@@ -240,7 +240,8 @@ class Scalr_UI_Controller_Farms_Roles extends Scalr_UI_Controller
 
 		$sshKey = Scalr_SshKey::init()->loadGlobalByFarmId(
 			$dbFarm->ID,
-			$dbFarmRole->CloudLocation
+			$dbFarmRole->CloudLocation,
+			$dbFarmRole->Platform
 		);
 
 		if (!$sshKey)
@@ -280,7 +281,7 @@ class Scalr_UI_Controller_Farms_Roles extends Scalr_UI_Controller
 		if ($maxInstances < $minInstances+1) {
 			$dbFarmRole->SetSetting(DBFarmRole::SETTING_SCALING_MAX_INSTANCES, $maxInstances+1);
 
-			$warnMsg = sprintf(_("Server successfully launched. The number of running %s instances is equal to maximum instances setting for this role. Maximum Instances setting for role %s has been increased automatically"),
+			$warnMsg = sprintf(_("Server count has been increased. Scalr will now request a new server from your cloud. Since the server count was already at the maximum set for this role, we increased the maximum by one."),
 				$dbRole->name, $dbRole->name
 			);
 		}
@@ -292,7 +293,7 @@ class Scalr_UI_Controller_Farms_Roles extends Scalr_UI_Controller
 
 		$serverCreateInfo = new ServerCreateInfo($dbFarmRole->Platform, $dbFarmRole);
 
-		Scalr::LaunchServer($serverCreateInfo);
+		Scalr::LaunchServer($serverCreateInfo, null, false, "Manually launched using UI");
 
 		if ($warnMsg)
 			$this->response->warning($warnMsg);
@@ -334,6 +335,7 @@ class Scalr_UI_Controller_Farms_Roles extends Scalr_UI_Controller
 
 			$row['min_count'] = $DBFarmRole->GetSetting(DBFarmRole::SETTING_SCALING_MIN_INSTANCES);
 			$row['max_count'] = $DBFarmRole->GetSetting(DBFarmRole::SETTING_SCALING_MAX_INSTANCES);
+			$row['allow_launch_instance'] = (!$DBFarmRole->GetRoleObject()->hasBehavior(ROLE_BEHAVIORS::MONGODB) && !$DBFarmRole->GetRoleObject()->hasBehavior(ROLE_BEHAVIORS::CF_CLOUD_CONTROLLER));
 
 			$row['location'] = $DBFarmRole->CloudLocation;
 

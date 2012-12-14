@@ -1,20 +1,20 @@
 <?php
-	class Modules_Platforms_Cloudstack implements IPlatformModule
+	class Modules_Platforms_Cloudstack extends Modules_Platform implements IPlatformModule
 	{
 		private $db;
 		
 		/** Properties **/
-		const API_KEY 	= 'cloudstack.api_key';
-		const SECRET_KEY	= 'cloudstack.secret_key';
-		const API_URL = 'cloudstack.api_url';
+		const API_KEY 	= 'api_key';
+		const SECRET_KEY	= 'secret_key';
+		const API_URL = 'api_url';
 		
-		const ACCOUNT_NAME = 'cloudstack.account_name';
-		const DOMAIN_NAME  = 'cloudtsack.domain_name';
-		const DOMAIN_ID  = 'cloudtsack.domain_id';
-		const SHARED_IP = 'cloudstack.shared_ip';
-		const SHARED_IP_ID = 'cloudstack.shared_ip_id';
-		const SHARED_IP_INFO = 'cloudstack.shared_ip_info';
-		const SZR_PORT_COUNTER = 'cloudstack.szr_port_counter';
+		const ACCOUNT_NAME = 'account_name';
+		const DOMAIN_NAME  = 'domain_name';
+		const DOMAIN_ID  = 'domain_id';
+		const SHARED_IP = 'shared_ip';
+		const SHARED_IP_ID = 'shared_ip_id';
+		const SHARED_IP_INFO = 'shared_ip_info';
+		const SZR_PORT_COUNTER = 'szr_port_counter';
 		
 		
 		/**
@@ -23,8 +23,9 @@
 		 */
 		private $instancesListCache;
 		
-		public function __construct()
+		public function __construct($platform = 'cloudstack')
 		{
+			parent::__construct($platform);
 			$this->db = Core::GetDBInstance();
 		}	
 		
@@ -34,16 +35,28 @@
 		 * @param unknown_type $region
 		 * @return Scalr_Service_Cloud_Nimbula_Client
 		 */
-		private function getCloudStackClient($environment, $cloudLoction=null)
+		protected function getCloudStackClient($environment, $cloudLocation=null)
 		{
 			return Scalr_Service_Cloud_Cloudstack::newCloudstack(
-				$environment->getPlatformConfigValue(self::API_URL),
-				$environment->getPlatformConfigValue(self::API_KEY),
-				$environment->getPlatformConfigValue(self::SECRET_KEY)
+				$this->getConfigVariable(self::API_URL, $environment),
+				$this->getConfigVariable(self::API_KEY, $environment),
+				$this->getConfigVariable(self::SECRET_KEY, $environment),
+				$this->platform
 			);
 		}
 		
 		public function getRoleBuilderBaseImages() {}
+		/*
+		public function getRoleBuilderBaseImages() {
+			
+			$loc = $this->getLocations();
+			$retval = array();
+			foreach ($loc as $location => $name)
+				$retval[] = array('name' => '', 'os_dist' => '', 'location' => $location, 'architecture' => '');
+			
+			return $retval;
+		}
+		*/
 		
 		public function getLocations() {
 			try {
@@ -53,18 +66,20 @@
 				return array();	
 			}
 			
-			if (!$environment || !$environment->isPlatformEnabled(SERVER_PLATFORMS::CLOUDSTACK))
+			if (!$environment || !$environment->isPlatformEnabled($this->platform))
 				return array();
 			
 			try {
 				$cs = Scalr_Service_Cloud_Cloudstack::newCloudstack(
-					$environment->getPlatformConfigValue(self::API_URL),
-					$environment->getPlatformConfigValue(self::API_KEY),
-					$environment->getPlatformConfigValue(self::SECRET_KEY)
+					$this->getConfigVariable(self::API_URL, $environment),
+					$this->getConfigVariable(self::API_KEY, $environment),
+					$this->getConfigVariable(self::SECRET_KEY, $environment),
+					$this->platform
 				);
 				
 				foreach ($cs->listZones() as $zone)
-					$retval[$zone->name] = "Cloudstack / {$zone->name}";
+					$retval[$zone->name] = ucfirst($this->platform)." / {$zone->name}";
+				
 			} catch (Exception $e) {
 				return array();
 			}
@@ -170,6 +185,7 @@
 		public function TerminateServer(DBServer $DBServer)
 		{
 		    $cs = $this->getCloudStackClient($DBServer->GetEnvironmentObject(), $this->GetServerCloudLocation($DBServer));
+		    
 		    $cs->destroyVirtualMachine($DBServer->GetProperty(CLOUDSTACK_SERVER_PROPERTIES::SERVER_ID));
 		    return true;
 		}
@@ -261,7 +277,7 @@
 				$launchOptions = new Scalr_Server_LaunchOptions();
 				$dbRole = DBRole::loadById($DBServer->roleId);
 				
-				$launchOptions->imageId = $dbRole->getImageId(SERVER_PLATFORMS::CLOUDSTACK, $DBServer->GetFarmRoleObject()->CloudLocation);
+				$launchOptions->imageId = $dbRole->getImageId($this->platform, $DBServer->GetFarmRoleObject()->CloudLocation);
 				$launchOptions->serverType = $DBServer->GetFarmRoleObject()->GetSetting(DBFarmRole::SETTING_CLOUDSTACK_SERVICE_OFFERING_ID);
    				$launchOptions->cloudLocation = $DBServer->GetFarmRoleObject()->CloudLocation;
 				
@@ -280,46 +296,56 @@
 		    	$environment, 
 		    	$launchOptions->cloudLocation
 		    );
-		    
-		    $networkType = $farmRole->GetSetting(DBFarmRole::SETTING_CLOUDSTACK_NETWORK_TYPE);
-			if ($networkType == 'Virtual') {
-			    $sharedIpId = $environment->getPlatformConfigValue(self::SHARED_IP_ID.".{$launchOptions->cloudLocation}", false);
-			    if (!$sharedIpId)
-			    {
-			    	$ipResult = $cs->associateIpAddress($launchOptions->cloudLocation);
-			    	$ipId = $ipResult->id;
-			    	if ($ipId) {
-			    		while (true) {
-			    			$ipInfo = $cs->listPublicIpAddresses($ipId);
-			    			$ipInfo = $ipInfo->publicipaddress[0];
-	
-			    			if (!$ipInfo)
-			    				throw new Exception("Cannot allocate IP address: listPublicIpAddresses -> failed");
-			    				
-			    			if ($ipInfo->state == 'Allocated') {
-			    				$environment->setPlatformConfig(array(self::SHARED_IP_ID.".{$launchOptions->cloudLocation}" => $ipId), false);
-			    				$environment->setPlatformConfig(array(self::SHARED_IP.".{$launchOptions->cloudLocation}" => $ipInfo->ipaddress), false);
-			    				$environment->setPlatformConfig(array(self::SHARED_IP_INFO.".{$launchOptions->cloudLocation}" => serialize($ipInfo)), false);
-			    				
-			    				$sharedIpId = $ipId;
-			    				break;
-			    			} else if ($ipInfo->state == 'Allocating') {
-			    				sleep(1);
-			    			} else {
-			    				throw new Exception("Cannot allocate IP address: ipAddress->state = {$ipInfo->state}");
-			    			}
-			    		}
-			    	}
-			    	else 
-			    		throw new Exception("Cannot allocate IP address: associateIpAddress -> failed");
-			    }
-			}
+			
+			$diskOffering = null;
+			$size = null;
+			
+			$diskOffering = $farmRole->GetSetting(DBFarmRole::SETTING_CLOUDSTACK_DISK_OFFERING_ID);
+			if ($diskOffering === false || $diskOffering === null)
+				$diskOffering = null;
+			
+			$sharedIp = $farmRole->GetSetting(DBFarmRole::SETTING_CLOUDSTACK_SHARED_IP_ID);
+		    if (!$sharedIp) {
+			    $networkType = $farmRole->GetSetting(DBFarmRole::SETTING_CLOUDSTACK_NETWORK_TYPE);
+				if ($networkType == 'Virtual' || $networkType == 'Isolated' || !$networkType) {
+				    $sharedIpId = $this->getConfigVariable(self::SHARED_IP_ID.".{$launchOptions->cloudLocation}", $environment, false);
+				    if (!$sharedIpId)
+				    {
+				    	$ipResult = $cs->associateIpAddress($launchOptions->cloudLocation);
+				    	$ipId = $ipResult->id;
+				    	if ($ipId) {
+				    		while (true) {
+				    			$ipInfo = $cs->listPublicIpAddresses($ipId);
+				    			$ipInfo = $ipInfo->publicipaddress[0];
+		
+				    			if (!$ipInfo)
+				    				throw new Exception("Cannot allocate IP address: listPublicIpAddresses -> failed");
+				    				
+				    			if ($ipInfo->state == 'Allocated') {
+				    				$this->setConfigVariable(array(self::SHARED_IP_ID.".{$launchOptions->cloudLocation}" => $ipId), $environment, false);
+				    				$this->setConfigVariable(array(self::SHARED_IP.".{$launchOptions->cloudLocation}" => $ipInfo->ipaddress), $environment, false);
+				    				$this->setConfigVariable(array(self::SHARED_IP_INFO.".{$launchOptions->cloudLocation}" => serialize($ipInfo)), $environment, false);
+				    				
+				    				$sharedIpId = $ipId;
+				    				break;
+				    			} else if ($ipInfo->state == 'Allocating') {
+				    				sleep(1);
+				    			} else {
+				    				throw new Exception("Cannot allocate IP address: ipAddress->state = {$ipInfo->state}");
+				    			}
+				    		}
+				    	}
+				    	else 
+				    		throw new Exception("Cannot allocate IP address: associateIpAddress -> failed");
+				    }
+				}
+		    }
 		    
 		    $sshKey = Scalr_SshKey::init();
 		    try {
-				if (!$sshKey->loadGlobalByFarmId($DBFarm->ID, $launchOptions->cloudLocation))
+				if (!$sshKey->loadGlobalByFarmId($DBFarm->ID, $launchOptions->cloudLocation, $this->platform))
 				{
-					$key_name = "FARM-{$DBServer->farmId}";
+					$key_name = "FARM-{$DBServer->farmId}-".SCALR_ID;
 					
 					$result = $cs->createSSHKeyPair($key_name);
 					if ($result->keypair->privatekey)
@@ -330,7 +356,7 @@
 						$sshKey->type = Scalr_SshKey::TYPE_GLOBAL;
 						$sshKey->cloudLocation = $launchOptions->cloudLocation;
 						$sshKey->cloudKeyName = $key_name;
-						$sshKey->platform = SERVER_PLATFORMS::CLOUDSTACK;
+						$sshKey->platform = $this->platform;
 						
 						$sshKey->setPrivate($result->keypair->privatekey);
 						$sshKey->setPublic($sshKey->generatePublicKey());
@@ -342,29 +368,39 @@
 		    
 	        $keyName = $sshKey->cloudKeyName;
 		    
+	        $roleName = $farmRole->GetRoleObject()->name;
+	        
 		    $vResult = $cs->deployVirtualMachine(
 		    	$launchOptions->serverType, 
 		    	$launchOptions->imageId, 
 		    	$launchOptions->cloudLocation,
 		    	null, //account
-		    	null, // diskoffering
-		    	"", //displayName
+		    	$diskOffering, // diskoffering
+		    	"{$roleName} #{$DBServer->index}", //displayName
 		    	null, //domainId
-		    	$farmRole->GetRoleObject()->name,
+		    	$roleName,
 		    	null, //hostId
 		    	null, //hypervisor
 		    	$keyName,
-		    	"", //name
+		    	"",//$DBServer->serverId, //name
 		    	$farmRole->GetSetting(DBFarmRole::SETTING_CLOUDSTACK_NETWORK_ID),
 		    	null, //securityGroupIds
 		    	null, //SecGroupNames
-		    	null, //size
+		    	$size, //size
 		    	base64_encode($launchOptions->userData)
 		    );
 		    if ($vResult->id) {
 	        	$DBServer->SetProperty(CLOUDSTACK_SERVER_PROPERTIES::SERVER_ID, $vResult->id);
 	        	$DBServer->SetProperty(CLOUDSTACK_SERVER_PROPERTIES::CLOUD_LOCATION, $launchOptions->cloudLocation);
 	        	$DBServer->SetProperty(CLOUDSTACK_SERVER_PROPERTIES::LAUNCH_JOB_ID, $vResult->jobid);
+	        	
+	        	try {
+	        		/*
+	        		$res = $cs->queryAsyncJobResult($vResult->jobid);
+	        		$DBServer->SetProperty(CLOUDSTACK_SERVER_PROPERTIES::TMP_PASSWORD, $res->jobresult->virtualmachine->password);
+	        		$DBServer->SetProperty(CLOUDSTACK_SERVER_PROPERTIES::SERVER_NAME, $res->jobresult->virtualmachine->name);
+	        		*/
+	        	} catch (Exception $e) {}
 	        	
 		        return $DBServer;
 		    } else
@@ -385,13 +421,14 @@
 			$put |= $message instanceof Scalr_Messaging_Msg_DbMsr_PromoteToMaster;
 			$put |= $message instanceof Scalr_Messaging_Msg_DbMsr_CreateDataBundle;
 			$put |= $message instanceof Scalr_Messaging_Msg_DbMsr_CreateBackup;
+			$put |= $message instanceof Scalr_Messaging_Msg_DbMsr_NewMasterUp;
 			
 			if ($put) {
 				$environment = $DBServer->GetEnvironmentObject();
 	        	$accessData = new stdClass();
-	        	$accessData->apiKey = $environment->getPlatformConfigValue(self::API_KEY);
-	        	$accessData->secretKey = $environment->getPlatformConfigValue(self::SECRET_KEY);
-	        	$accessData->apiUrl = $environment->getPlatformConfigValue(self::API_URL);
+	        	$accessData->apiKey = $this->getConfigVariable(self::API_KEY, $environment);
+	        	$accessData->secretKey = $this->getConfigVariable(self::SECRET_KEY, $environment);
+	        	$accessData->apiUrl = $this->getConfigVariable(self::API_URL, $environment);
 	        	
 	        	$message->platformAccessData = $accessData;
 			}

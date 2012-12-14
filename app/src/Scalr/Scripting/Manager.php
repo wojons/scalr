@@ -93,7 +93,14 @@ class Scalr_Scripting_Manager
 			
 			foreach ($event->GetScriptingVars() as $k=>$v)
 				$params[$k] = $event->{$v};
+			
+			$params['event_name'] = $event->GetName();
 		} 
+		
+		if ($event instanceof CustomEvent) {
+			if (count($event->params) > 0)
+				$params = array_merge($params, $event->params);
+		}
 		
 		// Prepare keys array and array with values for replacement in script
 		$keys = array_keys($params);
@@ -118,6 +125,14 @@ class Scalr_Scripting_Manager
 		$scripts = $db->GetAll("SELECT * FROM farm_role_scripts WHERE event_name=? AND farmid=? ORDER BY order_index ASC", array($event->GetName(), $eventServer->farmId));
 		
 		foreach ($roleScripts as $script) {
+			
+			$params = $db->GetOne("SELECT params FROM farm_role_scripting_params WHERE farm_role_id = ? AND role_script_id = ? AND farm_role_script_id = '0'", array(
+				$eventServer->farmRoleId,
+				$script['id']
+			));
+			if ($params)
+				$script['params'] = $params;
+			
 			$scripts[] = array(
 			 "id" => "r{$script['id']}",
 			 "scriptid" => $script['script_id'], 
@@ -142,7 +157,7 @@ class Scalr_Scripting_Manager
 			if ($scriptSettings['target'] == SCRIPTING_TARGET::ROLE && $eventServer->farmRoleId != $targetServer->farmRoleId)
 				continue;
 
-			if ($scriptSettings['target'] == SCRIPTING_TARGET::FARM && $eventServer->farmRoleId != $scriptSettings['farm_roleid'])
+			if ($scriptSettings['type'] != 'role' && $scriptSettings['target'] == SCRIPTING_TARGET::FARM && $eventServer->farmRoleId != $scriptSettings['farm_roleid'])
 				continue;
 				
 			if ($scriptSettings['type'] != 'role' && $scriptSettings['target'] != SCRIPTING_TARGET::FARM && $targetServer->farmRoleId != $scriptSettings['farm_roleid'])

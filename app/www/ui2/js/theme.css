@@ -1,0 +1,59 @@
+/* Toolbar Buttons */
+.scalr-ui-btn-icon-download {
+	background-image: url('/ui2/images/icons/download_icon_16x16.png') !important;
+}
+
+.x-btn-pressed .scalr-ui-btn-icon-download {
+	background-image: url('/ui2/images/icons/download_icon_16x16_inverse.png') !important;
+}
+
+/* Servers */
+/** Actions **/
+.scalr-ui-servers-actions-console {
+	background: url('/ui2/images/icons/servers/actions.png') no-repeat 0px 0px;
+	width: 16px;
+	height: 16px;
+}
+
+.scalr-ui-servers-actions-statsusage {
+	background: url('/ui2/images/icons/servers/actions.png') no-repeat 0px -16px;
+	width: 16px;
+	height: 16px;
+}
+
+.scalr-ui-servers-actions-execute {
+	background: url('/ui2/images/icons/servers/actions.png') no-repeat 0px -32px;
+	width: 16px;
+	height: 16px;
+}
+
+
+
+
+/* Form */
+/* Не отображать рамку ошибки вокруг поля
+input[type="file"] {
+	background-color: inherit;
+	background-image: none
+}
+*/
+
+/* Выделять readonly поля
+.x-form-readonly input[readonly], .x-form-readonly textarea[readonly] {
+	color: #777;
+}
+
+.x-form-readonly .x-form-cb-label {
+	color: #777;
+}
+
+.x-form-readonly .x-form-display-field {
+	color: #777;
+}
+
+.x-form-readonly input.x-trigger-noedit[readonly]{
+	color: #777;
+	cursor: default;
+}
+*/
+/* Text field */

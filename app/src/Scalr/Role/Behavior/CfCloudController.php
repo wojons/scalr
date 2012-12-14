@@ -3,6 +3,7 @@
 	{
 		/** DBFarmRole settings **/
 		const ROLE_VOLUME_ID    = 'cf.data_storage.volume_id';
+		const ROLE_VERSION    	= 'cf.version';
 		const ROLE_DATA_STORAGE_ENGINE = 'cf.data_storage.engine';
 		
 		// For EBS storage
@@ -31,8 +32,11 @@
 			{
 				case "Scalr_Messaging_Msg_HostUp":
 					
-					if ($message->cfCloudController->volumeConfig)
+					if ($message->cfCloudController->volumeConfig) {
 						$this->setVolumeConfig($message->cfCloudController->volumeConfig, $dbServer->GetFarmRoleObject(), $dbServer);
+					
+						$dbServer->GetFarmRoleObject()->SetSetting(self::ROLE_VERSION, $message->cfCloudController->version);
+					}
 					else
 						throw new Exception("Received hostUp message from CF Cloud Controller server without volumeConfig");
 					

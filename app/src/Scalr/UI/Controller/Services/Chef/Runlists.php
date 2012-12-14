@@ -24,9 +24,13 @@ class Scalr_UI_Controller_Services_Chef_Runlists extends Scalr_UI_Controller
 	
 	public function editAction()
 	{
-		$retval = $this->db->GetRow('SELECT runlist, name, description, chef_server_id, attributes, chef_environment as chefEnv FROM services_chef_runlists WHERE `id` = ?', array(
+		$retval = $this->db->GetRow('SELECT env_id, runlist, name, description, chef_server_id, attributes, chef_environment as chefEnv FROM services_chef_runlists WHERE `id` = ?', array(
 			$this->getParam('runlistId')
 		));
+		
+		if(!$this->user->getPermissions()->hasAccessEnvironment($retval['env_id']))
+			throw new Scalr_Exception_InsufficientPermissions();
+		
 		$list = json_decode($retval['runlist']);
 		$results = array();
 		foreach ($list as $key=>$value) {
@@ -48,10 +52,10 @@ class Scalr_UI_Controller_Services_Chef_Runlists extends Scalr_UI_Controller
 	
 	public function xListRunlistsAction()
 	{
-		$sql = 'SELECT id, name, description, chef_server_id as servId, chef_environment as chefEnv FROM services_chef_runlists WHERE env_id = '.$this->getEnvironmentId();
+		$sql = 'SELECT id, name, description, chef_server_id as servId, chef_environment as chefEnv FROM services_chef_runlists WHERE env_id = ?';
+		$params = array($this->getEnvironmentId());
 
-		$response = $this->buildResponseFromSql($sql);
-		$this->response->data($response);
+		$this->response->data($this->buildResponseFromSql($sql, array('name', 'description'), array(), $params));
 	}
 	
 	public function xDeleteRunlistAction()
@@ -61,9 +65,13 @@ class Scalr_UI_Controller_Services_Chef_Runlists extends Scalr_UI_Controller
 		if($result['total'])
 			$this->response->failure('This runlist is in use. It can\'t be deleted');
 		else {
-			$servParams = $this->db->GetRow('SELECT url, username, auth_key FROM services_chef_servers WHERE id = ?', array(
+			$servParams = $this->db->GetRow('SELECT env_id, url, username, auth_key FROM services_chef_servers WHERE id = ?', array(
 				$this->getParam('servId')
 			));
+			
+			if(!$this->user->getPermissions()->hasAccessEnvironment($servParams['env_id']))
+				throw new Scalr_Exception_InsufficientPermissions();
+			
 			$chef = Scalr_Service_Chef_Client::getChef($servParams['url'], $servParams['username'], $this->getCrypto()->decrypt($servParams['auth_key'], $this->cryptoKey));
 			$role = $chef->getRole($this->getParam('runlistName'));
 			if ($role instanceof stdClass)

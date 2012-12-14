@@ -24,5 +24,10 @@
 		{
 			return array("device_name" => "DeviceName", "volume_id" => "VolumeID");
 		}
+		
+		public function getTextDetails()
+		{
+			return "EBS volume {$this->VolumeID} successfully atatched as {$this->DeviceName}";
+		}
 	}
 ?>

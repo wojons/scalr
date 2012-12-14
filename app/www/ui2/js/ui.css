@@ -1,0 +1,181 @@
+.scalr-mainwindow-docked-warning {
+	white-space: nowrap;
+	font-family: Arial;
+	font-size: 14px;
+	text-align: center;
+	background: #FFF4CC;
+	color: #974706;
+	border: 1px solid #CEA16D !important;
+}
+
+.scalr-mainwindow-docked-toolbar{
+	border: 1px solid #99BBE8 !important;
+}
+
+.scalr-treepanel {
+	border-bottom: 0px;
+	border-top: 0px;
+	border-left: 0px;
+	border-right: 1px;
+}
+
+.scalr-mainwindow-docked-map {
+	border: 1px solid #99BBE8 !important;
+}
+
+
+
+
+/* View switch button */
+.scalr-ui-btn-icon-viewswitch {
+	width: 56px;
+	height: 21px;
+}
+
+.scalr-ui-btn-icon-viewswitch .view {
+	width: 28px;
+	height: 21px;
+	float: left;
+	cursor: pointer;
+}
+
+.scalr-ui-btn-icon-viewswitch .grid {
+	width: 28px;
+	height: 21px;
+	float: left;
+	cursor: pointer;
+}
+
+.scalr-ui-btn-icon-viewswitch-grid {
+	background-image: url('/ui2/images/icons/grid/view_switch.png') !important;
+	background-position: 0px 21px;
+}
+
+.scalr-ui-btn-icon-viewswitch-view {
+	background-image: url('/ui2/images/icons/grid/view_switch.png') !important;
+	background-position: 0px 0px;
+}
+
+/* Scalr UI messages */
+.scalr-ui-message {
+	width: 60%;
+	max-width: 600px;
+	left: 30%;
+	z-index: 16000;
+	position: absolute;
+	background-color: #EBF1FC;
+	border: 1px solid #94A5BC;
+	box-shadow: 0 1px #FFF inset, 0 -1px #FFF inset, 1px 0 #FFF inset, -1px 0 #FFF inset, 0 0 6px #999;
+	font-size: 13px;
+	line-height: 18px;
+}
+
+.scalr-ui-message-success {
+	background: url('/ui2/images/icons/message/success_16x16.png') no-repeat scroll 10px 8px;
+	color: #438800;
+	padding: 8px 25px 8px 34px;
+}
+
+.scalr-ui-message-error {
+	background: url('/ui2/images/icons/message/error_16x16.png') no-repeat scroll 10px 8px;
+	color: #CA4100;
+	padding: 8px 25px 8px 34px;
+}
+
+.scalr-ui-message-info {
+	background: url('/ui2/images/icons/message/info_16x16.png') no-repeat scroll 10px 8px;
+	color: #307AB0;
+	padding: 8px 25px 8px 34px;
+}
+
+.scalr-ui-message-warning {
+	background: url('/ui2/images/icons/message/warning_16x16.png') no-repeat scroll 10px 8px;
+	color: #474747;
+	padding: 8px 25px 8px 34px;
+}
+
+/* Edit combobox status icon */
+.scalr-ui-grid-row-combobox {
+	padding-right: 5px;
+}
+
+.scalr-ui-grid-row-combobox .x-grid-cell-inner {
+	background-image: url('/ui2/images/icons/grid/arrow_icon.png') !important;
+	background-position: right center;
+	background-repeat: no-repeat;
+	padding-right: 13px;
+}
+
+/*
+ * Operation status style
+ */
+.scalr-operation-status-complete {
+	background: url('/ui2/images/icons/operation_status_icons_sprite.png') no-repeat;
+	height:14px;
+	width:14px;
+	background-position: 0px 0px;
+	float:left;
+	margin-right:5px;
+}
+
+.scalr-operation-status-running {
+	/*background: url('/ui2/images/icons/operation_status_icons_sprite.png') no-repeat;*/
+	height:14px;
+	width:14px;
+	/*background-position: 0px -14px;*/
+	float:left;
+	margin-right:5px;
+}
+
+.scalr-operation-status-warning {
+	background: url('/ui2/images/icons/operation_status_icons_sprite.png') no-repeat;
+	height:14px;
+	width:14px;
+	background-position: 0px -28px;
+	float:left;
+	margin-right:5px;
+}
+
+.scalr-operation-status-error {
+	background: url('/ui2/images/icons/operation_status_icons_sprite.png') no-repeat;
+	height:14px;
+	width:14px;
+	color: red;
+	background-position: 0px -42px;
+	float:left;
+	margin-right:5px;
+}
+
+.scalr-operation-status-pending {
+	float:left;
+	height:14px;
+	width:14px;
+	margin-right:5px;
+}
+
+
+/*
+ * Form
+ */
+
+/* ultra-large buttons (64px) (on top) */
+.scalr-btn-icon-ultra-large .x-btn-inner {
+	padding-top: 68px;
+	background-position: center top;
+	min-width: 68px;
+	width: 89px;
+}
+
+.scalr-btn-icon-ultra-large .x-btn-icon {
+	height: 64px;
+}
+
+.scalr-btn-icon-billing .x-btn-inner {
+	margin-left: 20px;
+	padding-left: 10px;
+}
+
+.scalr-btn-icon-billing .x-btn-icon {
+	height: 113px;
+	width: 70px;
+}

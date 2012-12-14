@@ -27,6 +27,9 @@
 	if (!function_exists('mysqli_connect')) 
 		$err[] = "Cannot find mysqli_connect function. Make sure that MYSQLi Functions enabled.";
 	
+	if (!function_exists('curl_init')) 
+		$err[] = "Cannot find curl_init function. Make sure that CURL Functions enabled.";
+	
 	// Check GetText
 	if (!function_exists('gettext')) 
 		$err[] = "Cannot find gettext function. Make sure that GetText Functions enabled.";
@@ -65,6 +68,10 @@
 	//
 	// Check php sessings
 	//
+	if (ini_get('short_open_tag') == 0)
+		$err[] = "short_open_tag should be enabled";
+
+
 	if (ini_get('safe_mode') == 1)
 		$err[] = "PHP safe mode enabled. Please disable it.";
 		

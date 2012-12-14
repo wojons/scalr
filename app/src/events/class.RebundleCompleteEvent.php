@@ -21,5 +21,10 @@
 			$this->BundleTaskID = $BundleTaskID;
 			$this->MetaData = $MetaData;
 		}
+		
+		public function getTextDetails()
+		{
+			return "Rebundle started on instance {$this->DBServer->remoteIp} ({$this->DBServer->serverId}) for farm #{$this->DBServer->farmId} successfully complete. New Image ID: {$this->SnapshotID}.";
+		}
 	}
 ?>

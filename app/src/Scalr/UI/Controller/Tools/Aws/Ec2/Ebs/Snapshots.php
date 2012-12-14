@@ -98,20 +98,26 @@ class Scalr_UI_Controller_Tools_Aws_Ec2_Ebs_Snapshots extends Scalr_UI_Controlle
 			$this->getEnvironment()->getPlatformConfigValue(Modules_Platforms_Ec2::CERTIFICATE)
 		);
 
+		if ($this->getParam('snapshotId'))
+			$filter['snapshot-id'] = $this->getParam('snapshotId');
+		
+		if ($this->getParam('volumeId'))
+			$filter['volume-id'] = $this->getParam('volumeId');
+		
 		// Rows
-		$aws_response = $amazonEC2Client->DescribeSnapshots();
+		$t = microtime(true);
+		$aws_response = $amazonEC2Client->DescribeSnapshots(null, $filter);
+		
+		$requestT = microtime(true)-$t;
+		@header("X-AWS-RequestTime-1: {$requestT}");
+		
 		$rowz = $aws_response->snapshotSet->item;
 		if ($rowz instanceof stdClass) $rowz = array($rowz);
 
+		$t = microtime(true);
 		$snaps = array();
 		foreach ($rowz as $pk=>$pv)
 		{
-			if ($this->getParam('volumeId') && $pv->volumeId != $this->getParam('volumeId'))
-				continue;
-
-			if ($this->getParam('snapshotId') && $pv->snapshotId != $this->getParam('snapshotId'))
-				continue;
-
 			$item = (array)$pv;
 
 			if ($pv->ownerId != $this->getEnvironment()->getPlatformConfigValue(Modules_Platforms_Ec2::ACCOUNT_ID)) {
@@ -122,11 +128,10 @@ class Scalr_UI_Controller_Tools_Aws_Ec2_Ebs_Snapshots extends Scalr_UI_Controlle
 					continue;
 			}
 			else {
-				$comment = $this->db->GetOne("SELECT comment FROM ebs_snaps_info WHERE snapid=?", array(
-					$pv->snapshotId
-				));
-
-				$item['comment'] = $comment ? $comment : $pv->description;
+				
+				if ($pv->description) {
+					$item['comment'] = $pv->description;
+				}
 
 				$item['owner'] = 'Me';
 			}
@@ -136,11 +141,22 @@ class Scalr_UI_Controller_Tools_Aws_Ec2_Ebs_Snapshots extends Scalr_UI_Controlle
 			unset($item['description']);
 			$snaps[] = $item;
 		}
+		$requestT = microtime(true)-$t;
+		@header("X-AWS-RequestTime-2: {$requestT}");
 
+		$t = microtime(true);
 		$response = $this->buildResponseFromData($snaps, array('snapshotId', 'volumeId', 'comment', 'owner'));
 		foreach ($response['data'] as &$row) {
 			$row['startTime'] = Scalr_Util_DateTime::convertTz($row['startTime']);
+			
+			if (!$row['comment']) {
+				$row['comment'] = $this->db->GetOne("SELECT comment FROM ebs_snaps_info WHERE snapid=?", array(
+						$pv->snapshotId
+				));
+			}
 		}
+		$requestT = microtime(true)-$t;
+		@header("X-AWS-RequestTime-3: {$requestT}");
 
 		$this->response->data($response);
 	}

@@ -1,21 +1,44 @@
 <?php
 
+/**
+ * Scalr Session class
+ *
+ * @method  string        getCloudynToken() getCloudynToken()       Gets a Cloudyn Token from session
+ * @method  Scalr_Session setCloudynToken() setCloudynToken($token) Sets a Cloudyn Token into session
+ */
 class Scalr_Session
 {
-	private
-		$userId,
-		$envId,
-		$sault,
-		$hash,
-		$hashpwd,
-		$restored = false;
+
+	private $userId;
+
+	private $envId;
+
+	private $sault;
+
+	private $hash;
+
+	private $hashpwd;
+
+	private $cloudynToken;
+
+	private $restored = false;
 
 	private static $_session = null;
 
-	const SESSION_USER_ID ='userId';
-	const SESSION_ENV_ID = 'envId';
-	const SESSION_HASH = 'hash';
-	const SESSION_SAULT = 'sault';
+	/**
+	 * @var ReflectionClass
+	 */
+	private static $refClass;
+
+	const SESSION_USER_ID = 'userId';
+
+	const SESSION_ENV_ID  = 'envId';
+
+	const SESSION_HASH    = 'hash';
+
+	const SESSION_SAULT   = 'sault';
+
+	const SESSION_CLOUDYN_TOKEN = 'cloudynToken';
 
 	/**
 	 * @return Scalr_Session
@@ -25,6 +48,7 @@ class Scalr_Session
 		if (self::$_session === null) {
 			self::$_session = new Scalr_Session();
 			self::$_session->hashpwd = Scalr_Util_CryptoTool::hash(@file_get_contents(dirname(__FILE__)."/../etc/.cryptokey"));
+			ini_set('session.cookie_httponly', true);
 		}
 
 		if (! self::$_session->restored) {
@@ -70,10 +94,12 @@ class Scalr_Session
 	{
 		$session = self::getInstance();
 		@session_start();
-		$session->userId = isset($_SESSION[__CLASS__][self::SESSION_USER_ID]) ? $_SESSION[__CLASS__][self::SESSION_USER_ID] : 0;
-		$session->envId = isset($_SESSION[__CLASS__][self::SESSION_ENV_ID]) ? $_SESSION[__CLASS__][self::SESSION_ENV_ID] : 0;
-		$session->sault = isset($_SESSION[__CLASS__][self::SESSION_SAULT]) ? $_SESSION[__CLASS__][self::SESSION_SAULT] : '';
-		$session->hash = isset($_SESSION[__CLASS__][self::SESSION_HASH]) ? $_SESSION[__CLASS__][self::SESSION_HASH] : '';
+		$refClass = self::getReflectionClass();
+		foreach ($refClass->getConstants() as $constname => $constvalue) {
+			if (substr($constname, 0, 8) !== 'SESSION_') continue;
+			$session->{$constvalue} = isset($_SESSION[__CLASS__][$constvalue]) ?
+				$_SESSION[__CLASS__][$constvalue] : null;
+		}
 
 		$newhash = self::createHash($session->userId, $session->sault);
 		if (! ($newhash == $session->hash && !empty($session->hash))) {
@@ -161,11 +187,6 @@ class Scalr_Session
 		setcookie("scalr_signature", self::createCookieHash($session->userId, $session->sault, $session->hash), $tm, "/");
 	}
 
-	public function getUserId()
-	{
-		return $this->userId;
-	}
-
 	public function isAuthenticated()
 	{
 		return $this->userId ? true : false;
@@ -178,8 +199,67 @@ class Scalr_Session
 		@session_write_close();
 	}
 
+	/**
+	 * This method is used to provide getters and setters for the session vars
+	 *
+	 * @param   string     $name
+	 * @param   array      $params
+	 * @throws  \BadMethodCallException
+	 */
+	public function __call($name, $params)
+	{
+		if (preg_match('#^(get|set)(.+)$#', $name, $m)) {
+			$ref = self::getReflectionClass();
+			$property = lcfirst($m[2]);
+			$constant = 'SESSION_' . strtoupper(preg_replace('/(?!^)[[:upper:]]+/', '_' . '$0', $property));
+			if ($ref->hasConstant($constant)) {
+				if ($m[1] == 'get') {
+					return $this->{$property};
+				} elseif ($m[1] == 'set') {
+					//set are expected to be here
+					@session_start();
+					$this->{$property} = $params[0];
+					$_SESSION[__CLASS__][$property] = $this->{$property};
+					@session_write_close();
+					return $this;
+				}
+			}
+		}
+		throw new \BadMethodCallException(sprintf(
+			'Method "%s" does not exist for the class %s', $name, get_class($this)
+		));
+	}
+
+	/**
+	 * Gets an User ID
+	 *
+	 * @return  int Returns an User ID
+	 */
+	public function getUserId()
+	{
+		return $this->userId;
+	}
+
+	/**
+	 * Gets an Environment ID
+	 *
+	 * @return  int Returns an Environment ID
+	 */
 	public function getEnvironmentId()
 	{
 		return $this->envId;
+	}
+
+	/**
+	 * Gets a reflection class
+	 *
+	 * @return ReflectionClass Returns a reflection  class
+	 */
+	private static function getReflectionClass()
+	{
+		if (self::$refClass === null) {
+			self::$refClass = new ReflectionClass(__CLASS__);
+		}
+		return self::$refClass;
 	}
 }

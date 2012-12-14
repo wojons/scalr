@@ -60,9 +60,54 @@
          	
          	switch($BundleTask->status)
          	{
+         		case SERVER_SNAPSHOT_CREATION_STATUS::MIGRATION_COPYING_DATA:
+         		case SERVER_SNAPSHOT_CREATION_STATUS::MIGRATION_CREATING_IMAGE:
+         		case SERVER_SNAPSHOT_CREATION_STATUS::MIGRATION_STARTING_SERVER:
+         			
+         			$meta = $BundleTask->getSnapshotDetails();
+         			$servers = array(
+         				'source' => DBServer::LoadByID($meta['sourceServerId']),
+         				'destination' => DBServer::LoadByID($meta['destServerId'])
+         			);
+         			
+         			foreach ($servers as $type => $server) {
+         				if (!PlatformFactory::NewPlatform($server->platform)->IsServerExists($server)) {
+         					$terminateServers = true;
+         					$BundleTask->SnapshotCreationFailed("{$type} server was terminated and no longer available in cloud.");
+         					break;
+         				}
+         				
+         				$status = PlatformFactory::NewPlatform($server->platform)->GetServerRealStatus($server);
+         				$BundleTask->Log(sprintf(_("[{$type} server] Server status: %s"), $status->getName()));
+         				if ($status->isPending()) {
+         					$BundleTask->Log(sprintf(_("[{$type} server] Waiting for running state."), $status->getName()));
+         					exit();
+         				}
+         				elseif ($status->isTerminated()) {
+         					$BundleTask->SnapshotCreationFailed("{$type} server was terminated and no longer available in cloud.");
+         					$terminateServers = true;
+         					break;
+         				}
+         			}
+         			
+         			if ($terminateServers) {
+         				foreach ($servers as $type => $server) {
+         					$server->status = SERVER_STATUS::PENDING_TERMINATE;
+         					$server->save();
+         				}
+         			}
+         			
+         			break;
+         		
+         		
          		case SERVER_SNAPSHOT_CREATION_STATUS::STARING_SERVER:
          		case SERVER_SNAPSHOT_CREATION_STATUS::PREPARING_ENV:
          		case SERVER_SNAPSHOT_CREATION_STATUS::INTALLING_SOFTWARE:
+         			
+         			if (!PlatformFactory::NewPlatform($DBServer->platform)->GetServerID($DBServer)) {
+         				$BundleTask->Log(sprintf(_("Waiting for temporary server")));
+         				exit();
+         			}
          			
          			if (!PlatformFactory::NewPlatform($DBServer->platform)->IsServerExists($DBServer)) {
          				
@@ -91,12 +136,39 @@
          	
          	switch($BundleTask->status)
          	{
+         		case SERVER_SNAPSHOT_CREATION_STATUS::MIGRATION_STARTING_SERVER:
+         			
+         			$meta = $BundleTask->getSnapshotDetails();
+         			$servers = array(
+         					'source' => DBServer::LoadByID($meta['sourceServerId']),
+         					'destination' => DBServer::LoadByID($meta['destServerId'])
+         			);
+         			
+         			foreach ($servers as $type => $server) {
+         				$ips = PlatformFactory::NewPlatform($server->platform)->GetServerIPAddresses($server);
+         				
+         				$server->remoteIp = $ips['remoteIp'];
+         				$server->localIp = $ips['localIp'];
+         				$server->save();
+         				
+         				if ($type == 'destination') {
+         					
+         				}
+         			}
+         			
+         			$BundleTask->status = SERVER_SNAPSHOT_CREATION_STATUS::MIGRATION_COPYING_DATA;
+         			$BundleTask->save();
+         			
+         			$BundleTask->Log(sprintf(_("Bundle task status: %s"), $BundleTask->status));
+         			
+         			break;
+         		
          		case SERVER_SNAPSHOT_CREATION_STATUS::STARING_SERVER:
          			
          			$ips = PlatformFactory::NewPlatform($DBServer->platform)->GetServerIPAddresses($DBServer);
          			
          			$DBServer->remoteIp = $ips['remoteIp'];
-         			$DBServer->localIp = $ips['locateIp'];
+         			$DBServer->localIp = $ips['localIp'];
          			$DBServer->save();
          			
          			$BundleTask->status = SERVER_SNAPSHOT_CREATION_STATUS::PREPARING_ENV;
@@ -205,7 +277,15 @@
          			$BundleTask->Log("Launching role builder routines on server");
          			
          			$ssh2Client->exec("chmod 0777 /tmp/scalr-builder.sh");
-         			$ssh2Client->exec("setsid /tmp/scalr-builder.sh > /var/log/role-builder-output.log 2>&1 &");        			
+         			
+         			// For CGE we need to use sudo
+         			if ($BundleTask->platform == SERVER_PLATFORMS::GCE) {
+         				$ssh2Client->exec("sudo touch /var/log/role-builder-output.log");
+         				$ssh2Client->exec("sudo chmod 0666 /var/log/role-builder-output.log");
+         				$ssh2Client->exec("sudo setsid /tmp/scalr-builder.sh > /var/log/role-builder-output.log 2>&1 &");
+         			}
+         			else
+         				$ssh2Client->exec("setsid /tmp/scalr-builder.sh > /var/log/role-builder-output.log 2>&1 &");        			
          			
          			$BundleTask->status = SERVER_SNAPSHOT_CREATION_STATUS::INTALLING_SOFTWARE;
          			$BundleTask->save();
@@ -256,6 +336,8 @@
 							PlatformFactory::NewPlatform($DBServer->platform)->TerminateServer($DBServer);
 							$DBServer->status = SERVER_STATUS::PENDING_TERMINATE;
 							$DBServer->save();
+							
+							Scalr_Server_History::init($DBServer)->markAsTerminated("RoleBuilder temporary server", true);
 							
 							$BundleTask->Log(sprintf("Temporary server '%s' (%s) has been terminated", $DBServer->serverId, $DBServer->GetProperty(EC2_SERVER_PROPERTIES::INSTANCE_ID)));
 						}
@@ -412,14 +494,10 @@
 			         					{
 			         						PlatformFactory::NewPlatform($DBServer->platform)->TerminateServer($DBServer);
 			         						
-			         						$db->Execute("UPDATE servers_history SET
-												dtterminated	= NOW(),
-												terminate_reason	= ?
-												WHERE server_id = ?
-											", array(
-												sprintf("Farm was in 'Synchronizing' state. Server terminated when bundling was completed. Bundle task #%s", $BundleTask->id),
-												$DBServer->serverId
-											));
+			         						Scalr_Server_History::init($DBServer)->markAsTerminated(
+			         							sprintf("Farm was in 'Synchronizing' state. Server has been terminated when bundling was completed. Bundle task #%s", $BundleTask->id),
+			         							true
+			         						);
 			         					}
 			         				}
 			         				else
@@ -428,7 +506,7 @@
 				         					array($DBServer->serverId, SERVER_STATUS::TERMINATED, SERVER_STATUS::PENDING_TERMINATE)
 				         				)) {
 				         					$ServerCreateInfo = new ServerCreateInfo($DBFarmRole->Platform, $DBFarmRole, $DBServer->index, $DBFarmRole->NewRoleID);
-											$nDBServer = Scalr::LaunchServer($ServerCreateInfo);
+											$nDBServer = Scalr::LaunchServer($ServerCreateInfo, null, false, "Server replacement after snapshotting");
 											$nDBServer->replaceServerID = $DBServer->serverId;
 											
 											$nDBServer->Save();

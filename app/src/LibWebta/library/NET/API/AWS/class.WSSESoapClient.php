@@ -90,7 +90,7 @@
 			}
 			catch (Exception $e)
 			{
-			    throw new Exception("[".__METHOD__."] ".$e->getMessage()." (Please, check your keys)", E_ERROR);
+			    throw new Exception("Unable to sign AWS API request. Please, check your X.509 certificate and private key.", E_ERROR);
 			}
 		
 			/* Add certificate (BinarySecurityToken) to the message and attach pointer to Signature */

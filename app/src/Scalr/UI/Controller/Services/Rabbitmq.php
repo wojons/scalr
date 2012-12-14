@@ -49,6 +49,9 @@ class Scalr_UI_Controller_Services_Rabbitmq extends Scalr_UI_Controller
 
 					$httpRequest = new HttpRequest();
 					$httpRequest->setUrl($url);
+					$httpRequest->setOptions(array(
+						'redirect' => 5
+					));
 					$httpRequest->setHeaders(array(
 						'Authorization' => 'Basic ' . base64_encode(
 							$moduleParams['rabbitmq']['username'] .

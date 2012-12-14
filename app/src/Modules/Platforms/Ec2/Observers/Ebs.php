@@ -191,6 +191,11 @@
 					$event->DBServer->index
 				)))
 				{
+					if (in_array($DBFarmRole->GetSetting(DBFarmRole::SETTING_AWS_EBS_TYPE), array('standard', 'io1')))
+						$type = $DBFarmRole->GetSetting(DBFarmRole::SETTING_AWS_EBS_TYPE);
+					else
+						$type = 'standard';
+					
 					$DBEBSVolume = new DBEBSVolume();
 					$DBEBSVolume->attachmentStatus = EC2_EBS_ATTACH_STATUS::CREATING;
 					$DBEBSVolume->isManual = 0;
@@ -201,6 +206,8 @@
 					$DBEBSVolume->serverId = $event->DBServer->serverId;
 					$DBEBSVolume->serverIndex = $event->DBServer->index;
 					$DBEBSVolume->size = $DBFarmRole->GetSetting(DBFarmRole::SETTING_AWS_EBS_SIZE);
+					$DBEBSVolume->type = $type;
+					$DBEBSVolume->iops = $DBFarmRole->GetSetting(DBFarmRole::SETTING_AWS_EBS_IOPS);
 					$DBEBSVolume->snapId = $DBFarmRole->GetSetting(DBFarmRole::SETTING_AWS_EBS_SNAPID);
 					$DBEBSVolume->isFsExists = ($DBFarmRole->GetSetting(DBFarmRole::SETTING_AWS_EBS_SNAPID)) ? 1 : 0; 
 					$DBEBSVolume->mount = $DBFarmRole->GetSetting(DBFarmRole::SETTING_AWS_EBS_MOUNT);
@@ -226,10 +233,11 @@
 			if ($event->DBServer->IsRebooting()) 
 				return;			
 			
-			$this->DB->Execute("UPDATE ec2_ebs SET attachment_status=?, mount_status=?, device='', server_id='' WHERE server_id=?", array(
+			$this->DB->Execute("UPDATE ec2_ebs SET attachment_status=?, mount_status=?, device='', server_id='' WHERE server_id=? AND attachment_status != ?", array(
 				EC2_EBS_ATTACH_STATUS::AVAILABLE,
 				EC2_EBS_MOUNT_STATUS::NOT_MOUNTED,
-				$event->DBServer->serverId
+				$event->DBServer->serverId,
+				EC2_EBS_ATTACH_STATUS::CREATING,
 			));
 		}
 	}

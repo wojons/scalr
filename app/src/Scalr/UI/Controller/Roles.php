@@ -52,9 +52,14 @@ class Scalr_UI_Controller_Roles extends Scalr_UI_Controller
 				continue;
 
 	        $role_platforms = $dbRole->getPlatforms();
+	        $enabled_role_platforms = array();
 	        $role_locations = array();
-	        foreach ($role_platforms as $platform)
-	        	$role_locations[$platform] = $dbRole->getCloudLocations($platform);
+	        foreach ($role_platforms as $platform) {
+	       		if ($this->environment->isPlatformEnabled($platform)) {
+	        		$role_locations[$platform] = $dbRole->getCloudLocations($platform);
+	        		$enabled_role_platforms[] = $platform;
+	       		}
+	        }
 
 	        $roles[] = array(
 	        	'role_id'				=> $dbRole->id,
@@ -65,10 +70,11 @@ class Scalr_UI_Controller_Roles extends Scalr_UI_Controller
 	        	'behaviors'				=> implode(",", $dbRole->getBehaviors()),
 	        	'origin'				=> $dbRole->origin,
 	        	'isstable'				=> (bool)$dbRole->isStable,
-	        	'platforms'				=> implode(",", $role_platforms),
+	        	'platforms'				=> implode(",", $enabled_role_platforms),
 	        	'locations'				=> $role_locations,
 	        	'os'					=> $dbRole->os == 'Unknown' ? 'Unknown OS' : $dbRole->os,
-	        	'tags'					=> $dbRole->getTags()
+	        	'tags'					=> $dbRole->getTags(),
+	        	'images'				=> $dbRole->getImages(true)
 	        );
 		}
 
@@ -103,6 +109,142 @@ class Scalr_UI_Controller_Roles extends Scalr_UI_Controller
 		$this->response->success('Selected roles successfully removed');
 	}
 
+	public function xMigrateAction()
+	{
+		$this->request->defineParams(array(
+			'roleId' 			=> array('type' => 'string'),
+			'sourceLocation' 	=> array('type' => 'string'),
+			'destLocation' 		=> array('type' => 'string'),
+		));
+		
+		$dbRole = DBRole::loadById($this->getParam('roleId'));
+		if ($dbRole->envId != 0)
+			$this->user->getPermissions()->validate($dbRole);
+		
+		
+		$imageId = $dbRole->getImageId(SERVER_PLATFORMS::EC2, $this->getParam('sourceLocation'));
+		
+		$rbImages = PlatformFactory::NewPlatform(SERVER_PLATFORMS::EC2)->getRoleBuilderBaseImages();
+		foreach ($rbImages as $iId => $info) {
+			if ($info['name'] == 'Ubuntu 12.04' && $info['location'] == $this->getParam('destLocation') && $dbRole->architecture == $info['architecture']) {
+				$destImageId = $iId;
+				break;
+			}
+		}
+		
+		if (!$destImageId)
+			throw new Exception("Unable to find base image for destination server");
+		
+		// Create source server
+		$creInfo = new ServerCreateInfo(SERVER_PLATFORMS::EC2, null, 0, 0);
+		$creInfo->clientId = $this->user->getAccountId();
+		$creInfo->envId = $this->getEnvironmentId();
+		$creInfo->farmId = 0;
+		$creInfo->roleId = $dbRole->id;
+		$creInfo->SetProperties(array());
+		
+		$sourceDbServer = DBServer::Create($creInfo, true);
+		$sourceDbServer->status = SERVER_STATUS::TEMPORARY;
+		$sourceDbServer->save();
+		
+		//Launch source server
+		$sourceLaunchOptions = new Scalr_Server_LaunchOptions();
+		$sourceLaunchOptions->imageId = $imageId;
+		$sourceLaunchOptions->cloudLocation = $this->getParam('sourceLocation');
+		$sourceLaunchOptions->architecture = $dbRole->architecture;
+		
+		$sourceLaunchOptions->serverType = 't1.micro';
+		$sourceLaunchOptions->userData = "#cloud-config\ndisable_root: false";
+		
+		
+		//Create destination server
+		$creInfo = new ServerCreateInfo(SERVER_PLATFORMS::EC2, null, 0, 0);
+		$creInfo->clientId = $this->user->getAccountId();
+		$creInfo->envId = $this->getEnvironmentId();
+		$creInfo->farmId = 0;
+		$creInfo->roleId = $dbRole->id;
+		$creInfo->SetProperties(array());
+		
+		$destDbServer = DBServer::Create($creInfo, true);
+		$destDbServer->status = SERVER_STATUS::TEMPORARY;
+		$destDbServer->save();
+		
+		//Launch source server
+		$destLaunchOptions = new Scalr_Server_LaunchOptions();
+		$destLaunchOptions->imageId = $destImageId;
+		$destLaunchOptions->cloudLocation = $this->getParam('destLocation');
+		$destLaunchOptions->architecture = $dbRole->architecture;
+		
+		$destLaunchOptions->serverType = 't1.micro';
+		$destLaunchOptions->userData = "#cloud-config\ndisable_root: false";
+		
+		
+		//Add Bundle task
+		$creInfo = new ServerSnapshotCreateInfo(
+				$sourceDbServer,
+				$this->getParam('roleName'),
+				SERVER_REPLACEMENT_TYPE::NO_REPLACE
+		);
+		
+		$bundleTask = BundleTask::Create($creInfo, true);
+		
+		$bundleTask->cloudLocation = $sourceLaunchOptions->cloudLocation;
+		$bundleTask->status = SERVER_SNAPSHOT_CREATION_STATUS::MIGRATION_STARTING_SERVER;
+		$bundleTask->setMetaData(array(
+			'sourceServerId' => $sourceDbServer->serverId,
+			'destServerId'	 => $destDbServer->serverId,
+			'sourceLocation' => $this->getParam('sourceLocation'),
+			'destLocation' => $this->getParam('destLocation')
+		));
+		$bundleTask->save();
+		
+		$bundleTask->Log(sprintf("Launching source temporary server (%s)", serialize($sourceLaunchOptions)));
+		$sourceDbServer->SetProperty(SERVER_PROPERTIES::SZR_IMPORTING_BUNDLE_TASK_ID, $bundleTask->id);
+		try {
+			PlatformFactory::NewPlatform(SERVER_PLATFORMS::EC2)->LaunchServer($sourceDbServer, $sourceLaunchOptions);
+			$bundleTask->Log(_("Source temporary server launched..."));
+		}
+		catch(Exception $e) {
+			$bundleTask->SnapshotCreationFailed(sprintf(_("Unable to launch source temporary server: %s"), $e->getMessage()));
+		}
+		
+		$bundleTask->Log(sprintf("Launching destination temporary server (%s)", serialize($destLaunchOptions)));
+		$destDbServer->SetProperty(SERVER_PROPERTIES::SZR_IMPORTING_BUNDLE_TASK_ID, $bundleTask->id);
+		try {
+			PlatformFactory::NewPlatform(SERVER_PLATFORMS::EC2)->LaunchServer($destDbServer, $destLaunchOptions);
+			$bundleTask->Log(_("Destination temporary server launched..."));
+		}
+		catch(Exception $e) {
+			$bundleTask->SnapshotCreationFailed(sprintf(_("Unable to launch destination temporary server: %s"), $e->getMessage()));
+		}
+		
+		$this->response->data(array('bundleTaskId' => $bundleTask->id));
+	}
+	
+	public function migrateAction()
+	{
+		$dbRole = DBRole::loadById($this->getParam('roleId'));
+		if ($dbRole->envId != 0)
+			$this->user->getPermissions()->validate($dbRole);
+		
+		$locations = PlatformFactory::NewPlatform(SERVER_PLATFORMS::EC2)->getLocations();
+		$imageLocations = $dbRole->getCloudLocations(SERVER_PLATFORMS::EC2);
+		
+		$dest = array();
+		$source = array();
+		foreach ($locations as $location => $name) {
+			if (in_array($location, $imageLocations))
+				$source[] = array('name' => $name, 'location' => $location);
+			else
+				$dest[] = array('name' => $name, 'location' => $location);
+		}
+		
+		$this->response->page('ui/roles/migrate.js', array(
+			'destination' => $dest,
+			'source' => $source
+		));
+	}
+	
 	public function builderAction()
 	{
 		$platforms = array();
@@ -111,10 +253,22 @@ class Scalr_UI_Controller_Roles extends Scalr_UI_Controller
 			if (in_array($platform, array(SERVER_PLATFORMS::RACKSPACE, SERVER_PLATFORMS::EC2)))
 				$platforms[$platform] = SERVER_PLATFORMS::GetName($platform);
 		}
+		
+		if ($this->getParam('beta') == 1) {
+			$platforms[SERVER_PLATFORMS::GCE] = SERVER_PLATFORMS::GetName(SERVER_PLATFORMS::GCE);
+		}
 
 		$images = array();
-		foreach ($platforms as $platform => $name)
-			$images[$platform] = PlatformFactory::NewPlatform($platform)->getRoleBuilderBaseImages();
+		foreach ($platforms as $platform => $name) {
+			$p = PlatformFactory::NewPlatform($platform);
+			$images[$platform] = $p->getRoleBuilderBaseImages();
+			$locations = $p->getLocations();
+			foreach ($images[$platform] as &$image) {
+				if ($image['location']) {
+					$image['location_description'] = $locations[$image['location']];
+				}
+			}
+		}
 
 		$this->response->page('ui/roles/builder.js', array(
 			'platforms' => $platforms,
@@ -153,6 +307,11 @@ class Scalr_UI_Controller_Roles extends Scalr_UI_Controller
 
 		$imageId = $this->getParam('imageId');
 
+		// Get image info
+		$images = PlatformFactory::NewPlatform($this->getParam('platform'))->getRoleBuilderBaseImages();
+		//os_dist
+		$imageInfo = $images[$imageId];
+
 		if ($this->getParam('platform') == SERVER_PLATFORMS::RACKSPACE)
 			$imageId = str_replace('lon', '', $imageId);
 
@@ -167,9 +326,10 @@ class Scalr_UI_Controller_Roles extends Scalr_UI_Controller
 			SERVER_PROPERTIES::SZR_IMPORTING_BEHAVIOR => $behaviours,
 			SERVER_PROPERTIES::SZR_KEY => Scalr::GenerateRandomKey(40),
 			SERVER_PROPERTIES::SZR_KEY_TYPE => SZR_KEY_TYPE::PERMANENT,
-			SERVER_PROPERTIES::SZR_VESION => "0.6",
+			SERVER_PROPERTIES::SZR_VESION => "0.9",
 			SERVER_PROPERTIES::SZR_IMPORTING_MYSQL_SERVER_TYPE => $this->getParam('mysqlServerType'),
-			SERVER_PROPERTIES::SZR_DEV_SCALARIZR_BRANCH => $this->getParam('devScalarizrBranch')
+			SERVER_PROPERTIES::SZR_DEV_SCALARIZR_BRANCH => $this->getParam('devScalarizrBranch'),
+			SERVER_PROPERTIES::ARCHITECTURE => $this->getParam('architecture')
 		));
 
 		$dbServer = DBServer::Create($creInfo, true);
@@ -185,11 +345,24 @@ class Scalr_UI_Controller_Roles extends Scalr_UI_Controller
 
 		switch($this->getParam('platform')) {
 			case SERVER_PLATFORMS::RACKSPACE:
-				$launchOptions->serverType = 1;
+				if ($imageInfo['os_dist'] == 'ubuntu')
+					$launchOptions->serverType = 1;
+				else
+					$launchOptions->serverType = 3;
 				break;
 			case SERVER_PLATFORMS::EC2:
-				$launchOptions->serverType = 'm1.small';
+				if ($imageInfo['os_dist'] == 'oel') {
+					$launchOptions->serverType = 'm1.large';
+					$bundleType = SERVER_SNAPSHOT_CREATION_TYPE::EC2_EBS_HVM;
+				}
+				else
+					$launchOptions->serverType = 'm1.small';
+				
 				$launchOptions->userData = "#cloud-config\ndisable_root: false";
+				break;
+			case SERVER_PLATFORMS::GCE:
+				$launchOptions->serverType = 'n1-standard-1';
+				$bundleType = SERVER_SNAPSHOT_CREATION_TYPE::GCE_STORAGE;
 				break;
 		}
 		
@@ -207,7 +380,10 @@ class Scalr_UI_Controller_Roles extends Scalr_UI_Controller
 		);
 
 		$bundleTask = BundleTask::Create($creInfo, true);
-
+		
+		if ($bundleType)
+			$bundleTask->bundleType = $bundleType;
+		
 		$bundleTask->cloudLocation = $launchOptions->cloudLocation;
 		$bundleTask->save();
 
@@ -235,6 +411,11 @@ class Scalr_UI_Controller_Roles extends Scalr_UI_Controller
 			'locations' => self::loadController('Platforms')->getCloudLocations('all'),
 			'isScalrAdmin' => ($this->user->getType() == Scalr_Account_User::TYPE_SCALR_ADMIN)
 		));
+	}
+
+	public function createAction()
+	{
+		$this->editAction();
 	}
 
 	/**
@@ -282,14 +463,18 @@ class Scalr_UI_Controller_Roles extends Scalr_UI_Controller
 				$this->user->getPermissions()->validate($dbRole);
 
 			$images = array();
-			foreach ($dbRole->getImages() as $platform => $locations) {
-				foreach ($locations as $location => $imageId)
+			foreach ($dbRole->getImages(true) as $platform => $locations) {
+				foreach ($locations as $location => $imageInfo)
 					$images[] = array(
-						'image_id' 		=> $imageId,
+						'image_id' 		=> $imageInfo['image_id'],
 						'platform' 		=> $platform,
 						'location' 		=> $location,
 						'platform_name' => SERVER_PLATFORMS::GetName($platform),
-						'location_name'	=> $llist[$location]
+						'location_name'	=> $llist[$location],
+						'os_name'		=> $imageInfo['os_name'],
+						'os_version'	=> $imageInfo['os_version'],
+						'os_family'		=> $imageInfo['os_family'],
+						'architecture'	=> $imageInfo['architecture']
 					);
 			}
 
@@ -331,25 +516,21 @@ class Scalr_UI_Controller_Roles extends Scalr_UI_Controller
 
 			$this->response->page('ui/roles/edit.js', $params,  array('ui/scripts/scriptfield.js'), array('ui/scripts/scriptfield.css'));
 		} else {
-			if ($this->user->getType() != Scalr_Account_User::TYPE_SCALR_ADMIN) {
-				throw new Scalr_Exception_InsufficientPermissions();
-			} else {
-				$params['tags'] = array();
-				$params['role'] = array(
-					'id'			=> 0,
-					'name'			=> "",
-					'arch'			=> "i386",
-					'agent'			=> 2,
-					'description'	=> "",
-					'behaviors'		=> array(),
-					'properties'	=> array(DBRole::PROPERTY_SSH_PORT => 22),
-					'images'		=> array(),
-					'parameters'	=> array(),
-					'scripts'       => array()
-				);
+			$params['tags'] = array();
+			$params['role'] = array(
+				'id'			=> 0,
+				'name'			=> "",
+				'arch'			=> "x86_64",
+				'agent'			=> 2,
+				'description'	=> "",
+				'behaviors'		=> array(),
+				'properties'	=> array(DBRole::PROPERTY_SSH_PORT => 22),
+				'images'		=> array(),
+				'parameters'	=> array(),
+				'scripts'       => array()
+			);
 
-				$this->response->page('ui/roles/edit.js', $params, array('ui/scripts/scriptfield.js'), array('ui/scripts/scriptfield.css'));
-			}
+			$this->response->page('ui/roles/edit.js', $params, array('ui/scripts/scriptfield.js'), array('ui/scripts/scriptfield.css'));
 		}
 	}
 
@@ -422,23 +603,30 @@ class Scalr_UI_Controller_Roles extends Scalr_UI_Controller
 		$parameters = $this->getParam('parameters');
 
 		if ($id == 0) {
-			if ($this->user->getType() != Scalr_Account_User::TYPE_SCALR_ADMIN)
-				throw new Scalr_Exception_InsufficientPermissions();
+			if ($this->user->getType() != Scalr_Account_User::TYPE_SCALR_ADMIN) {
+				$origin = ROLE_TYPE::CUSTOM;
+				$envId = $this->environment->id;
+				$clientId = $this->user->getAccountId();
+			} else {
+				$origin = ROLE_TYPE::SHARED;
+				$envId = 0;
+				$clientId = 0;
+			}
 
 			$dbRole = new DBRole(0);
 
 			$dbRole->generation = ($this->getParam('agent') == 'scalarizr' || $this->getParam('agent') == 2) ? 2 : 1; // ($post_agent != 'scalarizr') ? 1 : 2;
 			$dbRole->architecture = $this->getParam('arch');
-			$dbRole->origin = ROLE_TYPE::SHARED;
-			$dbRole->envId = 0;
-			$dbRole->clientId = 0;
+			$dbRole->origin = $origin;
+			$dbRole->envId = $envId;
+			$dbRole->clientId = $clientId;
 			$dbRole->name = $this->getParam('name');
 			$dbRole->os = $this->getParam('os');
 			$dbRole->szrVersion = $this->getParam('szr_version');
 
 			$rules = array(
-				'icmp:-1:-1:0.0.0.0/0',
-				'tcp:22:22:0.0.0.0/0'
+				array('rule' => 'icmp:-1:-1:0.0.0.0/0'),
+				array('rule' => 'tcp:22:22:0.0.0.0/0')
 			);
 
 			foreach ($this->getParam('behaviors') as $behavior) {
@@ -454,22 +642,23 @@ class Scalr_UI_Controller_Roles extends Scalr_UI_Controller
 				}
 
 				if ($behavior == ROLE_BEHAVIORS::MYSQL) {
-					$rules[] = "tcp:3306:3306:0.0.0.0/0";
+					$rules[] = array('rule' => "tcp:3306:3306:0.0.0.0/0");
 				}
 
 				if ($behavior == ROLE_BEHAVIORS::CASSANDRA) {
-					$rules[] = "tcp:9160:9160:0.0.0.0/0";
+					$rules[] = array('rule' => "tcp:9160:9160:0.0.0.0/0");
 				}
 				
 				if ($behavior == ROLE_BEHAVIORS::CF_DEA) {
-					$rules[] = "tcp:12345:12345:0.0.0.0/0";
+					$rules[] = array('rule' => "tcp:12345:12345:0.0.0.0/0");
 				}
 				
 				if ($behavior == ROLE_BEHAVIORS::CF_ROUTER) {
-					$rules[] = "tcp:2222:2222:0.0.0.0/0";
+					$rules[] = array('rule' => "tcp:2222:2222:0.0.0.0/0");
 				}
 				
-				$rules = array_merge($rules, Scalr_Role_Behavior::loadByName($behavior)->getSecurityRules());
+				foreach (Scalr_Role_Behavior::loadByName($behavior)->getSecurityRules() as $rr)
+					$rules[] = array('rule' => $rr);
 			}
 
 			$dbRole = $dbRole->save();
@@ -523,9 +712,9 @@ class Scalr_UI_Controller_Roles extends Scalr_UI_Controller
 				$image['location'],
 				
 				$image['szr_version'], 
-				$image['distributor'], 
-				$image['codename'], 
-				$image['release'],
+				$image['os_family'], 
+				$image['os_name'], 
+				$image['os_version'],
 				$image['architecture']
 			);
 		}
@@ -582,10 +771,15 @@ class Scalr_UI_Controller_Roles extends Scalr_UI_Controller
 			foreach ($dbRole->getPlatforms() as $platform)
 				$platforms[] = SERVER_PLATFORMS::GetName($platform);
 
+			if ($this->user->getAccountId() != 0)
+				$usedBy =$this->db->GetOne("SELECT COUNT(*) FROM farm_roles WHERE (role_id=? OR new_role_id=?) AND farmid IN (SELECT id FROM farms WHERE env_id=?)", array($dbRole->id, $dbRole->id, $this->getEnvironmentId()));
+			else
+				$usedBy =$this->db->GetOne("SELECT COUNT(*) FROM farm_roles WHERE role_id=? OR new_role_id=?", array($dbRole->id, $dbRole->id));
+				
 			$status = '<span style="color:gray;">Not used</span>';
 			if ($this->db->GetOne("SELECT id FROM roles_queue WHERE role_id=?", array($dbRole->id)))
 				$status = '<span style="color:red;">Deleting</span>';
-			elseif ($this->db->GetOne("SELECT COUNT(*) FROM farm_roles WHERE role_id=? AND farmid IN (SELECT id FROM farms WHERE clientid=?)", array($dbRole->id, $this->user->getAccountId())) > 0)
+			elseif ($usedBy > 0)
 				$status = '<span style="color:green;">In use</span>';
 
 			$role = array(

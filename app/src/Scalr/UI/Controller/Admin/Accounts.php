@@ -48,7 +48,17 @@ class Scalr_UI_Controller_Admin_Accounts extends Scalr_UI_Controller
 			$sql .= ' AND id IN (SELECT account_id FROM account_users WHERE `type` = '.$this->db->qstr(Scalr_Account_User::TYPE_ACCOUNT_OWNER).' AND email LIKE '.$this->db->qstr("%".$chunks[1]."%").')';
 			$this->request->setParams(array('query' => ''));
 		}
-			
+		
+		if ($chunks[0] == 'user') {
+			$sql .= ' AND id IN (SELECT account_id FROM account_users WHERE email LIKE '.$this->db->qstr("%".$chunks[1]."%").')';
+			$this->request->setParams(array('query' => ''));
+		}
+
+		if ($chunks[0] == 'env') {
+			$sql .= ' AND id IN (SELECT client_id FROM client_environments WHERE id LIKE "'.$this->db->qstr("%".$chunks[1]."%").'")';
+			$this->request->setParams(array('query' => ''));
+		}
+
 		$response = $this->buildResponseFromSql($sql, array("id", "name"));
 		foreach ($response['data'] as &$row) {
 			$account = Scalr_Account::init()->loadById($row['id']);
@@ -213,7 +223,6 @@ class Scalr_UI_Controller_Admin_Accounts extends Scalr_UI_Controller
 		$owner = $account->getOwner();
 		
 		Scalr_Session::create($owner->getId());
-		
-		UI::Redirect("/#/dashboard");
+		$this->response->setRedirect('/');
 	}
 }

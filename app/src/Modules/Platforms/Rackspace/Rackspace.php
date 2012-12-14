@@ -43,16 +43,16 @@
 
 			if (!$isManagedOrd1) {
 				$images['rs-ORD1'] = array(
+					'125'	=> array('name' => 'Ubuntu 12.04','os_dist' => 'ubuntu', 'location' => 'rs-ORD1', 'architecture' => 'x86_64'),
 					'112'	=> array('name' => 'Ubuntu 10.04','os_dist' => 'ubuntu', 'location' => 'rs-ORD1', 'architecture' => 'x86_64'),
-					'115'	=> array('name' => 'Ubuntu 11.04','os_dist' => 'ubuntu', 'location' => 'rs-ORD1', 'architecture' => 'x86_64'),
-					'119'	=> array('name' => 'Ubuntu 11.10','os_dist' => 'ubuntu', 'location' => 'rs-ORD1', 'architecture' => 'x86_64'),					
-					'114'	=> array('name' => 'CentOS 5.6',  'os_dist' => 'centos', 'location' => 'rs-ORD1', 'architecture' => 'x86_64'),
-					'110'	=> array('name' => 'RHEL 5.5',    'os_dist' => 'rhel',   'location' => 'rs-ORD1', 'architecture' => 'x86_64')
+					'121'	=> array('name' => 'CentOS 5.8',  'os_dist' => 'centos', 'location' => 'rs-ORD1', 'architecture' => 'x86_64'),
+					'127'	=> array('name' => 'CentOS 6.3',  'os_dist' => 'centos', 'location' => 'rs-ORD1', 'architecture' => 'x86_64'),
+					'110'	=> array('name' => 'RHEL 5.5',    'os_dist' => 'rhel',   'location' => 'rs-ORD1', 'architecture' => 'x86_64'),
+					'111'	=> array('name' => 'RHEL 6.1',    'os_dist' => 'rhel',   'location' => 'rs-ORD1', 'architecture' => 'x86_64'),
 				);
 			} else {
 				$images['rs-ORD1'] = array(
 					'65'	=> array('name' => 'Ubuntu 10.04','os_dist' => 'ubuntu', 'location' => 'rs-ORD1', 'architecture' => 'x86_64'),
-					'73'	=> array('name' => 'Ubuntu 10.10','os_dist' => 'ubuntu', 'location' => 'rs-ORD1', 'architecture' => 'x86_64'),
 					'67'	=> array('name' => 'CentOS 5.5',  'os_dist' => 'centos', 'location' => 'rs-ORD1', 'architecture' => 'x86_64'),
 					'63'	=> array('name' => 'RHEL 5.5',    'os_dist' => 'rhel',   'location' => 'rs-ORD1', 'architecture' => 'x86_64'),
 				);
@@ -60,17 +60,17 @@
 				
 			if (!$isManagedLonx) {
 				$images['rs-LONx'] = array(
+					'lon125'	=> array('name' => 'Ubuntu 12.04','os_dist' => 'ubuntu', 'location' => 'rs-LONx', 'architecture' => 'x86_64'),
 					'lon112'	=> array('name' => 'Ubuntu 10.04','os_dist' => 'ubuntu', 'location' => 'rs-LONx', 'architecture' => 'x86_64'),
-					'lon115'	=> array('name' => 'Ubuntu 11.04','os_dist' => 'ubuntu', 'location' => 'rs-LONx', 'architecture' => 'x86_64'),
-					'lon119'	=> array('name' => 'Ubuntu 11.10','os_dist' => 'ubuntu', 'location' => 'rs-LONx', 'architecture' => 'x86_64'),
-					'lon114'	=> array('name' => 'CentOS 5.6',  'os_dist' => 'centos', 'location' => 'rs-LONx', 'architecture' => 'x86_64'),
-					'lon110'	=> array('name' => 'RHEL 5.5',    'os_dist' => 'rhel',   'location' => 'rs-LONx', 'architecture' => 'x86_64')
+					'lon121'	=> array('name' => 'CentOS 5.8',  'os_dist' => 'centos', 'location' => 'rs-ORD1', 'architecture' => 'x86_64'),
+					'lon127'	=> array('name' => 'CentOS 6.3',  'os_dist' => 'centos', 'location' => 'rs-ORD1', 'architecture' => 'x86_64'),
+					'lon110'	=> array('name' => 'RHEL 5.5',    'os_dist' => 'rhel',   'location' => 'rs-LONx', 'architecture' => 'x86_64'),
+					'lon111'	=> array('name' => 'RHEL 6.1',    'os_dist' => 'rhel',   'location' => 'rs-ORD1', 'architecture' => 'x86_64'),
 				);	
 			}
 			else {
 				$images['rs-LONx'] = array(
 					'lon65'	=> array('name' => 'Ubuntu 10.04','os_dist' => 'ubuntu', 'location' => 'rs-LONx', 'architecture' => 'x86_64'),
-					'lon73'	=> array('name' => 'Ubuntu 10.10','os_dist' => 'ubuntu', 'location' => 'rs-LONx', 'architecture' => 'x86_64'),
 					'lon67'	=> array('name' => 'CentOS 5.5',  'os_dist' => 'centos', 'location' => 'rs-LONx', 'architecture' => 'x86_64'),
 					'lon63'	=> array('name' => 'RHEL 5.5',    'os_dist' => 'rhel',   'location' => 'rs-LONx', 'architecture' => 'x86_64')
 				);
@@ -386,7 +386,7 @@
 						'path'		=> '/etc/scalr/private.d/.user-data',
 						'contents'	=> base64_encode($launchOptions->userData)
 					)
-				);
+				);				
 			} catch (Exception $e) {
 				 throw new Exception(sprintf(_("Cannot launch new instance. %s (%s, %s)"), $e->getMessage(), $launchOptions->imageId, $launchOptions->serverType));
 			}
@@ -423,6 +423,7 @@
 			$put |= $message instanceof Scalr_Messaging_Msg_DbMsr_PromoteToMaster;
 			$put |= $message instanceof Scalr_Messaging_Msg_DbMsr_CreateDataBundle;
 			$put |= $message instanceof Scalr_Messaging_Msg_DbMsr_CreateBackup;
+			$put |= $message instanceof Scalr_Messaging_Msg_DbMsr_NewMasterUp;
 			
 			
 			if ($put) {

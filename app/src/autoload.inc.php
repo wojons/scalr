@@ -1,4 +1,4 @@
-<?
+<?php
 	function __autoload($class_name)
 	{
     	$paths = array(
@@ -20,9 +20,10 @@
 
     		/********************** Service Configuration Modules ********************/
     		'ServiceConfigurationFactory'	=> SRCPATH.'/Modules/class.ServiceConfigurationFactory.php',
-    	
+
     		/****************************** Modules **********************************/
     		'Modules_Platforms_Aws'		=> SRCPATH.'/Modules/Platforms/abstract.Aws.php', // Abstract
+    		'Modules_Platform'			=> SRCPATH.'/Modules/abstract.Platform.php', // Abstract
 
     		'Modules_Platforms_Ec2'		=> SRCPATH.'/Modules/Platforms/Ec2/Ec2.php',
     		'Modules_Platforms_Rds'		=> SRCPATH.'/Modules/Platforms/Rds/Rds.php',
@@ -31,8 +32,11 @@
     		'Modules_Platforms_Nimbula'		=> SRCPATH.'/Modules/Platforms/Nimbula/Nimbula.php',
 			'Modules_Platforms_Cloudstack'		=> SRCPATH.'/Modules/Platforms/Cloudstack/Cloudstack.php',
     		'Modules_Platforms_Openstack'		=> SRCPATH.'/Modules/Platforms/Openstack/Openstack.php',
-    	
-    	
+    		'Modules_Platforms_uCloud'		=> SRCPATH.'/Modules/Platforms/uCloud/uCloud.php',
+    		'Modules_Platforms_Idcf'		=> SRCPATH.'/Modules/Platforms/Idcf/Idcf.php',
+    		'Modules_Platforms_GoogleCE'		=> SRCPATH.'/Modules/Platforms/GoogleCE/GoogleCE.php',
+
+
     		'IModules_Platforms_Adapters_Status' => SRCPATH.'/Modules/Platforms/interface.IModules_Platforms_Adapters_Status.php',
     		'IPlatformModule'		=> SRCPATH.'/Modules/interface.IPlatformModule.php',
     		'PlatformFactory'		=> SRCPATH.'/Modules/class.PlatformFactory.php',
@@ -50,7 +54,8 @@
     		'Modules_Platforms_Openstack_Adapters_Status'	=> SRCPATH.'/Modules/Platforms/Openstack/Adapters/Status.php',
     		'Modules_Platforms_Nimbula_Adapters_Status'	=> SRCPATH.'/Modules/Platforms/Nimbula/Adapters/Status.php',
     		'Modules_Platforms_Cloudstack_Adapters_Status'	=> SRCPATH.'/Modules/Platforms/Cloudstack/Adapters/Status.php',
-    	
+    		'Modules_Platforms_GoogleCE_Adapters_Status'	=> SRCPATH.'/Modules/Platforms/GoogleCE/Adapters/Status.php',
+
 
 
     		'Modules_Platforms_Rds_Helpers_Rds'	=> SRCPATH.'/Modules/Platforms/Rds/Helpers/Rds.php',
@@ -59,7 +64,7 @@
 
 
     		'Modules_Platforms_Eucalyptus_Helpers_Eucalyptus'	=> SRCPATH.'/Modules/Platforms/Eucalyptus/Helpers/Eucalyptus.php',
-    	
+
     		'Modules_Platforms_Cloudstack_Helpers_Cloudstack'	=> SRCPATH.'/Modules/Platforms/Cloudstack/Helpers/Cloudstack.php',
     		'Modules_Platforms_Cloudstack_Observers_Cloudstack'	=> SRCPATH.'/Modules/Platforms/Cloudstack/Observers/Cloudstack.php',
 
@@ -85,6 +90,9 @@
 
     		/****************************** Events ******************************/
     		'Event'					=> SRCPATH.'/events/abstract.Event.php',
+    		'CustomEvent'			=> SRCPATH.'/events/class.CustomEvent.php',
+    		'MetricCheckFailedEvent'=> SRCPATH.'/events/class.MetricCheckFailedEvent.php',
+    		'MetricCheckRecoveredEvent'		=> SRCPATH.'/events/class.MetricCheckRecoveredEvent.php',
     		'FarmLaunchedEvent' 	=> SRCPATH.'/events/class.FarmLaunchedEvent.php',
     		'FarmTerminatedEvent' 	=> SRCPATH.'/events/class.FarmTerminatedEvent.php',
     		'HostCrashEvent' 		=> SRCPATH.'/events/class.HostCrashEvent.php',
@@ -112,16 +120,15 @@
     		'ServiceConfigurationPresetChangedEvent'	=> SRCPATH.'/events/class.ServiceConfigurationPresetChangedEvent.php',
 
     		/****************************** Structs ******************************/
-    		'CONTEXTS'				=> SRCPATH."/structs/struct.CONTEXTS.php",
 			'CONFIG'				=> SRCPATH."/structs/struct.CONFIG.php",
 
     		/****************************** ENUMS ******************************/
     		'APPCONTEXT'			=> SRCPATH."/types/enum.APPCONTEXT.php",
 			'FORM_FIELD_TYPE'		=> SRCPATH."/types/enum.FORM_FIELD_TYPE.php",
 			'SUBSCRIPTION_STATUS'	=> SRCPATH."/types/enum.SUBSCRIPTION_STATUS.php",
-			'INSTANCE_FLAVOR'		=> SRCPATH."/types/enum.INSTANCE_FLAVOR.php",
-    		'X86_64_TYPE'			=> SRCPATH."/types/enum.X86_64_TYPE.php",
-    		'I386_TYPE'				=> SRCPATH."/types/enum.I386_TYPE.php",
+			//'INSTANCE_FLAVOR'		=> SRCPATH."/types/enum.INSTANCE_FLAVOR.php",
+    		//'X86_64_TYPE'			=> SRCPATH."/types/enum.X86_64_TYPE.php",
+    		//'I386_TYPE'				=> SRCPATH."/types/enum.I386_TYPE.php",
 			'INSTANCE_ARCHITECTURE'	=> SRCPATH."/types/enum.INSTANCE_ARCHITECTURE.php",
 			'EVENT_TYPE'			=> SRCPATH."/types/enum.EVENT_TYPE.php",
 			'RRD_STORAGE_TYPE'		=> SRCPATH."/types/enum.RRD_STORAGE_TYPE.php",
@@ -161,6 +168,7 @@
     		'EC2_SERVER_PROPERTIES'	=> SRCPATH."/types/enum.EC2_SERVER_PROPERTIES.php",
     		'RDS_SERVER_PROPERTIES'	=> SRCPATH."/types/enum.RDS_SERVER_PROPERTIES.php",
     		'VPS_SERVER_PROPERTIES'	=> SRCPATH."/types/enum.VPS_SERVER_PROPERTIES.php",
+    		'GCE_SERVER_PROPERTIES'	=> SRCPATH."/types/enum.GCE_SERVER_PROPERTIES.php",
     		'EUCA_SERVER_PROPERTIES'=> SRCPATH."/types/enum.EUCA_SERVER_PROPERTIES.php",
     		'RACKSPACE_SERVER_PROPERTIES'	=> SRCPATH."/types/enum.RACKSPACE_SERVER_PROPERTIES.php",
     		'OPENSTACK_SERVER_PROPERTIES'	=> SRCPATH."/types/enum.OPENSTACK_SERVER_PROPERTIES.php",
@@ -201,6 +209,9 @@
 		if (strpos($class_name, "_") !== false) {
 			$filename = str_replace("_", "/", $class_name) . ".php";
 			require_once ($filename);
+		} else if (strpos($class_name, 'Scalr\\') === 0) {
+		    //Loads Scalr namespaces
+		    $filename = str_replace('\\', "/", $class_name) . ".php";
+			require_once ($filename);
 		}
 	}
-?>

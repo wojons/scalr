@@ -25,6 +25,62 @@
         {
         	$db = Core::GetDBInstance(null, true);
 			
+        	$list = $db->GetAll("SELECT farm_roleid FROM farm_role_settings WHERE name=? AND value='1'", array(Scalr_Db_Msr::DATA_STORAGE_EBS_ENABLE_ROTATION));
+        	foreach ($list as $list_item) {
+        		try {
+        			$DBFarmRole = DBFarmRole::LoadByID($list_item['farm_roleid']);
+        		}
+        		catch(Exception $e) {
+        			continue;
+        		}
+        		
+        		try {
+        			$DBFarm = $DBFarmRole->GetFarmObject();
+        		}
+        		catch(Exception $e) {
+        			continue;
+        		}
+        		
+        		if ($DBFarm->Status == FARM_STATUS::RUNNING) {
+        			$old_snapshots = $db->GetAll("SELECT id FROM storage_snapshots WHERE farm_roleid=? AND `type`='ebs' ORDER BY dtcreated ASC", array($DBFarmRole->ID));
+        			$r = (int)$DBFarmRole->GetSetting(Scalr_Db_Msr::DATA_STORAGE_EBS_ROTATE);
+        			
+        			if (count($old_snapshots) > $r && $r > 0) {
+        				try {
+        					$AmazonEC2Client = Scalr_Service_Cloud_Aws::newEc2(
+        							$DBFarmRole->CloudLocation,
+        							$DBFarm->GetEnvironmentObject()->getPlatformConfigValue(Modules_Platforms_Ec2::PRIVATE_KEY),
+        							$DBFarm->GetEnvironmentObject()->getPlatformConfigValue(Modules_Platforms_Ec2::CERTIFICATE)
+        					);
+        						
+        					while (count($old_snapshots) > $r)
+        					{
+        						$snapinfo = array_shift($old_snapshots);
+        						
+        						try {
+        							$AmazonEC2Client->DeleteSnapshot($snapinfo['id']);
+        							$db->Execute("DELETE FROM storage_snapshots WHERE id=?", array($snapinfo['id']));
+        						}
+        						catch(Exception $e) {
+        							if (stristr($e->getMessage(), "does not exist")) {
+        								$db->Execute("DELETE FROM storage_snapshots WHERE id=?", array($snapinfo['id']));
+        							}
+        							else
+        								throw $e;
+        						}
+        					}
+        				}
+        				catch(Exception $e)
+        				{
+        					$this->logger->warn(sprintf(
+        							_("Cannot delete old snapshot ({$snapinfo['id']}): %s"),
+        							$e->getMessage()
+        					));
+        				}
+        			}
+        		}
+        	}
+        	
 			// Rotate MySQL master snapshots.
 			$list = $db->GetAll("SELECT farm_roleid FROM farm_role_settings WHERE name=? AND value='1'", array(DBFarmRole::SETTING_MYSQL_EBS_SNAPS_ROTATION_ENABLED));
 			foreach ($list as $list_item)
@@ -38,7 +94,13 @@
 					continue;	
 				}
 				
-				$DBFarm = $DBFarmRole->GetFarmObject();
+				try {
+					$DBFarm = $DBFarmRole->GetFarmObject();
+				}
+				catch(Exception $e)
+				{
+					continue;
+				}
 				
 				if ($DBFarm->Status == FARM_STATUS::RUNNING)
 				{					
@@ -340,7 +402,9 @@
         				$CreateVolumeType = new CreateVolumeType(
         					$DBEBSVolume->size,
         					($DBEBSVolume->snapId) ? $DBEBSVolume->snapId : "",
-        					$DBEBSVolume->ec2AvailZone
+        					$DBEBSVolume->ec2AvailZone,
+        					$DBEBSVolume->type,
+        					$DBEBSVolume->iops
         				);
         				
         				try
@@ -370,7 +434,10 @@
         						}
         					}
         					
-        					$this->logger->error("Cannot create volume: {$e->getMessage()}. Database ID: {$DBEBSVolume->id}");
+        					if ($DBEBSVolume->farmId)
+        						$this->logger->error(new FarmLogMessage($DBEBSVolume->farmId, "Cannot create volume: {$e->getMessage()}"));
+        					else
+        						$this->logger->error("Cannot create volume: {$e->getMessage()}. Database ID: {$DBEBSVolume->id}");
         					exit();
         				}
         			}
@@ -425,7 +492,7 @@
         				$DBEBSVolume->attachmentStatus = EC2_EBS_ATTACH_STATUS::ATTACHING;
 	        			$DBEBSVolume->save();
         				
-        				$this->logger->fatal("Szr verison > 0.7.36. Status: {$DBServer->status}. VolumeID: {$DBEBSVolume->volumeId}");
+        				//$this->logger->fatal("Szr verison > 0.7.36. Status: {$DBServer->status}. VolumeID: {$DBEBSVolume->volumeId}");
         				return;
         			}
         		}

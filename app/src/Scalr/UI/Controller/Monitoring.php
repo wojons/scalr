@@ -4,7 +4,7 @@ class Scalr_UI_Controller_Monitoring extends Scalr_UI_Controller
 {
 	public function viewAction() 
 	{		
-		$farms = self::loadController('Farms')->getList(array('status' => FARM_STATUS::RUNNING));		
+		$farms = self::loadController('Farms')->getList(array('status' => FARM_STATUS::RUNNING));
 		$children = array();
 		$hasServers = false;
 		$hasRoles = false;
@@ -33,7 +33,7 @@ class Scalr_UI_Controller_Monitoring extends Scalr_UI_Controller
 						'checked' => false,
 						'itemId' => 'INSTANCE_'.$serv['farm_roleid'].'_'.$serv['index'],
 						'value' => '#'.$serv['index'],
-						'icon' => '/ui/images/space.gif'
+						'icon' => '/ui2/images/space.gif'
 					);
 				}
 				
@@ -43,7 +43,7 @@ class Scalr_UI_Controller_Monitoring extends Scalr_UI_Controller
 					'checked' => false,
 					'itemId' => $role['id'],
 					'value' => $role['name'],
-					'icon' => '/ui/images/space.gif'
+					'icon' => '/ui2/images/space.gif'
 				);
 				
 				if ($hasServers) {
@@ -63,7 +63,7 @@ class Scalr_UI_Controller_Monitoring extends Scalr_UI_Controller
             	'value' => $farm['name'],
             	'checked' => false,
             	'leaf' => true,
-				'icon' => '/ui/images/space.gif'
+				'icon' => '/ui2/images/space.gif'
 			);
 			
 			if ($hasRoles) {
@@ -75,8 +75,8 @@ class Scalr_UI_Controller_Monitoring extends Scalr_UI_Controller
 			$children[] = $item;
 			$hasRoles = false;
 		}
-		$enabled = $this->user->getSetting(Scalr_Account_User::SETTING_DASHBOARD_ENABLED);
-		$this->response->page('ui/monitoring/view.js', array('children' => $children, 'dashboard_enabled' => $enabled));
+		//$enabled = $this->user->getSetting(Scalr_Account_User::SETTING_DASHBOARD_ENABLED);
+		$this->response->page('ui/monitoring/view.js', array('children' => $children/*, 'dashboard_enabled' => $enabled*/), array('ui/monitoring/window.js'));
 	}
 }
 

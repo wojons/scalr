@@ -80,7 +80,8 @@
 				$event->DBServer->GetFarmRoleObject()->GetRoleObject()->name, 
 				$event->DBServer->localIp, 
 				$event->DBServer->remoteIp,
-				$event->NewIPAddress
+				$event->NewIPAddress,
+				$event->NewLocalIPAddress
 			);
 			
 			$this->SendExecMessage($event->DBServer, $event, $msg);
@@ -188,9 +189,6 @@
 						continue;
 					}
 				}
-				
-				if (!$farmDBServer->IsSupported("0.5"))
-					$farmDBServer->SendMessage($msg, true);
 			}
 		}
 	}

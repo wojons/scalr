@@ -1,4 +1,7 @@
 <?php
+
+	use \Scalr\Server\Alerts;
+
 	class DBEventObserver extends EventObserver
 	{
 		/**
@@ -7,6 +10,24 @@
 		 * @var unknown_type
 		 */
 		public $ObserverName = 'DB';
+		
+		public function OnMetricCheckFailed(MetricCheckFailedEvent $event) {
+			
+            $serverAlerts = new Alerts($event->dBServer);
+			$hasActiveAlert = $serverAlerts->hasActiveAlert($event->metric);
+			if (!$hasActiveAlert) {
+				$serverAlerts->createAlert($event->metric, $event->details);
+			}
+		}
+		
+		public function OnMetricCheckRecovered(MetricCheckRecoveredEvent $event) {
+			
+			$serverAlerts = new Alerts($event->dBServer);
+			$hasActiveAlert = $serverAlerts->hasActiveAlert($event->metric);
+			if ($hasActiveAlert) {
+				$serverAlerts->solveAlert($event->metric);
+			}
+		}
 		
 		/**
 		 * Update database when 'mysqlBckComplete' event recieved from instance
@@ -28,6 +49,38 @@
 			{
 				$DBFarmRole->SetSetting(DBFarmRole::SETTING_MYSQL_LAST_BCP_TS, time());
 				$DBFarmRole->SetSetting(DBFarmRole::SETTING_MYSQL_IS_BCP_RUNNING, 0);
+				
+				switch ($event->DBServer->platform) {
+					case SERVER_PLATFORMS::EC2:
+						$provider = 's3'; break;
+					case SERVER_PLATFORMS::RACKSPACE:
+						$provider = 'cf'; break;
+					default:
+						$provider = 'unknown'; break;
+				}
+				
+				$backup = Scalr_Db_Backup::init();
+				$backup->service = 'mysql';
+				$backup->platform = $event->DBServer->platform;
+				$backup->provider = $provider;
+				$backup->envId = $event->DBServer->envId;
+				$backup->farmId = $event->DBServer->farmId;
+				$backup->cloudLocation = $event->DBServer->GetCloudLocation();
+				$backup->status = Scalr_Db_Backup::STATUS_AVAILABLE;
+				
+				$total = 0;
+				foreach ($event->backupParts as $item) {
+					if (is_object($item) && $item->size) {
+						$backup->addPart(str_replace(array("s3://", "cf://"), array("", ""), $item->path), $item->size);
+						$total = $total+(int)$item->size;
+					} else {
+						$backup->addPart(str_replace(array("s3://", "cf://"), array("", ""), $item), 0);
+					}
+				}
+				
+				$backup->size = $total;
+				$backup->save();
+				
 			}
 			elseif ($event->Operation == MYSQL_BACKUP_TYPE::BUNDLE)
 			{
@@ -175,10 +228,15 @@
 		 */
 		public function OnHostInit(HostInitEvent $event)
 		{			
+			$event->DBServer->SetProperty("tmp.status", $event->DBServer->status);
+			
+			
 			$event->DBServer->localIp = $event->InternalIP;
 			$event->DBServer->remoteIp = $event->ExternalIP;
 			$event->DBServer->status = SERVER_STATUS::INIT;
 			$event->DBServer->Save();
+			
+			$event->DBServer->SetProperty("tmp.status.processed", $event->DBServer->status);
 			
 			$this->DB->Execute("DELETE FROM server_operations WHERE server_id=?", array($event->DBServer->serverId));
 			$event->DBServer->SetProperty(SERVER_PROPERTIES::SZR_IS_INIT_FAILED, false);
@@ -186,7 +244,8 @@
 			try {
 				$key = Scalr_Model::init(Scalr_Model::SSH_KEY)->loadGlobalByFarmId(
 					$event->DBServer->farmId,
-					$event->DBServer->GetFarmRoleObject()->CloudLocation
+					$event->DBServer->GetFarmRoleObject()->CloudLocation,
+					$event->DBServer->platform
 				);
 				
 				if ($key && !$key->getPublic())
@@ -208,6 +267,12 @@
 		{
 			try {
 				$BundleTask = BundleTask::LoadById($event->BundleTaskID);
+				
+				$BundleTask->osFamily = $event->MetaData['dist']->distributor;
+				$BundleTask->osName = $event->MetaData['dist']->codename;
+				$BundleTask->osVersion = $event->MetaData['dist']->release;
+				
+				$BundleTask->Save();
 			}
 			catch (Exception $e)
 			{
@@ -219,7 +284,15 @@
 				$BundleTask->SnapshotCreationComplete($event->SnapshotID, $event->MetaData);
 				
 			if ($event->DBServer && $event->DBServer->status == SERVER_STATUS::TEMPORARY) {
+				
+				$BundleTask->Log("Terminating temporary server");
+				
 				PlatformFactory::NewPlatform($event->DBServer->platform)->TerminateServer($event->DBServer);
+				
+				$BundleTask->Log("Termintation request has been sent");
+				
+				Scalr_Server_History::init($event->DBServer)->markAsTerminated("RoleBuilder temporary server", true);
+				
 				//$event->DBServer->status = SERVER_STATUS::TERMINATED;
 				//$event->DBServer->save();
 			}
@@ -251,6 +324,8 @@
 				PlatformFactory::NewPlatform($event->DBServer->platform)->TerminateServer($event->DBServer);
 				$event->DBServer->status = SERVER_STATUS::TERMINATED;
 				$event->DBServer->save();
+				
+				Scalr_Server_History::init($event->DBServer)->markAsTerminated("RoleBuilder temporary server", true);
 			}
 		}
 
@@ -270,25 +345,28 @@
 			
 			$roles = $DBFarm->GetFarmRoles();
 			foreach($roles as $dbFarmRole) {
-				$scalingManager = new Scalr_Scaling_Manager($dbFarmRole);
-	            $scalingDecision = $scalingManager->makeScalingDecition();
-	            if ($scalingDecision == Scalr_Scaling_Decision::UPSCALE) {
-					$ServerCreateInfo = new ServerCreateInfo($dbFarmRole->Platform, $dbFarmRole);
-					try {
-						$DBServer = Scalr::LaunchServer($ServerCreateInfo, null, true);
-
-						$dbFarmRole->SetSetting(DBFarmRole::SETTING_SCALING_UPSCALE_DATETIME, time());
-						
-						Logger::getLogger(LOG_CATEGORY::FARM)->info(new FarmLogMessage($DBFarm->ID, sprintf("Farm %s, role %s scaling up. Starting new instance. ServerID = %s.", 
-							$DBFarm->Name,
-                        	$dbFarmRole->GetRoleObject()->name,
-                        	$DBServer->serverId
-						)));
-					}
-					catch(Exception $e){
-						Logger::getLogger(LOG_CATEGORY::SCALING)->error($e->getMessage());
-					}
-	            }
+				if ($dbFarmRole->GetSetting(DBFarmRole::SETTING_SCALING_ENABLED))
+				{
+					$scalingManager = new Scalr_Scaling_Manager($dbFarmRole);
+		            $scalingDecision = $scalingManager->makeScalingDecition();
+		            if ($scalingDecision == Scalr_Scaling_Decision::UPSCALE) {
+						$ServerCreateInfo = new ServerCreateInfo($dbFarmRole->Platform, $dbFarmRole);
+						try {
+							$DBServer = Scalr::LaunchServer($ServerCreateInfo, null, true, "Farm launched");
+	
+							$dbFarmRole->SetSetting(DBFarmRole::SETTING_SCALING_UPSCALE_DATETIME, time());
+							
+							Logger::getLogger(LOG_CATEGORY::FARM)->info(new FarmLogMessage($DBFarm->ID, sprintf("Farm %s, role %s scaling up. Starting new instance. ServerID = %s.", 
+								$DBFarm->Name,
+	                        	$dbFarmRole->GetRoleObject()->name,
+	                        	$DBServer->serverId
+							)));
+						}
+						catch(Exception $e){
+							Logger::getLogger(LOG_CATEGORY::SCALING)->error($e->getMessage());
+						}
+		            }
+				}
 			}
 		}
 		
@@ -322,47 +400,34 @@
                 if ($this->DB->GetOne("SELECT id FROM bundle_tasks WHERE server_id=? AND status NOT IN ('success','failed')", array($dbServer->serverId)))
                 	continue;
                 
-            	if ($dbServer->status != SERVER_STATUS::PENDING_LAUNCH)
-                {
-	            	try {
-	            		//Scalr::FireEvent($dbFarm->ID, new BeforeHostTerminateEvent($dbServer, false));
-	            		if ($dbServer->status != SERVER_STATUS::PENDING_TERMINATE && $dbServer->status != SERVER_STATUS::TERMINATED)
-						{ 
-							$dbServer->status = SERVER_STATUS::PENDING_TERMINATE;
-							
-							if (defined("SCALR_SERVER_TZ"))
-							{
-								$tz = date_default_timezone_get();
-								date_default_timezone_set(SCALR_SERVER_TZ);
-							}
-								
-							$dbServer->dateShutdownScheduled = date("Y-m-d H:i:s");
-							
-							if ($tz)
-								date_default_timezone_set($tz);
-							
-							$dbServer->Save();
+	            try {
+            		//Scalr::FireEvent($dbFarm->ID, new BeforeHostTerminateEvent($dbServer, false));
+            		if ($dbServer->status != SERVER_STATUS::PENDING_TERMINATE && $dbServer->status != SERVER_STATUS::TERMINATED)
+					{ 
+						/*
+						$dbServer->status = SERVER_STATUS::PENDING_TERMINATE;
+						
+						if (defined("SCALR_SERVER_TZ"))
+						{
+							$tz = date_default_timezone_get();
+							date_default_timezone_set(SCALR_SERVER_TZ);
 						}
-	    					
-	    				if ($dbServer->status != SERVER_STATUS::TERMINATED)
-	    				{
-		    				$this->DB->Execute("UPDATE servers_history SET
-								dtterminated	= NOW(),
-								terminate_reason	= ?
-								WHERE server_id = ?
-							", array(
-								sprintf("Farm was terminated"),
-								$dbServer->serverId
-							));
-	    				}
-	    			}
-	    			catch (Exception $e) {
-	    				$this->Logger->error($e->getMessage()); 
-	    			}
-                }
-    			else {
-    				$dbServer->status = SERVER_STATUS::TERMINATED;
-    				$dbServer->Save();
+							
+						$dbServer->dateShutdownScheduled = date("Y-m-d H:i:s");
+						
+						if ($tz)
+							date_default_timezone_set($tz);
+						
+						$dbServer->Save();
+						*/
+						
+						Scalr::FireEvent($dbServer->farmId, new BeforeHostTerminateEvent($dbServer, $event->ForceTerminate));
+						
+						Scalr_Server_History::init($dbServer)->markAsTerminated("Farm was terminated");
+					}
+    			}
+    			catch (Exception $e) {
+    				$this->Logger->error($e->getMessage()); 
     			}
             }
 		}
@@ -406,8 +471,10 @@
 
 					Logger::getLogger(LOG_CATEGORY::FARM)->info(new FarmLogMessage($this->FarmID, "OLD Server found: {$oldDBServer->serverId})."));
 					
-					if ($oldDBServer)
+					if ($oldDBServer) {
 						Scalr::FireEvent($oldDBServer->farmId, new BeforeHostTerminateEvent($oldDBServer));
+						Scalr_Server_History::init($oldDBServer)->markAsTerminated("Server replaced with new one after snapshotting");
+					}
 				}
 			}
 			catch (Exception $e)
@@ -466,12 +533,8 @@
 			$event->DBServer->status = SERVER_STATUS::TERMINATED;
 			$event->DBServer->dateShutdownScheduled = date("Y-m-d H:i:s");
 			
-			$this->DB->Execute("UPDATE servers_history SET
-				dtterminated_scalr	= NOW()
-				WHERE server_id = ?
-			", array(
-				$event->DBServer->serverId
-			));
+			//TODO: move to alerts;
+			$this->DB->Execute("UPDATE server_alerts SET status='resolved' WHERE server_id = ?", array($event->DBServer->serverId));
 			
 	        try {
 				$DBFarmRole = $event->DBServer->GetFarmRoleObject();
@@ -535,9 +598,14 @@
 		
 		public function OnIPAddressChanged(IPAddressChangedEvent $event)
 		{
-			Logger::getLogger(LOG_CATEGORY::FARM)->warn(new FarmLogMessage($this->FarmID, "IP changed for server {$event->DBServer->serverId}. New IP address: {$event->NewIPAddress}"));
+			Logger::getLogger(LOG_CATEGORY::FARM)->warn(new FarmLogMessage($this->FarmID, "IP changed for server {$event->DBServer->serverId}. New IP address: {$event->NewIPAddress} New local IP address: {$event->NewLocalIPAddress}"));
 			
-			$event->DBServer->remoteIp = $event->NewIPAddress;
+			if ($event->NewIPAddress)
+				$event->DBServer->remoteIp = $event->NewIPAddress;
+			
+			if ($event->NewLocalIPAddress)
+				$event->DBServer->localIp = $event->NewLocalIPAddress;
+			
 			$event->DBServer->Save();
 		}
 		

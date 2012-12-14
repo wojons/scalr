@@ -203,6 +203,8 @@ class Scalr_UI_Controller_Services_Mongodb extends Scalr_UI_Controller
 			}
 		}
 		
+		$this->db->Execute("DELETE FROM services_mongodb_volumes_map WHERE farm_roleid = ? AND replica_set_index = ?", array($dbFarmRole->ID, $rReplica));
+		
 		Scalr_Role_Behavior::loadByName(ROLE_BEHAVIORS::MONGODB)->log($dbFarmRole, sprintf("Removing replica set #s from cluster", $rReplica));
 		
 		$this->response->success('Replica removal has been initiated. It may take a few minutes before it will be removed.');

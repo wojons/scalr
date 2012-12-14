@@ -5,12 +5,13 @@
 		private static $observersSetuped = false;
 		private static function setupObservers()
 		{
-			Scalr::AttachObserver(new SSHWorker());
 			Scalr::AttachObserver(new DBEventObserver());
 			
 			/* AMI_SCRIPTS Scripting
 			//Scalr::AttachObserver(new ScriptingEventObserver());
 			 */
+			// AMI-Scripts SSH Worker
+			//Scalr::AttachObserver(new SSHWorker());
 			
 			Scalr::AttachObserver(new DNSEventObserver());
 			
@@ -277,7 +278,11 @@
 				{
 					$observer->SetFarmID($farmid);					
 					Logger::getLogger(__CLASS__)->info(sprintf("Event %s. Observer: %s", "On{$event->GetName()}", get_class($observer)));
-					call_user_func(array($observer, "On{$event->GetName()}"), $event);
+					
+					if ($event instanceof CustomEvent) 
+						call_user_func(array($observer, "OnCustomEvent"), $event);
+					else
+						call_user_func(array($observer, "On{$event->GetName()}"), $event);
 				}
 			}
 			catch(Exception $e)
@@ -294,8 +299,7 @@
 			}
 			
 			// invoke StoreEvent method
-			$reflect = new ReflectionMethod("Scalr", "StoreEvent");
-			$reflect->invoke(null, $farmid, $event);
+			self::StoreEvent($farmid, $event);
 		}
 		
 		/**
@@ -306,43 +310,35 @@
 		 */
 		public static function StoreEvent($farmid, Event $event)
 		{
-			if ($event->SkipDeferredOperations)
-				return true;
-			
 			try
 			{
 				$DB = Core::GetDBInstance();
-					
-				// Get Smarty object
-				$Smarty = Core::GetSmartyInstance();
-				
-				// Assign vars
-				$Smarty->assign(array("event" => $event));
 				
 				// Generate event message 
-				if (file_exists(CF_TEMPLATES_PATH."/event_messages/{$event->GetName()}.tpl")) {
-					$message = $Smarty->fetch("event_messages/{$event->GetName()}.tpl");
-					$short_message = $Smarty->fetch("event_messages/{$event->GetName()}.short.tpl");
-						
-					// Store event in database
-					$DB->Execute("INSERT INTO events SET 
-						farmid	= ?, 
-						type	= ?, 
-						dtadded	= NOW(),
-						message	= ?,
-						short_message = ?, 
-						event_object = ?,
-						event_id	 = ?
-						",
-						array($farmid, $event->GetName(), $message, $short_message, serialize($event), $event->GetEventID())
-					);
+				$message = $event->getTextDetails();
+				
+				$eventStr = null;	
+				try {
+					$eventStr = serialize($event);
+				} catch (Exception $e) {
 					
-					$eventid = $DB->Insert_ID();
-					
-					// Add task for fire deferred event
-					TaskQueue::Attach(QUEUE_NAME::DEFERRED_EVENTS)->AppendTask(new FireDeferredEventTask($eventid));
-				} else
-					Logger::getLogger(__CLASS__)->warn(sprintf(_("Cannot store event in database: '{$event->GetName()}' message template not found")));
+				}
+				
+				if ($event->DBServer)
+					$eventServerId = $event->DBServer->serverId;
+				
+				// Store event in database
+				$DB->Execute("INSERT INTO events SET 
+					farmid	= ?, 
+					type	= ?, 
+					dtadded	= NOW(),
+					message	= ?,
+					event_object = ?,
+					event_id	 = ?,
+					event_server_id = ?
+					",
+					array($farmid, $event->GetName(), $message, $eventStr, $event->GetEventID(), $eventServerId)
+				);
 			}
 			catch(Exception $e)
 			{
@@ -355,7 +351,7 @@
 		 * @param ServerCreateInfo $ServerCreateInfo
 		 * @return DBServer
 		 */
-		public static function LaunchServer(ServerCreateInfo $ServerCreateInfo = null, DBServer $DBServer = null, $delayed = false)
+		public static function LaunchServer(ServerCreateInfo $ServerCreateInfo = null, DBServer $DBServer = null, $delayed = false, $reason = "")
 		{
 			$db = Core::GetDBInstance();
 			
@@ -367,6 +363,12 @@
 				));
 				
 				$DBServer = DBServer::Create($ServerCreateInfo, false, true);
+				
+				try {
+					Scalr_Server_History::init($DBServer)->setLaunchReason($reason);
+				} catch (Exception $e) {
+					Logger::getLogger(LOG_CATEGORY::FARM)->error(sprintf("Cannot update servers history: {$e->getMessage()}"));
+				}
 			}
 			elseif(!$DBServer && !$ServerCreateInfo)
 			{
@@ -382,6 +384,18 @@
 				return $DBServer;
 			}
 			
+			if ($ServerCreateInfo->roleId) {
+				$dbRole = DBRole::loadById($ServerCreateInfo->roleId);
+				if ($dbRole->generation == 1) {
+					$DBServer->status = SERVER_STATUS::PENDING_LAUNCH;
+					$DBServer->Save();
+					
+					$DBServer->SetProperty(SERVER_PROPERTIES::LAUNCH_ERROR, "ami-scripts servers no longer supported");
+					
+					return $DBServer;
+				}	
+			}
+			
 			try
 			{
 				$account = Scalr_Account::init()->loadById($DBServer->clientId);
@@ -391,6 +405,10 @@
 				
 				$DBServer->status = SERVER_STATUS::PENDING;
 				$DBServer->Save();
+				
+				try {
+					Scalr_Server_History::init($DBServer)->save();
+				} catch (Exception $e) {}
 			}
 			catch(Exception $e)
 			{
@@ -409,19 +427,7 @@
 			if ($DBServer->status == SERVER_STATUS::PENDING)
 			{
 				Scalr::FireEvent($DBServer->farmId, new BeforeInstanceLaunchEvent($DBServer));
-
 				$DBServer->SetProperty(SERVER_PROPERTIES::LAUNCH_ERROR, "");
-				
-				$db->Execute("UPDATE servers_history SET
-					`dtlaunched` = NOW(),
-					`cloud_server_id` = ?,
-					`type` = ?
-					WHERE server_id = ?
-				", array(
-					$DBServer->GetCloudServerID(),
-					$DBServer->GetProperty(EC2_SERVER_PROPERTIES::INSTANCE_TYPE),
-					$DBServer->serverId
-				));
 			}
 			
 			return $DBServer;
@@ -450,7 +456,7 @@
 			return $key;
 		}
 	    
-		public static function GenerateUID($short = false)
+		public static function GenerateUID($short = false, $startWithLetter = false)
 		{
 			$pr_bits = false;
 	        if (is_a ( $this, 'uuid' )) {
@@ -497,6 +503,13 @@
 	        
 	        if ($short)
 	        	return sprintf ( '%012s', $node );
+	        
+	        if ($startWithLetter) {
+	        	if (!preg_match("/^[a-z]+[a-z0-9]*$/", $time_low)) {
+	        		$rand_char = chr(rand(97,102));
+	        		$time_low = $rand_char.substr($time_low, 1);
+	        	}
+	        }
 	        
 	        return sprintf ( '%08s-%04s-%04x-%04x-%012s', $time_low, $time_mid, $time_hi_and_version, $clock_seq_hi_and_reserved, $node );
 		}

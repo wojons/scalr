@@ -198,7 +198,7 @@
 			if (!$dbType)
 				return array();
 		
-			if ($dbType == ROLE_BEHAVIORS::MYSQL2)
+			if ($dbType == ROLE_BEHAVIORS::MYSQL2 || $dbType == ROLE_BEHAVIORS::PERCONA)
 				$dbType = 'mysql';
 				
 			$records = array();
@@ -303,10 +303,24 @@
 			}
 				
 			$int_record_alias = $DBFarmRole->GetSetting(DBFarmRole::SETTING_DNS_INT_RECORD_ALIAS);
-			$int_record = ($int_record_alias) ? $int_record_alias : "int-{$DBFarmRole->GetRoleObject()->name}";
+			$int_record = "int-{$DBFarmRole->GetRoleObject()->name}";
 			
 			$ext_record_alias = $DBFarmRole->GetSetting(DBFarmRole::SETTING_DNS_EXT_RECORD_ALIAS);
-			$ext_record = ($ext_record_alias) ? $ext_record_alias : "ext-{$DBFarmRole->GetRoleObject()->name}";
+			$ext_record = "ext-{$DBFarmRole->GetRoleObject()->name}";
+			
+			if ($int_record_alias || $ext_record_alias) {
+				$params = $DBServer->GetScriptingVars();
+				$keys = array_keys($params);
+				$f = create_function('$item', 'return "%".$item."%";');
+				$keys = array_map($f, $keys);
+				$values = array_values($params);
+			}
+			
+			if ($int_record_alias)
+				$int_record = str_replace($keys, $values, $int_record_alias);
+			
+			if ($ext_record_alias)
+				$ext_record = str_replace($keys, $values, $ext_record_alias);
 			
 			$records = array(
 				array(
@@ -539,6 +553,10 @@
 		{
 			$this->db->Execute("DELETE FROM dns_zones WHERE id=?", array($this->id));
 			$this->db->Execute("DELETE FROM dns_zone_records WHERE zone_id=?", array($this->id));
+			
+			try {
+				$this->removeFromPowerDns();
+			} catch (Exception $e) {}			
 		}
 		
 		private function unBind () {
@@ -548,6 +566,181 @@
 			}
 			
 			return $row;		
+		}
+		
+		protected function removeFromPowerDns()
+		{
+			try
+			{
+				$dnsConf = @parse_ini_file(APPPATH."/etc/dns.ini", true);
+				if (!$dnsConf['global']['enabled'])
+					return true;
+
+				$pdnsDb = &NewADOConnection("mysqli://{$dnsConf['db']['user']}:{$dnsConf['db']['pass']}@{$dnsConf['db']['host']}/{$dnsConf['db']['name']}");
+				$pdnsDb->debug = false;
+                $pdnsDb->cacheSecs = 0;
+                $pdnsDb->SetFetchMode(ADODB_FETCH_ASSOC); 
+			}
+			catch(Exception $e)
+			{		
+				throw new Exception("Connection failed: {$e->getMessage()}");
+			}
+			
+			$pdnsDb->Execute("DELETE FROM domains WHERE name = ? AND scalr_dns_type = 'global'", array($this->zoneName));
+		}
+
+		private function IsDomain($var, $name = null, $error = null, $allowed_utf8_chars = "", $disallowed_utf8_chars = "")
+		{	
+			// Remove trailing dot if its there. FQDN may contain dot at the end!
+			$var = rtrim($var, ".");
+			
+			$retval = (bool)preg_match('/^([a-zA-Z0-9'.$allowed_utf8_chars.']+[a-zA-Z0-9-'.$allowed_utf8_chars.']*\.[a-zA-Z0-9'.$allowed_utf8_chars.']*?)+$/usi', $var);
+							
+			if ($disallowed_utf8_chars != '')
+				$retval &= !(bool)preg_match("/[{$disallowed_utf8_chars}]+/siu", $var);
+			
+			return $retval;
+		}
+		
+		//TODO: Rewrite this
+		protected function saveInPowerDns()
+		{				
+			try
+			{
+				$dnsConf = @parse_ini_file(APPPATH."/etc/dns.ini", true);
+				if (!$dnsConf['global']['enabled'])
+					return true;
+
+				$pdnsDb = &NewADOConnection("mysqli://{$dnsConf['db']['user']}:{$dnsConf['db']['pass']}@{$dnsConf['db']['host']}/{$dnsConf['db']['name']}");
+				$pdnsDb->debug = false;
+                $pdnsDb->cacheSecs = 0;
+                $pdnsDb->SetFetchMode(ADODB_FETCH_ASSOC); 
+			}
+			catch(Exception $e)
+			{		
+				throw new Exception("Connection failed: {$e->getMessage()}");
+			}
+			
+           	$pdnsDomainId = $pdnsDb->GetOne("SELECT id FROM domains WHERE name = ? AND scalr_dns_type = 'global'", array($this->zoneName));
+			
+			// Remove domain from powerdns
+			if ($this->status == DNS_ZONE_STATUS::INACTIVE || $this->status == DNS_ZONE_STATUS::PENDING_DELETE) {
+				if ($pdnsDomainId) {
+					$pdnsDb->Execute("DELETE FROM domains WHERE id = ?", array($pdnsDomainId));
+				}
+			} else {
+				
+				if (!$pdnsDomainId) {
+					
+					$pdnsDb->Execute("INSERT INTO domains SET
+						`name` = ?,
+						`type` = ?,
+						`scalr_dns_type` = ?
+					", array(
+						$this->zoneName,
+						'NATIVE',
+						'global'
+					));
+					
+					$pdnsDomainId = $pdnsDb->Insert_ID();
+				}
+				
+				$records = $this->db->Execute("SELECT * FROM dns_zone_records WHERE zone_id = ?", array($this->id));
+				
+				// Remove all records
+				$pdnsDb->Execute("DELETE FROM records WHERE domain_id = ?", array($pdnsDomainId));
+				
+				// Add SOA record
+				//primary hostmaster serial refresh retry expire default_ttl
+				$owner = substr_replace($this->soaOwner, '@', strpos($this->soaOwner, '.'), 1);
+				$soa = "ns1.scalr.net {$owner} {$this->soaSerial} {$this->soaRefresh} {$this->soaRetry} {$this->soaExpire} {$this->soaMinTtl}";
+				$pdnsDb->Execute("INSERT INTO records SET
+					domain_id = ?,
+					name = ?,
+					type = ?,
+					content = ?, 
+					ttl = ?,
+					prio = ?,
+					change_date = ?, 
+					server_id = ?,
+					service = ?,
+					ordername = ?,
+					auth = ?
+				", array(
+					$pdnsDomainId,
+					$this->zoneName,
+					"SOA",
+					$soa,
+					86400,
+					0,
+					time(),
+					'',
+					'',
+					'',
+					1
+				));
+				
+				//check AXFR
+				if ($this->isZoneConfigModified) {
+					$pdnsDb->Execute("DELETE FROM domainmetadata WHERE domain_id = ?", array($pdnsDomainId));
+					$axfr = explode(";", $this->axfrAllowedHosts);
+					foreach ($axfr as $axfrIp) {
+						if (ip2long($axfrIp) !== false)
+							$pdnsDb->Execute("INSERT INTO domainmetadata SET `domain_id` = ?, `kind` = ?, `content` = ?", array($pdnsDomainId, 'ALLOW-AXFR-FROM', $axfrIp));
+					}
+				}
+				
+				
+				while ($record = $records->FetchRow()) {
+					
+					// Convert name
+					$name = str_replace(array("@", ""), "{$this->zoneName}.", $record['name']);
+					if (substr($name, -1) != '.') {
+						$name = "{$name}.{$this->zoneName}";
+					}
+					$name = trim($name, '.');
+					
+					// Convert content 
+					$content = $record['value'];
+					if (substr($content, -1) != '.' && $record['type'] != 'TXT') {
+						if (ip2long($content) === false && !$this->IsDomain($content))
+							$content = "{$content}.{$this->zoneName}";
+					}
+					$content = trim($content, '.');
+					if ($record['type'] == 'SRV') {
+						$content = "{$record['weight']} {$record['port']} {$content}";
+					}
+					
+					if (!$record['ttl'])
+						$record['ttl'] = 20;
+					
+					$pdnsDb->Execute("INSERT INTO records SET
+						domain_id = ?,
+						name = ?,
+						type = ?,
+						content = ?, 
+						ttl = ?,
+						prio = ?,
+						change_date = ?, 
+						server_id = ?,
+						service = ?,
+						ordername = ?,
+						auth = ?
+					", array(
+						$pdnsDomainId,
+						$name,
+						$record['type'],
+						$content,
+						$record['ttl'],
+						$record['priority'],
+						time(),
+						$record['server_id'],
+						$record['issystem'] ? "_system" : "_custom",
+						'',
+						1
+					));
+				}
+			}
 		}
 		
 		public function save ($update_system_records = false) {
@@ -635,6 +828,12 @@
 			}
 			
 			$this->db->CommitTrans();
+			
+			try {
+				//$this->saveInPowerDns();
+			} catch (Exception $e) {
+				Logger::getLogger("DNS")->fatal("Unable to save data in PowerDNS db: {$e->getMessage()}");
+			}
 		}
 	}
 ?>

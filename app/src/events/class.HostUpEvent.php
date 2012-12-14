@@ -17,5 +17,10 @@
 			$this->DBServer = $DBServer;
 			$this->ReplUserPass = $ReplUserPass;
 		}
+		
+		public function getTextDetails()
+		{
+			return "Instance {$this->DBServer->serverId} Public IP: {$this->DBServer->remoteIp} Internal IP: {$this->DBServer->localIp} is UP";
+		}
 	}
 ?>

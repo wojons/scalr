@@ -43,7 +43,7 @@
 			if (!preg_match("/^[A-Za-z-]+$/", $service) && $service != '*')
 				throw new Scalr_Net_Dns_Exception(sprintf(_("'%s' is not a valid service for SRV record"), $service));
 			
-			if ($proto != 'udp' && $proto != 'tcp')
+			if ($proto != 'udp' && $proto != 'tcp' && $proto != 'tls')
 				throw new Scalr_Net_Dns_Exception(sprintf(_("'%s' is not a valid protocol for SRV record"), $proto));
 			
 			$this->name = $name;

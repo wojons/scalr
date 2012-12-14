@@ -12,9 +12,10 @@ class Scalr_UI_Controller_Dashboard_Widget_Announcement extends Scalr_UI_Control
 	{
 		if (!$params['newsCount'])
 			$params['newsCount'] = 5;
+
 		$rssCachePath = CACHEPATH."/rss.announcement.cxml";
 		$data = array();
-		if (file_exists($rssCachePath) && (time() - filemtime($rssCachePath) < 86400)) {
+		if (file_exists($rssCachePath) && (time() - filemtime($rssCachePath) < 3600)) {
 			clearstatcache();
 			$time = filemtime($rssCachePath);
 			$data = json_decode(file_get_contents($rssCachePath));
@@ -29,12 +30,12 @@ class Scalr_UI_Controller_Dashboard_Widget_Announcement extends Scalr_UI_Control
 
 			$feedContent = curl_exec($curl);
 			curl_close($curl);
-			if($feedContent && !empty($feedContent)) {
+			if ($feedContent && !empty($feedContent)) {
 				$feedXml = simplexml_load_string($feedContent);
 				if($feedXml) {
 					foreach ($feedXml->channel->item as $key=>$item) {
 						$new = false;
-						if(date('M d',strtotime($item->pubDate)) == date('M d',time()))
+						if((time() - strtotime($item->pubDate)) <= 604800)
 							$new = true;
 						$data[] = array(
 							'text' =>  "".$item->title,
@@ -49,17 +50,13 @@ class Scalr_UI_Controller_Dashboard_Widget_Announcement extends Scalr_UI_Control
 		}
 		$i = 0;
 		$result = array();
-		while ($i < $params['newsCount']) {
-			$result[] = $data[$i];
-			$i++;
+		$len = count($data);
+		if ($len) {
+			while ($i < $params['newsCount'] && $i < $len) {
+				$result[] = $data[$i];
+				$i++;
+			}
 		}
 		return $result;
-	}
-
-	public function getContentAction()
-	{
-		$this->response->data(array(
-			'widgetContent' => $this->getContent()
-		));
 	}
 }

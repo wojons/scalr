@@ -71,6 +71,14 @@
 						));
 						break;
 						
+					case SERVER_PLATFORMS::GCE:
+						$this->SetProperties(array(
+							GCE_SERVER_PROPERTIES::CLOUD_LOCATION => $DBFarmRole->CloudLocation
+						));
+						break;
+						
+					case SERVER_PLATFORMS::UCLOUD:
+					case SERVER_PLATFORMS::IDCF:
 					case SERVER_PLATFORMS::CLOUDSTACK:
 						$this->SetProperties(array(
 							CLOUDSTACK_SERVER_PROPERTIES::CLOUD_LOCATION => $DBFarmRole->CloudLocation
@@ -79,7 +87,7 @@
 					
 					case SERVER_PLATFORMS::EC2:
 						$this->SetProperties(array(
-							EC2_SERVER_PROPERTIES::AVAIL_ZONE => $DBFarmRole->GetSetting(DBFarmRole::SETTING_AWS_AVAIL_ZONE),
+							//EC2_SERVER_PROPERTIES::AVAIL_ZONE => $DBFarmRole->GetSetting(DBFarmRole::SETTING_AWS_AVAIL_ZONE),
 							EC2_SERVER_PROPERTIES::REGION => $DBFarmRole->CloudLocation
 						));
 					break;

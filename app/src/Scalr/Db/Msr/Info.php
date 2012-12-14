@@ -19,12 +19,18 @@ abstract class Scalr_Db_Msr_Info
 	
 	public static function init(DBFarmRole $dbFarmRole, DBServer $dbServer, $dbType) {
 		switch ($dbType) {
+			/*
 			case Scalr_Db_Msr::DB_TYPE_MYSQL:
 				return new Scalr_Db_Msr_Mysql_Info($dbFarmRole, $dbServer);
 				break;
-				
+			*/
+			
 			case Scalr_Db_Msr::DB_TYPE_MYSQL2:
 				return new Scalr_Db_Msr_Mysql2_Info($dbFarmRole, $dbServer);
+				break;
+				
+			case Scalr_Db_Msr::DB_TYPE_PERCONA:
+				return new Scalr_Db_Msr_Percona_Info($dbFarmRole, $dbServer);
 				break;
 				
 			case Scalr_Db_Msr::DB_TYPE_POSTGRESQL:
@@ -118,7 +124,7 @@ abstract class Scalr_Db_Msr_Info
 		}
 	}
 	
-	public function __construct(DBFarmRole $dbFarmRole, DBServer $dbServer, $type) {
+	public function __construct(DBFarmRole $dbFarmRole, DBServer $dbServer, $type = null) {
 		$this->dbFarmRole = $dbFarmRole;
 		$this->dbServer = $dbServer;
 		$this->logger = Logger::getLogger(__CLASS__);
@@ -126,16 +132,102 @@ abstract class Scalr_Db_Msr_Info
 		$this->replicationMaster = (int)$dbServer->GetProperty(Scalr_Db_Msr::REPLICATION_MASTER);
 		
 		$this->buildStorageSettings();
-	
 	}
 	
 	public function getMessageProperties() {
 		$retval = new stdClass();
 		$retval->replicationMaster = $this->replicationMaster;
 		$retval->volumeConfig = $this->volumeConfig;
-		$retval->snapshotConfig = $this->snapshotConfig;
+		$retval->snapshotConfig = $this->snapshotConfig;	
 		
 		return $retval;
+	}
+	
+	protected function getFreshVolumeConfig()
+	{
+		$volumeConfig = new stdClass();
+		$volumeConfig->type = $this->dbFarmRole->GetSetting(Scalr_Db_Msr::DATA_STORAGE_ENGINE);
+
+		$fsType = $this->dbFarmRole->GetSetting(Scalr_Db_Msr::DATA_STORAGE_FSTYPE);
+		if ($fsType) {
+			$volumeConfig->fstype = $fsType;
+		}
+		
+		// For any Block storage APIs
+		if ($volumeConfig->type == MYSQL_STORAGE_ENGINE::RAID_EBS) {
+			
+			$volumeConfig->type = 'raid';
+			$volumeConfig->vg = $this->databaseType;
+			$volumeConfig->level = $this->dbFarmRole->GetSetting(Scalr_Db_Msr::DATA_STORAGE_RAID_LEVEL);
+			$volumeConfig->disks = array();
+			
+			for ($i = 1; $i <= $this->dbFarmRole->GetSetting(Scalr_Db_Msr::DATA_STORAGE_RAID_DISKS_COUNT); $i++) {
+				$dsk = new stdClass();
+				$dsk->type = 'ebs';
+				$dsk->size = $this->dbFarmRole->GetSetting(Scalr_Db_Msr::DATA_STORAGE_RAID_DISK_SIZE);
+				
+				if ($this->dbFarmRole->GetSetting(Scalr_Db_Msr::DATA_STORAGE_RAID_EBS_DISK_TYPE) == 'io1') {
+					$dsk->volumeType = 'io1';
+					$dsk->iops = $this->dbFarmRole->GetSetting(Scalr_Db_Msr::DATA_STORAGE_RAID_EBS_DISK_IOPS);
+				}
+				
+				$volumeConfig->disks[] = $dsk;
+			}
+			
+			$volumeConfig->snapPv = new stdClass();
+			$volumeConfig->snapPv->type = 'ebs';
+			$volumeConfig->snapPv->size = 1;
+			
+		} else if ($volumeConfig->type != MYSQL_STORAGE_ENGINE::EPH && $volumeConfig->type != MYSQL_STORAGE_ENGINE::RAID_EBS) {
+			$volumeConfig->size = $this->dbFarmRole->GetSetting(Scalr_Db_Msr::DATA_STORAGE_EBS_SIZE);
+			
+			if ($this->dbFarmRole->GetSetting(Scalr_Db_Msr::DATA_STORAGE_EBS_TYPE) == 'io1') {
+				$volumeConfig->volumeType = 'io1';
+				$volumeConfig->iops = $this->dbFarmRole->GetSetting(Scalr_Db_Msr::DATA_STORAGE_EBS_IOPS);
+			}
+		}
+		// For RackSpace
+		//TODO:
+		else if ($volumeConfig->type == MYSQL_STORAGE_ENGINE::EPH) {
+			
+			if ($this->dbFarmRole->Platform == SERVER_PLATFORMS::RACKSPACE) {
+				$volumeConfig->snap_backend = sprintf("cf://scalr-%s-%s/data-bundles/%s/%s",
+					$this->dbFarmRole->GetFarmObject()->EnvID,
+					$this->dbFarmRole->CloudLocation,
+					$this->dbFarmRole->FarmID,
+					$this->databaseType
+				);
+				$volumeConfig->vg = $this->databaseType;
+				$volumeConfig->disk = new stdClass();
+				$volumeConfig->disk->type = 'loop';
+				$volumeConfig->disk->size = '75%root';
+			} elseif ($this->dbFarmRole->Platform == SERVER_PLATFORMS::GCE) {
+				$volumeConfig->snap_backend = sprintf("gcs://scalr-%s-%s/data-bundles/%s/%s",
+					$this->dbFarmRole->GetFarmObject()->EnvID,
+					$this->dbFarmRole->CloudLocation,
+					$this->dbFarmRole->FarmID,
+					$this->databaseType
+				);
+				$volumeConfig->vg = $this->databaseType;
+				$volumeConfig->disk = array(
+					'type' => 'gce_ephemeral',
+					'name' => 'ephemeral-disk-0'
+				);
+				$volumeConfig->size = "80%";
+			} elseif ($this->dbFarmRole->Platform == SERVER_PLATFORMS::EC2) {
+				$volumeConfig->snap_backend = sprintf("s3://scalr-%s-%s/data-bundles/%s/%s",
+					$this->dbFarmRole->GetFarmObject()->EnvID,
+					$this->dbFarmRole->CloudLocation,
+					$this->dbFarmRole->FarmID,
+					$this->databaseType
+				);
+				$volumeConfig->vg = $this->databaseType;
+				$volumeConfig->disk = $this->dbFarmRole->GetSetting(Scalr_Db_Msr::DATA_STORAGE_EPH_DISK);
+				$volumeConfig->size = "80%";
+			}
+		}
+		
+		return $volumeConfig;
 	}
 	
 	protected function buildStorageSettings()
@@ -161,6 +253,14 @@ abstract class Scalr_Db_Msr_Info
 				);
 							
 				$this->snapshotConfig = $snapshotConfig->getConfig();
+				
+				if ($this->snapshotConfig) {
+					if ($this->snapshotConfig->type == MYSQL_STORAGE_ENGINE::EPH) {
+						if ($this->dbFarmRole->Platform == SERVER_PLATFORMS::EC2) {
+							$this->snapshotConfig->disk->device = $this->dbFarmRole->GetSetting(Scalr_Db_Msr::DATA_STORAGE_EPH_DISK);
+						}
+					}
+				}
 			} catch (Exception $e) {
 				$this->logger->error(new FarmLogMessage($this->dbServer->farmId, "Cannot get snaphotConfig for hostInit message: {$e->getMessage()}"));
 			}
@@ -168,61 +268,19 @@ abstract class Scalr_Db_Msr_Info
 
 		//TODO:
 		/** If new role and there is no volume, we need to create a new one **/
-		if ($this->replicationMaster && !$this->volumeConfig)
-		{
-			$this->volumeConfig = new stdClass();
-			$this->volumeConfig->type = $this->dbFarmRole->GetSetting(Scalr_Db_Msr::DATA_STORAGE_ENGINE);
-
-			// For any Block storage APIs
-			if ($this->volumeConfig->type == MYSQL_STORAGE_ENGINE::RAID_EBS) {
-				
-				$this->volumeConfig->type = 'raid';
-				$this->volumeConfig->vg = $this->databaseType;
-				$this->volumeConfig->level = $this->dbFarmRole->GetSetting(Scalr_Db_Msr::DATA_STORAGE_RAID_LEVEL);
-				$this->volumeConfig->disks = array();
-				
-				for ($i = 1; $i <= $this->dbFarmRole->GetSetting(Scalr_Db_Msr::DATA_STORAGE_RAID_DISKS_COUNT); $i++) {
-					$dsk = new stdClass();
-					$dsk->type = 'ebs';
-					$dsk->size = $this->dbFarmRole->GetSetting(Scalr_Db_Msr::DATA_STORAGE_RAID_DISK_SIZE);
-					
-					$this->volumeConfig->disks[] = $dsk;
-				}
-				
-				$this->volumeConfig->snapPv = new stdClass();
-				$this->volumeConfig->snapPv->type = 'ebs';
-				$this->volumeConfig->snapPv->size = 1;
-				
-			} else if ($this->volumeConfig->type != MYSQL_STORAGE_ENGINE::EPH && $this->volumeConfig->type != MYSQL_STORAGE_ENGINE::RAID_EBS) {
-				$this->volumeConfig->size = $this->dbFarmRole->GetSetting(Scalr_Db_Msr::DATA_STORAGE_EBS_SIZE);
-			}
-			// For RackSpace
-			//TODO:
-			else if ($this->volumeConfig->type == MYSQL_STORAGE_ENGINE::EPH) {
-				
-				if ($this->dbFarmRole->Platform == SERVER_PLATFORMS::RACKSPACE) {
-					$this->volumeConfig->snap_backend = sprintf("cf://scalr-%s-%s/data-bundles/%s/%s",
-						$this->dbFarmRole->GetFarmObject()->EnvID,
-						$this->dbFarmRole->CloudLocation,
-						$this->dbFarmRole->FarmID,
-						$this->databaseType
-					);
-					$this->volumeConfig->vg = $this->databaseType;
-					$this->volumeConfig->disk = new stdClass();
-					$this->volumeConfig->disk->type = 'loop';
-					$this->volumeConfig->disk->size = '75%root';
-				} elseif ($this->dbFarmRole->Platform == SERVER_PLATFORMS::EC2) {
-					$this->volumeConfig->snap_backend = sprintf("s3://scalr-%s-%s/data-bundles/%s/%s",
-						$this->dbFarmRole->GetFarmObject()->EnvID,
-						$this->dbFarmRole->CloudLocation,
-						$this->dbFarmRole->FarmID,
-						$this->databaseType
-					);
-					$this->volumeConfig->vg = $this->databaseType;
-					$this->volumeConfig->disk = $this->dbFarmRole->GetSetting(Scalr_Db_Msr::DATA_STORAGE_EPH_DISK);
-					$this->volumeConfig->size = "80%";
+		if ($this->replicationMaster)
+		{	
+			if (!$this->volumeConfig) {
+				$this->volumeConfig = $this->getFreshVolumeConfig();
+			} else {
+				if ($this->volumeConfig->type == MYSQL_STORAGE_ENGINE::EPH) {
+					if ($this->dbFarmRole->Platform == SERVER_PLATFORMS::EC2) {
+						$this->volumeConfig->disk->device = $this->dbFarmRole->GetSetting(Scalr_Db_Msr::DATA_STORAGE_EPH_DISK);
+					}
 				}
 			}
+		} else {
+			$this->volumeConfig = $this->getFreshVolumeConfig();
 		}
 	}
 }

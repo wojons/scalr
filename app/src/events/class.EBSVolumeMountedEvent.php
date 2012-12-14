@@ -26,5 +26,10 @@
 		{
 			return array("mountpoint" => "Mountpoint", "volume_id" => "VolumeID", "device" => "DeviceName");
 		}
+		
+		public function getTextDetails()
+		{
+			return "EBS volume {$this->VolumeID} successfully mounted to {$this->Mountpoint}";
+		}
 	}
 ?>

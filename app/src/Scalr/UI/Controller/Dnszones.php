@@ -149,7 +149,8 @@ class Scalr_UI_Controller_Dnszones extends Scalr_UI_Controller
 	{
 		
 		$farms = self::loadController('Farms')->getList();
-		$farms[0] = array('id'=>0, 'name'=>'');
+		array_unshift($farms, array('id'=>0, 'name'=>''));
+		
 		$records = array();
 		$nss = $this->db->GetAll("SELECT * FROM nameservers WHERE isbackup='0'");
 		foreach ($nss as $ns)
@@ -167,6 +168,7 @@ class Scalr_UI_Controller_Dnszones extends Scalr_UI_Controller
 			'zone' => array(
 				'domainName' => Scalr::GenerateUID() . '.' . CONFIG::$DNS_TEST_DOMAIN_NAME,
 				'domainType' => 'scalr',
+				'soaOwner'   => str_replace('@', '.', $this->user->getEmail()),
 				'soaRetry' => '7200',
 				'soaRefresh' => '14400',
 				'soaExpire' => '86400'
@@ -185,7 +187,7 @@ class Scalr_UI_Controller_Dnszones extends Scalr_UI_Controller
 		$this->user->getPermissions()->validate($DBDNSZone);
 
 		$farms = self::loadController('Farms')->getList();
-		$farms[0] = array('id'=>0, 'name'=>'');
+		array_unshift($farms, array('id'=>0, 'name'=>''));
 		$farmRoles = array();
 
 		if ($DBDNSZone->farmId) {
@@ -193,7 +195,7 @@ class Scalr_UI_Controller_Dnszones extends Scalr_UI_Controller
 
 			$farmRoles = self::loadController('Roles', 'Scalr_UI_Controller_Farms')->getList();
 			if (count($farmRoles))
-				$farmRoles[0] = array('id' => 0, 'name' => '');
+				array_unshift($farmRoles, array('id' => 0, 'name' => ''));
 		}
 
 		$this->response->page('ui/dnszones/create.js', array(
@@ -205,6 +207,7 @@ class Scalr_UI_Controller_Dnszones extends Scalr_UI_Controller
 				'domainId' => $DBDNSZone->id,
 				'domainName' => $DBDNSZone->zoneName,
 				'soaRetry' => $DBDNSZone->soaRetry,
+				'soaOwner' => $DBDNSZone->soaOwner,
 				'soaRefresh' => $DBDNSZone->soaRefresh,
 				'soaExpire' => $DBDNSZone->soaExpire,
 				'domainFarm' => $DBDNSZone->farmId,
@@ -267,20 +270,25 @@ class Scalr_UI_Controller_Dnszones extends Scalr_UI_Controller
 
 					while (count($domainChunks) > 0) {
 						$chkDmn = trim(array_pop($domainChunks).".{$chkDmn}", ".");
-						$chkDomainId = $this->db->GetOne("SELECT id FROM dns_zones WHERE zone_name=? AND client_id != ?", array($chkDmn, $this->user->getAccountId()));
-						if ($chkDomainId) {
-							if ($chkDmn == $this->getParam('domainName'))
-								$errors['domainName'] = sprintf(_("%s already exists on scalr nameservers"), $this->getParam('domainName'));
-							else {
-								$chkDnsZone = DBDNSZone::loadById($chkDomainId);
-								$access = false;
-								foreach (explode(";", $chkDnsZone->allowedAccounts) as $email) {
-									if ($email == $this->user->getEmail())
-										$access = true;
+						
+						if (in_array($chkDmn, array('scalr.net', 'scalr.com', 'scalr-dns.net', 'scalr-dns.com')))
+							$errors['domainName'] = sprintf(_("You cannot use %s domain name because top level domain %s does not belong to you"), $this->getParam('domainName'), $chkDmn);
+						else {
+							$chkDomainId = $this->db->GetOne("SELECT id FROM dns_zones WHERE zone_name=? AND client_id != ?", array($chkDmn, $this->user->getAccountId()));
+							if ($chkDomainId) {
+								if ($chkDmn == $this->getParam('domainName'))
+									$errors['domainName'] = sprintf(_("%s already exists on scalr nameservers"), $this->getParam('domainName'));
+								else {
+									$chkDnsZone = DBDNSZone::loadById($chkDomainId);
+									$access = false;
+									foreach (explode(";", $chkDnsZone->allowedAccounts) as $email) {
+										if ($email == $this->user->getEmail())
+											$access = true;
+									}
+	
+									if (!$access)
+										$errors['domainName'] = sprintf(_("You cannot use %s domain name because top level domain %s does not belong to you"), $this->getParam('domainName'), $chkDmn);
 								}
-
-								if (!$access)
-									$errors['domainName'] = sprintf(_("You cannot use %s domain name because top level domain %s does not belong to you"), $this->getParam('domainName'), $chkDmn);
 							}
 						}
 					}
@@ -311,6 +319,10 @@ class Scalr_UI_Controller_Dnszones extends Scalr_UI_Controller
 		if ($recordsValidation !== true)
 			$errors = array_merge($errors, $recordsValidation);
 
+		$soaOwner = $this->getParam('soaOwner');
+		if (!$soaOwner)
+			$soaOwner = $this->user->getEmail();
+			
 		if (count($errors) == 0) {
 			if ($this->getParam('domainId')) {
 				$DBDNSZone = DBDNSZone::loadById($this->getParam('domainId'));
@@ -319,6 +331,7 @@ class Scalr_UI_Controller_Dnszones extends Scalr_UI_Controller
 				$DBDNSZone->soaRefresh = $this->getParam('soaRefresh');
 				$DBDNSZone->soaExpire = $this->getParam('soaExpire');
 				$DBDNSZone->soaRetry = $this->getParam('soaRetry');
+				$DBDNSZone->soaOwner = str_replace('@', '.', $soaOwner);
 
 				$this->response->success("DNS zone successfully updated. It could take up to 5 minutes to update it on NS servers.");
 			} else {
@@ -326,7 +339,7 @@ class Scalr_UI_Controller_Dnszones extends Scalr_UI_Controller
 					$domainName,
 					$this->getParam('soaRefresh'),
 					$this->getParam('soaExpire'),
-					str_replace('@', '.', $this->user->getEmail()),
+					str_replace('@', '.', $soaOwner),
 					$this->getParam('soaRetry')
 				);
 

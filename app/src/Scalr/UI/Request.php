@@ -1,4 +1,6 @@
 <?php
+use Scalr\DependencyInjection\Container;
+
 class Scalr_UI_Request
 {
 	protected
@@ -9,13 +11,14 @@ class Scalr_UI_Request
 		$environment,
 		$requestType,
 		$paramErrors = array(),
-		$paramsIsValid = true;
+		$paramsIsValid = true,
+	    $clientIp = null;
 
 	const REQUEST_TYPE_UI = 'ui';
 	const REQUEST_TYPE_API = 'api';
 
 	/**
-	 * 
+	 *
 	 * @var Scalr_UI_Request
 	 */
 	private static $_instance = null;
@@ -24,19 +27,19 @@ class Scalr_UI_Request
 	{
 		if (self::$_instance === null)
 			throw new Scalr_Exception_Core('Scalr_UI_Request not initialized');
-			
+
 		return self::$_instance;
 	}
-	
+
 	public function __construct($type)
 	{
 		$this->requestType = $type;
 	}
-	
+
 	public static function initializeInstance($type, $userId, $envId)
 	{
 		$instance = new Scalr_UI_Request($type);
-		
+
 		if ($userId) {
 			try {
 				$user = Scalr_Account_User::init();
@@ -44,10 +47,10 @@ class Scalr_UI_Request
 			} catch (Exception $e) {
 				throw new Exception('User account is no longer available.');
 			}
-	
+
 			if ($user->status != Scalr_Account_User::STATUS_ACTIVE)
 				throw new Exception('User account has been deactivated. Please contact your account owner.');
-			
+
 			if ($user->getType() != Scalr_Account_User::TYPE_SCALR_ADMIN) {
 				$environment = $user->getDefaultEnvironment($envId);
 				$user->getPermissions()->setEnvironmentId($environment->id);
@@ -65,30 +68,34 @@ class Scalr_UI_Request
 
 			$instance->user = $user;
 			$instance->environment = $environment;
+
 		}
-		
+
+		$container = Container::getInstance();
+		$container->request = $instance;
+
 		self::$_instance = $instance;
 		return $instance;
 	}
-	
+
 	/**
-	 * 
+	 *
 	 * @return Scalr_Account_User
 	 */
 	public function getUser()
 	{
 		return $this->user;
 	}
-	
+
 	/**
-	 * 
+	 *
 	 * @return Scalr_Environment
 	 */
 	public function getEnvironment()
 	{
 		return $this->environment;
 	}
-	
+
 	public function getRequestType()
 	{
 		return $this->requestType;
@@ -132,7 +139,7 @@ class Scalr_UI_Request
 		$this->requestParams[$key] = $value;
 		$this->params[$key] = $value;
 	}
-	
+
 	public function setParams($params)
 	{
 		$this->requestParams = array_merge($this->requestParams, $params);
@@ -146,7 +153,7 @@ class Scalr_UI_Request
 		if (isset($this->definitions[$key])) {
 			$value = $this->getRequestParam($key);
 			$rule = $this->definitions[$key];
-			
+
 			if ($value == NULL && isset($rule['default'])) {
 				$value = $rule['default'];
 			} else {
@@ -154,19 +161,19 @@ class Scalr_UI_Request
 					case 'integer': case 'int':
 						$value = intval($value);
 						break;
-	
+
 					case 'bool':
 						$value = ($value == 'true' || $value == 'false') ? ($value == 'true' ? true : false) : (bool) $value;
 						break;
-	
+
 					case 'json':
 						$value = is_array($value) ? $value : json_decode($value, true);
 						break;
-	
+
 					case 'array':
 						settype($value, 'array');
 						break;
-	
+
 					case 'string': default:
 						$value = strval($value);
 						break;
@@ -180,18 +187,18 @@ class Scalr_UI_Request
 		$this->params[$key] = $this->getRequestParam($key);
 		return $this->params[$key];
 	}
-	
+
 	public function getParams()
 	{
 		foreach ($this->definitions as $key => $value) {
 			$this->getParam($key);
 		}
-		
+
 		return $this->params;
 	}
-	
+
 	/**
-	 * 
+	 *
 	 * @return Scalr_UI_Request
 	 */
 	public function validate()
@@ -207,18 +214,18 @@ class Scalr_UI_Request
 					$this->addValidationErrors($key, $result);
 			}
 		}
-		
+
 		if (count($this->paramErrors))
 			$this->paramsIsValid = false;
-			
+
 		return $this;
 	}
-	
+
 	public function isValid()
 	{
 		return $this->paramsIsValid;
 	}
-	
+
 	public function addValidationErrors($field, $errors)
 	{
 		$this->paramsIsValid = false;
@@ -227,12 +234,12 @@ class Scalr_UI_Request
 
 		$this->paramErrors[$field] = array_merge($this->paramErrors[$field], $errors);
 	}
-	
+
 	public function getValidationErrors()
 	{
 		return array('errors' => $this->paramErrors);
 	}
-	
+
 	public function getValidationErrorsMessage()
 	{
 		$message = '';
@@ -242,7 +249,30 @@ class Scalr_UI_Request
 				$message .= "<li>{$error}</li>";
 			$message .= "</ul>";
 		}
-		
+
 		return $message;
+	}
+
+	/**
+	 * Gets client ip address
+	 *
+	 * @return string Returns client ip address.
+	 */
+	public static function getClientIpAddress()
+	{
+		return $_SERVER['REMOTE_ADDR'];
+	}
+
+	/**
+	 * Gets client ip address for the current request
+	 *
+	 * @returns string Returns client ip address for the current request.
+	 */
+	public function getClientIp()
+	{
+		if ($this->clientIp === null) {
+			$this->clientIp = self::getClientIpAddress();
+		}
+		return $this->clientIp;
 	}
 }

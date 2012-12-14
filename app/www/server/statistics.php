@@ -7,15 +7,16 @@
 	require_once(dirname(__FILE__)."/../../cron/watchers/class.LASNMPWatcher.php");
 	require_once(dirname(__FILE__)."/../../cron/watchers/class.MEMSNMPWatcher.php");
 	require_once(dirname(__FILE__)."/../../cron/watchers/class.NETSNMPWatcher.php");
+	require_once(dirname(__FILE__)."/../../cron/watchers/class.ServersNumWatcher.php");
     
-    if ($req_task == "get_stats_image_url")
+    if ($_REQUEST['task'] == "get_stats_image_url")
     {    	
-    	$farmid = (int)$req_farmid;
-    	$watchername = $req_watchername;
-    	$graph_type = $req_graph_type;
-    	$role_name = ($req_role_name) ? $req_role_name : $req_role;
+    	$farmid = (int)$_REQUEST['farmid'];
+    	$watchername = $_REQUEST['watchername'];
+    	$graph_type = $_REQUEST['graph_type'];
+    	$role_name = ($_REQUEST['role_name']) ? $_REQUEST['role_name'] : $_REQUEST['role'];
     	
-    	if ($req_version == 2)
+    	if ($_REQUEST['version'] == 2)
     	{
     		if ($role_name != 'FARM' && !stristr($role_name, "INSTANCE_"))
     			$role_name = "FR_{$role_name}";
@@ -40,18 +41,59 @@
 	
 	    	$image_path = APPPATH."/cache/stats/{$farmid}/{$role_name}.{$watchername}.{$graph_type}.gif";
 	    	
-	    	$farm_rrddb_dir = CONFIG::$RRD_DB_DIR."/{$farminfo['id']}";
-	    	$rrddbpath = "{$farm_rrddb_dir}/{$role_name}/{$watchername}/db.rrd";
+	    	$lastDigit = substr("{$farminfo['id']}", -1);
+			
+			/*
+			/mnt/rrddata/x1x6
+			/mnt/rrddata/x2x7
+			/mnt/rrddata/x3x8
+			/mnt/rrddata/x4x9
+			/mnt/rrddata/x5x0
+			 */
+			
+			switch ($lastDigit) {
+				case 1:
+				case 6:
+					$folder = "x1x6";
+					break;
+					
+				case 2:
+				case 7:
+					$folder = "x2x7";
+					break;
+				
+				case 3:
+				case 8:
+					$folder = "x3x8";
+					break;
+					
+				case 4:
+				case 9:
+					$folder = "x4x9";
+					break;
+					
+				case 5:
+				case 0:
+					$folder = "x5x0";
+					break;
+			}
+			
+	    	$farm_rrddb_dir = CONFIG::$STATISTICS_RRD_DB_DIR."/{$folder}/{$farminfo['id']}";
 	    	
-	    	CONFIG::$RRD_GRAPH_STORAGE_TYPE = RRD_STORAGE_TYPE::LOCAL_FS;
-	    	
+	    	if ($watchername == 'ServersNum')
+	    		$rrddbpath = "{$farm_rrddb_dir}/{$role_name}/SERVERS/db.rrd";
+	    	else
+	    		$rrddbpath = "{$farm_rrddb_dir}/{$role_name}/{$watchername}/db.rrd";
+			
+			var_dump($rrddbpath);
+			
 	    	if (file_exists($rrddbpath))
 	    	{
 	        	try
 	        	{
 	    			GenerateGraph($farmid, $role_name, $rrddbpath, $watchername, $graph_type, $image_path);
 	    			
-	    			$url = str_replace(array("%fid%","%rn%","%wn%"), array($farmid, $role_name, $watchername), CONFIG::$RRD_STATS_URL);
+	    			$url = str_replace(array("%fid%","%rn%","%wn%"), array($farmid, $role_name, $watchername), CONFIG::$STATISTICS_RRD_STATS_URL);
 					$url = "{$url}{$graph_type}.gif";
 	    			
 	    			$result = array("success" => true, "msg" => $url);
@@ -70,10 +112,7 @@
     
     function GenerateGraph($farmid, $role_name, $rrddbpath, $watchername, $graph_type)
 	{
-        if (CONFIG::$RRD_GRAPH_STORAGE_TYPE == RRD_STORAGE_TYPE::AMAZON_S3)
-        	$image_path = APPPATH."/cache/stats/{$farmid}/{$role_name}.{$watchername}.{$graph_type}.gif";
-        else
-        	$image_path = CONFIG::$RRD_GRAPH_STORAGE_PATH."/{$farmid}/{$role_name}_{$watchername}.{$graph_type}.gif";
+        $image_path = CONFIG::$STATISTICS_RRD_GRAPH_STORAGE_PATH."/{$farmid}/{$role_name}_{$watchername}.{$graph_type}.gif";
         
         @mkdir(dirname($image_path), 0777, true);
 
@@ -136,7 +175,7 @@
             case GRAPH_TYPE::YEARLY:
             	$r = array(
             		"start" => "-1y", 
-            		"end" => false, 
+            		"end" => "-5min", 
             		"step" => 86400, 
             		"update_every" => 86400,
             		"x_grid" => "MONTH:1:MONTH:1:MONTH:1:0:%b"

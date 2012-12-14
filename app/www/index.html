@@ -5,62 +5,42 @@
 	<meta http-equiv="Content-Language" content="en-us" />
 	<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
 	<meta name="robots" content="none" />
-	<script type="text/javascript">
-		var RecaptchaOptions = {
-			//theme : 'white'
-			theme : 'custom',
-			custom_theme_widget: 'recaptcha_widget'
-		};
-	</script>
+    <style>
+        @-webkit-keyframes pulse {
+            0% {
+                opacity: 1;
+            }
+            50% {
+                opacity: 0.6
+            }
+            100% {
+                opacity: 1
+            }
+        }
+    </style>
 </head>
 <body>
-	<div id="loading" style="position: absolute; top: 50%; left: 50%; font-size: 18px; font-family: arial; font-weight: bold; color: #999; width: 140px; height: 140px; margin: -70px 0 0 -70px;">
-		<div id="loading-div" style="background-image: url(/ui/images/logo_progress.png); background-position: 0px -500px; width: 100px; height: 100px; margin-left: 10px;"></div>
-		<span id="loading-text">Loading Scalr...</span>
-	</div>
+    <div id="loading" style="position: absolute; left: 0px; right: 0px; top: 0px; bottom: 0px; background-color: #F0F1F4; z-index: 10000000;">
+        <div style="position: absolute; top: 50%; left: 50%; width: 118px; height: 99px; margin: -100px 0 0 -59px; overflow: hidden;">
+            <div id="loading-bg" style="position: absolute; left: 0; bottom: 0; background-image: url(/ui2/images/main_logo_bg.png); width: 118px; height: 99px;"></div>
+            <div id="loading-div" style="position: absolute; left: 0; bottom: 0; width: 118px; height: 0px; -webkit-transition: all 0.2s ease; -moz-transition: all 0.2s ease; overflow: hidden;">
+                <div id="loading-div-child" style="position: absolute; bottom: 0; width: 118px; height: 99px; background-image: url(/ui2/images/main_logo.png);"></div>
+            </div>
+        </div>
+        <div id="loading-text" style="position:absolute; top: 50%; left: 50%; width: 600px; margin-left: -300px; height: auto; margin-top: 30px; font: bold 18px arial, helvetica, sans-serif; color: #C93301; line-height: 28px; text-shadow: 0 1px #F8F9FA; text-align: center; display: none;"></div>
+    </div>
 
-	<div id="body-container" style="position: absolute; left: 0px; right: 0px; top: 0px; bottom: 0px; visibility: hidden"></div>
+	<div id="body-container" style="left: 0px; top: 0px; visibility: hidden"></div>
 
 	<div id="body-login-container" style="display: none">
-		<div id="body-login">
-			<form method="POST" action="/guest/xLogin/">
-                <table class="x-field x-form-item x-field-default x-anchor-form-item" cellpadding="0" style="table-layout: fixed; width: 388px; "><tbody><tr><td style="" valign="top" halign="left" width="75" class="x-field-label-cell"><label for="textfield-1017-inputEl" class="x-form-item-label x-form-item-label-left" style="width:70px;margin-right:5px;">Email:</label></td><td class="x-form-item-body " role="presentation" colspan="2" style="width: 100%; "><input type="text" size="1" name="scalrLogin" style="width: 100%; -webkit-user-select: text; " class="x-form-field x-form-text " autocomplete="off" aria-invalid="false" data-errorqtip=""></td></tr></tbody></table>
-                <table class="x-field x-form-item x-field-default x-anchor-form-item" cellpadding="0" style="table-layout: fixed; width: 388px; "><tbody><tr><td style="" valign="top" halign="left" width="75" class="x-field-label-cell"><label for="textfield-1018-inputEl" class="x-form-item-label x-form-item-label-left" style="width:70px;margin-right:5px;">Password:</label></td><td class="x-form-item-body " role="presentation" colspan="2" style="width: 100%; "><input type="password" size="1" name="scalrPass" style="width: 100%; -webkit-user-select: text; " class="x-form-field x-form-text " autocomplete="off" aria-invalid="false" data-errorqtip=""></td></tr></tbody></table>
-
-                <div id="recaptcha_widget" style="display:none; width: 375px; margin-bottom: 5px; padding: 3px; -moz-border-radius: 2px; -webkit-border-radius: 2px; border-radius: 2px;">
-                    <div style="border: 1px solid #BBB; margin-left: 72px;width: 302px; height:59px">
-                        <div id="recaptcha_image"></div>
-                    </div>
-                    <div style="margin-left: 70px; margin-top: 5px; height:55px;">
-                        <span style="margin-left: 3px;">Type the two words:</span>
-                        <input type="text" id="recaptcha_response_field" name="scalrCaptcha" style="margin-left: 3px; width: 267px; height: 35px; display: inline-block;"/>
-                        <div style="float:right;">
-                            <div><a href="javascript:Recaptcha.reload()"><img src="/ui/images/ui/guest/login/refresh.png" title="Get another CAPTCHA"/></a></div>
-                            <div><a href="javascript:Recaptcha.showhelp()"><img src="/ui/images/ui/guest/login/help.png" title="Help"/></a></div>
-                        </div>
-                    </div>
-                </div>
-                
-                <script type="text/javascript" src="https://www.google.com/recaptcha/api/challenge?k=6Le9Us4SAAAAAOlqx9rkyJq0g3UBZtpoETmqUsmY"></script>
-
-                <table class="x-field x-form-item x-field-default x-anchor-form-item" cellpadding="0" style="table-layout: fixed; width: 388px; "><tbody><tr><td id="field-1019-labelCell" style="display:none;" valign="top" halign="left" width="75" class="x-field-label-cell"><label for="field-1019-inputEl" class="x-form-item-label x-form-item-label-left" style="width:70px;margin-right:5px;"></label></td><td class="x-form-item-body " role="presentation" colspan="3" style="width: 100%; "><input type="checkbox" size="1" name="scalrKeepSession" style="" class="x-form-field x-form-checkbox " checked=1 autocomplete="off" aria-invalid="false" data-errorqtip="">&nbsp;Remember me</td></tr></tbody></table>
-
-                <fieldset class="x-fieldset x-fieldset-with-title x-fieldset-with-legend x-fieldset-default" style="border-width: 1px; width: 388px; ">
-                    <legend class="x-fieldset-header x-fieldset-header-default">
-                        <div class="x-component x-fieldset-header-text x-component-default">Do you like Scalr?</div>
-                        <div class="x-clear" role="presentation"></div>
-                    </legend>
-                    <div class="x-fieldset-body" style="width: 376px; ">Scalr has just launched its referral programme! Refer your friends and receive a $100 Amazon gift card. <a href="http://scalr.net/pricing/referral/?utm_source=scalr&amp;utm_campaign=login" target="_blank">Learn more</a>
-                        <div id="fieldset-1020-overflowPadderEl" style="font-size: 1px; width: 1px; height: 1px; display: none; "></div>
-                    </div>
-                </fieldset>
-
-				<div style="display: none">
-					<input type="submit">
-				</div>
-			</form>
-		</div>
+		<form method="post" action="/guest/xLogin/">
+            <input id="textfield-user-login-inputEl" type="text" size="1" name="scalrLogin" style="width:100%;" class="x-form-field x-form-text " autocomplete="on" aria-invalid="false" data-errorqtip="" />
+            <input id="textfield-user-password-inputEl" type="password" size="1" name="scalrPass" style="width:100%;" class="x-form-field x-form-text " autocomplete="on" aria-invalid="false" data-errorqtip="">
+			<input type="submit" />
+        </form>
 	</div>
+
+    <iframe src='/login.html' style='width:0px;height:0px;border:0px;' id='hiddenChromeLoginForm' name='hiddenChromeLoginForm'></iframe>
 
     <script type="text/javascript">
         var head = document.head || document.getElementsByTagName('head')[0];
@@ -68,30 +48,46 @@
         var debugMode = document.location.search.indexOf('debug') != -1 ? true : false;
         var errorMessage = 'The browser you are currently using is not supported by <a href="https://my.scalr.net/">my.scalr.net</a>. Please use one of the following ones: Safari, Firefox or Chrome.';
 
-        if (/msie/.test(navigator.userAgent.toLowerCase())) {
-            document.getElementById('loading-text').innerHTML = errorMessage;
-            document.getElementById('loading').style.width = '800px';
-            document.getElementById('loading').style.color = 'red';
-            document.getElementById('loading').style.marginLeft = '-400px';
-            document.getElementById('loading').style.textAlign = 'center';
+        var updateProgress = function (percent) {
+            var pos = Math.ceil(99 * percent / 100), div = document.getElementById('loading-div');
+            div.style.height = pos + 'px';
+        };
 
-            document.getElementById('loading-div').style.backgroundPosition = '0px 0px';
-            document.getElementById('loading-div').style.marginLeft = '340px';
+        var showError = function (message) {
+            var text = document.getElementById('loading-text'), div = document.getElementById('loading-div');
+            text.style.display = 'block';
+            text.innerHTML = message;
+
+            div.parentNode.removeChild(div);
+            document.getElementById('loading-bg').style.backgroundImage = 'url(/ui2/images/main_logo_error.png)';
+        }
+
+        updateProgress(5);
+
+        if (/msie/.test(navigator.userAgent.toLowerCase())) {
+            showError(errorMessage);
         } else {
+            updateProgress(10);
+            
+            var css = document.createElement('link');
+            css.type = 'text/css';
+            css.rel = 'stylesheet';
+            css.href = '/ui2/js/extjs-4.1/theme/ext-scalr-1.css';
+            head.appendChild(css);
+            
             script.type = 'text/javascript';
-            script.src = debugMode ? '/ui/js/extjs-4.1/ext-all-debug-1.js' : '/ui/js/extjs-4.1/ext-all-1.js';
+            script.src = debugMode ? '/ui2/js/extjs-4.1/ext-all-debug-2.js' : '/ui2/js/extjs-4.1/ext-all-2.js';
             script.onload = function () {
                 try {
-                    Ext.get('loading').down('div').applyStyles('background-position: 0px -400px');
+                    updateProgress(30);
 
                     if (! (Ext.isChrome || Ext.isGecko || Ext.isSafari)) {
-                        Ext.get('loading').down('div').applyStyles('background-position: 0px 0px; margin-left: 340px;');
-                        Ext.get('loading').applyStyles('width: 800px; color: red; margin-left: -400px; text-align: center;');
-                        Ext.get('loading').child('span').update(errorMessage);
+                        showError(errorMessage);
                     } else {
+                        Ext.Ajax.defaultHeaders = { 'X-Scalr-Interface': 'v2' };
                         Ext.Ajax.request({
                             url: '/guest/xInit',
-                            params: {locationHash: document.location.hash},
+                            params: { locationHash: document.location.hash, scalrPrivateInterface: 'v2' },
                             success: function (response) {
                                 try {
                                     var obj = Ext.decode(response.responseText);
@@ -105,6 +101,10 @@
                                         (function () {
                                             var onloadCss = function () {
                                                 if (Scalr.InitParams.css.length > 0) {
+                                                    // from 30 to 50
+                                                    var p = Math.ceil((Scalr.InitParams.css.length / len) * 20) + 30;
+                                                    updateProgress(p);
+
                                                     var el = document.createElement('link');
                                                     el.type = 'text/css';
                                                     el.rel = 'stylesheet';
@@ -126,15 +126,19 @@
                                                     Ext.Function.defer(checkCss, 50);
                                                 } else {
                                                     // loading js
+                                                    // from 50 to 100
+                                                    updateProgress(50);
+
                                                     var len = Scalr.InitParams.extjs.length;
                                                     (function () {
                                                         var onloadJs = function () {
                                                             if (Scalr.InitParams.extjs.length > 0) {
-                                                                var p = Math.ceil((Scalr.InitParams.extjs.length / len) * 3 + 1) * 100;
-                                                                Ext.get('loading').down('div').applyStyles('background-position: 0px -' + p + 'px');
+                                                                var p = Math.ceil((1 - Scalr.InitParams.extjs.length / len) * 50) + 50;
+                                                                updateProgress(p);
                                                                 Ext.Loader.injectScriptElement(Scalr.InitParams.extjs.shift(), onloadJs);
                                                             } else {
-                                                                Scalr.Init();
+                                                                updateProgress(100);
+                                                                Scalr.Init(Scalr.InitParams.context);
                                                             }
                                                         };
                                                         onloadJs();
@@ -144,34 +148,22 @@
                                             onloadCss();
                                         })();
                                     } else {
-                                        Ext.get('loading').down('div').applyStyles('background-position: 0px 0px; margin-left: 340px;');
-                                        Ext.get('loading').applyStyles('width: 800px; color: red; margin-left: -400px; text-align: center;');
-                                        Ext.get('loading').child('span').update(obj.errorMessage || 'Service is temporary not available. Please try again in a minute.');
+                                        showError(obj.errorMessage || 'Service is temporary not available. Please try again in a minute.')
                                     }
                                 } catch (e) {
-                                    Ext.get('loading').down('div').applyStyles('background-position: 0px 0px; margin-left: 340px;');
-                                    Ext.get('loading').applyStyles('width: 800px; color: red; margin-left: -400px; text-align: center;');
-                                    Ext.get('loading').child('span').update('Service is temporary not available. Please try again in a minute.');
+                                    showError('Service is temporary not available. Please try again in a minute.')
                                 }
                             },
                             failure: function () {
-                                Ext.get('loading').down('div').applyStyles('background-position: 0px 0px; margin-left: 340px;');
-                                Ext.get('loading').applyStyles('width: 800px; color: red; margin-left: -400px; text-align: center;');
-                                Ext.get('loading').child('span').update('Service is temporary not available. Please try again in a minute.');
+                                showError('Service is temporary not available. Please try again in a minute.')
                             }
                         });
                     }
                 } catch (e) {
-                    document.getElementById('loading-text').innerHTML = 'Error init UI';
+                    showError('Error init UI')
                 }
             }
             head.appendChild(script);
-
-            var css = document.createElement('link');
-            css.type = 'text/css';
-            css.rel = 'stylesheet';
-            css.href = '/ui/js/extjs-4.1/resources/css/ext-all-1.css';
-            head.appendChild(css);
         }
     </script>
 </body>

@@ -17,5 +17,10 @@
 			$this->BundleTaskID = $BundleTaskID;
 			$this->LastErrorMessage = $LastErrorMessage;
 		}
+		
+		public function getTextDetails()
+		{
+			return "Rebundle started on instance {$this->DBServer->remoteIp} ({$this->DBServer->serverId}) for farm #{$this->DBServer->farmId} failed.";
+		}
 	}
 ?>

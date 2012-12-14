@@ -43,6 +43,10 @@
 			$this->FarmID = $farmid;
 		}
 		
+		public function OnMetricCheckFailed(MetricCheckFailedEvent $event) {}
+		
+		public function OnMetricCheckRecovered(MetricCheckRecoveredEvent $event) {}
+		
 		public function OnHostInit(HostInitEvent $event) {}
 		
 		public function OnHostUp(HostUpEvent $event) {}
@@ -67,6 +71,8 @@
 		public function OnFarmLaunched(FarmLaunchedEvent $event) {}
 		
 		public function OnFarmTerminated(FarmTerminatedEvent $event) {}
+		
+		public function OnCustomEvent(CustomEvent $event) {}
 		
 		/**
 		 * @deprecated

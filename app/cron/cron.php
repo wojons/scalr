@@ -3,8 +3,6 @@
 	define("NO_TEMPLATES", true);
 	define("NO_SESSIONS", true);
 	require_once(dirname(__FILE__)."/../src/prepend.inc.php");    
-
-	CONTEXTS::$APPCONTEXT = APPCONTEXT::CRONJOB;
 	
 	Core::Load("IO/PCNTL/interface.IProcess.php");
 	Core::Load("IO/PCNTL");
@@ -14,7 +12,7 @@
     $fname = basename($argv[0]);
 
     $JobLauncher = new JobLauncher(dirname(__FILE__));
-    
+	
     // DBQueueEvent - it is a daemon process so we must skepp this check
     if ($JobLauncher->GetProcessName() != 'DBQueueEvent')
     {

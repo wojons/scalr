@@ -28,8 +28,13 @@
             $db->Execute("DELETE FROM events WHERE `dtadded` < {$oldlogtime}");
             sleep(60);
             
-            $oldlogtime = date("Y-m-d", mktime(date("H"), date("i"), date("s"), date("m"), date("d")-30, date("Y")));
+            $oldlogtime = date("Y-m-d", mktime(date("H"), date("i"), date("s"), date("m"), date("d")-10, date("Y")));
             $db->Execute("DELETE FROM messages WHERE type='out' AND status='1' AND `dtlasthandleattempt` < {$oldlogtime}");
+            sleep(60);
+            $db->Execute("DELETE FROM messages WHERE type='out' AND status='3' AND `dtlasthandleattempt` < {$oldlogtime}");
+            sleep(60);
+            $oldlogtime = date("Y-m-d", mktime(date("H"), date("i"), date("s"), date("m"), date("d")-20, date("Y")));
+            $db->Execute("DELETE FROM messages WHERE type='in' AND status='1' AND `dtlasthandleattempt` < {$oldlogtime}");
             sleep(60);
             
             //Clear old scripting events

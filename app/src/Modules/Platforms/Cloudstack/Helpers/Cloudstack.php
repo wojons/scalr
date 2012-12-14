@@ -6,21 +6,24 @@
 		{
 			foreach ($roles as $DBFarmRole)
 			{
-				if ($DBFarmRole->Platform != SERVER_PLATFORMS::CLOUDSTACK)
+				if (!in_array($DBFarmRole->Platform, array(SERVER_PLATFORMS::CLOUDSTACK, SERVER_PLATFORMS::IDCF, SERVER_PLATFORMS::UCLOUD)))
 					continue;
 				
 				$location = $DBFarmRole->CloudLocation;
 				
+				$platform = PlatformFactory::NewPlatform($DBFarmRole->Platform);
+				
 				$cs = Scalr_Service_Cloud_Cloudstack::newCloudstack(
-					$DBFarm->GetEnvironmentObject()->getPlatformConfigValue(Modules_Platforms_Cloudstack::API_URL),
-					$DBFarm->GetEnvironmentObject()->getPlatformConfigValue(Modules_Platforms_Cloudstack::API_KEY),
-					$DBFarm->GetEnvironmentObject()->getPlatformConfigValue(Modules_Platforms_Cloudstack::SECRET_KEY)
+					$platform->getConfigVariable(Modules_Platforms_Cloudstack::API_URL, $DBFarm->GetEnvironmentObject()),
+					$platform->getConfigVariable(Modules_Platforms_Cloudstack::API_KEY, $DBFarm->GetEnvironmentObject()),
+					$platform->getConfigVariable(Modules_Platforms_Cloudstack::SECRET_KEY, $DBFarm->GetEnvironmentObject()),
+					$DBFarmRole->Platform
 				);
 				
 				$sshKey = Scalr_SshKey::init();
-				if (!$sshKey->loadGlobalByFarmId($DBFarm->ID, $location))
+				if (!$sshKey->loadGlobalByFarmId($DBFarm->ID, $location, $DBFarmRole->Platform))
 				{
-					$key_name = "FARM-{$DBFarm->ID}";
+					$key_name = "FARM-{$DBFarm->ID}-".SCALR_ID;
 					
 					$result = $cs->createSSHKeyPair($key_name);
 					if ($result->keypair->privatekey)
@@ -31,7 +34,7 @@
 						$sshKey->type = Scalr_SshKey::TYPE_GLOBAL;
 						$sshKey->cloudLocation = $location;
 						$sshKey->cloudKeyName = $key_name;
-						$sshKey->platform = SERVER_PLATFORMS::CLOUDSTACK;
+						$sshKey->platform = $DBFarmRole->Platform;
 						
 						$sshKey->setPrivate($result->keypair->privatekey);
 						$sshKey->setPublic($sshKey->generatePublicKey());

@@ -43,6 +43,12 @@
 				{
 					if (!$db->GetRow("SELECT id FROM ec2_ebs WHERE server_id=? AND ismanual='0'", array($DBServer->serverId)))
 					{
+						if (in_array($DBFarmRole->GetSetting(DBFarmRole::SETTING_AWS_EBS_TYPE), array('standard', 'io1')))
+							$type = $DBFarmRole->GetSetting(DBFarmRole::SETTING_AWS_EBS_TYPE);
+						else
+							$type = 'standard';
+						
+						
 						$DBEBSVolume = new DBEBSVolume();
 						$DBEBSVolume->attachmentStatus = EC2_EBS_ATTACH_STATUS::CREATING;
 						$DBEBSVolume->isManual = false;
@@ -52,6 +58,8 @@
 						$DBEBSVolume->farmRoleId = $DBFarmRole->ID;
 						$DBEBSVolume->serverId = $DBServer->serverId;
 						$DBEBSVolume->serverIndex = $DBServer->index;
+						$DBEBSVolume->type = $type;
+						$DBEBSVolume->iops = $DBFarmRole->GetSetting(DBFarmRole::SETTING_AWS_EBS_IOPS);
 						$DBEBSVolume->size = $DBFarmRole->GetSetting(DBFarmRole::SETTING_AWS_EBS_SIZE);
 						$DBEBSVolume->snapId = $DBFarmRole->GetSetting(DBFarmRole::SETTING_AWS_EBS_SNAPID);
 						$DBEBSVolume->mount = $DBFarmRole->GetSetting(DBFarmRole::SETTING_AWS_EBS_MOUNT);

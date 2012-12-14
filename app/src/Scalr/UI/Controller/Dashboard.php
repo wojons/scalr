@@ -8,62 +8,105 @@ class Scalr_UI_Controller_Dashboard extends Scalr_UI_Controller
 
 	public function defaultAction()
 	{
-		if ($this->user->getSetting(Scalr_Account_User::SETTING_DASHBOARD_ENABLED) == '1') {
+		if ($this->user->getType() == Scalr_Account_User::TYPE_SCALR_ADMIN) {
+			$this->response->page('ui/dashboard/admin.js');
+		} else {
 			$loadJs = array('ui/dashboard/columns.js');
+			$cloudynEnabled = CONFIG::$CLOUDYN_MASTER_EMAIL ? true : false;
 
 			$panel = $this->user->getDashboard($this->getEnvironmentId());
-			if (! is_array($panel))
-				$panel = array();
 
-			$type = 'new';
-			$client = Client::Load($this->user->getAccountId());
-			if ($client->GetSettingValue(CLIENT_SETTINGS::DATE_FARM_CREATED))
-				$type = 'old';
-			$panel = $this->fillDash($panel);
-			$widgets = array();
-			foreach ($panel as $cols=>$colValue) {
-				foreach ($colValue['widgets'] as $widg=>$widgValue) {
-					$widgets[$widgValue['name']] = 1;
+			if (empty($panel['configuration'])) {
+				// default configurations
+				$client = Client::Load($this->user->getAccountId());
+				if ($client->GetSettingValue(CLIENT_SETTINGS::DATE_FARM_CREATED)) {
+					// old customer
+					$panel['configuration'] = array(
+						array(
+							array('name' => 'dashboard.status')
+						),
+						array(
+							array('name' => 'dashboard.announcement', 'params' => array('newsCount' => 5)),
+							array('name' => 'dashboard.usagelaststat', 'params' => array('farmCount' => 5))
+						),
+						array(
+							array('name' => 'dashboard.lasterrors', 'params' => array('errorCount' => 10)),
+							array('name' => 'dashboard.uservoice', 'params' => array('sugCount' => 5))
+						)
+					);
+
+				} else {
+					// new customer
+					$panel['configuration'] = array(
+						array(
+							array('name' => 'dashboard.tutorapp')
+						),
+						array(
+							array('name' => 'dashboard.tutordns')
+						),
+						array(
+							array('name' => 'dashboard.tutorfarm'),
+							array('name' => 'dashboard.announcement', 'params' => array('newsCount' => 5))
+						)
+					);
+
 				}
+
+				$this->user->setDashboard($this->getEnvironmentId(), $panel);
+				$panel = $this->user->getDashboard($this->getEnvironmentId());
 			}
+
+			// section for adding required widgets
+			if ($cloudynEnabled &&
+				!in_array('cloudynInstalled', $panel['flags']) &&
+				!in_array('dashboard.cloudyn', $panel['widgets']) &&
+				!!$this->environment->isPlatformEnabled(SERVER_PLATFORMS::EC2))
+			{
+				if (! isset($panel['configuration'][0])) {
+					$panel['configuration'][0] = array();
+				}
+				array_unshift($panel['configuration'][0], array('name' => 'dashboard.cloudyn'));
+				$panel['flags'][] = 'cloudynInstalled';
+				$this->user->setDashboard($this->getEnvironmentId(), $panel);
+				$panel = $this->user->getDashboard($this->getEnvironmentId());
+			}
+
+			$panel = $this->fillDash($panel);
+
             $this->response->page('ui/dashboard/view.js',
 	            array(
 		            'panel' => $panel,
-					'widgets' => $widgets,
-					'type' => $type
+		            'flags' => array(
+			            'cloudynEnabled' => $cloudynEnabled
+		            )
 	            ),
 	            $loadJs,
 	            array('ui/dashboard/view.css')
             );
         }
-		else if ($this->user->getType() == Scalr_Account_User::TYPE_SCALR_ADMIN)
-			$this->response->page('ui/dashboard_admin.js');
-		else
-			$this->response->page('ui/dashboard.js', array('envId'=>$this->getEnvironmentId()), array(), array('ui/dashboard/dashboard.css'));
 	}
 
-	public function fillDash ($panel)
+	public function fillDash($panel)
 	{
-		for ($i = 0; $i < count($panel); $i++) {
-			if (is_array($panel[$i]) && is_array($panel[$i]['widgets'])) {
-				$widgets = $panel[$i]['widgets'];
-				for ($j = 0; $j < count($widgets); $j++) {
-					if (isset($widgets[$j]['name'])) {
-						$name = str_replace('dashboard.', '', $widgets[$j]['name']);
-						try {
-							$widget = Scalr_UI_Controller::loadController($name, 'Scalr_UI_Controller_Dashboard_Widget');
-						} catch (Exception $e) {
-							continue;
-						}
+		foreach ($panel['configuration'] as &$column) {
+			foreach ($column as &$wid) {
+				$tt = microtime(true);
 
-						$info = $widget->getDefinition();
+				$name = str_replace('dashboard.', '', $wid['name']);
+				try {
+					$widget = Scalr_UI_Controller::loadController($name, 'Scalr_UI_Controller_Dashboard_Widget');
+				} catch (Exception $e) {
+					continue;
+				}
 
-						if ($info['js'])
-							$loadJs[] = $info['js'];
+				$info = $widget->getDefinition();
 
-						if ($info['type'] == 'local')
-							$panel[$i]['widgets'][$j]['widgetContent'] = $widget->getContent($widgets[$j]['params']);
-					}
+				if ($info['js'])
+					$loadJs[] = $info['js'];
+
+				if ($info['type'] == 'local') {
+					$wid['widgetContent'] = $widget->getContent($wid['params']);
+					$wid['time'] = microtime(true) - $tt;
 				}
 			}
 		}
@@ -72,28 +115,28 @@ class Scalr_UI_Controller_Dashboard extends Scalr_UI_Controller
 
     public function xSavePanelAction()
     {
-	    $this->request->defineParams(array(
+		$t = microtime(true);
+    	$this->request->defineParams(array(
 		   'panel' => array('type' => 'json')
 	    ));
 
 	    $this->user->setDashboard($this->getEnvironmentId(), $this->getParam('panel'));
-		$widgets = array();
-		$panel = $this->fillDash($this->getParam('panel'));
-		foreach ($panel as &$colValue) {
-			foreach ($colValue['widgets'] as &$widgValue) {
-				$widgets[$widgValue['name']] = 1;
-			}
-		}
+	    $panel = $this->user->getDashboard($this->getEnvironmentId());
+
+	    $t2 = microtime(true);
+		$panel = $this->fillDash($panel);
+		$t3 = microtime(true);
+
         $this->response->data(array(
-	        'success' => true,
-	        'data' => array(
-				'panel'=>$panel,
-				'widgets'=> $widgets
-			)
+			'panel' => $panel,
+            't' => microtime(true) - $t,
+            't2' => microtime(true) - $t2,
+            't3' => microtime(true) - $t3,
         ));
     }
 
-	public function xUpdatePanelAction () {
+	public function xUpdatePanelAction ()
+	{
 		$this->request->defineParams(array(
 			'widget' => array('type' => 'json')
 		));
@@ -180,104 +223,59 @@ class Scalr_UI_Controller_Dashboard extends Scalr_UI_Controller
 				'value' => $client->Email
 			));
 
-			// PayPal users: users without Chargify Client ID property
-			if (!$client->GetSettingValue(CLIENT_SETTINGS::BILLING_CGF_CID)) {
-				// Billing type
-				array_push($js_module, array(
-					'xtype' => 'displayfield',
-					'fieldLabel' => 'Billing type',
-					'value' => 'PayPal (Legacy)'
-				));
-
-				$sid = $this->db->GetOne("SELECT subscriptionid FROM subscriptions WHERE clientid=? AND status='Active'", array(
-					$clientId
-				));
-				if ($sid) {
-					array_push($js_module, array(
-						'xtype' => 'displayfield',
-						'fieldLabel' => 'Subscription ID',
-						'value' => $sid
-					));
-				}
-
-				$t = strtotime($client->DueDate);
-				if ($t) {
-					array_push($js_module, array(
-						'xtype' => 'displayfield',
-						'fieldLabel' => 'Due date',
-						'value' => date("M j Y", $t)
-					));
-				}
-
-				if ($this->db->GetOne("SELECT amount FROM payments WHERE clientid = ?", array($clientId)) == 50)
-					$package = 'Beta-legacy';
-				else
-					$package = 'Production';
-
-				if ($client->GetSettingValue(CLIENT_SETTINGS::BILLING_PACKAGE) == '3')
-					$package = 'Mission Critical';
-
+			if (!$client->GetSettingValue(CLIENT_SETTINGS::BILLING_CGF_SID))
+			{
 				array_push($js_module, array(
 					'xtype' => 'displayfield',
 					'fieldLabel' => 'Plan',
-					'value' => $package
+					'value' => 'Development'
 				));
 			}
-			else {
-				if (!$client->GetSettingValue(CLIENT_SETTINGS::BILLING_CGF_SID))
+			else
+			{
+				$c = new ChargifyConnector();
+
+				try
 				{
+					$subs = $c->getCustomerSubscription($client->GetSettingValue(CLIENT_SETTINGS::BILLING_CGF_SID));
+
+					$color = (ucfirst($subs->getState()) != 'Active') ? 'red' : 'green';
+					array_push($js_module, array(
+						'xtype' => 'displayfield',
+						'fieldLabel' => 'Status',
+						'value' => "<span style='color:{$color}'>".ucfirst($subs->getState())."</span>"
+					));
+
+					array_push($js_module, array(
+						'xtype' => 'displayfield',
+						'fieldLabel' => 'Billing type',
+						'value' => ucfirst($subs->getCreditCard()->getCardType()) . " (" . $subs->getCreditCard()->getMaskedCardNumber() . ")"
+					));
+
 					array_push($js_module, array(
 						'xtype' => 'displayfield',
 						'fieldLabel' => 'Plan',
-						'value' => 'Development'
+						'value' => ucfirst($subs->getProduct()->getHandle())
+					));
+
+					array_push($js_module, array(
+						'xtype' => 'displayfield',
+						'fieldLabel' => 'Due date',
+						'value' => date("M j Y", strtotime($subs->next_assessment_at))
+					));
+
+					array_push($js_module, array(
+						'xtype' => 'displayfield',
+						'fieldLabel' => 'Balance',
+						'value' => "$".number_format($subs->getBalanceInCents()/100, 2)
 					));
 				}
-				else
-				{
-					$c = new ChargifyConnector();
-
-					try
-					{
-						$subs = $c->getCustomerSubscription($client->GetSettingValue(CLIENT_SETTINGS::BILLING_CGF_SID));
-
-						$color = (ucfirst($subs->getState()) != 'Active') ? 'red' : 'green';
-						array_push($js_module, array(
-							'xtype' => 'displayfield',
-							'fieldLabel' => 'Status',
-							'value' => "<span style='color:{$color}'>".ucfirst($subs->getState())."</span>"
-						));
-
-						array_push($js_module, array(
-							'xtype' => 'displayfield',
-							'fieldLabel' => 'Billing type',
-							'value' => ucfirst($subs->getCreditCard()->getCardType()) . " (" . $subs->getCreditCard()->getMaskedCardNumber() . ")"
-						));
-
-						array_push($js_module, array(
-							'xtype' => 'displayfield',
-							'fieldLabel' => 'Plan',
-							'value' => ucfirst($subs->getProduct()->getHandle())
-						));
-
-						array_push($js_module, array(
-							'xtype' => 'displayfield',
-							'fieldLabel' => 'Due date',
-							'value' => date("M j Y", strtotime($subs->next_assessment_at))
-						));
-
-						array_push($js_module, array(
-							'xtype' => 'displayfield',
-							'fieldLabel' => 'Balance',
-							'value' => "$".number_format($subs->getBalanceInCents()/100, 2)
-						));
-					}
-					catch(Exception $e) {
-						array_push($js_module, array(
-							'xtype' => 'displayfield',
-							'hideLabel' => true,
-							'value' => "<span style='color:red;'>Billing information is not available at the moment</span>"
-						));
-					}
+				catch(Exception $e) {
+					array_push($js_module, array(
+						'xtype' => 'displayfield',
+						'hideLabel' => true,
+						'value' => "<span style='color:red;'>Billing information is not available at the moment</span>"
+					));
 				}
 			}
 		}

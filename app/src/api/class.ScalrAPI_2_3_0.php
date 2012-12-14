@@ -2,6 +2,27 @@
 	
 	class ScalrAPI_2_3_0 extends ScalrAPI_2_2_0
 	{
+		public function FarmClone($FarmID)
+		{
+			$response = $this->CreateInitialResponse();
+				
+			try
+			{
+				$DBFarm = DBFarm::LoadByID($FarmID);
+				if ($DBFarm->EnvID != $this->Environment->id)
+					throw new Exception("N");
+			}
+			catch(Exception $e)
+			{
+				throw new Exception(sprintf("Farm #%s not found", $FarmID));
+			}
+			
+			$farm = $DBFarm->cloneFarm(null, $this->user, $this->Environment->id);
+			$response->FarmID = $farm->ID;
+			
+			return $response;
+		}
+		
 		public function EnvironmentsList()
 		{
 			$response = $this->CreateInitialResponse();

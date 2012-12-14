@@ -1,1 +1,0 @@
-IP address for instance {$event->DBServer->serverId} changed to {$event->NewIPAddress} 

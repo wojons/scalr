@@ -81,7 +81,7 @@
   		$date = gmdate("D, d M Y H:i:s T", strtotime($event["dtadded"]));
   		
   		$item = $RSS->createElement('item');
-  		$item->appendChild($RSS->createElement('title', $event['short_message']));
+  		$item->appendChild($RSS->createElement('title', $event['message']));
   		$item->appendChild($RSS->createElement('link', "http://scalr.net"));
   		$item->appendChild($RSS->createElement('guid'));
   		$item->appendChild($RSS->createElement('comments'));

@@ -1,1 +1,0 @@
-New MySQL master: {$event->DBServer->remoteIp} Up

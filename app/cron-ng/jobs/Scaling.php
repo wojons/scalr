@@ -207,30 +207,32 @@
 									$DBServer->GetEnvironmentObject()->getPlatformConfigValue(Modules_Platforms_Ec2::CERTIFICATE)
 								);
 									
-	                        	// Shutdown an instance just before a full hour running 
-			                    $response = $AmazonEC2Client->DescribeInstances($DBServer->GetProperty(EC2_SERVER_PROPERTIES::INSTANCE_ID));
-			                    if ($response && $response->reservationSet->item)
-			                    {
-	                        		$launch_time = strtotime($response->reservationSet->item->instancesSet->item->launchTime);
-	                        		$time = 3600 - (time() - $launch_time) % 3600;
-		                        		
-	                        		// Terminate instance in < 10 minutes for full hour. 
-	                        		if ($time <= 600)
-	                        			$allow_terminate = true;
-	                        		else
-	                        		{
-	                        			$timeout = round(($time - 600) / 60, 1);
-										
-	                        			Logger::getLogger(LOG_CATEGORY::FARM)->info(new FarmLogMessage($DBFarm->ID, sprintf("Farm %s, role %s scaling down. Server '%s' will be terminated in %s minutes. Launch time: %s",
-	                        				$DBFarm->Name,
-	                        				$DBServer->GetFarmRoleObject()->GetRoleObject()->name,
-	                        				$DBServer->serverId,
-	                        				$timeout,
-	                        				$response->reservationSet->item->instancesSet->item->launchTime
-	                        			)));
-	                        			
-	                        		}
-		                        }
+	                        	// Shutdown an instance just before a full hour running
+	                        	if (!$DBServer->GetFarmRoleObject()->GetSetting(DBFarmRole::SETTING_SCALING_IGNORE_FULL_HOUR)) {
+				                    $response = $AmazonEC2Client->DescribeInstances($DBServer->GetProperty(EC2_SERVER_PROPERTIES::INSTANCE_ID));
+				                    if ($response && $response->reservationSet->item)
+				                    {
+		                        		$launch_time = strtotime($response->reservationSet->item->instancesSet->item->launchTime);
+		                        		$time = 3600 - (time() - $launch_time) % 3600;
+			                        		
+		                        		// Terminate instance in < 10 minutes for full hour. 
+		                        		if ($time <= 600)
+		                        			$allow_terminate = true;
+		                        		else {
+		                        			$timeout = round(($time - 600) / 60, 1);
+											
+		                        			Logger::getLogger(LOG_CATEGORY::FARM)->info(new FarmLogMessage($DBFarm->ID, sprintf("Farm %s, role %s scaling down. Server '%s' will be terminated in %s minutes. Launch time: %s",
+		                        				$DBFarm->Name,
+		                        				$DBServer->GetFarmRoleObject()->GetRoleObject()->name,
+		                        				$DBServer->serverId,
+		                        				$timeout,
+		                        				$response->reservationSet->item->instancesSet->item->launchTime
+		                        			)));
+		                        			
+		                        		}
+			                        }
+	                        	} else 
+	                        		$allow_terminate = true;
 			                        //
 	                        }
 	                        else
@@ -251,6 +253,7 @@
 		                        			$DBServer->serverId,
 						            		$res
 		                        		)));
+										break;
 						            }
 		                        }
 	                        	
@@ -265,6 +268,8 @@
 	                        			$DBServer->GetFarmRoleObject()->GetRoleObject()->name,
 	                        			$DBServer->serverId
 	                        		)));
+							        
+							        Scalr_Server_History::init($DBServer)->markAsTerminated("Scaling down");
 								}
 		                        catch (Exception $e)
 		                        {
@@ -333,7 +338,7 @@
 		      			            
 			            $ServerCreateInfo = new ServerCreateInfo($DBFarmRole->Platform, $DBFarmRole);
 						try {
-							$DBServer = Scalr::LaunchServer($ServerCreateInfo);
+							$DBServer = Scalr::LaunchServer($ServerCreateInfo, null, false, "Scaling up");
 	
 							$DBFarmRole->SetSetting(DBFarmRole::SETTING_SCALING_UPSCALE_DATETIME, time());
 							

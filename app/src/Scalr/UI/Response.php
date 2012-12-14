@@ -7,7 +7,8 @@ class Scalr_UI_Response
 		$headers = array(),
 		$httpResponseCode = 200,
 		$jsResponse = array('success' => true),
-		$jsResponseFlag = false;
+		$jsResponseFlag = false,
+		$serverDebugLog = array();
 
 	private static $_instance = null;
 
@@ -101,6 +102,19 @@ class Scalr_UI_Response
 			header($header['name'] . ': ' . $header['value'], $header['replace']);
 		}
 
+		$cookies = array();
+		foreach(headers_list() as $header) {
+			$matches = explode(':', $header, 2);
+			if (trim($matches[0]) == 'Set-Cookie') {
+				$kv = explode('=', trim($matches[1]), 2);
+				$cookies[$kv[0]] = $kv[1];
+			}
+		}
+
+		header_remove('Set-Cookie');
+		foreach ($cookies as $key => $value)
+			header("Set-Cookie: {$key}={$value}", false);
+
 		if ($this->jsResponseFlag)
 			$this->prepareJsonResponse();
 
@@ -119,18 +133,22 @@ class Scalr_UI_Response
 			$this->setHeader('content-type', 'text/html'); // hack for ajax file uploads and other cases
 	}
 
-	private function getModuleName($name)
+	public function getModuleName($name)
 	{
-		$fl = APPPATH . "/www/ui/js/{$name}";
+		$headers = apache_request_headers();
+		$vPath = isset($headers['X-Scalr-Interface']) ? intval(trim($headers['X-Scalr-Interface'], 'v')) : '2';
+		$path = "ui{$vPath}/js/";
+
+		$fl = APPPATH . "/www/{$path}{$name}";
 		if (file_exists($fl))
-			$tm = filemtime(APPPATH . "/www/ui/js/{$name}");
+			$tm = filemtime(APPPATH . "/www/{$path}{$name}");
 		else
 			throw new Scalr_UI_Exception_NotFound(sprintf('Js file not found'));
 
 		$nameTm = str_replace('.js', "-{$tm}.js", $name);
 		$nameTm = str_replace('.css', "-{$tm}.css", $nameTm);
 
-		return "/ui/js/{$nameTm}";
+		return "/{$path}{$nameTm}";
 	}
 
 	public function page($name, $params = array(), $requires = array(), $requiresCss = array())
@@ -190,5 +208,10 @@ class Scalr_UI_Response
 	public function varDump($value, $name = 'var')
 	{
 		$this->setHeader('X-Scalr-Debug', $name . ': ' . print_r($value, true));
+	}
+
+	public function debugLog($key, $value)
+	{
+		$this->serverDebugLog[] = array('key' => $key, 'value' => print_r($value, true));
 	}
 }

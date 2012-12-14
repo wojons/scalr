@@ -25,8 +25,24 @@
             
             if (!$this->DBServer->IsSupported(0.5)) {
             	throw new Exception("ami-scripts roles cannot execute scripts anymore. Please upgrade your roles to scalarizr: http://scalr.net/blog/announcements/ami-scripts/");
+            } elseif (!$this->DBServer->IsSupported(0.9) && $this->DBServer->IsSupported(0.8)) {
+            	throw new Exception("Windows scalarizr doesn't support script executions");
+            } else {
+            	if (SCALR_ID == 'ab6d8171') {
+            		$this->DB->Execute("INSERT INTO debug_scripting SET
+            			server_id = ?,
+            			request = ?,
+            			params = ?
+            		", array(
+						$this->DBServer->serverId,
+						json_encode($_REQUEST),
+						json_encode(array(
+							$this->DBServer->GetProperty(SERVER_PROPERTIES::SZR_VESION),
+							$_SERVER['REQUEST_URI']
+						))
+					));
+            	}
             }
-            	
             
             
             if (!in_array($this->GetArg("event"), $scalr_events))
@@ -89,7 +105,7 @@
 	            		}
 	            	}
 	            }
-            } catch(Exception $e){ return $ResponseDOMDocument; }
+            } catch(Exception $e){ var_dump("1: ".$e->getMessage()); return $ResponseDOMDocument; }
     		/************/
 		            	
             
@@ -98,7 +114,7 @@
     		try {
     			$DBFarmRole = $this->DBServer->GetFarmRoleObject();
     		}
-    		catch(Exception $e) { return $ResponseDOMDocument; }
+    		catch(Exception $e) { var_dump("2: ".$e->getMessage()); return $ResponseDOMDocument; }
     		
 			$DBFarm = $this->DBServer->GetFarmObject();
 			
@@ -140,8 +156,9 @@
 		            	// Build a list of scripts to be executed upon event from another instance.
 		            	//
 		            	try {
-		            		$targetDBServer = DBServer::LoadByLocalIp($this->GetArg("target_ip"));
+		            		$targetDBServer = DBServer::LoadByLocalIp($this->GetArg("target_ip"), $this->DBServer->farmId);
 		            	} catch (Exception $e) {
+		            		var_dump("3: ".$e->getMessage());
 		            		return $ResponseDOMDocument;
 		            	}		
 	            	}
@@ -157,6 +174,7 @@
 		            try {
 		            	$TargetDBFarmRole = $targetDBServer->GetFarmRoleObject();
 		            } catch (Exception $e){
+		            	var_dump("4: ".$e->getMessage());
 		            	return $ResponseDOMDocument;
 		            }
 		            						

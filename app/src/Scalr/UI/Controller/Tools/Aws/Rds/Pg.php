@@ -102,7 +102,7 @@ class Scalr_UI_Controller_Tools_Aws_Rds_Pg extends Scalr_UI_Controller
 			$itemField->fieldLabel = $value['ParameterName'];
 			$itemField->value = $value['ParameterValue'];
 			$itemField->labelWidth = 250;
-			$itemField->width = 820;
+			$itemField->width = 790;
 			$itemField->readOnly = ($value['IsModifiable'] == "false" && $itemField->xtype != 'displayfield') ? true : false;
 
 			$itemDesc = new stdClass();

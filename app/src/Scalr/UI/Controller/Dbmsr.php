@@ -85,22 +85,11 @@ class Scalr_UI_Controller_Dbmsr extends Scalr_UI_Controller
 				}
 			}
 		} else {
-			foreach ($dbFarmRole->GetServersByFilter(array('status' => SERVER_STATUS::RUNNING)) as $dbServer) {
-				if ($dbServer->GetProperty(Scalr_Db_Msr::REPLICATION_MASTER) == 1) {
-
-					if ($dbFarmRole->GetSetting(Scalr_Db_Msr::DATA_BUNDLE_IS_RUNNING) == 1)
-						throw new Exception("Data bundle already in progress");
-
-					$dbServer->SendMessage(new Scalr_Messaging_Msg_DbMsr_CreateDataBundle());
-
-					$dbFarmRole->SetSetting(Scalr_Db_Msr::DATA_BUNDLE_IS_RUNNING, 1);
-					$dbFarmRole->SetSetting(Scalr_Db_Msr::DATA_BUNDLE_SERVER_ID, $dbServer->serverId);
-
-
-					$this->response->success('Data bundle successfully initiated');
-					return;
-				}
-			}
+			
+			$behavior = Scalr_Role_Behavior::loadByName($dbFarmRole->GetRoleObject()->getDbMsrBehavior());
+			$behavior->createDataBundle($dbFarmRole);
+			$this->response->success('Data bundle successfully initiated');
+			return;
 		}
 
 		$this->response->failure('Scalr unable to initiate data bundle. No running replication master found.');
@@ -122,7 +111,7 @@ class Scalr_UI_Controller_Dbmsr extends Scalr_UI_Controller
 
 		if ($dbFarmRole->GetRoleObject()->hasBehavior(ROLE_BEHAVIORS::MYSQL)) {
 			if ($dbFarmRole->GetSetting(DBFarmRole::SETTING_MYSQL_IS_BCP_RUNNING) == 1)
-				throw new Exception("Backuping already in progress");
+				throw new Exception("Backup already in progress");
 
 			foreach ($dbFarmRole->GetServersByFilter(array('status' => SERVER_STATUS::RUNNING)) as $dbServer) {
 				if (!$dbServer->GetProperty(SERVER_PROPERTIES::DB_MYSQL_MASTER))
@@ -140,37 +129,30 @@ class Scalr_UI_Controller_Dbmsr extends Scalr_UI_Controller
 				$dbFarmRole->SetSetting(DBFarmRole::SETTING_MYSQL_IS_BCP_RUNNING, 1);
 				$dbFarmRole->SetSetting(DBFarmRole::SETTING_MYSQL_BCP_SERVER_ID, $slaveDbServer->serverId);
 
-				$this->response->success('Backuping successfully initiated');
+				$this->response->success('Backup successfully initiated');
 				return;
 			}
 		} else {
-			if ($dbFarmRole->GetSetting(Scalr_Db_Msr::DATA_BACKUP_IS_RUNNING) == 1)
-					throw new Exception("Backup already in progress");
-
-			foreach ($dbFarmRole->GetServersByFilter(array('status' => SERVER_STATUS::RUNNING)) as $dbServer) {
-				if (!$dbServer->GetProperty(Scalr_Db_Msr::REPLICATION_MASTER)) {
-					$slaveDbServer = $dbServer;
-					break;
-				}
-				else
-					$masterDbServer = $dbServer;
-			}
-
-			if (!$slaveDbServer)
-				$slaveDbServer = $masterDbServer;
-
-			if ($slaveDbServer) {
-				$slaveDbServer->SendMessage(new Scalr_Messaging_Msg_DbMsr_CreateBackup());
-
-				$dbFarmRole->SetSetting(Scalr_Db_Msr::DATA_BACKUP_IS_RUNNING, 1);
-				$dbFarmRole->SetSetting(Scalr_Db_Msr::DATA_BACKUP_SERVER_ID, $slaveDbServer->serverId);
-
-				$this->response->success('Backuping successfully initiated');
-				return;
-			}
+			$behavior = Scalr_Role_Behavior::loadByName($dbFarmRole->GetRoleObject()->getDbMsrBehavior());
+			$behavior->createBackup($dbFarmRole);
+			$this->response->success('Backup successfully initiated');
+			return;
 		}
 
 		$this->response->failure('Scalr unable to initiate data backup. No running replication master found.');
+	}
+
+	private function getMySqlReplicationStatus($type, $ip, $username, $password)
+	{
+		$conn = &NewADOConnection("mysqli");
+		$conn->Connect($ip, $username, $password, null);
+		$conn->SetFetchMode(ADODB_FETCH_ASSOC);
+		
+		$r = $conn->GetRow("SHOW {$type} STATUS");
+		
+		unset($conn);
+		
+		return $r;
 	}
 
 	public function statusAction()
@@ -205,6 +187,12 @@ class Scalr_UI_Controller_Dbmsr extends Scalr_UI_Controller
 		}
 
 		$data = array('farmRoleId' => $dbFarmRole->ID, 'farmHash' => $dbFarm->Hash, 'pmaAccessConfigured' => false);
+		
+		$data['backupsNotSupported'] = in_array($dbFarmRole->Platform, array(
+			SERVER_PLATFORMS::CLOUDSTACK,
+			SERVER_PLATFORMS::IDCF,
+			SERVER_PLATFORMS::UCLOUD
+		));
 		
 		if ($dbFarmRole->GetSetting(DBFarmRole::SETTING_MYSQL_PMA_USER))
 			$data['pmaAccessConfigured'] = true;
@@ -283,35 +271,37 @@ class Scalr_UI_Controller_Dbmsr extends Scalr_UI_Controller
 
 				try
 		   		{
-		   			$conn = &NewADOConnection("mysqli");
-		   			$conn->Connect($dbServer->remoteIp, 'scalr_stat', $dbFarmRole->GetSetting(DBFarmRole::SETTING_MYSQL_STAT_PASSWORD), null);
-		   			$conn->SetFetchMode(ADODB_FETCH_ASSOC);
+		   			$isCloudstack = in_array($dbFarmRole->Platform, array(SERVER_PLATFORMS::CLOUDSTACK, SERVER_PLATFORMS::IDCF, SERVER_PLATFORMS::UCLOUD));
+		   			$isMaster = ($dbServer->GetProperty(SERVER_PROPERTIES::DB_MYSQL_MASTER) == 1);
+					
+		   			if (!$isCloudstack) {
+		   				$rStatus = $this->getMySqlReplicationStatus($isMaster ? 'MASTER' : 'SLAVE', $dbServer->remoteIp, 'scalr_stat', $dbFarmRole->GetSetting(DBFarmRole::SETTING_MYSQL_STAT_PASSWORD));
+		   			}
 
-					if ($dbServer->GetProperty(SERVER_PROPERTIES::DB_MYSQL_MASTER) == 1)
-					{
-		   				$r = $conn->GetRow("SHOW MASTER STATUS");
-		   				$MasterPosition = $r['Position'];
+					if ($isMaster) {
+		   				$MasterPosition = $rStatus['Position'];
 		   				$master_ip = $dbServer->remoteIp;
 		   				$master_iid = $dbServer->serverId;
 					}
-		   			else
-		   			{
-		   				$r = $conn->GetRow("SHOW SLAVE STATUS");
-
+		   			else {
 		   				$num = ++$slaveNumber;
-		   				$SlavePosition = $r['Exec_Master_Log_Pos'];
+		   				$SlavePosition = $rStatus['Exec_Master_Log_Pos'];
 		   			}
 
-		   			$data["replicationStatus"][] =
-		   			array(
+		   			$d = array(
 		   				"serverId" => $dbServer->serverId,
 		   				"localIp" => $dbServer->localIp,
 		   				"remoteIp" => $dbServer->remoteIp,
-		   				"data" => $r,
-		   				"masterPosition" => $MasterPosition,
-		   				"slavePosition" => $SlavePosition,
-		   				"replicationRole" => $dbServer->GetProperty(SERVER_PROPERTIES::DB_MYSQL_MASTER) ? 'Master' : "Slave #{$num}"
+		   				"replicationRole" => $isMaster ? 'Master' : "Slave #{$num}"
 		   			);
+		   			
+		   			if (!$isCloudstack) {
+		   				$d['data'] = $rStatus;
+		   				$d['masterPosition'] = $MasterPosition;
+		   				$d['slavePosition'] = $SlavePosition;
+		   			}
+		   			
+		   			$data["replicationStatus"][] = $d;
 		   		}
 		   		catch(Exception $e)
 		   		{
@@ -320,7 +310,7 @@ class Scalr_UI_Controller_Dbmsr extends Scalr_UI_Controller
 		   				"localIp" => $dbServer->localIp,
 		   				"remoteIp" => $dbServer->remoteIp,
 		   				"error" => ($e->msg) ? $e->msg : $e->getMessage(),
-		   				"replicationRole" => $dbServer->GetProperty(SERVER_PROPERTIES::DB_MYSQL_MASTER) ? 'Master' : 'Slave'
+		   				"replicationRole" => $isMaster ? 'Master' : 'Slave'
 		   			);
 		   		}
 			}
@@ -342,6 +332,9 @@ class Scalr_UI_Controller_Dbmsr extends Scalr_UI_Controller
 			} elseif ($dbFarmRole->GetRoleObject()->hasBehavior(ROLE_BEHAVIORS::MYSQL2)) {
 				$data['additionalInfo']['MasterPassword'] = $dbFarmRole->GetSetting(Scalr_Db_Msr_Mysql2::ROOT_PASSWORD);
 				$name = 'MySQL';
+			} elseif ($dbFarmRole->GetRoleObject()->hasBehavior(ROLE_BEHAVIORS::PERCONA)) {
+				$data['additionalInfo']['MasterPassword'] = $dbFarmRole->GetSetting(Scalr_Db_Msr_Percona::ROOT_PASSWORD);
+				$name = 'Percona Server';
 			}
 
 			$data['dtLastBackup'] = $dbFarmRole->GetSetting(Scalr_Db_Msr::DATA_BACKUP_LAST_TS) ? Scalr_Util_DateTime::convertTz((int)$dbFarmRole->GetSetting(Scalr_Db_Msr::DATA_BACKUP_LAST_TS), 'd M Y \a\\t H:i:s') : 'Never';
@@ -392,29 +385,48 @@ class Scalr_UI_Controller_Dbmsr extends Scalr_UI_Controller
 				}
 
 				try {
-					if ($dbServer->GetProperty(Scalr_Db_Msr::REPLICATION_MASTER) == 1) {
-						//TODO:
+							
+					$isCloudstack = in_array($dbFarmRole->Platform, array(SERVER_PLATFORMS::CLOUDSTACK, SERVER_PLATFORMS::IDCF, SERVER_PLATFORMS::UCLOUD));
+		   			$isMaster = ($dbServer->GetProperty(Scalr_Db_Msr::REPLICATION_MASTER) == 1);
+					
+		   			if (!$isCloudstack && in_array($this->getParam('type'), array(ROLE_BEHAVIORS::MYSQL2, ROLE_BEHAVIORS::PERCONA))) {
+		   				$password = $dbFarmRole->GetSetting(Scalr_Db_Msr_Mysql2::STAT_PASSWORD);
+		   				$rStatus = $this->getMySqlReplicationStatus($isMaster ? 'MASTER' : 'SLAVE', $dbServer->remoteIp, 'scalr_stat', $password);
+		   			}
+					
+					if ($isMaster) {
+		   				$MasterPosition = $rStatus['Position'];
+		   				$master_ip = $dbServer->remoteIp;
+		   				$master_iid = $dbServer->serverId;
 					}
-		   			else
-		   			{
+		   			else {
 		   				$num = ++$slaveNumber;
+		   				$SlavePosition = $rStatus['Exec_Master_Log_Pos'];
 		   			}
 
-		   			$data["replicationStatus"][] =
-		   			array(
+		   			$d = array(
 		   				"serverId" => $dbServer->serverId,
 		   				"localIp" => $dbServer->localIp,
 		   				"remoteIp" => $dbServer->remoteIp,
-		   				"data" => array(),
-		   				"replicationRole" => $dbServer->GetProperty(Scalr_Db_Msr::REPLICATION_MASTER) ? 'Master' : "Slave #{$num}"
+		   				"replicationRole" => $isMaster ? 'Master' : "Slave #{$num}"
 		   			);
+		   			
+		   			if (!$isCloudstack) {
+		   				$d['data'] = $rStatus;
+		   				$d['masterPosition'] = $MasterPosition;
+		   				$d['slavePosition'] = $SlavePosition;
+		   			}
+		   			
+		   			$data["replicationStatus"][] = $d;
 		   		}
 		   		catch(Exception $e)
 		   		{
 		   			$data["replicationStatus"][] = array(
 		   				"serverId" => $dbServer->serverId,
+		   				"localIp" => $dbServer->localIp,
+		   				"remoteIp" => $dbServer->remoteIp,
 		   				"error" => ($e->msg) ? $e->msg : $e->getMessage(),
-		   				"replicationRole" => $dbServer->GetProperty(Scalr_Db_Msr::REPLICATION_MASTER) ? 'Master' : 'Slave'
+		   				"replicationRole" => $isMaster ? 'Master' : 'Slave'
 		   			);
 		   		}
 			}

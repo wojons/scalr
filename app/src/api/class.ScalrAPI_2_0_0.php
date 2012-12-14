@@ -382,6 +382,7 @@
 					$iitm->{"ExternalIP"} = $DBServer->remoteIp;
 					$iitm->{"InternalIP"} = $DBServer->localIp;
 					$iitm->{"Status"} = $DBServer->status;
+					$iitm->{"Index"} = $DBServer->index;
 					$iitm->{"ScalarizrVersion"} = $DBServer->GetProperty(SERVER_PROPERTIES::SZR_VESION);
 					$iitm->{"Uptime"} = round((time()-strtotime($DBServer->dateAdded))/60, 2); //seconds -> minutes
 					
@@ -503,7 +504,7 @@
 			return $response;
 		}
 		
-		public function ScriptGetDetails($ScriptID)
+		public function ScriptGetDetails($ScriptID, $ShowContent = false)
 		{
 			$script_info = $this->DB->GetRow("SELECT * FROM scripts WHERE id=?", array($ScriptID));
 			if (!$script_info)
@@ -527,6 +528,11 @@
 				$itm = new stdClass();
 				$itm->{"Revision"} = $revision['revision'];
 				$itm->{"Date"} = $revision['dtcreated'];
+				
+				if ($ShowContent) {
+					$itm->{"Content"} = base64_encode($revision['script']);
+				}
+				
 				$itm->{"ConfigVariables"} = new stdClass();
 				$itm->{"ConfigVariables"}->Item = array();
 				
@@ -651,10 +657,7 @@
 					$msg->meta[Scalr_Messaging_MsgMeta::EVENT_ID] = "FRSID-{$farm_rolescript_id}";
 					
 					$msg = Scalr_Scripting_Manager::extendMessage($msg, $DBServer);
-					
-					$isEventNotice = !$DBServer->IsSupported("0.5");
-					
-					$DBServer->SendMessage($msg, $isEventNotice);
+					$DBServer->SendMessage($msg);
 				}
 			}
 			
@@ -825,35 +828,27 @@
 				throw new Exception("Object #{$ObjectID} not found in database");
 				
 			$response = $this->CreateInitialResponse();
-				
-			if (CONFIG::$MONITORING_TYPE == MONITORING_TYPE::REMOTE)
-			{
-				$_REQUEST['role_name'] = $_REQUEST['role'];
-
-				$data = array(
-					'task'			=> 'get_stats_image_url',
-					'farmid'		=> $DBFarm->ID,
-					'watchername'	=> "{$WatcherName}SNMP",
-					'graph_type'	=> $GraphType,
-					'role_name'		=> $role
-				);
 			
-				$content = @file_get_contents(CONFIG::$MONITORING_SERVER_URL."/server/statistics.php?".http_build_query($data));
-				$r = @json_decode($content);
-				if ($r->type == 'ok')
-					$response->GraphURL = $r->msg;
-				else
-				{
-					if ($r->msg)
-						throw new Exception($r->msg);
-					else
-						throw new Exception("Internal API error");
-				}
-			}
+			$_REQUEST['role_name'] = $_REQUEST['role'];
+
+			$data = array(
+				'task'			=> 'get_stats_image_url',
+				'farmid'		=> $DBFarm->ID,
+				'watchername'	=> "{$WatcherName}SNMP",
+				'graph_type'	=> $GraphType,
+				'role_name'		=> $role
+			);
+		
+			$content = @file_get_contents(CONFIG::$MONITORING_SERVER_URL."/server/statistics.php?".http_build_query($data));
+			$r = @json_decode($content);
+			if ($r->type == 'ok')
+				$response->GraphURL = $r->msg;
 			else
 			{
-				//TODO:
-				throw new Exception("This API method not implemented for Local monitoring type");
+				if ($r->msg)
+					throw new Exception($r->msg);
+				else
+					throw new Exception("Internal API error");
 			}
 			
 			return $response;
@@ -921,6 +916,17 @@
             	$ServerSnapshotCreateInfo = new ServerSnapshotCreateInfo($DBServer, $RoleName, SERVER_REPLACEMENT_TYPE::NO_REPLACE, false, 'Bundled via API');
             	$BundleTask = BundleTask::Create($ServerSnapshotCreateInfo);
             	
+				$protoRole = DBRole::loadById($DBServer->roleId);
+				$details = $protoRole->getImageDetails(
+					SERVER_PLATFORMS::EC2, 
+					$DBServer->GetProperty(EC2_SERVER_PROPERTIES::REGION)
+				);
+						
+				$BundleTask->osFamily = $details['os_family'];
+				$BundleTask->osName = $details['os_name'];
+				$BundleTask->osVersion = $details['os_version'];
+				$BundleTask->save();
+				
             	$response = $this->CreateInitialResponse();
             	
             	$response->BundleTaskID = $BundleTask->id;
@@ -966,7 +972,7 @@
 				
 			if ($retval == Scalr_Scaling_Decision::UPSCALE && ($dbFarmRole->GetPendingInstancesCount() > 5 || !$isSzr))
 			 */
-			$isSzr = $DBFarmRole->GetRoleObject()->isSupported("0.5");	
+			$isSzr = true;	
 				
 			$n = $DBFarmRole->GetPendingInstancesCount(); 
 			if ($n >= 5 && !$isSzr)
@@ -995,7 +1001,7 @@
         	        	
 			$ServerCreateInfo = new ServerCreateInfo($DBFarmRole->Platform, $DBFarmRole);
 			try {
-				$DBServer = Scalr::LaunchServer($ServerCreateInfo);
+				$DBServer = Scalr::LaunchServer($ServerCreateInfo, null, false, "API Request");
 											
 				Logger::getLogger(LOG_CATEGORY::FARM)->info(new FarmLogMessage($DBFarm->ID, sprintf("Starting new instance (API). ServerID = %s.", $DBServer->serverId)));
 			}
@@ -1019,14 +1025,7 @@
 
 			PlatformFactory::NewPlatform($DBServer->platform)->TerminateServer($DBServer);
     		
-			$this->DB->Execute("UPDATE servers_history SET
-				dtterminated	= NOW(),
-				terminate_reason	= ?
-				WHERE server_id = ?
-			", array(
-				sprintf("Terminated via API. TransactionID: %s", $response->TransactionID),
-				$DBServer->serverId
-			));
+			Scalr_Server_History::init($DBServer)->markAsTerminated("Terminated via API");
 			
     		if ($DecreaseMinInstancesSetting)
     		{

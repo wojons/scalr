@@ -15,5 +15,10 @@
 		{
 			return array("zone_name" => "ZoneName");
 		}
+		
+		public function getTextDetails()
+		{
+			return "DNS Zone {$this->ZoneName} updated";
+		}
 	}
 ?>

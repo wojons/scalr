@@ -171,9 +171,19 @@ class Scalr_UI_Controller_Farms extends Scalr_UI_Controller
 		//////////////////
 		
 
-		$haveMysqlRole = (bool)$this->db->GetOne("SELECT id FROM farm_roles WHERE role_id IN (SELECT role_id FROM role_behaviors WHERE behavior=? OR behavior=?) AND farmid=? AND platform != ?",
-			array(ROLE_BEHAVIORS::MYSQL, ROLE_BEHAVIORS::MYSQL2, $this->getParam('farmId'), SERVER_PLATFORMS::RDS)
+		$haveMysqlRole = (bool)$this->db->GetOne("SELECT id FROM farm_roles WHERE role_id IN (SELECT role_id FROM role_behaviors WHERE behavior=?) AND farmid=? AND platform != ?",
+			array(ROLE_BEHAVIORS::MYSQL, $this->getParam('farmId'), SERVER_PLATFORMS::RDS)
 		);
+		
+		if (!$haveMysqlRole)
+			$haveMysql2Role = (bool)$this->db->GetOne("SELECT id FROM farm_roles WHERE role_id IN (SELECT role_id FROM role_behaviors WHERE behavior=?) AND farmid=? AND platform != ?",
+				array(ROLE_BEHAVIORS::MYSQL2, $this->getParam('farmId'), SERVER_PLATFORMS::RDS)
+			);
+		
+		if (!$haveMysql2Role && !$haveMysqlRole)
+			$havePerconaRole = (bool)$this->db->GetOne("SELECT id FROM farm_roles WHERE role_id IN (SELECT role_id FROM role_behaviors WHERE behavior=?) AND farmid=? AND platform != ?",
+				array(ROLE_BEHAVIORS::PERCONA, $this->getParam('farmId'), SERVER_PLATFORMS::RDS)
+			);
 
 		$havePgRole = (bool)$this->db->GetOne("SELECT id FROM farm_roles WHERE role_id IN (SELECT role_id FROM role_behaviors WHERE behavior=?) AND farmid=? AND platform != ?",
 			array(ROLE_BEHAVIORS::POSTGRESQL, $this->getParam('farmId'), SERVER_PLATFORMS::RDS)
@@ -181,6 +191,10 @@ class Scalr_UI_Controller_Farms extends Scalr_UI_Controller
 
 		$haveRedisRole = (bool)$this->db->GetOne("SELECT id FROM farm_roles WHERE role_id IN (SELECT role_id FROM role_behaviors WHERE behavior=?) AND farmid=? AND platform != ?",
 			array(ROLE_BEHAVIORS::REDIS, $this->getParam('farmId'), SERVER_PLATFORMS::RDS)
+		);
+		
+		$haveCFController = (bool)$this->db->GetOne("SELECT id FROM farm_roles WHERE role_id IN (SELECT role_id FROM role_behaviors WHERE behavior=?) AND farmid=? AND platform != ?",
+				array(ROLE_BEHAVIORS::CF_CLOUD_CONTROLLER, $this->getParam('farmId'), SERVER_PLATFORMS::RDS)
 		);
 		
 		$type = array();
@@ -195,13 +209,19 @@ class Scalr_UI_Controller_Farms extends Scalr_UI_Controller
 		if ($haveMysqlRole)
 			$type['mysql'] = 'MySQL';
 		
+		if ($haveMysql2Role)
+			$type['mysql2'] = 'MySQL 5.5';
+			
+		if ($havePerconaRole)
+			$type['percona'] = 'Percona Server';
 		
 		foreach ($type as $dbMsr => $name) {
 			$it = array(
 				array(
-				'cls' => 'scalr-ui-form-field-info',
-				'html' => 'Public - To connect to the service from the Internet<br / >Private - To connect to the service from another instance',
-				'border' => false
+					'xtype' => 'displayfield',
+					'fieldCls' => 'x-form-field-info',
+					'anchor' => '100%',
+					'value' => 'Public - To connect to the service from the Internet<br / >Private - To connect to the service from another instance'
 				),
 				array(
 					'xtype' => 'displayfield',
@@ -232,6 +252,23 @@ class Scalr_UI_Controller_Farms extends Scalr_UI_Controller
 				'items' => $it
 			);
 		}
+		
+		if ($haveCFController) {
+			$it = array(
+				array(
+					'xtype' => 'displayfield',
+					'fieldLabel' => 'VMC target endpoint',
+					'value' => "api.ext.cloudfoundry.{$dbFarm->Hash}.scalr-dns.net"
+				)
+			);
+				
+			$form[] = array(
+					'xtype' => 'fieldset',
+					'title' => "CloudFoundry connection information",
+					'labelWidth' => 220,
+					'items' => $it
+			);
+		}
 
 		$this->response->page('ui/farms/extendedinfo.js', array('name' => $dbFarm->Name, 'info' => $form));
 	}
@@ -240,7 +277,7 @@ class Scalr_UI_Controller_Farms extends Scalr_UI_Controller
 	{
 		$retval = array();
 		
-		$sql = "SELECT id, name FROM farms WHERE env_id = ?";
+		$sql = "SELECT  name, id FROM farms WHERE env_id = ?";
 		$args = array($this->getEnvironmentId());
 		foreach ((array)$filterArgs as $k=>$v) {
 			if (is_array($v)) {	
@@ -259,14 +296,155 @@ class Scalr_UI_Controller_Farms extends Scalr_UI_Controller
 		while ($farm = $s->fetchRow()) {
 			$retval[$farm['id']] = $farm;
 		}
-
+		sort($retval);
 		return $retval;
+	}
+
+	/**
+	 * @param $values array (farmId, farmRoleId, serverId)
+	 * @param $options array|string
+	 *      'addAll' - add "On all *" option to roles and servers
+	 *      'disabledFarmRole' - remove farmRole field
+	 *      'disabledServer' - remove server field
+	 *      'addEmpty' - add "*empty*" option
+	 *      'requiredFarm', 'requiredFarmRole', 'requiredServer' - add allowBlank = false to field
+	 * @return array
+	 */
+	public function getFarmWidget($values = array(), $options)
+	{
+		if ($options) {
+			if (!is_array($options))
+				$options = array($options);
+
+		} else
+			$options = array();
+
+		if ($values['serverId']) {
+			$dbServer = DBServer::LoadByID($values['serverId']);
+			$this->user->getPermissions()->validate($dbServer);
+			$values['farmRoleId'] = $dbServer->farmRoleId;
+		}
+
+		if ($values['farmRoleId']) {
+			$dbFarmRole = DBFarmRole::LoadByID($values['farmRoleId']);
+			$this->user->getPermissions()->validate($dbFarmRole);
+
+			$values['dataServers'] = $this->getFarmWidgetServers($values['farmRoleId'], $options);
+			$values['farmId'] = $dbFarmRole->FarmID;
+
+			if (! $values['serverId'])
+				$values['serverId'] = 0;
+		}
+
+		if ($values['farmId']) {
+			$values['dataFarmRoles'] = $this->getFarmWidgetRoles($values['farmId'], $options);
+		}
+
+		$values['dataFarms'] = $this->getFarmWidgetFarms($options);
+		$values['options'] = $options;
+
+		return $values;
+	}
+
+	public function getFarmWidgetFarms($options)
+	{
+		$farms = $this->db->GetAll('SELECT id, name FROM farms WHERE env_id = ? ORDER BY name', $this->getEnvironmentId());
+		if (in_array('addEmpty', $options))
+			array_unshift($farms, array('id' => '', 'name' => ''));
+
+		return $farms;
+	}
+
+	public function getFarmWidgetRoles($farmId, $options)
+	{
+		$dbFarm = DBFarm::LoadById($farmId);
+		$this->user->getPermissions()->validate($dbFarm);
+		$dataFarmRoles = array();
+		$behaviors = array();
+
+		foreach($options as $key => $value) {
+			$matches = explode('_', $value);
+			if ($matches[0] == 'behavior' && $matches[1])
+				$behaviors[] = $matches[1];
+		}
+
+		foreach($this->db->GetAll("SELECT id, platform, role_id FROM farm_roles WHERE farmid = ?", array($dbFarm->ID)) as $farmRole) {
+			try {
+				$dbRole = DBRole::loadById($farmRole['role_id']);
+				$farmRole['name'] = $dbRole->name;
+
+				if (!empty($behaviors)) {
+					$bFilter = false;
+					foreach($behaviors as $behavior) {
+						if ($dbRole->hasBehavior($behavior)) {
+							$bFilter = true;
+							break;
+						}
+					}
+
+					if (!$bFilter)
+						continue;
+				}
+
+			} catch (Exception $e) {
+				$farmRole['name'] = '*removed*';
+			}
+
+			array_push($dataFarmRoles, $farmRole);
+		}
+
+		if (count($dataFarmRoles) && in_array('addAll', $options))
+			array_unshift($dataFarmRoles, array('id' => '0', 'name' => 'On all roles'));
+
+		if (in_array('addEmpty', $options))
+			array_unshift($dataFarmRoles, array('id' => '', 'name' => ''));
+
+		if (!empty($dataFarmRoles))
+			return $dataFarmRoles;
+		else
+			return null;
+	}
+
+	public function xGetFarmWidgetRolesAction()
+	{
+		$this->response->data(array(
+			'dataFarmRoles' => $this->getFarmWidgetRoles($this->getParam('farmId'), explode(',', $this->getParam('options')))
+		));
+	}
+
+	public function getFarmWidgetServers($farmRoleId, $options)
+	{
+		$servers = array();
+		$dbFarmRole = DBFarmRole::LoadByID($farmRoleId);
+		$this->user->getPermissions()->validate($dbFarmRole);
+
+		foreach ($dbFarmRole->GetServersByFilter(array('status' => SERVER_STATUS::RUNNING)) as $value)
+			array_push($servers, array('id' => $value->serverId, 'name' => $value->remoteIp));
+
+		if (count($servers) && in_array('addAll', $options)) {
+			array_unshift($servers, array('id' => 0, 'name' => 'On all servers'));
+		}
+
+		if (in_array('addEmpty', $options))
+			array_unshift($servers, array('id' => '', 'name' => ''));
+
+		if (!empty($servers))
+			return $servers;
+		else
+			return null;
+	}
+
+	public function xGetFarmWidgetServersAction()
+	{
+		$this->response->data(array(
+			'dataServers' => $this->getFarmWidgetServers($this->getParam('farmRoleId'), explode(',', $this->getParam('options')))
+		));
 	}
 
 	public function viewAction()
 	{
 		$enabled = $this->user->getSetting(Scalr_Account_User::SETTING_DASHBOARD_ENABLED);
-		$this->response->page('ui/farms/view.js', array('dashboard_enabled'=>$enabled));
+		$this->response->page('ui/farms/view.js', array('dashboard_enabled' => $enabled));
 	}
 
 	public function editAction()
@@ -301,9 +479,54 @@ class Scalr_UI_Controller_Farms extends Scalr_UI_Controller
 		$dbFarm = DBFarm::LoadByID($this->getParam('farmId'));
 		$this->user->getPermissions()->validate($dbFarm);
 
-		$newDbFarm = $dbFarm->cloneFarm();
+		$newDbFarm = $dbFarm->cloneFarm(null, $this->user, $this->getEnvironmentId());
 
 		$this->response->success("Farm successfully cloned. New farm: '{$newDbFarm->Name}'");
+	}
+
+	public function xLockAction()
+	{
+		$this->request->defineParams(array(
+			'farmId' => array('type' => 'int'),
+			'comment', 'restrict'
+		));
+
+		if (! $this->getParam('comment')) {
+			$this->response->failure('Comment is required');
+			return;
+		}
+
+		$dbFarm = DBFarm::LoadByID($this->getParam('farmId'));
+		$this->user->getPermissions()->validate($dbFarm);
+		$dbFarm->isLocked();
+
+		$dbFarm->lock($this->user->getId(), $this->getParam('comment'), !!$this->getParam('restrict'));
+
+		$this->response->success('Farm successfully locked');
+	}
+
+	public function xUnlockAction()
+	{
+		$this->request->defineParams(array(
+			'farmId' => array('type' => 'int')
+		));
+
+		$dbFarm = DBFarm::LoadByID($this->getParam('farmId'));
+		$this->user->getPermissions()->validate($dbFarm);
+		if ($dbFarm->isLocked(false)) {
+			if ($dbFarm->GetSetting(DBFarm::SETTING_LOCK_RESTRICT) &&
+				$dbFarm->createdByUserId != $this->user->getId() &&
+				$this->user->getType() != Scalr_Account_User::TYPE_ACCOUNT_OWNER
+			) {
+				// farm lock restricted, user has no access
+				throw new Exception('You can\'t unlock farm. Only farm owner or account owner can do that.');
+			}
+
+			$dbFarm->unlock($this->user->getId());
+			$this->response->success('Farm successfully unlocked');
+		} else {
+			$this->response->failure('Farm isn\'t locked');
+		}
 	}
 
 	public function xTerminateAction()
@@ -313,9 +536,14 @@ class Scalr_UI_Controller_Farms extends Scalr_UI_Controller
 			'deleteDNSZones' => array('type' => 'string'),
 			'deleteCloudObjects' => array('type' => 'string'),
 			'unTermOnFail' => array('type' => 'string'),
+			'forceTerminate' => array('type' => 'string'),
 			'sync' => array('type' => 'array'),
 			'syncInstances' => array('type' => 'array'),
 		));
+
+		$dbFarm = DBFarm::LoadByID($this->getParam('farmId'));
+		$this->user->getPermissions()->validate($dbFarm);
+		$dbFarm->isLocked();
 
 		$syncInstances = $this->getParam('syncInstances');
 		foreach ($this->getParam('sync') as $farmRoleId) {
@@ -340,8 +568,9 @@ class Scalr_UI_Controller_Farms extends Scalr_UI_Controller
 		$removeZoneFromDNS = ($this->getParam('deleteDNSZones') == 'on') ? 1 : 0;
 		$keepCloudObjects = ($this->getParam('deleteCloudObjects') == 'on') ? 0 : 1;
 		$termOnFail = ($this->getParam('unTermOnFail') == 'on') ? 0 : 1;
+		$forceTerminate = ($this->getParam('forceTerminate') == 'on') ? 1 : 0;
 
-		$event = new FarmTerminatedEvent($removeZoneFromDNS, $keepCloudObjects, $termOnFail, $keepCloudObjects);
+		$event = new FarmTerminatedEvent($removeZoneFromDNS, $keepCloudObjects, $termOnFail, $keepCloudObjects, $forceTerminate);
 		Scalr::FireEvent($this->getParam('farmId'), $event);
 
 		$this->response->success('Farm successfully terminated. Instances termination can take a few minutes.');
@@ -351,6 +580,7 @@ class Scalr_UI_Controller_Farms extends Scalr_UI_Controller
 	{
 		$dbFarm = DBFarm::LoadByID($this->getParam('farmId'));
 		$this->user->getPermissions()->validate($dbFarm);
+		$dbFarm->isLocked();
 
 		$outdatedFarmRoles = $this->db->GetAll("SELECT id FROM farm_roles WHERE farmid=?",
 			array($dbFarm->ID)
@@ -391,7 +621,8 @@ class Scalr_UI_Controller_Farms extends Scalr_UI_Controller
 			'roles' => $data,
 			'isMongoDbClusterRunning' => $isMongoDbClusterRunning,
 			'isMysqlRunning' => $isMysql,
-			'farmId' => $dbFarm->ID
+			'farmId' => $dbFarm->ID,
+			'farmName' => $dbFarm->Name
 		));
 	}
 
@@ -424,8 +655,8 @@ class Scalr_UI_Controller_Farms extends Scalr_UI_Controller
 		}
 
 		$moduleParams['tabs'] = array('scaling', 'mysql', 'dbmsr', 'cloudfoundry', 'rabbitmq', 'mongodb', 'haproxy', 'balancing', 'placement', 
-			'openstack', 'cloudstack', 'rsplacement', 'params', 'rds', 'eips', 'ebs', 'ebs2',  'dns', 'scripting',
-			'timeouts', 'cloudwatch', 'euca', 'nimbula', 'ec2', 'servicesconfig', 'deployments', 'devel'
+			'openstack', 'cloudstack', 'rsplacement', 'gce', 'params', 'rds', 'eips', 'ebs', 'ebs2',  'dns', 'scripting',
+			'timeouts', 'cloudwatch', 'euca', 'nimbula', 'ec2', 'servicesconfig', 'deployments', 'devel', 'storage'
 		);
 		
 		if ($this->user->getAccount()->isFeatureEnabled(Scalr_Limits::FEATURE_CHEF)) {
@@ -436,14 +667,17 @@ class Scalr_UI_Controller_Farms extends Scalr_UI_Controller
 			'farmId' => $farmId,
 			'currentTimeZone' => $this->getEnvironment()->getPlatformConfigValue(Scalr_Environment::SETTING_TIMEZONE),
 			'currentTime' => Scalr_Util_DateTime::convertTz(time()),
-			'currentEnvId' => $this->getEnvironmentId(),
+			'currentEnvId' => $this->getEnvironmentId()
 		);
+		
+		//TODO: Features
+		$moduleParams['tabParams']['featureRAID'] = $this->user->getAccount()->isFeatureEnabled(Scalr_Limits::FEATURE_RAID);
+		$moduleParams['tabParams']['featureMFS'] = $this->user->getAccount()->isFeatureEnabled(Scalr_Limits::FEATURE_MFS);
 
 		$this->response->page('ui/farms/builder.js', $moduleParams, array(
 			'ui/farms/builder/selroles.js',
 			'ui/farms/builder/roleedit.js',
 			'ui/farms/builder/allroles.js',
-			//('highlight/highlight.pack.js') // TODO: enable when it's ready
 			'ui/farms/builder/tab.js',
 			'ui/farms/builder/tabs/balancing.js',
 			'ui/farms/builder/tabs/cloudwatch.js',
@@ -464,6 +698,7 @@ class Scalr_UI_Controller_Farms extends Scalr_UI_Controller
 			'ui/farms/builder/tabs/rsplacement.js',
 			'ui/farms/builder/tabs/cloudstack.js',
 			'ui/farms/builder/tabs/openstack.js',
+			'ui/farms/builder/tabs/gce.js',
 			'ui/farms/builder/tabs/rds.js',
 			'ui/farms/builder/tabs/scaling.js',
 			'ui/farms/builder/tabs/scripting.js',
@@ -474,6 +709,7 @@ class Scalr_UI_Controller_Farms extends Scalr_UI_Controller
 			'ui/farms/builder/tabs/chef.js',
 			'ui/farms/builder/tabs/deployments.js',
 			'ui/farms/builder/tabs/devel.js',
+			'ui/farms/builder/tabs/storage.js',
 			'ui/scripts/scriptfield.js'
 		), array(
 			'ui/farms/builder/tabs/scripting.css',
@@ -490,6 +726,7 @@ class Scalr_UI_Controller_Farms extends Scalr_UI_Controller
 
 		$dbFarm = DBFarm::LoadByID($this->getParam('farmId'));
 		$this->user->getPermissions()->validate($dbFarm);
+		$dbFarm->isLocked();
 
 		Scalr::FireEvent($dbFarm->ID, new FarmLaunchedEvent(true));
 
@@ -504,6 +741,7 @@ class Scalr_UI_Controller_Farms extends Scalr_UI_Controller
 
 		$dbFarm = DBFarm::LoadByID($this->getParam('farmId'));
 		$this->user->getPermissions()->validate($dbFarm);
+		$dbFarm->isLocked();
 
 		if ($dbFarm->Status != FARM_STATUS::TERMINATED)
 			throw new Exception(_("Cannot delete a running farm. Please terminate a farm before deleting it."));
@@ -539,7 +777,6 @@ class Scalr_UI_Controller_Farms extends Scalr_UI_Controller
 			$this->db->Execute("DELETE FROM elastic_ips WHERE farmid=?", array($dbFarm->ID));
 			$this->db->Execute("DELETE FROM events WHERE farmid=?", array($dbFarm->ID));
 			$this->db->Execute("DELETE FROM ec2_ebs WHERE farm_id=?", array($dbFarm->ID));
-			$this->db->Execute("DELETE FROM apache_vhosts WHERE farm_id=?", array($dbFarm->ID));
 
 			$this->db->Execute("DELETE FROM farm_role_options WHERE farmid=?", array($dbFarm->ID));
 			$this->db->Execute("DELETE FROM farm_role_scripts WHERE farmid=?", array($dbFarm->ID));
@@ -562,6 +799,7 @@ class Scalr_UI_Controller_Farms extends Scalr_UI_Controller
 			}
 
 			$this->db->Execute("UPDATE dns_zones SET farm_id='0', farm_roleid='0' WHERE farm_id=?", array($dbFarm->ID));
+			$this->db->Execute("UPDATE apache_vhosts SET farm_id='0', farm_roleid='0' WHERE farm_id=?", array($dbFarm->ID));
 		} catch(Exception $e) {
 			$this->db->RollbackTrans();
 			throw new Exception(_("Cannot delete farm at the moment ({$e->getMessage()}). Please try again later."));
@@ -582,7 +820,7 @@ class Scalr_UI_Controller_Farms extends Scalr_UI_Controller
 			'sort' => array('type' => 'json', 'default' => array('property' => 'id', 'direction' => 'asc'))
 		));
 
-		$sql = "SELECT clientid, id, name, status, dtadded FROM farms WHERE env_id='" . $this->getEnvironmentId() . "'";
+		$sql = "SELECT clientid, id, name, status, dtadded, created_by_id, created_by_email FROM farms WHERE env_id='" . $this->getEnvironmentId() . "'";
 
 		if ($this->getParam('farmId'))
 			$sql .= " AND id=".$this->db->qstr($this->getParam('farmId'));
@@ -601,8 +839,15 @@ class Scalr_UI_Controller_Farms extends Scalr_UI_Controller
 
 			$row["roles"] = $this->db->GetOne("SELECT COUNT(*) FROM farm_roles WHERE farmid='{$row['id']}'");
 			$row["zones"] = $this->db->GetOne("SELECT COUNT(*) FROM dns_zones WHERE farm_id='{$row['id']}'");
+			
+			//TODO: Use Alerts class
+			$row['alerts'] = $this->db->GetOne("SELECT COUNT(*) FROM server_alerts WHERE farm_id='{$row['id']}' AND status='failed'");
 
 			$row['dtadded'] = Scalr_Util_DateTime::convertTz($row["dtadded"]);
+			$dbFarm = DBFarm::LoadByID($row['id']);
+			$row['lock'] = $dbFarm->GetSetting(DBFarm::SETTING_LOCK);
+			if ($row['lock'])
+				$row['lock_comment'] = $dbFarm->isLocked(false);
 
 			$row["havemysqlrole"] = (bool)$this->db->GetOne("SELECT id FROM farm_roles WHERE role_id IN (SELECT role_id FROM role_behaviors WHERE behavior=?) AND farmid=? AND platform != ?",
 				array(ROLE_BEHAVIORS::MYSQL, $row['id'], SERVER_PLATFORMS::RDS)
@@ -626,6 +871,10 @@ class Scalr_UI_Controller_Farms extends Scalr_UI_Controller
 			
 			$row["havemongodbrole"] = (bool)$this->db->GetOne("SELECT id FROM farm_roles WHERE role_id IN (SELECT role_id FROM role_behaviors WHERE behavior=?) AND farmid=? AND platform != ?",
 				array(ROLE_BEHAVIORS::MONGODB, $row['id'], SERVER_PLATFORMS::RDS)
+			);
+			
+			$row["haveperconarole"] = (bool)$this->db->GetOne("SELECT id FROM farm_roles WHERE role_id IN (SELECT role_id FROM role_behaviors WHERE behavior=?) AND farmid=? AND platform != ?",
+					array(ROLE_BEHAVIORS::PERCONA, $row['id'], SERVER_PLATFORMS::RDS)
 			);
 
 			$row['status_txt'] = FARM_STATUS::GetStatusName($row['status']);

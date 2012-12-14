@@ -102,6 +102,7 @@
         public function RequestData()
         {
         	$result = $this->SNMPTree->Get($this->OIDs);
+        	
         	preg_match_all("/([^=]+)=([^\n]+)/", $result, $matches);
         	$result = array();
         	foreach ($matches[1] as $k=>$v)
@@ -116,8 +117,8 @@
         	{
         		//$retval[$wn] = array();
         		$w_data = array();
-        		foreach($oids as $oid)
-        			$w_data[] = $result[$oid];
+        		foreach($oids as $oname => $oid)
+        			$w_data[$oname] = (float)$result[$oid];
         			
         		$this->Data[$wn] = $w_data;
         	}
@@ -131,7 +132,7 @@
         	$Watcher = $this->WatchersCache[$watcher_name]->newInstance($this->SNMPTree);
         	
         	$this->wOIDs[$watcher_name] = $Watcher->GetOIDs();
-        	$this->OIDs = array_merge($this->OIDs, $Watcher->GetOIDs());
+        	$this->OIDs = array_merge($this->OIDs, array_values($Watcher->GetOIDs()));
         }
         
         /*

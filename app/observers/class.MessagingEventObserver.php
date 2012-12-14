@@ -135,6 +135,30 @@
 				$DBServer->SendMessage($msg);
 			}
 		}
+
+		public function OnCustomEvent(CustomEvent $event)
+		{
+			$servers = DBFarm::LoadByID($this->FarmID)->GetServersByFilter(array('status' => array(SERVER_STATUS::INIT, SERVER_STATUS::RUNNING)));
+			foreach ((array)$servers as $DBServer)
+			{
+				$msg = new Scalr_Messaging_Msg();
+				$msg->setName($event->GetName());
+				
+				$msg->behaviour = $event->DBServer->GetFarmRoleObject()->GetRoleObject()->getBehaviors();
+				$msg->roleName = $event->DBServer->GetFarmRoleObject()->GetRoleObject()->name;
+				$msg->localIp = $event->DBServer->localIp;
+				$msg->remoteIp = $event->DBServer->remoteIp;
+				$msg->serverIndex = $event->DBServer->index;
+				$msg->serverId = $event->DBServer->serverId;
+				
+				$msg->scripts = $this->getScripts($event, $event->DBServer, $DBServer);
+				$msg->eventId = $event->GetEventID();
+				
+				// Send message ONLY if there are scripts assigned to this event
+				if (count($msg->scripts) > 0)
+					$DBServer->SendMessage($msg);
+			}
+		}
 		
 		public function OnHostInit(HostInitEvent $event)
 		{
@@ -145,12 +169,6 @@
 			
 			$dbServer = $event->DBServer;
 			$dbFarmRole = $dbServer->GetFarmRoleObject();
-			
-			if (!$event->DBServer->IsSupported("0.5")) {
-				if ($event->DBServer->platform == SERVER_PLATFORMS::EC2) {
-					$msg->awsAccountId = $event->DBServer->GetEnvironmentObject()->getPlatformConfigValue(Modules_Platforms_Ec2::ACCOUNT_ID);
-				}
-			}
 			
 			if ($dbFarmRole) {
 				foreach (Scalr_Role_Behavior::getListForFarmRole($dbFarmRole) as $behavior)
@@ -258,13 +276,16 @@
 				if ($event->DBServer->platform == SERVER_PLATFORMS::RACKSPACE || 
 					$event->DBServer->platform == SERVER_PLATFORMS::NIMBULA || 
 					$event->DBServer->platform == SERVER_PLATFORMS::OPENSTACK ||
-					$event->DBServer->platform == SERVER_PLATFORMS::CLOUDSTACK)
+					$event->DBServer->platform == SERVER_PLATFORMS::CLOUDSTACK ||
+					$event->DBServer->platform == SERVER_PLATFORMS::IDCF ||
+					$event->DBServer->platform == SERVER_PLATFORMS::UCLOUD)
 				{
 					$sshKey = Scalr_SshKey::init();
 					
 					if (!$sshKey->loadGlobalByFarmId(
 						$event->DBServer->farmId, 
-						$event->DBServer->GetFarmRoleObject()->CloudLocation
+						$event->DBServer->GetFarmRoleObject()->CloudLocation,
+						$event->DBServer->platform
 					)) {
 						$key_name = "FARM-{$event->DBServer->farmId}";
 						
@@ -302,6 +323,7 @@
 				$hiMsg->serverId = $event->DBServer->serverId;
 				
 				$hiMsg->scripts = $this->getScripts($event, $event->DBServer, $DBServer);
+				$hiMsg->eventId = $event->GetEventID();
 				//TODO: $hiMsg = Scalr_Scripting_Manager::extendMessage($hiMsg, $DBServer, $event);
 				
 				if ($event->DBServer->farmRoleId != 0) {
@@ -327,6 +349,7 @@
 					foreach ($scripts as $script)
 					{						
 						$itm = new stdClass();
+						// Script
 						$itm->asynchronous = ($script['issync'] == 1) ? '0' : '1';
 						$itm->timeout = $script['timeout'];
 						$itm->name = $script['name'];
@@ -350,13 +373,15 @@
 					$event->DBServer->GetFarmRoleObject()->GetRoleObject()->name, 
 					$event->DBServer->localIp, 
 					$event->DBServer->remoteIp,
-					$event->NewIPAddress
+					$event->NewIPAddress,
+					$event->NewLocalIPAddress
 				);
 				
 				$msg->serverIndex = $event->DBServer->index;
 				$msg->serverId = $event->DBServer->serverId;
 				
 				$msg->scripts = $this->getScripts($event, $event->DBServer, $DBServer);
+				$msg->eventId = $event->GetEventID();
 				
 				$delayed = !($DBServer->serverId == $event->DBServer->serverId);
 				
@@ -368,8 +393,6 @@
 			$servers = DBFarm::LoadByID($this->FarmID)->GetServersByFilter(array('status' => array(SERVER_STATUS::INIT, SERVER_STATUS::RUNNING)));
 			foreach ((array)$servers as $DBServer)
 			{
-				if (!$DBServer->IsSupported("0.5"))
-				 	continue;
 				
 				$msg = new Scalr_Messaging_Msg_BeforeHostUp(
 					$event->DBServer->GetFarmRoleObject()->GetRoleObject()->getBehaviors(),
@@ -383,6 +406,7 @@
 				$msg->serverId = $event->DBServer->serverId;
 				
 				$msg->scripts = $this->getScripts($event, $event->DBServer, $DBServer);
+				$msg->eventId = $event->GetEventID();
 				
 				$delayed = !($DBServer->serverId == $event->DBServer->serverId);
 				
@@ -406,6 +430,7 @@
 				
 				$msg->serverIndex = $event->DBServer->index;
 				$msg->serverId = $event->DBServer->serverId;
+				$msg->eventId = $event->GetEventID();
 				
 				$msg->scripts = $this->getScripts($event, $event->DBServer, $DBServer);
 				
@@ -434,6 +459,7 @@
 				$msg->serverId = $event->DBServer->serverId;
 				
 				$msg->scripts = $this->getScripts($event, $event->DBServer, $DBServer);
+				$msg->eventId = $event->GetEventID();
 				
 				$DBServer->SendMessage($msg);
 			}
@@ -455,6 +481,7 @@
 				$msg->serverId = $event->DBServer->serverId;
 				
 				$msg->scripts = $this->getScripts($event, $event->DBServer, $DBServer);
+				$msg->eventId = $event->GetEventID();
 				
 				$DBServer->SendMessage($msg);
 			}
@@ -465,14 +492,22 @@
 			$servers = DBFarm::LoadByID($this->FarmID)->GetServersByFilter(array('status' => array(SERVER_STATUS::INIT, SERVER_STATUS::RUNNING)));
 			foreach ((array)$servers as $DBServer)
 			{
+				if ($event->DBServer->GetFarmRoleObject()->NewRoleID) {
+					$roleName = DBRole::loadById($event->DBServer->GetFarmRoleObject()->NewRoleID)->name;
+				} else {
+					$roleName = $event->DBServer->GetFarmRoleObject()->GetRoleObject()->name;
+				}
+				
+				
 				$msg = new Scalr_Messaging_Msg_HostUp(
 					$event->DBServer->GetFarmRoleObject()->GetRoleObject()->getBehaviors(),
-					$event->DBServer->GetFarmRoleObject()->GetRoleObject()->name,
+					$roleName,
 					$event->DBServer->localIp,
 					$event->DBServer->remoteIp
 				);
 				
 				$msg->scripts = $this->getScripts($event, $event->DBServer, $DBServer);
+				$msg->eventId = $event->GetEventID();
 				
 				$msg->serverIndex = $event->DBServer->index;
 				$msg->serverId = $event->DBServer->serverId;
@@ -512,6 +547,7 @@
 				$msg->serverIndex = $event->DBServer->serverIndex;
 				
 				$msg->scripts = $this->getScripts($event, $event->DBServer, $DBServer);
+				$msg->eventId = $event->GetEventID();
 				
 				if ($event->DBServer->farmRoleId != 0) {
 					foreach (Scalr_Role_Behavior::getListForFarmRole($event->DBServer->GetFarmRoleObject()) as $behavior)
@@ -524,6 +560,7 @@
 			try {
 				if ($event->DBServer->GetFarmRoleObject()->GetRoleObject()->getDbMsrBehavior()) {
 					$this->sendPromoteToMasterMessage($event);
+					
 				}
 			} catch (Exception $e) {
 				
@@ -544,6 +581,7 @@
 				$msg->serverIndex = $event->DBServer->serverIndex;
 				
 				$msg->scripts = $this->getScripts($event, $event->DBServer, $DBServer);
+				$msg->eventId = $event->GetEventID();
 				
 				$DBServer->SendMessage($msg, false, true);
 			}
@@ -557,6 +595,7 @@
 				//Check if master already running: do not send promote_to_master
 				
 				$msg = new Scalr_Messaging_Msg_DbMsr_PromoteToMaster();
+				$msg->tmpEventName = $event->GetName();
 				$msg->dbType = $event->DBServer->GetFarmRoleObject()->GetRoleObject()->getDbMsrBehavior();
 				
 				if ($event->DBServer->farmRoleId != 0) {
@@ -565,7 +604,7 @@
 				}
 				
 				
-				if (in_array($event->DBServer->platform, array(SERVER_PLATFORMS::EC2, SERVER_PLATFORMS::CLOUDSTACK))) {
+				if (in_array($event->DBServer->platform, array(SERVER_PLATFORMS::EC2, SERVER_PLATFORMS::CLOUDSTACK, SERVER_PLATFORMS::IDCF, SERVER_PLATFORMS::UCLOUD))) {
 					try {
 						$volume = Scalr_Storage_Volume::init()->loadById(
 							$event->DBServer->GetFarmRoleObject()->GetSetting(Scalr_Db_Msr::VOLUME_ID)
@@ -596,6 +635,7 @@
 						$first_in_role_server = $DBServer;
 					
 					if (($platform == SERVER_PLATFORMS::EC2 && $DBServer->GetProperty(EC2_SERVER_PROPERTIES::AVAIL_ZONE) == $availZone) || $platform != SERVER_PLATFORMS::EC2) {
+						$event->DBServer->SetProperty(Scalr_Db_Msr::REPLICATION_MASTER, 0);
 						$dbFarmRole->SetSetting(Scalr_Db_Msr::SLAVE_TO_MASTER, 1);
 						$DBServer->SetProperty(Scalr_Db_Msr::REPLICATION_MASTER, 1);
 						$DBServer->SendMessage($msg);
@@ -673,6 +713,7 @@
 				
 				
 				$msg->scripts = $this->getScripts($event, $event->DBServer, $DBServer);
+				$msg->eventId = $event->GetEventID();
 				
 				if ($event->DBServer->farmRoleId != 0) {
 					foreach (Scalr_Role_Behavior::getListForRole(DBRole::loadById($event->DBServer->roleId)) as $behavior)
@@ -680,6 +721,11 @@
 				}
 				
 				$DBServer->SendMessage($msg, false, true);
+				
+				if ($isMaster && $DBServer->status == SERVER_STATUS::RUNNING) {
+					$doNotPromoteSlave2Master = true;
+				}
+				
 			}
 				
 			try {
@@ -688,13 +734,14 @@
 				return;
 			}
 		
-			$this->sendPromoteToMasterMessage($event);
+			
+			if (!$doNotPromoteSlave2Master)
+				$this->sendPromoteToMasterMessage($event);
 			
 			//LEGACY MYSQL CODE:
 			if ($event->DBServer->GetFarmRoleObject()->GetRoleObject()->hasBehavior(ROLE_BEHAVIORS::MYSQL)) {
 				// If EC2 master down			
 				if (($event->DBServer->GetProperty(SERVER_PROPERTIES::DB_MYSQL_MASTER)) &&
-					$event->DBServer->IsSupported("0.5") &&
 					$DBFarmRole)
 				{
 					$master = $dbFarm->GetMySQLInstances(true);
@@ -709,7 +756,7 @@
 					
 					if ($event->DBServer->IsSupported("0.7"))
 					{
-						if (in_array($event->DBServer->platform, array(SERVER_PLATFORMS::EC2, SERVER_PLATFORMS::CLOUDSTACK))) {
+						if (in_array($event->DBServer->platform, array(SERVER_PLATFORMS::EC2, SERVER_PLATFORMS::CLOUDSTACK, SERVER_PLATFORMS::IDCF, SERVER_PLATFORMS::UCLOUD))) {
 							try {
 								$volume = Scalr_Storage_Volume::init()->loadById(
 									$DBFarmRole->GetSetting(DBFarmRole::SETTING_MYSQL_SCALR_VOLUME_ID)

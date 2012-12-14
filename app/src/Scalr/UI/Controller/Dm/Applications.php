@@ -96,8 +96,7 @@ class Scalr_UI_Controller_Dm_Applications extends Scalr_UI_Controller
 
 		$this->response->page('ui/dm/applications/deploy.js', array(
 			'application_name'	=> $application->name,
-			'farms'				=> self::loadController('Farms')->getList(),
-			'farmRoles'			=> array()
+			'farmWidget'        => self::loadController('Farms')->getFarmWidget(array(), 'disabledServer')
 		));
 	}
 

@@ -26,7 +26,7 @@ class Scalr_UI_Controller_Environments extends Scalr_UI_Controller
 
 	public function viewAction()
 	{
-		$this->response->page('ui/environments/view.js', array('owner' => $this->user->getType() == Scalr_Account_User::TYPE_ACCOUNT_OWNER));
+		$this->response->page('ui/environments/view.js');
 	}
 
 	public function xListEnvironmentsAction()
@@ -89,6 +89,20 @@ class Scalr_UI_Controller_Environments extends Scalr_UI_Controller
 		$env->save();
 
 		$this->response->success("Environment's status successfully changed");
+	}
+
+	public function xSetSystemAction()
+	{
+		$env = Scalr_Environment::init();
+		$env->loadById($this->getParam('envId'));
+		$this->user->getPermissions()->validate($env);
+
+		if ($this->user->getType() != Scalr_Account_User::TYPE_ACCOUNT_OWNER)
+			throw new Scalr_Exception_InsufficientPermissions();
+
+		$env->setSystem();
+
+		$this->response->success("System environment successfully changed");
 	}
 
 	public function xRemoveAction()
@@ -191,13 +205,16 @@ class Scalr_UI_Controller_Environments extends Scalr_UI_Controller
 		//TODO:
 		if (!$this->getParam('beta')) {
 			unset($platforms[SERVER_PLATFORMS::OPENSTACK]);
+			unset($platforms[SERVER_PLATFORMS::UCLOUD]);
+			//unset($platforms[SERVER_PLATFORMS::RACKSPACENG]);
+			unset($platforms[SERVER_PLATFORMS::GCE]);
 		}
 
 		$timezones = array();
 		$timezoneAbbreviationsList = timezone_abbreviations_list();
 		foreach ($timezoneAbbreviationsList as $timezoneAbbreviations) {
 			foreach ($timezoneAbbreviations as $value) {
-				if (preg_match( '/^(America|Antartica|Arctic|Asia|Atlantic|Europe|Indian|Pacific|Australia)\//', $value['timezone_id']))
+				if (preg_match( '/^(America\/|Antartica\/|Arctic\/|Asia\/|Atlantic\/|Europe\/|Indian\/|Pacific\/|Australia\/|UTC)/', $value['timezone_id']))
 					$timezones[$value['timezone_id']] = $value['offset'];
 			}
 		}
@@ -209,7 +226,15 @@ class Scalr_UI_Controller_Environments extends Scalr_UI_Controller
 			'environment' => $env,
 			'platforms' => $platforms,
 			'timezones' => $timezones
+		), array(), array('ui/environments/edit.css'));
+
+		/*
+		 * $this->response->page('ui/environments/edit.js', array(
+			'environment' => $env,
+			'platforms' => $platforms,
+			'timezones' => Scalr_Util_DateTime::getTimezones()
 		));
+		 */
 	}
 
 	public function xGetInfoAction()

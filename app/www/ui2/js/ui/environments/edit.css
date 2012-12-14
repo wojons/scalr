@@ -1,0 +1,29 @@
+.scalr-ui-environment-edit-btn {
+	display: inline-block;
+	margin-right: 17px;
+	margin-bottom: 10px;
+}
+
+div.scalr-ui-environment-edit-btn-custom {
+	border-radius: 4px;
+	background: white;
+	cursor: pointer;
+	width: 109px;
+}
+
+div.scalr-ui-environment-edit-btn-custom:hover {
+	box-shadow: 0 1px 3px #708098;
+}
+
+div.scalr-ui-environment-edit-btn-name {
+	width: 109px;
+	height: 20px;
+	text-align: center;
+}
+
+div.scalr-ui-environment-edit-btn-icon {
+	padding-top: 10px;
+	width: 109px;
+	height: 89px;
+	text-align: center;
+}

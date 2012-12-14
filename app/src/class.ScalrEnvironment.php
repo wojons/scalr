@@ -1,7 +1,7 @@
 <?
 	abstract class ScalrEnvironment extends ScalrRESTService
     {    	   	
-    	const LATEST_VERSION = '2012-04-17';
+    	const LATEST_VERSION = '2012-07-01';
     	
     	/**
     	 * 

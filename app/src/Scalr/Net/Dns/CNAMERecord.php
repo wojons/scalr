@@ -25,9 +25,9 @@
 			
 			// Name
 			if ($this->validator->MatchesPattern($name, self::PAT_NON_FDQN) ||
-			   $this->validator->MatchesPattern($name, '/^\*\.[A-Za-z0-9]+$/si') ||
+			   $this->validator->MatchesPattern($name, '/^\*\.[A-Za-z0-9\-\.]+[A-Za-z0-9]+$/si') ||
 			   //default._domainkey.vip
-			   $this->validator->MatchesPattern($name, '/^[A-Za-z0-9]+[_\.A-Za-z0-9-]*[A-Za-z0-9]+$/si') ||
+			   $this->validator->MatchesPattern($name, '/^[_A-Za-z0-9]+[_\.A-Za-z0-9-]*[A-Za-z0-9]+$/si') ||
 				($this->validator->IsDomain($name)) && !$this->validator->IsIPAddress(rtrim($name, ".")) || $name == "*")
 				$this->name = $name;
 			else 
@@ -37,7 +37,7 @@
 			if (!$this->validator->IsDomain($value))
 			{
 				if ($this->validator->MatchesPattern($value, self::PAT_NON_FDQN) || 
-				$this->validator->MatchesPattern($value, '/^[A-Za-z0-9]+[_\.A-Za-z0-9-]*[A-Za-z0-9]+[\.]*$/si'))
+				$this->validator->MatchesPattern($value, '/^[_A-Za-z0-9]+[_\.A-Za-z0-9-]*[A-Za-z0-9]+[\.]*$/si'))
 					$this->cname = $value;
 				else
 					 throw new Scalr_Net_Dns_Exception(sprintf(_("'%s' is not a valid value for CNAME record"), $value));

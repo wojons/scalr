@@ -1,1 +1,0 @@
-Option {$event->OptionName} for farm role {$event->DBFarmRole->ID} changed

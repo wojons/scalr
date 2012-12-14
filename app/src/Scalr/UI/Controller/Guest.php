@@ -2,7 +2,7 @@
 //require_once(SRCPATH . '/externals/recaptcha-php-1.11/recaptchalib.php');
 
 class Scalr_UI_Controller_Guest extends Scalr_UI_Controller
-{	
+{
 	public function logoutAction()
 	{
 		Scalr_Session::destroy();
@@ -13,216 +13,113 @@ class Scalr_UI_Controller_Guest extends Scalr_UI_Controller
 	{
 		return true;
 	}
-	
+
 	public function xInitAction()
 	{
 		$initParams = array();
-		
-		if ($this->user) {
-			require_once (dirname(__FILE__) . "/../../../class.XmlMenu.php");
-			$Menu = new XmlMenu();
-			
-			if ($this->user->getType() == Scalr_Account_User::TYPE_SCALR_ADMIN) {
-    			$Menu->LoadFromFile(dirname(__FILE__)."/../../../../etc/admin_nav.xml");
-			} else {
-				$Menu->LoadFromFile(dirname(__FILE__)."/../../../../etc/client_nav4.xml");
 
-				// get XML document to add new children as farms names
-		    	$clientMenu = $Menu->GetXml();
-		
-				foreach ($this->db->GetAll("SELECT name, id  FROM farms WHERE env_id=? ORDER BY `name` ASC",
-					array($this->getEnvironmentId())) as $row)
-				{
-				    $farm_info[] = array(
-				    	'name' =>$row['name'],
-				    	'id' => $row['id']
-				    );
-				}				
-				
-				// creates a list of farms for server farms in main menu
-				$nodeServerFarms = $clientMenu->xpath("//node[@id='server_farms']");
-		
-				if(count($farm_info) > 0)
-					$nodeServerFarms[0]->addChild('separator');
-		
-				foreach($farm_info as $farm_row) {
-					$farmList = $nodeServerFarms[0]->addChild('node');
-					$farmList->addAttribute('title', $farm_row['name']);
-		
-					$itemFarm = $farmList->addChild('item','Manage');
-						$itemFarm->addAttribute('href', "#/farms/{$farm_row['id']}/view");
-					$itemFarm = $farmList->addChild('item','Edit');
-						$itemFarm->addAttribute('href', "#/farms/{$farm_row['id']}/edit");
-					$itemFarm = $farmList->addChild('separator');
-					$itemFarm = $farmList->addChild('item',"Roles");
-						$itemFarm->addAttribute('href', "#/farms/{$farm_row['id']}/roles");
-					$itemFarm = $farmList->addChild('item',"Servers");
-						$itemFarm->addAttribute('href', "#/farms/{$farm_row['id']}/servers");
-					$itemFarm = $farmList->addChild('item', "DNS zones");
-						$itemFarm->addAttribute('href', "#/farms/{$farm_row['id']}/dnszones");
-		
-					$itemFarm = $farmList->addChild('item',"Apache vhosts");
-					$itemFarm->addAttribute('href', "#/farms/{$farm_row['id']}/vhosts");
-			    }
-		    }
-		    
-		    if ($this->user->getAccountId() != 0) {
-			    if (!$this->environment->isPlatformEnabled(SERVER_PLATFORMS::EC2)) {
-			    	$t = &$clientMenu->xpath("//node[@id='tools_aws']");
-			    	$t[0]->addAttribute("hidden", "1");
-			    	$f1 = true;
-			    }
-			    
-			    if (!$this->environment->isPlatformEnabled(SERVER_PLATFORMS::CLOUDSTACK)) {
-			    	$t = $clientMenu->xpath("//node[@id='tools_cloudstack']");
-			    	$t[0]->addAttribute("hidden", "1");
-			    	$f2 = true;
-			    }
-			    
-			    if (!$this->environment->isPlatformEnabled(SERVER_PLATFORMS::RACKSPACE)) {
-			    	$t = $clientMenu->xpath("//node[@id='tools_rackspace']");
-			    	$t[0]->addAttribute("hidden", "1");
-			    	$f2 = true;
-			    }
-			   
-			    if ($f1 && $f2) {
-			   		$t = &$clientMenu->xpath("//separator[@id='tools_sep']");
-			   		$t[0]->addAttribute("hidden", "1");
-			    }
-		    }
-		    
-		    $initParams['menu'] = $Menu->GetExtJSMenuItems();
-			
-			$initParams['user'] = array(
+		$initParams['extjs'] = array(
+			$this->response->getModuleName("init.js"),
+			$this->response->getModuleName("theme.js"),
+			$this->response->getModuleName("override.js"),
+			$this->response->getModuleName("utils.js"),
+			$this->response->getModuleName("ui-plugins.js"),
+			$this->response->getModuleName("ui.js")
+		);
+
+		$initParams['css'] = array(
+			$this->response->getModuleName("theme.css"),
+			$this->response->getModuleName("ui.css"),
+			$this->response->getModuleName("utils.css")
+		);
+
+		$initParams['context'] = $this->getContext();
+
+		$this->response->data(array('initParams' => $initParams));
+	}
+
+	public function getContext()
+	{
+		$data = array();
+		if ($this->user) {
+			$data['user'] = array(
 				'userId' => $this->user->getId(),
 				'clientId' => $this->user->getAccountId(),
 				'userName' => $this->user->getEmail(),
 				'envId' => $this->getEnvironment() ? $this->getEnvironmentId() : 0,
+				'envName'  => $this->getEnvironment() ? $this->getEnvironment()->name : '',
 				'type' => $this->user->getType()
 			);
 
-			if ($this->user->getAccountId() != 0) {
-				$initParams['flags'] = $this->user->getAccount()->getFeaturesList();
-				$initParams['user']['userIsTrial'] = $this->user->getAccount()->getSetting(Scalr_Account::SETTING_IS_TRIAL) == '1' ? true : false;
-			} else {
-				$initParams['flags'] = array();
-			}
-			
-			$initParams['flags']['dashboardEnabled'] = $this->user->getSetting(Scalr_Account_User::SETTING_DASHBOARD_ENABLED) == '1' ? true : false;
+			if ($this->user->getType() != Scalr_Account_User::TYPE_SCALR_ADMIN) {
+				$data['farms'] = $this->db->getAll('SELECT id, name FROM farms WHERE env_id = ? ORDER BY name', array($this->getEnvironmentId()));
 
-			if ($this->user->getType() == Scalr_Account_User::TYPE_ACCOUNT_OWNER) {
-				$initParams['user']['userIsOldPkg'] = $this->user->getAccount()->getSetting(Scalr_Account::SETTING_BILLING_ALERT_OLD_PKG) == '1' ? true : false;
-				$initParams['user']['userIsPaypal'] = $this->user->getAccount()->getSetting(Scalr_Account::SETTING_BILLING_ALERT_PAYPAL) == '1' ? true : false;
+				if ($this->user->getAccountId() != 0) {
+					$initParams['flags'] = $this->user->getAccount()->getFeaturesList();
+					$initParams['user']['userIsTrial'] = $this->user->getAccount()->getSetting(Scalr_Account::SETTING_IS_TRIAL) == '1' ? true : false;
+				} else {
+					$initParams['flags'] = array();
+				}
 
-				if (! $this->user->getAccount()->getSetting(Scalr_Account::SETTING_DATE_ENV_CONFIGURED)) {
-					if (count($this->environment->getEnabledPlatforms()) == 0)					
-						$initParams['flags']['needEnvConfig'] = Scalr_Environment::init()->loadDefault($this->user->getAccountId())->id;
+				$data['flags']['platformEc2Enabled'] = !!$this->environment->isPlatformEnabled(SERVER_PLATFORMS::EC2);
+				$data['flags']['platformCloudstackEnabled'] = !!$this->environment->isPlatformEnabled(SERVER_PLATFORMS::CLOUDSTACK);
+				$data['flags']['platformIdcfEnabled'] = !!$this->environment->isPlatformEnabled(SERVER_PLATFORMS::IDCF);
+				$data['flags']['platformUcloudEnabled'] = !!$this->environment->isPlatformEnabled(SERVER_PLATFORMS::UCLOUD);
+				$data['flags']['platformRackspaceEnabled'] = !!$this->environment->isPlatformEnabled(SERVER_PLATFORMS::RACKSPACE);
+
+				$data['flags']['billingExists'] = false;
+
+				if ($this->user->getType() == Scalr_Account_User::TYPE_ACCOUNT_OWNER) {
+					if (! $this->user->getAccount()->getSetting(Scalr_Account::SETTING_DATE_ENV_CONFIGURED)) {
+						if (count($this->environment->getEnabledPlatforms()) == 0)
+							$data['flags']['needEnvConfig'] = Scalr_Environment::init()->loadDefault($this->user->getAccountId())->id;
+					}
+				}
+
+				$data['environments'] = $this->user->getEnvironments();
+
+				if ($this->getEnvironment() && $this->user->isTeamOwner()) {
+					$data['user']['isTeamOwner'] = true;
 				}
 			}
 		}
 
-		$initParams['extjs'] = array(
-			$this->getModuleName("init.js"),
-			$this->getModuleName("theme.js"),
-			$this->getModuleName("override.js"),
-			$this->getModuleName("utils.js"),
-			$this->getModuleName("ui-plugins.js"),
-			$this->getModuleName("ui.js"),
-			$this->getModuleName("highlightjs/highlight.pack.js")
-		);
-
-		$initParams['css'] = array(
-			$this->getModuleName("theme.css"),
-			$this->getModuleName("ui.css"),
-			$this->getModuleName("utils.css"),
-			$this->getModuleName("highlightjs/styles/solarized_light.css")
-		);
-
-		if ($this->user) {
-			$initParams['menu'][] = '->';
-
-			if ($initParams['user']['userIsTrial']) {
-				$initParams['menu'][] = array(
-					'text' => 'Live Chat',
-					'itemId' => 'trialChat',
-					'iconCls' => 'scalr-menu-icon-supportchat'
-				);
-			}
-
-			$t1 = array('text' => $initParams['user']['userName'], 'iconCls' => 'scalr-menu-icon-login', 'menu' => array(
-				array('href' => '#/core/api', 'text' => 'API access', 'iconCls' => 'scalr-menu-icon-api'),
-				array('xtype' => 'menuseparator'),
-				array('href' => '#/core/profile', 'text' => 'Profile', 'iconCls' => 'scalr-menu-icon-profile'),
-				array('href' => '#/core/settings', 'text' => 'Settings', 'iconCls' => 'scalr-menu-icon-settings')
-			));
-
-			$t1['menu'][] = array('xtype' => 'menuseparator');
-			$t1['menu'][] = array('href' => '/guest/logout', 'text' => 'Logout', 'iconCls' => 'scalr-menu-icon-logout');
-
-			$initParams['menu'][] = $t1;
-			
-			if ($this->getEnvironment()) {
-				$envs = array();
-				foreach($this->user->getEnvironments() as $env) {
-					$envs[] = array(
-						'text' => $env['name'],
-						'checked' => $env['id'] == $this->getEnvironmentId(),
-						'group' => 'environment',
-						'envId' => $env['id']
-					);
-				}
-
-				if ($this->user->getType() == Scalr_Account_User::TYPE_ACCOUNT_OWNER || $this->user->isTeamOwner()) {
-					$envs[] = array('xtype' => 'menuseparator');
-					$envs[] = array('href' => '#/environments/view', 'text' => 'Manage');
-
-					if ($this->user->getType() == Scalr_Account_User::TYPE_ACCOUNT_OWNER)
-						$envs[] = array('href' => '#/environments/create', 'text' => 'Add new');
-				}
-				
-				$initParams['menu'][] = array(
-					'iconCls' => 'scalr-menu-icon-environment',
-					'text' => $this->getEnvironment()->name,
-					'menu' => $envs,
-					'environment' => 'true',
-					'tooltip' => 'Environment'
-				);
-				
-				$initParams['farms'] = $this->db->getAll('SELECT * FROM farms WHERE env_id = ?', array($this->getEnvironmentId()));
-			}
-			
-			$m = array();
-			
-			$m[] = array('href' => '#/account/teams/view', 'text' => 'Teams');
-			$m[] = array('href' => '#/account/users/view', 'text' => 'Users');
-
-			$initParams['menu'][] = array(
-				'iconCls' => 'scalr-menu-icon-account',
-				'tooltip' => 'Accounting',
-				'menu' => $m
-			);
-			
-			$initParams['menu'][] = array(
-				'iconCls' => 'scalr-menu-icon-help',
-				'tooltip' => 'Help',
-				'menu' => array(
-					array('href' => 'http://wiki.scalr.net', 'text' => 'Wiki'),
-					array('href' => 'https://groups.google.com/group/scalr-discuss', 'text' => 'Support')
-				)
-			);
-
-		}
-		
-		$this->response->data(array('initParams' => $initParams));
+		return $data;
 	}
-	
+
+	public function xGetContextAction()
+	{
+		$this->response->data($this->getContext());
+	}
+
+	/**
+	 * Accumulates emails in app/cache/.remind-me-later-emails file.
+	 * Registration from is in the http://scalr.net/l/re-invent-2012/
+	 */
+	public function xRemindMeLaterAction()
+	{
+		$this->response->setHeader('Access-Control-Allow-Origin', '*');
+		$this->request->defineParams(array('email'));
+		$email = $this->getParam('email');
+		$file = APPPATH . '/cache/.remind-me-later-emails';
+		$fp = fopen($file, 'a');
+		if (!$fp) {
+			$this->response->failure('Cannot open file for writing.');
+			return;
+		} else {
+			fputcsv($fp, array(gmdate('c'), $email));
+			fclose($fp);
+		}
+		$this->response->data(array('status' => 'ok'));
+	}
+
 	public function xCreateAccountAction()
 	{
-		global $Mailer; //FIXME:
+		global $Mailer; //FIXME: [postponed] this needs to be removed as part of LibWebta
 
 		if (!class_exists("Scalr_Billing"))
 			exit();
-		
+
 		$this->request->defineParams(array(
 			'name', 'org', 'email', 'password', 'agreeTerms', 'newBilling',
 			'country', 'phone', 'lastname', 'firstname', 'v', 'numServers'
@@ -233,27 +130,27 @@ class Scalr_UI_Controller_Guest extends Scalr_UI_Controller
 		if ($this->getParam('v') == 2) {
 			if (!$this->getParam('firstname'))
 				$err['firstname'] = _("First name required");
-			
+
 			if (!$this->getParam('lastname'))
 				$err['lastname'] = _("Last name required");
-				
+
 			if (!$this->getParam('org'))
 				$err['org'] = _("Organization required");
-				
+
 			$name = $this->getParam('firstname')." ".$this->getParam('lastname');
-				
+
 		} else {
 			if (!$this->getParam('name'))
 				$err['name'] = _("Account name required");
-				
+
 			$name = $this->getParam("name");
 		}
-		
-		
+
+
 		$password = $this->getParam('password');
 		if (!$password)
 			$password = $this->getCrypto()->sault(10);
-			
+
 		if (!$Validator->IsEmail($this->getParam('email')))
 			$err['email'] = _("Invalid E-mail address");
 
@@ -264,7 +161,7 @@ class Scalr_UI_Controller_Guest extends Scalr_UI_Controller
 		$DBEmailCheck = $this->db->GetOne("SELECT COUNT(*) FROM account_users WHERE email=?", array($this->getParam('email')));
 		if ($DBEmailCheck > 0)
 			$err['email'] = _("E-mail already exists in database");
-			
+
 		if (!$this->getParam('agreeTerms'))
 			$err['agreeTerms'] = _("You need to agree with terms and conditions");
 
@@ -279,7 +176,7 @@ class Scalr_UI_Controller_Guest extends Scalr_UI_Controller
 			$user = $account->createUser($this->getParam('email'), $password, Scalr_Account_User::TYPE_ACCOUNT_OWNER);
 			$user->fullname = $name;
 			$user->save();
-			
+
 			if ($this->getParam('v') == 2) {
 				$user->setSetting('website.phone', $this->getParam('phone'));
 				$user->setSetting('website.country', $this->getParam('country'));
@@ -295,13 +192,13 @@ class Scalr_UI_Controller_Guest extends Scalr_UI_Controller
 				$billing->createSubscription(Scalr_Billing::PACKAGE_SEED, "", "", "", "");
 				/*******************/
 		    } catch (Exception $e) {
-		    	$account->delete();	
+		    	$account->delete();
 		    	header("Location: https://scalr.net/order/?error={$e->getMessage()}");
 		    	exit();
 		    }
-		
-			
-			
+
+
+
 			if ($_COOKIE['__utmz']) {
 				$gaParser = new Scalr_Service_GoogleAnalytics_Parser();
 
@@ -333,41 +230,30 @@ class Scalr_UI_Controller_Guest extends Scalr_UI_Controller
 				'password'	=> $password
 			);
 
-			
+
 			$mailer = new PHPMailer();
 			$mailer->Subject = 'Welcome to the Scalr revolution!';
-			$mailer->From = 'yoda@scalr.com';
+			$mailer->From = 'sales@scalr.com';
 			$mailer->FromName = 'Scalr';
 			$mailer->AddAddress($this->getParam('email'));
 			$mailer->IsHTML(true);
 			$mailer->Body = @file_get_contents(dirname(__FILE__).'/../../../../templates/en_US/emails/welcome.html');
 			$mailer->Body = str_replace(array('{{FirstName}}','{{Password}}'), array($clientinfo['firstname'], $clientinfo['password']), $mailer->Body);
-			
+
 			$mailer->Send();
-			
-			/*
-			// Send welcome E-mail
-			$Mailer->ClearAddresses();
-			$Mailer->From 		='yoda@scalr.com';
-			$res = $Mailer->Send("emails/welcome.eml",
-				array("client" => $clientinfo, "site_url" => "http://{$_SERVER['HTTP_HOST']}"),
-				$this->getParam('email'),
-				''
-			);
-			*/
-			
+
 			$user->getAccount()->setSetting(Scalr_Account::SETTING_IS_TRIAL, 1);
-			
+
 			//AutoLogin
 			$user->updateLastLogin();
 			Scalr_Session::create($user->getId());
 			Scalr_Session::keepSession();
-			
+
 			header("Location: http://scalr.net/thanks.html");
 		}
 		else {
 			$errors = array_values($err);
-			$error = $errors[0]; 
+			$error = $errors[0];
 			header("Location: https://scalr.net/order/?error={$error}");
 			//$this->response->failure();
 			//$this->response->data(array('errors' => $err));
@@ -378,7 +264,7 @@ class Scalr_UI_Controller_Guest extends Scalr_UI_Controller
 
 	public function loginAction()
 	{
-		$this->response->page('ui/guest/login.js', array('loginAttempts'=>0));
+		$this->response->page('ui/guest/login.js', array('loginAttempts' => 0));
 	}
 
 	private function loginUserGet()
@@ -390,13 +276,14 @@ class Scalr_UI_Controller_Guest extends Scalr_UI_Controller
 		if ($this->getParam('scalrLogin') != '' && $this->getParam('scalrPass') != '') {
 			$user = Scalr_Account_User::init()->loadByEmail($this->getParam('scalrLogin'));
 			if (!$user)
-				throw new Exception("Incorrect login or password");
+				throw new Exception("Incorrect login or password (0)");
 
 			if ($user->getSetting(Scalr_Account_User::SETTING_SECURITY_IP_WHITELIST)) {
 				$ips = explode(',', $user->getSetting(Scalr_Account_User::SETTING_SECURITY_IP_WHITELIST));
 				$inList = false;
 				foreach ($ips as $ip) {
-					if(preg_match('/'.$ip.'/', $_SERVER['REMOTE_ADDR']))
+					$ip = trim($ip);
+					if($ip && preg_match('/^'.$ip.'$/', $_SERVER['REMOTE_ADDR']))
 						$inList = true;
 				}
 				if (!$inList)
@@ -407,9 +294,9 @@ class Scalr_UI_Controller_Guest extends Scalr_UI_Controller
 			if ($pass)
 				return $user;
 			else
-				throw new Exception('Incorrect login or password');
+				throw new Exception('Incorrect login or password (2)');
 		} else
-			throw new Exception('Incorrect login or password');
+			throw new Exception('Incorrect login or password (1)');
 	}
 
 	private function loginUserCreate($user)
@@ -424,27 +311,32 @@ class Scalr_UI_Controller_Guest extends Scalr_UI_Controller
 		$this->response->data(array('userId' => $user->getId()));
 	}
 
+	public function xLoginFakeAction()
+	{
+		$this->response->setBody(file_get_contents(APPPATH . '/www/login.html'));
+	}
+
 	public function xLoginAction()
 	{
 		$loginattempt = $this->db->GetRow("SELECT loginattempts FROM account_users WHERE `email` = ?",
 			array($this->getParam('scalrLogin'))
 		);
-		if($loginattempt['loginattempts'] > 2) {
+		if ($loginattempt['loginattempts'] > 2) {
 			$text = file_get_contents('http://www.google.com/recaptcha/api/challenge?k=6Le9Us4SAAAAAOlqx9rkyJq0g3UBZtpoETmqUsmY');
 			$start = strpos($text, "challenge : '")+13;
 			$length = strpos($text, ",", $start)-$start;
 			$curl = curl_init();
 			// TODO: move private key to config.ini
-			curl_setopt($curl, CURLOPT_URL, 'http://www.google.com/recaptcha/api/verify?privatekey=6Le9Us4SAAAAAHcdRP6Dx44BIwVU0MOOGhBuOxf6&remoteip=my.scalr.net&challenge='.substr($text, $start, $length).'&response='.$this->getParam('kCaptcha'));
+			curl_setopt($curl, CURLOPT_URL, 'http://www.google.com/recaptcha/api/verify?privatekey=6Le9Us4SAAAAAHcdRP6Dx44BIwVU0MOOGhBuOxf6&remoteip=my.scalr.net&challenge='.substr($text, $start, $length).'&response='.$this->getParam('scalrCaptcha'));
 			curl_setopt($curl, CURLOPT_TIMEOUT, 10);
 			curl_setopt($curl, CURLOPT_FOLLOWLOCATION, true);
 			curl_setopt($curl, CURLOPT_RETURNTRANSFER, true);
 
 			$response = curl_exec($curl);
 			curl_close($curl);
-			if(preg_match('/false?.*/',$response )) {
+			if (preg_match('/false?.*/', $response )) {
 				$this->response->data($loginattempt);
-				throw new Exception('Incorrect captcha');
+				throw new Exception('Enter captcha correctly');
 			}
 		}
 		try {
@@ -462,7 +354,7 @@ class Scalr_UI_Controller_Guest extends Scalr_UI_Controller
 					return;
 				}
 			} else
-				throw new Exception('Incorrect login or password');
+				throw new Exception('Incorrect login or password (4)');
 
 			$this->loginUserCreate($user);
 		} catch (Exception $e) {
@@ -470,7 +362,7 @@ class Scalr_UI_Controller_Guest extends Scalr_UI_Controller
 				array($this->getParam('scalrLogin'))
 			);
 			$this->response->data($loginattempt);
-			$this->response->failure('Incorrect login or password');
+			$this->response->failure($e->getMessage());
 		}
 	}
 
@@ -514,7 +406,7 @@ class Scalr_UI_Controller_Guest extends Scalr_UI_Controller
 
 	public function xResetPasswordAction()
 	{
-		global $Mailer; //FIXME:
+		global $Mailer; //FIXME: [postponed] this needs to be removed as part of LibWebta
 
 		$user = Scalr_Account_User::init()->loadByEmail($this->getParam('email'));
 
@@ -591,11 +483,13 @@ class Scalr_UI_Controller_Guest extends Scalr_UI_Controller
 			'url', 'file', 'lineno', 'message'
 		));
 
-		$this->db->Execute('INSERT INTO ui_errors (tm, file, lineno, url, short, message, browser, account_id) VALUES (NOW(), ?, ?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE cnt = cnt + 1', array(
+		$message = explode("\n", $this->getParam('message'));
+
+		$this->db->Execute('INSERT INTO ui_errors (tm, file, lineno, url, short, message, browser, account_id) VALUES (NOW(), ?, ?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE cnt = cnt + 1, tm = NOW()', array(
 			$this->getParam('file'),
 			$this->getParam('lineno'),
 			$this->getParam('url'),
-			$this->getParam('message'),
+			$message[0],
 			$this->getParam('message'),
 			$_SERVER['HTTP_USER_AGENT'],
 			$this->user ? $this->user->getAccountId() : ''

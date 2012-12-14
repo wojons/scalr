@@ -77,6 +77,39 @@
                 }
 			}
 			
+			/*
+			 Metrics scaling
+			*/
+			foreach ($this->getFarmRoleMetrics() as $farmRoleMetric) {
+				$scalingMetricDecision = $farmRoleMetric->getScalingDecision();
+			
+				$this->logger->info(sprintf(_("Metric: %s. Decision: %s. Last value: %s"),
+					$farmRoleMetric->getMetric()->name, $scalingMetricDecision, $farmRoleMetric->lastValue)
+				);
+			
+				$scalingMetricName = $farmRoleMetric->getMetric()->name;
+				$scalingMetricInstancesCount = null;
+				if ($scalingMetricName == 'DateAndTime') {
+					$scalingMetricInstancesCount = $farmRoleMetric->instancesNumber;
+				}
+				
+				if ($scalingMetricDecision == Scalr_Scaling_Decision::NOOP)
+					continue;
+					
+				Logger::getLogger(LOG_CATEGORY::FARM)->info(new FarmLogMessage($this->dbFarmRole->FarmID, sprintf("%s: Role '%s' on farm '%s'. Metric name: %s. Last metric value: %s.",
+					$scalingMetricDecision,
+					$this->dbFarmRole->GetRoleObject()->name,
+					$this->dbFarmRole->GetFarmObject()->Name,
+					$farmRoleMetric->getMetric()->name,
+					$farmRoleMetric->lastValue
+				)));
+				
+				if ($scalingMetricDecision != Scalr_Scaling_Decision::NOOP) {
+					break;
+				}
+			}
+			
+			
 			$isDbMsr = $this->dbFarmRole->GetRoleObject()->hasBehavior(ROLE_BEHAVIORS::MYSQL) || 
 				$this->dbFarmRole->GetRoleObject()->getDbMsrBehavior(); 
 			
@@ -113,35 +146,19 @@
             	}
             }
             elseif ($this->dbFarmRole->GetRunningInstancesCount() > $this->dbFarmRole->GetSetting(DBFarmRole::SETTING_SCALING_MAX_INSTANCES)) {
-            	$this->logger->info(_("Decreasing number of running instances to fit max instances setting"));
-				return Scalr_Scaling_Decision::DOWNSCALE;
+            	// Need to check Date&Time based scaling. Otherwise Scalr downscale role every time.
+            	if ($scalingMetricInstancesCount) {
+            		if ($this->dbFarmRole->GetRunningInstancesCount() > $scalingMetricInstancesCount) {
+            			$this->logger->info(_("Decreasing number of running instances to fit DateAndTime scaling settings ({$scalingMetricInstancesCount})"));
+            			return Scalr_Scaling_Decision::DOWNSCALE;
+            		}
+            	} else {
+            		$this->logger->info(_("Decreasing number of running instances to fit max instances setting ({$scalingMetricInstancesCount})"));
+					return Scalr_Scaling_Decision::DOWNSCALE;
+            	}
 			}
 			
-			/*
-			 Metrics scaling
-			 */
-			foreach ($this->getFarmRoleMetrics() as $farmRoleMetric) {				
-				$res = $farmRoleMetric->getScalingDecision();
-				
-				$this->logger->info(sprintf(_("Metric: %s. Decision: %s. Last value: %s"), 
-					$farmRoleMetric->getMetric()->name, $res, $farmRoleMetric->lastValue)
-				);
-				
-				if ($res == Scalr_Scaling_Decision::NOOP)
-					continue;
-					
-				Logger::getLogger(LOG_CATEGORY::FARM)->info(new FarmLogMessage($this->dbFarmRole->FarmID, sprintf("%s: Role '%s' on farm '%s'. Metric name: %s. Last metric value: %s.", 
-					$res,
-					$this->dbFarmRole->GetRoleObject()->name,
-                    $this->dbFarmRole->GetFarmObject()->Name,
-                    $farmRoleMetric->getMetric()->name,
-                    $farmRoleMetric->lastValue
-				)));
-					
-				return $res;
-			}
-			
-			return Scalr_Scaling_Decision::NOOP;
+			return ($scalingMetricDecision) ? $scalingMetricDecision : Scalr_Scaling_Decision::NOOP;
 		}
 	}
 ?>

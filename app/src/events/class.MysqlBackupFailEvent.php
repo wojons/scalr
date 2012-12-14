@@ -17,5 +17,10 @@
 			$this->DBServer = $DBServer;
 			$this->Operation = $Operation;
 		}
+		
+		public function getTextDetails()
+		{
+			return "MySQL backup failed";
+		}
 	}
 ?>
