@@ -11,6 +11,7 @@
 			$clientId,
 			$description,
 			$isStable,
+			$isDevel,
 			$approvalState,
 			$generation,
 			$os,
@@ -39,6 +40,7 @@
 			'env_id'		=> 'envId',
 			'description'	=> 'description',
 			'is_stable'		=> 'isStable',
+			'is_devel'		=> 'isDevel',
 			'generation'	=> 'generation',
 			'os'			=> 'os',
 			'approval_state'=> 'approvalState',
@@ -124,6 +126,8 @@
 				return ROLE_BEHAVIORS::POSTGRESQL;
 			elseif ($this->hasBehavior(ROLE_BEHAVIORS::MYSQL2))
 				return ROLE_BEHAVIORS::MYSQL2;
+			elseif ($this->hasBehavior(ROLE_BEHAVIORS::PERCONA))
+				return ROLE_BEHAVIORS::PERCONA;
 				
 			return false;
 		}
@@ -168,6 +172,13 @@
 				foreach ($images as $image)
 				{
 					$this->images[$image['platform']][$image['cloud_location']] = $image['image_id'];
+					$this->imagesDetails[$image['platform']][$image['cloud_location']] = array(
+						'image_id' 	=> $image['image_id'],
+						'os_name'	=> $image['os_name'],
+						'os_family' => $image['os_family'],
+						'os_version'=> $image['os_version'],
+						'architecture'=> $image['architecture']
+					);
 				}
 			}
 		}
@@ -196,11 +207,14 @@
 			return array_keys($this->images);
 		}
 
-		public function getImages()
+		public function getImages($extended = false)
 		{
 			$this->loadImagesCache();
 
-			return $this->images;
+			if (!$extended)
+				return $this->images;
+			else
+				return $this->imagesDetails;
 		}
 
 		public function getImagesString()
@@ -222,15 +236,26 @@
 			return $images;
 		}
 
-		public function getImageId($platform = null, $cloud_location = null)
+		public function getImageDetails($platform, $cloudLocation) {
+			$this->loadImagesCache();
+			return $this->imagesDetails[$platform][$cloudLocation];
+		}
+		
+		public function getImageId($platform = null, $cloudLocation = null)
 		{
 			$this->loadImagesCache();
 
 			if ($platform)
 			{
-				if ($cloud_location)
+				if ($cloudLocation)
 				{
-					return $this->images[$platform][$cloud_location];
+					$allRegionsImage = $this->images[$platform][''];
+					
+					$retval = $this->images[$platform][$cloudLocation];
+					if (!$retval)
+						return $allRegionsImage;
+					else
+						return $retval;
 				}
 				else
 					return $this->images[$platform];
@@ -384,15 +409,14 @@
 			$this->db->Execute("DELETE FROM role_images WHERE image_id = ? AND role_id = ?", array($imageId, $this->id));
 		}
 
-		public function setImage($imageId, $platform, $cloudLocation, $agentVersion = '', $osDistributor = '', $osCodename = '', $osRelease = '', $architecture = '')
+		public function setImage($imageId, $platform, $cloudLocation='', $agentVersion = '', $osFamily = '', $osName = '', $osVersion = '', $architecture = '')
 		{
-			$osFullName = ucfirst($osDistributor)." {$osRelease} ".ucfirst($osCodename);
-			if (!in_array($osDistributor, array('ubuntu', 'fedora'))) {
-				$osRelease = strstr($osRelease, '.', true);
+			if (!in_array($osFamily, array('ubuntu', 'fedora'))) {
+				$osVersion = strstr($osVersion, '.', true);
 			}
 			
 			// @HACK for shared roles
-			if ($this->origin == ROLE_TYPE::SHARED || !$this->db->GetOne("SELECT id FROM role_images WHERE image_id = ? AND role_id != ?", array(trim($imageId), $this->id)))
+			if ($this->origin == ROLE_TYPE::SHARED || $this->isDevel == 1 || !$this->db->GetOne("SELECT id FROM role_images WHERE image_id = ? AND role_id != ?", array(trim($imageId), $this->id)))
 			{
 				$this->db->Execute("INSERT INTO role_images SET
 					`role_id`			= ?,
@@ -404,18 +428,27 @@
 					`os_name`			= ?,
 					`os_version`		= ?,
 					`architecture`		= ?
-					ON DUPLICATE KEY UPDATE image_id = ? 
+					ON DUPLICATE KEY UPDATE 
+					`image_id` = ?, 
+					`os_family`			= ?,
+					`os_name`			= ?,
+					`os_version`		= ?,
+					`architecture`		= ?
 				", array(
 					$this->id,
 					$cloudLocation,
 					trim($imageId),
 					$platform,
 					$agentVersion,
-					$osDistributor,
-					$osFullName,
-					$osRelease,
+					$osFamily,
+					$osName,
+					$osVersion,
 					$architecture,
-					trim($imageId)
+					trim($imageId),
+					$osFamily,
+					$osName,
+					$osVersion,
+					$architecture
 				));
 			}
 			else
@@ -499,6 +532,7 @@
 			$retval = array();
 			while ($script = $dbParams->FetchRow()) {
 				$retval[] = array(
+					'role_script_id' => $script['id'],
 					'event_name' => $script['event_name'],
 					'target' => $script['target'],
 					'script_id' => $script['script_id'],
@@ -522,31 +556,61 @@
 			if (! is_array($scripts))
 				return;
 
-			$this->db->Execute('DELETE FROM role_scripts WHERE role_id = ?', array($this->id));
+			$ids = array();
 			foreach ($scripts as $script) {
 				// TODO: check permission for script_id
-				$this->db->Execute('INSERT INTO role_scripts SET
-					`role_id` = ?,
-					`event_name` = ?,
-					`target` = ?,
-					`script_id` = ?,
-					`version` = ?,
-					`timeout` = ?,
-					`issync` = ?,
-					`params` = ?,
-					`order_index` = ?
-				', array(
-					$this->id,
-					$script['event_name'],
-					$script['target'],
-					$script['script_id'],
-					$script['version'],
-					$script['timeout'],
-					$script['issync'],
-					serialize($script['params']),
-					$script['order_index']
-				));
+				if (!$script['role_script_id']) {
+					$this->db->Execute('INSERT INTO role_scripts SET
+						`role_id` = ?,
+						`event_name` = ?,
+						`target` = ?,
+						`script_id` = ?,
+						`version` = ?,
+						`timeout` = ?,
+						`issync` = ?,
+						`params` = ?,
+						`order_index` = ?
+					', array(
+						$this->id,
+						$script['event_name'],
+						$script['target'],
+						$script['script_id'],
+						$script['version'],
+						$script['timeout'],
+						$script['issync'],
+						serialize($script['params']),
+						$script['order_index']
+					));
+					$ids[] = $this->db->Insert_ID();
+				} else {
+					$this->db->Execute('UPDATE role_scripts SET
+						`event_name` = ?,
+						`target` = ?,
+						`script_id` = ?,
+						`version` = ?,
+						`timeout` = ?,
+						`issync` = ?,
+						`params` = ?,
+						`order_index` = ?
+						WHERE id = ? AND role_id = ?
+					', array(
+						$script['event_name'],
+						$script['target'],
+						$script['script_id'],
+						$script['version'],
+						$script['timeout'],
+						$script['issync'],
+						serialize($script['params']),
+						$script['order_index'],
+						
+						$script['role_script_id'],
+						$this->id
+					));
+					$ids[] = $script['role_script_id'];
+				}
 			}
+
+			$this->db->Execute('DELETE FROM role_scripts WHERE role_id = ? AND id NOT IN (\'' . implode("','", $ids) . '\')', array($this->id));
 		}
 
 		public static function createFromBundleTask(BundleTask $BundleTask)
@@ -575,13 +639,9 @@
 			}
 
 			$meta = $BundleTask->getSnapshotDetails();
-			$dist = new stdClass();
 			if ($meta) {
 				if ($meta['os'])
 					$os = $meta['os']->version;
-					
-				if ($meta['dist'])
-					$dist = $meta['dist'];
 			}
 			else
 				$os = $proto_role['os'];
@@ -626,7 +686,7 @@
 
 			$role =  self::loadById($role_id);
 
-			$behaviors = explode(",",$proto_role['behaviors']);
+			$behaviors = explode(",", $proto_role['behaviors']);
 			foreach ($behaviors as $behavior) {
 				$db->Execute("INSERT INTO role_behaviors SET
 					role_id			= ?,
@@ -641,11 +701,11 @@
 			$role->setImage(
 				$BundleTask->snapshotId, 
 				$BundleTask->platform, 
-				$BundleTask->cloudLocation, 
+				($BundleTask->platform != SERVER_PLATFORMS::GCE) ? $BundleTask->cloudLocation : "", 
 				$meta['szr_version'], 
-				$dist->distributor, //$osFamily 
-				$dist->codename, //$osName 
-				$dist->release, //$osVersion 
+				$BundleTask->osFamily,
+				$BundleTask->osName,
+				$BundleTask->osVersion,
 				$proto_role['architecture']
 			);
 

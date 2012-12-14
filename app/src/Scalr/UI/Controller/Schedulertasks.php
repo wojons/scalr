@@ -24,11 +24,7 @@ class Scalr_UI_Controller_Schedulertasks extends Scalr_UI_Controller
 	public function createAction()
 	{
 		$this->response->page('ui/schedulertasks/create.js', array(
-			'farmRoles' => array(
-				'farms' => self::loadController('Farms')->getList(),
-				'farmRoles' => array(),
-				'servers' => array()
-			),
+			'farmWidget' => self::loadController('Farms')->getFarmWidget(array(), 'addAll'),
 			'timezones' => Scalr_Util_DateTime::getTimezones(),
 			'scripts' => self::loadController('Scripts')->getList(),
 			'defaultTimezone' => $this->getEnvironment()->getPlatformConfigValue(Scalr_Environment::SETTING_TIMEZONE)
@@ -59,52 +55,22 @@ class Scalr_UI_Controller_Schedulertasks extends Scalr_UI_Controller
 			'timezone' => $task->timezone
 		);
 
-		$farmRoles = array(
-			'farms' => self::loadController('Farms')->getList(),				
-			'farmRoles' => array(),
-			'servers' => array()
-		);
+		$farmWidget = array();
 
 		switch($task->targetType) {
 			case Scalr_SchedulerTask::TARGET_FARM:
 				try {
-					$farmRoles['farmId'] = $task->targetId;
-					$this->request->setParams(array('farmId' => $task->targetId));
-					$farmRole = self::loadController('Roles', 'Scalr_UI_Controller_Farms')->getList();
-					if (count($farmRole)) {
-						$farmRole[0] = array('id' => '0', 'name' => 'On all roles');
-						$farmRoles['farmRoleId'] = '0';
-					}
-					$farmRoles['farmRoles'] = $farmRole;
+					$farmWidget = self::loadController('Farms')->getFarmWidget(array(
+						'farmId' => $task->targetId
+					), 'addAll');
 				} catch (Exception $e) {}
 			break;
 
 			case Scalr_SchedulerTask::TARGET_ROLE:
 				try {
-					$DBFarmRole = DBFarmRole::LoadByID($task->targetId);
-					$farmRoles['farmId'] = $DBFarmRole->FarmID;
-					$farmRoles['farmRoleId'] = $task->targetId;
-					
-					$this->request->setParams(array('farmId' => $DBFarmRole->FarmID));
-					
-					$farmRole = self::loadController('Roles', 'Scalr_UI_Controller_Farms')->getList();
-
-					if (count($farmRole))
-						$farmRole[0] = array('id' => '0', 'name' => 'On all roles');
-
-					$farmRoles['farmRoles'] = $farmRole;
-
-					$servers = array();
-					foreach ($DBFarmRole->GetServersByFilter(array('status' => SERVER_STATUS::RUNNING)) as $key => $value)
-						$servers[$value->serverId] = $value->remoteIp;
-
-					$farmRoles['servers'] = $servers;
-					if (count($servers)) {
-						$farmRoles['servers'][0] = 'On all servers';
-						$farmRoles['serverId'] = '0';
-					}
-
-
+					$farmWidget = self::loadController('Farms')->getFarmWidget(array(
+						'farmRoleId' => $task->targetId
+					), 'addAll');
 				} catch (Exception $e) {}
 				break;
 
@@ -112,27 +78,9 @@ class Scalr_UI_Controller_Schedulertasks extends Scalr_UI_Controller
 				$serverArgs = explode(':', $task->targetId);
 				try {
 					$DBServer = DBServer::LoadByFarmRoleIDAndIndex($serverArgs[0], $serverArgs[1]);
-					$farmRoles['serverId'] = $DBServer->serverId;
-					$farmRoles['farmRoleId'] = $DBServer->farmRoleId;
-					$farmRoles['farmId'] = $DBServer->farmId;
-					
-					$this->request->setParams(array('farmId' => $DBServer->farmId));
-					
-					$farmRole = self::loadController('Roles', 'Scalr_UI_Controller_Farms')->getList();
-					if (count($farmRole))
-						$farmRole[0] = array('id' => '0', 'name' => 'On all roles');
-					$farmRoles['farmRoles'] = $farmRole;
-
-					$servers = array();
-					$dbFarmRole = DBFarmRole::LoadByID($DBServer->farmRoleId);
-					foreach ($dbFarmRole->GetServersByFilter(array('status' => SERVER_STATUS::RUNNING)) as $key => $value)
-						$servers[$value->serverId] = $value->remoteIp;
-					
-					$farmRoles['servers'] = $servers;
-					if (count($servers))
-						$farmRoles['servers'][0] = 'On all servers';
-					
-					
+					$farmWidget = self::loadController('Farms')->getFarmWidget(array(
+						'serverId' => $DBServer->serverId
+					), 'addAll');
 				} catch(Exception $e) {}
 				break;
 
@@ -140,7 +88,7 @@ class Scalr_UI_Controller_Schedulertasks extends Scalr_UI_Controller
 		}
 
 		$this->response->page('ui/schedulertasks/create.js', array(
-			'farmRoles' => $farmRoles,
+			'farmWidget' => $farmWidget,
 			'timezones' => Scalr_Util_DateTime::getTimezones(),
 			'scripts' => self::loadController('Scripts')->getList(),
 			'defaultTimezone' => $this->getEnvironment()->getPlatformConfigValue(Scalr_Environment::SETTING_TIMEZONE),

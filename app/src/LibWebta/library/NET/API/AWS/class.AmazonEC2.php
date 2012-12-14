@@ -53,13 +53,18 @@
 		public $deleteOnTermination;
 		public $snapshotId;
 		public $volumeSize;
+		public $volumeType;
 		
 			
-		public function _construct($deleteOnTermination = true,$snapshotId = false,$volumeSize = false)
+		public function _construct($deleteOnTermination = true, $snapshotId = false, $volumeSize = false, $volumeType = 'standart', $iops = 200)
 		{
 			$this->deleteOnTermination = $deleteOnTermination;
 			$this->snapshotId = $snapshotId;
 			$this->volumeSize = $volumeSize;
+			$this->volumeType = $volumeType;
+			
+			if ($this->volumeType == 'io1')
+				$this->iops = $iops;
 			
 		}
 	};
@@ -325,6 +330,7 @@
 	class DescribeAddressesType
 	{
 		public $publicIpsSet;
+		public $allocationIdsSet;
 		
 		public function AddAddress($ip_address)
 		{
@@ -385,12 +391,17 @@
 		public $size;
 		public $snapshotId;
 		public $availabilityZone;
+		public $volumeType;
 		
-		public function __construct($size = null, $snapshotId = null, $availabilityZone = null)
+		public function __construct($size = null, $snapshotId = null, $availabilityZone = null, $volumeType = 'standard', $iops = 10)
 		{
 			$this->size = $size;
 			$this->snapshotId = $snapshotId;
 			$this->availabilityZone = $availabilityZone;
+			$this->volumeType = $volumeType;
+			
+			if ($this->volumeType == 'io1')
+				$this->iops = $iops;
 		}
 	}
 	
@@ -540,8 +551,8 @@
 	
 	class AmazonEC2 
     {		
-	    const EC2WSDL = 'http://s3.amazonaws.com/ec2-downloads/2010-08-31.ec2.wsdl'; //previos version http://ec2.amazonaws.com/doc/2009-10-31/AmazonEC2.wsdl
-	    const EC2WSDL_LOCAL = '/etc/aws/wsdl/2010-08-31.ec2.wsdl';
+	    const EC2WSDL = 'http://s3.amazonaws.com/ec2-downloads/2012-07-20.ec2.wsdl'; //previos version http://ec2.amazonaws.com/doc/2009-10-31/AmazonEC2.wsdl
+	    const EC2WSDL_LOCAL = '/etc/aws/wsdl/2012-07-20.ec2.wsdl';
 	    const KEY_PATH = '/etc/awskey.pem';
 	    const CERT_PATH = '/etc/awscert.pem';
 	    const USER_AGENT = 'Libwebta AWS Client (http://webta.net)';
@@ -926,7 +937,7 @@
 		 * @param string $snapshotId
 		 * @return stdClass
 		 */
-    	public function DescribeSnapshots(array $snapshotId = null)
+    	public function DescribeSnapshots(array $snapshotId = null, array $filter = null)
 		{
 			try 
 			{
@@ -935,6 +946,16 @@
 				
 				if ($snapshotId)
 					$stdClass->snapshotSet->item->snapshotId = $snapshotId; 
+				
+				if (!empty($filter)) {
+					$i = 0;
+					foreach ($filter as $key => $f) {
+						$stdClass->filterSet->item[$i] = new stdClass();
+						$stdClass->filterSet->item[$i]->name = $key;
+						$stdClass->filterSet->item[$i]->valueSet->item->value = $f;
+						$i++;
+					}
+				}
 				
 				$response = $this->EC2SoapClient->DescribeSnapshots($stdClass);
 				
@@ -1155,13 +1176,19 @@
 		 * @param IpPermissionSetType $ipPermissions
 		 * @return bool
 		 */
-		public function RevokeSecurityGroupIngress($userId, $groupName, IpPermissionSetType $ipPermissions)
+		public function RevokeSecurityGroupIngress($userId, $groupName = false, IpPermissionSetType $ipPermissions, $groupId = false)
 		{
 			try 
 			{
 				$stdClass = new stdClass();
 			    $stdClass->userId = $userId;
-				$stdClass->groupName = $groupName;
+			    
+			    if ($groupName)
+					$stdClass->groupName = $groupName;
+			    
+			    if ($groupId)
+			    	$stdClass->groupId = $groupId;
+			    
 				$stdClass->ipPermissions = $ipPermissions;
 
 				$response = $this->EC2SoapClient->RevokeSecurityGroupIngress($stdClass);
@@ -1190,13 +1217,19 @@
 		 * @param IpPermissionSetType $ipPermissions
 		 * @return bool
 		 */
-		public function AuthorizeSecurityGroupIngress($userId, $groupName, IpPermissionSetType $ipPermissions)
+		public function AuthorizeSecurityGroupIngress($userId, $groupName = false, IpPermissionSetType $ipPermissions, $groupId = false)
 		{
 		    try 
 			{
 				$stdClass = new stdClass();
 			    $stdClass->userId = $userId;
-				$stdClass->groupName = $groupName;
+			    
+			    if ($groupId)
+			    	$stdClass->groupId = $groupId;
+			    
+			    if ($groupName)
+					$stdClass->groupName = $groupName;
+			    
 				$stdClass->ipPermissions = $ipPermissions;
 
 				$response = $this->EC2SoapClient->AuthorizeSecurityGroupIngress($stdClass);
@@ -1220,11 +1253,14 @@
 		 * @param string $groupName
 		 * @return bool
 		 */
-		public function DeleteSecurityGroup($groupName)
+		public function DeleteSecurityGroup($groupName = null, $groupId = null)
 		{
 		    try 
 			{
-				$response = $this->EC2SoapClient->DeleteSecurityGroup(array("groupName" => $groupName));
+				if ($groupName)
+					$response = $this->EC2SoapClient->DeleteSecurityGroup(array("groupName" => $groupName));
+				elseif ($groupId)
+					$response = $this->EC2SoapClient->DeleteSecurityGroup(array("groupId" => $groupId));
 				
 				if ($response instanceof SoapFault)
 					throw new Exception($response->faultstring, E_ERROR);
@@ -1279,15 +1315,16 @@
 		 * @param securityGroupSet $securityGroupSet
 		 * @return Object
 		 */
-		public function DescribeSecurityGroups($groupName = false)
+		public function DescribeSecurityGroups($groupName = false, $groupId = false)
 		{
 		    try 
 			{
+				$securityGroupSet = new stdClass();
+				$securityGroupSet->securityGroupSet = new stdClass();
+				$securityGroupSet->securityGroupIdSet = new stdClass();
+				
 				if ($groupName)
 				{
-					$securityGroupSet = new stdClass();
-					$securityGroupSet->securityGroupSet = new stdClass();
-					
 					if (!is_array($groupName))
 					{
 						$securityGroupSet->securityGroupSet->item = new stdClass();
@@ -1304,7 +1341,26 @@
 						}
 					}
 				}
-				else
+				
+				if ($groupId) {
+					if (!is_array($groupId))
+					{
+						$securityGroupSet->securityGroupIdSet->item = new stdClass();
+						$securityGroupSet->securityGroupIdSet->item->groupId = $groupId;
+					}
+					else
+					{
+						$securityGroupSet->securityGroupIdSet->item = array();
+						foreach ($groupId as $group)
+						{
+							$itm = new stdClass();
+							$itm->groupId = $group;
+							array_push($securityGroupSet->securityGroupIdSet->item, $itm);
+						}
+					}
+				}
+				
+				if (!$groupName && !$groupId)
 					$securityGroupSet = null;
 				
 				$response = $this->EC2SoapClient->DescribeSecurityGroups($securityGroupSet);
@@ -1398,6 +1454,28 @@
 			catch (SoapFault $e) 
 			{
 			    throw new Exception($e->getMessage(), E_ERROR);
+			}
+	
+			return $response;
+		}
+		
+		public function DescribeInstanceStatus($instanceId = NULL)
+		{
+			try 
+		    {
+				if(!empty($instanceId)) 
+				{
+				    $objInstances->instancesSet = array('item' => array('instanceId' => $instanceId) ); 
+				};
+								
+				$response = $this->EC2SoapClient->DescribeInstanceStatus($objInstances);
+				
+				if ($response instanceof SoapFault)
+					throw new Exception($response->faultstring, E_ERROR);				
+			} 
+			catch (SoapFault $e) 
+			{				
+				throw new Exception($e->getMessage(), E_ERROR);
 			}
 	
 			return $response;

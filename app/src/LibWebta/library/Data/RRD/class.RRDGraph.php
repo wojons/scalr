@@ -30,7 +30,7 @@
      * @version 1.0
      * @author Igor Savchenko <http://webta.net/company.html>
      */
-	class RRDGraph extends Core
+	class RRDGraph2 extends Core
 	{
 	    /**
 	     * RRD Graph width
@@ -181,7 +181,10 @@
 			}
 			
 			$args = array_merge($args,$this->Args);
-					
+
+			var_dump($args);
+			exit();
+			
 			foreach ($args as $arg)
 			{
 				if (substr($arg, 0, 1) != '-')

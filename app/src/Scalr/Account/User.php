@@ -218,19 +218,72 @@ class Scalr_Account_User extends Scalr_Model
 	 */
 	public function getDashboard($envId)
 	{
-		return unserialize($this->db->GetOne("SELECT value FROM account_user_dashboard WHERE `user_id` = ? AND `env_id` = ?",
+		$obj = unserialize($this->db->GetOne("SELECT value FROM account_user_dashboard WHERE `user_id` = ? AND `env_id` = ?",
 			array($this->id, $envId)
 		));
+
+		// temporary fix: convertion to new format
+		if (is_array($obj) && !array_key_exists('configuration', $obj)) {
+			$old = $obj; $obj = array();
+			for ($i = 0; $i < count($old); $i++) {
+				$column = array();
+				if (is_array($old[$i]) && is_array($old[$i]['widgets'])) {
+					$widgets = $old[$i]['widgets'];
+					for ($j = 0; $j < count($widgets); $j++) {
+						if (is_array($widgets[$j]))
+							array_push($column, $widgets[$j]);
+					}
+				}
+
+				array_push($obj, $column);
+			}
+
+			$obj = array('configuration' => $obj, 'flags' => array(), 'widgets' => array());
+			$this->setDashboard($envId, $obj);
+			$obj = $this->getDashboard($envId);
+		} else if (! is_array($obj)) {
+			$obj = array('configuration' => array(), 'flags' => array(), 'widgets' => array());
+			$this->setDashboard($envId, $obj);
+			$obj = $this->getDashboard($envId);
+		}
+
+		return $obj;
 	}
 
 	/**
 	 * Set user dashboard
-	 * @param $envId
-	 * @param $value
-	 * @return ID
+	 * @param $envId integer
+	 * @param $value object
+	 * @throws Scalr_Exception_Core
 	 */
 	public function setDashboard($envId, $value)
 	{
+		// check consistency
+		$usedWidgets = array();
+		if (is_array($value) &&
+			isset($value['configuration']) && is_array($value['configuration']) &&
+			isset($value['flags']) && is_array($value['flags'])
+		) {
+			$configuration = array();
+			foreach ($value['configuration'] as $col) {
+				if (is_array($col)) {
+					$column = array();
+					foreach ($col as $wid) {
+						if (is_array($wid) && isset($wid['name'])) {
+							$usedWidgets[] = $wid['name'];
+							array_push($column, $wid);
+						}
+					}
+					array_push($configuration, $column);
+				}
+			}
+
+			$value['configuration'] = $configuration;
+			$value['widgets'] = array_unique($usedWidgets);
+		} else {
+			throw new Scalr_Exception_Core('Invalid configuration for dashboard');
+		}
+
 		$this->db->Execute("REPLACE INTO account_user_dashboard SET `value` = ?, `user_id` = ?, `env_id` = ?",
 			array(serialize($value), $this->id, $envId)
 		);
@@ -309,15 +362,18 @@ class Scalr_Account_User extends Scalr_Model
 			if ($envId) {
 				$environment = Scalr_Environment::init()->loadById($envId);
 
-				if (! $this->getPermissions()->check($environment))
+				if (! $this->getPermissions()->check($environment)) {
 					$envId = 0;
+				}
+
 			} else {
 				$envId = (int) $this->getSetting(Scalr_Account_User::SETTING_DEFAULT_ENVIRONMENT);
 
 				if ($envId) {
 					$environment = Scalr_Environment::init()->loadById($envId);
-					if (! $this->getPermissions()->check($environment))
+					if (! $this->getPermissions()->check($environment)) {
 						$envId = 0;
+					}
 				}
 			}
 		} catch (Exception $e) {
@@ -378,8 +434,10 @@ class Scalr_Account_User extends Scalr_Model
 	
 	public function isTeamUserInEnvironment($envId, $permissions)
 	{
-		return $this->db->getOne('SELECT permissions FROM account_team_users 
+		$all = $this->db->getCol('SELECT permissions FROM account_team_users
 			JOIN account_team_envs ON account_team_users.team_id = account_team_envs.team_id
-			WHERE user_id = ? AND env_id = ?', array($this->id, $envId)) == $permissions ? true : false;
+			WHERE user_id = ? AND env_id = ?', array($this->id, $envId));
+
+		return in_array($permissions, $all) ? true : false;
 	}
 }

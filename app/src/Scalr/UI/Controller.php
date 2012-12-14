@@ -28,7 +28,13 @@ class Scalr_UI_Controller
 	 * @var Scalr_Environment
 	 */
 	protected $environment;
-	
+
+	/**
+	 * DI Container
+	 * @var \Scalr\DependencyInjection\Container
+	 */
+	private $container;
+
 	/**
 	 * @var string
 	 */
@@ -41,13 +47,13 @@ class Scalr_UI_Controller
 		$this->db = Core::getDBInstance();
 		$this->user = $this->request->getUser();
 		$this->environment = $this->request->getEnvironment();
-		
+		$this->container = \Scalr\DependencyInjection\Container::getInstance();
+
 		date_default_timezone_set(SCALR_SERVER_TZ);
 	}
-	
+
 	public function init()
 	{
-		
 	}
 
 	/**
@@ -62,7 +68,7 @@ class Scalr_UI_Controller
 
 		return $this->crypto;
 	}
-	
+
 	public function getEnvironmentId()
 	{
 		if ($this->environment)
@@ -94,20 +100,6 @@ class Scalr_UI_Controller
 			return false;
 	}
 
-	public function getModuleName($name, $onlyPath = false)
-	{
-		$fl = APPPATH . "/www/ui/js/{$name}";
-		if (file_exists($fl))
-			$tm = filemtime(APPPATH . "/www/ui/js/{$name}");
-		else
-			throw new Exception(sprintf('Js file not found'));
-
-		$nameTm = str_replace('.js', "-{$tm}.js", $name);
-		$nameTm = str_replace('.css', "-{$tm}.css", $nameTm);
-
-		return "/ui/js/{$nameTm}";
-	}
-
 	protected $sortParams = array();
 	protected function sort($item1, $item2)
 	{
@@ -130,11 +122,12 @@ class Scalr_UI_Controller
 		));
 
 		if ($this->getParam('query') && count($filterFields) > 0) {
-			foreach ($data as $k=>$v) {
+			$query = trim($this->getParam('query'));
+			foreach ($data as $k => $v) {
 				$found = false;
 				foreach ($filterFields as $field)
 				{
-					if (stristr($v[$field], $this->getParam('query'))) {
+					if (stristr($v[$field], $query)) {
 						$found = true;
 						break;
 					}
@@ -273,7 +266,7 @@ class Scalr_UI_Controller
 		if (! is_array($s)) {
 			$s = json_decode($this->getParam('sort'), true);
 		}
-		
+
 		if (is_array($s)) {
 			$sorts = array();
 			if (count($s) && !is_array($s[0]))
@@ -282,11 +275,14 @@ class Scalr_UI_Controller
 			foreach ($s as $param) {
 				$sort = preg_replace("/[^A-Za-z0-9_]+/", "", $param['property']);
 				$dir = (in_array(strtolower($param['direction']), array('asc', 'desc'))) ? $param['direction'] : 'ASC';
-				
-				$sorts[] = "`{$sort}` {$dir}";
+
+				if ($sort && $dir)
+					$sorts[] = "`{$sort}` {$dir}";
 			}
-			
-			$sql .= " ORDER BY " . implode($sorts, ',');
+
+			if (count($sorts) > 0) {
+				$sql .= " ORDER BY " . implode($sorts, ',');
+			}
 		} else if ($this->getParam('sort')) {
 			$sort = preg_replace("/[^A-Za-z0-9_]+/", "", $this->getParam('sort'));
 			$dir = (in_array(strtolower($this->getParam('dir')), array('asc', 'desc'))) ? $this->getParam('dir') : 'ASC';
@@ -295,10 +291,14 @@ class Scalr_UI_Controller
 
 		if (! $noLimit) {
 			$start = $this->getParam('start');
+			if ($start > $response["total"])
+				$start = 0;
+
 			$limit = $this->getParam('limit');
 			$sql .= " LIMIT $start, $limit";
 		}
 
+		//$response['sql'] = $sql;
 		$response["success"] = true;
 		$response["data"] = $this->db->GetAll($sql);
 
@@ -308,7 +308,7 @@ class Scalr_UI_Controller
 	public function call($pathChunks, $permissionFlag = true)
 	{
 		$arg = array_shift($pathChunks);
-		
+
 		if ($this->user) {
 			if ($this->user->getType() == Scalr_Account_User::TYPE_TEAM_USER) {
 				if (!$this->user->isTeamUserInEnvironment($this->getEnvironmentId(), Scalr_Account_Team::PERMISSIONS_OWNER) &&
@@ -318,13 +318,13 @@ class Scalr_UI_Controller
 						// rules defined for this controller
 						$cls = get_class($this);
 						$clsShort = str_replace('Scalr_UI_Controller_', '', $cls);
-						$methodShort = str_replace('Action', '', $method);
+						$methodShort = str_replace('Action', '', $method); // TODO: check
 						$clsPermissions = $cls::getPermissionDefinitions();
-						
+
 						$permissions = $this->user->getGroupPermissions($this->getEnvironmentId());
 						if (array_key_exists($clsShort, $permissions)) {
 							$perm = $permissions[$clsShort];
-							
+
 							if (in_array('VIEW', $perm, true) || in_array('FULL', $perm, true))
 								$permissionFlag = true;
 							else
@@ -369,17 +369,17 @@ class Scalr_UI_Controller
 
 		} else if (method_exists($this, 'defaultAction') && $arg == '') {
 			$this->response->setHeader('X-Scalr-Cache-Id', $this->uiCacheKeyPattern);
-			
+
 			if (! $permissionFlag)
 				throw new Scalr_Exception_InsufficientPermissions();
-			
+
 			$this->callActionMethod('defaultAction');
 
 		} else {
 			throw new Scalr_UI_Exception_NotFound();
 		}
 	}
-	
+
 	public function callActionMethod($method)
 	{
 		if ($this->request->getRequestType() == Scalr_UI_Request::REQUEST_TYPE_API) {
@@ -395,7 +395,7 @@ class Scalr_UI_Controller
 			if (! $apiMethodCheck)
 				throw new Scalr_UI_Exception_NotFound();
 		}
-		
+
 		if ($this->user) {
 			if ($this->user->getType() == Scalr_Account_User::TYPE_TEAM_USER) {
 				if (!$this->user->isTeamUserInEnvironment($this->getEnvironmentId(), Scalr_Account_Team::PERMISSIONS_OWNER) &&
@@ -407,12 +407,12 @@ class Scalr_UI_Controller
 						$clsShort = str_replace('Scalr_UI_Controller_', '', $cls);
 						$methodShort = str_replace('Action', '', $method);
 						$clsPermissions = $cls::getPermissionDefinitions();
-						
+
 						$permissions = $this->user->getGroupPermissions($this->getEnvironmentId());
 						if (array_key_exists($clsShort, $permissions)) {
 							// rules for user and such controller
 							$perm = $permissions[$clsShort];
-							
+
 							if (! in_array('FULL', $perm, true)) {
 								// user doesn't has full privilegies
 								if (array_key_exists($methodShort, $clsPermissions)) {
@@ -425,16 +425,81 @@ class Scalr_UI_Controller
 										throw new Scalr_Exception_InsufficientPermissions();
 								}
 							}
-		
+
 						} else
 							throw new Scalr_Exception_InsufficientPermissions();
-							
+
 					}
 				}
 			}
 		}
-			
+
+		/*
+		 * Debug action section
+		 * Controller::Action => array of filter's params (accountId, userId) or true
+		 */
+		$debug = false;
+		/*array(
+			'Scalr_UI_Controller_Core::xChangeEnvironmentAction' => array('accountId' => array('7871', '263', '9159', '6412', '6957')),
+			'Scalr_UI_Controller_Guest::xGetContextAction' => array('accountId' => array('7871', '263', '9159', '6412', '6957'))
+		);*/
+		$debugMode = false;
+		$key = get_class($this) . '::' . $method;
+
+		if ($debug && array_key_exists($key, $debug)) {
+			$value = $debug[$key];
+
+			if (is_array($value) && $this->user) {
+				if (isset($value['accountId'])) {
+					if (is_array($value['accountId']) && in_array($this->user->getAccountId(), $value['accountId']))
+						$debugMode = true;
+
+					if (is_numeric($value['accountId']) && $value['accountId'] == $this->user->getAccountId())
+						$debugMode = true;
+				}
+
+				if (isset($value['userId'])) {
+					if (is_array($value['userId']) && in_array($this->user->getId(), $value['userId']))
+						$debugMode = true;
+
+					if (is_numeric($value['userId']) && $value['userId']== $this->user->getId())
+						$debugMode = true;
+				}
+			} else {
+				$debugMode = true;
+			}
+		}
+
+		if ($debugMode) {
+			$this->response->debugLog('Server', $_SERVER);
+			$this->response->debugLog('Request', $_REQUEST);
+			$this->response->debugLog('Session', Scalr_Session::getInstance());
+		}
+
 		$this->{$method}();
+
+		if ($debugMode) {
+			if ($this->response->jsResponseFlag) {
+				$this->response->debugLog('JS Response', $this->response->jsResponse);
+			}
+
+			try {
+				$message = '';
+				foreach($this->response->serverDebugLog as $value) {
+					$message .= $value['key'] . ":\n" . $value['value'] . "\n\n";
+				}
+
+				$this->db->Execute('INSERT INTO ui_debug_log (ipaddress, dtadded, url, report, env_id, account_id, user_id) VALUES(?, NOW(), ?, ?, ?, ?, ?)', array(
+					$this->request->getClientIp(),
+					$key,
+					$message,
+					$this->getEnvironment() ? $this->getEnvironmentId() : 0,
+					$this->user ? $this->user->getAccountId() : 0,
+					$this->user ? $this->user->getId() : 0
+				));
+
+			} catch(Exception $e) {}
+		}
 	}
 
 	public function addUiCacheKeyPatternChunk($chunk)
@@ -444,6 +509,8 @@ class Scalr_UI_Controller
 
 	static public function handleRequest($pathChunks, $params)
 	{
+		$startTime = microtime(true);
+			
 		if ($pathChunks[0] == '')
 			$pathChunks = array('guest');
 
@@ -488,15 +555,37 @@ class Scalr_UI_Controller
 		} catch (Scalr_UI_Exception_NotFound $e) {
 			Scalr_UI_Response::getInstance()->setHttpResponseCode(404);
 
+		} catch (ADODB_Exception $e) {
+			try {
+				$db = Core::getDBInstance();
+				$user = Scalr_UI_Request::getInstance()->getUser();
+
+				$db->Execute('INSERT INTO ui_errors (tm, file, lineno, url, short, message, browser, account_id) VALUES (NOW(), ?, ?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE cnt = cnt + 1', array(
+					$e->getFile(),
+					$e->getLine(),
+					$_SERVER['REQUEST_URI'],
+					$e->getMessage(),
+					$e->getTraceAsString(),
+					$_SERVER['HTTP_USER_AGENT'],
+					$user ? $user->getAccountId() : ''
+				));
+
+				Scalr_UI_Response::getInstance()->failure('Database error (1)');
+
+			} catch (Exception $e) {
+				Scalr_UI_Response::getInstance()->failure('Database error (2)');
+			}
+
 		} catch (Exception $e) {
 			Scalr_UI_Response::getInstance()->failure($e->getMessage());
 		}
 
+		Scalr_UI_Response::getInstance()->setHeader("X-Scalr-ActionTime", microtime(true) - $startTime);
 		Scalr_UI_Response::getInstance()->sendResponse();
 	}
 
 	/**
-	 * 
+	 *
 	 * @return Scalr_UI_Controller
 	 */
 	static public function loadController($controller, $prefix = 'Scalr_UI_Controller', $checkPermissions = false)
@@ -515,5 +604,15 @@ class Scalr_UI_Controller
 		}
 
 		throw new Scalr_UI_Exception_NotFound($className);
+	}
+
+	/**
+	 * Gets DI Container
+	 *
+	 * @return \Scalr\DependencyInjection\Container Returns DI Container
+	 */
+	public function getContainer()
+	{
+		return $this->container;
 	}
 }

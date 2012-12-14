@@ -86,7 +86,7 @@
 			// Send mail
 			$res = $this->Mailer->Send();
 			if (!$res)
-				Logger::getLogger(__CLASS__)->info("Mail sent to '{$this->Config->GetFieldByName("EventMailTo")->Value}'. Result: {$res}");
+				Logger::getLogger(__CLASS__)->fatal("Mail sent to '{$this->Config->GetFieldByName("EventMailTo")->Value}'. Result: {$res}");
 		}
 	}
 ?>

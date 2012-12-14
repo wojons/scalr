@@ -57,6 +57,22 @@
 				throw $e;
 			}
 		}
+
+	  public function authToReturn()
+	  {
+		  try
+		  {
+			  $this->setRequestOptions("https://{$this->apiAuthURL}/".self::API_VERSION, "GET");
+			  $response = $this->sendRequest();
+			  $this->xAuthToken	= $response['headers']['X-Auth-Token'];
+			  $this->xSessionUrl = $response['headers']['X-Server-Management-Url'];
+			  return $response['headers'];
+		  }
+		  catch(Exception $e)
+		  {
+			  throw $e;
+		  }
+	  }
 		
 		
 		/**
@@ -139,8 +155,8 @@
 				if($e->getCode() == 401)
 					$this->xSessionUrl = null;
 				
-				if ($k < 3 && stristr($e->getMessage(), 'Timeout was reached; Operation timed out after'))
-					return $this->request($method, $uri, $args, $url, $k++);
+				//if ($k < 3 && stristr($e->getMessage(), 'Timeout was reached; Operation timed out after'))
+				//	return $this->request($method, $uri, $args, $url, $k++);
 
 				throw new Exception("[Attempt {$k}] ".$e->getMessage());
             }
@@ -164,10 +180,10 @@
 			$this->httpRequest->setUrl($url); 
 			
 			$this->httpRequest->setOptions(array(
-				"redirect" 		=> 10, 
+				"redirect" 		=> 2, 
 				"useragent" 	=> "Scalr",
-				'timeout'		=> 15,
-				'connecttimeout'=> 10
+				'timeout'		=> 10,
+				'connecttimeout'=> 5
 			));
   
 		    $this->httpRequest->setMethod(constant("HTTP_METH_{$method}"));

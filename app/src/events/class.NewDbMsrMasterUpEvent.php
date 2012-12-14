@@ -20,5 +20,10 @@
 			
 			$this->DBServer = $DBServer;
 		}
+		
+		public function getTextDetails()
+		{
+			return "New database master UP: {$this->DBServer->serverId} Public IP: {$this->DBServer->remoteIp} Internal IP: {$this->DBServer->localIp}";
+		}
 	}
 ?>

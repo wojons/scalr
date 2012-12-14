@@ -49,6 +49,7 @@ class Scalr_UI_Controller_Services_Configurations_Presets extends Scalr_UI_Contr
 			if (!in_array($this->getParam('roleBehavior'), array(
 				ROLE_BEHAVIORS::MYSQL,
 				ROLE_BEHAVIORS::MYSQL2,
+				ROLE_BEHAVIORS::PERCONA,
 				ROLE_BEHAVIORS::APACHE, 
 				ROLE_BEHAVIORS::MEMCACHED,
 				ROLE_BEHAVIORS::NGINX,
@@ -221,6 +222,14 @@ class Scalr_UI_Controller_Services_Configurations_Presets extends Scalr_UI_Contr
 			$sql .= " AND id=".$this->db->qstr($this->getParam('presetId'));
 
 		$response = $this->buildResponseFromSql($sql, array("name", "role_behavior"));
+
+		foreach($response['data'] as &$row) {
+			if ($row['dtadded'])
+				$row['dtadded'] = Scalr_Util_DateTime::convertTz($row['dtadded']);
+
+			if ($row['dtlastmodified'])
+				$row['dtlastmodified'] = Scalr_Util_DateTime::convertTz($row['dtlastmodified']);
+		}
 
 		$this->response->data($response);
 	}

@@ -2,5 +2,12 @@
 driver=mysqli
 host = "localhost"
 name = "scalr"
-user = "scalr"
+user = "root"
 pass = ""
+
+
+[statistics]
+rrd_default_font_path	= "/usr/share/rrdtool/fonts/DejaVuSansMono-Roman.ttf"
+rrd_db_dir				= "/home/rrddata"
+rrd_stats_url			= "http://example.com/%fid%/%rn%_%wn%."
+rrd_graph_storage_path	= "/home/graphics"

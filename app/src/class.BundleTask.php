@@ -34,7 +34,11 @@
 		public $description;
 		public $roleId;
 		public $farmId;
-		public $cloudLocation;		
+		public $cloudLocation;	
+		
+		public $osFamily;
+		public $osName;
+		public $osVersion;	
 		
 		private $Db;
 		private $tz;
@@ -61,7 +65,10 @@
 			'role_id'		=> 'roleId',
 			'farm_id'		=> 'farmId',
 			'cloud_location'=> 'cloudLocation',
-			'meta_data'		=> 'metaData'
+			'meta_data'		=> 'metaData',
+			'os_family'		=> 'osFamily',
+			'os_name'		=> 'osName',
+			'os_version'	=> 'osVersion'
 		);
 		
 		public function __construct($id)

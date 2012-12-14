@@ -1,1 +1,0 @@
-Instance {$event->DBServer->serverId} has new IP: {$event->NewIPAddress} 

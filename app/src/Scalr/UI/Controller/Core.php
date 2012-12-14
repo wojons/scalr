@@ -7,32 +7,6 @@ class Scalr_UI_Controller_Core extends Scalr_UI_Controller
 		return true;
 	}
 
-/*
-    if ($req_redirect_to == 'support')
-	{
-		$farms_rs = $db->GetAll("SELECT id FROM farms WHERE clientid=?", array(::getInstance()->getClientId()));
-		$farms = array();
-		foreach ($farms_rs as $frm)
-			$farms[] = $frm['id'];
-
-		$farms = implode(', ', array_values($farms));
-
-		$user = Scalr_Account_User::init()->loadById(::getInstance()->getUserId());
-
-		$args = array(
-        	"name"		=> $user->fullname,
-			"Farms"		=> $farms,
-			"ClientID"	=> $user->getAccountId(),
-			"email"		=> $user->getEmail(),
-        	"expires" => date("D M d H:i:s O Y", time()+120)
-        );
-
-		$token = GenerateTenderMultipassToken(json_encode($args));
-        //////////////////////////////
-
-        UI::Redirect("http://support.scalr.net/?sso={$token}");
-	}
-*/
 	public function supportAction()
 	{
 		if ($this->user) {
@@ -147,12 +121,11 @@ class Scalr_UI_Controller_Core extends Scalr_UI_Controller
 	public function settingsAction()
 	{
 		$panel = $this->user->getDashboard($this->getEnvironmentId());
-		if (! is_array($panel))
-			$panel = array();
+
 		$params = array(
 			'rss_login' => $this->user->getSetting(Scalr_Account_User::SETTING_RSS_LOGIN),
 			'rss_pass' => $this->user->getSetting(Scalr_Account_User::SETTING_RSS_PASSWORD),
-			'default_environment' => $this->user->getSetting(Scalr_Account_User::SETTING_DEFAULT_ENVIRONMENT),
+			'default_environment' => $this->user->getSetting(Scalr_Account_User::SETTING_DEFAULT_ENVIRONMENT) ? $this->user->getSetting(Scalr_Account_User::SETTING_DEFAULT_ENVIRONMENT) : '',
 			'default_environment_list' => $this->user->getEnvironments(),
 			'user_email' => $this->user->getEmail(),
 			'settings' => array(
@@ -160,8 +133,7 @@ class Scalr_UI_Controller_Core extends Scalr_UI_Controller
 				'security_2fa_ggl' => $this->user->getSetting(Scalr_Account_User::SETTING_SECURITY_2FA_GGL)
 			),
 			'security_ip_whitelist' => $this->user->getSetting(Scalr_Account_User::SETTING_SECURITY_IP_WHITELIST),
-			'dashboard_enabled' => $this->user->getSetting(Scalr_Account_User::SETTING_DASHBOARD_ENABLED),
-			'dashboard_columns' => count($panel)
+			'dashboard_columns' => count($panel['configuration'])
 		);
 
 		$this->response->page('ui/core/settings.js', $params);
@@ -183,32 +155,22 @@ class Scalr_UI_Controller_Core extends Scalr_UI_Controller
 			if (strlen($rssPass) < 6)
 				$err['rss_pass'] = "RSS feed password must be 6 chars or more";
 		}
-		if ($this->getParam('dashboard_enabled') == '1') {
-			$panel = $this->user->getDashboard($this->getEnvironmentId());
-			if (! is_array($panel))
-				$panel = array();
-			if ($this->getParam('dashboard_columns') > count($panel)) {
-				while ($this->getParam('dashboard_columns') > count($panel)) {
-					$panel[count($panel)] = array (
-						'widgets' => array()
-					);
-				}
-			}
-			if ($this->getParam('dashboard_columns') < count($panel)) {
-				for ($i = count($panel); $i > $this->getParam('dashboard_columns'); $i--) {
-					foreach($panel[$i-1]['widgets'] as $widg) {
-						$panel[0]['widgets'][count($panel[0]['widgets'])] = $widg;
-					}
-					unset($panel[$i-1]);
-				}
-			}
-			$this->user->setDashboard($this->getEnvironmentId(), $panel);
-		}
 
-		if ($this->getParam('dashboard_enabled') == '0') {
-			$panel = array();
-			$this->user->setDashboard($this->getEnvironmentId(), $panel);
+		$panel = $this->user->getDashboard($this->getEnvironmentId());
+		if ($this->getParam('dashboard_columns') > count($panel['configuration'])) {
+			while ($this->getParam('dashboard_columns') > count($panel['configuration'])) {
+				$panel['configuration'][] = array();
+			}
 		}
+		if ($this->getParam('dashboard_columns') < count($panel['configuration'])) {
+			for ($i = count($panel['configuration']); $i > $this->getParam('dashboard_columns'); $i--) {
+				foreach($panel['configuration'][$i-1] as $widg) {
+					$panel['configuration'][0][] = $widg;
+				}
+				unset($panel['configuration'][$i-1]);
+			}
+		}
+		$this->user->setDashboard($this->getEnvironmentId(), $panel);
 
 		$panel = self::loadController('Dashboard')->fillDash($panel);
 		if (count($err) == 0) {
@@ -255,14 +217,15 @@ class Scalr_UI_Controller_Core extends Scalr_UI_Controller
 	public function xChangeEnvironmentAction()
 	{
 		$env = Scalr_Environment::init()->loadById($this->getParam('envId'));
+
 		foreach ($this->user->getEnvironments() as $e) {
-			if ($env->id  == $e['id']) {
+			if ($env->id == $e['id']) {
 				Scalr_Session::getInstance()->setEnvironmentId($e['id']);
 				$this->response->success();
 				return;
 			}
 		}
-		
+
 		throw new Scalr_Exception_InsufficientPermissions();
 	}
 }

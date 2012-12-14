@@ -10,6 +10,10 @@
 		// For EBS storage
 		const ROLE_DATA_STORAGE_EBS_SIZE = 'mongodb.data_storage.ebs.size';
 		
+		const DATA_STORAGE_RAID_LEVEL = 'mongodb.data_storage.raid.level';
+		const DATA_STORAGE_RAID_DISKS_COUNT = 'mongodb.data_storage.raid.volumes_count';
+		const DATA_STORAGE_RAID_DISK_SIZE = 'mongodb.data_storage.raid.volume_size';
+		
 		const ROLE_KEYFILE = 'mongodb.keyfile';
 		
 		const ROLE_CLUSTER_STATUS = 'mongodb.cluster.status';
@@ -281,6 +285,9 @@
 	       					}
 	       				}
 	       					
+						$this->db->Execute("DELETE FROM services_mongodb_volumes_map WHERE farm_roleid = ? AND shard_index = ?", array($dbFarmRole->ID, $message->shardIndex));
+						$this->db->Execute("DELETE FROM services_mongodb_snapshots_map WHERE farm_roleid = ? AND shard_index = ?", array($dbFarmRole->ID, $message->shardIndex));
+							
 	       				$this->log($dbFarmRole, "Shard #{$message->shardIndex} successfully removed");
 	       					
        				} else {
@@ -458,8 +465,28 @@
 				$volumeConfig->type = $dbFarmRole->GetSetting(static::ROLE_DATA_STORAGE_ENGINE);
 				//$volumeConfig->fstype = 'xfs';
 	
-				if (in_array($dbFarmRole->GetSetting(static::ROLE_DATA_STORAGE_ENGINE), array(MYSQL_STORAGE_ENGINE::EBS, MYSQL_STORAGE_ENGINE::CSVOL))) {
+				if (in_array($volumeConfig->type, array(MYSQL_STORAGE_ENGINE::EBS, MYSQL_STORAGE_ENGINE::CSVOL))) {
 					$volumeConfig->size = $dbFarmRole->GetSetting(static::ROLE_DATA_STORAGE_EBS_SIZE);
+				}
+				elseif ($volumeConfig->type == MYSQL_STORAGE_ENGINE::RAID_EBS) {
+				
+					$volumeConfig->type = 'raid';
+					$volumeConfig->vg = $this->behavior;
+					$volumeConfig->level = $dbFarmRole->GetSetting(self::DATA_STORAGE_RAID_LEVEL);
+					$volumeConfig->disks = array();
+				
+					for ($i = 1; $i <= $dbFarmRole->GetSetting(self::DATA_STORAGE_RAID_DISKS_COUNT); $i++) {
+						$dsk = new stdClass();
+						$dsk->type = 'ebs';
+						$dsk->size = $dbFarmRole->GetSetting(self::DATA_STORAGE_RAID_DISK_SIZE);
+							
+						$volumeConfig->disks[] = $dsk;
+					}
+				
+					$volumeConfig->snapPv = new stdClass();
+					$volumeConfig->snapPv->type = 'ebs';
+					$volumeConfig->snapPv->size = 1;
+				
 				}
 				// For RackSpace
 				//TODO:

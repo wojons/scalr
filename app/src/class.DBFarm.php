@@ -7,6 +7,12 @@
 		
 		const SETTING_SZR_UPD_REPOSITORY		= 'szr.upd.repository';
 		const SETTING_SZR_UPD_SCHEDULE			= 'szr.upd.schedule';
+
+		const SETTING_LOCK                      = 'lock';
+		const SETTING_LOCK_COMMENT              = 'lock.comment';
+		const SETTING_LOCK_BY                   = 'lock.by';
+		const SETTING_LOCK_RESTRICT             = 'lock.restrict';
+		const SETTING_LOCK_UNLOCK_BY            = 'lock.unlock.by';
 		
 		public 
 			$ID,
@@ -18,7 +24,11 @@
 			$Comments,
 			$RolesLaunchOrder,
 			$ScalarizrCertificate,
-			$TermOnSyncFail;
+			$TermOnSyncFail,
+			
+			$createdByUserId,
+			$createdByUserEmail
+		;
 		
 		private $DB,
 				$environment;
@@ -35,7 +45,10 @@
 			'comments'		=> 'Comments',
 			'scalarizr_cert'=> 'ScalarizrCertificate',
 			'farm_roles_launch_order'	=> 'RolesLaunchOrder',
-			'term_on_sync_fail'	=> 'TermOnSyncFail'
+			'term_on_sync_fail'	=> 'TermOnSyncFail',
+				
+			'created_by_id' 	=> 'createdByUserId',
+			'created_by_email'	=> 'createdByUserEmail'
 		);
 		
 		/**
@@ -47,24 +60,22 @@
 		{
 			$this->ID = $id;
 			$this->DB = Core::GetDBInstance();
-			
-			$this->Logger = Logger::getLogger(__CLASS__);
 		}
 		
 		public function __sleep()
-		{
-			return array("ID", "ClientID", "Name");		
-		}
+	    {
+	        return array_values(self::$FieldPropertyMap);
+	    }
 		
 		public function __wakeup()
 		{
 			$this->DB = Core::GetDBInstance();
-			$this->Logger = Logger::getLogger(__CLASS__);
 		}
 		
-		public static function create($name)
+		//TODO: Rewrite this terrible code.
+		public static function create($name, Scalr_Account_User $user, $envId)
 		{
-			$account = Scalr_UI_Request::getInstance()->getUser()->getAccount();
+			$account = $user->getAccount();
 			$account->validateLimit(Scalr_Limits::ACCOUNT_FARMS, 1);
 			
 			$db = Core::GetDBInstance();
@@ -72,7 +83,10 @@
 			$dbFarm = new self();
 			$dbFarm->Status = FARM_STATUS::TERMINATED;
 			$dbFarm->ClientID = $account->id;
-			$dbFarm->EnvID = Scalr_UI_Request::getInstance()->getEnvironment()->id;
+			$dbFarm->EnvID = $envId;
+			
+			$dbFarm->createdByUserId = $user->id;
+			$dbFarm->createdByUserEmail = $user->getEmail();
 			
 			$dbFarm->Name = $name;
 			$dbFarm->RolesLaunchOrder = 0;
@@ -85,9 +99,9 @@
 			return $dbFarm;
 		}
 		
-		public function cloneFarm($name = false)
+		public function cloneFarm($name = false, Scalr_Account_User $user, $envId)
 		{
-			$account = Scalr_UI_Request::getInstance()->getUser()->getAccount();
+			$account = $user->getAccount();
 			$account->validateLimit(Scalr_Limits::ACCOUNT_FARMS, 1);
 			
 			$definition = $this->getDefinition();
@@ -101,7 +115,10 @@
 				}
 			}
 
-			$dbFarm = self::create($name);
+			$dbFarm = self::create($name, $user, $envId);
+			
+			$dbFarm->createdByUserId = $user->id;
+			$dbFarm->createdByUserEmail = $user->getEmail();
 			
 			foreach($definition->roles as $index => $role) {
 				$dbFarmRole = $dbFarm->AddRole(DBRole::loadById($role->roleId), $role->platform, $role->cloudLocation, $index+1);
@@ -306,7 +323,7 @@
 				DBFarmRole::SETTING_SCALING_POLLING_INTERVAL => 2,
 				DBFarmRole::SETTING_EXCLUDE_FROM_DNS => false,
 				DBFarmRole::SETTING_BALANCING_USE_ELB => false,
-				DBFarmRole::SETTING_AWS_AVAIL_ZONE => 'x-scalr-diff',
+				//DBFarmRole::SETTING_AWS_AVAIL_ZONE => 'x-scalr-diff',
 				DBFarmRole::SETTING_AWS_INSTANCE_TYPE => $DBRole->instanceType
 			);
 			
@@ -358,7 +375,65 @@
 			
 			return $this->SettingsCache[$name];
 		}
-		
+
+		/**
+		 * Check if farm is locked
+		 *
+		 * @param $throwException
+		 * @return bool
+		 * @throws Exception
+		 */
+		public function isLocked($throwException = true)
+		{
+			if ($this->GetSetting(DBFarm::SETTING_LOCK)) {
+				$message = $this->GetSetting(DBFarm::SETTING_LOCK_COMMENT);
+
+				try {
+					$userName = Scalr_Account_User::init()->loadById($this->getSetting(DBFarm::SETTING_LOCK_BY))->getEmail();
+				} catch(Exception $e) {
+					$userName = $this->getSetting(DBFarm::SETTING_LOCK_BY);
+				}
+
+				if ($message)
+					$message = sprintf(' with comment: \'%s\'', $message);
+
+				if ($throwException)
+					throw new Exception(sprintf('Farm was locked by %s%s. Please unlock it first.', $userName, $message));
+				else
+					return sprintf('Farm was locked by %s%s.', $userName, $message);
+			}
+
+			return false;
+		}
+
+		/**
+		 * @param $userId integer
+		 * @param $comment string
+		 * @param $restrict bool
+		 */
+		public function lock($userId, $comment, $restrict)
+		{
+			$this->SetSetting(DBFarm::SETTING_LOCK, 1);
+			$this->SetSetting(DBFarm::SETTING_LOCK_BY, $userId);
+			$this->SetSetting(DBFarm::SETTING_LOCK_COMMENT, $comment);
+			$this->SetSetting(DBFarm::SETTING_LOCK_UNLOCK_BY, '');
+
+			if ($this->createdByUserId && $restrict)
+				$this->SetSetting(DBFarm::SETTING_LOCK_RESTRICT, 1);
+		}
+
+		/**
+		 * @param $userId integer
+		 */
+		public function unlock($userId)
+		{
+			$this->SetSetting(DBFarm::SETTING_LOCK, '');
+			$this->SetSetting(DBFarm::SETTING_LOCK_BY, '');
+			$this->SetSetting(DBFarm::SETTING_LOCK_UNLOCK_BY, $userId);
+			$this->SetSetting(DBFarm::SETTING_LOCK_COMMENT, '');
+			$this->SetSetting(DBFarm::SETTING_LOCK_RESTRICT, '');
+		}
+
 		/**
 		 * Load DBInstance by database id
 		 * @param $id
@@ -381,6 +456,15 @@
 			}
 			
 			return $DBFarm;
+		}
+
+		static public function LoadByIDOnlyName($id)
+		{
+			$db = Core::GetDBInstance();
+
+			$farm_info = $db->GetRow("SELECT name FROM farms WHERE id=?", array($id));
+
+			return $farm_info['name'] ? $farm_info['name'] : '*removed farm*';
 		}
 		
 		public function save()
@@ -405,6 +489,8 @@
 					clientid	= ?,
 					env_id		= ?, 
 					hash		= ?, 
+					created_by_id = ?,
+					created_by_email = ?,
 					dtadded		= NOW(),						
 					farm_roles_launch_order = ?,
 					comments = ?
@@ -414,6 +500,8 @@
 					$this->ClientID,
 					$this->EnvID, 
 					$this->Hash, 
+					$this->createdByUserId,
+					$this->createdByUserEmail,
 					$this->RolesLaunchOrder,
 					$this->Comments
                 ));

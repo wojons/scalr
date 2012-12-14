@@ -2,7 +2,7 @@
 	class Scalr_Service_Cloud_Aws
 	{
 		/**
-		 * 
+		 *
 		 * Amazon IAM Client
 		 * @param string $access_key
 		 * @param string $secret_key
@@ -13,11 +13,11 @@
 			$iam = new Scalr_Service_Cloud_Aws_Iam_Client($secret_key, $access_key);
 			return $iam;
 		}
-		
-		
-		
+
+
+
 		/**
-		 * 
+		 *
 		 * Enter description here ...
 		 * @param unknown_type $accessKey
 		 * @param unknown_type $accessKeyId
@@ -30,12 +30,12 @@
 		{
 			$ec2 = AmazonEC2::GetInstance(AWSRegions::GetAPIURL($region));
 			$ec2->SetAuthKeys($privateKey, $certificate);
-			
+
 			return $ec2;
 		}
-		
+
 		/**
-		 * 
+		 *
 		 * Enter description here ...
 		 * @param unknown_type $access_key
 		 * @param unknown_type $secret_key
@@ -46,32 +46,23 @@
 		{
 			$rds = AmazonRDS::GetInstance($access_key, $secret_key);
 		    $rds->SetRegion($region);
-		    
+
 		    return $rds;
 		}
-		
+
 		/**
-		 * 
-		 * Enter description here ...
-		 * @param unknown_type $region
-		 * @param unknown_type $access_key
-		 * @param unknown_type $secret_key
-		 * @return AmazonELB
+		 * @deprecated This method has been deprecated since we started using new AWS Elb library.
 		 */
 		public static function newElb($region, $access_key, $secret_key)
 		{
-			$elb = AmazonELB::GetInstance($access_key, $secret_key);
-			$elb->SetRegion($region);
-			
-			return $elb;
+			throw new Exception('Deprecated method.');
 		}
-		
+
 		public static function newVpc($region, $privateKey, $certificate)
 		{
-			$vpc = AmazonVPC::GetInstance(AWSRegions::GetAPIURL($region)); 
+			$vpc = AmazonVPC::GetInstance(AWSRegions::GetAPIURL($region));
 			$vpc->SetAuthKeys($privateKey, $certificate);
-			
+
 			return $vpc;
 		}
 	}
-?>

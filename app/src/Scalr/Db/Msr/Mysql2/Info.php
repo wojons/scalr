@@ -10,9 +10,9 @@ class Scalr_Db_Msr_Mysql2_Info extends Scalr_Db_Msr_Info {
 		$logFile;
 	
 	
-	public function __construct(DBFarmRole $dbFarmRole, DBServer $dbServer) {
+	public function __construct(DBFarmRole $dbFarmRole, DBServer $dbServer, $type = null) {
 		
-		$this->databaseType = ROLE_BEHAVIORS::MYSQL2;
+		$this->databaseType = ($type) ? $type : ROLE_BEHAVIORS::MYSQL2;
 		
 		parent::__construct($dbFarmRole, $dbServer);
 

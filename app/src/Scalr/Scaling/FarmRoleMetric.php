@@ -20,6 +20,7 @@
 			$farmRoleId,
 			$metricId,
 			$dtLastPolled,
+			$instancesNumber,
 			$lastValue;
 			
 		protected $metric,
@@ -122,7 +123,19 @@
 			else
 				$invert = false;
 			
-			return $algo->makeDecision($dbFarmRole, $this, $invert);
+			if ($this->getMetric()->name == 'DateAndTime') {
+				$decision = $algo->makeDecision($dbFarmRole, $this, $invert);
+				$this->instancesNumber = $algo->instancesNumber;
+				$this->lastValue = $algo->lastValue;
+				
+				return $decision;
+			} elseif ($this->getMetric()->name == 'FreeRam') {
+				if ($this->lastValue == 0)
+					return Scalr_Scaling_Decision::NOOP;
+				else
+					return $algo->makeDecision($dbFarmRole, $this, $invert);
+			} else
+				return $algo->makeDecision($dbFarmRole, $this, $invert);
 		}
 		
 		/**

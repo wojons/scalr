@@ -1,12 +1,13 @@
 <?php
 
-	Core::Load("Data/RRD");
+	//Core::Load("Data/RRD");
 	
 	require_once(APPPATH . "/cron/watchers/class.SNMPWatcher.php");
 	require_once(APPPATH . "/cron/watchers/class.CPUSNMPWatcher.php");
 	require_once(APPPATH . "/cron/watchers/class.LASNMPWatcher.php");
 	require_once(APPPATH . "/cron/watchers/class.MEMSNMPWatcher.php");
 	require_once(APPPATH . "/cron/watchers/class.NETSNMPWatcher.php");
+	require_once(APPPATH . "/cron/watchers/class.ServersNumWatcher.php");
 	
 	class Scalr_Cronjob_SNMPStatsPoller extends Scalr_System_Cronjob_MultiProcess_DefaultWorker
     {
@@ -38,7 +39,7 @@
         	$this->db = Core::GetDBInstance();
         	
         	// key = watcher_name, value = use average value for varm and role
-        	$this->watchers = array("CPUSNMP" => true, "MEMSNMP" => true, "LASNMP" => true, "NETSNMP" => false);
+        	$this->watchers = array("CPUSNMP" => true, "MEMSNMP" => true, "LASNMP" => true, "NETSNMP" => false, "ServersNum" => false);
         }
         
         function startForking ($workQueue) {
@@ -60,7 +61,7 @@
         function enqueueWork ($workQueue) {
             $this->logger->info("Fetching active farms...");
             
-            $rows = $this->db->GetAll("SELECT farms.*, clients.isactive FROM farms 
+            $rows = $this->db->GetAll("SELECT farms.id FROM farms 
             	INNER JOIN clients ON clients.id = farms.clientid 
             	WHERE farms.status='1' AND clients.status='Active'");
             $this->logger->info("Found ".count($rows)." farms");            
@@ -96,7 +97,9 @@
             //			
                         
             // Check data folder for farm
-			$farm_rrddb_dir = CONFIG::$RRD_DB_DIR."/{$farmId}";
+            $lastDigit = substr("{$farmId}", -1);
+			$farm_rrddb_dir = CONFIG::$RRD_DB_DIR."/{$lastDigit}/{$farmId}";
+            //$farm_rrddb_dir = CONFIG::$RRD_DB_DIR."/{$farmId}";
 			
             if (!file_exists($farm_rrddb_dir))
             {
@@ -144,29 +147,35 @@
             		$this->snmpWatcher->ResetData();
             		
             		foreach (array_keys($this->watchers) as $watcher_name)
-            		{            			
-            			// Get data
-            			$data = $this->snmpWatcher->GetDataByWatcher($watcher_name);
-            			
-            			if ($data[0] === '' || $data[0] === false || $data[0] === null)
-            			{
-            				$this->logger->info('break (Line: 142)');
-            				break;
+            		{   
+            			if ($watcher_name != 'ServersNum') {         			
+	            			// Get data
+	            			$data = $this->snmpWatcher->GetDataByWatcher($watcher_name);
+	            			
+	            			if (!$data)
+	            			{
+	            				$this->logger->info('break (Line: 142)');
+	            				break;
+	            			}
+	            			
+	            			// Collect data
+	            			foreach($data as $k=>$v)
+	            			{
+	            				$role_data[$watcher_name][$k] += (float)$v;
+	            				$farm_data[$watcher_name][$k] += (float)$v;
+	            			}
+	            			
+	            			$this->snmpWatcher->UpdateRRDDatabase($watcher_name, $data, "INSTANCE_{$farm_role["id"]}_{$DBServer->index}");
             			}
-            			
-            			// Collect data
-            			foreach($data as $k=>$v)
-            			{
-            				$role_data[$watcher_name][$k] += (float)$v;
-            				$farm_data[$watcher_name][$k] += (float)$v;
-            			}
-            			
-            			$this->snmpWatcher->UpdateRRDDatabase($watcher_name, $data, "INSTANCE_{$farm_role["id"]}_{$DBServer->index}");
             		}
             		
             		$role_icnt++;
             		$farm_icnt++;
             	}
+            	
+            	$role_data['ServersNum'] = array(
+            		"s_running" => $this->db->GetOne("SELECT COUNT(*) FROM servers WHERE status='Running' AND farm_roleid=?", array($farm_role["id"]))	
+            	);
             	
             	//Update data and build graphic for role
             	foreach ($role_data as $watcher_name => $data)
@@ -178,7 +187,7 @@
             				$ditem = round($ditem/$role_icnt, 2);
             		}
             			
-             		if ($data[0] === '' || $data[0] === false || $data[0] === null)
+             		if (!$data)
              		{
             			$this->logger->info('break 1 (Line: 172)');
              			break 1;
@@ -196,6 +205,10 @@
             	}
             }
             
+            $farm_data['ServersNum'] = array(
+            	"s_running" => $this->db->GetOne("SELECT COUNT(*) FROM servers WHERE status='Running' AND farm_id=?", array($farmId))
+            );
+            
             // Update data and build graphic for farm
         	foreach ($farm_data as $watcher_name => $data)
             {
@@ -206,7 +219,7 @@
             			$ditem = round($ditem/$farm_icnt, 2);
             	}
             	
-            	if ($data[0] === '' || $data[0] === false || $data[0] === null)
+            	if (!$data)
             	{
             		$this->logger->info('continue (Line: 200)');
             		continue;

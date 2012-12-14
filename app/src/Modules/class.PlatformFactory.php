@@ -17,6 +17,8 @@
 					self::$cache[$platform] = new Modules_Platforms_Ec2();
 				elseif ($platform == SERVER_PLATFORMS::RDS)
 					self::$cache[$platform] = new Modules_Platforms_Rds();
+				elseif ($platform == SERVER_PLATFORMS::GCE)
+					self::$cache[$platform] = new Modules_Platforms_GoogleCE();
 				elseif ($platform == SERVER_PLATFORMS::EUCALYPTUS)
 					self::$cache[$platform] = new Modules_Platforms_Eucalyptus();
 				elseif ($platform == SERVER_PLATFORMS::RACKSPACE)
@@ -25,6 +27,10 @@
 					self::$cache[$platform] = new Modules_Platforms_Nimbula();
 				elseif ($platform == SERVER_PLATFORMS::CLOUDSTACK)
 					self::$cache[$platform] = new Modules_Platforms_Cloudstack();
+				elseif ($platform == SERVER_PLATFORMS::IDCF)
+					self::$cache[$platform] = new Modules_Platforms_Idcf();
+				elseif ($platform == SERVER_PLATFORMS::UCLOUD)
+					self::$cache[$platform] = new Modules_Platforms_uCloud();
 				elseif ($platform == SERVER_PLATFORMS::OPENSTACK)
 					self::$cache[$platform] = new Modules_Platforms_Openstack();
 				else

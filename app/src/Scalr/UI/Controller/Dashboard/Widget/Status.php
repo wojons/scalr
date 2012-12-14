@@ -43,6 +43,10 @@ class Scalr_UI_Controller_Dashboard_Widget_Status extends Scalr_UI_Controller_Da
 				'name' => 'AP_block',
 				'filter' => 'Singapore'
 			),
+			'ap-southeast-2' => array(
+				'name' => 'AP_block',
+				'filter' => 'Sydney'
+			),
 			'ap-northeast-1' => array(
 				'name' => 'AP_block',
 				'filter' => 'Tokyo'
@@ -52,7 +56,8 @@ class Scalr_UI_Controller_Dashboard_Widget_Status extends Scalr_UI_Controller_Da
 			$neededLocations = $this->getUsedLocations();
 			$params['locations'] = $neededLocations;
 		} else
-			$neededLocations = json_decode($params['locations']);
+			$neededLocations = $params['locations'];
+
 		if (file_exists($awsCachePath) && (time() - filemtime($awsCachePath) < 3600)) {
 			clearstatcache();
 			$time = filemtime($awsCachePath);
@@ -61,10 +66,12 @@ class Scalr_UI_Controller_Dashboard_Widget_Status extends Scalr_UI_Controller_Da
 			$html = file_get_contents('http://status.aws.amazon.com');
 			$dom->loadHTML($html);
 			$dom->preserveWhiteSpace = false;
+
 			foreach ($compliance as $compKey=>$compValue) {
 				$div = $dom->getElementById($compValue['name']);
 				$tables = $div->getElementsByTagName('table');
 				$rows = $tables->item(0)->getElementsByTagName('tr');
+
 				foreach ($rows as $row)
 				{
 					$cols = $row->getElementsByTagName('td');
@@ -90,26 +97,37 @@ class Scalr_UI_Controller_Dashboard_Widget_Status extends Scalr_UI_Controller_Da
 						}
 					}
 				}
+
 			}
+
 			file_put_contents($awsCachePath, json_encode($data));
 		}
-		$retval = array();
+		$retval = array('locations' => json_encode($neededLocations));
 		foreach ($neededLocations as $value) {
-			$retval['result'][] = $data[$value];
+			$retval['data'][] = $data[$value];
 		}
 		return $retval;
 	}
 
-	public function xGetContentAction () {
-		$this->response->data($this->getContent(array('locations'=>$this->request->getParam('locations'))));
+	public function xGetContentAction ()
+	{
+		$this->request->defineParams(array(
+			'locations' => array('type' => 'json')
+		));
+
+		$this->response->data(
+			$this->getContent(array(
+					'locations' => $this->request->getParam('locations')
+				)
+			)
+		);
 	}
 
-	public function xGetLocationsAction () {
-		$this->response->data(array('locations'=>self::loadController('Platforms')->getCloudLocations(SERVER_PLATFORMS::EC2, false)));
-	}
-
-	public function xGetUsedLocationsAction () {
-		$this->response->data(array('locations'=>json_encode($this->getUsedLocations())));
+	public function xGetLocationsAction ()
+	{
+		$this->response->data(array(
+			'locations' => self::loadController('Platforms')->getCloudLocations(SERVER_PLATFORMS::EC2, false)
+		));
 	}
 
 	public function getUsedLocations() {

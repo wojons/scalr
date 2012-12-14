@@ -15,6 +15,7 @@
 		const EUCA_EBS = 'euca.ebs';
 		
 		const RS_CFILES = 'rs.cfiles';
+		const GCE_STORAGE = 'gce.storage';
 		
 		const OSTACK_GLANCE = 'ostack.glance';
 		

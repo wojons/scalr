@@ -15,6 +15,7 @@
 				'eu-west-1'		 => 'AWS / EU West 1 (Ireland)',
 				'sa-east-1'		 => 'AWS / SA East 1 (Sao Paulo)', 
 				'ap-southeast-1' => 'AWS / Asia Pacific East 1 (Singapore)',
+				'ap-southeast-2' => 'AWS / Asia Pacific East 2 (Sydney)',
 				'ap-northeast-1' => 'AWS / Asia Pacific North 1 (Tokyo)'
 			);
 		}

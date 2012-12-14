@@ -105,6 +105,9 @@ class Scalr_UI_Controller_Bundletasks extends Scalr_UI_Controller
 			
 			$row['dtadded'] = Scalr_Util_DateTime::convertTz($row['dtadded']);
 			
+			if (!$row['bundle_type'])
+				$row['bundle_type'] = "*";
+			
 			if ($row['dtstarted'])
 				$row['dtstarted'] = Scalr_Util_DateTime::convertTz($row['dtstarted']);
 			

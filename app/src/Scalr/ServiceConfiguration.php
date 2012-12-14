@@ -41,7 +41,9 @@
 
 			error_reporting(E_ALL);
 
-		    $ini_params = @parse_ini_file(dirname(__FILE__)."/../../www/storage/service-configuration-manifests/{$this->roleBehavior}.ini", true, INI_SCANNER_RAW);
+			$filePath = @dirname(__FILE__)."/../../www/storage/service-configuration-manifests/{$this->roleBehavior}.ini";
+			
+		    $ini_params = @parse_ini_file($filePath, true, INI_SCANNER_RAW);
 		    
 			foreach ($ini_params as $param => $props)
 			{

@@ -60,6 +60,8 @@
         <item href="#/schedulertasks/view" search="SELECT COUNT(*) FROM scheduler_tasks WHERE task_name LIKE '%s' AND client_id='{CLIENT_ID}'" >Tasks scheduler</item>
 		<separator />
 		<item href="#/sshKeys/view">SSH keys manager</item>
+		<separator />
+		<item href="#/db/backups">Backups manager</item>
 		<!--
 		<separator />
 		<node title="Eucalyptus">

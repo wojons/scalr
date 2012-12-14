@@ -4,15 +4,23 @@ class Scalr_Messaging_Msg {
 	
 	public $messageId;
 
-	private $messageName;	
+	protected $messageName;	
 	
 	public $meta = array();
 	
 	public $forecastVars = array();
 	
+	//public $scripts = array();
+	
+	
 	function __construct () {
 		$this->messageId = Scalr::GenerateUID();
 		$this->meta[Scalr_Messaging_MsgMeta::SCALR_VERSION] = SCALR_VERSION;
+	}
+	
+	function setName($name) {
+		if ($this->messageName === null)
+			$this->messageName = $name;
 	}
 	
 	function getName () {

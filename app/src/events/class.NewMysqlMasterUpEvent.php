@@ -23,5 +23,10 @@
 			$this->SnapURL = $SnapURL;
 			$this->OldMasterDBServer = $OldMasterDBServer;
 		}
+		
+		public function getTextDetails()
+		{
+			return "New MySQL master UP: {$this->DBServer->serverId} Public IP: {$this->DBServer->remoteIp} Internal IP: {$this->DBServer->localIp}";
+		}
 	}
 ?>

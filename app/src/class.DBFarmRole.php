@@ -15,6 +15,7 @@
 		const SETTING_SCALING_POLLING_INTERVAL			= 	'scaling.polling_interval';
 		const SETTING_SCALING_LAST_POLLING_TIME			= 	'scaling.last_polling_time';
 		const SETTING_SCALING_KEEP_OLDEST				= 	'scaling.keep_oldest';
+		const SETTING_SCALING_IGNORE_FULL_HOUR			= 	'scaling.ignore_full_hour';
 		const SETTING_SCALING_SAFE_SHUTDOWN				=	'scaling.safe_shutdown';
 		const SETTING_SCALING_EXCLUDE_DBMSR_MASTER      =   'scaling.exclude_dbmsr_master';
 		const SETTING_SCALING_ONE_BY_ONE				=   'scaling.one_by_one';
@@ -62,11 +63,18 @@
 		/** NIMBULA Settings **/
 		const SETTING_NIMBULA_SHAPE				=		'nimbula.shape';
 		
+		/** GCE Settings **/
+		const SETTING_GCE_MACHINE_TYPE			=		'gce.machine-type';
+		const SETTING_GCE_NETWORK				=		'gce.network';
+		
 		/** Cloudstack Settings **/
 		const SETTING_CLOUDSTACK_SERVICE_OFFERING_ID		=		'cloudstack.service_offering_id';
 		const SETTING_CLOUDSTACK_NETWORK_OFFERING_ID		=		'cloudstack.network_offering_id';
+		const SETTING_CLOUDSTACK_DISK_OFFERING_ID			=		'cloudstack.disk_offering_id';
 		const SETTING_CLOUDSTACK_NETWORK_ID					=		'cloudstack.network_id';
 		const SETTING_CLOUDSTACK_NETWORK_TYPE				=		'cloudstack.network_type';
+		const SETTING_CLOUDSTACK_SHARED_IP_ADDRESS			=		'cloudstack.shared_ip.address';
+		const SETTING_CLOUDSTACK_SHARED_IP_ID				=		'cloudstack.shared_ip.id';
 		
 		/** EUCA Settings **/
 		const SETTING_EUCA_INSTANCE_TYPE 		= 		'euca.instance_type';
@@ -76,7 +84,13 @@
 		const SETTING_AWS_INSTANCE_TYPE 		= 		'aws.instance_type';
 		const SETTING_AWS_AVAIL_ZONE			= 		'aws.availability_zone';
 		const SETTING_AWS_USE_ELASIC_IPS		= 		'aws.use_elastic_ips';
+		const SETTING_AWS_ELASIC_IPS_MAP		= 		'aws.elastic_ips.map';
+	
+		const SETTING_AWS_EBS_OPTIMIZED				= 		'aws.ebs_optimized';
+		
 		const SETTING_AWS_USE_EBS				=		'aws.use_ebs';
+		const SETTING_AWS_EBS_IOPS				= 		'aws.ebs_iops';
+		const SETTING_AWS_EBS_TYPE				= 		'aws.ebs_type';
 		const SETTING_AWS_EBS_SIZE				=		'aws.ebs_size';
 		const SETTING_AWS_EBS_SNAPID			=		'aws.ebs_snapid';
 		const SETTING_AWS_EBS_MOUNT				=		'aws.ebs_mount';
@@ -188,21 +202,16 @@
 			$this->DB = Core::GetDBInstance();
 			
 			$this->ID = $farm_roleid;
-			
-			$this->Logger = Logger::getLogger(__CLASS__);
 		}
 		
 		public function __sleep()
-		{
-			$retval = array("ID", "FarmID", "RoleID");
-			
-			return $retval;
-		}
+	    {
+	        return array_values($FieldPropertyMap);
+	    }
 		
 		public function __wakeup()
 		{
 			$this->DB = Core::GetDBInstance();
-			$this->Logger = Logger::getLogger(__CLASS__);
 		}
 		
 		public function applyDefinition($definition, $reset = false)
@@ -494,15 +503,7 @@
                 	try
 					{
 						PlatformFactory::NewPlatform($DBServer->platform)->TerminateServer($DBServer);
-                           
-						$this->DB->Execute("UPDATE servers_history SET
-							dtterminated	= NOW(),
-							terminate_reason	= ?
-							WHERE server_id = ?
-						", array(
-							sprintf("Role removed from farm"),
-							$DBServer->serverId
-						));
+                        Scalr_Server_History::init($DBServer)->markAsTerminated("Role removed from farm", true);
 					}
 					catch(Exception $e){}
 					
@@ -701,14 +702,33 @@
 			}
 		}
 		
-		public function SetScripts(array $scripts)
+		public function SetScripts(array $scripts, array $params = array())
 		{
 			$this->DB->Execute("DELETE FROM farm_role_scripts WHERE farm_roleid=?", array($this->ID));
 			
-			if (count($scripts) > 0)
-			{						
-				foreach ($scripts as $script)
-				{							
+			if (count($params) > 0) {
+				foreach ($params as $param) {
+					$roleScriptId = $param['role_script_id'];
+					$roleParams = $this->DB->GetOne("SELECT params FROM role_scripts WHERE id = ?", array($roleScriptId));
+					$newParams = serialize($param['params']);
+					if ($newParams != $roleParams) {
+						$this->DB->Execute("REPLACE INTO farm_role_scripting_params SET
+							farm_role_id = ?,
+							role_script_id = ?,
+							farm_role_script_id = ?,
+							params = ?
+						", array(
+							$this->ID,
+							$roleScriptId,
+							0,
+							$newParams
+						));
+					}
+				}
+			}
+			
+			if (count($scripts) > 0) {						
+				foreach ($scripts as $script) {							
 					$config = $script['params'];
 					
 					$target = $script['target'];

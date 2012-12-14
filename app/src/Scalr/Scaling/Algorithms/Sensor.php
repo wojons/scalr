@@ -37,7 +37,7 @@
 						$retval = Scalr_Scaling_Decision::NOOP;
 				}
 		
-				$isSzr = $dbFarmRole->GetRoleObject()->isSupported("0.5");
+				$isSzr = true;
 				
 				if ($retval == Scalr_Scaling_Decision::UPSCALE && ($dbFarmRole->GetPendingInstancesCount() > 5 && !$isSzr))
 					return Scalr_Scaling_Decision::NOOP;

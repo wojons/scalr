@@ -1,0 +1,1 @@
+{"postgresql.conf": {"exclude": ["hot_standby", "max_wal_senders", "data_directory", "listen_addresses", "wal_level", "wal_keep_segments", "pid_file"], "include": [], "doc": []}}

@@ -2,8 +2,6 @@
 	
 	abstract class Event
 	{
-		public $SkipDeferredOperations = false;
-		
 		private $EventID;
 		private $FarmID;
 		
@@ -72,6 +70,11 @@
 		public function GetName()
 		{
 			return str_replace(__CLASS__, "", get_class($this));
+		}
+		
+		public function getTextDetails()
+		{
+			return $this->GetName();
 		}
 	}
 ?>

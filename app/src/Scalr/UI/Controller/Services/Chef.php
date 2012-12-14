@@ -2,14 +2,31 @@
 
 class Scalr_UI_Controller_Services_Chef extends Scalr_UI_Controller
 {
-	public function xListRunListAction ()
+	public function xListRunlistAction()
 	{
-		$sql = 'SELECT id, name, description, attributes, chef_environment as chefEnv FROM services_chef_runlists WHERE `env_id` = '.$this->getEnvironmentId();
+		$this->request->defineParams(array(
+			'serverId' => array('type' => 'int'),
+			'chefEnvironment'
+		));
 
-		$response = $this->buildResponseFromSql($sql);
-		$this->response->data($response);
+		$sql = 'SELECT id, name, description, chef_server_id as servId, chef_environment as chefEnv FROM services_chef_runlists WHERE env_id = ?';
+		$params = array($this->getEnvironmentId());
+
+		if ($this->getParam('serverId')) {
+			$sql .= ' AND chef_server_id = ?';
+			$params[] = $this->getParam('serverId');
+		}
+
+		if ($this->getParam('chefEnvironment')) {
+			$sql .= ' AND chef_environment = ?';
+			$params[] = $this->getParam('chefEnvironment');
+		}
+
+		$this->response->data(array(
+			'data' => $this->db->GetAll($sql, $params)
+		));
 	}
-	
+
 	public function xListAllRecipesAction()
 	{
 		$servParams = $this->db->GetRow('SELECT url, username, auth_key FROM services_chef_servers WHERE id = ?', array($this->getParam('servId')));
@@ -52,7 +69,7 @@ class Scalr_UI_Controller_Services_Chef extends Scalr_UI_Controller
 		if ($response instanceof stdClass)
 		$response = (array)$response;
 		
-		$roles = array();
+		$roles = array(array('name' => ''));
 		foreach ($response as $key => $value) {
 			$role = $chef->getRole($key);
 			$roles[] = array(

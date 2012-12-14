@@ -25,5 +25,10 @@
 				$this->replacementDBServer = DBServer::LoadByID($r_server['server_id']);
 			
 		}
+		
+		public function getTextDetails()
+		{
+			return "Instance {$this->DBServer->serverId} ({$this->DBServer->remoteIp}) Internal IP: {$this->DBServer->localIp} terminated";
+		}
 	}
 ?>

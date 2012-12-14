@@ -1,1 +1,0 @@
-EBS volume {$event->VolumeID} successfully mounted to {$event->Mountpoint} on {$event->DBServer->serverId} ({$event->DBServer->remoteIp}) server

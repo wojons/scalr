@@ -8,7 +8,6 @@
 		 */
 		public $DBServer;
 		
-		public $SkipDeferredOperations = true;
 		
 		public function __construct(DBServer $DBServer)
 		{

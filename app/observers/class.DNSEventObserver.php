@@ -188,8 +188,11 @@
 				}
 				
 				if ($dbRole->hasBehavior(ROLE_BEHAVIORS::NGINX)) {
-					$records[] = array("api.cloudfoundry", $server->localIp, $server->serverId, 'cloudfoundry');
-					$records[] = array("api.cloudfoundry", $server->remoteIp, $server->serverId, 'cloudfoundry');
+					//$records[] = array("int.api.cloudfoundry", $server->localIp, $server->serverId, 'cloudfoundry');
+					//$records[] = array("ext.api.cloudfoundry", $server->remoteIp, $server->serverId, 'cloudfoundry');
+					
+					$records[] = array("*.int.cloudfoundry", $server->localIp, $server->serverId, 'cloudfoundry');
+					$records[] = array("*.ext.cloudfoundry", $server->remoteIp, $server->serverId, 'cloudfoundry');
 				}
 				
 				$isMysql = $dbRole->hasBehavior(ROLE_BEHAVIORS::MYSQL);
@@ -223,10 +226,7 @@
 				
 				$dbmsr = $dbRole->getDbMsrBehavior();
 				if ($dbmsr) {
-					
 					$recordPrefix = $dbmsr;
-					if ($recordPrefix == 'mysql2')
-						$recordPrefix == 'mysql';
 					
 					// Clear records
 					$this->DB->Execute("DELETE FROM powerdns.records WHERE `service` = ? AND domain_id = ?", array($dbmsr, $domainId));
@@ -255,7 +255,12 @@
 					}
 				}
 				
-				
+				foreach ($cnameRecords as $cr) {
+					$this->DB->Execute("INSERT INTO powerdns.records SET
+						`domain_id`=?, `name`=?, `type`=?, `content`=?, `ttl`=?, `server_id`=?, `service`=?
+					",
+					array($domainId, "$cr[0].{$domainName}", "CNAME", "{$cr[1]}", 20, $cr[2], $cr[3]));
+				}
 				
 				foreach ($records as $r) {
 					$this->DB->Execute("INSERT INTO powerdns.records SET 

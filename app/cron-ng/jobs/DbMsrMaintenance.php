@@ -42,8 +42,8 @@
         
         function enqueueWork ($workQueue) {
             
-            $rows = $this->db->GetAll("SELECT id FROM farm_roles WHERE platform != ? AND role_id IN (SELECT role_id FROM role_behaviors WHERE behavior IN (?,?,?))", 
-            	array(SERVER_PLATFORMS::RDS, ROLE_BEHAVIORS::POSTGRESQL, ROLE_BEHAVIORS::REDIS, ROLE_BEHAVIORS::MYSQL2)
+            $rows = $this->db->GetAll("SELECT id FROM farm_roles WHERE platform != ? AND role_id IN (SELECT role_id FROM role_behaviors WHERE behavior IN (?,?,?,?))", 
+            	array(SERVER_PLATFORMS::RDS, ROLE_BEHAVIORS::POSTGRESQL, ROLE_BEHAVIORS::REDIS, ROLE_BEHAVIORS::MYSQL2, ROLE_BEHAVIORS::PERCONA)
             );
             $this->logger->info("Found ".count($rows)." DbMsr farm roles...");            
             
@@ -52,7 +52,7 @@
             }
         }
 
-        private function performDbMsrAction($action, $dbFarmRole)
+        private function performDbMsrAction($action, DBFarmRole $dbFarmRole)
         {
         	if ($dbFarmRole->GetSetting(Scalr_Db_Msr::getConstant("DATA_{$action}_ENABLED")) && $dbFarmRole->GetSetting(Scalr_Db_Msr::getConstant("DATA_{$action}_EVERY")) != 0) {
 				if ($dbFarmRole->GetSetting(Scalr_Db_Msr::getConstant("DATA_{$action}_IS_RUNNING")) == 1) {	                    
@@ -102,42 +102,14 @@
                 	
 					if ($performAction)
 					{
-						// perform data bundle on master
-	               		$servers = $dbFarmRole->GetServersByFilter(array('status' => array(SERVER_STATUS::RUNNING)));
-						foreach ($servers as $dbServer) {
+						$behavior = Scalr_Role_Behavior::loadByName($dbFarmRole->GetRoleObject()->getDbMsrBehavior());
 							
-							if ($action == 'BUNDLE') {
-								if ($dbServer->GetProperty(Scalr_Db_Msr::REPLICATION_MASTER)) {
-									$dbServer->SendMessage(new Scalr_Messaging_Msg_DbMsr_CreateDataBundle());
-									
-									$dbFarmRole->SetSetting(Scalr_Db_Msr::getConstant("DATA_{$action}_IS_RUNNING"), 1);
-									$dbFarmRole->SetSetting(Scalr_Db_Msr::getConstant("DATA_{$action}_RUNNING_TS"), time());
-									$dbFarmRole->SetSetting(Scalr_Db_Msr::getConstant("DATA_{$action}_SERVER_ID"), $dbServer->serverId);
-									
-									break;
-								}
-							} elseif ($action == 'BACKUP') {
-								if ($dbServer->GetProperty(Scalr_Db_Msr::REPLICATION_MASTER)) {
-									$master = $dbServer;
-									continue;
-								}
-								
-								$bcpServer = $dbServer;
-								break;
-							}
+						if ($action == 'BUNDLE') {
+							$behavior->createDataBundle($dbFarmRole);
 						}
 						
 						if ($action == 'BACKUP') {
-							if (!$bcpServer)
-								$bcpServer = $master;	
-							
-							if ($bcpServer) {
-								$bcpServer->SendMessage(new Scalr_Messaging_Msg_DbMsr_CreateBackup());
-									
-								$dbFarmRole->SetSetting(Scalr_Db_Msr::getConstant("DATA_{$action}_IS_RUNNING"), 1);
-								$dbFarmRole->SetSetting(Scalr_Db_Msr::getConstant("DATA_{$action}_RUNNING_TS"), time());
-								$dbFarmRole->SetSetting(Scalr_Db_Msr::getConstant("DATA_{$action}_SERVER_ID"), $bcpServer->serverId);
-							}
+							$behavior->createBackup($dbFarmRole);
 						}
 					}
 	            }
@@ -164,7 +136,14 @@
         	//********* Bundle database data ***********/
        		$this->performDbMsrAction('BUNDLE', $dbFarmRole);
        		
+       		$backupsNotSupported = in_array($dbFarmRole->Platform, array(
+       			SERVER_PLATFORMS::CLOUDSTACK,
+       			SERVER_PLATFORMS::IDCF,
+       			SERVER_PLATFORMS::UCLOUD
+       		));
+       		
        		//********* Backup database data ***********/
-        	$this->performDbMsrAction('BACKUP', $dbFarmRole);
+       		if (!$backupsNotSupported)
+        		$this->performDbMsrAction('BACKUP', $dbFarmRole);
         }
     }

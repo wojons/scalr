@@ -1,1 +1,0 @@
-DNS Zone {$event->ZoneName} updated 

@@ -83,6 +83,11 @@ class Scalr_Service_Cloud_Cloudstack_Client extends Scalr_Service_Cloud_Cloudsta
         return $this->request("deployVirtualMachine", $args);
     }
     
+    public function listAvailableProductTypes()
+    {
+    	return $this->request("listAvailableProductTypes", array());
+    }
+    
     /**
     * Destroys a virtual machine. Once destroyed, only the administrator can recover it.
     *

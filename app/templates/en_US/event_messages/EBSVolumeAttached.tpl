@@ -1,1 +1,0 @@
-EBS volume {$event->VolumeID} successfully atatched as {$event->DeviceName}

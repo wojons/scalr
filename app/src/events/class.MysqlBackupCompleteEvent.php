@@ -20,5 +20,10 @@
 			$this->Operation = $Operation;
 			$this->SnapshotInfo = $SnapInfo;
 		}
+		
+		public function getTextDetails()
+		{
+			return "MySQL backup complete";
+		}
 	}
 ?>

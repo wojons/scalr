@@ -18,9 +18,9 @@
 				$location = $DBFarmRole->CloudLocation;
 				
 				$sshKey = Scalr_Model::init(Scalr_Model::SSH_KEY);
-				if (!$sshKey->loadGlobalByFarmId($DBFarm->ID, $location))
+				if (!$sshKey->loadGlobalByFarmId($DBFarm->ID, $location, SERVER_PLATFORMS::EC2))
 				{
-					$key_name = "FARM-{$DBFarm->ID}";
+					$key_name = "FARM-{$DBFarm->ID}-".SCALR_ID;
 						
 					$AmazonEC2Client = Scalr_Service_Cloud_Aws::newEc2(
 						$location, 
@@ -46,6 +46,7 @@
 				}
 			
 				try {
+					/*
 					if (!$DBFarmRole->GetSetting(DBFarmRole::SETTING_AWS_S3_BUCKET))
 					{
 						if (!$buckets[$location])
@@ -85,6 +86,7 @@
 							$buckets[$location]
 						);
 					}
+					*/
 				} catch (Exception $e) {
 					throw new Exception("Amazon S3: {$e->getMessage()}");
 				}

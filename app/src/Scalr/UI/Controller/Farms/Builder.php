@@ -145,6 +145,26 @@ class Scalr_UI_Controller_Farms_Builder extends Scalr_UI_Controller
 							if (!$role['settings'][Scalr_Db_Msr::DATA_STORAGE_EPH_DISK])
 								throw new Exception(sprintf(_("Ephemeral disk settings is required for role '%s'"), $dbRole->name));
 						}
+						
+						if ($role['settings'][Scalr_Db_Msr::DATA_STORAGE_ENGINE] == MYSQL_STORAGE_ENGINE::RAID_EBS) {
+							if (!$this->user->getAccount()->isFeatureEnabled(Scalr_Limits::FEATURE_RAID)) {
+								throw new Exception('RAID arrays are not available for your pricing plan. <a href="#/billing">Please upgrade your account to be able to use this feature.</a>');
+							}
+						}
+						
+						if ($role['settings'][Scalr_Db_Msr::DATA_STORAGE_FSTYPE] && $role['settings'][Scalr_Db_Msr::DATA_STORAGE_FSTYPE] != 'ext3') {
+							if (!$this->user->getAccount()->isFeatureEnabled(Scalr_Limits::FEATURE_MFS)) {
+								throw new Exception('Only ext3 filesystem available for your pricing plan. <a href="#/billing">Please upgrade your account to be able to use other filesystems.</a>');
+							}
+						}
+					}
+					
+					if ($dbRole->hasBehavior(ROLE_BEHAVIORS::MONGODB)) {
+						if ($role['settings'][Scalr_Role_Behavior_MongoDB::ROLE_DATA_STORAGE_ENGINE] == MYSQL_STORAGE_ENGINE::RAID_EBS) {
+							if (!$this->user->getAccount()->isFeatureEnabled(Scalr_Limits::FEATURE_RAID)) {
+								throw new Exception('RAID arrays are not available for your pricing plan. <a href="#/billing">Please upgrade your account to be able to use this feature.</a>');
+							}
+						}
 					}
 					
 					if ($role['settings'][DBFarmRole::SETTING_AWS_AVAIL_ZONE] == 'x-scalr-custom=')
@@ -204,12 +224,16 @@ class Scalr_UI_Controller_Farms_Builder extends Scalr_UI_Controller
 		if ($this->getParam('farmId')) {
 			$dbFarm = DBFarm::LoadByID($this->getParam('farmId'));
 			$this->user->getPermissions()->validate($dbFarm);
+			$dbFarm->isLocked();
 		}
 		else {
 			$this->user->getAccount()->validateLimit(Scalr_Limits::ACCOUNT_FARMS, 1);
 
 			$dbFarm = new DBFarm();
 			$dbFarm->Status = FARM_STATUS::TERMINATED;
+			
+			$dbFarm->createdByUserId = $this->user->getId();
+			$dbFarm->createdByUserEmail = $this->user->getEmail();
 		}
 
 		if ($this->getParam('farm')) {
@@ -238,6 +262,10 @@ class Scalr_UI_Controller_Farms_Builder extends Scalr_UI_Controller
 				$dbFarmRole = DBFarmRole::LoadByID($role['farm_role_id']);
 				$dbRole = DBRole::loadById($dbFarmRole->RoleID);
 				$role['role_id'] = $dbFarmRole->RoleID;
+				
+				if ($dbFarmRole->Platform == SERVER_PLATFORMS::GCE)
+					$dbFarmRole->CloudLocation = $role['cloud_location'];
+				
 			} else {
 				$update = false;
 				$dbRole = DBRole::loadById($role['role_id']);
@@ -301,7 +329,7 @@ class Scalr_UI_Controller_Farms_Builder extends Scalr_UI_Controller
 			/* End of role params management */
 
 			/* Add script options to databse */
-			$dbFarmRole->SetScripts($role['scripting']);
+			$dbFarmRole->SetScripts($role['scripting'], $role['scripting_params']);
 			/* End of scripting section */
 
 			/* Add services configuration */
@@ -381,6 +409,14 @@ class Scalr_UI_Controller_Farms_Builder extends Scalr_UI_Controller
 					'event' 		=> $script['event_name']
 				);
 			}
+			
+			//Scripting params
+			$scriptingParams = $this->db->Execute("SELECT * FROM farm_role_scripting_params WHERE farm_role_id = ? AND farm_role_script_id = '0'", array($dbFarmRole->ID));
+			$sParams = array();
+			while ($p = $scriptingParams->FetchRow()){
+				$sParams[] = array('role_script_id' => $p['role_script_id'], 'params' => unserialize($p['params']));
+			}
+			
 
 			$scalingManager = new Scalr_Scaling_Manager($dbFarmRole);
 			$scaling = array();
@@ -400,10 +436,13 @@ class Scalr_UI_Controller_Farms_Builder extends Scalr_UI_Controller
 				$isBundling = false;
 			}
 
+			$imageDetails = $dbFarmRole->GetRoleObject()->getImageDetails($dbFarmRole->Platform, $dbFarmRole->CloudLocation);
+			
 			$farmRoles[] = array(
 				'farm_role_id'	=> $dbFarmRole->ID,
 				'role_id'		=> $dbFarmRole->RoleID,
 				'platform'		=> $dbFarmRole->Platform,
+				'os'			=> $dbFarmRole->GetRoleObject()->os,
 				'generation'	=> $dbFarmRole->GetRoleObject()->generation,
 				'arch'			=> $dbFarmRole->GetRoleObject()->architecture,
 				'group'			=> ROLE_GROUPS::GetConstByBehavior($dbFarmRole->GetRoleObject()->getBehaviors()),
@@ -411,12 +450,16 @@ class Scalr_UI_Controller_Farms_Builder extends Scalr_UI_Controller
 				'is_bundle_running'	=> $isBundling,
 				'behaviors'		=> implode(",", $dbFarmRole->GetRoleObject()->getBehaviors()),
 				'scripting'		=> $scriptsObject,
+				'scripting_params' => $sParams,
 				'settings'		=> $dbFarmRole->GetAllSettings(),
 				'cloud_location'=> $dbFarmRole->CloudLocation,
 				'launch_index'	=> (int)$dbFarmRole->LaunchIndex,
 				'scaling'		=> $scaling,
 				'config_presets'=> $presets,
-				'tags'			=> $dbFarmRole->GetRoleObject()->getTags()
+				'tags'			=> $dbFarmRole->GetRoleObject()->getTags(),
+				'image_os_family' 	=> $imageDetails['os_family'],
+				'image_os_version' 	=> $imageDetails['os_version'],
+				'image_os_name'	 	=> $imageDetails['os_name']
 			);
 		}
 
@@ -426,7 +469,8 @@ class Scalr_UI_Controller_Farms_Builder extends Scalr_UI_Controller
 				'description' => $dbFarm->Comments,
 				'rolesLaunchOrder' => $dbFarm->RolesLauchOrder
 			),
-			'roles' => $farmRoles
+			'roles' => $farmRoles,
+			'lock' => $dbFarm->isLocked(false)
 		);
 	}
 
@@ -436,112 +480,16 @@ class Scalr_UI_Controller_Farms_Builder extends Scalr_UI_Controller
 		$this->response->data($res);
 	}
 
-	public function xGetRolesAction()
-	{
-		$roles = array();
-		$platforms = $this->getEnvironment()->getEnabledPlatforms();
-
-		$rolesSql = "SELECT id FROM roles WHERE (env_id = 0 OR env_id=?) AND id IN (SELECT role_id FROM role_images WHERE platform IN ('".implode("','", array_keys($platforms))."'))";
-
-		$dbroles = $this->db->Execute($rolesSql, array($this->getEnvironmentId()));
-		while ($role = $dbroles->FetchRow()) {
-			if ($this->db->GetOne("SELECT id FROM roles_queue WHERE role_id=?", array($role['id'])))
-				continue;
-
-			$dbRole = DBRole::loadById($role['id']);
-
-			$rolePlatforms = $dbRole->getPlatforms();
-			$roleLocations = array();
-			foreach ($rolePlatforms as $platform)
-				$roleLocations[$platform] = $dbRole->getCloudLocations($platform);
-
-			$roles[] = array(
-				'role_id'				=> $dbRole->id,
-				'arch'					=> $dbRole->architecture,
-				'group'					=> ROLE_GROUPS::GetConstByBehavior($dbRole->getBehaviors()),
-				'name'					=> $dbRole->name,
-				'generation'			=> $dbRole->generation,
-				'behaviors'				=> implode(",", $dbRole->getBehaviors()),
-				'origin'				=> $dbRole->origin,
-				'isstable'				=> (bool)$dbRole->isStable,
-				'platforms'				=> implode(",", $rolePlatforms),
-				'locations'				=> $roleLocations,
-				'os'					=> $dbRole->os == 'Unknown' ? 'Unknown OS' : $dbRole->os,
-				'tags'					=> $dbRole->getTags()
-			);
-		}
-
-		$this->response->success();
-		$this->response->data(array('roles' => $roles));
-	}
-
 	public function xGetScriptsAction()
 	{
-		$filterSql = " AND (";
-		// Show shared roles
-		$filterSql .= " origin='".SCRIPT_ORIGIN_TYPE::SHARED."'";
-
-		// Show custom roles
-		$filterSql .= " OR (origin='".SCRIPT_ORIGIN_TYPE::CUSTOM . "' AND clientid='" . $this->user->getAccountId() . "')";
-
-		//Show approved contributed roles
-		$filterSql .= " OR (origin='".SCRIPT_ORIGIN_TYPE::USER_CONTRIBUTED . "' AND (approval_state='" . APPROVAL_STATE::APPROVED . "' OR clientid='" . $this->user->getAccountId() . "'))";
-		$filterSql .= ")";
-
-		$scripts = $this->db->Execute("SELECT * FROM scripts WHERE 1=1 {$filterSql}");
-		$scriptsList = array();
-		
-		$builtInVariables = array_keys(CONFIG::getScriptingBuiltinVariables());
-		
-		while ($script = $scripts->FetchRow()) {
-			$dbversions = $this->db->Execute("SELECT * FROM script_revisions WHERE scriptid=? AND (approval_state=? OR (SELECT clientid FROM scripts WHERE scripts.id=script_revisions.scriptid) = '" . $this->user->getAccountId() . "')",
-				array($script['id'], APPROVAL_STATE::APPROVED)
-			);
-
-			$versions = array();
-			while ($version = $dbversions->FetchRow()) {
-				$vars = Scalr_UI_Controller_Scripts::GetCustomVariables($version["script"]);
-				$data = array();
-				foreach ($vars as $var) {
-					if (!in_array($var, $builtInVariables))
-						$data[$var] = ucwords(str_replace("_", " ", $var));
-				}
-				$versions[] = array("revision" => $version['revision'], "fields" => $data);
-			}
-
-			$scr = array(
-				'id'			=> $script['id'],
-				'name'			=> $script['name'],
-				'description'	=> $script['description'],
-				'issync'		=> $script['issync'],
-				'timeout'		=> ($script['issync'] == 1) ? CONFIG::$SYNCHRONOUS_SCRIPT_TIMEOUT : CONFIG::$ASYNCHRONOUS_SCRIPT_TIMEOUT,
-				'revisions'		=> $versions
-			);
-
-			$scriptsList[$script['id']] = $scr;
-		}
-
 		$dbRole = DBRole::loadById($this->getParam('roleId'));
 		if ($dbRole->origin == ROLE_TYPE::CUSTOM)
 			$this->user->getPermissions()->validate($dbRole);
 
-		$this->response->data(array(
-			'scripts' => $scriptsList,
-			'events' => array(
-				EVENT_TYPE::HOST_UP => EVENT_TYPE::GetEventDescription(EVENT_TYPE::HOST_UP),
-				EVENT_TYPE::HOST_INIT => EVENT_TYPE::GetEventDescription(EVENT_TYPE::HOST_INIT),
-				EVENT_TYPE::HOST_DOWN => EVENT_TYPE::GetEventDescription(EVENT_TYPE::HOST_DOWN),
-				EVENT_TYPE::REBOOT_COMPLETE => EVENT_TYPE::GetEventDescription(EVENT_TYPE::REBOOT_COMPLETE),
-				EVENT_TYPE::INSTANCE_IP_ADDRESS_CHANGED => EVENT_TYPE::GetEventDescription(EVENT_TYPE::INSTANCE_IP_ADDRESS_CHANGED),
-				EVENT_TYPE::NEW_MYSQL_MASTER => EVENT_TYPE::GetEventDescription(EVENT_TYPE::NEW_MYSQL_MASTER),
-				EVENT_TYPE::EBS_VOLUME_MOUNTED => EVENT_TYPE::GetEventDescription(EVENT_TYPE::EBS_VOLUME_MOUNTED),
-				EVENT_TYPE::BEFORE_INSTANCE_LAUNCH => EVENT_TYPE::GetEventDescription(EVENT_TYPE::BEFORE_INSTANCE_LAUNCH),
-				EVENT_TYPE::BEFORE_HOST_TERMINATE => EVENT_TYPE::GetEventDescription(EVENT_TYPE::BEFORE_HOST_TERMINATE),
-				EVENT_TYPE::DNS_ZONE_UPDATED =>  EVENT_TYPE::GetEventDescription(EVENT_TYPE::DNS_ZONE_UPDATED),
-				EVENT_TYPE::EBS_VOLUME_ATTACHED => EVENT_TYPE::GetEventDescription(EVENT_TYPE::EBS_VOLUME_ATTACHED),
-				EVENT_TYPE::BEFORE_HOST_UP => EVENT_TYPE::GetEventDescription(EVENT_TYPE::BEFORE_HOST_UP),
-			),
-			'roleScripts' => $dbRole->getScripts()
-		));
+		
+		$data = self::loadController('Scripts')->getScriptingData();
+		$data['roleScripts'] = $dbRole->getScripts();
+		
+		$this->response->data($data);
 	}
 }

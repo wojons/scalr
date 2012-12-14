@@ -21,12 +21,17 @@
 		const SZR_DEV_SCALARIZR_BRANCH = 'scalarizr.dev.scalarizr.branch';
 		
 		const SZR_IS_INIT_FAILED = 'scalarizr.is_init_failed';
+		const SZR_IS_INIT_ERROR_MSG = 'scalarizr.init_error_msg';
 		const LAUNCH_ERROR = 'system.launch.error';
+		const SUB_STATUS 		= 'system.sub-status';
 		
 		const SZR_IMPORTING_MYSQL_SERVER_TYPE = 'scalarizr.import.mysql_server_type';
 		
 		const SZR_SNMP_PORT = 'scalarizr.snmp_port';
 		const SZR_CTRL_PORT = 'scalarizr.ctrl_port';
+		const SZR_API_PORT = 'scalarizr.api_port';
+		const SZR_UPDC_PORT = 'scalarizr.updc_port';
+		const CUSTOM_SSH_PORT = 'scalarizr.ssh_port';
 		
 		/** DATABASE PROPERTIES */
 		const DB_MYSQL_MASTER	= 'db.mysql.master';

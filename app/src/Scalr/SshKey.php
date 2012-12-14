@@ -48,10 +48,10 @@
 			return "ab:ab:ab:ab";
 		}
 		
-		public function loadGlobalByName($name, $cloudLocation, $envId)
+		public function loadGlobalByName($name, $cloudLocation, $envId, $platform)
 		{
-			$info = $this->db->GetRow("SELECT * FROM ssh_keys WHERE `cloud_key_name`=? AND `cloud_location`=? AND `type`=? AND `env_id` = ?", 
-				array($name, $cloudLocation, self::TYPE_GLOBAL, $envId)
+			$info = $this->db->GetRow("SELECT * FROM ssh_keys WHERE `cloud_key_name`=? AND (`cloud_location`=? || `cloud_location`='') AND `type`=? AND `env_id` = ? AND `platform` = ?", 
+				array($name, $cloudLocation, self::TYPE_GLOBAL, $envId, $platform)
 			);
 			if (!$info)
 				return false;
@@ -59,10 +59,10 @@
 				return parent::loadBy($info);
 		}
 		
-		public function loadGlobalByFarmId($farmId, $cloudLocation)
+		public function loadGlobalByFarmId($farmId, $cloudLocation, $platform)
 		{
-			$info = $this->db->GetRow("SELECT * FROM ssh_keys WHERE `farm_id`=? AND `cloud_location`=? AND `type`=?", 
-				array($farmId, $cloudLocation, self::TYPE_GLOBAL)
+			$info = $this->db->GetRow("SELECT * FROM ssh_keys WHERE `farm_id`=? AND (`cloud_location`=? OR `cloud_location` = '') AND `type`=? AND `platform` = ?", 
+				array($farmId, $cloudLocation, self::TYPE_GLOBAL, $platform)
 			);
 			if (!$info)
 				return false;

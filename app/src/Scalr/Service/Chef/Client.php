@@ -54,10 +54,10 @@
 			$role->name = $name;
 			$role->chef_type = "role";
 			$role->json_class = "Chef::Role";
-			$role->default_attributes = empty($attributes) ? new stdClass() : json_decode($attributes);
+			$role->default_attributes = new stdClass();
 			$role->description = $description;
             $role->run_list = $runList;
-            $role->override_attributes = new stdClass();
+            $role->override_attributes = empty($attributes) ? new stdClass() : $attributes;
 			if (!empty($environment))
                 $role->env_run_lists = $environment;
 
@@ -70,10 +70,10 @@
 			$role->name = $name;
 			$role->chef_type = "role";
 			$role->json_class = "Chef::Role";
-			$role->default_attributes = empty($attributes) ? new stdClass() : $attributes;
+			$role->default_attributes = new stdClass();
 			$role->description = $description;
             $role->run_list = $runList;
-            $role->override_attributes = new stdClass();
+            $role->override_attributes = empty($attributes) ? new stdClass() : $attributes;
             if (!empty($environment))
                 $role->env_run_lists = $environment;
             return $this->request("/roles/{$name}", "PUT", json_encode($role));

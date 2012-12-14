@@ -10,5 +10,10 @@
 		const PENDING_TERMINATE = "Pending terminate";
 		const IMPORTING			= "Importing";
 		const TERMINATED		= "Terminated";
+		
+		
+		const SUSPENDED			= "Suspended";
+		const RESUMING			= "Resuming";
+		const DEBUGGING			= "Debugging";
 	}
 ?>

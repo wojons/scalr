@@ -13,10 +13,10 @@
     try
     {
     
-	    if ($req_Version != '2.0.0' && $req_Version != '2.1.0' && $req_Version != '2.2.0' && $req_Version != '2.3.0')
+	    if ($_REQUEST['Version'] != '2.0.0' && $_REQUEST['Version'] != '2.1.0' && $_REQUEST['Version'] != '2.2.0' && $_REQUEST['Version'] != '2.3.0')
 	    	throw new Exception("All versions prior to 2.0.0 are no longer supported");
     	
-    	$API = ScalrAPICoreFactory::GetCore($req_Version); //TODO:    
+    	$API = ScalrAPICoreFactory::GetCore($_REQUEST['Version']); //TODO:    
 	    $request = @file_get_contents("php://input");
 	        
 	    if ($api_provider == API_PROVIDER::SOAP)

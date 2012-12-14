@@ -32,14 +32,22 @@ class Scalr_Messaging_Service_LogQueueHandler implements Scalr_Messaging_Service
 					server_id = ?, 
 					event = ?,
 					message = ?, 
-					dtadded = NOW() 
+					dtadded = NOW(),
+					script_name = ?,
+					event_server_id = ?,
+					exec_time = ?,
+					exec_exitcode = ?,
+					event_id = ?
 				", array(
 					$dbserver->farmId,
 					$message->getServerId(),
 					$message->eventName,
-					sprintf("Script '%s' execution result (Time: %s s, Exit code: %s). %s %s", 
-							$message->scriptName, round($message->timeElapsed, 2), $message->returnCode,
-							base64_decode($message->stderr), base64_decode($message->stdout))
+					sprintf("STDERR: %s \n\n STDOUT: %s", base64_decode($message->stderr), base64_decode($message->stdout)),
+					$message->scriptName,
+					$message->eventServerId,
+					round($message->timeElapsed, 2),
+					$message->returnCode,
+					$message->eventId
 				));
 				
 				if ($message->meta[Scalr_Messaging_MsgMeta::SZR_VERSION])
@@ -50,8 +58,17 @@ class Scalr_Messaging_Service_LogQueueHandler implements Scalr_Messaging_Service
 			}
 			
 		} elseif ($message instanceof Scalr_Messaging_Msg_Log) {
+			
+			try {
+				if ($message->meta[Scalr_Messaging_MsgMeta::SZR_VERSION])
+					DBServer::LoadByID($message->getServerId())->SetProperty(SERVER_PROPERTIES::SZR_VESION, $message->meta[Scalr_Messaging_MsgMeta::SZR_VERSION]);
+			} catch (Exception $e) {}
+			
 			foreach ($message->entries as $entry) {
 				try {
+					if (self::$severityCodes[$entry->level] < 3)
+						continue;
+					
 					$this->db->Execute("INSERT DELAYED INTO logentries SET 
 						serverid = ?, 
 						message = ?, 
@@ -67,9 +84,6 @@ class Scalr_Messaging_Service_LogQueueHandler implements Scalr_Messaging_Service
 						$entry->name,
 						$dbserver->farmId
 					));
-					
-					if ($message->meta[Scalr_Messaging_MsgMeta::SZR_VERSION])
-						DBServer::LoadByID($message->getServerId())->SetProperty(SERVER_PROPERTIES::SZR_VESION, $message->meta[Scalr_Messaging_MsgMeta::SZR_VERSION]);
 					
 				} catch (Exception $e) {
 					$this->logger->error($e->getMessage());

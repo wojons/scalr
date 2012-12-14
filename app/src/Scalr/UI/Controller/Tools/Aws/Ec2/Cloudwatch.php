@@ -1,91 +1,128 @@
 <?php
 
+use Scalr\Service\Aws\CloudWatch\DataType\DimensionFilterData;
+use Scalr\Service\Aws\CloudWatch\DataType\DimensionData;
+use Scalr\Service\Aws\CloudWatch\DataType\DatapointData;
+use Scalr\Service\Aws\CloudWatch\DataType\MetricData;
+
 class Scalr_UI_Controller_Tools_Aws_Ec2_Cloudwatch extends Scalr_UI_Controller
 {
 	public function viewAction()
 	{
-		$amazonCloudWatch = AmazonCloudWatch::GetInstance(
-			$this->getEnvironment()->getPlatformConfigValue(Modules_Platforms_Ec2::ACCESS_KEY),
-			$this->getEnvironment()->getPlatformConfigValue(Modules_Platforms_Ec2::SECRET_KEY),
-			$this->getParam('region')
+		$cloudWatch = $this->getEnvironment()->aws($this->getParam('region'))->cloudWatch;
+		$namespace = $this->getParam('namespace') ? $this->getParam('namespace') : "AWS/EC2";
+		$metricList = $cloudWatch->metric->list(
+			new DimensionFilterData($this->getParam('object'), $this->getParam('objectId')),
+			$namespace
 		);
-
-		$namespace = ($this->getParam('namespace')) ? $this->getParam('namespace') : "AWS/EC2";
-		
-		$result = $amazonCloudWatch->ListMetrics($namespace, array($this->getParam('object') => $this->getParam('objectId')));
-		
-		$metric = array();
-		
-		foreach ($result[$namespace] as $item=>$key)
-		{
-			$res = $amazonCloudWatch->GetMetricStatistics(
-				$item,
-				(time()-3600),
-				time(),
-				array('Average'),
-				null,
-				300,
+		$aMetric = array();
+		$statistics = array('Average');
+		/* @var $metric MetricData */
+		foreach ($metricList as $metric) {
+			$datapointList = $cloudWatch->metric->getStatistics(
+				$metric->metricName,
+				new \DateTime('-3600 second', new DateTimeZone('UTC')),
+				new \DateTime(null, new DateTimeZone('UTC')),
+				$statistics,
 				$namespace,
-				array($this->getParam('object') => $this->getParam('objectId'))
+				300,
+				null,
+				new DimensionData($this->getParam('object'), $this->getParam('objectId'))
 			);
-			
-			$unit = $res['unit'];
-			$step = 0;
-			foreach ($res as $name=>$value){
-				if($unit == "Bytes" || $unit == "Bytes/Second" )
-				{
-					if((float)$value['Average'] >= 1024 && (float)$value['Average'] <= 1048576 && $step < 2)	
-						$step = 2;
-				
-					if((float)$value['Average'] >1048576 && (float)$value['Average'] <= (1048576*1024) && $step < 3)
-						$step = 3;
-					
-					if ((float)$value['Average'] < 1024 && $step < 1)
-						$step = 1;
+
+			$dps = array();
+			$unit = null;
+			//Ensures backward compability for the result array
+			/* @var $datapoint DatapointData */
+			foreach ($datapointList as $datapoint) {
+				$unit = $datapoint->unit;
+				foreach ($statistics as $s) {
+					$lcs = lcfirst($s);
+					if ($datapoint->unit == 'Bytes' || $datapoint->unit == 'Bytes/Second') {
+						$dps[$datapoint->timestamp->getTimestamp()][$s] = round($datapoint->{$lcs} / 1024, 2);
+					} else {
+						$dps[$datapoint->timestamp->getTimestamp()][$s] = $datapoint->{$lcs};
+					}
 				}
 			}
-			if($step == 1) $unit = "K".$unit;
-			if($step == 2) $unit = "M".$unit;
-			if($step == 3) $unit = "G".$unit;
-			$metric[] = array(
-				'name' => $item,
+
+			$maxAverage = null;
+			/* @var $datapoint DatapointData */
+			foreach ($dps as $value) {
+				if ($unit == "Bytes" || $unit == "Bytes/Second") {
+					if ($maxAverage === null || $maxAverage < $value['Average']) {
+						$maxAverage = $value['Average'];
+					}
+				}
+			}
+			if ($maxAverage !== null) {
+				if ($maxAverage >= 1024 && $maxAverage <= 1048576) {
+					$unit = "M" . $unit;
+				} else if ($maxAverage > 1048576 && $maxAverage <= 1048576 * 1024) {
+					$unit = "G" . $unit;
+				} else if ($maxAverage < 1024) {
+					$unit = "K" . $unit;
+				}
+			}
+			$aMetric[] = array(
+				'name' => $metric->metricName,
 				'unit' => $unit
 			);
 		}
-			
-		$this->response->page('ui/tools/aws/ec2/cloudwatch/view.js', array ('metric' => $metric));
+
+		$this->response->page('ui/tools/aws/ec2/cloudwatch/view.js', array('metric' => $aMetric), array('extjs-4.1/ext-chart.js'));
 	}
+
 	public function xGetMetricAction()
 	{
-		$amazonCloudWatch = AmazonCloudWatch::GetInstance(
-			$this->getEnvironment()->getPlatformConfigValue(Modules_Platforms_Ec2::ACCESS_KEY),
-			$this->getEnvironment()->getPlatformConfigValue(Modules_Platforms_Ec2::SECRET_KEY),
-			$this->getParam('region')
-		);
-		
-		$res = $amazonCloudWatch->GetMetricStatistics(
+		$cloudWatch = $this->getEnvironment()->aws($this->getParam('region'))->cloudWatch;
+
+		$statistics = array($this->getParam('type'));
+		$datapointList = $cloudWatch->metric->getStatistics(
 			$this->getParam('metricName'),
-			strtotime($this->getParam('startTime')),
-			strtotime($this->getParam('endTime')),
-			array($this->getParam('type')),
-			null,
-			$this->getParam('period'),
+			new \DateTime($this->getParam('startTime')),
+			new \DateTime($this->getParam('endTime')),
+			$statistics,
 			$this->getParam('namespace'),
-			array($this->getParam('dValue') => $this->getParam('dType'))
+			$this->getParam('period'),
+			null,
+			new DimensionData($this->getParam('dValue'), $this->getParam('dType'))
 		);
-		
+
+		$dps = array();
+		$unit = null;
+		//Ensures backward compability for the result array
+		/* @var $datapoint DatapointData */
+		foreach ($datapointList as $datapoint) {
+			$unit = $datapoint->unit;
+			foreach ($statistics as $s) {
+				$lcs = lcfirst($s);
+				if ($datapoint->unit == 'Bytes' || $datapoint->unit == 'Bytes/Second') {
+					$dps[$datapoint->timestamp->getTimestamp()][$s] = round($datapoint->{$lcs} / 1024, 2);
+				} else {
+					$dps[$datapoint->timestamp->getTimestamp()][$s] = $datapoint->{$lcs};
+				}
+			}
+		}
+
 		$store = array();
-		ksort($res);
-    	foreach ($res as $time => $val)
-		{
-			if($time != 'unit') {
-				if($this->getParam('Unit') == "MBytes" || $this->getParam('Unit') == "MBytes/Second")
-				$store[] = array('time' => date($this->getParam('dateFormat'), $time), 'value' => (float)round($val[$this->getParam('type')]/1024, 2));
-			else if($this->getParam('Unit') == "GBytes" || $this->getParam('Unit') == "GBytes/Second")
-				$store[] = array('time' => date($this->getParam('dateFormat'), $time), 'value' => (float)round($val[$this->getParam('type')]/1024/1024, 2));
-			else 
-				$store[] = array('time' => date($this->getParam('dateFormat'), $time), 'value' => (float)round($val[$this->getParam('type')], 2));
-		
+		ksort($dps);
+    	foreach ($dps as $time => $val) {
+			if ($this->getParam('Unit') == "MBytes" || $this->getParam('Unit') == "MBytes/Second") {
+				$store[] = array(
+					'time'  => date($this->getParam('dateFormat'), $time),
+					'value' => (float) round($val[$this->getParam('type')] / 1024, 2)
+				);
+			} else if ($this->getParam('Unit') == "GBytes" || $this->getParam('Unit') == "GBytes/Second") {
+				$store[] = array(
+					'time'  => date($this->getParam('dateFormat'), $time),
+					'value' => (float) round($val[$this->getParam('type')] / 1024 / 1024, 2)
+				);
+			} else {
+				$store[] = array(
+					'time'  => date($this->getParam('dateFormat'), $time),
+					'value' => (float) round($val[$this->getParam('type')], 2)
+				);
 			}
 		}
 

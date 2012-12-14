@@ -1,1 +1,0 @@
-Rebundle started on instance {$event->DBServer->remoteIp} ({$event->DBServer->serverId}) for farm #{$event->DBServer->farmId} failed.

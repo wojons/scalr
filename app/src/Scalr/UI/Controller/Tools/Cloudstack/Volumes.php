@@ -11,8 +11,14 @@ class Scalr_UI_Controller_Tools_Cloudstack_Volumes extends Scalr_UI_Controller
 
 	public function viewAction()
 	{
+		if ($this->getParam('platform')) {
+			$locations = self::loadController('Platforms')->getCloudLocations(array($this->getParam('platform')), false);
+		} else {
+			$locations = self::loadController('Platforms')->getCloudLocations(array(SERVER_PLATFORMS::CLOUDSTACK, SERVER_PLATFORMS::IDCF, SERVER_PLATFORMS::UCLOUD), false);
+		}
+			
 		$this->response->page('ui/tools/cloudstack/volumes/view.js', array(
-			'locations'	=> self::loadController('Platforms')->getCloudLocations(SERVER_PLATFORMS::CLOUDSTACK, false)
+			'locations'	=> $locations
 		));
 	}
 
@@ -23,15 +29,30 @@ class Scalr_UI_Controller_Tools_Cloudstack_Volumes extends Scalr_UI_Controller
 			'cloudLocation'
 		));
 
-		$amazonEC2Client = Scalr_Service_Cloud_Aws::newEc2(
-			$this->getParam('cloudLocation'),
-			$this->getEnvironment()->getPlatformConfigValue(Modules_Platforms_Ec2::PRIVATE_KEY),
-			$this->getEnvironment()->getPlatformConfigValue(Modules_Platforms_Ec2::CERTIFICATE)
-		);
+		$platformLocations = self::loadController('Platforms')->getEnabledPlatforms(true);
+		foreach ($platformLocations as $p => $details) {
+			foreach ($details['locations'] as $key => $loc) {
+				if ($key == $this->getParam('cloudLocation')) {
+					$platformName = $p;
+					break;
+				}
+			}
+			
+			if ($platformName)
+				break;
+		}
 
+		$platform = PlatformFactory::NewPlatform($platformName);
+		
+		$cs = Scalr_Service_Cloud_Cloudstack::newCloudstack(
+			$platform->getConfigVariable(Modules_Platforms_Cloudstack::API_URL, $this->environment),
+			$platform->getConfigVariable(Modules_Platforms_Cloudstack::API_KEY, $this->environment),
+			$platform->getConfigVariable(Modules_Platforms_Cloudstack::SECRET_KEY, $this->environment),
+			$platformName
+		);
+		
 		foreach ($this->getParam('volumeId') as $volumeId) {
-			$amazonEC2Client->DeleteVolume($volumeId);
-			$this->db->Execute("DELETE FROM ec2_ebs WHERE volume_id=?", array($volumeId));
+			$cs->deleteVolume($volumeId);
 		}
 
 		$this->response->success('Volume(s) successfully removed');
@@ -43,14 +64,30 @@ class Scalr_UI_Controller_Tools_Cloudstack_Volumes extends Scalr_UI_Controller
 			'sort' => array('type' => 'json', 'default' => array('property' => 'volumeId', 'direction' => 'ASC')),
 			'volumeId'
 		));
+		
+		$platformLocations = self::loadController('Platforms')->getEnabledPlatforms(true);
+		foreach ($platformLocations as $p => $details) {
+			foreach ($details['locations'] as $key => $loc) {
+				if ($key == $this->getParam('cloudLocation')) {
+					$platformName = $p;
+					break;
+				}
+			}
+			
+			if ($platformName)
+				break;
+		}
 
-		$csClient = Scalr_Service_Cloud_Cloudstack::newCloudstack(
-			$this->environment->getPlatformConfigValue(Modules_Platforms_Cloudstack::API_URL),
-			$this->environment->getPlatformConfigValue(Modules_Platforms_Cloudstack::API_KEY),
-			$this->environment->getPlatformConfigValue(Modules_Platforms_Cloudstack::SECRET_KEY)
+		$platform = PlatformFactory::NewPlatform($platformName);
+		
+		$cs = Scalr_Service_Cloud_Cloudstack::newCloudstack(
+			$platform->getConfigVariable(Modules_Platforms_Cloudstack::API_URL, $this->environment),
+			$platform->getConfigVariable(Modules_Platforms_Cloudstack::API_KEY, $this->environment),
+			$platform->getConfigVariable(Modules_Platforms_Cloudstack::SECRET_KEY, $this->environment),
+			$platformName
 		);
-
-		$volumes = $csClient->listVolumes($this->getParam('cloudLocation'));
+		
+		$volumes = $cs->listVolumes($this->getParam('cloudLocation'));
 		
 		$vols = array();
 		foreach ($volumes as $pk=>$pv)

@@ -18,12 +18,9 @@
 
 	define('SCALR_NOT_CHECK_SESSION', 1);
 	try {
-		
-		$t = microtime(true);
+		$startTime = microtime(true);
 		require("src/prepend.inc.php");
-		$pTime = microtime(true) - $t;
-		
-		@header("X-Scalr-PTime: {$pTime}");
+		$prependTime = microtime(true);
 		
 		$session = Scalr_Session::getInstance();
 		try {
@@ -43,13 +40,19 @@
 		if ($session->isAuthenticated()) {
 			$session->setEnvironmentId($request->getEnvironment()->id);
 		}
+		
+		$initTime = microtime(true);
 
+		Scalr_UI_Response::getInstance()->setHeader("X-Scalr-PrependTime", $prependTime-$startTime);
+		Scalr_UI_Response::getInstance()->setHeader("X-Scalr-InitTime", $initTime-$prependTime);
 		//@session_write_close();
 
 		Scalr_UI_Controller::handleRequest(explode('/', $path), $_REQUEST);
-		
-		$totalTime = microtime(true) - $t;
-		
+				
+	} catch (ADODB_Exception $e) {
+		Scalr_UI_Response::getInstance()->data(array('errorDB' => true));
+		Scalr_UI_Response::getInstance()->failure();
+		Scalr_UI_Response::getInstance()->sendResponse();
 	} catch (Exception $e) {
 		Scalr_UI_Response::getInstance()->failure($e->getMessage());
 		Scalr_UI_Response::getInstance()->sendResponse();

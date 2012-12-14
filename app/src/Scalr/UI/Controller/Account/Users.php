@@ -20,7 +20,41 @@ class Scalr_UI_Controller_Account_Users extends Scalr_UI_Controller
 			'feature2FA' => $this->user->getAccount()->isFeatureEnabled(Scalr_Limits::FEATURE_2FA)
 		));
 	}
-	
+
+	public function view2Action()
+	{
+		// TODO: refactor
+		$sql = "SELECT account_users.id, status, email, fullname, dtcreated, dtlastlogin, type, comments FROM account_users
+				LEFT JOIN account_team_users ON account_users.id = account_team_users.user_id
+				LEFT JOIN account_user_groups ON account_users.id = account_user_groups.user_id
+				WHERE account_id='" . $this->user->getAccountId() . "'";
+
+		$usersList = $this->db->getAll($sql);
+
+		foreach ($usersList as &$row) {
+			$user = Scalr_Account_User::init();
+			$user->loadById($row['id']);
+
+			$row['dtcreated'] = Scalr_Util_DateTime::convertTz($row["dtcreated"]);
+			$row['dtlastlogin'] = $row['dtlastlogin'] ? Scalr_Util_DateTime::convertTz($row["dtlastlogin"]) : 'Never';
+			$row['teams'] = $user->getTeams();
+			$row['is2FaEnabled'] = $user->getSetting(Scalr_Account_User::SETTING_SECURITY_2FA_GGL) == '1' ? true : false;
+
+			switch ($row['type']) {
+				case Scalr_Account_User::TYPE_ACCOUNT_OWNER:
+					$row['type'] = 'Account Owner';
+					break;
+				default:
+					$row['type'] = $user->isTeamOwner() ? 'Team Owner' : 'Team User';
+					break;
+			}
+		}
+
+		$this->response->page('ui/account/users/view2.js', array(
+			'usersList' => $usersList
+		), array(), array('ui/account/users/view2.css'));
+	}
+
 	public function xListUsersAction()
 	{
 		$this->request->defineParams(array(
@@ -235,7 +269,7 @@ class Scalr_UI_Controller_Account_Users extends Scalr_UI_Controller
 						// Send reset password E-mail
 						$Mailer->ClearAddresses();
 						$res = $Mailer->Send("emails/user_account_confirm.eml",
-							array("client" => $clientinfo, "pwd_link" => "https://{$_SERVER['HTTP_HOST']}/#/confirmPasswordReset/{$hash}"),
+							array("client" => $clientinfo, "pwd_link" => "https://{$_SERVER['HTTP_HOST']}/#/guest/updatePassword/?hash={$hash}"),
 							$clientinfo['email'],
 							$clientinfo['fullname']
 						);

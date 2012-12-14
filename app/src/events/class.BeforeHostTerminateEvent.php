@@ -8,8 +8,6 @@
 		 */
 		public $DBServer;
 		
-		public $SkipDeferredOperations = true;
-		
 		public $ForceTerminate;
 		
 		public function __construct(DBServer $DBServer, $ForceTerminate = true)

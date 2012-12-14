@@ -54,15 +54,23 @@ class Scalr_UI_Controller_Services_Mysql extends Scalr_UI_Controller
 
 		foreach ($dbFarm->GetFarmRoles() as $dbFarmRole) {
 			if ($dbFarmRole->GetRoleObject()->getDbMsrBehavior() == ROLE_BEHAVIORS::MYSQL2) {
-				foreach ($dbFarmRole->GetServersByFilter() as $server) {
+				foreach ($dbFarmRole->GetServersByFilter(array('status' => SERVER_STATUS::RUNNING)) as $server) {
 					if ($server->GetProperty(Scalr_Db_Msr::REPLICATION_MASTER) == 1) {
 						$DBServer = $server;
 						$behavior = ROLE_BEHAVIORS::MYSQL2;
 						break;
 					}
 				}
+			} elseif ($dbFarmRole->GetRoleObject()->getDbMsrBehavior() == ROLE_BEHAVIORS::PERCONA) {
+				foreach ($dbFarmRole->GetServersByFilter(array('status' => SERVER_STATUS::RUNNING)) as $server) {
+					if ($server->GetProperty(Scalr_Db_Msr::REPLICATION_MASTER) == 1) {
+						$DBServer = $server;
+						$behavior = ROLE_BEHAVIORS::PERCONA;
+						break;
+					}
+				}
 			} elseif ($dbFarmRole->GetRoleObject()->hasBehavior(ROLE_BEHAVIORS::MYSQL)) {
-				foreach ($dbFarmRole->GetServersByFilter() as $server) {
+				foreach ($dbFarmRole->GetServersByFilter(array('status' => SERVER_STATUS::RUNNING)) as $server) {
 					if ($server->GetProperty(SERVER_PROPERTIES::DB_MYSQL_MASTER) == 1) {
 						$DBServer = $server;
 						$behavior = ROLE_BEHAVIORS::MYSQL;

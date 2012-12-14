@@ -128,11 +128,11 @@ class Scalr_UI_Controller_Operations extends Scalr_UI_Controller
 		//scalr-operation-status-
 		$content = '<div style="margin:10px;">';
 		foreach ($details as $phaseName => $phase) {
-			$cont = ($phase['status'] != 'running') ? "&nbsp;" : "<img src='/ui/images/icons/running.gif' />";
+			$cont = ($phase['status'] != 'running') ? "&nbsp;" : "<img src='/ui2/images/icons/running.gif' />";
 			$content .= "<div style='clear:both;'><div class='scalr-operation-status-{$phase['status']}'>{$cont}</div> {$phaseName}</div>";
 				
 			foreach ($phase['steps'] as $stepName => $step) {
-				$cont = ($step['status'] != 'running') ? "&nbsp;" : "<img src='/ui/images/icons/running.gif' />";
+				$cont = ($step['status'] != 'running') ? "&nbsp;" : "<img src='/ui2/images/icons/running.gif' />";
 				$content .= "<div style='clear:both;padding-left:15px;'><div class='scalr-operation-status-{$step['status']}'>{$cont}</div> {$stepName}</div>";
 				
 				if ($step['status'] == 'error')

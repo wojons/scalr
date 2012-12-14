@@ -34,9 +34,15 @@
     require(dirname(__FILE__)."/../src/class.ScalrEnvironment20120417.php");
     
     /**
+     * Date: 2012-07-01
+     * @todo: description
+     */
+    require(dirname(__FILE__)."/../src/class.ScalrEnvironment20120701.php");
+    
+    /**
      * ***************************************************************************************
      */
-    if (!$req_version)
+    if (!$_REQUEST["version"])
     	die();
     
     $args = "";
@@ -51,7 +57,7 @@
     	
     try
     {
-   	 	$EnvironmentObject = ScalrEnvironmentFactory::CreateEnvironment($req_version);
+   	 	$EnvironmentObject = ScalrEnvironmentFactory::CreateEnvironment($_REQUEST['version']);
     	$response = $EnvironmentObject->Query($req_operation, array_merge($_GET, $_POST));
     }
     catch(Exception $e)

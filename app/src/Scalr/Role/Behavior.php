@@ -19,6 +19,10 @@
 					$obj = 'Scalr_Role_Behavior_CfCloudController';
 					break;
 					
+				case ROLE_BEHAVIORS::CF_ROUTER:
+					$obj = 'Scalr_Role_Behavior_CfRouter';
+					break;
+					
 				case ROLE_BEHAVIORS::RABBITMQ:
 					$obj = 'Scalr_Role_Behavior_RabbitMQ';
 					break;
@@ -45,6 +49,10 @@
 					
 				case ROLE_BEHAVIORS::MYSQL2:
 					$obj = 'Scalr_Role_Behavior_Mysql2';
+					break;
+					
+				case ROLE_BEHAVIORS::PERCONA:
+					$obj = 'Scalr_Role_Behavior_Percona';
 					break;
 						
 				case ROLE_BEHAVIORS::POSTGRESQL:

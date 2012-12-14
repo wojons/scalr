@@ -89,6 +89,8 @@
        				$message = $this->serializer->unserialize($row["message"]);
        				$event = null;
        				
+       				$startTime = microtime(true);
+       				
        				// Update scalarizr package version
 					if ($message->meta[Scalr_Messaging_MsgMeta::SZR_VERSION]) {
 						$dbserver->SetProperty(SERVER_PROPERTIES::SZR_VESION, 
@@ -117,6 +119,8 @@
 									$msg = $message->error->message;
 									$trace = $message->error->trace;
 									$handler = $message->error->handler;
+									
+									$dbserver->SetProperty(SERVER_PROPERTIES::SZR_IS_INIT_ERROR_MSG, $message->error->message);
 								}
        								
        							$this->db->Execute("INSERT INTO server_operation_progress SET 
@@ -204,6 +208,21 @@
 	       					
 	       				}
 	       				
+						elseif ($message instanceof Scalr_Messaging_Msg_FireEvent) {
+							
+							//Validate event
+							$isEventExist = $this->db->GetOne("SELECT id FROM event_definitions WHERE name = ? AND env_id = ?", array(
+								$message->eventName,
+								$dbserver->envId
+							));
+							if (!$isEventExist)
+								continue;
+							
+							$this->logger->fatal("FireEvent: {$message->eventName}: ".serialize((array)$message->params));
+							
+	       					$event = new CustomEvent($dbserver, $message->eventName, (array)$message->params);
+	       				}
+	       				
 	       				/********* MONGODB *********/
 	       				elseif ($message instanceof Scalr_Messaging_Msg_MongoDb) {
 	       					
@@ -248,7 +267,18 @@
 	       						}
 	       					}
 	       					
-	       					if (!$isMoving)
+	       					if ($dbserver->platform == SERVER_PLATFORMS::EC2) {
+	       						//TODO: Check is is stopping or shutting-down procedure.
+	       						$p = PlatformFactory::NewPlatform($dbserver->platform);
+	       						$status = $p->GetServerRealStatus($dbserver);
+	       						if (!$status->isTerminated()) {
+	       							//Stopping
+	       							$this->logger->error(new FarmLogMessage($dbserver->farmId, "Server is in '{$status->getName()}' state. Ignoring HostDown event."));
+	       							$isStopping = true;
+	       						}
+	       					}
+	       					
+	       					if (!$isMoving && !$isStopping)
 	       						$event = new HostDownEvent($dbserver);
 	       					
 	       				} elseif ($message instanceof Scalr_Messaging_Msg_RebootStart) {
@@ -314,10 +344,10 @@
 	       						
 	       						if ($dbserver->platform == SERVER_PLATFORMS::EC2) {
 		       						if ($message->aws) {
-		       							if ($message->aws->root-device-type == 'ebs')
+		       							if ($message->aws->rootDeviceType == 'ebs')
 		       								$tags[] = ROLE_TAGS::EC2_EBS;
 		       								
-		       							if ($message->aws->virtualization-type == 'hvm')
+		       							if ($message->aws->virtualizationType == 'hvm')
 		       								$tags[] = ROLE_TAGS::EC2_HVM;
 		       						}
 		       						else {
@@ -349,6 +379,11 @@
 												
 										} catch (Exception $e) {
 											$metaData['tagsError'] = $e->getMessage();
+											try {
+												$bundleTask = BundleTask::LoadById($message->bundleTaskId);
+												if ($bundleTask->bundleType == SERVER_SNAPSHOT_CREATION_TYPE::EC2_EBS)
+													$tags[] = ROLE_TAGS::EC2_EBS;
+											} catch (Exception $e) {}
 										}
 		       						}
 	       						} elseif ($dbserver->platform == SERVER_PLATFORMS::NIMBULA) {
@@ -390,6 +425,7 @@
 	       				} elseif ($message instanceof Scalr_Messaging_Msg_Mysql_CreateBackupResult) {
 	       					if ($message->status == "ok") {
 	       						$event = new MysqlBackupCompleteEvent($dbserver, MYSQL_BACKUP_TYPE::DUMP);
+	       						$event->backupParts = $message->backupParts;
 	       					} else {
 	       						$event = new MysqlBackupFailEvent($dbserver, MYSQL_BACKUP_TYPE::DUMP);
 	       						$event->lastError = $message->lastError;
@@ -487,8 +523,10 @@
        					);
        				}
        				
-       				$this->db->Execute("UPDATE messages SET status = ? WHERE messageid = ?",
-       						array($handle_status, $message->messageId));
+       				$totalTime = microtime(true) - $startTime;
+       				
+       				$this->db->Execute("UPDATE messages SET status = ?, instance_id = ? WHERE messageid = ?",
+       						array($handle_status, $totalTime, $message->messageId));
        				
        				if ($event) {
        					Scalr::FireEvent($dbserver->farmId, $event);
@@ -508,11 +546,24 @@
         		
         		$bundleTask->Log("Received Hello message from scalarizr on server. Creating image");
         		
-        		$bundleTask->save();
+        		$bundleTask->osFamily = $message->dist->distributor;
+				$bundleTask->osName = $message->dist->codename;
+				$bundleTask->osVersion = $message->dist->release;
         		
+        		$bundleTask->save();
         	}
+        	
        		if ($dbserver->status == SERVER_STATUS::IMPORTING) {
        			
+				if ($message->behaviour && !$dbserver->remoteIp) {
+					$dbserver->remoteIp = $message->remoteIp;
+					$dbserver->localIp = $message->localIp;
+					
+					$dbserver->SetProperty(SERVER_PROPERTIES::SZR_IMPORTING_BEHAVIOR, implode(",", $message->behaviour));
+					
+					$dbserver->save();
+				}
+				
        			switch ($dbserver->platform) {
        				case SERVER_PLATFORMS::EC2:
        					$dbserver->SetProperties(array(
@@ -533,16 +584,29 @@
 		       				SERVER_PROPERTIES::ARCHITECTURE => $message->architecture
 	       				));
        					break;
+       				case SERVER_PLATFORMS::GCE:
+       					$dbserver->SetProperties(array(
+       						GCE_SERVER_PROPERTIES::CLOUD_LOCATION => $message->{$dbserver->platform}->cloudLocation,
+       						GCE_SERVER_PROPERTIES::SERVER_ID => $message->{$dbserver->platform}->serverId,
+       						GCE_SERVER_PROPERTIES::SERVER_NAME => $message->{$dbserver->platform}->serverName,
+       						GCE_SERVER_PROPERTIES::MACHINE_TYPE => $message->{$dbserver->platform}->machineType,
+       						SERVER_PROPERTIES::ARCHITECTURE => $message->architecture
+       					));
+       					break;
+       					
        				case SERVER_PLATFORMS::NIMBULA:
        					$dbserver->SetProperties(array(
 	       					NIMBULA_SERVER_PROPERTIES::NAME => $message->serverName,
 		       				SERVER_PROPERTIES::ARCHITECTURE => $message->architecture
 	       				));
        					break;
+       				
+       				case SERVER_PLATFORMS::IDCF:
+       				case SERVER_PLATFORMS::UCLOUD:
        				case SERVER_PLATFORMS::CLOUDSTACK:
        					$dbserver->SetProperties(array(
-	       					CLOUDSTACK_SERVER_PROPERTIES::SERVER_ID => $message->cloudstack->instanceId,
-		       				CLOUDSTACK_SERVER_PROPERTIES::CLOUD_LOCATION => $message->cloudstack->availZone,
+	       					CLOUDSTACK_SERVER_PROPERTIES::SERVER_ID => $message->{$dbserver->platform}->instanceId,
+		       				CLOUDSTACK_SERVER_PROPERTIES::CLOUD_LOCATION => $message->{$dbserver->platform}->availZone,
 		       				SERVER_PROPERTIES::ARCHITECTURE => $message->architecture,
 	       				));
        					break;
@@ -639,6 +703,16 @@
        				SERVER_REPLACEMENT_TYPE::NO_REPLACE
        			);
        			$bundleTask = BundleTask::Create($creInfo);
+       			
+       			$bundleTask->osFamily = $message->dist->distributor;
+				$bundleTask->osName = $message->dist->codename;
+				$bundleTask->osVersion = $message->dist->release;
+       			
+       			if ($message->dist->distributor == 'oel' && $dbserver->platform == SERVER_PLATFORMS::EC2) {
+       				$bundleTask->bundleType = SERVER_SNAPSHOT_CREATION_TYPE::EC2_EBS_HVM;
+       			}
+				
+				$bundleTask->Save();
        		}
         }
         
@@ -651,10 +725,13 @@
        				$srv_props[SERVER_PROPERTIES::SZR_KEY_TYPE] = SZR_KEY_TYPE::PERMANENT;
        			}
 
-				if ($dbserver->platform != SERVER_PLATFORMS::CLOUDSTACK) {
+				if (!in_array($dbserver->platform, array(SERVER_PLATFORMS::CLOUDSTACK, SERVER_PLATFORMS::IDCF, SERVER_PLATFORMS::UCLOUD))) {
        				$srv_props[SERVER_PROPERTIES::SZR_SNMP_PORT] = $message->snmpPort;
        				$remoteIp = $message->remoteIp;
 				} else {
+					
+					$platform = PlatformFactory::NewPlatform($dbserver->platform);
+					
 					if ($dbserver->farmRoleId) {
 						$dbFarmRole = $dbserver->GetFarmRoleObject();
 						$networkType = $dbFarmRole->GetSetting(DBFarmRole::SETTING_CLOUDSTACK_NETWORK_TYPE);
@@ -663,8 +740,13 @@
 							$srv_props[SERVER_PROPERTIES::SZR_SNMP_PORT] = $message->snmpPort;
 						}
 						else {
-							$env = $dbserver->GetEnvironmentObject();
-							$remoteIp = $env->getPlatformConfigValue(Modules_Platforms_Cloudstack::SHARED_IP . "." . $dbserver->GetProperty(CLOUDSTACK_SERVER_PROPERTIES::CLOUD_LOCATION), false);		
+							$sharedIp = $dbFarmRole->GetSetting(DBFarmRole::SETTING_CLOUDSTACK_SHARED_IP_ADDRESS);
+							if (!$sharedIp) {
+								$env = $dbserver->GetEnvironmentObject();
+								$remoteIp = $platform->getConfigVariable(Modules_Platforms_Cloudstack::SHARED_IP . "." . $dbserver->GetProperty(CLOUDSTACK_SERVER_PROPERTIES::CLOUD_LOCATION), $env, false);
+							} else {
+								$remoteIp = $sharedIp;
+							}
 						} 
 					}
 					else {

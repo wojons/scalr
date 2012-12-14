@@ -147,6 +147,12 @@ class Scheduler2Process implements IProcess
 							if (! $config['scriptId'])
 								throw new Exception(_("Script %s is not existed"), $config['scriptId']);
 
+							if ($config['scriptVersion'] == 'latest' || (int)$config['scriptVersion'] == -1) {
+								$config['scriptVersion'] = (int)$db->GetOne("SELECT MAX(revision) FROM script_revisions WHERE scriptid=?",
+									array($config['scriptId'])
+								);
+							}
+
 							// check avaliable script version
 							if (! $db->GetOne("SELECT id FROM script_revisions WHERE scriptid = ? AND revision = ? AND approval_state = ?",
 								array($config['scriptId'], $config['scriptVersion'], APPROVAL_STATE::APPROVED))) {

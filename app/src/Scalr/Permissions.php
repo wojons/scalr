@@ -57,6 +57,7 @@ class Scalr_Permissions
 			case 'Scalr_ServiceConfiguration':
 			case 'Scalr_Service_Apache_Vhost':
 			case 'Scalr_SshKey':
+			case 'Scalr_Db_Backup':
 			case 'Scalr_SchedulerTask':
 				return $this->hasAccessEnvironment($object->envId);
 
@@ -65,7 +66,7 @@ class Scalr_Permissions
 		}
 	}
 
-	protected function hasAccessEnvironment($envId)
+	public function hasAccessEnvironment($envId)
 	{
 		if (is_null($this->envId)) {
 			throw new Scalr_Exception_Core('Environment not defined in permissions object');

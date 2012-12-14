@@ -101,6 +101,8 @@
 			if ($event->DBServer->replaceServerID)
 				return;
 			
+			//aws.elastic_ips.map
+			
 			try
 			{
 				$DBFarm = DBFarm::LoadByID($this->FarmID);
@@ -251,7 +253,7 @@
 					array($event->DBServer->serverId, $ip['ipaddress'])
 				);
 								
-				Scalr::FireEvent($this->FarmID, new IPAddressChangedEvent($event->DBServer, $ip['ipaddress']));
+				Scalr::FireEvent($this->FarmID, new IPAddressChangedEvent($event->DBServer, $ip['ipaddress'], $event->DBServer->localIp));
 			}
 			else
 			{
@@ -297,7 +299,7 @@
 								array($event->replacementDBServer->serverId, $ip['ipaddress'])
 							);
 							
-							Scalr::FireEvent($this->FarmID, new IPAddressChangedEvent($event->replacementDBServer, $ip['ipaddress']));
+							Scalr::FireEvent($this->FarmID, new IPAddressChangedEvent($event->replacementDBServer, $ip['ipaddress'], $event->replacementDBServer->localIp));
 						}
 						catch(Exception $e)
 						{

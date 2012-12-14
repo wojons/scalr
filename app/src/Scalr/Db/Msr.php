@@ -8,9 +8,12 @@ class Scalr_Db_Msr
 	const VOLUME_ID    = 'db.msr.volume_id';
 	const SNAPSHOT_ID  = 'db.msr.snapshot_id';
 	const DATA_STORAGE_ENGINE = 'db.msr.data_storage.engine';
+	const DATA_STORAGE_FSTYPE = 'db.msr.data_storage.fstype';
 	
 	// For EBS storage
 	const DATA_STORAGE_EBS_SIZE = 'db.msr.data_storage.ebs.size';
+	const DATA_STORAGE_EBS_TYPE = 'db.msr.data_storage.ebs.type';
+	const DATA_STORAGE_EBS_IOPS = 'db.msr.data_storage.ebs.iops';
 	const DATA_STORAGE_EBS_ENABLE_ROTATION = 'db.msr.data_storage.ebs.snaps.enable_rotation';
 	const DATA_STORAGE_EBS_ROTATE = 'db.msr.data_storage.ebs.snaps.rotate';
 	
@@ -21,6 +24,8 @@ class Scalr_Db_Msr
 	const DATA_STORAGE_RAID_LEVEL = 'db.msr.data_storage.raid.level';
 	const DATA_STORAGE_RAID_DISKS_COUNT = 'db.msr.data_storage.raid.volumes_count';
 	const DATA_STORAGE_RAID_DISK_SIZE = 'db.msr.data_storage.raid.volume_size';
+	const DATA_STORAGE_RAID_EBS_DISK_TYPE = 'db.msr.data_storage.raid.ebs.type';
+	const DATA_STORAGE_RAID_EBS_DISK_IOPS = 'db.msr.data_storage.raid.ebs.iops';
 	
 	/** Replication settings **/
 	const SLAVE_TO_MASTER = 'db.msr.slave_to_master';
@@ -53,6 +58,7 @@ class Scalr_Db_Msr
 	
 	const DB_TYPE_MYSQL = 'mysql';
 	const DB_TYPE_MYSQL2 = 'mysql2';
+	const DB_TYPE_PERCONA = 'percona';
 	const DB_TYPE_POSTGRESQL = 'postgresql';
 	const DB_TYPE_REDIS = 'redis';
 	
@@ -74,7 +80,36 @@ class Scalr_Db_Msr
 		$dbFarmRole->SetSetting(Scalr_Db_Msr::DATA_BACKUP_IS_RUNNING, 0);
 		//$dbFarmRole->SetSetting(Scalr_Db_Msr::DATA_BACKUP_SERVER_ID, "");
 		
-		//TODO: $message->backupParts
+		switch ($dbServer->platform) {
+			case SERVER_PLATFORMS::EC2: 
+				$provider = 's3'; break;
+			case SERVER_PLATFORMS::RACKSPACE: 
+				$provider = 'cf'; break;
+			default: 
+				$provider = 'unknown'; break;
+		}
+		
+		$backup = Scalr_Db_Backup::init();
+		$backup->service = $message->dbType;
+		$backup->platform = $dbServer->platform;
+		$backup->provider = $provider;
+		$backup->envId = $dbServer->envId;
+		$backup->farmId = $dbServer->farmId;
+		$backup->cloudLocation = $dbServer->GetCloudLocation();
+		$backup->status = Scalr_Db_Backup::STATUS_AVAILABLE;
+		
+		$total = 0;
+		foreach ($message->backupParts as $item) {
+			if (is_object($item) && $item->size) {
+				$backup->addPart(str_replace(array("s3://", "cf://"), array("", ""), $item->path), $item->size);
+				$total = $total+(int)$item->size;
+			} else {
+				$backup->addPart(str_replace(array("s3://", "cf://"), array("", ""), $item), 0);
+			}
+		}
+		
+		$backup->size = $total;
+		$backup->save();
 	}
 	
 	public static function onCreateDataBundleResult(Scalr_Messaging_Msg $message, DBServer $dbServer)
@@ -90,11 +125,13 @@ class Scalr_Db_Msr
 		
 		if ($dbSettings->snapshotConfig) {
 			try {					
-				$snapshot = Scalr_Model::init(Scalr_Model::STORAGE_SNAPSHOT);
+				$snapshot = Scalr_Storage_Snapshot::init();
 				$snapshot->loadBy(array(
 					'id'			=> $dbSettings->snapshotConfig->id,
 					'client_id'		=> $dbServer->clientId,
 					'env_id'		=> $dbServer->envId,
+					'farm_id'		=> $dbServer->farmId,
+					'farm_roleid'	=> $dbServer->farmRoleId,
 					'name'			=> "Automatical '{$message->dbType}' data bundle",
 					'type'			=> $dbFarmRole->GetSetting(Scalr_Db_Msr::DATA_STORAGE_ENGINE),
 					'platform'		=> $dbServer->platform,
@@ -110,6 +147,10 @@ class Scalr_Db_Msr
 				if ($message->dbType == self::DB_TYPE_MYSQL) {
            			$dbFarmRole->SetSetting(Scalr_Db_Msr_Mysql::LOG_FILE, $dbSettings->logFile);
            			$dbFarmRole->SetSetting(Scalr_Db_Msr_Mysql::LOG_POS, $dbSettings->logPos);
+				}
+				elseif ($message->dbType == self::DB_TYPE_MYSQL2 || $message->dbType == self::DB_TYPE_PERCONA) {
+					$dbFarmRole->SetSetting(Scalr_Db_Msr_Mysql2::LOG_FILE, $dbSettings->logFile);
+					$dbFarmRole->SetSetting(Scalr_Db_Msr_Mysql2::LOG_POS, $dbSettings->logPos);
 				}
                 elseif ($message->dbType == self::DB_TYPE_POSTGRESQL) {
                 	$dbFarmRole->SetSetting(Scalr_Db_Msr_Postgresql::XLOG_LOCATION, $dbSettings->currentXlogLocation);

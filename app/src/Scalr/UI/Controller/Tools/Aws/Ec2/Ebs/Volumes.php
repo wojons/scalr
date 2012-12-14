@@ -244,6 +244,7 @@ class Scalr_UI_Controller_Tools_Aws_Ec2_Ebs_Volumes extends Scalr_UI_Controller
 				'size'	=> $pv->size,
 				'snapshotId' => $pv->snapshotId,
 				'availZone' => $pv->availabilityZone,
+				'type'	=> $pv->volumeType,
 				'status' => $pv->status,
 				'attachmentStatus' => $pv->attachmentSet->status,
 				'device'	=> $pv->attachmentSet->device,
@@ -289,7 +290,7 @@ class Scalr_UI_Controller_Tools_Aws_Ec2_Ebs_Volumes extends Scalr_UI_Controller
 			$vols[] = $item;
 		}
 
-		$response = $this->buildResponseFromData($vols, array('instanceId', 'volumeId', 'snapshotId', 'farmId', 'farmRoleId', 'availZone'));
+		$response = $this->buildResponseFromData($vols, array('instanceId', 'volumeId', 'snapshotId', 'farmId', 'farmRoleId', 'availZone', 'type'));
 
 		$this->response->data($response);
 	}

@@ -14,7 +14,12 @@ class Scalr_UI_Controller_Services_Chef_Servers extends Scalr_UI_Controller
 	
 	public function editAction()
 	{
-		$servParams = $this->db->GetRow('SELECT url, auth_key as authKey, username as userName, v_auth_key as authVKey, v_username as userVName FROM services_chef_servers WHERE id = ?', array($this->getParam('servId')));
+		$servParams = $this->db->GetRow('SELECT env_id, url, auth_key as authKey, username as userName, v_auth_key as authVKey, v_username as userVName 
+			FROM services_chef_servers WHERE id = ?', array($this->getParam('servId')));
+			
+		if (!$this->user->getPermissions()->hasAccessEnvironment($servParams['env_id']))
+			throw new Scalr_Exception_InsufficientPermissions();
+			
 		$servParams['authKey'] = $this->getCrypto()->decrypt($servParams['authKey'], $this->cryptoKey);
 		$servParams['authVKey'] = $this->getCrypto()->decrypt($servParams['authVKey'], $this->cryptoKey);
 		$this->response->page('ui/services/chef/servers/create.js', array('servParams'=>$servParams));
@@ -24,7 +29,7 @@ class Scalr_UI_Controller_Services_Chef_Servers extends Scalr_UI_Controller
 	{
 		$this->response->page('ui/services/chef/servers/create.js');
 	}
-	
+
 	public function xListServersAction()
 	{
 		$response = $this->buildResponseFromSql('SELECT id, url, username FROM services_chef_servers WHERE env_id = '.$this->getEnvironmentId());
@@ -33,7 +38,11 @@ class Scalr_UI_Controller_Services_Chef_Servers extends Scalr_UI_Controller
 
 	public function xListEnvironmentsAction()
     {
-        $servParams = $this->db->GetRow('SELECT url, auth_key as authKey, username as userName FROM services_chef_servers WHERE id = ?', array($this->getParam('servId')));
+        $servParams = $this->db->GetRow('SELECT url, env_id, auth_key as authKey, username as userName FROM services_chef_servers WHERE id = ?', array($this->getParam('servId')));
+		
+		if(!$this->user->getPermissions()->hasAccessEnvironment($servParams['env_id']))
+			throw new Scalr_Exception_InsufficientPermissions();
+		
         $chef = Scalr_Service_Chef_Client::getChef($servParams['url'], $servParams['userName'], $this->getCrypto()->decrypt($servParams['authKey'], $this->cryptoKey));
         $response = $chef->listEnvironments();
         if ($response instanceof stdClass)
@@ -42,7 +51,7 @@ class Scalr_UI_Controller_Services_Chef_Servers extends Scalr_UI_Controller
         foreach ($response as $key => $value)
             $envs[]['name'] = $key;
 
-        $this->response->data(array('data'=>$envs));
+        $this->response->data(array('data' => $envs));
     }
 
 	public function xDeleteServerAction()
@@ -52,7 +61,7 @@ class Scalr_UI_Controller_Services_Chef_Servers extends Scalr_UI_Controller
 		if($result['total'])
 			$this->response->failure('This chef server is in use by runlist(s). It can\'t be deleted');
 		else {
-			$this->db->Execute('DELETE FROM services_chef_servers WHERE id = ?', array($this->getParam('servId')));
+			$this->db->Execute('DELETE FROM services_chef_servers WHERE id = ? AND env_id = ?', array($this->getParam('servId'), $this->getEnvironmentId()));
 			$this->response->success('Chef server successfully deleted');
 		}
 	}
@@ -64,13 +73,14 @@ class Scalr_UI_Controller_Services_Chef_Servers extends Scalr_UI_Controller
 		$chef = Scalr_Service_Chef_Client::getChef($this->getParam('url'), $this->getParam('userVName'), $this->getParam('authVKey'));
 		$response = $chef->getClient($this->getParam('userVName'));
 		if ($this->getParam('servId')) {
-			$this->db->Execute('UPDATE services_chef_servers SET  `url` = ?, `username` = ?, `auth_key` = ?, `v_username` = ?, `v_auth_key` = ? WHERE `id` = ?', array(
+			$this->db->Execute('UPDATE services_chef_servers SET  `url` = ?, `username` = ?, `auth_key` = ?, `v_username` = ?, `v_auth_key` = ? WHERE `id` = ? AND env_id = ?', array(
 				$this->getParam('url'),
 				$this->getParam('userName'),
 				$this->getCrypto()->encrypt($this->getParam('authKey'), $this->cryptoKey),
 				$this->getParam('userVName'),
 				$this->getCrypto()->encrypt($this->getParam('authVKey'), $this->cryptoKey),
-				$this->getParam('servId')
+				$this->getParam('servId'),
+				$this->getEnvironmentId()
 			));
 			$this->response->success('Server successfully updated');
 		} else {

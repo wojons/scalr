@@ -5,6 +5,7 @@
 		const CUSTOM 	= "custom";
 		const MYSQL 	= "mysql";
 		const MYSQL2 	= "mysql2";
+		const PERCONA 	= "percona";
 		const NGINX	 	= "www";
 		const APACHE 	= "app";
 		const MEMCACHED = "memcached";
@@ -31,6 +32,9 @@
 				self::CUSTOM => _("Custom"),
 				self::MYSQL	 => _("MySQL 5.1"),
 				self::MYSQL2	 => _("MySQL 5.5"),
+				
+				self::PERCONA	 => _("Percona Server 5.5"),
+					
 				self::APACHE => _("Apache"),
 				self::NGINX	 => _("Nginx"),
 				self::HAPROXY	 => _("HAProxy"),

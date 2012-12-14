@@ -45,7 +45,24 @@
             	}
             }
             
-            $this->ThreadArgs = array(1);
+			$rows = $db->Execute("SELECT * FROM events WHERE ishandled = '0' ORDER BY id ASC");
+			while ($dbevent = $rows->FetchRow()) {
+				try {
+            		//TODO: Initialize Event classes
+            		$Event = unserialize($dbevent['event_object']);
+            		if ($Event) {
+	            		Logger::getLogger(__CLASS__)->info(sprintf(_("Fire event %s for farm: %s"), $Event->GetName(), $Event->GetFarmID()));
+			            // Fire event
+						Scalr::FireDeferredEvent($Event);
+            		}
+            		
+            		//$db->Execute("UPDATE events SET ishandled='1', event_object = '' WHERE id=?", array($dbevent['id']));
+            		$db->Execute("UPDATE events SET ishandled='1' WHERE id=?", array($dbevent['id']));
+            	}
+            	catch(Exception $e) {
+            		Logger::getLogger(__CLASS__)->fatal(sprintf(_("Cannot fire deferred event: %s"), $e->getMessage()));
+            	}
+			}
         }
         
         public function OnEndForking()
@@ -53,8 +70,9 @@
             
         }
         
-        public function StartThread($data)
-        {        	
+        public function StartThread($eventId)
+        {
+        	/*        	
         	// Reconfigure observers;
         	Scalr::ReconfigureObservers();
         	
@@ -108,6 +126,7 @@
 		        	exit();
 		        }
             }
+			*/
         }
         
         /**

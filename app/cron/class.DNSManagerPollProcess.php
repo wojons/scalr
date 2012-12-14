@@ -117,6 +117,7 @@
            	}
            	
            	$DBDNSZone->save();
+			exit();
         }
     }
 ?>

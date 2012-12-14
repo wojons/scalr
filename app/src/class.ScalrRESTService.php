@@ -44,7 +44,8 @@
     	protected function GetCallingInstance()
     	{
     		if (!$_SERVER['HTTP_X_SIGNATURE'])
-    			return $this->ValidateRequestByFarmHash($this->GetArg('farmid'), $this->GetArg('instanceid'), $this->GetArg('authhash'));
+    			//return $this->ValidateRequestByFarmHash($this->GetArg('farmid'), $this->GetArg('instanceid'), $this->GetArg('authhash'));
+    			throw new Exception("ami-scripts roles cannot execute scripts anymore. Please upgrade your roles to scalarizr: http://scalr.net/blog/announcements/ami-scripts/");
     		else
     			return $this->ValidateRequestBySignature($_SERVER['HTTP_X_SIGNATURE'], $_SERVER['HTTP_DATE'], $_SERVER['HTTP_X_SERVER_ID']);
     	}

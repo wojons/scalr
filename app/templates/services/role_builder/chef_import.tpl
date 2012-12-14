@@ -33,7 +33,7 @@ for recipe in $RECIPES; do
 done
 
 CHEF_RUNLIST='{ "scalarizr": { "behaviour": [ "'$(echo $BEHAVIOURS | sed 's/ /\", \"/g')'" ], 
-"platform" : "'$PLATFORM'", "branch" : "'$SCALARIZR_BRANCH'"}, "run_list": [ '
+"platform" : "'$PLATFORM'", "branch" : "'$SCALARIZR_BRANCH'"}, "run_list": [ "recipe[base]", '
 
 get_behaviour() {
 	bhv="$1"
@@ -57,6 +57,8 @@ get_behaviour() {
 			echo "\"recipe[mysqlproxy]\", "
 	elif [ "$bhv" = "mongodb" ]; then
 			echo "\"recipe[mongodb]\", "
+	elif [ "$bhv" = "percona" ]; then
+			echo "\"recipe[percona]\", "
     fi	
 }
 
@@ -114,9 +116,9 @@ if [ "$rhel" -eq 0 ] && [ "$fedora" -eq 0 ]; then
 	fi
 	action "Updating package list" "apt-get update"
 	action "Installing essential packages" "apt-get -y install ruby ruby1.8-dev libopenssl-ruby rdoc ri irb build-essential wget make tar ssl-cert"
-	action 'Downloading rubygems' "wget -c http://production.cf.rubygems.org/rubygems/rubygems-1.8.10.tgz"
-	action 'Unpacking rubygems' "tar zxf rubygems-1.8.10.tgz"
-	cd rubygems-1.8.10
+	action 'Downloading rubygems' "wget -c http://production.cf.rubygems.org/rubygems/rubygems-1.8.24.tgz"
+	action 'Unpacking rubygems' "tar zxf rubygems-1.8.24.tgz"
+	cd rubygems-1.8.24
 	action "Installing rubygems" "ruby setup.rb --no-format-executable --no-ri --no-rdoc"
 		
 else
@@ -130,12 +132,12 @@ else
 		x64=$(python -c "import platform; print int('x86_64' in platform.uname()[4])")
 		if [ "$x64" -eq 1 ]; then
 			action "Removing old ruby packages" "yum -y remove ruby*"
-			action "Removing glibc x86" "yum -y remove glibc.i686"
+			action "Removing glibc x86" "yum -y remove glibc.i686 | grep 'Complete!\|No Packages marked for removal'"
 			action "Disabling x86 packages installation" "echo 'exclude=*.i386 *.i586 *.i686' >> /etc/yum.conf"
 		fi
 		action "Removing unnecessary packages" "yum -y remove mysql*"
 	else
-		action "Installing EPEL repository"  "rpm -Uvh --replacepkgs http://download.fedoraproject.org/pub/epel/6/i386/epel-release-6-5.noarch.rpm"
+		action "Installing EPEL repository"  "rpm -Uvh --replacepkgs http://download.fedoraproject.org/pub/epel/6/i386/epel-release-6-7.noarch.rpm"
 	fi
 	action "Installing essential packages" "yum -y install ruby ruby-devel make automake gcc-c++ gcc autoconf"
 	action "Installing rubygems" "yum -y install rubygems"
@@ -176,12 +178,10 @@ fi
 
 
 if [ "0" = "$BUILD_ONLY" ]; then
-	action "Starting importing to Scalr in background" "$SCALR_IMPORT_STRING &"
-	echo "Scalarizr's log:"
+	action "Starting importing to Scalr" "$SCALR_IMPORT_STRING &"
 	tail -f /var/log/scalarizr.log | while read LINE; do
 	        [[ "${LINE}" =~ 'Rebundle complete!' ]] && break
-	        echo $LINE
+	        [[ "${LINE}" =~ 'Traceback (most recent call last):' ]] && echo "Scalarizr import   [ Failed ]" && exit 1
 	done
 fi
-echo "Done!"
 exit 0

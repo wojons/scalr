@@ -2,6 +2,10 @@
 
 class Scalr_UI_Controller_Environments_Platform extends Scalr_UI_Controller
 {
+	/**
+	 * 
+	 * @var Scalr_Environment
+	 */
 	private $env;
 	private $checkVarError;
 	
@@ -19,7 +23,7 @@ class Scalr_UI_Controller_Environments_Platform extends Scalr_UI_Controller
 		return array('xSaveEc2', 'xSaveRackspace', 'xSaveNimbula', 'xSaveCloudstack', 'xSaveOpenstack', 'xSaveEucalyptus');
 	}
 
-	private function checkVar($name, $type, $requiredError = '', $group = '')
+	private function checkVar($name, $type, $requiredError = '', $group = '', $noFileTrim = false)
 	{
 		$varName = str_replace('.', '_', ($group != '' ? $name . '.' . $group : $name));
 		$errorName = $group != '' ? $name . '.' . $group : $name;
@@ -66,7 +70,7 @@ class Scalr_UI_Controller_Environments_Platform extends Scalr_UI_Controller
 
 			case 'file':
 				if (isset($_FILES[$varName]['tmp_name']) && ($value = @file_get_contents($_FILES[$varName]['tmp_name'])) != '') {
-					return trim($value);
+					return ($noFileTrim) ? $value : trim($value);
 				} else {
 					$value = $this->env->getPlatformConfigValue($name, true, $group);
 					if ($value == '' && $requiredError)
@@ -78,6 +82,96 @@ class Scalr_UI_Controller_Environments_Platform extends Scalr_UI_Controller
 		}
 	}
 
+	public function gceAction()
+	{
+		$params = array();
+	
+		if (in_array(SERVER_PLATFORMS::GCE, $this->env->getEnabledPlatforms())) {
+			$params['gce.is_enabled'] = true;
+			$params[Modules_Platforms_GoogleCE::CLIENT_ID] = $this->env->getPlatformConfigValue(Modules_Platforms_GoogleCE::CLIENT_ID);
+			$params[Modules_Platforms_GoogleCE::PROJECT_ID] = $this->env->getPlatformConfigValue(Modules_Platforms_GoogleCE::PROJECT_ID);
+			$params[Modules_Platforms_GoogleCE::SERVICE_ACCOUNT_NAME] = $this->env->getPlatformConfigValue(Modules_Platforms_GoogleCE::SERVICE_ACCOUNT_NAME);
+			$params[Modules_Platforms_GoogleCE::KEY] = $this->env->getPlatformConfigValue(Modules_Platforms_GoogleCE::KEY) != '' ? 'Uploaded' : '';
+		}
+	
+		$this->response->page('ui/environments/platform/gce.js', array(
+			'env' => array(
+					'id' => $this->env->id,
+					'name' => $this->env->name
+			),
+			'params' => $params
+		));
+	}
+	
+	public function xSaveGceAction()
+	{
+		$pars = array();
+		$enabled = false;
+	
+		if ($this->getParam('gce_is_enabled')) {
+			$enabled = true;
+	
+			$pars[Modules_Platforms_GoogleCE::CLIENT_ID] = trim($this->checkVar(Modules_Platforms_GoogleCE::CLIENT_ID, 'string', "GCE Cient ID required"));
+			$pars[Modules_Platforms_GoogleCE::SERVICE_ACCOUNT_NAME] = trim($this->checkVar(Modules_Platforms_GoogleCE::SERVICE_ACCOUNT_NAME, 'string', "GCE email (service account name) required"));
+			$pars[Modules_Platforms_GoogleCE::PROJECT_ID] = trim($this->checkVar(Modules_Platforms_GoogleCE::PROJECT_ID, 'password', "GCE Project ID required"));
+			$pars[Modules_Platforms_GoogleCE::KEY] = base64_encode($this->checkVar(Modules_Platforms_GoogleCE::KEY, 'file', "GCE Private Key required", null, true));
+			
+			if (! count($this->checkVarError)) {
+				if (
+					$pars[Modules_Platforms_GoogleCE::CLIENT_ID] != $this->env->getPlatformConfigValue(Modules_Platforms_GoogleCE::CLIENT_ID) or
+					$pars[Modules_Platforms_GoogleCE::SERVICE_ACCOUNT_NAME] != $this->env->getPlatformConfigValue(Modules_Platforms_GoogleCE::SERVICE_ACCOUNT_NAME) or
+					$pars[Modules_Platforms_GoogleCE::PROJECT_ID] != $this->env->getPlatformConfigValue(Modules_Platforms_GoogleCE::PROJECT_ID) or
+					$pars[Modules_Platforms_GoogleCE::KEY] != $this->env->getPlatformConfigValue(Modules_Platforms_GoogleCE::KEY)
+				) {
+					try {
+						$client = new Google_Client();
+						$client->setApplicationName("Scalr GCE");
+						$client->setScopes(array('https://www.googleapis.com/auth/compute'));
+						
+						$key = base64_decode($pars[Modules_Platforms_GoogleCE::KEY]);
+						$client->setAssertionCredentials(new Google_AssertionCredentials(
+							$pars[Modules_Platforms_GoogleCE::SERVICE_ACCOUNT_NAME],
+							array('https://www.googleapis.com/auth/compute'),
+							$key
+						));
+						
+						$client->setUseObjects(true);
+						$client->setClientId($pars[Modules_Platforms_GoogleCE::CLIENT_ID]);
+						
+						$gce = new Google_ComputeService($client);
+						
+						$gce->instances->listInstances($pars[Modules_Platforms_GoogleCE::PROJECT_ID]);
+						
+					} catch (Exception $e) {
+						throw new Exception(_("Provided GCE credentials are incorrect: ({$e->getMessage()})"));
+					}
+				}
+			} else {
+				$this->response->failure();
+				$this->response->data(array('errors' => $this->checkVarError));
+				return;
+			}
+		}
+	
+		$this->db->BeginTrans();
+		try {
+			$this->env->enablePlatform(SERVER_PLATFORMS::GCE, $enabled);
+	
+			if ($enabled)
+				$this->env->setPlatformConfig($pars);
+	
+			if (! $this->user->getAccount()->getSetting(Scalr_Account::SETTING_DATE_ENV_CONFIGURED))
+				$this->user->getAccount()->setSetting(Scalr_Account::SETTING_DATE_ENV_CONFIGURED, time());
+	
+			$this->response->success('Environment saved');
+			$this->response->data(array('enabled' => $enabled));
+		} catch (Exception $e) {
+			$this->db->RollbackTrans();
+			throw new Exception(_("Failed to save GCE settings: {$e->getMessage()}"));
+		}
+		$this->db->CommitTrans();
+	}
+	
 	public function ec2Action()
 	{
 		$params = array();
@@ -120,6 +214,15 @@ class Scalr_UI_Controller_Environments_Platform extends Scalr_UI_Controller
 			$pars[Modules_Platforms_Ec2::SECRET_KEY] = $this->checkVar(Modules_Platforms_Ec2::SECRET_KEY, 'password', "AWS Access Key required");
 			$pars[Modules_Platforms_Ec2::PRIVATE_KEY] = trim($this->checkVar(Modules_Platforms_Ec2::PRIVATE_KEY, 'file', "AWS x.509 Private Key required"));
 			$pars[Modules_Platforms_Ec2::CERTIFICATE] = trim($this->checkVar(Modules_Platforms_Ec2::CERTIFICATE, 'file', "AWS x.509 Certificate required"));
+
+			// user can mull certificate and private key, check it
+			if (strpos($pars[Modules_Platforms_Ec2::PRIVATE_KEY], 'BEGIN CERTIFICATE') !== FALSE &&
+				strpos($pars[Modules_Platforms_Ec2::CERTIFICATE], 'BEGIN PRIVATE KEY') !== FALSE) {
+				// swap it
+				$key = $pars[Modules_Platforms_Ec2::PRIVATE_KEY];
+				$pars[Modules_Platforms_Ec2::PRIVATE_KEY] = $pars[Modules_Platforms_Ec2::CERTIFICATE];
+				$pars[Modules_Platforms_Ec2::CERTIFICATE] = $key;
+			}
 
 			// the same as EC2
 			$pars[Modules_Platforms_Rds::ACCOUNT_ID] = $pars[Modules_Platforms_Ec2::ACCOUNT_ID];
@@ -172,26 +275,29 @@ class Scalr_UI_Controller_Environments_Platform extends Scalr_UI_Controller
 			if (! $this->user->getAccount()->getSetting(Scalr_Account::SETTING_DATE_ENV_CONFIGURED))
 				$this->user->getAccount()->setSetting(Scalr_Account::SETTING_DATE_ENV_CONFIGURED, time());
 
+			$this->db->CommitTrans();
+		} catch (Exception $e) {
+			$this->db->RollbackTrans();
+			throw new Exception(_("Failed to save AWS settings: {$e->getMessage()}"));
+		}
+				
+		try {
 			if ($this->user->getAccount()->getSetting(Scalr_Account::SETTING_IS_TRIAL) == 1) {
 				if ($this->db->GetOne("SELECT COUNT(*) FROM farms WHERE clientid = ?", array($this->user->getAccountId())) == 0) {
 					//Create demo farm
 					try {
 						$dbFarm = DBFarm::LoadByID(9670); // LAMP-PROTOTYPE
-						$dbFarm->cloneFarm('My First LAMP Farm');
+						$dbFarm->cloneFarm('My First LAMP Farm', $this->user, $this->getEnvironmentId());
 						$demoFarm = true;
 					} catch (Exception $e) {
 						throw new Exception("Demo farm creation failed: {$e->getMessage()}");
 					}
 				}
 			}
-			
-			$this->response->success('Environment saved');
-			$this->response->data(array('enabled' => $enabled, 'demoFarm' => $demoFarm));
-		} catch (Exception $e) {
-			$this->db->RollbackTrans();
-			throw new Exception(_("Failed to save AWS settings: {$e->getMessage()}"));
-		}
-		$this->db->CommitTrans();
+		} catch (Exception $e) {}
+		
+		$this->response->success('Environment saved');
+		$this->response->data(array('enabled' => $enabled, 'demoFarm' => $demoFarm));
 	}
 
 	public function rackspaceAction()
@@ -319,15 +425,22 @@ class Scalr_UI_Controller_Environments_Platform extends Scalr_UI_Controller
 		}
 	}
 
+	public function getCloudStackDetails($platform)
+	{
+		$params["{$platform}.is_enabled"] = true;
+		$params[Modules_Platforms_Cloudstack::API_URL] = $this->env->getPlatformConfigValue("{$platform}." . Modules_Platforms_Cloudstack::API_URL);
+		$params[Modules_Platforms_Cloudstack::API_KEY] = $this->env->getPlatformConfigValue("{$platform}." . Modules_Platforms_Cloudstack::API_KEY);
+		$params[Modules_Platforms_Cloudstack::SECRET_KEY] = $this->env->getPlatformConfigValue("{$platform}." . Modules_Platforms_Cloudstack::SECRET_KEY);
+		
+		return $params;
+	} 	
+	
 	public function cloudstackAction()
 	{
 		$params = array();
 
 		if (in_array(SERVER_PLATFORMS::CLOUDSTACK, $this->env->getEnabledPlatforms())) {
-			$params['cloudstack.is_enabled'] = true;
-			$params[Modules_Platforms_Cloudstack::API_URL] = $this->env->getPlatformConfigValue(Modules_Platforms_Cloudstack::API_URL);
-			$params[Modules_Platforms_Cloudstack::API_KEY] = $this->env->getPlatformConfigValue(Modules_Platforms_Cloudstack::API_KEY);
-			$params[Modules_Platforms_Cloudstack::SECRET_KEY] = $this->env->getPlatformConfigValue(Modules_Platforms_Cloudstack::SECRET_KEY);
+			$params = $this->getCloudStackDetails(SERVER_PLATFORMS::CLOUDSTACK);
 		}
 
 		$this->response->page('ui/environments/platform/cloudstack.js', array(
@@ -335,7 +448,47 @@ class Scalr_UI_Controller_Environments_Platform extends Scalr_UI_Controller
 				'id' => $this->env->id,
 				'name' => $this->env->name
 			),
-			'params' => $params
+			'params' => $params,
+			'platformName' => 'Cloudstack',
+			'platform' => 'cloudstack'
+		));
+	}
+	
+	public function idcfAction()
+	{
+		$params = array();
+	
+		if (in_array(SERVER_PLATFORMS::IDCF, $this->env->getEnabledPlatforms())) {
+			$params = $this->getCloudStackDetails(SERVER_PLATFORMS::IDCF);
+		}
+	
+		$this->response->page('ui/environments/platform/cloudstack.js', array(
+			'env' => array(
+					'id' => $this->env->id,
+					'name' => $this->env->name
+			),
+			'params' => $params,
+			'platformName' => 'IDCF',
+			'platform' => 'idcf'
+		));
+	}
+	
+	public function ucloudAction()
+	{
+		$params = array();
+	
+		if (in_array(SERVER_PLATFORMS::UCLOUD, $this->env->getEnabledPlatforms())) {
+			$params = $this->getCloudStackDetails(SERVER_PLATFORMS::UCLOUD);
+		}
+	
+		$this->response->page('ui/environments/platform/cloudstack.js', array(
+			'env' => array(
+					'id' => $this->env->id,
+					'name' => $this->env->name
+			),
+			'params' => $params,
+			'platformName' => 'KT uCloud',
+			'platform' => 'ucloud'
 		));
 	}
 
@@ -343,13 +496,14 @@ class Scalr_UI_Controller_Environments_Platform extends Scalr_UI_Controller
 	{
 		$pars = array();
 		$enabled = false;
+		$platform = $this->getParam('platform');
 
-		if ($this->getParam('cloudstack_is_enabled')) {
+		if ($this->getParam("{$platform}_is_enabled")) {
 			$enabled = true;
 
-			$pars[Modules_Platforms_Cloudstack::API_URL] = $this->checkVar(Modules_Platforms_Cloudstack::API_URL, 'string', 'API URL required');
-			$pars[Modules_Platforms_Cloudstack::API_KEY] = $this->checkVar(Modules_Platforms_Cloudstack::API_KEY, 'string', 'API key required');
-			$pars[Modules_Platforms_Cloudstack::SECRET_KEY] = $this->checkVar(Modules_Platforms_Cloudstack::SECRET_KEY, 'string', 'Secret key required');
+			$pars["{$platform}." . Modules_Platforms_Cloudstack::API_URL] = $this->checkVar(Modules_Platforms_Cloudstack::API_URL, 'string', 'API URL required');
+			$pars["{$platform}." . Modules_Platforms_Cloudstack::API_KEY] = $this->checkVar(Modules_Platforms_Cloudstack::API_KEY, 'string', 'API key required');
+			$pars["{$platform}." . Modules_Platforms_Cloudstack::SECRET_KEY] = $this->checkVar(Modules_Platforms_Cloudstack::SECRET_KEY, 'string', 'Secret key required');
 		}
 
 		if (count($this->checkVarError)) {
@@ -357,32 +511,48 @@ class Scalr_UI_Controller_Environments_Platform extends Scalr_UI_Controller
 			$this->response->data(array('errors' => $this->checkVarError));
 		} else {
 			
-			$cs = Scalr_Service_Cloud_Cloudstack::newCloudstack(
-				$pars[Modules_Platforms_Cloudstack::API_URL],
-				$pars[Modules_Platforms_Cloudstack::API_KEY],
-				$pars[Modules_Platforms_Cloudstack::SECRET_KEY]
-			);
-			$accounts = $cs->listAccounts();
-			foreach ($accounts as $account) {
-				foreach ($account->user as $user) {
-					if ($user->apikey == $pars[Modules_Platforms_Cloudstack::API_KEY]) {
-						$dPars[Modules_Platforms_Cloudstack::ACCOUNT_NAME] = $user->account;
-						$dPars[Modules_Platforms_Cloudstack::DOMAIN_NAME] = $user->domain;
-						$dPars[Modules_Platforms_Cloudstack::DOMAIN_ID] = $user->domainid; 
+			if ($this->getParam("{$platform}_is_enabled")) {
+				$cs = Scalr_Service_Cloud_Cloudstack::newCloudstack(
+					$pars["{$platform}." . Modules_Platforms_Cloudstack::API_URL],
+					$pars["{$platform}." . Modules_Platforms_Cloudstack::API_KEY],
+					$pars["{$platform}." . Modules_Platforms_Cloudstack::SECRET_KEY],
+					$platform
+				);
+				$accounts = $cs->listAccounts();
+				foreach ($accounts as $account) {
+					foreach ($account->user as $user) {
+						if ($user->apikey == $pars["{$platform}." . Modules_Platforms_Cloudstack::API_KEY]) {
+							$dPars["{$platform}." . Modules_Platforms_Cloudstack::ACCOUNT_NAME] = $user->account;
+							$dPars["{$platform}." . Modules_Platforms_Cloudstack::DOMAIN_NAME] = $user->domain;
+							$dPars["{$platform}." . Modules_Platforms_Cloudstack::DOMAIN_ID] = $user->domainid; 
+						}
 					}
 				}
+				
+				if (!$dPars["{$platform}." . Modules_Platforms_Cloudstack::ACCOUNT_NAME])
+					throw new Exception("Cannot determine account name for provided keys");
 			}
-			
-			if (!$dPars[Modules_Platforms_Cloudstack::ACCOUNT_NAME])
-				throw new Exception("Cannot determine account name for provided keys");
 			
 			$this->db->BeginTrans();
 			try {
-				$this->env->enablePlatform(SERVER_PLATFORMS::CLOUDSTACK, $enabled);
+				$this->env->enablePlatform($platform, $enabled);
 
 				if ($enabled) {
 					$this->env->setPlatformConfig($pars);
 					$this->env->setPlatformConfig($dPars, false);
+				} else {
+					$this->env->setPlatformConfig(array(
+						"{$platform}." . Modules_Platforms_Cloudstack::ACCOUNT_NAME => false,
+						"{$platform}." . Modules_Platforms_Cloudstack::API_KEY => false,
+						"{$platform}." . Modules_Platforms_Cloudstack::API_URL => false,
+						"{$platform}." . Modules_Platforms_Cloudstack::DOMAIN_ID => false,
+						"{$platform}." . Modules_Platforms_Cloudstack::DOMAIN_NAME => false,
+						"{$platform}." . Modules_Platforms_Cloudstack::SECRET_KEY => false,
+						"{$platform}." . Modules_Platforms_Cloudstack::SHARED_IP => false,
+						"{$platform}." . Modules_Platforms_Cloudstack::SHARED_IP_ID => false,
+						"{$platform}." . Modules_Platforms_Cloudstack::SHARED_IP_INFO => false,
+						"{$platform}." . Modules_Platforms_Cloudstack::SZR_PORT_COUNTER => false
+					));
 				}
 
 				if (! $this->user->getAccount()->getSetting(Scalr_Account::SETTING_DATE_ENV_CONFIGURED))
@@ -392,7 +562,7 @@ class Scalr_UI_Controller_Environments_Platform extends Scalr_UI_Controller
 				$this->response->data(array('enabled' => $enabled));
 			} catch (Exception $e) {
 				$this->db->RollbackTrans();
-				throw new Exception(_('Failed to save Cloudstack settings'));
+				throw new Exception(_('Failed to save '.ucfirst($platform).' settings'));
 			}
 			$this->db->CommitTrans();
 		}

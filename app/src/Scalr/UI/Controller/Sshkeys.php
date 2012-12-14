@@ -1,5 +1,5 @@
 <?php
-class Scalr_UI_Controller_SshKeys extends Scalr_UI_Controller
+class Scalr_UI_Controller_Sshkeys extends Scalr_UI_Controller
 {
 	const CALL_PARAM_NAME = 'sshKeyId';
 
@@ -10,7 +10,10 @@ class Scalr_UI_Controller_SshKeys extends Scalr_UI_Controller
 
 	public function viewAction()
 	{
-		$this->response->page('ui/sshkeys/view.js');
+		$farms = self::loadController('Farms')->getList();
+		array_unshift($farms, array('id' => 0, 'name' => 'All farms'));
+
+		$this->response->page('ui/sshkeys/view.js', array('farms' => $farms));
 	}
 
 	public function downloadPrivateAction()
@@ -24,10 +27,15 @@ class Scalr_UI_Controller_SshKeys extends Scalr_UI_Controller
 
 		$retval = $sshKey->getPrivate();
 
+		if ($sshKey->cloudLocation)
+			$fileName = "{$sshKey->cloudKeyName}.{$sshKey->cloudLocation}.private.pem";
+		else
+			$fileName = "{$sshKey->cloudKeyName}.private.pem";
+		
 		$this->response->setHeader('Pragma', 'private');
 		$this->response->setHeader('Cache-control', 'private, must-revalidate');
 		$this->response->setHeader('Content-type', 'plain/text');
-		$this->response->setHeader('Content-Disposition', 'attachment; filename="'.$sshKey->cloudKeyName.'.'.$sshKey->cloudLocation.'.private.pem"');
+		$this->response->setHeader('Content-Disposition', 'attachment; filename="'.$fileName.'"');
 		$this->response->setHeader('Content-Length', strlen($retval));
 
 		$this->response->setResponse($retval);
@@ -46,10 +54,15 @@ class Scalr_UI_Controller_SshKeys extends Scalr_UI_Controller
 		if (!$retval)
 			$retval = $sshKey->generatePublicKey();
 
+		if ($sshKey->cloudLocation)
+			$fileName = "{$sshKey->cloudKeyName}.{$sshKey->cloudLocation}.public.pem";
+		else
+			$fileName = "{$sshKey->cloudKeyName}.public.pem";
+		
 		$this->response->setHeader('Pragma', 'private');
 		$this->response->setHeader('Cache-control', 'private, must-revalidate');
 		$this->response->setHeader('Content-type', 'plain/text');
-		$this->response->setHeader('Content-Disposition', 'attachment; filename="'.$sshKey->cloudKeyName.'.'.$sshKey->cloudLocation.'.public.pem"');
+		$this->response->setHeader('Content-Disposition', 'attachment; filename="'.$fileName.'"');
 		$this->response->setHeader('Content-Length', strlen($retval));
 
 		$this->response->setResponse($retval);
@@ -78,11 +91,13 @@ class Scalr_UI_Controller_SshKeys extends Scalr_UI_Controller
 				
 				$this->response->success();
 			} else {
-				//TODO:
+				$sshKey->delete();
 			}
 		} else {
 			//TODO:
 		}
+		
+		$this->response->success("SSH key successfully removed");
 	}
 	
 	public function regenerateAction()
@@ -144,16 +159,30 @@ class Scalr_UI_Controller_SshKeys extends Scalr_UI_Controller
 	{
 		$this->request->defineParams(array(
 			'sshKeyId' => array('type' => 'int'),
-			'sort' => array('type' => 'string', 'default' => 'id'),
-			'dir' => array('type' => 'string', 'default' => 'ASC')
+			'farmId' => array('type' => 'int'),
+			'sort' => array('type' => 'json')
 		));
 
-		$sql = "SELECT id from ssh_keys WHERE env_id='" . $this->getEnvironmentId()."'";
+		$sql = 'SELECT id FROM ssh_keys WHERE env_id = ? AND :FILTER:';
+		$params = array($this->getEnvironmentId());
 
-		if ($this->getParam('sshKeyId'))
-			$sql .= " AND id='{$this->getParam('sshKeyId')}'";
+		if ($this->getParam('sshKeyId')) {
+			$sql .= " AND id = ?";
+			$params[] = $this->getParam('sshKeyId');
+		}
 
-		$response = $this->buildResponseFromSql($sql, array("cloud_key_name", "farm_id", "id"));
+		if ($this->getParam('farmId')) {
+			$sql .= " AND farm_id = ?";
+			$params[] = $this->getParam('farmId');
+		}
+
+		$response = $this->buildResponseFromSql(
+			$sql,
+			array('id', 'type', 'cloud_location'),
+			array('cloud_key_name', 'cloud_location', 'farm_id', 'id'),
+			$params
+		);
+
 		foreach ($response["data"] as &$row) {
 			$sshKey = Scalr_SshKey::init()->loadById($row['id']);
 

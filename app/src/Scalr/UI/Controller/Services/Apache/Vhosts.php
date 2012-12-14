@@ -2,6 +2,7 @@
 class Scalr_UI_Controller_Services_Apache_Vhosts extends Scalr_UI_Controller
 {
 	const CALL_PARAM_NAME = 'vhostId';
+	protected $farmWidgetOptions = array('behavior_app', 'disabledServer', 'requiredFarm', 'requiredFarmRole');
 
 	public static function getPermissionDefinitions()
 	{
@@ -73,10 +74,7 @@ class Scalr_UI_Controller_Services_Apache_Vhosts extends Scalr_UI_Controller
 		}
 
 		$this->response->page('ui/services/apache/vhosts/create.js', array(
-			'farms' => $farms,
-			'farmRoles' => $farmRoles,
-			'farmId' => $vHost->farmId,
-			'farmRoleId' => $vHost->farmRoleId,
+			'farmWidget' => self::loadController('Farms')->getFarmWidget(array('farmId' => $vHost->farmId, 'farmRoleId' => $vHost->farmRoleId), $this->farmWidgetOptions),
 			'vhostId' => $vHost->id,
 			'domainName' => $vHost->domainName,
 			'isSslEnabled' => (int)$vHost->isSslEnabled,
@@ -97,10 +95,7 @@ class Scalr_UI_Controller_Services_Apache_Vhosts extends Scalr_UI_Controller
 		$farms = self::loadController('Farms')->getList();
 
 		$this->response->page('ui/services/apache/vhosts/create.js', array(
-			'farms' => $farms,
-			'farmRoles' => array(),
-			'farmId' => '',
-			'farmRoleId' => '',
+			'farmWidget' => self::loadController('Farms')->getFarmWidget(array(), $this->farmWidgetOptions),
 			'vhostId' => 0,
 			'domainName' => '',
 			'isSslEnabled' => 0,
@@ -236,7 +231,7 @@ class Scalr_UI_Controller_Services_Apache_Vhosts extends Scalr_UI_Controller
 		if ($this->getParam('vhostId'))
 			$sql .= " AND `id` = " . $this->db->qstr($this->getParam('vhostId'));
 
-		$response = $this->buildResponseFromSql($sql, array("name"));
+		$response = $this->buildResponseFromSql($sql, array("name", "httpd_conf_vars"));
 
 		foreach ($response['data'] as &$row) {
 			$row['last_modified'] = Scalr_Util_DateTime::convertTz($row['last_modified']);

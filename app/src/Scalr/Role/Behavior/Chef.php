@@ -3,10 +3,13 @@
 	{
 		/** DBFarmRole settings **/
 		const ROLE_CHEF_SERVER_ID		= 'chef.server_id';
-		const ROLE_CHEF_ROLE_NAME			= 'chef.role_name';
+		const ROLE_CHEF_BOOTSTRAP		= 'chef.bootstrap';
+		const ROLE_CHEF_ROLE_NAME		= 'chef.role_name';
 		const ROLE_CHEF_RUNLIST_ID		= 'chef.runlist_id';
+		const ROLE_CHEF_ENVIRONMENT		= 'chef.environment';
 		const ROLE_CHEF_ATTRIBUTES		= 'chef.attributes';
 		const ROLE_CHEF_CHECKSUM		= 'chef.checksum';
+		const ROLE_CHEF_NODENAME_TPL	= 'chef.node_name_tpl';
 		
 		const SERVER_CHEF_NODENAME		= 'chef.node_name';
 		
@@ -40,38 +43,54 @@
 				}
 				
 				$db = Core::GetDBInstance();
+				$useChefBootstrap = $dbFarmRole->GetSetting(self::ROLE_CHEF_BOOTSTRAP);
 				$runListId = $dbFarmRole->GetSetting(self::ROLE_CHEF_RUNLIST_ID);
 				$attributes = $dbFarmRole->GetSetting(self::ROLE_CHEF_ATTRIBUTES); 
 				$checksum = $dbFarmRole->GetSetting(self::ROLE_CHEF_CHECKSUM);
 				$chefRoleName = $dbFarmRole->GetSetting(self::ROLE_CHEF_ROLE_NAME);
 				$chefServerId = $dbFarmRole->GetSetting(self::ROLE_CHEF_SERVER_ID);
 				
+				$defaultRoleName = "scalr-{$dbFarmRole->ID}";
+				
 				// Need to remove chef role if chef was disabled for current farmrole
-				if (!$runListId && $chefRoleName) {
+				if (!$useChefBootstrap && $chefRoleName == $defaultRoleName) {
 					$this->removeChefRole($chefServerId, $chefRoleName);
 					$dbFarmRole->ClearSettings("chef.");
 					return true;
+				} elseif (!$useChefBootstrap) {
+					$dbFarmRole->ClearSettings("chef.");
+					return true;	
+				}
+				
+				if ($chefRoleName != $defaultRoleName) {
+					$runListId = null;
+					$dbFarmRole->SetSetting(self::ROLE_CHEF_RUNLIST_ID, null);
 				}
 					
-				if ($runListId)
+				if ($useChefBootstrap && $runListId)
 				{
 					$runListInfo = $this->db->GetRow("SELECT chef_server_id, runlist FROM services_chef_runlists WHERE id=?", array($runListId));	
 					$newChefServerId = $runListInfo['chef_server_id'];
 					if ($newChefServerId != $chefServerId && $chefServerId) {
 						// Remove role from old server
-						$this->removeChefRole($chefServerId, $chefRoleName);
-						$createNew = true;
+						if ($chefRoleName == $defaultRoleName) {
+							$this->removeChefRole($chefServerId, $chefRoleName);
+							$createNew = true;
+						}
 					}
 					
-					if (!$chefServerId)
-						$createNew = true;
-					
-					$chefServerInfo = $this->db->GetRow("SELECT * FROM services_chef_servers WHERE id=?", array($runListInfo['chef_server_id']));
+					$chefServerInfo = $this->db->GetRow("SELECT * FROM services_chef_servers WHERE id=?", array($chefServerId));
 					$chefServerInfo['auth_key'] = $this->getCrypto()->decrypt($chefServerInfo['auth_key'], $this->cryptoKey);
 					
 					$chefClient = Scalr_Service_Chef_Client::getChef($chefServerInfo['url'], $chefServerInfo['username'], trim($chefServerInfo['auth_key']));
-						
-					$roleName = "scalr-{$dbFarmRole->ID}";
+					
+					if (!$chefRoleName)	{
+						$roleName = $defaultRoleName;
+						$createNew = true;
+					}
+					else
+						$roleName = $chefRoleName;
+					
 					$setSettings = false;
 					
 					if ($createNew) {
@@ -86,7 +105,6 @@
 					
 					if ($setSettings) {
 						$dbFarmRole->SetSetting(self::ROLE_CHEF_ROLE_NAME, $roleName);
-						$dbFarmRole->SetSetting(self::ROLE_CHEF_SERVER_ID, $runListInfo['chef_server_id']);
 						$dbFarmRole->SetSetting(self::ROLE_CHEF_CHECKSUM, md5("{$runListInfo['runlist']}.$attributes"));
 					}
 				}
@@ -110,18 +128,29 @@
 		
 		public function extendMessage(Scalr_Messaging_Msg $message, DBServer $dbServer)
 		{
-			$message = parent::extendMessage($message);
+			$message = parent::extendMessage($message, $dbServer);
 			
 			$dbFarmRole = $dbServer->GetFarmRoleObject();
 			$chefServerId = $dbFarmRole->GetSetting(self::ROLE_CHEF_SERVER_ID);
-			$runListId = $dbFarmRole->GetSetting(self::ROLE_CHEF_RUNLIST_ID);
-			if (!$chefServerId || !$runListId)
+			$chefRoleName = $dbFarmRole->GetSetting(self::ROLE_CHEF_ROLE_NAME);
+			$chefEnvironment = $dbFarmRole->GetSetting(self::ROLE_CHEF_ENVIRONMENT);
+			if (!$chefServerId || !$chefRoleName)
 				return $message;
-				
-			$chefRunListInfo = $this->db->GetRow("SELECT * FROM services_chef_runlists WHERE id=?", array($runListId));
 			
-			$chefServerInfo = $this->db->GetRow("SELECT * FROM services_chef_servers WHERE id=?", array($chefRunListInfo['chef_server_id']));
+			$chefServerInfo = $this->db->GetRow("SELECT * FROM services_chef_servers WHERE id=?", array($chefServerId));
 			$chefServerInfo['v_auth_key'] = trim($this->getCrypto()->decrypt($chefServerInfo['v_auth_key'], $this->cryptoKey));
+			
+			$nodeNameTpl = $dbFarmRole->GetSetting(self::ROLE_CHEF_NODENAME_TPL);
+			if ($nodeNameTpl) {
+				$params = $dbServer->GetScriptingVars();
+				$keys = array_keys($params);
+				$f = create_function('$item', 'return "%".$item."%";');
+				$keys = array_map($f, $keys);
+				$values = array_values($params);
+					
+				
+				$nodeName = str_replace($keys, $values, $nodeNameTpl);
+			}
 			
 			switch (get_class($message))
 			{
@@ -129,10 +158,14 @@
 					
 					$message->chef = new stdClass();
 					$message->chef->serverUrl = $chefServerInfo['url'];
-					$message->chef->role = $dbFarmRole->GetSetting(self::ROLE_CHEF_ROLE_NAME);
+					$message->chef->role = $chefRoleName;
 					$message->chef->validatorName = $chefServerInfo['v_username'];
 					$message->chef->validatorKey = $chefServerInfo['v_auth_key'];
-					$message->chef->environment = $chefRunListInfo['chef_environment'];
+					$message->chef->jsonAttributes = $dbFarmRole->GetSetting(self::ROLE_CHEF_ATTRIBUTES);
+					$message->chef->environment = $chefEnvironment;
+					
+					if ($nodeName)
+						$message->chef->nodeName = $nodeName;
 					
 					break;
 			}

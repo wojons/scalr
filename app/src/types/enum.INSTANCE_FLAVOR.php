@@ -11,5 +11,6 @@
 		const M2_XLARGE	= "m2.xlarge";
 		const M2_2XLARGE = "m2.2xlarge";
 		const M2_4XLARGE = "m2.4xlarge";
+		const HI1_4XLARGE = "hi1.4xlarge";
 	}
 ?>

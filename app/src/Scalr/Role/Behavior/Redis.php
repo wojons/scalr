@@ -12,7 +12,7 @@
 		public function getSecurityRules()
 		{
 			return array(
-				"tcp:6379:6379:0.0.0.0/0"
+				"tcp:6379:6395:0.0.0.0/0"
 			);
 		}
 	}

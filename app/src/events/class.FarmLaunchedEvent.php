@@ -10,5 +10,10 @@
 			
 			$this->MarkInstancesAsActive = $MarkInstancesAsActive;
 		}
+		
+		public function getTextDetails()
+		{
+			return "Farm has been launched";
+		}
 	}
 ?>

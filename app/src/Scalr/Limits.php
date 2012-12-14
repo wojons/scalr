@@ -11,6 +11,8 @@
 		const FEATURE_MONGODB_SHARDING = 'feature.mongodb.sharding';
 		const FEATURE_USERS_PERMISSIONS = 'feature.users.permissions';
 		const FEATURE_CHEF = 'feature.chef';
+		const FEATURE_RAID = 'feature.raid';
+		const FEATURE_MFS  = 'feature.mfs';
 		
 		const TYPE_SOFT = 'soft';
 		const TYPE_HARD = 'hard';
@@ -49,7 +51,9 @@
 				self::FEATURE_2FA => self::getFeatureName(self::FEATURE_2FA),
 				self::FEATURE_USERS_PERMISSIONS => self::getFeatureName(self::FEATURE_USERS_PERMISSIONS),
 				self::FEATURE_CHEF => self::getFeatureName(self::FEATURE_CHEF),
-				self::FEATURE_MONGODB_SHARDING => self::getFeatureName(self::FEATURE_MONGODB_SHARDING)
+				self::FEATURE_MONGODB_SHARDING => self::getFeatureName(self::FEATURE_MONGODB_SHARDING),
+				self::FEATURE_RAID => self::getFeatureName(self::FEATURE_RAID),
+				self::FEATURE_MFS => self::getFeatureName(self::FEATURE_MFS)
 			);
 		}
 			
@@ -60,11 +64,11 @@
 			switch ($feature)
 			{
 				case self::FEATURE_2FA:
-					$retval = 'Two-factor Authentification';
+					$retval = 'Two-factor authentification';
 				break;
 				
 				case self::FEATURE_MONGODB_SHARDING:
-					$retval = 'MongoDB Sharding';
+					$retval = 'MongoDB sharding';
 				break;
 				
 				case self::FEATURE_USERS_PERMISSIONS:
@@ -74,6 +78,14 @@
 				case self::FEATURE_CHEF:
 					$retval = 'Chef integration';
 				break;
+				
+				case self::FEATURE_RAID:
+					$retval = 'RAID arrays';
+				break;
+				
+				case self::FEATURE_MFS:
+					$retval = 'Different filesystems';
+					break;
 			}
 			
 			return $retval;

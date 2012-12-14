@@ -14,5 +14,10 @@
 			
 			$this->DBServer = $DBServer;
 		}
+		
+		public function getTextDetails()
+		{
+			return "Instance {$this->DBServer->serverId} Public IP: {$this->DBServer->remoteIp} Internal IP: {$this->DBServer->localIp} crashed";
+		}
 	}
 ?>

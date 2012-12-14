@@ -148,6 +148,13 @@
             	}
 	                
 	            try {
+	            	
+					$realStatus = $DBServer->GetRealStatus()->getName();
+					if ($realStatus == 'stopped') {
+						$DBServer->SetProperty(SERVER_PROPERTIES::SUB_STATUS, $realStatus);
+						continue;
+					}
+					
 	                if ($DBServer->status != SERVER_STATUS::TERMINATED && $DBServer->GetRealStatus()->isTerminated())
 	                {
 	                    if ($DBServer->status != SERVER_STATUS::PENDING_TERMINATE) {
@@ -249,7 +256,7 @@
 									$scripting_event = EVENT_TYPE::HOST_UP;
 								}
 
-								if ($scripting_event) {
+								if ($scripting_event && $dtadded) {
 									$scripting_timeout = (int)$this->db->GetOne("SELECT sum(timeout) FROM farm_role_scripts  
 										WHERE event_name=? AND 
 										farm_roleid=? AND issync='1'",
@@ -261,10 +268,12 @@
 										
 								    if ($dtadded+$launch_timeout < time()) {
 			                            //Add entry to farm log
+			                            $time = time();
 			                    		Logger::getLogger(LOG_CATEGORY::FARM)->warn(new FarmLogMessage($DBFarm->ID, "Server '{$DBServer->serverId}' did not send '{$event}' event in {$launch_timeout} seconds after launch (Try increasing timeouts in role settings). Considering it broken. Terminating instance."));
 			                                
 			                    		try {
 			                            	Scalr::FireEvent($DBFarm->ID, new BeforeHostTerminateEvent($DBServer, false));
+			                            	Scalr_Server_History::init($DBServer)->markAsTerminated("Server did not send '{$event}' event in {$launch_timeout} seconds after launch");
 			                            }
 			                            catch (Exception $err) {
 											$this->logger->fatal($err->getMessage());
@@ -277,11 +286,13 @@
 								{
 									$ipaddresses = PlatformFactory::NewPlatform($DBServer->platform)->GetServerIPAddresses($DBServer);
 									
-									if ($ipaddresses['remoteIp'] && $DBServer->remoteIp != $ipaddresses['remoteIp'])
+									if (
+										($ipaddresses['remoteIp'] && $DBServer->remoteIp && $DBServer->remoteIp != $ipaddresses['remoteIp']) || 
+										($ipaddresses['localIp'] && $DBServer->localIp && $DBServer->localIp != $ipaddresses['localIp']))
 									{
 										Scalr::FireEvent(
 			                            	$DBServer->farmId,
-			                                new IPAddressChangedEvent($DBServer, $ipaddresses['remoteIp']) 
+			                                new IPAddressChangedEvent($DBServer, $ipaddresses['remoteIp'], $ipaddresses['localIp']) 
 			                            );
 									}
 									
@@ -297,11 +308,13 @@
 						{
 							$ipaddresses = PlatformFactory::NewPlatform($DBServer->platform)->GetServerIPAddresses($DBServer);
 							
-							if ($ipaddresses['remoteIp'] && $DBServer->remoteIp != $ipaddresses['remoteIp'])
+							if (
+								($ipaddresses['remoteIp'] && $DBServer->remoteIp && $DBServer->remoteIp != $ipaddresses['remoteIp']) || 
+								($ipaddresses['localIp'] && $DBServer->localIp && $DBServer->localIp != $ipaddresses['localIp']))
 							{
 								Scalr::FireEvent(
 	                            	$DBServer->farmId,
-	                                new IPAddressChangedEvent($DBServer, $ipaddresses['remoteIp']) 
+	                                new IPAddressChangedEvent($DBServer, $ipaddresses['remoteIp'], $ipaddresses['localIp']) 
 	                            );
 							}
 							
@@ -337,28 +350,9 @@
 		                			)));
 		                			
 		                			PlatformFactory::NewPlatform($DBServer->platform)->TerminateServer($DBServer);
-		                			
-		                			$this->db->Execute("UPDATE servers_history SET
-										dtterminated	= NOW(),
-										terminate_reason	= ?
-										WHERE server_id = ?
-									", array(
-										sprintf("Server is running on Amazon but has terminated status on Scalr"),
-										$DBServer->serverId
-									));
 								}
 	                		} catch (Exception $e) {
-	                			if (stristr($e->getMessage(), "not found")) {
-	                				
-	                				$this->db->Execute("UPDATE servers_history SET
-										dtterminated	= NOW(),
-										terminate_reason	= ?
-										WHERE server_id = ?
-									", array(
-										sprintf("Role was removed from farm"),
-										$DBServer->serverId
-									));
-	                				
+	                			if (stristr($e->getMessage(), "not found")) {	                				
 	                				$DBServer->Remove();
 	                			} elseif (stristr($e->getMessage(), "disableApiTermination")) {
 	                				continue;
@@ -406,14 +400,27 @@
 		            $p_terminated_servers = $this->db->GetAll("SELECT server_id FROM servers WHERE status=? AND role_id='0' AND farm_id IS NULL", 
 		            	array(SERVER_STATUS::PENDING_TERMINATE)
 		            );
-		            foreach ($p_terminated_servers as $ts)
-		            	DBServer::LoadByID($ts['server_id'])->Remove();
+		            foreach ($p_terminated_servers as $ts) {
+		            	
+		            	$dbServer = DBServer::LoadByID($ts['server_id']);
+		            	$dbServer->Remove();
+		            }
 		            	
 		            $importing_servers = $this->db->GetAll("SELECT server_id FROM servers WHERE status IN(?,?) AND UNIX_TIMESTAMP(dtadded)+86400 < UNIX_TIMESTAMP(NOW())", 
 		            	array(SERVER_STATUS::IMPORTING, SERVER_STATUS::TEMPORARY)
 		            );	
-		            foreach ($importing_servers as $ts)
-		            	DBServer::LoadByID($ts['server_id'])->Remove();
+		            foreach ($importing_servers as $ts) {
+		            	
+		            	$dbServer = DBServer::LoadByID($ts['server_id']);
+		            	if ($dbServer->status == SERVER_STATUS::TEMPORARY) {
+			            	try {
+			            		PlatformFactory::NewPlatform($dbServer->platform)->TerminateServer($dbServer);
+			            	} catch (Exception $e) {
+			            		
+			            	}
+		            	}
+		            	$dbServer->Remove();
+		            }
 		            
 		            $pending_launch_servers = $this->db->GetAll("SELECT server_id FROM servers WHERE status=?", array(SERVER_STATUS::PENDING_LAUNCH));
 		            try
@@ -421,9 +428,12 @@
 			            foreach ($pending_launch_servers as $ts)
 			            {
 			            	$DBServer = DBServer::LoadByID($ts['server_id']);
-			            	$account = Scalr_Account::init()->loadById($DBServer->clientId);
-			            	if ($account->status == Scalr_Account::STATUS_ACTIVE) {
-								Scalr::LaunchServer(null, $DBServer);
+			            	if ($DBServer->status == SERVER_STATUS::PENDING_LAUNCH)
+			            	{
+				            	$account = Scalr_Account::init()->loadById($DBServer->clientId);
+				            	if ($account->status == Scalr_Account::STATUS_ACTIVE) {
+									Scalr::LaunchServer(null, $DBServer);
+				            	}
 			            	}
 			            }
 			        }

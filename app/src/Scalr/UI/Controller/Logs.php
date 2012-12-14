@@ -5,7 +5,7 @@ class Scalr_UI_Controller_Logs extends Scalr_UI_Controller
 	public function systemAction()
 	{
 		$farms = self::loadController('Farms')->getList();
-		$farms[0] = 'All farms';
+		array_unshift($farms, array('id' => 0, 'name' => 'All farms'));
 
 		$this->response->page('ui/logs/system.js', array(
 			'farms' => $farms,
@@ -22,7 +22,7 @@ class Scalr_UI_Controller_Logs extends Scalr_UI_Controller
 	public function scriptingAction()
 	{
 		$farms = self::loadController('Farms')->getList();
-		$farms[0] = 'All farms';
+		array_unshift($farms, array('id' => '0', 'name' => 'All farms'));
 
 		$this->response->page('ui/logs/scripting.js', array(
 			'farms' => $farms
@@ -150,14 +150,13 @@ class Scalr_UI_Controller_Logs extends Scalr_UI_Controller
 		));
 
 		$farms = array();
-		foreach ($this->db->getAll('SELECT id FROM farms WHERE clientid = ?', array($this->user->getAccountId())) as $value)
+		foreach ($this->db->getAll('SELECT id FROM farms WHERE env_id = ?', array($this->getEnvironmentId())) as $value)
 			$farms[] = $value['id'];
 
 		$sql = "SELECT * FROM scripting_log WHERE 1";
 
 		if ($this->getParam('serverId')) {
-			$serverId = preg_replace("/[^A-Za-z0-9-]+/si", "", $this->getParam('serverId'));
-			$sql  .= " AND server_id = '{$serverId}'";
+			$sql  .= " AND server_id = ".$this->db->qstr($this->getParam('serverId'));
 		}
 		else {
 			if ($this->getParam('farmId'))
@@ -165,11 +164,60 @@ class Scalr_UI_Controller_Logs extends Scalr_UI_Controller
 			else
 				$sql .= count($farms) ? " AND farmid IN (" . implode(',', $farms) . ")" : " AND 0";
 		}
+		
+		if ($this->getParam('eventId'))
+			$sql  .= " AND event_id = ".$this->db->qstr($this->getParam('eventId'));
 
 
-		$response = $this->buildResponseFromSql($sql, array("message", "server_id"));
+		$response = $this->buildResponseFromSql($sql, array("script_name", "server_id", "event_server_id", "event"));
+		$cache = array();
 		foreach ($response["data"] as &$row) {
-			$row["farm_name"] = $this->db->GetOne("SELECT name FROM farms WHERE id=?", array($row['farmid']));
+				
+			//
+			//target_data
+			//
+			if (!$cache['farm_names'][$row['farmid']])
+				$cache['farm_names'][$row['farmid']] = $this->db->GetOne("SELECT name FROM farms WHERE id=?", array($row['farmid']));
+			$row['target_farm_name'] = $cache['farm_names'][$row['farmid']];
+			$row['target_farm_id'] = $row['farmid'];
+			
+			$sInfo = $this->db->GetRow("SELECT role_id, farm_roleid, `index` FROM servers WHERE server_id = ?", array($row['server_id']));
+			$row['target_farm_roleid'] = $sInfo['farm_roleid'];
+			
+			if (!$cache['role_names'][$sInfo['role_id']])
+				$cache['role_names'][$sInfo['role_id']] = $this->db->GetOne("SELECT name FROM roles WHERE id=?", array($sInfo['role_id']));
+			$row['target_role_name'] = $cache['role_names'][$sInfo['role_id']];
+			
+			$row['target_server_index'] = $sInfo['index'];
+			$row['target_server_id'] = $row['server_id'];
+			
+			
+			//
+			//event_data
+			//
+			if ($row['event_server_id']) {
+				$esInfo = $this->db->GetRow("SELECT role_id, farm_roleid, `index`, farm_id FROM servers WHERE server_id = ?", array($row['event_server_id']));
+				
+				if (!$cache['farm_names'][$esInfo['farm_id']])
+					$cache['farm_names'][$esInfo['farm_id']] = $this->db->GetOne("SELECT name FROM farms WHERE id=?", array($esInfo['farm_id']));
+				$row['event_farm_name'] = $cache['farm_names'][$esInfo['farm_id']];
+				$row['event_farm_id'] = $esInfo['farm_id'];
+				
+				$row['event_farm_roleid'] = $esInfo['farm_roleid'];
+				
+				if (!$cache['role_names'][$esInfo['role_id']])
+					$cache['role_names'][$esInfo['role_id']] = $this->db->GetOne("SELECT name FROM roles WHERE id=?", array($esInfo['role_id']));
+				$row['event_role_name'] = $cache['role_names'][$esInfo['role_id']];
+				
+				$row['event_server_index'] = $esInfo['index'];
+			}
+			
+			if (stristr($row['event'], "CustomEvent") !== false)
+				$row['event'] = 'Executed manually';
+			
+			if (stristr($row['event'], "APIEvent") !== false)
+				$row['event'] = 'Executed by API';
+			
 			$row['dtadded'] = Scalr_Util_DateTime::convertTz($row['dtadded']);
 			$row['message'] = nl2br(htmlspecialchars($row['message']));
 		}

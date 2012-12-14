@@ -31,6 +31,10 @@
 				"api_url" => "https://ec2.ap-southeast-1.amazonaws.com",				
 				"name"	  => "EC2 / Asia Pacific 1"
 			),
+			"ap-southeast-2" => array(
+				"api_url" => "https://ec2.ap-southeast-2.amazonaws.com",				
+				"name"	  => "EC2 / Asia Pacific 2"
+			),
 			"ap-northeast-1" => array(
 				"api_url" => "https://ec2.ap-northeast-1.amazonaws.com",				
 				"name"	  => "EC2 / Asia Pacific 1"

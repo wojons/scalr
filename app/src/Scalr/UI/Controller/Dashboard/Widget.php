@@ -17,4 +17,9 @@ class Scalr_UI_Controller_Dashboard_Widget extends Scalr_UI_Controller
 			'widgetContent' => $this->getContent()
 		));
 	}
+
+	public function xGetContentAction()
+	{
+		$this->response->data($this->getContent());
+	}
 }

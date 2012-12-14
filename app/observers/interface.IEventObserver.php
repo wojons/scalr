@@ -22,6 +22,8 @@
 		
 		public function OnFarmTerminated(FarmTerminatedEvent $event);
 		
+		public function OnCustomEvent(CustomEvent $event);
+		
 		/**
 		 * @deprecated
 		 */

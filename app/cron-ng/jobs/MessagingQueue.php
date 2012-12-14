@@ -42,7 +42,7 @@
             $this->logger->info("Fetching pending messages...");
             
             $rows = $this->db->GetAll("SELECT id FROM messages 
-            	WHERE `type`='out' AND status=? AND UNIX_TIMESTAMP(dtlasthandleattempt)+handle_attempts*120 < UNIX_TIMESTAMP(NOW()) ORDER BY id DESC LIMIT 0,3000", 
+            	WHERE `type`='out' AND status=? AND DATE_ADD(dtlasthandleattempt, INTERVAL handle_attempts MINUTE) < NOW() ORDER BY id DESC LIMIT 0,3000", 
             	array(MESSAGE_STATUS::PENDING)
             );
             	
