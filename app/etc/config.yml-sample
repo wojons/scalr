@@ -22,11 +22,11 @@ scalr:
 #      user: 'scalradmin@scalr'
 #      pass: 'set password'
 #      
-#   email:
-#      # Default value: null
-#      address: ~
-#      # Default value: null
-#      name: ~   
+#  email:
+#    # Default value: null
+#    address: ~
+#    # Default value: null
+#    name: ~   
 #      
 #  auditlog:
 #    # Disabled by default. Default: false
