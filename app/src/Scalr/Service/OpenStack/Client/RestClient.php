@@ -136,7 +136,8 @@ class RestClient implements ClientInterface
             'Content-Type' => 'application/' . (isset($ctype) ? $ctype : 'json') . '; charset=UTF-8',
         );
         if ($auth) {
-            if (($token = $this->getConfig()->getAuthToken()) === null || $token->isExpired()) {
+            $token = $this->getConfig()->getAuthToken();
+            if (!($token instanceof AuthToken) || $token->isExpired()) {
                 $this->getConfig()->setAuthToken(null);
                 //We need to sign on at first.
                 $bAuthRequestSent = true;
