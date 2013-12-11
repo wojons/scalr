@@ -4,7 +4,7 @@ CHANGELOG for 4.5.x
 This changelog references the relevant changes (bug and security fixes) done
 in 4.5 minor versions.
 
-To get the diff between two versions, go to https://github.com/Scalr/scalr/compare/v4.4.0...v5.5.0
+To get the diff between two versions, go to https://github.com/Scalr/scalr/compare/v4.4.0...v4.5.0
 
 * 5.4.0 (2013-12-12)
  * Updated GCE images for roles builder (dicsydel)
