@@ -36,8 +36,8 @@ Roadmap
 * [Roadmap][3]
 
 
-*In memory of Alexey Kovalyov
-Brilliant engineer, caring brother, and most excellent friend
+*In memory of Alexey Kovalyov.
+Brilliant engineer, caring brother, and most excellent friend.
 This project is dedicated to you.*
 
 [1]: https://scalr-wiki.atlassian.net/wiki/display/docs/Open-Source+Installation "Open-Source Installation"
