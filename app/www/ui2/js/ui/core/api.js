@@ -2,20 +2,30 @@ Scalr.regPage('Scalr.ui.core.api', function (loadParams, moduleParams) {
 	var params = moduleParams;
 	
 	return Ext.create('Ext.form.Panel', {
-		bodyCls: 'x-panel-body-frame',
 		width: 700,
-		title: 'API access details & settings',
+		title: 'API settings',
 		fieldDefaults: {
 			labelWidth: 110
 		},
+        layout: 'auto',
 		items: [{
 			xtype: 'fieldset',
-			title: 'Enable API for current environment',
+			title: 'Enable API access for environment &laquo;' + params['envName'] + '&raquo;',
 			checkboxToggle:  true,
+            toggleOnTitleClick: true,
+            collapsible: true,
 			collapsed: !params['api.enabled'],
 			checkboxName: 'api.enabled',
+            cls: 'x-fieldset-separator-none',
 			inputValue: 1,
+            defaults:{
+                anchor: '100%'
+            },
 			items: [{
+                xtype: 'displayfield',
+                fieldLabel: 'API Endpoint',
+                value: params['api.endpoint']
+            },{
 				xtype: 'fieldcontainer',
 				layout: 'hbox',
 				fieldLabel: 'API Key ID',
@@ -27,8 +37,9 @@ Scalr.regPage('Scalr.ui.core.api', function (loadParams, moduleParams) {
 					value: params['api.access_key']
 				}, {
 					xtype: 'button',
-					margin: '0 0 0 5',
+					margin: '0 0 0 8',
 					text: 'Regenerate',
+                    width: 110,
 					hidden: !params['api.enabled'],
 					handler: function () {
 						Scalr.Request({
@@ -56,7 +67,6 @@ Scalr.regPage('Scalr.ui.core.api', function (loadParams, moduleParams) {
 				fieldLabel: 'API Access Key',
 				readOnly: true,
 				height: 100,
-				anchor: '100%',
 				value: params['api.secret_key']
 			}, {
 				xtype:'textarea',
@@ -65,7 +75,6 @@ Scalr.regPage('Scalr.ui.core.api', function (loadParams, moduleParams) {
 				name:'api.ip.whitelist',
 				grow: true,
 				growMax: 200,
-				anchor: '100%',
 				value: params['api.ip.whitelist']
 			}]
 		}],
@@ -73,7 +82,7 @@ Scalr.regPage('Scalr.ui.core.api', function (loadParams, moduleParams) {
 		dockedItems: [{
 			xtype: 'container',
 			dock: 'bottom',
-			cls: 'x-docked-bottom-frame',
+			cls: 'x-docked-buttons',
 			layout: {
 				type: 'hbox',
 				pack: 'center'
@@ -95,7 +104,6 @@ Scalr.regPage('Scalr.ui.core.api', function (loadParams, moduleParams) {
 				}
 			}, {
 				xtype: 'button',
-				margin: '0 0 0 5',
 				text: 'Cancel',
 				handler: function() {
 					Scalr.event.fireEvent('close');

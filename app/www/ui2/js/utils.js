@@ -13,12 +13,10 @@ Scalr.utils.CreateProcessBox = function (config) {
 
 	return Scalr.utils.Window({
 		title: config['msg'],
-		width: 298,
-		bodyStyle: 'padding-top: 0px',
+		width: 313,
 		items: [{
 			xtype: 'component',
-			style: 'margin-bottom: 10px; margin-top: 15px',
-			html: '<span class="scalr-ui-progress-bar"></span>'
+            cls: 'x-panel-confirm-loading'
 		}],
 		closeOnEsc: false
 	});
@@ -49,7 +47,9 @@ Scalr.utils.Confirm = function (config) {
 			a = 'Terminate'; break;
 		case 'launch':
 			a = 'Launch'; break;
-	};
+        case 'error':
+            a = 'Retry'; break;
+	}
 
 	if (config.objects) {
 		config.objects.sort();
@@ -65,20 +65,22 @@ Scalr.utils.Confirm = function (config) {
 	var items = [], winConfig = {
 		width: config.formWidth || 400,
 		title: config.title || null,
+        alignTop: config.alignTop || null,
 		items: items,
 		dockedItems: [{
 			xtype: 'container',
 			dock: 'bottom',
+            cls: 'x-docked-buttons',
 			layout: {
 				type: 'hbox',
 				pack: 'center'
 			},
 			items: [{
-				xtype: 'btn',
-				cls: 'x-button-text-large x-button-text-focus',
+				xtype: 'button',
 				text: config['ok'] || 'OK',
-				width: 160,
+				width: 150,
 				itemId: 'buttonOk',
+                cls: 'x-btn-defaultfocus',
 				disabled: config['disabled'] || false,
 				handler: function () {
 					var values = this.up('#box').down('#form') ? this.up('#box').down('#form').getValues() : {};
@@ -91,23 +93,27 @@ Scalr.utils.Confirm = function (config) {
 					}
 				}
 			}, {
-				xtype: 'btn',
-				cls: 'x-button-text-large',
+				xtype: 'button',
 				text: 'Cancel',
-				width: 160,
-				margin: '0 0 0 16',
+				width: 150,
 				handler: function () {
 					this.up('#box').close();
 				}
 			}]
 		}]
 	};
+    if (Ext.isDefined(config.listeners)) {
+        winConfig.listeners = config.listeners;
+    }
+
+    if (Ext.isDefined(config.winConfig)) {
+        Ext.apply(winConfig, config.winConfig);
+    }
 
 	if (Ext.isDefined(config.type)) {
 		items.push({
 			xtype: 'component',
-			cls: 'x-panel-confirm-message' + (config.multiline ? ' x-panel-confirm-message-multiline' : ''),
-			style: Ext.isDefined(config.form) ? 'padding: 0 0 22px 0' : '',
+			cls: 'x-panel-confirm-message' + (config.multiline ? ' x-fieldset-separator-bottom x-panel-confirm-message-multiline' : '') + (config.form ? ' x-panel-confirm-message-form' : ''),
 			data: config,
 			tpl: '<div class="icon icon-{type}"></div><div class="message">{msg}</div>'
 		});
@@ -124,6 +130,9 @@ Scalr.utils.Confirm = function (config) {
 			},
 			items: config.form
 		};
+
+        if (config.formSimple)
+            form['bodyCls'] = 'x-container-fieldset';
 
 		if (Ext.isDefined(config.formValidate)) {
 			form.listeners = {
@@ -166,7 +175,7 @@ Scalr.utils.Window = function(config) {
 		modal: true,
 		shadow: false,
 		border: false,
-		cls: 'x-panel-confirm',
+		cls: 'x-panel-shadow x-panel-confirm',
 		width: 400,
 		maxHeight: Scalr.application.getHeight() - 10, // padding from top and bottom
 		autoScroll: true,
@@ -177,8 +186,8 @@ Scalr.utils.Window = function(config) {
 	var c = Ext.widget(config);
 	c.keyMap = new Ext.util.KeyMap(Ext.getBody(), [{
 		key: Ext.EventObject.ESC,
-		fn: function () {
-			if (this.closeOnEsc)
+		fn: function (key, e) {
+			if (this.closeOnEsc && e.within(c.getEl()))
 				this.close();
 		},
 		scope: c
@@ -189,8 +198,15 @@ Scalr.utils.Window = function(config) {
 	});
 
 	c.show(config.animationTarget || null);
-	c.center();
-	c.toFront();
+    
+    if (config.alignTop) {
+        var xy = c.getAlignToXY(c.container, 't-t', [0, 55]);
+        c.setPagePosition(xy);
+    } else {
+        c.center();
+    }
+	
+    c.toFront();
 
 	return c;
 };
@@ -223,7 +239,7 @@ Scalr.utils.Request = function (config) {
                     }*/
                     return true;
                 } else {
-                    if (result && result.errorMessage)
+                    if (result && result.errorMessage && !config.hideErrorMessage)
                         Scalr.message.Error(result.errorMessage);
 
                     options.failureF.call(this, result, response, options);
@@ -236,14 +252,15 @@ Scalr.utils.Request = function (config) {
                 }
 			}
 
-			if ((response.status == 500 || (!response.responseText && response.status != 0)) && !options.disableHandleError) {
+			// TODO: check if it still needs
+            /*if ((response.status == 500 || (!response.responseText && response.status != 0 && response.status != 403)) && !options.disableHandleError) {
 				Scalr.utils.PostError({
 					message: 'responseText is null in ajax request\nRequest:\n' + Scalr.utils.VarDump(response.request.options.params || {}) +
 						'\nresponse headers: \n' + response && Ext.isFunction(response.getAllResponseHeaders) ? Scalr.utils.VarDump(response.getAllResponseHeaders()) : '' +
 						'\nresponse text: \n' + response.responseText,
 					url: document.location.href
 				});
-			}
+			}*/
 
 			//if (!response.responseText && Ext.isDefined(response.status) ? response.status == 200 : true)
 
@@ -310,7 +327,8 @@ Scalr.utils.Request = function (config) {
 	}
 };
 
-Scalr.utils.UserLoadFile = function (path) {
+Scalr.utils.UserLoadFile = function(path) {
+    path = Ext.String.urlAppend(path, 'X-Requested-Token=' + Scalr.flags.specialToken);
 	Ext.Function.defer(
 		Ext.getBody().createChild({
 			tag: 'iframe',
@@ -347,7 +365,7 @@ Scalr.utils.ThrowDebug = function (c) {
 
 Scalr.utils.PostException = function(e) {
 	Scalr.utils.PostError({
-		message: e.message + "\nstack: " + e.stack + "\ntype: " + e.type + "\nname: " + e.name,
+		message: 't4 ' + e.message + "\nstack: " + e.stack + "\ntype: " + e.type + "\nname: " + e.name,
 		url: document.location.href
 	});
 };
@@ -362,6 +380,7 @@ Scalr.utils.PostError = function(params) {
     } else
         return;
 
+    Scalr.storage.set('enable-debug', true, true);
 	Scalr.Request({
 		url: '/guest/xPostError',
         hideErrorMessage: true,
@@ -383,12 +402,15 @@ Scalr.utils.IsEqualValues = function (obj1, obj2) {
 
 Scalr.utils.getGravatarUrl = function (emailHash, size) {
 	size = size || 'small';
-	var sizes = {small: 23, large: 46},
-		defaultIcon = window.location.protocol + '//' + window.location.hostname + '/ui2/images/ui/account/avatar_default_' + size + '.png';
+	var sizes = {small: 48, large: 92},
+		defaultIcon = window.location.protocol + '//' + window.location.hostname + '/ui2/js/extjs-4.2/theme/images/topmenu/avatar_default_' + size + '.png';
 	return emailHash ? 'https://gravatar.com/avatar/' + emailHash + '?d=' + encodeURIComponent(defaultIcon) + '&s=' + sizes[size] : defaultIcon;
 }
 
 Scalr.utils.getColorById = function(id) {
+    if (Ext.isString(id) && id.indexOf('virtual_') === 0) {
+        id = id.substring(id.length - 6);
+    }
     if (Ext.isNumeric(id) && id > 0) {
         var goldenRatio = 0.618033988749895,
             colors = [
@@ -412,7 +434,8 @@ Scalr.utils.beautifyOsFamily = function(osfamily) {
         oel: 'OEL',
         debian: 'Debian',
         amazon: 'Amazon Linux',
-        windows: 'Windows'
+        windows: 'Windows',
+        scientific: 'Scientific'
     };
 
     return map[osfamily] || osfamily;
@@ -425,7 +448,7 @@ Scalr.utils.beautifySoftware = function(name) {
         lamp: 'LAMP',
         memcached: 'Memcached',
         mongodb: 'MongoDB',
-        nginx: 'Ngnix',
+        nginx: 'Nginx',
         postgresql: 'PostgreSQL',
         rabbitmq: 'RabbitMQ',
         redis: 'Redis',
@@ -441,6 +464,131 @@ Scalr.utils.beautifySoftware = function(name) {
     return map[name] || name;
 }
 
+Scalr.utils.beautifyBehavior = function(name) {
+    var map = {
+        mysql: 'MySQL',
+        mysql2: 'MySQL 5',
+        postgresql: 'PostgreSQL',
+        percona: 'Percona 5',
+        app: 'Apache',
+        tomcat: 'Tomcat',
+        haproxy: 'HAProxy',
+        www: 'Nginx',
+        memcached: 'Memcached',
+        redis: 'Redis',
+        rabbitmq: 'RabbitMQ',
+        mongodb: 'MongoDB',
+        mysqlproxy: 'MySQL Proxy',
+        mariadb: 'MariaDB',
+        cassandra: 'Cassandra',
+        cf_router: 'CF router',
+        cf_cloud_controller: 'CF controller',
+        cf_health_manager: 'CF health mngr',
+        cf_dea: 'CF DEA',
+        cf_service: 'CF service',
+        chef: 'Chef',
+        base: 'Base'
+    };
+
+    return map[name] || name;
+}
+
+//checks resource/permission against current context acl
+Scalr.utils.isAllowed = function(resource, permission){
+    if (Scalr.user['type'] === 'AccountOwner') return true;
+    var value = Scalr.acl[resource],
+        access = value !== undefined;
+    if (permission !== undefined && access) {
+        access = value[permission] !== undefined;
+    }
+    return access;
+}
+
+Scalr.utils.canManageAcl = function(){
+    return Scalr.user['type'] === 'AccountOwner' || Scalr.user['type'] === 'AccountAdmin'
+}
+
+Scalr.utils.isOpenstack = function(platform, pureOnly) {
+    var list = ['openstack', 'ecs', 'ocs', 'nebula'];
+    if (!pureOnly) {
+        list.push('rackspacengus', 'rackspacenguk');
+    }
+    return Ext.Array.contains(list, platform);
+}
+
+Scalr.utils.isCloudstack = function(platform) {
+    var list = ['cloudstack', 'idcf', 'ucloud'];
+    return Ext.Array.contains(list, platform);
+}
+
+Scalr.utils.isPlatformEnabled = function(platform) {
+    return Scalr.platforms[platform] !== undefined && Scalr.platforms[platform].enabled;
+}
+
+Scalr.utils.getPlatformName = function(platform, fix) {
+    var name = Scalr.platforms[platform] !== undefined ? Scalr.platforms[platform].name : platform;
+
+    if (fix === true) {
+        if (platform.indexOf('rackspacen') === 0) {
+            name = '<span class="small">' + name.replace(' ', '<br/>') + '</span>';
+        } else if (platform === 'ecs') {
+            name = '<span class="small">' + name.replace(/\s(suite)$/i, '<br/>$1') + '</span>';
+        } else if (platform === 'ocs') {
+            name = '<span class="small">CloudScaling<br />OCS</span>';
+        }
+    }
+    return name;
+}
+
+Scalr.utils.getRoleCls = function(context) {
+    var b = context['behaviors'],
+        behaviors = [
+            "cf_cchm", "cf_dea", "cf_router", "cf_service",
+            "rabbitmq", "www",
+            "app", "tomcat", 'haproxy',
+            "mysqlproxy",
+            "memcached",
+            "cassandra", "mysql", "mysql2", "percona", "postgresql", "redis", "mongodb", 'mariadb'
+        ];
+
+    if (b) {
+        //Handle CF all-in-one role
+        if (Ext.Array.difference(['cf_router', 'cf_cloud_controller', 'cf_health_manager', 'cf_dea'], b).length === 0) {
+            return 'cf-all-in-one';
+        }
+        //Handle CF CCHM role
+        if (Ext.Array.contains(b, 'cf_cloud_controller') || Ext.Array.contains(b, 'cf_health_manager')) {
+            return 'cf-cchm';
+        }
+
+        for (var i=0, len=b.length; i < len; i++) {
+            for (var k = 0; k < behaviors.length; k++ ) {
+                if (behaviors[k] == b[i]) {
+                    return b[i].replace('_', '-');
+                }
+            }
+        }
+    }
+    return 'base';
+}
+
+Scalr.utils.getRandomString = function(len) {
+    var text = "";
+    var possible = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+
+    for (var i = 0; i < len; i++)
+        text += possible.charAt(Math.floor(Math.random() * possible.length));
+
+    return text;
+};
+
+Scalr.strings = {
+    'deprecated_warning': 'This feature has been <b>Deprecated</b> and will be removed from Scalr in the future! Please limit your usage and DO NOT create major dependencies with this feature.',
+    'farmbuilder.hostname_format.info': 'You can use global variables in the following format: {GLOBAL_VAR_NAME}<br />'+
+                                             '<b>For example:</b> {SCALR_FARM_NAME} -> {SCALR_ROLE_NAME} #{SCALR_INSTANCE_INDEX}',
+    'farmbuilder.available_variables.info': '<b>You can use the following variables:</b> %image_id%, %external_ip%, %internal_ip%, %role_name%, %isdbmaster%, %instance_index%, ' +
+                                             '%server_id%, %farm_id%, %farm_name%, %env_id%, %env_name%, %cloud_location%, %instance_id%, %avail_zone%'
+}
 /*
  CryptoJS v3.1.2
  code.google.com/p/crypto-js
@@ -461,3 +609,7 @@ var CryptoJS=CryptoJS||function(e,m){var p={},j=p.lib={},l=function(){},f=j.Base
 // shorter name
 Scalr.Confirm = Scalr.utils.Confirm;
 Scalr.Request = Scalr.utils.Request;
+Scalr.isAllowed = Scalr.utils.isAllowed;
+Scalr.isOpenstack = Scalr.utils.isOpenstack;
+Scalr.isCloudstack = Scalr.utils.isCloudstack;
+Scalr.isPlatformEnabled = Scalr.utils.isPlatformEnabled;

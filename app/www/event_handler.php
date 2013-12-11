@@ -1,4 +1,4 @@
-<?
+<?php
     try
     {
         require(dirname(__FILE__)."/../src/prepend.inc.php");
@@ -29,7 +29,7 @@
             //$Logger->info("Scalarizr version: {$req_PkgVer}");
 
             // Get farminfo and instanceinfo from database
-            $farminfo = $db->GetRow("SELECT id FROM farms WHERE id=? AND hash=?", array($farm_id, $hash));
+            $farminfo = $db->GetRow("SELECT id FROM farms WHERE id=? AND hash=? LIMIT 1", array($farm_id, $hash));
             $DBFarm = DBFarm::LoadByID($farminfo['id']);
 
             $DBServer = DBServer::LoadByPropertyValue(EC2_SERVER_PROPERTIES::INSTANCE_ID, $req_InstanceID);
@@ -163,10 +163,8 @@
                         break;
 
                     case "newAMI":
-
-                            if (!$data['bundletaskid'])
-                            {
-                                $data['bundletaskid'] = $db->GetOne("SELECT id FROM bundle_tasks WHERE status=? AND server_id=?", array(
+                            if (!$data['bundletaskid']) {
+                                $data['bundletaskid'] = $db->GetOne("SELECT id FROM bundle_tasks WHERE status=? AND server_id=? LIMIT 1", array(
                                     SERVER_SNAPSHOT_CREATION_STATUS::IN_PROGRESS, $DBServer->serverId
                                 ));
                             }
@@ -189,7 +187,7 @@
                         else
                         {
                             // Single volume
-                            $ebsinfo = $db->GetRow("SELECT * FROM ec2_ebs WHERE volume_id=?", array($data['name']));
+                            $ebsinfo = $db->GetRow("SELECT * FROM ec2_ebs WHERE volume_id=? LIMIT 1", array($data['name']));
                             if ($ebsinfo)
                                 $db->Execute("UPDATE ec2_ebs SET mount_status=?, isfsexist='1' WHERE id=?", array(EC2_EBS_MOUNT_STATUS::MOUNTED, $ebsinfo['id']));
                         }

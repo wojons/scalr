@@ -2,7 +2,6 @@ Scalr.regPage('Scalr.ui.scripts.events.create', function (loadParams, modulePara
 	var action = (!loadParams['eventId']) ? 'Create' : 'Edit';
 
 	var form = Ext.create('Ext.form.Panel', {
-		bodyCls: 'x-panel-body-frame',
 		width: 700,
 		title: 'Scripts &raquo; Events &raquo; ' + action,
 		fieldDefaults: {
@@ -29,7 +28,7 @@ Scalr.regPage('Scalr.ui.scripts.events.create', function (loadParams, modulePara
 		dockedItems: [{
 			xtype: 'container',
 			dock: 'bottom',
-			cls: 'x-docked-bottom-frame',
+			cls: 'x-docked-buttons',
 			layout: {
 				type: 'hbox',
 				pack: 'center'
@@ -52,7 +51,6 @@ Scalr.regPage('Scalr.ui.scripts.events.create', function (loadParams, modulePara
 				}
 			}, {
 				xtype: 'button',
-				margin: '0 0 0 5',
 				text: 'Cancel',
 				handler: function() {
 					Scalr.event.fireEvent('close');

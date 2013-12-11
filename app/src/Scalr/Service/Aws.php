@@ -1,17 +1,10 @@
 <?php
 namespace Scalr\Service;
 
+use Scalr\Service\Aws\Plugin\EventObserver;
 use Scalr\Service\Aws\EntityManager;
-use Scalr\Service\Aws\CloudWatch;
-use Scalr\Service\Aws\Sqs;
-use Scalr\Service\Aws\S3;
-use Scalr\Service\Aws\Iam;
-use Scalr\Service\Aws\Ec2;
 use Scalr\DependencyInjection\Container;
-use Scalr\Service\Aws\Elb;
 use Scalr\Service\Aws\ServiceInterface;
-use Scalr\Service\Aws\Client\QueryClient;
-use Scalr\Service\Aws\Client\ClientInterface;
 
 /**
  * Amazon Web Services software development kit
@@ -34,43 +27,6 @@ class Aws
     const CLIENT_QUERY = 'Query';
 
     const CLIENT_SOAP  = 'Soap';
-
-    /**
-     * Access Key Id
-     * @var string
-     */
-    private $accessKeyId;
-
-    /**
-     * Secret Access Key
-     * @var string
-     */
-    private $secretAccessKey;
-
-    /**
-     * X.509 certificate
-     * @var string
-     */
-    private $certificate;
-
-    /**
-     * Private key for certificate
-     * @var string
-     */
-    private $privateKey;
-
-    /**
-     * AWS Entity Manager
-     * @var EntityManager
-     */
-    private $entityManager;
-
-    /**
-     * Whether debug is enabled or not.
-     *
-     * @var bool
-     */
-    private $debug = false;
 
     /**
      * United States East (Northern Virginia) Region.
@@ -153,6 +109,43 @@ class Aws
     const SERVICE_INTERFACE_RDS = 'rds';
 
     /**
+     * Access Key Id
+     * @var string
+     */
+    private $accessKeyId;
+
+    /**
+     * Secret Access Key
+     * @var string
+     */
+    private $secretAccessKey;
+
+    /**
+     * X.509 certificate
+     * @var string
+     */
+    private $certificate;
+
+    /**
+     * Private key for certificate
+     * @var string
+     */
+    private $privateKey;
+
+    /**
+     * AWS Entity Manager
+     * @var EntityManager
+     */
+    private $entityManager;
+
+    /**
+     * Whether debug is enabled or not.
+     *
+     * @var bool
+     */
+    private $debug = false;
+
+    /**
      * Region for AWS
      *
      * @var string
@@ -177,6 +170,27 @@ class Aws
      * @var array
      */
     private $serviceInterfaces = array();
+
+    /**
+     * The quantity of the processed queries to the AWS API
+     *
+     * @var int
+     */
+    public $queriesQuantity = 0;
+
+    /**
+     * AWS Client event observer
+     *
+     * @var EventObserver
+     */
+    private $eventObserver;
+
+    /**
+     * An environment object
+     *
+     * @var \Scalr_Environment
+     */
+    private $environment;
 
     /**
      * Constructor
@@ -223,7 +237,7 @@ class Aws
      *
      * @return     array Returns Returns the list of available (implemented) web service interfaces
      */
-    static public function getAvailableServiceInterfaces()
+    public function getAvailableServiceInterfaces()
     {
         return array(
             self::SERVICE_INTERFACE_ELB,
@@ -240,9 +254,10 @@ class Aws
     /**
      * Gets available regions
      *
+     * @param     bool    $ignoreCache  optional If true it will ignore cache
      * @return    array   Returns list of available regions
      */
-    static public function getAvailableRegions()
+    public function getAvailableRegions($ignoreCache = false)
     {
         return array(
             self::REGION_AP_NORTHEAST_1,
@@ -262,9 +277,9 @@ class Aws
      * @param    string    $region   AWS region  (Aws::REGION_US_EAST_1)
      * @return   boolean   Returns boolean true if region is valid or false otherwise.
      */
-    static public function isValidRegion($region)
+    public function isValidRegion($region)
     {
-        if (!in_array($region, self::getAvailableRegions())) {
+        if (!in_array($region, $this->getAvailableRegions())) {
             $ret = false;
         } else {
             $ret = true;
@@ -298,7 +313,7 @@ class Aws
             if (!isset($this->serviceInterfaces[$n])) {
                 //It validates region only for the services which it is necessary for.
                 if (!in_array($n, array(self::SERVICE_INTERFACE_IAM, self::SERVICE_INTERFACE_S3, self::SERVICE_INTERFACE_CLOUD_FRONT))) {
-                    if (!self::isValidRegion($this->region)) {
+                    if (!$this->isValidRegion($this->region)) {
                         throw new AwsException(sprintf('Invalid region "%s" for the service "%s"', $this->region, $n));
                     }
                 }
@@ -445,5 +460,49 @@ class Aws
     {
         $this->debug = false;
         return $this;
+    }
+
+	/**
+     * Gets an AWS client event observer
+     *
+     * @return  \Scalr\Service\Aws\Plugin\EventObserver Returns AWS client event observer
+     */
+    public function getEventObserver()
+    {
+        return $this->eventObserver;
+    }
+
+	/**
+     * Sets an AWS client event observer object associated with this instance
+     *
+     * @param   \Scalr\Service\Aws\Plugin\EventObserver $eventObserver The event observer
+     * @return  Aws
+     */
+    public function setEventObserver(EventObserver $eventObserver = null)
+    {
+        $this->eventObserver = $eventObserver;
+        return $this;
+    }
+
+    /**
+     * Sets an Scalr environment object which is associated with the AWS client instance
+     *
+     * @param   \Scalr_Environment $environment An environment object
+     * @return  Aws
+     */
+    public function setEnvironment(\Scalr_Environment $environment = null)
+    {
+        $this->environment = $environment;
+        return $this;
+    }
+
+    /**
+     * Gets an Scalr Environment object which is associated with the AWS client instance
+     *
+     * @return  \Scalr_Environment  Returns Scalr Environment object
+     */
+    public function getEnvironment()
+    {
+        return $this->environment;
     }
 }

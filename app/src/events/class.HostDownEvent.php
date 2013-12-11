@@ -18,7 +18,7 @@ class HostDownEvent extends Event
     {
         parent::__construct();
         $this->DBServer = $DBServer;
-        $r_server = \Scalr::getDb()->GetRow("SELECT server_id FROM servers WHERE replace_server_id=?", array(
+        $r_server = \Scalr::getDb()->GetRow("SELECT server_id FROM servers WHERE replace_server_id=? LIMIT 1", array(
             $DBServer->serverId
         ));
         if ($r_server) {

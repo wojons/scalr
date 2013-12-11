@@ -1,9 +1,12 @@
 <?php
+use Scalr\Acl\Acl;
+
 class Scalr_UI_Controller_Dbmsr extends Scalr_UI_Controller
 {
-    public static function getPermissionDefinitions()
+
+    public function hasAccess()
     {
-        return array();
+        return parent::hasAccess() && $this->request->isAllowed(Acl::RESOURCE_DB_DATABASE_STATUS);
     }
 
     public function xGrowStorageAction()
@@ -84,8 +87,8 @@ class Scalr_UI_Controller_Dbmsr extends Scalr_UI_Controller
                 $msg = new Scalr_Messaging_Msg_Mysql_CreatePmaUser($dbFarmRole->ID, \Scalr::config('scalr.pma_instance_ip_address'));
                 $masterDbServer->SendMessage($msg);
 
-                $dbFarmRole->SetSetting(DBFarmRole::SETTING_MYSQL_PMA_REQUEST_TIME, time());
-                $dbFarmRole->SetSetting(DBFarmRole::SETTING_MYSQL_PMA_REQUEST_ERROR, "");
+                $dbFarmRole->SetSetting(DBFarmRole::SETTING_MYSQL_PMA_REQUEST_TIME, time(), DBFarmRole::TYPE_LCL);
+                $dbFarmRole->SetSetting(DBFarmRole::SETTING_MYSQL_PMA_REQUEST_ERROR, "", DBFarmRole::TYPE_LCL);
 
                 $this->response->success();
             }
@@ -347,11 +350,11 @@ class Scalr_UI_Controller_Dbmsr extends Scalr_UI_Controller
                     $data['bundleServerId'] = $dbFarmRole->GetSetting(DBFarmRole::SETTING_MYSQL_BUNDLE_SERVER_ID);
 
                     if ($data['isBundleRunning']) {
-                        $opId = $this->db->GetOne("SELECT id FROM server_operations WHERE server_id = ? AND name = ? AND status = ? ORDER BY timestamp DESC", array(
+                        $opId = $this->db->GetOne("SELECT id FROM server_operations WHERE server_id = ? AND name = ? AND status = ? ORDER BY timestamp DESC LIMIT 1", array(
                             $data['bundleServerId'], 'MySQL data bundle', 'running'
                         ));
                     } elseif ($data['bundleServerId']) {
-                        $opId = $this->db->GetOne("SELECT id FROM server_operations WHERE server_id = ? AND name = ? ORDER BY timestamp DESC", array(
+                        $opId = $this->db->GetOne("SELECT id FROM server_operations WHERE server_id = ? AND name = ? ORDER BY timestamp DESC LIMIT 1", array(
                             $data['bundleServerId'], 'MySQL data bundle'
                         ));
                     }
@@ -365,11 +368,11 @@ class Scalr_UI_Controller_Dbmsr extends Scalr_UI_Controller
 
                 if (!$data['backupOperationId']) {
                     if ($data['isBackupRunning']) {
-                        $opId = $this->db->GetOne("SELECT id FROM server_operations WHERE server_id = ? AND name = ? AND status = ? ORDER BY timestamp DESC", array(
+                        $opId = $this->db->GetOne("SELECT id FROM server_operations WHERE server_id = ? AND name = ? AND status = ? ORDER BY timestamp DESC LIMIT 1", array(
                             $data['backupServerId'], 'MySQL backup', 'running'
                         ));
                     } elseif ($data['backupServerId']) {
-                        $opId = $this->db->GetOne("SELECT id FROM server_operations WHERE server_id = ? AND name = ? ORDER BY timestamp DESC", array(
+                        $opId = $this->db->GetOne("SELECT id FROM server_operations WHERE server_id = ? AND name = ? ORDER BY timestamp DESC LIMIT 1", array(
                             $data['backupServerId'], 'MySQL backup'
                         ));
                     }
@@ -561,11 +564,11 @@ class Scalr_UI_Controller_Dbmsr extends Scalr_UI_Controller
                     $data['bundleServerId'] = $dbFarmRole->GetSetting(Scalr_Db_Msr::DATA_BUNDLE_SERVER_ID);
 
                     if ($data['isBundleRunning']) {
-                        $opId = $this->db->GetOne("SELECT id FROM server_operations WHERE server_id = ? AND name = ? AND status = ? ORDER BY timestamp DESC", array(
+                        $opId = $this->db->GetOne("SELECT id FROM server_operations WHERE server_id = ? AND name = ? AND status = ? ORDER BY timestamp DESC LIMIT 1", array(
                             $data['bundleServerId'], "{$name} data bundle", 'running'
                         ));
                     } elseif ($data['bundleServerId']) {
-                        $opId = $this->db->GetOne("SELECT id FROM server_operations WHERE server_id = ? AND name = ? ORDER BY timestamp DESC", array(
+                        $opId = $this->db->GetOne("SELECT id FROM server_operations WHERE server_id = ? AND name = ? ORDER BY timestamp DESC LIMIT 1", array(
                             $data['bundleServerId'], "{$name} data bundle"
                         ));
                     }
@@ -579,11 +582,11 @@ class Scalr_UI_Controller_Dbmsr extends Scalr_UI_Controller
 
                 if (!$data['backupOperationId']) {
                     if ($data['isBackupRunning']) {
-                        $opId = $this->db->GetOne("SELECT id FROM server_operations WHERE server_id = ? AND name = ? AND status = ? ORDER BY timestamp DESC", array(
+                        $opId = $this->db->GetOne("SELECT id FROM server_operations WHERE server_id = ? AND name = ? AND status = ? ORDER BY timestamp DESC LIMIT 1", array(
                             $data['backupServerId'], "{$name} backup", 'running'
                         ));
                     } elseif ($data['backupServerId']) {
-                        $opId = $this->db->GetOne("SELECT id FROM server_operations WHERE server_id = ? AND name = ? ORDER BY timestamp DESC", array(
+                        $opId = $this->db->GetOne("SELECT id FROM server_operations WHERE server_id = ? AND name = ? ORDER BY timestamp DESC LIMIT 1", array(
                             $data['backupServerId'], "{$name} backup"
                         ));
                     }

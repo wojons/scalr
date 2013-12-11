@@ -7,6 +7,17 @@ class Scalr_Net_Scalarizr_Services_System extends Scalr_Net_Scalarizr_Client
         parent::__construct($dbServer, $port);
     }
 
+    public function getHostname() {
+        return $this->request("get_hostname")->result;
+    }
+
+    public function setHostname($hostname) {
+        $params = new stdClass();
+        $params->hostname = $hostname;
+
+        return $this->request("set_hostname", $params)->result;
+    }
+
     public function callAuthShutdownHook() {
         return $this->request("call_auth_shutdown_hook")->result;
     }
@@ -44,5 +55,13 @@ class Scalr_Net_Scalarizr_Services_System extends Scalr_Net_Scalarizr_Client
     public function dist()
     {
         return $this->request("dist")->result;
+    }
+
+    public function getScriptLogs($executionId)
+    {
+        $params = new stdClass();
+        $params->execScriptId = $executionId;
+
+        return $this->request("get_script_logs", $params)->result;
     }
 }

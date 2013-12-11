@@ -4,6 +4,7 @@ namespace Scalr\Service\Aws\Client\QueryClient;
 use Scalr\Service\Aws;
 use Scalr\Service\Aws\Client\QueryClientResponse;
 use Scalr\Service\Aws\Client\QueryClient;
+use Scalr\Service\Aws\Event\EventType;
 
 /**
  * Amazon S3 Query API client.
@@ -52,6 +53,20 @@ class S3QueryClient extends QueryClient
             $path = '/' . $path;
         }
 
+        $this->lastApiCall = null;
+        $eventObserver = $this->getAws()->getEventObserver();
+        if ($eventObserver && $eventObserver->isSubscribed(EventType::EVENT_SEND_REQUEST)) {
+            foreach (debug_backtrace() as $arr) {
+                if (empty($arr['class']) ||
+                    !preg_match("/\\\\Service\\\\Aws\\\\.+Api$/", $arr['class']) ||
+                    $arr['type'] !== '->') {
+                    continue;
+                }
+                $this->lastApiCall = ucfirst($arr['function']);
+                break;
+            }
+        }
+
         //Wipes out extra options from headers and moves them to separate array.
         //It also collects an x-amz headers.
         $extraOptions = array();
@@ -70,6 +85,15 @@ class S3QueryClient extends QueryClient
         }
         if (!isset($options['Host'])) {
             $options['Host'] = (isset($extraOptions['subdomain']) ? $extraOptions['subdomain'] . '.' : '') . $this->url;
+        }
+
+        if (strpos($options['Host'], 'http') === 0) {
+            $arr = parse_url($options['Host']);
+            $scheme = $arr['scheme'];
+            $options['Host'] = $arr['host'] . (isset($arr['port']) ? ':' . $arr['port'] : '');
+            $path = (!empty($arr['path']) && $arr['path'] != '/' ? rtrim($arr['path'], '/') : '') . $path;
+        } else {
+            $scheme = 'https';
         }
 
         if ($httpMethod === 'PUT' || $httpMethod === 'POST') {
@@ -144,22 +168,22 @@ class S3QueryClient extends QueryClient
               . base64_encode(hash_hmac('sha1', $options['Date'], $this->secretAccessKey, 1));
         }
 
-        $httpRequest->setUrl('https://' . $options['Host'] . $path);
+        $httpRequest->setUrl($scheme . '://' . $options['Host'] . $path);
         $httpRequest->setMethod(constant('HTTP_METH_' . $httpMethod));
         $httpRequest->setOptions(array(
             'redirect'  => 10,
             'useragent' => 'Scalr AWS Client (http://scalr.com)'
         ));
         $httpRequest->addHeaders($options);
-        /* @var $message \HttpMessage */
-        $message = $this->tryCall($httpRequest);
-        $response = new QueryClientResponse($message);
-        $response->setRequest($httpRequest);
+
+        $response = $this->tryCall($httpRequest);
+
         if ($this->getAws() && $this->getAws()->getDebug()) {
             echo "\n";
             echo $httpRequest->getRawRequestMessage() . "\n";
             echo $httpRequest->getRawResponseMessage() . "\n";
         }
+
         return $response;
     }
 }

@@ -18,15 +18,22 @@ class DNSManagerPollProcess implements \Scalr\System\Pcntl\ProcessInterface
     {
         $db = \Scalr::getDb();
 
-        $this->ThreadArgs = $db->GetAll("SELECT dns_zones.id FROM dns_zones INNER JOIN clients ON clients.id = dns_zones.client_id WHERE dns_zones.status NOT IN(?,?) OR (isonnsserver='1' AND dns_zones.status=?) ORDER BY `priority` DESC LIMIT 0,100", array(
-            DNS_ZONE_STATUS::ACTIVE,
-            DNS_ZONE_STATUS::INACTIVE,
-            DNS_ZONE_STATUS::INACTIVE
-        ));
+        if (!\Scalr::config('scalr.dns.global.enabled'))
+            $this->ThreadArgs = array();
+        else {
+            $this->ThreadArgs = $db->GetAll("SELECT dns_zones.id FROM dns_zones INNER JOIN clients ON clients.id = dns_zones.client_id WHERE dns_zones.status NOT IN(?,?) OR (isonnsserver='1' AND dns_zones.status=?) ORDER BY `priority` DESC LIMIT 0,100", array(
+                DNS_ZONE_STATUS::ACTIVE,
+                DNS_ZONE_STATUS::INACTIVE,
+                DNS_ZONE_STATUS::INACTIVE
+            ));
+        }
     }
 
     public function OnEndForking()
     {
+        if (!\Scalr::config('scalr.dns.global.enabled'))
+            return true;
+
         $db = \Scalr::getDb();
 
         $remoteBind = new Scalr_Net_Dns_Bind_RemoteBind();

@@ -53,7 +53,6 @@ Ext.define('Scalr.ui.ScriptField', {
 	alias: 'widget.scriptfield',
 	extend: 'Ext.form.Panel',
 
-	bodyCls: 'x-panel-body-frame',
 	border: false,
 	fieldDefaults: {
 		labelWidth: 120,
@@ -159,9 +158,11 @@ Ext.define('Scalr.ui.ScriptField', {
 	dockedItems: [{
 		xtype: 'toolbar',
 		dock: 'top',
+        ui: 'simple',
+        padding: '12 32 0 32',
 		items: [{
-			ui: 'paging',
-			iconCls: 'x-tbar-add',
+            text: 'Add script',
+            cls: 'x-btn-green-bg',
 			handler: function() {
 				var sm = this.up('scriptfield').up().down('scripteventgrid').getSelectionModel();
 				if (sm.hasSelection())
@@ -175,6 +176,7 @@ Ext.define('Scalr.ui.ScriptField', {
 	items: [{
 		xtype: 'fieldset',
 		itemId: 'scriptAdd',
+        cls: 'x-fieldset-separator-none',
 		title: 'Add script',
 		hidden: true,
 		items: [{
@@ -272,7 +274,7 @@ Ext.define('Scalr.ui.ScriptField', {
 		}, {
 			xtype: 'combo',
 			fieldLabel: 'Execution mode',
-			store: [ ['1', 'Synchronous'], ['0', 'Asynchronous']],
+			store: [ ['1', 'Blocking'], ['0', 'Non-blocking']],
 			queryMode: 'local',
 			editable: false,
 			name: 'issync'
@@ -339,6 +341,7 @@ Ext.define('Scalr.ui.ScriptField', {
 	}, {
 		xtype: 'fieldset',
 		itemId: 'scriptEditButtons',
+        cls: 'x-fieldset-separator-none',
 		hidden: true,
 		layout: {
 			type: 'hbox',

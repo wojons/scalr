@@ -1,8 +1,6 @@
-
 import os
 import sys
 import yaml
-import time
 import shutil
 import logging
 import argparse
@@ -10,94 +8,102 @@ import argparse
 from scalrpy.util import helper
 from scalrpy.util import dbmanager
 
-from sqlalchemy import exc as db_exc
+from scalrpy import __version__
 
-import scalrpy
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-ETC_DIR = os.path.abspath(BASE_DIR + '/../../../etc')
+CONFIG = {
+        'connections':{
+            'mysql':{
+                'user':None,
+                'pass':None,
+                'host':None,
+                'port':3306,
+                'name':None,
+                'pool_size':1,
+                },
+            },
+        'rrd_db_dir': None,
+        'log_file':'/var/log/scalr.stats-cleaner.log',
+        'pid_file':'/var/run/scalr.stats-cleaner.pid',
+        'verbosity':1,
+        }
 
-config = {
-    'log_file':'/var/log/scalr.stats-cleaner.log'
-}
-
-logger = logging.getLogger(__file__)
-
-def configure(args, cnf):
-    global config
-
-    for k, v in cnf.iteritems():
-            config.update({k:v})
-
-    for k, v in vars(args).iteritems():
-        if v is not None:
-            config.update({k:v})
-
-    helper.configure_log(__file__, log_level=config['verbosity'], log_file=config['log_file'],
-                         log_size=1024*100)
+LOG = logging.getLogger('ScalrPy')
 
 
 def clean():
-    db_manager = dbmanager.DBManager(config['connections']['mysql'])
-    db = db_manager.get_db()
-    session = db.session
-
+    connection = dbmanager.make_connection(CONFIG['connections']['mysql'])
+    cursor = connection.cursor()
     try:
-        db_farms = ['%s' % int(farm.id) for farm in session.query(db.farms.id).all()]
-    except (db_exc.OperationalError, db_exc.InternalError):
-        logger.critical(sys.exc_info())
-        return
+        cursor.execute("""SELECT `id` FROM `farms`""")
+        farms_id = cursor.fetchall()
+    finally:
+        cursor.close()
+        connection.close()
+    for dir_ in os.listdir(CONFIG['rrd_db_dir']):
+        for farm_id in os.listdir('%s/%s' % (CONFIG['rrd_db_dir'], dir_)):
+            if farm_id not in farms_id:
+                LOG.debug('Delete farm %s' % farm_id)
+                if not CONFIG['test']:
+                    dir_to_delete = '%s/%s/%s' % (CONFIG['rrd_db_dir'], dir_, farm_id),
+                    shutil.rmtree(dir_to_delete, ignore_errors=True)
 
-    for dir_ in os.listdir(config['rrd_db_dir']):
-        for farm in os.listdir('%s/%s' % (config['rrd_db_dir'], dir_)):
-            if farm not in db_farms:
-                logger.debug('Delete farm %s' % farm )
-                if not config['test']:
-                    shutil.rmtree('%s/%s/%s'
-                                  % (config['rrd_db_dir'], dir_, farm), ignore_errors=True)
+
+def configure(config, args=None):
+    global CONFIG
+    helper.update_config(config['connections']['mysql'], CONFIG['connections']['mysql'])
+    if 'stats_poller' in config:
+        CONFIG['rrd_db_dir'] = config['stats_poller']['rrd_db_dir']
+        if 'connections' in config['stats_poller']:
+            helper.update_config(
+                    config['stats_poller']['connections']['mysql'],
+                    CONFIG['connections']['mysql']
+                    )
+    if 'stats_cleaner' in config:
+        helper.update_config(config['stats_cleaner'], CONFIG)
+    helper.update_config(config_to=CONFIG, args=args)
+    helper.validate_config(CONFIG)
+    helper.configure_log(
+            log_level=CONFIG['verbosity'],
+            log_file=CONFIG['log_file'],
+            log_size=1024*1000
+            )
 
 
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-l', '--log-file', default=None,
+            help="log file")
+    parser.add_argument('-c', '--config-file', default='./config.yml',
+            help='config file')
+    parser.add_argument('-d', '--rrd-db-dir', default=None,
+            help='path to rrd database')
+    parser.add_argument('-v', '--verbosity', action='count', default=1,
+            help='increase output verbosity [0:4]. Default is 1 - ERROR')
+    parser.add_argument('-t', '--test', action='store_true', default=False,
+            help='test only')
+    parser.add_argument('--version', action='version', version='Version %s' % __version__)
+    args = parser.parse_args()
     try:
-        parser = argparse.ArgumentParser()
-
-        parser.add_argument('-c', '--config_file', default='%s/config.yml' % ETC_DIR,
-                            help='config file')
-        parser.add_argument('-d', '--rrd_db_dir', default=None,
-                            help='path to rrd database')
-        parser.add_argument('-v', '--verbosity', action='count', default=1,
-                            help='increase output verbosity [0:4]. Default is 1 - ERROR')
-        parser.add_argument('-t', '--test', action='store_true', default=False, help='Test only')
-        parser.add_argument('--version', action='version', version='Version %s'
-                            % scalrpy.__version__)
-        
-        args = parser.parse_args()
-
-        try:
-            cnf = yaml.safe_load(open(args.config_file))['scalr']['stats_poller']
-        except IOError as e:
-            sys.stderr.write('%s\n' % str(e))
-            sys.exit(1)
-        except KeyError:
-            sys.stderr.write('%s\nYou must define \'stats_poller\' section in config file\n'
-                             % str(sys.exc_info()))
-            sys.exit(1)
-
-        configure(args, cnf)
-
-    except Exception:
-        sys.stderr.write('%s\n' % str(sys.exc_info()))
+        config = yaml.safe_load(open(args.config_file))['scalr']
+        configure(config, args)
+    except:
+        if args.verbosity > 3:
+            raise
+        else:
+            sys.stderr.write('%s\n' % helper.exc_info())
         sys.exit(1)
-
     try:
-        logger.info('Start time: %s' % time.ctime())
         clean()
-    except Exception:
-        logger.critical('Something happened and I think I died')
-        logger.exception('Critical exception')
+    except KeyboardInterrupt:
+        LOG.critical('KeyboardInterrupt')
+        sys.exit(0)
+    except SystemExit:
+        pass
+    except:
+        LOG.exception('Something happened and I think I died')
         sys.exit(1)
 
 
 if __name__ == '__main__':
     main()
-

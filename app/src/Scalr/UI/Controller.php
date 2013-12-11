@@ -23,11 +23,6 @@ class Scalr_UI_Controller
     public $user;
 
     /**
-     * @var Scalr_Account
-     */
-    //public $account;
-
-    /**
      * @var Scalr_Environment
      */
     protected $environment;
@@ -38,6 +33,8 @@ class Scalr_UI_Controller
      * @var \Scalr\DependencyInjection\Container
      */
     private $container;
+
+    protected $sortParams = array();
 
     /**
      * @var string
@@ -89,6 +86,11 @@ class Scalr_UI_Controller
         return $this->request->getParam($key);
     }
 
+    /**
+     * Restricts access to controller's actions
+     *
+     * @return boolean Returns true if user has access.
+     */
     public function hasAccess()
     {
         if ($this->user) {
@@ -102,7 +104,6 @@ class Scalr_UI_Controller
             return false;
     }
 
-    protected $sortParams = array();
     protected function sort($item1, $item2)
     {
         foreach ($this->sortParams as $cond) {
@@ -150,16 +151,18 @@ class Scalr_UI_Controller
             $s = json_decode($this->getParam('sort'), true);
         }
 
+        $sortParams = array();
         if (is_array($s)) {
-            $sorts = array();
-            if (count($s) && !is_array($s[0]))
+            if (count($s) && isset($s[0]) && !is_array($s[0]))
                 $s = array($s);
 
             foreach ($s as $param) {
-                $sort = preg_replace("/[^A-Za-z0-9_]+/", "", $param['property']);
-                $dir = (in_array(strtolower($param['direction']), array('asc', 'desc'))) ? $param['direction'] : 'ASC';
+                if (is_array($param)) {
+                    $sort = preg_replace("/[^A-Za-z0-9_]+/", "", $param['property']);
+                    $dir = (in_array(strtolower($param['direction']), array('asc', 'desc'))) ? $param['direction'] : 'ASC';
 
-                $sortParams[] = array('property' => $sort, 'direction' => $dir);
+                    $sortParams[] = array('property' => $sort, 'direction' => $dir);
+                }
             }
         } else if ($this->getParam('sort')) {
             $sort = preg_replace("/[^A-Za-z0-9_]+/", "", $this->getParam('sort'));
@@ -316,35 +319,6 @@ class Scalr_UI_Controller
     {
         $arg = array_shift($pathChunks);
 
-        if ($this->user) {
-            if ($this->getContainer()->config->get('scalr.auth_mode') != 'ldap') {
-                if ($this->user->getType() == Scalr_Account_User::TYPE_TEAM_USER) {
-                    if (!$this->user->isTeamUserInEnvironment($this->getEnvironmentId(), Scalr_Account_Team::PERMISSIONS_OWNER) &&
-                        !$this->user->isTeamUserInEnvironment($this->getEnvironmentId(), Scalr_Account_Team::PERMISSIONS_FULL)
-                    ) {
-                        if (method_exists($this, 'getPermissionDefinitions')) {
-                            // rules defined for this controller
-                            $cls = get_class($this);
-                            $clsShort = str_replace('Scalr_UI_Controller_', '', $cls);
-                            $methodShort = str_replace('Action', '', $method); // TODO: check
-                            $clsPermissions = $cls::getPermissionDefinitions();
-
-                            $permissions = $this->user->getGroupPermissions($this->getEnvironmentId());
-                            if (array_key_exists($clsShort, $permissions)) {
-                                $perm = $permissions[$clsShort];
-
-                                if (in_array('VIEW', $perm, true) || in_array('FULL', $perm, true))
-                                    $permissionFlag = true;
-                                else
-                                    $permissionFlag = false;
-                            } else
-                                $permissionFlag = false;
-                        }
-                    }
-                }
-            }
-        }
-
         try {
             $subController = self::loadController($arg, get_class($this), true);
         } catch (Scalr_UI_Exception_NotFound $e) {
@@ -360,7 +334,7 @@ class Scalr_UI_Controller
             $this->addUiCacheKeyPatternChunk($arg);
             $this->response->setHeader('X-Scalr-Cache-Id', $this->uiCacheKeyPattern);
 
-            if (! $permissionFlag)
+            if (!$permissionFlag)
                 throw new Scalr_Exception_InsufficientPermissions();
 
             $this->callActionMethod($action);
@@ -379,7 +353,7 @@ class Scalr_UI_Controller
         } else if (method_exists($this, 'defaultAction') && $arg == '') {
             $this->response->setHeader('X-Scalr-Cache-Id', $this->uiCacheKeyPattern);
 
-            if (! $permissionFlag)
+            if (!$permissionFlag)
                 throw new Scalr_Exception_InsufficientPermissions();
 
             $this->callActionMethod('defaultAction');
@@ -405,55 +379,11 @@ class Scalr_UI_Controller
                 throw new Scalr_UI_Exception_NotFound();
         }
 
-        if ($this->user) {
-            if ($this->user->getType() == Scalr_Account_User::TYPE_TEAM_USER) {
-                if ($this->getContainer()->config->get('scalr.auth_mode') != 'ldap') {
-                    if (!$this->user->isTeamUserInEnvironment($this->getEnvironmentId(), Scalr_Account_Team::PERMISSIONS_OWNER) &&
-                        !$this->user->isTeamUserInEnvironment($this->getEnvironmentId(), Scalr_Account_Team::PERMISSIONS_FULL)
-                    ) {
-                        if (method_exists($this, 'getPermissionDefinitions')) {
-                            // rules defined for this controller
-                            $cls = get_class($this);
-                            $clsShort = str_replace('Scalr_UI_Controller_', '', $cls);
-                            $methodShort = str_replace('Action', '', $method);
-                            $clsPermissions = $cls::getPermissionDefinitions();
-
-                            $permissions = $this->user->getGroupPermissions($this->getEnvironmentId());
-                            if (array_key_exists($clsShort, $permissions)) {
-                                // rules for user and such controller
-                                $perm = $permissions[$clsShort];
-
-                                if (! in_array('FULL', $perm, true)) {
-                                    // user doesn't has full privilegies
-                                    if (array_key_exists($methodShort, $clsPermissions)) {
-                                        // standalone rule for this method
-                                        if (! in_array($clsPermissions[$methodShort], $perm))
-                                            throw new Scalr_Exception_InsufficientPermissions();
-                                    } else {
-                                        // VIEW rule
-                                        if (! in_array('VIEW', $perm))
-                                            throw new Scalr_Exception_InsufficientPermissions();
-                                    }
-                                }
-
-                            } else
-                                throw new Scalr_Exception_InsufficientPermissions();
-
-                        }
-                    }
-                }
-            }
-        }
-
         /*
          * Debug action section
          * Controller::Action => array of filter's params (accountId, userId) or true
          */
         $debug = false;
-        /*array(
-            'Scalr_UI_Controller_Core::xChangeEnvironmentAction' => array('accountId' => array('7871', '263', '9159', '6412', '6957')),
-            'Scalr_UI_Controller_Guest::xGetContextAction' => array('accountId' => array('7871', '263', '9159', '6412', '6957'))
-        );*/
         $debugMode = false;
         $key = get_class($this) . '::' . $method;
 
@@ -518,7 +448,7 @@ class Scalr_UI_Controller
         $this->uiCacheKeyPattern .= "/{$chunk}";
     }
 
-    static public function handleRequest($pathChunks, $params)
+    static public function handleRequest($pathChunks)
     {
         $startTime = microtime(true);
 
@@ -526,7 +456,6 @@ class Scalr_UI_Controller
             $pathChunks = array('guest');
 
         try {
-            Scalr_UI_Request::getInstance()->setParams($params);
             $user = Scalr_UI_Request::getInstance()->getUser();
             $controller = self::loadController(array_shift($pathChunks), 'Scalr_UI_Controller', true);
             $class = get_class($controller);
@@ -574,14 +503,15 @@ class Scalr_UI_Controller
                 $db = Scalr::getDb();
                 $user = Scalr_UI_Request::getInstance()->getUser();
 
-                $db->Execute('INSERT INTO ui_errors (tm, file, lineno, url, short, message, browser, account_id) VALUES (NOW(), ?, ?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE cnt = cnt + 1', array(
+                $db->Execute('INSERT INTO ui_errors (tm, file, lineno, url, short, message, browser, account_id, user_id) VALUES (NOW(), ?, ?, ?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE cnt = cnt + 1', array(
                     $e->getFile(),
                     $e->getLine(),
                     $_SERVER['REQUEST_URI'],
-                    $e->getMessage(),
+                    substr($e->getMessage(), 0, 255),
                     $e->getMessage() . "\n" . $e->getTraceAsString(),
                     $_SERVER['HTTP_USER_AGENT'],
-                    $user ? $user->getAccountId() : ''
+                    $user ? $user->getAccountId() : '',
+                    $user ? $user->getId() : ''
                 ));
 
                 Scalr_UI_Response::getInstance()->failure('Database error (1)');
@@ -595,7 +525,6 @@ class Scalr_UI_Controller
         }
 
         Scalr_UI_Response::getInstance()->setHeader("X-Scalr-ActionTime", microtime(true) - $startTime);
-        Scalr_UI_Response::getInstance()->sendResponse();
     }
 
     /**

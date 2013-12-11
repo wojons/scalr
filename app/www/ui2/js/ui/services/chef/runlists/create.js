@@ -29,11 +29,11 @@ Scalr.regPage( 'Scalr.ui.services.chef.runlists.create', function ( loadParams, 
 
 	var form = Ext.create('Ext.form.Panel', {
 		width: 850,
-		bodyCls: 'x-panel-body-frame',
 		title: loadParams['runlistId'] ? 'Edit RunList' : 'Create new RunList',
 		scalrOptions: {
 			modal: true
 		},
+        layout: 'auto',
 		items: [{
 			xtype: 'fieldset',
 			title: 'General',
@@ -121,8 +121,8 @@ Scalr.regPage( 'Scalr.ui.services.chef.runlists.create', function ( loadParams, 
 					}	
 				},{
 					xtype: 'button',
-					icon: '/ui2/images/icons/add_icon_16x16.png',
-					cls: 'x-btn-icon',
+                    ui: 'action',
+                    cls: 'x-btn-action-add',
 					tooltip: 'Add new Server',
 					margin: '0 0 0 5',
 					listeners: {
@@ -161,24 +161,27 @@ Scalr.regPage( 'Scalr.ui.services.chef.runlists.create', function ( loadParams, 
                         rolesStore.proxy.extraParams.chefEnv = newValue;
                         recipesStore.proxy.extraParams.chefEnv = newValue;
                         form.down('#rolesGrid').enable();
+                        if(form.down('#recipesGrid'))
+                            form.down('#recipesGrid').enable();
 						if(form.down('#chefEnv'))
 							form.down('#chefEnv').setReadOnly(true);
 						form.down('#chefServer').setReadOnly(true);
-                        rolesStore.load(function () {
-							if(form.down('#recipesGrid'))
-                        		form.down('#recipesGrid').enable();
-                        	recipesStore.load(function (){
-								if(form.down('#chefEnv'))
-									form.down('#chefEnv').setReadOnly(false);
-								form.down('#chefServer').setReadOnly(false);
-							});
-                        });
+                        var ready = 2,
+                            onStoreLoad = function(){
+                                if (--ready === 0) {
+                                    if(form.down('#chefEnv'))
+                                        form.down('#chefEnv').setReadOnly(false);
+                                    form.down('#chefServer').setReadOnly(false);
+                                }
+                            };
+                        rolesStore.load(onStoreLoad);
+                        recipesStore.load(onStoreLoad);
                     }
                 }
             }]
 		},{
 			xtype: 'container',
-			margin: '0 0 12 0',
+			cls: 'x-container-fieldset',
 			layout: {
 				type: 'hbox'
 			},
@@ -186,9 +189,14 @@ Scalr.regPage( 'Scalr.ui.services.chef.runlists.create', function ( loadParams, 
 				xtype: 'container',
 				flex: 1,
 				items: [{
+                    xtype: 'label',
+                    cls: 'x-fieldset-subheader',
+                    html: 'Roles',
+                    margin: '0 0 12 0'
+                },{
 					xtype: 'gridpanel',
-					title: 'Roles',
 					itemId: 'rolesGrid',
+                    cls: 'x-grid-shadow',
 					maxHeight: 200,
 					disabled: loadParams['runlistId'] ? false : true,
 					plugins: {
@@ -210,10 +218,14 @@ Scalr.regPage( 'Scalr.ui.services.chef.runlists.create', function ( loadParams, 
 						dataIndex: 'name'
 					}]
 				},{
-					margin: '12 0 0 0',
-					maxHeight: 200,
+                    xtype: 'label',
+                    cls: 'x-fieldset-subheader',
+                    html: 'Recipes',
+					margin: '12 0'
+                },{
 					xtype: 'gridpanel',
-					title: 'Recipes',
+					maxHeight: 200,
+                    cls: 'x-grid-shadow',
 					itemId: 'recipesGrid',
 					disabled: loadParams['runlistId'] ? false : true,
 					store: recipesStore,
@@ -278,6 +290,7 @@ Scalr.regPage( 'Scalr.ui.services.chef.runlists.create', function ( loadParams, 
 					items: [{
 						xtype: 'gridpanel',
 						itemId: 'runList',
+                        cls: 'x-grid-shadow',
 						hidden: false,
 						store:{
 							fields: ['name']
@@ -324,7 +337,7 @@ Scalr.regPage( 'Scalr.ui.services.chef.runlists.create', function ( loadParams, 
 		dockedItems: [{
 			xtype: 'container',
 			dock: 'bottom',
-			cls: 'x-docked-bottom-frame',
+			cls: 'x-docked-buttons',
 			layout: {
 				type: 'hbox',
 				pack: 'center'
@@ -371,7 +384,6 @@ Scalr.regPage( 'Scalr.ui.services.chef.runlists.create', function ( loadParams, 
 				}
 			},{
 				xtype: 'button',
-				margin: '0 0 0 5',
 				text: 'Cancel',
 				handler: function() {
 					Scalr.event.fireEvent('close');

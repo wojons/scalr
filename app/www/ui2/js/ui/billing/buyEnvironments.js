@@ -1,7 +1,6 @@
 Scalr.regPage('Scalr.ui.billing.buyEnvironments', function (loadParams, moduleParams) {
 	
 	var form = Ext.create('Ext.form.Panel', {
-		bodyCls: 'x-panel-body-frame',
 		width: 500,
 		title: 'Billing &raquo; Buy more environments',
 		fieldDefaults: {
@@ -55,7 +54,7 @@ Scalr.regPage('Scalr.ui.billing.buyEnvironments', function (loadParams, modulePa
 		
 		dockedItems: [{
 			xtype: 'container',
-			cls: 'x-docked-bottom-frame',
+			cls: 'x-docked-buttons',
 			dock: 'bottom',
 			layout: {
 				type: 'hbox',
@@ -79,7 +78,6 @@ Scalr.regPage('Scalr.ui.billing.buyEnvironments', function (loadParams, modulePa
 				}
 			}, {
 				xtype: 'button',
-				margin: '0 0 0 5',
 				text: 'Cancel',
 				handler: function() {
 					Scalr.event.fireEvent('close');

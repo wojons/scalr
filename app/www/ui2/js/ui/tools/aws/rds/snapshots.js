@@ -51,58 +51,70 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.snapshots', function (loadParams, modulePa
 			}
 		],
 
-		multiSelect: true,
-		selModel: {
-			selType: 'selectedmodel',
-			selectedMenu: [{
-				text: 'Delete',
-				iconCls: 'x-menu-icon-delete',
-				request: {
-					confirmBox: {
-						msg: 'Delete selected db snapshot(s): %s ?',
-						type: 'delete'
-					},
-					processBox: {
-						msg: 'Deleting db snapshot(s) ...',
-						type: 'delete'
-					},
-					url: '/tools/aws/rds/snapshots/xDeleteSnapshots/',
-					dataHandler: function (records) {
-						var data = [];
-						this.confirmBox.objects = [];
-						for (var i = 0, len = records.length; i < len; i++) {
-							data.push(records[i].get('id'));
-							this.confirmBox.objects.push(records[i].get('name'));
-						}
+        multiSelect: true,
+        selModel: {
+            selType: 'selectedmodel'
+        },
 
-						return { snapshots: Ext.encode(data), cloudLocation: store.proxy.extraParams.cloudLocation };
-					}
-				}
-			}]
-		},
+        listeners: {
+            selectionchange: function(selModel, selections) {
+                this.down('scalrpagingtoolbar').down('#delete').setDisabled(!selections.length);
+            }
+        },
 
-		dockedItems: [{
-			xtype: 'scalrpagingtoolbar',
-			store: store,
-			dock: 'top',
-			afterItems: [{
-				ui: 'paging',
-				iconCls: 'x-tbar-add',
-				handler: function() {
-					Scalr.event.fireEvent('redirect', '#/tools/aws/rds/instances/create');
-				}
-			}],
-			items: [{
-				xtype: 'fieldcloudlocation',
-				itemId: 'cloudLocation',
-				store: {
-					fields: [ 'id', 'name' ],
-					data: moduleParams.locations,
-					proxy: 'object'
-				},
-				gridStore: store,
-				cloudLocation: loadParams['cloudLocation'] || ''
-			}]
-		}]
+        dockedItems: [{
+            xtype: 'scalrpagingtoolbar',
+            store: store,
+            dock: 'top',
+            beforeItems: [{
+                text: 'Add instance',
+                cls: 'x-btn-green-bg',
+                handler: function() {
+                    Scalr.event.fireEvent('redirect', '#/tools/aws/rds/instances/create');
+                }
+            }],
+            afterItems: [{
+                ui: 'paging',
+                itemId: 'delete',
+                iconCls: 'x-tbar-delete',
+                tooltip: 'Select one or more db snapshot(s) to delete them',
+                disabled: true,
+                handler: function() {
+                    var request = {
+                        confirmBox: {
+                            type: 'delete',
+                            msg: 'Delete selected db snapshot(s): %s ?'
+                        },
+                        processBox: {
+                            type: 'delete',
+                            msg: 'Deleting snapshot(s) ...'
+                        },
+                        url: '/tools/aws/rds/snapshots/xDeleteSnapshots/',
+                        success: function() {
+                            store.load();
+                        }
+                    }, records = this.up('grid').getSelectionModel().getSelection(), data = [];
+
+                    request.confirmBox.objects = [];
+                    for (var i = 0, len = records.length; i < len; i++) {
+                        data.push(records[i].get('id'));
+                        request.confirmBox.objects.push(records[i].get('name'));
+                    }
+                    request.params = { snapshots: Ext.encode(data), cloudLocation: store.proxy.extraParams.cloudLocation };
+                    Scalr.Request(request);
+                }
+            }],
+            items: [{
+                xtype: 'fieldcloudlocation',
+                itemId: 'cloudLocation',
+                store: {
+                    fields: [ 'id', 'name' ],
+                    data: moduleParams.locations,
+                    proxy: 'object'
+                },
+                gridStore: store,
+                cloudLocation: loadParams['cloudLocation'] || ''
+            }]
+        }]
 	});
 });

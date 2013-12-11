@@ -65,11 +65,11 @@ class Scalr_Script extends Scalr_Model
     public function getRevision($version = null)
     {
         if (!$version)
-            $revision = $this->db->GetRow("SELECT id, revision, script, dtcreated as dtCreated, variables FROM script_revisions WHERE scriptid=? ORDER BY revision DESC", array(
+            $revision = $this->db->GetRow("SELECT id, revision, script, dtcreated as dtCreated, variables FROM script_revisions WHERE scriptid=? ORDER BY revision DESC LIMIT 1", array(
                 $this->id
             ));
         else
-            $revision = $this->db->GetRow("SELECT id, revision, script, dtcreated as dtCreated, variables FROM script_revisions WHERE scriptid=? AND revision = ?", array(
+            $revision = $this->db->GetRow("SELECT id, revision, script, dtcreated as dtCreated, variables FROM script_revisions WHERE scriptid=? AND revision = ? LIMIT 1", array(
                 $this->id,
                 $version
             ));

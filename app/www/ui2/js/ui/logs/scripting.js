@@ -15,7 +15,8 @@ Scalr.regPage('Scalr.ui.logs.scripting', function (loadParams, moduleParams) {
 			'event_role_id', 
 			'event_farm_roleid',
 			'event_role_name',
-			'event_server_index'
+			'event_server_index',
+            'execution_id'
 		],
 		proxy: {
 			type: 'scalr.paging',
@@ -36,11 +37,13 @@ Scalr.regPage('Scalr.ui.logs.scripting', function (loadParams, moduleParams) {
 		stateId: 'grid-scripting-view',
 		stateful: true,
 		plugins: [{
-			ptype: 'gridstore'
+			ptype: 'gridstore',
+            highlightNew: true
 		}, {
 			ptype: 'rowexpander',
+            pluginId: 'rowexpander',
 			rowBodyTpl: [
-				'<p><b>Message:</b> {message}</p>'
+				'<tpl if="message"><p><b>Message:</b> {message}</p><tpl else><p>Loading...</p></tpl>'
 			]
 		}],
 
@@ -53,14 +56,48 @@ Scalr.regPage('Scalr.ui.logs.scripting', function (loadParams, moduleParams) {
 				href: '#/logs/scripting'
 			}
 		}],
-
 		viewConfig: {
 			emptyText: 'No logs found',
 			loadingText: 'Loading logs ...',
 			disableSelection: true,
 			getRowClass: function (record, rowIndex, rowParams) {
-				return (record.get('exec_exitcode') != '0') ? 'x-grid-row-red' : '';
-			}
+                if (record.get('exec_exitcode') != '0') {
+                    return 'x-grid-row-red';
+                }
+			},
+            listeners: {
+                beforerefresh: function(){//since we load message dynamically, we must to collapse all expanded rows before refresh
+                    var key,
+                        recordsExpanded = this.up().getPlugin('rowexpander').recordsExpanded;
+                    if (recordsExpanded) {
+                        for (key in recordsExpanded) {
+                            if (recordsExpanded.hasOwnProperty(key)) {
+                                delete recordsExpanded[key];
+                            }
+                        }
+                    }
+                },
+                expandbody: function(rowNode, record, expandRow, eOpts){
+                    if(true || record.get('execution_id')) {
+                        if (!record.get('message')) {
+                            Scalr.Request({
+                                url: '/logs/getScriptingLog/',
+                                params: {
+                                    executionId: record.get('execution_id')
+                                },
+                                success: function (data) {
+                                    var node = Ext.fly(rowNode).down('.x-grid-rowbody');
+                                    if (node) {
+                                        node.setHTML('<p><b>Message:</b> ' + data.message + '</p>');
+                                        record.set('message', data.message);
+                                    }
+                                },
+                                scope: this
+                            });
+                        }
+                    }
+                }
+            }
 		},
 
 		columns: [
@@ -95,7 +132,7 @@ Scalr.regPage('Scalr.ui.logs.scripting', function (loadParams, moduleParams) {
 				'</tpl>'
 			},
 			{ header: 'Script name', width: 200, dataIndex: 'script_name', sortable: false },
-			{ header: 'Execution time', width: 120, dataIndex: 'exec_time', sortable: false, xtype: 'templatecolumn', tpl: '{$exec_time} s'},
+			{ header: 'Execution time', width: 130, dataIndex: 'exec_time', sortable: false, xtype: 'templatecolumn', tpl: '{exec_time} s'},
 			{ header: 'Exit code', width: 100, dataIndex: 'exec_exitcode', sortable: false }
 		],
 
@@ -105,7 +142,58 @@ Scalr.regPage('Scalr.ui.logs.scripting', function (loadParams, moduleParams) {
 			dock: 'top',
 			items: [{
 				xtype: 'filterfield',
-				store: store
+				store: store,
+                width: 300,
+                form: {
+                    items: [{
+                        xtype: 'textfield',
+                        fieldLabel: 'ServerID',
+                        labelAlign: 'top',
+                        name: 'serverId'
+                    }, {
+                        xtype: 'textfield',
+                        fieldLabel: 'EventID',
+                        labelAlign: 'top',
+                        name: 'eventId'
+                    }, {
+                        xtype: 'datefield',
+                        fieldLabel: 'By date',
+                        labelAlign: 'top',
+                        name: 'byDate',
+                        format: 'Y-m-d',
+                        maxValue: new Date(),
+                        listeners: {
+                            change: function (field, value) {
+                                this.next().down('[name="fromTime"]')[ value ? 'enable' : 'disable' ]();
+                                this.next().down('[name="toTime"]')[ value ? 'enable' : 'disable' ]();
+                            }
+                        }
+                    }, {
+                        xtype: 'fieldcontainer',
+                        layout: 'hbox',
+                        fieldLabel: 'Period of time',
+                        labelAlign: 'top',
+                        items: [{
+                            xtype: 'timefield',
+                            flex: 1,
+                            name: 'fromTime',
+                            format: 'H:i',
+                            disabled: true,
+                            listeners: {
+                                change: function(field, value) {
+                                    this.next().setMinValue(value);
+                                }
+                            }
+                        }, {
+                            xtype: 'timefield',
+                            flex: 1,
+                            margin: '0 0 0 10',
+                            name: 'toTime',
+                            format: 'H:i',
+                            disabled: true
+                        }]
+                    }]
+                }
 			}, ' ', {
 				xtype: 'combo',
 				fieldLabel: 'Farm',

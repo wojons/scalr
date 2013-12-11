@@ -1,17 +1,12 @@
-
 from gevent import monkey
 monkey.patch_all()
 
-import socket
-socket.setdefaulttimeout(5)
-
-import os
 import sys
 import time
 import yaml
-import logging
+import socket
 import urllib2
-import binascii
+import logging
 import argparse
 import gevent.pool
 
@@ -21,315 +16,419 @@ from scalrpy.util import basedaemon
 from scalrpy.util import cryptotool
 
 from sqlalchemy import and_
-from sqlalchemy import asc 
+from sqlalchemy import asc
 from sqlalchemy import func
 from sqlalchemy import exc as db_exc
 
-import scalrpy
+from scalrpy import __version__
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-ETC_DIR = os.path.abspath(BASE_DIR + '/../../../etc')
 
-config = {
-    'qsize':1024,
+CONFIG = {
+    'connections':{
+        'mysql':{
+            'user':None,
+            'pass':None,
+            'host':None,
+            'port':3306,
+            'name':None,
+            'pool_size':4,
+            'driver':'mysql+pymysql',
+            },
+        },
+    'pool_size':100,
+    'no_daemon':False,
     'cratio':120,
-    'pool_size':10,
-    'inst_conn_policy':'public',
+    'instances_connection_timeout':10,
+    'instances_connection_policy':'public',
     'pid_file':'/var/run/scalr.messaging.pid',
-    'log_file':'/var/log/scalr.messaging.log'
-}
+    'log_file':'/var/log/scalr.messaging.log',
+    'verbosity':1,
+    }
 
-logger = logging.getLogger(__file__)
+
+LOG = logging.getLogger('ScalrPy')
 
 
 class Messaging(basedaemon.BaseDaemon):
 
-    def __init__(self, config):
-        super(Messaging, self).__init__(pid_file=config['pid_file'], logger_name=__file__)
-        self.db_manager = dbmanager.DBManager(config['connections']['mysql'])
+    def __init__(self):
+        super(Messaging, self).__init__(pid_file=CONFIG['pid_file'])
+        self._db_manager = dbmanager.DBManager(CONFIG['connections']['mysql'], autoflush=False)
+        self._worker_pool = gevent.pool.Pool(CONFIG['pool_size'])
 
 
-    def _server_is_active(self, srv):
-        return srv.status in (
-                'Running', 'Initializing', 'Importing', 'Temporary', 'Pending terminate')
-
-
-    def _encrypt(self, server_id, crypto_key, data, headers=None):
+    def _encrypt(self, server_id, key, data, headers=None):
+        assert server_id
+        assert key
+        assert data
         crypto_algo = dict(name="des_ede3_cbc", key_size=24, iv_size=8)
-        data = cryptotool.encrypt(crypto_algo, data, binascii.a2b_base64(crypto_key))
-        headers = headers or {}
-
-        headers['X-Signature'], headers['Date'] = cryptotool.sign_http_request(data, crypto_key)
+        data = cryptotool.encrypt(crypto_algo, data, cryptotool.decrypt_key(key))
+        headers = headers or dict()
+        headers['X-Signature'], headers['Date'] = cryptotool.sign(data, key)
         headers['X-Server-Id'] = server_id
-
         return data, headers
 
 
-    def _send(self, task):
-        msg = task['msg']
-        req = task['req']
+    def _get_messages(self):
+        db = self._db_manager.get_db()
+        where = and_(
+                db.messages.type == 'out',
+                db.messages.status == 0,
+                db.messages.messageid != '',
+                db.messages.message_version == 2,
+                func.unix_timestamp(db.messages.dtlasthandleattempt) +
+                db.messages.handle_attempts *
+                CONFIG['cratio'] < func.unix_timestamp(func.now()))
+        messages = db.session.query(
+                db.messages.messageid,
+                db.messages.server_id,
+                db.messages.message_name,
+                db.messages.message_format,
+                db.messages.handle_attempts,
+                db.messages.event_id,
+                db.messages.message).filter(where).order_by(asc(db.messages.id)).limit(500)[0:500]
+        return messages
 
-        db = self.db_manager.get_db()
-        db.session.add(msg)
 
+    def _get_servers(self, servers_id):
+        if not servers_id:
+            return tuple()
+        db = self._db_manager.get_db()
+        status = (
+                'Running',
+                'Initializing',
+                'Importing',
+                'Temporary',
+                'Pending terminate')
+        servers = db.session.query(
+                db.servers.server_id,
+                db.servers.farm_id,
+                db.servers.farm_roleid,
+                db.servers.remote_ip,
+                db.servers.local_ip).filter(
+                and_(db.servers.server_id.in_(servers_id), db.servers.status.in_(status)))
+        return servers
+
+
+    def _get_ctrl_ports(self, servers_id):
+        if not servers_id:
+            return tuple()
+        db = self._db_manager.get_db()
+        where = and_(
+                db.server_properties.server_id.in_(servers_id),
+                db.server_properties.name == 'scalarizr.ctrl_port',
+                db.server_properties.value != 'NULL')
+        ctrl_ports = db.session.query(
+                db.server_properties.server_id,
+                db.server_properties.value).filter(where)
+        return ctrl_ports
+
+
+    def _get_srz_keys(self, servers_id):
+        if not servers_id:
+            return tuple()
+        db = self._db_manager.get_db()
+        where_key = and_(
+                db.server_properties.server_id.in_(servers_id),
+                db.server_properties.name == 'scalarizr.key',
+                db.server_properties.value != 'NULL')
+        srz_keys = db.session.query(
+                db.server_properties.server_id,
+                db.server_properties.value).filter(where_key)
+        return srz_keys
+
+
+    def _filter_vpc_farms(self, farms_id):
+        if not farms_id:
+            return tuple()
+        db = self._db_manager.get_db()
+        where = and_(
+                db.farm_settings.farmid.in_(farms_id),
+                db.farm_settings.name == 'ec2.vpc.id',
+                db.farm_settings.value != 'NULL')
+        return [farm.farmid for farm in
+                db.session.query(db.farm_settings.farmid).filter(where)]
+
+
+    def _get_vpc_router_roles(self, farms_id):
+        if not farms_id:
+            return dict()
+        db = self._db_manager.get_db()
+        where = and_(db.role_behaviors.behavior == 'router')
+        vpc_roles = db.session.query(db.role_behaviors.role_id).filter(where)
+        roles_id = [behavior.role_id for behavior in vpc_roles]
+        if not roles_id:
+            return dict()
+        where = and_(
+                db.farm_roles.role_id.in_(roles_id),
+                db.farm_roles.farmid.in_(farms_id))
+        return dict((el.farmid, el.id) for el in db.session.query(
+                db.farm_roles.farmid, db.farm_roles.id).filter(where))
+
+
+    def _produce_tasks(self):
+        tasks = []
+        db = self._db_manager.get_db()
         try:
-            logger.debug('Send message msg_id:%s %s %s'
-                         % (msg.messageid, req.get_host(), req.header_items()))
-            code = urllib2.urlopen(req, timeout=5).getcode()
-            if code != 201:
-                raise Exception(code, 'Delivery failed')
-            logger.debug('Delivery ok msg_id:%s %s' % (msg.messageid, req.get_host()))
-            msg.status = 1
-            msg.message = ''
-            msg.dtlasthandleattempt = func.now()
-            if msg.message_name == 'ExecScript':
-                db.delete(msg)
-        except Exception as e:
-            if type(e) in (urllib2.URLError, socket.timeout) and\
-                    ('Connection refused' in str(e) or 'timed out' in str(e)):
-                logger.warning('Delivery failed msg_id:%s %s error:%s' % (msg.messageid, req.get_host(), e))
-            else:
-                logger.error('Delivery failed msg_id:%s %s error:%s' % (msg.messageid, req.get_host(), e))
-            msg.handle_attempts += 1
-            msg.status = 0 if msg.handle_attempts < 3 else 3
-            msg.dtlasthandleattempt = func.now()
+            messages = self._get_messages()
+            servers_id = [message.server_id for message in messages]
+            servers = dict((server.server_id, server) for server in self._get_servers(servers_id))
+            if not servers:
+                return tasks
+            srz_keys = dict((el.server_id, el.value) for el in self._get_srz_keys(servers_id))
+            ctrl_ports = dict((el.server_id, el.value) for el in self._get_ctrl_ports(servers_id))
+            vpc_farms_id = self._filter_vpc_farms(
+                    list(set(server.farm_id for server in servers.values())))
+            vpc_router_roles = self._get_vpc_router_roles(vpc_farms_id)
+            for message in messages:
+                try:
+                    msg = {
+                            'messageid': message.messageid,
+                            'message_name': message.message_name,
+                            'handle_attempts': message.handle_attempts,
+                            'event_id': message.event_id}
+                    if not message.message:
+                        LOG.warning('Message %s for server %s set status=3 \
+Reason: empty message' % (message.messageid, message.server_id))
+                        msg['handle_attempts'] = 2
+                        self._db_update(False, msg)
+                        continue
+                    if message.server_id in servers:
+                        server = servers[message.server_id]
+                    else:
+                        LOG.warning('Message %s for server %s set status=3 \
+Reason: server dosn\'t exist' % (message.messageid, message.server_id))
+                        msg['handle_attempts'] = 2
+                        self._db_update(False, msg)
+                        continue
+                    if message.server_id in srz_keys and srz_keys[message.server_id]:
+                        key = srz_keys[message.server_id]
+                    else:
+                        LOG.error('Server %s hasn\'t scalarizr key' % message.server_id)
+                        self._db_update(False, msg)
+                        continue
+                    if message.server_id in ctrl_ports and ctrl_ports[message.server_id]:
+                        port = ctrl_ports[message.server_id]
+                    else:
+                        port = 8013
+                    ip = {'public': server.remote_ip,
+                            'local': server.local_ip,
+                            'auto': server.remote_ip if server.remote_ip else server.local_ip
+                            }[CONFIG['instances_connection_policy']]
+                    try:
+                        data, headers = self._encrypt(message.server_id, key, message.message)
+                    except:
+                        LOG.warning('Message %s for server %s set status=3 \
+Reason: unable to encrypt message, error %s' \
+                                % (message.messageid, message.server_id, helper.exc_info()))
+                        msg['handle_attempts'] = 2
+                        self._db_update(False, msg)
+                        continue
+                    if server.farm_id in vpc_farms_id and server.farm_id in vpc_router_roles:
+                        if server.remote_ip:
+                            ip = server.remote_ip
+                        else:
+                            where = and_(
+                                    db.farm_role_settings.farm_roleid == vpc_router_roles[server.farm_id],
+                                    db.farm_role_settings.name == 'router.vpc.ip',
+                                    db.farm_role_settings.value != 'NULL')
+                            ip_query = db.session.query(
+                                    db.farm_role_settings.value).filter(where).first()
+                            if ip_query:
+                                ip = ip_query.value
+                                headers['X-Receiver-Host'] = server.local_ip
+                                headers['X-Receiver-Port'] = port
+                                port = 80
+                            else:
+                                LOG.warning('Message %s for server %s set status=3 \
+Reason: farm_role_settings hasn\'t ip value' % (message.messageid, message.server_id))
+                                msg['handle_attempts'] = 2
+                                self._db_update(False, msg)
+                                continue
+                    if not ip:
+                        LOG.warning('Message %s for server %s set status=3 \
+Reason: can\'t determine ip' % (message.messageid, message.server_id))
+                        msg['handle_attempts'] = 2
+                        self._db_update(False, msg)
+                        continue
+                    if str(message.message_format) == 'json':
+                        headers['Content-type'] = 'application/json'
+                    url = 'http://%s:%s/%s' % (ip, port, 'control')
+                    request = urllib2.Request(url, data, headers)
+                    tasks.append({'msg': msg, 'req': request})
+                except:
+                    LOG.error(helper.exc_info())
+            db.session.commit()
         finally:
+            db.session.remove()
+        return tasks
+
+
+    def _db_update(self, ok, msg):
+        db = self._db_manager.get_db()
+        try:
             while True:
                 try:
-                    db.commit()
-                    db.session.close()
+                    if ok:
+                        if msg['message_name'] == 'ExecScript':
+                            db.messages.filter(
+                                    db.messages.messageid == msg['messageid']).delete()
+                        else:
+                            db.messages.filter(db.messages.messageid == msg['messageid']).update({
+                                    'status': 1,
+                                    'message': '',
+                                    'dtlasthandleattempt': func.now()},
+                                    synchronize_session=False)
+                        if msg['event_id']:
+                            db.events.filter(db.events.event_id == msg['event_id']).update({
+                                    db.events.msg_sent: db.events.msg_sent + 1})
+                    else:
+                        db.messages.filter(db.messages.messageid == msg['messageid']).update({
+                                'status': 0 if msg['handle_attempts'] < 2 else 3,
+                                'handle_attempts': msg['handle_attempts'] + 1,
+                                'dtlasthandleattempt': func.now()},
+                                synchronize_session=False)
+                    db.session.commit()
                     break
-                except (db_exc.OperationalError, db_exc.InternalError):
-                    logger.error(sys.exc_info())
-                    time.sleep(10)
+                except db_exc.SQLAlchemyError:
+                    db.session.remove()
+                    LOG.error(helper.exc_info())
+                    time.sleep(5)
+        finally:
+            db.session.remove()
+
+
+    def _send(self, task):
+        if not task:
+            return
+        try:
+            msg = task['msg']
+            req = task['req']
+            try:
+
+                LOG.debug('Send message %s host %s header %s'
+                        % (msg['messageid'], req.get_host(), req.header_items()))
+                code = urllib2.urlopen(
+                    req, timeout=CONFIG['instances_connection_timeout']).getcode()
+                if code != 201:
+                    raise Exception('Server response code %s' % code)
+                LOG.debug('Delivery ok, message %s, host %s'
+                        % (msg['messageid'], req.get_host()))
+                try:
+                    self._db_update(True, msg)
+                except:
+                    LOG.error('Unable to update database %s' %helper.exc_info())
+            except:
+                e = sys.exc_info()[1]
+                if type(e) in (urllib2.URLError, socket.timeout) and\
+                        ('Connection refused' in str(e) or 'timed out' in str(e)):
+                    LOG.warning('Delivery failed message id %s host %s error %s'
+                            % (msg['messageid'], req.get_host(), helper.exc_info()))
+                else:
+                    LOG.error('Delivery failed message id %s host %s error %s'
+                            % (msg['messageid'], req.get_host(), helper.exc_info()))
+                self._db_update(False, msg)
+        except:
+            LOG.error(helper.exc_info())
+
+
+    def _process_tasks(self, tasks):
+        self._worker_pool.map(self._send, tasks)
+        self._worker_pool.join()
 
 
     def run(self):
-        db = self.db_manager.get_db()
-
         while True:
             try:
-                db.servers
-                db.farm_roles
-                db.farm_settings
-                db.role_behaviors
-                db.server_properties
-                db.farm_role_settings
-                break
-            except (db_exc.OperationalError, db_exc.InternalError):
-                logger.error(sys.exc_info())
-                time.sleep(10)
-
-        timestep = 5
-        wrk_pool = gevent.pool.Pool(config['pool_size'])
-
-        while True:
-            try:
-                where1 = and_(
-                        db.messages.type=='out',
-                        db.messages.status==0,
-                        db.messages.message_version==2)
-
-                where2 = and_(
-                        func.unix_timestamp(db.messages.dtlasthandleattempt) +\
-                        db.messages.handle_attempts *\
-                        config['cratio'] < func.unix_timestamp(func.now()))
-
-                msgs = dict((msg.messageid, msg) for msg in\
-                        db.messages.filter(where1, where2).order_by(
-                        asc(db.messages.id)).all()[0:config['qsize']])
-
-                if not msgs:
-                    time.sleep(timestep)
+                tasks = self._produce_tasks()
+                if not tasks:
+                    time.sleep(5)
                     continue
-
-                srvs_id = [msg.server_id for msg in msgs.values()]
-                srvs = dict((srv.server_id, srv) for srv in\
-                        db.servers.filter(db.servers.server_id.in_(srvs_id)).all())
-
-                where = and_(
-                        db.server_properties.server_id.in_(srvs_id),
-                        db.server_properties.name=='scalarizr.key')
-                keys_query = db.server_properties.filter(where).all()
-                keys = dict((el.server_id, el.value) for el in keys_query)
-
-                where = and_(
-                        db.server_properties.server_id.in_(srvs_id),
-                        db.server_properties.name=='scalarizr.ctrl_port')
-                ports_query = db.server_properties.filter(where).all()
-                ports = dict((el.server_id, el.value if el and el.value else 8013)
-                             for el in ports_query)
-
-                tasks = []
-                for msg in msgs.values():
-                    try:
-                        srv = srvs[msg.server_id]
-                    except KeyError:
-                        logging.warning('Server with server_id %s dosn\'t exist. Delete message %s'
-                                        %(msg.server_id, msg.messageid))
-                        db.delete(msg)
-                        continue
-
-                    if not self._server_is_active(srv):
-                        continue
-
-                    ip = {'public':srv.remote_ip, 'local':srv.local_ip, 'auto':srv.remote_ip
-                            if srv.remote_ip else srv.local_ip}[config['inst_conn_policy']]
-
-                    try:
-                        key = keys[msg.server_id]
-                    except KeyError: 
-                        logging.error('Server %s has not scalarizr key' % msg.server_id)
-                        continue
-
-                    try:
-                        port = ports[msg.server_id]
-                    except KeyError:
-                        port = 8013
-
-                    req_host = '%s:%s' % (ip, port)
-                    data, headers = self._encrypt(msg.server_id, key, msg.message)
-
-                    where = and_(
-                            db.farm_settings.farmid==srv.farm_id,
-                            db.farm_settings.name=='ec2.vpc.id')
-                    is_vpc = db.farm_settings.filter(where).first()
-                    
-                    if(is_vpc):
-                        where = and_(
-                                db.role_behaviors.behavior=='router')
-                        vpc_roles = [behavior.role_id for behavior
-                                     in db.role_behaviors.filter(where).all()]
-
-                        where = and_(
-                                db.farm_roles.role_id.in_(vpc_roles), db.farm_roles.farmid==srv.farm_id)
-                        db_farm_role = db.farm_roles.filter(where).first()
-
-                        if db_farm_role:
-                            logger.debug('Message:%s for VPC server:%s' % (msg.messageid, srv.server_id))
-                            if srv.remote_ip:
-                                ip = srv.remote_ip
-                                req_host = '%s:%s' % (srv.remote_ip, port)
-                            else:
-                                where = and_(
-                                        db.farm_role_settings.farm_roleid==db_farm_role.id,
-                                        db.farm_role_settings.name=='router.vpc.ip')
-                                ip_query = db.farm_role_settings.filter(where).first()
-                                if ip_query and ip_query.value:
-                                    ip = ip_query.value
-                                    req_host = '%s:80' % ip
-                                    headers['X-Receiver-Host'] = srv.local_ip
-                                    headers['X-Receiver-Port'] = port
-                                else:
-                                    ip = None
-
-                    if ip == None or ip == 'None':
-                        logger.warning('Server: %s Null ip, delete message %s'
-                                       % (srv.server_id, msg.messageid))
-                        db.delete(msg)
-                        continue
-                    
-                    url = 'http://%s/%s' % (req_host, 'control')
-                    req = urllib2.Request(url, data, headers)
-
-                    db.session.expunge(msg)
-                    tasks.append({'msg':msg, 'req':req})
-
-                wrk_pool.map_async(self._send, tasks)
-                gevent.sleep(0)
-                wrk_pool.join()
-
-            except (db_exc.OperationalError, db_exc.InternalError):
-                logger.error(sys.exc_info())
-                time.sleep(10)
-            except Exception:
-                logger.exception('Exception')
-            finally:
-                while True:
-                    try:
-                        db.commit()
-                        db.session.close()
-                        break
-                    except (db_exc.OperationalError, db_exc.InternalError):
-                        logger.error(sys.exc_info())
-                        time.sleep(10)
-
-            time.sleep(timestep)
+                self._process_tasks(tasks)
+            except KeyboardInterrupt:
+                raise KeyboardInterrupt
+            except db_exc.SQLAlchemyError:
+                LOG.error(helper.exc_info())
+                time.sleep(5)
+            except:
+                LOG.exception('Exception')
+                time.sleep(5)
 
 
-def configure(args, cnf):
-    global config
+    def start(self, daemon=False):
+        if daemon:
+            super(Messaging, self).start()
+        else:
+            self.run()
 
-    for k, v in cnf.iteritems():
-            config.update({k:v})
 
-    for k, v in vars(args).iteritems():
-        if v is not None:
-            config.update({k:v})
-
-    helper.configure_log(__file__, log_level=config['verbosity'], log_file=config['log_file'],
-                         log_size=1024*500)
+def configure(config, args=None):
+    global CONFIG
+    helper.update_config(config['connections']['mysql'], CONFIG['connections']['mysql'])
+    if 'system' in config and 'instances_connection_timeout' in config['system']:
+        timeout = config['system']['instances_connection_timeout']
+        CONFIG['instances_connection_timeout'] = timeout
+    if 'instances_connection_policy' in config:
+        CONFIG['instances_connection_policy'] = config['instances_connection_policy']
+    if 'msg_sender' in config:
+        helper.update_config(config['msg_sender'], CONFIG)
+    helper.update_config(config_to=CONFIG, args=args)
+    helper.validate_config(CONFIG)
+    helper.configure_log(
+            log_level=CONFIG['verbosity'],
+            log_file=CONFIG['log_file'],
+            log_size=1024*1000
+            )
 
 
 def main():
+    parser = argparse.ArgumentParser()
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument('--start', action='store_true', default=False, help='start daemon')
+    group.add_argument('--stop', action='store_true', default=False, help='stop daemon')
+    parser.add_argument('--no-daemon', action='store_true', default=None,
+            help="Run in no daemon mode")
+    parser.add_argument('-p', '--pid-file', default=None, help="Pid file")
+    parser.add_argument('-l', '--log-file', default=None, help="Log file")
+    parser.add_argument('-c', '--config-file', default='./config.yml', help='config file')
+    parser.add_argument('-t', '--instances-connection-timeout', type=int, default=None,
+            help='instances connection timeout')
+    parser.add_argument('-v', '--verbosity', action='count', default=None,
+            help='increase output verbosity [0:4]. Default is 1 - ERROR')
+    parser.add_argument('--version', action='version', version='Version %s' % __version__)
+    args = parser.parse_args()
     try:
-        parser = argparse.ArgumentParser()
-
-        group = parser.add_mutually_exclusive_group()
-
-        group.add_argument('--start', action='store_true', default=False, help='start daemon')
-        group.add_argument('--stop', action='store_true', default=False, help='stop daemon')
-        group.add_argument('--restart', action='store_true', default=False, help='restart daemon')
-
-        parser.add_argument('-p', '--pid_file', default=None, help="Pid file")
-        parser.add_argument('-c', '--config_file', default='%s/config.yml' % ETC_DIR,
-                            help='config file')
-        parser.add_argument('-v', '--verbosity', action='count', default=1,
-                            help='increase output verbosity [0:4]. Default is 1 - ERROR')
-        parser.add_argument('--version', action='version', version='Version %s'
-                            % scalrpy.__version__)
-        
-        args = parser.parse_args()
-
-        try:
-            cnf = yaml.safe_load(open(args.config_file))['scalr']['msg_sender']
-        except IOError as e:
-            sys.stderr.write('%s\n' % str(e))
-            sys.exit(1)
-        except KeyError:
-            sys.stderr.write('%s\nYou must define \'msg_sender\' section in config file\n'
-                             % str(sys.exc_info()))
-            sys.exit(1)
-
-        configure(args, cnf)
-
-    except Exception:
-        sys.stderr.write('%s\n' % str(sys.exc_info()))
+        config = yaml.safe_load(open(args.config_file))['scalr']
+        configure(config, args)
+    except:
+        if args.verbosity > 3:
+            raise
+        else:
+            sys.stderr.write('%s\n' % helper.exc_info())
         sys.exit(1)
-
     try:
-        daemon = Messaging(config)
-
+        socket.setdefaulttimeout(CONFIG['instances_connection_timeout'])
+        daemon = Messaging()
         if args.start:
-            if not helper.check_pid(config['pid_file']):
-                logger.critical('Another copy of process already running. Exit') 
-                sys.exit(0)
-            daemon.start()
+            LOG.info('Start')
+            if not helper.check_pid(CONFIG['pid_file']):
+                LOG.info('Another copy of process already running. Exit')
+                return
+            daemon.start(daemon=not args.no_daemon)
         elif args.stop:
+            LOG.info('Stop')
             daemon.stop()
-        elif args.restart:
-            daemon.restart()
         else:
             print 'Usage %s -h' % sys.argv[0]
-
+    except KeyboardInterrupt:
+        LOG.critical('KeyboardInterrupt')
+        return
     except SystemExit:
         pass
-    except Exception:
-        logger.critical('Something happened and I think I died')
-        logger.exception('Critical exception')
+    except:
+        LOG.exception('Something happened and I think I died')
         sys.exit(1)
 
 
 if __name__ == '__main__':
     main()
-

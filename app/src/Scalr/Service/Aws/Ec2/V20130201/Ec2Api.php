@@ -1,6 +1,7 @@
 <?php
 namespace Scalr\Service\Aws\Ec2\V20130201;
 
+use Scalr\Service\Aws\Ec2\DataType\GetPasswordDataResponseData;
 use Scalr\Service\Aws\Ec2\DataType\MonitorInstancesResponseSetList;
 use Scalr\Service\Aws\Ec2\DataType\MonitorInstancesResponseSetData;
 use Scalr\Service\Aws\Ec2\DataType\InstanceAttributeType;
@@ -2874,6 +2875,41 @@ class Ec2Api extends AbstractApi
     }
 
     /**
+     * GetPasswordData action
+     *
+     * Retrieves the encrypted administrator password for an instance running Windows.
+     *
+     * Note!
+     * The Windows password is only generated the first time an AMI is launched.
+     * It is not generated for rebundled AMIs or after the password is changed on an instance.
+     * The password is encrypted using the key pair that you provided.
+     *
+     * @param   string      $instanceId       A Windows instance ID.
+     * @return  GetPasswordDataResponseData      Returns object which represents console output.
+     * @throws  ClientException
+     * @throws  Ec2Exception
+     */
+    public function getPasswordData($instanceId)
+    {
+        $result = null;
+        $options = array(
+            'InstanceId' => (string) $instanceId,
+        );
+        $response = $this->client->call(ucfirst(__FUNCTION__), $options);
+        if ($response->getError() === false) {
+            $sxml = simplexml_load_string($response->getRawContent());
+            $response = null;
+            $result = new GetPasswordDataResponseData();
+            $result->setEc2($this->ec2);
+            $result->passwordData = (string)$sxml->passwordData;
+            $result->timestamp = new DateTime((string)$sxml->timestamp, new DateTimeZone('UTC'));
+            $result->instanceId = (string)$sxml->instanceId;
+            $result->setRequestId((string)$sxml->requestId);
+        }
+        return $result;
+    }
+
+    /**
      * DescribePlacementGroups action
      *
      * Describes one or more of your placement groups.
@@ -4378,6 +4414,70 @@ class Ec2Api extends AbstractApi
             }
             $result = true;
         }
+        return $result;
+    }
+
+    /**
+     * DescribeInstanceAttribute action
+     *
+     * Describes an attribute of the specified instance
+     *
+     * @param   string                $instanceId The ID of the Instance.
+     * @param   InstanceAttributeType $attribute  The attribute.
+     * @return  mixed                 Returns attribute value. It may be scalar value or stdClass object
+     *                                depends on attribute.
+     * @throws  ClientException
+     * @throws  Ec2Exception
+     */
+    public function describeInstanceAttribute($instanceId, InstanceAttributeType $attribute)
+    {
+        $result = null;
+        $options = array(
+            'InstanceId' => (string) $instanceId,
+            'Attribute'  => (string) $attribute,
+        );
+        $action = ucfirst(__FUNCTION__);
+        $response = $this->client->call($action, $options);
+        if ($response->getError() === false) {
+            $sxml = simplexml_load_string($response->getRawContent());
+            $response = null;
+            $ptr = $sxml->{$options['Attribute']};
+            switch ($options['Attribute']) {
+                case InstanceAttributeType::TYPE_EBS_OPTIMIZED :
+                case InstanceAttributeType::TYPE_SOURCE_DEST_CHECK :
+                case InstanceAttributeType::TYPE_DISABLE_API_TERMINATION :
+                    $result = ((string)$ptr->value == 'true');
+                    break;
+
+                case InstanceAttributeType::TYPE_INSTANCE_TYPE :
+                case InstanceAttributeType::TYPE_KERNEL :
+                case InstanceAttributeType::TYPE_RAMDISK :
+                case InstanceAttributeType::TYPE_USER_DATA :
+                case InstanceAttributeType::TYPE_INSTANCE_INITIATED_SHUTDOWN_BEHAVIOR :
+                case InstanceAttributeType::TYPE_ROOT_DEVICE_NAME :
+                    $result = (string)$ptr->value;
+                    break;
+
+                case InstanceAttributeType::TYPE_BLOCK_DEVICE_MAPPING :
+                    $result = $this->_loadInstanceBlockDeviceMappingResponseList($ptr);
+                    break;
+
+                case InstanceAttributeType::TYPE_GROUP_SET :
+                    $result = $this->_loadGroupList($ptr);
+                    break;
+
+                case InstanceAttributeType::TYPE_PRODUCT_CODES :
+                    $result = $this->_loadProductCodeSetList($ptr);
+                    break;
+
+                default :
+                    throw new \InvalidArgumentException(sprintf(
+                        'Unexpected attribute "%s" in %s call',
+                        $options['Attribute'], $action
+                    ));
+            }
+        }
+
         return $result;
     }
 

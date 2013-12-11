@@ -3,11 +3,6 @@
     {
         const SETTING_URL = 'url';
 
-        public function __construct()
-        {
-            $this->snmpClient = new Scalr_Net_Snmp_Client();
-        }
-
         public function getValue(DBFarmRole $dbFarmRole, Scalr_Scaling_FarmRoleMetric $farmRoleMetric)
         {
             $start_time = microtime(true);
@@ -32,14 +27,6 @@
                     $message = $e->innerException->getMessage();
                 else
                     $message = $e->getMessage();
-
-                if (stristr($message, "name lookup timed out")) {
-                    $info = @parse_url($farmRoleMetric->getSetting(self::SETTING_URL));
-                    $tmp1 = gethostbyname($info['host']);
-                    $tmp2 = system("/usr/bin/dig {$info['host']} A", $tmp3);
-                    $var = json_encode(array($tmp1, $tmp2, $tmp3));
-                    Logger::getLogger('Scalr_Scaling_Sensors_Http')->fatal("URL Scaling metric: {$var}");
-                }
 
                 throw new Exception("HTTPResponseTime Scaling Sensor cannot get value: {$message}");
             }

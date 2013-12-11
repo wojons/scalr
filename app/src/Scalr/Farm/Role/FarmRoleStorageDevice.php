@@ -60,7 +60,7 @@ class FarmRoleStorageDevice
     {
         $db = \Scalr::getDb();
 
-        $id = $db->GetOne("SELECT storage_id FROM farm_role_storage_devices WHERE storage_config_id = ? AND server_index = ? AND status = ?",
+        $id = $db->GetOne("SELECT storage_id FROM farm_role_storage_devices WHERE storage_config_id = ? AND server_index = ? AND status = ? LIMIT 1",
             array($configId, $serverIndex, self::STATUS_ACTIVE)
         );
         if (!$id)
@@ -74,7 +74,7 @@ class FarmRoleStorageDevice
      * @return Scalr\Farm\Role\FarmRoleStorageDevice
      */
     public function loadById($id) {
-        $info = $this->db->GetRow("SELECT * FROM farm_role_storage_devices WHERE storage_id = ?", array($id));
+        $info = $this->db->GetRow("SELECT * FROM farm_role_storage_devices WHERE storage_id = ? LIMIT 1", array($id));
         if (!$info)
             return false;
 

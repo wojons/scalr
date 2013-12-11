@@ -39,7 +39,7 @@ Scalr.regPage('Scalr.ui.services.apache.vhosts.view', function (loadParams, modu
 		},
 
 		columns:[
-			{ header: "ID", width: 50, dataIndex: 'id', sortable:true },
+			{ header: "ID", width: 60, dataIndex: 'id', sortable:true },
 			{ header: "Name", flex: 5, dataIndex: 'name', sortable:true },
 			{ header: "Farm & Role", flex: 5, dataIndex: 'farm_id', sortable: true, xtype: 'templatecolumn', tpl:
 				'<tpl if="farm_name && role_name">'+
@@ -47,7 +47,7 @@ Scalr.regPage('Scalr.ui.services.apache.vhosts.view', function (loadParams, modu
 					'&nbsp;&rarr;&nbsp;<a href="#/farms/{farm_id}/roles/{farm_roleid}/view" title="Role {role_name}">{role_name}</a> ' +
 				'<tpl else><img src="/ui2/images/icons/false.png" /></tpl>'
 			},
-			{ header: "Last time modified", width: 150, dataIndex: 'last_modified', sortable: true },
+			{ header: "Last time modified", width: 160, dataIndex: 'last_modified', sortable: true },
 			{ header: "SSL", width: 60, dataIndex: 'is_ssl_enabled', sortable: true, align: 'center', xtype: 'templatecolumn', tpl:
 				'<tpl if="is_ssl_enabled == 1"><img src="/ui2/images/icons/true.png" /></tpl>' +
 				'<tpl if="is_ssl_enabled == 0"><img src="/ui2/images/icons/false.png" /></tpl>'
@@ -108,8 +108,8 @@ Scalr.regPage('Scalr.ui.services.apache.vhosts.view', function (loadParams, modu
 				}
 			}],
 			beforeItems: [{
-				ui: 'paging',
-				iconCls: 'x-tbar-add',
+                text: 'Add virtualhost',
+                cls: 'x-btn-green-bg',
 				handler: function() {
 					Scalr.event.fireEvent('redirect', '#/services/apache/vhosts/create');
 				}

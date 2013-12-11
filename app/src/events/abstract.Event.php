@@ -12,6 +12,10 @@ abstract class Event
      */
     public $DBFarm;
 
+    public $msgExpected = 0,
+        $msgCreated = 0,
+        $msgSent = 0;
+
     /**
      * Constructor
      */

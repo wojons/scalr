@@ -75,8 +75,8 @@ class SzrMessagingProcess implements \Scalr\System\Pcntl\ProcessInterface
         $job = new Scalr_Cronjob_ScalarizrMessaging();
 
         while(true) {
-            $rows = $db->Execute("SELECT distinct(server_id) FROM messages WHERE type = ? AND status = ? AND isszr = ?",
-                array("in", MESSAGE_STATUS::PENDING, 1)
+            $rows = $db->Execute("SELECT distinct(server_id) FROM messages WHERE type = ? AND status = ?",
+                array("in", MESSAGE_STATUS::PENDING)
             );
 
             while ($row = $rows->FetchRow()) {

@@ -43,7 +43,7 @@ class AllocationPool extends AbstractInitType
      * @param   string     $end    End IP
      * @return  AllocationPool
      */
-    public static function init($start = null, $end = null)
+    public static function init()
     {
         return call_user_func_array('parent::init', func_get_args());
     }

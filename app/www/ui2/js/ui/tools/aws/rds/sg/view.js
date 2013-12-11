@@ -72,37 +72,44 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.sg.view', function (loadParams, modulePara
 			xtype: 'scalrpagingtoolbar',
 			store: store,
 			dock: 'top',
-			afterItems: [{
-				ui: 'paging',
-				iconCls: 'x-tbar-add',
+			beforeItems: [{
+                text: 'Add security group',
+                cls: 'x-btn-green-bg',
 				handler: function() {
 					Scalr.Request({
 						confirmBox: {
 							title: 'Create new security group',
 							form: [{
-								xtype: 'combo',
-								name: 'cloudLocation',
-								store: {
-									fields: [ 'id', 'name' ],
-									data: moduleParams.locations,
-									proxy: 'object'
-								},
-								editable: false,
-								fieldLabel: 'Location',
-								queryMode: 'local',
-								displayField: 'name',
-								valueField: 'id',
-								value: panel.down('#cloudLocation').value
-							},{
-								xtype: 'textfield',
-								name: 'dbSecurityGroupName',
-								fieldLabel: 'Name',
-								allowBlank: false
-							},{
-								xtype: 'textfield',
-								name: 'dbSecurityGroupDescription',
-								fieldLabel: 'Description',
-								allowBlank: false
+                                xtype: 'fieldset',
+                                cls: 'x-fieldset-separator-none',
+                                defaults: {
+                                    anchor: '100%'
+                                },
+                                items: [{
+                                    xtype: 'combo',
+                                    name: 'cloudLocation',
+                                    store: {
+                                        fields: [ 'id', 'name' ],
+                                        data: moduleParams.locations,
+                                        proxy: 'object'
+                                    },
+                                    editable: false,
+                                    fieldLabel: 'Location',
+                                    queryMode: 'local',
+                                    displayField: 'name',
+                                    valueField: 'id',
+                                    value: panel.down('#cloudLocation').value
+                                },{
+                                    xtype: 'textfield',
+                                    name: 'dbSecurityGroupName',
+                                    fieldLabel: 'Name',
+                                    allowBlank: false
+                                },{
+                                    xtype: 'textfield',
+                                    name: 'dbSecurityGroupDescription',
+                                    fieldLabel: 'Description',
+                                    allowBlank: false
+                                }]
 							}]
 						},
 						processBox: {

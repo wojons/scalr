@@ -22,4 +22,36 @@ class BehaviorEventObserver extends EventObserver
             }
         }
     }
+
+    public function OnBeforeHostTerminate(BeforeHostTerminateEvent $event)
+    {
+        $dbServer = $event->DBServer;
+        if ($dbServer->farmRoleId != 0) {
+            try {
+                $dbFarmRole = $dbServer->GetFarmRoleObject();
+            } catch (Exception $e) {
+                return false;
+            }
+
+            foreach (Scalr_Role_Behavior::getListForFarmRole($dbFarmRole) as $bObj) {
+                $bObj->onBeforeHostTerminate($dbServer);
+            }
+        }
+    }
+
+    public function OnHostDown(HostDownEvent $event)
+    {
+        $dbServer = $event->DBServer;
+        if ($dbServer->farmRoleId != 0) {
+            try {
+                $dbFarmRole = $dbServer->GetFarmRoleObject();
+            } catch (Exception $e) {
+            	return false;
+            }
+
+            foreach (Scalr_Role_Behavior::getListForFarmRole($dbFarmRole) as $bObj) {
+                $bObj->onHostDown($dbServer);
+            }
+        }
+    }
 }

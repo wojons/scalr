@@ -1,18 +1,18 @@
 Scalr.regPage('Scalr.ui.farms.builder.addrole.gce', function () {
     return {
         xtype: 'container',
+        itemId: 'gce',
         isExtraSettings: true,
         hidden: true,
 
-        cls: 'x-delimiter-top',
-        padding: '18 24',
+        cls: 'x-container-fieldset x-fieldset-separator-bottom',
         
         layout: {
             type: 'hbox',
             align: 'stretch'
         },
         defaults: {
-            maxWidth: 340
+            maxWidth: 348
         },
 
         isVisibleForRole: function(record) {
@@ -30,48 +30,50 @@ Scalr.regPage('Scalr.ui.farms.builder.addrole.gce', function () {
 
         onSettingsUpdate: function(record, name, value) {
             if (name === 'db.msr.data_storage.engine') {
-                Scalr.cachedRequest.load(
-                    {
-                        url: '/platforms/gce/xGetOptions',
-                        params: {}
-                    },
-                    function(data, status){
-                        this.refreshInstanceType(record, data || {});
-                    },
-                    this
-                );
+                this.refreshInstanceType();
             }
         },
 
-        refreshInstanceType: function(record, data, value) {
-            var mtypeField = this.down('[name="gce.machine-type"]'),
-                settings = record.get('settings', true),
-                storageEngine = settings['db.msr.data_storage.engine'] || record.getDefaultStorageEngine(),
-                mtypeFieldValue;
-                
-            if (value === undefined) {
-                value = mtypeField.getValue();
+        refreshInstanceType: function(value) {
+            var me = this,
+                cloudLocation = me.down('[name="gce.cloud-location"]').getValue();
+            if (cloudLocation.length > 0) {
+                Scalr.cachedRequest.load(
+                    {
+                        url: '/platforms/gce/xGetMachineTypes',
+                        params: {
+                            cloudLocation: cloudLocation[0]
+                        }
+                    },
+                    function(data, status) {
+                        var mtypeField = me.down('[name="gce.machine-type"]');
+                        if (status) {
+                            var settings = me.currentRole.get('settings', true),
+                                mtypeFieldValue;
+
+                            if (value === undefined) {
+                                value = mtypeField.getValue();
+                            }
+
+                            mtypeField.store.load({ data: data['types'] || [] });
+                            mtypeFieldValue = 'n1-standard-1';
+
+                           if (!mtypeField.findRecordByValue(value)) {
+                               value = null;
+                           }
+                           
+                            mtypeField.reset();
+                            mtypeField.setValue(value || mtypeFieldValue);
+                        }
+                        mtypeField.setDisabled(!status);
+                    }
+                );
             }
-            
-            if (record.isDbMsr() && (storageEngine === 'lvm' || storageEngine === 'eph')) {
-                mtypeField.store.load({ data: data['dbTypes'] || [] });
-                mtypeFieldValue = 'n1-standard-1-d';
-            } else {
-                mtypeField.store.load({ data: data['types'] || [] });
-                mtypeFieldValue = 'n1-standard-1';
-            }
-            
-           if (!mtypeField.findRecordByValue(value)) {
-               value = null;
-           }
-            
-            mtypeField.reset();
-            mtypeField.setValue(value || mtypeFieldValue);
-            
             
         },
         
         setRole: function(record) {
+            this.currentRole = record;
             Scalr.cachedRequest.load(
                 {
                     url: '/platforms/gce/xGetOptions',
@@ -81,21 +83,19 @@ Scalr.regPage('Scalr.ui.farms.builder.addrole.gce', function () {
                     var locationField = this.down('[name="gce.cloud-location"]'),
                         mtypeField = this.down('[name="gce.machine-type"]'),
                         locationFieldValue = '';
-
+                        
+                    mtypeField.setDisabled(!status);
                     if (status) {
                         locationField.store.loadData(data['zones'] || []);
                         if (locationField.store.getCount() > 0) {
                             locationFieldValue = locationField.store.getAt(3);
                             locationFieldValue = locationFieldValue ? locationFieldValue.get('name') : '';
                         }
-                        
-                        this.refreshInstanceType(record, data, null);
                     }
                     locationField.reset();
                     locationField.setValue(locationFieldValue);
                     
                     locationField.setDisabled(!status);
-                    mtypeField.setDisabled(!status);
                 },
                 this
             );
@@ -132,9 +132,9 @@ Scalr.regPage('Scalr.ui.farms.builder.addrole.gce', function () {
                 cls: 'x-boundlist-checkboxes',
                 tpl : '<tpl for=".">'+
                         '<tpl if="state != &quot;UP&quot;">'+
-                            '<div class="x-boundlist-item x-boundlist-item-disabled" title="Zone is offline for maintenance">{description}&nbsp;<span class="warning"></span></div>'+
+                            '<div class="x-boundlist-item x-boundlist-item-disabled" title="Zone is offline for maintenance"><img class="x-boundlist-icon" src="' + Ext.BLANK_IMAGE_URL + '"/>{description}&nbsp;<span class="warning"></span></div>'+
                         '<tpl else>'+
-                            '<div class="x-boundlist-item">{description}</div>'+
+                            '<div class="x-boundlist-item"><img class="x-boundlist-icon" src="' + Ext.BLANK_IMAGE_URL + '"/>{description}</div>'+
                         '</tpl>'+
                       '</tpl>'
             },
@@ -144,23 +144,27 @@ Scalr.regPage('Scalr.ui.farms.builder.addrole.gce', function () {
             },
             editable: false,
             queryMode: 'local',
-            margin: '0 36 0 0',
+            margin: '0 64 0 0',
             labelWidth: 70,
             listeners: {
                 beforeselect: function(comp, record, index) {
-                    var result = true;
-                    if (!this.up('form').isLoading && record.get('state') !== 'UP') {
-                        result = false;
+                    if (comp.isExpanded) {
+                        var result = true;
+                        if (record.get('state') !== 'UP') {
+                            result = false;
+                        }
+                        return result;
                     }
-                    return result;
                 },
                 beforedeselect: function(comp, record, index) {
-                    var result = true;
-                    if (!this.up('form').isLoading && comp.getValue().length < 2) {
-                        Scalr.message.Warning('At least one cloud location must be selected!');
-                        result = false;
+                    if (comp.isExpanded) {
+                        var result = true;
+                        if (comp.getValue().length < 2) {
+                            Scalr.message.InfoTip('At least one cloud location must be selected!', comp.inputEl, {anchor: 'bottom'});
+                            result = false;
+                        }
+                        return result;
                     }
-                    return result;
                 },
                 change: function(comp, value) {
                     if (value) {
@@ -172,6 +176,8 @@ Scalr.regPage('Scalr.ui.farms.builder.addrole.gce', function () {
                         f.resumeEvents();
                         comp.store.data.each(function(){locations.push(this.get('name'))});
                         panel.down('#locationmap').selectLocation(panel.state.platform, value, locations, 'world');
+                        
+                        this.up('#gce').refreshInstanceType();
                     }
                 }
             }

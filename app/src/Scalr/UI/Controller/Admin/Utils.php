@@ -24,19 +24,7 @@ class Scalr_UI_Controller_Admin_Utils extends Scalr_UI_Controller
             $p1 = str_replace('.php', '', $p1);
             $p1 = str_replace('/', '_', $p1);
 
-            if (method_exists($p1, 'getPermissionDefinitions')) {
-                $methods = $p1::getPermissionDefinitions();
-
-                foreach (get_class_methods($p1) as $value) {
-                    if (strpos($value, 'Action') === FALSE)
-                        continue;
-
-                    $value = str_replace('Action', '', $value);
-                    $result[str_replace('Scalr_UI_Controller_', '', $p1)][] = array('name' => $value, 'permission' => array_key_exists($value, $methods) ? $methods[$value] : false);
-                }
-            } else {
-                $result[str_replace('Scalr_UI_Controller_', '', $p1)] = 'Not covered';
-            }
+            $result[str_replace('Scalr_UI_Controller_', '', $p1)] = 'Not covered';
         }
 
         return $result;
@@ -45,5 +33,28 @@ class Scalr_UI_Controller_Admin_Utils extends Scalr_UI_Controller
     public function mapPermissionsAction()
     {
         $this->response->page('ui/admin/utils/mapPermissions.js', array('map' => $this->getPermissions(SRCPATH . '/Scalr/UI/Controller')));
+    }
+
+    public function debugAction()
+    {
+        $this->response->page('ui/admin/utils/debug.js', Scalr_Session::getInstance()->getDebugMode());
+    }
+
+    public function xSaveDebugAction()
+    {
+        Scalr_Session::getInstance()->setDebugMode(array(
+            'sql' => $this->getParam('sql')
+        ));
+
+        $js = array();
+
+        if ($this->getParam('sql')) {
+            $js[] = $this->response->getModuleName('ui-debug.js');
+        }
+
+        if (count($js))
+            $this->response->data(array('js' => $js));
+
+        $this->response->success('Debug parameters have applied');
     }
 }

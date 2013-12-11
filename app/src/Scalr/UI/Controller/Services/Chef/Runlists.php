@@ -1,4 +1,5 @@
 <?php
+use Scalr\Acl\Acl;
 
 class Scalr_UI_Controller_Services_Chef_Runlists extends Scalr_UI_Controller
 {
@@ -9,6 +10,7 @@ class Scalr_UI_Controller_Services_Chef_Runlists extends Scalr_UI_Controller
 
     public function viewAction()
     {
+        $this->request->restrictAccess(Acl::RESOURCE_SERVICES_CHEF);
         $res = $this->db->getAll('SELECT distinct(chef_environment) AS env FROM services_chef_runlists WHERE env_id = ?', $this->getEnvironmentId());
         $envs = array();
         foreach($res as $value) {
@@ -19,11 +21,13 @@ class Scalr_UI_Controller_Services_Chef_Runlists extends Scalr_UI_Controller
 
     public function createAction()
     {
+        $this->request->restrictAccess(Acl::RESOURCE_SERVICES_CHEF);
         $this->response->page('ui/services/chef/runlists/create.js');
     }
 
     public function editAction()
     {
+        $this->request->restrictAccess(Acl::RESOURCE_SERVICES_CHEF);
         $retval = $this->db->GetRow('SELECT env_id, runlist, name, description, chef_server_id, attributes, chef_environment as chefEnv FROM services_chef_runlists WHERE `id` = ?', array(
             $this->getParam('runlistId')
         ));
@@ -60,6 +64,7 @@ class Scalr_UI_Controller_Services_Chef_Runlists extends Scalr_UI_Controller
 
     public function xDeleteRunlistAction()
     {
+        $this->request->restrictAccess(Acl::RESOURCE_SERVICES_CHEF);
         $sql = 'SELECT id FROM farm_role_settings WHERE name = "chef.runlist_id" AND value = '.$this->db->qstr($this->getParam('runlistId'));
         $result = $this->buildResponseFromSql($sql);
         if($result['total'])
@@ -98,6 +103,7 @@ class Scalr_UI_Controller_Services_Chef_Runlists extends Scalr_UI_Controller
 
     public function xSaveRunListAction()
     {
+        $this->request->restrictAccess(Acl::RESOURCE_SERVICES_CHEF);
         $this->request->defineParams(array(
             'runList' => array('type' => 'json'),
             'runListAttrib' => array('type' => 'json')
@@ -132,7 +138,7 @@ class Scalr_UI_Controller_Services_Chef_Runlists extends Scalr_UI_Controller
                 $envRunlist
             );
             if ($response instanceof stdClass) {
-                if($this->db->getRow('SELECT * FROM services_chef_runlists WHERE name = ? AND `chef_environment` = ?  AND env_id = ?', array(
+                if($this->db->getRow('SELECT * FROM services_chef_runlists WHERE name = ? AND `chef_environment` = ?  AND env_id = ? LIMIT 1', array(
                     $this->getParam('runListName'),
                     $this->getParam('chefEnv'),
                     $this->getEnvironmentId()
@@ -200,6 +206,7 @@ class Scalr_UI_Controller_Services_Chef_Runlists extends Scalr_UI_Controller
 
     public function xUpdateAttribAction()
     {
+        $this->request->restrictAccess(Acl::RESOURCE_SERVICES_CHEF);
         $this->db->Execute("UPDATE services_chef_runlists SET attributes = ? WHERE id = ?", array(
             $this->getParam('attributes'),
             $this->getParam('runlistId')

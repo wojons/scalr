@@ -11,9 +11,6 @@ Scalr.regPage('Scalr.ui.farms.builder.addrole.mongodb', function () {
         collapsed: true,
         collapsible: true,
         layout: 'anchor',
-        cls: 'x-delimiter-top',
-        padding: '0 0 12 0',
-        style: 'border-radius:0',
         
         isVisibleForRole: function(record) {
             return Ext.Array.contains(record.get('behaviors'), 'mongodb');
@@ -28,9 +25,10 @@ Scalr.regPage('Scalr.ui.farms.builder.addrole.mongodb', function () {
         },
 
         isValid: function() {
-            var res = true;
+            var res = true, field;
             if (!this.collapsed) {
-                res = this.down('[name="mongodb.ssl.cert_id"]').validate();
+                field = this.down('[name="mongodb.ssl.cert_id"]');
+                res = field.validate() || {comp: field};
             }
             return res;
         },
@@ -52,48 +50,34 @@ Scalr.regPage('Scalr.ui.farms.builder.addrole.mongodb', function () {
             xtype: 'combo',
             name: 'mongodb.ssl.cert_id',
             fieldLabel: 'SSL certificate',
-            maxWidth: 720,
+            maxWidth: 470,
             anchor: '100%',
-            store: {
-                fields: [ 'id', 'name' ],
-                data: []
-            },
-            queryMode: 'local',
             emptyText: 'Choose certificate',
             valueField: 'id',
             displayField: 'name',
-            forceSelection: true,
             allowBlank: false,
+
+            forceSelection: true,
+            queryCaching: false,
+            minChars: 0,
+            queryDelay: 10,
+            store: {
+                fields: [ 'id', 'name' ],
+                proxy: {
+                    type: 'cachedrequest',
+                    crscope: 'farmbuilder',
+                    url: '/services/ssl/certificates/xListCertificates',
+                    filterFields: ['name']
+                }
+            },
             plugins: [{
                 ptype: 'comboaddnew',
-                url: '/services/ssl/certificates/create'
+                url: '/services/ssl/certificates/create',
+                disabled: !Scalr.isAllowed('SERVICES_SSL')
             }],
-            getRequestParams: function() {
-                return {url: '/services/ssl/certificates/xListCertificates'};
-            },
             listeners: {
                 addnew: function(item) {
-                    this.up('#farmbuilder').cache.setExpired(this.getRequestParams());
-                },
-                expand: function() {
-                    var me = this,
-                        cache = me.up('#farmbuilder').cache,
-                        data = cache.get(me.getRequestParams());
-                    if (!me.dataLoaded || data.expired === true) {
-                        me.collapse();
-                        me.store.removeAll();
-                        this.up('#farmbuilder').cache.load(
-                            me.getRequestParams(),
-                            function(data, status){
-                                if (!status) return;
-                                me.store.loadData(data || []);
-                                me.dataLoaded = true
-                                me.expand();
-                            },
-                            this,
-                            0
-                        );
-                    }
+                    Scalr.CachedRequestManager.get('farmbuilder').setExpired({url: '/services/ssl/certificates/xListCertificates'});
                 }
             }
         }]

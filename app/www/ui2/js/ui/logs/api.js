@@ -55,7 +55,48 @@ Scalr.regPage('Scalr.ui.logs.api', function (loadParams, moduleParams) {
 			dock: 'top',
 			items: [{
 				xtype: 'filterfield',
-				store: store
+				store: store,
+                width: 300,
+                form: {
+                    items: [{
+                        xtype: 'datefield',
+                        fieldLabel: 'By date',
+                        labelAlign: 'top',
+                        name: 'byDate',
+                        format: 'Y-m-d',
+                        maxValue: new Date(),
+                        listeners: {
+                            change: function (field, value) {
+                                this.next().down('[name="fromTime"]')[ value ? 'enable' : 'disable' ]();
+                                this.next().down('[name="toTime"]')[ value ? 'enable' : 'disable' ]();
+                            }
+                        }
+                    }, {
+                        xtype: 'fieldcontainer',
+                        layout: 'hbox',
+                        fieldLabel: 'Period of time',
+                        labelAlign: 'top',
+                        items: [{
+                            xtype: 'timefield',
+                            flex: 1,
+                            name: 'fromTime',
+                            format: 'H:i',
+                            disabled: true,
+                            listeners: {
+                                change: function(field, value) {
+                                    this.next().setMinValue(value);
+                                }
+                            }
+                        }, {
+                            xtype: 'timefield',
+                            flex: 1,
+                            margin: '0 0 0 10',
+                            name: 'toTime',
+                            format: 'H:i',
+                            disabled: true
+                        }]
+                    }]
+                }
 			}]
 		}]
 	});

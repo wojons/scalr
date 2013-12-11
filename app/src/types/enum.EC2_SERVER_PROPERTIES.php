@@ -1,4 +1,4 @@
-<?
+<?php
     final class EC2_SERVER_PROPERTIES extends SERVER_PROPERTIES
     {
         const AMIID			= 'ec2.ami-id';
@@ -9,6 +9,7 @@
         const REGION		= 'ec2.region';
         const INSTANCE_TYPE	= 'ec2.instance_type';
 
+        const IS_LOCKED     = 'ec2.is_locked';
 
         const VPC_ID	= 'ec2.vpc-id';
         const SUBNET_ID = 'ec2.subnet-id';

@@ -16,14 +16,14 @@ class Scalr_UI_Controller_Account_Users extends Scalr_UI_Controller
         $row['status'] = $user->status;
         $row['email'] = $user->getEmail();
         $row['fullname'] = $user->fullname;
-        $row['dtcreated'] = Scalr_Util_DateTime::convertTz($user->dtcreated);
-        $row['dtlastlogin'] = $user->dtlastlogin ? Scalr_Util_DateTime::convertTz($user->dtlastlogin) : 'Never';
+        $row['dtcreated'] = Scalr_Util_DateTime::convertTz(isset($user->dtcreated) ? $user->dtcreated : null);
+        $row['dtlastlogin'] = !empty($user->dtlastlogin) ? Scalr_Util_DateTime::convertTz($user->dtlastlogin) : 'Never';
         $row['type'] = $user->type;
         $row['comments'] = $user->comments;
 
         $row['teams'] = $user->getTeams();
         $row['is2FaEnabled'] = $user->getSetting(Scalr_Account_User::SETTING_SECURITY_2FA_GGL) == '1' ? true : false;
-        $row['password'] = $row['password'] ? true : false;
+        $row['password'] = isset($row['password']) ? true : false;
 
         switch ($row['type']) {
             case Scalr_Account_User::TYPE_ACCOUNT_OWNER:
@@ -41,24 +41,32 @@ class Scalr_UI_Controller_Account_Users extends Scalr_UI_Controller
         $params = array();
 
         // account owner, team owner
-        if ($this->user->getType() == Scalr_Account_User::TYPE_ACCOUNT_OWNER || $this->user->isTeamOwner()) {
-            $sql = 'SELECT account_users.id FROM account_users WHERE account_id = ?';
+        if ($this->user->canManageAcl()) {
+            $sql = 'SELECT u.id FROM account_users u WHERE u.account_id = ?';
             $params[] = $this->user->getAccountId();
         } else {
             // team user
             $teams = $this->user->getTeams();
-            if (! count($teams))
-                throw new Exception('You are not belongs to any team');
+            if (empty($teams)) {
+                throw new Exception('You do not belong to any team.');
+            }
 
-            $sql = 'SELECT account_users.id FROM account_users JOIN account_team_users ON account_users.id = account_team_users.user_id WHERE account_id= ?';
+            $sql = "
+                SELECT u.id
+                FROM account_users u
+                JOIN account_team_users tu ON u.id = tu.user_id
+                WHERE u.account_id = ?
+            ";
             $params[] = $this->user->getAccountId();
 
             foreach ($this->user->getTeams() as $team) {
-                $r[] = 'account_team_users.team_id = ?';
-                $params[] = $team['id'];
+                $r[] = "tu.team_id = ?";
+                $params[] = intval($team['id']);
             }
 
             $sql .= ' AND (' . implode(' OR ', $r) . ')';
+
+            $sql .= ' GROUP BY u.id';
         }
 
         $usersList = $this->db->getAll($sql, $params);
@@ -75,118 +83,64 @@ class Scalr_UI_Controller_Account_Users extends Scalr_UI_Controller
         $this->response->data(array('usersList' => $this->getList()));
     }
 
-    public function xGroupActionHandlerAction()
-    {
-        $this->request->defineParams(array(
-            'ids' => array('type' => 'json'), 'action'
-        ));
-
-        if (! ($this->user->getType() == Scalr_Account_User::TYPE_ACCOUNT_OWNER || $this->user->isTeamOwner()))
-            throw new Scalr_Exception_InsufficientPermissions(); // check permissions
-
-        $processed = array();
-        $errors = array();
-        foreach($this->getParam('ids') as $userId) {
-            try {
-                $user = Scalr_Account_User::init();
-                $user->loadById($userId);
-
-                if ($user->getAccountId() != $this->user->getAccountId())
-                    continue; // check security
-
-                switch($this->getParam('action')) {
-                    case 'delete':
-                        if ($user->getType() == Scalr_Account_User::TYPE_TEAM_USER && !$user->isTeamOwner()) {
-                            // could delete only simple user, not team owner
-                            $user->delete();
-                            $processed[] = $user->getId();
-                        } else {
-                            throw new Scalr_Exception_Core('You couldn\'t delete team owner or account owner');
-                        }
-                        break;
-
-                    case 'activate':
-                        // account owner could do everything (except himself), team owner - only simple users, not team owners
-                        if ($this->user->getType() == Scalr_Account_User::TYPE_ACCOUNT_OWNER && $user->getType() != Scalr_Account_User::TYPE_ACCOUNT_OWNER ||
-                            $this->user->isTeamOwner() && $user->getType() == Scalr_Account_User::TYPE_TEAM_USER && !$user->isTeamOwner()
-                        ) {
-                            $user->status = Scalr_Account_User::STATUS_ACTIVE;
-                            $user->save();
-                            $processed[] = $user->getId();
-                        } else {
-                            throw new Scalr_Exception_Core('You couldn\'t change status of team owner or account owner');
-                        }
-                        break;
-
-                    case 'deactivate':
-                        // account owner could do everything (except himself), team owner - only simple users, not team owners
-                        if ($this->user->getType() == Scalr_Account_User::TYPE_ACCOUNT_OWNER && $user->getType() != Scalr_Account_User::TYPE_ACCOUNT_OWNER ||
-                            $this->user->isTeamOwner() && $user->getType() == Scalr_Account_User::TYPE_TEAM_USER && !$user->isTeamOwner()
-                        ) {
-                            $user->status = Scalr_Account_User::STATUS_INACTIVE;
-                            $user->save();
-                            $processed[] = $user->getId();
-                        } else {
-                            throw new Scalr_Exception_Core('You couldn\'t change status of team owner or account owner');
-                        }
-                        break;
-                }
-            } catch (Exception $e) {
-                $errors[] = $e->getMessage();
-            }
-        }
-
-        $num = count($this->getParam('ids'));
-
-        if (count($processed) == $num) {
-            $this->response->success('All users processed');
-        } else {
-            array_walk($errors, function(&$item) { $item = '- ' . $item; });
-            $this->response->warning(sprintf('Successfully processed only %d from %d users. <br>Such errors have occured:<br>%s', count($processed), $num, join($errors, '')));
-        }
-
-        $this->response->data(array('processed' => $processed));
-    }
-
     public function xListUsersAction()
     {
         $this->request->defineParams(array(
             'sort' => array('type' => 'json')
         ));
 
+        $selectCols = "SELECT u.id, u.status, u.email, u.fullname, u.dtcreated, u.dtlastlogin, u.type, u.comments";
+
+        $accountId = intval($this->user->getAccountId());
+
+        $sqlGroup = "GROUP BY u.id";
+        $sqlWhere = "WHERE u.account_id = " . $accountId . " ";
+
         // account owner, team owner
-        if ($this->user->getType() == Scalr_Account_User::TYPE_ACCOUNT_OWNER || $this->user->isTeamOwner())
-            $sql = "SELECT account_users.id, status, email, fullname, dtcreated, dtlastlogin, type, comments FROM account_users
-                LEFT JOIN account_team_users ON account_users.id = account_team_users.user_id
-                LEFT JOIN account_user_groups ON account_users.id = account_user_groups.user_id
-                WHERE account_id='" . $this->user->getAccountId() . "'";
-        else {
+        if ($this->user->canManageAcl() || $this->user->isTeamOwner()) {
+            $sql = "
+                $selectCols
+                FROM account_users u
+                LEFT JOIN account_team_users tu ON u.id = tu.user_id
+            ";
+        } else {
             // team user
             $teams = $this->user->getTeams();
-            if (! count($teams))
-                throw new Exception('You are not belongs to any team');
 
-            $sql = 'SELECT account_users.id, status, email, fullname, dtcreated, dtlastlogin, type, comments FROM account_users
-                JOIN account_team_users ON account_users.id = account_team_users.user_id
-                LEFT JOIN account_user_groups ON account_users.id = account_user_groups.user_id
-                WHERE account_id="' . $this->user->getAccountId() . '"';
+            if (!count($teams))
+                throw new Exception('You do not belong to any team.');
 
-            foreach ($this->user->getTeams() as $team)
-                $r[] = 'account_team_users.team_id = "' . $team['id'] . '"';
+            $sql = "
+                $selectCols
+                FROM account_users u
+                JOIN account_team_users tu ON u.id = tu.user_id
+            ";
 
-            $sql .= ' AND (' . implode(' OR ', $r) . ')';
+            $s = '';
+            foreach ($this->user->getTeams() as $team) {
+                $s .= intval($team['id']) . ",";
+            }
+
+            if (!empty($s)) {
+                $sqlWhere .= " AND tu.team_id IN (" . rtrim($s, ',') . ") ";
+            }
         }
 
         if ($this->getParam('teamId'))
-            $sql .= ' AND account_team_users.team_id = ' . $this->db->qstr($this->getParam('teamId'));
+            $sqlWhere .= " AND tu.team_id = " . intval($this->getParam('teamId')) . " ";
 
         if ($this->getParam('userId'))
-            $sql .= ' AND account_users.id = ' . $this->db->qstr($this->getParam('userId'));
+            $sqlWhere .= " AND u.id = " . intval($this->getParam('userId')) . " ";
 
-        if ($this->getParam('groupPermissionId'))
-            $sql .= ' AND account_user_groups.group_id = ' . $this->db->qstr($this->getParam('groupPermissionId'));
+        if ($this->getParam('groupPermissionId')) {
+            $sql .= "
+                LEFT JOIN account_team_user_acls tua ON tua.account_team_user_id = tu.id
+            ";
+            $sqlWhere .= ' AND tua.account_role_id = ' . $this->db->qstr($this->getParam('groupPermissionId'));
+        }
 
-        $response = $this->buildResponseFromSql($sql, array('email', 'fullname'));
+        $response = $this->buildResponseFromSql($sql . $sqlWhere, array('email', 'fullname'), $sqlGroup);
+
         foreach ($response["data"] as &$row) {
             $user = Scalr_Account_User::init();
             $user->loadById($row['id']);
@@ -200,11 +154,13 @@ class Scalr_UI_Controller_Account_Users extends Scalr_UI_Controller
                 case Scalr_Account_User::TYPE_ACCOUNT_OWNER:
                     $row['type'] = 'Account Owner';
                     break;
+
                 default:
                     $row['type'] = $user->isTeamOwner() ? 'Team Owner' : 'Team User';
                     break;
             }
         }
+
         $this->response->data($response);
     }
 
@@ -214,25 +170,27 @@ class Scalr_UI_Controller_Account_Users extends Scalr_UI_Controller
         $user->loadById($this->getParam('userId'));
 
         if ($user->getAccountId() == $this->user->getAccountId() &&
-            ($this->user->getType() == Scalr_Account_User::TYPE_ACCOUNT_OWNER || $this->user->isTeamOwner()))
-        {
+            ($this->user->isAccountOwner() || $this->user->isAccountAdmin() || $this->user->isTeamOwner())) {
             if ($this->user->isTeamOwner() && $this->user->getId() != $user->getId()) {
-                if ($user->getType() == Scalr_Account_User::TYPE_ACCOUNT_OWNER || $user->isTeamOwner())
+                if ($user->isAccountOwner() || $user->isTeamOwner()) {
                     throw new Scalr_Exception_InsufficientPermissions();
+                }
             }
 
-            if ($obj)
+            if ($obj) {
                 return $user;
-            else
+            } else {
                 return array(
-                    'id' => $user->getId(),
-                    'email' => $user->getEmail(),
+                    'id'       => $user->getId(),
+                    'email'    => $user->getEmail(),
                     'fullname' => $user->fullname,
-                    'status' => $user->status,
-                    'comments' => $user->comments
+                    'status'   => $user->status,
+                    'comments' => $user->comments,
                 );
-        } else
+            }
+        } else {
             throw new Scalr_Exception_InsufficientPermissions();
+        }
     }
 
     public function xGetInfoAction()
@@ -244,34 +202,39 @@ class Scalr_UI_Controller_Account_Users extends Scalr_UI_Controller
     {
         $user = $this->getUser(true);
 
+        if ($this->user->getId() != $user->getId() && !$this->user->canManageAcl()) {
+            throw new Scalr_Exception_InsufficientPermissions();
+        }
+
         if ($user->getSetting(Scalr_Account_User::SETTING_API_ENABLED) == 1) {
             $this->response->data(array(
                 'accessKey' => $user->getSetting(Scalr_Account_User::SETTING_API_ACCESS_KEY),
                 'secretKey' => $user->getSetting(Scalr_Account_User::SETTING_API_SECRET_KEY)
             ));
         } else {
-            $this->response->failure('Api not enabled for this user');
+            $this->response->failure('API has not been enabled for this user yet.');
         }
     }
 
     public function xSaveAction()
     {
         $user = Scalr_Account_User::init();
+        $validator = new Scalr_Validator();
 
-        if (! $this->getParam('email'))
-            throw new Scalr_Exception_Core('Email cannot be null');
+        if (!$this->getParam('email'))
+            throw new Scalr_Exception_Core('Email must be provided.');
 
-        if ($this->user->getType() == Scalr_Account_User::TYPE_ACCOUNT_OWNER || $this->user->isTeamOwner()) {
+        if ($validator->validateEmail($this->getParam('email'), null, true) !== true)
+            throw new Scalr_Exception_Core('Email should be correct');
+
+        if ($this->user->canManageAcl() || $this->user->isTeamOwner()) {
+            $newUser = false;
             if ($this->getParam('id')) {
-                $user->loadById($this->getParam('id'));
+                $user->loadById((int)$this->getParam('id'));
 
-                if ($user->getAccountId() == $this->user->getAccountId()) {
-                    if ($this->user->isTeamOwner() && $this->user->getId() != $user->getId()) {
-                        if ($user->getType() == Scalr_Account_User::TYPE_ACCOUNT_OWNER || $user->isTeamOwner())
-                            throw new Scalr_Exception_InsufficientPermissions();
-                    }
-                } else
+                if (!$this->user->canEditUser($user)) {
                     throw new Scalr_Exception_InsufficientPermissions();
+                }
 
                 $user->updateEmail($this->getParam('email'));
             } else {
@@ -281,20 +244,22 @@ class Scalr_UI_Controller_Account_Users extends Scalr_UI_Controller
                 $newUser = true;
             }
 
+            $sendResetLink = false;
             if (!$this->getParam('password')) {
-                $password = $this->getCrypto()->sault(10);
+                $password = Scalr_Util_CryptoTool::sault(10);
                 $sendResetLink = true;
-            }
-            else
+            } else {
                 $password = $this->getParam('password');
+            }
 
-            if ($password != '******')
+            if ($password != '******') {
                 $user->updatePassword($password);
+            }
 
             if (in_array($this->getParam('status'), array(Scalr_Account_User::STATUS_ACTIVE, Scalr_Account_User::STATUS_INACTIVE)) &&
-                $user->getType() != Scalr_Account_User::TYPE_ACCOUNT_OWNER
-            )
+                !$user->isAccountOwner()) {
                 $user->status = $this->getParam('status');
+            }
 
             $user->fullname = $this->getParam('fullname');
             $user->comments = $this->getParam('comments');
@@ -309,38 +274,15 @@ class Scalr_UI_Controller_Account_Users extends Scalr_UI_Controller
             }
 
             if ($newUser) {
-
-                if ($user->getType() == Scalr_Account_User::TYPE_ACCOUNT_OWNER)
-                {
-                    try {
-                        $clientinfo = array(
-                            'fullname'	=> $user->fullname,
-                            'firstname' => $user->fullname,
-                            'email'		=> $user->getEmail(),
-                            'password'	=> $this->getParam('password')
-                        );
-
-                        // Send welcome E-mail
-                        $res = $this->getContainer()->mailer->sendTemplate(
-                            SCALR_TEMPLATES_PATH . '/emails/welcome.eml',
-                            array(
-                                "{{client_firstname}}" => $clientinfo['firstname'],
-                                "{{password}}"         => $clientinfo['password'],
-                                "{{site_url}}"         => "http://{$_SERVER['HTTP_HOST']}"
-                            ),
-                            $user->getEmail()
-                        );
-                    } catch (Exception $e) {
-                    }
-                } elseif ($sendResetLink) {
+                if ($sendResetLink) {
                     try {
                         $hash = $this->getCrypto()->sault(10);
 
                         $user->setSetting(Scalr_Account::SETTING_OWNER_PWD_RESET_HASH, $hash);
 
                         $clientinfo = array(
-                            'email' => $user->getEmail(),
-                            'fullname'	=> $user->fullname
+                            'email'    => $user->getEmail(),
+                            'fullname' => $user->fullname
                         );
 
                         // Send reset password E-mail
@@ -359,13 +301,15 @@ class Scalr_UI_Controller_Account_Users extends Scalr_UI_Controller
             }
 
             $this->response->data(array('user' => array(
-                'id' => $user->getId(),
-                'email' => $user->getEmail(),
+                'id'       => $user->getId(),
+                'email'    => $user->getEmail(),
                 'fullname' => $user->fullname
             )));
+
             $this->response->success('User successfully saved');
-        } else
+        } else {
             throw new Scalr_Exception_InsufficientPermissions();
+        }
     }
 
     public function xRemoveAction()
@@ -373,13 +317,10 @@ class Scalr_UI_Controller_Account_Users extends Scalr_UI_Controller
         $user = Scalr_Account_User::init();
         $user->loadById($this->getParam('userId'));
 
-        if ($user->getAccountId() == $this->user->getAccountId() &&
-            $user->getType() == Scalr_Account_User::TYPE_TEAM_USER &&
-            !$user->isTeamOwner())
-        {
-            if ($this->user->getType() == Scalr_Account_User::TYPE_ACCOUNT_OWNER || $this->user->isTeamOwner()) {
+        if ($user->getAccountId() == $this->user->getAccountId()) {
+            if ($this->user->canManageAcl() || $this->user->isTeamOwner()) {
                 $user->delete();
-                $this->response->success('User successfully removed');
+                $this->response->success('User has been successfully removed.');
                 return;
             }
         }

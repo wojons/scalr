@@ -1,4 +1,6 @@
 <?php
+use Scalr\Acl\Acl;
+
 class Scalr_UI_Controller_Services_Ssl_Certificates extends Scalr_UI_Controller
 {
     const CALL_PARAM_NAME = 'certId';
@@ -10,6 +12,8 @@ class Scalr_UI_Controller_Services_Ssl_Certificates extends Scalr_UI_Controller
 
     public function viewAction()
     {
+        $this->request->restrictAccess(Acl::RESOURCE_SERVICES_SSL);
+        
         $this->response->page('ui/services/ssl/certificates/view.js');
     }
 
@@ -20,6 +24,8 @@ class Scalr_UI_Controller_Services_Ssl_Certificates extends Scalr_UI_Controller
 
     public function xRemoveAction()
     {
+        $this->request->restrictAccess(Acl::RESOURCE_SERVICES_SSL);
+
         $this->request->defineParams(array(
             'certs' => array('type' => 'json')
         ));
@@ -39,6 +45,8 @@ class Scalr_UI_Controller_Services_Ssl_Certificates extends Scalr_UI_Controller
 
     public function editAction()
     {
+        $this->request->restrictAccess(Acl::RESOURCE_SERVICES_SSL);
+        
         $cert = new Scalr_Service_Ssl_Certificate();
         $cert->loadById($this->getParam('certId'));
         $this->user->getPermissions()->validate($cert);
@@ -56,11 +64,15 @@ class Scalr_UI_Controller_Services_Ssl_Certificates extends Scalr_UI_Controller
 
     public function createAction()
     {
+        $this->request->restrictAccess(Acl::RESOURCE_SERVICES_SSL);
+        
         $this->response->page('ui/services/ssl/certificates/create.js');
     }
 
     public function xSaveAction()
     {
+        $this->request->restrictAccess(Acl::RESOURCE_SERVICES_SSL);
+        
         $cert = new Scalr_Service_Ssl_Certificate();
         $flagNew = false;
         if ($this->getParam('id')) {

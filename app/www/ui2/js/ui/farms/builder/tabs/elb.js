@@ -5,13 +5,19 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.elb', function (moduleParams) {
 		layout: 'anchor',
 		tabData: null,
         originalElbIds: {},
+        
+        /*settings: {
+            'aws.elb.enabled': undefined,
+            'aws.elb.id': undefined,
+            'aws.elb.remove': undefined
+        },*/
 
 		isEnabled: function (record) {
             return record.get('platform') == 'ec2' && !record.get('behaviors').match("cf_");
 		},
 
 		beforeShowTab: function (record, handler) {
-            this.up('#farmbuilder').cache.load(
+            Scalr.CachedRequestManager.get('farmbuilder').load(
                 {
                     url: '/platforms/ec2/xListElb',
                     params: {
@@ -121,7 +127,7 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.elb', function (moduleParams) {
             itemId: 'vpc_warning',
             hidden: true,
             anchor: '100%',
-			fieldCls: 'x-form-field-warning',
+			cls: 'x-form-field-warning x-form-field-warning-fit',
 			value: 'Scalr doesn\'t support ELB in VPC farms yet.'
         },{
 			xtype: 'fieldset',
@@ -165,7 +171,7 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.elb', function (moduleParams) {
 					}],
 					listeners: {
                         addnew: function(item) {
-                            this.up('#farmbuilder').cache.setExpired({
+                            Scalr.CachedRequestManager.get('farmbuilder').setExpired({
                                 url: '/platforms/ec2/xListElb',
                                 params: {
                                     cloudLocation: this.up('#elb').currentRole.get('cloud_location')
@@ -183,14 +189,14 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.elb', function (moduleParams) {
 						}
 					}
 				}, {
-					xtype: 'btn',
+					xtype: 'button',
 					margin: '0 0 0 12',
 					hidden: true,
 					text: 'Manage'
 				}]
 			}, {
 				xtype: 'displayfield',
-				fieldCls: 'x-form-field-info',
+				cls: 'x-form-field-info',
 				itemId: 'warningUsed',
 				//anchor: '100%',
 				value: 'Warning'
@@ -207,8 +213,7 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.elb', function (moduleParams) {
 		}, {
 			xtype: 'container',
 			itemId: 'removeElb',
-            style: 'background:#F9EEDD;border-radius:4px;',
-            padding: '18 32 10 10',
+            cls: 'x-container-fieldset',
 			hidden: true,
 			items: [{
 				xtype: 'checkbox',
@@ -217,8 +222,8 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.elb', function (moduleParams) {
                     this.boxLabelEl.setHTML('Check to remove <b>'+hostname+'</b> ELB from cloud after saving farm');
                     this.updateLayout();
                 },
-				boxLabel: true
+				boxLabel: 'remove'
 			}]
-		}]
+        }]
 	});
 });

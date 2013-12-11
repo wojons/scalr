@@ -14,7 +14,6 @@ Scalr.regPage('Scalr.ui.admin.utils.mapPermissions', function (loadParams, modul
 	}
 
 	return Ext.create('Ext.panel.Panel', {
-		bodyCls: 'x-panel-body-frame',
 		width: 800,
 		title: 'Admin &raquo; Utils &raquo; Permissions Map',
 		data: result,

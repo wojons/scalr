@@ -1,4 +1,4 @@
-<?
+<?php
     final class AMAZON_EBS_STATE
     {
         const IN_USE 		= 'in-use';

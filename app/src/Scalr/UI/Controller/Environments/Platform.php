@@ -2,6 +2,7 @@
 
 use Scalr\Service\OpenStack\OpenStack;
 use Scalr\Service\OpenStack\OpenStackConfig;
+use Scalr\Acl\Acl;
 
 class Scalr_UI_Controller_Environments_Platform extends Scalr_UI_Controller
 {
@@ -12,12 +13,17 @@ class Scalr_UI_Controller_Environments_Platform extends Scalr_UI_Controller
     private $env;
     private $checkVarError;
 
+    /**
+     * {@inheritdoc}
+     * @see Scalr_UI_Controller::init()
+     */
     public function init()
     {
         $this->env = Scalr_Environment::init()->loadById($this->getParam(Scalr_UI_Controller_Environments::CALL_PARAM_NAME));
         $this->user->getPermissions()->validate($this->env);
 
-        if (! ($this->user->getType() == Scalr_Account_User::TYPE_ACCOUNT_OWNER || $this->user->isTeamUserInEnvironment($this->env->id, Scalr_Account_Team::PERMISSIONS_OWNER)))
+        if (!($this->user->isAccountOwner() || $this->user->isTeamOwnerInEnvironment($this->env->id) ||
+            $this->request->isAllowed(Acl::RESOURCE_ADMINISTRATION_ENV_CLOUDS)))
             throw new Scalr_Exception_InsufficientPermissions();
     }
 
@@ -238,6 +244,7 @@ class Scalr_UI_Controller_Environments_Platform extends Scalr_UI_Controller
             throw new Exception(_("Failed to save AWS settings: {$e->getMessage()}"));
         }
 
+        $demoFarm = false;
         try {
             if ($this->user->getAccount()->getSetting(Scalr_Account::SETTING_IS_TRIAL) == 1) {
                 if ($this->db->GetOne("SELECT COUNT(*) FROM farms WHERE clientid = ?", array($this->user->getAccountId())) == 0) {

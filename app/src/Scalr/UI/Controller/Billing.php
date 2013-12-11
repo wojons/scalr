@@ -1,4 +1,5 @@
 <?php
+use Scalr\Acl\Acl;
 
 class Scalr_UI_Controller_Billing extends Scalr_UI_Controller
 {
@@ -12,10 +13,7 @@ class Scalr_UI_Controller_Billing extends Scalr_UI_Controller
 
     public function hasAccess()
     {
-        if (parent::hasAccess()) {
-            return $this->user->getType() == Scalr_Account_User::TYPE_ACCOUNT_OWNER ? true : false;
-        } else
-            return false;
+        return parent::hasAccess() && $this->request->isAllowed(Acl::RESOURCE_ADMINISTRATION_BILLING);
     }
 
     public function defaultAction()
@@ -132,7 +130,7 @@ h3 {margin: 0 0 5px 0;}
                 $this->billing->cancelSubscription();
             }
 
-            $this->response->success("Subscription successfully cancelled and scalr won't monitor your instances any longer. You can reactivate your account at any time.");
+            $this->response->success("Subscription cancelled: Scalr has STOPPED managing your instances.  You can reactivate your account at any time.");
             return;
         }
 

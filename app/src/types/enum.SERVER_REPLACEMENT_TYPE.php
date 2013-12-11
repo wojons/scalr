@@ -1,4 +1,4 @@
-<?
+<?php
     final class SERVER_REPLACEMENT_TYPE
     {
         const NO_REPLACE = 'no_replace';

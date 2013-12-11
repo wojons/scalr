@@ -1,99 +1,170 @@
-.scalr-ui-dbbackups-cell-title {
-	background: -webkit-gradient(linear, left top, left bottom, from(#ECECEC), to(#cdcdcd));
-	background: -moz-linear-gradient(top, #ECECEC, #cdcdcd);
-	height: 26px;
-	color: #333333;
-	font: bold 12px arial;
-	text-shadow: 0 1px #dddddd;
-	padding: 6px;
-	text-align: center;
-	cursor: pointer;
-	/*border-left: 1px solid #FFF;*/
-	border-right: 2px solid #FFF;
-}
-.scalr-ui-dbbackups-cell-title-day {
-	border-right: 2px none !important;
+.scalr-ui-dbbackups-calendar {
+    position: relative;
+    overflow: hidden
 }
 
-.scalr-ui-dbbackups-cell-title item:last-child {
-	border-right: 0;
-}
-.scalr-ui-dbbackups-cell-title-right {
-	background-color: #f5f5f5;
-	padding: 6px 0 0 3px;
-	overflow-y: auto;
-	cursor: pointer;
-	border-right: 2px solid #FFF;
-	border-bottom: 2px solid #FFF;
-	text-align: right;
-}
-.scalr-ui-dbbackups-cell-title-right item:last-child{
-	border-right: 0;
+.scalr-ui-dbbackups-title {
 }
 
-.scalr-ui-dbbackups-cell-title-right item:first-child{
-	border-left: 0;
+.scalr-ui-dbbackups-title div {
+    background: #E6E6E6;
+    font-weight: bold;
+    text-align: center;
+    box-shadow: 1px 0 #D2D2D2 inset;
+    padding: 7px;
+    overflow: hidden;
+    float: left
 }
 
-.scalr-ui-dbbackups-cell-title-right span {
-	color: #999999;
-	font: 12px arial;
+.scalr-ui-dbbackups-cell {
+    text-align: right;
+    height: 100%;
+    overflow: hidden;
+    float: left
 }
 
-.scalr-ui-dbbackups-cell-title-right span.day {
-	margin-right: 19px;
+.scalr-ui-dbbackups-cell:first-child {
+    border-left: none;
 }
 
-.scalr-ui-dbbackups-cell-title-right:hover {
-	background-color: #D6D6D6;
+.scalr-ui-dbbackups-cell:last-child {
+    border-right: none;
 }
 
-.scalr-ui-dbbackups-cell-empty {
-	background-color: #E5E5E5;
-	border-right: 2px solid #FFF;
-	border-bottom: 2px solid #FFF;
+.scalr-ui-dbbackups-today {
+    background: #DBF1C5;
+    box-shadow: 0 1px 2px #537630 inset;
+    -webkit-box-shadow: 0 1px 3px #537630 inset
 }
 
-.scalr-ui-dbbackups-cell-empty item:last-child{
-	border-right: 0;
+.scalr-ui-dbbackups-this-month {
+    background: #F5F5F5;
+    box-shadow: 0 -1px #EAEAEA inset, 1px 0 #EAEAEA inset
 }
 
-.scalr-ui-dbbackups-cell-empty item:first-child{
-	border-left: 0;
+.scalr-ui-dbbackups-this-month:hover {
+    background: #F0F0F0
 }
 
-.scalr-ui-dbbackups-cell-content {
-	height: 22px;
-	background-color: #FFF;
-	border-radius: 4px;
-	text-align: left;
-	color: black;
-	margin: 5px;
-	padding: 3px;
-	cursor: pointer;
-	text-overflow: ellipsis;
-	white-space: nowrap;
-	overflow: hidden;
+.scalr-ui-dbbackups-not-this-month {
+    background: #EAEAEA;
+    box-shadow: 1px 0 #DFDFDF inset
 }
 
-
-.scalr-ui-dbbackups-cell-content:hover a{
-	text-decoration: none;
-	border-bottom: 1px dashed #666;
-	color: #666;
+.scalr-ui-dbbackups-date {
+    color: #999999;
+    padding: 6px 10px
 }
 
-.scalr-ui-dbbackups-cell-time {
-	padding: 11px 0 0 11px;
-	background-color: #f5f5f5;
-	color: #999999;
-	border-right: 2px solid #fff;
-	border-bottom: 2px solid #fff;
+.scalr-ui-dbbackups-backups {
+    width: 100%;
+    overflow: hidden;
 }
 
-.scalr-ui-dbbackups-cell-details {
-	padding: 3px 3px 0 0;
-	background-color: #f5f5f5;
-	color: #999999;
-	border-bottom: 2px solid #fff;
+.scalr-ui-dbbackups-backups div {
+    background: white;
+    border-radius: 3px;
+    height: 22px;
+    text-align: left;
+    padding: 3px;
+    margin: 0 5px 5px 5px;
+}
+
+.scalr-ui-dbbackups-backups-link {
+    color: black;
+    height: 16px;
+    display: block;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis
+}
+
+.scalr-ui-dbbackups-backups-link:hover {
+    color: #000;
+    text-decoration: none
+}
+
+.scalr-ui-dbbackups-backups-link span span {
+    color: #0054CC
+}
+
+.scalr-ui-dbbackups-backups-link:hover span {
+    border-bottom: 1px dotted #999;
+}
+
+.scalr-ui-dbbackups-show-more {
+    background: url(/ui2/images/ui/db/show_more.png) no-repeat center;
+    height: 22px;
+    width: 100%;
+    text-align: center
+}
+
+.scalr-ui-dbbackups-show-more:hover {
+    background: url(/ui2/images/ui/db/show_more_hover.png) no-repeat center
+}
+
+.scalr-ui-dbbackups-show-more a {
+    height: 100%;
+    display: block
+}
+
+.scalr-ui-dbbackups-show-all-backups-container {
+    padding: 12px 17px;
+    overflow-y: auto
+}
+
+.scalr-ui-dbbackups-show-all-backups-container-content {
+    padding: 5px 0
+}
+
+.scalr-ui-dbbackups-show-all-backups-container-content div {
+    background: #F1F3F8;
+    border-radius: 3px;
+    padding: 4px;
+    margin: 5px;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis
+}
+
+.scalr-ui-dbbackups-anchor-left {
+    border-right: 10px solid white;
+    border-top: 10px solid transparent;
+    border-bottom: 10px solid transparent;
+    height: 0;
+    width: 0;
+    top: 0;
+    left: 50px;
+    position: absolute;
+}
+
+.scalr-ui-dbbackups-anchor-right {
+    border-left: 10px solid white;
+    border-top: 10px solid transparent;
+    border-bottom: 10px solid transparent;
+    height: 0;
+    width: 0;
+    top: 0;
+    left: 0;
+    position: absolute;
+}
+
+.scalr-ui-dbbackups-button-prev, .scalr-ui-dbbackups-button-next {
+    background: url(/ui2/images/ui/db/trigger_month_sprite.png);
+}
+
+.scalr-ui-dbbackups-button-prev {
+    background-position: -5px -5px;
+}
+
+.x-pressed .scalr-ui-dbbackups-button-prev{
+    background-position: -5px 21px;
+}
+
+.scalr-ui-dbbackups-button-next {
+    background-position: -34px -5px;
+}
+
+.x-pressed .scalr-ui-dbbackups-button-next {
+    background-position: -34px 21px;
 }

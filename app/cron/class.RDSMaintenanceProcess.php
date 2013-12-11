@@ -25,8 +25,7 @@ class RDSMaintenanceProcess implements \Scalr\System\Pcntl\ProcessInterface
         // selects rows where the snapshot's time has come to create new snapshot.
         $resultset = $db->Execute("
             SELECT * FROM autosnap_settings
-            WHERE (UNIX_TIMESTAMP(DATE_ADD(dtlastsnapshot, INTERVAL period HOUR)) < UNIX_TIMESTAMP(NOW())
-            OR dtlastsnapshot IS NULL)
+            WHERE (`dtlastsnapshot` < NOW() - INTERVAL `period` HOUR OR `dtlastsnapshot` IS NULL)
             AND objectid != '0'
             AND object_type = ?
         ", array(AUTOSNAPSHOT_TYPE::RDSSnap)

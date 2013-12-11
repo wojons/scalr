@@ -1,4 +1,4 @@
-<?
+<?php
     final class RACKSPACE_SERVER_PROPERTIES extends SERVER_PROPERTIES
     {
         const SERVER_ID		= 'rs.server-id';

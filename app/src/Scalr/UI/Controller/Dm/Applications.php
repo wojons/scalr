@@ -1,7 +1,14 @@
 <?php
+use Scalr\Acl\Acl;
+
 class Scalr_UI_Controller_Dm_Applications extends Scalr_UI_Controller
 {
     const CALL_PARAM_NAME = 'applicationId';
+
+    public function hasAccess()
+    {
+        return parent::hasAccess() && $this->request->isAllowed(Acl::RESOURCE_DEPLOYMENTS_APPLICATIONS);
+    }
 
     public function defaultAction()
     {
@@ -157,7 +164,7 @@ class Scalr_UI_Controller_Dm_Applications extends Scalr_UI_Controller
         $response = $this->buildResponseFromSql($sql, array("name"));
 
         foreach ($response["data"] as &$row) {
-            //$row['source_url'] = $this->db->getOne("SELECT url FROM dm_sources WHERE id=?", array($row['source_id']));
+            //$row['source_url'] = $this->db->getOne("SELECT url FROM dm_sources WHERE id=? LIMIT 1", array($row['source_id']));
             //$row['used_on'] = $this->db->getOne("SELECT COUNT(*) FROM dm_deployment_tasks WHERE dm_application_id=?", array($row['id']));
         }
 
@@ -178,7 +185,7 @@ class Scalr_UI_Controller_Dm_Applications extends Scalr_UI_Controller
         $response = $this->buildResponseFromSql($sql, array("name"));
 
         foreach ($response["data"] as &$row) {
-            $row['source_url'] = $this->db->getOne("SELECT url FROM dm_sources WHERE id=?", array($row['source_id']));
+            $row['source_url'] = $this->db->getOne("SELECT url FROM dm_sources WHERE id=? LIMIT 1", array($row['source_id']));
             $row['used_on'] = $this->db->getOne("SELECT COUNT(*) FROM dm_deployment_tasks WHERE dm_application_id=?", array($row['id']));
         }
 

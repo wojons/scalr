@@ -21,9 +21,9 @@ if ($_REQUEST['task'] == "get_stats_image_url")
             $role_name = "FR_{$role_name}";
     }
 
-    $farminfo = $db->GetRow("SELECT status, id, env_id, clientid FROM farms WHERE id=?", array($farmid));
+    $farminfo = $db->GetRow("SELECT status, id, env_id, clientid FROM farms WHERE id=? LIMIT 1", array($farmid));
     if ($farminfo["status"] != FARM_STATUS::RUNNING)
-        $result = array("success" => false, "msg" => _("Statistics not available for terminated farm"));
+        $result = array("success" => false, "msg" => _("Statistics are not available for terminated farms"));
     else
     {
         if ($farminfo['clientid'] != 0)
@@ -106,7 +106,7 @@ if ($_REQUEST['task'] == "get_stats_image_url")
                 );
             }
         } else {
-            $result = array("success" => false, "msg" => _("Statistics not available yet"));
+            $result = array("success" => false, "msg" => _("Statistics are not available yet"));
         }
     }
 }
@@ -118,7 +118,8 @@ function GenerateGraph($farmid, $role_name, $rrddbpath, $watchername, $graph_typ
     $image_path = \Scalr::config('scalr.stats_poller.images_path')
         . "/{$farmid}/{$role_name}_{$watchername}.{$graph_type}.gif";
 
-    @mkdir(dirname($image_path), 0777, true);
+    if (!@file_exists(dirname($image_path)))
+        @mkdir(dirname($image_path), 0777, true);
 
     $graph_info = GetGraphicInfo($graph_type);
 

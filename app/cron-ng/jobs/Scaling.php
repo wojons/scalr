@@ -96,6 +96,7 @@ class Scalr_Cronjob_Scaling extends Scalr_System_Cronjob_MultiProcess_DefaultWor
 
                 if ($DBFarmRole->GetSetting(DBFarmRole::SETTING_SCALING_ENABLED) != '1' &&
                     !$DBFarmRole->GetRoleObject()->hasBehavior(ROLE_BEHAVIORS::MONGODB) &&
+                    !$DBFarmRole->GetRoleObject()->hasBehavior(ROLE_BEHAVIORS::RABBITMQ) &&
                     !$DBFarmRole->GetRoleObject()->hasBehavior(ROLE_BEHAVIORS::VPC_ROUTER))
                 {
                     $this->logger->info("[FarmID: {$DBFarm->ID}] Scaling disabled for role '{$DBFarmRole->GetRoleObject()->name}'. Skipping...");
@@ -112,7 +113,7 @@ class Scalr_Cronjob_Scaling extends Scalr_System_Cronjob_MultiProcess_DefaultWor
                 }
 
                 // Set Last polling time
-                $DBFarmRole->SetSetting(DBFarmRole::SETTING_SCALING_LAST_POLLING_TIME, time());
+                $DBFarmRole->SetSetting(DBFarmRole::SETTING_SCALING_LAST_POLLING_TIME, time(), DBFarmRole::TYPE_LCL);
 
                 // Get current count of running and pending instances.
                 $this->logger->info(sprintf("Processing role '%s'", $DBFarmRole->GetRoleObject()->name));
@@ -171,8 +172,7 @@ class Scalr_Cronjob_Scaling extends Scalr_System_Cronjob_MultiProcess_DefaultWor
                     // * Instances ordered by uptime (oldest wil be choosen)
                     // * Instance cannot be mysql master
                     // * Choose the one that was rebundled recently
-                    while (!$got_valid_instance && count($servers) > 0)
-                    {
+                    while (!$got_valid_instance && count($servers) > 0) {
                         $item = array_shift($servers);
                         $DBServer = DBServer::LoadByID($item['server_id']);
 
@@ -182,29 +182,31 @@ class Scalr_Cronjob_Scaling extends Scalr_System_Cronjob_MultiProcess_DefaultWor
                                 continue;
                         }
 
-                        // Exclude db master
-                        if ($DBServer->GetProperty(SERVER_PROPERTIES::DB_MYSQL_MASTER) != 1 && $DBServer->GetProperty(Scalr_Db_Msr::REPLICATION_MASTER) != 1)
-                        {
-                            /*
-                             * We do not want to delete the most recently synced instance. Because of LA fluctuation.
-                             * I.e. LA may skyrocket during sync and drop dramatically after sync.
-                             */
+                        if ($DBServer->GetProperty(EC2_SERVER_PROPERTIES::IS_LOCKED))
+                            continue;
 
-                            if ($DBServer->dateLastSync != 0)
-                            {
-                                $chk_sync_time = $this->db->GetOne("SELECT server_id FROM servers
-                                WHERE dtlastsync > {$DBServer->dateLastSync}
-                                AND farm_roleid='{$DBServer->farmRoleId}' AND status NOT IN('".SERVER_STATUS::TERMINATED."', '".SERVER_STATUS::TROUBLESHOOTING."')");
-                                if ($chk_sync_time)
+                        // Exclude db master
+                        if ($DBServer->GetProperty(SERVER_PROPERTIES::DB_MYSQL_MASTER) != 1 && $DBServer->GetProperty(Scalr_Db_Msr::REPLICATION_MASTER) != 1) {
+                            // We do not want to delete the most recently synced instance. Because of LA fluctuation.
+                            // I.e. LA may skyrocket during sync and drop dramatically after sync.
+                            if ($DBServer->dateLastSync != 0) {
+                                $chk_sync_time = $this->db->GetOne("
+                                    SELECT server_id FROM servers
+                                    WHERE dtlastsync > {$DBServer->dateLastSync}
+                                    AND farm_roleid='{$DBServer->farmRoleId}'
+                                    AND status NOT IN('".SERVER_STATUS::TERMINATED."', '".SERVER_STATUS::TROUBLESHOOTING."')
+                                    LIMIT 1
+                                ");
+                                if ($chk_sync_time) {
                                     $got_valid_instance = true;
-                            }
-                            else
+                                }
+                            } else {
                                 $got_valid_instance = true;
+                            }
                         }
                     }
 
-                    if ($DBServer && $got_valid_instance)
-                    {
+                    if ($DBServer && $got_valid_instance) {
                         $this->logger->info(sprintf("Server '%s' selected for termination...", $DBServer->serverId));
                            $allow_terminate = false;
 
@@ -240,15 +242,13 @@ class Scalr_Cronjob_Scaling extends Scalr_System_Cronjob_MultiProcess_DefaultWor
                             //Releases memory
                             $DBServer->GetEnvironmentObject()->getContainer()->release('aws');
                             unset($aws);
-                        }
-                        else
+                        } else {
                             $allow_terminate = true;
+                        }
 
-                        if ($allow_terminate)
-                        {
+                        if ($allow_terminate) {
                             //Check safe shutdown
-                            if ($DBServer->GetFarmRoleObject()->GetSetting(DBFarmRole::SETTING_SCALING_SAFE_SHUTDOWN) == 1)
-                            {
+                            if ($DBServer->GetFarmRoleObject()->GetSetting(DBFarmRole::SETTING_SCALING_SAFE_SHUTDOWN) == 1) {
                                 if ($DBServer->IsSupported('0.11.3')) {
                                     try {
                                         $port = $DBServer->GetProperty(SERVER_PROPERTIES::SZR_API_PORT);
@@ -274,22 +274,18 @@ class Scalr_Cronjob_Scaling extends Scalr_System_Cronjob_MultiProcess_DefaultWor
                                 }
                             }
 
-                            try
-                            {
-                                Scalr::FireEvent($DBFarm->ID, new BeforeHostTerminateEvent($DBServer, false));
+                            try {
+                                $DBServer->terminate('SCALING_DOWN', false);
 
-                                $DBFarmRole->SetSetting(DBFarmRole::SETTING_SCALING_DOWNSCALE_DATETIME, time());
+                                $DBFarmRole->SetSetting(DBFarmRole::SETTING_SCALING_DOWNSCALE_DATETIME, time(), DBFarmRole::TYPE_LCL);
 
-                                Logger::getLogger(LOG_CATEGORY::FARM)->info(new FarmLogMessage($DBFarm->ID, sprintf("Farm %s, role %s scaling down. Server '%s' marked as 'Pending terminate' and will be fully terminated in 3 minutes.",
+                                Logger::getLogger(LOG_CATEGORY::FARM)->info(new FarmLogMessage($DBFarm->ID, sprintf(
+                                    "Farm %s, role %s scaling down. Server '%s' marked as 'Pending terminate' and will be fully terminated in 3 minutes.",
                                     $DBFarm->Name,
                                     $DBServer->GetFarmRoleObject()->GetRoleObject()->name,
                                     $DBServer->serverId
                                 )));
-
-                                Scalr_Server_History::init($DBServer)->markAsTerminated("Scaling down");
-                            }
-                            catch (Exception $e)
-                            {
+                            } catch (Exception $e) {
                                 $this->logger->fatal(sprintf("Cannot terminate %s: %s",
                                     $DBFarm->ID,
                                     $DBServer->serverId,
@@ -297,29 +293,29 @@ class Scalr_Cronjob_Scaling extends Scalr_System_Cronjob_MultiProcess_DefaultWor
                                 ));
                             }
                         }
+                    } else {
+                        $this->logger->warn(sprintf(
+                            "[FarmID: %s] Scalr unable to determine what instance it should terminate (FarmRoleID: %s). Skipping...",
+                            $DBFarm->ID,
+                            $DBFarmRole->ID
+                        ));
                     }
-                    else
-                        $this->logger->warn(sprintf("[FarmID: {$DBFarm->ID}] Scalr unable to determine what instance it should terminate (FarmRoleID: {$DBFarmRole->ID}). Skipping..."));
 
                     break;
-                }
-                elseif ($scalingDecision == Scalr_Scaling_Decision::UPSCALE)
-                {
+                } elseif ($scalingDecision == Scalr_Scaling_Decision::UPSCALE) {
                     /*
                     Timeout instance's count increase. Increases  instance's count after
                     scaling resolution �need more instances� for selected timeout interval
                     from scaling EditOptions
                     */
-                    if($DBFarmRole->GetSetting(DBFarmRole::SETTING_SCALING_UPSCALE_TIMEOUT_ENABLED))
-                    {
+                    if ($DBFarmRole->GetSetting(DBFarmRole::SETTING_SCALING_UPSCALE_TIMEOUT_ENABLED)) {
                         // if the farm timeout is exceeded
                         // checking timeout interval.
                         $last_up_scale_data_time =  $DBFarmRole->GetSetting(DBFarmRole::SETTING_SCALING_UPSCALE_DATETIME);
                         $timeout_interval = $DBFarmRole->GetSetting(DBFarmRole::SETTING_SCALING_UPSCALE_TIMEOUT);
 
                         // check the time interval to continue scaling or cancel it...
-                        if(time() - $last_up_scale_data_time < $timeout_interval*60)
-                        {
+                        if(time() - $last_up_scale_data_time < $timeout_interval * 60) {
                             // if the launch time is too small to terminate smth in this role -> go to the next role in foreach()
                             Logger::getLogger(LOG_CATEGORY::FARM)->info(new FarmLogMessage($DBFarm->ID,
                                 sprintf("Waiting for upscaling timeout on farm %s, role %s",
@@ -343,7 +339,7 @@ class Scalr_Cronjob_Scaling extends Scalr_System_Cronjob_MultiProcess_DefaultWor
                                 ));
                                 continue 2;
                             } else {
-                                $DBFarmRole->SetSetting(Scalr_Db_Msr::SLAVE_TO_MASTER, 0);
+                                $DBFarmRole->SetSetting(Scalr_Db_Msr::SLAVE_TO_MASTER, 0, DBFarmRole::TYPE_LCL);
                             }
                         }
                     }
@@ -363,7 +359,7 @@ class Scalr_Cronjob_Scaling extends Scalr_System_Cronjob_MultiProcess_DefaultWor
                         }
                     }
 
-                    $fstatus = $this->db->GetOne("SELECT status FROM farms WHERE id=?", array($DBFarm->ID));
+                    $fstatus = $this->db->GetOne("SELECT status FROM farms WHERE id=? LIMIT 1", array($DBFarm->ID));
                     if ($fstatus != FARM_STATUS::RUNNING)
                     {
                         $this->logger->warn("[FarmID: {$DBFarm->ID}] Farm terminated. There is no need to scale it.");
@@ -374,7 +370,7 @@ class Scalr_Cronjob_Scaling extends Scalr_System_Cronjob_MultiProcess_DefaultWor
                     try {
                         $DBServer = Scalr::LaunchServer($ServerCreateInfo, null, false, "Scaling up");
 
-                        $DBFarmRole->SetSetting(DBFarmRole::SETTING_SCALING_UPSCALE_DATETIME, time());
+                        $DBFarmRole->SetSetting(DBFarmRole::SETTING_SCALING_UPSCALE_DATETIME, time(), DBFarmRole::TYPE_LCL);
 
                         Logger::getLogger(LOG_CATEGORY::FARM)->info(new FarmLogMessage($DBFarm->ID, sprintf("Farm %s, role %s scaling up. Starting new instance. ServerID = %s.",
                             $DBFarm->Name,

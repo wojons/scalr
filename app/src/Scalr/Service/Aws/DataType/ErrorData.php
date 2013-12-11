@@ -74,6 +74,12 @@ class ErrorData
     const ERR_REQUEST_EXPIRED = 'RequestExpired';
 
     /**
+     * The maximum request rate permitted by the Amazon EC2 APIs
+     * has been exceeded for your account.
+     */
+    const ERR_REQUEST_LIMIT_EXCEEDED = 'RequestLimitExceeded';
+
+    /**
      * The request has failed due to a temporary failure of the server.
      */
     const ERR_SERVICE_UNAVAILABLE = 'ServiceUnavailable';
@@ -119,6 +125,11 @@ class ErrorData
      * One or more specified security groups do not exist.
      */
     const ERR_INVALID_SECURITY_GROUP = 'InvalidSecurityGroup';
+
+    /**
+     * The security group does not exist
+     */
+    const ERR_INVALID_GROUP_NOT_FOUND = 'InvalidGroup.NotFound';
 
     /**
      * The VPC has no Internet gateway.
@@ -295,6 +306,13 @@ class ErrorData
      * @var \HttpRequest
      */
     public $request;
+
+    /**
+     * The number of the query during current session
+     *
+     * @var int
+     */
+    public $queryNumber;
 
     /**
      * Magic setter

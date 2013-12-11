@@ -1,4 +1,4 @@
-<?
+<?php
     final class OPENSTACK_SERVER_PROPERTIES extends SERVER_PROPERTIES
     {
         const SERVER_ID		= 'openstack.server-id';
@@ -7,6 +7,9 @@
         const FLAVOR_ID		= 'openstack.flavor-id';
         const HOST_ID		= 'openstack.host-id';
         const ADMIN_PASS	= 'openstack.admin-pass';
+
+        const FLOATING_IP   = 'openstack.floating-ip';
+        const FLOATING_IP_ID   = 'openstack.floating-ip-id';
 
         const CLOUD_LOCATION	= 'openstack.cloud_location';
     }

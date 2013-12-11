@@ -111,10 +111,16 @@ class RestClientResponse implements ClientResponseInterface
                         $this->errorData->details = '';
                     } else {
                         list(, $v) = each($d);
-                        $this->errorData->code = $v->code;
-                        $this->errorData->message = $v->message;
-                        //. (isset($this->rawRequestMessage) ? "\nError Code:" . $this->getResponseCode() . "\n" . $this->rawRequestMessage : '');
-                        $this->errorData->details = isset($v->details) ? (string)$v->details : '';
+                        if (is_object($v)) {
+                            $this->errorData->code = $v->code;
+                            $this->errorData->message = $v->message;
+                            $this->errorData->details = isset($v->details) ? (string)$v->details : '';
+                        } else {
+                            //QuantumError
+                            $this->errorData->code = $code;
+                            $this->errorData->message = (string)$v;
+                            $this->errorData->details = '';
+                        }
                     }
                 } else if ($this->format == AppFormat::APP_XML) {
                     $d = simplexml_load_string($this->getContent());

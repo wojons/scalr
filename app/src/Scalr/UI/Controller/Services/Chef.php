@@ -2,6 +2,7 @@
 
 class Scalr_UI_Controller_Services_Chef extends Scalr_UI_Controller
 {
+    
     public function xListRunlistAction()
     {
         $this->request->defineParams(array(
@@ -29,21 +30,50 @@ class Scalr_UI_Controller_Services_Chef extends Scalr_UI_Controller
 
     public function xListAllRecipesAction()
     {
-        $servParams = $this->db->GetRow('SELECT url, username, auth_key FROM services_chef_servers WHERE id = ?', array($this->getParam('servId')));
-        $chef = Scalr_Service_Chef_Client::getChef($servParams['url'], $servParams['username'], $this->getCrypto()->decrypt($servParams['auth_key'], $this->cryptoKey));
-        if (!$this->getParam('chefEnv') || $this->getParam('chefEnv') == '_default')
-            $response = $chef->listCookbooks();
-        else
-            $response = $chef->listCookbooks($this->getParam('chefEnv'));
-        if ($response instanceof stdClass)
-            $response = (array)$response;
+        $chefClient = $this->getChefClient($this->getParam('servId'));
+        
+        $this->response->data(array(
+            'data' => $this->listRecipes($chefClient, $this->getParam('chefEnv'))
+        ));
+    }
 
+    public function xListRolesAction()
+    {
+        $chefClient = $this->getChefClient($this->getParam('servId'));
+
+        $roles = $this->listRoles($chefClient);
+        //array_unshift($roles, array('name' => ''));
+        
+        $this->response->data(array(
+            'data' => $roles
+        ));
+    }
+
+    public function xListAllAction()
+    {
+        $chefClient = $this->getChefClient($this->getParam('servId'));
+
+        $roles = $this->listRoles($chefClient);
+        $recipes = $this->listRecipes($chefClient, $this->getParam('chefEnv'));
+        
+        $this->response->data(array(
+            'data' => array_merge($roles, $recipes)
+        ));
+    }
+
+    private function getChefClient($chefServerId)
+    {
+        $server = $this->db->GetRow('SELECT url, username, auth_key FROM services_chef_servers WHERE id = ?', array($chefServerId));
+        return Scalr_Service_Chef_Client::getChef($server['url'], $server['username'], $this->getCrypto()->decrypt($server['auth_key'], $this->cryptoKey));
+    }
+    
+    private function listRecipes(&$chefClient, $chefEnv)
+    {
         $recipes = array();
-        foreach ($response as $key => $value) {
-            $recipeList = $chef->listRecipes($key, '_latest');
+        $response = (array)$chefClient->listCookbooks($chefEnv || $chefEnv == '_default' ? '' : $chefEnv);
 
-            if ($recipeList instanceof stdClass)
-                $recipeList = (array)$recipeList;
+        foreach ($response as $key => $value) {
+            $recipeList = (array)$chefClient->listRecipes($key, '_latest');
 
             foreach ($recipeList as $name => $recipeValue) {
                 if ($name == 'recipes') {
@@ -57,79 +87,22 @@ class Scalr_UI_Controller_Services_Chef extends Scalr_UI_Controller
             }
         }
         sort($recipes);
-        $this->response->data(array('data'=>$recipes));
+        return $recipes;
     }
 
-    public function xListRolesAction()
+    private function listRoles(&$chefClient)
     {
-        $servParams = $this->db->GetRow('SELECT url, username, auth_key FROM services_chef_servers WHERE id = ?', array($this->getParam('servId')));
-        $chef = Scalr_Service_Chef_Client::getChef($servParams['url'], $servParams['username'], $this->getCrypto()->decrypt($servParams['auth_key'], $this->cryptoKey));
-        $response = $chef->listRoles();
+        $roles = array();
+        $response = (array)$chefClient->listRoles();
 
-        if ($response instanceof stdClass)
-        $response = (array)$response;
-
-        $roles = array(array('name' => ''));
         foreach ($response as $key => $value) {
-            $role = $chef->getRole($key);
+            $role = $chefClient->getRole($key);
             $roles[] = array(
                 'name' => $role->name,
                 'chef_type' => $role->chef_type
             );
         }
         sort($roles);
-
-        $this->response->data(array('data'=>$roles));
+        return $roles;
     }
-/*	public function xListRecipesAction()
-    {
-        $chef = Scalr_Service_Chef_Client::getChef($url, $username, $privateKey);
-        $response = $chef->listRecipes($this->getParam('cbName'), $this->getParam('version'));
-
-        if ($response instanceof stdClass)
-        $response = (array)$response;
-
-        $recipes = array();
-        foreach ($response as $key => $value) {
-            if($key == 'recipes'){
-                foreach ($value as $recipe){
-                    $recipes[] = array(
-                        'cookbook' => $this->getParam('cbName'),
-                        'name' => substr($recipe->name, 0, (strlen($recipe->name)-3)),
-                        'specificity' => $recipe->specificity,
-                        'path' => $recipe->path
-                    );
-                }
-            }
-        }
-        $this->buildResponseFromData($recipes, 'name');
-        $this->response->data(array('data'=>$recipes));
-    }*/
-
-/*public function xListCookbooksAction()
-    {
-        $chef = Scalr_Service_Chef_Client::getChef($url, $username, $privateKey);
-        $response = $chef->listCookbooks();
-
-        if ($response instanceof stdClass)
-        $response = (array)$response;
-
-        $cookbook = array();
-        foreach ($response as $key => $value) {
-            $versions = array();
-            foreach($value->versions as $version){
-                $versions[] = array(
-                    'version' => $version->version
-                );
-            }
-            $cookbook[] = array(
-                'name' => $key,
-                'url' => $value->url,
-                'version' => $versions[0]['version'],
-                'versions' => $versions
-            );
-        }
-        $this->buildResponseFromData($cookbook, 'name');
-        $this->response->data(array('data'=>$cookbook));
-    }*/
 }

@@ -17,39 +17,52 @@ class ClientException extends AwsException
      */
     protected $errorData;
 
+    /**
+     * API Action
+     *
+     * @var string
+     */
+    protected $apicall;
+
+
     public function __construct($message = null, $code = null, $previous = null)
     {
         if ($message instanceof ErrorData) {
             $this->errorData = $message;
 
             //Action is the AWS Action name
-            $action = null;
+            $this->apicall = null;
             //We need to fetch Action name from the request if possible.
             if ($message->request instanceof \HttpRequest) {
                 if ($message->request->getMethod() == HTTP_METH_POST) {
                     $postfields = $message->request->getPostFields();
                     if (!empty($postfields['Action'])) {
-                        $action = $postfields['Action'];
+                        $this->apicall = $postfields['Action'];
                     }
                 }
             }
             //Trying to fetch Action from the backtrace
-            if ($action === null) {
+            if ($this->apicall === null) {
                 foreach (debug_backtrace() as $arr) {
                     if (empty($arr['class']) ||
                         !preg_match("/\\\\Service\\\\Aws\\\\.+Api$/", $arr['class']) ||
                         $arr['type'] !== '->') {
                         continue;
                     }
-                    $action = ucfirst($arr['function']);
+                    $this->apicall = ucfirst($arr['function']);
                     break;
                 }
+            }
+
+            if ($this->errorData->getCode() == ErrorData::ERR_REQUEST_LIMIT_EXCEEDED) {
+                $this->errorData->message = $this->errorData->getMessage()
+                  . " (Request number for the current session is " . $this->errorData->queryNumber . ")";
             }
 
             parent::__construct(
                 sprintf(
                     'AWS Error.%s %s',
-                    ($action ? sprintf(" Request %s failed.", $action) : ''),
+                    ($this->apicall ? sprintf(" Request %s failed.", $this->apicall) : ''),
                     $this->errorData->getMessage()
                 ),
                 $code,
@@ -68,5 +81,15 @@ class ClientException extends AwsException
     public function getErrorData()
     {
         return $this->errorData;
+    }
+
+    /**
+     * Gets API Action name which causes error
+     *
+     * @return   string Returns API Action name which causes error
+     */
+    public function getApiCall()
+    {
+        return $this->apicall;
     }
 }

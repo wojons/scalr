@@ -1,10 +1,15 @@
 <?php
-
+use Scalr\Acl\Acl;
 use Scalr\Service\Aws\Ec2\DataType as Ec2DataType;
 
 class Scalr_UI_Controller_Tools_Aws_Ec2_Ebs_Snapshots extends Scalr_UI_Controller
 {
     const CALL_PARAM_NAME = 'snapshotId';
+
+    public function hasAccess()
+    {
+        return parent::hasAccess() && $this->request->isAllowed(Acl::RESOURCE_AWS_SNAPSHOTS);
+    }
 
     public function defaultAction()
     {
@@ -105,12 +110,23 @@ class Scalr_UI_Controller_Tools_Aws_Ec2_Ebs_Snapshots extends Scalr_UI_Controlle
         $aws = $this->getEnvironment()->aws($this->getParam('cloudLocation'));
 
         $cnt = 0;
+        $errcnt = 0;
         foreach ($this->getParam('snapshotId') as $snapshotId) {
-            $aws->ec2->snapshot->delete($snapshotId);
-            $cnt++;
+            try {
+                $aws->ec2->snapshot->delete($snapshotId);
+                $cnt++;
+            } catch (Exception $e) {
+                $errcnt++;
+                $errmsg = $e->getMessage();
+            }
         }
 
-        $this->response->success('Snapshot' . ($cnt > 1 ? 's have' : ' has') . ' been successfully removed.');
+        $msg = 'Snapshot' . ($cnt > 1 ? 's have' : ' has') . ' been successfully removed.';
+
+        if ($errcnt != 0)
+            $msg .= " {$errcnt} snapshots was not removed due to error: {$errmsg}";
+
+        $this->response->success($msg);
     }
 
     public function xListSnapshotsAction()
@@ -172,7 +188,7 @@ class Scalr_UI_Controller_Tools_Aws_Ec2_Ebs_Snapshots extends Scalr_UI_Controlle
         foreach ($response['data'] as &$row) {
             $row['startTime'] = Scalr_Util_DateTime::convertTz($row['startTime']);
             if (empty($row['comment'])) {
-                $row['comment'] = $this->db->GetOne("SELECT comment FROM ebs_snaps_info WHERE snapid=?", array(
+                $row['comment'] = $this->db->GetOne("SELECT comment FROM ebs_snaps_info WHERE snapid=? LIMIT 1", array(
                     $row['snapshotId']
                 ));
             }

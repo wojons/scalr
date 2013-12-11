@@ -1,11 +1,18 @@
 Scalr.regPage('Scalr.ui.farms.builder.tabs.ebs', function (moduleTabParams) {
-	
-	var pageParameters = Ext.urlDecode(window.location.search.substring(1));
-	
 	return Ext.create('Scalr.ui.FarmsBuilderTab', {
 		tabTitle: 'EBS',
         deprecated: true,
         layout: 'anchor',
+        
+        settings: {
+            'aws.use_ebs': 0,
+            'aws.ebs_size': undefined,
+            'aws.ebs_snapid': undefined,
+            'aws.ebs_type': undefined,
+            'aws.ebs_iops': undefined,
+            'aws.ebs_mount': undefined,
+            'aws.ebs_mountpoint': undefined
+        },
         
         tabData: null,
         
@@ -13,14 +20,8 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.ebs', function (moduleTabParams) {
 			return record.get('platform') == 'ec2';
 		},
 
-		getDefaultValues: function (record) {
-			return {
-				'aws.use_ebs': 0
-			};
-		},
-
 		beforeShowTab: function (record, handler) {
-            this.up('#farmbuilder').cache.load(
+            Scalr.CachedRequestManager.get('farmbuilder').load(
                 {
                     url: '/platforms/ec2/xGetSnapshots',
                     params: {
@@ -96,7 +97,7 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.ebs', function (moduleTabParams) {
 
 		items: [{
 			xtype: 'displayfield',
-			fieldCls: 'x-form-field-warning',
+			cls: 'x-form-field-warning x-form-field-warning-fit',
             anchor: '100%',
 			value: 'This EBS manager is deprecated. Please use <a href="#">NEW STORAGE MANAGER</a> instead.',
 			listeners: {
@@ -107,7 +108,7 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.ebs', function (moduleTabParams) {
 					}, this);
 				}
 			}
-		}, {
+        },{
 			xtype: 'fieldset',
 			name: 'aws.use_ebs',
 			checkboxToggle: true,
@@ -210,6 +211,6 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.ebs', function (moduleTabParams) {
 					value: 'mount point.'
 				}]
 			}]
-		}]
+        }]
 	});
 });

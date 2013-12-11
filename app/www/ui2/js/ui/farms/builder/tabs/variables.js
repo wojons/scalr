@@ -9,8 +9,12 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.variables', function (moduleTabParams
 			return true;
 		},
 
+        settings: {
+            variables: undefined
+        },
+
 		showTab: function (record) {
-			this.down('variablefield').setValue(record.get('variables'));
+			this.down('variablefield').setValue(record.get('variables', true));
 		},
 
 		hideTab: function (record) {
@@ -20,10 +24,12 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.variables', function (moduleTabParams
 		items: [{
 			xtype: 'fieldset',
 			autoScroll: true,
+            cls: 'x-fieldset-separator-none',
 			items: [{
 				xtype: 'variablefield',
 				name: 'variables',
 				currentScope: 'farmrole',
+                encodeParams: false,
 				maxWidth: 1200
 			}]
 		}]

@@ -1,6 +1,5 @@
 Scalr.regPage('Scalr.ui.dnszones.settings', function (loadParams, moduleParams) {
 	return Ext.create('Ext.form.Panel', {
-		bodyCls: 'x-panel-body-frame',
 		title: 'DNS Zones &raquo; Settings',
 		width: 900,
 
@@ -35,7 +34,7 @@ Scalr.regPage('Scalr.ui.dnszones.settings', function (loadParams, moduleParams) 
 		dockedItems: [{
 			xtype: 'container',
 			dock: 'bottom',
-			cls: 'x-docked-bottom-frame',
+			cls: 'x-docked-buttons',
 			layout: {
 				type: 'hbox',
 				pack: 'center'
@@ -58,7 +57,6 @@ Scalr.regPage('Scalr.ui.dnszones.settings', function (loadParams, moduleParams) 
 				}
 			}, {
 				xtype: 'button',
-				margin: '0 0 0 5',
 				text: 'Cancel',
 				handler: function() {
 					Scalr.event.fireEvent('close');

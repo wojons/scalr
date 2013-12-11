@@ -1,4 +1,4 @@
-<?
+<?php
     final class SERVER_SNAPSHOT_CREATION_TYPE
     {
         const EC2_EBS = 'ec2.ebs';
@@ -17,7 +17,8 @@
         const RS_CFILES = 'rs.cfiles';
         const GCE_STORAGE = 'gce.storage';
 
-        const OSTACK_GLANCE = 'ostack.glance';
+        const OSTACK_LINUX = 'ostack.linux';
+        const OSTACK_WINDOWS = 'ostack.windows';
 
         const CSTACK_DEF = 'cstack.default';
 

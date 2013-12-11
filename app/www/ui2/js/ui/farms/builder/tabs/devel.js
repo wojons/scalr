@@ -3,15 +3,13 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.devel', function () {
 		tabTitle: 'Development options',
         itemId: 'devel',
         
+        settings: {
+            'user-data.scm_branch': 'master',
+            'user-data.szr_version': ''
+        },
+        
 		isEnabled: function (record) {
 			return Scalr.flags['betaMode'];
-		},
-
-		getDefaultValues: function (record) {
-			return {
-				'user-data.scm_branch': 'master',
-				'user-data.szr_version': ''
-			};
 		},
 
 		showTab: function (record) {
@@ -30,16 +28,18 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.devel', function () {
 
 		items: [{
 			xtype: 'fieldset',
+            cls: 'x-fieldset-separator-none',
+            defaults: {
+                maxWidth: 600,
+				anchor: '100%',
+				labelWidth: 110
+            },
 			items: [{
 				xtype: 'textfield',
-				anchor: '100%',
-				labelWidth: 200,
 				fieldLabel: 'SCM Branch',
 				name: 'user-data.scm_branch'
 			}, {
 				xtype: 'textfield',
-				anchor: '100%',
-				labelWidth: 200,
 				fieldLabel: 'Scalarizr version',
 				name: 'user-data.szr_version'
 			}]

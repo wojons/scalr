@@ -1,4 +1,4 @@
-<?
+<?php
     final class INSTANCE_COST
     {
         const M1_SMALL 		= 0.10;

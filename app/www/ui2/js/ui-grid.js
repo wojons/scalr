@@ -7,10 +7,11 @@ Ext.define('Scalr.ui.PagingToolbar', {
 	pageSizeStorageName: 'grid-ui-page-size',
 	autoRefresh: 0,
 	autoRefreshTask: 0,
-	height: 33,
+	//height: 41,
 	prependButtons: true,
 	beforeItems: [],
 	afterItems: [],
+    calculatePageSize: true,
 
 	checkRefreshHandler: function (item, enabled) {
 		if (enabled) {
@@ -18,11 +19,10 @@ Ext.define('Scalr.ui.PagingToolbar', {
 			this.gridContainer.autoRefresh = this.autoRefresh;
 			this.gridContainer.saveState();
 			if (this.autoRefresh) {
-				clearInterval(this.autoRefreshTask);
-				this.autoRefreshTask = setInterval(this.refreshHandler, this.autoRefresh * 1000);
+				this.setDelayedRefresh();
 				this.down('#refresh').setIconCls('x-tbar-autorefresh');
 			} else {
-				clearInterval(this.autoRefreshTask);
+				this.clearDelayedRefresh();
 				this.down('#refresh').setIconCls('x-tbar-loading');
 			}
 		}
@@ -32,6 +32,9 @@ Ext.define('Scalr.ui.PagingToolbar', {
 		var me = this, items = [ '->' ];
 
 		if (this.beforeItems.length) {
+            for (var i = 0; i < this.beforeItems.length; i++)
+                this.beforeItems[i]['margin'] = '0 9 0 0';
+
 			items = Ext.Array.push(items, this.beforeItems);
 		}
 
@@ -42,8 +45,12 @@ Ext.define('Scalr.ui.PagingToolbar', {
 			iconCls: Ext.baseCSSPrefix + 'tbar-loading',
 			ui: 'paging',
 			handler: me.doRefresh,
-			scope: me
-		}, '-', {
+			scope: me,
+            margin: '0 11 0 0'
+		}, {
+            xtype: 'tbseparator',
+            margin: '0 11 0 0'
+        }, {
 			itemId: 'first',
 			//tooltip: me.firstText,
 			overflowText: me.firstText,
@@ -51,7 +58,8 @@ Ext.define('Scalr.ui.PagingToolbar', {
 			ui: 'paging',
 			disabled: true,
 			handler: me.moveFirst,
-			scope: me
+			scope: me,
+            margin: '0 9 0 0'
 		},{
 			itemId: 'prev',
 			//tooltip: me.prevText,
@@ -60,7 +68,8 @@ Ext.define('Scalr.ui.PagingToolbar', {
 			ui: 'paging',
 			disabled: true,
 			handler: me.movePrevious,
-			scope: me
+			scope: me,
+            margin: '0 9 0 0'
 		}, me.beforePageText, {
 			xtype: 'textfield',
 			itemId: 'inputItem',
@@ -83,31 +92,36 @@ Ext.define('Scalr.ui.PagingToolbar', {
 			xtype: 'tbtext',
 			itemId: 'afterTextItem',
 			text: Ext.String.format(me.afterPageText, 1)
-		},
-			{
-				itemId: 'next',
-				//tooltip: me.nextText,
-				overflowText: me.nextText,
-				iconCls: Ext.baseCSSPrefix + 'tbar-page-next',
-				ui: 'paging',
-				disabled: true,
-				handler: me.moveNext,
-				scope: me
-			},{
-				itemId: 'last',
-				//	tooltip: me.lastText,
-				overflowText: me.lastText,
-				iconCls: Ext.baseCSSPrefix + 'tbar-page-last',
-				ui: 'paging',
-				disabled: true,
-				handler: me.moveLast,
-				scope: me
-			}]);
+		}, {
+            itemId: 'next',
+            //tooltip: me.nextText,
+            overflowText: me.nextText,
+            iconCls: Ext.baseCSSPrefix + 'tbar-page-next',
+            ui: 'paging',
+            disabled: true,
+            handler: me.moveNext,
+            scope: me,
+            margin: '0 9 0 0'
+        },{
+            itemId: 'last',
+            //	tooltip: me.lastText,
+            overflowText: me.lastText,
+            iconCls: Ext.baseCSSPrefix + 'tbar-page-last',
+            ui: 'paging',
+            disabled: true,
+            handler: me.moveLast,
+            scope: me,
+            margin: '0 11 0 0'
+        }]);
 
 		if (this.afterItems.length) {
-			items.push({
+            for (var i = 0; i < this.afterItems.length; i++)
+                this.afterItems[i]['margin'] = '0 9 0 0';
+
+            this.afterItems[this.afterItems.length - 1]['margin'] = '0 12 0 0';
+            items.push({
 				xtype: 'tbseparator',
-				margin: '0 7 0 0'
+                margin: '0 8 0 0'
 			});
 			items = Ext.Array.push(items, this.afterItems);
 		}
@@ -149,13 +163,25 @@ Ext.define('Scalr.ui.PagingToolbar', {
 
     setPageSizeAndLoad: function() {
         var grid = this.gridContainer, view = grid.getView();
-        if (Ext.isDefined(grid.height) && view.rendered) {
+        if (this.calculatePageSize && Ext.isDefined(grid.height) && view.rendered) {
             grid.store.pageSize = this.getPageSize();
             if (Ext.isObject(this.data)) {
                 grid.store.loadData(this.data.data);
                 grid.store.totalCount = this.data.total;
             } else
                 grid.store.load();
+        } else {
+            grid.store.load();
+        }
+    },
+
+    doRefresh : function(){
+        var me = this,
+            current = me.store.currentPage;
+
+        if (me.fireEvent('beforechange', me, current) !== false) {
+            me.store.gridHightlightNew = true;
+            me.store.loadPage(current);
         }
     },
 
@@ -164,7 +190,7 @@ Ext.define('Scalr.ui.PagingToolbar', {
 			total = me.getPageData().pageCount,
 			next = me.store.currentPage + 1;
 
-		if (me.store.currentPage == 1 && me.store.pageSize != me.evaluatePageSize()) {
+		if (me.store.currentPage == 1 && me.store.pageSize != me.evaluatePageSize() && me.calculatePageSize) {
 			// if page has less records, that it could include, load more records per page
 			if (me.fireEvent('beforechange', me, next) !== false) {
 				me.store.pageSize = me.evaluatePageSize();
@@ -187,39 +213,65 @@ Ext.define('Scalr.ui.PagingToolbar', {
 				if (this.scalrReconfigureParams)
 					Ext.applyIf(loadParams, this.scalrReconfigureParams);
 				Ext.apply(this.store.proxy.extraParams, loadParams);
-                if (this.scalrReconfigureParams)
+                if (this.scalrReconfigureParams) {
                     this.fireEvent('scalrreconfigure', this.store.proxy.extraParams);
+                }
 			};
+
+            // TODO: on back to page event, refresh grid WITH gridHightlightNew
 			this.refreshHandler = Ext.Function.bind(function () {
+                this.store.gridHightlightNew = true;
 				this.store.load();
 			}, this.gridContainer);
 
 			this.gridContainer.on('activate', function () {
-				if (this.store.pageSize != this.getPageSize() || !this.data)
+				if (this.store.pageSize != this.getPageSize() || !this.data) {
 					this.setPageSizeAndLoad();
-				if (this.autoRefresh)
-					this.autoRefreshTask = setInterval(this.refreshHandler, this.autoRefresh * 1000);
+                }
+				if (this.autoRefresh) {
+					this.setDelayedRefresh();
+                }
 			}, this);
 
 			this.gridContainer.on('deactivate', function () {
-				clearInterval(this.autoRefreshTask);
+				this.clearDelayedRefresh();
 			}, this);
 
 			this.gridContainer.store.on('load', function () {
 				if (this.autoRefreshTask) {
-					clearInterval(this.autoRefreshTask);
-					if (this.autoRefresh)
-						this.autoRefreshTask = setInterval(this.refreshHandler, this.autoRefresh * 1000);
+					this.clearDelayedRefresh();
+					if (this.autoRefresh) {
+						this.setDelayedRefresh();
+                    }
 				}
 			}, this);
 
 			this.gridContainer.on('staterestore', function(comp) {
 				this.autoRefresh = comp.autoRefresh || 0;
-				if (this.autoRefresh)
+				if (this.autoRefresh) {
 					this.down('#refresh').setIconCls('x-tbar-autorefresh');
+                }
 			}, this);
 		});
-	}
+	},
+    setDelayedRefresh: function() {
+        this.clearDelayedRefresh();
+        this.autoRefreshTask = setTimeout(this.refreshHandler, this.autoRefresh * 1000);
+
+    },
+    clearDelayedRefresh: function() {
+        if (this.autoRefreshTask) {
+            clearTimeout(this.autoRefreshTask);
+            this.autoRefreshTask = 0;
+        }
+    },
+    onLoad : function(){
+        //fix current page
+        if (this.store.currentPage > Math.ceil(this.store.getTotalCount() / this.store.pageSize)) {
+            this.gridContainer.store.currentPage = 1;
+        }
+        this.callParent(arguments);
+    }
 });
 
 Ext.define('Scalr.ui.ToolbarCloudLocation', {
@@ -241,6 +293,11 @@ Ext.define('Scalr.ui.ToolbarCloudLocation', {
 	editable: false,
 	queryMode: 'local',
 	setCloudLocation: function () {
+        if (this.store.getCount() == 0) {
+            Scalr.message.Warning('Location\'s list is empty');
+            return;
+        }
+
 		if (this.cloudLocation) {
 			this.setValue(this.cloudLocation);
 		} else {
@@ -299,7 +356,7 @@ Ext.define('Scalr.ui.GridRadioColumn', {
 		var result = '<div ';
 		if (value)
 			result += 'class="x-form-cb-checked" '
-		result += 'style="text-align: center" ><input type="button" class="x-form-field x-form-radio" /></div>';
+		result += 'style="text-align: center" ><input type="button" class="x-form-field x-form-radio" style="border:0" /></div>';
 
 		return result;
 	}
@@ -311,7 +368,8 @@ Ext.define('Scalr.ui.GridOptionsColumn', {
 
 	text: '&nbsp;',
 	hideable: false,
-	width: 116,
+	width: 110,
+    minWidth: 110,
 	fixed: true,
 	align: 'center',
 	tdCls: 'x-grid-row-options-cell',
@@ -321,6 +379,7 @@ Ext.define('Scalr.ui.GridOptionsColumn', {
 
 		this.sortable = false;
 		this.optionsMenu = Ext.create('Ext.menu.Menu', {
+            cls: 'x-options-menu',
 			items: this.optionsMenu,
 			listeners: {
 				click: function (menu, item, e) {
@@ -349,16 +408,33 @@ Ext.define('Scalr.ui.GridOptionsColumn', {
 		});
 
 		this.optionsMenu.doAutoRender();
+        this.optionsMenu.on('hide', function() {
+            if (this.currentBtnEl)
+                this.currentBtnEl.removeCls('x-grid-row-options-pressed');
+
+            this.currentBtnEl = null;
+        }, this);
 	},
 
-	showOptionsMenu: function (view, record) {
+	showOptionsMenu: function(view, record) {
+        var btnEl = Ext.get(view.getNode(record)).down('div.x-grid-row-options');
+
+        var prevSeparator;
 		this.optionsMenu.suspendLayouts();
 		this.beforeShowOptions(record, this.optionsMenu);
 		this.optionsMenu.show();
-
+        
 		this.optionsMenu.items.each(function (item) {
 			var display = this.getOptionVisibility(item, record);
 			item.record = record;
+            if (display) {//prevent double separators
+                if (item.xtype === 'menuseparator') {
+                    display = prevSeparator === undefined;
+                    prevSeparator = display ? item : undefined;
+                } else {
+                    prevSeparator = undefined;
+                }
+            }
 			item[display ? "show" : "hide"]();
 			if (display && item.href) {
 				// Update item link
@@ -374,7 +450,9 @@ Ext.define('Scalr.ui.GridOptionsColumn', {
 		this.optionsMenu.resumeLayouts();
 		this.optionsMenu.doLayout();
 
-		var btnEl = Ext.get(view.getNode(record)).down('div.x-grid-row-options'), xy = btnEl.getXY(), sizeX = xy[1] + btnEl.getHeight() + this.optionsMenu.getHeight();
+		var xy = btnEl.getXY(), sizeX = xy[1] + btnEl.getHeight() + this.optionsMenu.getHeight();
+        btnEl.addCls('x-grid-row-options-pressed');
+        this.currentBtnEl = btnEl;
 		// menu shouldn't overflow window size
 		if (sizeX > Scalr.application.getHeight()) {
 			xy[1] -= sizeX - Scalr.application.getHeight();
@@ -383,7 +461,7 @@ Ext.define('Scalr.ui.GridOptionsColumn', {
 		this.optionsMenu.setPosition([xy[0] - (this.optionsMenu.getWidth() - btnEl.getWidth()), xy[1] + btnEl.getHeight() + 1]);
 	},
 
-	initComponent: function () {
+	initComponent: function() {
 		this.callParent(arguments);
 
 		this.on('boxready', function () {
@@ -397,22 +475,353 @@ Ext.define('Scalr.ui.GridOptionsColumn', {
 		});
 	},
 
-	renderer: function (value, meta, record, rowIndex, colIndex) {
+	renderer: function(value, meta, record, rowIndex, colIndex) {
 		if (this.headerCt.getHeaderAtIndex(colIndex).getVisibility(record))
 			return '<div class="x-grid-row-options">Actions<div class="x-grid-row-options-trigger"></div></div>';
 	},
 
 	linkTplsCache: {},
 
-	getVisibility: function (record) {
+	getVisibility: function(record) {
 		return true;
 	},
 
-	getOptionVisibility: function (item, record) {
+	getOptionVisibility: function(item, record) {
 		return true;
 	},
 
-	beforeShowOptions: function (record, menu) {
+	beforeShowOptions: function(record, menu) {
 
 	}
+});
+
+Ext.define('Scalr.ui.GridOptionsColumn2', {
+	extend: 'Ext.grid.column.Column',
+	alias: 'widget.optionscolumn2',
+
+	text: '&nbsp;',
+	hideable: false,
+	width: 110,
+    minWidth: 110,
+	fixed: true,
+	align: 'center',
+	tdCls: 'x-grid-row-options-cell',
+
+	constructor: function () {
+		this.callParent(arguments);
+
+		this.sortable = false;
+        this.menu = Ext.widget(this.menu);
+        this.menu.doAutoRender();
+        this.menu.on('hide', function() {
+            if (this.currentBtnEl)
+                this.currentBtnEl.removeCls('x-grid-row-options-pressed');
+
+            this.currentBtnEl = null;
+        }, this);
+	},
+
+	initComponent: function() {
+		this.callParent(arguments);
+
+		this.on('boxready', function () {
+			this.up('panel').on('itemclick', function (view, record, item, index, e) {
+				var btnEl = Ext.get(e.getTarget('div.x-grid-row-options'));
+				if (! btnEl)
+					return;
+                btnEl.addCls('x-grid-row-options-pressed');
+                this.currentBtnEl = btnEl;
+                this.menu.setData(record.getData());
+				this.menu.showBy(btnEl, 'tr-br');
+			}, this);
+		});
+	},
+
+	renderer: function(value, meta, record, rowIndex, colIndex) {
+		if (this.headerCt.getHeaderAtIndex(colIndex).getVisibility(record))
+			return '<div class="x-grid-row-options">Actions<div class="x-grid-row-options-trigger"></div></div>';
+	},
+
+	getVisibility: function(record) {
+		return true;
+	}
+
+});
+
+Ext.define('Scalr.ui.ButtonGroupColumn', {
+    extend: 'Ext.grid.column.Column',
+    alias: 'widget.buttongroupcolumn',
+
+    stopSelection: true,
+
+    tdCls: Ext.baseCSSPrefix + 'grid-cell-buttongroupcolumn',
+    innerCls: Ext.baseCSSPrefix + 'grid-cell-inner-buttongroupcolumn',
+
+    clickTargetName: 'el',
+
+    processEvent: function(type, view, cell, recordIndex, cellIndex, e, record, row) {
+        var me = this,
+            mousedown = type == 'mousedown',
+            newValue;
+        if (!me.disabled && mousedown) {
+            Ext.Array.each(Ext.fly(cell).query('.x-btn'), function(btn){
+                var b = Ext.fly(btn);
+                if (e.within(b)) {
+                    if (!b.hasCls('x-pressed')) {
+                        newValue = b.getAttribute('data-value')
+                    }
+                }
+            });
+            if (newValue !== undefined) {
+                if (me.toggleHandler !== undefined){
+                    me.toggleHandler(view, record, newValue);
+                } else {
+                    record.set(me.dataIndex, newValue);
+                }
+            }
+            e.stopEvent();
+            return false;
+        } else {
+            return me.callParent(arguments);
+        }
+    },
+
+    renderer : function(value, meta, record, rowIndex, colIndex, store, grid) {
+        var column = grid.panel.columns[colIndex],
+            buttons = column.buttons,
+            html = [];
+        value = column.getValue !== undefined ? column.getValue(record) : value;
+        html.push('<div class="x-form-buttongroupfield">');
+        Ext.Array.each(buttons, function(btn, index, arr){
+            html.push('<a ' + (btn.width ? 'style="width:' + btn.width + 'px"' : '') + ' class="x-btn x-unselectable x-btn-default-small' + (value == btn.value ? ' x-pressed x-btn-pressed x-btn-default-small-pressed' : '') +'" data-value="' + btn.value + '">');
+            html.push('<span class="x-btn-wrap"><span class="x-btn-button">');
+            html.push('<span class="x-btn-inner x-btn-inner-center" >' + btn.text + '</span>');
+            html.push('</span></span></a>');
+        });
+        html.push('</div>');
+        return html.join('');
+    }
+});
+
+Ext.define('Scalr.ui.MultiCheckboxColumn', {
+    extend: 'Ext.grid.column.Column',
+    alias: 'widget.multicheckboxcolumn',
+
+    stopSelection: true,
+
+    tdCls: Ext.baseCSSPrefix + 'grid-cell-multicheckboxcolumn',
+    innerCls: Ext.baseCSSPrefix + 'grid-cell-inner-multicheckboxcolumn',
+
+    clickTargetName: 'el',
+    itemCls: 'x-multicheckbox-item',
+    itemCheckedCls: 'x-multicheckbox-item-checked',
+    itemDisabledCls: 'x-multicheckbox-item-disabled',
+    itemReadOnlyCls: 'x-multicheckbox-item-readonly',
+
+    processEvent: function(type, view, cell, recordIndex, cellIndex, e, record, row) {
+        var me = this,
+            mousedown = type == 'mousedown',
+            changed = false,
+            value, name;
+        if (!me.disabled && mousedown) {
+            value = Ext.clone(record.get(me.dataIndex));
+            Ext.Array.each(Ext.fly(cell).query('.' + me.itemCls), function(item){
+                var b = Ext.fly(item);
+                if (e.within(b) && !b.hasCls(me.itemDisabledCls) && !me.readonly) {
+                    name = b.getAttribute('data-value');
+                    if (!b.hasCls(me.itemCheckedCls)) {
+                        value[name] = 1;
+                        changed = true;
+                    } else {
+                        value[name] = 0;
+                        changed = true;
+                    }
+                    return false;
+                }
+            });
+            if (changed) {
+                me.fireEvent('beforechange', me, value, name, record, cell);
+                record.set(me.dataIndex, value);
+            }
+            e.stopEvent();
+            return false;
+        } else {
+            return me.callParent(arguments);
+        }
+    },
+
+    renderer : function(value, meta, record, rowIndex, colIndex, store, grid) {
+        var granted = record.get('granted'),
+            column = grid.panel.columns[colIndex],
+            html = [];
+        if (value) {
+            Ext.Object.each(value, function(key, value){
+                var cls = column.itemCls;
+                if (granted == 1) {
+                    if (value == 1) {
+                        cls += ' ' + column.itemCheckedCls;
+                    }
+                } else if (!column.readonly){
+                    cls += ' ' + column.itemDisabledCls;
+                }
+
+                if (column.readonly){
+                    cls += ' ' + column.itemReadOnlyCls;
+                }
+                html.push('<span class="' + cls + '" data-value="' + key + '"><img src="' + Ext.BLANK_IMAGE_URL + '"/>' + key + '</span>');
+            });
+        }
+        return column.customRenderer ? column.customRenderer(html, record) : html.join('');
+    }
+});
+
+Ext.define('Scalr.ui.RowPointer', {
+    extend: 'Ext.AbstractPlugin',
+    alias: 'plugin.rowpointer',
+
+    disabled: false,
+	client: null,
+
+	baseCls: 'x-panel-row-pointer',
+	addCls: null,
+    
+    align: 'left',
+    
+    width: 32,
+    height: 28,
+	addOffset: 0,
+	thresholdOffset: 0,
+	hiddenOffset: -100,
+    
+	init: function(client) {
+		this.client = client;
+        this.baseCls += ' ' + this.baseCls + '-' + this.align;
+	},
+
+    getPointerEl: function() {
+        if (this.pointerEl === undefined) {
+            this.pointerEl = Ext.DomHelper.append(this.client.el.dom, '<div class="' + this.baseCls + (this.addCls ? ' ' + this.addCls  : '') + '"' + (this.tooltip ? ' title="' + this.tooltip + '"'  : '') + '></div>', true);
+            this.pointerEl.setWidth(this.width);
+            this.pointerEl.setHeight(this.height);
+        }
+        return this.pointerEl;
+    },
+
+    pointTo: function(record) {
+		var offset = this.hiddenOffset;
+		if (record) {
+            var node = this.client.view.getNode(record);
+            if (node) {
+                offset = Ext.get(node).getOffsetsTo(this.client.el)[1] + this.addOffset;
+                offset = offset < this.thresholdOffset ? this.hiddenOffset : offset;
+            }
+		}
+		this.getPointerEl().setStyle('top', offset + 'px');
+    }
+
+});
+
+Ext.define('Scalr.ui.FocusedRowPointer', {
+    extend: 'Scalr.ui.RowPointer',
+    alias: 'plugin.focusedrowpointer',
+
+    align: 'right',
+
+    width: 10,
+	thresholdOffset: 60,
+	
+	throttle: 100,
+    
+	init: function(client) {
+		var me = this;
+        me.callParent(arguments);
+
+		me.throttledUpdatePointerPosition = Ext.Function.createThrottled(me.updatePointerPosition, me.throttle, me);
+
+        client.on('afterrender', function() {
+            this.on('afterlayout', me.throttledUpdatePointerPosition, me);
+            this.getSelectionModel().on('focuschange', me.throttledUpdatePointerPosition, me);
+            this.view.el.on('scroll', me.throttledUpdatePointerPosition, me);
+
+            client.on('beforedestroy',  function() {
+                this.un('afterlayout', me.throttledUpdatePointerPosition, me);
+                this.getSelectionModel().un('focuschange', me.throttledUpdatePointerPosition, me);
+                this.view.el.un('scroll', me.throttledUpdatePointerPosition, me);
+            });
+        });
+	},
+
+	updatePointerPosition: function() {
+		this.pointTo(this.client.getSelectionModel().lastFocused);
+	},
+
+});
+
+Ext.define('Ext.grid.feature.AddButton', {
+    extend: 'Ext.grid.feature.Feature',
+    alias: 'feature.addbutton',
+    cls: Ext.baseCSSPrefix + 'grid-add-button',
+    viewCls: Ext.baseCSSPrefix + 'grid-with-add-button',
+    disabledCls: Ext.baseCSSPrefix + 'disabled',
+    text: 'Add',
+    
+    init: function(grid) {
+        var me = this;
+
+        me.callParent(arguments);
+        grid.view.addCls(me.viewCls);
+        
+        grid.view.on({
+            viewready: function() {
+                this.on('resize', me.updateButtonPosition, me);
+                this.on('refresh', me.updateButtonPosition, me);
+                this.on('itemadd', me.updateButtonPosition, me);
+                this.on('itemremove', me.updateButtonPosition, me);
+                this.el.on('scroll', me.updateButtonPosition, me);
+                this.el.on('click', me.onViewClick, me);
+            },
+            single: true
+        },{
+            begoredestroy: function() {
+                this.un('resize', me.updateButtonPosition, me);
+                this.un('refresh', me.updateButtonPosition, me);
+                this.un('itemadd', me.updateButtonPosition, me);
+                this.un('itemremove', me.updateButtonPosition, me);
+                this.el.un('scroll', me.updateButtonPosition, me);
+                this.el.un('click', me.onViewClick, me);
+            },
+            single: true
+        });
+
+        me.view.addFooterFn(me.renderTFoot);
+    },
+
+    renderTFoot: function(values, out) {
+        var view = values.view,
+            me = view.findFeature('addbutton'),
+            colspan = view.headerCt.getVisibleGridColumns().length;
+
+            out.push('<tfoot class="x-grid-add-button-wrap" id="' + view.id + '-add-button"><tr><td colspan="' + colspan + '"><div class="' + me.cls + (me.disabled ? ' ' + me.disabledCls : '') + '"><img src="' + Ext.BLANK_IMAGE_URL + '" class="x-icon-grid-add-item"/>&nbsp;&nbsp;' + me.text + '</div></td></tr></tfoot>');
+    },
+
+    onViewClick: function(e, t) {
+        var el = this.view.el.getById(this.view.id + '-add-button');
+        if (el && e.within(el) && !this.disabled) {
+            this.handler(this.view);
+        }
+    },
+
+    setDisabled: function(disabled) {
+        var el = this.view.el.getById(this.view.id + '-add-button');
+        if (el) {
+            el[disabled ? 'addCls' : 'removeCls'](this.disabledCls);
+        }
+        this.disabled = !!disabled;
+    },
+
+    updateButtonPosition: function() {
+        var btn = this.view.el.getById(this.view.id + '-add-button');
+        btn.setStyle('top', (this.view.el.getScroll().top + this.view.el.getHeight() - btn.getHeight()) + 'px');
+    }
+
 });

@@ -26,26 +26,53 @@ class Scalr_Messaging_JsonSerializer {
         $retval->name = $msg->getName();
         $retval->id = $msg->messageId;
         $retval->body = new stdClass();
-        $retval->meta = array();
+        $retval->meta = new stdClass();
 
         $meta = (array)$msg->meta;
         unset($msg->meta);
 
-        $this->walkSerialize($msg, $retval->body);
-        $this->walkSerialize($meta, $retval->meta);
+        $this->walkSerialize($msg, $retval->body, 'underScope');
+        $this->walkSerialize($meta, $retval->meta, 'underScope');
 
         return @json_encode($retval);
     }
 
-    private function walkSerialize ($object, $retval) {
+    private function walkSerialize ($object, &$retval, $normalizationMethod) {
         foreach ($object as $k=>$v) {
+            if ($v === null)
+                $v = '';
+
+            $valueType = gettype($v);
+            $objectType = gettype($retval);
+
+            $normalizedString = call_user_func(array($this, $normalizationMethod), $k);
+
             if (is_object($v) || is_array($v)) {
-                $this->walkSerialize($v, $retval->{$this->underScope($k)});
+                if ($objectType == 'object') {
+                    if (is_array($v))
+                        $retval->{$normalizedString} = array();
+                    else
+                        $retval->{$normalizedString} = new stdClass();
+
+                    call_user_func_array(array($this, 'walkSerialize'), array($v, &$retval->{$normalizedString}, $normalizationMethod));
+                }
+                else {
+                    if (is_array($v))
+                        $retval[$normalizedString] = array();
+                    else
+                        $retval[$normalizedString] = new stdClass();
+
+                    call_user_func_array(array($this, 'walkSerialize'), array($v, &$retval[$normalizedString], $normalizationMethod));
+                }
             } else {
-                if (is_object($object))
-                   $retval->{$this->underScope($k)} = $v;
-                else
-                   $retval[$this->underScope($k)] = $v;
+                if (is_object($retval))
+                   $retval->{$normalizedString} = $v;
+                else {
+                    if (!is_int($k))
+                        $retval[$normalizedString] = $v;
+                    else
+                        $retval[] = $v;
+                }
             }
         }
     }
@@ -60,24 +87,11 @@ class Scalr_Messaging_JsonSerializer {
         $ref = new ReflectionClass(Scalr_Messaging_Msg::getClassForName($msg->name));
         $retval = $ref->newInstance();
         $retval->messageId = "{$msg->id}";
+        $retval->meta = (array)$msg->meta;
 
-        $this->walkUnserialize($msg->meta, $retval->meta);
-        $this->walkUnserialize($msg->body, $retval);
+        $this->walkSerialize($msg->body, $retval, 'camelCase');
 
         return $retval;
-    }
-
-    private function walkUnserialize ($msg, $retval) {
-        foreach ($msg as $k=>$v) {
-            if (is_object($v) || is_array($v)) {
-                $this->walkUnserialize($v, $retval->{$this->camelCase($k)});
-            } else {
-                if (is_object($msg))
-                   $retval->{$this->camelCase($k)} = $v;
-                else
-                   $retval[$this->camelCase($k)] = $v;
-            }
-        }
     }
 
     private function underScope ($name) {

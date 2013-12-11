@@ -72,8 +72,7 @@ class ListImagesFilter extends Marker
      * @param   int         $limit        optional Limit.
      * @return  ListImagesFilter Returns new ListImagesFilter object.
      */
-    public static function init($name = null, $serverId = null, ImageStatus $status = null,
-                                ImageType $type = null, \DateTime $changesSince = null, $marker = null, $limit = null)
+    public static function init()
     {
         return call_user_func_array('parent::init', func_get_args());
     }

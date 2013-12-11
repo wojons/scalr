@@ -1,6 +1,5 @@
 Scalr.regPage('Scalr.ui.servers.sshconsole', function (loadParams, moduleParams) {
 	return Ext.create('Ext.form.Panel', {
-		bodyCls: 'x-panel-body-frame',
 		scalrOptions: {
 			'maximize': 'all'
 		},

@@ -34,7 +34,7 @@ class Modules_Platforms_Ec2 extends Modules_Platforms_Aws implements IPlatformMo
     /**
      * @var array
      */
-    private $instancesListCache = array();
+    public $instancesListCache = array();
 
     public function __construct()
     {
@@ -86,13 +86,12 @@ class Modules_Platforms_Ec2 extends Modules_Platforms_Aws implements IPlatformMo
      */
     public function IsServerExists(DBServer $DBServer, $debug = false)
     {
-        return in_array(
-            $DBServer->GetProperty(EC2_SERVER_PROPERTIES::INSTANCE_ID),
-            @array_keys($this->GetServersList(
-                $DBServer->GetEnvironmentObject(),
-                $DBServer->GetProperty(EC2_SERVER_PROPERTIES::REGION)
-            ))
+        $list = $this->GetServersList(
+            $DBServer->GetEnvironmentObject(),
+            $DBServer->GetProperty(EC2_SERVER_PROPERTIES::REGION)
         );
+        return !is_array($list) ? false :
+            in_array($DBServer->GetProperty(EC2_SERVER_PROPERTIES::INSTANCE_ID), array_keys($list));
     }
 
     /**
@@ -160,8 +159,8 @@ class Modules_Platforms_Ec2 extends Modules_Platforms_Aws implements IPlatformMo
             $status = 'not-found';
         } elseif (empty($this->instancesListCache[$DBServer->GetEnvironmentObject()->id][$region][$iid])) {
             $aws = $DBServer->GetEnvironmentObject()->aws($region);
-            try {
 
+            try {
                 $reservations = $aws->ec2->instance->describe($iid);
 
                 if ($reservations && count($reservations) > 0 && $reservations->get(0)->instancesSet &&
@@ -369,7 +368,7 @@ class Modules_Platforms_Ec2 extends Modules_Platforms_Aws implements IPlatformMo
                 $DBServer->GetProperty(EC2_SERVER_PROPERTIES::REGION)
             );
 
-            if ($details['os_family'] == 'oel' || $details['os_family'] == 'redhat') {
+            if (in_array($details['os_family'], array('oel', 'redhat', 'scientific'))) {
                 $BundleTask->bundleType = SERVER_SNAPSHOT_CREATION_TYPE::EC2_EBS_HVM;
             }
         }
@@ -647,10 +646,10 @@ class Modules_Platforms_Ec2 extends Modules_Platforms_Aws implements IPlatformMo
             'name'  => RouteTableFilterNameType::vpcId(),
             'value' => $vpcId,
         ), array(
-            'name'  => 'tag-key',
+            'name'  => RouteTableFilterNameType::tagKey(),
             'value' => 'scalr-rt-type'
         ), array(
-            'name'  => 'tag-value',
+            'name'  => RouteTableFilterNameType::tagValue(),
             'value' => $type
         ));
 
@@ -836,6 +835,8 @@ class Modules_Platforms_Ec2 extends Modules_Platforms_Aws implements IPlatformMo
 
                             $routeTableId = $dbFarmRole->GetSetting(DBFarmRole::SETTING_AWS_VPC_ROUTING_TABLE_ID);
 
+                            Logger::getLogger('VPC')->warn(new FarmLogMessage($DBServer->farmId, "Internet access: {$vpcInternetAccess}"));
+
                             if (!$routeTableId) {
                                 if ($vpcInternetAccess == Scalr_Role_Behavior_Router::INTERNET_ACCESS_OUTBOUND) {
                                     $routerRole = $DBServer->GetFarmObject()->GetFarmRoleByBehavior(ROLE_BEHAVIORS::VPC_ROUTER);
@@ -845,7 +846,12 @@ class Modules_Platforms_Ec2 extends Modules_Platforms_Aws implements IPlatformMo
                                     }
 
                                     $networkInterfaceId = $routerRole->GetSetting(Scalr_Role_Behavior_Router::ROLE_VPC_NID);
+
+                                    Logger::getLogger('EC2')->warn(new FarmLogMessage($DBServer->farmId, "Requesting outbound routing table. NID: {$networkInterfaceId}"));
+
                                     $routeTableId = $this->getRoutingTable($vpcInternetAccess, $aws, $networkInterfaceId, $vpcId);
+
+                                    Logger::getLogger('EC2')->warn(new FarmLogMessage($DBServer->farmId, "Routing table ID: {$routeTableId}"));
 
                                 } elseif ($vpcInternetAccess == Scalr_Role_Behavior_Router::INTERNET_ACCESS_FULL) {
                                     $routeTableId = $this->getRoutingTable($vpcInternetAccess, $aws, null, $vpcId);
@@ -855,12 +861,15 @@ class Modules_Platforms_Ec2 extends Modules_Platforms_Aws implements IPlatformMo
                             $aws->ec2->routeTable->associate($routeTableId, $subnet->subnetId);
 
                         } catch (Exception $e) {
+
+                            Logger::getLogger('EC2')->warn(new FarmLogMessage($DBServer->farmId, "Removing allocated subnet, due to routing table issues"));
+
                             $aws->ec2->subnet->delete($subnet->subnetId);
                             throw $e;
                         }
 
                         $vpcSubnetId = $subnet->subnetId;
-                        $dbFarmRole->SetSetting(DBFarmRole::SETTING_AWS_VPC_SUBNET_ID, $vpcSubnetId);
+                        $dbFarmRole->SetSetting(DBFarmRole::SETTING_AWS_VPC_SUBNET_ID, $vpcSubnetId, DBFarmRole::TYPE_LCL);
                     }
 
                     if ($vpcSubnetId) {
@@ -872,6 +881,8 @@ class Modules_Platforms_Ec2 extends Modules_Platforms_Aws implements IPlatformMo
         } else {
             $runInstanceRequest->userData = base64_encode(trim($launchOptions->userData));
         }
+
+        $governance = new Scalr_Governance($DBServer->envId);
 
         $aws = $environment->aws($launchOptions->cloudLocation);
 
@@ -901,29 +912,12 @@ class Modules_Platforms_Ec2 extends Modules_Platforms_Aws implements IPlatformMo
         $runInstanceRequest->instanceInitiatedShutdownBehavior = 'terminate';
 
         if (!$noSecurityGroups) {
-            if ($runInstanceRequest->subnetId) {
-                if ($DBServer->farmRoleId) {
-                    $dbFarmRole = $DBServer->GetFarmRoleObject();
-                    $sgList = trim($dbFarmRole->GetSetting(DBFarmRole::SETTING_AWS_SG_LIST));
-                    if ($sgList) {
-                        $sgList = explode(",", $sgList);
-                        foreach ($sgList as $sg) {
-                            if ($sg != '') {
-                                $runInstanceRequest->appendSecurityGroupId(trim($sg));
-                            }
-                        }
-                    } else {
-                        foreach ($this->GetServerSecurityGroupsList($DBServer, $aws->ec2, $vpcId) as $sgroup) {
-                            $runInstanceRequest->appendSecurityGroupId($sgroup);
-                        }
-                    }
-                }
-            } else {
-                // Set Security groups
-                foreach ($this->GetServerSecurityGroupsList($DBServer, $aws->ec2, $vpcId) as $sgroup) {
-                    $runInstanceRequest->appendSecurityGroupId($sgroup);
-                }
 
+            foreach ($this->GetServerSecurityGroupsList($DBServer, $aws->ec2, $vpcId, $governance) as $sgroup) {
+                $runInstanceRequest->appendSecurityGroupId($sgroup);
+            }
+
+            if (!$runInstanceRequest->subnetId) {
                 // Set availability zone
                 if (!$launchOptions->availZone) {
                     $avail_zone = $this->GetServerAvailZone($DBServer, $aws->ec2, $launchOptions);
@@ -942,7 +936,7 @@ class Modules_Platforms_Ec2 extends Modules_Platforms_Aws implements IPlatformMo
         // Set instance type
         $runInstanceRequest->instanceType = $launchOptions->serverType;
 
-        if ($launchOptions->serverType == 'hi1.4xlarge' || $launchOptions->osFamily == 'oel') {
+        if ($launchOptions->serverType == 'hi1.4xlarge' || $launchOptions->serverType == 'cc2.8xlarge' || $launchOptions->osFamily == 'oel') {
             foreach ($this->GetBlockDeviceMapping($launchOptions->serverType) as $bdm) {
                 $runInstanceRequest->appendBlockDeviceMapping($bdm);
             }
@@ -964,7 +958,7 @@ class Modules_Platforms_Ec2 extends Modules_Platforms_Aws implements IPlatformMo
                         ));
                 }
 
-                $DBServer->GetFarmRoleObject()->SetSetting(DBFarmRole::SETTING_AWS_CLUSTER_PG, $placementGroup);
+                $DBServer->GetFarmRoleObject()->SetSetting(DBFarmRole::SETTING_AWS_CLUSTER_PG, $placementGroup, DBFarmRole::TYPE_LCL);
             }
 
             if ($placementGroup) {
@@ -985,12 +979,17 @@ class Modules_Platforms_Ec2 extends Modules_Platforms_Aws implements IPlatformMo
             $keyName = "SCALR-ROLESBUILDER-" . SCALR_ID;
             $farmId = 0;
         } else {
-            $keyName = "FARM-{$DBServer->farmId}-" . SCALR_ID;
-            $farmId = $DBServer->farmId;
-            $oldKeyName = "FARM-{$DBServer->farmId}";
-            if ($sshKey->loadGlobalByName($oldKeyName, $launchOptions->cloudLocation, $DBServer->envId, SERVER_PLATFORMS::EC2)) {
-                $keyName = $oldKeyName;
+            $keyName = $governance->getValue(Scalr_Governance::AWS_KEYPAIR);
+            if ($keyName) {
                 $skipKeyValidation = true;
+            } else {
+                $keyName = "FARM-{$DBServer->farmId}-" . SCALR_ID;
+                $farmId = $DBServer->farmId;
+                $oldKeyName = "FARM-{$DBServer->farmId}";
+                if ($sshKey->loadGlobalByName($oldKeyName, $launchOptions->cloudLocation, $DBServer->envId, SERVER_PLATFORMS::EC2)) {
+                    $keyName = $oldKeyName;
+                    $skipKeyValidation = true;
+                }
             }
         }
         if (!$skipKeyValidation && !$sshKey->loadGlobalByName($keyName, $launchOptions->cloudLocation, $DBServer->envId, SERVER_PLATFORMS::EC2)) {
@@ -1039,7 +1038,7 @@ class Modules_Platforms_Ec2 extends Modules_Platforms_Aws implements IPlatformMo
             }
         }
 
-        if ($result->instancesSet) {
+        if ($result->instancesSet->get(0)->instanceId) {
             $DBServer->SetProperty(EC2_SERVER_PROPERTIES::AVAIL_ZONE, $result->instancesSet->get(0)->placement->availabilityZone);
             $DBServer->SetProperty(EC2_SERVER_PROPERTIES::INSTANCE_ID, $result->instancesSet->get(0)->instanceId);
             $DBServer->SetProperty(EC2_SERVER_PROPERTIES::INSTANCE_TYPE, $runInstanceRequest->instanceType);
@@ -1049,8 +1048,9 @@ class Modules_Platforms_Ec2 extends Modules_Platforms_Aws implements IPlatformMo
             $DBServer->SetProperty(EC2_SERVER_PROPERTIES::SUBNET_ID, $result->instancesSet->get(0)->subnetId);
             $DBServer->SetProperty(EC2_SERVER_PROPERTIES::ARCHITECTURE, $result->instancesSet->get(0)->architecture);
 
-            return $DBServer;
+            $DBServer->osType = $result->instancesSet->get(0)->platform ? $result->instancesSet->get(0)->platform : 'linux';
 
+            return $DBServer;
         } else {
             throw new Exception(sprintf(_("Cannot launch new instance. %s"), serialize($result)));
         }
@@ -1129,7 +1129,7 @@ class Modules_Platforms_Ec2 extends Modules_Platforms_Aws implements IPlatformMo
         }
 
         //f
-        if (in_array($instanceType, array('m1.xlarge', 'c1.xlarge'))) {
+        if (in_array($instanceType, array('m1.xlarge', 'c1.xlarge', 'cc2.8xlarge'))) {
             $retval[] = new BlockDeviceMappingData("{$prefix}f", 'ephemeral3');
         }
 
@@ -1153,7 +1153,6 @@ class Modules_Platforms_Ec2 extends Modules_Platforms_Aws implements IPlatformMo
         return $retval;
     }
 
-
     /**
      * Gets the list of the security groups for the specified db server.
      *
@@ -1164,32 +1163,79 @@ class Modules_Platforms_Ec2 extends Modules_Platforms_Aws implements IPlatformMo
      * @param   string                 $vpcId    optional The ID of VPC
      * @return  array  Returns array looks like array(groupid-1, groupid-2, ..., groupid-N)
      */
-    private function GetServerSecurityGroupsList(DBServer $DBServer, \Scalr\Service\Aws\Ec2 $ec2, $vpcId = "")
+    private function GetServerSecurityGroupsList(DBServer $DBServer, \Scalr\Service\Aws\Ec2 $ec2, $vpcId = "", Scalr_Governance $governance = null)
     {
         $retval = array();
+        $checkGroups = array();
+        $sgGovernance = true;
+        $allowAdditionalSgs = true;
 
-        if ($DBServer->farmRoleId) {
-            $dbFarmRole = $DBServer->GetFarmRoleObject();
-            $sgList = trim($dbFarmRole->GetSetting(DBFarmRole::SETTING_AWS_SG_LIST));
-            if ($sgList) {
-                $sgList = explode(",", $sgList);
-                foreach ($sgList as $sg) {
-                    if ($sg != '') {
-                        array_push($retval, trim($sg));
+        if ($governance) {
+            $sgs = $governance->getValue(Scalr_Governance::AWS_SECURITY_GROUPS);
+            if ($sgs !== null) {
+                $governanceSecurityGroups = @explode(",", $sgs);
+                if (!empty($governanceSecurityGroups)) {
+                    foreach ($governanceSecurityGroups as $sg) {
+                        if ($sg != '')
+                            array_push($checkGroups, trim($sg));
                     }
                 }
+
+                $sgGovernance = false;
+                $allowAdditionalSgs = $governance->getValue(Scalr_Governance::AWS_SECURITY_GROUPS, 'allow_additional_sec_groups');
             }
         }
 
-        //Describe security groups
-        //[scalr-rb-system, scalr-role.*, scalr-farm.*, Scalr::config('scalr.aws.security_group_name')]
+        if (!$sgGovernance || $allowAdditionalSgs) {
+            if ($DBServer->farmRoleId != 0) {
+                $dbFarmRole = $DBServer->GetFarmRoleObject();
+                if ($dbFarmRole->GetSetting(DBFarmRole::SETTING_AWS_SECURITY_GROUPS_LIST) !== null) {
+                    // New SG management
+                    $sgs = @json_decode($dbFarmRole->GetSetting(DBFarmRole::SETTING_AWS_SECURITY_GROUPS_LIST));
+                    if (!empty($sgs)) {
+                        foreach ($sgs as $sg) {
+                            if (stripos($sg, 'sg-') === 0)
+                                array_push($retval, $sg);
+                            else
+                                array_push($checkGroups, $sg);
+                        }
+                    }
+                } else {
+                    // Old SG management
+                    array_push($checkGroups, 'default');
+                    array_push($checkGroups, \Scalr::config('scalr.aws.security_group_name'));
+                    if (!$vpcId) {
+                        array_push($checkGroups, "scalr-farm.{$DBServer->farmId}");
+                        array_push($checkGroups, "scalr-role.{$DBServer->farmRoleId}");
+                    }
+
+                    $additionalSgs = trim($dbFarmRole->GetSetting(DBFarmRole::SETTING_AWS_SG_LIST));
+                    if ($additionalSgs) {
+                        $sgs = explode(",", $additionalSgs);
+                        if (!empty($sgs)) {
+                            foreach ($sgs as $sg) {
+                                $sg = trim($sg);
+                                if (stripos($sg, 'sg-') === 0)
+                                    array_push($retval, $sg);
+                                else
+                                    array_push($checkGroups, $sg);
+                            }
+                        }
+                    }
+                }
+            } else
+                array_push($checkGroups, 'scalr-rb-system');
+        }
+
+        // No name based security groups, return only SG ids.
+        if (empty($checkGroups))
+            return $retval;
+
+        // Filter groups
         $filter = array(
             array(
                 'name' => SecurityGroupFilterNameType::groupName(),
-                'value' => array(
-                    'default', 'scalr-farm.*', 'scalr-role.*', 'scalr-rb-system',
-                    \Scalr::config('scalr.aws.security_group_name')
-                ),
+                'value' => $checkGroups,
             )
         );
 
@@ -1216,164 +1262,161 @@ class Modules_Platforms_Ec2 extends Modules_Platforms_Aws implements IPlatformMo
             throw new Exception("Cannot get list of security groups (1): {$e->getMessage()}");
         }
 
-        //Add default security group
-        if (isset($sgList['default'])) {
-            array_push($retval, $sgList['default']);
-        }
+        foreach ($checkGroups as $groupName) {
+            // Check default SG
+            if ($groupName == 'default') {
+                array_push($retval, $sgList[$groupName]);
 
-        /**** Security group for role builder ****/
-        if ($DBServer->status == SERVER_STATUS::TEMPORARY) {
-            if (empty($sgList['scalr-rb-system'])) {
-                try {
-                    $securityGroupId = $ec2->securityGroup->create(
-                        'scalr-rb-system', "Security group for Roles Builder", $vpcId
-                    );
-                    $ipRangeList = new IpRangeList();
-                    foreach (\Scalr::config('scalr.aws.ip_pool') as $ip) {
-                        $ipRangeList->append(new IpRangeData($ip));
-                    }
-                    $ec2->securityGroup->authorizeIngress(array(
-                        new IpPermissionData('tcp', 22, 22, $ipRangeList),
-                        new IpPermissionData('tcp', 8008, 8013, $ipRangeList)
-                    ), $securityGroupId);
-
-                    $sgList['scalr-rb-system'] = $securityGroupId;
-                } catch (Exception $e) {
-                    throw new Exception(sprintf(_("Cannot create security group '%s': %s"), 'scalr-rb-system', $e->getMessage()));
-                }
-            }
-
-            array_push($retval, $sgList['scalr-rb-system']);
-
-            return $retval;
-        }
-
-        /*
-         * SCALR IP POOL SECURITY GROUP
-         */
-        if (empty($sgList[\Scalr::config('scalr.aws.security_group_name')])) {
-            try {
-                $securityGroupId = $ec2->securityGroup->create(
-                    \Scalr::config('scalr.aws.security_group_name'), "Security rules needed by Scalr", $vpcId
-                );
-
-                $ipRangeList = new IpRangeList();
-                foreach (\Scalr::config('scalr.aws.ip_pool') as $ip) {
-                    $ipRangeList->append(new IpRangeData($ip));
-                }
-                // TODO: Open only FOR VPC ranges
-                $ipRangeList->append(new IpRangeData('10.0.0.0/8'));
-
-                $ec2->securityGroup->authorizeIngress(array(
-                    new IpPermissionData('tcp', 3306, 3306, $ipRangeList),
-                    new IpPermissionData('tcp', 8008, 8013, $ipRangeList),
-                    new IpPermissionData('udp', 8014, 8014, $ipRangeList),
-                ), $securityGroupId);
-
-                $sgList[\Scalr::config('scalr.aws.security_group_name')] = $securityGroupId;
-
-            } catch (Exception $e) {
-                throw new Exception(sprintf(_("Cannot create security group '%s': %s"), \Scalr::config('scalr.aws.security_group_name'), $e->getMessage()));
-            }
-        }
-        array_push($retval, $sgList[\Scalr::config('scalr.aws.security_group_name')]);
-
-        /**********************************************/
-        if ($vpcId)
-            return $retval;
-
-        /**********************************/
-        // Add Role security group
-        $role_sec_group = \Scalr::config('scalr.aws.security_group_prefix')
-          . $DBServer->GetFarmRoleObject()->GetRoleObject()->name;
-
-        $roleSecurityGroup = "scalr-role.{$DBServer->farmRoleId}";
-        $farmSecurityGroup = "scalr-farm.{$DBServer->farmId}";
-
-        $new_role_sec_group = "scalr-role.{$DBServer->farmRoleId}";
-        $farm_security_group = "scalr-farm.{$DBServer->farmId}";
-
-        // Create farm security group
-        if (empty($sgList[$farmSecurityGroup])) {
-            try {
-                $securityGroupId = $ec2->securityGroup->create(
-                    $farmSecurityGroup, sprintf("Security group for FarmID N%s", $DBServer->farmId), $vpcId
-                );
-
-                $userIdGroupPairList = new UserIdGroupPairList(new UserIdGroupPairData(
-                    $DBServer->GetEnvironmentObject()->getPlatformConfigValue(self::ACCOUNT_ID),
-                    null,
-                    $farmSecurityGroup
-                ));
-
-                $ec2->securityGroup->authorizeIngress(array(
-                    new IpPermissionData('tcp', 0, 65535, null, $userIdGroupPairList),
-                    new IpPermissionData('udp', 0, 65535, null, $userIdGroupPairList)
-                ), $securityGroupId);
-
-                $sgList[$farmSecurityGroup] = $securityGroupId;
-
-            } catch (Exception $e) {
-                throw new Exception(sprintf(
-                    _("Cannot create security group '%s': %s"), $farmSecurityGroup, $e->getMessage()
-                ));
-            }
-        }
-        array_push($retval, $sgList[$farmSecurityGroup]);
-
-        if (empty($sgList[$roleSecurityGroup])  && !$vpcId) {
-            try {
-                $securityGroupId = $ec2->securityGroup->create(
-                    $roleSecurityGroup,
-                    sprintf("Security group for FarmRoleID N%s on FarmID N%s", $DBServer->GetFarmRoleObject()->ID, $DBServer->farmId),
-                    $vpcId
-                );
-
-                // DB rules
-                $dbRules = $DBServer->GetFarmRoleObject()->GetRoleObject()->getSecurityRules();
-                $groupRules = array();
-                foreach ($dbRules as $rule) {
-                    $groupRules[md5($rule['rule'])] = $rule;
-                }
-
-                // Behavior rules
-                foreach (Scalr_Role_Behavior::getListForFarmRole($DBServer->GetFarmRoleObject()) as $bObj) {
-                    $bRules = $bObj->getSecurityRules();
-                    foreach ($bRules as $r) {
-                        if ($r) {
-                            $groupRules[md5($r)] = array('rule' => $r);
+            // Check Roles builder SG
+            } elseif ($groupName == 'scalr-rb-system') {
+                if (!isset($sgList[$groupName])) {
+                    try {
+                        $securityGroupId = $ec2->securityGroup->create(
+                            'scalr-rb-system', "Security group for Roles Builder", $vpcId
+                        );
+                        $ipRangeList = new IpRangeList();
+                        foreach (\Scalr::config('scalr.aws.ip_pool') as $ip) {
+                            $ipRangeList->append(new IpRangeData($ip));
                         }
+
+                        sleep(2);
+
+                        $ec2->securityGroup->authorizeIngress(array(
+                            new IpPermissionData('tcp', 22, 22, $ipRangeList),
+                            new IpPermissionData('tcp', 8008, 8013, $ipRangeList)
+                        ), $securityGroupId);
+
+                        $sgList['scalr-rb-system'] = $securityGroupId;
+                    } catch (Exception $e) {
+                        throw new Exception(sprintf(_("Cannot create security group '%s': %s"), 'scalr-rb-system', $e->getMessage()));
                     }
                 }
+                array_push($retval, $sgList[$groupName]);
 
-                // Default rules
-                $userIdGroupPairList = new UserIdGroupPairList(new UserIdGroupPairData(
-                    $DBServer->GetEnvironmentObject()->getPlatformConfigValue(self::ACCOUNT_ID),
-                    null,
-                    $roleSecurityGroup
-                ));
-                $rules = array(
-                    new IpPermissionData('tcp', 0, 65535, null, $userIdGroupPairList),
-                    new IpPermissionData('udp', 0, 65535, null, $userIdGroupPairList)
-                );
+            //Check scalr-farm.* security group
+            } elseif (stripos($groupName, 'scalr-farm.') === 0) {
+                if (!isset($sgList[$groupName])) {
+                    try {
+                        $securityGroupId = $ec2->securityGroup->create(
+                            $groupName, sprintf("Security group for FarmID N%s", $DBServer->farmId), $vpcId
+                        );
 
-                foreach ($groupRules as $rule) {
-                    $group_rule = explode(":", $rule["rule"]);
-                    $rules[] = new IpPermissionData(
-                        $group_rule[0], $group_rule[1], $group_rule[2],
-                        new IpRangeData($group_rule[3])
-                    );
+                        sleep(2);
+
+                        $userIdGroupPairList = new UserIdGroupPairList(new UserIdGroupPairData(
+                            $DBServer->GetEnvironmentObject()->getPlatformConfigValue(self::ACCOUNT_ID),
+                            null,
+                            $groupName
+                        ));
+
+                        $ec2->securityGroup->authorizeIngress(array(
+                            new IpPermissionData('tcp', 0, 65535, null, $userIdGroupPairList),
+                            new IpPermissionData('udp', 0, 65535, null, $userIdGroupPairList)
+                        ), $securityGroupId);
+
+                        $sgList[$groupName] = $securityGroupId;
+
+                    } catch (Exception $e) {
+                        throw new Exception(sprintf(
+                            _("Cannot create security group '%s': %s"), $groupName, $e->getMessage()
+                        ));
+                    }
                 }
+                array_push($retval, $sgList[$groupName]);
 
-                $ec2->securityGroup->authorizeIngress($rules, $securityGroupId);
+            //Check scalr-role.* security group
+            } elseif (stripos($groupName, 'scalr-role.') === 0) {
+                if (!isset($sgList[$groupName])) {
+                    try {
+                        $securityGroupId = $ec2->securityGroup->create(
+                            $groupName,
+                            sprintf("Security group for FarmRoleID N%s on FarmID N%s", $DBServer->GetFarmRoleObject()->ID, $DBServer->farmId),
+                            $vpcId
+                        );
 
-                $sgList[$roleSecurityGroup] = $securityGroupId;
+                        sleep(2);
 
-            } catch (Exception $e) {
-                throw new Exception(sprintf(_("Cannot create security group '%s': %s"), $roleSecurityGroup, $e->getMessage()));
+                        // DB rules
+                        $dbRules = $DBServer->GetFarmRoleObject()->GetRoleObject()->getSecurityRules();
+                        $groupRules = array();
+                        foreach ($dbRules as $rule) {
+                            $groupRules[Scalr_Util_CryptoTool::hash($rule['rule'])] = $rule;
+                        }
+
+                        // Behavior rules
+                        foreach (Scalr_Role_Behavior::getListForFarmRole($DBServer->GetFarmRoleObject()) as $bObj) {
+                            $bRules = $bObj->getSecurityRules();
+                            foreach ($bRules as $r) {
+                                if ($r) {
+                                    $groupRules[Scalr_Util_CryptoTool::hash($r)] = array('rule' => $r);
+                                }
+                            }
+                        }
+
+                        // Default rules
+                        $userIdGroupPairList = new UserIdGroupPairList(new UserIdGroupPairData(
+                            $DBServer->GetEnvironmentObject()->getPlatformConfigValue(self::ACCOUNT_ID),
+                            null,
+                            $groupName
+                        ));
+                        $rules = array(
+                            new IpPermissionData('tcp', 0, 65535, null, $userIdGroupPairList),
+                            new IpPermissionData('udp', 0, 65535, null, $userIdGroupPairList)
+                        );
+
+                        foreach ($groupRules as $rule) {
+                            $group_rule = explode(":", $rule["rule"]);
+                            $rules[] = new IpPermissionData(
+                                $group_rule[0], $group_rule[1], $group_rule[2],
+                                new IpRangeData($group_rule[3])
+                            );
+                        }
+
+                        $ec2->securityGroup->authorizeIngress($rules, $securityGroupId);
+
+                        $sgList[$groupName] = $securityGroupId;
+
+                    } catch (Exception $e) {
+                        throw new Exception(sprintf(_("Cannot create security group '%s': %s"), $groupName, $e->getMessage()));
+                    }
+                }
+                array_push($retval, $sgList[$groupName]);
+            } elseif ($groupName == \Scalr::config('scalr.aws.security_group_name')) {
+                if (!isset($sgList[$groupName])) {
+                    try {
+                        $securityGroupId = $ec2->securityGroup->create(
+                            $groupName, "Security rules needed by Scalr", $vpcId
+                        );
+
+                        $ipRangeList = new IpRangeList();
+                        foreach (\Scalr::config('scalr.aws.ip_pool') as $ip) {
+                            $ipRangeList->append(new IpRangeData($ip));
+                        }
+                        // TODO: Open only FOR VPC ranges
+                        $ipRangeList->append(new IpRangeData('10.0.0.0/8'));
+
+                        sleep(2);
+
+                        $ec2->securityGroup->authorizeIngress(array(
+                            new IpPermissionData('tcp', 3306, 3306, $ipRangeList),
+                            new IpPermissionData('tcp', 8008, 8013, $ipRangeList),
+                            new IpPermissionData('udp', 8014, 8014, $ipRangeList),
+                        ), $securityGroupId);
+
+                        $sgList[$groupName] = $securityGroupId;
+
+                    } catch (Exception $e) {
+                        throw new Exception(sprintf(_("Cannot create security group '%s': %s"), $groupName, $e->getMessage()));
+                    }
+                }
+                array_push($retval, $sgList[$groupName]);
+            } else {
+                if (!isset($sgList[$groupName])) {
+                    throw new Exception(sprintf(_("Security group '%s' is not found"), $groupName));
+                } else
+                    array_push($retval, $sgList[$groupName]);
             }
         }
-        array_push($retval, $sgList[$roleSecurityGroup]);
 
         return $retval;
     }
@@ -1407,6 +1450,7 @@ class Modules_Platforms_Ec2 extends Modules_Platforms_Aws implements IPlatformMo
         $role_avail_zone = $this->db->GetOne("
             SELECT ec2_avail_zone FROM ec2_ebs
             WHERE server_index=? AND farm_roleid=?
+            LIMIT 1
         ",
             array($DBServer->index, $DBServer->farmRoleId)
         );

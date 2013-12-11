@@ -11,24 +11,51 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.storage', function (moduleTabParams) 
             type: 'hbox',
             align: 'stretch'
         },
-
-        bodyCls: 'x-panel-body-frame x-panel-body-plain',
+        
+        tabData: null,
+        
+        cls: 'scalr-ui-farmbuilder-roleedit-tab',
 
         isEnabled: function (record) {
-			return true;
+			return true;//record.get('os_family') !== 'windows' || record.get('platform') === 'ec2';
 		},
 		
+        beforeShowTab: function (record, handler) {
+            var platform = record.get('platform');
+            if (Ext.Array.contains(['cloudstack', 'idcf', 'ucloud'], platform)) {
+                Scalr.cachedRequest.load(
+                    {
+                        url: '/platforms/cloudstack/xGetOfferingsList/',
+                        params: {
+                            cloudLocation: record.get('cloud_location'),
+                            platform: platform,
+                            farmRoleId: record.get('new') ? '' : record.get('farm_role_id')
+                        }
+                    },
+                    function(data, status){
+                        this.tabData = data;
+                        status ? handler() : this.deactivateTab();
+                    },
+                    this
+                );
+            } else {
+                handler();
+            }
+        },
+        
 		showTab: function (record) {
 			var settings = this.down('#settings'),
                 platform = record.get('platform'),
                 storages = record.get('storages', true),
+                osFamily = record.get('os_family'),
+                field,
                 data = [];
 
-			this.down('#configuration').store.loadData(storages['configs'] || []);
-			this.down('#configuration').devices = storages['devices'] || [];
+            field = this.down('#configuration');
+			field.store.loadData(storages['configs'] || []);
+			field.devices = storages['devices'] || [];
 
-			this.down('[name="ebs.snapshot"]').cloudLocation = record.get('cloud_location');
-			this.down('[name="ebs.snapshot"]').forceSelection = false;
+			this.down('[name="ebs.snapshot"]').store.getProxy().params = {cloudLocation: record.get('cloud_location')};
 
 			// Storage engine
 			if (platform == 'ec2') {
@@ -43,37 +70,65 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.storage', function (moduleTabParams) 
 				}, {
 					name: 'raid.csvol', description: 'RAID array (on CS volumes)'
 				}];
-			} else if (Ext.Array.contains(['openstack', 'rackspacengus', 'rackspacenguk'], platform)) {
+                this.down('[name="csvol.disk_offering_id"]').store.load({data: this.tabData['diskOfferings'] || []});
+                this.down('[name="csvol.snapshot_id"]').store.getProxy().params = {
+                    platform: record.get('platform'),
+                    cloudLocation: record.get('cloud_location')
+                };
+			} else if (Ext.Array.contains(['gce'], platform)) {
+                data = [{
+                    name: 'gce_persistent', description: 'Persistent disk'
+                }, {
+                    name: 'raid.gce_pd', description: 'RAID array (on PDs)'
+                }];
+            } else if (Scalr.isOpenstack(platform)) {
                 data = [{
                     name: 'cinder', description: 'Persistent disk'
                 }, {
                     name: 'raid.cinder', description: 'RAID array (on Persistent disks)'
                 }];
             }
-			settings.down('[name="type"]').store.loadData(data);
+
+            //storage engine
+            field = settings.down('[name="type"]');
+			field.store.loadData(data);
+            field.setReadOnly(record.get('os_family') === 'windows', false);
 
 			// Storage filesystem
-			var data = [{ fs: 'ext3', description: 'Ext3' }];
+			var data = [];
 
-			if ((record.get('os_family') == 'centos' && record.get('arch') == 'x86_64') ||
-				(record.get('os_family') == 'ubuntu' && Ext.Array.contains(['10.04', '12.04'], record.get('os_generation')))
-				) {
-				if (moduleTabParams['featureMFS']) {
-					data.push({ fs: 'ext4', description: 'Ext4'});
-					data.push({ fs: 'xfs', description: 'XFS'});
-				} else {
-					data.push({ fs: 'ext4', description: 'Ext4 (Not available for your pricing plan)'});
-					data.push({ fs: 'xfs', description: 'XFS (Not available for your pricing plan)'});
-				}
-			}
-			settings.down('[name="fs"]').store.loadData(data);
+            if (osFamily !== 'windows') {
+                data.push({ fs: 'ext3', description: 'Ext3' });
+                if ((osFamily == 'centos' && record.get('arch') == 'x86_64') ||
+                    (osFamily == 'ubuntu' && Ext.Array.contains(['10.04', '12.04'], record.get('os_generation')))
+                    ) {
+                    if (moduleTabParams['featureMFS']) {
+                        data.push({ fs: 'ext4', description: 'Ext4'});
+                        data.push({ fs: 'xfs', description: 'XFS'});
+                    } else {
+                        data.push({ fs: 'ext4', description: 'Ext4 (Not available for your pricing plan)'});
+                        data.push({ fs: 'xfs', description: 'XFS (Not available for your pricing plan)'});
+                    }
+                }
+            }
+            field = settings.down('[name="fs"]');
+			field.store.loadData(data);
+            field.setDisabled(osFamily === 'windows');
+            field.setVisible(osFamily !== 'windows');
+
+            this.down('#mountCt').setVisible(osFamily !== 'windows');
+            
 			this.down('#editor').hide();
 		},
 		
 		hideTab: function (record) {
-			var storages = [];
+			var storages = [],
+                grid = this.down('#configuration'),
+                selModel = grid.getSelectionModel();
 
-			this.down('#configuration').store.each(function(record) {
+            selModel.setLastFocused(null);
+            selModel.deselectAll();
+			grid.store.each(function(record) {
 				storages.push(record.getData());
 			});
 
@@ -88,41 +143,56 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.storage', function (moduleTabParams) 
             maxWidth: 900,
             minWidth: 460,
             flex: 1,
-            cls: 'x-panel-columned-leftcol',
+            cls: 'x-panel-column-left',
             layout: {
                 type: 'vbox',
                 align: 'stretch'
             },
             items: [{
+                xtype: 'component',
+                cls: 'x-fieldset-subheader',
+                margin: 12,
+                html: 'Storage'
+            },{
                 xtype: 'grid',
                 itemId: 'configuration',
-                cls: 'x-grid-shadow x-grid-dark-focus',
-                margin: '5 0 0 0',
-                selType: 'selectedmodel',
+                cls: 'x-grid-shadow',
                 multiSelect: true,
-                padding: 9,
+                padding: '0 9 9',
+                features: {
+                    ftype: 'addbutton',
+                    text: 'Add storage',
+                    handler: function(view) {
+                        var currentRole = view.up('#storage').currentRole,
+                            selModel = view.getSelectionModel(),
+                            storageDefaults = { reUse: 1 };
+
+                            if (currentRole.get('os_family') === 'windows') {
+								if (currentRole.get('platform') === 'ec2')
+                                    storageDefaults['type'] = 'ebs';
+						        else if (Scalr.isOpenstack(currentRole.get('platform')))
+								    storageDefaults['type'] = 'cinder';
+                            }
+                            
+														
+                            selModel.setLastFocused(null);
+                            selModel.deselectAll();
+                            view.up('#storage').down('#editor').loadRecord(view.store.createModel(storageDefaults), currentRole);
+                    }
+                },
                 plugins: [{
-                    ptype: 'rowpointer',
-                    addCls: 'x-panel-columned-row-pointer-light'
+                    ptype: 'focusedrowpointer',
+                    thresholdOffset: 26,
                 }],
                 viewConfig: {
-                    //focusedItemCls: '',
-                    plugins: {
-                        ptype: 'dynemptytext',
-                        emptyText: '',
-                        emptyTextNoItems: '<div style="margin-top:-7px">Click on the <a class="add-link" href="#"><img src="'+Ext.BLANK_IMAGE_URL+'" class="scalr-ui-action-icon scalr-ui-action-icon-add" style="position:relative;top:5px" /></a> button above to add storage configuration.</div>',
-                        onAddItemClick: function() {
-                            this.client.ownerCt.up('panel').down('#add').handler();
-                        }
-                    },
                     getRowClass: function(record) {
-                        if (record.get('status') == 'Pending delete')
-                            return 'x-grid-row-striped';
+                        if (record.get('status') === 'Pending delete')
+                            return 'x-grid-row-strikeout';
                     }
                 },
                 store: {
                     proxy: 'object',
-                    fields: [ 'id', 'type', 'fs', 'settings', 'mount', 'mountPoint', 'reUse', 'status', 'rebuild' ]
+                    fields: [ 'id', 'type', 'fs', {name: 'settings', defaultValue: {fs: 'ext3'}}, 'mount', 'mountPoint', 'reUse', 'status', 'rebuild' ]
                 },
                 columns: [
                     { header: 'Type', flex: 2, sortable: true, dataIndex: 'type', xtype: 'templatecolumn', tpl:
@@ -132,9 +202,11 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.storage', function (moduleTabParams) 
                                     'ebs': 'Single EBS volume',
                                     'csvol': 'Single CS volume',
 									'cinder': 'Single persistent disk',
+									'gce_persistent': 'Persistent disk',
                                     'raid.ebs': 'RAID array (on EBS)',
                                     'raid.csvol': 'RAID array (on CS volumes)',
-									'raid.cinder': 'RAID array (on Persistent disks)'
+									'raid.cinder': 'RAID array (on PDs)',
+									'raid.gce_pd': 'RAID array (on PDs)'
                                 };
 
                                 return l[type] || type;
@@ -145,7 +217,9 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.storage', function (moduleTabParams) 
                         new Ext.XTemplate('{[this.name(values.fs)]}', {
                             name: function(type) {
                                 var l = {
-                                    'ext3': 'Ext3'
+                                    'ext3': 'Ext3',
+									'ext4': 'Ext4',
+									'xfs': 'XFS'
                                 };
 
                                 return l[type] || type;
@@ -164,7 +238,7 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.storage', function (moduleTabParams) 
                             getDescription: function(v) {
                                 var result = [],
                                     s;
-                                if (Ext.Array.contains(['raid.ebs', 'raid.csvol', 'raid.cinder'], v.type)) {
+                                if (Ext.Array.contains(['raid.ebs', 'raid.csvol', 'raid.cinder', 'raid.gce_pd'], v.type)) {
                                     result.push('RAID ' + v['settings']['raid.level'] + ' on ' + v['settings']['raid.volumes_count'] + ' x');
                                 }
 
@@ -177,25 +251,35 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.storage', function (moduleTabParams) 
                                     s = v['settings']['csvol.size'] + 'GB CS volume';
                                 } else if (Ext.Array.contains(['raid.cinder', 'cinder'], v.type)) {
                                     s = v['settings']['cinder.size'] + 'GB Persistent disk';
+                                } else if (Ext.Array.contains(['raid.gce_pd', 'gce_persistent'], v.type)) {
+                                    s = v['settings']['gce_persistent.size'] + 'GB Persistent disk';
                                 }
 
                                 result.push(s);
                                 return result.join(' ');
                             }
                         })
-                    }
-                ],
+                    },
+                    {
+                        xtype: 'templatecolumn',
+                        tpl: '<tpl if="status!=\'Pending delete\'"><img style="cursor:pointer" width="15" height="15" class="x-icon-action x-icon-action-delete" title="Delete scaling metric" src="'+Ext.BLANK_IMAGE_URL+'"/></tpl>',
+                        width: 42,
+                        sortable: false,
+                        resizable: false,
+                        dataIndex: 'id',
+                        align:'left'
+                }],
 
                 listeners: {
-                    selectionchange: function(grid, selections) {
-                        this.down('#delete').setDisabled(!selections.length);
-                    },
                     viewready: function() {
                         var me = this;
                         me.getSelectionModel().on('focuschange', function(gridSelModel) {
                             var dev = me.next();
                             dev.hide();
-                            dev.store.removeAll();
+                            //todo: 4.2 check
+                            if (dev.store.getCount() > 0) {
+                                dev.store.removeAll();
+                            }
                             if (gridSelModel.lastFocused) {
                                 var id = gridSelModel.lastFocused.get('id');
                                 if (me.devices[id]) {
@@ -205,59 +289,30 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.storage', function (moduleTabParams) 
                                 }
                             }
                         });
-                    }
-                },
-                dockedItems: [{
-                    cls: 'x-toolbar',
-                    dock: 'top',
-                    layout: 'hbox',
-                    defaults: {
-                        margin: '0 0 0 10'
                     },
-                    items: [{
-                        xtype: 'label',
-                        cls: 'x-fieldset-subheader',
-                        html: 'Storages',
-                        margin: 0
-                    },{
-                        xtype: 'tbfill' 
-                    },{
-                        itemId: 'delete',
-                        xtype: 'button',
-                        ui: 'action-dark',
-                        iconCls: 'x-btn-groupacton-delete',
-                        disabled: true,
-                        tooltip: 'Delete storage configuration',
-                        handler: function() {
-                            var grid = this.up('#configuration'), selections = grid.getSelectionModel().getSelection();
-
-                            for (var i = 0; i < selections.length; i++) {
-                                if (! selections[i].get('id'))
-                                    grid.getStore().remove(selections[i]);
-                                else
-                                    selections[i].set('status', 'Pending delete');
+                    itemclick: function (view, record, item, index, e) {
+                        if (e.getTarget('img.x-icon-action-delete')) {
+                            var selModel = view.getSelectionModel();
+                            if (record === selModel.getLastFocused()) {
+                                selModel.deselectAll();
+                                selModel.setLastFocused(null);
                             }
+                            if (!record.get('id')) {
+                                view.getStore().remove(record);
+                            } else {
+                                record.set('status', 'Pending delete');
+                            }
+                            return false;
                         }
-                    },{
-                        itemId: 'add',
-                        xtype: 'button',
-                        ui: 'action-dark',
-                        iconCls: 'x-btn-groupacton-add',
-                        tooltip: 'Add storage configuration',
-                        handler: function() {
-                            var conf = this.up('#configuration'), editor = this.up('#storage').down('#editor');
-                            conf.getSelectionModel().setLastFocused(null);
-                            editor.loadRecord(conf.store.createModel({ reUse: 1 }), this.up('#storage').currentRole);
-                        }
-                    }]
-                }]
+                    }
+                }
             },{
                 xtype: 'grid',
                 flex: 1,
                 padding: 9,
                 itemId: 'devices',
-                cls: 'x-grid-shadow',
-                margin: '36 0 0 0',
+                cls: 'x-grid-shadow x-grid-no-selection',
+                margin: '24 0 0 0',
                 hidden: true,
                 viewConfig: {
                     disableSelection: true,
@@ -269,12 +324,12 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.storage', function (moduleTabParams) 
                     fields: [ 'serverIndex', 'serverId', 'serverInstanceId', 'farmRoleId', 'storageId', 'storageConfigId', 'placement' ]
                 },
                 columns: [
-                    { header: 'Server Index', width: 110, sortable: true, dataIndex: 'serverIndex' },
+                    { header: 'Server Index', width: 125, sortable: true, dataIndex: 'serverIndex' },
                     { header: 'Server Id', flex: 1, sortable: true, dataIndex: 'serverId', xtype: 'templatecolumn', tpl:
-                        '<tpl if="serverId"><a href="#/servers/{serverId}/extendedInfo">{serverId}</a> <tpl if="serverInstanceId">({serverInstanceId})</tpl><tpl else>Not running</tpl>'
+                        '<tpl if="serverId"><a href="#/servers/{serverId}/dashboard">{serverId}</a> <tpl if="serverInstanceId">({serverInstanceId})</tpl><tpl else>Not running</tpl>'
                     },
                     { header: 'Storage Id', width: 130, sortable: true, dataIndex: 'storageId' },
-                    { header: 'Placement', width: 100, sortable: true, dataIndex: 'placement' },
+                    { header: 'Placement', width: 110, sortable: true, dataIndex: 'placement' },
                     { header: 'Config', width: 80, sortable: false, dataIndex: 'config', xtype: 'templatecolumn', tpl:
                         '<a href="#" class="view">View</a>'
                     }
@@ -300,6 +355,7 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.storage', function (moduleTabParams) 
                                         title: 'Storage config',
                                         width: 800,
                                         layout: 'fit',
+                                        bodyCls: 'x-container-fieldset',
                                         items: [{
                                             xtype: 'codemirror',
                                             readOnly: true,
@@ -330,7 +386,8 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.storage', function (moduleTabParams) 
                     }
                 },
                 dockedItems: [{
-                    cls: 'x-toolbar',
+                    xtype: 'toolbar',
+                    ui: 'simple',
                     dock: 'top',
                     items: [{
                         xtype: 'label',
@@ -345,7 +402,6 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.storage', function (moduleTabParams) 
             xtype: 'container',
             layout: 'fit',
             flex: .7,
-            style: 'background: #F0F1F4;border-radius:0 4px 4px 0',
             margin: 0,
             items: {
                 xtype: 'form',
@@ -354,17 +410,19 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.storage', function (moduleTabParams) 
                 overflowY: 'auto',
                 suspendLiveUpdate: 0,
                 listeners: {
-                    boxready: function() {
+                    render: function() {
                         var me = this,
                             grid = me.up('#storage').down('#configuration'),
                             form = me.getForm();
-                        grid.getSelectionModel().on('focuschange', function(gridSelModel) {
-                            if (gridSelModel.lastFocused && (gridSelModel.lastFocused.get('status') == 'Pending create' || gridSelModel.lastFocused.get('status') == '')) {
-                                if (gridSelModel.lastFocused !== form.getRecord()) {
-                                    me.loadRecord(gridSelModel.lastFocused);
+                        grid.getSelectionModel().on('focuschange', function(gridSelModel, oldFocused, newFocused) {
+                            if (oldFocused != newFocused) {
+                                if (newFocused && (newFocused.get('status') == 'Pending create' || newFocused.get('status') == '')) {
+                                    if (newFocused !== form.getRecord()) {
+                                        me.loadRecord(newFocused);
+                                    }
+                                } else {
+                                    me.deselectRecord();
                                 }
-                            } else {
-                                me.deselectRecord();
                             }
                         });
                         form.getFields().each(function(){
@@ -393,15 +451,12 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.storage', function (moduleTabParams) 
                     var form = this.getForm();
                     this.setVisible(false);
                     this.suspendLiveUpdate++;
-                    form.reset();
-                    if (form._record) {
-                        delete form._record;//todo: replace with .getForm().reset(true) in latest extjs
-                    }
+                    form.reset(true);
                     this.suspendLiveUpdate--;
 
                 },
                 isSettingsField: function(name) {
-                    return name.indexOf('ebs') === 0 || name.indexOf('raid') === 0 || name.indexOf('csvol') === 0 || name.indexOf('cinder') === 0;
+                    return name.indexOf('ebs') === 0 || name.indexOf('raid') === 0 || name.indexOf('csvol') === 0 || name.indexOf('cinder') === 0 || name.indexOf('gce_persistent') === 0;
                 },
                 updateSettings: function() {
                     var me = this,
@@ -425,11 +480,7 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.storage', function (moduleTabParams) 
                         var conf = me.up('#storage').down('#configuration');
                         if (!record.store) {
                             conf.store.add(record);
-                            conf.getView().focusRow(record);
-                            conf.getSelectionModel().setLastFocused(record);
-                        } else {
-                            conf.getSelectionModel().lastFocused = null;//we lost row focus after record update for unknwo reason
-                            conf.getSelectionModel().setLastFocused(record);
+                            conf.getSelectionModel().setLastFocused(record, true);
                         }
                     }
                 },
@@ -464,24 +515,36 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.storage', function (moduleTabParams) 
                                     ebsSnapshots = editor.down('[name="ebs.snapshot"]'),
                                     raid = editor.down('#raid_settings'),
                                     csvol = editor.down('#csvol_settings'),
-									cinder = editor.down('#cinder_settings');
+									cinder = editor.down('#cinder_settings'),
+									gce = editor.down('#gce_settings'),
+                                    field;
 
                                 ebs[ value == 'ebs' || value == 'raid.ebs' ? 'show' : 'hide' ]();
                                 ebs[ value == 'ebs' || value == 'raid.ebs' ? 'enable' : 'disable' ]();
                                 ebsSnapshots[ value == 'ebs' ? 'show' : 'hide' ]();
                                 
-								raid[ value == 'raid.ebs' || value == 'raid.csvol' || value == 'raid.cinder' ? 'show' : 'hide' ]();
-                                raid[ value == 'raid.ebs' || value == 'raid.csvol' || value == 'raid.cinder' ? 'enable' : 'disable' ]();
+								raid[ value == 'raid.ebs' || value == 'raid.csvol' || value == 'raid.cinder' || value == 'raid.gce_pd' ? 'show' : 'hide' ]();
+                                raid[ value == 'raid.ebs' || value == 'raid.csvol' || value == 'raid.cinder' || value == 'raid.gce_pd' ? 'enable' : 'disable' ]();
                                 
 								csvol[ value == 'csvol' || value == 'raid.csvol' ? 'show' : 'hide' ]();
                                 csvol[ value == 'csvol' || value == 'raid.csvol' ? 'enable' : 'disable' ]();
 								
 								cinder[ value == 'cinder' || value == 'raid.cinder' ? 'show' : 'hide' ]();
                                 cinder[ value == 'cinder' || value == 'raid.cinder' ? 'enable' : 'disable' ]();
+								
+								gce[ value == 'gce_persistent' || value == 'raid.gce_pd' ? 'show' : 'hide' ]();
+                                gce[ value == 'gce_persistent' || value == 'raid.gce_pd' ? 'enable' : 'disable' ]();
 
-                                if (value == 'raid.ebs' || value == 'raid.csvol' || value == 'raid.cinder') {
+                                if (value == 'raid.ebs' || value == 'raid.csvol' || value == 'raid.cinder' || value == 'raid.gce_pd') {
                                     // set default values for raid configuration
                                     raid.down('[name="raid.level"]').setValue('10');
+                                }
+                                
+                                if ( value === 'csvol' || value === 'raid.csvol') {
+                                    field = editor.down('[name="csvol.disk_offering_id"]');
+                                    if (!field.getValue()) {
+                                        field.setValue(field.store.first());
+                                    }
                                 }
                             }
                         }
@@ -511,7 +574,7 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.storage', function (moduleTabParams) 
                             boxLabel: 'Re-use'
                         }, {
                             xtype: 'displayinfofield',
-                            value: "If re-use is checked, volume will be always re-attached to the replaced server. If it's not checked during server replacement new volume will be created according to the settings and old one will be removed.",
+                            value: "If an instance is terminated, reattach this same volume to the replacement server",
                             margin: '0 0 0 5'
                         }]
                     }, {
@@ -523,11 +586,12 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.storage', function (moduleTabParams) 
                             boxLabel: 'Regenerate storage if missing volumes'
                         }, {
                             xtype: 'displayinfofield',
-                            value: "If this checkbox checked and scalr will find that volume(s) are missed, storage will be re-created from scratch based on configuration",
+                            value: "If Scalr detects any missing volumes, regenerate this storage from scratch (based on configuration)",
                             margin: '0 0 0 5'
                         }]
                     }, {
                         xtype: 'container',
+                        itemId: 'mountCt',
                         layout: {
                             type: 'hbox',
                             align: 'middle'
@@ -561,21 +625,13 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.storage', function (moduleTabParams) 
                 }, {
                     xtype:'fieldset',
                     itemId: 'raid_settings',
-                    style: 'padding-top:0',
+                    title: 'RAID settings',
                     defaults: {
                         labelWidth: 110,
                         anchor: '100%',
                         maxWidth: 480
                     },
                     items: [{
-                        xtype: 'component',
-                        cls: 'x-fieldset-delimiter',
-                        maxWidth: null
-                    },{
-                        xtype: 'label',
-                        cls: 'x-fieldset-subheader',
-                        text: 'RAID settings'
-                    },{
                         xtype: 'container',
                         layout: {
                             type: 'hbox',
@@ -638,7 +694,7 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.storage', function (moduleTabParams) 
                             name: 'raid.volumes_count',
                             disabled: true,
                             editable: false,
-                            width: 45,
+                            width: 50,
                             store: {
                                 fields: [ 'id', 'name'],
                                 proxy: 'object'
@@ -656,21 +712,13 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.storage', function (moduleTabParams) 
                 }, {
                     xtype:'fieldset',
                     itemId: 'ebs_settings',
+                    title: 'Volume settings',
                     defaults: {
                         labelWidth: 110,
                         anchor: '100%',
                         maxWidth: 480
                     },
-                    style: 'padding-top:0',
                     items: [{
-                        xtype: 'component',
-                        cls: 'x-fieldset-delimiter',
-                        maxWidth: null
-                    },{
-                        xtype: 'label',
-                        cls: 'x-fieldset-subheader',
-                        text: 'Volume settings'
-                    }, {
                         xtype: 'textfield',
                         name: 'ebs.size',
                         fieldLabel: 'Size (GB)',
@@ -750,12 +798,22 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.storage', function (moduleTabParams) 
                         emptyText: 'Create an empty volume',
                         valueField: 'snapshotId',
                         displayField: 'snapshotId',
-                        queryMode: 'local',
                         anchor: '100%',
                         matchFieldWidth: true,
+
+                        restoreValueOnBlur: true,
+                        queryCaching: false,
+                        minChars: 0,
+                        queryDelay: 10,
                         store: {
                             fields: [ 'snapshotId', 'createdDate', 'size', 'volumeId', 'description' ],
-                            proxy: 'object'
+                            proxy: {
+                                type: 'cachedrequest',
+                                crscope: 'farmbuilder',
+                                url: '/platforms/ec2/xGetSnapshots',
+                                filterFields: ['snapshotId', 'volumeId', 'description'],//fliterFn
+                                prependData: [{}]//Create an empty volume
+                            }
                         },
                         listConfig: {
                             cls: 'x-boundlist-alt',
@@ -767,59 +825,55 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.storage', function (moduleTabParams) 
                                         '<div style="font-style: italic; font-size: 11px;">{description}</div>' +
                                     '<tpl else><div style="line-height: 26px;">Create an empty volume</div></tpl>' +
                                 '</div></tpl>'
-                        },
-                        filterFn: function(queryString, item) {
-                            var value = new RegExp(queryString);
-                            return (
-                                value.test(item.get('snapshotId')) ||
-                                    value.test(item.get('volumeId')) ||
-                                    value.test(item.get('description'))
-                                ) ? true : false;
-                        },
-                        listeners: {
-                            expand: function() {
-                                var me = this;
-                                if (me.cloudLocation != me.loadedCloudLocation) {
-                                    me.collapse();
-                                    me.store.removeAll();
-                                    me.up('#farmbuilder').cache.load(
-                                        {
-                                            url: '/platforms/ec2/xGetSnapshots',
-                                            params: {
-                                                cloudLocation: me.cloudLocation
-                                            }
-                                        },
-                                        function(data, status) {
-                                            if (!status) return;
-                                            me.loadedCloudLocation = me.cloudLocation;
-                                            me.store.loadData([{instanceId: ''}]);
-                                            me.store.loadData(data || [], true);
-                                            me.forceSelection = true;
-                                            me.expand();
-                                        },
-                                        this,
-                                        0
-                                    );
-                                }
-                            }
                         }
                     }]
                 }, {
                     xtype:'fieldset',
                     itemId: 'csvol_settings',
+                    title: 'Volume settings',
                     defaults: {
                         labelWidth: 100,
                         width: 300
                     },
-                    style: 'padding-top:0',
                     items: [{
-                        xtype: 'component',
-                        cls: 'x-fieldset-delimiter',
-                        maxWidth: null
-                    },{
-                        xtype: 'label',
-                        cls: 'x-fieldset-subheader',
-                        text: 'Volume settings'
+                        xtype: 'combo',
+                        anchor: '100%',
+                        maxWidth: 480,
+                        name: 'csvol.disk_offering_id',
+                        fieldLabel: 'Disk offering',
+                        editable: false,
+                        store: {
+                            fields: [ 'id', 'name' , 'type', {name: 'size', type: 'int'}, 'custom_size', {name: 'fullname', convert: function(v, record){return record.data.name + (record.data.type ? ' (' + record.data.type + ')' : '');}}],
+                            proxy: 'object',
+                            sortOnFilter: true,
+                            sortOnLoad: true,
+                            sorters: [{
+                                property: 'size',
+                                direction: 'ASC'
+                            }]
+                        },
+                        queryMode: 'local',
+                        valueField: 'id',
+                        displayField: 'fullname',
+                        allowBlank: false,
+                        labelWidth: 110,
+                        listeners: {
+                            change: function(field, value){
+                                var record = field.findRecordByValue(value),
+                                    csvol = field.up('#csvol_settings'),
+                                    sizeField = csvol.down('[name="csvol.size"]'),
+                                    typeField = csvol.down('[name="csvol.disk_offering_type"]'),
+                                    customSize = record ? record.get('custom_size') : false;
+                                sizeField.setValue(record ? record.get('size') || 1 : null);
+                                sizeField.setReadOnly(!customSize);
+                                typeField.setValue(customSize ? 'custom' : 'fixed');
+                                if (record && record.get('type') === 'local') {
+                                    this.up('#editor').down('[name="reUse"]').setValue(0).setReadOnly(true);
+                                } else {
+                                    this.up('#editor').down('[name="reUse"]').setReadOnly(false);
+                                }
+                            }
+                        }
                     },{
                         xtype: 'container',
                         layout: {
@@ -829,8 +883,8 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.storage', function (moduleTabParams) 
                         items: [{
                             xtype: 'textfield',
                             fieldLabel: 'Size',
-                            labelWidth: 50,
-                            maxWidth: 110,
+                            labelWidth: 110,
+                            maxWidth: 160,
                             name: 'csvol.size',
                             allowBlank: false
                         },{
@@ -838,24 +892,55 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.storage', function (moduleTabParams) 
                             text: 'GB',
                             margin: '0 0 0 6'
                         }]
+                    },{
+                        xtype: 'hidden',
+                        name: 'csvol.disk_offering_type'
+                    }, {
+                        xtype: 'combo',
+                        fieldLabel: 'Snapshot',
+                        name: 'csvol.snapshot_id',
+                        emptyText: 'Create an empty volume',
+                        valueField: 'snapshotId',
+                        displayField: 'snapshotId',
+                        labelWidth: 110,
+                        anchor: '100%',
+                        maxWidth: 480,
+                        matchFieldWidth: true,
+
+                        restoreValueOnBlur: true,
+                        queryCaching: false,
+                        minChars: 0,
+                        queryDelay: 10,
+                        store: {
+                            fields: [ 'snapshotId', 'createdAt', 'volumeType', 'volumeId' ],
+                            proxy: {
+                                type: 'cachedrequest',
+                                crscope: 'farmbuilder',
+                                url: '/tools/cloudstack/snapshots/xGetSnapshots',
+                                filterFields: ['snapshotId', 'volumeId'],//fliterFn
+                                prependData: [{}]//Create an empty volume
+                            }
+                        },
+                        listConfig: {
+                            cls: 'x-boundlist-alt',
+                            tpl:
+                                '<tpl for="."><div class="x-boundlist-item" style="height: auto; width: auto">' +
+                                    '<tpl if="snapshotId">' +
+                                    '<div style="font-weight: bold">{snapshotId} ({volumeType})</div>' +
+                                    '<div>created <span style="font-weight: bold">{createdAt}</span> on <span style="font-weight: bold">{volumeId}</span></div>' +
+                                    '<tpl else><div style="line-height: 26px;">Create an empty volume</div></tpl>' +
+                                    '</div></tpl>'
+                        }
                     }]
                 }, {
                     xtype:'fieldset',
                     itemId: 'cinder_settings',
+                    title: 'Volume settings',
                     defaults: {
                         labelWidth: 100,
                         width: 300
                     },
-                    style: 'padding-top:0',
                     items: [{
-                        xtype: 'component',
-                        cls: 'x-fieldset-delimiter',
-                        maxWidth: null
-                    },{
-                        xtype: 'label',
-                        cls: 'x-fieldset-subheader',
-                        text: 'Volume settings'
-                    },{
                         xtype: 'container',
                         layout: {
                             type: 'hbox',
@@ -867,6 +952,33 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.storage', function (moduleTabParams) 
                             labelWidth: 50,
                             maxWidth: 110,
                             name: 'cinder.size',
+                            allowBlank: false
+                        },{
+                            xtype: 'label',
+                            text: 'GB',
+                            margin: '0 0 0 6'
+                        }]
+                    }]
+                }, {
+                    xtype:'fieldset',
+                    itemId: 'gce_settings',
+                    title: 'Volume settings',
+                    defaults: {
+                        labelWidth: 100,
+                        width: 300
+                    },
+                    items: [{
+                        xtype: 'container',
+                        layout: {
+                            type: 'hbox',
+                            align: 'middle'
+                        },
+                        items: [{
+                            xtype: 'textfield',
+                            fieldLabel: 'Size',
+                            labelWidth: 50,
+                            maxWidth: 110,
+                            name: 'gce_persistent.size',
                             allowBlank: false
                         },{
                             xtype: 'label',

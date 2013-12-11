@@ -1,4 +1,4 @@
-<?
+<?php
     final class EC2_EBS_ATTACH_STATUS
     {
         const AVAILABLE 			= 'available';

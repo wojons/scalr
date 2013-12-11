@@ -102,6 +102,7 @@ class Modules_Platforms_Ec2_Helpers_Eip
             SELECT * FROM elastic_ips
             WHERE farmid=?
             AND ((farm_roleid=? AND instance_index=?) OR server_id = ?)
+            LIMIT 1
         ", array(
             $dbServer->farmId,
             $dbFarmRole->ID,
@@ -218,7 +219,7 @@ class Modules_Platforms_Ec2_Helpers_Eip
     {
         $db = \Scalr::getDb();
         $DBFarm = $DBFarmRole->GetFarmObject();
-        $DBFarmRole->SetSetting(DBFarmRole::SETTING_AWS_ELASIC_IPS_MAP, null);
+        $DBFarmRole->SetSetting(DBFarmRole::SETTING_AWS_ELASIC_IPS_MAP, null, DBFarmRole::TYPE_LCL);
 
         $isVPC = $DBFarm->GetSetting(DBFarm::SETTING_EC2_VPC_ID);
 
@@ -261,8 +262,7 @@ class Modules_Platforms_Ec2_Helpers_Eip
 
                 try {
                     $dbServer = DBServer::LoadByFarmRoleIDAndIndex($DBFarmRole->ID, $serverIndex);
-                } catch (Exception $e) {
-                }
+                } catch (Exception $e) {}
 
                 // Allocate new IP if needed
                 if (!$ipAddress || $ipAddress == '0.0.0.0') {
@@ -286,69 +286,74 @@ class Modules_Platforms_Ec2_Helpers_Eip
                     $serverIndex
                 ));
 
-                //Remove old IP association
-                $db->Execute("
-                    DELETE FROM elastic_ips
-                    WHERE ipaddress=?
-                ", array(
-                    $ipAddress
-                ));
-
-                if (!$allocationId && $isVPC) {
-                    $allocationId = $aws->ec2->address->describe($ipAddress)->get(0)->allocationId;
-                }
-
-                // Associate IP with server in our db
-                $db->Execute("
-                    INSERT INTO elastic_ips
-                    SET env_id=?,
-                        farmid=?,
-                        farm_roleid=?,
-                        ipaddress=?,
-                        state='0',
-                        instance_id='',
-                        clientid=?,
-                        instance_index=?,
-                        allocation_id=?
-                ", array(
-                    $DBFarm->EnvID,
-                    $DBFarmRole->FarmID,
-                    $DBFarmRole->ID,
-                    $ipAddress,
-                    $DBFarm->ClientID,
-                    $serverIndex,
-                    $allocationId
-                ));
-
-                // Associate IP on AWS with running server
-                try {
-                    $dbServer = DBServer::LoadByFarmRoleIDAndIndex($DBFarmRole->ID, $serverIndex);
-
+                if ($ipAddress) {
+                    //Remove old IP association
                     $db->Execute("
-                        UPDATE elastic_ips
-                        SET state='1',
-                            server_id = ?
-                        WHERE ipaddress = ?
+                        DELETE FROM elastic_ips
+                        WHERE ipaddress=?
                     ", array(
-                        $dbServer->serverId,
                         $ipAddress
                     ));
 
-                    $update = false;
+                    if (!$allocationId && $isVPC) {
+                        $allocationId = $aws->ec2->address->describe($ipAddress)->get(0)->allocationId;
+                    }
 
-                    if ($dbServer->remoteIp != $ipAddress) {
-                        if ($dbServer && $dbServer->status == SERVER_STATUS::RUNNING) {
-                            $fireEvent = self::associateIpAddress($dbServer, $ipAddress, ($isVPC) ? $allocationId : null);
+                    // Associate IP with server in our db
+                    $db->Execute("
+                        INSERT INTO elastic_ips
+                        SET env_id=?,
+                            farmid=?,
+                            farm_roleid=?,
+                            ipaddress=?,
+                            state='0',
+                            instance_id='',
+                            clientid=?,
+                            instance_index=?,
+                            allocation_id=?
+                    ", array(
+                        $DBFarm->EnvID,
+                        $DBFarmRole->FarmID,
+                        $DBFarmRole->ID,
+                        $ipAddress,
+                        $DBFarm->ClientID,
+                        $serverIndex,
+                        $allocationId
+                    ));
+
+                    // Associate IP on AWS with running server
+                    try {
+                        $dbServer = DBServer::LoadByFarmRoleIDAndIndex($DBFarmRole->ID, $serverIndex);
+
+                        $db->Execute("
+                            UPDATE elastic_ips
+                            SET state='1',
+                                server_id = ?
+                            WHERE ipaddress = ?
+                        ", array(
+                            $dbServer->serverId,
+                            $ipAddress
+                        ));
+
+                        $update = false;
+
+                        if ($dbServer->remoteIp != $ipAddress) {
+                            if ($dbServer && $dbServer->status == SERVER_STATUS::RUNNING) {
+                                $fireEvent = self::associateIpAddress($dbServer, $ipAddress, ($isVPC) ? $allocationId : null);
+                            }
                         }
-                    }
 
-                    if ($fireEvent) {
-                        $event = new IPAddressChangedEvent($dbServer, $ipAddress, $dbServer->localIp);
-                        Scalr::FireEvent($dbServer->farmId, $event);
-                    }
-                } catch (Exception $e) {
+                        if ($fireEvent) {
+                            $event = new IPAddressChangedEvent($dbServer, $ipAddress, $dbServer->localIp);
+                            Scalr::FireEvent($dbServer->farmId, $event);
+                        }
+                    } catch (Exception $e) {}
+                } else {
+                    Logger::getLogger(LOG_CATEGORY::FARM)->fatal(sprintf(
+                        _("Cannot allocate elastic ip address for instance %s on farm %s (2)"),
+                        $dbServer->serverId, $DBFarm->Name
+                    ));
                 }
-
             }
         }
     }

@@ -33,7 +33,7 @@ Scalr.regPage('Scalr.ui.servers.messages', function (loadParams, moduleParams) {
 		columns:[
 			{ header: "Message ID", flex: 1, dataIndex: 'messageid', sortable: true },
 			{ header: "Message type", width: 150, dataIndex: 'message_type', xtype: 'templatecolumn', tpl:'{type} / {message_type}', sortable: false },
-			{ header: "Server ID", flex: 1, dataIndex: 'server_id', xtype: 'templatecolumn', tpl:'<a href="#/servers/{server_id}/extendedInfo">{server_id}</a>', sortable: true },
+			{ header: "Server ID", flex: 1, dataIndex: 'server_id', xtype: 'templatecolumn', tpl:'<a href="#/servers/{server_id}/dashboard">{server_id}</a>', sortable: true },
 			{ header: "Status", width: 100, dataIndex: 'status', sortable: true, xtype: 'templatecolumn', tpl:
 				'<tpl if="status == 1"><span style="color:green;">Delivered</span></tpl>'+
 				'<tpl if="status == 0"><span style="color:orange;">Delivering...</span></tpl>'+

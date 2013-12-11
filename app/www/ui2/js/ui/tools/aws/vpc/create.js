@@ -1,6 +1,5 @@
 Scalr.regPage('Scalr.ui.tools.aws.vpc.create', function (loadParams, moduleParams) {
 	var form = Ext.create('Ext.form.Panel', {
-		bodyCls: 'x-panel-body-frame',
 		title: 'Create VPC',
 		fieldDefaults: {
 			anchor: '100%'
@@ -12,7 +11,7 @@ Scalr.regPage('Scalr.ui.tools.aws.vpc.create', function (loadParams, moduleParam
         defaults: {
             labelWidth: 120
         },
-        bodyPadding: '18 18 8',
+        bodyCls: 'x-container-fieldset',
 		items: [{
             xtype: 'displayfield',
             name: 'cloudLocation',
@@ -41,7 +40,7 @@ Scalr.regPage('Scalr.ui.tools.aws.vpc.create', function (loadParams, moduleParam
 		dockedItems: [{
 			xtype: 'container',
 			dock: 'bottom',
-			cls: 'x-docked-bottom-frame',
+			cls: 'x-docked-buttons',
 			layout: {
 				type: 'hbox',
 				pack: 'center'
@@ -69,7 +68,6 @@ Scalr.regPage('Scalr.ui.tools.aws.vpc.create', function (loadParams, moduleParam
 				}
 			}, {
 				xtype: 'button',
-				margin: '0 0 0 5',
 				text: 'Cancel',
 				handler: function() {
 					Scalr.event.fireEvent('close');

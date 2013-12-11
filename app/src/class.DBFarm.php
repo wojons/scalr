@@ -16,6 +16,11 @@ class DBFarm
     const SETTING_EC2_VPC_REGION            = 'ec2.vpc.region';
     const SETTING_EC2_VPC_ID                = 'ec2.vpc.id';
 
+    const SETTING_LEASE_STATUS              = 'lease.status';
+    const SETTING_LEASE_TERMINATE_DATE      = 'lease.terminate.date';
+    const SETTING_LEASE_EXTEND_CNT          = 'lease.extend.cnt';
+    const SETTING_LEASE_NOTIFICATION_SEND   = 'lease.notification.send';
+
     const SETTING_TIMEZONE                  = 'timezone';
 
     public
@@ -117,11 +122,25 @@ class DBFarm
         $definition = $this->getDefinition();
 
         if (!$name) {
-            if (!stristr($definition->name, "(clone"))
-                $name = $definition->name . ' (clone #1)';
+            $template = "";
+            if (!stristr($definition->name, "clone")) {
+                $template = $definition->name . ' (clone #%s)';
+                $i = 1;
+            }
             else {
                 preg_match("/^(.*?)\(clone \#([0-9]*)\)$/si", $definition->name, $matches);
-                $name = trim($matches[1])." (clone #".($matches[2]+1).")";
+                $template = trim($matches[1])." (clone #%s)";
+                $i = $matches[2]+1;
+            }
+
+            while (true) {
+                $name = sprintf($template, $i);
+                if (!$this->DB->GetOne("SELECT id FROM farms WHERE name = ? AND env_id = ? LIMIT 1", array($name, $this->EnvID))) {
+                    break;
+                }
+                else {
+                    $i++;
+                }
             }
         }
 
@@ -130,20 +149,34 @@ class DBFarm
         $dbFarm->createdByUserId = $user->id;
         $dbFarm->createdByUserEmail = $user->getEmail();
 
+        $dbFarm->SetSetting(DBFarm::SETTING_TIMEZONE, $definition->settings[DBFarm::SETTING_TIMEZONE]);
+        $dbFarm->SetSetting(DBFarm::SETTING_EC2_VPC_ID, $definition->settings[DBFarm::SETTING_EC2_VPC_ID]);
+        $dbFarm->SetSetting(DBFarm::SETTING_EC2_VPC_REGION, $definition->settings[DBFarm::SETTING_EC2_VPC_REGION]);
+        $dbFarm->SetSetting(DBFarm::SETTING_SZR_UPD_REPOSITORY, $definition->settings[DBFarm::SETTING_SZR_UPD_REPOSITORY]);
+        $dbFarm->SetSetting(DBFarm::SETTING_SZR_UPD_SCHEDULE, $definition->settings[DBFarm::SETTING_SZR_UPD_SCHEDULE]);
+
+        $variables = new Scalr_Scripting_GlobalVariables($envId, Scalr_Scripting_GlobalVariables::SCOPE_FARM);
+        $variables->setValues($definition->globalVariables, 0, $dbFarm->ID, 0);
+
         foreach($definition->roles as $index => $role) {
-            $dbFarmRole = $dbFarm->AddRole(DBRole::loadById($role->roleId), $role->platform, $role->cloudLocation, $index+1);
+            $dbFarmRole = $dbFarm->AddRole(DBRole::loadById($role->roleId), $role->platform, $role->cloudLocation, $index+1, $role->alias);
             $oldRoleSettings = $dbFarmRole->GetAllSettings();
             $dbFarmRole->applyDefinition($role, true);
+            $newSettings = $dbFarmRole->GetAllSettings();
 
-            Scalr_Helpers_Dns::farmUpdateRoleSettings($dbFarmRole, $oldRoleSettings, $dbFarmRole->GetAllSettings());
+            Scalr_Helpers_Dns::farmUpdateRoleSettings($dbFarmRole, $oldRoleSettings, $newSettings);
 
             /**
              * Platfrom specified updates
              */
             if ($dbFarmRole->Platform == SERVER_PLATFORMS::EC2) {
-                Modules_Platforms_Ec2_Helpers_Ebs::farmUpdateRoleSettings($dbFarmRole, $oldRoleSettings, $dbFarmRole->GetAllSettings());
-                Modules_Platforms_Ec2_Helpers_Eip::farmUpdateRoleSettings($dbFarmRole, $oldRoleSettings, $dbFarmRole->GetAllSettings());
-                Modules_Platforms_Ec2_Helpers_Elb::farmUpdateRoleSettings($dbFarmRole, $oldRoleSettings, $dbFarmRole->GetAllSettings());
+                Modules_Platforms_Ec2_Helpers_Ebs::farmUpdateRoleSettings($dbFarmRole, $oldRoleSettings, $newSettings);
+                Modules_Platforms_Ec2_Helpers_Eip::farmUpdateRoleSettings($dbFarmRole, $oldRoleSettings, $newSettings);
+                Modules_Platforms_Ec2_Helpers_Elb::farmUpdateRoleSettings($dbFarmRole, $oldRoleSettings, $newSettings);
+            }
+
+            if (in_array($dbFarmRole->Platform, array(SERVER_PLATFORMS::IDCF, SERVER_PLATFORMS::CLOUDSTACK))) {
+                Modules_Platforms_Cloudstack_Helpers_Cloudstack::farmUpdateRoleSettings($dbFarmRole, $oldRoleSettings, $newSettings);
             }
 
             $dbFarmRolesList[] = $dbFarmRole;
@@ -168,10 +201,19 @@ class DBFarm
     {
         $farmDefinition = new stdClass();
         $farmDefinition->name = $this->Name;
+
+        // Farm Roles
         $farmDefinition->roles = array();
         foreach ($this->GetFarmRoles() as $dbFarmRole) {
             $farmDefinition->roles[] = $dbFarmRole->getDefinition();
         }
+
+        //Farm Global Variables
+        $variables = new Scalr_Scripting_GlobalVariables($this->EnvID, Scalr_Scripting_GlobalVariables::SCOPE_FARM);
+        $farmDefinition->globalVariables = $variables->getValues(0, $this->ID, 0);
+
+        //Farm Settings
+        $farmDefinition->settings = $this->GetAllSettings();
 
         return $farmDefinition;
     }
@@ -194,7 +236,7 @@ class DBFarm
      */
     public function GetFarmRoleByRoleID($role_id)
     {
-        $db_role = $this->DB->GetRow("SELECT id FROM farm_roles WHERE farmid=? AND role_id=?", array($this->ID, $role_id));
+        $db_role = $this->DB->GetRow("SELECT id FROM farm_roles WHERE farmid=? AND role_id=? LIMIT 1", array($this->ID, $role_id));
         if (!$db_role)
             throw new Exception(sprintf(_("Role #%s not assigned to farm #%"), $role_id, $this->ID));
 
@@ -208,7 +250,7 @@ class DBFarm
      */
     public function GetFarmRoleByBehavior($behavior)
     {
-        $farmRoleId = $this->DB->GetOne("SELECT id FROM farm_roles WHERE role_id IN (SELECT role_id FROM role_behaviors WHERE behavior=?) AND farmid=?",
+        $farmRoleId = $this->DB->GetOne("SELECT id FROM farm_roles WHERE role_id IN (SELECT role_id FROM role_behaviors WHERE behavior=?) AND farmid=? LIMIT 1",
             array($behavior, $this->ID)
         );
 
@@ -231,7 +273,7 @@ class DBFarm
 
     public function GetMySQLInstances($only_master = false, $only_slaves = false)
     {
-        $mysql_farm_role_id = $this->DB->GetOne("SELECT id FROM farm_roles WHERE role_id IN (SELECT role_id FROM role_behaviors WHERE behavior=?) AND farmid=?",
+        $mysql_farm_role_id = $this->DB->GetOne("SELECT id FROM farm_roles WHERE role_id IN (SELECT role_id FROM role_behaviors WHERE behavior=?) AND farmid=? LIMIT 1",
             array(ROLE_BEHAVIORS::MYSQL, $this->ID)
         );
         if ($mysql_farm_role_id)
@@ -323,10 +365,14 @@ class DBFarm
      * @return DBFarmRole
      * @param DBRole $DBRole
      */
-    public function AddRole(DBRole $DBRole, $platform, $cloudLocation, $launchIndex)
+    public function AddRole(DBRole $DBRole, $platform, $cloudLocation, $launchIndex, $alias = "")
     {
+        if (empty($alias))
+            $alias = $DBRole->name;
+
         $this->DB->Execute("INSERT INTO farm_roles SET
-            farmid=?, role_id=?, reboot_timeout=?, launch_timeout=?, status_timeout = ?, launch_index = ?, platform = ?, cloud_location=?", array(
+            farmid=?, role_id=?, reboot_timeout=?, launch_timeout=?, status_timeout = ?,
+            launch_index = ?, platform = ?, cloud_location=?, `alias` = ?", array(
             $this->ID,
             $DBRole->id,
             300,
@@ -334,7 +380,8 @@ class DBFarm
             600,
             $launchIndex,
             $platform,
-            $cloudLocation
+            $cloudLocation,
+            $alias
         ));
 
         $farm_role_id = $this->DB->Insert_ID();
@@ -344,15 +391,11 @@ class DBFarm
         $DBFarmRole->RoleID = $DBRole->id;
         $DBFarmRole->Platform = $platform;
         $DBFarmRole->CloudLocation = $cloudLocation;
+        $DBFarmRole->Alias = $alias;
 
         $default_settings = array(
             DBFarmRole::SETTING_SCALING_MIN_INSTANCES => 1,
-            DBFarmRole::SETTING_SCALING_MAX_INSTANCES => 1,
-            DBFarmRole::SETTING_SCALING_POLLING_INTERVAL => 2,
-            DBFarmRole::SETTING_EXCLUDE_FROM_DNS => false,
-            DBFarmRole::SETTING_BALANCING_USE_ELB => false,
-            //DBFarmRole::SETTING_AWS_AVAIL_ZONE => 'x-scalr-diff',
-            DBFarmRole::SETTING_AWS_INSTANCE_TYPE => $DBRole->instanceType
+            DBFarmRole::SETTING_SCALING_MAX_INSTANCES => 1
         );
 
         foreach ($default_settings as $k => $v)
@@ -371,18 +414,26 @@ class DBFarm
     {
         $Reflect = new ReflectionClass($this);
         $consts = array_values($Reflect->getConstants());
-        if (in_array($name, $consts))
-        {
-            $this->DB->Execute("REPLACE INTO farm_settings SET `farmid`=?, `name`=?, `value`=?",
-                array($this->ID, $name, $value)
-            );
+        if (in_array($name, $consts)) {
+            //UNIQUE KEY `farmid_name` (`farmid`,`name`)
+            $this->DB->Execute("
+                INSERT INTO farm_settings
+                SET `farmid` = ?,
+                    `name`=?,
+                    `value`=?
+                ON DUPLICATE KEY UPDATE
+                    `value` = ?
+            ", array(
+                $this->ID, $name, $value,
+                $value,
+            ));
 
             $this->SettingsCache[$name] = $value;
-
-            return true;
-        }
-        else
+        } else {
             throw new Exception("Unknown farm setting '{$name}'");
+        }
+
+        return true;
     }
 
     /**
@@ -394,7 +445,7 @@ class DBFarm
     {
         if (!isset($this->SettingsCache[$name])) {
             $this->SettingsCache[$name] = $this->DB->GetOne("
-                SELECT `value` FROM `farm_settings` WHERE `farmid`=? AND `name` = ?
+                SELECT `value` FROM `farm_settings` WHERE `farmid`=? AND `name` = ? LIMIT 1
             ", array(
                 $this->ID,
                 $name
@@ -499,9 +550,9 @@ class DBFarm
     {
         if (!$this->ID) {
             $this->ID = 0;
-            $this->Hash = substr(md5(uniqid(rand(), true)),0, 14);
+            $this->Hash = substr(Scalr_Util_CryptoTool::hash(uniqid(rand(), true)),0, 14);
 
-            //Такой хуйни быть не должно. Убрать НАХУЙ Scalr_UI_Request отсюда!
+            //FIXME This is F*CKINK BULLSHIT! REMOVE Scalr_UI_Request From here.
             if (!$this->ClientID)
                 $this->ClientID = Scalr_UI_Request::getInstance()->getUser()->getAccountId();
 
@@ -509,7 +560,7 @@ class DBFarm
                 $this->EnvID = Scalr_UI_Request::getInstance()->getEnvironment()->id;
         }
 
-        if ($this->DB->GetOne('SELECT id FROM farms WHERE name = ? AND env_id = ? AND id != ?', array($this->Name, $this->EnvID, $this->ID)))
+        if ($this->DB->GetOne('SELECT id FROM farms WHERE name = ? AND env_id = ? AND id != ? LIMIT 1', array($this->Name, $this->EnvID, $this->ID)))
             throw new Exception('This name already used');
 
         if (!$this->ID)

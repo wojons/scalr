@@ -156,7 +156,6 @@ Scalr.regPage('Scalr.ui.tools.aws.ec2.cloudwatch.view', function (loadParams, mo
 	}
 	var panel = Ext.create('Ext.panel.Panel', {
 		title: 'Tools &raquo; Amazon Web Services &raquo; Cloud Watch Statistics ('+ title + loadParams['objectId'] + ')',
-		bodyCls: 'x-panel-body-frame',
 		layout: {
 			type: 'table',
 			columns: 2

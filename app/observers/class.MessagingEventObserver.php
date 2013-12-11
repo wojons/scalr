@@ -97,7 +97,7 @@ class MessagingEventObserver extends EventObserver
 
             $msg->replPassword = $dbFarmRole->GetSetting(DbFarmRole::SETTING_MYSQL_REPL_PASSWORD);
             $msg->rootPassword = $dbFarmRole->GetSetting(DbFarmRole::SETTING_MYSQL_ROOT_PASSWORD);
-            if ($newMasterServer->platform == SERVER_PLATFORMS::RACKSPACE || $newMasterServer->platform == SERVER_PLATFORMS::OPENSTACK) {
+            if ($newMasterServer->platform == SERVER_PLATFORMS::RACKSPACE || $newMasterServer->isOpenstack()) {
                 $msg->logPos = $dbFarmRole->GetSetting(DbFarmRole::SETTING_MYSQL_LOG_POS);
                 $msg->logFile = $dbFarmRole->GetSetting(DbFarmRole::SETTING_MYSQL_LOG_FILE);
 
@@ -118,17 +118,35 @@ class MessagingEventObserver extends EventObserver
     public function OnCustomEvent(CustomEvent $event)
     {
         $servers = DBFarm::LoadByID($this->FarmID)->GetServersByFilter(array('status' => array(SERVER_STATUS::INIT, SERVER_STATUS::RUNNING)));
-        foreach ((array)$servers as $DBServer)
-        {
-            $msg = new Scalr_Messaging_Msg();
-            $msg->setName($event->GetName());
-            $msg->setServerMetaData($event->DBServer);
 
-            $msg = Scalr_Scripting_Manager::extendMessage($msg, $event, $event->DBServer, $DBServer);
+        $event->messageServers = count($servers);
+        $event->processing = array();
 
-            // Send message ONLY if there are scripts assigned to this event
-            if (count($msg->scripts) > 0)
-                $DBServer->SendMessage($msg, false, true);
+        foreach ((array)$servers as $DBServer) {
+            try {
+                $startTime = microtime(true);
+
+                $msg = new Scalr_Messaging_Msg();
+                $msg->setName($event->GetName());
+                $msg->setServerMetaData($event->DBServer);
+
+                $msg = Scalr_Scripting_Manager::extendMessage($msg, $event, $event->DBServer, $DBServer);
+
+                $extendTime = microtime(true) - $startTime;
+
+                // Send message ONLY if there are scripts assigned to this event
+                if (count($msg->scripts) > 0)
+                    $DBServer->SendMessage($msg, false, true);
+
+                $endTime = microtime(true) - $startTime;
+
+                $event->processing[] = array($extendTime, $endTime, count($msg->scripts));
+                if (!$msg)
+                    throw new Exception("Empty MSG");
+
+            } catch (Exception $e) {
+                //TODO: Log this situation
+            }
         }
     }
 
@@ -257,11 +275,9 @@ class MessagingEventObserver extends EventObserver
         {
             $authSshKey = $event->DBServer->platform == SERVER_PLATFORMS::RACKSPACE ||
                 $event->DBServer->platform == SERVER_PLATFORMS::NIMBULA ||
-                $event->DBServer->platform == SERVER_PLATFORMS::CLOUDSTACK ||
-                $event->DBServer->platform == SERVER_PLATFORMS::IDCF ||
-                $event->DBServer->platform == SERVER_PLATFORMS::UCLOUD;
+                $event->DBServer->isCloudstack();
 
-            if($event->DBServer->platform == SERVER_PLATFORMS::OPENSTACK || $event->DBServer->platform == SERVER_PLATFORMS::RACKSPACENG_US || $event->DBServer->platform == SERVER_PLATFORMS::RACKSPACENG_UK) {
+            if($event->DBServer->isOpenstack()) {
                 $platform = PlatformFactory::NewPlatform($event->DBServer->platform);
                 $isKeyPairsSupported = $platform->getConfigVariable(Modules_Platforms_Openstack::EXT_KEYPAIRS_ENABLED, $event->DBServer->GetEnvironmentObject(), false);
                 if ($isKeyPairsSupported != 1)
@@ -300,8 +316,17 @@ class MessagingEventObserver extends EventObserver
 
         // Send broadcast HostInit
         $servers = DBFarm::LoadByID($this->FarmID)->GetServersByFilter(array('status' => array(SERVER_STATUS::INIT, SERVER_STATUS::RUNNING)));
+
+        $event->msgExpected = count($servers);
+
         foreach ((array)$servers as $DBServer)
         {
+
+            if (!$DBServer->IsSupported('0.5')) {
+                $event->msgExpected--;
+                continue;
+            }
+
             $hiMsg = new Scalr_Messaging_Msg_HostInit();
             $hiMsg->setServerMetaData($event->DBServer);
 
@@ -312,7 +337,10 @@ class MessagingEventObserver extends EventObserver
                     $hiMsg = $behavior->extendMessage($hiMsg, $event->DBServer);
             }
 
-            $DBServer->SendMessage($hiMsg, false, true);
+            $hiMsg = $DBServer->SendMessage($hiMsg, false, true);
+
+            if ($hiMsg->dbMessageId)
+                $event->msgCreated++;
         }
 
         // Send HostInitResponse to target server
@@ -403,32 +431,45 @@ class MessagingEventObserver extends EventObserver
 
             $msg = Scalr_Scripting_Manager::extendMessage($msg, $event, $event->DBServer, $DBServer);
 
-            $DBServer->SendMessage($msg);
+            $DBServer->SendMessage($msg, false, true);
         }
     }
 
     public function OnHostUp(HostUpEvent $event)
     {
         $servers = DBFarm::LoadByID($this->FarmID)->GetServersByFilter(array('status' => array(SERVER_STATUS::INIT, SERVER_STATUS::RUNNING)));
+
+        $event->msgExpected = count($servers);
+
         foreach ((array)$servers as $DBServer)
         {
-            $msg = new Scalr_Messaging_Msg_HostUp();
-            $msg->setServerMetaData($event->DBServer);
+            try {
+                $msg = new Scalr_Messaging_Msg_HostUp();
+                $msg->setServerMetaData($event->DBServer);
 
-            if ($event->DBServer->GetFarmRoleObject()->NewRoleID) {
-                $msg->roleName = DBRole::loadById($event->DBServer->GetFarmRoleObject()->NewRoleID)->name;
-            } else {
-                $msg->roleName = $event->DBServer->GetFarmRoleObject()->GetRoleObject()->name;
+                if ($event->DBServer->GetFarmRoleObject()->NewRoleID) {
+                    $msg->roleName = DBRole::loadById($event->DBServer->GetFarmRoleObject()->NewRoleID)->name;
+                } else {
+                    $msg->roleName = $event->DBServer->GetFarmRoleObject()->GetRoleObject()->name;
+                }
+
+                $msg = Scalr_Scripting_Manager::extendMessage($msg, $event, $event->DBServer, $DBServer);
+
+                if ($event->DBServer->farmRoleId != 0) {
+                    foreach (Scalr_Role_Behavior::getListForFarmRole($event->DBServer->GetFarmRoleObject()) as $behavior)
+                        $msg = $behavior->extendMessage($msg, $event->DBServer);
+                }
+
+                $msg = $DBServer->SendMessage($msg, false, true);
+
+                if ($msg->dbMessageId)
+                    $event->msgCreated++;
+                else
+                    throw new Exception("Empty MSG: {$DBServer->serverId} ({$event->DBServer->serverId})");
+
+            } catch (Exception $e) {
+                //TODO: Log this situation
             }
-
-            $msg = Scalr_Scripting_Manager::extendMessage($msg, $event, $event->DBServer, $DBServer);
-
-            if ($event->DBServer->farmRoleId != 0) {
-                foreach (Scalr_Role_Behavior::getListForFarmRole($event->DBServer->GetFarmRoleObject()) as $behavior)
-                    $msg = $behavior->extendMessage($msg, $event->DBServer);
-            }
-
-            $DBServer->SendMessage($msg, false, true);
         }
 
         if ($event->DBServer->GetProperty(SERVER_PROPERTIES::DB_MYSQL_MASTER) == 1 && $event->DBServer->IsSupported("0.7")) {
@@ -450,6 +491,13 @@ class MessagingEventObserver extends EventObserver
             $servers = $dbFarm->GetServersByFilter(array('status' => array(SERVER_STATUS::INIT, SERVER_STATUS::RUNNING, SERVER_STATUS::PENDING_TERMINATE)));
             foreach ($servers as $DBServer)
             {
+                // We don't need to send beforeHostTerminate event to all "Pending terminate" servers,
+                // only tu eventServer.
+                if ($DBServer->status == SERVER_STATUS::PENDING_TERMINATE) {
+                    if ($DBServer->serverId != $event->DBServer->serverId)
+                        continue;
+                }
+
                 $msg = new Scalr_Messaging_Msg_BeforeHostTerminate();
                 $msg->setServerMetaData($event->DBServer);
 
@@ -564,18 +612,15 @@ class MessagingEventObserver extends EventObserver
 
         $dbFarm = DBFarm::LoadByID($this->FarmID);
         $servers = $dbFarm->GetServersByFilter(array('status' => array(SERVER_STATUS::RUNNING)));
-        try
-        {
+        try {
             $DBFarmRole = $event->DBServer->GetFarmRoleObject();
             $is_synchronize = ($DBFarmRole->NewRoleID) ? true : false;
         }
-        catch(Exception $e)
-        {
+        catch(Exception $e) {
             $is_synchronize = false;
         }
 
-        try
-        {
+        try {
             $DBRole = DBRole::loadById($event->DBServer->roleId);
         }
         catch(Exception $e){}
@@ -584,8 +629,7 @@ class MessagingEventObserver extends EventObserver
 
         $first_in_role_handled = false;
         $first_in_role_server = null;
-        foreach ($servers as $DBServer)
-        {
+        foreach ($servers as $DBServer) {
             if (!($DBServer instanceof DBServer))
                 continue;
 
@@ -620,11 +664,14 @@ class MessagingEventObserver extends EventObserver
             $msg->serverId = $event->DBServer->serverId;
             $msg->cloudLocation = $event->DBServer->GetCloudLocation();
 
-            $msg = Scalr_Scripting_Manager::extendMessage($msg, $event, $event->DBServer, $DBServer);
+            // If FarmRole was removed from farm, no configuration left
+            if ($DBFarmRole) {
+                $msg = Scalr_Scripting_Manager::extendMessage($msg, $event, $event->DBServer, $DBServer);
 
-            if ($event->DBServer->farmRoleId != 0) {
-                foreach (Scalr_Role_Behavior::getListForRole(DBRole::loadById($event->DBServer->roleId)) as $behavior)
-                    $msg = $behavior->extendMessage($msg, $event->DBServer);
+                if ($event->DBServer->farmRoleId != 0) {
+                    foreach (Scalr_Role_Behavior::getListForRole(DBRole::loadById($event->DBServer->roleId)) as $behavior)
+                        $msg = $behavior->extendMessage($msg, $event->DBServer);
+                }
             }
 
             $DBServer->SendMessage($msg, false, true);
@@ -636,18 +683,15 @@ class MessagingEventObserver extends EventObserver
 
         }
 
-        try {
-            $event->DBServer->GetFarmRoleObject();
-        } catch (Exception $e) {
+        if (!$DBFarmRole)
             return;
-        }
 
 
-        if (!$doNotPromoteSlave2Master && !$DBFarmRole->GetSetting(Scalr_Db_Msr::SLAVE_TO_MASTER))
+        if ($DBFarmRole->GetRoleObject()->getDbMsrBehavior() && !$doNotPromoteSlave2Master && !$DBFarmRole->GetSetting(Scalr_Db_Msr::SLAVE_TO_MASTER))
             $this->sendPromoteToMasterMessage($event);
 
         //LEGACY MYSQL CODE:
-        if ($event->DBServer->GetFarmRoleObject()->GetRoleObject()->hasBehavior(ROLE_BEHAVIORS::MYSQL)) {
+        if ($DBFarmRole->GetRoleObject()->hasBehavior(ROLE_BEHAVIORS::MYSQL)) {
             // If EC2 master down
             if (($event->DBServer->GetProperty(SERVER_PROPERTIES::DB_MYSQL_MASTER)) &&
                 $DBFarmRole)

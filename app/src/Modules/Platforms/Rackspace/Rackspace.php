@@ -42,7 +42,6 @@ class Modules_Platforms_Rackspace implements IPlatformModule
             return array();
         }
 
-        //Eucalyptus locations defined by client. Admin cannot get them
         $db = \Scalr::getDb();
         $locations = $db->GetAll("SELECT DISTINCT(`group`) as `name` FROM client_environment_properties WHERE `name` = ? AND env_id = ?", array(
             self::API_KEY, $envId
@@ -298,11 +297,12 @@ class Modules_Platforms_Rackspace implements IPlatformModule
                 $launchOptions->serverType,
                 array(),
                 array(
-                    'path'		=> '/etc/scalr/private.d/.user-data',
+                    'path'		=> ($DBServer->osType == 'windows' ? 'C:\\Program Files\\Scalarizr\\etc\\private.d\\.user-data' : '/etc/scalr/private.d/.user-data'),
                     'contents'	=> base64_encode($launchOptions->userData)
                 )
             );
         } catch (Exception $e) {
+             //Logger::getLogger('RACKSPACE')->fatal(json_encode(array($rsClient->lastRequestBody, $rsClient->LastResponseHeaders, $rsClient->LastResponseBody)));
              throw new Exception(sprintf(_("Cannot launch new instance. %s (%s, %s)"), $e->getMessage(), $launchOptions->imageId, $launchOptions->serverType));
         }
 
@@ -321,8 +321,10 @@ class Modules_Platforms_Rackspace implements IPlatformModule
 
             return $DBServer;
         }
-        else
+        else {
+            //Logger::getLogger('RACKSPACE')->fatal(json_encode(array($rsClient->lastRequestBody, $rsClient->LastResponseHeaders, $rsClient->LastResponseBody)));
             throw new Exception(sprintf(_("Cannot launch new instance. %s (%s, %s)"), serialize($result), $launchOptions->imageId, $launchOptions->serverType));
+        }
     }
 
     public function PutAccessData(DBServer $DBServer, Scalr_Messaging_Msg $message)

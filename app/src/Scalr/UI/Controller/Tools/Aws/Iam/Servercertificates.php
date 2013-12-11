@@ -1,10 +1,12 @@
 <?php
+use Scalr\Acl\Acl;
 
 class Scalr_UI_Controller_Tools_Aws_Iam_ServerCertificates extends Scalr_UI_Controller
 {
-    public static function getPermissionDefinitions()
+
+    public function hasAccess()
     {
-        return array();
+        return parent::hasAccess() && $this->request->isAllowed(Acl::RESOURCE_AWS_IAM);
     }
 
     public function createAction()

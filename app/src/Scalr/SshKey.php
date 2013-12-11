@@ -32,8 +32,13 @@ class Scalr_SshKey extends Scalr_Model
         $cloudKeyName,
         $platform;
 
-    protected $privateKeyEnc,
-            $publicKeyEnc;
+    protected $privateKeyEnc;
+    protected $publicKeyEnc;
+
+    /**
+     * @var \DBFarm
+     */
+    private $dbFarm;
 
     /**
      *
@@ -43,6 +48,20 @@ class Scalr_SshKey extends Scalr_Model
         return parent::init();
     }
 
+    /**
+     * Gets DBFarm object
+     *
+     * @return \DBFarm
+     */
+    public function getFarmObject()
+    {
+        if (!$this->dbFarm && !empty($this->farmId)) {
+            $this->dbFarm = \DBFarm::LoadByID($this->farmId);
+        }
+
+        return $this->dbFarm;
+    }
+
     public function getFingerprint()
     {
         return "ab:ab:ab:ab";
@@ -50,7 +69,7 @@ class Scalr_SshKey extends Scalr_Model
 
     public function loadGlobalByName($name, $cloudLocation, $envId, $platform)
     {
-        $info = $this->db->GetRow("SELECT * FROM ssh_keys WHERE `cloud_key_name`=? AND (`cloud_location`=? || `cloud_location`='') AND `type`=? AND `env_id` = ? AND `platform` = ?",
+        $info = $this->db->GetRow("SELECT * FROM ssh_keys WHERE `cloud_key_name`=? AND (`cloud_location`=? || `cloud_location`='') AND `type`=? AND `env_id` = ? AND `platform` = ? LIMIT 1",
             array($name, $cloudLocation, self::TYPE_GLOBAL, $envId, $platform)
         );
         if (!$info)
@@ -61,7 +80,7 @@ class Scalr_SshKey extends Scalr_Model
 
     public function loadGlobalByFarmId($farmId, $cloudLocation, $platform)
     {
-        $info = $this->db->GetRow("SELECT * FROM ssh_keys WHERE `farm_id`=? AND (`cloud_location`=? OR `cloud_location` = '') AND `type`=? AND `platform` = ?",
+        $info = $this->db->GetRow("SELECT * FROM ssh_keys WHERE `farm_id`=? AND (`cloud_location`=? OR `cloud_location` = '') AND `type`=? AND `platform` = ? LIMIT 1",
             array($farmId, $cloudLocation, self::TYPE_GLOBAL, $platform)
         );
         if (!$info)
@@ -78,7 +97,7 @@ class Scalr_SshKey extends Scalr_Model
            2 => array("pipe", "w")
         );
 
-        $filePath = CACHEPATH."/_tmp.".md5($tmpFileContents);
+        $filePath = CACHEPATH."/_tmp.".Scalr_Util_CryptoTool::hash($tmpFileContents);
 
         if (!$readTmpFile)
         {

@@ -1,6 +1,5 @@
 Scalr.regPage('Scalr.ui.admin.accounts.edit', function (loadParams, moduleParams) {
 	var form = Ext.create('Ext.form.Panel', {
-		bodyCls: 'x-panel-body-frame',
 		width: 700,
 		title: 'Admin &raquo; Accounts &raquo; ' + (moduleParams['account']['id'] ? ('Edit &raquo; ' + moduleParams['account']['name']) : 'Create'),
 		fieldDefaults: {
@@ -60,7 +59,7 @@ Scalr.regPage('Scalr.ui.admin.accounts.edit', function (loadParams, moduleParams
 		dockedItems: [{
 			xtype: 'container',
 			dock: 'bottom',
-			cls: 'x-docked-bottom-frame',
+			cls: 'x-docked-buttons',
 			layout: {
 				type: 'hbox',
 				pack: 'center'
@@ -85,7 +84,6 @@ Scalr.regPage('Scalr.ui.admin.accounts.edit', function (loadParams, moduleParams
 				}
 			}, {
 				xtype: 'button',
-				margin: '0 0 0 5',
 				text: 'Cancel',
 				handler: function() {
 					Scalr.event.fireEvent('close');

@@ -9,6 +9,28 @@ namespace Scalr\Service\OpenStack\Type;
  */
 abstract class AbstractInitType
 {
+
+    /**
+     * ReflectionClass instance
+     *
+     * @var \ReflectionClass
+     */
+    private $reflection;
+
+    /**
+     * Gets reflection class object
+     *
+     * @return  \ReflectionClass Returns reflection class instance
+     */
+    public function getReflectionClass()
+    {
+        if (!isset($this->reflection)) {
+            $this->reflection = new \ReflectionClass(get_class($this));
+        }
+
+        return $this->reflection;
+    }
+
     /**
      * Initializes a new object of the class
      *

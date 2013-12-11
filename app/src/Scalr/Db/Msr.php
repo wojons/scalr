@@ -19,6 +19,7 @@ class Scalr_Db_Msr
 
     // For EPH storage
     const DATA_STORAGE_EPH_DISK = 'db.msr.data_storage.eph.disk';
+    const DATA_STORAGE_EPH_DISKS = 'db.msr.data_storage.eph.disks';
 
     // For Raid storage
     const DATA_STORAGE_RAID_LEVEL = 'db.msr.data_storage.raid.level';
@@ -83,17 +84,21 @@ class Scalr_Db_Msr
     {
         $dbFarmRole = $dbServer->GetFarmRoleObject();
 
-        $dbFarmRole->SetSetting(Scalr_Db_Msr::DATA_BACKUP_LAST_TS, time());
-        $dbFarmRole->SetSetting(Scalr_Db_Msr::DATA_BACKUP_IS_RUNNING, 0);
+        $dbFarmRole->SetSetting(Scalr_Db_Msr::DATA_BACKUP_LAST_TS, time(), DBFarmRole::TYPE_LCL);
+        $dbFarmRole->SetSetting(Scalr_Db_Msr::DATA_BACKUP_IS_RUNNING, 0, DBFarmRole::TYPE_LCL);
         //$dbFarmRole->SetSetting(Scalr_Db_Msr::DATA_BACKUP_SERVER_ID, "");
 
-        switch ($dbServer->platform) {
-            case SERVER_PLATFORMS::EC2:
-                $provider = 's3'; break;
-            case SERVER_PLATFORMS::RACKSPACE:
-                $provider = 'cf'; break;
-            default:
-                $provider = 'unknown'; break;
+        if (PlatformFactory::isOpenstack($dbServer->platform)) {
+            $provider = 'cf';
+        } else {
+            switch ($dbServer->platform) {
+                case SERVER_PLATFORMS::EC2:
+                    $provider = 's3'; break;
+                case SERVER_PLATFORMS::GCE:
+                    $provider = 'gcs'; break;
+                default:
+                    $provider = 'unknown'; break;
+            }
         }
 
         $backup = Scalr_Db_Backup::init();
@@ -109,10 +114,10 @@ class Scalr_Db_Msr
         if (isset($message->backupParts) && is_array($message->backupParts)) {
             foreach ($message->backupParts as $item) {
                 if (is_object($item) && $item->size) {
-                    $backup->addPart(str_replace(array("s3://", "cf://"), array("", ""), $item->path), $item->size);
+                    $backup->addPart(str_replace(array("s3://", "cf://", "gcs://", "swift://"), array("", "", "", ""), $item->path), $item->size);
                     $total = $total+(int)$item->size;
                 } else {
-                    $backup->addPart(str_replace(array("s3://", "cf://"), array("", ""), $item), 0);
+                    $backup->addPart(str_replace(array("s3://", "cf://", "gcs://", "swift://"), array("", "", "", ""), $item), 0);
                 }
             }
         }
@@ -126,8 +131,8 @@ class Scalr_Db_Msr
         $dbFarm = $dbServer->GetFarmObject();
         $dbFarmRole = $dbServer->GetFarmRoleObject();
 
-        $dbFarmRole->SetSetting(Scalr_Db_Msr::DATA_BUNDLE_LAST_TS, time());
-        $dbFarmRole->SetSetting(Scalr_Db_Msr::DATA_BUNDLE_IS_RUNNING, 0);
+        $dbFarmRole->SetSetting(Scalr_Db_Msr::DATA_BUNDLE_LAST_TS, time(), DBFarmRole::TYPE_LCL);
+        $dbFarmRole->SetSetting(Scalr_Db_Msr::DATA_BUNDLE_IS_RUNNING, 0, DBFarmRole::TYPE_LCL);
         //$dbFarmRole->SetSetting(Scalr_Db_Msr::DATA_BUNDLE_SERVER_ID, "");
 
         $dbSettings = $message->{$message->dbType};
@@ -154,15 +159,15 @@ class Scalr_Db_Msr
                 $dbFarmRole->SetSetting(Scalr_Db_Msr::SNAPSHOT_ID, $snapshot->id);
 
                 if ($message->dbType == self::DB_TYPE_MYSQL) {
-                       $dbFarmRole->SetSetting(Scalr_Db_Msr_Mysql::LOG_FILE, $dbSettings->logFile);
-                       $dbFarmRole->SetSetting(Scalr_Db_Msr_Mysql::LOG_POS, $dbSettings->logPos);
+                       $dbFarmRole->SetSetting(Scalr_Db_Msr_Mysql::LOG_FILE, $dbSettings->logFile, DBFarmRole::TYPE_LCL);
+                       $dbFarmRole->SetSetting(Scalr_Db_Msr_Mysql::LOG_POS, $dbSettings->logPos, DBFarmRole::TYPE_LCL);
                 }
                 elseif ($message->dbType == self::DB_TYPE_MYSQL2 || $message->dbType == self::DB_TYPE_PERCONA || $message->dbType == self::DB_TYPE_MARIADB) {
-                    $dbFarmRole->SetSetting(Scalr_Db_Msr_Mysql2::LOG_FILE, $dbSettings->logFile);
-                    $dbFarmRole->SetSetting(Scalr_Db_Msr_Mysql2::LOG_POS, $dbSettings->logPos);
+                    $dbFarmRole->SetSetting(Scalr_Db_Msr_Mysql2::LOG_FILE, $dbSettings->logFile, DBFarmRole::TYPE_LCL);
+                    $dbFarmRole->SetSetting(Scalr_Db_Msr_Mysql2::LOG_POS, $dbSettings->logPos, DBFarmRole::TYPE_LCL);
                 }
                 elseif ($message->dbType == self::DB_TYPE_POSTGRESQL) {
-                    $dbFarmRole->SetSetting(Scalr_Db_Msr_Postgresql::XLOG_LOCATION, $dbSettings->currentXlogLocation);
+                    $dbFarmRole->SetSetting(Scalr_Db_Msr_Postgresql::XLOG_LOCATION, $dbSettings->currentXlogLocation, DBFarmRole::TYPE_LCL);
                 }
                 elseif ($message->dbType == self::DB_TYPE_REDIS) {
                     //Nothing todo
@@ -219,7 +224,7 @@ class Scalr_Db_Msr
                         throw $e;
                 }
 
-                $dbFarmRole->SetSetting(self::VOLUME_ID, $storageVolume->id);
+                $dbFarmRole->SetSetting(self::VOLUME_ID, $storageVolume->id, DBFarmRole::TYPE_LCL);
             }
             catch(Exception $e) {
                 Logger::getLogger(__CLASS__)->error(new FarmLogMessage($dbServer->farmId, "Cannot save storage volume: {$e->getMessage()}"));

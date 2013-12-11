@@ -187,7 +187,7 @@ class Scalr_Billing
 
     public function applyCoupon($code)
     {
-        $customCoupon = $this->db->GetOne("SELECT chargify_coupon_id FROM billing.coupons WHERE id = ? AND scalr_account_id IS NULL", array($code));
+        $customCoupon = $this->db->GetOne("SELECT chargify_coupon_id FROM billing.coupons WHERE id = ? AND scalr_account_id IS NULL LIMIT 1", array($code));
         if ($customCoupon) {
             $origCode = $code;
             $code = $customCoupon;
@@ -259,6 +259,20 @@ class Scalr_Billing
             'cg1.4xlarge' => 26,
             'hi1.4xlarge' => 38,
             'hs1.8xlarge' => 60,
+
+            'g2.2xlarge' => 20,
+
+            'c3.large' => 2,
+            'c3.xlarge' => 4,
+            'c3.2xlarge' => 8,
+            'c3.4xlarge' => 16,
+            'c3.8xlarge' => 32,
+
+            'i2.large' => 2,
+            'i2.xlarge' => 4,
+            'i2.2xlarge' => 8,
+            'i2.4xlarge' => 16,
+            'i2.8xlarge' => 32,
 
             // Rackspace
             '1'	=> 0.25,
@@ -352,7 +366,7 @@ class Scalr_Billing
                     }
                 } catch (Exception $e) {}
 
-                $customCoupon = $this->db->GetOne("SELECT id FROM billing.coupons WHERE chargify_coupon_id = ? AND scalr_account_id=?", array(
+                $customCoupon = $this->db->GetOne("SELECT id FROM billing.coupons WHERE chargify_coupon_id = ? AND scalr_account_id=? LIMIT 1", array(
                     $retval['couponCode'], $this->account->id
                 ));
                 if ($customCoupon)

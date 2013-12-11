@@ -1,8 +1,7 @@
 Scalr.regPage('Scalr.ui.guest.recoverPassword', function (loadParams, moduleParams) {
 	return Ext.create('Ext.panel.Panel', {
 		title: 'Recover password',
-		bodyCls: 'x-panel-body-frame',
-		width: 400,
+		width: 420,
 		scalrOptions: {
 			modal: true
 		},
@@ -23,7 +22,7 @@ Scalr.regPage('Scalr.ui.guest.recoverPassword', function (loadParams, modulePara
 		dockedItems: [{
 			xtype: 'container',
 			dock: 'bottom',
-			cls: 'x-docked-bottom-frame',
+			cls: 'x-docked-buttons',
 			layout: {
 				type: 'hbox',
 				pack: 'center'
@@ -31,6 +30,7 @@ Scalr.regPage('Scalr.ui.guest.recoverPassword', function (loadParams, modulePara
 			items: [{
 				xtype: 'button',
 				text: 'Send me new password',
+                width: 180,
 				handler: function () {
 					if (this.up('panel').down('[name="email"]').validate()) {
 						Scalr.Request({
@@ -51,7 +51,6 @@ Scalr.regPage('Scalr.ui.guest.recoverPassword', function (loadParams, modulePara
 			}, {
 				xtype: 'button',
 				text: 'Cancel',
-				margin: '0 0 0 5',
 				handler: function () {
 					Scalr.event.fireEvent('close', true);
 				}

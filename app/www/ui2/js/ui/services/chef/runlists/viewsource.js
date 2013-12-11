@@ -1,17 +1,16 @@
 Scalr.regPage('Scalr.ui.services.chef.runlists.viewsource', function (loadParams, moduleParams) {
 	return Ext.create('Ext.panel.Panel', {
 		title: 'Chef &raquo; RunList &raquo; Source',
-		width: 300,
+		width: 400,
 		height: 300,
 		scalrOptions: {
 			'modal': true
 		},
-		bodyCls: 'x-panel-body-frame',
+        layout: 'fit',
+        bodyPadding: 12,
 		items: [{
 			xtype: 'textareafield',
 			value: moduleParams['runlist'],
-			labelWidth: 0,
-			width: 287,
 			height: '98%',
 			readOnly: true
 		}],

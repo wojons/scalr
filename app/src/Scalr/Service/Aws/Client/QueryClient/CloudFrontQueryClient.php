@@ -1,6 +1,7 @@
 <?php
 namespace Scalr\Service\Aws\Client\QueryClient;
 
+use Scalr\Service\Aws\Event\EventType;
 use Scalr\Service\Aws\Client\QueryClientResponse;
 
 /**
@@ -20,7 +21,7 @@ class CloudFrontQueryClient extends S3QueryClient
      * {@inheritdoc}
      * @see Scalr\Service\Aws\Client\QueryClient.S3QueryClient::call()
      */
-    public function call ($action, $options, $path = '/')
+    public function call($action, $options, $path = '/')
     {
         $httpRequest = $this->createRequest();
         $httpMethod = $action ?: 'GET';
@@ -28,6 +29,20 @@ class CloudFrontQueryClient extends S3QueryClient
             $path = '/' . $path;
         }
         $path = '/' . $this->getApiVersion() . (!empty($path) ? $path : '/');
+
+        $this->lastApiCall = null;
+        $eventObserver = $this->getAws()->getEventObserver();
+        if ($eventObserver && $eventObserver->isSubscribed(EventType::EVENT_SEND_REQUEST)) {
+            foreach (debug_backtrace() as $arr) {
+                if (empty($arr['class']) ||
+                    !preg_match("/\\\\Service\\\\Aws\\\\.+Api$/", $arr['class']) ||
+                    $arr['type'] !== '->') {
+                    continue;
+                }
+                $this->lastApiCall = ucfirst($arr['function']);
+                break;
+            }
+        }
 
         //Wipes out extra options from headers and moves them to separate array.
         //It also collects an x-amz headers.
@@ -75,15 +90,15 @@ class CloudFrontQueryClient extends S3QueryClient
             'useragent' => 'Scalr AWS Client (http://scalr.com)'
         ));
         $httpRequest->addHeaders($options);
-        /* @var $message \HttpMessage */
-        $message = $this->tryCall($httpRequest);
-        $response = new QueryClientResponse($message);
-        $response->setRequest($httpRequest);
+
+        $response = $this->tryCall($httpRequest);
+
         if ($this->getAws() && $this->getAws()->getDebug()) {
             echo "\n";
             echo $httpRequest->getRawRequestMessage() . "\n";
             echo $httpRequest->getRawResponseMessage() . "\n";
         }
+
         return $response;
     }
 

@@ -4,8 +4,6 @@ Scalr.regPage('Scalr.ui.guest.login', function (loadParams, moduleParams) {
 	return Ext.create('Ext.form.Panel', {
 		width: 500,
 		style: 'margin-top: 50px',
-		bodyCls: 'x-panel-body-frame',
-		title: 'Please login',
 		scalrOptions: {
 			reload: false
 		},
@@ -16,14 +14,14 @@ Scalr.regPage('Scalr.ui.guest.login', function (loadParams, moduleParams) {
 		},
 		items: {
 			xtype: 'fieldset',
-			style: 'padding: 30px 0px 10px',
+            title: '<img src="/ui2/images/ui/guest/login/logo.png" style="vertical-align: middle"> Welcome',
+            cls: 'x-fieldset-separator-none x-fieldset-no-bottom-padding',
 			items: [{
 				xtype: 'textfield',
 				name: 'scalrLogin',
-				fieldLabel: 'Email',
+				fieldLabel: Scalr.flags['authMode'] == 'ldap' ? 'Login' : 'Email',
 				allowBlank: false,
 				inputId: 'textfield-user-login-inputEl',
-
 				fieldSubTpl: '',
 				listeners: {
 					afterrender: function () {
@@ -47,7 +45,7 @@ Scalr.regPage('Scalr.ui.guest.login', function (loadParams, moduleParams) {
             }, {
                 xtype: 'combobox',
                 store: {
-                    fields: [ 'id', 'name' ],
+                    fields: [ 'id', 'name', 'org', 'dtadded', 'owner' ],
                     proxy: 'object'
                 },
                 queryMode: 'local',
@@ -58,7 +56,13 @@ Scalr.regPage('Scalr.ui.guest.login', function (loadParams, moduleParams) {
                 disabled: true,
                 fieldLabel: 'Account',
                 editable: false,
-                allowBlank: false
+                allowBlank: false,
+                listConfig: {
+                    cls: 'x-boundlist-alt',
+                    getInnerTpl: function () {
+                        return '{name}<tpl if="org"> [{org}]</tpl><tpl if="owner"> [owner: {owner}]</tpl> [created at {dtadded}]'
+                    }
+                }
 			}, {
 				xtype: 'checkbox',
 				name: 'scalrKeepSession',
@@ -124,7 +128,7 @@ Scalr.regPage('Scalr.ui.guest.login', function (loadParams, moduleParams) {
 		dockedItems: [{
 			xtype: 'container',
 			dock: 'bottom',
-			cls: 'x-docked-bottom-frame',
+			cls: 'x-docked-buttons',
 			layout: {
 				type: 'hbox',
 				pack: 'center'
@@ -137,7 +141,7 @@ Scalr.regPage('Scalr.ui.guest.login', function (loadParams, moduleParams) {
 					if (this.up('form').getForm().isValid()) {
 						var values = this.up('form').getForm().getValues();
 
-						if (Ext.isChrome) {
+						if (Ext.isChrome || Ext.isGecko || Ext.isSafari) {
 							// fake save password feature
 							var iframe = document.getElementById('hiddenChromeLoginForm');
 							var iframedoc = iframe.contentWindow ? iframe.contentWindow.document : iframe.contentDocument;
@@ -161,9 +165,9 @@ Scalr.regPage('Scalr.ui.guest.login', function (loadParams, moduleParams) {
 
 								} else {
 									Scalr.event.fireEvent('unlock');
-									if (Ext.isChrome) {
+									if (Ext.isChrome || Ext.isGecko || Ext.isSafari) {
 										history.back();
-									}
+                                    }
 
 									if (Scalr.user.userId && (data.userId == Scalr.user.userId)) {
 										Scalr.state.userNeedLogin = false;
@@ -171,7 +175,13 @@ Scalr.regPage('Scalr.ui.guest.login', function (loadParams, moduleParams) {
 									} else {
 										Scalr.application.updateContext(function() {
 											Scalr.event.fireEvent('unlock');
-											Scalr.event.fireEvent('close', true);
+                                            var counter = 4; //Ext.isChrome || Ext.isGecko || Ext.isSafari ? 4 : 3; // 3 because of fake save password submit, else 2
+                                            // +1 because updateContext execute window.onhashchange();
+                                            // if it was first page, don't redirect backward (blank page or another site)
+                                            if (Scalr.state.pageRedirectCounter < counter)
+                                                Scalr.event.fireEvent('redirect', '#/dashboard');
+                                            else
+                                                Scalr.event.fireEvent('close');
 										});
 									}
 								}
@@ -212,7 +222,6 @@ Scalr.regPage('Scalr.ui.guest.login', function (loadParams, moduleParams) {
 				xtype: 'button',
 				text: 'Forgot password?',
                 hidden: Scalr.flags['authMode'] == 'ldap',
-				margin: '0 0 0 10',
 				handler: function () {
 					Scalr.event.fireEvent('redirect', '#/guest/recoverPassword' , true, {
 						email: this.up('form').down('[name=scalrLogin]').getValue()
@@ -227,7 +236,12 @@ Scalr.regPage('Scalr.ui.guest.login', function (loadParams, moduleParams) {
 			},
 			activate: function () {
 				if (Scalr.user.userId && !Scalr.state.userNeedLogin) {
-					Scalr.event.fireEvent('close', true);
+                    var counter = 4; //Ext.isChrome || Ext.isGecko || Ext.isSafari ? 4 : 3; // 3 because of fake save password submit, else 2
+                    // if it was first page, don't redirect backward (blank page or another site)
+                    if (Scalr.state.pageRedirectCounter < counter)
+                        Scalr.event.fireEvent('redirect', '#/dashboard', true);
+                    else
+                        Scalr.event.fireEvent('close', true);
 				} else {
 					Scalr.event.fireEvent('lock', true);
 					this.down('[name="scalrLogin"]').focus();

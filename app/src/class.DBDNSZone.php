@@ -33,6 +33,11 @@ class DBDNSZone
     private $records;
     private $updateRecords = false;
 
+    /**
+     * @var \DBFarm
+     */
+    private $dbFarm;
+
     private static $FieldPropertyMap = array(
         'id' 			=> 'id',
         'farm_roleid'	=> 'farmRoleId',
@@ -61,6 +66,20 @@ class DBDNSZone
     {
         $this->id = $id;
         $this->db = \Scalr::getDb();
+    }
+
+    /**
+     * Gets DBFarm object
+     *
+     * @return \DBFarm
+     */
+    public function getFarmObject()
+    {
+        if (!$this->dbFarm && !empty($this->farmId)) {
+            $this->dbFarm = \DBFarm::LoadByID($this->farmId);
+        }
+
+        return $this->dbFarm;
     }
 
     /**
@@ -272,15 +291,32 @@ class DBDNSZone
 
     private function getServerDNSRecords(DBServer $DBServer)
     {
+        $records = array();
+
         if ($DBServer->status != SERVER_STATUS::RUNNING)
-            return array();
+            return $records;
 
         if ($DBServer->GetProperty(SERVER_PROPERTIES::EXCLUDE_FROM_DNS))
-            return array();
+            return $records;
 
         $DBFarmRole = $DBServer->GetFarmRoleObject();
         if ($DBFarmRole->GetSetting(DBFarmRole::SETTING_EXCLUDE_FROM_DNS))
-            return array();
+            return $records;
+
+        if ($DBFarmRole->ID == $this->farmRoleId)
+        {
+            array_push($records, array(
+                "name" 		=> "@",
+                "value"		=> $DBServer->remoteIp,
+                "type"		=> "A",
+                "ttl"		=> 90,
+                "server_id"	=> $DBServer->serverId,
+                "issystem"	=> '1'
+            ));
+        }
+
+        if (!$DBFarmRole->GetSetting(DBFarmRole::SETTING_DNS_CREATE_RECORDS))
+            return $records;
 
         $int_record_alias = $DBFarmRole->GetSetting(DBFarmRole::SETTING_DNS_INT_RECORD_ALIAS);
         $int_record = "int-{$DBFarmRole->GetRoleObject()->name}";
@@ -302,36 +338,22 @@ class DBDNSZone
         if ($ext_record_alias)
             $ext_record = str_replace($keys, $values, $ext_record_alias);
 
-        $records = array(
-            array(
+        array_push($records, array(
                 "name" 		=> $int_record,
                 "value"		=> $DBServer->localIp,
                 "type"		=> "A",
                 "ttl"		=> 90,
                 "server_id"	=> $DBServer->serverId,
                 "issystem"	=> '1'
-            ),
-            array(
+        ));
+        array_push($records, array(
                 "name" 		=> $ext_record,
                 "value"		=> $DBServer->remoteIp,
                 "type"		=> "A",
                 "ttl"		=> 90,
                 "server_id"	=> $DBServer->serverId,
                 "issystem"	=> '1'
-            ),
-        );
-
-        if ($DBFarmRole->ID == $this->farmRoleId)
-        {
-            array_push($records, array(
-                "name" 		=> "@",
-                "value"		=> $DBServer->remoteIp,
-                "type"		=> "A",
-                "ttl"		=> 90,
-                "server_id"	=> $DBServer->serverId,
-                "issystem"	=> '1'
-            ));
-        }
+        ));
 
         $records = array_merge($records, (array)$this->getDbRecords($DBServer));
         $records = array_merge($records, (array)$this->getBehaviorsRecords($DBServer));
@@ -466,31 +488,45 @@ class DBDNSZone
         }
 
 
-        if ($system_records)
-        {
-            foreach ($system_records as $record)
-            {
-                $this->db->Execute("REPLACE INTO dns_zone_records SET
-                    `zone_id`	= ?,
-                    `type`		= ?,
-                    `ttl`		= ?,
-                    `priority`	= ?,
-                    `value`		= ?,
-                    `name`		= ?,
-                    `issystem`	= '1',
-                    `weight`	= ?,
-                    `port`		= ?,
-                    `server_id`	= ?
+        if ($system_records) {
+            foreach ($system_records as $record) {
+                //UNIQUE KEY `zoneid` (`zone_id`,`type`(1),`value`,`name`)
+                $this->db->Execute("
+                    INSERT INTO dns_zone_records
+                    SET `zone_id` = ?,
+                        `type` = ?,
+                        `value` = ?,
+                        `name` = ?,
+                        `issystem` = '1',
+                        `ttl` = ?,
+                        `priority` = ?,
+                        `weight` = ?,
+                        `port` = ?,
+                        `server_id` = ?
+                    ON DUPLICATE KEY UPDATE
+                        `issystem` = '1',
+                        `ttl` = ?,
+                        `priority` = ?,
+                        `weight` = ?,
+                        `port` = ?,
+                        `server_id` = ?
                 ", array(
                     $this->id,
                     $record['type'],
-                    (int)$record['ttl'],
-                    (int)$record['priority'],
                     $record['value'],
                     $record['name'],
+
+                    (int)$record['ttl'],
+                    (int)$record['priority'],
                     (int)$record['weight'],
                     (int)$record['port'],
-                    $record['server_id']
+                    $record['server_id'],
+
+                    (int)$record['ttl'],
+                    (int)$record['priority'],
+                    (int)$record['weight'],
+                    (int)$record['port'],
+                    $record['server_id'],
                 ));
             }
         }
@@ -576,7 +612,7 @@ class DBDNSZone
 
         $pdnsDb = \Scalr::getContainer()->dnsdb;
 
-        $pdnsDomainId = $pdnsDb->GetOne("SELECT id FROM domains WHERE name = ? AND scalr_dns_type = 'global'", array($this->zoneName));
+        $pdnsDomainId = $pdnsDb->GetOne("SELECT id FROM domains WHERE name = ? AND scalr_dns_type = 'global' LIMIT 1", array($this->zoneName));
 
         // Remove domain from powerdns
         if ($this->status == DNS_ZONE_STATUS::INACTIVE || $this->status == DNS_ZONE_STATUS::PENDING_DELETE) {
@@ -748,31 +784,43 @@ class DBDNSZone
                 }
             }
 
-            if ($this->updateRecords)
-            {
+            if ($this->updateRecords) {
                 $this->db->Execute("DELETE FROM dns_zone_records WHERE zone_id=? AND issystem='0'", array($this->id));
 
-                foreach ($this->records as $record)
-                {
-                    $this->db->Execute("REPLACE INTO dns_zone_records SET
-                        `zone_id`	= ?,
-                        `type`		= ?,
-                        `ttl`		= ?,
-                        `priority`	= ?,
-                        `value`		= ?,
-                        `name`		= ?,
-                        `issystem`	= '0',
-                        `weight`	= ?,
-                        `port`		= ?
+                foreach ($this->records as $record) {
+                    //UNIQUE KEY `zoneid` (`zone_id`,`type`(1),`value`,`name`)
+                    $this->db->Execute("
+                        INSERT INTO dns_zone_records
+                        SET `zone_id` = ?,
+                            `type` = ?,
+                            `value` = ?,
+                            `name` = ?,
+                            `issystem` = '0',
+                            `ttl` = ?,
+                            `priority` = ?,
+                            `weight` = ?,
+                            `port` = ?
+                        ON DUPLICATE KEY UPDATE
+                            `issystem` = '0',
+                            `ttl` = ?,
+                            `priority` = ?,
+                            `weight` = ?,
+                            `port` = ?
                     ", array(
                         $this->id,
                         $record['type'],
-                        (int)$record['ttl'],
-                        (int)$record['priority'],
                         $record['value'],
                         $record['name'],
+
+                        (int)$record['ttl'],
+                        (int)$record['priority'],
                         (int)$record['weight'],
-                        (int)$record['port']
+                        (int)$record['port'],
+
+                        (int)$record['ttl'],
+                        (int)$record['priority'],
+                        (int)$record['weight'],
+                        (int)$record['port'],
                     ));
                 }
             }

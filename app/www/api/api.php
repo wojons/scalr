@@ -1,4 +1,4 @@
-<?
+<?php
     require(dirname(__FILE__)."/../../src/prepend.inc.php");
 
     class API_PROVIDER

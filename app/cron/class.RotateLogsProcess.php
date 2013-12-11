@@ -1,5 +1,7 @@
 <?php
 
+use Scalr\Service\Aws\Plugin\Handlers\StatisticsPlugin;
+
 class RotateLogsProcess implements \Scalr\System\Pcntl\ProcessInterface
 {
     public $ThreadArgs;
@@ -37,9 +39,11 @@ class RotateLogsProcess implements \Scalr\System\Pcntl\ProcessInterface
         $db->Execute("DELETE FROM messages WHERE type='out' AND status='1' AND `dtlasthandleattempt` < '{$oldlogtime}'");
         print "m1\n";
         sleep(60);
+
         $db->Execute("DELETE FROM messages WHERE type='out' AND status='3' AND `dtlasthandleattempt` < '{$oldlogtime}'");
         print "m2\n";
         sleep(60);
+
         $oldlogtime = date("Y-m-d H:i:s", mktime(date("H"), date("i"), date("s"), date("m"), date("d")-20, date("Y")));
         $db->Execute("DELETE FROM messages WHERE type='in' AND status='1' AND `dtlasthandleattempt` < '{$oldlogtime}'");
         print "m3\n";
@@ -53,12 +57,16 @@ class RotateLogsProcess implements \Scalr\System\Pcntl\ProcessInterface
         $db->Execute("DELETE FROM  `farm_role_scripts` WHERE ismenuitem='0' AND event_name LIKE  'APIEvent-{$year}{$month}%'");
 
         // Rotate syslog
-        if ($db->GetOne("SELECT COUNT(*) FROM syslog") > 1000000)
-        {
+        if ($db->GetOne("SELECT COUNT(*) FROM syslog") > 1000000) {
             $dtstamp = date("dmY");
-            $db->Execute("CREATE TABLE syslog_{$dtstamp} (id INT NOT NULL AUTO_INCREMENT,
-                          PRIMARY KEY (id))
-                          ENGINE=MyISAM SELECT dtadded, message, severity, transactionid FROM syslog;");
+            $db->Execute("
+                CREATE TABLE syslog_{$dtstamp} (
+                    id INT NOT NULL AUTO_INCREMENT,
+                    PRIMARY KEY (id)
+                ) ENGINE=MyISAM
+                SELECT dtadded, message, severity, transactionid
+                FROM syslog
+            ");
             $db->Execute("TRUNCATE TABLE syslog");
             $db->Execute("OPTIMIZE TABLE syslog");
             $db->Execute("TRUNCATE TABLE syslog_metadata");
@@ -66,6 +74,11 @@ class RotateLogsProcess implements \Scalr\System\Pcntl\ProcessInterface
 
             $this->Logger->debug("Log rotated. New table 'syslog_{$dtstamp}' created.");
         }
+
+        //Rotate aws_statistics
+        printf("%s - AWS Statistics rotate\n", date('H:i:s'));
+        StatisticsPlugin::rotate();
+        printf("%s - OK\n", date('H:i:s'));
     }
 
     public function OnEndForking()

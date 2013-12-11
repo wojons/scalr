@@ -58,6 +58,9 @@ namespace Scalr\DependencyInjection;
  * @property \Scalr\System\Config\Yaml $config
  *           Gets configuration
  *
+ * @property \Scalr\Acl\Acl $acl
+ *           Gets an ACL shared service
+ *
  *
  * @method   mixed config()
  *           config(string $name)
@@ -71,8 +74,12 @@ namespace Scalr\DependencyInjection;
  *               string $privateKey = null)
  *           Gets an Aws instance.
  *
+ * @method   \Scalr\Service\Eucalyptus eucalyptus()
+ *           eucalyptus(string|\DBServer|\DBFarmRole $cloudLocation, \Scalr_Environment $env = null)
+ *           Gets an Eucalyptus instance
+ *
  * @method   \Scalr\Service\OpenStack\OpenStack openstack()
- *           openstack($platform, $region)
+ *           openstack(string|\Scalr\Service\OpenStack\OpenStackConfig $platform, string $region, \Scalr_Environment $env = null)
  *           Gets an Openstack instance for the current environment
  *
  * @method   \ADODB_mysqli adodb()
@@ -81,9 +88,7 @@ namespace Scalr\DependencyInjection;
  *
  * @method   \Scalr\Net\Ldap\LdapClient ldap()
  *           ldap($user, $password)
- *           Gets a  new instance of LdapClient. If user and pass are not specified for
- *           scalr.connections.ldap section in the config the user and password which are specified
- *           for calling this method will be used.
+ *           Gets a new instance of LdapClient for specified user
  */
 class Container
 {

@@ -1,4 +1,5 @@
 <?php
+use Scalr\Acl\Acl;
 
 class Scalr_UI_Controller_Services_Chef_Servers extends Scalr_UI_Controller
 {
@@ -9,11 +10,13 @@ class Scalr_UI_Controller_Services_Chef_Servers extends Scalr_UI_Controller
 
     public function viewAction()
     {
+        $this->request->restrictAccess(Acl::RESOURCE_SERVICES_CHEF);
         $this->response->page('ui/services/chef/servers/view.js');
     }
 
     public function editAction()
     {
+        $this->request->restrictAccess(Acl::RESOURCE_SERVICES_CHEF);
         $servParams = $this->db->GetRow('SELECT env_id, url, auth_key as authKey, username as userName, v_auth_key as authVKey, v_username as userVName
             FROM services_chef_servers WHERE id = ?', array($this->getParam('servId')));
 
@@ -27,6 +30,7 @@ class Scalr_UI_Controller_Services_Chef_Servers extends Scalr_UI_Controller
 
     public function createAction()
     {
+        $this->request->restrictAccess(Acl::RESOURCE_SERVICES_CHEF);
         $this->response->page('ui/services/chef/servers/create.js');
     }
 
@@ -56,6 +60,7 @@ class Scalr_UI_Controller_Services_Chef_Servers extends Scalr_UI_Controller
 
     public function xDeleteServerAction()
     {
+        $this->request->restrictAccess(Acl::RESOURCE_SERVICES_CHEF);
         $sql = 'SELECT name FROM services_chef_runlists WHERE chef_server_id = '.$this->db->qstr($this->getParam('servId'));
         $result = $this->buildResponseFromSql($sql);
         if($result['total'])
@@ -68,24 +73,26 @@ class Scalr_UI_Controller_Services_Chef_Servers extends Scalr_UI_Controller
 
     public function xSaveServerAction()
     {
+        $this->request->restrictAccess(Acl::RESOURCE_SERVICES_CHEF);
+        $servId = $this->getParam('servId');
+
         $key = str_replace("\r\n", "\n", $this->getParam('authKey'));
         $vKey = str_replace("\r\n", "\n", $this->getParam('authVKey'));
 
         $chef = Scalr_Service_Chef_Client::getChef($this->getParam('url'), $this->getParam('userName'), $key);
         $response = $chef->listCookbooks();
         $chef = Scalr_Service_Chef_Client::getChef($this->getParam('url'), $this->getParam('userVName'), $vKey);
-        $response = $chef->getClient();
-        if ($this->getParam('servId')) {
+        $response = $chef->getClient($this->getParam('userVName'));
+        if ($servId) {
             $this->db->Execute('UPDATE services_chef_servers SET  `url` = ?, `username` = ?, `auth_key` = ?, `v_username` = ?, `v_auth_key` = ? WHERE `id` = ? AND env_id = ?', array(
                 $this->getParam('url'),
                 $this->getParam('userName'),
                 $this->getCrypto()->encrypt($key, $this->cryptoKey),
                 $this->getParam('userVName'),
                 $this->getCrypto()->encrypt($vKey, $this->cryptoKey),
-                $this->getParam('servId'),
+                $servId,
                 $this->getEnvironmentId()
             ));
-            $this->response->success('Server successfully updated');
         } else {
             $this->db->Execute('INSERT INTO services_chef_servers (`env_id`, `url`, `username`, `auth_key`, `v_username`, `v_auth_key`) VALUES (?, ?, ?, ?, ?, ?)', array(
                 $this->getEnvironmentId(),
@@ -95,7 +102,15 @@ class Scalr_UI_Controller_Services_Chef_Servers extends Scalr_UI_Controller
                 $this->getParam('userVName'),
                 $this->getCrypto()->encrypt($vKey, $this->cryptoKey),
             ));
-            $this->response->success('Server successfully added');
+            $servId = $this->db->Insert_ID();
         }
+
+        $this->response->data(array(
+            'server' => array(
+                'id' => (string)$servId,
+                'url' => $this->getParam('url')
+            )
+        ));
+        $this->response->success('Server successfully saved');
     }
 }

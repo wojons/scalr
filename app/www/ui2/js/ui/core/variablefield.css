@@ -1,88 +1,56 @@
-.scalr-ui-variablefield .x-btn-inner {
-	width: 24px;
-	height: 22px;
-	background: url('/ui2/images/icons/variablefield/flag_sprite.png') no-repeat;
+.scalr-ui-variablefield-flag-required .x-form-display-field-body,
+.scalr-ui-variablefield-flag-final .x-form-display-field-body {
+    background: url('/ui2/images/widget/variablefield/flags_sprite.png') no-repeat;
+    padding-left: 26px;
 }
 
-
-.scalr-ui-variablefield .x-form-display-field .x-btn-inner {
-	width: 18px;
-	height: 18px;
-	float:left;
+.scalr-ui-variablefield-flag-required .x-form-display-field-body {
+	background-position: 0 -26px;
 }
 
-.scalr-ui-variablefield-flag-final .x-btn-inner {
-	background-position: 0px 0px;
-}
-
-.scalr-ui-variablefield-flag-final.x-btn-base-image-background-disabled .x-btn-inner {
-	background-position: 0px -22px;
-}
-
-.scalr-ui-variablefield-flag-final.x-btn-base-image-background-pressed .x-btn-inner {
-	background-position: 0px -44px;
-}
-
-.scalr-ui-variablefield-flag-required .x-btn-inner {
-	background-position: -24px 0px;
-}
-
-.scalr-ui-variablefield-flag-required.x-btn-base-image-background-disabled .x-btn-inner {
-	background-position: -24px -22px;
-}
-
-.scalr-ui-variablefield-flag-required.x-btn-base-image-background-pressed .x-btn-inner {
-	background-position: -24px -44px;
-}
-
-.scalr-ui-variablefield-flag-required .x-form-display-field .x-btn-inner {
-	background-position: -29px -3px;
-}
-
-.scalr-ui-variablefield-flag-final .x-form-display-field .x-btn-inner {
-	background-position: -5px -3px;
+.scalr-ui-variablefield-flag-final .x-form-display-field-body {
+	background-position: 0 0;
 }
 
 .scalr-ui-variablefield-scope-env, .scalr-ui-variablefield-scope-role, .scalr-ui-variablefield-scope-farm {
 	margin-bottom: 5px;
 }
 
-.scalr-ui-variablefield-scope-env div.icon {
-	margin: 4px 10px 4px 0;
-	float: left;
+.scalr-ui-variablefield-scope-env {
 	background: #FCA503;
-	height: 8px;
-	width: 8px;
 	border-radius: 2px;
-	box-shadow: 0 1px rgba(255, 255, 255, 0.5);
+    box-shadow: 0 1px rgba(255, 255, 255, 0.6);
 }
 
-.scalr-ui-variablefield-scope-role div.icon {
-	margin: 4px 10px 4px 0;
-	float: left;
+.scalr-ui-variablefield-scope-role {
 	background: #7CBFE7;
-	height: 8px;
-	width: 8px;
 	border-radius: 2px;
-	box-shadow: 0 1px rgba(255, 255, 255, 0.5);
+    box-shadow: 0 1px rgba(255, 255, 255, 0.6);
 }
 
-.scalr-ui-variablefield-scope-farm div.icon {
-	margin: 4px 10px 4px 0;
-	float: left;
+.scalr-ui-variablefield-scope-farm {
 	background: #0F9104;
-	height: 8px;
-	width: 8px;
 	border-radius: 2px;
-	box-shadow: 0 1px rgba(255, 255, 255, 0.5);
+	box-shadow: 0 1px rgba(255, 255, 255, 0.6);
 }
 
-.scalr-ui-variablefield-scope-farmrole div.icon {
-	margin: 4px 10px 4px 0;
-	float: left;
+.scalr-ui-variablefield-scope-farmrole {
 	background: #D90000;
-	height: 8px;
-	width: 8px;
 	border-radius: 2px;
-	box-shadow: 0 1px rgba(255, 255, 255, 0.5);
+	box-shadow: 0 1px rgba(255, 255, 255, 0.6);
+}
+
+.scalr-ui-variablefield-scope-env.icon, .scalr-ui-variablefield-scope-role.icon, .scalr-ui-variablefield-scope-farm.icon, .scalr-ui-variablefield-scope-farmrole.icon {
+    margin: 2px 10px 4px 0;
+    float: left;
+    height: 10px;
+    width: 10px;
+}
+
+.scalr-ui-variablefield-btn-autohide .x-btn-action-small {
+    visibility: hidden;
+}
+
+.scalr-ui-variablefield-btn-autohide:hover .x-btn-action-small {
+    visibility: inherit;
 }

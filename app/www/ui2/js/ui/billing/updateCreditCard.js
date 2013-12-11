@@ -1,8 +1,7 @@
 Scalr.regPage('Scalr.ui.billing.updateCreditCard', function (loadParams, moduleParams) {
 	
 	var form = Ext.create('Ext.form.Panel', {
-		bodyCls: 'x-panel-body-frame',
-		width: 500,
+		width: 600,
 		title: 'Billing &raquo; Update CreditCard Information',
 		fieldDefaults: {
 			anchor: '100%'
@@ -10,9 +9,10 @@ Scalr.regPage('Scalr.ui.billing.updateCreditCard', function (loadParams, moduleP
 		scalrOptions: {
 			'modal': true
 		},
+        bodyCls: 'x-container-fieldset',
 		items: [{
 			xtype: 'displayfield',
-			fieldCls: 'x-form-field-info',
+			cls: 'x-form-field-info',
 			value: 'Your card will be pre-authorized for $1. <a href="http://en.wikipedia.org/wiki/Authorization_hold">What does this mean?</a>'
 		},{
 			xtype: 'fieldcontainer',
@@ -78,7 +78,7 @@ Scalr.regPage('Scalr.ui.billing.updateCreditCard', function (loadParams, moduleP
 				xtype: 'combo',
 				name: 'ccExpYear',
 				margin: '0 0 0 5',
-				width: 65,
+				width: 70,
 				value:'2012',
 				hideLabel: true,
 				editable: false,
@@ -133,7 +133,7 @@ Scalr.regPage('Scalr.ui.billing.updateCreditCard', function (loadParams, moduleP
 		
 		dockedItems: [{
 			xtype: 'container',
-			cls: 'x-docked-bottom-frame',
+			cls: 'x-docked-buttons',
 			dock: 'bottom',
 			layout: {
 				type: 'hbox',
@@ -156,7 +156,6 @@ Scalr.regPage('Scalr.ui.billing.updateCreditCard', function (loadParams, moduleP
 				}
 			}, {
 				xtype: 'button',
-				margin: '0 0 0 5',
 				text: 'Cancel',
 				handler: function() {
 					Scalr.event.fireEvent('close');

@@ -43,6 +43,16 @@
             return $this->request("/cookbooks/{$cookbookName}/{$cookbookVersion}", "GET");
         }
 
+        public function removeClient($name)
+        {
+            return $this->request("/clients/{$name}", "DELETE");
+        }
+
+        public function removeNode($name)
+        {
+            return $this->request("/nodes/{$name}", "DELETE");
+        }
+
         public function listRoles()
         {
             return $this->request('/roles', "GET");
@@ -149,7 +159,7 @@
                 if (is_array($data))
                     $httpRequest->setPostFields($data);
                 else
-                    $httpRequest->setRawPostData($data);
+                    $httpRequest->setBody($data);
             }
 
             if ($method == 'PUT' && $data)
@@ -214,7 +224,7 @@
                 throw new Exception("Unexpected situation. Response code {$httpRequest->getResponseCode()}");
             }
 
-              return $retval;
+            return $retval;
         }
 
         public function sign($string) {

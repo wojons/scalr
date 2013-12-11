@@ -2,7 +2,6 @@ Scalr.regPage('Scalr.ui.tools.aws.s3.distribution', function (loadParams, module
 	var form = Ext.create('Ext.form.Panel', {
 		title: 'Create new Distribution',
 		width: 650,
-		bodyCls: 'x-panel-body-frame',
 		scalrOptions: {
 			'modal': true
 		},
@@ -115,7 +114,7 @@ Scalr.regPage('Scalr.ui.tools.aws.s3.distribution', function (loadParams, module
 		dockedItems: [{
 			xtype: 'container',
 			dock: 'bottom',
-			cls: 'x-docked-bottom-frame',
+			cls: 'x-docked-buttons',
 			layout: {
 				type: 'hbox',
 				pack: 'center'
@@ -139,7 +138,6 @@ Scalr.regPage('Scalr.ui.tools.aws.s3.distribution', function (loadParams, module
 				}
 			},{
 				xtype: 'button',
-				margin: '0 0 0 5',
 				text: 'Cancel',
 				handler: function() {
 					Scalr.event.fireEvent('close');

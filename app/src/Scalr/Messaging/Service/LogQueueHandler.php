@@ -33,6 +33,11 @@ class Scalr_Messaging_Service_LogQueueHandler implements Scalr_Messaging_Service
 
         if ($message instanceOf Scalr_Messaging_Msg_ExecScriptResult) {
             try {
+                $storage = \Scalr::config('scalr.system.scripting.logs_storage');
+
+                if (!$message->executionId || $storage == 'scalr')
+                    $msg = sprintf("STDERR: %s \n\n STDOUT: %s", base64_decode($message->stderr), base64_decode($message->stdout));
+
                 $this->db->Execute("INSERT DELAYED INTO scripting_log SET
                     farmid = ?,
                     server_id = ?,
@@ -43,17 +48,21 @@ class Scalr_Messaging_Service_LogQueueHandler implements Scalr_Messaging_Service
                     event_server_id = ?,
                     exec_time = ?,
                     exec_exitcode = ?,
-                    event_id = ?
+                    event_id = ?,
+                    execution_id = ?,
+                    run_as = ?
                 ", array(
                     $dbserver->farmId,
                     $message->getServerId(),
                     $message->eventName,
-                    sprintf("STDERR: %s \n\n STDOUT: %s", base64_decode($message->stderr), base64_decode($message->stdout)),
+                    $msg,
                     $message->scriptName,
                     $message->eventServerId,
                     round($message->timeElapsed, 2),
                     $message->returnCode,
-                    $message->eventId
+                    $message->eventId,
+                    $message->executionId,
+                    $message->runAs
                 ));
 
                 if ($message->meta[Scalr_Messaging_MsgMeta::SZR_VERSION])
@@ -119,7 +128,7 @@ class Scalr_Messaging_Service_LogQueueHandler implements Scalr_Messaging_Service
                     $message->message
                 ));
             } catch (Exception $e) {}
-        } elseif ($message instanceof Scalr_Messaging_Msg_OperationDefinition) {
+        } /*elseif ($message instanceof Scalr_Messaging_Msg_OperationDefinition) {
             try {
                 if ($message->name == 'Execute scripts')
                     return;
@@ -142,6 +151,10 @@ class Scalr_Messaging_Service_LogQueueHandler implements Scalr_Messaging_Service
             } catch (Exception $e) {}
         } elseif ($message instanceof Scalr_Messaging_Msg_OperationProgress) {
             try {
+
+                $opName = $this->db->GetOne("SELECT name FROM server_operations WHERE id = ? LIMIT 1", array($message->id));
+                if (!$opName || ($opName != 'Initialization' && $opName != 'Grow MySQL/Percona data volume'))
+                    return;
 
                 if ($message->warning) {
                     $msg = $message->warning->message;
@@ -180,6 +193,6 @@ class Scalr_Messaging_Service_LogQueueHandler implements Scalr_Messaging_Service
                     $msg
                 ));
             } catch (Exception $e) {}
-        }
+        }*/
     }
 }

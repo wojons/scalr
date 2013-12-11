@@ -103,12 +103,12 @@ class AbstractAuditLogDocument extends ArrayObject
                         $mgetter = true;
                         $value = $srcObject->$srcProperty;
                     } catch (\Exception $e) {
-                        $exeptionThrown = true;
+                        $exceptionThrown = true;
                     }
                 }
                 //By the end we check magic getter
-                if (isset($exeptionThrown) || !isset($mgetter)) {
-                    $exeptionThrown = null;
+                if (isset($exceptionThrown) || !isset($mgetter)) {
+                    $exceptionThrown = null;
                     $mgetter = null;
                     if (method_exists($srcObject, '__call')) {
                         try {

@@ -75,7 +75,7 @@ abstract class Scalr_Db_Msr_Info
                         throw $e;
                 }
 
-                $this->dbFarmRole->SetSetting(Scalr_Db_Msr::VOLUME_ID, $storageVolume->id);
+                $this->dbFarmRole->SetSetting(Scalr_Db_Msr::VOLUME_ID, $storageVolume->id, DBFarmRole::TYPE_LCL);
             }
             catch(Exception $e) {
                 $this->logger->error(new FarmLogMessage($this->dbServer->farmId, "Cannot save storage volume: {$e->getMessage()}"));
@@ -114,7 +114,7 @@ abstract class Scalr_Db_Msr_Info
                         throw $e;
                 }
 
-                $this->dbFarmRole->SetSetting(Scalr_Db_Msr::SNAPSHOT_ID, $storageSnapshot->id);
+                $this->dbFarmRole->SetSetting(Scalr_Db_Msr::SNAPSHOT_ID, $storageSnapshot->id, DBFarmRole::TYPE_LCL);
             }
             catch(Exception $e) {
                 $this->logger->error(new FarmLogMessage($event->DBServer->farmId, "Cannot save storage snapshot: {$e->getMessage()}"));
@@ -192,7 +192,7 @@ abstract class Scalr_Db_Msr_Info
                 $volumeConfig->disk = new stdClass();
                 $volumeConfig->disk->type = 'loop';
                 $volumeConfig->disk->size = '75%root';
-            } elseif (in_array($this->dbFarmRole->Platform, array(SERVER_PLATFORMS::OPENSTACK, SERVER_PLATFORMS::RACKSPACENG_UK, SERVER_PLATFORMS::RACKSPACENG_US))) {
+            } elseif ($this->dbFarmRole->isOpenstack()) {
                 $storageProvider = 'swift';
 
                 $volumeConfig->disk = new stdClass();
@@ -209,7 +209,18 @@ abstract class Scalr_Db_Msr_Info
             } elseif ($this->dbFarmRole->Platform == SERVER_PLATFORMS::EC2) {
                 $storageProvider = 's3';
 
-                $volumeConfig->disk = $this->dbFarmRole->GetSetting(Scalr_Db_Msr::DATA_STORAGE_EPH_DISK);
+                $disk = $this->dbFarmRole->GetSetting(Scalr_Db_Msr::DATA_STORAGE_EPH_DISK);
+                if ($disk)
+                	$volumeConfig->disk = $disk;
+                else {
+                	$disks = $this->dbFarmRole->GetSetting(Scalr_Db_Msr::DATA_STORAGE_EPH_DISKS);
+                	if ($disks) {
+	                	$diskType = 'ec2_ephemeral';
+	                	$v = json_decode($disks);
+	                	foreach ($v as $name => $size)
+	                		$volumeConfig->disks[] = array('type' => $diskType, 'name' => $name);
+                	}
+                }
                 $volumeConfig->size = "80%";
             }
 
@@ -281,7 +292,7 @@ abstract class Scalr_Db_Msr_Info
                 $this->volumeConfig = $this->getFreshVolumeConfig();
             } else {
                 if ($this->volumeConfig->type == MYSQL_STORAGE_ENGINE::EPH) {
-                    if ($this->dbFarmRole->Platform == SERVER_PLATFORMS::EC2) {
+                    if ($this->dbFarmRole->Platform == SERVER_PLATFORMS::EC2 && !$this->volumeConfig->disks) {
                         $this->volumeConfig->disk->device = $this->dbFarmRole->GetSetting(Scalr_Db_Msr::DATA_STORAGE_EPH_DISK);
                     }
                 }

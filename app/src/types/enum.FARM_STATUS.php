@@ -1,4 +1,4 @@
-<?
+<?php
     final class FARM_STATUS
     {
         const RUNNING 		= 1;

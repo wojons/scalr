@@ -1,6 +1,5 @@
 Scalr.regPage('Scalr.ui.tools.aws.ec2.ebs.volumes.attach', function (loadParams, moduleParams) {
 	return Ext.create('Ext.form.Panel', {
-		bodyCls: 'x-panel-body-frame',
 		width: 700,
 		title: 'Tools &raquo; Amazon Web Services &raquo; EBS &raquo; Volumes &raquo; ' + loadParams['volumeId'] + ' &raquo;Attach',
 		fieldDefaults: {
@@ -65,7 +64,7 @@ Scalr.regPage('Scalr.ui.tools.aws.ec2.ebs.volumes.attach', function (loadParams,
 		dockedItems: [{
 			xtype: 'container',
 			dock: 'bottom',
-			cls: 'x-docked-bottom-frame',
+			cls: 'x-docked-buttons',
 			layout: {
 				type: 'hbox',
 				pack: 'center'
@@ -92,7 +91,6 @@ Scalr.regPage('Scalr.ui.tools.aws.ec2.ebs.volumes.attach', function (loadParams,
 				}
 			}, {
 				xtype: 'button',
-				margin: '0 0 0 5',
 				text: 'Cancel',
 				handler: function() {
 					Scalr.event.fireEvent('close');

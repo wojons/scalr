@@ -1,13 +1,10 @@
 <?php
+use Scalr\Acl\Acl;
 
 class Scalr_UI_Controller_Scaling_Metrics extends Scalr_UI_Controller
 {
     const CALL_PARAM_NAME = 'metricId';
 
-    public static function getPermissionDefinitions()
-    {
-        return array();
-    }
 
     public function defaultAction()
     {
@@ -33,18 +30,22 @@ class Scalr_UI_Controller_Scaling_Metrics extends Scalr_UI_Controller
         return $metrics;
     }
 
+
     public function xGetListAction()
     {
+        $this->request->restrictAccess(Acl::RESOURCE_GENERAL_CUSTOM_SCALING_METRICS);
         $this->response->data(array('metrics' => $this->getList()));
     }
 
     public function getListAction()
     {
+        $this->request->restrictAccess(Acl::RESOURCE_GENERAL_CUSTOM_SCALING_METRICS);
         $this->response->data(array('metrics' => $this->getList()));
     }
 
     public function xSaveAction()
     {
+        $this->request->restrictAccess(Acl::RESOURCE_GENERAL_CUSTOM_SCALING_METRICS);
         $this->request->defineParams(array(
             'metricId' => array('type' => 'int'),
             'name', 'filePath', 'retrieveMethod', 'calcFunction'
@@ -76,12 +77,13 @@ class Scalr_UI_Controller_Scaling_Metrics extends Scalr_UI_Controller
 
     public function xRemoveAction()
     {
+        $this->request->restrictAccess(Acl::RESOURCE_GENERAL_CUSTOM_SCALING_METRICS);
         $this->request->defineParams(array(
             'metrics' => array('type' => 'json')
         ));
 
         foreach ($this->getParam('metrics') as $metricId) {
-            if (!$this->db->GetOne("SELECT id FROM farm_role_scaling_metrics WHERE metric_id=?", array($metricId)))
+            if (!$this->db->GetOne("SELECT id FROM farm_role_scaling_metrics WHERE metric_id=? LIMIT 1", array($metricId)))
                 $this->db->Execute("DELETE FROM scaling_metrics WHERE id=? AND env_id=?", array($metricId, $this->getEnvironmentId()));
             else
                 $err[] = sprintf(_("Metric #%s is used and cannot be removed"), $metricId);
@@ -95,6 +97,7 @@ class Scalr_UI_Controller_Scaling_Metrics extends Scalr_UI_Controller
 
     public function createAction()
     {
+        $this->request->restrictAccess(Acl::RESOURCE_GENERAL_CUSTOM_SCALING_METRICS);
         $this->response->page('ui/scaling/metrics/create.js', array(
             'name' => '',
             'filePath' => '',
@@ -105,6 +108,7 @@ class Scalr_UI_Controller_Scaling_Metrics extends Scalr_UI_Controller
 
     public function editAction()
     {
+        $this->request->restrictAccess(Acl::RESOURCE_GENERAL_CUSTOM_SCALING_METRICS);
         $this->request->defineParams(array(
             'metricId' => array('type' => 'int')
         ));
@@ -122,11 +126,13 @@ class Scalr_UI_Controller_Scaling_Metrics extends Scalr_UI_Controller
 
     public function viewAction()
     {
+        $this->request->restrictAccess(Acl::RESOURCE_GENERAL_CUSTOM_SCALING_METRICS);
         $this->response->page('ui/scaling/metrics/view.js');
     }
 
     public function xListMetricsAction()
     {
+        $this->request->restrictAccess(Acl::RESOURCE_GENERAL_CUSTOM_SCALING_METRICS);
         $this->request->defineParams(array(
             'metricId' => array('type' => 'int'),
             'sort' => array('type' => 'json')

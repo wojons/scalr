@@ -1,4 +1,4 @@
-<?
+<?php
     final class NIMBULA_SERVER_PROPERTIES extends SERVER_PROPERTIES
     {
         const CLOUD_LOCATION	= 'nimbula.cloud_location';

@@ -1,33 +1,20 @@
 <?php
-
+use Scalr\Acl\Acl;
 use \Scalr\Server\Alerts;
 
 class Scalr_UI_Controller_Alerts extends Scalr_UI_Controller
 {
     const CALL_PARAM_NAME = 'alertId';
 
+    public function hasAccess()
+    {
+        return parent::hasAccess() && $this->request->isAllowed(Acl::RESOURCE_FARMS_ALERTS);
+    }
+
     public function defaultAction()
     {
         $this->viewAction();
     }
-
-    /*
-    public function xRemoveAction()
-    {
-        $this->request->defineParams(array(
-            'events' => array('type' => 'json')
-        ));
-
-        foreach ($this->getParam('events') as $id)
-        {
-            $this->db->Execute("DELETE FROM event_definitions WHERE env_id=? AND id=?",
-                array($this->getEnvironmentId(), $id)
-            );
-        }
-
-        $this->response->success();
-    }
-    */
 
     public function viewAction()
     {

@@ -1,4 +1,4 @@
-<?
+<?php
     final class DNS_ZONE_STATUS
     {
         const ACTIVE 			= 'Active';

@@ -1,4 +1,4 @@
-<?
+<?php
     final class GRAPH_TYPE
     {
         const DAILY 	= "daily";

@@ -118,6 +118,7 @@ Scalr.regPage('Scalr.ui.admin.accounts.view', function (loadParams, moduleParams
 								confirmBox: {
 									type: 'action',
 									msg: 'Please select user. You can search by id, email, fullname, type.',
+                                    formSimple: true,
 									form: [{
 										xtype: 'combo',
 										name: 'userId',
@@ -180,8 +181,8 @@ Scalr.regPage('Scalr.ui.admin.accounts.view', function (loadParams, moduleParams
 			store: store,
 			dock: 'top',
 			beforeItems: [{
-				ui: 'paging',
-				iconCls: 'x-tbar-add',
+                text: 'Add account',
+                cls: 'x-btn-green-bg',
 				handler: function() {
 					Scalr.event.fireEvent('redirect', '#/admin/accounts/create');
 				}

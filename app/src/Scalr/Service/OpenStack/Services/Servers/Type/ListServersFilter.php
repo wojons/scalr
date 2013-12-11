@@ -84,8 +84,7 @@ class ListServersFilter extends Marker
      * @param   number   $limit        optional Limit.
      * @return  ListServersFilter      Creates new object and returns it.
      */
-    public static function init($name = null, $flavorId = null, $imageId = null, $status = null,
-                                DateTime $changesSince = null, $marker = null, $limit = null)
+    public static function init()
     {
         return call_user_func_array('parent::init', func_get_args());
     }

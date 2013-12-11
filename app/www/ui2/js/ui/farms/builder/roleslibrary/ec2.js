@@ -4,15 +4,14 @@ Scalr.regPage('Scalr.ui.farms.builder.addrole.ec2', function () {
         isExtraSettings: true,
         hidden: true,
         
-        cls: 'x-delimiter-top',
-        padding: '18 24',
+        cls: 'x-container-fieldset x-fieldset-separator-bottom',
         
         layout: {
             type: 'hbox',
             align: 'stretch'
         },
         defaults: {
-            maxWidth: 340
+            maxWidth: 348
         },
         
         isVisibleForRole: function(record) {
@@ -31,11 +30,12 @@ Scalr.regPage('Scalr.ui.farms.builder.addrole.ec2', function () {
         setRole: function(record) {
             var formPanel = this.up('form'),
                 role = formPanel.getCurrentRole(),
+                instTypeLimits = formPanel.up('#farmbuilder').getLimits('aws.instance_type'),
                 instType,
                 field,
                 tags;
 
-            if (formPanel.mode === 'shared') {
+            if (formPanel.mode === 'shared') {//record.getEc2InstanceType uses some tags, so we must to define them
                 tags = record.get('tags') || [];
                 if (role.hvm == 1) {
                     Ext.Array.include(tags, 'ec2.hvm');
@@ -46,12 +46,13 @@ Scalr.regPage('Scalr.ui.farms.builder.addrole.ec2', function () {
                 record.set('tags', tags);
             }
 
-            instType = record.getEc2InstanceType();
-
+            instType = record.getEc2InstanceType(instTypeLimits);
             field = this.down('[name="aws.instance_type"]');
             field.reset();
             field.store.load({data: instType.list});
             field.setValue(instType.value);
+            field.setReadOnly(instType.list.length < 2, false);
+            field[instTypeLimits?'addCls':'removeCls']('x-field-governance');
 
             if (formPanel.up('roleslibrary').vpc === false) {
                 Scalr.cachedRequest.load(
@@ -89,7 +90,9 @@ Scalr.regPage('Scalr.ui.farms.builder.addrole.ec2', function () {
         },
 
         isValid: function() {
-            return true;
+            var res = true, field = this.down('[name="aws.instance_type"]');
+            res = field.validate() || {comp: field, message: 'Instance type is required'};
+            return res;
         },
 
         getSettings: function() {
@@ -129,7 +132,7 @@ Scalr.regPage('Scalr.ui.farms.builder.addrole.ec2', function () {
                 fields: [ 'id', 'name', 'state', 'disabled', 'items' ],
                 proxy: 'object'
             },
-            margin: '0 36 0 0',
+            margin: '0 64 0 0',
             labelWidth: 70,
             listeners: {
                 collapse: function() {
@@ -144,16 +147,21 @@ Scalr.regPage('Scalr.ui.farms.builder.addrole.ec2', function () {
             flex: 1,
             submitValue: false,
             editable: false,
+            hideInputOnReadOnly: true,
             labelWidth: 90,
             queryMode: 'local',
             name: 'aws.instance_type',
             fieldLabel: 'Instance type',
+            governance: true,
             store: {
                 fields: [ 'id', 'name' ],
                 proxy: 'object'
             },
             valueField: 'name',
+            emptyText: 'No suitable instance types',
             displayField: 'name',
+            allowBlank: false,
+            anyMatch: true,
             listeners: {
                 change: function(comp, value){
                     if (value) {

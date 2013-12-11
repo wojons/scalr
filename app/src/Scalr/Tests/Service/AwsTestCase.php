@@ -74,6 +74,7 @@ class AwsTestCase extends TestCase
         $this->environment = new \Scalr_Environment();
         if (!$this->isSkipFunctionalTests()) {
             $this->environment->loadById(\Scalr::config('scalr.phpunit.envid'));
+            $this->container->environment = $this->environment;
         }
     }
 
@@ -129,13 +130,17 @@ class AwsTestCase extends TestCase
         $container = $this->getContainer();
         $awsStub = $this->getMock(
             AwsTestCase::AWS_NS,
-            array('__get', 'getEntityManager'),
+            array('__get', 'getEntityManager', 'getContainer'),
             array(AwsTestCase::REGION),
             '',
             false
         );
+
         $em = new EntityManager();
         $awsStub->expects($this->any())->method('getEntityManager')->will($this->returnValue($em));
+
+        $awsStub->expects($this->any())->method('getContainer')->will($this->returnValue($container));
+
         foreach (array(
             'region'          => self::REGION,
             'accessKeyId'     => ($container->initialized('environment') ? $container->awsAccessKeyId : 'fakeAccessKeyId'),
@@ -155,19 +160,17 @@ class AwsTestCase extends TestCase
     /**
      * Gets an ser vice interface mock object
      *
-     * @param   string            $serviceName  Service name (Elb, CloudWatch etc..)
-     * @param   Closure|callback  $callback     optional callback for QueryClientResponse mock
+     * @param   string                   $serviceName  Service name (Elb, CloudWatch etc..)
+     * @param   \Closure|callback|string $callback     optional callback for QueryClientResponse mock
      * @return  ServiceInterface Returns service interface mock
      * @throws  \RuntimeException
      */
     public function getServiceInterfaceMock($serviceName, $callback = null)
     {
+        $me = $this;
         $serviceName = lcfirst($serviceName);
         $ucServiceName = ucfirst($serviceName);
         $serviceClass = AwsTestCase::AWS_NS . '\\' . $ucServiceName;
-        if (!in_array($serviceName, Aws::getAvailableServiceInterfaces())) {
-            throw new \RuntimeException(sprintf('Unknown service name %s', $serviceName));
-        }
         $container = $this->getContainer();
         $awsStub = $this->getAwsMock();
         $serviceInterfaceStub = $this->getMock(
@@ -205,8 +208,7 @@ class AwsTestCase extends TestCase
             ->method('__get')
             ->will($this->returnValue($serviceInterfaceStub))
         ;
-        //TODO rewrite it to automatic detection of the class name by it's existance in the folder.
-        if (in_array($serviceName, array(Aws::SERVICE_INTERFACE_S3, Aws::SERVICE_INTERFACE_CLOUD_FRONT))) {
+        if (is_readable(SRCPATH . '/Scalr/Service/Aws/Client/QueryClient/' . ucfirst($serviceName) . 'QueryClient.php')) {
             $queryClientClass = AwsTestCase::AWS_NS . '\\Client\\QueryClient\\' . ucfirst($serviceName) . 'QueryClient';
         } else {
             $queryClientClass = AwsTestCase::AWS_NS . '\\Client\\QueryClient';
@@ -221,11 +223,25 @@ class AwsTestCase extends TestCase
                 $serviceInterfaceStub->getUrl(),
             )
         );
+
+        if ($callback === null) {
+            $callback = array($this, 'getQueryClientStandartCallResponseMock');
+        } else if (is_string($callback) && substr($callback, -4) == '.xml') {
+            $mth = $callback;
+            $callback = function() use ($me, $awsStub, $mth) {
+                return $me->getQueryClientResponseMock($me->getFixtureFileContent($mth), null, $awsStub);
+            };
+        } else if (!is_callable($callback)) {
+            throw new \InvalidArgumentException('Invalid callback');
+        }
+
         $queryClientStub
             ->expects($this->any())
             ->method('call')
-            ->will($this->returnCallback($callback === null ? array($this, 'getQueryClientStandartCallResponseMock') : $callback))
+            ->will($this->returnCallback($callback))
         ;
+
+
         $apiClass = $serviceClass . '\\V' . $serviceClass::API_VERSION_CURRENT . '\\' . $ucServiceName . 'Api';
         $elbApi = new $apiClass($serviceInterfaceStub, $queryClientStub);
         $serviceInterfaceStub
@@ -240,22 +256,36 @@ class AwsTestCase extends TestCase
     /**
      * Gets QueryClientResponse Mock.
      *
-     * @param     string    $body
+     * @param     string             $body
+     * @param     int                $responseCode optional The code of the http response
+     * @param     \Scalr\Service\Aws $awsStub optional Aws mock
      * @return    QueryClientResponse Returns response mock object
      */
-    public function getQueryClientResponseMock($body)
+    public function getQueryClientResponseMock($body, $responseCode = null, $awsStub = null)
     {
         $response = $this->getMock(
             AwsTestCase::AWS_NS . '\\Client\\QueryClientResponse',
             array(
                 'getRawContent',
-                'getError'
+                'getResponseCode',
             ),
             array(
                 $this->getMock('HttpMessage')
             )
         );
-        $response->expects($this->any())->method('getError')->will($this->returnValue(false));
+
+        if ($awsStub !== null) {
+            $response->setQueryNumber(++$awsStub->queriesQuantity);
+        }
+
+        if ($responseCode === null) {
+            if (preg_match('/<\/errors>/i', $body)) {
+                $responseCode = 500;
+            } else {
+                $responseCode = 200;
+            }
+        }
+        $response->expects($this->any())->method('getResponseCode')->will($this->returnValue($responseCode));
         $response->expects($this->any())->method('getRawContent')->will($this->returnValue($body));
 
         return $response;

@@ -1,4 +1,4 @@
-<?
+<?php
     class Scalr_Scaling_Algorithms_Sensor
     {
         public function __construct()

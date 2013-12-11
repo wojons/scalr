@@ -191,6 +191,7 @@ class Scalr_SchedulerTask extends Scalr_Model
                             $DBServer = DBServer::LoadByID($server['server_id']);
 
                             $msg = new Scalr_Messaging_Msg_ExecScript($eventName);
+                            $msg->setServerMetaData($DBServer);
 
                             $script = Scalr_Scripting_Manager::prepareScript($scriptSettings, $DBServer);
 
@@ -198,8 +199,14 @@ class Scalr_SchedulerTask extends Scalr_Model
                             // Script
                             $itm->asynchronous = ($script['issync'] == 1) ? '0' : '1';
                             $itm->timeout = $script['timeout'];
-                            $itm->name = $script['name'];
-                            $itm->body = $script['body'];
+
+                            if ($script['body']) {
+                                $itm->name = $script['name'];
+                                $itm->body = $script['body'];
+                            } else {
+                                $itm->path = $script['path'];
+                            }
+                            $itm->executionId = $script['execution_id'];
 
                             $msg->scripts = array($itm);
 

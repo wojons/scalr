@@ -33,10 +33,26 @@ abstract class WebTestCase extends TestCase
     private $env;
 
     /**
+     * Test User
+     * @var \Scalr_Account_User
+     */
+    private $user;
+
+    /**
      * Error report level
      * @var int
      */
     private $errorLevel;
+
+    /**
+     * Returns true if current test is for Scalr Admin privilege
+     *
+     * @return boolean
+     */
+    protected function isAdminUserTestClass()
+    {
+        return false;
+    }
 
     /**
      * {@inheritdoc}
@@ -47,14 +63,19 @@ abstract class WebTestCase extends TestCase
         parent::setUp();
         $this->errorLevel = error_reporting();
         if (\Scalr::config('scalr.phpunit.skip_functional_tests')) {
-            self::markTestSkipped();
+            $this->markTestSkipped();
         }
+
         if (\Scalr::config('scalr.phpunit.userid')) {
             $this->_testUserId = \Scalr::config('scalr.phpunit.userid');
         }
+
         if (\Scalr::config('scalr.phpunit.envid')) {
             $this->_testEnvId = \Scalr::config('scalr.phpunit.envid');
-            $this->env = \Scalr_Environment::init()->loadById($this->_testEnvId);
+        }
+
+        if (!$this->isAdminUserTestClass() && (!empty($this->_testUserId) && $this->getUser()->isScalrAdmin())) {
+            $this->markTestSkipped('Current test class cannot be passed with scalr admin session.');
         }
     }
 
@@ -65,6 +86,7 @@ abstract class WebTestCase extends TestCase
     protected function tearDown()
     {
         $this->env = null;
+        $this->user = null;
         error_reporting($this->errorLevel);
         parent::tearDown();
     }
@@ -72,7 +94,7 @@ abstract class WebTestCase extends TestCase
     /**
      * Makes a request to site
      *
-     * @param   striing    $uri         A request uri
+     * @param   string    $uri         A request uri
      * @param   array      $parameters  optional Request parameters
      * @param   string     $method      optional HTTP Request method
      * @param   array      $server      optional Additional server options
@@ -82,46 +104,92 @@ abstract class WebTestCase extends TestCase
      */
     protected function request($uri, array $parameters = array(), $method = 'GET', array $server = array(), array $files = array())
     {
-        //TODO implement logic for $_FILES
-        $level = error_reporting(E_ERROR | E_RECOVERABLE_ERROR | E_USER_ERROR);
-        $method = strtoupper($method);
+        $aUri = parse_url($uri);
+        call_user_func_array(array($this, 'getRequest'), array_merge(array(Scalr_UI_Request::REQUEST_TYPE_UI, null), func_get_args()));
+
+        $path = explode('/', trim($aUri['path'], '/'));
+        Scalr_UI_Controller::handleRequest($path);
+        $content = Scalr_UI_Response::getInstance()->getResponse();
+
+        $arr = @json_decode($content, true);
+        return $arr === null ? $content : $arr;
+    }
+
+    /**
+     * Get internal request to the controller's action ignoring checking aliases
+     *
+     * @param   string   $uri
+     * @param   array    $parameters
+     * @return  mixed    Returns raw response as it is returned by action
+     */
+    protected function internalRequest($uri, array $parameters = array())
+    {
+        $aUri = parse_url($uri);
+        call_user_func_array(array($this, 'getRequest'), array_merge(array(Scalr_UI_Request::REQUEST_TYPE_UI, null), func_get_args()));
+
+        $path = explode('/', trim($aUri['path'], '/'));
+        $method = array_pop($path) . 'Action';
+        $subController = ucfirst(array_pop($path));
+        $controller = 'Scalr_UI_Controller' . (count($path) ? '_' . join('_', array_map('ucfirst', $path)) : '');
+
+        $c = \Scalr_UI_Controller::loadController($subController, $controller, true);
+        $c->$method();
+
+        $content = Scalr_UI_Response::getInstance()->getResponse();
+
+        $arr = @json_decode($content, true);
+        return $arr === null ? $content : $arr;
+    }
+
+    /**
+     * Prepares request
+     *
+     * @param   striing    $uri         A request uri
+     * @param   array      $parameters  optional Request parameters
+     * @param   string     $method      optional HTTP Request method
+     * @param   array      $server      optional Additional server options
+     * @param   array      $files       optional Uploaded files array
+     * @return  array|string            Returns array which represents returned json object or raw body content in the
+     *                                  case if the response is not a json.
+     * @return  \Scalr_UI_Request
+     */
+    protected function getRequest($requestType = Scalr_UI_Request::REQUEST_TYPE_UI, $requestClass = null, $uri, array $parameters = array(), $method = 'GET', array $server = array(), array $files = array())
+    {
         $aUrl = parse_url($uri);
-        $_SERVER['QUERY_STRING'] = isset($aUrl['query']) ? $aUrl['query'] : '';
-        $_SERVER['REQUEST_URI'] = (isset($aUrl['path']) ? $aUrl['path'] : '/')
-          . (isset($aUrl['query']) ? '?' . $aUrl['query'] : '')
-          . (isset($aUrl['fragment']) ? '#' . $aUrl['fragment'] : '');
-        $path = trim(str_replace("?{$_SERVER['QUERY_STRING']}", "", $_SERVER['REQUEST_URI']), '/');
-        if (!empty($_SERVER['QUERY_STRING'])) {
-            foreach(explode('&', $_SERVER['QUERY_STRING']) as $v) {
+
+        if (!empty($aUrl['query'])) {
+            foreach(explode('&', $aUrl['query']) as $v) {
                 $v = array_map('html_entity_decode', explode('=', $v));
                 $parameters[$v[0]] = isset($v[1]) ? $v[1] : null;
             }
         }
-        foreach ($server as $k => $v) {
-            $_SERVER[$k] = $v;
+
+        $parametersConvert = array();
+        foreach ($parameters as $key => $value) {
+            $parametersConvert[str_replace('.', '_', $key)] = $value;
         }
-        @ob_start();
+
         Scalr_UI_Response::getInstance()->resetResponse();
-        Scalr_UI_Request::initializeInstance(
-            Scalr_UI_Request::REQUEST_TYPE_UI, $this->_testUserId, $this->_testEnvId
+
+        $testEnv = $this->getUser()->isScalrAdmin() ? null : $this->_testEnvId;
+
+        $requestClass = $requestClass ?: 'Scalr_UI_Request';
+        $instance = $requestClass::initializeInstance(
+            $requestType, array(), $server, $parametersConvert, $files, $this->_testUserId, $testEnv
         );
 
-        Scalr_UI_Controller::handleRequest(explode('/', $path), $parameters);
-        $content = @ob_get_contents();
-        @ob_end_clean();
-        $arr = @json_decode($content, true);
-        error_reporting($level);
-        return $arr === null ? $content : $arr;
+        return $instance;
     }
 
     /**
      * Asserts that response data array has necessary data keys.
      *
-     * @param   array $keys         Array of the keys or Index array that looks like array($key => $constraint)
-     * @param   array $responseData Response array
-     * @param   bool  $checkAll     optional Whether it should check all data array or only the first.
+     * @param   array  $keys           Array of the keys or Index array that looks like array($key => $constraint)
+     * @param   array  $responseData   Response array
+     * @param   bool   $checkAll       optional Whether it should check all data array or only the first.
+     * @param   string $dataColumnName optional The name of the data column
      */
-    protected function assertResponseDataHasKeys($keys, $responseData, $checkAll = false)
+    protected function assertResponseDataHasKeys($keys, $responseData, $checkAll = false, $dataColumnName = 'data')
     {
         $this->assertInternalType('array', $responseData);
         if (isset($responseData['success']) && $responseData['success'] === false &&
@@ -129,10 +197,10 @@ abstract class WebTestCase extends TestCase
             echo "\n" . $responseData['errorMessage'] . "\n";
         }
         $this->assertArrayHas(true, 'success', $responseData);
-        $this->assertArrayHasKey('data', $responseData);
-        if (!empty($responseData['data'])) {
-            $this->assertInternalType('array', $responseData['data']);
-            foreach ($responseData['data'] as $obj) {
+        $this->assertArrayHasKey($dataColumnName, $responseData);
+        if (!empty($responseData[$dataColumnName])) {
+            $this->assertInternalType('array', $responseData[$dataColumnName]);
+            foreach ($responseData[$dataColumnName] as $obj) {
                 $this->assertNotEmpty($obj);
                 $this->assertInternalType('array', $obj);
                 foreach ($keys as $key => $val) {
@@ -149,13 +217,38 @@ abstract class WebTestCase extends TestCase
     }
 
     /**
-     * Gets an Scalr_Environment instance
+     * Gets a test environment instance
      *
      * @return  \Scalr_Environment Returns environment instance
      */
     protected function getEnvironment()
     {
+        if (!isset($this->env)) {
+            if (empty($this->_testEnvId)) {
+                $this->_testEnvId = \Scalr::config('scalr.phpunit.envid');
+            }
+            $this->env = \Scalr_Environment::init()->loadById($this->_testEnvId);
+        }
+
         return $this->env;
+    }
+
+    /**
+     * Gets an test User instance
+     *
+     * @return  \Scalr_Account_user Returns user instance
+     */
+    protected function getUser()
+    {
+        if (!isset($this->user)) {
+            if (empty($this->_testUserId)) {
+                $this->_testUserId = \Scalr::config('scalr.phpunit.userid');
+            }
+            $this->user = \Scalr_Account_User::init();
+            $this->user->loadById($this->_testUserId);
+        }
+
+        return $this->user;
     }
 
     /**

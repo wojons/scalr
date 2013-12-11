@@ -8,9 +8,17 @@ class Scalr_Role_Behavior
     const ROLE_DM_REMOTE_PATH = 'dm.remote_path';
 
     const ROLE_BASE_KEEP_SCRIPTING_LOGS_TIME   = 'base.keep_scripting_logs_time';
+    const ROLE_BASE_HOSTNAME_FORMAT   = 'base.hostname_format';
+
+    const SERVER_BASE_HOSTNAME = 'base.hostanme';
 
 
     protected $behavior;
+
+    /**
+     * @var \ADODB_mysqli
+     */
+    public $db;
 
     /**
      * @return Scalr_Role_Behavior
@@ -145,6 +153,9 @@ class Scalr_Role_Behavior
                 } catch (Exception $e) {
                     $this->logger->error(new FarmLogMessage($dbServer->farmId, "Error in role message handler: {$e->getMessage()}"));
                 }
+
+                if (isset($message->base) && isset($message->base->hostname))
+                    $dbServer->SetProperty(self::SERVER_BASE_HOSTNAME, $message->base->hostname);
                 break;
         }
     }
@@ -188,6 +199,22 @@ class Scalr_Role_Behavior
 
         switch (get_class($message))
         {
+            case "Scalr_Messaging_Msg_BeforeHostTerminate":
+
+                //Storage
+                try {
+                    if ($dbFarmRole) {
+                        $storage = new FarmRoleStorage($dbFarmRole);
+                        $volumes = $storage->getVolumesConfigs($dbServer->index);
+                        if (!empty($volumes))
+                            $message->volumes = $volumes;
+                    }
+                } catch (Exception $e) {
+                    $this->logger->error(new FarmLogMessage($dbServer->farmId, "Cannot init storage: {$e->getMessage()}"));
+                }
+
+                break;
+
             case "Scalr_Messaging_Msg_HostInitResponse":
 
                 //Deployments
@@ -207,10 +234,7 @@ class Scalr_Role_Behavior
                                 $dbServer->envId,
                                 Scalr_Dm_DeploymentTask::STATUS_DEPLOYING
                             );
-
-                            $msg = $deploymentTask->getDeployMessage();
-
-                            $message->deploy = $msg;
+                            $message->deploy = $deploymentTask->getDeployMessageProperties();
                         }
                     }
                 } catch (Exception $e) {
@@ -238,6 +262,9 @@ class Scalr_Role_Behavior
 
                         $message->base = new stdClass();
                         $message->base->keepScriptingLogsTime = $scriptingLogTimeout;
+
+                        $hostNameFormat = $dbFarmRole->GetSetting(self::ROLE_BASE_HOSTNAME_FORMAT);
+                        $message->base->hostname = (!empty($hostNameFormat)) ? $dbServer->applyGlobalVarsToValue($hostNameFormat) : '';
                     }
                        //keep_scripting_logs_time
                 } catch (Exception $e) {}
@@ -255,7 +282,17 @@ class Scalr_Role_Behavior
 
     }
 
+    public function onBeforeHostTerminate(DBServer $dbServer)
+    {
+
+    }
+
     public function onFarmTerminated(DBFarmRole $dbFarmRole)
+    {
+
+    }
+
+    public function onHostDown(DBServer $dbServer)
     {
 
     }
@@ -298,7 +335,7 @@ class Scalr_Role_Behavior
                     throw $e;
             }
 
-            $dbFarmRole->SetSetting(static::ROLE_SNAPSHOT_ID, $storageSnapshot->id);
+            $dbFarmRole->SetSetting(static::ROLE_SNAPSHOT_ID, $storageSnapshot->id, DBFarmRole::TYPE_LCL);
         }
         catch(Exception $e) {
             $this->logger->error(new FarmLogMessage($dbFarmRole->FarmID, "Cannot save storage volume: {$e->getMessage()}"));
@@ -335,7 +372,7 @@ class Scalr_Role_Behavior
                     throw $e;
             }
 
-            $dbFarmRole->SetSetting(static::ROLE_VOLUME_ID, $storageVolume->id);
+            $dbFarmRole->SetSetting(static::ROLE_VOLUME_ID, $storageVolume->id, DBFarmRole::TYPE_LCL);
         }
         catch(Exception $e) {
             $this->logger->error(new FarmLogMessage($dbFarmRole->FarmID, "Cannot save storage volume: {$e->getMessage()}"));

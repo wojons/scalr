@@ -1,9 +1,12 @@
 <?php
+use Scalr\Acl\Acl;
+
 class Scalr_UI_Controller_Services_Mongodb extends Scalr_UI_Controller
 {
-    public static function getPermissionDefinitions()
+
+    public function hasAccess()
     {
-        return array();
+        return parent::hasAccess() && $this->request->isAllowed(Acl::RESOURCE_DB_DATABASE_STATUS);
     }
 
     /**
@@ -100,10 +103,22 @@ class Scalr_UI_Controller_Services_Mongodb extends Scalr_UI_Controller
         if ($cStatus && $cStatus != Scalr_Role_Behavior_MongoDB::STATUS_ACTIVE)
             throw new Exception("Shut-down process already initiated");
 
+        //OLD version (1 config server)
         foreach ($dbFarmRole->GetServersByFilter(array('status' => SERVER_STATUS::RUNNING)) as $server) {
             if ($server->GetProperty(Scalr_Role_Behavior_MongoDB::SERVER_IS_CFG_SERVER)) {
                 $cfgServer = $server;
                 break;
+            }
+        }
+
+        //NEW version (3 config servers) Send to node 0-0
+        if (!$cfgServer) {
+            foreach ($dbFarmRole->GetServersByFilter(array('status' => SERVER_STATUS::RUNNING)) as $server) {
+                if ($server->GetProperty(Scalr_Role_Behavior_MongoDB::SERVER_REPLICA_SET_INDEX) === '0' &&
+                $server->GetProperty(Scalr_Role_Behavior_MongoDB::SERVER_SHARD_INDEX) === '0') {
+                    $cfgServer = $server;
+                    break;
+                }
             }
         }
 
@@ -113,7 +128,7 @@ class Scalr_UI_Controller_Services_Mongodb extends Scalr_UI_Controller
             $sendMsg = $cfgServer->SendMessage(new Scalr_Messaging_Msg_MongoDb_ClusterTerminate());
         //TODO: Handle situation when message was not sent.
 
-        $dbFarmRole->SetSetting(Scalr_Role_Behavior_MongoDB::ROLE_CLUSTER_STATUS, Scalr_Role_Behavior_MongoDB::STATUS_SHUTTING_DOWN);
+        $dbFarmRole->SetSetting(Scalr_Role_Behavior_MongoDB::ROLE_CLUSTER_STATUS, Scalr_Role_Behavior_MongoDB::STATUS_SHUTTING_DOWN, DBFarmRole::TYPE_LCL);
 
         Scalr_Role_Behavior::loadByName(ROLE_BEHAVIORS::MONGODB)->log($dbFarmRole, "Initiated cluster shutdown");
 
@@ -154,7 +169,7 @@ class Scalr_UI_Controller_Services_Mongodb extends Scalr_UI_Controller
 
         $router->SendMessage($msg);
 
-        $dbFarmRole->SetSetting(Scalr_Role_Behavior_MongoDB::ROLE_CLUSTER_IS_REMOVING_SHARD_INDEX, $lastShardIndex);
+        $dbFarmRole->SetSetting(Scalr_Role_Behavior_MongoDB::ROLE_CLUSTER_IS_REMOVING_SHARD_INDEX, $lastShardIndex, DBFarmRole::TYPE_LCL);
 
         Scalr_Role_Behavior::loadByName(ROLE_BEHAVIORS::MONGODB)->log($dbFarmRole, "Initiated shard #{$lastShardIndex} removal");
 
@@ -174,7 +189,7 @@ class Scalr_UI_Controller_Services_Mongodb extends Scalr_UI_Controller
 
         $shardsCount = $dbFarmRole->GetSetting(Scalr_Role_Behavior_MongoDB::ROLE_SHARDS_COUNT);
 
-        $dbFarmRole->SetSetting(Scalr_Role_Behavior_MongoDB::ROLE_SHARDS_COUNT, $shardsCount+1);
+        $dbFarmRole->SetSetting(Scalr_Role_Behavior_MongoDB::ROLE_SHARDS_COUNT, $shardsCount+1, DBFarmRole::TYPE_CFG);
 
         Scalr_Role_Behavior::loadByName(ROLE_BEHAVIORS::MONGODB)->log($dbFarmRole, sprintf("Requested new shard. Adding #%s shard to the cluster", $shardsCount));
 
@@ -194,12 +209,12 @@ class Scalr_UI_Controller_Services_Mongodb extends Scalr_UI_Controller
 
         $rReplica = $replicasCount-1;
 
-        $dbFarmRole->SetSetting(Scalr_Role_Behavior_MongoDB::ROLE_REPLICAS_COUNT, $rReplica);
+        $dbFarmRole->SetSetting(Scalr_Role_Behavior_MongoDB::ROLE_REPLICAS_COUNT, $rReplica, DBFarmRole::TYPE_CFG);
 
         // Terminate instances
         foreach ($dbFarmRole->GetServersByFilter(array('status' => array(SERVER_STATUS::RUNNING, SERVER_STATUS::INIT, SERVER_STATUS::PENDING, SERVER_STATUS::PENDING_LAUNCH))) as $server) {
             if ($server->GetProperty(Scalr_Role_Behavior_MongoDB::SERVER_REPLICA_SET_INDEX) == $rReplica) {
-                Scalr::FireEvent($server->farmId, new BeforeHostTerminateEvent($server, false));
+                $server->terminate(array('REMOVING_REPLICA_SET_FROM_CLUSTER', 'MongoDB'), false, $this->user);
             }
         }
 
@@ -218,7 +233,7 @@ class Scalr_UI_Controller_Services_Mongodb extends Scalr_UI_Controller
 
         $replicasCount = $dbFarmRole->GetSetting(Scalr_Role_Behavior_MongoDB::ROLE_REPLICAS_COUNT);
 
-        $dbFarmRole->SetSetting(Scalr_Role_Behavior_MongoDB::ROLE_REPLICAS_COUNT, $replicasCount+1);
+        $dbFarmRole->SetSetting(Scalr_Role_Behavior_MongoDB::ROLE_REPLICAS_COUNT, $replicasCount+1, DBFarmRole::TYPE_CFG);
 
         Scalr_Role_Behavior::loadByName(ROLE_BEHAVIORS::MONGODB)->log($dbFarmRole, sprintf("Requested new replica set. Adding #%s replica set to the cluster", $replicasCount+1));
 

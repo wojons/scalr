@@ -49,7 +49,8 @@ class DNSEventObserver extends EventObserver
         if (\Scalr::config('scalr.dns.static.enabled')) {
             try {
                 $hash = DBFarm::LoadByID($event->GetFarmID())->Hash;
-                $this->DB->Execute("INSERT INTO `powerdns`.`domains` SET `name`=?, `type`=?, `scalr_farm_id`=?", array("{$hash}.scalr-dns.net",'NATIVE', $event->GetFarmID()));
+                $pdnsDb = \Scalr::getContainer()->dnsdb;
+                $pdnsDb->Execute("INSERT INTO `domains` SET `name`=?, `type`=?, `scalr_farm_id`=?", array("{$hash}.scalr-dns.net",'NATIVE', $event->GetFarmID()));
             } catch (Exception $e) {}
         }
 
@@ -75,7 +76,8 @@ class DNSEventObserver extends EventObserver
     {
         //SYSTEM DNS ZONES
         if (\Scalr::config('scalr.dns.static.enabled')) {
-            $this->DB->Execute("DELETE FROM `powerdns`.`domains` WHERE scalr_farm_id = ?", array($event->GetFarmID()));
+            $pdnsDb = \Scalr::getContainer()->dnsdb;
+            $pdnsDb->Execute("DELETE FROM `domains` WHERE scalr_farm_id = ?", array($event->GetFarmID()));
         }
 
         if (!$event->RemoveZoneFromDNS)
@@ -166,6 +168,8 @@ class DNSEventObserver extends EventObserver
         if (!Scalr::config('scalr.dns.static.enabled'))
             return true;
 
+        $pdnsDb = \Scalr::getContainer()->dnsdb;
+
         $deleteMySQL = false;
         $deleteDbMsr = false;
 
@@ -177,7 +181,8 @@ class DNSEventObserver extends EventObserver
                 $dbRole = DBRole::loadById($server->roleId);
             } catch (Exception $e) {}
 
-            $domain = $this->DB->GetRow("SELECT id, name FROM powerdns.domains WHERE scalr_farm_id = ?", array($server->farmId));
+
+            $domain = $pdnsDb->GetRow("SELECT id, name FROM domains WHERE scalr_farm_id = ? LIMIT 1", array($server->farmId));
             $domainId = $domain['id'];
             $domainName = $domain['name'];
             if (!$domainId)
@@ -211,7 +216,7 @@ class DNSEventObserver extends EventObserver
 
                 $servers = $this->DB->Execute("SELECT server_id, local_ip, remote_ip FROM servers WHERE `farm_roleid` = ? and `status`=?", array($server->farmRoleId, SERVER_STATUS::RUNNING));
                 while ($s = $servers->FetchRow()) {
-                    if ($this->DB->GetOne("SELECT value FROM server_properties WHERE server_id = ? AND name = ?", array($s['server_id'], SERVER_PROPERTIES::DB_MYSQL_MASTER)) == 1) {
+                    if ($this->DB->GetOne("SELECT value FROM server_properties WHERE server_id = ? AND name = ? LIMIT 1", array($s['server_id'], SERVER_PROPERTIES::DB_MYSQL_MASTER)) == 1) {
                         $records[] = array("int.master.mysql", $s['local_ip'], $s['server_id'], 'mysql');
                         $records[] = array("ext.master.mysql", $s['remote_ip'], $s['server_id'], 'mysql');
                         $mysqlMasterServer = $s;
@@ -242,7 +247,7 @@ class DNSEventObserver extends EventObserver
 
                 $servers = $this->DB->Execute("SELECT server_id, local_ip, remote_ip FROM servers WHERE `farm_roleid` = ? and `status`=?", array($server->farmRoleId, SERVER_STATUS::RUNNING));
                 while ($s = $servers->FetchRow()) {
-                    if ($this->DB->GetOne("SELECT value FROM server_properties WHERE server_id = ? AND name = ?", array($s['server_id'], Scalr_Db_Msr::REPLICATION_MASTER)) == 1) {
+                    if ($this->DB->GetOne("SELECT value FROM server_properties WHERE server_id = ? AND name = ? LIMIT 1", array($s['server_id'], Scalr_Db_Msr::REPLICATION_MASTER)) == 1) {
                         $records[] = array("int.master.{$recordPrefix}", $s['local_ip'], $s['server_id'], $dbmsr);
                         $records[] = array("ext.master.{$recordPrefix}", $s['remote_ip'], $s['server_id'], $dbmsr);
                         $mysqlMasterServer = $s;
@@ -271,15 +276,15 @@ class DNSEventObserver extends EventObserver
             }
             */
 
-            $this->DB->Execute("DELETE FROM powerdns.records WHERE server_id = ?", array($server_id));
+            $pdnsDb->Execute("DELETE FROM records WHERE server_id = ?", array($server_id));
             if ($deleteMySQL)
-                $this->DB->Execute("DELETE FROM powerdns.records WHERE `service` = ? AND domain_id = ?", array('mysql', $domainId));
+                $pdnsDb->Execute("DELETE FROM records WHERE `service` = ? AND domain_id = ?", array('mysql', $domainId));
             if ($deleteDbMsr)
-                $this->DB->Execute("DELETE FROM powerdns.records WHERE `service` = ? AND domain_id = ?", array($dbmsr, $domainId));
+                $pdnsDb->Execute("DELETE FROM records WHERE `service` = ? AND domain_id = ?", array($dbmsr, $domainId));
 
             if (count($records) > 0) {
                 foreach ($records as $r) {
-                    $this->DB->Execute("INSERT INTO powerdns.records SET
+                    $pdnsDb->Execute("INSERT INTO records SET
                         `domain_id`=?, `name`=?, `type`=?, `content`=?, `ttl`=?, `server_id`=?, `service`=?
                     ",
                     array($domainId, "$r[0].{$domainName}", "A", "{$r[1]}", 20, $r[2], $r[3]));

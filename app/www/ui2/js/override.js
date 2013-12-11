@@ -1,4 +1,46 @@
-// show file name in File Field
+Ext.override(Ext.view.Table, {
+    enableTextSelection: true,
+    markDirty: false
+});
+
+Ext.override(Ext.grid.View, {
+    stripeRows: false
+});
+
+Ext.override(Ext.form.action.Action, {
+    submitEmptyText: false
+});
+
+Ext.override(Ext.tip.Tip, {
+    shadow: false
+});
+
+Ext.override(Ext.panel.Tool, {
+    width: 21,
+    height: 16
+});
+
+Ext.override(Ext.tip.ToolTip, {
+    clickable: false,
+    onRender: function() {
+        var me = this;
+        me.callParent(arguments);
+        if (me.clickable) {
+            me.mon(me.el, 'mouseover', function () {
+                me.clearTimer('hide');
+                me.clearTimer('dismiss');
+            }, me);
+            me.mon(me.el, 'mouseout', function () {
+                me.clearTimer('show');
+                if (me.autoHide !== false) {
+                    me.delayHide();
+                }
+            }, me);
+        }
+    }
+});
+
+// show file name in File Field (4.2)
 Ext.override(Ext.form.field.File, {
 	onRender: function() {
 		var me = this;
@@ -14,16 +56,22 @@ Ext.override(Ext.form.field.File, {
 	}
 });
 
-// submit form on enter on any fields in form
+// (4.2)
 Ext.override(Ext.form.field.Base, {
 	allowChangeable: true,
 	allowChangeableMsg: 'You can set this value only once',
 	validateOnBlur: false,
+    governance: false,
 
 	initComponent: function() {
+        if (this.governance) {
+            this.beforeSubTpl = '<span class="x-icon-governance" title="This functionality is limited by account owner"></span>' + (this.beforeSubTpl || '');
+        }
+
 		this.callParent(arguments);
 
-		this.on('specialkey', function(field, e) {
+        // submit form on enter on any fields in form
+        this.on('specialkey', function(field, e) {
 			if (e.getKey() == e.ENTER) {
 				var form = field.up('form');
 				if (form) {
@@ -61,7 +109,14 @@ Ext.override(Ext.form.field.Base, {
 		this.callParent(arguments);
 		if (! this.allowChangeable)
 			this.changeableTip.setDisabled(false);
-	}
+	},
+
+    setValueWithGovernance: function(value, limit) {
+        var governanceEnabled = limit !== undefined;
+        this.setValue(governanceEnabled ? limit.value : value);
+        this.setReadOnly(governanceEnabled);
+        this[governanceEnabled ? 'addCls' : 'removeCls']('x-field-governance');
+    }
 });
 
 Ext.override(Ext.form.field.Checkbox, {
@@ -217,6 +272,7 @@ Ext.override(Ext.form.Panel, {
 	}
 });
 
+// (4.2)
 Ext.override(Ext.form.Basic, {
 	constructor: function() {
 		this.callParent(arguments);
@@ -244,59 +300,23 @@ Ext.override(Ext.form.Basic, {
 	}
 });
 
-Ext.override(Ext.form.action.Action, {
-	submitEmptyText: false
-});
-
-// save & restore all sort params
+// (4.2) save our additional parameter
 Ext.override(Ext.panel.Table, {
 	getState: function() {
-		var state = this.callParent(arguments), me = this, sorters = me.store.sorters;
-
-		if (sorters) {
-			var s = [];
-			sorters.each(function (item) {
-				s.push({
-					direction: item.direction,
-					property: item.property,
-					root: item.root
-				});
-			});
-
-			state = me.addPropertyToState(state, 'sort', s);
-		}
+		var state = this.callParent(arguments);
 		state = this.addPropertyToState(state, 'autoRefresh', this.autoRefresh);
-
 		return state;
-	},
-	applyState: function(state) {
-		var sorter = state.sort, me = this, store = me.store;
-		if (sorter) {
-			store.sort(sorter, null, false);
-			delete state.sort;
-		}
-
-		this.callParent(arguments);
 	}
 });
 
-Ext.override(Ext.view.Table, {
-	enableTextSelection: true
-});
-
+// (4.2)
 Ext.override(Ext.view.AbstractView, {
-	loadingText: 'Loading data...',
-	emptyTextPrepare: true,
+	loadingText: 'Loading data...'
 	//disableSelection: true,
 	// TODO: apply and check errors (role/edit for example, selected plugin for grid
-
-	initComponent: function() {
-		this.callParent(arguments);
-		if (this.emptyTextPrepare)
-			this.emptyText = '<div class="x-grid-empty">' + this.emptyText + '</div>';
-	}
 });
 
+// (4.2)
 Ext.override(Ext.view.BoundList, {
 	afterRender: function() {
 		this.callParent(arguments);
@@ -306,15 +326,28 @@ Ext.override(Ext.view.BoundList, {
 	}
 })
 
+// (4.2)
+Ext.override(Ext.form.field.Text, {
+    readOnlyCls: 'x-form-readonly',
+    hideInputOnReadOnly: false,
+	initComponent: function() {
+		var me = this;
+		me.callParent(arguments);
+        if (me.hideInputOnReadOnly) {
+            me.readOnlyCls += ' x-input-readonly';
+        }
+	}
+});
+
 Ext.override(Ext.form.field.ComboBox, {
 	matchFieldWidth: false,
 	autoSetValue: false,
-	queryReset: false, // set true to refresh store forcibly
+    clearDataBeforeQuery: false,
+    restoreValueOnBlur: false,
 
 	initComponent: function() {
 		var me = this;
 		me.callParent(arguments);
-
 		if (!me.value && me.autoSetValue && me.store.getCount() > 0) {
 			me.setValue(me.store.first().get(me.valueField));
 		}
@@ -330,164 +363,52 @@ Ext.override(Ext.form.field.ComboBox, {
 				picker.el.applyStyles('min-width: ' + me.bodyEl.getWidth() + 'px');
 			}
 		}
-
 		this.callParent(arguments);
 	},
 
-	onBeforeLoad: function() {
-		if (this.queryMode == 'remote')
-			this.addCls('x-field-trigger-loading');
-
-		this.removeCls('x-field-trigger-error');
-		if (this.rendered)
-			this.triggerEl.elements[0].dom.title = '';
-	},
-	onLoad: function(store, records, successful) {
-		if (this.queryMode == 'remote')
-			this.removeCls('x-field-trigger-loading');
-
-		if (!successful && store.proxy.reader.rawData && store.proxy.reader.rawData.errorMessage) {
-			this.addCls('x-field-trigger-error');
-			this.triggerEl.elements[0].dom.title = 'Error loading data: ' + store.proxy.reader.rawData.errorMessage + "\nClick to try once more.";
-			this.queryReset = true;
-			this.collapse();
-		}
-	},
-	onException: function() {
-		if (this.queryMode == 'remote')
-			this.removeCls('x-field-trigger-loading');
-	},
-	// based onTriggerClick
-	prefetch: function() {
-		var me = this;
-		if (!me.readOnly && !me.disabled) {
-			if (me.triggerAction === 'all') {
-				me.doQuery(me.allQuery, true);
-			} else {
-				me.doQuery(me.getRawValue(), false, true);
-			}
-			me.collapse();
-		}
-	},
-
-	doQuery: function(queryString, forceAll, rawQuery) {
-		/* Changed */
-		if (this.queryReset && this.queryCaching)
-			this.queryCaching = false;
-		/* End */
-
-        queryString = queryString || '';
-
-        // store in object and pass by reference in 'beforequery'
-        // so that client code can modify values.
-        var me = this,
-            qe = {
-                query: queryString,
-                forceAll: forceAll,
-                combo: me,
-                cancel: false
-            },
-            store = me.store,
-            isLocalMode = me.queryMode === 'local',
-            needsRefresh;
-
-        if (me.fireEvent('beforequery', qe) === false || qe.cancel) {
-            return false;
+    doRemoteQuery: function(queryPlan) {
+        if (this.queryMode == 'remote' && this.clearDataBeforeQuery) {
+            this.store.removeAll();
         }
+        this.callParent(arguments);
+    },
+    
+    onLoad: function(store, records, successful) {
+        this.callParent(arguments);
+        if (!successful && this.queryMode == 'remote') {
+            this.collapse();
+        }
+    },
 
-        // get back out possibly modified values
-        queryString = qe.query;
-        forceAll = qe.forceAll;
+    /*
+     * Combobox set editable=true when setting reaOnly=false, sometimes we need to set these options separately.
+     * Using setEditable(false) after setReadOnly(false) doesn't work for unknown reason
+     **/
+    setReadOnly: function(readOnly, editable) {
+        this.callParent(arguments);
+        if (editable !== undefined && this.inputEl) {
+            this.inputEl.dom.readOnly = !editable;
+        }
+    },
 
-        // query permitted to run
-        if (forceAll || (queryString.length >= me.minChars)) {
-            // expand before starting query so LoadMask can position itself correctly
-            me.expand();
-
-            // make sure they aren't querying the same thing
-            if (!me.queryCaching || me.lastQuery !== queryString) {
-                me.lastQuery = queryString;
-
-                if (isLocalMode) {
-                    // forceAll means no filtering - show whole dataset.
-                    store.suspendEvents();
-                    needsRefresh = me.clearFilter();
-                    if (queryString || !forceAll) {
-						/* Changed */
-						if (this.filterFn) {
-							me.activeFilter = new Ext.util.Filter({
-								root: 'data',
-								filterFn: function(item) {
-									return me.filterFn(queryString, item)
-								}
-							});
-						} else {
-							me.activeFilter = new Ext.util.Filter({
-								root: 'data',
-								property: me.displayField,
-								value: queryString,
-								anyMatch: this.anyMatch || false
-							});
-						}
-						/* End */
-						store.filter(me.activeFilter);
-						needsRefresh = true;
-                    } else {
-                        delete me.activeFilter;
-                    }
-                    store.resumeEvents();
-                    if (me.rendered && needsRefresh) {
-                        me.getPicker().refresh();
-                    }
-                } else {
-                    // Set flag for onLoad handling to know how the Store was loaded
-                    me.rawQuery = rawQuery;
-
-                    // In queryMode: 'remote', we assume Store filters are added by the developer as remote filters,
-                    // and these are automatically passed as params with every load call, so we do *not* call clearFilter.
-                    if (me.pageSize) {
-                        // if we're paging, we've changed the query so start at page 1.
-                        me.loadPage(1);
-                    } else {
-                        store.load({
-                            params: me.getParams(queryString)
-                        });
-                    }
-                }
-            }
-
-            // Clear current selection if it does not match the current value in the field
-            if (me.getRawValue() !== me.getDisplayValue()) {
-                me.ignoreSelection++;
-                me.picker.getSelectionModel().deselectAll();
-                me.ignoreSelection--;
-            }
-
-            if (isLocalMode) {
-                me.doAutoSelect();
-            }
-            if (me.typeAhead) {
-                me.doTypeAhead();
-            }
-        }		
-		
-		/* Changed */
-		if (this.queryReset) {
-			this.queryReset = false;
-			this.queryCaching = true
-		}
-		/* End */
-		return true;
-	},
+    assertValue: function() {
+        var forceSelection = this.forceSelection;
+        if (this.restoreValueOnBlur) {
+            forceSelection = true;
+        }
+        this.callParent(arguments);
+        this.forceSelection = forceSelection;
+    },
 
 	defaultListConfig: {
+        loadMask: false,
 		shadow: false // disable shadow in combobox
 	},
 	shadow: false
 });
 
 Ext.override(Ext.form.field.Picker, {
-	pickerOffset: [0, 2]
+	pickerOffset: [0, 1]
 });
 
 Ext.override(Ext.picker.Date, {
@@ -516,23 +437,27 @@ Ext.override(Ext.container.Container, {
 		}
 	},
 
-	getFieldValues: function() {
+	getFieldValues: function(noSubmitValue) {
 		var fields = this.query('[isFormField]'), values = {};
+        noSubmitValue = noSubmitValue || false; // not include submitValue: false
+
 		for (var i = 0, len = fields.length; i < len; i++) {
+            if (noSubmitValue && fields[i].submitValue == false)
+                continue;
 			values[fields[i].getName()] = fields[i].getValue();
 		}
 
 		return values;
-	}
-});
+	},
 
-Ext.override(Ext.tip.Tip, {
-	shadow: false
-});
+    isValidFields: function() {
+        var fields = this.query('[isFormField]'), isValid = true;
+        for (var i = 0, len = fields.length; i < len; i++) {
+            isValid = isValid && fields[i].isValid();
+        }
 
-Ext.override(Ext.panel.Tool, {
-	width: 21,
-	height: 16
+        return isValid;
+    }
 });
 
 // override to save scope, WTF? field doesn't forward =((
@@ -566,6 +491,11 @@ Ext.override(Ext.grid.column.Column, {
 	// hide control menu
 	menuDisabled: true,
 
+    // extjs doesn't save column parameter, use dataIndex as stateId by default
+    getStateId: function () {
+        return this.dataIndex || this.stateId || this.headerId;
+    },
+
 	// mark sortable columns
 	beforeRender: function() {
 		this.callParent();
@@ -578,6 +508,46 @@ Ext.override(Ext.grid.Panel, {
 	enableColumnMove: false
 });
 
+Ext.override(Ext.grid.header.Container, {
+    applyColumnsState: function(columns) {
+        if (!columns || !columns.length) {
+            return;
+        }
+
+        var me     = this,
+            items  = me.items.items,
+            count  = items.length,
+            i      = 0,
+            length = columns.length,
+            c, col, columnState, index;
+
+        for (c = 0; c < length; c++) {
+            columnState = columns[c];
+
+            for (index = count; index--; ) {
+                col = items[index];
+                if (col.getStateId && col.getStateId() == columnState.id) {
+                    // If a column in the new grid matches up with a saved state...
+                    // Ensure that the column is restored to the state order.
+                    // i is incremented upon every column match, so all persistent
+                    // columns are ordered before any new columns.
+                    /*Changed*/
+                    //since we don't use columnmove - we don't need code below.(This code places all newly added columns to the very last position)
+                    /*if (i !== index) {
+                        me.moveHeader(index, i);
+                    }*/
+                    /*End*/
+                    if (col.applyColumnState) {
+                        col.applyColumnState(columnState);
+                    }
+                    ++i;
+                    break;
+                }
+            }
+        }
+    }
+});
+
 // fieldset's title is not legend (simple div)
 Ext.override(Ext.form.FieldSet, {
 	createLegendCt: function() {
@@ -586,6 +556,7 @@ Ext.override(Ext.form.FieldSet, {
 			legend = {
 				xtype: 'container',
 				baseCls: me.baseCls + '-header',
+                cls: me.headerCls,
 				id: me.id + '-legend',
 				//autoEl: 'legend',
 				items: items,
@@ -607,7 +578,7 @@ Ext.override(Ext.form.FieldSet, {
                     element: 'el',
                     scope : me,
                     fn : function(e, el){
-                        if(Ext.fly(el).hasCls(me.baseCls + '-header')) {
+                        if(!Ext.fly(el).hasCls(me.baseCls + '-header-text')) {
                             me.toggle(arguments);
                         }
                     }
@@ -642,12 +613,15 @@ Ext.override(Ext.form.FieldSet, {
 			else
 				this.toggleCmp.setType('expand');
 		}
-	}
+	},
+    setTitle: function(title, description) {
+        this.callParent([title + (description ? '<span class="x-fieldset-header-description">' + description + '</span>' : '')]);
+    }
     
 });
 
 Ext.override(Ext.menu.Menu, {
-	childMenuOffset: [2, 0],
+	childMenuOffset: [1, 0],
 	menuOffset: [0, 1],
 	shadow: false,
 	showBy: function(cmp, pos, off) {
@@ -693,43 +667,6 @@ Ext.override(Ext.menu.Menu, {
 	}
 });
 
-Ext.override(Ext.menu.Item, {
-	renderTpl: [
-		'<tpl if="plain">',
-			'{text}',
-		'<tpl else>',
-			'<a id="{id}-itemEl" class="' + Ext.baseCSSPrefix + 'menu-item-link" href="{href}" <tpl if="hrefTarget">target="{hrefTarget}"</tpl> hidefocus="true" unselectable="on">',
-				'<img id="{id}-iconEl" src="{icon}" class="' + Ext.baseCSSPrefix + 'menu-item-icon {iconCls}" />',
-				'<span id="{id}-textEl" class="' + Ext.baseCSSPrefix + 'menu-item-text" <tpl if="arrowCls">style="margin-right: 17px;"</tpl> >{text}</span>',
-				'<img id="{id}-arrowEl" src="{blank}" class="{arrowCls}" />',
-				'<div style="clear: both"></div>',
-			'</a>',
-		'</tpl>'
-	]
-});
-
-// fix from 4.1.2
-// TODO: remove after update
-Ext.view.Table.override({
-	onUpdate: function(store, record) {
-		var index = store.indexOf(record);
-		this.callParent(arguments);
-
-		if (this.getSelectionModel().isSelected(record))
-			Ext.fly(this.getNodeByRecord(record)).addCls('x-grid-row-selected');
-
-		this.doStripeRows(index, index);
-	}
-});
-
-// remove strip div
-Ext.override(Ext.tab.Bar, {
-	afterRender: function() {
-		this.callParent(arguments);
-		this.strip.applyStyles('height: 0px; display: none;')
-	}
-});
-
 Ext.override(Ext.grid.plugin.CellEditing, {
 	getEditor: function() {
 		var editor = this.callParent(arguments);
@@ -758,14 +695,15 @@ Ext.Error.handle = function(err) {
 	var err = new Ext.Error(err);
 
 	Scalr.utils.PostError({
-		message: err.toString(),
+		message: 't1 ' + err.toString(),
 		url: document.location.href
 	});
 
 	return true;
 };
 
-Ext.override(Ext.grid.plugin.HeaderResizer, {
+/*temporarily disabled due to 17278-unable-to-add-rule-to-security-group*/
+/*Ext.override(Ext.grid.plugin.HeaderResizer, {
 	resizeColumnsToFitPanelWidth: function(currentColumn) {
 		var headerCt = this.headerCt,
 			grid = headerCt.ownerCt || null;
@@ -816,8 +754,9 @@ Ext.override(Ext.grid.plugin.HeaderResizer, {
 		this.callParent(arguments);
 		this.resizeColumnsToFitPanelWidth(this.dragHd);
 	}
-});
+});*/
 
+// (4.2)
 Ext.apply(Ext.Loader, {
 	loadScripts: function(sc, handler) {
 		var scope = {
@@ -838,105 +777,246 @@ Ext.apply(Ext.Loader, {
 	}
 });
 
-Ext.override(Ext.grid.RowEditor, {
-	reposition: function(animateConfig) {
-		var me = this,
-			context = me.context,
-			row = context && Ext.get(context.row),
-			btns = me.getFloatingButtons(),
-			btnEl = btns.el,
-			grid = me.editingPlugin.grid,
-			viewEl = grid.view.el,
+/* (4.2)*/
+Ext.override(Ext.button.Button, {
+    onMouseDown: function(e) {
+        var me = this;
 
-			// always get data from ColumnModel as its what drives
-			// the GridView's sizing
-			mainBodyWidth = grid.headerCt.getFullWidth(),
-			scrollerWidth = grid.getWidth(),
+        if (Ext.isIE) {
+            // In IE the use of unselectable on the button's elements causes the element
+            // to not receive focus, even when it is directly clicked.
+            me.getFocusEl().focus();
+        }
 
-			// use the minimum as the columns may not fill up the entire grid
-			// width
-			width = Math.min(mainBodyWidth, scrollerWidth),
-			scrollLeft = grid.view.el.dom.scrollLeft,
-			btnWidth = btns.getWidth(),
-			left = (width - btnWidth) / 2 + scrollLeft,
-			y, rowH, newHeight,
-
-			invalidateScroller = function() {
-				btnEl.scrollIntoView(viewEl, false);
-				if (animateConfig && animateConfig.callback) {
-					animateConfig.callback.call(animateConfig.scope || me);
-				}
-			},
-			
-			animObj;
-
-		// need to set both top/left
-		if (row && Ext.isElement(row.dom)) {
-			// Bring our row into view if necessary, so a row editor that's already
-			// visible and animated to the row will appear smooth
-			row.scrollIntoView(viewEl, false);
-
-			// Get the y position of the row relative to its top-most static parent.
-			// offsetTop will be relative to the table, and is incorrect
-			// when mixed with certain grid features (e.g., grouping).
-			y = row.getXY()[1] - 5;
-			rowH = row.getHeight();
-			newHeight = rowH + (me.editingPlugin.grid.rowLines ? 9 : 10);
-
-			// Set editor height to match the row height
-			/* Changed */
-			newHeight -= 5;
-			y += row.parent().last('.x-grid-row').dom === row.dom && row.parent().first('.x-grid-row').dom !== row.dom ? 0 : 3;
-			/* End */
-			if (me.getHeight() != newHeight) {
-				me.setHeight(newHeight);
-				me.el.setLeft(0);
-			}
-			/* Changed */
-			if (false) {
-			/* End */
-				animObj = {
-					to: {
-						y: y
-					},
-					duration: animateConfig.duration || 125,
-					listeners: {
-						afteranimate: function() {
-							invalidateScroller();
-							y = row.getXY()[1] - 5;
-						}
-					}
-				};
-				me.el.animate(animObj);
-			} else {
-				me.el.setY(y);
-				invalidateScroller();
-			}
-		}
-		if (me.getWidth() != mainBodyWidth) {
-			me.setWidth(mainBodyWidth);
-		}
-		btnEl.setLeft(left);
-	}
-	
-});
-
-/*required for new left menu(rolebuilder), allows absolute positioning for scrollers*/
-Ext.override(Ext.layout.container.boxOverflow.Scroller, {
-    handleOverflow: function(ownerContext) {
-        var me = this,
-            layout = me.layout,
-            names = layout.getNames(),
-            methodName = 'get' + names.widthCap;
-
-        me.captureChildElements();
-        me.showScrollers();
-
-        return {
-			/* Changed */
-            reservedSpace: (me.beforeCt.getStyle('position') == 'absolute' ? 0 : me.beforeCt[methodName]()) + (me.afterCt.getStyle('position') == 'absolute' ? 0 : me.afterCt[methodName]())
-			/* End */
-        };
+        if (!me.disabled && e.button === 0) {
+            Ext.button.Manager.onButtonMousedown(me, e);
+            /*Changed*/
+            if (!me.disableMouseDownPressed) {
+                me.addClsWithUI(me.pressedCls);
+            }
+            /*End*/
+        }
     }
 });
 
+// (4.2)
+Ext.override(Ext.button.Split, {
+    initComponent: function() {
+        this.callParent(arguments);
+        this.addCls('x-btn-default-small-split');
+    }
+});
+
+// (4.2)
+Ext.define(null, {
+    override: 'Ext.grid.plugin.RowExpander',
+
+    addExpander: function() {
+        this.callParent(arguments);
+        //they override selectionmodel checkbox position to 1 for unknown reason, we need to fix it
+        this.grid.getSelectionModel().injectCheckbox = 'last';
+    }
+});
+
+// (4.2)
+Ext.define(null, {
+    override: 'Ext.form.field.Date',
+    triggerWidth: 29
+});
+
+// (4.2)
+Ext.define(null, {
+    override: 'Ext.picker.Date',
+    disableAnim: true
+});
+
+// (4.2)
+Ext.define(null, {
+    override: 'Ext.picker.Month',
+    onRender: function() {
+        this.callParent(arguments);
+        this.buttonsEl.addCls('x-form-buttongroupfield')
+    }
+});
+
+// (4.2)
+Ext.define(null, {
+    override: 'Ext.form.action.Submit',
+    buildForm: function() {
+        var result = this.callParent(arguments);
+        Ext.fly(result.formEl).createChild({
+            tag: 'input',
+            type: 'hidden',
+            name: 'X-Requested-Token',
+            value: Scalr.flags.specialToken
+        });
+        return result;
+    }
+});
+
+// (4.2)
+Ext.define(null, {
+    override: 'Ext.grid.plugin.RowExpander',
+    getHeaderConfig: function() {
+        var config = this.callParent(arguments);
+        config['width'] = 38;
+
+        return config;
+    },
+
+    // transfer all row classes to parent wrap tr
+    addCollapsedCls: {
+        before: function(values, out) {
+            var me = this.rowExpander;
+
+            if (!me.recordsExpanded[values.record.internalId]) {
+                values.itemClasses.push(me.rowCollapsedCls);
+            }
+
+            values.itemClasses = Ext.Array.merge(values.itemClasses, values.rowClasses);
+        },
+        priority: 500
+    }
+});
+
+Ext.define(null, {
+    override: 'Ext.layout.component.Dock',
+
+    beginLayoutCycle: function(ownerContext) {
+        var me = this,
+            docked = ownerContext.dockedItems,
+            len = docked.length,
+            owner = me.owner,
+            frameBody = owner.frameBody,
+            lastHeightModel = me.lastHeightModel,
+            i, item, dock;
+
+        /* CHANGED */
+        Ext.layout.component.Dock.superclass.beginLayoutCycle.apply(this, arguments);
+        /* END */
+
+        if (me.owner.manageHeight) {
+            // Reset in case manageHeight gets turned on during lifecycle.
+            // See below for why display could be set to non-default value.
+            if (me.lastBodyDisplay) {
+                owner.body.dom.style.display = me.lastBodyDisplay = '';
+            }
+        } else {
+            // When manageHeight is false, the body stretches the outer el by using wide margins to force it to
+            // accommodate the docked items. When overflow is visible (when panel is resizable and has embedded handles),
+            // the body must be inline-block so as not to collapse its margins
+            if (me.lastBodyDisplay !== 'inline-block') {
+                owner.body.dom.style.display = me.lastBodyDisplay = 'inline-block';
+            }
+
+            if (lastHeightModel && lastHeightModel.shrinkWrap &&
+                !ownerContext.heightModel.shrinkWrap) {
+                owner.body.dom.style.marginBottom = '';
+            }
+        }
+
+        if (ownerContext.widthModel.auto) {
+            if (ownerContext.widthModel.shrinkWrap) {
+                owner.el.setWidth(null);
+            }
+            owner.body.setWidth(null);
+            if (frameBody) {
+                frameBody.setWidth(null);
+            }
+        }
+        if (ownerContext.heightModel.auto) {
+            /* CHANGED */
+            // TODO: check in 4.2.3
+            //owner.body.setHeight(null); Scalr: quote this line
+            /* END */
+            //owner.el.setHeight(null); Disable this for now
+            if (frameBody) {
+                frameBody.setHeight(null);
+            }
+        }
+
+        // Each time we begin (2nd+ would be due to invalidate) we need to publish the
+        // known contentWidth/Height if we are collapsed:
+        if (ownerContext.collapsedVert) {
+            ownerContext.setContentHeight(0);
+        } else if (ownerContext.collapsedHorz) {
+            ownerContext.setContentWidth(0);
+        }
+
+        // dock: 'right' items, when a panel gets narrower get "squished". Moving them to
+        // left:0px avoids this!
+        for (i = 0; i < len; i++) {
+            item = docked[i].target;
+            dock = item.dock;
+
+            if (dock == 'right') {
+                item.setLocalX(0);
+            } else if (dock != 'left') {
+                continue;
+            }
+
+            // TODO - clear width/height?
+        }
+    }
+});
+
+Ext.define(null, {
+    override: 'Ext.grid.RowEditor',
+
+    //disable animation due to unpredictable chrome tab crashing since v30
+    reposition: function(animateConfig, fromScrollHandler) {
+        var me = this,
+            context = me.context,
+            row = context && Ext.get(context.row),
+            yOffset = 0,
+            rowTop,
+            localY,
+            deltaY,
+            afterPosition;
+
+        if (row && Ext.isElement(row.dom)) {
+
+            deltaY = me.syncButtonPosition(me.getScrollDelta());
+
+            if (!me.editingPlugin.grid.rowLines) {
+                yOffset = -parseInt(row.first().getStyle('border-bottom-width'), 10);
+            }
+            rowTop = me.calculateLocalRowTop(row);
+            localY = me.calculateEditorTop(rowTop) + yOffset;
+
+            if (!fromScrollHandler) {
+                afterPosition = function() {
+                    if (deltaY) {
+                        me.scrollingViewEl.scrollBy(0, deltaY, /*Changed*/false/*End*/);
+                    }
+                    me.focusContextCell();
+                }
+            }
+
+            me.syncEditorClip();console.log(animateConfig)
+            /*Changed*/
+            /*if (animateConfig) {
+                me.animate(Ext.applyIf({
+                    to: {
+                        top: localY
+                    },
+                    duration: animateConfig.duration || 125,
+                    callback: afterPosition
+                }, animateConfig));
+            } else {*/
+                me.setLocalY(localY);
+                if (afterPosition) {
+                    afterPosition();
+                }
+            //}
+            /*End*/
+        }
+    },
+
+});
+
+//disable animation due to unpredictable chrome tab crashing since v30
+Ext.define(null, {
+    override: 'Ext.layout.container.Accordion',
+    animate: false
+});

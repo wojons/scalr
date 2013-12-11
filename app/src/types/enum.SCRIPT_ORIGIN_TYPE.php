@@ -1,4 +1,4 @@
-<?
+<?php
     final class SCRIPT_ORIGIN_TYPE
     {
         const SHARED = "Shared";

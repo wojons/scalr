@@ -58,9 +58,9 @@ class TaskQueue
      */
     public function Size()
     {
-        return $this->DB->GetOne("SELECT COUNT(*) FROM task_queue WHERE queue_name=?",
-                    array($this->QueueName)
-                );
+        return $this->DB->GetOne("SELECT COUNT(*) FROM task_queue WHERE queue_name=?", array(
+            $this->QueueName
+        ));
     }
 
     /**
@@ -125,7 +125,7 @@ class TaskQueue
      */
     public function Peek()
     {
-        $dbtask = $this->DB->GetRow("SELECT * FROM task_queue WHERE queue_name=? AND id > ? ORDER BY id ASC",
+        $dbtask = $this->DB->GetRow("SELECT * FROM task_queue WHERE queue_name=? AND id > ? ORDER BY id ASC LIMIT 1",
             array($this->QueueName, $this->LastTaskID)
         );
         if (!$dbtask)

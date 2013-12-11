@@ -138,7 +138,6 @@ Scalr.regPage('Scalr.ui.dbmsr.status', function (loadParams, moduleParams) {
 	var panel = Ext.create('Ext.form.Panel', {
 		width: 900,
 		title: 'Database status',
-		bodyCls: 'x-panel-body-frame',
 		fieldDefaults: {
 			anchor: '100%',
 			labelWidth: 150
@@ -210,7 +209,7 @@ Scalr.regPage('Scalr.ui.dbmsr.status', function (loadParams, moduleParams) {
 			hidden: !moduleParams['staticDnsSupported'],
 			items: [{
 				xtype: 'displayfield',
-				fieldCls: 'x-form-field-info',
+				cls: 'x-form-field-info',
 				value: 'Public - To connect to the service from the Internet<br / >Private - To connect to the service from another instance'
 			}, {
 				xtype: 'displayfield',
@@ -419,7 +418,7 @@ Scalr.regPage('Scalr.ui.dbmsr.status', function (loadParams, moduleParams) {
 			}, {
 				hidden: !moduleParams['noDataBundleForSlaves'],
 				xtype: 'displayfield',
-				fieldCls: 'x-form-field-warning',
+				cls: 'x-form-field-warning',
 				value: 'Data bundle was created on OLD master and cannot be used to launch new slaves.<br />Please create new data bundle to be able to launch slaves.'
 			}]
 		}],
@@ -529,7 +528,7 @@ Scalr.regPage('Scalr.ui.dbmsr.status', function (loadParams, moduleParams) {
 
 		panel.add({
 			xtype: 'fieldset',
-			title: item['replicationRole']+": <a href='#/servers/"+item['serverId']+"/extendedInfo'>"+item['serverId']+"</a>",
+			title: item['replicationRole']+": <a href='#/servers/"+item['serverId']+"/dashboard'>"+item['serverId']+"</a>",
 			items: items
 		});
 	});
@@ -542,7 +541,7 @@ Scalr.regPage('Scalr.ui.dbmsr.status', function (loadParams, moduleParams) {
 				msg: 'Are you sure want to increase storage size?',
 				form: [{
 					xtype: 'displayfield',
-					fieldCls: 'x-form-field-warning',
+					cls: 'x-form-field-warning',
 					value: '<span style="color:red;">Attention! This operation will cause downtime on master server.</span><br />During creation and replacement of new storage, master server won\'t be able to accept any connections.'
 				}, {
 					xtype: 'fieldcontainer',

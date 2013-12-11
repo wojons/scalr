@@ -87,12 +87,13 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.servicesconfig', function () {
 
 		items: [{
 			xtype: 'displayfield',
-			fieldCls: 'x-form-field-warning',
+			cls: 'x-form-field-warning x-form-field-warning-fit',
             anchor: '100%',
 			value: 'Services config is deprecated.'
 		}, {
 			xtype: 'fieldset',
 			itemId: 'servicesconfig',
+            cls: 'x-fieldset-separator-none',
 			defaults: {
 				labelWidth: 100,
 				width: 400

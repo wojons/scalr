@@ -1,4 +1,4 @@
-<?
+<?php
     require(dirname(__FILE__)."/../src/prepend.inc.php");
 
     try {
@@ -30,8 +30,12 @@
             exit();
         }
 
-        if (!$user->getPermissions()->check(Scalr_Environment::init()->loadById($dbFarm->EnvID)))
+        $env = Scalr_Environment::init()->loadById($dbFarm->EnvID);
+
+        if (!$user->getPermissions()->check($env))
             die("Error (2)");
+
+        \Scalr::getContainer()->environment = $env;
     }
 
     header("Content-type: application/rss+xml");

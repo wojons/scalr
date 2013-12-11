@@ -25,7 +25,11 @@ class AvailabilityZoneFilterListTest extends AwsTestCase
                         'name'  => AvailabilityZoneFilterNameType::state(),
                         'value' => 'us',
                     ),
-                    new AvailabilityZoneFilterData(AvailabilityZoneFilterNameType::zoneName(), 'us-east-1')
+                    new AvailabilityZoneFilterData(AvailabilityZoneFilterNameType::zoneName(), 'us-east-1'),
+                    array(
+                        'name'  => AvailabilityZoneFilterNameType::TYPE_MESSAGE,
+                        'value' => array('1', '2'),
+                    )
                 ),
                 //result
                 array (
@@ -33,6 +37,9 @@ class AvailabilityZoneFilterListTest extends AwsTestCase
                     'Filter.1.Value.1' => 'us',
                     'Filter.2.Name'    => (string)AvailabilityZoneFilterNameType::zoneName(),
                     'Filter.2.Value.1' => 'us-east-1',
+                    'Filter.3.Name'    => AvailabilityZoneFilterNameType::TYPE_MESSAGE,
+                    'Filter.3.Value.1' => '1',
+                    'Filter.3.Value.2' => '2',
                 ),
             ),
         );

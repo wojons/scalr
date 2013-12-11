@@ -1,0 +1,13 @@
+LOGS_API_LOGS:
+- /logs/api
+- /logs/xListApiLogs
+- /logs/apiLogEntryDetails
+
+LOGS_SCRIPTING_LOGS:
+- /logs/scripting
+- /logs/xListScriptingLogs
+- /logs/scriptingMessage
+
+LOGS_SYSTEM_LOGS:
+- /logs/system
+- /logs/xListLogs

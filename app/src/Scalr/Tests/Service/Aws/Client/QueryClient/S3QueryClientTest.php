@@ -193,11 +193,16 @@ class S3QueryClientTest extends AwsTestCase
             )
         ;
 
+        $awsStub = $this->getMock('Scalr\\Service\\Aws', null, array(), '', false);
+
         $clientStub = $this->getMock(
             self::CLASS_S3_QUERY_CLIENT,
             array('createRequest', 'tryCall'),
             array($awsAccessKeyId, $secretAccessKey, $apiVersion, $url)
         );
+
+        $clientStub->setAws($awsStub);
+
         $clientStub
             ->expects($this->once())
             ->method('createRequest')

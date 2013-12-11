@@ -1,4 +1,5 @@
 <?php
+use Scalr\Acl\Acl;
 
 class Scalr_UI_Controller_Core extends Scalr_UI_Controller
 {
@@ -40,7 +41,9 @@ class Scalr_UI_Controller_Core extends Scalr_UI_Controller
         $params[Scalr_Account_User::SETTING_API_IP_WHITELIST] = (string)$this->user->getSetting(Scalr_Account_User::SETTING_API_IP_WHITELIST);
         $params[Scalr_Account_User::SETTING_API_ACCESS_KEY] = $this->user->getSetting(Scalr_Account_User::SETTING_API_ACCESS_KEY);
         $params[Scalr_Account_User::SETTING_API_SECRET_KEY] = $this->user->getSetting(Scalr_Account_User::SETTING_API_SECRET_KEY);
+        $params['api.endpoint'] = \Scalr::config('scalr.endpoint.scheme').'://'.\Scalr::config('scalr.endpoint.host').'/api/api.php';
 
+        $params['envName'] = $this->getEnvironment() ? $this->getEnvironment()->name : '';
         $this->response->page('ui/core/api.js', $params);
     }
 
@@ -78,11 +81,19 @@ class Scalr_UI_Controller_Core extends Scalr_UI_Controller
 
     public function securityAction()
     {
+        $subnets = $this->user->getVar(Scalr_Account_User::VAR_SECURITY_IP_WHITELIST);
+        $whitelist = array();
+        if ($subnets) {
+            $subnets = unserialize($subnets);
+            foreach ($subnets as $subnet)
+                $whitelist[] = Scalr_Util_Network::convertSubnetToMask($subnet);
+        }
+
         $params = array(
             'email' => $this->user->getEmail(),
             'security_2fa' => $this->user->getAccount()->isFeatureEnabled(Scalr_Limits::FEATURE_2FA),
             'security_2fa_ggl' => $this->user->getSetting(Scalr_Account_User::SETTING_SECURITY_2FA_GGL) ? '1' : '',
-            'security_ip_whitelist' => strval($this->user->getSetting(Scalr_Account_User::SETTING_SECURITY_IP_WHITELIST))
+            'security_ip_whitelist' => join(', ', $whitelist)
         );
 
         $this->response->page('ui/core/security.js', $params);
@@ -91,17 +102,32 @@ class Scalr_UI_Controller_Core extends Scalr_UI_Controller
     public function xSecuritySaveAction()
     {
         $this->request->defineParams(array(
-            'password' => array('type' => 'string'),
-            'cpassword' => array('type' => 'string')
+            'password' => array('type' => 'string', 'validator' => array(Scalr_Validator::NOEMPTY => true)),
+            'cpassword' => array('type' => 'string', 'validator' => array(Scalr_Validator::NOEMPTY => true))
         ));
 
-        if (!$this->getParam('password'))
-            $err['password'] = "Password is required";
-
+        $this->request->validate();
         if ($this->getParam('password') != $this->getParam('cpassword'))
-            $err['cpassword'] = "Two passwords are not equal";
+            $this->request->addValidationErrors('cpassword', 'Two passwords are not equal');
 
-        if (count($err) == 0) {
+        $subnets = array();
+        $whitelist = trim($this->getParam('security_ip_whitelist'));
+        if ($whitelist) {
+            $whitelist = explode(',', $whitelist);
+
+            foreach ($whitelist as $mask) {
+                $sub = Scalr_Util_Network::convertMaskToSubnet($mask);
+                if ($sub)
+                    $subnets[] = $sub;
+                else
+                    $this->request->addValidationErrors('security_ip_whitelist', sprintf('Not valid mask: %s', $mask));
+            }
+        }
+
+        if (count($subnets) && !Scalr_Util_Network::isIpInSubnets($this->request->getRemoteAddr(), $subnets))
+            $this->request->addValidationErrors('security_ip_whitelist', 'New IP access whitelist doesn\'t correspond your current IP address');
+
+        if ($this->request->isValid()) {
             $updateSession = false;
 
             if ($this->getParam('password') != '******') {
@@ -109,9 +135,7 @@ class Scalr_UI_Controller_Core extends Scalr_UI_Controller
                 $updateSession = true;
             }
 
-            $this->user->setSetting(Scalr_Account_User::SETTING_SECURITY_IP_WHITELIST, trim($this->getParam('security_ip_whitelist')));
-
-            $this->user->fullname = $this->getParam("fullname");
+            $this->user->setVar(Scalr_Account_User::VAR_SECURITY_IP_WHITELIST, count($subnets) ? serialize($subnets) : '');
             $this->user->save();
 
             if ($updateSession)
@@ -121,7 +145,7 @@ class Scalr_UI_Controller_Core extends Scalr_UI_Controller
         }
         else {
             $this->response->failure();
-            $this->response->data(array('errors' => $err));
+            $this->response->data($this->request->getValidationErrors());
         }
     }
 
@@ -231,20 +255,30 @@ class Scalr_UI_Controller_Core extends Scalr_UI_Controller
 
     public function variablesAction()
     {
+        $this->request->restrictAccess(Acl::RESOURCE_GENERAL_GLOBAL_VARIABLES);
         $vars = new Scalr_Scripting_GlobalVariables($this->getEnvironmentId());
         $this->response->page('ui/core/variables.js', array('variables' => json_encode($vars->getValues())), array('ui/core/variablefield.js'), array('ui/core/variablefield.css'));
     }
 
     public function xSaveVariablesAction()
     {
+        $this->request->restrictAccess(Acl::RESOURCE_GENERAL_GLOBAL_VARIABLES);
         $this->request->defineParams(array(
             'variables' => array('type' => 'json')
         ));
 
         $vars = new Scalr_Scripting_GlobalVariables($this->getEnvironmentId());
-        $vars->setValues($this->getParam('variables'));
-
-        $this->response->success('Variables saved');
+        $result = $vars->setValues($this->getParam('variables'));
+        if ($result === true)
+            $this->response->success('Variables saved');
+        else {
+            $this->response->failure();
+            $this->response->data(array(
+                'errors' => array(
+                    'variables' => $result
+                )
+            ));
+        }
     }
 
     public function xChangeEnvironmentAction()

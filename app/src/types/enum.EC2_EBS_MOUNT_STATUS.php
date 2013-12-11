@@ -1,4 +1,4 @@
-<?
+<?php
     final class EC2_EBS_MOUNT_STATUS
     {
         const NOT_MOUNTED 			= 'not-mounted';

@@ -46,7 +46,6 @@ Scalr.regPage('Scalr.ui.farms.events.configure', function (loadParams, modulePar
 		});
 	}
 	var form = Ext.create('Ext.form.Panel',{
-		bodyCls: 'x-panel-body-frame',
 		title: 'Farms &raquo; ' + moduleParams['farmName'] + ' &raquo; Events &raquo; Configure Notifications ',
 		width: 710,
 		items: [{
@@ -59,7 +58,7 @@ Scalr.regPage('Scalr.ui.farms.events.configure', function (loadParams, modulePar
 				value: '<img src="/ui2/images/icons/feed_icon_14x14.png" style="float: left;">&nbsp;<a href = "https://my.scalr.net/storage/events/' + loadParams['farmId'] + '/rss.xml">https://my.scalr.net/storage/events/' + loadParams['farmId'] + '/rss.xml</a>'
 			},{
 				xtype: 'displayfield',
-				fieldCls: 'x-form-field-warning',
+				cls: 'x-form-field-warning',
 				value: 'Your RSS reader must support basic HTTP authentication. The login and password for RSS feeds can be found in <a href = "#/core/settings">Settings -> System settings</a>'
 			}]
 		},{
@@ -78,7 +77,7 @@ Scalr.regPage('Scalr.ui.farms.events.configure', function (loadParams, modulePar
 		dockedItems: [{
 			xtype: 'container',
 			dock: 'bottom',
-			cls: 'x-docked-bottom-frame',
+			cls: 'x-docked-buttons',
 			layout: {
 				type: 'hbox',
 				pack: 'center'
@@ -126,7 +125,6 @@ Scalr.regPage('Scalr.ui.farms.events.configure', function (loadParams, modulePar
 				}
 			},{
 				xtype: 'button',
-				margin: '0 0 0 5',
 				text: 'Cancel',
 				handler: function() {
 					Scalr.event.fireEvent('close');

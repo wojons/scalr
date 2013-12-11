@@ -1,4 +1,6 @@
 <?php
+use Scalr\Acl\Acl;
+
 class Scalr_UI_Controller_Farms_Events extends Scalr_UI_Controller
 {
     const CALL_PARAM_NAME = 'eventId';
@@ -8,6 +10,11 @@ class Scalr_UI_Controller_Farms_Events extends Scalr_UI_Controller
      * @var DBFarm
      */
     private $dbFarm;
+
+    public function hasAccess()
+    {
+        return parent::hasAccess() && $this->request->isAllowed(Acl::RESOURCE_FARMS_EVENTS_AND_NOTIFICATIONS);
+    }
 
     public function init()
     {
@@ -57,7 +64,7 @@ class Scalr_UI_Controller_Farms_Events extends Scalr_UI_Controller
             $row['scripts'] = $this->db->GetOne("SELECT COUNT(*) FROM scripting_log WHERE event_id = ?", array($row['event_id']));
 
             if ($row['event_server_id']) {
-                $esInfo = $this->db->GetRow("SELECT role_id, farm_roleid, `index`, farm_id FROM servers WHERE server_id = ?", array($row['event_server_id']));
+                $esInfo = $this->db->GetRow("SELECT role_id, farm_roleid, `index`, farm_id FROM servers WHERE server_id = ? LIMIT 1", array($row['event_server_id']));
 
                 if ($esInfo) {
                     if (!$cache['farm_names'][$esInfo['farm_id']])
@@ -78,26 +85,30 @@ class Scalr_UI_Controller_Farms_Events extends Scalr_UI_Controller
 
         $this->response->data($response);
     }
+
     public function configureAction()
     {
         $observers = array('MailEventObserver','RESTEventObserver');
         $form = array();
 
-        foreach ($observers as $observer)
-        {
+        foreach ($observers as $observer) {
             $observerItems = $observer::GetConfigurationForm();
-            $farm_observer_id = $this->db->GetOne("SELECT id FROM farm_event_observers
-                WHERE farmid=? AND event_observer_name=?",
+
+            $farm_observer_id = $this->db->GetOne("
+                SELECT id FROM farm_event_observers
+                WHERE farmid=? AND event_observer_name=?
+                LIMIT 1
+            ",
                 array($this->getParam('farmId'), $observer)
             );
-            if ($farm_observer_id)
-            {
+
+            if ($farm_observer_id) {
                 $config_opts = $this->db->Execute("SELECT * FROM farm_event_observers_config
                     WHERE observerid=?", array($farm_observer_id)
                 );
-                while($config_opt = $config_opts->FetchRow())
-                {
-                    $field = &$observerItems->GetFieldByName($config_opt['key']);
+
+                while ($config_opt = $config_opts->FetchRow()) {
+                    $field = $observerItems->GetFieldByName($config_opt['key']);
                     if ($field)
                         $field->Value = $config_opt['value'];
                 }
@@ -108,6 +119,8 @@ class Scalr_UI_Controller_Farms_Events extends Scalr_UI_Controller
         }
         $this->response->page('ui/farms/events/configure.js', array('farmName' => $this->dbFarm->Name, 'form' => $form));
     }
+
+
     public function xSaveNotificationsAction()
     {
         $this->request->defineParams(array(
@@ -116,28 +129,30 @@ class Scalr_UI_Controller_Farms_Events extends Scalr_UI_Controller
         ));
         $observers = array('MailEventObserver','RESTEventObserver');
 
-        foreach ($observers as $observer)
-        {
-            $farm_observer_id = $this->db->GetOne("SELECT id FROM farm_event_observers
-                WHERE farmid=? AND event_observer_name=?",
+        foreach ($observers as $observer) {
+            $farm_observer_id = $this->db->GetOne("
+                SELECT id FROM farm_event_observers
+                WHERE farmid=? AND event_observer_name=?
+                LIMIT 1
+            ",
                 array($this->getParam('farmId'), $observer)
             );
-            if($farm_observer_id) //if exist in database
-            {
+
+            if ($farm_observer_id) {
+                //if exist in database
                 $this->db->Execute("DELETE FROM farm_event_observers_config WHERE observerid = ?",
                     array($farm_observer_id)
                 );
-            }
-            else if(!$farm_observer_id) // if not in database
-            {
+            } else if(!$farm_observer_id) {
+                // if not in database
                 // insert
                 $this->db->Execute("INSERT INTO farm_event_observers SET farmid=?, event_observer_name=?",
                     array($this->getParam('farmId'), $observer)
                 );
                 $farm_observer_id = $this->db->Insert_ID();
             }
-            if($this->getParam($observer.'Enabled'))
-            {
+
+            if($this->getParam($observer.'Enabled')) {
                 //update
                 $this->db->Execute("INSERT INTO farm_event_observers_config SET
                         `key` =?,

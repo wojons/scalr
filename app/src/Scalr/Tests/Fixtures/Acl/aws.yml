@@ -1,0 +1,24 @@
+AWS_VOLUMES:
+- [/tools/aws/ec2/ebs/volumes, ~, all]
+
+AWS_SNAPSHOTS:
+- [/tools/aws/ec2/ebs/snapshots, ~, all]
+
+AWS_ELB:
+- [/tools/aws/ec2/elb, ~, all]
+
+AWS_CLOUDWATCH:
+- [/tools/aws/ec2/cloudwatch, ~, all]
+
+AWS_IAM:
+- [/tools/aws/iam/servercertificates, ~, all]
+
+AWS_RDS:
+- [/tools/aws/rds, null, all]
+- [/tools/aws/rds/instances, null, all]
+- [/tools/aws/rds/pg, null, all]
+- [/tools/aws/rds/sg, null, all]
+- [/tools/aws/rds/snapshots, null, all]
+
+AWS_ELASTIC_IPS:
+- [/tools/aws/ec2/eips, ~, all]

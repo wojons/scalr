@@ -44,11 +44,10 @@ Scalr.regPage('Scalr.ui.account2.environments.platform.rackspace', function (loa
 		Scalr.Request(r);
 	};
 	var form = Ext.create('Ext.form.Panel', {
-		bodyCls: 'x-panel-body-frame',
 		scalrOptions: {
 			'modal': true
 		},
-		width: 600,
+		width: 700,
 		title: 'Environments &raquo; ' + moduleParams.env.name + '&raquo; Rackspace',
 		fieldDefaults: {
 			anchor: '100%'
@@ -107,7 +106,11 @@ Scalr.regPage('Scalr.ui.account2.environments.platform.rackspace', function (loa
 		dockedItems: [{
 			xtype: 'container',
 			dock: 'bottom',
-			cls: 'x-docked-bottom-frame',
+			cls: 'x-docked-buttons',
+            defaults:{
+                flex: 1,
+                maxWidth: 150
+            },
 			layout: {
 				type: 'hbox',
 				pack: 'center'
@@ -120,17 +123,15 @@ Scalr.regPage('Scalr.ui.account2.environments.platform.rackspace', function (loa
 				}
 			}, {
 				xtype: 'button',
-				margin: '0 0 0 5',
-				hidden: Scalr.flags.needEnvConfig,
+				hidden: !!Scalr.flags.needEnvConfig,
 				text: 'Cancel',
 				handler: function() {
 					Scalr.event.fireEvent('close');
 				}
 			},{
 				xtype: 'button',
-				margin: '0 0 0 10',
 				cls: 'x-btn-default-small-red',
-				hidden: !params['rs-LONx'] && !params['rs-ORD1'] || Scalr.flags.needEnvConfig,
+				hidden: !params['rs-LONx'] && !params['rs-ORD1'] || !!Scalr.flags.needEnvConfig,
 				text: 'Delete',
 				handler: function() {
 					sendForm(true);
@@ -138,15 +139,15 @@ Scalr.regPage('Scalr.ui.account2.environments.platform.rackspace', function (loa
 			}, {
 				xtype: 'button',
 				hidden: !Scalr.flags.needEnvConfig,
-				margin: '0 0 0 5',
 				text: "I'm not using Rackspace, let me configure another cloud",
+                flex: 3.4,
+                maxWidth: 600,
 				handler: function () {
 					Scalr.event.fireEvent('redirect', '#/account/environments/?envId=' + moduleParams.env.id, true);
 				}
 			}, {
 				xtype: 'button',
 				hidden: !Scalr.flags.needEnvConfig,
-				margin: '0 0 0 5',
 				text: 'Do this later',
 				handler: function () {
 					sessionStorage.setItem('needEnvConfigLater', true);

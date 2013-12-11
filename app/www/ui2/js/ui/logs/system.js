@@ -26,7 +26,8 @@ Scalr.regPage('Scalr.ui.logs.system', function (loadParams, moduleParams) {
 		stateId: 'grid-logs-system-view',
 		stateful: true,
 		plugins: [{
-			ptype: 'gridstore'
+			ptype: 'gridstore',
+            highlightNew: true
 		}, {
 			ptype: 'rowexpander',
 			rowBodyTpl: [
@@ -40,7 +41,7 @@ Scalr.regPage('Scalr.ui.logs.system', function (loadParams, moduleParams) {
 		}, {
 			xtype: 'favoritetool',
 			favorite: {
-				text: 'System Log',
+				text: 'System log',
 				href: '#/logs/system'
 			}
 		}],
@@ -49,18 +50,20 @@ Scalr.regPage('Scalr.ui.logs.system', function (loadParams, moduleParams) {
 			emptyText: 'No logs found',
 			loadingText: 'Loading logs ...',
 			disableSelection: true,
-			getRowClass: function (record, rowIndex, rowParams) {
-				return (record.get('severity') > 3) ? 'x-grid-row-red x-grid-row-collapsed' : 'x-grid-row-collapsed';
+			getRowClass: function (record) {
+                if (record.get('severity') > 3) {
+                    return 'x-grid-row-red';
+                }
 			}
 		},
 
 		columns: [
 			{ header: '', width: 40, dataIndex: 'severity', sortable: false, resizable: false, hideable: false, align:'center', xtype: 'templatecolumn', tpl:
-				'<tpl if="severity == 1"><img src="/ui2/images/icons/log/debug.png"></tpl>' +
-				'<tpl if="severity == 2"><img src="/ui2/images/icons/log/info.png"></tpl>' +
-				'<tpl if="severity == 3"><img src="/ui2/images/icons/log/warning.png"></tpl>' +
-				'<tpl if="severity == 4"><img src="/ui2/images/icons/log/error.png"></tpl>' +
-				'<tpl if="severity == 5"><img src="/ui2/images/icons/log/fatal_error.png"></tpl>'
+				'<tpl if="severity == 1"><img src="/ui2/images/ui/logs/system/debug.png"></tpl>' +
+				'<tpl if="severity == 2"><img src="/ui2/images/ui/logs/system/info.png"></tpl>' +
+				'<tpl if="severity == 3"><img src="/ui2/images/ui/logs/system/warning.png"></tpl>' +
+				'<tpl if="severity == 4"><img src="/ui2/images/ui/logs/system/error.png"></tpl>' +
+				'<tpl if="severity == 5"><img src="/ui2/images/ui/logs/system/fatal_error.png"></tpl>'
 			},
 			{ header: 'Time', width: 156, dataIndex: 'time', sortable: true },
 			{ header: 'Farm', width: 120, dataIndex: 'farm_name', itemId: 'farm_name', sortable: false, xtype: 'templatecolumn', tpl:
@@ -79,7 +82,48 @@ Scalr.regPage('Scalr.ui.logs.system', function (loadParams, moduleParams) {
 			dock: 'top',
 			items: [{
 				xtype: 'filterfield',
-				store: store
+				store: store,
+                width: 300,
+                form: {
+                    items: [{
+                        xtype: 'datefield',
+                        fieldLabel: 'By date',
+                        labelAlign: 'top',
+                        name: 'byDate',
+                        format: 'Y-m-d',
+                        maxValue: new Date(),
+                        listeners: {
+                            change: function (field, value) {
+                                this.next().down('[name="fromTime"]')[ value ? 'enable' : 'disable' ]();
+                                this.next().down('[name="toTime"]')[ value ? 'enable' : 'disable' ]();
+                            }
+                        }
+                    }, {
+                        xtype: 'fieldcontainer',
+                        layout: 'hbox',
+                        fieldLabel: 'Period of time',
+                        labelAlign: 'top',
+                        items: [{
+                            xtype: 'timefield',
+                            flex: 1,
+                            name: 'fromTime',
+                            format: 'H:i',
+                            disabled: true,
+                            listeners: {
+                                change: function(field, value) {
+                                    this.next().setMinValue(value);
+                                }
+                            }
+                        }, {
+                            xtype: 'timefield',
+                            flex: 1,
+                            margin: '0 0 0 10',
+                            name: 'toTime',
+                            format: 'H:i',
+                            disabled: true
+                        }]
+                    }]
+                }
 			}, ' ', {
 				xtype: 'combo',
 				fieldLabel: 'Farm',
@@ -111,9 +155,9 @@ Scalr.regPage('Scalr.ui.logs.system', function (loadParams, moduleParams) {
 						panel.store.loadPage(1);
 					}
 				}
-			}, ' ', {
+            }, ' ', {
 				text: 'Severity',
-				width: 90,
+				width: 100,
 				menu: {
 					items: [{
 						text: 'Fatal error',
@@ -154,7 +198,7 @@ Scalr.regPage('Scalr.ui.logs.system', function (loadParams, moduleParams) {
 				}
 			}, ' ', {
 				text: 'Download Log',
-				width: 140,
+				width: 160,
 				iconCls: 'scalr-ui-btn-icon-download',
 				handler: function () {
 					var params = Scalr.utils.CloneObject(store.proxy.extraParams);

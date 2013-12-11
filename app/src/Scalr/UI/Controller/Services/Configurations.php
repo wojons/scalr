@@ -1,6 +1,13 @@
 <?php
+use Scalr\Acl\Acl;
+
 class Scalr_UI_Controller_Services_Configurations extends Scalr_UI_Controller
 {
+    public function hasAccess()
+    {
+        return parent::hasAccess() && $this->request->isAllowed(Acl::RESOURCE_DB_SERVICE_CONFIGURATION);
+    }
+
     public function manageAction()
     {
         $farmRole = DBFarmRole::LoadByID($this->getParam('farmRoleId'));
@@ -18,9 +25,6 @@ class Scalr_UI_Controller_Services_Configurations extends Scalr_UI_Controller
                     break;
                 }
             }
-
-            if (!$masterServer)
-                throw new Exception("Scalr unable to load configuration: there is no running database master.");
         }
 
         if ($behavior == ROLE_BEHAVIORS::MYSQL) {
@@ -30,9 +34,6 @@ class Scalr_UI_Controller_Services_Configurations extends Scalr_UI_Controller
                     break;
                 }
             }
-
-            if (!$masterServer)
-                throw new Exception("Scalr unable to load configuration: there is no running database master.");
         }
 
         $params = array(
@@ -53,25 +54,12 @@ class Scalr_UI_Controller_Services_Configurations extends Scalr_UI_Controller
             $params['masterServerId'] = $masterServer->serverId;
             $config = $this->getConfig($masterServer, $behavior);
             foreach ($config as $file => $conf) {
-
                 $conf = (array)$conf;
-
                 ksort($conf, SORT_ASC | SORT_STRING);
-
                 $params['config'][$file] = $conf;
             }
-
-            $manifest = @json_decode(file_get_contents(APPPATH."/www/storage/service-configuration-manifests/2012-09-03/{$behavior}.json"));
-
-
         } else {
-            foreach ($farmRole->GetServersByFilter(array('status' => SERVER_STATUS::RUNNING)) as $dbServer) {
-                $params['servers'][] = array(
-                    'serverId'	=> $dbServer->serverId,
-                    'localIp'	=> $dbServer->localIp,
-                    'remoteIp'	=> $dbServer->remoteIp
-                );
-            }
+            $params['config'] = $farmRole->GetServiceConfiguration2($behavior);
         }
 
         $this->response->page( 'ui/services/configurations/manage.js', $params, array('ui/services/configurations/configfield.js'));
@@ -116,6 +104,7 @@ class Scalr_UI_Controller_Services_Configurations extends Scalr_UI_Controller
         $this->user->getPermissions()->validate($farmRole);
 
         $behavior = $this->getParam('behavior');
+        $updateFarmRoleSettings = false;
 
         if (!$farmRole->GetRoleObject()->hasBehavior($behavior))
             throw new Exception("Behavior not assigned to this role");
@@ -132,34 +121,37 @@ class Scalr_UI_Controller_Services_Configurations extends Scalr_UI_Controller
         }
 
         // Update master
-        $dbServer = DBServer::LoadByID($this->getParam('masterServerId'));
-        $this->user->getPermissions()->validate($dbServer);
-        if ($dbServer->farmRoleId != $farmRole->ID)
-            throw new Exception("Server not found");
-        if ($dbServer->status != SERVER_STATUS::RUNNING)
-            throw new Exception("Master server is not running. Config cannot be applied.");
+        if ($this->getParam('masterServerId')) {
+            $dbServer = DBServer::LoadByID($this->getParam('masterServerId'));
+            $this->user->getPermissions()->validate($dbServer);
+            if ($dbServer->farmRoleId != $farmRole->ID)
+                throw new Exception("Server not found");
+            if ($dbServer->status != SERVER_STATUS::RUNNING)
+                throw new Exception("Master server is not running. Config cannot be applied.");
 
-        $this->setConfig($dbServer, $behavior, $config);
+            $this->setConfig($dbServer, $behavior, $config);
 
-        $servers = 0;
-        $savedServers = 1;
+            $servers = 0;
+            $savedServers = 1;
+            $updateFarmRoleSettings = true;
 
-        foreach ($farmRole->GetServersByFilter(array('status' => array(SERVER_STATUS::RUNNING, SERVER_STATUS::INIT))) as $server) {
-            $servers++;
-            try {
-                if ($server->serverId == $dbServer->serverId)
-                    continue;
+            foreach ($farmRole->GetServersByFilter(array('status' => array(SERVER_STATUS::RUNNING, SERVER_STATUS::INIT))) as $server) {
+                $servers++;
+                try {
+                    if ($server->serverId == $dbServer->serverId)
+                        continue;
 
-                $this->setConfig($server, $behavior, $config);
-                $savedServers++;
-            } catch (Exception $e) {
-                $warn[] = sprintf("Cannot update configuration on %s (%s): %s", $server->serverId, $server->remoteIp, $e->getMessage());
+                    $this->setConfig($server, $behavior, $config);
+                    $savedServers++;
+                } catch (Exception $e) {
+                    $warn[] = sprintf("Cannot update configuration on %s (%s): %s", $server->serverId, $server->remoteIp, $e->getMessage());
+                }
             }
-        }
+        } else
+            $updateFarmRoleSettings = true;
 
-        if ($savedServers > 0) {
+        if ($updateFarmRoleSettings)
             $farmRole->SetServiceConfiguration($behavior, $config);
-        }
 
         if (!$warn)
             $this->response->success(sprintf("Config successfully applied on %s of %s servers", $savedServers, $servers));

@@ -1,9 +1,23 @@
 Scalr.regPage('Scalr.ui.roles.view', function (loadParams, moduleParams) {
+    var platformFilterItems = [{
+        text: 'All clouds',
+        value: null,
+        iconCls: 'x-icon-osfamily-small'
+    }];
+
+    Ext.Object.each(moduleParams['platforms'], function(key, value){
+        platformFilterItems.push({
+            text: value.name,
+            value: key,
+            iconCls: 'x-icon-platform-small x-icon-platform-small-' + key
+        });
+    });
+
 	var store = Ext.create('store.store', {
 		fields: [
 			{name: 'id', type: 'int'},
 			{name: 'client_id', type: 'int'},
-			'name', 'tags', 'origin', 'client_name', 'behaviors', 'os', 'platforms','generation','used_servers','status','behaviors_name'
+			'name', 'origin', 'client_name', 'behaviors', 'os', 'osFamily', 'platforms','used_servers','status','behaviors_name'
 		],
 		proxy: {
 			type: 'scalr.paging',
@@ -27,14 +41,18 @@ Scalr.regPage('Scalr.ui.roles.view', function (loadParams, moduleParams) {
 	};
 	
 	var cloneOptions = {
-		xtype: 'textfield',
-		fieldLabel: 'New role name',
-		editable: false,
-		queryMode: 'local',
-		value: '',
-		name: 'newRoleName',
-		labelWidth: 150,
-		width: 500
+        xtype: 'fieldset',
+        cls: 'x-fieldset-separator-none',
+        items: [{
+            xtype: 'textfield',
+            fieldLabel: 'New role name',
+            editable: false,
+            queryMode: 'local',
+            value: '',
+            name: 'newRoleName',
+            labelWidth: 100,
+            anchor: '100%'
+        }]
 	};
 
 	return Ext.create('Ext.grid.Panel', {
@@ -66,21 +84,24 @@ Scalr.regPage('Scalr.ui.roles.view', function (loadParams, moduleParams) {
 		},
 
 		columns: [
+            { header: "ID", width: 80, dataIndex: 'id', sortable: true },
 			{ header: "Role name", flex: 2, dataIndex: 'name', sortable: true },
-			{ header: "OS", width: 150, dataIndex: 'os', sortable: true },
-			{ header: "Owner", flex: 1, dataIndex: 'client_name', sortable: false},
-			{ header: "Behaviors", flex: 1, dataIndex: 'behaviors_name', sortable: false },
-			{ header: "Available on", flex: 1, dataIndex: 'platforms', sortable: false },
-			{ header: "Tags", width: 130, dataIndex: 'tags', sortable: false },
+			{ header: "OS", width: 180, dataIndex: 'os', sortable: true, xtype: 'templatecolumn', tpl: '<img style="margin:0 3px"  class="x-icon-osfamily-small x-icon-osfamily-small-{osFamily}" src="' + Ext.BLANK_IMAGE_URL + '"/> {os}' },
+			{ header: "Owner", width: 70, dataIndex: 'client_name', sortable: false},
+			{ header: "Automation", flex: 1, dataIndex: 'behaviors_name', sortable: false },
+			{ header: "Available on", width: 110, dataIndex: 'platforms', sortable: false, xtype: 'templatecolumn', tpl: 
+            '<tpl foreach="platforms">'+
+                '<img style="margin:0 3px"  class="x-icon-platform-small x-icon-platform-small-{$}" title="{.}" src="' + Ext.BLANK_IMAGE_URL + '"/>'+
+            '</tpl>'
+            },
 			{ header: "Status", width: 100, dataIndex: 'status', sortable: false, xtype: 'templatecolumn', tpl:
 				'{status} ({used_servers})'
 			},
-			{ header: "Scalr agent", width: 100, dataIndex: 'generation', sortable: false },
 			{
 				xtype: 'optionscolumn',
 				optionsMenu: [
 					{ itemId: "option.view", iconCls: 'x-menu-icon-info', text:'View details', href: "#/roles/{id}/info" },
-					{ itemId: "option.clone", iconCls: 'x-menu-icon-fork', text: 'Clone', request: {
+					{ itemId: "option.clone", iconCls: 'x-menu-icon-clone', text: 'Clone', request: {
 						confirmBox: {
 							type: 'action',
 							form: cloneOptions,
@@ -101,7 +122,7 @@ Scalr.regPage('Scalr.ui.roles.view', function (loadParams, moduleParams) {
 					}},
 					{
 						itemId: 'option.migrate',
-						iconCls: 'x-menu-icon-fork',
+						iconCls: 'x-menu-icon-clone',
 						text: 'Copy to another EC2 region',
 						request: {
 							processBox: {
@@ -116,14 +137,16 @@ Scalr.regPage('Scalr.ui.roles.view', function (loadParams, moduleParams) {
 									confirmBox: {
 										type: 'action',
 										msg: 'Copying images allows you to use roles in additional regions',
-										formWidth: 700,
+										formWidth: 600,
 										form: [{
 											xtype: 'fieldset',
 											title: 'Region copy',
+                                            defaults: {
+                                                anchor: '100%',
+                                                labelWidth: 120
+                                            },
 											items: [{
 												xtype: 'displayfield',
-												labelWidth: 120,
-												width: 500,
 												fieldLabel: 'Role name',
 												value: data['roleName']	
 											},{
@@ -139,9 +162,7 @@ Scalr.regPage('Scalr.ui.roles.view', function (loadParams, moduleParams) {
 												displayField: 'name',
 												editable: false,
 												queryMode: 'local',
-												name: 'sourceRegion',
-												labelWidth: 120,
-												width: 500
+												name: 'sourceRegion'
 											}, {
 												xtype: 'combo',
 												fieldLabel: 'Destination region',
@@ -155,9 +176,7 @@ Scalr.regPage('Scalr.ui.roles.view', function (loadParams, moduleParams) {
 												displayField: 'name',
 												editable: false,
 												queryMode: 'local',
-												name: 'destinationRegion',
-												labelWidth: 120,
-												width: 500
+												name: 'destinationRegion'
 											}]
 										}]
 									},
@@ -177,11 +196,13 @@ Scalr.regPage('Scalr.ui.roles.view', function (loadParams, moduleParams) {
 				],
 
 				getOptionVisibility: function (item, record) {
-					if (item.itemId == 'option.view' || item.itemId == 'option.clone')
+					if (item.itemId == 'option.view')
 						return true;
+                    if (item.itemId == 'option.clone')
+                        return Scalr.isAllowed('FARMS_ROLES', 'clone');
 
 					if (item.itemId == 'option.migrate')
-						return (record.get('platforms').indexOf('EC2') != -1 && record.get('origin') == 'CUSTOM');
+						return (record.get('platforms')['ec2'] && record.get('origin') == 'CUSTOM');
 
 					if (record.get('origin') == 'CUSTOM') {
 						if (item.itemId == 'option.edit') {
@@ -217,10 +238,10 @@ Scalr.regPage('Scalr.ui.roles.view', function (loadParams, moduleParams) {
 			store: store,
 			dock: 'top',
 			beforeItems: [{
-				ui: 'paging',
-				iconCls: 'x-tbar-add',
+                text: 'Add role',
+                cls: 'x-btn-green-bg',
 				handler: function() {
-					Scalr.event.fireEvent('redirect', '#/roles/builder');
+					Scalr.event.fireEvent('redirect', '#/roles/' + (Scalr.user['type'] === 'ScalrAdmin' ? 'edit' : 'builder'));
 				}
 			}],
 			afterItems: [{
@@ -258,7 +279,7 @@ Scalr.regPage('Scalr.ui.roles.view', function (loadParams, moduleParams) {
 			items: [{
 				xtype: 'filterfield',
 				store: store,
-				width: 300,
+				width: 240,
 				form: {
 					items: [{
 						xtype: 'radiogroup',
@@ -280,8 +301,31 @@ Scalr.regPage('Scalr.ui.roles.view', function (loadParams, moduleParams) {
 						}]
 					}]
 				}
-			}, ' ', 'Location:', {
+			}, ' ', {
+                xtype: 'cyclealt',
+                prependText: 'Cloud: ',
+                text: 'Cloud: All',
+                getItemIconCls: false,
+                width: 120,
+                hidden: platformFilterItems.length === 2,
+                style: 'text-align:center',
+                changeHandler: function(comp, item) {
+                    store.proxy.extraParams.platform = item.value;
+                    delete store.proxy.extraParams.cloudLocation;
+                    comp.next('#location').setPlatform(item.value);
+                    store.loadPage(1);
+                },
+                getItemText: function(item) {
+                    return item.value ? '<img src="' + Ext.BLANK_IMAGE_URL + '" class="' + item.iconCls + '" title="' + item.text + '" />' : 'All';
+                },
+                menu: {
+                    cls: 'x-menu-light x-menu-cycle-button-filter',
+                    minWidth: 200,
+                    items: platformFilterItems
+                }
+            }, ' ', {
 				xtype: 'combo',
+                itemId: 'location',
 				matchFieldWidth: false,
 				width: 200,
 				editable: false,
@@ -291,6 +335,7 @@ Scalr.regPage('Scalr.ui.roles.view', function (loadParams, moduleParams) {
 					proxy: 'object'
 				},
 				displayField: 'name',
+                emptyText: 'All locations',
 				valueField: 'id',
 				value: '',
 				queryMode: 'local',
@@ -298,9 +343,28 @@ Scalr.regPage('Scalr.ui.roles.view', function (loadParams, moduleParams) {
 					change: function() {
 						store.proxy.extraParams.cloudLocation = this.getValue();
 						store.loadPage(1);
-					}
+					},
+                    afterrender: {
+                        fn: function() {
+                            this.setPlatform();
+                        },
+                        single: true
+                    }
 				},
-				iconCls: 'no-icon'
+                setPlatform: function(platform) {
+                    var locations = {'': 'All locations'};
+                    Ext.Object.each(moduleParams['platforms'], function(key, value) {
+                        if (!platform || key === platform && Ext.Object.getSize(value.locations)) {
+                            Ext.Object.each(value.locations, function(key, value){
+                                locations[key] = value;
+                            });
+                        }
+                    });
+                    this.store.load({data: locations});
+                    this.suspendEvents(false);
+                    this.reset();
+                    this.resumeEvents();
+                }
 			}, ' ', 'Owner:', {
 				xtype: 'buttongroupfield',
 				value: '',
@@ -308,16 +372,16 @@ Scalr.regPage('Scalr.ui.roles.view', function (loadParams, moduleParams) {
 					xtype: 'button',
 					text: 'All',
 					value: '',
-					width: 60
+					width: 70
 				}, {
 					xtype: 'button',
 					text: 'Scalr',
-					width: 60,
+					width: 70,
 					value: 'Shared'
 				}, {
 					xtype: 'button',
 					text: 'Private',
-					width: 60,
+					width: 70,
 					value: 'Custom'
 				}],
 				listeners: {

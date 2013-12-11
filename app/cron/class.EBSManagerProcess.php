@@ -21,13 +21,9 @@ class EBSManagerProcess implements \Scalr\System\Pcntl\ProcessInterface
      */
     public function OnStartForking()
     {
-        $db = \Scalr::getDb();
+        $db = \Scalr::getDb(true);
 
-        $this->ThreadArgs = $db->GetAll("
-            SELECT id FROM ec2_ebs
-            WHERE attachment_status NOT IN (?,?)
-            OR mount_status NOT IN (?,?)
-        ", array(
+        $this->ThreadArgs = $db->GetAll("SELECT id FROM ec2_ebs WHERE attachment_status NOT IN (?,?) OR mount_status NOT IN (?,?)", array(
             EC2_EBS_ATTACH_STATUS::ATTACHED, EC2_EBS_ATTACH_STATUS::AVAILABLE,
             EC2_EBS_MOUNT_STATUS::MOUNTED, EC2_EBS_MOUNT_STATUS::NOT_MOUNTED
         ));
@@ -184,7 +180,7 @@ class EBSManagerProcess implements \Scalr\System\Pcntl\ProcessInterface
         // Auto - snapshoting
         $snapshots_settings = $db->Execute("
             SELECT * FROM autosnap_settings
-            WHERE (UNIX_TIMESTAMP(DATE_ADD(dtlastsnapshot, INTERVAL period HOUR)) < UNIX_TIMESTAMP(NOW()) OR dtlastsnapshot IS NULL)
+            WHERE (`dtlastsnapshot` < NOW() - INTERVAL `period` HOUR OR `dtlastsnapshot` IS NULL)
             AND objectid != '0' AND object_type = ?",
             array(AUTOSNAPSHOT_TYPE::EBSSnap)
         );
@@ -208,7 +204,7 @@ class EBSManagerProcess implements \Scalr\System\Pcntl\ProcessInterface
                 $description = "Auto snapshot created by Scalr";
                 if (true) {
                     $info = $db->GetRow("
-                        SELECT * FROM ec2_ebs WHERE volume_id=?
+                        SELECT * FROM ec2_ebs WHERE volume_id=? LIMIT 1
                     ", array(
                         $snapshot_settings['objectid']
                     ));
@@ -475,7 +471,7 @@ class EBSManagerProcess implements \Scalr\System\Pcntl\ProcessInterface
                     $DBEBSVolume->save();
                     return;
                 }
-            } catch (ServerNotFoundException $e) {
+            } catch (\Scalr\Exception\ServerNotFoundException $e) {
                 if ($DBEBSVolume->volumeId) {
                     $DBEBSVolume->attachmentStatus = EC2_EBS_ATTACH_STATUS::AVAILABLE;
                     $DBEBSVolume->mountStatus = EC2_EBS_MOUNT_STATUS::NOT_MOUNTED;

@@ -1,0 +1,14 @@
+imports:
+- { resource: 'Acl/farms.yml' }
+- { resource: 'Acl/administration.yml' }
+- { resource: 'Acl/general.yml' }
+- { resource: 'Acl/services.yml' }
+- { resource: 'Acl/logs.yml' }
+- { resource: 'Acl/deployments.yml' }
+- { resource: 'Acl/db.yml' }
+- { resource: 'Acl/aws.yml' }
+- { resource: 'Acl/cloudstack.yml' }
+- { resource: 'Acl/openstack.yml' }
+
+DNS_ZONES: 
+- [/dnszones, ~, all]

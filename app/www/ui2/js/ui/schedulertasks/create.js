@@ -7,7 +7,6 @@ Scalr.regPage('Scalr.ui.schedulertasks.create', function (loadParams, modulePara
 		executionOptions = moduleParams['task']['config'];
 	}
 	var form = Ext.create('Ext.form.Panel', {
-		bodyCls: 'x-panel-body-frame',
 		width: 1100,
 		title: 'Scheduler tasks &raquo; ' + (moduleParams['task'] ? ('Edit &raquo; ' + moduleParams['task']['name']) : 'Create'),
 		fieldDefaults: {
@@ -242,7 +241,7 @@ Scalr.regPage('Scalr.ui.schedulertasks.create', function (loadParams, modulePara
 				}
 			}, {
 				xtype: 'combo',
-				store: [ ['1', 'Synchronous'], ['0', 'Asynchronous']],
+				store: [ ['1', 'Blocking'], ['0', 'Non-blocking']],
 				editable: false,
 				queryMode: 'local',
 				name: 'scriptIsSync',
@@ -326,7 +325,7 @@ Scalr.regPage('Scalr.ui.schedulertasks.create', function (loadParams, modulePara
 		dockedItems: [{
 			xtype: 'container',
 			dock: 'bottom',
-			cls: 'x-docked-bottom-frame',
+			cls: 'x-docked-buttons',
 			layout: {
 				type: 'hbox',
 				pack: 'center'
@@ -370,7 +369,6 @@ Scalr.regPage('Scalr.ui.schedulertasks.create', function (loadParams, modulePara
 				}
 			}, {
 				xtype: 'button',
-				margin: '0 0 0 5',
 				text: 'Cancel',
 				handler: function() {
 					Scalr.event.fireEvent('close');

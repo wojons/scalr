@@ -29,6 +29,8 @@
                    "--rigid",
                    "--no-gridfit",
                    "--slope-mode",
+                "--border" => 0,
+                "--color" => "BACK#FFFFFF",
                 "--x-grid" => $r["x_grid"],
                 "--end" => $r["end"],
                 "--start" => $r["start"],

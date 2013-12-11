@@ -1,7 +1,14 @@
 <?php
+use Scalr\Acl\Acl;
+
 class Scalr_UI_Controller_Dm_Sources extends Scalr_UI_Controller
 {
     const CALL_PARAM_NAME = 'sourceId';
+
+    public function hasAccess()
+    {
+        return parent::hasAccess() && $this->request->isAllowed(Acl::RESOURCE_DEPLOYMENTS_SOURCES);
+    }
 
     public function defaultAction()
     {

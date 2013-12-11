@@ -18,8 +18,8 @@ class Modules_Platforms_Ec2_Helpers_Elb
         if ($newSettings[DBFarmRole::SETTING_BALANCING_USE_ELB] == 1 && !$newSettings[DBFarmRole::SETTING_AWS_ELB_ENABLED]) {
             $newSettings[DBFarmRole::SETTING_AWS_ELB_ENABLED] = 1;
             $newSettings[DBFarmRole::SETTING_AWS_ELB_ID] = $newSettings[DBFarmRole::SETTING_BALANCING_NAME];
-            $DBFarmRole->SetSetting(DBFarmRole::SETTING_AWS_ELB_ENABLED, 1);
-            $DBFarmRole->SetSetting(DBFarmRole::SETTING_AWS_ELB_ID, $newSettings[DBFarmRole::SETTING_BALANCING_NAME]);
+            $DBFarmRole->SetSetting(DBFarmRole::SETTING_AWS_ELB_ENABLED, 1, DBFarmRole::TYPE_CFG);
+            $DBFarmRole->SetSetting(DBFarmRole::SETTING_AWS_ELB_ID, $newSettings[DBFarmRole::SETTING_BALANCING_NAME], DBFarmRole::TYPE_LCL);
         }
 
         //NEW ELB:
@@ -87,10 +87,10 @@ class Modules_Platforms_Ec2_Helpers_Elb
 
             // Check and remove OLD ELB settings
             if ($newSettings['aws.elb.enabled'] && $DBFarmRole->GetSetting(DBFarmRole::SETTING_BALANCING_HOSTNAME)) {
-                $DBFarmRole->SetSetting(DBFarmRole::SETTING_BALANCING_NAME, null);
-                $DBFarmRole->SetSetting(DBFarmRole::SETTING_BALANCING_HOSTNAME, null);
-                $DBFarmRole->SetSetting(DBFarmRole::SETTING_BALANCING_USE_ELB, null);
-                $DBFarmRole->SetSetting(DBFarmRole::SETTING_BALANCING_HC_HASH, null);
+                $DBFarmRole->SetSetting(DBFarmRole::SETTING_BALANCING_NAME, null, DBFarmRole::TYPE_LCL);
+                $DBFarmRole->SetSetting(DBFarmRole::SETTING_BALANCING_HOSTNAME, null, DBFarmRole::TYPE_LCL);
+                $DBFarmRole->SetSetting(DBFarmRole::SETTING_BALANCING_USE_ELB, null, DBFarmRole::TYPE_LCL);
+                $DBFarmRole->SetSetting(DBFarmRole::SETTING_BALANCING_HC_HASH, null, DBFarmRole::TYPE_LCL);
                 $DBFarmRole->ClearSettings("lb.avail_zone");
                 $DBFarmRole->ClearSettings("lb.healthcheck");
                 $DBFarmRole->ClearSettings("lb.role.listener");

@@ -64,8 +64,8 @@
         public function onFarmSave(DBFarm $dbFarm, DBFarmRole $dbFarmRole)
         {
             if (!$dbFarmRole->GetSetting(self::ROLE_REPLICAS_COUNT)) {
-                $dbFarmRole->SetSetting(self::ROLE_REPLICAS_COUNT, 1);
-                $dbFarmRole->SetSetting(self::ROLE_SHARDS_COUNT, 1);
+                $dbFarmRole->SetSetting(self::ROLE_REPLICAS_COUNT, 1, DBFarmRole::TYPE_CFG);
+                $dbFarmRole->SetSetting(self::ROLE_SHARDS_COUNT, 1, DBFarmRole::TYPE_CFG);
             }
         }
 
@@ -137,7 +137,7 @@
 
         public function onFarmTerminated(DBFarmRole $dbFarmRole)
         {
-            $dbFarmRole->SetSetting(self::ROLE_CLUSTER_STATUS, "");
+            $dbFarmRole->SetSetting(self::ROLE_CLUSTER_STATUS, "", DBFarmRole::TYPE_LCL);
         }
 
         public function onBeforeInstanceLaunch(DBServer $dbServer)
@@ -150,7 +150,7 @@
             $dbServer->SetProperty(self::SERVER_REPLICA_SET_INDEX, $indexes['replicaSetIndex']);
 
             if (!$dbServer->GetFarmRoleObject()->GetSetting(self::ROLE_CLUSTER_STATUS) && $indexes['shardIndex'] == 0 && $indexes['replicaSetIndex'] == 0)
-                $dbServer->GetFarmRoleObject()->SetSetting(self::ROLE_CLUSTER_STATUS, self::STATUS_BUILDING);
+                $dbServer->GetFarmRoleObject()->SetSetting(self::ROLE_CLUSTER_STATUS, self::STATUS_BUILDING, DBFarmRole::TYPE_LCL);
         }
 
         public function getSecurityRules()
@@ -233,8 +233,8 @@
                                case SERVER_STATUS::PENDING_LAUNCH:
                                case SERVER_STATUS::PENDING:
                                case SERVER_STATUS::INIT:
-                                   Scalr::FireEvent($dbFarmRole->FarmID, new BeforeHostTerminateEvent($server, true));
-                               break;
+                                   $server->terminate(array('SHUTTING_DOWN_CLUSTER', 'MongoDB'));
+                                   break;
 
                                case SERVER_STATUS::RUNNING:
                                    if ($node->status == 'pending')
@@ -246,7 +246,7 @@
                                            $this->log($dbFarmRole, "Node {$shardIndex}-{$replicaSetIndex} successfully terminated. Config server will be terminated with farm.");
                                        } else {
                                            $this->log($dbFarmRole, "Node {$shardIndex}-{$replicaSetIndex} successfully terminated. Terminating instance.");
-                                           Scalr::FireEvent($dbFarmRole->FarmID, new BeforeHostTerminateEvent($server, true));
+                                           $server->terminate(array('SHUTTING_DOWN_CLUSTER', 'MongoDB'));
                                        }
                                    }
                                    else {
@@ -263,11 +263,11 @@
                 case "Scalr_Messaging_Msg_MongoDb_ClusterTerminateResult":
 
                     if ($message->status == 'ok') {
-                           $dbFarmRole->SetSetting(self::ROLE_CLUSTER_STATUS, self::STATUS_TERMINATED);
+                           $dbFarmRole->SetSetting(self::ROLE_CLUSTER_STATUS, self::STATUS_TERMINATED, DBFarmRole::TYPE_LCL);
                            $this->log($dbFarmRole, "Cluster successfully terminated", "INFO");
                        } else {
                            $this->log($dbFarmRole, "Unable to shutdown mongodb cluster. Received TerminateCluster failed message.", "ERROR");
-                           $dbFarmRole->SetSetting(self::ROLE_CLUSTER_STATUS, self::STATUS_ACTIVE);
+                           $dbFarmRole->SetSetting(self::ROLE_CLUSTER_STATUS, self::STATUS_ACTIVE, DBFarmRole::TYPE_LCL);
                        }
 
                     break;
@@ -286,14 +286,14 @@
                            return;
 
                        if ($message->status == 'ok') {
-                           $dbFarmRole->SetSetting(self::ROLE_CLUSTER_IS_REMOVING_SHARD_INDEX, null);
+                           $dbFarmRole->SetSetting(self::ROLE_CLUSTER_IS_REMOVING_SHARD_INDEX, null, DBFarmRole::TYPE_LCL);
                            $sCount = $dbFarmRole->GetSetting(self::ROLE_SHARDS_COUNT);
-                           $dbFarmRole->SetSetting(self::ROLE_SHARDS_COUNT, $sCount-1);
+                           $dbFarmRole->SetSetting(self::ROLE_SHARDS_COUNT, $sCount-1, DBFarmRole::TYPE_CFG);
 
                            // Terminate instances
                            foreach ($dbFarmRole->GetServersByFilter(array('status' => array(SERVER_STATUS::RUNNING, SERVER_STATUS::INIT, SERVER_STATUS::PENDING, SERVER_STATUS::PENDING_LAUNCH))) as $server) {
                                if ($server->GetProperty(self::SERVER_SHARD_INDEX) == $message->shardIndex) {
-                                   Scalr::FireEvent($server->farmId, new BeforeHostTerminateEvent($server, false));
+                                   $server->terminate(array('SHUTTING_DOWN_CLUSTER', 'MongoDB'), false);
                                }
                            }
 
@@ -339,14 +339,14 @@
                     if ($message->mongodb->configServers)
                         $this->setConfigServersConfig($message->mongodb->configServers, $dbServer->GetFarmRoleObject(), $dbServer);
 
-                    $dbServer->GetFarmRoleObject()->SetSetting(self::ROLE_KEYFILE, $message->mongodb->keyfile);
-                    $dbServer->GetFarmRoleObject()->SetSetting(self::ROLE_PASSWORD, $message->mongodb->password);
+                    $dbServer->GetFarmRoleObject()->SetSetting(self::ROLE_KEYFILE, $message->mongodb->keyfile, DBFarmRole::TYPE_LCL);
+                    $dbServer->GetFarmRoleObject()->SetSetting(self::ROLE_PASSWORD, $message->mongodb->password, DBFarmRole::TYPE_LCL);
 
                     $dbServer->SetProperty(self::SERVER_IS_CFG_SERVER, $message->mongodb->configServer);
                     $dbServer->SetProperty(self::SERVER_IS_ROUTER, $message->mongodb->router);
 
-                    if ($message->mongodb->configServer == 1) {
-                        $dbServer->GetFarmRoleObject()->SetSetting(self::ROLE_CLUSTER_STATUS, self::STATUS_ACTIVE);
+                    if (isset($message->mongodb->configServer) || (isset($message->mongodb->configServers) && count($message->mongodb->configServers) > 0)) {
+                        $dbServer->GetFarmRoleObject()->SetSetting(self::ROLE_CLUSTER_STATUS, self::STATUS_ACTIVE, DBFarmRole::TYPE_LCL);
                     }
 
                     break;
@@ -497,14 +497,14 @@
 
         private function getSnapshotIdByServer(DBServer $dbServer)
         {
-            return $this->db->GetOne("SELECT snapshot_id FROM services_mongodb_snapshots_map WHERE farm_roleid = ? AND shard_index = ?", array(
+            return $this->db->GetOne("SELECT snapshot_id FROM services_mongodb_snapshots_map WHERE farm_roleid = ? AND shard_index = ? LIMIT 1", array(
                 $dbServer->farmRoleId, $dbServer->GetProperty(self::SERVER_SHARD_INDEX)
             ));
         }
 
         private function getVolumeIdByServer(DBServer $dbServer)
         {
-            return $this->db->GetOne("SELECT volume_id FROM services_mongodb_volumes_map WHERE farm_roleid = ? AND shard_index = ? AND replica_set_index = ?", array(
+            return $this->db->GetOne("SELECT volume_id FROM services_mongodb_volumes_map WHERE farm_roleid = ? AND shard_index = ? AND replica_set_index = ? LIMIT 1", array(
                 $dbServer->farmRoleId, $dbServer->GetProperty(self::SERVER_SHARD_INDEX), $dbServer->GetProperty(self::SERVER_REPLICA_SET_INDEX)
             ));
         }
@@ -621,19 +621,17 @@
             }
 
             $configServers = $this->db->GetAll("SELECT * FROM services_mongodb_config_servers WHERE
-                `farm_role_id` = ? AND
-                `shard_index` = ? AND
-                `replica_set_index` = ?
+                `farm_role_id` = ?
             ", array(
-                $dbServer->farmRoleId,
-                $message->mongodb->shardIndex,
-                $message->mongodb->replicaSetIndex
+                $dbServer->farmRoleId
             ));
             if (count($configServers) > 0) {
                 $configuration->config_servers = array();
                 foreach ($configServers as $cs) {
                     $itm = new stdClass();
                     $itm->id = $cs['config_server_index'];
+                    $itm->replicaSetIndex = $cs['replica_set_index'];
+                    $itm->shardIndex = $cs['shard_index'];
                     try {
                         $volume = Scalr_Storage_Volume::init()->loadById($cs['volume_id']);
                         $volumeConfig = $volume->getConfig();

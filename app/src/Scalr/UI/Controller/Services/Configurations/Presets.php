@@ -3,11 +3,6 @@ class Scalr_UI_Controller_Services_Configurations_Presets extends Scalr_UI_Contr
 {
     const CALL_PARAM_NAME = 'presetId';
 
-    public static function getPermissionDefinitions()
-    {
-        return array();
-    }
-
     public function defaultAction()
     {
         $this->viewAction();
@@ -53,30 +48,28 @@ class Scalr_UI_Controller_Services_Configurations_Presets extends Scalr_UI_Contr
                 ROLE_BEHAVIORS::APACHE,
                 ROLE_BEHAVIORS::MEMCACHED,
                 ROLE_BEHAVIORS::NGINX,
-                ROLE_BEHAVIORS::REDIS))
-            ) {
+                ROLE_BEHAVIORS::REDIS))) {
                 $err['roleBehavior'] = _("Please select service name");
             }
 
-            if (!$this->getParam('presetName'))
+            if (!$this->getParam('presetName')) {
                 $err['presetName'] = _("Preset name required");
-            else
-            {
+            } else {
                 if (strlen($this->getParam('presetName')) < 5)
                     $err['presetName'] = _("Preset name should be 5 chars or longer");
                 elseif (!preg_match("/^[A-Za-z0-9-]+$/", $this->getParam('presetName')))
                     $err['presetName'] = _("Preset name should be alpha-numeric");
                 elseif (strtolower($this->getParam('presetName')) == "default")
                     $err['presetName'] = _("default is reserverd name");
-                elseif ($this->getParam('roleBehavior') && $this->db->GetOne("SELECT id FROM service_config_presets WHERE name = ? AND role_behavior = ? AND id != ? AND env_id = ?", array(
+                elseif ($this->getParam('roleBehavior') && $this->db->GetOne("SELECT id FROM service_config_presets WHERE name = ? AND role_behavior = ? AND id != ? AND env_id = ? LIMIT 1", array(
                     $this->getParam('presetName'), $this->getParam('roleBehavior'), (int)$this->getParam('presetId'), $this->getEnvironmentId()
-                )))
+                ))) {
                     $err['presetName'] = _("Preset with selected name already exists");
+                }
             }
         }
 
-        if (count($err) == 0)
-        {
+        if (count($err) == 0) {
             $serviceConfiguration = Scalr_ServiceConfiguration::init();
 
             if ($this->getParam('presetId')) {

@@ -1,4 +1,4 @@
-<?
+<?php
     final class EUCA_SERVER_PROPERTIES extends SERVER_PROPERTIES
     {
         const EMIID			= 'euca.emi-id';

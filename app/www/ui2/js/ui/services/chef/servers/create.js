@@ -1,21 +1,23 @@
 Scalr.regPage('Scalr.ui.services.chef.servers.create', function (loadParams, moduleParams) {
 	var form = Ext.create('Ext.form.Panel', {
-		title: loadParams['servId'] ? 'Edit Chef server' : 'Create new Chef server',
-		width: 780,
-		bodyCls: 'x-panel-body-frame',
+		width: 660,
 		scalrOptions: {
 			modal: true
 		},
 		items: [{
-			xtype: 'textfield',
-			name: 'url',
-			fieldLabel: 'URL',
-			labelWidth: 100,
-			anchor: '100%',
-			allowBlank: false
-		},{
+            xtype: 'fieldset',
+            title: loadParams['servId'] ? 'Edit Chef server' : 'New Chef server',
+            items: {
+                xtype: 'textfield',
+                name: 'url',
+                fieldLabel: 'URL',
+                labelWidth: 70,
+                anchor: '100%',
+                allowBlank: false
+            }
+        },{
 			xtype: 'fieldset',
-			title: 'Client auth info',
+			title: 'Client authorization',
 			defaults: {
 				labelWidth: 70,
 				anchor: '100%',
@@ -27,14 +29,15 @@ Scalr.regPage('Scalr.ui.services.chef.servers.create', function (loadParams, mod
 				fieldLabel: 'Username'
 			},{
 				xtype: 'textarea',
-				height: 200,
+				height: 80,
 				name: 'authKey',
 				fieldLabel: 'Key'
 
 			}]
 		},{
 			xtype: 'fieldset',
-			title: 'Client validator auth info',
+			title: 'Client validator authorization',
+            cls: 'x-fieldset-separator-none',
 			defaults: {
 				labelWidth: 70,
 				anchor: '100%',
@@ -46,7 +49,7 @@ Scalr.regPage('Scalr.ui.services.chef.servers.create', function (loadParams, mod
 				fieldLabel: 'Username'
 			},{
 				xtype: 'textarea',
-				height: 200,
+				height: 80,
 				name: 'authVKey',
 				fieldLabel: 'Key'
 
@@ -55,7 +58,7 @@ Scalr.regPage('Scalr.ui.services.chef.servers.create', function (loadParams, mod
 		dockedItems: [{
 			xtype: 'container',
 			dock: 'bottom',
-			cls: 'x-docked-bottom-frame',
+			cls: 'x-docked-buttons',
 			layout: {
 				type: 'hbox',
 				pack: 'center'
@@ -74,13 +77,18 @@ Scalr.regPage('Scalr.ui.services.chef.servers.create', function (loadParams, mod
 						url: '/services/chef/servers/xSaveServer',
 						params: {servId: loadParams['servId'] ? loadParams['servId'] : 0},
 						success: function (data) {
+                            if (data['server']) {
+                                Scalr.CachedRequestManager.get().setExpired({
+                                    url: '/services/chef/servers/xListServers/'
+                                });
+                                Scalr.event.fireEvent('update', '/services/chef/servers/create', data['server']);
+                            }
 							Scalr.event.fireEvent('close');
 						}
 					});
 				}
 			},{
 				xtype: 'button',
-				margin: '0 0 0 5',
 				text: 'Cancel',
 				handler: function() {
 					Scalr.event.fireEvent('close');

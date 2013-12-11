@@ -1,7 +1,5 @@
 <?php
 
-use Scalr\DependencyInjection\Container;
-
 /**
  * Scalr_Environment class
  *
@@ -53,14 +51,14 @@ use Scalr\DependencyInjection\Container;
  * @property \ADODB_mysqli $dnsdb
  *           Gets an ADODB mysqli Connection to PDNS Database
  *
+ * @property \Scalr\Acl\Acl $acl
+ *           Gets an ACL shared service
+ *
  *
  * @method   mixed config()
  *           config(string $name)
  *           Gets config value for the dot notation access key
  *
- * @method   \Scalr\Service\OpenStack\OpenStack openstack()
- *           openstack($platform, $region)
- *           Gets an Openstack instance for the current environment
  *
  * @method   \Scalr_Environment loadById()
  *           loadById($id)
@@ -72,8 +70,7 @@ use Scalr\DependencyInjection\Container;
  *
  * @method   \Scalr\Net\Ldap\LdapClient ldap()
  *           ldap($user, $password)
- *           Gets Ldap client. If user and pass are not specified for scalr.connections.ldap section in the config
- *           the user and password which are specified for calling this method will be used.
+ *           Gets a new instance of LdapClient for specified user
  */
 class Scalr_Environment extends Scalr_Model
 {
@@ -114,29 +111,6 @@ class Scalr_Environment extends Scalr_Model
     const STATUS_INACTIVE  = 'Inactive';
 
     /**
-     * {@inheritdoc}
-     * @see Scalr_Model::__construct()
-     */
-    public function __construct ($id = null)
-    {
-        parent::__construct($id);
-        if ($id !== null) {
-            $this->getContainer()->environment = $this;
-        }
-    }
-
-    /**
-     * {@inheritdoc}
-     * @see Scalr_Model::loadBy()
-     */
-    public function loadBy($info)
-    {
-        $object = parent::loadBy($info);
-        $this->getContainer()->environment = $object;
-        return $object;
-    }
-
-    /**
      * @param  string  $id  serviceid
      * @return mixed
      */
@@ -164,11 +138,11 @@ class Scalr_Environment extends Scalr_Model
     /**
      * Gets an Amazon Web Service (Aws) factory instance
      *
-     * This method ensures that aws instance will always be from the
-     * correct environment scope.
+     * This method ensures that aws instance is always from the
+     * current environment scope.
      *
      * @param   string|\DBServer|\DBFarmRole|\DBEBSVolume $awsRegion optional
-     *          The region or object that has environment itself
+     *          The region or object which has both Scalr_Environment instance and cloud location itself
      *
      * @param   string  $awsAccessKeyId     optional The AccessKeyId
      * @param   string  $awsSecretAccessKey optional The SecretAccessKey
@@ -182,9 +156,52 @@ class Scalr_Environment extends Scalr_Model
         $arguments = func_get_args();
         if (count($arguments) <= 1) {
             $arguments[0] = isset($arguments[0]) ? $arguments[0] : null;
+            //Adds Scalr_Environment as second parameter
             $arguments[1] = $this;
         }
+        //Retrieves an instance from the DI container
         return $this->__call('aws', $arguments);
+    }
+
+    /**
+     * Gets Eucalyptus cloud client
+     *
+     * @param   string|\DBServer|\DBFarmRole    $cloudLocation
+     *          The cloud location or object which has both Scalr_Environment instance and cloud location itself
+     *
+     * @return  \Scalr\Service\Eucalyptus Returns Eucalyptus instance
+     */
+    public function eucalyptus($cloudLocation)
+    {
+        $arguments = func_get_args();
+        $arguments[0] = $cloudLocation;
+        $arguments[1] = $this;
+
+        return $this->__call('eucalyptus', $arguments);
+    }
+
+    /**
+     * Gets an OpenStack client instance
+     *
+     * This method ensures that openstack instance is always from the current
+     * environment scope
+     *
+     * @param   \Scalr\Service\OpenStack\OpenStackConfig|string   $platform  The platform name or Openstack config
+     * @param   string                                            $region    optional The region
+     * @return  \Scalr\Service\OpenStack\OpenStack Returns openstack instance from DI container
+     */
+    public function openstack($platform, $region = null)
+    {
+        $arguments = func_get_args();
+        for ($i = 0; $i < 2; ++$i) {
+            if (!isset($arguments[$i])) {
+                $arguments[$i] = null;
+            }
+        }
+        //Adds Scalr_Environment as third parameter
+        $arguments[2] = $this;
+        //Retrieves an instance from the DI container
+        return $this->__call('openstack', $arguments);
     }
 
     /**
@@ -204,10 +221,12 @@ class Scalr_Environment extends Scalr_Model
 
     /**
      * Init
+     *
      * @param   string $className
-     * @return  Scalr_Environment
+     * @return  \Scalr_Environment
      */
-    public static function init($className = null) {
+    public static function init($className = null)
+    {
         return parent::init();
     }
 
@@ -218,6 +237,7 @@ class Scalr_Environment extends Scalr_Model
         $this->clientId = $clientId;
         $this->status = self::STATUS_ACTIVE;
         $this->save();
+
         return $this;
     }
 
@@ -234,7 +254,7 @@ class Scalr_Environment extends Scalr_Model
     public function loadDefault($clientId)
     {
         // TODO: rewrite Scalr_Environment::loadDefault($clientId) for user-based
-        $info = $this->db->GetRow("SELECT * FROM client_environments WHERE client_id = ?", array($clientId));
+        $info = $this->db->GetRow("SELECT * FROM client_environments WHERE client_id = ? LIMIT 1", array($clientId));
         if (! $info)
             throw new Exception(sprintf(_('Default environment for clientId #%s not found'), $clientId));
 
@@ -376,7 +396,7 @@ class Scalr_Environment extends Scalr_Model
      */
     public function save($forceInsert = false)
     {
-        if ($this->db->GetOne('SELECT id FROM client_environments WHERE name = ? AND client_id = ? AND id != ?', array($this->name, $this->clientId, $this->id)))
+        if ($this->db->GetOne("SELECT id FROM client_environments WHERE name = ? AND client_id = ? AND id != ? LIMIT 1", array($this->name, $this->clientId, $this->id)))
             throw new Exception('This name already used');
 
         parent::save();
@@ -414,6 +434,7 @@ class Scalr_Environment extends Scalr_Model
             $this->db->Execute("DELETE FROM ssh_keys WHERE env_id=?", array($this->id));
 
             $this->db->Execute('DELETE FROM `account_team_envs` WHERE env_id = ?', array($this->id));
+            $this->db->Execute('DELETE FROM `global_variables` WHERE env_id = ?', array($this->id));
 
         } catch (Exception $e) {
             throw new Exception (sprintf(_("Cannot delete record. Error: %s"), $e->getMessage()), $e->getCode());
@@ -475,6 +496,27 @@ class Scalr_Environment extends Scalr_Model
                 SERVER_PLATFORMS::OPENSTACK . "." . Modules_Platforms_Openstack::PASSWORD,
                 SERVER_PLATFORMS::OPENSTACK . "." . Modules_Platforms_Openstack::TENANT_NAME,
                 SERVER_PLATFORMS::OPENSTACK . "." . Modules_Platforms_Openstack::USERNAME,
+
+                SERVER_PLATFORMS::OCS . "." . Modules_Platforms_Openstack::API_KEY,
+                SERVER_PLATFORMS::OCS . "." . Modules_Platforms_Openstack::AUTH_TOKEN,
+                SERVER_PLATFORMS::OCS . "." . Modules_Platforms_Openstack::KEYSTONE_URL,
+                SERVER_PLATFORMS::OCS . "." . Modules_Platforms_Openstack::PASSWORD,
+                SERVER_PLATFORMS::OCS . "." . Modules_Platforms_Openstack::TENANT_NAME,
+                SERVER_PLATFORMS::OCS . "." . Modules_Platforms_Openstack::USERNAME,
+
+                SERVER_PLATFORMS::NEBULA . "." . Modules_Platforms_Openstack::API_KEY,
+                SERVER_PLATFORMS::NEBULA . "." . Modules_Platforms_Openstack::AUTH_TOKEN,
+                SERVER_PLATFORMS::NEBULA . "." . Modules_Platforms_Openstack::KEYSTONE_URL,
+                SERVER_PLATFORMS::NEBULA . "." . Modules_Platforms_Openstack::PASSWORD,
+                SERVER_PLATFORMS::NEBULA . "." . Modules_Platforms_Openstack::TENANT_NAME,
+                SERVER_PLATFORMS::NEBULA . "." . Modules_Platforms_Openstack::USERNAME,
+
+                SERVER_PLATFORMS::ECS . "." . Modules_Platforms_Openstack::API_KEY,
+                SERVER_PLATFORMS::ECS . "." . Modules_Platforms_Openstack::AUTH_TOKEN,
+                SERVER_PLATFORMS::ECS . "." . Modules_Platforms_Openstack::KEYSTONE_URL,
+                SERVER_PLATFORMS::ECS . "." . Modules_Platforms_Openstack::PASSWORD,
+                SERVER_PLATFORMS::ECS . "." . Modules_Platforms_Openstack::TENANT_NAME,
+                SERVER_PLATFORMS::ECS . "." . Modules_Platforms_Openstack::USERNAME,
 
                 SERVER_PLATFORMS::RACKSPACENG_UK . "." . Modules_Platforms_Openstack::API_KEY,
                 SERVER_PLATFORMS::RACKSPACENG_UK . "." . Modules_Platforms_Openstack::AUTH_TOKEN,
@@ -579,6 +621,9 @@ class Scalr_Environment extends Scalr_Model
             }
 
             foreach (array(SERVER_PLATFORMS::OPENSTACK,
+                           SERVER_PLATFORMS::ECS,
+                           SERVER_PLATFORMS::OCS,
+                           SERVER_PLATFORMS::NEBULA,
                            SERVER_PLATFORMS::RACKSPACENG_UK,
                            SERVER_PLATFORMS::RACKSPACENG_US) as $platform) {
                 $ret[$platform] = array(

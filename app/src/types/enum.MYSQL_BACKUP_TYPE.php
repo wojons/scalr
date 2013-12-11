@@ -1,4 +1,4 @@
-<?
+<?php
     final class MYSQL_BACKUP_TYPE
     {
         const BUNDLE 	= "bundle";

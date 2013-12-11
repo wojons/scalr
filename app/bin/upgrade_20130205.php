@@ -29,18 +29,22 @@
   KEY `farm_role_id` (`farm_role_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1 AUTO_INCREMENT=1 ;");
 
-            $db->Execute("CREATE TABLE IF NOT EXISTS `farm_role_storage_devices` (
+            $db->Execute("
+CREATE TABLE IF NOT EXISTS `farm_role_storage_devices` (
   `id` int(11) NOT NULL AUTO_INCREMENT,
   `farm_role_id` int(11) DEFAULT NULL,
+  `env_id` int(11) DEFAULT NULL,
+  `cloud_location` varchar(50) DEFAULT NULL,
   `server_index` tinyint(4) DEFAULT NULL,
-  `storage_config_id` int(11) DEFAULT NULL,
+  `placement` varchar(36) DEFAULT NULL,
+  `storage_config_id` varchar(36) DEFAULT NULL,
   `config` text,
   `storage_id` varchar(36) DEFAULT NULL,
   `status` varchar(20) DEFAULT NULL,
   PRIMARY KEY (`id`),
   UNIQUE KEY `storage_id` (`storage_id`),
   KEY `storage_config_id` (`storage_config_id`)
-) ENGINE=InnoDB DEFAULT CHARSET=latin1 AUTO_INCREMENT=1 ;");
+) ENGINE=InnoDB  DEFAULT CHARSET=latin1 AUTO_INCREMENT= 1;");
 
             $db->Execute("CREATE TABLE IF NOT EXISTS `farm_role_storage_settings` (
   `id` int(11) NOT NULL AUTO_INCREMENT,
@@ -52,7 +56,8 @@
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1 AUTO_INCREMENT=1 ;");
 
             $db->Execute("ALTER TABLE `farm_role_storage_devices`
-  ADD CONSTRAINT `farm_role_storage_devices_ibfk_1` FOREIGN KEY (`storage_config_id`) REFERENCES `farm_role_storage_config` (`id`) ON DELETE CASCADE ON UPDATE NO ACTION;");
+  ADD CONSTRAINT `farm_role_storage_devices_ibfk_1` FOREIGN KEY (`storage_config_id`) REFERENCES `farm_role_storage_config` (`id`) ON DELETE CASCADE ON UPDATE NO ACTION;
+                ");
 
             $db->Execute("ALTER TABLE `farm_role_storage_settings`
   ADD CONSTRAINT `farm_role_storage_settings_ibfk_1` FOREIGN KEY (`storage_config_id`) REFERENCES `farm_role_storage_config` (`id`) ON DELETE CASCADE ON UPDATE NO ACTION;");

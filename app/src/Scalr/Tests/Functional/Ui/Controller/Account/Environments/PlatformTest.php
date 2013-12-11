@@ -2,9 +2,8 @@
 
 namespace Scalr\Tests\Functional\Ui\Controller;
 
-use Scalr\Service\Aws\Ec2\DataType\AvailabilityZoneFilterNameType;
 use Scalr\Tests\WebTestCase;
-use \CONFIG;
+use SERVER_PLATFORMS;
 
 /**
  * Functional test for the Scalr_UI_Controller_Account2_Environments_Platform class.
@@ -45,8 +44,9 @@ class PlatformTest extends WebTestCase
     public function providerPlatformAction()
     {
         $aPrefixed = array_fill_keys(array(
-            \SERVER_PLATFORMS::CLOUDSTACK, \SERVER_PLATFORMS::IDCF, \SERVER_PLATFORMS::UCLOUD,
-            \SERVER_PLATFORMS::OPENSTACK, \SERVER_PLATFORMS::RACKSPACENG_UK, \SERVER_PLATFORMS::RACKSPACENG_US,
+            SERVER_PLATFORMS::CLOUDSTACK, SERVER_PLATFORMS::IDCF, SERVER_PLATFORMS::UCLOUD,
+            SERVER_PLATFORMS::OPENSTACK, SERVER_PLATFORMS::RACKSPACENG_UK, SERVER_PLATFORMS::RACKSPACENG_US,
+            SERVER_PLATFORMS::OCS, SERVER_PLATFORMS::ECS, SERVER_PLATFORMS::NEBULA
         ), true);
         $pars = array();
         foreach (\SERVER_PLATFORMS::GetList() as $platform => $opts) {
@@ -78,6 +78,7 @@ class PlatformTest extends WebTestCase
         $this->resetEnvironmentCache();
         if (!empty($content['moduleParams']['params'])) {
             foreach ($content['moduleParams']['params'] as $varname => $val) {
+                if ($varname === '_info') continue;
                 if (!preg_match('/\.is_enabled$/', $varname)) {
                     $varname = $prefix . $varname;
                     $enc = true;

@@ -1,10 +1,10 @@
 Scalr.regPage('Scalr.ui.farms.builder.tabs.scripting', function (tabParams) {
 	return Ext.create('Scalr.ui.FarmsBuilderTab', {
-		tabTitle: 'Scripting',
+		tabTitle: 'Orchestration',
 
 		itemId: 'scripting',
 		layout: 'fit',
-        bodyCls: 'x-panel-body-frame x-panel-body-plain',
+        cls: 'scalr-ui-farmbuilder-roleedit-tab',
 		
         tabData: null,
         
@@ -18,7 +18,7 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.scripting', function (tabParams) {
 		},
 
 		beforeShowTab: function (record, handler) {
-            this.up('#farmbuilder').cache.load(
+            Scalr.CachedRequestManager.get('farmbuilder').load(
                 {
                     url: '/farms/builder/xGetScripts',
                     params: {
@@ -60,7 +60,8 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.scripting', function (tabParams) {
 					timeout: roleScripts[i]['timeout'],
 					version: roleScripts[i]['version']+'',
 					system: true,
-					hash: roleScripts[i]['hash']
+					hash: roleScripts[i]['hash'],
+                    script_path: roleScripts[i]['script_path']
 				});
 			}
 			
@@ -78,6 +79,7 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.scripting', function (tabParams) {
 					cloud_location: item.get('cloud_location'),
 					role_id: item.get('role_id'),
 					name: item.get('name'),
+                    alias: item.get('alias'),
 					current: item === record
 				});
 			});
@@ -117,8 +119,7 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.scripting', function (tabParams) {
 		
 		items: {
 			xtype: 'scriptfield2',
-			itemId: 'rolescripting',
-			margin: 0
+			itemId: 'rolescripting'
 		}
 	});
 });

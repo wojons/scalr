@@ -2,22 +2,9 @@
 
 class Modules_Platforms_Ec2_Helpers_Ebs
 {
-    public static function farmValidateRoleSettings($settings, $rolename)
+    public static function farmValidateRoleSettings($settings, DBRole $dbRole)
     {
-        if ($settings[DBFarmRole::SETTING_AWS_USE_EBS] && $settings[DBFarmRole::SETTING_AWS_AVAIL_ZONE] == "")
-            throw new Exception(sprintf(_("EBS cannot be enabled if Placement is set to 'Choose randomly'. Please select a different option for 'Placement' parameter for role '%s'."), $rolename));
-
-        if ($settings[DBFarmRole::SETTING_AWS_USE_EBS])
-        {
-            if (!$settings[DBFarmRole::SETTING_AWS_EBS_SIZE] && !$settings[DBFarmRole::SETTING_AWS_EBS_SNAPID])
-                throw new Exception(sprintf(_("EBS volume size or/and snapshot for role '%s' should be specified"), $rolename));
-
-            if (!$settings[DBFarmRole::SETTING_AWS_EBS_SNAPID])
-            {
-                if ($settings[DBFarmRole::SETTING_AWS_EBS_SIZE] < 1 || $settings[DBFarmRole::SETTING_AWS_EBS_SIZE] > 1000)
-                    throw new Exception(sprintf(_("EBS volume size for role '%s' must be between 1 and 1000 GB"), $rolename));
-            }
-        }
+        //OLD EBS tab. Not using anymore.
     }
 
     public static function farmUpdateRoleSettings(DBFarmRole $DBFarmRole, $oldSettings, $newSettings)
@@ -41,7 +28,7 @@ class Modules_Platforms_Ec2_Helpers_Ebs
 
             foreach ($servers as $DBServer)
             {
-                if (!$db->GetRow("SELECT id FROM ec2_ebs WHERE server_id=? AND ismanual='0'", array($DBServer->serverId)))
+                if (!$db->GetRow("SELECT id FROM ec2_ebs WHERE server_id=? AND ismanual='0' LIMIT 1", array($DBServer->serverId)))
                 {
                     if (in_array($DBFarmRole->GetSetting(DBFarmRole::SETTING_AWS_EBS_TYPE), array('standard', 'io1')))
                         $type = $DBFarmRole->GetSetting(DBFarmRole::SETTING_AWS_EBS_TYPE);

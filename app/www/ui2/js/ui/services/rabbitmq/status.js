@@ -2,7 +2,6 @@ Scalr.regPage('Scalr.ui.services.rabbitmq.status', function (loadParams, moduleP
 	var panel = Ext.create('Ext.form.Panel', {
 		width: 700,
 		title: 'RabbitMQ status',
-		bodyCls: 'x-panel-body-frame',
 		fieldDefaults: {
 			anchor: '100%',
 			labelWidth: 130

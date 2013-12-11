@@ -1,4 +1,4 @@
-<?
+<?php
     final class MYSQL_STORAGE_ENGINE
     {
         const LVM  = 'lvm';

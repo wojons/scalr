@@ -87,9 +87,9 @@ Scalr.regPage('Scalr.ui.admin.users.view', function (loadParams, moduleParams) {
 			xtype: 'scalrpagingtoolbar',
 			store: store,
 			dock: 'top',
-			afterItems: [{
-				ui: 'paging',
-				iconCls: 'x-tbar-add',
+			beforeItems: [{
+                text: 'Add user',
+                cls: 'x-btn-green-bg',
 				handler: function() {
 					Scalr.event.fireEvent('redirect', '#/admin/users/create');
 				}

@@ -119,6 +119,7 @@ class ServersApi
         $options = array(
             'server' => $server,
         );
+
         $response = $this->getClient()->call(
             $this->service,
             '/servers', $options, 'POST'

@@ -10,7 +10,8 @@ class Scalr_Messaging_Msg {
 
     public $handlers = array();
 
-    public $behaviour,
+    public $dbMessageId,
+        $behaviour,
         $roleName,
         $localIp,
         $remoteIp,
@@ -26,8 +27,16 @@ class Scalr_Messaging_Msg {
     }
 
     public function setServerMetaData(DBServer $dbServer) {
-        $this->behaviour = $dbServer->GetFarmRoleObject()->GetRoleObject()->getBehaviors();
-        $this->roleName = $dbServer->GetFarmRoleObject()->GetRoleObject()->name;
+
+        try {
+            $this->behaviour = $dbServer->GetFarmRoleObject()->GetRoleObject()->getBehaviors();
+            $this->roleName = $dbServer->GetFarmRoleObject()->GetRoleObject()->name;
+            $this->farmRoleAlias = $dbServer->GetFarmRoleObject()->Alias;
+            if (empty($this->farmRoleAlias))
+                $this->farmRoleAlias = $this->roleName;
+
+        } catch (Exception $e) {}
+
         $this->localIp = $dbServer->localIp;
         $this->remoteIp = $dbServer->remoteIp;
         $this->serverIndex = $dbServer->index;

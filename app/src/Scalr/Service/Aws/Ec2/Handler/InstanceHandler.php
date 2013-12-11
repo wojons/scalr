@@ -1,6 +1,7 @@
 <?php
 namespace Scalr\Service\Aws\Ec2\Handler;
 
+use Scalr\Service\Aws\Ec2\DataType\GetPasswordDataResponseData;
 use Scalr\Service\Aws\Ec2\DataType\MonitorInstancesResponseSetList;
 use Scalr\Service\Aws\Ec2\DataType\InstanceAttributeType;
 use Scalr\Service\Aws\Ec2\DataType\GetConsoleOutputResponseData;
@@ -187,6 +188,26 @@ class InstanceHandler extends AbstractEc2Handler
     }
 
     /**
+     * GetPasswordData action
+     *
+     * Retrieves the encrypted administrator password for an instance running Windows.
+     *
+     * Note!
+     * The Windows password is only generated the first time an AMI is launched.
+     * It is not generated for rebundled AMIs or after the password is changed on an instance.
+     * The password is encrypted using the key pair that you provided.
+     *
+     * @param   string      $instanceId       A Windows instance ID.
+     * @return  GetPasswordDataResponseData   Returns object which represents console output.
+     * @throws  ClientException
+     * @throws  Ec2Exception
+     */
+    public function getPasswordData($instanceId)
+    {
+        return $this->getEc2()->getApiHandler()->getPasswordData($instanceId);
+    }
+
+    /**
      * ModifyInstanceAttribute action
      *
      * Modifies the specified attribute of the specified instance.
@@ -208,6 +229,26 @@ class InstanceHandler extends AbstractEc2Handler
             $attribute = new InstanceAttributeType($attribute);
         }
         return $this->getEc2()->getApiHandler()->modifyInstanceAttribute($instanceId, $attribute, $value);
+    }
+
+    /**
+     * DescribeInstanceAttribute action
+     *
+     * Describes an attribute of the specified instance
+     *
+     * @param   string                       $instanceId The ID of the Instance.
+     * @param   InstanceAttributeType|string $attribute  The attribute.
+     * @return  mixed                 Returns attribute value. It may be scalar value or object
+     *                                depends on attribute.
+     * @throws  ClientException
+     * @throws  Ec2Exception
+     */
+    public function describeAttribute($instanceId, $attribute)
+    {
+        if (!($attribute instanceof InstanceAttributeType)) {
+            $attribute = new InstanceAttributeType($attribute);
+        }
+        return $this->getEc2()->getApiHandler()->describeInstanceAttribute($instanceId, $attribute);
     }
 
     /**

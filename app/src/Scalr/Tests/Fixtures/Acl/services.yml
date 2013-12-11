@@ -1,0 +1,29 @@
+SERVICES_APACHE:
+- [/services/apache/vhosts, null, all]
+- /farms/vhosts
+
+SERVICES_CHEF:
+- /services/chef/runlists/default
+- /services/chef/runlists/view
+- /services/chef/runlists/create
+- /services/chef/runlists/edit
+- /services/chef/runlists/xDeleteRunlist
+- /services/chef/runlists/xSaveRunList
+- /services/chef/runlists/xUpdateAttrib
+- /services/chef/servers/default
+- /services/chef/servers/view
+- /services/chef/servers/edit
+- /services/chef/servers/create
+- /services/chef/servers/xDeleteServer
+- /services/chef/servers/xSaveServer
+
+SERVICES_SSL:
+- /services/ssl/certificates/default
+- /services/ssl/certificates/view
+- /services/ssl/certificates/xRemove
+- /services/ssl/certificates/edit
+- /services/ssl/certificates/create
+- /services/ssl/certificates/xSave
+
+SERVICES_RABBITMQ:
+- [/services/rabbitmq, null, all]

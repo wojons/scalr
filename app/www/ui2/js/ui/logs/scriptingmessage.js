@@ -5,7 +5,6 @@ Scalr.regPage('Scalr.ui.logs.scriptingmessage', function (loadParams, modulePara
 		scalrOptions: {
 			'modal': true
 		},
-		bodyCls: 'x-panel-body-frame',
 		width: 800,
 		tools: [{
 			type: 'close',

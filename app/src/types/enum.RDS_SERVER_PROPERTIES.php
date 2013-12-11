@@ -1,4 +1,4 @@
-<?
+<?php
     final class RDS_SERVER_PROPERTIES extends SERVER_PROPERTIES
     {
         const AVAIL_ZONE		= 'rds.avail-zone';

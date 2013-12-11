@@ -9,9 +9,13 @@ class Scalr_UI_Controller_Admin_Accounts extends Scalr_UI_Controller
         return array('xRemove', 'xSave', 'xListAccounts', 'xGetInfo');
     }
 
+    /**
+     * {@inheritdoc}
+     * @see Scalr_UI_Controller::hasAccess()
+     */
     public function hasAccess()
     {
-        return $this->user && ($this->user->getType() == Scalr_Account_User::TYPE_SCALR_ADMIN);
+        return $this->user && $this->user->isScalrAdmin();
     }
 
     public function defaultAction()
@@ -206,6 +210,8 @@ class Scalr_UI_Controller_Admin_Accounts extends Scalr_UI_Controller
             $account->comments = $this->getParam('comments');
 
             $account->save();
+
+            $account->initializeAcl();
 
             $account->setLimits(array(
                 Scalr_Limits::ACCOUNT_ENVIRONMENTS => $this->getParam('limitEnv'),

@@ -1,7 +1,7 @@
 <?php
 
-    require_once dirname(__FILE__).'/../../../externals/google-api-php-client-r558/src/Google_Client.php';
-    require_once dirname(__FILE__).'/../../../externals/google-api-php-client-r558/src/contrib/Google_ComputeService.php';
+    require_once dirname(__FILE__).'/../../../externals/google-api-php-client-r592/src/Google_Client.php';
+    require_once dirname(__FILE__).'/../../../externals/google-api-php-client-r592/src/contrib/Google_ComputeService.php';
 
     class Modules_Platforms_GoogleCE implements IPlatformModule
     {
@@ -12,7 +12,7 @@
         const PROJECT_ID			= 'gce.project_id';
         const ACCESS_TOKEN			= 'gce.access_token';
 
-        const RESOURCE_BASE_URL = 'https://www.googleapis.com/compute/v1beta14/projects/';
+        const RESOURCE_BASE_URL = 'https://www.googleapis.com/compute/v1beta15/projects/';
 
         private $instancesListCache;
 
@@ -117,6 +117,16 @@
             );
         }
 
+        public function determineServerIps($client, $server)
+        {
+            $network = $server->getNetworkInterfaces();
+
+            return array(
+                'localIp'	=> $network[0]->networkIP,
+                'remoteIp'	=> $network[0]->accessConfigs[0]->natIP
+            );
+        }
+
         public function GetServerIPAddresses(DBServer $DBServer)
         {
             $gce = $this->getClient($DBServer->GetEnvironmentObject(), $DBServer->GetProperty(GCE_SERVER_PROPERTIES::CLOUD_LOCATION));
@@ -124,7 +134,7 @@
             $result = $gce->instances->get(
                 $DBServer->GetEnvironmentObject()->getPlatformConfigValue(self::PROJECT_ID),
                 $DBServer->GetCloudLocation(),
-                $DBServer->serverId
+                $DBServer->GetProperty(GCE_SERVER_PROPERTIES::SERVER_NAME)
             );
 
             $network = $result->getNetworkInterfaces();
@@ -213,7 +223,7 @@
             $gce->instances->delete(
                 $DBServer->GetEnvironmentObject()->getPlatformConfigValue(self::PROJECT_ID),
                 $DBServer->GetCloudLocation(),
-                $DBServer->serverId
+                $DBServer->GetProperty(GCE_SERVER_PROPERTIES::SERVER_NAME)
             );
 
             return true;
@@ -239,7 +249,10 @@
                 }
                 catch(Exception $e)
                 {
-                    throw $e;
+                    if (stristr($e->getMessage(), "was not found"))
+                        return true;
+                    else
+                        throw $e;
                 }
             }
 
@@ -292,21 +305,23 @@
             $retval = $gce->instances->getSerialPortOutput(
                 $DBServer->GetEnvironmentObject()->getPlatformConfigValue(self::PROJECT_ID),
                 $DBServer->GetCloudLocation(),
-                $DBServer->serverId
+                $DBServer->GetProperty(GCE_SERVER_PROPERTIES::SERVER_NAME)
             );
 
             return base64_encode($retval->contents);
         }
 
-        private function getObjectUrl($objectName, $objectType, $projectName) {
+        private function getObjectUrl($objectName, $objectType, $projectName, $cloudLocation = null) {
 
-            if ($objectType != 'images')
-                return self::RESOURCE_BASE_URL."{$projectName}/global/{$objectType}/{$objectName}";
-            else {
+            if ($objectType == 'images') {
                 if (!stristr($objectName, "/global"))
                     return str_replace($projectName, "{$projectName}/global", self::RESOURCE_BASE_URL."{$objectName}");
                 else
                     return self::RESOURCE_BASE_URL."{$objectName}";
+            } elseif ($objectType == 'machineTypes') {
+                return self::RESOURCE_BASE_URL."{$projectName}/zones/{$cloudLocation}/{$objectType}/{$objectName}";
+            } else {
+                return self::RESOURCE_BASE_URL."{$projectName}/global/{$objectType}/{$objectName}";
             }
         }
 
@@ -325,7 +340,7 @@
                     $info = $gce->instances->get(
                         $DBServer->GetEnvironmentObject()->getPlatformConfigValue(self::PROJECT_ID),
                         $DBServer->GetCloudLocation(),
-                        $DBServer->serverId
+                        $DBServer->GetProperty(GCE_SERVER_PROPERTIES::SERVER_NAME)
                     );
                 }
                 catch(Exception $e){}
@@ -530,7 +545,8 @@
             $instance->setMachineType($this->getObjectUrl(
                 $launchOptions->serverType,
                 'machineTypes',
-                $environment->getPlatformConfigValue(self::PROJECT_ID)
+                $environment->getPlatformConfigValue(self::PROJECT_ID),
+                $availZone
             ));
             $instance->setImage($this->getObjectUrl(
                 $launchOptions->imageId,

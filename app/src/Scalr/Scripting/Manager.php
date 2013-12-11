@@ -29,9 +29,6 @@ class Scalr_Scripting_Manager
 
     public static function getScriptingBuiltinVariables()
     {
-        foreach (self::$BUILTIN_VARIABLES as $k=>$v)
-            self::$BUILTIN_VARIABLES["event_{$k}"] = $v;
-
         if (!self::$BUILTIN_VARIABLES_LOADED)
         {
             $ReflectEVENT_TYPE = new ReflectionClass("EVENT_TYPE");
@@ -72,6 +69,9 @@ class Scalr_Scripting_Manager
                 }
             }
 
+            foreach (self::$BUILTIN_VARIABLES as $k=>$v)
+                self::$BUILTIN_VARIABLES["event_{$k}"] = $v;
+
             self::$BUILTIN_VARIABLES_LOADED = true;
         }
 
@@ -106,8 +106,19 @@ class Scalr_Scripting_Manager
                         // Script
                         $itm->asynchronous = ($script['issync'] == 1) ? '0' : '1';
                         $itm->timeout = $script['timeout'];
-                        $itm->name = $script['name'];
-                        $itm->body = $script['body'];
+
+                        if ($script['body']) {
+                            $itm->name = $script['name'];
+                            $itm->body = $script['body'];
+                        } else {
+                            $itm->name = "local-".crc32($script['path']).mt_rand(100, 999);
+                            $itm->path = $script['path'];
+                        }
+
+                        if ($script['run_as'])
+                            $itm->runAs = $script['run_as'];
+
+                        $itm->executionId = $script['execution_id'];
 
                         $retval[] = $itm;
                     }
@@ -144,15 +155,23 @@ class Scalr_Scripting_Manager
 
                 $variables['event_name'] = $event->GetName();
             }
+
+            $formats = \Scalr::config("scalr.system.global_variables.format");
             foreach ($variables as $name => $value) {
-                $message->globalVariables[] = (object)array('name' => "SCALR_".strtoupper($name), 'value' => $value);
+                $name = "SCALR_".strtoupper($name);
+                $value = trim($value);
+
+                if (isset($formats[$name]))
+                   $value = @sprintf($formats[$name], $value);
+
+                $message->globalVariables[] = (object)array('name' => $name, 'value' => $value);
             }
 
             // Add custom variables
             $globalVariables = new Scalr_Scripting_GlobalVariables($eventServer->envId);
             $vars = $globalVariables->listVariables($eventServer->roleId, $eventServer->farmId, $eventServer->farmRoleId);
             foreach ($vars as $k => $v) {
-                $message->globalVariables[] = (object)array('name' => $k, 'value' => $v);
+                $message->globalVariables[] = (object)array('name' => $k, 'value' => trim($v));
             }
         } catch (Exception $e) {}
 
@@ -163,71 +182,82 @@ class Scalr_Scripting_Manager
     {
         $db = \Scalr::getDb();
 
-        //$scriptSettings['version'] = (int)$scriptSettings['version'];
+        $template = array(
+            'timeout' => $scriptSettings['timeout'],
+            'issync'  => $scriptSettings['issync'],
+            'run_as'  => $scriptSettings['run_as'],
+            'execution_id' => Scalr::GenerateUID()
+        );
 
-        if ($scriptSettings['version'] == 'latest' || (int)$scriptSettings['version'] == -1) {
-            $version = (int)$db->GetOne("SELECT MAX(revision) FROM script_revisions WHERE scriptid=?",
+        if ($scriptSettings['scriptid']) {
+
+            if ($scriptSettings['version'] == 'latest' || (int)$scriptSettings['version'] == -1) {
+                $version = (int)$db->GetOne("SELECT MAX(revision) FROM script_revisions WHERE scriptid=?",
+                    array($scriptSettings['scriptid'])
+                );
+            }
+            else
+                $version = (int)$scriptSettings['version'];
+
+            $info = $db->GetRow("SELECT name,id FROM scripts WHERE id=? LIMIT 1",
                 array($scriptSettings['scriptid'])
             );
-        }
-        else
-            $version = (int)$scriptSettings['version'];
 
-        $template = $db->GetRow("SELECT name,id FROM scripts WHERE id=?",
-            array($scriptSettings['scriptid'])
-        );
-        $template['timeout'] = $scriptSettings['timeout'];
-        $template['issync'] = $scriptSettings['issync'];
+            $template['name'] = $info['name'];
+            $template['id'] = $info['id'];
 
-        $revisionInfo = $db->GetRow("SELECT script, variables FROM script_revisions WHERE scriptid=? AND revision=?", array(
-            $template['id'], $version
-        ));
+            $revisionInfo = $db->GetRow("SELECT script, variables FROM script_revisions WHERE scriptid=? AND revision=? LIMIT 1", array(
+                $template['id'], $version
+            ));
 
-        $template['body'] = $revisionInfo['script'];
+            $template['body'] = $revisionInfo['script'];
 
-        if (!$template['body'])
-            return false;
+            if (!$template['body'])
+                return false;
 
-        $scriptParams = (array)unserialize($revisionInfo['variables']);
-        foreach ($scriptParams as &$val)
-            $val = "";
+            $scriptParams = (array)unserialize($revisionInfo['variables']);
+            foreach ($scriptParams as &$val)
+                $val = "";
 
-        $params = array_merge($scriptParams, $targetServer->GetScriptingVars(), (array)unserialize($scriptSettings['params']));
+            $params = array_merge($scriptParams, $targetServer->GetScriptingVars(), (array)unserialize($scriptSettings['params']));
 
-        if ($event) {
-            $eventServer = $event->DBServer;
-            foreach ($eventServer->GetScriptingVars() as $k => $v) {
-                $params["event_{$k}"] = $v;
+            if ($event) {
+                $eventServer = $event->DBServer;
+                foreach ($eventServer->GetScriptingVars() as $k => $v) {
+                    $params["event_{$k}"] = $v;
+                }
+
+                foreach ($event->GetScriptingVars() as $k=>$v)
+                    $params[$k] = $event->{$v};
+
+                if (isset($event->params) && is_array($event->params))
+                    foreach ($event->params as $k=>$v)
+                        $params[$k] = $v;
+
+                $params['event_name'] = $event->GetName();
             }
 
-            foreach ($event->GetScriptingVars() as $k=>$v)
-                $params[$k] = $event->{$v};
+            if ($event instanceof CustomEvent) {
+                if (count($event->params) > 0)
+                    $params = array_merge($params, $event->params);
+            }
 
-            if (isset($event->params) && is_array($event->params))
-                foreach ($event->params as $k=>$v)
-                    $params[$k] = $v;
+            // Prepare keys array and array with values for replacement in script
+            $keys = array_keys($params);
+            $f = create_function('$item', 'return "%".$item."%";');
+            $keys = array_map($f, $keys);
+            $values = array_values($params);
+            $script_contents = str_replace($keys, $values, $template['body']);
+            $template['body'] = str_replace('\%', "%", $script_contents);
 
-            $params['event_name'] = $event->GetName();
+            // Parse and set variables from data bag
+            //TODO: @param_name@
+
+            // Generate script contents
+            $template['name'] = preg_replace("/[^A-Za-z0-9]+/", "_", $template['name']);
+        } else {
+            $template['path'] = $scriptSettings['script_path'];
         }
-
-        if ($event instanceof CustomEvent) {
-            if (count($event->params) > 0)
-                $params = array_merge($params, $event->params);
-        }
-
-        // Prepare keys array and array with values for replacement in script
-        $keys = array_keys($params);
-        $f = create_function('$item', 'return "%".$item."%";');
-        $keys = array_map($f, $keys);
-        $values = array_values($params);
-        $script_contents = str_replace($keys, $values, $template['body']);
-        $template['body'] = str_replace('\%', "%", $script_contents);
-
-        // Parse and set variables from data bag
-        //TODO: @param_name@
-
-        // Generate script contents
-        $template['name'] = preg_replace("/[^A-Za-z0-9]+/", "_", $template['name']);
 
         return $template;
     }
@@ -241,8 +271,7 @@ class Scalr_Scripting_Manager
         $scripts = $db->GetAll("SELECT * FROM farm_role_scripts WHERE (event_name=? OR event_name='*') AND farmid=? ORDER BY order_index ASC", array($event->GetName(), $eventServer->farmId));
 
         foreach ($roleScripts as $script) {
-
-            $params = $db->GetOne("SELECT params FROM farm_role_scripting_params WHERE farm_role_id = ? AND `hash` = ? AND farm_role_script_id = '0'", array(
+            $params = $db->GetOne("SELECT params FROM farm_role_scripting_params WHERE farm_role_id = ? AND `hash` = ? AND farm_role_script_id = '0' LIMIT 1", array(
                 $eventServer->farmRoleId,
                 $script['hash']
             ));
@@ -259,7 +288,9 @@ class Scalr_Scripting_Manager
              "timeout" => $script['timeout'],
              "issync" => $script['issync'],
              "order_index" => $script['order_index'],
-             "type"   => "role"
+             "type"   => "role",
+             'script_path' => $script['script_path'],
+             'run_as' => $script['run_as']
             );
         }
 

@@ -81,9 +81,9 @@ Scalr.regPage('Scalr.ui.services.chef.servers.view', function (loadParams, modul
 			xtype: 'scalrpagingtoolbar',
 			store: store,
 			dock: 'top',
-			afterItems: [{
-				ui: 'paging',
-				iconCls: 'x-tbar-add',
+			beforeItems: [{
+                text: 'Add Chef server',
+                cls: 'x-btn-green-bg',
 				handler: function() {
 					Scalr.event.fireEvent('redirect', '#/services/chef/servers/create');
 				}

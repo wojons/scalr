@@ -1,12 +1,13 @@
 Scalr.regPage('Scalr.ui.account2.environments.view', function (loadParams, moduleParams) {
-	var isAccountOwner = Scalr.user['type'] == 'AccountOwner',
+	var isAccountOwner = Scalr.user['type'] === 'AccountOwner',
 		storeTeams = Scalr.data.get('account.teams'),
-		storeEnvironments = Scalr.data.get('account.environments');
+		storeEnvironments = Scalr.data.get('account.environments'),
+        readOnlyAccess = !Scalr.utils.canManageAcl() && !Scalr.isAllowed('ADMINISTRATION_ENV_CLOUDS');
 		
 	var getTeamNames = function(teams, links) {
 		var list = [];
 		if (teams) {
-            if (Scalr.flags['authMode'] == 'ldap') {
+            if (Scalr.flags['authMode'] === 'ldap') {
                 list = teams;
                 var len = list.length, maxLen = 2;
                 if (len > maxLen) {
@@ -15,9 +16,11 @@ Scalr.regPage('Scalr.ui.account2.environments.view', function (loadParams, modul
                 }
             } else {
                 for (var i=0, len=teams.length; i<len; i++) {
-                    var record = storeTeams.getById(teams[i]);
+                    var record = storeTeams.getById(teams[i]),
+                        name;
                     if (record) {
-                        list.push(links?'<a href="#/account/teams?teamId='+record.get('id')+'">'+record.get('name')+'</a>':record.get('name'));
+                        name = record.get('name').replace(/\s/g, '&nbsp;');
+                        list.push(links?'<a href="#/account/teams?teamId='+record.get('id')+'">'+name+'</a>':name);
                     }
                 }
             }
@@ -46,16 +49,16 @@ Scalr.regPage('Scalr.ui.account2.environments.view', function (loadParams, modul
 			}
 		}]
 	});
-	var reconfigurePage = function(params) {
-		if (params.envId) {
+	var reconfigurePage = function(envId) {
+		if (envId) {
 			dataview.deselect(form.getForm().getRecord());
-			if (params.envId == 'new') {
+			if (envId === 'new') {
 				if (isAccountOwner) {
 					panel.down('#add').handler();
 				}
 			} else {
 				panel.down('#envLiveSearch').reset();
-				var record =  store.getById(params.envId);
+				var record =  store.getById(envId);
 				if (record) {
 					dataview.select(record);
 				}
@@ -68,30 +71,55 @@ Scalr.regPage('Scalr.ui.account2.environments.view', function (loadParams, modul
         store: store,
 		listeners: {
 			boxready: function(){
-				reconfigurePage(loadParams);
-			}
+				reconfigurePage(loadParams.envId || Scalr.user.envId);
+			},
+            refresh: function(view){
+                var record = view.getSelectionModel().getLastSelected();
+                if (record) {
+                    form.loadRecord(view.store.getById(record.get('id')));
+                }
+            }
 		},
-		cls: 'x-dataview-columned',
+        cls: 'x-dataview',
+        itemCls: 'x-dataview-tab',
+        selectedItemCls : 'x-dataview-tab-selected',
+        overItemCls : 'x-dataview-tab-over',
+        itemSelector: '.x-dataview-tab',
         tpl  : new Ext.XTemplate(
             '<tpl for=".">',
-                '<div class="x-item">',
-					'<div class="x-item-inner">',
-						'<table>',
-							'<tr>',
-								'<td>',
-									'<div class="x-item-id">id:&nbsp;{id}</div>',
-									'<div class="x-item-title">{name} </div>',
-									'{[values.teams && values.teams.length  ? \'<span class="x-item-param-title">Teams: </span><br/>\' : \'\']}',
-									'{[this.getTeamNames(values.teams)]}',
-								'</td>',
-								'<td>',
-									'<div class="x-item-status{[values.status == "Active" ? "" : " x-item-status-inactive"]}">{[values.status == \'Active\' ? \'Managed\' : \'Suspended\']}</div>',
-									'<span class="x-item-param-title">Enabled clouds: </span><br/>{[values.platforms && values.platforms.length ? "" : "no clouds enabled"]}',
-									'<div>{[this.getPlatformNames(values.platforms)]}<div class="x-clear"></div></div>',
-								'</td>',
-							'</tr>',
-						'</table>',
-					'</div>',
+                '<div class="x-dataview-tab">',
+                    '<table>',
+                        '<tr>',
+                            '<td colspan="3">',
+                                '<div class="x-fieldset-subheader" style="margin-bottom:10px">{name} </div>',
+                            '</td>',
+                        '</tr>',
+                        '<tr>',
+                            '<td width="50">',
+                                '<span class="x-dataview-tab-param-title">ID: </span>',
+                            '</td>',
+                            '<td width="120">',
+                                '<span class="x-dataview-tab-param-value">{id}</span>',
+                            '</td>',
+                            '<td>',
+                                '<div class="x-dataview-tab-param-title x-dataview-tab-status-{[values.status == "Active" ? "active" : "inactive"]}">{[values.status == \'Active\' ? \'Managed\' : \'Suspended\']}</div>',
+                            '</td>',
+                        '</tr>',
+                        '<tr>',
+                            '<td>',
+                                '<span class="x-dataview-tab-param-title">Teams: </span>',
+                            '</td>',
+                            '<td>',
+                                '<tpl if="values.teams && values.teams.length">',
+                                    '<div class="x-dataview-tab-param-value">{[this.getTeamNames(values.teams)]}</div>',
+                                '</tpl>',
+                            '</td>',
+                            '<td>',
+                                '<span class="x-dataview-tab-param-title" style="float:left">Enabled clouds: </span>',
+                                '<span style="float:left;width:100px;">{[this.getPlatformNames(values.platforms)]}</span>',
+                            '</td>',
+                        '</tr>',
+                    '</table>',
                 '</div>',
             '</tpl>',
 			{
@@ -99,14 +127,12 @@ Scalr.regPage('Scalr.ui.account2.environments.view', function (loadParams, modul
 					var list = [];
 					if (platforms && platforms.length) {
 						for (var i=0, len=platforms.length; i<len; i++) {
-							if (moduleParams.platforms[platforms[i]]) {
-								list.push(
-									'<div class="scalr-ui-icon-platform scalr-ui-icon-platform-' + platforms[i] + ' "title="'+(moduleParams.platforms[platforms[i]])+'"></div>'
-								);
-							}
+                            list.push(
+                                '<div class="x-icon-platform-small x-icon-platform-small-' + platforms[i] + ' "title="'+(Scalr.utils.getPlatformName(platforms[i]))+'"></div>'
+                            );
 						}
-						return list.join('');
 					}
+                    return list.length > 0 ? '<div style="margin:-2px 0 0">' + list.join('') + '<div class="x-clear"></div></div>' : '<span class=\"x-dataview-tab-param-value\">&nbsp;none</span>';
 				},
 				getTeamNames: function(teams){
 					return getTeamNames(teams);
@@ -122,19 +148,18 @@ Scalr.regPage('Scalr.ui.account2.environments.view', function (loadParams, modul
 			}
 		},
 		loadingText: 'Loading environments ...',
-		deferEmptyText: true,
+		deferEmptyText: true
 
-        itemSelector: '.x-item',
-        overItemCls : 'x-item-over',
-		trackOver: true
     });
 
 	var form = 	Ext.create('Ext.form.Panel', {
 		hidden: true,
-		minWidth: 680,
 		fieldDefaults: {
 			anchor: '100%'
 		},
+		layout: 'auto',
+        overflowX: 'hidden',
+        overflowY: 'auto',
 		listeners: {
 			hide: function() {
 				if (isAccountOwner) {
@@ -152,31 +177,39 @@ Scalr.regPage('Scalr.ui.account2.environments.view', function (loadParams, modul
 				});
 			},
 			beforeloadrecord: function(record) {
-				var form = this.getForm(),
+				var frm = this.getForm(),
 					isNewRecord = !record.get('id');
 
-				form.reset();
+				frm.reset(true);
+                this.down('#formtitle').setTitle(isNewRecord ? 'New environment' : '');
 				var c = this.query('component[cls~=hideoncreate], #delete');
 				for (var i=0, len=c.length; i<len; i++) {
 					c[i].setVisible(!isNewRecord);
 				}
-				this.down('#settings').setTitle(!isNewRecord?'Edit &ldquo;'+record.get('name')+'&rdquo;':'Add environment');
 				if (isAccountOwner) {
 					dataview.up('panel').down('#add').setDisabled(isNewRecord);
-				}
-				this.down('#delete').setDisabled(storeEnvironments.getCount()>1?false:true);
+                    this.down('#delete').setDisabled(storeEnvironments.getCount()>1?false:true);
+                }
 				if (this.down('#envTeamNames')) {
-					this.down('#envTeamNames').setValue(getTeamNames(record.get('teams'), true));
+					this.down('#envTeamNames').setValue(getTeamNames(record.get('teams'), Scalr.utils.canManageAcl()));
 				}
+
+                this.down('#teamstitle').setTitle(
+                    Scalr.flags['authMode'] == 'ldap' ? 'Accessible by LDAP groups (comma separated)' : 'Team access' + (!isNewRecord && Scalr.utils.canManageAcl() ? ' (<a href="#/account/environments/accessmap?envId=' + record.get('id') + '">view summary</a>)' : '')
+                , false);
+
+                var rackspaceBtn = this.down('button[platform="rackspace"]');
+                if (rackspaceBtn) {
+                    rackspaceBtn.setVisible(Ext.Array.contains(record.get('platforms'), 'rackspace'));
+                }
 			},
 			loadrecord: function(record) {
 				envTeamsStore.loadData(storeTeams.getRange());
 				if (record.get('id')) {
 					var platforms = record.get('platforms');
-					form.down('#platforms').items.each(function(){
-						var platformEnabled = Ext.Array.contains(platforms, this.platform);
-						this[(platformEnabled ? 'addCls' : 'removeCls')]('scalr-ui-environment-cloud-btn-pressed');
-						this.icon.update('<img src="' + '/ui2/images/icons/platform/' + this.platform + (platformEnabled ? '' : '_disabled') + '_89x64.png' + '" />');
+					Ext.Array.each(form.down('#platforms').query('[xtype="button"]'), function(btn){
+						var platformEnabled = Ext.Array.contains(platforms, btn.platform);
+						this[(platformEnabled ? 'removeCls' : 'addCls')]('scalr-ui-environment-cloud-disabled');
 					});
 				}
 				if (!this.isVisible()) {
@@ -185,84 +218,120 @@ Scalr.regPage('Scalr.ui.account2.environments.view', function (loadParams, modul
 			}
 		},
 		items: [{
-			itemId: 'settings',
 			xtype: 'fieldset',
-			title: 'Settings',
+            itemId: 'formtitle',
+            title: '&nbsp;',
 			defaults: {
-				border: false,
-				xtype: 'panel',
 				flex: 1,
-				layout: 'anchor',
 				maxWidth: 370
 			},
-
 			layout: 'hbox',
 			items: [{
-				xtype: isAccountOwner ? 'textfield' : 'displayfield',
+				xtype: 'textfield',
+                readOnly: !isAccountOwner,
 				name: 'name',
 				fieldLabel: 'Environment',
+                labelWidth: 80,
 				allowBlank: false
 			}, {
 				xtype: 'buttongroupfield',
-				fieldLabel: 'Status',
+				fieldLabel: 'Scalr management',
+                readOnly: !Scalr.utils.canManageAcl(),
 				margin: '0 0 0 40',
-				labelWidth: 60,
+				labelWidth: 120,
 				name: 'status',
 				value: 'Active',
+                layout: 'hbox',
+                defaults: {
+                    maxWidth: 100,
+                    flex: 1
+                },
 				items: [{
-					text: 'Managed',
-					value: 'Active',
-					width: 90
+					text: 'Active',
+					value: 'Active'
 				}, {
 					text: 'Suspended',
-					value: 'Inactive',
-					width: 90
+					value: 'Inactive'
 				}]
 			}]
 		}, {
-			xtype: 'fieldset',
-			title: 'Clouds',
+			xtype: 'container',
 			itemId: 'platforms',
-			cls: 'hideoncreate'
+			cls: 'hideoncreate x-fieldset-separator-bottom',
+            maxWidth: 1100,
+            layout: {
+                type: 'hbox',
+                align: 'stretch'
+            },
+            items: [{
+                xtype: 'fieldset',
+                title: 'Public&nbsp;clouds',
+                itemId: 'publicPlatforms',
+                cls: 'x-fieldset-separator-none x-fieldset-clouds',
+            },{
+                xtype: 'fieldset',
+                title: 'Private&nbsp;clouds',
+                itemId: 'privatePlatforms',
+                cls: 'x-fieldset-clouds',
+                flex: 1,
+                listeners: {
+                    boxready: {
+                        fn: function(){
+                            if (this.isVisible() && this.prev().isVisible()) {
+                                this.on({
+                                    resize: function(){
+                                        if (!this.resizeInProgress) {
+                                            var leftcol = this.prev(),
+                                                container = leftcol.ownerCt,
+                                                width = container.getWidth(),
+                                                extraWidth = 54,
+                                                itemWidth = 110,
+                                                colCount = Math.floor(((width > container.maxWidth ? container.maxWidth : width) - extraWidth*2)/110),
+                                                rowsCount = Math.ceil((leftcol.items.length + this.items.length)/colCount);
+                                            colCount = Math.ceil(leftcol.items.length/rowsCount);
+                                            if (colCount > leftcol.items.length) {
+                                                colCount = leftcol.items.length;
+                                            }
+                                            this.resizeInProgress = true;
+                                            leftcol.setWidth(colCount*itemWidth + extraWidth);
+                                            this.resizeInProgress = false;
+                                        }
+                                    }
+                                });
+                            }
+                        },
+                        sigle: true
+                    }
+                }
+            }]
 		},{
 			xtype: 'fieldset',
-			title: Scalr.flags['authMode'] == 'ldap' ? 'Accessible by LDAP groups (comma separated)' : 'Accessible by',
-			items: [isAccountOwner ? Scalr.flags['authMode'] == 'ldap' ? {
+            cls: 'x-fieldset-separator-none',
+            itemId: 'teamstitle',
+			items: [
+                Scalr.utils.canManageAcl() ? Scalr.flags['authMode'] == 'ldap' ? {
                 xtype: 'accountauthldapfield',
                 name: 'teams'
             } : {
 				xtype: 'gridfield',
 				name: 'teams',
 				flex: 1,
-				cls: 'x-grid-shadow x-grid-norowselect',
+				cls: 'x-grid-shadow x-grid-no-selection',
 				maxWidth: 1100,
-				disabled: !isAccountOwner,
 				listeners: {
 					viewready: function(){
-						var me = this;
 						this.reconfigure(envTeamsStore);
-						this.setHeight('auto');
-						form.on('show', function(){
-							me.fireEvent('afterlayout');
-						})
-					},
-					afterlayout: function(){//resize grid maxHeight to fit available space
-						var maxHeight = this.up('#rightcol').body.getHeight()- form.getHeight() + this.getHeight();
-						if (this.maxHeight != maxHeight) {
-							this.maxHeight = maxHeight>90?maxHeight:90;
-						}
 					}
 				},
 				viewConfig: {
 					focusedItemCls: '',
-					overItemCls: '',
 					plugins: {
 						ptype: 'dynemptytext',
 						emptyText: 'No teams were found.'+ (!isAccountOwner ? '' : ' Click <a href="#/account/teams?teamId=new">here</a> to create new team.')
 					}
 				},
 				columns: [
-					{text: 'Team name', flex: 1, dataIndex: 'name', sortable: true},
+					{text: 'Team name', flex: 1, dataIndex: 'name', sortable: true, xtype: 'templatecolumn', tpl: '<a href="#/account/teams?teamId={id}">{name}</a>'},
 					{text: 'Users', width: 120, dataIndex: 'users', sortable: false, xtype: 'templatecolumn', tpl: '<tpl if="users.length"><a href="#/account/teams?teamId={id}">{users.length}</a></tpl>'},
 					{
 						text: 'Other environments',
@@ -292,7 +361,7 @@ Scalr.regPage('Scalr.ui.account2.environments.view', function (loadParams, modul
 						})
 					}
 				]
-			} : {
+            } : {
 				xtype: 'displayfield',
 				itemId: 'envTeamNames'
 			}]
@@ -300,12 +369,12 @@ Scalr.regPage('Scalr.ui.account2.environments.view', function (loadParams, modul
 		dockedItems: [{
 			xtype: 'container',
 			dock: 'bottom',
-			cls: 'x-toolbar x-docked-light',
-			maxWidth: 1100,
+			cls: 'x-docked-buttons',
 			layout: {
 				type: 'hbox',
 				pack: 'center'
 			},
+            hidden: !Scalr.utils.canManageAcl(),
 			items: [{
 				itemId: 'save',
 				xtype: 'button',
@@ -349,6 +418,7 @@ Scalr.regPage('Scalr.ui.account2.environments.view', function (loadParams, modul
 				cls: 'x-btn-default-small-red',
 				text: 'Delete',
 				disabled: !isAccountOwner,
+                tooltip: isAccountOwner ? '' : 'Only <b>Account owner</b> can delete environments',
 				handler: function() {
 					var record = form.getForm().getRecord();
 					Scalr.Request({
@@ -375,29 +445,40 @@ Scalr.regPage('Scalr.ui.account2.environments.view', function (loadParams, modul
 		}]
 	});
 
-	for (var i in moduleParams['platforms']) {
-		form.down('#platforms').add({
-			xtype: 'custombutton',
-			width: 90,
-			height: 85,
-			cls: 'scalr-ui-environment-cloud-btn',
-			childEls: [ 'icon' ],
-			renderTpl:
-				'<div class="x-btn-inner" id="{id}-btnEl" title="{title}">' +
-					'<div id="{id}-icon" class="x-btn-icon"><img src="{icon}"></div>' +
-					'<div class="x-btn-name">{name}</div>' +
-				'</div>',
-			renderData: {
-				title: moduleParams['platforms'][i],
-				name: moduleParams['platforms'][i].replace(/^rackspace open cloud \((.+)\)$/i, '<div style="margin-top:-5px;line-height:11px">Rackspace <br/> Open Cloud ($1)</div>'),
-				icon: '/ui2/images/icons/platform/' + i + '_disabled_89x64.png'
-			},
-			platform: i,
+    var publicPlatformsList = ['ec2', 'idcf', 'gce', 'rackspace', 'rackspacengus', 'rackspacenguk', 'ecs'],
+        publicPlatformsCt = form.down('#publicPlatforms'),
+        privatePlatformsCt = form.down('#privatePlatforms');
+	Ext.Object.each(Scalr.platforms, function(key, value) {
+		(Ext.Array.contains(publicPlatformsList, key) ? publicPlatformsCt : privatePlatformsCt).add({
+            xtype: 'button',
+            ui: 'simple',
+			cls: 'x-btn-simple-large',
+            margin: '10 0 0 10',
+            iconAlign: 'above',
+            iconCls: 'x-icon-platform-large x-icon-platform-large-' + key,
+            text: Scalr.utils.getPlatformName(key, true),
+			platform: key,
+            disableMouseDownPressed: readOnlyAccess,
 			handler: function () {
-				Scalr.event.fireEvent('redirect', '#/account/environments/' + form.getForm().getRecord().get('id') + '/platform/' + this.platform, true);
+                if (readOnlyAccess) {
+                    Scalr.message.InfoTip('Insufficient permissions to configure cloud.', this.el);
+                } else {
+                    Scalr.event.fireEvent('redirect', '#/account/environments/' + form.getForm().getRecord().get('id') + '/platform/' + this.platform, true);
+                }
 			}
 		});
-	};
+	});
+    if (!publicPlatformsCt.items.length) {
+        publicPlatformsCt.hide();
+        privatePlatformsCt.addCls('x-fieldset-separator-none');
+    } else {
+        privatePlatformsCt.addCls('x-fieldset-separator-left');
+    }
+    if (!privatePlatformsCt.items.length) {
+        privatePlatformsCt.hide();
+        publicPlatformsCt.flex = 1;
+    }
+
 	
 	Scalr.event.on('update', function (type, envId, platform, enabled) {
 		if (type == '/account/environments/edit') {
@@ -405,8 +486,7 @@ Scalr.regPage('Scalr.ui.account2.environments.view', function (loadParams, modul
 				if (envId == form.getForm().getRecord().get('id')) {
 					var b = form.down('#platforms').down('[platform="' + platform + '"]');
 					if (b) {
-						b[(enabled ? 'addCls' : 'removeCls')]('scalr-ui-environment-cloud-btn-pressed');
-						b.icon.update('<img src="' + '/ui2/images/icons/platform/' + platform + (enabled ? '' : '_disabled') + '_89x64.png' + '" />');
+						b[(enabled ? 'removeCls' : 'addCls')]('scalr-ui-environment-cloud-disabled');
 					}
 				}
 			}
@@ -426,7 +506,7 @@ Scalr.regPage('Scalr.ui.account2.environments.view', function (loadParams, modul
 	
 	
 	var panel = Ext.create('Ext.panel.Panel', {
-		cls: 'x-panel-columned scalr-ui-account-env',
+		cls: 'scalr-ui-panel-account-env',
 		layout: {
 			type: 'hbox',
 			align: 'stretch'
@@ -441,61 +521,57 @@ Scalr.regPage('Scalr.ui.account2.environments.view', function (loadParams, modul
 			}
 		},
 		scalrReconfigure: function(params){
-			reconfigurePage(params);
+			reconfigurePage(params.envId);
 		},
 		items: [
 			Ext.create('Ext.panel.Panel', {
-				cls: 'x-panel-columned-leftcol',
+				cls: 'x-panel-column-left',
 				width: 440,
 				items: dataview,
 				autoScroll: true,
 				dockedItems: [{
-					cls: 'x-toolbar',
+					xtype: 'toolbar',
 					dock: 'top',
-					layout: 'hbox',
 					defaults: {
 						margin: '0 0 0 10'
 					},
-					margin: 12,
 					items: [{
 						xtype: 'filterfield',
 						itemId: 'envLiveSearch',
 						margin: 0,
+                        width: 200,
 						filterFields: ['name'],
 						store: store
 					},{
 						xtype: 'tbfill' 
 					},{
-						itemId: 'refresh',
-						xtype: 'button',
-						iconCls: 'x-btn-groupacton-refresh',
-						ui: 'action',
-						tooltip: 'Refresh',
-						handler: function() {
-							Scalr.data.reload('account.*');
-						}
-					},{
 						itemId: 'add',
-						xtype: 'button',
-						iconCls: 'x-btn-groupacton-add',
-						ui: 'action',
-						tooltip: 'Add environment',
+                        text: 'Add environment',
+                        cls: 'x-btn-green-bg',
+						tooltip: isAccountOwner ? '' : 'Only <b>Account owner</b> can create environments',
 						disabled: !isAccountOwner,
+                        hidden: readOnlyAccess,
 						handler: function(){
 							dataview.deselect(form.getForm().getRecord());
 							form.loadRecord(store.createModel({status: 'Active'}));
+						}
+					},{
+						itemId: 'refresh',
+                        ui: 'paging',
+						iconCls: 'x-tbar-loading',
+						tooltip: 'Refresh',
+						handler: function() {
+							Scalr.data.reload('account.*');
 						}
 					}]
 				}]				
 			})			
 		,{
-			cls: 'x-panel-columned-rightcol',
-			itemId: 'rightcol',
-			flex: 1,
-			items: [
-				form
-			],
-			autoScroll: true
+			xtype: 'container',
+            flex: 1,
+            layout: 'fit',
+			minWidth: 600,
+			items: form
 		}]	
 	});
 	return panel;

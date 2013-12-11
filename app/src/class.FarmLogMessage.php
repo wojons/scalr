@@ -1,13 +1,15 @@
-<?
-    class FarmLogMessage
-    {
-        public $FarmID;
-        public $Message;
+<?php
 
-        function __construct($farmid, $message)
-        {
-            $this->FarmID = $farmid;
-            $this->Message = $message;
-        }
+class FarmLogMessage
+{
+
+    public $FarmID;
+
+    public $Message;
+
+    function __construct($farmid, $message)
+    {
+        $this->FarmID = $farmid;
+        $this->Message = $message;
     }
-?>
+}

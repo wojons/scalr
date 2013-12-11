@@ -1,4 +1,4 @@
-<?
+<?php
     // deprecated in favor Scalr_SchedulerTask
     final class SCHEDULE_TASK_TYPE
     {

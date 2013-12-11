@@ -13,6 +13,7 @@ if (substr($sapi_type, 0, 3) == 'cli') {
 }
 
 $err = array();
+$recommend = array();
 
 if (!$windows) {
     // Check POSIX
@@ -34,7 +35,7 @@ if (!$windows) {
         $err[] = "Cannot find SNMP functions. Make sure that SNMP Functions enabled. Look at $PHPSITE/snmp.installation.php";
     }
 
-    // Check RRDTool
+//     //Check RRDTool
 //     if (class_exists('RRDUpdater')) {
 //         $err[] = "rrdtool extension must be installed. Look at http://oss.oetiker.ch/rrdtool/pub/contrib/";
 //     }
@@ -43,8 +44,8 @@ if (!$windows) {
 // Check PECL_HTTP
 if (!class_exists('HTTPRequest')) {
     $err[] = "Cannot find PECL_HTTP functions. Make sure that PECL_HTTP Functions enabled. Look at $PHPSITE/http.install.php";
-} else if (version_compare(phpversion('http'), '1.7.4', '<')) {
-    $err[] = 'Version of the Pecl_Http extension must be >= 1.7.4.';
+} else if (version_compare(phpversion('http'), '1.7.4', '<') || version_compare(phpversion('http'), '2.0.0', '>=')) {
+    $err[] = 'Version of the Pecl_Http extension must be >= 1.7.4 and < 2.0.0.';
 }
 
 //SSH2
@@ -118,11 +119,11 @@ if (ini_get('safe_mode') == 1)
 if (ini_get('register_gloabls') == 1)
     $err[] = "PHP register globals enabled. Please disable it.";
 
-if (version_compare($phpBranch, '5.3', '<') ||
-    $phpBranch == '5.3' && version_compare(PHP_VERSION, '5.3.16', '<') ||
-    $phpBranch == '5.4' && version_compare(PHP_VERSION, '5.4.5', '<')) {
+if (version_compare($phpBranch, '5.4', '<') ||
+    $phpBranch == '5.4' && version_compare(PHP_VERSION, '5.4.19', '<') ||
+    $phpBranch == '5.5' && version_compare(PHP_VERSION, '5.5.4', '<')) {
     //look into phpunit test app/src/Scalr/Tests/SoftwareDependencyTest.php
-    $err[] = "You have " . phpversion() . " PHP version. It must be >= 5.3.16 for 5.3 branch or >= 5.4.5 for 5.4 branch";
+    $err[] = "You have " . phpversion() . " PHP version. It must be >= 5.4.19 for 5.4 branch or >= 5.5.4 for 5.5 branch";
 }
 
 // If all extensions installed
@@ -175,6 +176,19 @@ if (count($err) == 0) {
     }
 }
 
+if (empty($err)) {
+    //Additionally checks conditional packages
+    if (!function_exists('ldap_connect')) {
+        if ($config('scalr.auth_mode') == 'ldap') {
+            $err[] = "LDAP must be enabled if you want to use ldap auth_mode. "
+                   . "Look at $PHPSITE/manual/en/ldap.installation.php";
+        } else {
+            $recommend[] = "If you're going to use ldap auth_mode, LDAP extension should be enabled. "
+                         . "Look at $PHPSITE/manual/en/ldap.installation.php";
+        }
+    }
+}
+
 $congrats = "Congratulations, your environment settings match Scalr requirements!";
 $worningWin = "Please pay attention to the fact that Windows system is not allowed for production environment!";
 
@@ -185,20 +199,34 @@ if (!$cli) {
             print "<span style='color:orange'>" . $worningWin . "</span>\n";
         }
     } else {
-        print "<span style='color:red'>Errors:</span><br>";
+        print "<span style='color:red;font-weight:bold;'>Errors:</span><br>";
         foreach ($err as $e)
             print "<span style='color:red'>&bull; {$e}</span><br>";
+    }
+
+    if (!empty($recommend)) {
+        print "<span style='color:gray;font-weight:bold;'>Recommendations:</span><br>";
+        foreach ($recommend as $e)
+            print "<span style='color:gray'>&bull; {$e}</span><br>";
     }
 } else {
     if (count($err) == 0) {
         print "\033[32m" . $congrats . "\033[0m\n";
         if ($windows) {
-            print "033[31m" . $worningWin . "\033[0m\n";
+            print "\033[31m" . $worningWin . "\033[0m\n";
         }
     } else {
         print "\033[31mErrors:\033[0m\n";
         foreach ($err as $e)
             print "\033[31m- {$e}\033[0m\n";
     }
+
+    if (!empty($recommend)) {
+        print "\033[1;30mRecommendations:\033[0m\n";
+        foreach ($recommend as $e)
+            print "\033[1;30m- {$e}\033[0m\n";
+    }
 }
+
+
 

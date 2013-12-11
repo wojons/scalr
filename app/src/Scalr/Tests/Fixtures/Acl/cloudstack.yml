@@ -1,0 +1,8 @@
+CLOUDSTACK_VOLUMES:
+- [/tools/cloudstack/volumes, null, all]
+
+CLOUDSTACK_SNAPSHOTS:
+- [/tools/cloudstack/snapshots, null, all]
+
+CLOUDSTACK_PUBLIC_IPS:
+- [/tools/cloudstack/ips, null, all]

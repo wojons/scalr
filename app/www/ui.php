@@ -25,7 +25,7 @@ try {
 
     $session = Scalr_Session::getInstance();
     try {
-        $request = Scalr_UI_Request::initializeInstance(Scalr_UI_Request::REQUEST_TYPE_UI, $session->getUserId(), $session->getEnvironmentId());
+        $request = Scalr_UI_Request::initializeInstance(Scalr_UI_Request::REQUEST_TYPE_UI, apache_request_headers(), $_SERVER, $_REQUEST, $_FILES, $session->getUserId(), $session->getEnvironmentId());
     } catch (Exception $e) {
         if ($path == 'guest/logout') {
             // hack
@@ -40,16 +40,45 @@ try {
         throw new Exception($message);
     }
 
+    $response = Scalr_UI_Response::getInstance();
+
     if ($session->isAuthenticated()) {
         $session->setEnvironmentId($request->getEnvironment()->id);
     }
 
-    $initTime = microtime(true);
+    $mode = $session->getDebugMode();
+    if (isset($mode['sql']) && $mode['sql'])
+        $response->debugMysql();
 
-    Scalr_UI_Response::getInstance()->setHeader("X-Scalr-PrependTime", $prependTime-$startTime);
-    Scalr_UI_Response::getInstance()->setHeader("X-Scalr-InitTime", $initTime-$prependTime);
+    // check against CSRF
+    $possibleCsrf = false;
+    $header = $request->getHeaderVar('Token');
+    $var = $request->getParam('X-Requested-Token');
+    // check header, otherwise check var
+    if ($header != 'key') {
+        if ($var != $session->getToken())
+            $possibleCsrf = true;
+    }
 
-    Scalr_UI_Controller::handleRequest(explode('/', $path), $_REQUEST);
+    /*     if ($header != 'key' || $session->isAuthenticated()) {
+        // authenticated users validated by token ONLY
+        if ($var != $session->getToken())
+            $possibleCsrf = true;
+    }*/
+
+    if ($possibleCsrf) {
+        //$response->setHttpResponseCode(403);
+        $response->setHeader('X-Scalr-C', true);
+        //$response->sendResponse();
+    }// else {
+        $initTime = microtime(true);
+
+        $response->setHeader("X-Scalr-PrependTime", $prependTime-$startTime);
+        $response->setHeader("X-Scalr-InitTime", $initTime-$prependTime);
+
+        Scalr_UI_Controller::handleRequest(explode('/', $path));
+        Scalr_UI_Response::getInstance()->sendResponse();
+    //}
 
 } catch (ADODB_Exception $e) {
     Scalr_UI_Response::getInstance()->data(array('errorDB' => true));

@@ -12,12 +12,12 @@ Scalr.regPage('Scalr.ui.guest.loginTfaGgl', function (loadParams, moduleParams, 
 
 	return Ext.create('Ext.form.Panel', {
 		title: 'Two-factor authorization',
-		width: 350,
+        bodyCls: 'x-container-fieldset x-fieldset-no-bottom-padding',
+		width: 400,
 		defaults: {
 			anchor: '100%',
-			labelWidth: 80
+			labelWidth: 60
 		},
-		bodyCls: 'x-panel-body-frame',
 		scalrOptions: {
 			modal: true
 		},
@@ -31,7 +31,7 @@ Scalr.regPage('Scalr.ui.guest.loginTfaGgl', function (loadParams, moduleParams, 
 		dockedItems: [{
 			xtype: 'container',
 			dock: 'bottom',
-			cls: 'x-docked-bottom-frame',
+			cls: 'x-docked-buttons',
 			layout: {
 				type: 'hbox',
 				pack: 'center'
@@ -65,7 +65,6 @@ Scalr.regPage('Scalr.ui.guest.loginTfaGgl', function (loadParams, moduleParams, 
 			}, {
 				xtype: 'button',
 				text: 'Cancel',
-				margin: '0 0 0 5',
 				handler: function () {
 					Scalr.event.fireEvent('close', true);
 				}

@@ -32,6 +32,8 @@
                     "--end" => $r["end"],
                     "--start" => $r["start"],
                     "--width" => 440,
+                    "--border" => 0,
+                    "--color" => "BACK#FFFFFF",
                     "--height" => 100,
                     "--font-render-mode" => "normal",
                     "DEF:in={$rrddbpath}:in:AVERAGE",

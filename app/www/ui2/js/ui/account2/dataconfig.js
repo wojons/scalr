@@ -24,7 +24,8 @@ Scalr.data.add([{
 		'comments', 
 		'is2FaEnabled', 
 		'password',
-		'gravatarhash'
+		'gravatarhash',
+        'type'
 	],
 	listeners: {
 		update: function(store, record, operation, fields){
@@ -56,27 +57,18 @@ Scalr.data.add([{
 	name: 'account.teams',
 	dataUrl: '/account/xGetData',
 	dataLoaded: false,
-	fields: [{name: 'id', type: 'string'}, 'name', 'users'],
+	fields: [{name: 'id', type: 'string'}, 'name', 'users', 'account_role_id'],
 	listeners: {
 		update: function(){
-			Scalr.data.fireRefresh(['account.users', 'account.groups', 'account.environments']);
+			Scalr.data.fireRefresh(['account.users', 'account.environments']);
 		},
 		add: function(){
 			Scalr.data.fireRefresh('account.users');
 		},
 		remove: function(store, record){
 			var teamId = record.get('id'),
-				groups = Scalr.data.get('account.groups'),
 				environments = Scalr.data.get('account.environments');
 
-			//remove team groups
-			if (groups) {
-				groups.each(function(groupRecord){
-					if (groupRecord.get('teamId') == teamId) {
-						groups.remove(groupRecord);
-					}
-				});
-			}
 			//update team environments
 			if (environments) {
 				environments.each(function(envRecord){
@@ -91,10 +83,10 @@ Scalr.data.add([{
 		}
 	}
 },{
-	name: 'account.groups',
+	name: 'account.environments',
 	dataUrl: '/account/xGetData',
 	dataLoaded: false,
-	fields: [{name: 'id', type: 'string'}, 'name', 'permissions', {name: 'teamId', type: 'string'}, 'color'],
+	fields: [{name: 'id', type: 'string'}, 'name', 'dtAdded', 'platforms', 'status', 'teams', 'teamIds'],
 	listeners: {
 		update: function(){
 			Scalr.data.fireRefresh('account.teams');
@@ -103,13 +95,29 @@ Scalr.data.add([{
 			Scalr.data.fireRefresh('account.teams');
 		},
 		remove: function(store, record){
-			var groupId = record.get('id'),
+			Scalr.data.fireRefresh('account.teams');
+		}
+	}
+},{
+	name: 'account.roles',
+	dataUrl: '/account/xGetData',
+	dataLoaded: false,
+	fields: [{name: 'id', type: 'string'}, 'name', 'resources', {name: 'baseRoleId', type: 'string'}, 'color'],
+	listeners: {
+		update: function(){
+			Scalr.data.fireRefresh('account.teams');
+		},
+		add: function(){
+			Scalr.data.fireRefresh('account.teams');
+		},
+		remove: function(store, record){
+			var roleId = record.get('id'),
 				team = Scalr.data.get('account.teams').getById(record.get('teamId')),
 				teamUsers = team ? team.get('users') : null;
 			if (teamUsers) {
 				for (var i=0, len=teamUsers; i<len; i++) {
-					if (teamUsers.groups) {
-						Ext.Array.remove(teamUsers.groups, groupId);
+					if (teamUsers.roles) {
+						Ext.Array.remove(teamUsers.roles, roleId);
 					}
 				}
 				team.set('users', teamUsers);
@@ -119,20 +127,8 @@ Scalr.data.add([{
 		}
 	}
 },{
-	name: 'account.environments',
+	name: 'base.roles',
 	dataUrl: '/account/xGetData',
 	dataLoaded: false,
-	fields: [{name: 'id', type: 'string'}, 'name', 'dtAdded', 'platforms', 'status', 'teams'],
-	listeners: {
-		update: function(){
-			Scalr.data.fireRefresh('account.teams');
-		},
-		add: function(){
-			Scalr.data.fireRefresh('account.teams');
-		},
-		remove: function(store, record){
-			Scalr.data.fireRefresh('account.teams');
-		}
-	}
-	
+	fields: [{name: 'id', type: 'string'}, 'name', 'resources']
 }]);

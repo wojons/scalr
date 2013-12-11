@@ -1,6 +1,5 @@
 Scalr.regPage('Scalr.ui.dm.applications.create', function (loadParams, moduleParams) {
 	var form = new Ext.create('Ext.form.Panel', {
-		bodyCls: 'x-panel-body-frame',
 		width: 910,
 		title: 'Deployments &raquo; Applications &raquo; '+((moduleParams['id']) ? 'Edit' : 'Create'),
 		fieldDefaults: {
@@ -48,10 +47,10 @@ Scalr.regPage('Scalr.ui.dm.applications.create', function (loadParams, modulePar
                     }
                 },{
                     xtype: 'button',
-                    icon: '/ui2/images/icons/add_icon_16x16.png',
-                    cls: 'x-btn-icon',
+                    ui: 'action',
+                    cls: 'x-btn-action-add',
                     tooltip: 'Add new Source',
-                    margin: '0 0 0 3',
+                    margin: '0 0 0 8',
                     listeners: {
                         click: function() {
                             Scalr.event.fireEvent('redirect','#/dm/sources/create');
@@ -66,11 +65,11 @@ Scalr.regPage('Scalr.ui.dm.applications.create', function (loadParams, modulePar
 			labelWidth: 130,
 			items: [{
 				xtype: 'displayfield',
-				fieldCls: 'x-form-field-info',
+				cls: 'x-form-field-info',
 				value: 'Built in variables: %remote_path%'
 			}, {
 				xtype: 'displayfield',
-				fieldCls: 'x-form-field-warning',
+				cls: 'x-form-field-warning',
 				value: 'First line must contain shebang (#!/path/to/interpreter)'
 			}, {
 				xtype: 'textarea',
@@ -92,7 +91,7 @@ Scalr.regPage('Scalr.ui.dm.applications.create', function (loadParams, modulePar
 		dockedItems: [{
 			xtype: 'container',
 			dock: 'bottom',
-			cls: 'x-docked-bottom-frame',
+			cls: 'x-docked-buttons',
 			layout: {
 				type: 'hbox',
 				pack: 'center'
@@ -116,7 +115,6 @@ Scalr.regPage('Scalr.ui.dm.applications.create', function (loadParams, modulePar
 				}
 			}, {
 				xtype: 'button',
-				margin: '0 0 0 5',
 				text: 'Cancel',
 				handler: function() {
 					Scalr.event.fireEvent('close');

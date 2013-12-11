@@ -2,7 +2,6 @@
 namespace Scalr\Service\Aws\Ec2\DataType;
 
 use Scalr\Service\Aws\Ec2Exception;
-use Scalr\Service\Aws\Ec2\AbstractEc2DataType;
 
 /**
  * SnapshotFilterData
@@ -10,58 +9,40 @@ use Scalr\Service\Aws\Ec2\AbstractEc2DataType;
  * @author   Vitaliy Demidov   <vitaliy@scalr.com>
  * @since    23.01.2013
  *
- * @property \Scalr\Service\Aws\Ec2\DataType\SnapshotFilterNameType $name                       A filter key name
- * @property array                                                  $value                      An array of values
+ * @property \Scalr\Service\Aws\Ec2\DataType\SnapshotFilterNameType $name
+ *           A filter key name
  *
- * @method   \Scalr\Service\Aws\Ec2\DataType\SnapshotFilterNameType getName()     getName()     Gets filter key name.
- * @method   array                                                  getValue()    getValue()    Gets list of values.
+ * @property array $value
+ *           An array of values
+ *
+ * @method   \Scalr\Service\Aws\Ec2\DataType\SnapshotFilterNameType getName()
+ *           getName()
+ *           Gets filter key name.
+ *
+ * @method   void __construct()
+ *           __construct(\Scalr\Service\Aws\Ec2\DataType\SnapshotFilterNameType|string $name, string|array $value)
+ *           Constructor
+ *
+ * @method   array getValue()
+ *           getValue()
+ *           Gets list of values.
+ *
+ * @method   \Scalr\Service\Aws\Ec2\DataType\SnapshotFilterData setName()
+ *           setName(\Scalr\Service\Aws\Ec2\DataType\SnapshotFilterNameType|string $name)
+ *           Sets filter key name.
+ *
+ * @method   \Scalr\Service\Aws\Ec2\DataType\SnapshotFilterData setValue()
+ *           setName(string|array $value)
+ *           Sets value or the list of the values.
  */
-class SnapshotFilterData extends AbstractEc2DataType
+class SnapshotFilterData extends AbstractFilterData
 {
-
     /**
-     * List of the public properties
-     * which is managed by magic getter and setters internally.
-     *
-     * @var  array
+     * {@inheritdoc}
+     * @see Scalr\Service\Aws\Ec2\DataType.AbstractFilterData::getFilterNameTypeClass()
      */
-    protected $_properties = array('name', 'value');
-
-    /**
-     * Convenient constuctor for the filter
-     *
-     * @param SnapshotFilterNameType $name  Filter name
-     * @param array|string           $value Filter value
-     */
-    public function __construct(SnapshotFilterNameType $name = null, $value = null)
+    public function getFilterNameTypeClass()
     {
-        parent::__construct();
-        $this->setValue($value);
-        $this->setName($name);
-    }
-
-    /**
-     * Sets a filter key name.
-     *
-     * @param   SnapshotFilterNameType $name Filter key name
-     * @return  SnapshotFilterData
-     */
-    public function setName(SnapshotFilterNameType $name = null)
-    {
-        return $this->__call(__FUNCTION__, array($name));
-    }
-
-    /**
-     * Sets a filter values.
-     *
-     * @param   string|array $value Value of list of the values for the filter
-     * @return  SnapshotFilterData
-     */
-    public function setValue($value = null)
-    {
-        if ($value !== null && !is_array($value)) {
-            $value = array((string)$value);
-        }
-        return $this->__call(__FUNCTION__, array($value));
+        return __NAMESPACE__ . '\\SnapshotFilterNameType';
     }
 }

@@ -1,10 +1,11 @@
 <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
 <html>
 <head>
-	<title>Scalr CP</title>
+	<title>Scalr CMP</title>
 	<meta http-equiv="Content-Language" content="en-us" />
 	<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
 	<meta name="robots" content="none" />
+    <link href="/ui2/images/favicon.ico?1.2" rel="shortcut icon" />
     <style>
         @-webkit-keyframes pulse {
             0% {
@@ -16,6 +17,55 @@
             100% {
                 opacity: 1
             }
+        }
+
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+        ::-webkit-scrollbar:horizontal {
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            display: none;
+        }
+        ::-webkit-scrollbar-thumb {
+            background-color: rgba(107, 135, 156, 0.8);
+            border-radius: 3px;
+        }
+        ::-webkit-scrollbar-corner {
+            display: none;
+        }
+
+        .scalr-ui-dataview-selroles::-webkit-scrollbar-track {
+            display: block;
+            background-color: rgba(255, 255, 255, 0.4);
+            box-shadow: 0 1px #DBDFE6 inset;
+        }
+
+        .x-docked-tabs::-webkit-scrollbar-track {
+            display: block;
+            background-color: #DFE4EA;
+            box-shadow: 0 1px rgba(255, 255, 255, 0.4) inset;
+        }
+
+        .x-grid-view::-webkit-scrollbar-track {
+            background-color: #FFFFFF;
+        }
+
+        .scalr-main-loader{position: absolute;left: 0px;right: 0px;top: 0px;bottom: 0px;background-color: #F0F1F4;z-index: 10000000;overflow: hidden;}
+        .scalr-main-loader #loading-inner{position: absolute; top: 50%; left: 50%; width: 120px; height: 106px; margin: -100px 0 0 -59px; overflow: hidden;}
+        .scalr-main-loader #loading-bg{position: absolute; left: 0; bottom: 0; background: url(/ui2/images/main_logo_bg.png?2.0) no-repeat; width: 120px; height: 106px;}
+        .scalr-main-loader #loading-div{position: absolute; left: 0; bottom: 0; width: 120px; height: 0px; -webkit-transition: all 0.2s ease; -moz-transition: all 0.2s ease; overflow: hidden;}
+        .scalr-main-loader #loading-div-child{position: absolute; bottom: 0; width: 120px; height: 106px; background: url(/ui2/images/main_logo.png?2.0) no-repeat;}
+        .scalr-main-loader #loading-text{position:absolute; top: 50%; left: 50%; width: 600px; margin-left: -300px; height: auto; margin-top: 30px; font: bold 18px arial, helvetica, sans-serif; color: #C93301; line-height: 28px; text-shadow: 0 1px #F8F9FA; text-align: center; display: none;}
+
+        @media only screen and (-webkit-min-device-pixel-ratio: 1.5),
+            only screen and (-o-min-device-pixel-ratio: 3/2),
+            only screen and (min--moz-device-pixel-ratio: 1.5),
+            only screen and (min-device-pixel-ratio: 1.5) {
+
+            .scalr-main-loader #loading-bg{background-image: url(/ui2/images/main_logo_bg_retina.png);background-size:120px 106px;}
+            .scalr-main-loader #loading-div-child{background-image: url(/ui2/images/main_logo_retina.png);background-size:120px 106px;}
         }
     </style>
     <script type="text/javascript">
@@ -36,14 +86,14 @@
 	</script>
 </head>
 <body>
-    <div id="loading" style="position: absolute; left: 0px; right: 0px; top: 0px; bottom: 0px; background-color: #F0F1F4; z-index: 10000000;">
-        <div style="position: absolute; top: 50%; left: 50%; width: 118px; height: 99px; margin: -100px 0 0 -59px; overflow: hidden;">
-            <div id="loading-bg" style="position: absolute; left: 0; bottom: 0; background-image: url(/ui2/images/main_logo_bg.png); width: 118px; height: 99px;"></div>
-            <div id="loading-div" style="position: absolute; left: 0; bottom: 0; width: 118px; height: 0px; -webkit-transition: all 0.2s ease; -moz-transition: all 0.2s ease; overflow: hidden;">
-                <div id="loading-div-child" style="position: absolute; bottom: 0; width: 118px; height: 99px; background-image: url(/ui2/images/main_logo.png);"></div>
+    <div id="loading" class="scalr-main-loader">
+        <div id="loading-inner">
+            <div id="loading-bg"></div>
+            <div id="loading-div">
+                <div id="loading-div-child"></div>
             </div>
         </div>
-        <div id="loading-text" style="position:absolute; top: 50%; left: 50%; width: 600px; margin-left: -300px; height: auto; margin-top: 30px; font: bold 18px arial, helvetica, sans-serif; color: #C93301; line-height: 28px; text-shadow: 0 1px #F8F9FA; text-align: center; display: none;"></div>
+        <div id="loading-text"></div>
     </div>
 
 	<div id="body-container" style="left: 0px; top: 0px; visibility: hidden"></div>
@@ -61,14 +111,13 @@
     <script type="text/javascript">
         var head = document.head || document.getElementsByTagName('head')[0];
         var script = document.createElement('script');
-        var debugMode = document.location.search.indexOf('debug') != -1 ? true : false;
-        var beta42Mode = document.location.search.indexOf('beta42') != -1 ? true : false;
-        var betaUsers = document.location.search.indexOf('betaUsers') != -1 ? true : false;
+        var debugMode = document.location.search.indexOf('debug') != -1;
+        debugMode = debugMode || sessionStorage.getItem('scalr-enable-debug');
 
         var errorMessage = 'The browser you are currently using is not supported by <a href="https://my.scalr.net/">my.scalr.net</a>. Please use one of the following ones: Safari, Firefox or Chrome.';
 
         var updateProgress = function (percent) {
-            var pos = Math.ceil(99 * percent / 100), div = document.getElementById('loading-div');
+            var pos = Math.ceil(106 * percent / 100), div = document.getElementById('loading-div');
             div.style.height = pos + 'px';
         };
 
@@ -91,13 +140,13 @@
             var css = document.createElement('link');
             css.type = 'text/css';
             css.rel = 'stylesheet';
-            css.href = '/ui2/js/extjs-4.1/theme/ext-scalr-2.css';
+            css.href = '/ui2/js/extjs-4.2/theme/ext-scalr-1.css';
             head.appendChild(css);
             
             script.type = 'text/javascript';
-            var p = beta42Mode ? 'extjs-4.2' : 'extjs-4.1';
-            var t = 4; // timestamp
-            script.src = debugMode || beta42Mode ? '/ui2/js/' + p + '/ext-all-debug-' + t + '.js' : '/ui2/js/' + p + '/ext-all-' + t + '.js';
+            var p = 'extjs-4.2';
+            var t = 1; // timestamp
+            script.src = debugMode ? '/ui2/js/' + p + '/ext-all-debug-' + t + '.js' : '/ui2/js/' + p + '/ext-all-' + t + '.js';
             script.onload = function () {
                 Ext.onReady(function() {
                     try {
@@ -106,10 +155,10 @@
                         if (! (Ext.isChrome || Ext.isGecko || Ext.isSafari)) {
                             showError(errorMessage);
                         } else {
-                            Ext.Ajax.defaultHeaders = { 'X-Scalr-Interface': 'v2' };
+                            Ext.Ajax.defaultHeaders = { 'X-Scalr-Interface': 'v2', 'X-Scalr-Token': 'key' };
                             Ext.Ajax.request({
                                 url: '/guest/xInit',
-                                params: { locationHash: document.location.hash, scalrPrivateInterface: 'v2' },
+                                params: { locationHash: document.location.hash },
                                 success: function (response) {
                                     try {
                                         var obj = Ext.decode(response.responseText);
@@ -178,6 +227,7 @@
                                                                     Ext.Loader.injectScriptElement(Scalr.InitParams.extjs.shift(), onloadJs);
                                                                 } else {
                                                                     updateProgress(100);
+                                                                    Scalr.state.pageUiHash = Scalr.InitParams.uiHash;
                                                                     Scalr.Init(Scalr.InitParams.context);
                                                                 }
                                                             };

@@ -36,6 +36,7 @@ class Modules_Platforms_Ec2_Helpers_Ec2
 
     public static function farmUpdateRoleSettings(DBFarmRole $DBFarmRole, $oldSettings, $newSettings)
     {
+
     }
 
     /**

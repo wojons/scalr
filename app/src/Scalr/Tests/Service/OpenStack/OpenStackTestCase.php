@@ -48,6 +48,7 @@ class OpenStackTestCase extends TestCase
         $this->environment = new \Scalr_Environment();
         if (!$this->isSkipFunctionalTests()) {
             $this->environment->loadById(\Scalr::config('scalr.phpunit.envid'));
+            $this->container->environment = $this->environment;
         }
     }
 

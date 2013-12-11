@@ -39,7 +39,7 @@ Scalr.regPage('Scalr.ui.scripts.events.view', function (loadParams, moduleParams
 		},
 
 		columns: [
-			{ header: "ID", width: 40, dataIndex: 'id', sortable: true },
+			{ header: "ID", width: 60, dataIndex: 'id', sortable: true },
 			{ header: "Name", flex: 1, dataIndex: 'name', sortable:true },
 			{ header: "Description", flex: 10, dataIndex: 'description', sortable: false },
 			{
@@ -73,8 +73,8 @@ Scalr.regPage('Scalr.ui.scripts.events.view', function (loadParams, moduleParams
 			store: store,
 			dock: 'top',
 			beforeItems: [{
-				ui: 'paging',
-				iconCls: 'x-tbar-add',
+                text: 'Add event',
+                cls: 'x-btn-green-bg',
 				handler: function() {
 					Scalr.event.fireEvent('redirect', '#/scripts/events/create');
 				}

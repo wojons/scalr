@@ -1,4 +1,4 @@
-<?
+<?php
     final class APPROVAL_STATE
     {
         const PENDING = "Pending";

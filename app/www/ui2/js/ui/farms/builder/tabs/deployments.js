@@ -8,20 +8,21 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.deployments', function () {
     }
 	return Ext.create('Scalr.ui.FarmsBuilderTab', {
 		tabTitle: 'Deployments',
+        deprecated: true,
+        
+        settings: {
+            'dm.remote_path': '/var/www',
+            'dm.application_id': undefined
+        },
+        
 		tabData: null,
 
 		isEnabled: function (record) {
 			return record.get('platform') != 'rds';
 		},
 
-		getDefaultValues: function (record) {
-			return {
-				'dm.remote_path': '/var/www'
-			};
-		},
-
 		beforeShowTab: function (record, handler) {
-            this.up('#farmbuilder').cache.load(
+            Scalr.CachedRequestManager.get('farmbuilder').load(
                 {
                     url: '/dm/applications/xGetApplications/'
                 },
@@ -55,9 +56,15 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.deployments', function () {
 		},
 
 		items: [{
+			xtype: 'displayfield',
+			cls: 'x-form-field-warning x-form-field-warning-fit',
+            anchor: '100%',
+			value: Scalr.strings['deprecated_warning']
+        },{
 			xtype: 'fieldset',
 			title: 'Deployment options',
 			itemId: 'options',
+            cls: 'x-fieldset-separator-none',
 			labelWidth: 150,
 			items: [{
                 xtype: 'container',
@@ -78,10 +85,10 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.deployments', function () {
                     name: 'dm.application_id'
                 }, {
                     xtype: 'button',
-                    icon: '/ui2/images/icons/add_icon_16x16.png',
-                    cls: 'x-btn-icon',
+                    ui: 'action',
+                    cls: 'x-btn-action-add',
                     tooltip: 'Add new Application',
-                    margin: '0 0 0 3',
+                    margin: '0 0 0 8',
                     listeners: {
                         click: function() {
                             Scalr.event.fireEvent('redirect','#/dm/applications/create');

@@ -1,7 +1,6 @@
 Scalr.regPage('Scalr.ui.billing.invoices', function (loadParams, moduleParams) {
 	
 	var form = Ext.create('Ext.form.Panel', {
-		bodyCls: 'x-panel-body-frame',
 		width: 500,
 		layout: 'card',
 		title: 'Billing &raquo; Invoices',
@@ -11,10 +10,11 @@ Scalr.regPage('Scalr.ui.billing.invoices', function (loadParams, moduleParams) {
 		scalrOptions: {
 			'modal': true
 		},
+        bodyCls: 'x-container-fieldset',
 		items: [{
 			xtype: 'grid',
 			itemId: 'view',
-			border: false,
+			cls: 'x-grid-shadow',
 			store: {
 				proxy: 'object',
 				fields: ['createdAt', 'id', 'text']

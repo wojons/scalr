@@ -1,4 +1,4 @@
-<?
+<?php
     class Scalr_Net_Ssh2_Client
     {
 
@@ -194,7 +194,7 @@
             else
                 $hostkeys = array();
 
-            $this->connection = ssh2_connect($host, $port, $hostkeys);
+            $this->connection = @ssh2_connect($host, $port, $hostkeys);
 
             if (!$this->isConnected())
                 throw new Scalr_Net_Ssh2_Exception("Unable to connect to SSH server on {$host}:{$port}");
@@ -203,7 +203,7 @@
                 // Try all avaliable pubkeys
                 foreach ((array)$this->pubkeys as $p)
                 {
-                    if (ssh2_auth_pubkey_file($this->connection, $p[0], $p[1], $p[2], $p[3]))
+                    if (@ssh2_auth_pubkey_file($this->connection, $p[0], $p[1], $p[2], $p[3]))
                         return true;
                     else
                         throw new Scalr_Net_Ssh2_Exception("Cannot login to SSH using PublicKey");
@@ -213,7 +213,7 @@
                 // Try all avaliable passwords
                 foreach ((array)$this->passwords as $p)
                 {
-                    if (ssh2_auth_password($this->connection, $p[0], $p[1]))
+                    if (@ssh2_auth_password($this->connection, $p[0], $p[1]))
                         return true;
                     else
                         throw new Scalr_Net_Ssh2_Exception("Cannot login to SSH using login/password");

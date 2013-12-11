@@ -1,6 +1,9 @@
 <?php
 namespace Scalr\Service\Aws\Client;
 
+use Scalr\Service\Aws\Event\SendRequestEvent;
+use Scalr\Service\Aws\Event\EventType;
+
 /**
  * AbstractClient
  *
@@ -16,6 +19,13 @@ abstract class AbstractClient
      * @var \Scalr\Service\Aws
      */
     private $aws;
+
+    /**
+     * Last API call
+     *
+     * @var string
+     */
+    protected $lastApiCall;
 
     /**
      * Sets aws instance
@@ -36,5 +46,29 @@ abstract class AbstractClient
     public function getAws()
     {
         return $this->aws;
+    }
+
+    /**
+     * Increments the quantity of the processed queries during current client instance
+     */
+    protected function _incrementQueriesQuantity()
+    {
+        $this->aws->queriesQuantity++;
+        $eventObserver = $this->aws->getEventObserver();
+        if (isset($eventObserver) && $eventObserver->isSubscribed(EventType::EVENT_SEND_REQUEST)) {
+            $eventObserver->fireEvent(new SendRequestEvent(array(
+                'requestNumber' => $this->aws->queriesQuantity,
+                'apicall'       => isset($this->lastApiCall) ? $this->lastApiCall : null,
+            )));
+        }
+    }
+
+    /**
+     * {@inheritdoc}
+     * @see Scalr\Service\Aws\Client.ClientInterface::getQueriesQuantity()
+     */
+    public function getQueriesQuantity()
+    {
+        return $this->aws->queriesQuantity;
     }
 }

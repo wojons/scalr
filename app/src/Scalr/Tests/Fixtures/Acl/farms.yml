@@ -1,0 +1,86 @@
+FARMS:
+  self:
+  - /farms/xListFarms
+  - /farms/extendedInfo
+  - /farms/xLock
+  - /farms/xUnlock
+  - /farms/xListFarms
+  - /farms/xLock
+  FARMS_MANAGE:
+  - /farms/builder/xBuild
+  - /farms/xRemove
+  - /farms/build
+  FARMS_CLONE:
+  - /farms/xClone
+  FARMS_LAUNCH:
+  - /farms/xLaunch
+  FARMS_TERMINATE:
+  - /farms/xTerminate
+  - /farms/xGetTerminationDetails
+  FARMS_NOT_OWNED_FARMS:
+  - /farms/xListFarms?showOnlyMy=0
+  - /farms/events/default?farmId=%NOT_OWNED_FARM_ID%
+  - /farms/events/view?farmId=%NOT_OWNED_FARM_ID%
+  - /farms/events/xListEvents?farmId=%NOT_OWNED_FARM_ID%
+  - /farms/events/configure?farmId=%NOT_OWNED_FARM_ID%
+  - /farms/events/xSaveNotifications?farmId=%NOT_OWNED_FARM_ID%
+  - /servers/xListServers
+  - /servers/xListServersUpdate
+  - /farms/roles/xListFarmRoles?farmId=%NOT_OWNED_FARM_ID%
+
+FARMS_ALERTS:
+- [/alerts, ~, all]
+
+FARMS_EVENTS_AND_NOTIFICATIONS:
+- [/farms/events, {"farmId":"%OWNED_FARM_ID%"}, all]
+
+FARMS_STATISTICS:
+- [/statistics, ~, all]
+
+FARMS_ROLES:
+  self:
+  - /roles/view
+  - /roles/xGetList
+  - /roles/xGetList2
+  - /roles/xListRoles
+  - /roles/info
+  - [/farms/roles, {"farmId":"%OWNED_FARM_ID%"}, all]
+
+  FARMS_ROLES_CREATE:
+  - /roles/xBuild
+  - /roles/builder
+  - [/roles/import, ~, all]
+  FARMS_ROLES_MANAGE: 
+  - /roles/xMigrate
+  - /roles/xGetMigrateDetails
+  - /roles/xRemove
+  - /roles/edit
+  - /roles/xSaveRole
+  FARMS_ROLES_CLONE: 
+  - /roles/xClone
+  FARMS_ROLES_BUNDLETASKS:
+  - [/bundletasks, ~, all]
+
+FARMS_SERVERS:
+- [/servers, ~, all]
+
+FARMS_SCRIPTS:
+  self: 
+  - /scripts/default
+  - /scripts/view
+  - /scripts/xGetScriptContent
+  - /scripts/xListScripts
+  - [/scripts/shortcuts, ~, all]
+  
+  FARMS_SCRIPTS_MANAGE:
+  - /scripts/xRemove
+  - /scripts/xSave
+  - /scripts/edit
+  - /scripts/create
+  
+  FARMS_SCRIPTS_EXECUTE:
+  - /scripts/execute
+  - /scripts/xExecute
+   
+  FARMS_SCRIPTS_FORK:
+  - /scripts/xFork

@@ -1,5 +1,5 @@
 <?php
-
+use Scalr\Acl\Acl;
 use Scalr\Service\Aws\CloudWatch\DataType\DimensionFilterData;
 use Scalr\Service\Aws\CloudWatch\DataType\DimensionData;
 use Scalr\Service\Aws\CloudWatch\DataType\DatapointData;
@@ -7,7 +7,13 @@ use Scalr\Service\Aws\CloudWatch\DataType\MetricData;
 
 class Scalr_UI_Controller_Tools_Aws_Ec2_Cloudwatch extends Scalr_UI_Controller
 {
-    public function xEnableAction() {
+    public function hasAccess()
+    {
+        return parent::hasAccess() && $this->request->isAllowed(Acl::RESOURCE_AWS_CLOUDWATCH);
+    }
+
+    public function xEnableAction()
+    {
         $dbServer = DBServer::LoadByID($this->getParam('serverId'));
         $this->user->getPermissions()->validate($dbServer);
 
@@ -17,7 +23,8 @@ class Scalr_UI_Controller_Tools_Aws_Ec2_Cloudwatch extends Scalr_UI_Controller
         $this->response->success("Cloudwatch monitoring successfully enabled for the instance");
     }
 
-    public function xDisableAction() {
+    public function xDisableAction()
+    {
         $dbServer = DBServer::LoadByID($this->getParam('serverId'));
         $this->user->getPermissions()->validate($dbServer);
 

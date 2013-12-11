@@ -72,6 +72,8 @@ class RestClient implements ClientInterface
         $req->setOptions(array(
             'redirect'  => 10,
             'useragent' => $this->useragent,
+            'verifypeer' => false,
+            'verifyhost' => false
         ));
         return $req;
     }
@@ -218,10 +220,10 @@ class RestClient implements ClientInterface
     /**
      * Sets debug mode
      *
-     * @param   bool $bDebug If true it will output debug per request into stdout
+     * @param   bool $bDebug  ptional If true it will output debug per request into stdout
      * @return  RestClient
      */
-    public function setDebug($bDebug)
+    public function setDebug($bDebug = true)
     {
         $this->debug = (bool)$bDebug;
         return $this;

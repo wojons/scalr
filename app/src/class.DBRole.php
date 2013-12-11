@@ -5,6 +5,7 @@ class DBRole
     public
         $id,
         $name,
+        $dateAdded,
         $imageId,
         $envId,
         $catId,
@@ -13,6 +14,8 @@ class DBRole
         $description,
         $isDevel,
         $generation,
+        $addedByUserId,
+        $addedByEmail,
         $os,
         $osFamily,
         $osGeneration,
@@ -43,6 +46,10 @@ class DBRole
         'generation'	=> 'generation',
         'os'			=> 'os',
 
+        'dtadded'         => 'dateAdded',
+        'added_by_userid' => 'addedByUserId',
+        'added_by_email'  => 'addedByEmail',
+
         'os_family'      => 'osFamily',
         'os_generation'  => 'osGeneration',
         'os_version'     => 'osVersion',
@@ -55,7 +62,6 @@ class DBRole
     const PROPERTY_NIMBULA_ENTRY = 'nimbula.entry';
     const PROPERTY_NIMBULA_INIT_ROOT_USER = 'nimbula.init.root_user';
     const PROPERTY_NIMBULA_INIT_ROOT_PASS = 'nimbula.init.root_pass';
-
 
     public function __construct($id)
     {
@@ -73,20 +79,25 @@ class DBRole
 
     public function setProperty($name, $value)
     {
-        $this->db->Execute("REPLACE INTO role_properties SET
-            `role_id` = ?,
-            `name`	= ?,
-            `value`	= ?
+        //UNIQUE KEY `NewIndex1` (`role_id`,`name`),
+        $this->db->Execute("
+            INSERT INTO role_properties
+            SET `role_id` = ?,
+                `name`	= ?,
+                `value`	= ?
+            ON DUPLICATE KEY UPDATE
+                `value` = ?
         ", array(
             $this->id,
             $name,
-            $value
+            $value,
+            $value,
         ));
     }
 
     public function getProperty($name)
     {
-        return $this->db->GetOne("SELECT value FROM role_properties WHERE `role_id` = ? AND `name` = ?", array(
+        return $this->db->GetOne("SELECT value FROM role_properties WHERE `role_id` = ? AND `name` = ? LIMIT 1", array(
             $this->id, $name
         ));
     }
@@ -98,7 +109,7 @@ class DBRole
 
     public function getCategoryName()
     {
-        return $this->db->GetOne("SELECT name FROM role_categories WHERE id=?", array($this->catId));
+        return $this->db->GetOne("SELECT name FROM role_categories WHERE id=? LIMIT 1", array($this->catId));
     }
 
     public function getRoleHistory($get_last = true)
@@ -351,6 +362,7 @@ class DBRole
         if (!$this->id) {
             $this->db->Execute("INSERT INTO roles SET
                 name		= ?,
+                dtadded     = NOW(),
                 description	= ?,
                 generation	= ?,
                 origin		= ?,
@@ -358,12 +370,17 @@ class DBRole
                 cat_id      = ?,
                 client_id	= ?,
                 behaviors	= ?,
+
+                added_by_userid = ?,
+                added_by_email = ?,
+
                 os			= ?,
                 os_family   = ?,
                 os_generation = ?,
                 os_version  = ?
             ", array($this->name, $this->description, $this->generation,
                 $this->origin, $this->envId, $this->catId, $this->clientId, $this->behaviorsRaw,
+                $this->addedByUserId, $this->addedByEmail,
                 $this->os, $this->osFamily, $this->osGeneration, $this->osVersion
             ));
 
@@ -405,7 +422,7 @@ class DBRole
 
     public function isUsed()
     {
-        return (bool)$this->db->GetOne("SELECT id FROM farm_roles WHERE role_id=? OR new_role_id=?",
+        return (bool)$this->db->GetOne("SELECT id FROM farm_roles WHERE role_id=? OR new_role_id=? LIMIT 1",
             array($this->id, $this->id)
         );
     }
@@ -452,7 +469,7 @@ class DBRole
         //TODO: validate
 
         foreach ($software as $software_key => $software_version) {
-            $this->db->Execute("REPLACE INTO role_software SET
+            $this->db->Execute("INSERT INTO role_software SET
                 role_id			= ?,
                 software_name	= ?,
                 software_version= ?,
@@ -682,25 +699,6 @@ class DBRole
                 ", array($newRoleId, $r2['software_name'], $r2['software_version'], $r2['software_key']));
             }
 
-            //Set security rules
-            $rsr3 = $this->db->Execute("SELECT * FROM role_security_rules WHERE role_id = ?", array($this->id));
-            while ($r3 = $rsr3->FetchRow()) {
-                $this->db->Execute("INSERT INTO role_security_rules SET
-                    `role_id` = ?,
-                    `rule` = ?
-                ", array($newRoleId, $r3['rule']));
-            }
-
-            //Set properties
-            $rsr5 = $this->db->Execute("SELECT * FROM role_properties WHERE role_id = ?", array($this->id));
-            while ($r5 = $rsr5->FetchRow()) {
-                $this->db->Execute("INSERT INTO role_properties SET
-                    `role_id` = ?,
-                    `name` = ?,
-                    `value` = ?
-                ", array($newRoleId, $r5['name'], $r5['value']));
-            }
-
             //Set global variables
             $rsr12 = $this->db->Execute("SELECT * FROM global_variables WHERE role_id = ? AND farm_id = '0' AND farm_role_id = '0'", array($this->id));
             while ($r12 = $rsr12->FetchRow()) {
@@ -715,22 +713,6 @@ class DBRole
                     `flag_required` = ?,
                     `scope` = 'role'
                 ", array($r12['env_id'], $newRoleId, $r12['name'], $r12['value'], $r12['flag_final'], $r12['flag_required']));
-            }
-
-            //Set parameters
-            $rsr6 = $this->db->Execute("SELECT * FROM role_parameters WHERE role_id = ?", array($this->id));
-            while ($r6 = $rsr6->FetchRow()) {
-                $this->db->Execute("INSERT INTO role_parameters SET
-                    `role_id` = ?,
-                    `name` = ?,
-                    `type` = ?,
-                    `isrequired` = ?,
-                    `defval` = ?,
-                    `allow_multiple_choice` = ?,
-                    `options` = ?,
-                    `hash` = ?,
-                    `issystem` = ?
-                ", array($newRoleId, $r6['name'], $r6['type'], $r6['isrequired'], $r6['defval'], $r6['allow_multiple_choice'], $r6['options'], $r6['hash'], $r6['issystem']));
             }
 
             //Set scripts
@@ -769,7 +751,7 @@ class DBRole
         $DBServer = DBServer::LoadByID($BundleTask->serverId);
 
         if ($BundleTask->prototypeRoleId) {
-            $proto_role = $db->GetRow("SELECT * FROM roles WHERE id=?", array($BundleTask->prototypeRoleId));
+            $proto_role = $db->GetRow("SELECT * FROM roles WHERE id=? LIMIT 1", array($BundleTask->prototypeRoleId));
             if (!$proto_role['architecture'])
                 $proto_role['architecture'] = $DBServer->GetProperty(SERVER_PROPERTIES::ARCHITECTURE);
         } else {
@@ -779,6 +761,9 @@ class DBRole
                 "name" => "*import*"
             );
         }
+
+        if (!$proto_role['architecture'])
+            $proto_role['architecture'] = 'x86_64';
 
         if (!$BundleTask->cloudLocation) {
             if ($DBServer)
@@ -819,6 +804,7 @@ class DBRole
         $db->Execute("INSERT INTO roles SET
             name			= ?,
             origin			= ?,
+            dtadded         = NOW(),
             client_id		= ?,
             env_id			= ?,
             cat_id          = ?,
@@ -826,6 +812,8 @@ class DBRole
             behaviors		= ?,
             history			= ?,
             generation		= ?,
+            added_by_email  = ?,
+            added_by_userid = ?,
             os				= ?,
             os_family       = ?,
             os_version      = ?,
@@ -840,6 +828,8 @@ class DBRole
             $proto_role['behaviors'],
             trim("{$proto_role['history']},{$proto_role['name']}", ","),
             2,
+            $BundleTask->createdByEmail,
+            $BundleTask->createdById,
             $osInfo->name,
             $osInfo->family,
             $osInfo->version,
@@ -902,19 +892,6 @@ class DBRole
                 $script['params'] = unserialize($script['params']);
 
             $role->setScripts($scripts);
-        } else {
-
-            if ($role->hasBehavior(ROLE_BEHAVIORS::NGINX)) {
-                // Add nginx parameter
-                $params[] = array(
-                    'name' => 'Nginx HTTPS Vhost Template',
-                    'type' => 'textarea',
-                    'required' => '1',
-                    'defval' => @file_get_contents(dirname(__FILE__)."/../templates/services/nginx/ssl.vhost.tpl")
-                );
-
-                $role->setParameters($params);
-            }
         }
 
         // Set software

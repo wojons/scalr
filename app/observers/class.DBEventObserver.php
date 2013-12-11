@@ -47,8 +47,8 @@ class DBEventObserver extends EventObserver
 
         if ($event->Operation == MYSQL_BACKUP_TYPE::DUMP)
         {
-            $DBFarmRole->SetSetting(DBFarmRole::SETTING_MYSQL_LAST_BCP_TS, time());
-            $DBFarmRole->SetSetting(DBFarmRole::SETTING_MYSQL_IS_BCP_RUNNING, 0);
+            $DBFarmRole->SetSetting(DBFarmRole::SETTING_MYSQL_LAST_BCP_TS, time(), DBFarmRole::TYPE_LCL);
+            $DBFarmRole->SetSetting(DBFarmRole::SETTING_MYSQL_IS_BCP_RUNNING, 0, DBFarmRole::TYPE_LCL);
 
             switch ($event->DBServer->platform) {
                 case SERVER_PLATFORMS::EC2:
@@ -84,8 +84,8 @@ class DBEventObserver extends EventObserver
         }
         elseif ($event->Operation == MYSQL_BACKUP_TYPE::BUNDLE)
         {
-            $DBFarmRole->SetSetting(DBFarmRole::SETTING_MYSQL_LAST_BUNDLE_TS, time());
-            $DBFarmRole->SetSetting(DBFarmRole::SETTING_MYSQL_IS_BUNDLE_RUNNING, 0);
+            $DBFarmRole->SetSetting(DBFarmRole::SETTING_MYSQL_LAST_BUNDLE_TS, time(), DBFarmRole::TYPE_LCL);
+            $DBFarmRole->SetSetting(DBFarmRole::SETTING_MYSQL_IS_BUNDLE_RUNNING, 0, DBFarmRole::TYPE_LCL);
 
             if (!is_array($event->SnapshotInfo))
                 $event->SnapshotInfo = array('snapshotId' => $event->SnapshotInfo);
@@ -103,7 +103,7 @@ class DBEventObserver extends EventObserver
                     ));
 
                     // Scalarizr stuff
-                    $DBFarmRole->SetSetting(DBFarmRole::SETTING_MYSQL_SNAPSHOT_ID, $event->SnapshotInfo['snapshotId']);
+                    $DBFarmRole->SetSetting(DBFarmRole::SETTING_MYSQL_SNAPSHOT_ID, $event->SnapshotInfo['snapshotId'], DBFarmRole::TYPE_LCL);
 
                     $snapshotConfig = new stdClass();
                     $snapshotConfig->type = 'ebs';
@@ -114,10 +114,10 @@ class DBEventObserver extends EventObserver
             }
 
             if ($event->SnapshotInfo['logFile'])
-                $DBFarmRole->SetSetting(DBFarmRole::SETTING_MYSQL_LOG_FILE, $event->SnapshotInfo['logFile']);
+                $DBFarmRole->SetSetting(DBFarmRole::SETTING_MYSQL_LOG_FILE, $event->SnapshotInfo['logFile'], DBFarmRole::TYPE_LCL);
 
             if ($event->SnapshotInfo['logPos'])
-                $DBFarmRole->SetSetting(DBFarmRole::SETTING_MYSQL_LOG_POS, $event->SnapshotInfo['logPos']);
+                $DBFarmRole->SetSetting(DBFarmRole::SETTING_MYSQL_LOG_POS, $event->SnapshotInfo['logPos'], DBFarmRole::TYPE_LCL);
 
 
             try {
@@ -145,7 +145,8 @@ class DBEventObserver extends EventObserver
 
                 $DBFarmRole->SetSetting(
                     DBFarmRole::SETTING_MYSQL_SCALR_SNAPSHOT_ID,
-                    $storageSnapshot->id
+                    $storageSnapshot->id,
+                    DBFarmRole::TYPE_LCL
                 );
             }
             catch(Exception $e) {
@@ -171,11 +172,11 @@ class DBEventObserver extends EventObserver
 
         if ($event->Operation == MYSQL_BACKUP_TYPE::DUMP)
         {
-            $DBFarmRole->SetSetting(DBFarmRole::SETTING_MYSQL_IS_BCP_RUNNING, 0);
+            $DBFarmRole->SetSetting(DBFarmRole::SETTING_MYSQL_IS_BCP_RUNNING, 0, DBFarmRole::TYPE_LCL);
         }
         elseif ($event->Operation == MYSQL_BACKUP_TYPE::BUNDLE)
         {
-            $DBFarmRole->SetSetting(DBFarmRole::SETTING_MYSQL_IS_BUNDLE_RUNNING, 0);
+            $DBFarmRole->SetSetting(DBFarmRole::SETTING_MYSQL_IS_BUNDLE_RUNNING, 0, DBFarmRole::TYPE_LCL);
         }
     }
 
@@ -210,14 +211,14 @@ class DBEventObserver extends EventObserver
         if ($event->OldMasterDBServer instanceof DBServer)
             $event->OldMasterDBServer->SetProperty(SERVER_PROPERTIES::DB_MYSQL_MASTER, 0);
 
-        $event->DBServer->GetFarmRoleObject()->SetSetting(DBFarmRole::SETTING_MYSQL_LAST_BUNDLE_TS, time());
+        $event->DBServer->GetFarmRoleObject()->SetSetting(DBFarmRole::SETTING_MYSQL_LAST_BUNDLE_TS, time(), DBFarmRole::TYPE_LCL);
 
         $event->DBServer->SetProperty(SERVER_PROPERTIES::DB_MYSQL_MASTER, 1);
     }
 
     public function OnNewDbMsrMasterUp(NewDbMsrMasterUpEvent $event)
     {
-        $event->DBServer->GetFarmRoleObject()->SetSetting(Scalr_Db_Msr::DATA_BUNDLE_LAST_TS, time());
+        $event->DBServer->GetFarmRoleObject()->SetSetting(Scalr_Db_Msr::DATA_BUNDLE_LAST_TS, time(), DBFarmRole::TYPE_LCL);
     }
 
     /**
@@ -293,16 +294,15 @@ class DBEventObserver extends EventObserver
     {
         try {
             $BundleTask = BundleTask::LoadById($event->BundleTaskID);
-        }
-        catch (Exception $e)
-        {
+        } catch (Exception $e) {
             Logger::getLogger(__CLASS__)->fatal("Rebundle complete event without bundle task.");
             return;
         }
 
         $msg = 'Received RebundleFailed event from server';
-        if ($event->LastErrorMessage)
+        if ($event->LastErrorMessage) {
             $msg .= ". Reason: {$event->LastErrorMessage}";
+        }
 
         $BundleTask->SnapshotCreationFailed($msg);
     }
@@ -321,26 +321,36 @@ class DBEventObserver extends EventObserver
             array(FARM_STATUS::RUNNING, $this->FarmID)
         );
 
+        $governance = new Scalr_Governance($DBFarm->EnvID);
+        if ($governance->isEnabled(Scalr_Governance::GENERAL_LEASE) && $DBFarm->GetSetting(DBFarm::SETTING_LEASE_STATUS)) {
+            $dt = new DateTime();
+            $dt->add(new DateInterval('P' . intval($governance->getValue(Scalr_Governance::GENERAL_LEASE, 'defaultLifePeriod')) . 'D'));
+            $DBFarm->SetSetting(DBFarm::SETTING_LEASE_EXTEND_CNT, 0);
+            $DBFarm->SetSetting(DBFarm::SETTING_LEASE_TERMINATE_DATE, $dt->format('Y-m-d H:i:s'));
+            $DBFarm->SetSetting(DBFarm::SETTING_LEASE_NOTIFICATION_SEND, '');
+        }
+
         $roles = $DBFarm->GetFarmRoles();
         foreach($roles as $dbFarmRole) {
-            if ($dbFarmRole->GetSetting(DBFarmRole::SETTING_SCALING_ENABLED) && !$DBFarm->GetSetting(DBFarm::SETTING_EC2_VPC_ID))
-            {
+            if ($dbFarmRole->GetSetting(DBFarmRole::SETTING_SCALING_ENABLED) && !$DBFarm->GetSetting(DBFarm::SETTING_EC2_VPC_ID)) {
                 $scalingManager = new Scalr_Scaling_Manager($dbFarmRole);
                 $scalingDecision = $scalingManager->makeScalingDecition();
                 if ($scalingDecision == Scalr_Scaling_Decision::UPSCALE) {
                     $ServerCreateInfo = new ServerCreateInfo($dbFarmRole->Platform, $dbFarmRole);
                     try {
-                        $DBServer = Scalr::LaunchServer($ServerCreateInfo, null, true, "Farm launched");
+                        $DBServer = Scalr::LaunchServer(
+                            $ServerCreateInfo, null, true, "Farm launched",
+                            (isset($event->userId) ? $event->userId : null)
+                        );
 
-                        $dbFarmRole->SetSetting(DBFarmRole::SETTING_SCALING_UPSCALE_DATETIME, time());
+                        $dbFarmRole->SetSetting(DBFarmRole::SETTING_SCALING_UPSCALE_DATETIME, time(), DBFarmRole::TYPE_LCL);
 
                         Logger::getLogger(LOG_CATEGORY::FARM)->info(new FarmLogMessage($DBFarm->ID, sprintf("Farm %s, role %s scaling up. Starting new instance. ServerID = %s.",
                             $DBFarm->Name,
                             $dbFarmRole->GetRoleObject()->name,
                             $DBServer->serverId
                         )));
-                    }
-                    catch(Exception $e){
+                    } catch (Exception $e) {
                         Logger::getLogger(LOG_CATEGORY::SCALING)->error($e->getMessage());
                     }
                 }
@@ -355,19 +365,14 @@ class DBEventObserver extends EventObserver
      */
     public function OnFarmTerminated(FarmTerminatedEvent $event)
     {
-        $syncs = $this->DB->GetOne("SELECT COUNT(*) FROM bundle_tasks WHERE farm_id=? AND status NOT IN ('success','failed')",
-            array($this->FarmID)
-        );
-
         $dbFarm = DBFarm::LoadByID($this->FarmID);
-        $dbFarm->Status = ($syncs > 0 && $dbFarm->Status == FARM_STATUS::RUNNING) ? FARM_STATUS::SYNCHRONIZING : FARM_STATUS::TERMINATED;
+        $dbFarm->Status = FARM_STATUS::TERMINATED;
         $dbFarm->TermOnSyncFail = $event->TermOnSyncFail;
         $dbFarm->save();
 
-        if ($dbFarm->Status == FARM_STATUS::SYNCHRONIZING)
-            $servers = $dbFarm->GetServersByFilter(array(), array('status' => array(SERVER_STATUS::PENDING_TERMINATE, SERVER_STATUS::TERMINATED)));
-        else
-            $servers = $dbFarm->GetServersByFilter(array(), array());
+        $dbFarm->SetSetting(DBFarm::SETTING_LEASE_NOTIFICATION_SEND, '');
+
+        $servers = $dbFarm->GetServersByFilter(array(), array());
 
         if (count($servers) == 0)
             return;
@@ -375,8 +380,11 @@ class DBEventObserver extends EventObserver
         //TERMINATE RUNNING INSTANCES
         foreach ($servers as $dbServer) {
             if ($this->DB->GetOne("
-                    SELECT id FROM bundle_tasks
-                    WHERE server_id=? AND status NOT IN ('success','failed')", array(
+                    SELECT id
+                    FROM bundle_tasks
+                    WHERE server_id=? AND status NOT IN ('success','failed')
+                    LIMIT 1
+            ", array(
                 $dbServer->serverId
             ))) {
                 continue;
@@ -388,8 +396,7 @@ class DBEventObserver extends EventObserver
                     SERVER_STATUS::TERMINATED,
                     SERVER_STATUS::TROUBLESHOOTING
                 ))) {
-                    Scalr::FireEvent($dbServer->farmId, new BeforeHostTerminateEvent($dbServer, $event->ForceTerminate));
-                    Scalr_Server_History::init($dbServer)->markAsTerminated("Farm was terminated");
+                    $dbServer->terminate('FARM_TERMINATED', true, (!empty($event->userId) ? $event->userId : null));
                 }
             } catch (Exception $e) {
                 $this->Logger->error($e->getMessage());
@@ -408,8 +415,9 @@ class DBEventObserver extends EventObserver
 
         $this->DB->Execute("UPDATE servers_history SET scu_collecting = '1' WHERE server_id = ?", array($event->DBServer->serverId));
 
-        if ($event->ReplUserPass)
-            $event->DBServer->GetFarmRoleObject()->SetSetting(DBFarmRole::SETTING_MYSQL_STAT_PASSWORD, $event->ReplUserPass);
+        if ($event->ReplUserPass) {
+            $event->DBServer->GetFarmRoleObject()->SetSetting(DBFarmRole::SETTING_MYSQL_STAT_PASSWORD, $event->ReplUserPass, DBFarmRole::TYPE_LCL);
+        }
 
         if (defined("SCALR_SERVER_TZ")) {
             $tz = date_default_timezone_get();
@@ -418,33 +426,29 @@ class DBEventObserver extends EventObserver
 
         $event->DBServer->SetProperty(SERVER_PROPERTIES::INITIALIZED_TIME, time());
 
-        if (isset($tz) && $tz)
+        if (!empty($tz)) {
             date_default_timezone_set($tz);
+        }
 
         $event->DBServer->Save();
 
-        try
-        {
+        try {
             // If we need replace old instance to new one terminate old one.
-            if ($event->DBServer->replaceServerID)
-            {
+            if ($event->DBServer->replaceServerID) {
                 Logger::getLogger(LOG_CATEGORY::FARM)->info(new FarmLogMessage($this->FarmID, "Host UP. Terminating old server: {$event->DBServer->replaceServerID})."));
 
                 try {
                     $oldDBServer = DBServer::LoadByID($event->DBServer->replaceServerID);
+                } catch (Exception $e) {
                 }
-                catch(Exception $e) {}
 
                 Logger::getLogger(LOG_CATEGORY::FARM)->info(new FarmLogMessage($this->FarmID, "OLD Server found: {$oldDBServer->serverId})."));
 
                 if ($oldDBServer) {
-                    Scalr::FireEvent($oldDBServer->farmId, new BeforeHostTerminateEvent($oldDBServer));
-                    Scalr_Server_History::init($oldDBServer)->markAsTerminated("Server replaced with new one after snapshotting");
+                    $oldDBServer->terminate('REPLACE_SERVER_FROM_SNAPSHOT');
                 }
             }
-        }
-        catch (Exception $e)
-        {
+        } catch (Exception $e) {
             $this->Logger->fatal($e->getMessage());
         }
     }
@@ -462,16 +466,16 @@ class DBEventObserver extends EventObserver
             $DBFarmRole = $event->DBServer->GetFarmRoleObject();
 
             if ($DBFarmRole->GetSetting(DBFarmRole::SETTING_MYSQL_BCP_SERVER_ID) == $event->DBServer->serverId)
-                $DBFarmRole->SetSetting(DBFarmRole::SETTING_MYSQL_IS_BCP_RUNNING, 0);
+                $DBFarmRole->SetSetting(DBFarmRole::SETTING_MYSQL_IS_BCP_RUNNING, 0, DBFarmRole::TYPE_LCL);
 
             if ($DBFarmRole->GetSetting(DBFarmRole::SETTING_MYSQL_BUNDLE_SERVER_ID) == $event->DBServer->serverId)
-                $DBFarmRole->SetSetting(DBFarmRole::SETTING_MYSQL_IS_BUNDLE_RUNNING, 0);
+                $DBFarmRole->SetSetting(DBFarmRole::SETTING_MYSQL_IS_BUNDLE_RUNNING, 0, DBFarmRole::TYPE_LCL);
 
             if ($DBFarmRole->GetSetting(Scalr_Db_Msr::DATA_BACKUP_SERVER_ID) == $event->DBServer->serverId)
-                $DBFarmRole->SetSetting(Scalr_Db_Msr::DATA_BACKUP_IS_RUNNING, 0);
+                $DBFarmRole->SetSetting(Scalr_Db_Msr::DATA_BACKUP_IS_RUNNING, 0, DBFarmRole::TYPE_LCL);
 
             if ($DBFarmRole->GetSetting(Scalr_Db_Msr::DATA_BUNDLE_SERVER_ID) == $event->DBServer->serverId)
-                $DBFarmRole->SetSetting(Scalr_Db_Msr::DATA_BUNDLE_IS_RUNNING, 0);
+                $DBFarmRole->SetSetting(Scalr_Db_Msr::DATA_BUNDLE_IS_RUNNING, 0, DBFarmRole::TYPE_LCL);
         }
         catch(Exception $e){}
     }
@@ -496,10 +500,10 @@ class DBEventObserver extends EventObserver
         if ($event->DBServer->IsRebooting())
             return;
 
-        if ($event->DBServer->status != SERVER_STATUS::TROUBLESHOOTING) {
-            $event->DBServer->status = SERVER_STATUS::TERMINATED;
-            $event->DBServer->dateShutdownScheduled = date("Y-m-d H:i:s");
-        }
+//         if ($event->DBServer->status != SERVER_STATUS::TROUBLESHOOTING) {
+//             $event->DBServer->status = SERVER_STATUS::TERMINATED;
+//             $event->DBServer->dateShutdownScheduled = date("Y-m-d H:i:s");
+//         }
 
         $this->DB->Execute("UPDATE servers_history SET scu_collecting = '0' WHERE server_id = ?", array($event->DBServer->serverId));
 
@@ -510,16 +514,16 @@ class DBEventObserver extends EventObserver
             $DBFarmRole = $event->DBServer->GetFarmRoleObject();
 
             if ($DBFarmRole->GetSetting(DBFarmRole::SETTING_MYSQL_BCP_SERVER_ID) == $event->DBServer->serverId)
-                $DBFarmRole->SetSetting(DBFarmRole::SETTING_MYSQL_IS_BCP_RUNNING, 0);
+                $DBFarmRole->SetSetting(DBFarmRole::SETTING_MYSQL_IS_BCP_RUNNING, 0, DBFarmRole::TYPE_LCL);
 
             if ($DBFarmRole->GetSetting(DBFarmRole::SETTING_MYSQL_BUNDLE_SERVER_ID) == $event->DBServer->serverId)
-                $DBFarmRole->SetSetting(DBFarmRole::SETTING_MYSQL_IS_BUNDLE_RUNNING, 0);
+                $DBFarmRole->SetSetting(DBFarmRole::SETTING_MYSQL_IS_BUNDLE_RUNNING, 0, DBFarmRole::TYPE_LCL);
 
             if ($DBFarmRole->GetSetting(Scalr_Db_Msr::DATA_BACKUP_SERVER_ID) == $event->DBServer->serverId)
-                $DBFarmRole->SetSetting(Scalr_Db_Msr::DATA_BACKUP_IS_RUNNING, 0);
+                $DBFarmRole->SetSetting(Scalr_Db_Msr::DATA_BACKUP_IS_RUNNING, 0, DBFarmRole::TYPE_LCL);
 
             if ($DBFarmRole->GetSetting(Scalr_Db_Msr::DATA_BUNDLE_SERVER_ID) == $event->DBServer->serverId)
-                $DBFarmRole->SetSetting(Scalr_Db_Msr::DATA_BUNDLE_IS_RUNNING, 0);
+                $DBFarmRole->SetSetting(Scalr_Db_Msr::DATA_BUNDLE_IS_RUNNING, 0, DBFarmRole::TYPE_LCL);
         }
         catch(Exception $e){}
 
@@ -530,40 +534,15 @@ class DBEventObserver extends EventObserver
         }
 
         //Check active bundle task:
-        $bundle_task_id = $this->DB->GetOne("SELECT id FROM bundle_tasks WHERE server_id=? AND status IN (?,?)", array(
+        $bundle_task_id = $this->DB->GetOne("SELECT id FROM bundle_tasks WHERE server_id=? AND status IN (?,?) LIMIT 1", array(
             $event->DBServer->serverId,
             SERVER_SNAPSHOT_CREATION_STATUS::PENDING,
             SERVER_SNAPSHOT_CREATION_STATUS::IN_PROGRESS
         ));
-        if ($bundle_task_id)
-        {
+        if ($bundle_task_id) {
             $BundleTask = BundleTask::LoadById($bundle_task_id);
             $BundleTask->SnapshotCreationFailed("Server was terminated before image was created.");
         }
-
-        //
-        //
-        //
-        //TODO:
-        $farminfo = $this->DB->GetRow("SELECT * FROM farms WHERE id=?", array($this->FarmID));
-
-        if ($farminfo['status'] == FARM_STATUS::SYNCHRONIZING)
-        {
-            $event->DBServer->SkipEBSObserver = true;
-
-            $farm_servers_count = $this->DB->GetOne("SELECT COUNT(*) FROM servers WHERE farm_id=? and server_id != ? and status != ?",
-                array($this->FarmID, $event->DBServer->serverId, SERVER_STATUS::TERMINATED)
-            );
-
-            if ($farm_servers_count == 0)
-            {
-                $this->DB->Execute("UPDATE farms SET status=? WHERE id=?",
-                    array(FARM_STATUS::TERMINATED, $this->FarmID)
-                );
-            }
-        }
-
-        $event->DBServer->Save();
     }
 
     public function OnIPAddressChanged(IPAddressChangedEvent $event)
@@ -577,23 +556,5 @@ class DBEventObserver extends EventObserver
             $event->DBServer->localIp = $event->NewLocalIPAddress;
 
         $event->DBServer->Save();
-    }
-
-    public function OnBeforeHostTerminate(BeforeHostTerminateEvent $event)
-    {
-        if ($event->DBServer->status != SERVER_STATUS::PENDING_TERMINATE && $event->DBServer->status != SERVER_STATUS::TERMINATED)
-        {
-            $event->DBServer->status = SERVER_STATUS::PENDING_TERMINATE;
-            $event->DBServer->dateShutdownScheduled = date("Y-m-d H:i:s");
-            $event->DBServer->Save();
-        }
-
-        if ($event->ForceTerminate)
-        {
-            if ($event->DBServer->GetCloudServerID()) {
-                Logger::getLogger(LOG_CATEGORY::FARM)->warn(new FarmLogMessage($this->FarmID, "Terminating instance '{$event->DBServer->serverId}' (O)."));
-                PlatformFactory::NewPlatform($event->DBServer->platform)->TerminateServer($event->DBServer);
-            }
-        }
     }
 }

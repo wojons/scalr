@@ -46,11 +46,11 @@ Scalr.regPage('Scalr.ui.account2.environments.platform.gce', function (loadParam
 	}
 	
 	var form = Ext.create('Ext.form.Panel', {
-		bodyCls: 'x-panel-body-frame',
 		scalrOptions: {
 			'modal': true
 		},
-		width: 600,
+		width: 700,
+        bodyCls: 'x-container-fieldset',
 		title: 'Environments &raquo; ' + moduleParams.env.name + '&raquo; Google Compute Engine',
 		fieldDefaults: {
 			anchor: '100%',
@@ -89,11 +89,15 @@ Scalr.regPage('Scalr.ui.account2.environments.platform.gce', function (loadParam
 		dockedItems: [{
 			xtype: 'container',
 			dock: 'bottom',
-			cls: 'x-docked-bottom-frame',
+			cls: 'x-docked-buttons',
 			layout: {
 				type: 'hbox',
 				pack: 'center'
 			},
+            defaults:{
+                flex: 1,
+                maxWidth: 150
+            },
 			items: [{
 				xtype: 'button',
 				text: 'Save',
@@ -102,33 +106,31 @@ Scalr.regPage('Scalr.ui.account2.environments.platform.gce', function (loadParam
 				}
 			}, {
 				xtype: 'button',
-				margin: '0 0 0 5',
-				hidden: Scalr.flags.needEnvConfig,
+				hidden: !!Scalr.flags.needEnvConfig,
 				text: 'Cancel',
 				handler: function() {
 					Scalr.event.fireEvent('close');
 				}
 			},{
 				xtype: 'button',
-				margin: '0 0 0 10',
 				cls: 'x-btn-default-small-red',
-				hidden: !params['gce.is_enabled'] || Scalr.flags.needEnvConfig,
-				text: 'Deleting',
+				hidden: !params['gce.is_enabled'] || !!Scalr.flags.needEnvConfig,
+				text: 'Delete',
 				handler: function() {
 					sendForm(true);
 				}
 			}, {
 				xtype: 'button',
 				hidden: !Scalr.flags.needEnvConfig,
-				margin: '0 0 0 5',
 				text: "I'm not using GCE, let me configure another cloud",
+                flex: 3.4,
+                maxWidth: 600,
 				handler: function () {
 					Scalr.event.fireEvent('redirect', '#/account/environments/?envId=' + moduleParams.env.id, true);
 				}
 			}, {
 				xtype: 'button',
 				hidden: !Scalr.flags.needEnvConfig,
-				margin: '0 0 0 5',
 				text: 'Do this later',
 				handler: function () {
 					sessionStorage.setItem('needEnvConfigLater', true);

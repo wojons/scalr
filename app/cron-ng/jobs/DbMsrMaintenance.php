@@ -71,7 +71,7 @@ class Scalr_Cronjob_DbMsrMaintenance extends Scalr_System_Cronjob_MultiProcess_D
                     $timeouted = true;
 
                 if ($timeouted)
-                    $dbFarmRole->SetSetting(Scalr_Db_Msr::getConstant("DATA_{$action}_IS_RUNNING"), 0);
+                    $dbFarmRole->SetSetting(Scalr_Db_Msr::getConstant("DATA_{$action}_IS_RUNNING"), 0, DBFarmRole::TYPE_LCL);
             }
             else {
                 /*
@@ -103,6 +103,8 @@ class Scalr_Cronjob_DbMsrMaintenance extends Scalr_System_Cronjob_MultiProcess_D
                         $dateTime = new DateTime(null, new DateTimeZone($tz));
                         $currentTime = (int)$dateTime->format("Hi");
                         //$current_time = (int)date("Hi");
+
+                        //BUG HERE: 22:00 - 6:00 - doesn't work
 
                         if ($pbwFrom <= $currentTime && $pbwTo >= $currentTime)
                             $performAction = true;
@@ -146,6 +148,10 @@ class Scalr_Cronjob_DbMsrMaintenance extends Scalr_System_Cronjob_MultiProcess_D
             $tz = $env->getPlatformConfigValue(ENVIRONMENT_SETTINGS::TIMEZONE);
             if (!$tz)
                 $tz = date_default_timezone_get();
+
+            $farmTz = $dbFarm->GetSetting(DBFarm::SETTING_TIMEZONE);
+            if ($farmTz)
+                $tz = $farmTz;
 
             //skip terminated farms
             if ($dbFarm->Status != FARM_STATUS::RUNNING)

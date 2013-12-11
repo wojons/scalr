@@ -39,9 +39,7 @@ class Modules_Platforms_Ec2_Observers_Ec2 extends EventObserver
                     array('key' => "scalr-env-id", 'value' => $dbServer->envId),
                     array('key' => "scalr-owner", 'value' => $dbServer->GetFarmObject()->createdByUserEmail),
                     array('key' => "scalr-farm-id", 'value' => $dbServer->farmId),
-                    array('key' => "scalr-farm-name", 'value' => $dbServer->GetFarmObject()->Name),
                     array('key' => "scalr-farm-role-id", 'value' => $dbServer->farmRoleId),
-                    array('key' => "scalr-role-name", 'value' => $dbServer->GetFarmRoleObject()->GetRoleObject()->name),
                     array('key' => "scalr-server-id", 'value' => $dbServer->serverId),
                     array('key' => "Name", 'value' => $instanceName)
                 );

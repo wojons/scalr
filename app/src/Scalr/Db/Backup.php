@@ -36,9 +36,28 @@ class Scalr_Db_Backup extends Scalr_Model
     private $isPartsChanged;
     private $parts = array();
 
+    /**
+     * @var \DBFarm
+     */
+    private $dbFarm;
+
     public function getParts()
     {
         return $this->db->GetAll('SELECT seq_number as number, size, path FROM services_db_backup_parts WHERE backup_id = ?', array($this->id));
+    }
+
+    /**
+     * Gets DBFarm object
+     *
+     * @return \DBFarm
+     */
+    public function getFarmObject()
+    {
+        if (!$this->dbFarm && !empty($this->farmId)) {
+            $this->dbFarm = \DBFarm::LoadByID($this->farmId);
+        }
+
+        return $this->dbFarm;
     }
 
     /**
@@ -85,4 +104,3 @@ class Scalr_Db_Backup extends Scalr_Model
     }
 }
 
-?>

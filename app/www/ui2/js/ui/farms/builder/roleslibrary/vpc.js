@@ -1,18 +1,17 @@
 Scalr.regPage('Scalr.ui.farms.builder.addrole.vpc', function () {
     return {
-        xtype: 'container',
+        xtype: 'fieldset',
         itemId: 'vpc',
         isExtraSettings: true,
         hidden: true,
 
-        cls: 'x-delimiter-top',
-        padding: '18 24',
-        
+        baseTitle: 'VPC-related settings',
+        title: '',
         layout: 'anchor',
         defaults: {
             anchor: '100%',
             labelWidth: 110,
-            maxWidth: 710
+            maxWidth: 760
         },
         
         isVisibleForRole: function(record) {
@@ -31,13 +30,46 @@ Scalr.regPage('Scalr.ui.farms.builder.addrole.vpc', function () {
         },
 
         setRole: function(record) {
-            var field;
-
-            field = this.down('[name="aws.vpc_internet_access"]');
-            field.setValue(field.getValue() || 'outbound-only');
+            var field,
+                vpc = this.up('roleslibrary').vpc,
+                limits = this.up('#farmbuilder').getLimits('aws.vpc'),
+                defaultType = 'new',
+                forceInternetAccess,
+                disableAddSubnet = false;
+                
+            if (limits && limits['ids']) {
+                var fieldLimits = limits['ids'][vpc.id];
+                if (Ext.isArray(fieldLimits)) {
+                    defaultType = 'existing';
+                    disableAddSubnet = true;
+                } else if (Ext.isString(fieldLimits)) {
+                    forceInternetAccess = fieldLimits;
+                }
+            }
             
-            this.down('[name="aws.vpc_routing_table_id"]').reset();
-            this.down('[name="vpcSubnetType"]').setValue('new');
+            field = this.down('[name="aws.vpc_internet_access"]');
+            field.down('[value="full"]').setDisabled(forceInternetAccess && forceInternetAccess !== 'full');
+            field.down('[value="outbound-only"]').setDisabled(forceInternetAccess && forceInternetAccess !== 'outbound-only');
+            field.setValue(forceInternetAccess || 'outbound-only');
+
+            field = this.down('[name="aws.vpc_routing_table_id"]');
+            field.store.getProxy().params = {cloudLocation: vpc.region, vpcId: vpc.id}
+            field.reset();
+            
+            field = this.down('[name="vpcSubnetType"]');
+            field.setValue(defaultType);
+            field.down('[value="new"]').setDisabled(disableAddSubnet);
+
+            this.down('[name="aws.vpc_avail_zone"]').store.getProxy().params = {cloudLocation: vpc.region};
+
+            field = this.down('[name="aws.vpc_subnet_id"]');
+            Ext.apply(field.store.getProxy(), {
+                params: {cloudLocation: vpc.region, vpcId: vpc.id},
+                filterFn: limits && limits['ids'] && limits['ids'][vpc.id] ? this.subnetsFilterFn : null,
+                filterFnScope: this
+            });
+
+            this.setTitle(this.baseTitle + (limits?'&nbsp;&nbsp;<img src="' + Ext.BLANK_IMAGE_URL + '" title="VPC settings is limited by account owner" class="x-icon-governance" />':''));
         },
 
         isValid: function() {
@@ -45,8 +77,10 @@ Scalr.regPage('Scalr.ui.farms.builder.addrole.vpc', function () {
                 fields = this.query('[isFormField]');
                 
             for (var i = 0, len = fields.length; i < len; i++) {
-                res = fields[i].validate();
-                if (res === false) break;
+                res = fields[i].validate() || {comp:fields[i]};
+                if (res !== true) {
+                    break;
+                }
             }
             return res;
         },
@@ -76,11 +110,23 @@ Scalr.regPage('Scalr.ui.farms.builder.addrole.vpc', function () {
             return settings;
         },
 
+        subnetsFilterFn: function(record) {
+            var res = false,
+                limits = this.up('#farmbuilder').getLimits('aws.vpc'),
+                vpc = this.up('roleslibrary').vpc,
+                fieldLimits = limits['ids'][vpc.id],
+                filterType = Ext.isArray(fieldLimits) ? 'subnets' : 'iaccess',
+                internet = record.get('internet');
+            if (
+                filterType === 'subnets' && Ext.Array.contains(fieldLimits, record.get('id')) ||
+                filterType === 'iaccess' && (internet === undefined || internet === fieldLimits)
+            ) {
+                res = true;
+            }
+            return res;
+        },
+        
         items: [{
-            xtype: 'label',
-            cls: 'x-fieldset-subheader',
-            text: 'VPC-related settings'
-        },{
             xtype: 'buttongroupfield',
             name: 'vpcSubnetType',
             fieldLabel: 'Placement',
@@ -125,38 +171,21 @@ Scalr.regPage('Scalr.ui.farms.builder.addrole.vpc', function () {
                 xtype: 'combo',
                 name: 'aws.vpc_avail_zone',
                 fieldLabel: 'Avail zone',
-                editable: false,
                 submitValue: false,
                 width: 325,
                 valueField: 'id',
                 displayField: 'name',
-                queryMode: 'local',
                 allowBlank: false,
+                
+                editable: false,
+                queryCaching: false,
+                minChars: 0,
+                queryDelay: 10,
                 store: {
-                    fields: ['id' , 'name'],
-                    proxy: 'object'
-                },
-                listeners: {
-                    expand: function() {
-                        var me = this,
-                            vpc = me.up('roleslibrary').vpc;
-                        if (me.loadedCloudLocation != vpc.region) {
-                            me.collapse();
-                            me.store.removeAll();
-                            Scalr.cachedRequest.load(
-                                {
-                                    url: '/platforms/ec2/xGetAvailZones',
-                                    params: {cloudLocation: vpc.region}
-                                },
-                                function(data, status){
-                                    if (!status) return;
-                                    me.store.loadData(data || []);
-                                    me.loadedCloudLocation = vpc.region;
-                                    me.expand();
-                                },
-                                this
-                            );
-                        }
+                    fields: [ 'id', 'name' ],
+                    proxy: {
+                        type: 'cachedrequest',
+                        url: '/platforms/ec2/xGetAvailZones'
                     }
                 }
             },{
@@ -164,39 +193,23 @@ Scalr.regPage('Scalr.ui.farms.builder.addrole.vpc', function () {
                 name: 'aws.vpc_routing_table_id',
                 fieldLabel: 'Routing table',
                 hidden: true,
-                editable: false,
                 width: 325,
                 valueField: 'id',
                 displayField: 'name',
                 emptyText: 'Scalr default',
-                queryMode: 'local',
+
+                editable: false,
+                queryCaching: false,
+                minChars: 0,
+                queryDelay: 10,
                 store: {
-                    fields: ['id' , 'name'],
-                    proxy: 'object'
-                },
-                listeners: {
-                    expand: function() {
-                        var me = this,
-                            vpc = me.up('roleslibrary').vpc;
-                        if (me.loadedCloudLocation != vpc.region) {
-                            me.collapse();
-                            me.store.removeAll();
-                            Scalr.cachedRequest.load(
-                                {
-                                    url: '/platforms/ec2/xGetRoutingTableList',
-                                    params: {cloudLocation: vpc.region, vpcId: vpc.id}
-                                },
-                                function(data, status){
-                                    me.store.loadData([{id: '', name: 'Scalr default'}]);
-                                    if (status) {
-                                        me.store.loadData(data['tables'] || [], true);
-                                        me.loadedCloudLocation = vpc.region;
-                                    }
-                                    me.expand();
-                                },
-                                this
-                            );
-                        }
+                    fields: [ 'id', 'name' ],
+                    proxy: {
+                        type: 'cachedrequest',
+                        crscope: 'farmbuilder',
+                        url: '/platforms/ec2/xGetRoutingTableList',
+                        root: 'tables',
+                        prependData: [{id: '', name: 'Scalr default'}]
                     }
                 }
             },{
@@ -204,6 +217,7 @@ Scalr.regPage('Scalr.ui.farms.builder.addrole.vpc', function () {
                 name: 'aws.vpc_internet_access',
                 submitValue: false,
                 fieldLabel: 'Internet access',
+                width: 325,
                 defaults:{
                     width: 109
                 },
@@ -218,23 +232,29 @@ Scalr.regPage('Scalr.ui.farms.builder.addrole.vpc', function () {
                 xtype: 'combo',
                 name: 'aws.vpc_subnet_id',
                 fieldLabel: 'Subnet',
-                editable: false,
                 submitValue: false,
-                width: 325,
+                width: 425,
                 valueField: 'id',
                 displayField: 'description',
-                queryMode: 'local',
                 allowBlank: false,
+                
+                editable: false,
+                queryCaching: false,
+                minChars: 0,
+                queryDelay: 10,
                 store: {
-                    fields: ['id' , 'description', 'availability_zone', 'internet', 'ips_left', 'sidr'],
-                    proxy: 'object'
+                    fields: ['id' , 'description', 'availability_zone', 'internet', 'ips_left', 'sidr', 'name'],
+                    proxy: {
+                        type: 'cachedrequest',
+                        url: '/platforms/ec2/xGetSubnetsList'
+                    }
                 },
                 listConfig: {
                     style: 'white-space:nowrap',
                     cls: 'x-boundlist-alt',
                     tpl:
                         '<tpl for="."><div class="x-boundlist-item" style="height: auto; width: auto;line-height:20px">' +
-                            '<div><span style="font-weight: bold">{id}</span> <span style="font-style: italic;font-size:90%">(Internet access: <b>{[values.internet || \'unknown\']}</b>)</span></div>' +
+                            '<div><span style="font-weight: bold">{name} - {id}</span> <span style="font-style: italic;font-size:90%">(Internet access: <b>{[values.internet || \'unknown\']}</b>)</span></div>' +
                             '<div>{sidr} in {availability_zone} [IPs left: {ips_left}]</div>' +
                         '</div></tpl>'
                 },
@@ -247,37 +267,6 @@ Scalr.regPage('Scalr.ui.farms.builder.addrole.vpc', function () {
                         } else {
                             tab.down('#vpc_internet_access').hide();
                         }
-
-                    },
-                    expand: function() {
-                        var me = this,
-                            vpc = me.up('roleslibrary').vpc,
-                            cache = me.up('#farmbuilder').cache,
-                            loadParams = {
-                                url: '/platforms/ec2/xGetSubnetsList',
-                                params: {
-                                    cloudLocation: vpc.region,
-                                    vpcId: vpc.id
-                                }
-                            },
-                            cacheId = cache.getCacheId(loadParams);
-
-                        if (me.loadedCacheId != cacheId) {
-                            me.collapse();
-                            me.store.removeAll();
-                            cache.load(
-                                loadParams,
-                                function(data, status, cacheId){
-                                    if (!status) return;
-                                    me.store.loadData(data || []);
-                                    me.loadedCacheId = cacheId;
-                                    me.expand();
-                                },
-                                this,
-                                0
-                            );
-                        }
-
                     }
                 }
             },{

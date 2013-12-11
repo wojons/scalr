@@ -1,8 +1,16 @@
 <?php
+
 use \Scalr\Service\Aws\Rds\DataType\ParameterData;
+use \Scalr\Acl\Acl;
 
 class Scalr_UI_Controller_Tools_Aws_Rds_Pg extends Scalr_UI_Controller
 {
+
+    public function hasAccess()
+    {
+        return parent::hasAccess() && $this->request->isAllowed(Acl::RESOURCE_AWS_RDS);
+    }
+
     public function viewAction()
     {
         $this->response->page('ui/tools/aws/rds/pg/view.js', array(

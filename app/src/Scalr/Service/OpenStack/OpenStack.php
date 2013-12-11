@@ -148,6 +148,21 @@ class OpenStack
     }
 
     /**
+     * Enables or disables debug mode
+     *
+     * In debug mode all requests and responses will be printed to stdout.
+     *
+     * @param   bool    $debug optional True to enable debug mode
+     * @return  OpenStack
+     */
+    public function setDebug($debug = true)
+    {
+        $this->getClient()->setDebug($debug);
+
+        return $this;
+    }
+
+    /**
      * Performs an authentication request
      *
      * @return  object Returns auth token

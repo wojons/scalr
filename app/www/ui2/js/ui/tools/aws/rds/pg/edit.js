@@ -1,6 +1,5 @@
 Scalr.regPage('Scalr.ui.tools.aws.rds.pg.edit', function (loadParams, moduleParams) {
 	var form = Ext.create('Ext.form.Panel',{
-		bodyCls: 'x-panel-body-frame',
 		title: 'Tools &raquo; Amazon Web Services &raquo; Amazon RDS &raquo; Parameter groups &raquo; ' + loadParams['name'] + ' &raquo; Edit',
 		width: 900,
 		items: [{
@@ -45,7 +44,7 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.pg.edit', function (loadParams, modulePara
 		dockedItems: [{
 			xtype: 'container',
 			dock: 'bottom',
-			cls: 'x-docked-bottom-frame',
+			cls: 'x-docked-buttons',
 			layout: {
 				type: 'hbox',
 				pack: 'center'
@@ -68,7 +67,6 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.pg.edit', function (loadParams, modulePara
 				}
 			},{
 				xtype: 'button',
-				margin: '0 0 0 5',
 				text: 'Cancel',
 				handler: function() {
 					Scalr.event.fireEvent('close');
@@ -76,7 +74,6 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.pg.edit', function (loadParams, modulePara
 			},{
 				xtype: 'button',
 				text: 'Reset to defaults',
-				margin: '0 0 0 15',
 				handler: function() {
 					Scalr.Request({
 						confirmBox: {

@@ -1,8 +1,10 @@
 <?php
 namespace Scalr\Service\OpenStack\Services;
 
+use Scalr\Service\OpenStack\Type\StringType;
 use Scalr\Service\OpenStack\OpenStack;
 use Scalr\Service\OpenStack\Exception\ServiceException;
+use Scalr\Service\OpenStack\Exception\RestClientException;
 
 /**
  * OpenStack abstract service interface class
@@ -186,5 +188,43 @@ abstract class AbstractService
                 return $this->availableHandlers[$name];
             }
         }
+    }
+
+    /**
+     * List Extensions action
+     *
+     * This operation returns a response body. In the response body, each extension is identified
+     * by two unique identifiers, a namespace and an alias. Additionally an extension contains
+     * documentation links in various formats
+     *
+     * @return  array      Returns list of available extensions
+     * @throws  RestClientException
+     */
+    public function listExtensions()
+    {
+        if (!isset($this->cache['extensions'])) {
+            $ret = $this->getApiHandler()->listExtensions();
+            $this->cache['extensions'] = array();
+            foreach ($ret as $v) {
+                $this->cache['extensions'][$v->name] = $v;
+                //Adds feature to resolve extension by alias
+                if (!empty($v->alias) && empty($this->cache['extensions'][$v->alias])) {
+                    $this->cache['extensions'][$v->alias] = $v;
+                }
+            }
+        }
+        return $this->cache['extensions'];
+    }
+
+    /**
+     * Checks whether given extension is supported by the service.
+     *
+     * @param   StringType|string  $extensionName  An extension name
+     * @return  bool   Returns true if an extension is supported.
+     */
+    public function isExtensionSupported($extensionName)
+    {
+        $list = $this->listExtensions();
+        return isset($list[(string)$extensionName]);
     }
 }

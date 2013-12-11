@@ -57,6 +57,7 @@ Scalr.regPage('Scalr.ui.account2.environments.platform.eucalyptus', function (lo
 			'modal': true
 		},
 		width: 900,
+        bodyCls: 'x-container-fieldset',
 		title: 'Environments &raquo; ' + moduleParams.env.name + ' &raquo; Eucalyptus',
 
 		layout: 'card',
@@ -75,9 +76,9 @@ Scalr.regPage('Scalr.ui.account2.environments.platform.eucalyptus', function (lo
 			return this.add({
 				xtype: 'form',
 				border: false,
-				bodyCls: 'x-panel-body-frame',
 				layout: 'anchor',
 				sType: 'add',
+                bodyStyle: 'box-shadow: none;',
 				defaults: {
 					anchor: '100%',
 					labelWidth: 350
@@ -158,7 +159,7 @@ Scalr.regPage('Scalr.ui.account2.environments.platform.eucalyptus', function (lo
 		items: [{
 			xtype: 'grid',
 			itemId: 'view',
-			border: false,
+            cls: 'x-grid-shadow',
 			sType: 'view',
 			store: {
 				fields: [ 'region', 'account_id', 'ec2_url', 'invalid' ],
@@ -178,7 +179,7 @@ Scalr.regPage('Scalr.ui.account2.environments.platform.eucalyptus', function (lo
 			},
 
 			columns: [
-				{ header: "Cloud Location", flex: 100, dataIndex: 'region' },
+				{ header: "Cloud Location", flex: 100, minWidth: 140, dataIndex: 'region' },
 				{ header: "Account ID", flex: 100, dataIndex: 'account_id' },
 				{ header: "EC2 URL", flex: 400, dataIndex: 'ec2_url' },
 				{
@@ -215,23 +216,33 @@ Scalr.regPage('Scalr.ui.account2.environments.platform.eucalyptus', function (lo
 			dockedItems: [{
 				xtype: 'toolbar',
 				dock: 'top',
+                ui: 'simple',
+                style: 'padding-right:2px',
 				items: [{
-					ui: 'paging',
-					iconCls: 'x-tbar-add',
+                    xtype: 'tbfill'
+                },{
+                    text: 'Add location',
+                    cls: 'x-btn-green-bg',
 					handler: function() {
 						Scalr.Confirm({
 							form: [{
-								xtype: 'textfield',
-								fieldLabel: 'Eucalyptus Cloud Location',
-								name: 'location',
-								allowBlank: false,
-								validator: function(value) {
-									var reg = /^([a-zA-Z0-9])([\w,-])*([a-zA-Z0-9])$/;
-									if (!reg.test(value))
-										return 'Name must contain [a-z,A-Z,0-9,_,-] and start/end with [a-z,A-Z,0-9]';
-									return true;
-								},
-								labelWidth: 160
+                                xtype: 'container',
+                                cls: 'x-container-fieldset',
+                                layout: 'anchor',
+                                items: {
+                                    xtype: 'textfield',
+                                    fieldLabel: 'Eucalyptus Cloud Location',
+                                    name: 'location',
+                                    anchor: '100%',
+                                    allowBlank: false,
+                                    validator: function(value) {
+                                        var reg = /^([a-zA-Z0-9])([\w,-])*([a-zA-Z0-9])$/;
+                                        if (!reg.test(value))
+                                            return 'Name must contain [a-z,A-Z,0-9,_,-] and start/end with [a-z,A-Z,0-9]';
+                                        return true;
+                                    },
+                                    labelWidth: 160
+                                }
 							}],
 							ok: 'Add',
 							title: 'Please specify cloud location name',
@@ -260,11 +271,15 @@ Scalr.regPage('Scalr.ui.account2.environments.platform.eucalyptus', function (lo
 		dockedItems: [{
 			xtype: 'container',
 			dock: 'bottom',
-			cls: 'x-docked-bottom-frame',
+			cls: 'x-docked-buttons',
 			layout: {
 				type: 'hbox',
 				pack: 'center'
 			},
+            defaults:{
+                flex: 1,
+                maxWidth: 150
+            },
 			items: [{
 				xtype: 'button',
 				itemId: 'buttonSave',
@@ -297,7 +312,7 @@ Scalr.regPage('Scalr.ui.account2.environments.platform.eucalyptus', function (lo
 			}, {
 				xtype: 'button',
 				itemId: 'buttonEdit',
-				text: 'Edit',
+				text: 'Apply',
 				hidden: true,
 				handler: function () {
 					this.up('panel').layout.setActiveItem(this.up('panel').down('#view'));
@@ -315,8 +330,7 @@ Scalr.regPage('Scalr.ui.account2.environments.platform.eucalyptus', function (lo
 			}, {
 				xtype: 'button',
 				itemId: 'buttonCancel',
-				margin: '0 0 0 5',
-				hidden: Scalr.flags.needEnvConfig,
+				hidden: !!Scalr.flags.needEnvConfig,
 				text: 'Cancel',
 				handler: function() {
 					var item = this.up('panel').layout.getActiveItem();
@@ -350,9 +364,8 @@ Scalr.regPage('Scalr.ui.account2.environments.platform.eucalyptus', function (lo
 			},{
 				xtype: 'button',
 				itemId: 'buttonDelete',
-				margin: '0 0 0 10',
 				cls: 'x-btn-default-small-red',
-				hidden: !isCloudEnabled || Scalr.flags.needEnvConfig,
+				hidden: !isCloudEnabled || !!Scalr.flags.needEnvConfig,
 				text: 'Delete',
 				handler: function() {
 					sendForm();
@@ -361,8 +374,9 @@ Scalr.regPage('Scalr.ui.account2.environments.platform.eucalyptus', function (lo
 				xtype: 'button',
 				itemId: 'buttonAnotherCloud',
 				hidden: !Scalr.flags.needEnvConfig,
-				margin: '0 0 0 5',
 				text: "I'm not using Eucalyptus, let me configure another cloud",
+                flex: 3.4,
+                maxWidth: 600,
 				handler: function () {
 					Scalr.event.fireEvent('redirect', '#/account/environments/?envId=' + moduleParams.env.id, true);
 				}
@@ -370,7 +384,6 @@ Scalr.regPage('Scalr.ui.account2.environments.platform.eucalyptus', function (lo
 				xtype: 'button',
 				itemId: 'buttonLater',
 				hidden: !Scalr.flags.needEnvConfig,
-				margin: '0 0 0 5',
 				text: 'Do this later',
 				handler: function () {
 					sessionStorage.setItem('needEnvConfigLater', true);

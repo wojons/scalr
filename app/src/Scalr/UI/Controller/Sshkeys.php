@@ -1,11 +1,13 @@
 <?php
+use Scalr\Acl\Acl;
+
 class Scalr_UI_Controller_Sshkeys extends Scalr_UI_Controller
 {
     const CALL_PARAM_NAME = 'sshKeyId';
 
-    public static function getPermissionDefinitions()
+    public function hasAccess()
     {
-        return array();
+        return parent::hasAccess() && $this->request->isAllowed(Acl::RESOURCE_SECURITY_SSH_KEYS);
     }
 
     public function viewAction()
@@ -19,12 +21,22 @@ class Scalr_UI_Controller_Sshkeys extends Scalr_UI_Controller
     public function downloadPrivateAction()
     {
         $this->request->defineParams(array(
-            'sshKeyId' => array('type' => 'int')
+            'sshKeyId' => array('type' => 'int'),
+            'farmId' => array('type' => 'int'),
+            'platform' => array('type' => 'string'),
+            'cloudLocation' => array('type' => 'string')
         ));
 
-        $sshKey = Scalr_SshKey::init()->loadById($this->getParam('sshKeyId'));
-        $this->user->getPermissions()->validate($sshKey);
+        if ($this->getParam('sshKeyId'))
+            $sshKey = Scalr_SshKey::init()->loadById($this->getParam('sshKeyId'));
+        else
+            $sshKey = Scalr_SshKey::init()->loadGlobalByFarmId(
+                $this->getParam('farmId'),
+                $this->getParam('cloudLocation'),
+                $this->getParam('platform')
+            );
 
+        $this->user->getPermissions()->validate($sshKey);
         $retval = $sshKey->getPrivate();
 
         if ($sshKey->cloudLocation)
@@ -78,11 +90,20 @@ class Scalr_UI_Controller_Sshkeys extends Scalr_UI_Controller
         $this->user->getPermissions()->validate($sshKey);
 
         if ($sshKey->type == Scalr_SshKey::TYPE_GLOBAL) {
-            if ($sshKey->platform == 'ec2') {
+            if ($sshKey->platform == SERVER_PLATFORMS::EC2) {
                 $aws = $this->getEnvironment()->aws($sshKey->cloudLocation);
                 $aws->ec2->keyPair->delete($sshKey->cloudKeyName);
                 $sshKey->delete();
 
+                $this->response->success();
+            } elseif (PlatformFactory::isOpenstack($sshKey->platform)) {
+                $os = $this->getEnvironment()->openstack($sshKey->platform, $sshKey->cloudLocation);
+
+                try {
+                    $os->servers->keypairs->delete($sshKey->cloudKeyName);
+                } catch (Exception $e) {}
+
+                $sshKey->delete();
                 $this->response->success();
             } else {
                 $sshKey->delete();
@@ -105,7 +126,7 @@ class Scalr_UI_Controller_Sshkeys extends Scalr_UI_Controller
         $this->user->getPermissions()->validate($sshKey);
 
         if ($sshKey->type == Scalr_SshKey::TYPE_GLOBAL) {
-            if ($sshKey->platform == 'ec2') {
+            if ($sshKey->platform == SERVER_PLATFORMS::EC2) {
                 $aws = $env->aws($sshKey->cloudLocation);
                 $aws->ec2->keyPair->delete($sshKey->cloudKeyName);
                 $result = $aws->ec2->keyPair->create($sshKey->cloudKeyName);

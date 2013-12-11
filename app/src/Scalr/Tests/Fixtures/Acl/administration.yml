@@ -1,0 +1,12 @@
+ADMINISTRATION_BILLING:
+# all action methods of billing controller
+- [/billing, ~, all]
+
+ADMINISTRATION_GOVERNANCE:
+- [/core/governance, ~, all]
+- [/core/governance/lease, ~, all]
+
+ADMINISTRATION_ENV_CLOUDS: 
+# all action methods of platform controller
+- [/account2/environments/platform, {"envId":"%ENV_ID%"}, all]
+

@@ -1,5 +1,4 @@
 <?php
-use Scalr\DependencyInjection\Container;
 
 class Scalr_UI_Request
 {
@@ -8,12 +7,20 @@ class Scalr_UI_Request
         $definitions = array(),
         $requestParams = array(),
         $requestHeaders = array(),
+        $requestServer = array(),
         $user,
         $environment,
         $requestType,
         $paramErrors = array(),
         $paramsIsValid = true,
         $clientIp = null;
+
+    /**
+     * Acl roles for this user and environment
+     *
+     * @var \Scalr\Acl\Role\AccountRoleSuperposition
+     */
+    protected $aclRoles;
 
     public $requestApiVersion;
 
@@ -38,18 +45,41 @@ class Scalr_UI_Request
         return self::$_instance;
     }
 
-    public function __construct($type)
+    public function __construct($type, $headers, $server, $params, $files)
     {
         $this->requestType = $type;
-        $this->requestHeaders = apache_request_headers();
+
+        if (is_array($headers)) {
+            foreach ($headers as $key => $value)
+                $this->requestHeaders[strtolower($key)] = $value;
+        }
+
+        // TODO: replace $_SERVER usage with class method
+        $this->requestServer = $server;
+        $this->requestParams = $params;
+        // TODO: create class for file upload abstraction
     }
 
-    public static function initializeInstance($type, $userId, $envId)
+    /**
+     * @param $type
+     * @param $headers
+     * @param $server
+     * @param $params
+     * @param $files
+     * @param $userId
+     * @param $envId
+     * @return Scalr_UI_Request
+     * @throws Scalr_Exception_Core
+     * @throws Exception
+     */
+    public static function initializeInstance($type, $headers, $server, $params, $files, $userId, $envId)
     {
         if (self::$_instance)
             self::$_instance = null;
 
-        $instance = new Scalr_UI_Request($type);
+        $class = get_called_class();
+
+        $instance = new $class($type, $headers, $server, $params, $files);
 
         if ($userId) {
             try {
@@ -77,6 +107,13 @@ class Scalr_UI_Request
                 }
             }
 
+            $ipWhitelist = $user->getVar(Scalr_Account_User::VAR_SECURITY_IP_WHITELIST);
+            if ($ipWhitelist) {
+                $ipWhitelist = unserialize($ipWhitelist);
+                if (! Scalr_Util_Network::isIpInSubnets($instance->getRemoteAddr(), $ipWhitelist))
+                    throw new Exception('The IP address isn\'t authorized');
+            }
+
             // check header's variables
             $headerUserId = !is_null($instance->getHeaderVar('UserId')) ? intval($instance->getHeaderVar('UserId')) : null;
             $headerEnvId = !is_null($instance->getHeaderVar('EnvId')) ? intval($instance->getHeaderVar('EnvId')) : null;
@@ -88,11 +125,12 @@ class Scalr_UI_Request
                 throw new Scalr_Exception_Core('Session expired. Please refresh page.', 1);
 
             $instance->user = $user;
-            $instance->environment = $environment;
+            $instance->environment = isset($environment) ? $environment : null;
         }
 
-        $container = Scalr::getContainer();
+        $container = \Scalr::getContainer();
         $container->request = $instance;
+        $container->environment = isset($instance->environment) ? $instance->environment : null;
 
         self::$_instance = $instance;
         return $instance;
@@ -108,8 +146,9 @@ class Scalr_UI_Request
     }
 
     /**
+     * Gets an environment instance which is associated with the request
      *
-     * @return Scalr_Environment
+     * @return \Scalr_Environment
      */
     public function getEnvironment()
     {
@@ -123,7 +162,7 @@ class Scalr_UI_Request
 
     public function getHeaderVar($name)
     {
-        $name = "X-Scalr-{$name}";
+        $name = strtolower("X-Scalr-{$name}");
         return isset($this->requestHeaders[$name]) ? $this->requestHeaders[$name] : NULL;
     }
 
@@ -174,6 +213,7 @@ class Scalr_UI_Request
     public function getParam($key)
     {
         $value = null;
+
         if (isset($this->params[$key]))
             return $this->params[$key];
 
@@ -211,11 +251,19 @@ class Scalr_UI_Request
             }
 
             $this->params[$key] = $value;
+        } else
+            $this->params[$key] = $this->getRequestParam($key);
 
-            return $value;
+        // If cloudlocation was set incorrectly we're displaying it as is in error messages.
+        // We need to strip_tags to protect from XSS.
+        // This is reported and confirmed XSS. Probably we need to do this for all string values and add exceptions
+        // in places where we need tags (like scripts content).
+
+        if ($key == "cloudLocation") {
+            if (isset($this->params[$key])) {
+                $this->params[$key] = preg_replace("/[^A-Za-z0-9-_\.\\s]+/si", '', $this->params[$key]);
+            }
         }
-
-        $this->params[$key] = $this->getRequestParam($key);
 
         return $this->params[$key];
     }
@@ -258,11 +306,18 @@ class Scalr_UI_Request
         return $this->paramsIsValid;
     }
 
+    /**
+     * @param $field string
+     * @param $errors array|string
+     */
     public function addValidationErrors($field, $errors)
     {
         $this->paramsIsValid = false;
         if (! isset($this->paramErrors[$field]))
             $this->paramErrors[$field] = array();
+
+        if (is_string($errors))
+            $errors = array($errors);
 
         $this->paramErrors[$field] = array_merge($this->paramErrors[$field], $errors);
     }
@@ -306,5 +361,81 @@ class Scalr_UI_Request
             $this->clientIp = self::getClientIpAddress();
         }
         return $this->clientIp;
+    }
+
+    /**
+     * Gets acl roles superposition for the request
+     *
+     * @return \Scalr\Acl\Role\AccountRoleSuperposition
+     */
+    public function getAclRoles()
+    {
+        if (!$this->aclRoles) {
+            $this->aclRoles = $this->getUser()->getAclRolesByEnvironment($this->getEnvironment()->id);
+        }
+        return $this->aclRoles;
+    }
+
+    /**
+     * Checks if access to ACL resource or unique permission is allowed
+     *
+     * Usage:
+     * --
+     * use \Scalr\Acl\Acl;
+     *
+     * //it is somewhere inside controller action method
+     * $this->request->isAllowed(Acl::RESOURCE_FARMS, Acl::PERM_FARMS_EDIT);
+     *
+     * //or you can do something like that
+     * $this->request->isAllowed('FARMS', 'edit');
+     *
+     * @param   int        $resourceId            The ID of the ACL resource or its symbolic name without "RESOURCE_" prefix.
+     * @param   string     $permissionId optional The ID of the uniqure permission which is
+     *                                            related to specified resource.
+     * @return  bool       Returns TRUE if access is allowed
+     */
+    public function isAllowed($resourceId, $permissionId = null)
+    {
+        return \Scalr::getContainer()->acl->isUserAllowedByEnvironment($this->getUser(), $this->getEnvironment(), $resourceId, $permissionId);
+    }
+
+    /**
+     * Checks if access to ACL resource or unique permission is allowed
+     * and throws an exception if negative.
+     *
+     * Usage:
+     * --
+     * use \Scalr\Acl\Acl;
+     *
+     * //it is somewhere inside controller action method
+     * $this->request->restrictAccess(Acl::RESOURCE_FARMS, Acl::PERM_FARMS_EDIT);
+     *
+     * //or you can do something like that
+     * $this->request->restrictAccess('FARMS', 'edit');
+     *
+     *
+     * @param   int        $resourceId            The ID of the ACL resource or its symbolic name
+     *                                            without "RESOURCE_" prefix.
+     * @param   string     $permissionId optional The ID of the uniqure permission which is
+     *                                            related to specified resource.
+     * @throws  Scalr_Exception_InsufficientPermissions
+     */
+    public function restrictAccess($resourceId, $permissionId = null)
+    {
+        if (is_string($resourceId)) {
+            $sName = 'Scalr\\Acl\\Acl::RESOURCE_' . strtoupper($resourceId);
+            if (defined($sName)) {
+                $resourceId = constant($sName);
+            } else {
+                throw new \InvalidArgumentException(sprintf(
+                    'Cannot find ACL resource %s by specified symbolic name %s.',
+                    $sName, $resourceId
+                ));
+            }
+        }
+
+        if (!$this->isAllowed($resourceId, $permissionId)) {
+           throw new Scalr_Exception_InsufficientPermissions();
+        }
     }
 }

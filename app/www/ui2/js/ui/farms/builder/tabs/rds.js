@@ -1,21 +1,22 @@
 Scalr.regPage('Scalr.ui.farms.builder.tabs.rds', function () {
 	return Ext.create('Scalr.ui.FarmsBuilderTab', {
 		tabTitle: 'RDS settings',
+        
+        settings: {
+            'rds.availability_zone': '',
+            'rds.instance_class': 'db.m1.small',
+            'rds.storage': 5,
+            'rds.master-user': 'root',
+            'rds.port': '3306',
+            'rds.engine': 'MySQL5.1',
+            'rds.master-pass': undefined,
+            'rds.multi-az': undefined
+        },
+        
 		tabData: null,
 
 		isEnabled: function (record) {
 			return record.get('platform') == 'rds';
-		},
-
-		getDefaultValues: function (record) {
-			return {
-				'rds.availability_zone': '',
-				'rds.instance_class': 'db.m1.small',
-				'rds.storage': 5,
-				'rds.master-user': 'root',
-				'rds.port': '3306',
-				'rds.engine': 'MySQL5.1'
-			};
 		},
 
 		beforeShowTab: function (record, handler) {

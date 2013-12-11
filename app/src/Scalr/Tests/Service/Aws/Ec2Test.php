@@ -118,12 +118,26 @@ class Ec2Test extends AwsTestCase
     /**
      * Gets Ec2 Mock
      *
-     * @param    callback $callback
+     * @param    \Closure|callback|string   $callback
      * @return   Ec2      Returns Ec2 Mock class
      */
     public function getEc2Mock($callback = null)
     {
-        return $this->getServiceInterfaceMock('Ec2');
+        return $this->getServiceInterfaceMock('Ec2', $callback);
+    }
+
+    public function testRequestLimitExceeded()
+    {
+        $ec2 = $this->getEc2Mock('DescribeInstancesRequestLimitExceeded.xml');
+        $ec2->getAws()->queriesQuantity = 255;
+        $this->assertEquals(255, $ec2->getApiClient()->getQueriesQuantity());
+
+        try {
+            $ec2->instance->describe();
+            $this->assertTrue(false, 'ClientException is expected.');
+        } catch (ClientException $e) {
+            $this->assertContains('Request number for the current session is 256', $e->getMessage(), '', true);
+        }
     }
 
     public function testUnmonitorInstances()
@@ -1306,6 +1320,13 @@ class Ec2Test extends AwsTestCase
         }
         $this->assertEquals(InstanceStateData::NAME_STOPPED, $ind->instanceState->name);
 
+        //For an each attributes it will get it values
+        foreach (InstanceAttributeType::getAllowedValues() as $attibute) {
+            //This is allowed only for VPC instances, so we have to skip
+            if ($attibute == InstanceAttributeType::TYPE_SOURCE_DEST_CHECK) continue;
+            $attrValue = $ind->describeAttribute($attibute);
+        }
+
         //Modifies instance attribute
         //Instance is required to be stopped.
         $ret = $ind->modifyAttribute(InstanceAttributeType::userData(), base64_encode('user data'));
@@ -1540,7 +1561,7 @@ class Ec2Test extends AwsTestCase
         //You may pass an array directly to the method
         $ret = $sg->revokeEgress($ipperm3array);
         $this->assertTrue($ret);
-        sleep(1);
+        sleep(3);
 
         $sg->refresh();
         //Checks if IP Permission is successfully revoked.

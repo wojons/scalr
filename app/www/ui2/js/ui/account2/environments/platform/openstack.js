@@ -1,8 +1,31 @@
 Scalr.regPage('Scalr.ui.account2.environments.platform.openstack', function (loadParams, moduleParams) {
-	var params = moduleParams['params'];
+    var keyStoneUrlField,
+        keyStoneUrls,
+        params = moduleParams['params'],
+        isEnabledProp = moduleParams['platform'] + '.is_enabled';
 
-	var isEnabledProp = moduleParams['platform'] + '.is_enabled';
-	
+    switch (moduleParams['platform']) {
+        case 'ecs':
+            keyStoneUrls = ['https://api.entercloudsuite.com:5000/v2.0', 'https://staging-api.entercloudsuite.com:5000/v2.0'];
+            keyStoneUrlField = {
+                xtype: 'combo',
+                fieldLabel: 'Keystone URL',
+                name: 'keystone_url',
+                store: keyStoneUrls,
+                editable: false,
+                value: params['keystone_url'] || keyStoneUrls[0]
+            };
+        break;
+        default:
+            keyStoneUrlField = {
+                xtype: 'textfield',
+                fieldLabel: 'Keystone URL',
+                name: 'keystone_url',
+                value: params['keystone_url']
+            };
+        break;
+    }
+
 	var sendForm = function(disablePlatform) {
 		var frm = form.getForm(),
 			r = {
@@ -41,11 +64,11 @@ Scalr.regPage('Scalr.ui.account2.environments.platform.openstack', function (loa
 	}
 	
 	var form = Ext.create('Ext.form.Panel', {
-		bodyCls: 'x-panel-body-frame',
 		scalrOptions: {
 			'modal': true
 		},
-		width: 600,
+        bodyCls: 'x-container-fieldset',
+		width: 700,
 		title: 'Environments &raquo; ' + moduleParams.env.name + '&raquo; ' + moduleParams['platformName'],
 		fieldDefaults: {
 			anchor: '100%',
@@ -56,13 +79,7 @@ Scalr.regPage('Scalr.ui.account2.environments.platform.openstack', function (loa
 			xtype: 'hidden',
 			name: isEnabledProp,
 			value: 'on'
-		}, {
-			xtype: 'textfield',
-			fieldLabel: 'Keystone URL',
-			name: 'keystone_url',
-			value: params['keystone_url'],
-			hidden: false
-		}, {
+		}, keyStoneUrlField, {
 			xtype: 'textfield',
 			fieldLabel: 'Username',
 			name: 'username',
@@ -91,11 +108,15 @@ Scalr.regPage('Scalr.ui.account2.environments.platform.openstack', function (loa
 		dockedItems: [{
 			xtype: 'container',
 			dock: 'bottom',
-			cls: 'x-docked-bottom-frame',
+			cls: 'x-docked-buttons',
 			layout: {
 				type: 'hbox',
 				pack: 'center'
 			},
+            defaults:{
+                flex: 1,
+                maxWidth: 150
+            },
 			items: [{
 				xtype: 'button',
 				text: 'Save',
@@ -104,17 +125,15 @@ Scalr.regPage('Scalr.ui.account2.environments.platform.openstack', function (loa
 				}
 			}, {
 				xtype: 'button',
-				margin: '0 0 0 5',
-				hidden: Scalr.flags.needEnvConfig,
+				hidden: !!Scalr.flags.needEnvConfig,
 				text: 'Cancel',
 				handler: function() {
 					Scalr.event.fireEvent('close');
 				}
 			},{
 				xtype: 'button',
-				margin: '0 0 0 10',
 				cls: 'x-btn-default-small-red',
-				hidden: !params[isEnabledProp] || Scalr.flags.needEnvConfig,
+				hidden: !params[isEnabledProp] || !!Scalr.flags.needEnvConfig,
 				text: 'Delete',
 				handler: function() {
 					sendForm(true);
@@ -122,15 +141,15 @@ Scalr.regPage('Scalr.ui.account2.environments.platform.openstack', function (loa
 			}, {
 				xtype: 'button',
 				hidden: !Scalr.flags.needEnvConfig,
-				margin: '0 0 0 5',
 				text: "I'm not using "+moduleParams['platformName']+", let me configure another cloud",
+                flex: 3.4,
+                maxWidth: 600,
 				handler: function () {
 					Scalr.event.fireEvent('redirect', '#/account/environments/?envId=' + moduleParams.env.id, true);
 				}
 			}, {
 				xtype: 'button',
 				hidden: !Scalr.flags.needEnvConfig,
-				margin: '0 0 0 5',
 				text: 'Do this later',
 				handler: function () {
 					sessionStorage.setItem('needEnvConfigLater', true);

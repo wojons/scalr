@@ -28,7 +28,6 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.logs', function (loadParams, moduleParams)
 			emptyText: 'No logs found',
 			loadingText: 'Loading logs ...'
 		},
-		bodyCls: 'x-panel-body-frame',
 		columns: [
 			{flex: 3, text: "Time", dataIndex: 'Date', sortable: true },
 			{flex: 1, text: "Message", dataIndex: 'Message', sortable: true },

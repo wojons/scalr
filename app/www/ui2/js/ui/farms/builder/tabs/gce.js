@@ -4,14 +4,12 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.gce', function (moduleTabParams) {
         itemId: 'gce',
         layout: 'anchor',
         
+        settings: {
+            'gce.network': 'default'
+        },
+        
 		isEnabled: function (record) {
 			return record.get('platform') == 'gce';
-		},
-
-		getDefaultValues: function (record) {
-			return {
-				'gce.network': 'default'
-			};
 		},
 
 		beforeShowTab: function (record, handler) {

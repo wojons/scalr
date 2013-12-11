@@ -1,4 +1,4 @@
-<?
+<?php
     final class SERVER_TYPE
     {
         const AWS_INSTANCE 			= "aws_instance";

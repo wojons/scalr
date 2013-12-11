@@ -1,11 +1,13 @@
 <?php
+use Scalr\Acl\Acl;
+
 class Scalr_UI_Controller_Services_Rabbitmq extends Scalr_UI_Controller
 {
     const REQUEST_TIMEOUT = 600;
 
-    public static function getPermissionDefinitions()
+    public function hasAccess()
     {
-        return array();
+        return parent::hasAccess() && $this->request->isAllowed(Acl::RESOURCE_SERVICES_RABBITMQ);
     }
 
     /**
@@ -66,9 +68,9 @@ class Scalr_UI_Controller_Services_Rabbitmq extends Scalr_UI_Controller
                     if ($result)
                         $moduleParams['rabbitmq']['overview'] = $result;
                 } else {
-                    throw new ServerNotFoundException();
+                    throw new \Scalr\Exception\ServerNotFoundException();
                 }
-            } catch (ServerNotFoundException $e) {
+            } catch (\Scalr\Exception\ServerNotFoundException $e) {
                 $moduleParams['rabbitmq']['status'] = 'Control panel was installed, but server not found';
                 $moduleParams['rabbitmq']['showSetup'] = true;
                 $dbFarmRole->ClearSettings('rabbitmq.cp');
@@ -129,9 +131,9 @@ class Scalr_UI_Controller_Services_Rabbitmq extends Scalr_UI_Controller
                     $msg = new Scalr_Messaging_Msg_RabbitMq_SetupControlPanel();
                     $dbServers[0]->SendMessage($msg);
 
-                    $dbFarmRole->SetSetting(Scalr_Role_Behavior_RabbitMQ::ROLE_CP_REQUESTED, 1);
-                    $dbFarmRole->SetSetting(Scalr_Role_Behavior_RabbitMQ::ROLE_CP_REQUEST_TIME, time());
-                    $dbFarmRole->SetSetting(Scalr_Role_Behavior_RabbitMQ::ROLE_CP_ERROR_MSG, "");
+                    $dbFarmRole->SetSetting(Scalr_Role_Behavior_RabbitMQ::ROLE_CP_REQUESTED, 1, DBFarmRole::TYPE_LCL);
+                    $dbFarmRole->SetSetting(Scalr_Role_Behavior_RabbitMQ::ROLE_CP_REQUEST_TIME, time(), DBFarmRole::TYPE_LCL);
+                    $dbFarmRole->SetSetting(Scalr_Role_Behavior_RabbitMQ::ROLE_CP_ERROR_MSG, "", DBFarmRole::TYPE_LCL);
 
                     $this->response->success("CP installing");
                     $this->response->data(array("status" => "Request was sent at " . Scalr_Util_DateTime::convertTz((int) time()) . ". Please wait..."));

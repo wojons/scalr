@@ -3,7 +3,7 @@ Scalr.regPage('Scalr.ui.monitoring.view', function (loadParams, moduleParams) {
 		title: 'Farms &raquo; Monitoring',
 
 		scalrOptions: {
-			'reload': false,
+			//'reload': false, // TODO: this is simple way, do better
 			'maximize': 'all'
 		},
 		layout: {
@@ -11,6 +11,8 @@ Scalr.regPage('Scalr.ui.monitoring.view', function (loadParams, moduleParams) {
 			align: 'top'
 		},
 		autoScroll: true,
+
+        bodyStyle: 'background: #B5C0CE',
 
 		compareMode: false,
 
@@ -140,6 +142,9 @@ Scalr.regPage('Scalr.ui.monitoring.view', function (loadParams, moduleParams) {
 		}],
 
 		listeners: {
+            destroy: function() {
+                Ext.TaskManager.stop(taskManager);
+            },
 			resize: function() {
 				// ???
 				//panel.body.child('.x-box-inner').applyStyles({width: '100%', height: '100%', overflow: 'hidden'});

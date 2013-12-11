@@ -8,17 +8,12 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.vpcrouter', function (moduleTabParams
 			return record.get('platform') === 'ec2';
 		},
 
-		getDefaultValues: function (record) {
-			return {
-			};
-		},
-
 		beforeShowTab: function (record, handler) {
             handler();
 		},
 
 		showTab: function (record) {
-			var settings = record.get('settings');
+			var settings = record.get('settings', true);
 			
 			this.down('[name="router.vpc.networkInterfaceId"]').setValue(settings['router.vpc.networkInterfaceId'] || '-');
 			this.down('[name="router.vpc.ip"]').setValue(settings['router.vpc.ip'] || '-');
@@ -32,26 +27,30 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.vpcrouter', function (moduleTabParams
 		},
 
 		items: [{
-            xtype: 'displayfield',
-			name: 'router.vpc.networkInterfaceId',
-            fieldLabel: 'Network Interface ID',
-            value: '',
-            width: 500,
-			labelWidth: 150
-        }, {
-            xtype: 'displayfield',
-			name: 'router.vpc.ip',
-            fieldLabel: 'Proxy IP address',
-            value: '',
-            width: 500,
-			labelWidth: 150
-        }, {
-            xtype: 'displayfield',
-			name: 'router.vpc.ipAllocationId',
-            fieldLabel: 'IP Allocation ID',
-            value: '',
-            width: 500,
-			labelWidth: 150
+            xtype: 'fieldset',
+            cls: 'x-fieldset-separator-none',
+            items: [{
+                xtype: 'displayfield',
+                name: 'router.vpc.networkInterfaceId',
+                fieldLabel: 'Network Interface ID',
+                value: '',
+                width: 500,
+                labelWidth: 150
+            }, {
+                xtype: 'displayfield',
+                name: 'router.vpc.ip',
+                fieldLabel: 'Proxy IP address',
+                value: '',
+                width: 500,
+                labelWidth: 150
+            }, {
+                xtype: 'displayfield',
+                name: 'router.vpc.ipAllocationId',
+                fieldLabel: 'IP Allocation ID',
+                value: '',
+                width: 500,
+                labelWidth: 150
+            }]
         }]
 	});
 });

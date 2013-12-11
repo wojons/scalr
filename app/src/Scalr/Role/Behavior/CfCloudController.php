@@ -37,7 +37,7 @@
                     if ($message->cfCloudController->volumeConfig) {
                         $this->setVolumeConfig($message->cfCloudController->volumeConfig, $dbServer->GetFarmRoleObject(), $dbServer);
 
-                        $dbServer->GetFarmRoleObject()->SetSetting(self::ROLE_VERSION, $message->cfCloudController->version);
+                        $dbServer->GetFarmRoleObject()->SetSetting(self::ROLE_VERSION, $message->cfCloudController->version, DBFarmRole::TYPE_LCL);
                     }
                     else
                         throw new Exception("Received hostUp message from CF Cloud Controller server without volumeConfig");

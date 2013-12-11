@@ -22,6 +22,7 @@ Scalr.regPage('Scalr.ui.tools.aws.ec2.eips.view', function (loadParams, modulePa
 		plugins: {
 			ptype: 'gridstore'
 		},
+
 		tools: [{
 			xtype: 'gridcolumnstool'
 		}, {
@@ -34,7 +35,6 @@ Scalr.regPage('Scalr.ui.tools.aws.ec2.eips.view', function (loadParams, modulePa
 
 		viewConfig: {
 			emptyText: "No elastic IPs found",
-			disableSelection: true,
 			loadingText: 'Loading elastic IPs ...'
 		},
 
@@ -57,44 +57,24 @@ Scalr.regPage('Scalr.ui.tools.aws.ec2.eips.view', function (loadParams, modulePa
 			{ header: "Server", flex: 1, dataIndex: 'server_id', sortable: true, xtype: 'templatecolumn', tpl:
 				'<tpl if="server_id"><a href="#/servers/{server_id}/view">{server_id}</a></tpl>' +
 				'<tpl if="!server_id">{instance_id}</tpl>'
-			}, {
-				xtype: 'optionscolumn',
-				getVisibility: function (record) {
-					return !(record.get('server_id'));
-				},
-				optionsMenu: [
-					/*
-					{ itemId: "option.associate", text:'Associate',
-						menuHandler: function (item) {
-							document.location.href = "#/tools/aws/ec2/eips/{ipaddress}/associate?cloudLocation="+store.baseParams.cloudLocation;
-						}
-					}, */
-				{
-					itemId: 'option.delete',
-					text: 'Delete',
-					iconCls: 'x-menu-icon-delete',
-					request: {
-						confirmBox: {
-							type: 'delete',
-							msg: 'Are you sure want to delete elastic ip "{ipaddress}"?'
-						},
-						processBox: {
-							type: 'delete',
-							msg: 'Deleting elastic IP address ...'
-						},
-						url: '/tools/aws/ec2/eips/xDelete/',
-						dataHandler: function (record) {
-							return { elasticIp: record.get('ipaddress'), cloudLocation: store.proxy.extraParams.cloudLocation };
-						},
-						success: function () {
-							store.load();
-						}
-					}
-				}]
 			}
 		],
 
-		dockedItems: [{
+        multiSelect: true,
+        selModel: {
+            selType: 'selectedmodel',
+            getVisibility: function(record) {
+                return !record.get('server_id');
+            }
+        },
+
+        listeners: {
+            selectionchange: function(selModel, selections) {
+                this.down('scalrpagingtoolbar').down('#delete').setDisabled(!selections.length);
+            }
+        },
+
+        dockedItems: [{
 			xtype: 'scalrpagingtoolbar',
 			store: store,
 			dock: 'top',
@@ -108,7 +88,38 @@ Scalr.regPage('Scalr.ui.tools.aws.ec2.eips.view', function (loadParams, modulePa
 				},
 				gridStore: store,
 				cloudLocation: loadParams['cloudLocation'] || ''
-			}]
+			}],
+            afterItems: [{
+                ui: 'paging',
+                itemId: 'delete',
+                iconCls: 'x-tbar-delete',
+                tooltip: 'Select one or more elastic IP(s) to delete them',
+                disabled: true,
+                handler: function() {
+                    var request = {
+                        confirmBox: {
+                            type: 'delete',
+                            msg: 'Delete selected IP(s): %s ?'
+                        },
+                        processBox: {
+                            type: 'delete',
+                            msg: 'Deleting elastic IP(s) ...'
+                        },
+                        url: '/tools/aws/ec2/eips/xDelete/',
+                        success: function() {
+                            store.load();
+                        }
+                    }, records = this.up('grid').getSelectionModel().getSelection(), data = [];
+
+                    request.confirmBox.objects = [];
+                    for (var i = 0, len = records.length; i < len; i++) {
+                        data.push(records[i].get('ipaddress'));
+                        request.confirmBox.objects.push(records[i].get('ipaddress'));
+                    }
+                    request.params = { eips: Ext.encode(data), cloudLocation: store.proxy.extraParams.cloudLocation };
+                    Scalr.Request(request);
+                }
+            }]
 		}]
 	});
 });

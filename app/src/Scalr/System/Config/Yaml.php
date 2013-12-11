@@ -236,7 +236,7 @@ class Yaml implements \ArrayAccess
         $data = array();
         //This is necessary for supporting imports feature
         if (($m = preg_split('/^imports[\s]*\:/sm', $content, 2)) && !empty($m[1]) &&
-            ($n = preg_split('/^[^\s]/sm', $m[1], 2)) && !empty($n[0])) {
+            ($n = preg_split('/^[^\s#-]/sm', $m[1], 2)) && !empty($n[0])) {
             $arr = @yaml_parse('imports:' . $n[0]);
             if ($arr === false) {
                 throw new Exception\YamlException('Could not parse yaml file.');
@@ -244,13 +244,17 @@ class Yaml implements \ArrayAccess
             if (!empty($arr['imports']) && is_array($arr['imports'])) {
                 foreach ($arr['imports'] as $v) {
                     if (!empty($v['resource']) && preg_match('/^(.).*\.(ini|ya?ml)$/i', $v['resource'], $m)) {
-                        $location = realpath(
-                            $m[1] == '/' ? $v['resource'] : dirname($this->path) . DIRECTORY_SEPARATOR . $v['resource']
-                        );
+                        $fileLocation = $m[1] == '/' ? $v['resource'] : dirname($this->path) . DIRECTORY_SEPARATOR . $v['resource'];
+                        $location = realpath($fileLocation);
+                        if (!$location || !is_readable($location)) {
+                            throw new Exception\YamlException(sprintf(
+                                'Could not open file "%s"', $fileLocation
+                            ));
+                        }
                         if (strtolower($m[2]) == 'ini') {
                             $cfg = parse_ini_file($location, true);
                         } else {
-                            $yaml = self::load($location);
+                            $yaml = self::__callStatic('load', array($location));
                             $cfg = $yaml->toArray();
                             $this->imports = array_merge($this->imports, $yaml->getImports());
                             unset($yaml);
@@ -292,7 +296,10 @@ class Yaml implements \ArrayAccess
             $config = yaml_parse($content);
             if ($config === false) {
                 throw new Exception\YamlException('Could not parse yaml file.');
+            } else if (!is_array($config)) {
+                $config = array();
             }
+
             //imports is the reserved top level token.
             if (isset($config['imports'])) {
                 unset($config['imports']);

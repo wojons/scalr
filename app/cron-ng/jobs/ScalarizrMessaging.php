@@ -63,21 +63,19 @@ class Scalr_Cronjob_ScalarizrMessaging extends Scalr_System_Cronjob_MultiProcess
                 SELECT distinct(m.server_id)
                 FROM messages m
                 INNER JOIN servers s ON m.server_id = s.server_id
-                WHERE m.type = ? AND m.status = ? AND m.isszr = ? AND s.farm_id = ?
+                WHERE m.type = ? AND m.status = ? AND s.farm_id = ?
             ", array(
                 "in",
                 MESSAGE_STATUS::PENDING,
-                1,
                 $farmid
             ));
         } else {
             $rows = $this->db->GetAll("
                 SELECT distinct(server_id) FROM messages
-                WHERE type = ? AND status = ? AND isszr = ?
+                WHERE type = ? AND status = ?
             ", array(
                 "in",
-                MESSAGE_STATUS::PENDING,
-                1
+                MESSAGE_STATUS::PENDING
             ));
         }
         $this->logger->info("Found " . count($rows) . " servers");
@@ -92,7 +90,7 @@ class Scalr_Cronjob_ScalarizrMessaging extends Scalr_System_Cronjob_MultiProcess
             $dbserver = DBServer::LoadByID($serverId);
             if ($dbserver->farmId) {
                 if ($dbserver->GetFarmObject()->Status == FARM_STATUS::TERMINATED) {
-                    throw new ServerNotFoundException("");
+                    throw new \Scalr\Exception\ServerNotFoundException("");
                 }
             }
         } catch (Exception $e) {
@@ -116,10 +114,11 @@ class Scalr_Cronjob_ScalarizrMessaging extends Scalr_System_Cronjob_MultiProcess
 
         while ($row = $rs->FetchRow()) {
             try {
-                if ($row["message"]) {
+                if ($row["message_format"] == 'xml') {
                     $message = $this->serializer->unserialize($row["message"]);
                 } else {
-                    $message = $this->jsonSerializer->unserialize($row["json_message"]);
+                    $message = $this->jsonSerializer->unserialize($row["message"]);
+                    $dbserver->SetProperty(SERVER_PROPERTIES::SZR_MESSAGE_FORMAT, 'json');
                 }
                 $message->messageIpAddress = $row['ipaddress'];
                 $event = null;
@@ -135,6 +134,10 @@ class Scalr_Cronjob_ScalarizrMessaging extends Scalr_System_Cronjob_MultiProcess
                         SERVER_PROPERTIES::SZR_UPD_CLIENT_VERSION,
                         $message->meta[Scalr_Messaging_MsgMeta::SZR_UPD_CLIENT_VERSION]);
                 }
+
+                if ($dbserver->GetProperty(SERVER_PROPERTIES::SYSTEM_IGNORE_INBOUND_MESSAGES))
+                    continue;
+
                 try {
                     if ($message instanceof Scalr_Messaging_Msg_OperationResult) {
                         $this->db->Execute("
@@ -143,9 +146,9 @@ class Scalr_Cronjob_ScalarizrMessaging extends Scalr_System_Cronjob_MultiProcess
                             $message->status,
                             $message->id
                         ));
-                        if ($message->status == 'ok') {
-                            if ($message->name == 'Grow MySQL/Percona data volume') {
-                                $volumeConfig = $message->data;
+                        if ($message->status == 'ok' || $message->status == 'completed') {
+                            if ($message->name == 'Grow MySQL/Percona data volume' || $message->name == 'mysql.grow-volume') {
+                                $volumeConfig = $message->data ? $message->data : $message->result;
                                 $oldVolumeId = $dbserver->GetFarmRoleObject()->GetSetting(Scalr_Db_Msr::VOLUME_ID);
                                 $engine = $dbserver->GetFarmRoleObject()->GetSetting(Scalr_Db_Msr::DATA_STORAGE_ENGINE);
                                 try {
@@ -175,14 +178,14 @@ class Scalr_Cronjob_ScalarizrMessaging extends Scalr_System_Cronjob_MultiProcess
                                             throw $e;
                                         }
                                     }
-                                    $dbserver->GetFarmRoleObject()->SetSetting(Scalr_Db_Msr::VOLUME_ID, $volumeConfig->id);
+                                    $dbserver->GetFarmRoleObject()->SetSetting(Scalr_Db_Msr::VOLUME_ID, $volumeConfig->id, DBFarmRole::TYPE_LCL);
                                     if ($engine == MYSQL_STORAGE_ENGINE::EBS) {
                                         $dbserver->GetFarmRoleObject()->SetSetting(
-                                            Scalr_Db_Msr::DATA_STORAGE_EBS_SIZE, $volumeConfig->size
+                                            Scalr_Db_Msr::DATA_STORAGE_EBS_SIZE, $volumeConfig->size, DBFarmRole::TYPE_CFG
                                         );
                                     } elseif ($engine == MYSQL_STORAGE_ENGINE::RAID_EBS) {
                                         $dbserver->GetFarmRoleObject()->SetSetting(
-                                            Scalr_Db_Msr::DATA_STORAGE_RAID_DISK_SIZE, $volumeConfig->size
+                                            Scalr_Db_Msr::DATA_STORAGE_RAID_DISK_SIZE, $volumeConfig->size, DBFarmRole::TYPE_CFG
                                         );
                                     }
                                     // Remove old
@@ -192,53 +195,26 @@ class Scalr_Cronjob_ScalarizrMessaging extends Scalr_System_Cronjob_MultiProcess
                                         $dbserver->farmId, "Cannot save storage volume: {$e->getMessage()}"
                                     ));
                                 }
+                            } else {
+                                $this->db->Execute("DELETE FROM server_operations WHERE id = ?", array(
+                                    $message->id
+                                ));
                             }
-                        } elseif ($message->status == 'error') {
-                            if ($message->name == 'Initialization') {
-                                $dbserver->SetProperty(SERVER_PROPERTIES::SZR_IS_INIT_FAILED, 1);
+                        } elseif ($message->status == 'error' || $message->status == 'failed') {
+
+                            if ($message->name == 'MySQL backup' || $message->name == 'MySQL data bundle') {
+                                $this->db->Execute("DELETE FROM server_operations WHERE id = ?", array(
+                                    $message->id
+                                ));
+                            } else {
+                                if ($message->name == 'Initialization' || $message->name == 'system.init') {
+                                    $dbserver->SetProperty(SERVER_PROPERTIES::SZR_IS_INIT_FAILED, 1);
+                                }
+                                if (is_object($message->error))
+                                    $dbserver->SetProperty(SERVER_PROPERTIES::SZR_IS_INIT_ERROR_MSG, $message->error->message);
+                                elseif ($message->error)
+                                    $dbserver->SetProperty(SERVER_PROPERTIES::SZR_IS_INIT_ERROR_MSG, $message->error);
                             }
-                            if ($message->error) {
-                                $msg = $message->error->message;
-                                $trace = $message->error->trace;
-                                $handler = $message->error->handler;
-                                $dbserver->SetProperty(SERVER_PROPERTIES::SZR_IS_INIT_ERROR_MSG, $message->error->message);
-                            }
-                            $this->db->Execute("
-                                INSERT INTO server_operation_progress
-                                SET `operation_id` = ?,
-                                    `timestamp` = ?,
-                                    `phase` = ?,
-                                    `step` = ?,
-                                    `status` = ?,
-                                    `message`= ?,
-                                    `trace` = ?,
-                                    `handler` = ?,
-                                    `progress` = ?,
-                                    `stepno` = ?
-                                ON DUPLICATE KEY
-                                UPDATE status = ?,
-                                       progress = ?,
-                                       trace = ?,
-                                       handler = ?,
-                                       message = ?
-                        ", array(
-                                $message->id,
-                                $message->getTimestamp(),
-                                $message->phase,
-                                $message->step,
-                                $message->status,
-                                $msg,
-                                $trace,
-                                $handler,
-                                $message->progress,
-                                $message->stepno,
-                                //
-                                $message->status,
-                                $message->progress,
-                                $trace,
-                                $handler,
-                                $msg
-                            ));
                         }
                     } elseif ($message instanceof Scalr_Messaging_Msg_UpdateControlPorts) {
                         $apiPort = $message->api;
@@ -290,20 +266,21 @@ class Scalr_Cronjob_ScalarizrMessaging extends Scalr_System_Cronjob_MultiProcess
                     } elseif ($message instanceof Scalr_Messaging_Msg_Win_PrepareBundleResult) {
                         try {
                             $bundleTask = BundleTask::LoadById($message->bundleTaskId);
-                        } catch (Exception $e) {
-                        }
+                        } catch (Exception $e) {}
                         if ($bundleTask) {
-                            if ($message->status == 'ok') {
-                                $metaData = array(
-                                    'szr_version' => $message->meta[Scalr_Messaging_MsgMeta::SZR_VERSION],
-                                    'os'          => $message->os,
-                                    'software'    => $message->software
-                                );
-                                $bundleTask->setMetaData($metaData);
-                                $bundleTask->Save();
-                                PlatformFactory::NewPlatform($bundleTask->platform)->CreateServerSnapshot($bundleTask);
-                            } else {
-                                $bundleTask->SnapshotCreationFailed("PrepareBundle procedure failed: {$message->lastError}");
+                            if ($bundleTask->status == SERVER_SNAPSHOT_CREATION_STATUS::PREPARING) {
+                                if ($message->status == 'ok') {
+                                    $metaData = array(
+                                        'szr_version' => $message->meta[Scalr_Messaging_MsgMeta::SZR_VERSION],
+                                        'os'          => $message->os,
+                                        'software'    => $message->software
+                                    );
+                                    $bundleTask->setMetaData($metaData);
+                                    $bundleTask->Save();
+                                    PlatformFactory::NewPlatform($bundleTask->platform)->CreateServerSnapshot($bundleTask);
+                                } else {
+                                    $bundleTask->SnapshotCreationFailed("PrepareBundle procedure failed: {$message->lastError}");
+                                }
                             }
                         }
                     } elseif ($message instanceof Scalr_Messaging_Msg_DeployResult) {
@@ -328,6 +305,7 @@ class Scalr_Cronjob_ScalarizrMessaging extends Scalr_System_Cronjob_MultiProcess
                         $isEventExist = $this->db->GetOne("
                             SELECT id FROM event_definitions
                             WHERE name = ? AND env_id = ?
+                            LIMIT 1
                         ", array(
                             $message->eventName,
                             $dbserver->envId
@@ -357,6 +335,8 @@ class Scalr_Cronjob_ScalarizrMessaging extends Scalr_System_Cronjob_MultiProcess
                         }
                     } elseif ($message instanceof Scalr_Messaging_Msg_HostInit) {
                         $event = $this->onHostInit($message, $dbserver);
+                        if (!$event)
+                            continue;
                     } elseif ($message instanceof Scalr_Messaging_Msg_HostUp) {
                         $event = $this->onHostUp($message, $dbserver);
                     } elseif ($message instanceof Scalr_Messaging_Msg_HostDown) {
@@ -371,11 +351,7 @@ class Scalr_Cronjob_ScalarizrMessaging extends Scalr_System_Cronjob_MultiProcess
                                 $isMoving = true;
                             }
                         }
-                        if (in_array($dbserver->platform, array(
-                            SERVER_PLATFORMS::OPENSTACK,
-                            SERVER_PLATFORMS::RACKSPACENG_US,
-                            SERVER_PLATFORMS::RACKSPACENG_UK
-                        ))) {
+                        if ($dbserver->isOpenstack()) {
                             $p = PlatformFactory::NewPlatform($dbserver->platform);
                             $status = $p->GetServerRealStatus($dbserver)->getName();
                             if (stristr($status, 'REBOOT') || stristr($status, 'HARD_REBOOT')) {
@@ -398,7 +374,14 @@ class Scalr_Cronjob_ScalarizrMessaging extends Scalr_System_Cronjob_MultiProcess
                             }
                         }
                         if (!$isMoving && !$isStopping && !$isRebooting) {
-                            $event = new HostDownEvent($dbserver);
+                            if ($dbserver->farmId) {
+                                $wasHostDownFired = $this->db->GetOne("SELECT id FROM events WHERE event_server_id = ? AND type = ?", array(
+                                    $dbserver->serverId, 'HostDown'
+                                ));
+
+                                if (!$wasHostDownFired)
+                                    $event = new HostDownEvent($dbserver);
+                            }
                         }
                         if ($isRebooting) {
                             $event = new RebootBeginEvent($dbserver);
@@ -446,7 +429,7 @@ class Scalr_Cronjob_ScalarizrMessaging extends Scalr_System_Cronjob_MultiProcess
                     } elseif ($message instanceof Scalr_Messaging_Msg_BlockDeviceMounted) {
                         // Single volume
                         $ebsinfo = $this->db->GetRow("
-                            SELECT * FROM ec2_ebs WHERE volume_id=?
+                            SELECT * FROM ec2_ebs WHERE volume_id=? LIMIT 1
                         ", array(
                             $message->volumeId
                         ));
@@ -548,22 +531,22 @@ class Scalr_Cronjob_ScalarizrMessaging extends Scalr_System_Cronjob_MultiProcess
                     } elseif ($message instanceof Scalr_Messaging_Msg_Mysql_CreatePmaUserResult) {
                         $farmRole = DBFarmRole::LoadByID($message->farmRoleId);
                         if ($message->status == "ok") {
-                            $farmRole->SetSetting(DbFarmRole::SETTING_MYSQL_PMA_USER, $message->pmaUser);
-                            $farmRole->SetSetting(DbFarmRole::SETTING_MYSQL_PMA_PASS, $message->pmaPassword);
+                            $farmRole->SetSetting(DbFarmRole::SETTING_MYSQL_PMA_USER, $message->pmaUser, DBFarmRole::TYPE_LCL);
+                            $farmRole->SetSetting(DbFarmRole::SETTING_MYSQL_PMA_PASS, $message->pmaPassword, DBFarmRole::TYPE_LCL);
                         } else {
-                            $farmRole->SetSetting(DBFarmRole::SETTING_MYSQL_PMA_REQUEST_TIME, "");
-                            $farmRole->SetSetting(DBFarmRole::SETTING_MYSQL_PMA_REQUEST_ERROR, $message->lastError);
+                            $farmRole->SetSetting(DBFarmRole::SETTING_MYSQL_PMA_REQUEST_TIME, "", DBFarmRole::TYPE_LCL);
+                            $farmRole->SetSetting(DBFarmRole::SETTING_MYSQL_PMA_REQUEST_ERROR, $message->lastError, DBFarmRole::TYPE_LCL);
                         }
                     } elseif ($message instanceof Scalr_Messaging_Msg_RabbitMq_SetupControlPanelResult) {
                         $farmRole = $dbserver->GetFarmRoleObject();
                         if ($message->status == "ok") {
-                            $farmRole->SetSetting(Scalr_Role_Behavior_RabbitMQ::ROLE_CP_SERVER_ID, $dbserver->serverId);
-                            $farmRole->SetSetting(Scalr_Role_Behavior_RabbitMQ::ROLE_CP_URL, $message->cpanelUrl);
-                            $farmRole->SetSetting(Scalr_Role_Behavior_RabbitMQ::ROLE_CP_REQUEST_TIME, "");
+                            $farmRole->SetSetting(Scalr_Role_Behavior_RabbitMQ::ROLE_CP_SERVER_ID, $dbserver->serverId, DBFarmRole::TYPE_LCL);
+                            $farmRole->SetSetting(Scalr_Role_Behavior_RabbitMQ::ROLE_CP_URL, $message->cpanelUrl, DBFarmRole::TYPE_LCL);
+                            $farmRole->SetSetting(Scalr_Role_Behavior_RabbitMQ::ROLE_CP_REQUEST_TIME, "", DBFarmRole::TYPE_LCL);
                         } else {
-                            $farmRole->SetSetting(Scalr_Role_Behavior_RabbitMQ::ROLE_CP_SERVER_ID, "");
-                            $farmRole->SetSetting(Scalr_Role_Behavior_RabbitMQ::ROLE_CP_REQUEST_TIME, "");
-                            $farmRole->SetSetting(Scalr_Role_Behavior_RabbitMQ::ROLE_CP_ERROR_MSG, $message->lastError);
+                            $farmRole->SetSetting(Scalr_Role_Behavior_RabbitMQ::ROLE_CP_SERVER_ID, "", DBFarmRole::TYPE_LCL);
+                            $farmRole->SetSetting(Scalr_Role_Behavior_RabbitMQ::ROLE_CP_REQUEST_TIME, "", DBFarmRole::TYPE_LCL);
+                            $farmRole->SetSetting(Scalr_Role_Behavior_RabbitMQ::ROLE_CP_ERROR_MSG, $message->lastError, DBFarmRole::TYPE_LCL);
                         }
                     } elseif ($message instanceof Scalr_Messaging_Msg_AmiScriptsMigrationResult) {
                         try {
@@ -617,18 +600,21 @@ class Scalr_Cronjob_ScalarizrMessaging extends Scalr_System_Cronjob_MultiProcess
                 $totalTime = microtime(true) - $startTime;
                 $this->db->Execute("
                     UPDATE messages
-                    SET status = ?, instance_id = ?
+                    SET status = ?, processing_time = ?, dtlasthandleattempt = NOW()
                     WHERE messageid = ?
                 ", array(
                     $handle_status,
                     $totalTime,
                     $message->messageId
                 ));
+
                 if ($event) {
                     Scalr::FireEvent($dbserver->farmId, $event);
                 }
+
+
             } catch (Exception $e) {
-                $this->logger->error($e->getMessage(), $e);
+                $this->logger->error($e->getMessage());
             }
         }
     }
@@ -642,14 +628,20 @@ class Scalr_Cronjob_ScalarizrMessaging extends Scalr_System_Cronjob_MultiProcess
             $bundleTask->osFamily = $message->dist->distributor;
             $bundleTask->osName = $message->dist->codename;
             $bundleTask->osVersion = $message->dist->release;
+
+            if (in_array($message->dist->distributor, array('redhat', 'oel', 'scientific')) &&
+            $dbserver->platform == SERVER_PLATFORMS::EC2) {
+                $bundleTask->bundleType = SERVER_SNAPSHOT_CREATION_TYPE::EC2_EBS_HVM;
+            }
+
             $bundleTask->save();
         }
         if ($dbserver->status == SERVER_STATUS::IMPORTING) {
             if (!$dbserver->remoteIp || !$dbserver->localIp) {
-                if ($message->remoteIp && $dbserver->platform != SERVER_PLATFORMS::IDCF) {
+                if (!$dbserver->remoteIp && $message->remoteIp && $dbserver->platform != SERVER_PLATFORMS::IDCF) {
                     $dbserver->remoteIp = $message->remoteIp;
                 }
-                if ($message->localIp) {
+                if (!$dbserver->localIp && $message->localIp) {
                     $dbserver->localIp = $message->localIp;
                 }
                 if (!$message->behaviour) {
@@ -659,105 +651,24 @@ class Scalr_Cronjob_ScalarizrMessaging extends Scalr_System_Cronjob_MultiProcess
                     $message->messageIpAddress != $dbserver->remoteIp) {
                     $dbserver->remoteIp = $message->messageIpAddress;
                 }
-                $dbserver->SetProperty(SERVER_PROPERTIES::SZR_IMPORTING_BEHAVIOR, @implode(",", $message->behaviour));
-                $dbserver->save();
             }
 
-            switch ($dbserver->platform) {
-                case SERVER_PLATFORMS::EC2:
-                    $dbserver->SetProperties(array(
-                        EC2_SERVER_PROPERTIES::AMIID         => $message->awsAmiId,
-                        EC2_SERVER_PROPERTIES::INSTANCE_ID   => $message->awsInstanceId,
-                        EC2_SERVER_PROPERTIES::INSTANCE_TYPE => $message->awsInstanceType,
-                        EC2_SERVER_PROPERTIES::AVAIL_ZONE    => $message->awsAvailZone,
-                        EC2_SERVER_PROPERTIES::REGION        => substr($message->awsAvailZone, 0, -1),
-                        SERVER_PROPERTIES::ARCHITECTURE      => $message->architecture
-                    ));
-                    break;
+            if (count($message->behaviour) == 1 && $message->behaviour[0] == ROLE_BEHAVIORS::CHEF)
+                $message->behaviour[] = ROLE_BEHAVIORS::BASE;
 
-                case SERVER_PLATFORMS::EUCALYPTUS:
-                    $dbserver->SetProperties(array(
-                        EUCA_SERVER_PROPERTIES::EMIID         => $message->awsAmiId,
-                        EUCA_SERVER_PROPERTIES::INSTANCE_ID   => $message->awsInstanceId,
-                        EUCA_SERVER_PROPERTIES::INSTANCE_TYPE => $message->awsInstanceType,
-                        EUCA_SERVER_PROPERTIES::AVAIL_ZONE    => $message->awsAvailZone,
-                        SERVER_PROPERTIES::ARCHITECTURE       => $message->architecture
-                    ));
-                    break;
+            $dbserver->SetProperty(SERVER_PROPERTIES::SZR_IMPORTING_BEHAVIOR, @implode(",", $message->behaviour));
+            $dbserver->save();
 
-                case SERVER_PLATFORMS::GCE:
-                    $dbserver->SetProperties(array(
-                        GCE_SERVER_PROPERTIES::CLOUD_LOCATION => $message->{$dbserver->platform}->cloudLocation,
-                        GCE_SERVER_PROPERTIES::SERVER_ID      => $message->{$dbserver->platform}->serverId,
-                        GCE_SERVER_PROPERTIES::SERVER_NAME    => $message->{$dbserver->platform}->serverName,
-                        GCE_SERVER_PROPERTIES::MACHINE_TYPE   => $message->{$dbserver->platform}->machineType,
-                        SERVER_PROPERTIES::ARCHITECTURE       => $message->architecture
-                    ));
-                    break;
+            $importVersion = $dbserver->GetProperty(SERVER_PROPERTIES::SZR_IMPORTING_VERSION);
 
-                case SERVER_PLATFORMS::NIMBULA:
-                    $dbserver->SetProperties(array(
-                        NIMBULA_SERVER_PROPERTIES::NAME => $message->serverName,
-                        SERVER_PROPERTIES::ARCHITECTURE => $message->architecture
-                    ));
-                    break;
-
-                case SERVER_PLATFORMS::IDCF:
-                case SERVER_PLATFORMS::UCLOUD:
-                case SERVER_PLATFORMS::CLOUDSTACK:
-                    $dbserver->SetProperties(array(
-                        CLOUDSTACK_SERVER_PROPERTIES::SERVER_ID      => $message->cloudstack->instanceId,
-                        CLOUDSTACK_SERVER_PROPERTIES::CLOUD_LOCATION => $message->cloudstack->availZone,
-                        SERVER_PROPERTIES::ARCHITECTURE              => $message->architecture
-                    ));
-                    break;
-
-                case SERVER_PLATFORMS::RACKSPACE:
+            if ($importVersion == 2) {
+                $dbserver->SetProperties(array(
+                    SERVER_PROPERTIES::ARCHITECTURE      => $message->architecture
+                ));
+            } else {
+                if ($dbserver->isOpenstack()) {
                     $env = $dbserver->GetEnvironmentObject();
-                    $cs = Scalr_Service_Cloud_Rackspace::newRackspaceCS(
-                        $env->getPlatformConfigValue(
-                            Modules_Platforms_Rackspace::USERNAME, true,
-                            $dbserver->GetProperty(RACKSPACE_SERVER_PROPERTIES::DATACENTER)
-                        ),
-                        $env->getPlatformConfigValue(
-                            Modules_Platforms_Rackspace::API_KEY, true,
-                            $dbserver->GetProperty(RACKSPACE_SERVER_PROPERTIES::DATACENTER)
-                        ),
-                        $dbserver->GetProperty(RACKSPACE_SERVER_PROPERTIES::DATACENTER)
-                    );
-                    $csServer = null;
-                    $list = $cs->listServers(true);
-                    if ($list) {
-                        foreach ($list->servers as $_tmp) {
-                            if ($_tmp->addresses->public && in_array($message->remoteIp, $_tmp->addresses->public)) {
-                                $csServer = $_tmp;
-                            }
-                        }
-                    }
-                    if (!$csServer) {
-                        $this->logger->error(sprintf(
-                            "Server not found on CloudServers (server_id: %s, remote_ip: %s, local_ip: %s)",
-                            $dbserver->serverId, $message->remoteIp, $message->localIp
-                        ));
-                        return;
-                    }
-                    $dbserver->SetProperties(array(
-                        RACKSPACE_SERVER_PROPERTIES::SERVER_ID  => $csServer->id,
-                        RACKSPACE_SERVER_PROPERTIES::NAME       => $csServer->name,
-                        RACKSPACE_SERVER_PROPERTIES::IMAGE_ID   => $csServer->imageId,
-                        RACKSPACE_SERVER_PROPERTIES::FLAVOR_ID  => $csServer->flavorId,
-                        RACKSPACE_SERVER_PROPERTIES::HOST_ID    => $csServer->hostId,
-                        SERVER_PROPERTIES::ARCHITECTURE         => $message->architecture
-                    ));
-                    break;
-
-                case SERVER_PLATFORMS::RACKSPACENG_UK:
-                case SERVER_PLATFORMS::RACKSPACENG_US:
-                case SERVER_PLATFORMS::OPENSTACK:
-                    $env = $dbserver->GetEnvironmentObject();
-
                     $os = $env->openstack($dbserver->platform, $dbserver->GetProperty(OPENSTACK_SERVER_PROPERTIES::CLOUD_LOCATION));
-
 
                     $csServer = null;
                     $list = $os->servers->list(true);
@@ -778,8 +689,8 @@ class Scalr_Cronjob_ScalarizrMessaging extends Scalr_System_Cronjob_MultiProcess
                             if ($_tmp->accessIPv4)
                                 array_push($ipaddresses, $_tmp->accessIPv4);
 
-                            if (in_array($message->localIp, $ipaddresses) ||
-                                in_array($message->remoteIp, $ipaddresses)) {
+                            if (in_array($dbserver->localIp, $ipaddresses) ||
+                            in_array($dbserver->remoteIp, $ipaddresses)) {
                                 $osServer = $_tmp;
                             }
                         }
@@ -787,7 +698,7 @@ class Scalr_Cronjob_ScalarizrMessaging extends Scalr_System_Cronjob_MultiProcess
                     if (!$osServer) {
                         $this->logger->error(sprintf(
                             "Server not found on Openstack (server_id: %s, remote_ip: %s, local_ip: %s)",
-                            $dbserver->serverId, $message->remoteIp, $message->localIp
+                            $dbserver->serverId, $dbserver->remoteIp, $dbserver->localIp
                         ));
                         return;
                     }
@@ -799,8 +710,94 @@ class Scalr_Cronjob_ScalarizrMessaging extends Scalr_System_Cronjob_MultiProcess
                         OPENSTACK_SERVER_PROPERTIES::HOST_ID   => $osServer->hostId,
                         SERVER_PROPERTIES::ARCHITECTURE        => $message->architecture
                     ));
-                    break;
+                } elseif ($dbserver->isCloudstack()) {
+                    $dbserver->SetProperties(array(
+                        CLOUDSTACK_SERVER_PROPERTIES::SERVER_ID      => $message->cloudstack->instanceId,
+                        CLOUDSTACK_SERVER_PROPERTIES::CLOUD_LOCATION => $message->cloudstack->availZone,
+                        SERVER_PROPERTIES::ARCHITECTURE              => $message->architecture
+                    ));
+                } else {
+                    switch ($dbserver->platform) {
+                        case SERVER_PLATFORMS::EC2:
+                            $dbserver->SetProperties(array(
+                                EC2_SERVER_PROPERTIES::AMIID         => $message->awsAmiId,
+                                EC2_SERVER_PROPERTIES::INSTANCE_ID   => $message->awsInstanceId,
+                                EC2_SERVER_PROPERTIES::INSTANCE_TYPE => $message->awsInstanceType,
+                                EC2_SERVER_PROPERTIES::AVAIL_ZONE    => $message->awsAvailZone,
+                                EC2_SERVER_PROPERTIES::REGION        => substr($message->awsAvailZone, 0, -1),
+                                SERVER_PROPERTIES::ARCHITECTURE      => $message->architecture
+                            ));
+                            break;
+
+                        case SERVER_PLATFORMS::EUCALYPTUS:
+                            $dbserver->SetProperties(array(
+                                EUCA_SERVER_PROPERTIES::EMIID         => $message->awsAmiId,
+                                EUCA_SERVER_PROPERTIES::INSTANCE_ID   => $message->awsInstanceId,
+                                EUCA_SERVER_PROPERTIES::INSTANCE_TYPE => $message->awsInstanceType,
+                                EUCA_SERVER_PROPERTIES::AVAIL_ZONE    => $message->awsAvailZone,
+                                SERVER_PROPERTIES::ARCHITECTURE       => $message->architecture
+                            ));
+                            break;
+
+                        case SERVER_PLATFORMS::GCE:
+                            $dbserver->SetProperties(array(
+                                GCE_SERVER_PROPERTIES::CLOUD_LOCATION => $message->{$dbserver->platform}->cloudLocation,
+                                GCE_SERVER_PROPERTIES::SERVER_ID      => $message->{$dbserver->platform}->serverId,
+                                GCE_SERVER_PROPERTIES::SERVER_NAME    => $message->{$dbserver->platform}->serverName,
+                                GCE_SERVER_PROPERTIES::MACHINE_TYPE   => $message->{$dbserver->platform}->machineType,
+                                SERVER_PROPERTIES::ARCHITECTURE       => $message->architecture
+                            ));
+                            break;
+
+                        case SERVER_PLATFORMS::NIMBULA:
+                            $dbserver->SetProperties(array(
+                                NIMBULA_SERVER_PROPERTIES::NAME => $message->serverName,
+                                SERVER_PROPERTIES::ARCHITECTURE => $message->architecture
+                            ));
+                            break;
+
+                        case SERVER_PLATFORMS::RACKSPACE:
+                            $env = $dbserver->GetEnvironmentObject();
+                            $cs = Scalr_Service_Cloud_Rackspace::newRackspaceCS(
+                                $env->getPlatformConfigValue(
+                                    Modules_Platforms_Rackspace::USERNAME, true,
+                                    $dbserver->GetProperty(RACKSPACE_SERVER_PROPERTIES::DATACENTER)
+                                ),
+                                $env->getPlatformConfigValue(
+                                    Modules_Platforms_Rackspace::API_KEY, true,
+                                    $dbserver->GetProperty(RACKSPACE_SERVER_PROPERTIES::DATACENTER)
+                                ),
+                                $dbserver->GetProperty(RACKSPACE_SERVER_PROPERTIES::DATACENTER)
+                            );
+                            $csServer = null;
+                            $list = $cs->listServers(true);
+                            if ($list) {
+                                foreach ($list->servers as $_tmp) {
+                                    if ($_tmp->addresses->public && in_array($message->remoteIp, $_tmp->addresses->public)) {
+                                        $csServer = $_tmp;
+                                    }
+                                }
+                            }
+                            if (!$csServer) {
+                                $this->logger->error(sprintf(
+                                    "Server not found on CloudServers (server_id: %s, remote_ip: %s, local_ip: %s)",
+                                    $dbserver->serverId, $message->remoteIp, $message->localIp
+                                ));
+                                return;
+                            }
+                            $dbserver->SetProperties(array(
+                                RACKSPACE_SERVER_PROPERTIES::SERVER_ID  => $csServer->id,
+                                RACKSPACE_SERVER_PROPERTIES::NAME       => $csServer->name,
+                                RACKSPACE_SERVER_PROPERTIES::IMAGE_ID   => $csServer->imageId,
+                                RACKSPACE_SERVER_PROPERTIES::FLAVOR_ID  => $csServer->flavorId,
+                                RACKSPACE_SERVER_PROPERTIES::HOST_ID    => $csServer->hostId,
+                                SERVER_PROPERTIES::ARCHITECTURE         => $message->architecture
+                            ));
+                            break;
+                    }
+                }
             }
+
             // Bundle image
             $creInfo = new ServerSnapshotCreateInfo(
                 $dbserver, $dbserver->GetProperty(SERVER_PROPERTIES::SZR_IMPORTING_ROLE_NAME),
@@ -810,14 +807,22 @@ class Scalr_Cronjob_ScalarizrMessaging extends Scalr_System_Cronjob_MultiProcess
             $bundleTask->osFamily = $message->dist->distributor;
             $bundleTask->osName = $message->dist->codename;
             $bundleTask->osVersion = $message->dist->release;
-            if ($message->dist->distributor == 'oel' &&
+            if (in_array($message->dist->distributor, array('oel', 'redhat', 'scientific')) &&
                 $dbserver->platform == SERVER_PLATFORMS::EC2) {
                 $bundleTask->bundleType = SERVER_SNAPSHOT_CREATION_TYPE::EC2_EBS_HVM;
             }
 
             $bundleTask->setDate("started");
 
+            $bundleTask->createdByEmail = $dbserver->GetProperty(SERVER_PROPERTIES::LAUNCHED_BY_EMAIL);
+            $bundleTask->createdById = $dbserver->GetProperty(SERVER_PROPERTIES::LAUNCHED_BY_ID);
+
+            if ($importVersion == 2)
+                $bundleTask->status = SERVER_SNAPSHOT_CREATION_STATUS::ESTABLISHING_COMMUNICATION;
+
             $bundleTask->Save();
+
+            $dbserver->SetProperty(SERVER_PROPERTIES::SZR_IMPORTING_BUNDLE_TASK_ID, $bundleTask->id);
         }
     }
 
@@ -832,76 +837,52 @@ class Scalr_Cronjob_ScalarizrMessaging extends Scalr_System_Cronjob_MultiProcess
                 $srv_props[SERVER_PROPERTIES::SZR_KEY_TYPE] = SZR_KEY_TYPE::PERMANENT;
             }
             $srv_props[SERVER_PROPERTIES::SZR_SNMP_PORT] = $message->snmpPort;
-            if (!in_array($dbserver->platform, array(
-                SERVER_PLATFORMS::CLOUDSTACK,
-                SERVER_PLATFORMS::IDCF,
-                SERVER_PLATFORMS::UCLOUD
-            ))) {
-                $remoteIp = $message->remoteIp;
-            } else {
-                if ($dbserver->farmRoleId) {
-                    $dbFarmRole = $dbserver->GetFarmRoleObject();
-                    $networkType = $dbFarmRole->GetSetting(DBFarmRole::SETTING_CLOUDSTACK_NETWORK_TYPE);
-                    if ($networkType == 'Direct') {
-                        $remoteIp = $message->localIp;
-                    } else {
-                        $sharedIp = $dbFarmRole->GetSetting(DBFarmRole::SETTING_CLOUDSTACK_SHARED_IP_ADDRESS);
-                        if (!$sharedIp) {
-                            $env = $dbserver->GetEnvironmentObject();
-                            $remoteIp = $platform->getConfigVariable(
-                                Modules_Platforms_Cloudstack::SHARED_IP . "." . $dbserver->GetProperty(CLOUDSTACK_SERVER_PROPERTIES::CLOUD_LOCATION), $env, false
-                            );
-                        } else {
-                            $remoteIp = $sharedIp;
-                        }
-                    }
-                } else {
-                    $remoteIp = $message->localIp;
+            if ($dbserver->isCloudstack()) {
+                $ips = $platform->GetServerIPAddresses($dbserver);
+                if ($ips['remoteIp']) {
+                    $remoteIp = $ips['remoteIp'];
+                    $dbserver->GetFarmRoleObject()->SetSetting(DBFarmRole::SETTING_CLOUDSTACK_NETWORK_TYPE, 'Direct', DBFarmRole::TYPE_LCL);
                 }
-            }
-            if (in_array($dbserver->platform, array(
-                SERVER_PLATFORMS::OPENSTACK
-            ))) {
-                if ($dbserver->farmRoleId) {
-                    $dbFarmRole = $dbserver->GetFarmRoleObject();
-                    $ipPool = $dbFarmRole->GetSetting(DBFarmRole::SETTING_OPENSTACK_IP_POOL);
-                    if ($ipPool) {
-                        //TODO:
-                        $osClient = $dbserver->GetEnvironmentObject()->openstack(
-                            $dbserver->platform, $dbserver->GetProperty(OPENSTACK_SERVER_PROPERTIES::CLOUD_LOCATION)
-                        );
-                        //Check free existing IP
-                        $ips = $osClient->servers->floatingIps->list($ipPool);
-                        foreach ($ips as $ip) {
-                            if (!$ip->instance_id) {
-                                $ipAddress = $ip->ip;
-                                break;
+                else {
+                    if ($dbserver->farmRoleId) {
+                        $dbFarmRole = $dbserver->GetFarmRoleObject();
+                        $networkType = $dbFarmRole->GetSetting(DBFarmRole::SETTING_CLOUDSTACK_NETWORK_TYPE);
+                        if ($networkType == 'Direct') {
+                            $remoteIp = $message->localIp;
+                        } else {
+                            $sharedIp = $dbFarmRole->GetSetting(DBFarmRole::SETTING_CLOUDSTACK_SHARED_IP_ADDRESS);
+                            if (!$sharedIp) {
+                                $env = $dbserver->GetEnvironmentObject();
+                                $remoteIp = $platform->getConfigVariable(
+                                    Modules_Platforms_Cloudstack::SHARED_IP . "." . $dbserver->GetProperty(CLOUDSTACK_SERVER_PROPERTIES::CLOUD_LOCATION), $env, false
+                                );
+                            } else {
+                                $remoteIp = $sharedIp;
                             }
                         }
-                        // If no free IP allocate new from pool
-                        if (!$ipAddress) {
-                            $ip = $osClient->servers->floatingIps->create($ipPool);
-                            $ipAddress = $ip->ip;
-                        }
-                        // Associate floating IP with Instance
-                        $osClient->servers->addFloatingIp($dbserver->GetCloudServerID(), $ipAddress);
-                        $remoteIp = $ipAddress;
-                    } else {
-                        if ($message->remoteIp) {
-                            $remoteIp = $message->remoteIp;
-                        } else {
-                            $remoteIp = $message->localIp;
-                        }
                     }
-                } else {
-                    $remoteIp = $message->localIp;
+                }
+            }
+            if ($dbserver->isOpenstack()) {
+                if ($dbserver->farmRoleId) {
+                    $ipPool = $dbserver->GetFarmRoleObject()->GetSetting(DBFarmRole::SETTING_OPENSTACK_IP_POOL);
+                    if ($ipPool && empty($dbserver->remoteIp)) {
+                        return false;
+                    } else {
+                        $remoteIp = $dbserver->remoteIp;
+                    }
                 }
             }
             if (!$remoteIp) {
                 $ips = $platform->GetServerIPAddresses($dbserver);
-                $remoteIp = $ips['remoteIp'];
+                if ($ips['remoteIp'])
+                    $remoteIp = $ips['remoteIp'];
+                else
+                    $remoteIp = $message->remoteIp ? $ips['remoteIp'] : '';
             }
             $dbserver->remoteIp = $remoteIp;
+            $dbserver->Save();
+
             //Update auto-update settings
             //TODO: Check auto-update client version
             if ($dbserver->IsSupported('0.7.225')) {
@@ -913,8 +894,7 @@ class Scalr_Cronjob_ScalarizrMessaging extends Scalr_System_Cronjob_MultiProcess
                         $updateClient = new Scalr_Net_Scalarizr_UpdateClient($dbserver);
                         $updateClient->configure($repo, $schedule);
                     }
-                } catch (Exception $e) {
-                }
+                } catch (Exception $e) {}
             }
             // MySQL specific
             $dbFarmRole = $dbserver->GetFarmRoleObject();
@@ -941,7 +921,7 @@ class Scalr_Cronjob_ScalarizrMessaging extends Scalr_System_Cronjob_MultiProcess
                     }
                     if (!$masterFound) $srv_props[Scalr_Db_Msr::REPLICATION_MASTER] = 1;
                 } elseif ($dbFarmRole->GetSetting(Scalr_Db_Msr::SLAVE_TO_MASTER) && count($servers) == 0) {
-                    $dbFarmRole->SetSetting(Scalr_Db_Msr::SLAVE_TO_MASTER, 0);
+                    $dbFarmRole->SetSetting(Scalr_Db_Msr::SLAVE_TO_MASTER, 0, DBFarmRole::TYPE_LCL);
                     $srv_props[Scalr_Db_Msr::REPLICATION_MASTER] = 1;
                 }
             }
@@ -982,15 +962,13 @@ class Scalr_Cronjob_ScalarizrMessaging extends Scalr_System_Cronjob_MultiProcess
                 $mysqlData = $message->mysql;
                 if ($dbserver->GetProperty(SERVER_PROPERTIES::DB_MYSQL_MASTER)) {
                     if ($mysqlData->rootPassword) {
-                        $dbFarmRole->SetSetting(DBFarmRole::SETTING_MYSQL_REPL_PASSWORD, $mysqlData->replPassword);
-                        $dbFarmRole->SetSetting(DBFarmRole::SETTING_MYSQL_ROOT_PASSWORD, $mysqlData->rootPassword);
-                        $dbFarmRole->SetSetting(DBFarmRole::SETTING_MYSQL_STAT_PASSWORD, $mysqlData->statPassword);
+                        $dbFarmRole->SetSetting(DBFarmRole::SETTING_MYSQL_REPL_PASSWORD, $mysqlData->replPassword, DBFarmRole::TYPE_LCL);
+                        $dbFarmRole->SetSetting(DBFarmRole::SETTING_MYSQL_ROOT_PASSWORD, $mysqlData->rootPassword, DBFarmRole::TYPE_LCL);
+                        $dbFarmRole->SetSetting(DBFarmRole::SETTING_MYSQL_STAT_PASSWORD, $mysqlData->statPassword, DBFarmRole::TYPE_LCL);
                     }
-                    $dbFarmRole->SetSetting(DBFarmRole::SETTING_MYSQL_LOG_FILE, $mysqlData->logFile);
-                    $dbFarmRole->SetSetting(DBFarmRole::SETTING_MYSQL_LOG_POS, $mysqlData->logPos);
+                    $dbFarmRole->SetSetting(DBFarmRole::SETTING_MYSQL_LOG_FILE, $mysqlData->logFile, DBFarmRole::TYPE_LCL);
+                    $dbFarmRole->SetSetting(DBFarmRole::SETTING_MYSQL_LOG_POS, $mysqlData->logPos, DBFarmRole::TYPE_LCL);
                     if ($dbserver->IsSupported("0.7")) {
-                        //$dbFarmRole->SetSetting(DBFarmRole::SETTING_MYSQL_SNAPSHOT_ID, $mysqlData->snapshotConfig);
-                        //$dbFarmRole->SetSetting(DBFarmRole::SETTING_MYSQL_SNAPSHOT_ID, $mysqlData->volumeConfig);
                         if ($mysqlData->volumeConfig) {
                             try {
                                 $storageVolume = Scalr_Storage_Volume::init();
@@ -1018,7 +996,7 @@ class Scalr_Cronjob_ScalarizrMessaging extends Scalr_System_Cronjob_MultiProcess
                                     } else
                                         throw $e;
                                 }
-                                $dbFarmRole->SetSetting(DBFarmRole::SETTING_MYSQL_SCALR_VOLUME_ID, $storageVolume->id);
+                                $dbFarmRole->SetSetting(DBFarmRole::SETTING_MYSQL_SCALR_VOLUME_ID, $storageVolume->id, DBFarmRole::TYPE_LCL);
                             } catch (Exception $e) {
                                 $this->logger->error(new FarmLogMessage(
                                     $event->DBServer->farmId, "Cannot save storage volume: {$e->getMessage()}"
@@ -1056,7 +1034,7 @@ class Scalr_Cronjob_ScalarizrMessaging extends Scalr_System_Cronjob_MultiProcess
                                     } else
                                         throw $e;
                                 }
-                                $dbFarmRole->SetSetting(DBFarmRole::SETTING_MYSQL_SCALR_SNAPSHOT_ID, $storageSnapshot->id);
+                                $dbFarmRole->SetSetting(DBFarmRole::SETTING_MYSQL_SCALR_SNAPSHOT_ID, $storageSnapshot->id, DBFarmRole::TYPE_LCL);
                             } catch (Exception $e) {
                                 $this->logger->error(new FarmLogMessage(
                                     $event->DBServer->farmId, "Cannot save storage snapshot: {$e->getMessage()}"
@@ -1065,7 +1043,7 @@ class Scalr_Cronjob_ScalarizrMessaging extends Scalr_System_Cronjob_MultiProcess
                         }
                     } else {
                         //@deprecated
-                        $dbFarmRole->SetSetting(DBFarmRole::SETTING_MYSQL_SNAPSHOT_ID, $mysqlData->snapshotId);
+                        $dbFarmRole->SetSetting(DBFarmRole::SETTING_MYSQL_SNAPSHOT_ID, $mysqlData->snapshotId, DBFarmRole::TYPE_LCL);
                     }
                 }
             }
@@ -1085,7 +1063,7 @@ class Scalr_Cronjob_ScalarizrMessaging extends Scalr_System_Cronjob_MultiProcess
      */
     private function onMysql_PromoteToMasterResult($message, DBServer $dbserver)
     {
-        $dbserver->GetFarmRoleObject()->SetSetting(DBFarmRole::SETTING_MYSQL_SLAVE_TO_MASTER, 0);
+        $dbserver->GetFarmRoleObject()->SetSetting(DBFarmRole::SETTING_MYSQL_SLAVE_TO_MASTER, 0, DBFarmRole::TYPE_LCL);
         if ($message->status == Scalr_Messaging_Msg_Mysql_PromoteToMasterResult::STATUS_OK) {
             $dbFarm = $dbserver->GetFarmObject();
             $dbFarmRole = $dbserver->GetFarmRoleObject();
@@ -1140,9 +1118,9 @@ class Scalr_Cronjob_ScalarizrMessaging extends Scalr_System_Cronjob_MultiProcess
                         ));
                         $snapshot->setConfig($message->snapshotConfig);
                         $snapshot->save(true);
-                        $dbFarmRole->SetSetting(DBFarmRole::SETTING_MYSQL_SCALR_SNAPSHOT_ID, $snapshot->id);
-                        $dbFarmRole->SetSetting(DBFarmRole::SETTING_MYSQL_LOG_FILE, $message->logFile);
-                        $dbFarmRole->SetSetting(DBFarmRole::SETTING_MYSQL_LOG_POS, $message->logPos);
+                        $dbFarmRole->SetSetting(DBFarmRole::SETTING_MYSQL_SCALR_SNAPSHOT_ID, $snapshot->id, DBFarmRole::TYPE_LCL);
+                        $dbFarmRole->SetSetting(DBFarmRole::SETTING_MYSQL_LOG_FILE, $message->logFile, DBFarmRole::TYPE_LCL);
+                        $dbFarmRole->SetSetting(DBFarmRole::SETTING_MYSQL_LOG_POS, $message->logPos, DBFarmRole::TYPE_LCL);
                     } catch (Exception $e) {
                         $this->logger->error(new FarmLogMessage(
                             $dbserver->farmId, "Cannot save storage snapshot: {$e->getMessage()}"
@@ -1151,7 +1129,7 @@ class Scalr_Cronjob_ScalarizrMessaging extends Scalr_System_Cronjob_MultiProcess
                 }
             } else {
                 // TODO: delete old slave volume if new one was created
-                $dbFarmRole->SetSetting(DBFarmRole::SETTING_MYSQL_MASTER_EBS_VOLUME_ID, $message->volumeId);
+                $dbFarmRole->SetSetting(DBFarmRole::SETTING_MYSQL_MASTER_EBS_VOLUME_ID, $message->volumeId, DBFarmRole::TYPE_LCL);
             }
             return new NewMysqlMasterUpEvent($dbserver, "", $oldMaster[0]);
         } elseif ($message->status == Scalr_Messaging_Msg_Mysql_PromoteToMasterResult::STATUS_FAILED) {

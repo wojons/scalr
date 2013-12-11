@@ -1,4 +1,4 @@
-<?
+<?php
     final class LOG_CATEGORY
     {
         const FARM 		= 'FarmLog';

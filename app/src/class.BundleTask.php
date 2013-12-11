@@ -36,6 +36,9 @@ class BundleTask
     public $farmId;
     public $cloudLocation;
 
+    public $createdById;
+    public $createdByEmail;
+
     public $osFamily;
     public $osName;
     public $osVersion;
@@ -47,6 +50,11 @@ class BundleTask
 
     private $tz;
     private $metaData;
+
+    /**
+     * @var \DBFarm
+     */
+    private $dbFarm;
 
     private static $FieldPropertyMap = array(
         'id'			=> 'id',
@@ -72,7 +80,9 @@ class BundleTask
         'meta_data'		=> 'metaData',
         'os_family'		=> 'osFamily',
         'os_name'		=> 'osName',
-        'os_version'	=> 'osVersion'
+        'os_version'	=> 'osVersion',
+        'created_by_id' => 'createdById',
+        'created_by_email' => 'createdByEmail'
     );
 
     public function __construct($id)
@@ -81,26 +91,40 @@ class BundleTask
         $this->Db = \Scalr::getDb();
     }
 
+    /**
+     * Gets DBFarm object
+     *
+     * @return \DBFarm
+     */
+    public function getFarmObject()
+    {
+        if (!$this->dbFarm && !empty($this->farmId)) {
+            $this->dbFarm = \DBFarm::LoadByID($this->farmId);
+        }
+
+        return $this->dbFarm;
+    }
+
     public function Log($message)
     {
-        if ($this->id)
-        {
-            try
-            {
+        if ($this->id) {
+            try {
                 $this->Db->Execute("INSERT INTO bundle_task_log SET
                     bundle_task_id	= ?,
                     dtadded			= NOW(),
                     message			= ?
-                ", array($this->id, $message));
+                ", array(
+                    $this->id,
+                    $message
+                ));
+            } catch (ADODB_Exception $e) {
             }
-            catch(ADODB_Exception $e){}
         }
     }
 
     public function setDate($dt)
     {
-        switch ($dt)
-        {
+        switch ($dt) {
             case "finished":
 
                 $this->dateFinished = date("Y-m-d H:i:s");
@@ -149,7 +173,7 @@ class BundleTask
             $i = 1;
         }
 
-        $role = $db->GetOne("SELECT id FROM roles WHERE name=? AND env_id=?", array($name, $DBServer->envId));
+        $role = $db->GetOne("SELECT id FROM roles WHERE name=? AND env_id=? LIMIT 1", array($name, $DBServer->envId));
         if ($role)
         {
             while ($role)
@@ -159,7 +183,7 @@ class BundleTask
                 $s = ($i < 10) ? "0{$i}" : $i;
                 $name = "{$m[1]}-{$m[2]}-{$s}";
 
-                $role = $db->GetOne("SELECT id FROM roles WHERE name=? AND env_id=?", array($name, $DBServer->envId));
+                $role = $db->GetOne("SELECT id FROM roles WHERE name=? AND env_id=? LIMIT 1", array($name, $DBServer->envId));
             }
         }
 
@@ -168,7 +192,6 @@ class BundleTask
 
     /**
      * @return ServerSnapshotDetails
-     * Enter description here ...
      */
     public function getSnapshotDetails()
     {
@@ -180,17 +203,16 @@ class BundleTask
         $retval = new stdClass();
 
         switch ($this->osFamily) {
-            //TODO: Investigate real values for generation/version/name
-            /*
-            $family = 'windows';
-            $generation = '2008';
-            $version = '2008';
-            $name = 'Windows 2008 Server';
-             */
             case "windows":
                 $retval->family = "windows";
-                $retval->generation = $this->osFamily;
-                $retval->version = $this->osFamily;
+
+                if (strpos($this->osName, '2008Server') === 0)
+                    $generation = '2008';
+                elseif (strpos($this->osName, '2012Server') === 0)
+                    $generation = '2012';
+
+                $retval->generation = $generation;
+                $retval->version = $this->osVersion;
                 $retval->name = $this->osFamily;
                 break;
             case "ubuntu":
@@ -237,6 +259,16 @@ class BundleTask
                 elseif ($retval->generation == 6)
                     $retval->name .= " Santiago";
                 break;
+            case "scientific":
+                $retval->family = $this->osFamily;
+                $retval->generation = (int)substr($this->osVersion, 0, 1);
+                $retval->version = $this->osVersion;
+                $retval->name = "Scientific {$this->osVersion}";
+                if ($retval->generation == 5)
+                    $retval->name .= " Boron";
+                elseif ($retval->generation == 6)
+                $retval->name .= " Carbon";
+                break;
             case "debian":
                 $retval->family = $this->osFamily;
                 $retval->generation = (int)substr($this->osVersion, 0, 1);
@@ -246,6 +278,8 @@ class BundleTask
                     $retval->name .= " Lenny";
                 elseif ($retval->generation == 6)
                     $retval->name .= " Squeeze";
+                elseif ($retval->generation == 7)
+                    $retval->name .= " Wheezy";
                 break;
         }
 
@@ -282,22 +316,6 @@ class BundleTask
 
         $this->failureReason = $failed_reason;
 
-        if ($this->farmId)
-        {
-            try {
-                $DBFarm = DBFarm::LoadByID($this->farmId);
-                if ($DBFarm->Status == FARM_STATUS::SYNCHRONIZING && !$DBFarm->TermOnSyncFail)
-                {
-                    $this->Db->Execute("UPDATE farms SET status=? WHERE id=?", array(
-                        FARM_STATUS::RUNNING,
-                        $this->farmId
-                    ));
-
-                    $this->Log(sprintf(_("Farm status set to Running")));
-                }
-            } catch (Exception $e) {}
-        }
-
         try {
             $dbServer = DBServer::LoadByID($this->serverId);
 
@@ -327,19 +345,18 @@ class BundleTask
                 try {
                     if (!$dbServer->GetProperty(SERVER_PROPERTIES::SZR_IMPORTING_LEAVE_ON_FAIL) && $dbServer->GetCloudServerID()) {
                         $this->Log(sprintf(_("Terminating temporary server...")));
-                        PlatformFactory::NewPlatform($dbServer->platform)->TerminateServer($dbServer);
-                        $dbServer->status = SERVER_STATUS::PENDING_TERMINATE;
-                        $dbServer->save();
-                        Scalr_Server_History::init($dbServer)->markAsTerminated("RoleBuilder temporary server", true);
+                        $dbServer->terminate('TEMPORARY_SERVER_ROLE_BUILDER');
+                        $this->Log("Termination request has been sent");
                     }
                 } catch (Exception $e) {}
             }
 
             if ($dbServer->status == SERVER_STATUS::IMPORTING) {
                 $this->Log(sprintf(_("Removing import server record from database...")));
-                $dbServer->Delete();
+                $dbServer->Remove();
             }
-        } catch (Exception $e) {}
+        } catch (Exception $e) {
+        }
 
         $this->Log(sprintf(_("Snapshot creation failed. Reason: %s. Bundle task status changed to: %s"), $failed_reason, $this->status));
 

@@ -5,8 +5,7 @@ define("DEFAULT_LOCALE", "en_US");
 
 @date_default_timezone_set(@date_default_timezone_get());
 
-// Attempt to normalize settings
-@error_reporting(E_ALL ^E_NOTICE ^E_USER_NOTICE ^E_DEPRECATED);
+@error_reporting(E_ALL);
 
 @ini_set('session.bug_compat_42', '0');
 @ini_set('session.bug_compat_warn', '0');
@@ -40,6 +39,8 @@ require_once SRCPATH . "/autoload.inc.php";
 
 spl_autoload_register("__autoload");
 
+set_error_handler("Scalr::errorHandler");
+
 //Container witn adodb service needs to be defined in the first turn, as much depends on it.
 Scalr::initializeContainer();
 
@@ -70,7 +71,6 @@ require_once SRCPATH . '/externals/adodb5-18/adodb-exceptions.inc.php';
 require_once SRCPATH . '/externals/adodb5-18/adodb.inc.php';
 
 $cfg = Scalr::getContainer()->config;
-set_error_handler("Scalr::errorHandler");
 
 try {
     $db = Scalr::getDb();
@@ -113,7 +113,7 @@ if (Scalr::getContainer()->get('config.type') == 'ini') {
     unset($ConfigReflection);
 
     CONFIG::$HTTP_PROTO = (CONFIG::$HTTP_PROTO) ? CONFIG::$HTTP_PROTO : "http";
-    CONFIG::$SYSDNS_SYSTEM = 0;
+    CONFIG::$SYSDNS_SYSTEM = 1;
 }
 
 require_once SRCPATH . '/class.LoggerAppenderScalr.php';
@@ -131,13 +131,3 @@ $Logger = Logger::getLogger('Application');
 require_once APPPATH . '/observers/interface.IDeferredEventObserver.php';
 require_once APPPATH . '/observers/interface.IEventObserver.php';
 
-//FIXME Tender integration should be placed to config file
-define("TENDER_APIKEY", "");
-define("TENDER_SITEKEY", "");
-
-//FIXME this stuff must be removed to config
-define('SCALR_PMA_KEY', '');
-
-//FIXME Recaptcha keys must be part of the config
-define('SCALR_RECAPTCHA_PUBLIC_KEY', '');
-define('SCALR_RECAPTCHA_PRIVATE_KEY', '');

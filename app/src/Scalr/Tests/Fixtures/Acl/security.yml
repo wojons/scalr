@@ -1,0 +1,9 @@
+SECURITY_SSH_KEYS:
+- [/sshkeys, null, all]
+- /farms/roles/xGetRoleSshPrivateKey?farmId=%OWNED_FARM_ID%
+
+SECURITY_RETRIEVE_WINDOWS_PASSWORDS:
+- /platforms/ec2/xGetWindowsPassword
+
+SECURITY_AWS_SECURITY_GROUPS:
+- [/security/groups, null, all]

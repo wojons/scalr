@@ -33,7 +33,7 @@
             if (!$dbFarmRole->GetSetting(self::ROLE_COOKIE_NAME))
             {
                 $cookie = substr(sha1(microtime(true).rand(0,100000)), 0, 20);
-                $dbFarmRole->SetSetting(self::ROLE_COOKIE_NAME, $cookie);
+                $dbFarmRole->SetSetting(self::ROLE_COOKIE_NAME, $cookie, DBFarmRole::TYPE_LCL);
             }
         }
 
@@ -108,13 +108,26 @@
                     else
                         throw new Exception("Received hostUp message from RabbitMQ server without volumeConfig");
 
-                    $dbServer->GetFarmRoleObject()->SetSetting(self::ROLE_PASSWORD, $message->rabbitmq->password);
+                    $dbServer->GetFarmRoleObject()->SetSetting(self::ROLE_PASSWORD, $message->rabbitmq->password, DBFarmRole::TYPE_LCL);
 
                     if ($message->rabbitmq->masterPassword)
-                        $dbServer->GetFarmRoleObject()->SetSetting(self::ROLE_MASTER_PASSWORD, $message->rabbitmq->masterPassword);
+                        $dbServer->GetFarmRoleObject()->SetSetting(self::ROLE_MASTER_PASSWORD, $message->rabbitmq->masterPassword, DBFarmRole::TYPE_LCL);
 
                     break;
             }
+        }
+
+        public function getConfiguration(DBServer $dbServer) {
+
+            $config = new stdClass();
+            $config->cookie = $dbServer->GetFarmRoleObject()->GetSetting(self::ROLE_COOKIE_NAME);
+            $config->volumeConfig = $this->getVolumeConfig($dbServer->GetFarmRoleObject(), $dbServer);
+            $config->nodeType = $this->getNodeType($dbServer->GetFarmRoleObject(), $dbServer);
+            $config->password = $dbServer->GetFarmRoleObject()->GetSetting(self::ROLE_PASSWORD);
+
+            $dbServer->SetProperty(self::SERVER_NODE_TYPE, $config->nodeType);
+
+            return $config;
         }
 
         public function extendMessage(Scalr_Messaging_Msg $message, DBServer $dbServer)
@@ -124,15 +137,7 @@
             switch (get_class($message))
             {
                 case "Scalr_Messaging_Msg_HostInitResponse":
-
-                    $message->rabbitmq = new stdClass();
-                    $message->rabbitmq->cookie = $dbServer->GetFarmRoleObject()->GetSetting(self::ROLE_COOKIE_NAME);
-                    $message->rabbitmq->volumeConfig = $this->getVolumeConfig($dbServer->GetFarmRoleObject(), $dbServer);
-                    $message->rabbitmq->nodeType = $this->getNodeType($dbServer->GetFarmRoleObject(), $dbServer);
-                    $message->rabbitmq->password = $dbServer->GetFarmRoleObject()->GetSetting(self::ROLE_PASSWORD);
-
-                    $dbServer->SetProperty(self::SERVER_NODE_TYPE, $message->rabbitmq->nodeType);
-
+                    $message->rabbitmq = $this->getConfiguration($dbServer);
                     break;
             }
 
@@ -240,7 +245,7 @@
                             $volumeConfig->disk = new stdClass();
                             $volumeConfig->disk->type = 'loop';
                             $volumeConfig->disk->size = '75%root';
-                        } elseif (in_array($dbFarmRole->Platform, array(SERVER_PLATFORMS::OPENSTACK, SERVER_PLATFORMS::RACKSPACENG_UK, SERVER_PLATFORMS::RACKSPACENG_US))) {
+                        } elseif ($dbFarmRole->isOpenstack()) {
                             $storageProvider = 'swift';
 
                             $volumeConfig->disk = new stdClass();

@@ -113,7 +113,7 @@ class OpenStackConfig
     /**
      * Gets region
      *
-     * @return  RegionInterface OpenStack Region
+     * @return  string   Returns OpenStack Region
      */
     public function getRegion()
     {

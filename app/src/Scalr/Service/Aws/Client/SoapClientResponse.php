@@ -1,6 +1,7 @@
 <?php
 namespace Scalr\Service\Aws\Client;
 
+use Scalr\Service\Aws\Plugin\EventObserver;
 use Scalr\Service\Aws\DataType\ErrorData;
 use Scalr\Service\Aws\LoaderException;
 use Scalr\Service\Aws\DataType\Loader\ErrorLoader;
@@ -35,10 +36,24 @@ class SoapClientResponse implements ClientResponseInterface
     private $errorData;
 
     /**
+     * Exception
+     *
+     * @var SoapClientException
+     */
+    private $exception;
+
+    /**
      * Http request
      * @var string
      */
     private $request;
+
+    /**
+     * The number of the query
+     *
+     * @var int
+     */
+    private $queryNumber;
 
     /**
      * Constructor
@@ -86,8 +101,31 @@ class SoapClientResponse implements ClientResponseInterface
      */
     public function getError()
     {
+        if ($this->hasError()) {
+            throw $this->exception;
+        }
+
+        return false;
+    }
+
+    /**
+     * {@inheritdoc}
+     * @see Scalr\Service\Aws\Client.ClientResponseInterface::getException()
+     */
+    public function getException()
+    {
+        return $this->hasError() ? $this->exception : null;
+    }
+
+    /**
+     * {@inheritdoc}
+     * @see Scalr\Service\Aws\Client.ClientResponseInterface::hasError()
+     */
+    public function hasError()
+    {
         if (!isset($this->errorData)) {
             $this->errorData = false;
+            $this->exception = null;
             $code = $this->getResponseCode();
             if ($code < 200 || $code > 299) {
                 if ($code == 404) {
@@ -99,13 +137,14 @@ class SoapClientResponse implements ClientResponseInterface
                 $loader = new ErrorLoader();
                 $this->errorData = $loader->load($this->getRawContent());
                 $this->errorData->request = $this->getRequest();
-                throw new SoapClientException($this->errorData);
+                $this->exception = new SoapClientException($this->errorData);
             }
         }
-        return $this->errorData;
+
+        return $this->errorData instanceof ErrorData;
     }
 
-    /**
+	/**
      * {@inheritdoc}
      * @see Scalr\Service\Aws\Client.ClientResponseInterface::getResponseCode()
      */
@@ -130,5 +169,34 @@ class SoapClientResponse implements ClientResponseInterface
     public function getRequest()
     {
         return $this->request;
+    }
+
+	/**
+     * {@inheritdoc}
+     * @see Scalr\Service\Aws\Client.ClientResponseInterface::setQueryNumber()
+     */
+    public function setQueryNumber($number)
+    {
+        $this->queryNumber = $number;
+    }
+
+	/**
+     * {@inheritdoc}
+     * @see Scalr\Service\Aws\Client.ClientResponseInterface::setRequest()
+     */
+    public function setRequest($request)
+    {
+        $this->request = $request;
+    }
+
+    /**
+	 * @param EventObserver $eventObserver
+	 * @return \Scalr\Service\Aws\Client\QueryClientResponse
+	 */
+    public function setEventObserver(EventObserver $eventObserver = null)
+    {
+        $this->eventObserver = $eventObserver;
+
+        return $this;
     }
 }
