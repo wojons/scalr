@@ -6,7 +6,7 @@ in 4.5 minor versions.
 
 To get the diff between two versions, go to https://github.com/Scalr/scalr/compare/v4.4.0...v4.5.0
 
-* 5.4.0 (2013-12-12)
+* 4.5.0 (2013-12-12)
  * Updated GCE images for roles builder (dicsydel)
  * Added AMazon Linux images to EC2 roles builder (dicsydel)
  * Euca support (dicsydel)
