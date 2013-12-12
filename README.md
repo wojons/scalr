@@ -1,6 +1,11 @@
 README
 ======
 
+**Version**: 4.5
+[![Build Status](https://secure.travis-ci.org/Scalr/scalr.png?branch=master)](http://travis-ci.org/Scalr/scalr)
+
+**Compatibility**: php 5.4+
+
 What is Scalr?
 --------------
 
