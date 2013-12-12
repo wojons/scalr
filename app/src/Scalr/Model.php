@@ -84,7 +84,7 @@ abstract class Scalr_Model
 
             if ($property && is_array($this->dbPropertyMap[$property]) && isset($this->dbPropertyMap[$property]['is_filter']) && $this->dbPropertyMap[$property]['is_filter']) {
                 if ($loadFlag) {
-                    $info = $this->db->getRow("SELECT * FROM {$this->dbTableName} WHERE {$property} = ?", array($value));
+                    $info = $this->db->getRow("SELECT * FROM {$this->dbTableName} WHERE {$property} = ? LIMIT 1", array($value));
                     if (! $info)
                         throw new Exception(sprintf(_($this->dbMessageKeyNotFound), $value));
 

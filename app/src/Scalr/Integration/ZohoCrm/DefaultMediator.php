@@ -260,8 +260,10 @@ class Scalr_Integration_ZohoCrm_DefaultMediator extends
         $contact->mailingState = $client->State;
         $contact->mailingCode = $client->ZipCode;
         if ($client->Country) {
-            $contact->mailingCountry = $this->db->GetOne(
-                    "SELECT name FROM countries WHERE code = ?", array($client->Country));
+            $contact->mailingCountry = $this->db->GetOne("
+                SELECT name FROM countries WHERE code = ?
+                LIMIT 1
+            ", array($client->Country));
         }
 
         $adPagesVisited = $client->GetSettingValue(CLIENT_SETTINGS::AD_PAGES_VISITED);

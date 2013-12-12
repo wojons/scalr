@@ -1,6 +1,5 @@
 <?php
 
-//FIXME this stuff must be defined in the config
 define('SCALR_PMA_KEY', '!80uy98hH&)#0gsg695^39gsvt7s853r%#dfscvJKGSG67gVB@');
 define('KEY_SAULT', $_REQUEST['s']);
 

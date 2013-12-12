@@ -56,8 +56,10 @@ Scalr.regPage('Scalr.ui.tools.aws.ec2.elb.details', function( loadParams, module
 	});
 
 	var panel = Ext.create('Ext.Panel', {
-		bodyCls: 'x-panel-body-frame',
 		title: 'Details',
+        scalrOptions: {
+            maximize: 'all'
+        },
 		items: [{
 			xtype: 'fieldset',
 			title: 'General',
@@ -109,7 +111,6 @@ Scalr.regPage('Scalr.ui.tools.aws.ec2.elb.details', function( loadParams, module
 			border: false,
 			height: 400,
 			itemId: 'panel',
-			bodyCls: 'x-panel-body-frame',
 			layout: {
 				type: 'hbox',
 				align: 'stretch'
@@ -152,6 +153,8 @@ Scalr.regPage('Scalr.ui.tools.aws.ec2.elb.details', function( loadParams, module
 							Scalr.Request({
 								confirmBox: {
 									title: 'Create new parameter group',
+                                    formSimple: true,
+                                    formWidth: 500,
 									form: [{
 										xtype: 'combo',
 										name: 'policyName',
@@ -211,7 +214,7 @@ Scalr.regPage('Scalr.ui.tools.aws.ec2.elb.details', function( loadParams, module
 									}
 									if (flag) {
 										policyFlag = true;
-										panel.down('#policyGrid').hide().disable();
+										panel.down('#policyGrid').disable();
 									}
 								}
 							}
@@ -236,12 +239,13 @@ Scalr.regPage('Scalr.ui.tools.aws.ec2.elb.details', function( loadParams, module
 						pack: 'start'
 					},
 					items: [{
-						ui: 'paging',
-						iconCls: 'x-tbar-add',
+                        text: 'Add listener',
+                        cls: 'x-btn-green-bg',
 						handler: function() {
 							Scalr.Request({
 								confirmBox: {
 									title: 'Add new Listener',
+                                    formSimple: true,
 									form: [{
 										xtype: 'hiddenfield',
 										name: 'cloudLocation',
@@ -254,7 +258,7 @@ Scalr.regPage('Scalr.ui.tools.aws.ec2.elb.details', function( loadParams, module
 										xtype: 'combo',
 										itemId: 'test',
 										name: 'protocol',
-										fieldLabel: 'protocol',
+										fieldLabel: 'Protocol',
 										labelWidth: 120,
 										editable: false,
 										store: [ 'TCP', 'HTTP', 'SSL', 'HTTPS' ],
@@ -333,7 +337,7 @@ Scalr.regPage('Scalr.ui.tools.aws.ec2.elb.details', function( loadParams, module
 									if (policyFlag) {
 										if(options.params.protocol == "HTTP" || options.params.protocol == "HTTPS"){
 											policyFlag = false;
-											this.up('#panel').down('#policyGrid').show().enable();
+											this.up('#panel').down('#policyGrid').enable();
 										}
 									}
 								}
@@ -406,12 +410,13 @@ Scalr.regPage('Scalr.ui.tools.aws.ec2.elb.details', function( loadParams, module
 						pack: 'start'
 					},
 					items: [{
-						ui: 'paging',
-						iconCls: 'x-tbar-add',
+                        text: 'Add policy',
+                        cls: 'x-btn-green-bg',
 						handler: function() {
 							Scalr.Request({
 								confirmBox: {
 									title: 'Create Stickiness Policies',
+                                    formSimple: true,
 									form: [{
 										xtype: 'hiddenfield',
 										name: 'cloudLocation',

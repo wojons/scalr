@@ -1,6 +1,8 @@
 <?php
 namespace Scalr\Service\OpenStack\Services;
 
+use Scalr\Service\OpenStack\Services\Network\Type\CreateRouter;
+use Scalr\Service\OpenStack\Services\Network\Type\ListRoutersFilter;
 use Scalr\Service\OpenStack\Services\Network\Type\ListPortsFilter;
 use Scalr\Service\OpenStack\Services\Network\Type\CreatePort;
 use Scalr\Service\OpenStack\Services\Network\Type\CreateSubnet;
@@ -25,6 +27,12 @@ use Scalr\Service\OpenStack\Services\Network\V2\NetworkApi;
  *
  * @property \Scalr\Service\OpenStack\Services\Network\Handler\PortsHandler $ports
  *           Gets a Ports service interface handler.
+ *
+ * @property \Scalr\Service\OpenStack\Services\Network\Handler\RoutersHandler $routers
+ *           Gets a Routers service interface handler.
+ *
+ * @property \Scalr\Service\OpenStack\Services\Network\Handler\FloatingIpsHandler $floatingIps
+ *           Gets a FloatingIps service interface handler.
  *
  * @method   \Scalr\Service\OpenStack\Services\Network\V2\NetworkApi getApiHandler()
  *           getApiHandler()
@@ -72,7 +80,7 @@ class NetworkService extends AbstractService implements ServiceInterface
         $cfg = $this->getOpenStack()->getConfig();
         return $cfg->getAuthToken() === null ?
             $cfg->getIdentityEndpoint() :
-            parent::getEndpointUrl() . '/v2.0';
+            rtrim(parent::getEndpointUrl(), '/') . '/v2.0';
     }
 
     /**
@@ -330,5 +338,210 @@ class NetworkService extends AbstractService implements ServiceInterface
     public function deletePort($portId)
     {
         return $this->getApiHandler()->deletePort($portId);
+    }
+
+    /**
+     * Gets the routers list
+     *
+     * This operation returns a list of routers to which the tenant has access.
+     * Default policy settings return only those routers that are owned by the tenant who submits the request,
+     * unless the request is submitted by an user with administrative rights.
+     * Users can control which attributes should be returned by using the fields query parameter.
+     * Additionally, results can be filtered by using query string parameters.
+     *
+     * @param   string                  $routerId     optional The ID of the router to show detailed info
+     * @param   ListRoutersFilter|array $filter       optional The filter options
+     * @param   array                   $fields       optional The list of the fields to show
+     * @return  array|object Returns the list of the routers or the information about one router
+     * @throws  RestClientException
+     */
+    public function listRouters($routerId = null, $filter = null, array $fields = null)
+    {
+        if (!empty($filter) && !($filter instanceof ListRoutersFilter)) {
+            $filter = ListRoutersFilter::initArray($filter);
+        }
+        return $this->getApiHandler()->listRouters($routerId, $filter, $fields);
+    }
+
+    /**
+     * Create Router action (POST /routers)
+     *
+     * This operation creates a new logical router.
+     * When it is created, a logical router does not have any internal interface.
+     * In other words, it is not associated to any subnet.
+     * The user can optionally specify an external gateway for a router at create time;
+     * a router's external gateway must be plugged into an external network,
+     * that is to say a network for which the extended field router:external is set to true.
+     *
+     * @param   CreateRouter|array $request Create router request object
+     * @return  object             Returns router object on success or throws an exception otherwise
+     * @throws  RestClientException
+     */
+    public function createRouter($request)
+    {
+        if (!($request instanceof CreateRouter)) {
+            $request = CreateRouter::initArray($request);
+        }
+        return $this->getApiHandler()->createRouter($request);
+    }
+
+    /**
+     * Delete Router action (DELETE /routers/router-id)
+     *
+     * This operation removes a logical router;
+     * The operation will fail if the router still has some internal interfaces.
+     * Users must remove all router interfaces before deleting the router,
+     * by removing all internal interfaces through remove router interface operation.
+     *
+     * @param   string     $routerId    The ID of the router to remove.
+     * @return  bool       Returns true on success or throws an exception otherwise
+     * @throws  RestClientException
+     */
+    public function deleteRouter($routerId)
+    {
+        return $this->getApiHandler()->deleteRouter($routerId);
+    }
+
+    /**
+     * Update Router action (PUT /routers/router-id)
+     *
+     * This operation updates a logical router. Beyond the name and the administrative state,
+     * the only parameter which can be updated with this operation is the external gateway.
+     *
+     * Please note that this operation does not allow to update router interfaces.
+     * To this aim, the add router interface and remove router interface should be used.
+     *
+     * @param   string       $routerId The Id of the router
+     * @param   array|object $options  Raw options object (It will be json_encoded and passed as is.)
+     * @return  object       Returns router object on success or throws an exception otherwise
+     * @throws  RestClientException
+     */
+    public function updateRouter($routerId, $options)
+    {
+        return $this->getApiHandler()->updateRouter($routerId, $options);
+    }
+
+    /**
+     * Add Router Interface action (PUT /routers/router-id/add_router_interface)
+     *
+     * This operation attaches a subnet to an internal router interface.
+     * Either a subnet identifier or a port identifier must be passed in the request body.
+     * If both are specified, a 400 Bad Request error is returned.
+     *
+     * When the subnet_id attribute is specified in the request body,
+     * the subnet's gateway ip address is used to create the router interface;
+     * otherwise, if port_id is specified, the IP address associated with the port is used
+     * for creating the router interface.
+     *
+     * It is worth remarking that a 400 Bad Request error is returned if several IP addresses are associated with the specified port,
+     * or if no IP address is associated with the port;
+     * also a 409 Conflict is returned if the port is already used.
+     *
+     * @param   string     $routerId The ID of the router
+     * @param   string     $subnetId optional The identifier of the subnet
+     * @param   string     $portId   optional The identifier of the port
+     * @throws  \InvalidArgumentException
+     * @throws  RestClientException
+     * @return  object     Returns both port and subnet identifiers as object's properties
+     */
+    public function addRouterInterface($routerId, $subnetId = null, $portId = null)
+    {
+        return $this->getApiHandler()->addRouterInterface($routerId, $subnetId, $portId);
+    }
+
+    /**
+     * Remove Router Interface action (PUT /routers/router-id/remove_router_interface)
+     *
+     * This operation removes an internal router interface, thus detaching a subnet from the router.
+     * Either a subnet identifier (subnet_id) or a port identifier (port_id) should be passed in the request body;
+     * this will be used to identify the router interface to remove.
+     * If both are specified, the subnet identifier must correspond to the one of the first ip address on the port specified by the port identifier;
+     * Otherwise a 409 Conflict error will be returned.
+     *
+     * The response will contain information about the affected router and interface.
+     *
+     * A 404 Not Found error will be returned either if the router or the subnet/port do not exist or are not visible to the user.
+     * As a consequence of this operation, the port connecting the router with the subnet is removed from the subnet's network.
+     *
+     * @param   string     $routerId The ID of the router
+     * @param   string     $subnetId optional The identifier of the subnet
+     * @param   string     $portId   optional The identifier of the port
+     * @throws  \InvalidArgumentException
+     * @throws  RestClientException
+     * @return  object     Returns raw response as object
+     */
+    public function removeRouterInterface($routerId, $subnetId = null, $portId = null)
+    {
+        return $this->getApiHandler()->removeRouterInterface($routerId, $subnetId, $portId);
+    }
+
+    /**
+     * List Floating Ips action
+     *
+     * @return  array Returns the list floating IP addresses
+     * @throws  RestClientException
+     */
+    public function listFloatingIps()
+    {
+        return $this->getApiHandler()->listFloatingIps();
+    }
+
+    /**
+     * Gets floating Ip details
+     *
+     * @param   int   $floatingIpAddressId  The unique identifier associated with allocated floating IP address.
+     * @return  object Returns details of the floating IP address.
+     * @throws  RestClientException
+     */
+    public function getFloatingIp($floatingIpAddressId)
+    {
+        return $this->getApiHandler()->getFloatingIp($floatingIpAddressId);
+    }
+
+    /**
+     * This operation creates a floating IP.
+     *
+     * Creates a new floating IP,
+     * and configures its association with an internal port,
+     * if the relevant information are specified.
+     *
+     * @param   string   $floatingNetworkId The identifier of the external network
+     * @param   string   $portId            optional Internal port
+     * @return  object   Returns allocated floating ip details
+     * @throws  RestClientException
+     */
+    public function createFloatingIp($floatingNetworkId, $portId = null)
+    {
+        return $this->getApiHandler()->createFloatingIp($floatingNetworkId, $portId);
+    }
+
+    /**
+     * Removes the floating IP address.
+     *
+     * @param   int $floatingIpAddressId Floating IP address ID
+     * @return  bool Returns true on success or throws an exception
+     * @throws  RestClientException
+     */
+    public function deleteFloatingIp($floatingIpAddressId)
+    {
+        return $this->getApiHandler()->deleteFloatingIp($floatingIpAddressId);
+    }
+
+    /**
+     * This operation updates a floating IP.
+     *
+     * This operation has the name of setting, unsetting, or updating the
+     * assocation between a floating ip and a Quantum port.
+     * The association process is exactly the same as the one discussed
+     * for the create floating IP operation.
+     *
+     * @param   string   $floatingIpId      The identifier of the floating IP
+     * @param   string   $portId            optional Internal port
+     * @return  object   Returns allocated floating ip details
+     * @throws  RestClientException
+     */
+    public function updateFloatingIp($floatingIpAddressId, $portId = null)
+    {
+        return $this->getApiHandler()->updateFloatingIp($floatingIpAddressId, $portId);
     }
 }

@@ -60,7 +60,7 @@ class Scalr_Account extends Scalr_Model
      */
     public function getOwner()
     {
-        $userId = $this->db->GetOne("SELECT id FROM account_users WHERE `account_id` = ? AND `type` = ?", array($this->id, Scalr_Account_User::TYPE_ACCOUNT_OWNER));
+        $userId = $this->db->GetOne("SELECT id FROM account_users WHERE `account_id` = ? AND `type` = ? LIMIT 1", array($this->id, Scalr_Account_User::TYPE_ACCOUNT_OWNER));
         return Scalr_Account_User::init()->loadById($userId);
     }
 
@@ -70,7 +70,7 @@ class Scalr_Account extends Scalr_Model
      */
     public function loadBySetting($name, $value)
     {
-        $id = $this->db->GetOne("SELECT clientid FROM client_settings WHERE `key` = ? AND `value` = ?",
+        $id = $this->db->GetOne("SELECT clientid FROM client_settings WHERE `key` = ? AND `value` = ? LIMIT 1",
             array($name, $value)
         );
         if (!$id)
@@ -83,63 +83,87 @@ class Scalr_Account extends Scalr_Model
      * {@inheritdoc}
      * @see Scalr_Model::delete()
      */
-    public function delete($id = null) {
+    public function delete($id = null)
+    {
+        try {
+            $this->db->StartTrans();
 
-        parent::delete();
+            //TODO: Use models
+            $this->db->Execute("DELETE FROM account_audit WHERE account_id=?", array($this->id));
 
-        //TODO: Use models
-        $this->db->Execute("DELETE FROM account_audit WHERE account_id=?", array($this->id));
-        $this->db->Execute("DELETE FROM account_users WHERE account_id=?", array($this->id));
-        $this->db->Execute("DELETE FROM account_teams WHERE account_id=?", array($this->id));
-        $this->db->Execute("DELETE FROM account_limits WHERE account_id=?", array($this->id));
-        $this->db->Execute("DELETE FROM client_environments WHERE client_id=?", array($this->id));
+            $this->db->Execute("
+                DELETE account_team_users FROM account_team_users, account_teams
+                WHERE account_teams.account_id = ?
+                AND account_team_users.team_id = account_teams.id
+            ", array($this->id));
+            $this->db->Execute("DELETE FROM account_users WHERE account_id=?", array($this->id));
+            $this->db->Execute("DELETE FROM account_teams WHERE account_id=?", array($this->id));
 
-        $this->db->Execute("DELETE FROM servers WHERE client_id=?", array($this->id));
-        $this->db->Execute("DELETE FROM ec2_ebs WHERE client_id=?", array($this->id));
-        $this->db->Execute("DELETE FROM apache_vhosts WHERE client_id=?", array($this->id));
-        $this->db->Execute("DELETE FROM scheduler WHERE account_id=?", array($this->id));
+            $this->db->Execute("DELETE FROM account_limits WHERE account_id=?", array($this->id));
+            $this->db->Execute("DELETE FROM client_environments WHERE client_id=?", array($this->id));
 
-        $farms = $this->db->GetAll("SELECT id FROM farms WHERE clientid='{$this->id}'");
-        foreach ($farms as $farm)
-        {
-            $this->db->Execute("DELETE FROM farms WHERE id=?", array($farm["id"]));
-            $this->db->Execute("DELETE FROM farm_roles WHERE farmid=?", array($farm["id"]));
-            $this->db->Execute("DELETE FROM farm_role_options WHERE farmid=?", array($farm["id"]));
-            $this->db->Execute("DELETE FROM farm_role_scripts WHERE farmid=?", array($farm["id"]));
-            $this->db->Execute("DELETE FROM farm_event_observers WHERE farmid=?", array($farm["id"]));
-            $this->db->Execute("DELETE FROM elastic_ips WHERE farmid=?", array($farm["id"]));
-        }
+            $this->db->Execute("
+                DELETE account_team_user_acls FROM account_team_user_acls, acl_account_roles
+                WHERE acl_account_roles.account_id = ?
+                AND account_team_user_acls.account_role_id = acl_account_roles.account_role_id
+            ", array($this->id));
 
-        $roles = $this->db->GetAll("SELECT id FROM roles WHERE client_id='{$this->id}'");
-        foreach ($roles as $role)
-        {
-            $this->db->Execute("DELETE FROM roles WHERE id = ?", array($role['id']));
+            $this->db->Execute("DELETE FROM acl_account_roles WHERE account_id=?", array($this->id));
 
-            $this->db->Execute("DELETE FROM role_behaviors WHERE role_id = ?", array($role['id']));
-            $this->db->Execute("DELETE FROM role_images WHERE role_id = ?", array($role['id']));
-            $this->db->Execute("DELETE FROM role_parameters WHERE role_id = ?", array($role['id']));
-            $this->db->Execute("DELETE FROM role_properties WHERE role_id = ?", array($role['id']));
-            $this->db->Execute("DELETE FROM role_security_rules WHERE role_id = ?", array($role['id']));
-            $this->db->Execute("DELETE FROM role_software WHERE role_id = ?", array($role['id']));
+            $this->db->Execute("DELETE FROM servers WHERE client_id=?", array($this->id));
+            $this->db->Execute("DELETE FROM ec2_ebs WHERE client_id=?", array($this->id));
+            $this->db->Execute("DELETE FROM apache_vhosts WHERE client_id=?", array($this->id));
+            $this->db->Execute("DELETE FROM scheduler WHERE account_id=?", array($this->id));
+
+            $farms = $this->db->GetAll("SELECT id FROM farms WHERE clientid='{$this->id}'");
+            foreach ($farms as $farm) {
+                $this->db->Execute("DELETE FROM farms WHERE id=?", array($farm["id"]));
+                $this->db->Execute("DELETE FROM farm_roles WHERE farmid=?", array($farm["id"]));
+                $this->db->Execute("DELETE FROM farm_role_options WHERE farmid=?", array($farm["id"]));
+                $this->db->Execute("DELETE FROM farm_role_scripts WHERE farmid=?", array($farm["id"]));
+                $this->db->Execute("DELETE FROM farm_event_observers WHERE farmid=?", array($farm["id"]));
+                $this->db->Execute("DELETE FROM elastic_ips WHERE farmid=?", array($farm["id"]));
+            }
+
+            $roles = $this->db->GetAll("SELECT id FROM roles WHERE client_id='{$this->id}'");
+            foreach ($roles as $role) {
+                $this->db->Execute("DELETE FROM roles WHERE id = ?", array($role['id']));
+
+                $this->db->Execute("DELETE FROM role_behaviors WHERE role_id = ?", array($role['id']));
+                $this->db->Execute("DELETE FROM role_images WHERE role_id = ?", array($role['id']));
+                $this->db->Execute("DELETE FROM role_parameters WHERE role_id = ?", array($role['id']));
+                $this->db->Execute("DELETE FROM role_properties WHERE role_id = ?", array($role['id']));
+                $this->db->Execute("DELETE FROM role_security_rules WHERE role_id = ?", array($role['id']));
+                $this->db->Execute("DELETE FROM role_software WHERE role_id = ?", array($role['id']));
+            }
+
+            parent::delete();
+
+            $this->db->CompleteTrans();
+        } catch (\Exception $e) {
+            $this->db->RollbackTrans();
+            throw $e;
         }
     }
 
     /**
+     * Initializes ACL Roles for account
      *
-     * @param string $name
-     * @return Scalr_Account_Group
+     * @returns array Returns Account Roles
+     * @throws  \Exception
      */
-    public function createTeam($name)
+    public function initializeAcl()
     {
-        if (!$this->id)
-            throw new Exception("Account is not created");
+        $ret = array();
+        if (!$this->id) {
+            throw new \Exception("Account is not created.");
+        }
+        $acl = $this->getContainer()->acl;
 
-        $group = Scalr_Account_Group::init();
-        $group->accountId = $this->id;
-        $group->name = $name;
-        $group->isActive = 1;
+        $ret['account_role'][$acl::ROLE_ID_FULL_ACCESS] = $acl->getFullAccessAccountRole($this->id, true);
+        $ret['account_role'][$acl::ROLE_ID_EVERYTHING_FORBIDDEN] = $acl->getNoAccessAccountRole($this->id, true);
 
-        return $group->save();
+        return $ret;
     }
 
     /**
@@ -189,6 +213,11 @@ class Scalr_Account extends Scalr_Model
 
         $config[ENVIRONMENT_SETTINGS::TIMEZONE] = "America/Adak";
 
+        /*
+            $config[ENVIRONMENT_SETTINGS::API_LIMIT_ENABLED] = 1;
+            $config[ENVIRONMENT_SETTINGS::API_LIMIT_REQPERHOUR] = 18000;
+        */
+
         $env->setPlatformConfig($config, false);
 
         return $env;
@@ -202,7 +231,7 @@ class Scalr_Account extends Scalr_Model
      */
     public function getSetting($name)
     {
-        return $this->db->GetOne("SELECT value FROM client_settings WHERE clientid=? AND `key`=?",
+        return $this->db->GetOne("SELECT value FROM client_settings WHERE clientid=? AND `key`=? LIMIT 1",
             array($this->id, $name)
         );
     }
@@ -215,9 +244,18 @@ class Scalr_Account extends Scalr_Model
      */
     public function setSetting($name, $value)
     {
-        $this->db->Execute("REPLACE INTO client_settings SET `key`=?, `value`=?, clientid=?",
-            array($name, $value, $this->id)
-        );
+        //UNIQUE KEY `NewIndex1` (`clientid`,`key`),
+        $this->db->Execute("
+            INSERT client_settings
+            SET clientid=?,
+                `key`=?,
+                `value`=?
+            ON DUPLICATE KEY UPDATE
+                `value`=?
+        ", array(
+            $this->id, $name, $value, $value
+        ));
+
         return $this;
     }
 

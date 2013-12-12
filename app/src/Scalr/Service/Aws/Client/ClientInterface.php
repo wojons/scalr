@@ -1,6 +1,8 @@
 <?php
 namespace Scalr\Service\Aws\Client;
 
+use Scalr\Service\Aws\Plugin\EventObserver;
+
 /**
  * Client interface
  *
@@ -25,7 +27,7 @@ interface ClientInterface
      * @return    ClientResponseInterface
      * @throws    ClientException
      */
-    public function call ($action, $options, $path = '/');
+    public function call($action, $options, $path = '/');
 
     /**
      * Gets client type
@@ -44,7 +46,15 @@ interface ClientInterface
 
     /**
      * Gets AWS instance
+     *
      * @return  \Scalr\Service\Aws Returns an AWS intance
      */
     public function getAws();
+
+    /**
+     * Gets the quantity of the processed queries during current client session
+     *
+     * @return   int    Returns the number of the requested queries to the AWS API
+     */
+    public function getQueriesQuantity();
 }

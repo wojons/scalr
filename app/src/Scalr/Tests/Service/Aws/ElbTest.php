@@ -199,7 +199,7 @@ class ElbTest extends ElbTestCase
     public function testCreateLoadBalancerTheSameName()
     {
         $this->skipIfEc2PlatformDisabled();
-        $exeption = null;
+        $exception = null;
         $repo = $this->elb->getEntityManager()->getRepository('Elb:LoadBalancerDescription');
         $lb2 = $repo->find(self::getTestName(self::LB_NAME_FUNC_TEST_2));
         $this->assertInstanceOf(self::CLASS_LOAD_BALANCER_DESCRIPTION_DATA, $lb2);
@@ -215,9 +215,9 @@ class ElbTest extends ElbTestCase
                 AwsTestCase::AVAILABILITY_ZONE_D
             ));
             $this->assertTrue(false, 'QueryClientException must be thrown here.');
-        } catch (QueryClientException $exeption) {
-            $this->assertInstanceOf(self::CLASS_ERROR_DATA, $exeption->getErrorData());
-            $this->assertEquals(ErrorData::ERR_DUPLICATE_LOAD_BALANCER_NAME, $exeption->getErrorData()->getCode());
+        } catch (QueryClientException $exception) {
+            $this->assertInstanceOf(self::CLASS_ERROR_DATA, $exception->getErrorData());
+            $this->assertEquals(ErrorData::ERR_DUPLICATE_LOAD_BALANCER_NAME, $exception->getErrorData()->getCode());
         }
     }
 
@@ -693,7 +693,7 @@ class ElbTest extends ElbTestCase
                 'reason-code',
                 'state'
             ) as $j) {
-                $name = preg_replace('/(-([a-z]))/e', "strtoupper('\\2')", $j);
+                $name = preg_replace_callback('/(-([a-z]))/', create_function('$a', 'return strtoupper($a[2]);'), $j);
                 $this->assertEquals($j . '-' . ($i * 3 + 1), $instanceHealthResult[$i]->{$name});
             }
         }

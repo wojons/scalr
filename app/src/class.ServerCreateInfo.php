@@ -45,59 +45,53 @@
             foreach ($Reflect->getConstants() as $k=>$v)
                 $this->platformProps[] = $v;
 
-            if ($DBFarmRole)
-            {
-                switch($this->platform)
-                {
-                    case SERVER_PLATFORMS::NIMBULA:
+            if ($DBFarmRole) {
+                if (PlatformFactory::isOpenstack($this->platform)) {
+                    $this->SetProperties(array(
+                        OPENSTACK_SERVER_PROPERTIES::CLOUD_LOCATION => $DBFarmRole->CloudLocation
+                    ));
+                } elseif(PlatformFactory::isCloudstack($this->platform)) {
+                    $this->SetProperties(array(
+                        CLOUDSTACK_SERVER_PROPERTIES::CLOUD_LOCATION => $DBFarmRole->CloudLocation
+                    ));
+                } else {
+                    switch($this->platform) {
+                    	case SERVER_PLATFORMS::NIMBULA:
 
-                        break;
+                    	    break;
 
-                    case SERVER_PLATFORMS::EUCALYPTUS:
-                        $this->SetProperties(array(
-                            EUCA_SERVER_PROPERTIES::REGION => $DBFarmRole->CloudLocation
-                        ));
-                        break;
+                    	case SERVER_PLATFORMS::EUCALYPTUS:
+                    	    $this->SetProperties(array(
+                    	    EUCA_SERVER_PROPERTIES::REGION => $DBFarmRole->CloudLocation
+                    	    ));
+                    	    break;
 
-                    case SERVER_PLATFORMS::OPENSTACK:
-                        $this->SetProperties(array(
-                            OPENSTACK_SERVER_PROPERTIES::CLOUD_LOCATION => $DBFarmRole->CloudLocation
-                        ));
-                        break;
+                    	case SERVER_PLATFORMS::RACKSPACE:
+                    	    $this->SetProperties(array(
+                    	    RACKSPACE_SERVER_PROPERTIES::DATACENTER => $DBFarmRole->CloudLocation
+                    	    ));
+                    	    break;
 
-                    case SERVER_PLATFORMS::RACKSPACE:
-                        $this->SetProperties(array(
-                            RACKSPACE_SERVER_PROPERTIES::DATACENTER => $DBFarmRole->CloudLocation
-                        ));
-                        break;
+                    	case SERVER_PLATFORMS::GCE:
+                    	    $this->SetProperties(array(
+                    	    GCE_SERVER_PROPERTIES::CLOUD_LOCATION => $DBFarmRole->CloudLocation
+                    	    ));
+                    	    break;
 
-                    case SERVER_PLATFORMS::GCE:
-                        $this->SetProperties(array(
-                            GCE_SERVER_PROPERTIES::CLOUD_LOCATION => $DBFarmRole->CloudLocation
-                        ));
-                        break;
-
-                    case SERVER_PLATFORMS::UCLOUD:
-                    case SERVER_PLATFORMS::IDCF:
-                    case SERVER_PLATFORMS::CLOUDSTACK:
-                        $this->SetProperties(array(
-                            CLOUDSTACK_SERVER_PROPERTIES::CLOUD_LOCATION => $DBFarmRole->CloudLocation
-                        ));
-                        break;
-
-                    case SERVER_PLATFORMS::EC2:
-                        $this->SetProperties(array(
-                            //EC2_SERVER_PROPERTIES::AVAIL_ZONE => $DBFarmRole->GetSetting(DBFarmRole::SETTING_AWS_AVAIL_ZONE),
-                            EC2_SERVER_PROPERTIES::REGION => $DBFarmRole->CloudLocation
-                        ));
-                    break;
+                    	case SERVER_PLATFORMS::EC2:
+                    	    $this->SetProperties(array(
+                    	    //EC2_SERVER_PROPERTIES::AVAIL_ZONE => $DBFarmRole->GetSetting(DBFarmRole::SETTING_AWS_AVAIL_ZONE),
+                    	    EC2_SERVER_PROPERTIES::REGION => $DBFarmRole->CloudLocation
+                    	    ));
+                    	    break;
+                    }
                 }
 
                 //TODO:
-                $this->SetProperties(array(SERVER_PROPERTIES::SZR_VESION => '0.13.0'));
+                $this->SetProperties(array(SERVER_PROPERTIES::SZR_VESION => '0.20.0'));
             }
             else
-                $this->SetProperties(array(SERVER_PROPERTIES::SZR_VESION => '0.13.0'));
+                $this->SetProperties(array(SERVER_PROPERTIES::SZR_VESION => '0.20.0'));
         }
 
         public function SetProperties(array $props)

@@ -24,10 +24,14 @@ class FarmRoleStorage
         return FarmRoleStorageConfig::getByFarmRole($this->farmRole);
     }
 
-    public function setConfigs(array $configs)
+    public function setConfigs($configs)
     {
         if (!empty($configs) && is_array($configs)) {
             foreach($configs as $value) {
+
+                if (!is_array($value) || !is_array($value['settings']))
+                    continue;
+
                 $config = new FarmRoleStorageConfig($this->farmRole);
                 $config->create($value);
             }
@@ -108,6 +112,8 @@ class FarmRoleStorage
                  } else {
                      $volume = $dbVolume->config;
                      $createFreshConfig = false;
+
+                     $volume->mpoint = ($config->mount == 1) ? $config->mountPoint : null;
                  }
             }
 
@@ -130,7 +136,11 @@ class FarmRoleStorage
                         }
                         break;
                     case FarmRoleStorageConfig::TYPE_CSVOL:
-                        $volumeConfigTemplate->size = $config->settings[FarmRoleStorageConfig::SETTING_CSVOL_SIZE];
+                        $volumeConfigTemplate->diskOfferingId = $config->settings[FarmRoleStorageConfig::SETTING_CSVOL_DISK_OFFERING];
+                        $volumeConfigTemplate->diskOfferingType = $config->settings[FarmRoleStorageConfig::SETTING_CSVOL_DISK_OFFERING_TYPE];
+                        if ($volumeConfigTemplate->diskOfferingType == 'custom' || !$volumeConfigTemplate->diskOfferingId)
+                            $volumeConfigTemplate->size = $config->settings[FarmRoleStorageConfig::SETTING_CSVOL_SIZE];
+
 
                         // SNAPSHOT
                         if ($config->settings[FarmRoleStorageConfig::SETTING_CSVOL_SNAPSHOT] != '') {
@@ -139,11 +149,21 @@ class FarmRoleStorage
                             $volumeConfigTemplate->snap->id = $config->settings[FarmRoleStorageConfig::SETTING_CSVOL_SNAPSHOT];
                         }
                         break;
+                    case FarmRoleStorageConfig::TYPE_GCE_PD:
+                        $volumeConfigTemplate->size = $config->settings[FarmRoleStorageConfig::SETTING_GCE_PD_SIZE];
+
+                        // SNAPSHOT
+                        if ($config->settings[FarmRoleStorageConfig::SETTING_GCE_PD_SNAPSHOT] != '') {
+                            $volumeConfigTemplate->snap = new \stdClass();
+                            $volumeConfigTemplate->snap->type = FarmRoleStorageConfig::TYPE_GCE_PD;
+                            $volumeConfigTemplate->snap->id = $config->settings[FarmRoleStorageConfig::SETTING_GCE_PD_SNAPSHOT];
+                        }
+                        break;
                     case FarmRoleStorageConfig::TYPE_EBS:
                         $volumeConfigTemplate->size = $config->settings[FarmRoleStorageConfig::SETTING_EBS_SIZE];
 
                         // IOPS
-                        if ($config->settings[FarmRoleStorageConfig::SETTING_EBS_TYPE] != 'standard') {
+                        if ($config->settings[FarmRoleStorageConfig::SETTING_EBS_TYPE] == 'io1') {
                             $volumeConfigTemplate->volumeType = $config->settings[FarmRoleStorageConfig::SETTING_EBS_TYPE];
                             $volumeConfigTemplate->iops = $config->settings[FarmRoleStorageConfig::SETTING_EBS_IOPS];
                         }
@@ -159,6 +179,7 @@ class FarmRoleStorage
                     case FarmRoleStorageConfig::TYPE_RAID_CSVOL:
                     case FarmRoleStorageConfig::TYPE_RAID_CINDER:
                     case FarmRoleStorageConfig::TYPE_RAID_EBS:
+                    case FarmRoleStorageConfig::TYPE_RAID_GCE_PD:
                         $volumeConfigTemplate->level = $config->settings[FarmRoleStorageConfig::SETTING_RAID_LEVEL];
                         $volumeConfigTemplate->vg = $config->id;
                         $volumeConfigTemplate->disks = array();
@@ -170,13 +191,20 @@ class FarmRoleStorage
                                 $disk->type = FarmRoleStorageConfig::TYPE_EBS;
 
                                 // IOPS
-                                if ($config->settings[FarmRoleStorageConfig::SETTING_EBS_TYPE] != 'standard') {
+                                if ($config->settings[FarmRoleStorageConfig::SETTING_EBS_TYPE] == 'io1') {
                                     $disk->volumeType = $config->settings[FarmRoleStorageConfig::SETTING_EBS_TYPE];
                                     $disk->iops = $config->settings[FarmRoleStorageConfig::SETTING_EBS_IOPS];
                                 }
                             } elseif ($config->type == FarmRoleStorageConfig::TYPE_RAID_CSVOL) {
-                                $disk->size = $config->settings[FarmRoleStorageConfig::SETTING_CSVOL_SIZE];
+                                $disk->diskOfferingId = $config->settings[FarmRoleStorageConfig::SETTING_CSVOL_DISK_OFFERING];
+                                $disk->diskOfferingType = $config->settings[FarmRoleStorageConfig::SETTING_CSVOL_DISK_OFFERING_TYPE];
+                                if ($disk->diskOfferingType == 'custom' || !$disk->diskOfferingId)
+                                    $disk->size = $config->settings[FarmRoleStorageConfig::SETTING_CSVOL_SIZE];
+
                                 $disk->type = FarmRoleStorageConfig::TYPE_CSVOL;
+                            } elseif ($config->type == FarmRoleStorageConfig::TYPE_RAID_GCE_PD) {
+                                $disk->size = $config->settings[FarmRoleStorageConfig::SETTING_GCE_PD_SIZE];
+                                $disk->type = FarmRoleStorageConfig::TYPE_GCE_PD;
                             } elseif ($config->type == FarmRoleStorageConfig::TYPE_RAID_CINDER) {
                                 $disk->size = $config->settings[FarmRoleStorageConfig::SETTING_CINDER_SIZE];
                                 $disk->type = FarmRoleStorageConfig::TYPE_CINDER;

@@ -1,9 +1,7 @@
-
 import mock
 import unittest
 
 from scalrpy import stats_poller
-
 
 
 def patch_snmp():
@@ -33,7 +31,6 @@ def patch_snmp():
     return snmp
 
 
-
 def patch_scalarizr_api():
     api = stats_poller.ScalarizrAPI()
     api.get_data = mock.Mock(return_value = {
@@ -61,20 +58,21 @@ def patch_scalarizr_api():
     return api 
 
 
-
 class SNMPTest(unittest.TestCase):
 
-    @mock.patch('scalrpy.stats_poller.netsnmp')
-    def test_get(self, netsnmp):
-        connection_info = {'host':'localhost', 'port':161,
-                           'community':'YaOtBabuhkiYhelYaOtDeduhkiYhel'}
-        with mock.patch('scalrpy.stats_poller.netsnmp.Session') as Session:
+    def test_get(self):
+        host = 'localhost'
+        port = 161
+        community = 'YaOtBabushkiUhelYaOtDeduhkiUhel'
+
+        import netsnmp
+        with mock.patch('netsnmp.Session') as Session:
             instance = Session.return_value
             instance.get.return_value = (
                 '0', '0', '0', '0', '0.0', '0.0', '0.0','0',
                 '0', '0', '0', '0', '0', '0', '0', '0', '0')
             snmp = stats_poller.SNMP()
-            data = snmp.get(connection_info, ['cpu', 'la', 'mem', 'net'])
+            data = snmp.get(host=host, port=port, community=community, metrics=['cpu', 'la', 'mem', 'net'])
             assert data == {
                     'cpu':{
                             'user':0.0,
@@ -99,13 +97,16 @@ class SNMPTest(unittest.TestCase):
                             'out':0.0}}
 
 
-
 class ScalarizrAPITest(unittest.TestCase):
 
     def test_get(self):
-        connection_info = {'host':'localhost', 'port':8010,
-                           'key':'YaOtBabuhkiYhelYaOtDeduhkiYhel'}
-        with mock.patch('scalrpy.stats_poller.HttpServiceProxy') as HttpServiceProxy:
+        host = 'localhost'
+        port = '8010'
+        key = 'YaOtBabuhkiYhelYaOtDeduhkiYhel'
+        key = 'uyPi0f3quqcQw4N4WXSlcj6FSKgt5pAVItGS91K3/l6MVlOaaHAtGA=='
+        os_type = 'linux'
+
+        with mock.patch('scalrpy.util.rpc.HttpServiceProxy') as HttpServiceProxy:
             hsp = HttpServiceProxy.return_value
             hsp.sysinfo.cpu_stat.return_value = {'user':0, 'nice':0, 'system':0, 'idle':0}
             hsp.sysinfo.mem_info.return_value = {
@@ -139,7 +140,8 @@ class ScalarizrAPITest(unittest.TestCase):
                                 'bytes':0,
                                 'sectors':0}}}
             api = stats_poller.ScalarizrAPI()
-            data = api.get(connection_info, ['cpu', 'la', 'mem', 'net'])
+            data = api.get(host=host, port=port, key=key, os_type=os_type, \
+                    metrics=['cpu', 'la', 'mem', 'net'], proxy=None)
             assert data == {
                     'cpu':{
                             'user':0.0,
@@ -154,7 +156,7 @@ class ScalarizrAPITest(unittest.TestCase):
                             'swap':0.0,
                             'swapavail':0.0,
                             'total':0.0,
-                            'avail':0.0,
+                            'avail':None,
                             'free':0.0,
                             'shared':0.0,
                             'buffer':0.0,
@@ -164,20 +166,17 @@ class ScalarizrAPITest(unittest.TestCase):
                             'out':0.0}}
 
 
-
 def test_server_thread():
-    task = {'farm_id':'1', 'farm_role_id':'2', 'index':'3', 'host':'localhost', 'api_port':80,
-            'api_key':'api_key', 'snmp_port':'80', 'community':'public',
-            'metrics':['cpu', 'la', 'net', 'mem']}
+    task = (
+            {'farm_id':'1', 'farm_role_id':'2', 'index':'3', 'host':'localhost', 'api_port':'80',
+            'srz_key':'uyPi0f3quqcQw4N4WXSlcj6FSKgt5pAVItGS91K3/l6MVlOaaHAtGA==', 'snmp_port':'80',
+            'community':'public', 'os_type':'linux', 'proxy':None,
+            'metrics':['cpu', 'la', 'net', 'mem']},
+            mock.MagicMock()
+            )
+    assert stats_poller.server_thread(task) == None
 
-    assert stats_poller.server_thread(task) == {'index': '3', 'farm_id': '1',
-            'data': {'mem': {'swapavail': None, 'cached': None, 'free': None, 'avail': None,
-            'buffer': None, 'swap': None, 'shared': None, 'total': None},
-            'net': {'in': None, 'out': None},
-            'cpu': {'idle': None, 'nice': None, 'system': None, 'user': None},
-            'la': {'la5': None, 'la15': None, 'la1': None}}, 'farm_role_id': '2'}
-
-    with mock.patch('scalrpy.stats_poller.HttpServiceProxy') as HttpServiceProxy:
+    with mock.patch('scalrpy.util.rpc.HttpServiceProxy') as HttpServiceProxy:
         hsp = HttpServiceProxy.return_value
         hsp.sysinfo.cpu_stat.return_value = {'user':0, 'nice':0, 'system':0, 'idle':0}
         hsp.sysinfo.mem_info.return_value = {
@@ -187,18 +186,47 @@ def test_server_thread():
                 'total_free':0,
                 'shared':0,
                 'buffer':0,
-                'cached':0}
+                'cached':0,
+                }
         hsp.sysinfo.net_stats.return_value = {
                 'eth0':{'receive':{'bytes':0}, 'transmit':{'bytes':0}}}
         hsp.sysinfo.load_average.return_value = [0.0, 0.0, 0.0]
+        hsp.sysinfo.disk_stats.return_value = {
+            'xvda1':{
+                    'write':{
+                            'num':0,
+                            'bytes':0,
+                            'sectors':0,
+                            },
+                    'read':{
+                            'num':0,
+                            'bytes':0,
+                            'sectors':0,
+                            },
+                    },
+            'loop0':{
+                    'write':{
+                            'num':0,
+                            'bytes':0,
+                            'sectors':0,
+                            },
+                    'read':{
+                            'num':0,
+                            'bytes':0,
+                            'sectors':0,
+                            },
+                    },
+            }
 
         assert stats_poller.server_thread(task) == {'index': '3', 'farm_id': '1', 'data': {
-                'mem': {'avail': 0.0, 'cached': 0.0, 'total': 0.0, 'swap': 0.0, 'buffer': 0.0,
+                'mem': {'avail': None, 'cached': 0.0, 'total': 0.0, 'swap': 0.0, 'buffer': 0.0,
                 'shared': 0.0, 'swapavail': 0.0, 'free': 0.0}, 'net': {'out': 0.0, 'in': 0.0},
                 'cpu': {'system': 0.0, 'idle': 0.0, 'user': 0.0, 'nice': 0.0},
                 'la': {'la5': 0.0, 'la15': 0.0, 'la1': 0.0}}, 'farm_role_id': '2'}
 
-    with mock.patch('scalrpy.stats_poller.netsnmp.Session') as Session:
+    import netsnmp
+    stats_poller.CONFIG['with_snmp'] = True
+    with mock.patch('netsnmp.Session') as Session:
         instance = Session.return_value
         instance.get.return_value = (
             '0', '0', '0', '0', '0.0', '0.0', '0.0','0',
@@ -209,7 +237,7 @@ def test_server_thread():
                 'shared': 0.0, 'swapavail': 0.0, 'free': 0.0}, 'net': {'out': 0.0, 'in': 0.0},
                 'cpu': {'system': 0.0, 'idle': 0.0, 'user': 0.0, 'nice': 0.0},
                 'la': {'la5': 0.0, 'la15': 0.0, 'la1': 0.0}}, 'farm_role_id': '2'}
-
+    stats_poller.CONFIG['with_snmp'] = False
 
 
 def test_post_processing():
@@ -268,7 +296,6 @@ def test_post_processing():
     assert fs == {'1': {'servers': {'s_running': 4}}, '2': {'servers': {'s_running': 1}}}
 
 
-
 class RRDWriterTest(unittest.TestCase):
 
     # todo
@@ -286,8 +313,7 @@ class RRDWriterTest(unittest.TestCase):
 
         writer.write('/tmp/unittest', {'in':None, 'out':None})
         rrdtool.update.assert_called_with('/tmp/unittest', '--daemon',
-                'unix:/var/run/rrdcached.sock', 'N:None:None')
-
+                'unix:/var/run/rrdcached.sock', 'N:U:U')
 
 
 class RRDWorkerTest(unittest.TestCase):
@@ -380,6 +406,7 @@ class RRDWorkerTest(unittest.TestCase):
                 '/tmp/rrd_db_dir/x1x6/1/FR_1/LASNMP/db.rrd',
                 {'la1':1.0, 'la5':1.0, 'la15':1.0})
 
+
     def test_process_fa_task(self):
         rrd_task = {'1':{
                 'cpu':{
@@ -419,6 +446,7 @@ class RRDWorkerTest(unittest.TestCase):
                 '/tmp/rrd_db_dir/x1x6/1/FARM/LASNMP/db.rrd',
                 {'la1':1.0, 'la5':1.0, 'la15':1.0})
 
+
     def test_process_rs_task(self):
         rrd_task = {'1/1':{'servers':{'s_running':1}}}
 
@@ -428,6 +456,7 @@ class RRDWorkerTest(unittest.TestCase):
                 '/tmp/rrd_db_dir/x1x6/1/FR_1/SERVERS/db.rrd',
                 {'s_running':1})
 
+
     def test_process_fs_task(self):
         rrd_task = {'1':{'servers':{'s_running':1}}}
 
@@ -436,7 +465,6 @@ class RRDWorkerTest(unittest.TestCase):
         self.rrd_wrk.writers['servers'].write.assert_called_with(
                 '/tmp/rrd_db_dir/x1x6/1/FARM/SERVERS/db.rrd',
                 {'s_running':1})
-
 
 
 if __name__ == "__main__":

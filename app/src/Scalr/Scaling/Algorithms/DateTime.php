@@ -27,11 +27,13 @@ class Scalr_Scaling_Algorithms_DateTime
 
         $currentDate = array((int)$date->format("Hi"), $date->format("D"));
 
-        $scaling_period = $this->db->GetRow("SELECT * FROM farm_role_scaling_times WHERE
-            '{$currentDate[0]}' >= start_time AND
-            '{$currentDate[0]}' <= end_time AND
-            INSTR(days_of_week, '{$currentDate[1]}') != 0 AND
-            farm_roleid = '{$dbFarmRole->ID}'
+        $scaling_period = $this->db->GetRow("
+            SELECT * FROM farm_role_scaling_times
+            WHERE '{$currentDate[0]}' >= start_time
+            AND '{$currentDate[0]}' <= end_time
+            AND INSTR(days_of_week, '{$currentDate[1]}') != 0
+            AND farm_roleid = '{$dbFarmRole->ID}'
+            LIMIT 1
         ");
 
         if ($scaling_period)
@@ -40,7 +42,6 @@ class Scalr_Scaling_Algorithms_DateTime
             $this->instancesNumber = $scaling_period['instances_count'];
             $this->lastValue = "{$scaling_period['start_time']} - {$scaling_period['end_time']} = {$scaling_period['instances_count']}";
 
-            //$dbFarmRole->SetSetting(self::PROPERTY_NEED_INSTANCES_IN_CURRENT_PERIOD, $num_instances);
             if (($dbFarmRole->GetRunningInstancesCount()+$dbFarmRole->GetPendingInstancesCount()) < $this->instancesNumber)
                 return Scalr_Scaling_Decision::UPSCALE;
             elseif (($dbFarmRole->GetRunningInstancesCount()+$dbFarmRole->GetPendingInstancesCount()) > $this->instancesNumber)
@@ -50,7 +51,6 @@ class Scalr_Scaling_Algorithms_DateTime
         }
         else
         {
-            //$dbFarmRole->SetSetting(self::PROPERTY_NEED_INSTANCES_IN_CURRENT_PERIOD, "");
             if ($dbFarmRole->GetRunningInstancesCount() > $dbFarmRole->GetSetting(DBFarmRole::SETTING_SCALING_MIN_INSTANCES)) {
                 $this->lastValue = "No period defined. Using Min instances setting.";
                 return Scalr_Scaling_Decision::DOWNSCALE;

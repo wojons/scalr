@@ -12,6 +12,8 @@ use Scalr\Tests\Constraint\ArrayHas;
 abstract class TestCase extends \PHPUnit_Framework_TestCase
 {
 
+    public static $dbLog = array();
+
     /**
      * {@inheritdoc}
      * @see PHPUnit_Framework_TestCase::setUp()
@@ -51,17 +53,14 @@ abstract class TestCase extends \PHPUnit_Framework_TestCase
     }
 
     /**
-     * Decamilizes string
+     * Camelizes string
      *
      * @param   string   $input
-     * @return  string   Returns decamelized string
+     * @return  string   Returns camelized string
      */
-    public function decamilize($input)
+    public function camelize($input)
     {
-        $u = preg_replace_callback('/(_|^)([^_]+)/', function($c){
-            return ucfirst(strtolower($c[2]));
-        }, $input);
-        return $u;
+        return \Scalr::camelize($input);
     }
 
     /**
@@ -168,5 +167,37 @@ abstract class TestCase extends \PHPUnit_Framework_TestCase
         $ref->setAccessible(true);
 
         return $ref;
+    }
+
+    /**
+     * Enables mysql log
+     */
+    public static function enableDbLog()
+    {
+        global $ADODB_OUTP;
+        $ADODB_OUTP = function($msg, $newline) {
+            \Scalr\Tests\TestCase::$dbLog[] = str_replace(array('<br>', '-----<hr>'), array("", ""), $msg);
+        };
+        \Scalr::getDb()->debug = -1;
+    }
+
+    /**
+     * Disables mysql log
+     */
+    public static function disableDbLog()
+    {
+        global $ADODB_OUTP;
+        $ADODB_OUTP = null;
+        \Scalr::getDb()->debug = false;
+    }
+
+    /**
+     * Gets mysql database log
+     *
+     * @return   array Returns logged sql queries
+     */
+    public static function getDbLog()
+    {
+        return self::$dbLog;
     }
 }

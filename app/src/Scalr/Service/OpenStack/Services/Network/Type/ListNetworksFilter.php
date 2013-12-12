@@ -83,8 +83,7 @@ class ListNetworksFilter extends Marker
      * @param   int                     $limit        optional Limit.
      * @return  ListNetworksFilter      Returns a new ListNetworksFilter object
      */
-    public static function init($name = null, $status = null, $adminStateUp = null,
-                                $shared = null, $id = null, $marker = null, $limit = null)
+    public static function init()
     {
         return call_user_func_array('parent::init', func_get_args());
     }
@@ -238,39 +237,6 @@ class ListNetworksFilter extends Marker
     }
 
     /**
-     * Adds property's value
-     *
-     * @param   string       $name     PropertyName
-     * @param   array|string $value    value
-     * @param   \Closure     $typeCast optional Type casting closrure
-     * @return  ListNetworksFilter
-     */
-    private function _addPropertyValue($name, $value, \Closure $typeCast = null)
-    {
-        if (!property_exists($this, $name)) {
-            throw new \InvalidArgumentException(sprintf(
-                'Property "%s" does not exist in "%s"',
-                $name, get_class($this)
-            ));
-        }
-        if ($this->$name === null) {
-            $this->$name = array();
-        }
-        $property =& $this->$name;
-        if (!is_array($value) && !($value instanceof \Traversable)) {
-            $value = array($value);
-        }
-        foreach ($value as $v) {
-            if ($typeCast !== null) {
-                $property[] = $typeCast($v);
-            } else {
-                $property[] = (string)$v;
-            }
-        }
-        return $this;
-    }
-
-    /**
      * {@inheritdoc}
      * @see Scalr\Service\OpenStack\Type.Marker::getQueryData()
      */
@@ -305,20 +271,7 @@ class ListNetworksFilter extends Marker
     {
         $str = parent::getQueryString();
 
-        foreach (array('name', 'status', 'id') as $prop) {
-            if (!empty($this->$prop)) {
-                foreach ($this->$prop as $v) {
-                    $str .= '&' . $prop . '=' . rawurlencode($v);
-                }
-            }
-        }
-
-        if ($this->adminStateUp !== null) {
-            $str .= '&admin_state_up=' . ((string)$this->getAdminStateUp());
-        }
-        if ($this->shared !== null) {
-            $str .= '&shared=' . ((string)$this->getShared());
-        }
+        $str .= $this->_getQueryStringForFields(array('name', 'status', 'id', 'shared', 'adminStateUp' => 'admin_state_up'), __CLASS__);
 
         return ltrim($str, '&');
     }

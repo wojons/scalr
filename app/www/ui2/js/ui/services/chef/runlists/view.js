@@ -94,9 +94,9 @@ Scalr.regPage('Scalr.ui.services.chef.runlists.view', function (loadParams, modu
 			xtype: 'scalrpagingtoolbar',
 			store: store,
 			dock: 'top',
-			afterItems: [{
-				ui: 'paging',
-				iconCls: 'x-tbar-add',
+			beforeItems: [{
+                text: 'Add runlist',
+                cls: 'x-btn-green-bg',
 				handler: function() {
 					Scalr.event.fireEvent('redirect', '#/services/chef/runlists/create');
 				}

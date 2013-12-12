@@ -3,9 +3,11 @@
   {
           protected	$xAuthUser;
         protected	$xAuthKey;
-        private		$LastResponseHeaders 	= array();
+        public		$LastResponseHeaders 	= array();
+        public      $lastRequestBody         = "";
+        public      $LastResponseBody       = "";
         private		$xSessionUrl			= null;		// session id which returned as X-Server-Management-Url  from header
-        private		$httpRequest			= null;
+        public		$httpRequest			= null;
         private		$xAuthToken				= null;
 
         const		ACCEPT_JSON				= "application/json";
@@ -84,13 +86,14 @@
         */
         private function sendRequest()
         {
-            try
+           try
            {
                 $this->httpRequest->send();
                 $info = $this->httpRequest->getResponseInfo();
 
                 $data = $this->httpRequest->getResponseData();
                 $this->LastResponseHeaders = $data['headers'];
+                $this->LastResponseBody = $data['body'];
 
                 if($info['response_code'] >= 400)
                 {
@@ -160,7 +163,10 @@
                 //if ($k < 3 && stristr($e->getMessage(), 'Timeout was reached; Operation timed out after'))
                 //    return $this->request($method, $uri, $args, $url, $k++);
 
-                throw new Exception("[Attempt {$k}] ".$e->getMessage());
+                $info = "Method: " . $this->httpRequest->getMethod();
+                $info .= " (". $this->httpRequest->getRawRequestMessage() .")";
+
+                throw new Exception("[Attempt {$k}] ".$e->getMessage() . " [{$info}]");
             }
 
             return json_decode($response['body']);
@@ -196,6 +202,8 @@
                 "X-Auth-Token"	=> $this->xAuthToken
             ));
 
+            $this->lastRequestBody = json_encode($args);
+
             $CanonicalizedQueryString = "";
 
              $time = time();
@@ -213,11 +221,17 @@
                         break;
 
                  case "PUT":
+
+                        $this->httpRequest->setQueryData("");
+
                         if($args)
                             $this->httpRequest->setPutData(json_encode($args));
                         break;
 
                  case "POST":
+
+                        $this->httpRequest->setQueryData("");
+
                         if($args)
                             $this->httpRequest->setBody(json_encode($args));
 
@@ -226,8 +240,8 @@
              }
 
              // unique time to disable caching
-             if($method !== "GET")
-                $this->httpRequest->setQueryData("&t={$time}");
+             //if($method !== "GET")
+             //   $this->httpRequest->setQueryData("&t={$time}");
 
         }
   }

@@ -1,6 +1,5 @@
 Scalr.regPage('Scalr.ui.dm.sources.create', function(loadParams, moduleParams) {
 	var form = Ext.create('Ext.form.Panel', {
-		bodyCls: 'x-panel-body-frame',
 		width: 900,
 		title: 'Deployments &raquo; Sources &raquo; ' + ((moduleParams['id']) ? 'Edit' : 'Create'),
         scalrOptions: {
@@ -74,7 +73,7 @@ Scalr.regPage('Scalr.ui.dm.sources.create', function(loadParams, moduleParams) {
 		dockedItems: [{
 			xtype: 'container',
 			dock: 'bottom',
-			cls: 'x-docked-bottom-frame',
+			cls: 'x-docked-buttons',
 			layout: {
 				type: 'hbox',
 				pack: 'center'
@@ -99,7 +98,6 @@ Scalr.regPage('Scalr.ui.dm.sources.create', function(loadParams, moduleParams) {
 				}
 			}, {
 				xtype: 'button',
-				margin: '0 0 0 5',
 				text: 'Cancel',
 				handler: function() {
 					Scalr.event.fireEvent('close');

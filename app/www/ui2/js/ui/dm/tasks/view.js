@@ -43,10 +43,24 @@ Scalr.regPage('Scalr.ui.dm.tasks.view', function (loadParams, moduleParams) {
 
 		columns: [
 			{ header: "ID", width: 130, dataIndex: 'id', sortable: true },
-			{ header: "Deployment", flex: 1, dataIndex: 'deployment_name', sortable: false, xtype: 'templatecolumn', tpl:
+			{ header: "Deployment", flex: 1, dataIndex: 'application_name', sortable: true, xtype: 'templatecolumn', tpl:
 				'<a href="#/dm/applications/{application_id}/view">{application_name}</a>'
 			},
-			{ header: "Farm & Role", flex: 1, dataIndex: 'farm_id', sortable: false, xtype: 'templatecolumn', tpl:
+			{ header: "Farm & Role", flex: 1, dataIndex: 'farm_id', sortable: true, xtype: 'templatecolumn',
+                doSort: function (state) {
+                    var ds = this.up('tablepanel').store;
+                    ds.sort([{
+                        property: 'farm_name',
+                        direction: state
+                    }, {
+                        property: 'role_name',
+                        direction: state
+                    }, {
+                        property: 'server_index',
+                        direction: state
+                    }]);
+                },
+                tpl:
 				'<tpl if="role_name">'+
 					'<a href="#/farms/{farm_id}/view" title="Farm {farm_name}">{farm_name}</a>' +
 					'&nbsp;&rarr;&nbsp;<a href="#/farms/{farm_id}/roles/{farm_roleid}/view" title="Role {role_name}">{role_name}</a> ' +
@@ -117,6 +131,11 @@ Scalr.regPage('Scalr.ui.dm.tasks.view', function (loadParams, moduleParams) {
 		],
 
 		dockedItems: [{
+            dock: 'top',
+			xtype: 'displayfield',
+			cls: 'x-form-field-warning x-form-field-warning-fit',
+			value: Scalr.strings['deprecated_warning']
+        },{
 			xtype: 'scalrpagingtoolbar',
 			store: store,
 			dock: 'top'

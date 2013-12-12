@@ -6,9 +6,15 @@ class Scalr_Service_Gearman_Jobs_MessagesSender
     {
         $db = \Scalr::getDb();
 
-        $rows = $db->GetAll("SELECT id FROM messages WHERE `type`='out' AND status=? AND UNIX_TIMESTAMP(dtlasthandleattempt)+handle_attempts*120 < UNIX_TIMESTAMP(NOW()) ORDER BY id DESC LIMIT 0,3000",
-            array(MESSAGE_STATUS::PENDING)
-        );
+        $rows = $db->GetAll("
+            SELECT id FROM messages
+            WHERE `type`='out' AND status=?
+            AND UNIX_TIMESTAMP(dtlasthandleattempt)+handle_attempts*120 < UNIX_TIMESTAMP(NOW())
+            ORDER BY id DESC
+            LIMIT 0,3000
+        ", array(
+            MESSAGE_STATUS::PENDING
+        ));
         return $rows;
     }
 
@@ -22,13 +28,14 @@ class Scalr_Service_Gearman_Jobs_MessagesSender
         try {
             if ($message['handle_attempts'] >= 3) {
                 $db->Execute("UPDATE messages SET status=? WHERE id=?", array(MESSAGE_STATUS::FAILED, $message['id']));
-            }
-            else {
+            } else {
                 try {
                     $DBServer = DBServer::LoadByID($message['server_id']);
-                }
-                catch (Exception $e) {
-                    $db->Execute("UPDATE messages SET status=? WHERE id=?", array(MESSAGE_STATUS::FAILED, $message['id']));
+                } catch (Exception $e) {
+                    $db->Execute("UPDATE messages SET status=? WHERE id=?", array(
+                        MESSAGE_STATUS::FAILED,
+                        $message['id']
+                    ));
                     return;
                 }
 

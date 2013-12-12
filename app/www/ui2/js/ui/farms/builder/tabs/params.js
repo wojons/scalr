@@ -10,7 +10,7 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.params', function (moduleTabParams) {
 		},
 
 		beforeShowTab: function (record, handler) {
-            this.up('#farmbuilder').cache.load(
+            Scalr.CachedRequestManager.get('farmbuilder').load(
                 {
                     url: '/roles/xGetRoleParams',
                     params: {
@@ -95,7 +95,7 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.params', function (moduleTabParams) {
 		items: [{
 			xtype: 'displayfield',
             anchor: '100%',
-			fieldCls: 'x-form-field-warning',
+			cls: 'x-form-field-warning x-form-field-warning-fit',
 			value: 'This Parameters manager is deprecated. Please use <a href="#">GLOBAL VARIABLES</a> instead.',
 			listeners: {
 				afterrender: function() {
@@ -107,7 +107,8 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.params', function (moduleTabParams) {
 			}
 		}, {
 			xtype: 'fieldset',
-			itemId: 'params'
+			itemId: 'params',
+            cls: 'x-fieldset-separator-none',
 		}]
 	});
 });

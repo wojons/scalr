@@ -2,6 +2,8 @@
 
     class ServersNumWatcher
     {
+        const COLOR_RUNNING_SERVERS = '#00cc00';
+
         /**
          * Plot graphic
          *
@@ -26,6 +28,8 @@
                    "--rigid",
                    "--no-gridfit",
                    "--slope-mode",
+                "--border" => 0,
+                "--color" => "BACK#FFFFFF",
                 "--x-grid" => $r["x_grid"],
                 "--end" => $r["end"],
                 "--start" => $r["start"],

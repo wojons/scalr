@@ -16,6 +16,14 @@ class Scalr_Util_CryptoTool
         $this->blockSize = $blockSize;
     }
 
+    public static function opensslDecrypt($data, $privateKey, $privateKeyPassword = false) {
+        $key = @openssl_get_privatekey($privateKey, $privateKeyPassword);
+
+        @openssl_private_decrypt($data, $result, $key);
+
+        return $result;
+    }
+
     private function splitKeyIv($cryptoKey)
     {
         $key = substr($cryptoKey, 0, $this->keySize); # Use first n bytes as key
@@ -40,8 +48,22 @@ class Scalr_Util_CryptoTool
     {
         list ($key, $iv) = $this->splitKeyIv($cryptoKey);
         $ret = mcrypt_decrypt($this->cryptoAlgo, $key, base64_decode($string), $this->cipherMode, $iv);
+
         // Remove padding
-        return trim($ret, "\x00..\x1F");
+        //$paddingLen = ord($ret[strlen($ret) - 1]);
+        //$ret = substr($ret, 0, -$paddingLen);
+        return trim($ret, "\x00..\x20");
+    }
+
+    public function decrypt2($string, $cryptoKey)
+    {
+        list ($key, $iv) = $this->splitKeyIv($cryptoKey);
+        $ret = mcrypt_decrypt($this->cryptoAlgo, $key, base64_decode($string), $this->cipherMode, $iv);
+
+        // Remove padding
+        $paddingLen = ord($ret[strlen($ret) - 1]);
+        $ret = substr($ret, 0, -$paddingLen);
+        return $ret;
     }
 
     public static function hash($input)
@@ -56,7 +78,7 @@ class Scalr_Util_CryptoTool
 
     public static function generateTenderMultipassToken($data)
     {
-        $salted = TENDER_APIKEY . TENDER_SITEKEY;
+        $salted = \Scalr::config('scalr.ui.tender_api_key') . \Scalr::config('scalr.ui.tender_site_key');
         $hash = hash('sha1', $salted, true);
         $saltedHash = substr($hash, 0, 16);
         $iv = "OpenSSL for Ruby";

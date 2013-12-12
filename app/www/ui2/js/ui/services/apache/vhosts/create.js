@@ -1,6 +1,5 @@
 Scalr.regPage('Scalr.ui.services.apache.vhosts.create', function (loadParams, moduleParams) {
 	var form = Ext.create('Ext.form.Panel', {
-		bodyCls: 'x-panel-body-frame',
 		title: moduleParams.vhost.vhostId ? 'Services &raquo; Apache &raquo; Vhosts &raquo; Edit' : 'Services &raquo; Apache &raquo; Vhosts &raquo; Create',
 		fieldDefaults: {
 			anchor: '100%'
@@ -43,10 +42,12 @@ Scalr.regPage('Scalr.ui.services.apache.vhosts.create', function (loadParams, mo
 				forceSelection: true,
 				name: 'sslCertId',
 				allowBlank: false,
+                queryMode: 'local',
 				disabled: !moduleParams['vhost']['isSslEnabled'],
 				plugins: [{
 					ptype: 'comboaddnew',
-					url: '/services/ssl/certificates/create'
+					url: '/services/ssl/certificates/create',
+                    disabled: !Scalr.isAllowed('SERVICES_SSL')
 				}]
 			}],
 			listeners: {
@@ -111,7 +112,7 @@ Scalr.regPage('Scalr.ui.services.apache.vhosts.create', function (loadParams, mo
 		dockedItems: [{
 			xtype: 'container',
 			dock: 'bottom',
-			cls: 'x-docked-bottom-frame',
+			cls: 'x-docked-buttons',
 			layout: {
 				type: 'hbox',
 				pack: 'center'
@@ -131,13 +132,12 @@ Scalr.regPage('Scalr.ui.services.apache.vhosts.create', function (loadParams, mo
 								//'vhostId': moduleParams['vhostId']
 							},
 							success: function () {
-								Scalr.event.fireEvent('close');
+								Scalr.event.fireEvent('redirect', '#/services/apache/vhosts/view');
 							}
 						});
 				}
 			}, {
 				xtype: 'button',
-				margin: '0 0 0 5',
 				text: 'Cancel',
 				handler: function() {
 					Scalr.event.fireEvent('close');

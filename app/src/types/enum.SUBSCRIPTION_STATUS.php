@@ -1,4 +1,4 @@
-<?
+<?php
     final class SUBSCRIPTION_STATUS
     {
         const PENDING 	= "Pending";

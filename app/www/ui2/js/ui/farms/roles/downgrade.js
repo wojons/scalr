@@ -1,7 +1,6 @@
 Scalr.regPage('Scalr.ui.farms.roles.downgrade', function (loadParams, moduleParams) {
 	return Ext.create('Ext.form.Panel', {
 		width: 700,
-		bodyCls: 'x-panel-body-frame',
 		title: 'Downgrade farm role to previous version',
 		fieldDefaults: {
 			anchor: '100%',
@@ -15,7 +14,7 @@ Scalr.regPage('Scalr.ui.farms.roles.downgrade', function (loadParams, modulePara
 
 		dockedItems: [{
 			xtype: 'container',
-			cls: 'x-docked-bottom-frame',
+			cls: 'x-docked-buttons',
 			dock: 'bottom',
 			layout: {
 				type: 'hbox',
@@ -38,7 +37,6 @@ Scalr.regPage('Scalr.ui.farms.roles.downgrade', function (loadParams, modulePara
 				}
 			}, {
 				xtype: 'button',
-				margin: '0 0 0 5',
 				text: 'Cancel',
 				handler: function() {
 					Scalr.event.fireEvent('close');

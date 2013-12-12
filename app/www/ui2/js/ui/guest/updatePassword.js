@@ -16,42 +16,44 @@ Scalr.regPage('Scalr.ui.guest.updatePassword', function (loadParams, moduleParam
 		scalrOptions: {
 			modal: true
 		},
-		bodyCls: 'x-panel-body-frame',
 		width: 400,
 		layout: 'anchor',
 		items: [{
-			xtype: 'textfield',
-			inputType: 'password',
-			fieldLabel: 'New password',
-			labelWidth: 110,
-			anchor: '100%',
-			name: 'password',
-			allowBlank: false,
-			validator: function(value) {
-				if (value.length < 6)
-					return "Password should be longer than 6 chars";
+            xtype: 'fieldset',
+            items: [{
+                xtype: 'textfield',
+                inputType: 'password',
+                fieldLabel: 'New password',
+                labelWidth: 110,
+                anchor: '100%',
+                name: 'password',
+                allowBlank: false,
+                validator: function(value) {
+                    if (value.length < 6)
+                        return "Password should be longer than 6 chars";
 
-				return true;
-			}
-		}, {
-			xtype: 'textfield',
-			fieldLabel: 'Confirm',
-			inputType: 'password',
-			labelWidth: 110,
-			anchor: '100%',
-			name: 'password2',
-			allowBlank: false,
-			validator: function(value) {
-				if (value != this.prev('[name="password"]').getValue())
-					return "Passwords doesn't match";
+                    return true;
+                }
+            }, {
+                xtype: 'textfield',
+                fieldLabel: 'Confirm',
+                inputType: 'password',
+                labelWidth: 110,
+                anchor: '100%',
+                name: 'password2',
+                allowBlank: false,
+                validator: function(value) {
+                    if (value != this.prev('[name="password"]').getValue())
+                        return "Passwords doesn't match";
 
-				return true;
-			}
+                    return true;
+                }
+            }]
 		}],
 		dockedItems: [{
 			xtype: 'container',
 			dock: 'bottom',
-			cls: 'x-docked-bottom-frame',
+			cls: 'x-docked-buttons',
 			layout: {
 				type: 'hbox',
 				pack: 'center'
@@ -80,7 +82,6 @@ Scalr.regPage('Scalr.ui.guest.updatePassword', function (loadParams, moduleParam
 			}, {
 				xtype: 'button',
 				text: 'Cancel',
-				margin: '0 0 0 5',
 				handler: function () {
 					Scalr.event.fireEvent('close', true);
 				}

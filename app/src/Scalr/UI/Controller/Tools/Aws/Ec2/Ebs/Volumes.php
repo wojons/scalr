@@ -1,5 +1,5 @@
 <?php
-
+use Scalr\Acl\Acl;
 use Scalr\Service\Aws\Ec2\DataType\VolumeFilterNameType;
 use Scalr\Service\Aws\Ec2\DataType\AttachmentSetResponseData;
 use Scalr\Service\Aws\Ec2\DataType\VolumeData;
@@ -8,6 +8,11 @@ use Scalr\Service\Aws\Ec2\DataType\CreateVolumeRequestData;
 class Scalr_UI_Controller_Tools_Aws_Ec2_Ebs_Volumes extends Scalr_UI_Controller
 {
     const CALL_PARAM_NAME = 'volumeId';
+
+    public function hasAccess()
+    {
+        return parent::hasAccess() && $this->request->isAllowed(Acl::RESOURCE_AWS_VOLUMES);
+    }
 
     public function defaultAction()
     {
@@ -75,8 +80,13 @@ class Scalr_UI_Controller_Tools_Aws_Ec2_Ebs_Volumes extends Scalr_UI_Controller
             $dbEbsVolume = DBEBSVolume::loadByVolumeId($this->getParam('volumeId'));
             if ($dbEbsVolume->isManual == 0) {
                 $errmsg = sprintf(_("This volume was automatically created for role '%s' on farm '%s' and cannot be re-attahced manually."),
-                    $this->db->GetOne("SELECT name FROM roles INNER JOIN farm_roles ON farm_roles.role_id = roles.id WHERE farm_roles.id=?", array($dbEbsVolume->farmRoleId)),
-                    $this->db->GetOne("SELECT name FROM farms WHERE id=?", array($dbEbsVolume->farmId))
+                    $this->db->GetOne("
+                        SELECT name FROM roles
+                        JOIN farm_roles ON farm_roles.role_id = roles.id
+                        WHERE farm_roles.id=?
+                        LIMIT 1
+                    ", array($dbEbsVolume->farmRoleId)),
+                    $this->db->GetOne("SELECT name FROM farms WHERE id=? LIMIT 1", array($dbEbsVolume->farmId))
                 );
             }
         } catch (Exception $e) {
@@ -232,7 +242,7 @@ class Scalr_UI_Controller_Tools_Aws_Ec2_Ebs_Volumes extends Scalr_UI_Controller
                 'instanceId'       => ($att !== null ? $att->instanceId : null),
             );
 
-            $item['autoSnaps'] = ($this->db->GetOne("SELECT id FROM autosnap_settings WHERE objectid=? AND object_type=?",
+            $item['autoSnaps'] = ($this->db->GetOne("SELECT id FROM autosnap_settings WHERE objectid=? AND object_type=? LIMIT 1",
                 array($pv->volumeId, AUTOSNAPSHOT_TYPE::EBSSnap))) ? true : false;
 
             $dbEbsVolume = false;

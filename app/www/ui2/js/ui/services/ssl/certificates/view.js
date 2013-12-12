@@ -43,7 +43,7 @@ Scalr.regPage('Scalr.ui.services.ssl.certificates.view', function () {
 		},
 
 		columns:[
-			{ header: "ID", width: 50, dataIndex: 'id', sortable: true },
+			{ header: "ID", width: 60, dataIndex: 'id', sortable: true },
 			{ header: "Name", flex: 1, dataIndex: 'name', sortable: true },
 			{
 				header: 'Private key', width: 120, dataIndex: 'sslPkey', sortable: false, xtype: 'templatecolumn', align: 'center',
@@ -113,8 +113,8 @@ Scalr.regPage('Scalr.ui.services.ssl.certificates.view', function () {
 				}
 			}],
 			beforeItems: [{
-				ui: 'paging',
-				iconCls: 'x-tbar-add',
+                text: 'Add SSL certificate',
+                cls: 'x-btn-green-bg',
 				handler: function() {
 					Scalr.event.fireEvent('redirect', '#/services/ssl/certificates/create');
 				}

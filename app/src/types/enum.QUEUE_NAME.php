@@ -1,4 +1,4 @@
-<?
+<?php
     final class QUEUE_NAME
     {
         const DEFERRED_EVENTS 	= "FireDeferredEvent";

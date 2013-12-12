@@ -40,7 +40,7 @@ Scalr.regPage('Scalr.ui.schedulertasks.view', function (loadParams, moduleParams
 		},
 
 		columns: [
-			{ text: 'ID', width: 50, dataIndex: 'id', sortable: true },
+			{ text: 'ID', width: 60, dataIndex: 'id', sortable: true },
 			{ text: 'Name', flex: 1, dataIndex: 'name', sortable: true },
             { text: 'Description', flex: 2, dataIndex: 'comments', sortable: false, hidden: true },
 			{ text: 'Type', flex: 2, dataIndex: 'type', sortable: true, xtype: 'templatecolumn', tpl:
@@ -83,8 +83,8 @@ Scalr.regPage('Scalr.ui.schedulertasks.view', function (loadParams, moduleParams
 				})
 			},
 			{ text: 'End date', width: 150, dataIndex: 'endTime', sortable: true },
-			{ text: 'Last time executed', width: 150, dataIndex: 'lastStartTime', sortable: true },
-			{ text: 'Timezone', width: 120, dataIndex: 'timezone', sortable: true },
+			{ text: 'Last time executed', width: 170, dataIndex: 'lastStartTime', sortable: true },
+			{ text: 'Time zone', width: 120, dataIndex: 'timezone', sortable: true },
 			{ text: 'Priority', width: 60, dataIndex: 'order_index', sortable: true, hidden: true },
 			{ text: 'Status', width: 100, dataIndex: 'status', sortable: true, xtype: 'templatecolumn', tpl:
 				'<tpl if="status == &quot;Active&quot;"><span style="color: green;">{status}</span></tpl>' +
@@ -190,8 +190,8 @@ Scalr.regPage('Scalr.ui.schedulertasks.view', function (loadParams, moduleParams
 			store: store,
 			dock: 'top',
 			beforeItems: [{
-				ui: 'paging',
-				iconCls: 'x-tbar-add',
+                text: 'Add task',
+                cls: 'x-btn-green-bg',
 				handler: function() {
 					Scalr.event.fireEvent('redirect', '#/schedulertasks/create');
 				}

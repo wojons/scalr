@@ -12,41 +12,23 @@ Scalr.regPage('Scalr.ui.roles.builder', function (loadParams, moduleParams) {
 		};
 	
 	if (Ext.Object.getSize(platforms) == 0) {
-		Scalr.message.Error('Role builder doesn\'t support configured clouds. Please use import wizard to create scalr compatible role.');
-		Scalr.event.fireEvent('redirect', '#/servers/import2', true);
+		Scalr.message.Error('The Role Builder does not support your enabled clouds. <br/>Please <a href="#/roles/import">Create a role from Non-Scalr server</a> instead.');
+		//Scalr.event.fireEvent('redirect', '#/roles/import', true);
 		return false;
 	}
 
-	var beautifyBehavior = function(name) {
-		var map = {
-			mysql2: 'MySQL 5',
-			postgresql: 'PostgreSQL',
-			percona: 'Percona 5',
-			app: 'Apache',
-            tomcat: 'Tomcat',
-			www: 'Nginx',
-			memcached: 'Memcached',
-			redis: 'Redis',
-			rabbitmq: 'RabbitMQ',
-			mongodb: 'MongoDB',
-			mysqlproxy: 'MySQL Proxy',
-			chef: 'Chef'
-		};
-		
-		return map[name] || name;
-	}
-	
 	behaviors = [
 		{name: 'mysql2', disable: {behavior: ['postgresql', 'redis', 'mongodb', 'percona']}},
 		{name: 'postgresql', disable: {platform: ['gce'], behavior: ['redis', 'mongodb', 'percona', 'mysql2']}},
 		{name: 'percona', disable: {behavior: ['postgresql', 'redis', 'mongodb', 'mysql2']}},
 		{name: 'app', disable: {behavior:['www', 'tomcat']}},
         {name: 'tomcat', disable: {behavior:['app'], os:['oel', {family: 'ubuntu', version: ['10.04']}]}},
-		{name: 'www', disable: {behavior:['app']}},
+        {name: 'haproxy', disable: {behavior:['www']}},
+		{name: 'www', disable: {behavior:['app', 'haproxy']}},
 		{name: 'memcached'},
 		{name: 'redis', disable: {behavior: ['postgresql', 'mongodb', 'percona', 'mysql2']}},
 		{name: 'rabbitmq', disable: {os: ['rhel', 'oel']}},
-		{name: 'mongodb', disable: {platform: ['gce'], behavior: ['postgresql', 'redis', 'percona', 'mysql2']}},
+		{name: 'mongodb', disable: {platform: ['gce', 'rackspacengus', 'rackspacenguk'], behavior: ['postgresql', 'redis', 'percona', 'mysql2']}},
 		//{name: 'mysqlproxy', addon: true, disable: {os: ['centos', 'oel', 'rhel']}},//{family: 'ubuntu', version: ['10.04']}
 		{name: 'chef', addon: true, button: {pressed: true, toggle: Ext.emptyFn}}
 	];
@@ -54,10 +36,8 @@ Scalr.regPage('Scalr.ui.roles.builder', function (loadParams, moduleParams) {
 	//behaviors buttons
 	for (var i=0, len=behaviors.length; i<len; i++) {
 		var button = {
-			renderData: {
-				name: behaviors[i].name,
-				title: beautifyBehavior(behaviors[i].name)
-			},
+            iconCls: 'x-icon-behavior-large x-icon-behavior-large-' + behaviors[i].name,
+            text: Scalr.utils.beautifyBehavior(behaviors[i].name),
 			behavior: behaviors[i].name
 		};
 		if (behaviors[i].button) {
@@ -69,16 +49,9 @@ Scalr.regPage('Scalr.ui.roles.builder', function (loadParams, moduleParams) {
 	//platform buttons
 	for (var i in platforms) {
 		buttons['platforms'].push({
-			renderData: {
-				title: platforms[i].name.replace(/^rackspace open cloud \((.+)\)$/i, '<span style="font-size:90%;position:relative;top:-.4em">Rackspace<br/>Open Cloud ($1)</span>'),
-				name: i
-			},
-			value: i,
-			toggleHandler: function () {
-				if (this.pressed) {
-					panel.fireEvent('selectplatform', this.value);
-				}
-			}
+            text: Scalr.utils.getPlatformName(i, true),
+            iconCls: 'x-icon-platform-large x-icon-platform-large-' + i,
+			value: i
 		});
 	}
 	
@@ -120,44 +93,40 @@ Scalr.regPage('Scalr.ui.roles.builder', function (loadParams, moduleParams) {
     };
 
 	var panel = Ext.create('Ext.panel.Panel', {
-		bodyCls: 'x-panel-leftmenu-body',
-		bodyStyle: 'border-radius:4px',
-		cls: 'x-panel-columned',
 		scalrOptions: {
-			title: 'Role builder',
 			maximize: 'all'
 		},
+        title: 'Roles &raquo; Builder',
 		layout: {
 			type: 'hbox',
 			align: 'stretch'
 		},
+        plugins: {
+            ptype: 'localcachedrequest',
+            crscope: 'rolebuilder'
+        },
 		
 		items:[{
 			xtype: 'container',
-			cls: 'scalr-ui-rolebuilder-panel scalr-ui-rolebuilder-panel-left',
-			width: 474,
+            cls: 'x-panel-column-left',
+            autoScroll: true,
+			width: 494,
 			layout: {
 				type: 'vbox',
 				align: 'stretch'
 			},
-			margin: 12,
-			padding: '16 22 8 22',
 			items: [{
-				xtype: 'container',
+				xtype: 'fieldset',
 				itemId: 'leftcol',
-				margin: '0 10 0 0',
+                cls: 'x-fieldset-separator-none',
+                title: 'Location and operating system',
 				layout: {
 					type: 'vbox',
 					align: 'stretch'
 				},
 				items: [{
 					xtype: 'label',
-					text: 'Location and operating system',
-					cls: 'x-fieldset-subheader'
-				},{
-					xtype: 'label',
-					text: 'Location:',
-					margin: '4 0 0'
+					text: 'Location:'
 				},{
 					xtype: 'container',
 					layout: {
@@ -171,6 +140,9 @@ Scalr.regPage('Scalr.ui.roles.builder', function (loadParams, moduleParams) {
 						platforms: moduleParams['platforms'],
 						size: 'large',
 						listeners: {
+                            beforeselectlocation: function() {
+                                return !panel.serverId;
+                            },
 							selectlocation: function(location){
 								panel.down('#cloud_location').setValue(location);
 							}
@@ -210,7 +182,7 @@ Scalr.regPage('Scalr.ui.roles.builder', function (loadParams, moduleParams) {
 						}
 					},
 					defaults: {
-						width: 102
+						width: 110
 					},
 					items: [{
 						text: '64 bit',
@@ -231,13 +203,14 @@ Scalr.regPage('Scalr.ui.roles.builder', function (loadParams, moduleParams) {
 						itemId: 'root_device_type',
 						fieldLabel: 'Root device type',
 						labelWidth: 110,
+                        width: 348,
 						listeners: {
 							change: function(comp, value) {
 								panel.fireEvent('selectrootdevicetype', value);
 							}
 						},
 						defaults: {
-							width: 102
+							width: 110
 						},
 						items: [{
 							text: 'EBS',
@@ -251,9 +224,6 @@ Scalr.regPage('Scalr.ui.roles.builder', function (loadParams, moduleParams) {
 						itemId: 'hvm',
 						enableToggle: true,
 						text: 'HVM',
-						width: 34,
-						padding: '3 0',
-						margin: '0 0 0 5',
 						toggleHandler: function(){
 							panel.fireEvent('selecthvm', this.pressed);
 						}
@@ -261,7 +231,7 @@ Scalr.regPage('Scalr.ui.roles.builder', function (loadParams, moduleParams) {
 				},{
 					xtype: 'label',
 					text: 'Operating system:',
-					margin: '10 0',
+					margin: '10 0 0 0',
 					cls: 'hideoncustomimage'
 				},{
 					xtype: 'label',
@@ -277,235 +247,218 @@ Scalr.regPage('Scalr.ui.roles.builder', function (loadParams, moduleParams) {
 			},{
 				xtype: 'container',
 				itemId: 'images',
-				cls: 'hideoncustomimage scalr-ui-dataview-boxes',
-                margin: '0 0 0 -10'
+				cls: 'hideoncustomimage',
+                margin: '0 0 0 18'
 			}]
 		}, {
 			xtype: 'form',
 			itemId: 'rightcol',
-			cls: 'scalr-ui-rolebuilder-panel scalr-ui-rolebuilder-panel-right x-panel-columned-rightcol',
 			layout: 'anchor',
-			defaults: {
-				anchor: '100%'
-			},
 			autoScroll: true,
 			flex: 1,
-			margin: '12 12 12 0',
-			padding: '16 0 16 22',
-			bodyPadding: '0 22 0 0',
 			items: [{
-				xtype: 'label',
-				text: 'General info and software',
-				cls: 'x-fieldset-subheader'
-			},{
-				xtype: 'textfield',
-				fieldLabel: 'Role name',
-				maxWidth: 536,
-				margin: '12 0',
-				itemId: 'rolename',
-				submitValue: false,
-				validateOnChange: false,
-				validator: function (value) {
-					var r = /^[A-z0-9-]+$/, r1 = /^-/, r2 = /-$/;
-					if (r.test(value) && !r1.test(value) && !r2.test(value) && value.length > 2)
-						return true;
-					else
-						return 'Illegal name';
-				}
-			},{
-				xtype: 'label',
-				text: 'Software:'
-			},{
-				xtype: 'container',
-				margin: '8 0 10 -10',
-				itemId: 'settings-behaviors',
-                cls: 'scalr-ui-dataview-boxes',
-				defaults: {
-					xtype: 'custombutton',
-					disabled: true,
-					enableToggle: true,
-                    cls: 'x-item',
-					renderTpl:
-						'<div class="x-btn-custom" style="height:100%" id="{id}-btnEl">'+
-							'<div class="x-btn-icon scalr-ui-icon-behavior-large scalr-ui-icon-behavior-large-{name}"></div><div class="x-btn-title" style="text-align:center;margin:4px 0 0">{title}</div>'+
-						'</div>',
-					margin: '0 0 10 10',
-					tooltip: '',
-					listeners: {
-						toggle: onSelectBehavior
-					}
-				},
-				items: buttons['behaviors']
-			},{
-				xtype: 'label',
-				text: 'Addons:'
-			}, {
-				xtype: 'container',
-				margin: '8 0 10 -10',
-				itemId: 'settings-addons',
-                cls: 'scalr-ui-dataview-boxes',
-				defaults: {
-					xtype: 'custombutton',
-					enableToggle: true,
-                    cls: 'x-item',
-					renderTpl:
-						'<div class="x-btn-custom" style="height:100%" id="{id}-btnEl">'+
-							'<div class="x-btn-icon scalr-ui-icon-behavior-large scalr-ui-icon-behavior-large-{name}"></div><div class="x-btn-title" style="text-align:center;margin:4px 0 0">{title}</div>'+
-						'</div>',
-					margin: '0 0 10 10',
-					listeners: {
-						toggle: onSelectAddon
-					}
-				},
-				items: buttons['addons']
-			},{
-                xtype: 'displayfield',
-                itemId: 'softwarewarning',
-                hidden: true,
-                fieldCls: 'x-form-field-info',
-                value: 'Software version is taken from the <b>official OS repositories</b>. Consult your distribution\'s package manager for exact version details.'
+                xtype: 'fieldset',
+                title: 'General info and software',
+                defaults: {
+                    anchor: '100%'
+                },
+                items: [{
+                    xtype: 'textfield',
+                    fieldLabel: 'Role name',
+                    maxWidth: 536,
+                    itemId: 'rolename',
+                    submitValue: false,
+                    //validateOnChange: false,
+                    validator: function (value) {
+                        var r = /^[A-z0-9-]+$/, r1 = /^-/, r2 = /-$/;
+                        if (r.test(value) && !r1.test(value) && !r2.test(value) && value.length > 2)
+                            return true;
+                        else
+                            return 'Illegal name';
+                    }
+                },{
+                    xtype: 'label',
+                    text: 'Software:'
+                },{
+                    xtype: 'container',
+                    margin: '10 0 10 -10',
+                    itemId: 'settings-behaviors',
+                    defaults: {
+                        xtype: 'button',
+                        ui: 'simple',
+                        disabled: true,
+                        enableToggle: true,
+                        cls: 'x-btn-simple-large',
+                        iconAlign: 'above',
+                        margin: '0 0 10 10',
+                        tooltip: '',
+                        listeners: {
+                            toggle: onSelectBehavior
+                        }
+                    },
+                    items: buttons['behaviors']
+                },{
+                    xtype: 'label',
+                    text: 'Addons:'
+                }, {
+                    xtype: 'container',
+                    margin: '10 0 10 -10',
+                    itemId: 'settings-addons',
+                    defaults: {
+                        xtype: 'button',
+                        ui: 'simple',
+                        enableToggle: true,
+                        cls: 'x-btn-simple-large',
+                        iconAlign: 'above',
+                        margin: '0 0 10 10',
+                        listeners: {
+                            toggle: onSelectAddon
+                        }
+                    },
+                    items: buttons['addons']
+                },{
+                    xtype: 'displayfield',
+                    itemId: 'softwarewarning',
+                    hidden: true,
+                    cls: 'x-form-field-info',
+                    value: 'Software version is taken from the <b>official OS repositories</b>. Consult your distribution\'s package manager for exact version details.'
+                }]
             },{
-				xtype: 'fieldset',
-				title: 'Install additional software using Chef',
-				itemId: 'chefsettings',
-				hidden: !chefFieldsetEnabled,
-				collapsible: true,
-				collapsed: true,
-				margin: '8 0 0 0',
-				style: 'background:#DFE4EA',
-				layout: 'anchor',
-				defaults: {
-					maxWidth: 516,
-					anchor: '100%',
-					labelWidth: 120
-				},
-				listeners: {
-					expand: function(){
-						panel.down('#rightcol').body.scrollTo('top', 3000);
-					}
-				},
-				items: [{
-					xtype: 'combo',
-					margin: '12 0',
-					name: 'chef.server',
-					fieldLabel: 'Chef server',
-					valueField: 'id',
-					displayField: 'url',
-					editable: false,
-					value: '',
-					store: {
-						fields: [ 'url', 'id' ],
-						proxy: {
-							type: 'ajax',
-							reader: {
-								type: 'json',
-								root: 'data'
-							},
-							url: '/services/chef/servers/xListServers/'
-						}
-					},
-					listeners: {
-						change: function(field, value) {
-							if (value) {
-								var f = this.next('[name="chef.environment"]');
-								f.setReadOnly(false);
-								f.queryReset = true;
+                xtype: 'fieldset',
+                title: 'Install additional software using Chef',
+                itemId: 'chefsettings',
+                hidden: !chefFieldsetEnabled,
+                toggleOnTitleClick: true,
+                collapsible: true,
+                collapsed: true,
+                layout: 'anchor',
+                defaults: {
+                    maxWidth: 516,
+                    anchor: '100%',
+                    labelWidth: 120
+                },
+                listeners: {
+                    expand: function(){
+                        panel.down('#rightcol').body.scrollTo('top', 3000);
+                    }
+                },
+                items: [{
+                    xtype: 'combo',
+                    name: 'chef.server',
+                    fieldLabel: 'Chef server',
+                    valueField: 'id',
+                    displayField: 'url',
+                    editable: false,
+                    value: '',
 
-								// hack, to preselect _default, when none being set
-								if (! f.environmentValue)
-									f.setValue('_default');
+                    queryCaching: false,
+                    clearDataBeforeQuery: true,
+                    store: {
+                        fields: [ 'url', 'id' ],
+                        proxy: {
+                            type: 'cachedrequest',
+                            crscope: 'rolebuilder',
+                            url: '/services/chef/servers/xListServers/'
+                        }
+                    },
+                    listeners: {
+                        change: function(field, value) {
+                            if (value) {
+                                var f = this.next('[name="chef.environment"]');
+                                f.setReadOnly(false, false);
 
-								f.store.proxy.extraParams['servId'] = value;
-								
-								var f1 = this.next('[name="chef.role"]');
-								f1.setReadOnly(false);
-								f1.queryReset = true;
-								f1.store.proxy.extraParams['servId'] = value;
-							}
-						}
-					}
-				}, {
-					xtype: 'combo',
-					name: 'chef.environment',
-					fieldLabel: 'Chef environment',
-					store: {
-						fields: [ 'name' ],
-						proxy: {
-							type: 'ajax',
-							reader: {
-								type: 'json',
-								root: 'data'
-							},
-							url: '/services/chef/servers/xListEnvironments/'
-						}
-					},
-					valueField: 'name',
-					displayField: 'name',
-					editable: false,
-					value: '',
-					listeners: {
-						change: function(field, value) {
-							if (value) {
-								var f = this.next('[name="chef.role"]');
-								f.setReadOnly(false);
-								f.queryReset = true;
-								f.store.proxy.extraParams['chefEnv'] = value;
-								f.store.proxy.extraParams['servId'] = this.store.proxy.extraParams['servId'];
+                                // hack, to preselect _default, when none being set
+                                if (! f.environmentValue)
+                                    f.setValue('_default');
 
-								if (f.getValue()) {
-									f.setValue('');
-									f.prefetch();
-								}
-							}
-						}
-					}
-				}, {
-					xtype: 'combo',
-					name: 'chef.role',
-					fieldLabel: 'Chef role',
-					store: {
-						fields: [ 'name', 'chef_type' ],
-						proxy: {
-							type: 'ajax',
-							reader: {
-								type: 'json',
-								root: 'data'
-							},
-							url: '/services/chef/xListRoles'
-						},
-						remoteSort: true
-					},
-					valueField: 'name',
-					displayField: 'name',
-					editable: false,
-					value: '',
-					listeners: {
-						change: function(field, value) {
-						}
-					}
-				},{
-					xtype: 'textarea',
-					fieldLabel: 'Attributes (json)',
-					name: 'chef.attributes',
-					itemId: 'chefattributes',
-					hidden: true,
-					grow: true,
-					growMax: 300,
-					anchor: '100%',
-					maxWidth: null,
-					validateOnChange: false,
-					validator: function(value) {
-						return !Ext.isEmpty(value) && Ext.typeOf(Ext.decode(value, true)) != 'object' ? 'Invalid json' : true;
-					}
-				}]
+                                f.store.proxy.params['servId'] = value;
+
+                                var f1 = this.next('[name="chef.role"]');
+                                f1.setReadOnly(false, false);
+                                f1.store.proxy.params['servId'] = value;
+                            }
+                        }
+                    }
+                }, {
+                    xtype: 'combo',
+                    name: 'chef.environment',
+                    fieldLabel: 'Chef environment',
+                    valueField: 'name',
+                    displayField: 'name',
+                    editable: false,
+                    readOnly: true,
+                    value: '',
+
+                    queryCaching: false,
+                    clearDataBeforeQuery: true,
+                    store: {
+                        fields: [ 'name' ],
+                        proxy: {
+                            type: 'cachedrequest',
+                            crscope: 'rolebuilder',
+                            url: '/services/chef/servers/xListEnvironments/'
+                        }
+                    },
+                    listeners: {
+                        change: function(field, value) {
+                            if (value) {
+                                var f = this.next('[name="chef.role"]');
+                                f.store.proxy.params['chefEnv'] = value;
+                                f.store.proxy.params['servId'] = this.store.proxy.params['servId'];
+
+                                if (f.getValue()) {
+                                    f.setValue('');
+                                    f.store.load();
+                                }
+                            }
+                        }
+                    }
+                }, {
+                    xtype: 'combo',
+                    name: 'chef.role',
+                    fieldLabel: 'Chef role',
+                    valueField: 'name',
+                    displayField: 'name',
+                    editable: false,
+                    readOnly: true,
+                    value: '',
+
+                    queryCaching: false,
+                    clearDataBeforeQuery: true,
+                    store: {
+                        fields: [ 'name', 'chef_type' ],
+                        proxy: {
+                            type: 'cachedrequest',
+                            crscope: 'rolebuilder',
+                            url: '/services/chef/xListRoles'
+                        }
+                    },
+                    listeners: {
+                        change: function(field, value) {
+                        }
+                    }
+                },{
+                    xtype: 'textarea',
+                    fieldLabel: 'Attributes (json)',
+                    name: 'chef.attributes',
+                    itemId: 'chefattributes',
+                    hidden: true,
+                    grow: true,
+                    growMax: 300,
+                    anchor: '100%',
+                    maxWidth: null,
+                    validateOnChange: false,
+                    validator: function(value) {
+                        return !Ext.isEmpty(value) && Ext.typeOf(Ext.decode(value, true)) != 'object' ? 'Invalid json' : true;
+                    }
+                }]
 			},{
 				xtype: 'fieldset',
 				title: 'Advanced options',
 				collapsible: true,
 				collapsed: true,
+                toggleOnTitleClick: true,
 				hidden: !advancedFieldsetEnabled,
-				margin: '8 0 0 0',
-				style: 'background:#DFE4EA',
 				layout: 'anchor',
 				defaults: {
 					maxWidth: 516,
@@ -519,7 +472,7 @@ Scalr.regPage('Scalr.ui.roles.builder', function (loadParams, moduleParams) {
 				},
 				items: [{
 					xtype: 'displayfield',
-					fieldCls: 'x-form-field-warning',
+					cls: 'x-form-field-warning',
 					value: 'Please use advanced options on your own risk!',
 					margin: '8 0 12 0'
 				},{
@@ -558,24 +511,17 @@ Scalr.regPage('Scalr.ui.roles.builder', function (loadParams, moduleParams) {
 			dockedItems:[{
 				xtype: 'container',
 				dock: 'bottom',
-				cls: 'x-toolbar x-docked-light',
-				height:36,
-				padding: '6 0 0 0',
-                style: 'z-index:101',//show toolbar above the mask to make "Cancel" button available
+				cls: 'x-docked-buttons',
+                style: 'z-index:101;background:transparent',//show toolbar above the mask to make "Cancel" button available
 				layout: {
 					type: 'hbox',
 					pack: 'center'
 				},
-                defaults: {
-                    width: 140
-                },
 				items: [{
+					xtype: 'button',
 					itemId: 'save',
-					xtype: 'btn',
-                    cls: 'x-button-text-large',
 					text: 'Create role',
 					disabled: true,
-					margin: '0 16 0 0',
 					handler: function() {
 						if (chefFieldsetEnabled) {
 							if (!panel.down('#chefattributes').isValid()) {
@@ -653,7 +599,7 @@ Scalr.regPage('Scalr.ui.roles.builder', function (loadParams, moduleParams) {
 								url: '/roles/xBuild',
 								params: r,
 								success: function (data) {
-									Scalr.event.fireEvent('redirect', '#/bundletasks/' + data.bundleTaskId + '/view');
+									Scalr.event.fireEvent('redirect', '#/roles/builder?serverId=' + data.serverId);
 								}
 							});
 						} else {
@@ -662,38 +608,312 @@ Scalr.regPage('Scalr.ui.roles.builder', function (loadParams, moduleParams) {
 						}
 					}
 				}, {
+					xtype: 'button',
 					itemId: 'cancel',
-					xtype: 'btn',
-                    cls: 'x-button-text-large',
 					text: 'Cancel',
 					handler: function() {
 						Scalr.event.fireEvent('close');
 					}
 				}]
 			}]
-		}],
+		},{
+            xtype: 'container',
+			itemId: 'progresscol',
+			layout: 'anchor',
+			autoScroll: true,
+            hidden: true,
+			flex: 1,
+            listeners: {
+                show: {
+                    fn: function() {
+                        this.down('#progress').resetProgress();
+                        this.down('#log').setBundleTaskId(this.bundleTaskId);
+                    },
+                    single: true
+                }
+            },
+			items: [{
+                xtype: 'fieldset',
+                title: 'Role creation progress',
+                cls: 'x-fieldset-separator-none',
+                itemId: 'progress',
+                layout: {
+                    type: 'hbox',
+                    align: 'stretch'
+                },
+                defaults: {
+                    xtype: 'component',
+                    flex: 1,
+                    cls: 'scalr-ui-progress-step',
+                    height: 26,
+                    maxWidth: 300
+                },
+                resetProgress: function() {
+                    this.items.each(function(item, index){
+                        if (index === 0) {
+                            item.addCls('inprogress');
+                            item.removeCls('complete');
+                        } else {
+                            item.removeCls('inprogress complete');
+                        }
+                    });
+                },
+                updateProgress: function(status, state) {
+                    var data = {
+                        'failed': -1,
+                        'pending': 0,
+                        'starting-server': 0,
+                        'preparing-environment': 1,
+                        'installing-software': 1,
+                        'creating-role': 3,
+                        'success': 5
+                    };
+                    if (data[status]) {
+                        this.items.each(function(item, index){
+                            if (index < data[status]) {
+                                item.removeCls('inprogress');
+                                item.addCls('complete');
+                            } else if (index === data[status]) {
+                                item.addCls(state || 'inprogress');
+                            } else {
+                                item.removeCls('inprogress complete');
+                            }
+                        });
+                    }
+                },
+                items: [{
+                    xtype: 'component',
+                    html: 'Starting server'
+                },{
+                    xtype: 'component',
+                    html: 'Creating image'
+                },{
+                    xtype: 'component',
+                    html: 'Setting automation'
+                },{
+                    xtype: 'component',
+                    html: 'Building role'
+                },{
+                    xtype: 'component',
+                    html: 'Complete!'
+                }]
+            },{
+                xtype: 'fieldset',
+                title: 'Role creation log',
+                cls: 'x-fieldset-separator-top-bottom',
+                itemId: 'log',
+                collapsible: true,
+                setBundleTaskId: function(bundleTaskId) {
+                    var rightcol = this.up('#progresscol');
+                    this.bundleTaskId = bundleTaskId;
+                    rightcol.down('#progress').updateProgress('in-progress');
+                    this.down('#fullLog').update('<a target="_blank" href="#/bundletasks/'+bundleTaskId+'/logs">View full log in new tab</a>');
+                    this.loadBundleTaskData();
+                },
+                loadBundleTaskData: function() {
+                    var me = this;
+                    me.stopAutoUpdate();
+                    me.request = Scalr.Request({
+                        params: {
+                            bundleTaskId: this.bundleTaskId
+                        },
+                        url: '/roles/import/xGetBundleTaskData/',
+                        success: function (data) {
+                            if (!me.isDestroyed) {
+                                var progresscol = me.up('#progresscol');
+                                if (data['status'] === 'failed') {
+                                    progresscol.down('#progress').updateProgress(data['status']);
+                                    panel.onBundleTaskFailed(data['failureReason']);
+                                } else {
+                                    me.down('grid').store.load({data: data['logs']});
+                                    progresscol.down('#progress').updateProgress(data['status']);
+                                    if (data['status'] !== 'success') {
+                                        me.autoUpdateTask = setTimeout(function(){
+                                            me.loadBundleTaskData();
+                                        }, 5000);
+                                    } else {
+                                        panel.onBundleTaskSuccess(data);
+                                    }
+                                }
+                            }
+                        }
+                    });
+
+                },
+                autoUpdateTask: null,
+                stopAutoUpdate: function(){
+                    if (this.request) {
+                        Ext.Ajax.abort(this.request);
+                    }
+                    if (this.autoUpdateTask) {
+                        clearTimeout(this.autoUpdateTask);
+                        this.autoUpdateTask = null;
+                    }
+                },
+                listeners: {
+                    destroy: function() {
+                        this.stopAutoUpdate();
+                    },
+                    hide: function() {
+                        this.stopAutoUpdate();
+                    }
+                },
+                items: [{
+                    xtype: 'grid',
+                    cls: 'x-grid-shadow',
+                    plugins: [{
+                        ptype: 'gridstore'
+                    }, {
+                        ptype: 'rowexpander',
+                        rowBodyTpl: [
+                            '<p><b>Message:</b> {message}</p>'
+                        ]
+                    }],
+                    store: {
+                        fields: [
+                            {name: 'id', type: 'int'},
+                            'dtadded','message'
+                        ],
+                        proxy: 'object'
+                    },
+                    viewConfig: {
+                        emptyText: 'Log is empty',
+                        focusedItemCls: 'x-noselection',
+                        selectedItemCls: 'x-noselection',
+                        getRowClass: function(record, rowIndex) {
+                            return rowIndex === 0 ? 'x-grid-row-new' : '';
+                        }
+                    },
+                    columns: [
+                        { header: "Date", width: 165, dataIndex: 'dtadded', sortable: false },
+                        { header: "Message", flex: 1, dataIndex: 'message', sortable: false }
+                    ]
+                },{
+                    xtype: 'component',
+                    itemId: 'fullLog',
+                    margin: '6 0 0'
+                }]
+            },{
+                xtype: 'component',
+                itemId: 'success',
+                hidden: true,
+                cls: 'x-fieldset-subheader',
+                style: 'text-align:center',
+                margin: '48 0 16'
+            },{
+                xtype: 'container',
+                itemId: 'failed',
+                hidden: true,
+                margin: '32 0 16',
+                items: [{
+                    xtype: 'component',
+                    cls: 'x-fieldset-subheader',
+                    style: 'text-align:center',
+                    margin: '0 0 16',
+                    html: 'Role creation failed'
+                },{
+                    xtype: 'component',
+                    style: 'text-align:center',
+                    itemId: 'failureReason'
+                }]
+            },{
+                xtype: 'container',
+                itemId: 'buttons',
+                items: [{
+                    xtype: 'container',
+                    itemId: 'commonButtons',
+                    cls: 'x-docked-buttons',
+                    layout: {
+                        type: 'hbox',
+                        pack: 'center'
+                    },
+                    items: [{
+                        xtype: 'button',
+                        itemId: 'cancel',
+                        text: 'Cancel',
+                        handler: function() {
+                            Scalr.utils.Confirm({
+                                form: {
+                                    xtype: 'component',
+                                    style: 'text-align: center',
+                                    margin: '36 0 0',
+                                    html: '<span class="x-fieldset-subheader">Are you sure want to cancel role creation?</span>'
+                                },
+                                success: function() {
+                                    Scalr.Request({
+                                        processBox: {
+                                            type: 'action'
+                                        },
+                                        url: '/servers/xServerCancelOperation/',
+                                        params: { serverId: panel.serverId },
+                                        success: function (data) {
+
+                                        }
+                                    });
+                                    Scalr.event.fireEvent('redirect', '#/roles/view');
+                                }
+                            });
+                        }
+                    }]
+                },{
+                    xtype: 'container',
+                    itemId: 'successButtons',
+                    hidden: true,
+                    cls: 'x-docked-buttons',
+                    layout: {
+                        type: 'hbox',
+                        pack: 'center'
+                    },
+                    items: [{
+                        xtype: 'button',
+                        text: 'Edit role',
+                        handler: function() {
+                            Scalr.event.fireEvent('redirect', '#/roles/'+panel.roleId+'/edit');
+                        }
+                    },{
+                        xtype: 'button',
+                        text: 'Build farm',
+                        handler: function() {
+                            Scalr.event.fireEvent('redirect', '#/farms/build');
+                        }
+                    }]
+                },{
+                    xtype: 'container',
+                    itemId: 'failedButtons',
+                    hidden: true,
+                    cls: 'x-docked-buttons',
+                    layout: {
+                        type: 'hbox',
+                        pack: 'center'
+                    },
+                    items: [{
+                        xtype: 'button',
+                        text: 'Try again',
+                        handler: function() {
+                            Scalr.event.fireEvent('redirect', '#/roles/builder');
+                        }
+                    }]
+                }]
+            }]
+        }],
 		dockedItems: [{
-			xtype: 'menu',
-			cls: 'x-leftmenu-new',
+			xtype: 'container',
+            itemId: 'platforms',
 			dock: 'left',
-			floating: false,
-			showSeparator: false,
-			itemId: 'platforms',
+			cls: 'x-docked-tabs',
+            width: 112,
 			defaults: {
-				xtype: 'custombutton',
-				cls: 'x-leftmenu-btn',
-				enableToggle: true,
-				width: 134,
-				height: 100,
-				margin: 0,
-				allowDepress: false,
-				toggleGroup: 'leftmenunew',
-				overCls: 'x-leftmenu-btn-over',
-				pressedCls: 'x-leftmenu-btn-pressed',
-				renderTpl:
-					'<div class="x-btn-inner"><div class="x-btn-el" id="{id}-btnEl">'+
-						'<span class="x-btn-icon scalr-ui-icon-platform-large scalr-ui-icon-platform-large-{name}"></span><span class="x-btn-title">{title}</span>'+
-					'</div></div>'
+                xtype: 'button',
+                ui: 'tab',
+                allowDepress: false,
+                iconAlign: 'above',
+                disableMouseDownPressed: true,
+                toggleGroup: 'rolebuilder-tabs',
+                toggleHandler: function (comp, state) {
+                    if (state) {
+                        panel.fireEvent('selectplatform', this.value);
+                    }
+                }
 			},
 			items: buttons['platforms']
 		}],
@@ -741,22 +961,18 @@ Scalr.regPage('Scalr.ui.roles.builder', function (loadParams, moduleParams) {
 			if (images.length) {
 				for (var i=0, len=images.length; i<len; i++) {
 					var image = images[i],
-						imageOS = Scalr.utils.beautifyOsFamily(image.os_family) + ' ' + image.os_version; 
+                        osFamily = Scalr.utils.beautifyOsFamily(image.os_family),
+						imageOS = osFamily + ' ' + image.os_version;
 					if (!added[imageOS]) {
 						compImages.add({
-							xtype: 'custombutton',
-                            cls: 'x-item',
+							xtype: 'button',
+                            ui: 'simple',
+                            cls: 'x-btn-simple-large' + (osFamily.indexOf(' ') !== -1 ? ' x-btn-simple-large-small-text' : ''),
+                            iconAlign: 'above',
+                            iconCls: 'x-icon-osfamily-large x-icon-osfamily-large-' + image.os_family,
 							allowDepress: false,
 							toggleGroup: 'scalr-ui-roles-builder-image',
-							style: 'float:left',
-							renderTpl:
-								'<div class="x-btn-custom" style="height:100%" id="{id}-btnEl">'+
-									'<div class="x-btn-icon scalr-ui-icon-osfamily-large scalr-ui-icon-osfamily-large-{osFamily}"></div><div class="x-btn-title" style="text-align:center;margin:4px 0 0">{title}</div>'+
-								'</div>',
-							renderData: {
-								osFamily: image.os_family,
-								title: imageOS
-							},
+                            text: imageOS,
 							osFamily: image.os_family,
 							osVersion: image.os_version,
 							margin: '0 0 10 10',
@@ -862,6 +1078,20 @@ Scalr.regPage('Scalr.ui.roles.builder', function (loadParams, moduleParams) {
 			return imageId;
 	
 		},
+
+        findImageById: function(platform, imageId) {
+            var images = moduleParams.platforms[platform].images,
+                image;
+            Ext.Array.each(images, function(item){
+                if (item['image_id'] == imageId) {
+                    image = item;
+                    return false;
+                }
+            });
+
+            return image;
+        },
+
 		getFiltersValues: function() {
 			var me = this,
 				images = moduleParams.platforms[result.platform].images,
@@ -937,9 +1167,7 @@ Scalr.regPage('Scalr.ui.roles.builder', function (loadParams, moduleParams) {
 			for (var i=0, len=me.filters.length; i<len; i++) {
 				if (state.filters[me.filters[i]]) {
 					var comp = panel.down('#'+me.filters[i]);
-					comp.items.each(function(){
-						this.enable();
-					});
+					comp.setReadOnly(false);
 					comp.items.each(function(){
 						if (!state.filters[me.filters[i]][this.value]) {
 							if (this.pressed) {
@@ -951,7 +1179,7 @@ Scalr.regPage('Scalr.ui.roles.builder', function (loadParams, moduleParams) {
 									}
 								});
 							}
-							this.disable();
+							comp.setReadOnly(true);
 						}
 					});
 				}
@@ -1007,11 +1235,11 @@ Scalr.regPage('Scalr.ui.roles.builder', function (loadParams, moduleParams) {
 					btn.toggle(false).disable();
 					var message = '';
 					if (disableInfo.reason == 'os') {
-						message = '<b>' + beautifyBehavior(item.name) + '</b> cannot be used together with <b style="white-space:nowrap">' + Scalr.utils.beautifyOsFamily(result.osfamily) + ' ' + result.osversion + '</b>.';
+						message = '<b>' + Scalr.utils.beautifyBehavior(item.name) + '</b> cannot be used together with <b style="white-space:nowrap">' + Scalr.utils.beautifyOsFamily(result.osfamily) + ' ' + result.osversion + '</b>.';
 					} else if (disableInfo.reason == 'platform') {
-						message = '<b>' + beautifyBehavior(item.name) + '</b> is not available on <b style="white-space:nowrap">' + platforms[result.platform].name + '</b>.';
+						message = '<b>' + Scalr.utils.beautifyBehavior(item.name) + '</b> is not available on <b style="white-space:nowrap">' + platforms[result.platform].name + '</b>.';
 					} else if (disableInfo.reason == 'behavior') {
-						message = '<b>' + beautifyBehavior(item.name) + '</b> cannot be used together with <b style="white-space:nowrap">' + (Ext.Array.map(Ext.Array.intersect(result.behaviors, disableInfo.value), beautifyBehavior)).join(', ') + '</b>.';
+						message = '<b>' + Scalr.utils.beautifyBehavior(item.name) + '</b> cannot be used together with <b style="white-space:nowrap">' + (Ext.Array.map(Ext.Array.intersect(result.behaviors, disableInfo.value), Scalr.utils.beautifyBehavior)).join(', ') + '</b>.';
 						//disableInfo.reason + (disableInfo.reason == 'behavior' ? ': ' + disableInfo.value.join(', ') : '')
 					}
 					btn.setTooltip(message);
@@ -1019,7 +1247,7 @@ Scalr.regPage('Scalr.ui.roles.builder', function (loadParams, moduleParams) {
 			}
 		},
 		toggleRightColumn: function(enable) {
-            toggleBehaviors(enable);
+            toggleBehaviors(true);
             panel.down('#save').setDisabled(!enable);
             var rightcol = panel.down('#rightcol'), mask;
             rightcol[enable ? 'unmask' : 'mask']();
@@ -1028,14 +1256,82 @@ Scalr.regPage('Scalr.ui.roles.builder', function (loadParams, moduleParams) {
                 mask.set({title: enable ? '' : 'Please select operating system.'});
                 mask.setStyle({
                     background: '#ffffff',
-                    opacity: .4
+                    opacity: .6
                 });
             }
             
         },
+
+        loadServer: function(server, image) {
+            image = image || {};
+            panel.suspendLayouts();
+            if (server['platform'] !== 'gce') {
+                panel.down('#cloud_location').setValue(image['cloud_location']).disable();
+            }
+            panel.down('#architecture').setValue(image['architecture']).disable();
+            panel.down('#root_device_type').setValue(image['root_device_type']).disable();
+            panel.down('#hvm').toggle(image['hvm']==1).disable();
+            panel.down('#images').items.each(function(item){
+                if (item.osFamily == image['os_family'] && item.osVersion == image['os_version']) {
+                    item.toggle(true);
+                }
+                item.disable();
+            });
+            panel.down('#imageId').setValue(server['imageId']).disable();
+
+            panel.getDockedComponent('platforms').items.each(function(){
+                this.disable();
+            });
+
+            panel.down('#rightcol').hide();
+            panel.down('#progresscol').bundleTaskId = server.bundleTaskId;
+            panel.down('#progresscol').show();
+            panel.resumeLayouts(true);
+        },
+
+        onBundleTaskSuccess: function(role) {
+            var progresscol = this.getComponent('progresscol'),
+                success = progresscol.down('#success');
+            progresscol.down('#successButtons').show();
+            progresscol.down('#commonButtons').hide();
+            progresscol.down('#log').hide();
+            success.update('New role &laquo;' + role['roleName'] + '&raquo; has successfully been created');
+            success.show();
+            this.roleId = role['roleId'];
+        },
+        onBundleTaskFailed: function(failureReason) {
+            var progresscol = this.getComponent('progresscol'),
+                failed = progresscol.down('#failed');
+            progresscol.down('#failedButtons').show();
+            progresscol.down('#commonButtons').hide();
+            progresscol.down('#log').hide();
+            failed.down('#failureReason').update('Error: '+failureReason);
+            failed.show();
+        },
+
 		listeners: {
 			afterrender: function () {
-				panel.down('#platforms').child('custombutton').toggle(true);
+                var items = panel.down('#platforms').items,
+                    defaultPlatform = loadParams['platform'] || 'ec2',
+                    defaultItem, server = moduleParams['server'], image;
+
+                if (server) {
+                    panel.serverId = server['serverId'];
+                    image = this.findImageById(server['platform'], server['imageId']);
+                    defaultPlatform = server['platform'];
+                }
+                items.each(function(){
+                    if (this.value == defaultPlatform) {
+                        defaultItem = this;
+                        return false;
+                    }
+                });
+                defaultItem = defaultItem || items.first();
+                defaultItem.toggle(true);
+
+                if (server) {
+                    this.loadServer(server, image);
+                }
 			},
 			selectplatform: function(value) {
 				this.suspendState++;

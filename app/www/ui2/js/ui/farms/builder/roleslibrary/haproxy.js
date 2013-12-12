@@ -1,11 +1,9 @@
 Scalr.regPage('Scalr.ui.farms.builder.addrole.haproxy', function () {
     return {
         xtype: 'container',
+        itemId: 'haproxy',
         isExtraSettings: true,
         hidden: true,
-
-        cls: 'x-delimiter-top',
-        padding: '18 24',
         
         layout: 'anchor',
 
@@ -23,18 +21,16 @@ Scalr.regPage('Scalr.ui.farms.builder.addrole.haproxy', function () {
         },
         
         setRole: function(record){
-            var hp = this.down('haproxysettings');
-            hp.roles = [];
+            var me = this,
+                hp = me.down('haproxysettings');
+            me.roles = [];
 			this.up('roleslibrary').moduleParams.tabParams.farmRolesStore.each(function(r){
-    			hp.roles.push({id: r.get('farm_role_id'), name: r.get('name')});
+                var location = r.get('cloud_location');
+    			me.roles.push({id: r.get('farm_role_id'), name: r.get('alias') + (location ? ' (' + location + ')' : '')});
 			});
             
             hp.setValue({
-                'haproxy.port': 80,
-                'haproxy.healthcheck.interval': 5,
-                'haproxy.healthcheck.fallthreshold': 5,
-                'haproxy.healthcheck.risethreshold': 3,
-                backends: []
+                'haproxy.proxies': []
             });
         },
 
@@ -45,17 +41,13 @@ Scalr.regPage('Scalr.ui.farms.builder.addrole.haproxy', function () {
         getSettings: function() {
             var hp = this.down('haproxysettings'),
                 settings = hp.getValue();
-            settings['haproxy.backends'] = Ext.encode(settings['haproxy.backends']);
+            settings['haproxy.proxies'] = Ext.encode(settings['haproxy.proxies']);
             return settings;
         },
 
         items: [{
-            xtype: 'label',
-            cls: 'x-fieldset-subheader',
-            text: 'Proxy settings'
-        },{
             xtype: 'haproxysettings',
-            roles: []
+            mode: 'add'
         }]
     }
 });

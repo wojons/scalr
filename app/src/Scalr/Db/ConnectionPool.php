@@ -61,7 +61,7 @@ class ConnectionPool
     {
         $alive = true;
         if (!empty($conn->_connectionID) && method_exists($conn->_connectionID, 'ping')) {
-            $alive = (bool) $conn->_connectionID->ping();
+            $alive = (bool) @$conn->_connectionID->ping();
         } else {
             try {
                 $conn->GetOne('SELECT 1');

@@ -26,7 +26,6 @@ Scalr.regPage('Scalr.ui.scripts.create', function (loadParams, moduleParams) {
 	};
 
 	var form = Ext.create('Ext.form.Panel', {
-		bodyCls: 'x-panel-body-frame',
 		width: 900,
 		title: (moduleParams['script']) ? 'Scripts &raquo; Edit' : 'Scripts &raquo; Create',
 		fieldDefaults: {
@@ -39,19 +38,19 @@ Scalr.regPage('Scalr.ui.scripts.create', function (loadParams, moduleParams) {
 				Scalr.event.fireEvent('maximize');
 			}
 		}],
-
+        layout: 'auto',
 		items: [{
 			xtype: 'fieldset',
 			title: 'General information',
 			items: [{
 				xtype: 'container',
 				layout: 'hbox',
-				maxWidth: 820,
+				maxWidth: 836,
 				items: [{
 					xtype: 'textfield',
 					name: 'name',
 					fieldLabel: 'Name',
-					labelWidth: 80,
+					labelWidth: 150,
 					allowBlank: false,
 					flex: 1
 				}, {
@@ -61,6 +60,7 @@ Scalr.regPage('Scalr.ui.scripts.create', function (loadParams, moduleParams) {
 					labelWidth: 50,
 					margin: '0 0 0 12',
 					width: 110,
+                    hidden: !moduleParams['script'],
 					store: moduleParams['versions'],
 					editable: false,
 					value: moduleParams['script'] ? parseInt(moduleParams['script']['version']) : 1,
@@ -84,21 +84,57 @@ Scalr.regPage('Scalr.ui.scripts.create', function (loadParams, moduleParams) {
 						}
 					}
 				}, {
-					xtype: 'checkbox',
-					name: 'isSync',
-					inputValue: 1,
-					margin: '0 0 0 12',
-					boxLabel: 'Sync',
-					hidden: true,
-					disabled: true
-				}]
+                    xtype: 'button',
+                    ui: 'action',
+                    itemId: 'delete',
+                    hidden: !moduleParams['script'] || moduleParams['versions'].length < 2,
+                    margin: '0 0 0 8',
+                    cls: 'x-btn-action-delete',
+                    tooltip: 'Remove selected version',
+                    handler: function() {
+                        Scalr.Request({
+                            confirmBox: {
+                                type: 'delete',
+                                msg: 'Are you sure want to delete selected version? This cannot be undone.'
+                            },
+                            processBox: {
+                                type: 'delete'
+                            },
+                            url: '/scripts/xRemoveRevision',
+                            params: {
+                                id: moduleParams['script']['id'],
+                                rev: this.prev().getValue()
+                            },
+                            success: function() {
+                                Scalr.event.fireEvent('refresh');
+                            }
+                        });
+                    }
+                }]
 			}, {
 				xtype: 'textfield',
 				name: 'description',
-				labelWidth: 80,
-				maxWidth: 820,
+				labelWidth: 150,
+				maxWidth: 836,
 				fieldLabel: 'Description'
-			}]
+			},{
+                xtype: 'buttongroupfield',
+                fieldLabel: 'Default execution mode',
+                editable: false,
+                name: 'isSync',
+                labelWidth: 150,
+                defaults: {
+                    width: 110
+                },
+                value: 1,
+                items: [{
+                    text: 'Blocking',
+                    value: 1
+                },{
+                    text: 'Non-blocking',
+                    value: 0
+                }]
+            }]
 		}, {
 			xtype: 'fieldset',
 			collapsible: true,
@@ -106,16 +142,17 @@ Scalr.regPage('Scalr.ui.scripts.create', function (loadParams, moduleParams) {
 			title: 'Variables',
 			items: [{
 				xtype: 'displayfield',
-				fieldCls: 'x-form-field-info',
+				cls: 'x-form-field-info',
 				value: 'Built in variables: <br>' + moduleParams['variables'] + '<br /><br /> You may use own variables as %variable%. Variable values can be set for each role in farm settings.'
 			}]
 		}, {
 			xtype: 'fieldset',
 			title: 'Script',
 			labelWidth: 130,
+            cls: 'x-fieldset-separator-none',
 			items: [{
 				xtype: 'displayfield',
-				fieldCls: 'x-form-field-warning',
+				cls: 'x-form-field-warning',
 				value: 'First line must contain shebang (#!/path/to/interpreter)'
 			}, {
 				xtype: 'codemirror',
@@ -133,7 +170,7 @@ Scalr.regPage('Scalr.ui.scripts.create', function (loadParams, moduleParams) {
 		dockedItems: [{
 			xtype: 'container',
 			dock: 'bottom',
-			cls: 'x-docked-bottom-frame',
+			cls: 'x-docked-buttons',
 			layout: {
 				type: 'hbox',
 				pack: 'center'
@@ -187,7 +224,6 @@ Scalr.regPage('Scalr.ui.scripts.create', function (loadParams, moduleParams) {
 				}
 			}, {
 				xtype: 'button',
-				margin: '0 0 0 5',
 				text: 'Cancel',
 				handler: function() {
 					Scalr.event.fireEvent('close');

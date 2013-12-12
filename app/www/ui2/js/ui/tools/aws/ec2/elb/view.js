@@ -91,8 +91,8 @@ Scalr.regPage('Scalr.ui.tools.aws.ec2.elb.view', function (loadParams, modulePar
 			store: store,
 			dock: 'top',
 			beforeItems: [{
-				ui: 'paging',
-				iconCls: 'x-tbar-add',
+                text: 'Add ELB',
+                cls: 'x-btn-green-bg',
 				hidden: !Scalr.flags['betaMode'],
 				handler: function() {
 					Scalr.event.fireEvent('redirect', '#/tools/aws/ec2/elb/create?cloudLocation=' + store.proxy.extraParams.cloudLocation);

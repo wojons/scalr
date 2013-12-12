@@ -9,11 +9,29 @@ class Scalr_UI_Controller_Operations extends Scalr_UI_Controller
         $this->detailsAction();
     }
 
+    public function progressAction()
+    {
+        $opId = $this->getParam('operationId');
+        if ($opId) {
+            $operation = $this->db->GetRow("SELECT * FROM server_operations WHERE id = ? LIMIT 1", array($opId));
+            $dbServer = DBServer::LoadByID($operation['server_id']);
+            $this->user->getPermissions()->validate($dbServer);
+        }
+
+        $client2 = Scalr_Net_Scalarizr_Client::getClient(
+            $dbServer,
+            Scalr_Net_Scalarizr_Client::NAMESPACE_OPERATION,
+            $dbServer->getPort(DBServer::PORT_API)
+        );
+        $info = $client2->getStatus($opId);
+        var_dump($info);
+    }
+
     public function detailsAction()
     {
         $opId = $this->getParam('operationId');
         if ($opId) {
-            $operation = $this->db->GetRow("SELECT * FROM server_operations WHERE id = ?", array($opId));
+            $operation = $this->db->GetRow("SELECT * FROM server_operations WHERE id = ? LIMIT 1", array($opId));
             $dbServer = DBServer::LoadByID($operation['server_id']);
             $this->user->getPermissions()->validate($dbServer);
 
@@ -22,7 +40,7 @@ class Scalr_UI_Controller_Operations extends Scalr_UI_Controller
             $serverId = $this->getParam("serverId");
             $opName = $this->getParam("operation");
 
-            $operation = $this->db->GetRow("SELECT * FROM server_operations WHERE server_id = ? AND name = ?", array($serverId, $opName));
+            $operation = $this->db->GetRow("SELECT * FROM server_operations WHERE server_id = ? AND name = ? LIMIT 1", array($serverId, $opName));
             if ($operation) {
                 $opId = $operation['id'];
             } else {
@@ -45,7 +63,7 @@ class Scalr_UI_Controller_Operations extends Scalr_UI_Controller
                 $details['Server provisioning']['status'] = 'pending';
                 $details['Boot OS']['status'] = 'pending';
                 $details['Start & Initialize scalarizr']['status'] = 'pending';
-                $message = "<span style='color:red;'>Unable to launch instance: {$launchError}</span>";
+                $message = "<span style='color:red;'>Unable to launch instance:".  htmlspecialchars($launchError)."</span>";
             } else {
                 $details['Server provisioning']['status'] = 'running';
                 $details['Boot OS']['status'] = 'pending';
@@ -89,7 +107,7 @@ class Scalr_UI_Controller_Operations extends Scalr_UI_Controller
 
                 if ($dbServer->GetProperty(SERVER_PROPERTIES::SZR_IS_INIT_FAILED)) {
                     $initStatus = '<span style="color:red;">Initialization failed</span>';
-                    $message = $dbServer->GetProperty(SERVER_PROPERTIES::SZR_IS_INIT_ERROR_MSG);
+                    $message = htmlspecialchars($dbServer->GetProperty(SERVER_PROPERTIES::SZR_IS_INIT_ERROR_MSG));
                 } else
                     $initStatus = $dbServer->status;
             }
@@ -158,7 +176,7 @@ class Scalr_UI_Controller_Operations extends Scalr_UI_Controller
                     $content .= "<div style='clear:both;padding-left:15px;'><div class='scalr-operation-status-{$step['status']}'>{$cont}</div> {$stepName}</div>";
 
                     if ($step['status'] == 'error')
-                        $message = $step['message'];
+                        $message = htmlspecialchars($step['message']);
                 }
             }
         }
@@ -171,7 +189,7 @@ class Scalr_UI_Controller_Operations extends Scalr_UI_Controller
             'name'		=> $operation['name'],
             'date'		=> Scalr_Util_DateTime::convertTz((int)$operation['timestamp']),
             'content' => $content,
-            'message' => $message
+            'message' => nl2br($message)
         ));
     }
 }

@@ -15,7 +15,7 @@ class CloudynTest extends TestCase
 
     /**
      * {@inheritdoc}
-     * @see SimpleTestCase::setUp()
+     * @see Scalr\Tests.TestCase::setUp()
      */
     protected function setUp()
     {
@@ -24,7 +24,7 @@ class CloudynTest extends TestCase
 
     /**
      * {@inheritdoc}
-     * @see SimpleTestCase::tearDown()
+     * @see Scalr\Tests.TestCase::tearDown()
      */
     protected function tearDown()
     {

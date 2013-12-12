@@ -1,8 +1,8 @@
 <?php
 namespace Scalr\Service\Aws\Client;
 
+use Scalr\Service\Aws\Plugin\EventObserver;
 use Scalr\Service\Aws\DataType\ErrorData;
-use Scalr\Service\Aws\LoaderException;
 use Scalr\Service\Aws\DataType\Loader\ErrorLoader;
 
 /**
@@ -29,11 +29,32 @@ class QueryClientResponse implements ClientResponseInterface
     private $errorData;
 
     /**
+     * Exception
+     *
+     * @var ClientException
+     */
+    private $exception;
+
+    /**
      * Http request
      *
      * @var \HttpRequest
      */
     private $request;
+
+    /**
+     * The number of the query during current user session
+     *
+     * @var int
+     */
+    private $queryNumber;
+
+    /**
+     * EventObserver
+     *
+     * @var EventObserver
+     */
+    private $eventObserver;
 
     /**
      * Constructor
@@ -57,6 +78,7 @@ class QueryClientResponse implements ClientResponseInterface
         if (method_exists($this->message, $method)) {
             return call_user_method_array($method, $this->message, $args);
         }
+        throw new \BadMethodCallException(sprintf('Method "%s" does not exist for class "%s".', $method, get_class($this)));
     }
 
     /**
@@ -92,8 +114,23 @@ class QueryClientResponse implements ClientResponseInterface
      */
     public function getError()
     {
+        if ($this->hasError()) {
+            throw $this->exception;
+        }
+
+        return false;
+    }
+
+
+    /**
+     * {@inheritdoc}
+     * @see Scalr\Service\Aws\Client.ClientResponseInterface::hasError()
+     */
+    public function hasError()
+    {
         if (!isset($this->errorData)) {
             $this->errorData = false;
+            $this->exception = null;
             $code = $this->getResponseCode();
             if ($code < 200 || $code > 299) {
                 if ($code == 404) {
@@ -102,16 +139,29 @@ class QueryClientResponse implements ClientResponseInterface
                         return $this->errorData;
                     }
                 }
+
                 $loader = new ErrorLoader();
                 $this->errorData = $loader->load($this->getRawContent());
                 $this->errorData->request = $this->getRequest();
-                throw new QueryClientException($this->errorData);
+                $this->errorData->queryNumber = $this->queryNumber;
+
+                $this->exception = new QueryClientException($this->errorData);
             }
         }
-        return $this->errorData;
+
+        return $this->errorData instanceof ErrorData;
     }
 
     /**
+     * {@inheritdoc}
+     * @see Scalr\Service\Aws\Client.ClientResponseInterface::getException()
+     */
+    public function getException()
+    {
+        return $this->hasError() ? $this->exception : null;
+    }
+
+	/**
      * {@inheritdoc}
      * @see Scalr\Service\Aws\Client.ClientResponseInterface::getResponseCode()
      */
@@ -120,7 +170,18 @@ class QueryClientResponse implements ClientResponseInterface
         return $this->message->getResponseCode();
     }
 
-    /**
+	/**
+	 * @param EventObserver $eventObserver
+	 * @return \Scalr\Service\Aws\Client\QueryClientResponse
+	 */
+    public function setEventObserver(EventObserver $eventObserver = null)
+    {
+        $this->eventObserver = $eventObserver;
+
+        return $this;
+    }
+
+	/**
      * {@inheritdoc}
      * @see Scalr\Service\Aws\Client.ClientResponseInterface::getResponseStatus()
      */
@@ -139,14 +200,24 @@ class QueryClientResponse implements ClientResponseInterface
     }
 
     /**
-     * Sets raw request message
-     *
-     * @param   \HttpRequest   $request Request object
-     * @return  RestClientResponse
+     * {@inheritdoc}
+     * @see Scalr\Service\Aws\Client.ClientResponseInterface::setRequest()
+     * @return QueryClientResponse
      */
-    public function setRequest(\HttpRequest $request)
+    public function setRequest($request)
     {
         $this->request = $request;
+        return $this;
+    }
+
+    /**
+     * {@inheritdoc}
+     * @see Scalr\Service\Aws\Client.ClientResponseInterface::setQueryNumber()
+     * @return QueryClientResponse
+     */
+    public function setQueryNumber($number)
+    {
+        $this->queryNumber = $number;
         return $this;
     }
 }

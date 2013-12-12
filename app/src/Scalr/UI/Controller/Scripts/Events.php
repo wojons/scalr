@@ -1,7 +1,14 @@
 <?php
+use Scalr\Acl\Acl;
+
 class Scalr_UI_Controller_Scripts_Events extends Scalr_UI_Controller
 {
     const CALL_PARAM_NAME = 'eventId';
+
+    public function hasAccess()
+    {
+        return parent::hasAccess() && $this->request->isAllowed(Acl::RESOURCE_GENERAL_CUSTOM_EVENTS);
+    }
 
     public function defaultAction()
     {

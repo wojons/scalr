@@ -72,7 +72,7 @@ class Scalr_UI_Controller_Tools_Aws_S3 extends Scalr_UI_Controller
             if ($c[0] == 'farm') {
                 $hash = $c[1];
 
-                $farm = $this->db->GetRow("SELECT id, name FROM farms WHERE hash=? AND env_id = ?", array($hash, $this->environment->id));
+                $farm = $this->db->GetRow("SELECT id, name FROM farms WHERE hash=? AND env_id = ? LIMIT 1", array($hash, $this->environment->id));
                 if ($farm) {
                     $info['farmId'] = $farm['id'];
                     $info['farmName'] = $farm['name'];
@@ -154,7 +154,7 @@ class Scalr_UI_Controller_Tools_Aws_S3 extends Scalr_UI_Controller
                 )
             );
 
-//         $zoneinfo = $this->db->GetRow("SELECT * FROM dns_zones WHERE zone_name=? AND client_id=?",
+//         $zoneinfo = $this->db->GetRow("SELECT * FROM dns_zones WHERE zone_name=? AND client_id=? LIMIT 1",
 //             array(
 //             $this->getParam('zone')? $this->getParam('zone') : $distributionConfig->CNAME,
 //             $this->user->getAccountId()
@@ -192,13 +192,13 @@ class Scalr_UI_Controller_Tools_Aws_S3 extends Scalr_UI_Controller
         $dist = $aws->cloudFront->distribution->fetch($this->getParam('id'));
         $result = $dist->delete();
 
-        $info = $this->db->GetRow("SELECT * FROM distributions WHERE cfid=?", array($this->getParam('id')));
+        $info = $this->db->GetRow("SELECT * FROM distributions WHERE cfid=? LIMIT 1", array($this->getParam('id')));
 
         if ($info) {
             $this->db->Execute("DELETE FROM distributions WHERE cfid=?", array($this->getParam('id')));
 
             // Remove CNAME from DNS zone
-//             $zoneinfo = $this->db->GetRow("SELECT * FROM dns_zones WHERE zone_name=? AND client_id=?",
+//             $zoneinfo = $this->db->GetRow("SELECT * FROM dns_zones WHERE zone_name=? AND client_id=? LIMIT 1",
 //                 array($info['zone'], $this->user->getAccountId())
 //             );
 

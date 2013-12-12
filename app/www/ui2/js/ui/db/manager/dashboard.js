@@ -2,571 +2,573 @@ Scalr.regPage('Scalr.ui.db.manager.dashboard', function (loadParams, moduleParam
 	var panel = Ext.create('Ext.form.Panel', {
 		width: 1140,
 		title: 'Database status',
-		bodyCls: 'x-panel-body-frame scalr-ui-dbmsrstatus-panel',
-		fieldDefaults: {
-			labelWidth: 120
-		},
-		items: [{
-			xtype: 'container',
-			layout: {
-				type: 'hbox',
-				align: 'stretch'
-			},
-
-			items: [{
-				xtype: 'fieldset',
-				minWidth: 400,
-				flex: 1.1,
-				title: 'General',
-				items: [{
-					xtype: 'displayfield',
-					name: 'general_dbname',
-					fieldLabel: 'Database type'
-				},{
-					xtype: 'container',
-					itemId: 'generalExtras',
-					height: 50,
-					overflow: 'hidden'
-				},{
-					xtype: 'container',
-					layout: {
-						type: 'column'
-					},
-					items: [{
-						xtype: 'btn',
-						cls: 'x-button-text-large',
-						itemId: 'manageConfigurationBtn',
-						text: 'Manage configuration',
-						margin: '0 10 0 0',
-						handler: function(){
-							var data = this.up('form').moduleParams;
-							Scalr.event.fireEvent('redirect', '#/services/configurations/manage?farmRoleId=' + data['farmRoleId'] + '&behavior=' + data['dbType']);
-						}
-					},{
-						xtype: 'btn',
-						cls: 'x-button-text-large',
-						text: 'Connection details',
-						margin: 0,
-						handler: function() {
-							Scalr.utils.Window({
-								title: 'Connection details',
-								width: 640,
-								padding: '0 24',
-								items: this.up('form').getConnectionDetails(),
-								dockedItems: [{
-									xtype: 'container',
-									margin: '12 0 0 0',
-									dock: 'bottom',
-									layout: {
-										type: 'hbox',
-										pack: 'center'
-									},
-									items: [{
-										xtype: 'btn',
-										cls: 'x-button-text-large x-button-text-dark',
-										text: 'Close',
-										handler: function() {
-											this.up('#box').close();
-										}
-									}]
-								}]
-							});
-						}
-					}]
-				}]
-			},{
-				xtype: 'fieldset',
-				flex: 1,
-				width: null,
-				itemId: 'phpMyAdminAccess',
-				margin: '0 0 12 12',
-				items: [{
-					xtype: 'image',
-					src: '/ui2/images/ui/db/phpmyadmin_logo.png',
-					width: 146,
-					height: 88,
-					margin: '10 0 10 50'
-				},{
-					xtype: 'container',
-					layout: {
-						type: 'hbox',
-						pack: 'center'
-					},
-					margin: '17 0 0 0',
-					defaults: {
-						width: 120
-					},
-					items: [{
-						xtype: 'btn',
-						cls: 'x-button-text-large',
-						itemId: 'setupPMA',
-						text: 'Setup access',
-						hidden: true,
-						handler: function(){
-							var form = this.up('form'),
-								data = form.moduleParams;
-							Scalr.Request({
-								processBox: {
-									type: 'action'
-								},
-								url: '/db/manager/xSetupPmaAccess/',
-								params: {farmId: data['farmId'], farmRoleId: data['farmRoleId']},
-								success: function(){
-									form.down('#setupPMA').hide();
-									form.down('#PMAinProgress').show();
-								}
-							});
-						}
-					}, {
-						xtype: 'btn',
-						cls: 'x-button-text-large',
-						itemId: 'launchPMA',
-						margin: '0 10 0 0',
-						text: 'Launch',
-						hidden: true,
-						handler: function() {
-							var data = this.up('form').moduleParams,
-								link = document.location.href.split('#');
-							window.open(link[0] + '#/services/mysql/pma?farmId=' + data['farmId']);
-							//Scalr.event.fireEvent('redirect', '#/services/mysql/pma?farmId=' + data['farmId']);
-						}
-					}, {
-						xtype: 'btn',
-						cls: 'x-button-text-large',
-						itemId: 'resetPMA',
-						hidden: true,
-						text: 'Reset access',
-						handler: function(){
-							var form = this.up('form'),
-								data = form.moduleParams;
-							Scalr.Request({
-								confirmBox: {
-									type: 'action',
-									msg: 'Are you sure want to reset PMA access?'
-								},
-								processBox: {
-									type: 'action'
-								},
-								url: '/db/manager/xSetupPmaAccess/',
-								params: {farmId: data['farmId'], farmRoleId: data['farmRoleId']},
-								success: function(){
-									form.down('#setupPMA').hide();
-									form.down('#launchPMA').hide();
-									form.down('#resetPMA').hide();
-									form.down('#PMAinProgress').show();
-								}
-							});
-						}
-					},{
-						xtype: 'displayfield',
-						hidden: true,
-						itemId: 'PMAinProgress',
-						margin: '-5 0 0 0',
-						width: 280,
-						value: 'MySQL access details for PMA requested. Please refresh this page in a couple minutes...'
-					}]
-				}]
-			},{
-				xtype: 'fieldset',
-				flex: 1.1,
-				minWidth: 400,
-				margin: '0 0 12 12',
-				title: 'Master storage',
-				defaults: {
-					labelWidth: 80
-				},
-				items: [{
-					xtype: 'displayfield',
-					name: 'storage_id',
-					fieldLabel: 'ID'
-				},{
-					xtype: 'displayfield',
-					name: 'storage_engine_name',
-					fieldLabel: 'Type'
-				},{
-					xtype: 'displayfield',
-					name: 'storage_fs',
-					fieldLabel: 'File system'
-				},{
-					xtype: 'fieldcontainer',
-					fieldLabel: 'Usage',
-					layout: 'column',
-					items: [{
-						xtype: 'progressfield',
-						width: 180,
-						name: 'storage_size',
-						valueField: 'used',
-						units: 'Gb'
-					},{
-						xtype: 'btn',
-						itemId: 'increaseStorageSizeBtn',
-						cls: 'scalr-ui-dbmsr-status-increase',
-						baseCls: 'x-btn-base-image-background',
-						margin: '0 0 0 5',
-						tooltip: 'Increase storage size',
-						handler: function(){
-							var data = this.up('form').moduleParams;
-							Scalr.Request({
-								confirmBox: {
-									type: 'action',
-									formWidth: 700,
-									msg: 'Are you sure want to increase storage size?',
-									form: [{
-										xtype: 'displayfield',
-										fieldCls: 'x-form-field-warning',
-										value: '<span style="color:red;">Attention! This operation will cause downtime on master server.</span><br />During creation and replacement of new storage, master server won\'t be able to accept any connections.'
-									}, {
-										xtype: 'fieldcontainer',
-										hideLabel: true,
-										layout: 'hbox',
-										items: [{
-											xtype: 'displayfield',
-											value: 'New size (GB):',
-											hideLabel: true
-										}, {
-											xtype: 'textfield',
-											width: 50,
-											hideLabel: true,
-											margin: '0 0 0 5',
-											name: 'newSize',
-											value: (parseInt(data['storage']['size']['total'])+1)*2
-										}, {
-											xtype: 'displayfield',
-											margin: '0 0 0 5',
-											value: ' GB',
-											hideLabel: true
-										}]
-									}]
-								},
-								processBox: {
-									type: 'action',
-									msg: 'Updating scalarizr ...'
-								},
-								url: '/db/manager/xGrowStorage/',
-								params: {farmRoleId: data['farmRoleId']},
-								success: function(data){
-									Scalr.message.Success("Storage grow successfully initiated");
-									Scalr.event.fireEvent('redirect', '#/operations/' + data['operationId'] + '/details');
-								}
-							});
-						}
-					}]
-				}]
-			}]
-		},{
-			xtype: 'fieldset',
-			title: 'Cluster map',
-			collapsible: true,
-			items: [{
-				xtype: 'dbmsclustermapfield',
-				name: 'clustermap'
-			}]
-		},{
-			xtype: 'container',
-			layout: {
-				type: 'hbox',
-				align: 'stretch'
-			},
-			items: [{
-				xtype: 'fieldset',
-				hideOn: 'backupsNotSupported',
-				margin: '0 12 12 0',
-				flex: 1,
-				title: 'Database dumps <img data-qtip="Database dumps description" class="tipHelp" src="/ui2/images/icons/info_icon_16x16.png" style="cursor: help; height: 16px;">',
-				items: [{
+		bodyCls: 'scalr-ui-dbmsrstatus-panel',
+        layout: 'auto',
+        items: [{
+            xtype: 'container',
+            layout: {
+                type: 'hbox',
+                align: 'stretch'
+            },
+            cls: 'x-fieldset-separator-bottom',
+            items: [{
+                xtype: 'fieldset',
+                cls: 'x-fieldset-separator-none',
+                minWidth: 400,
+                flex: 1.1,
+                title: 'General',
+                items: [{
+                    xtype: 'displayfield',
+                    name: 'general_dbname',
+                    fieldLabel: 'Database type',
+                    labelWidth: 130
+                },{
+                    xtype: 'container',
+                    itemId: 'generalExtras',
+                    height: 58,
+                    defaults: {
+                        labelWidth: 130
+                    },
+                    overflow: 'hidden'
+                },{
+                    xtype: 'container',
+                    layout: {
+                        type: 'hbox',
+                        pack: 'center'
+                    },
+                    defaults: {
+                        flex: 1,
+                        maxWidth: 180
+                    },
+                    items: [{
+                        xtype: 'button',
+                        itemId: 'manageConfigurationBtn',
+                        text: 'Manage configuration',
+                        margin: '0 5 0 0',
+                        handler: function(){
+                            var data = this.up('form').moduleParams;
+                            Scalr.event.fireEvent('redirect', '#/services/configurations/manage?farmRoleId=' + data['farmRoleId'] + '&behavior=' + data['dbType']);
+                        }
+                    },{
+                        xtype: 'button',
+                        text: 'Connection details',
+                        margin: '0 0 0 5',
+                        handler: function() {
+                            Scalr.utils.Window({
+                                title: 'Connection details',
+                                width: 640,
+                                //padding: '0 24',
+                                items: this.up('form').getConnectionDetails(),
+                                dockedItems: [{
+                                    xtype: 'container',
+                                    cls: 'x-docked-buttons',
+                                    dock: 'bottom',
+                                    layout: {
+                                        type: 'hbox',
+                                        pack: 'center'
+                                    },
+                                    items: [{
+                                        xtype: 'button',
+                                        text: 'Close',
+                                        handler: function() {
+                                            this.up('#box').close();
+                                        }
+                                    }]
+                                }]
+                            });
+                        }
+                    }]
+                }]
+            },{
+                xtype: 'fieldset',
+                itemId: 'phpMyAdminAccess',
+                cls: 'x-fieldset-separator-left',
+                flex: 1,
+                //width: null,
+                items: [{
+                    xtype: 'image',
+                    src: '/ui2/images/ui/db/phpmyadmin_logo.png',
+                    width: 146,
+                    height: 88,
+                    margin: '20 0 21 50'
+                },{
+                    xtype: 'container',
+                    layout: {
+                        type: 'hbox',
+                        pack: 'center'
+                    },
+                    defaults: {
+                        width: 120
+                    },
+                    items: [{
+                        xtype: 'button',
+                        itemId: 'setupPMA',
+                        text: 'Setup access',
+                        hidden: true,
+                        disabled: !Scalr.isAllowed('DB_DATABASE_STATUS', 'phpmyadmin'),
+                        handler: function(){
+                            var form = this.up('form'),
+                                data = form.moduleParams;
+                            Scalr.Request({
+                                processBox: {
+                                    type: 'action'
+                                },
+                                url: '/db/manager/xSetupPmaAccess/',
+                                params: {farmId: data['farmId'], farmRoleId: data['farmRoleId']},
+                                success: function(){
+                                    form.down('#setupPMA').hide();
+                                    form.down('#PMAinProgress').show();
+                                }
+                            });
+                        }
+                    }, {
+                        xtype: 'button',
+                        itemId: 'launchPMA',
+                        margin: '0 10 0 0',
+                        text: 'Launch',
+                        hidden: true,
+                        disabled: !Scalr.isAllowed('DB_DATABASE_STATUS', 'phpmyadmin'),
+                        handler: function() {
+                            var data = this.up('form').moduleParams,
+                                link = document.location.href.split('#');
+                            window.open(link[0] + '#/services/mysql/pma?farmId=' + data['farmId']);
+                            //Scalr.event.fireEvent('redirect', '#/services/mysql/pma?farmId=' + data['farmId']);
+                        }
+                    }, {
+                        xtype: 'button',
+                        cls: 'x-button-text-large',
+                        itemId: 'resetPMA',
+                        hidden: true,
+                        disabled: !Scalr.isAllowed('DB_DATABASE_STATUS', 'phpmyadmin'),
+                        text: 'Reset access',
+                        handler: function(){
+                            var form = this.up('form'),
+                                data = form.moduleParams;
+                            Scalr.Request({
+                                confirmBox: {
+                                    type: 'action',
+                                    msg: 'Are you sure want to reset PMA access?'
+                                },
+                                processBox: {
+                                    type: 'action'
+                                },
+                                url: '/db/manager/xSetupPmaAccess/',
+                                params: {farmId: data['farmId'], farmRoleId: data['farmRoleId']},
+                                success: function(){
+                                    form.down('#setupPMA').hide();
+                                    form.down('#launchPMA').hide();
+                                    form.down('#resetPMA').hide();
+                                    form.down('#PMAinProgress').show();
+                                }
+                            });
+                        }
+                    },{
+                        xtype: 'displayfield',
+                        hidden: true,
+                        itemId: 'PMAinProgress',
+                        margin: '-8 0 0 0',
+                        width: 280,
+                        value: 'MySQL access details for PMA requested. Please refresh this page in a couple minutes...'
+                    }]
+                }]
+            },{
+                xtype: 'fieldset',
+                flex: 1.1,
+                minWidth: 400,
+                title: 'Master storage',
+                cls: 'x-fieldset-separator-left',
+                defaults: {
+                    labelWidth: 80
+                },
+                items: [{
+                    xtype: 'displayfield',
+                    name: 'storage_id',
+                    fieldLabel: 'ID'
+                },{
+                    xtype: 'displayfield',
+                    name: 'storage_engine_name',
+                    fieldLabel: 'Type'
+                },{
+                    xtype: 'displayfield',
+                    name: 'storage_fs',
+                    fieldLabel: 'File system'
+                },{
+                    xtype: 'fieldcontainer',
+                    fieldLabel: 'Usage',
+                    layout: 'column',
+                    items: [{
+                        xtype: 'progressfield',
+                        width: 180,
+                        name: 'storage_size',
+                        valueField: 'used',
+                        units: 'Gb'
+                    },{
+                        xtype: 'button',
+                        itemId: 'increaseStorageSizeBtn',
+                        ui: 'flag',
+                        cls: 'x-btn-flag-increase',
+                        margin: '0 0 0 5',
+                        tooltip: 'Increase storage size',
+                        handler: function(){
+                            var data = this.up('form').moduleParams;
+                            Scalr.Request({
+                                confirmBox: {
+                                    type: 'action',
+                                    formWidth: 700,
+                                    msg: 'Are you sure want to increase storage size?',
+                                    form: [{
+                                        xtype: 'container',
+                                        cls: 'x-container-fieldset',
+                                        layout: 'anchor',
+                                        items: [{
+                                            xtype: 'displayfield',
+                                            cls: 'x-form-field-warning',
+                                            value: '<span style="color:red;">Attention! This operation will cause downtime on master server.</span><br />During creation and replacement of new storage, master server won\'t be able to accept any connections.'
+                                        }, {
+                                            xtype: 'fieldcontainer',
+                                            hideLabel: true,
+                                            layout: 'hbox',
+                                            items: [{
+                                                xtype: 'displayfield',
+                                                value: 'New size (GB):',
+                                                hideLabel: true
+                                            }, {
+                                                xtype: 'textfield',
+                                                width: 50,
+                                                hideLabel: true,
+                                                margin: '0 0 0 5',
+                                                name: 'newSize',
+                                                value: (parseInt(data['storage']['size']['total'])+1)*2
+                                            }, {
+                                                xtype: 'displayfield',
+                                                margin: '0 0 0 5',
+                                                value: ' GB',
+                                                hideLabel: true
+                                            }]
+                                        }]
+                                    }]
+                                },
+                                processBox: {
+                                    type: 'action',
+                                    msg: 'Updating scalarizr ...'
+                                },
+                                url: '/db/manager/xGrowStorage/',
+                                params: {farmRoleId: data['farmRoleId']},
+                                success: function(data){
+                                    Scalr.message.Success("Storage grow successfully initiated");
+                                    Scalr.event.fireEvent('redirect', '#/operations/' + data['operationId'] + '/details');
+                                }
+                            });
+                        }
+                    }]
+                }]
+            }]
+        },{
+            xtype: 'fieldset',
+            title: 'Cluster map',
+            collapsible: true,
+            items: [{
+                xtype: 'dbmsclustermapfield',
+                name: 'clustermap'
+            }]
+        },{
+            xtype: 'container',
+            layout: {
+                type: 'hbox',
+                align: 'stretch'
+            },
+            items: [{
+                xtype: 'fieldset',
+                cls: 'x-fieldset-separator-right',
+                hideOn: 'backupsNotSupported',
+                flex: 1.04,
+                title: 'Database dumps <img data-qtip="Database dumps description" class="tipHelp" src="/ui2/images/icons/info_icon_16x16.png" style="cursor: help; height: 16px;">',
+                items: [{
                     xtype: 'displayfield',
                     showOn: 'backupsDisabled',
                     hidden: true,
                     value: 'Database dumps disabled.'
                 },{
-					xtype: 'displayfield',
-					name: 'backup_schedule',
-					fieldLabel: 'Schedule',
+                    xtype: 'displayfield',
+                    name: 'backup_schedule',
+                    fieldLabel: 'Schedule',
                     hideOn: 'backupsDisabled'
-				},{
-					xtype: 'displayfield',
-					name: 'backup_next',
-					fieldLabel: 'Next backup',
+                },{
+                    xtype: 'displayfield',
+                    name: 'backup_next',
+                    fieldLabel: 'Next backup',
                     hideOn: 'backupsDisabled'
-				},{
-					xtype: 'fieldcontainer',
-					fieldLabel: 'Last backup',
+                },{
+                    xtype: 'fieldcontainer',
+                    fieldLabel: 'Last backup',
                     hideOn: 'backupsDisabled',
-					layout: 'column',
-					items: [{
-						xtype: 'displayfield',
-						name: 'backup_last'
-					},{
-						xtype: 'displayfield',
-						name: 'backup_last_result',
-						margin: '0 0 0 20',
-						style: 'font-weight:bold;',
-						valueToRaw: function(value) {
-							return value;
-						},
-						renderer: function(rawValue) {
-							var html = '';
-							if (rawValue.status) {
-								if (rawValue.status != 'ok') {
-									html = '<span style="position:relative;top:-3px;color:#C00000;text-transform:capitalize">Failed';
-									if (rawValue.error) {
-										html += ' <img data-qtip="'+Ext.String.htmlEncode(rawValue.error)+'" src="/ui2/images/icons/question.png" style="cursor: help; height: 16px;position:relative;top:2px">';
-									}
-									html += '</span>';
-								} else {
-									html = '<span style="color:#008000;text-transform:capitalize">Success</span>';
-								}
-							}
-							return html;
-						}
-					}]
-				},{
-					xtype: 'dbmshistoryfield',
-					name: 'backup_history',
-					fieldLabel: 'History',
+                    layout: 'column',
+                    items: [{
+                        xtype: 'displayfield',
+                        name: 'backup_last'
+                    },{
+                        xtype: 'displayfield',
+                        name: 'backup_last_result',
+                        margin: '0 0 0 20',
+                        style: 'font-weight:bold;',
+                        valueToRaw: function(value) {
+                            return value;
+                        },
+                        renderer: function(rawValue) {
+                            var html = '';
+                            if (rawValue.status) {
+                                if (rawValue.status != 'ok') {
+                                    html = '<span style="position:relative;top:-3px;color:#C00000;text-transform:capitalize">Failed';
+                                    if (rawValue.error) {
+                                        html += ' <img data-qtip="'+Ext.String.htmlEncode(rawValue.error)+'" src="/ui2/images/icons/question.png" style="cursor: help; height: 16px;position:relative;top:2px">';
+                                    }
+                                    html += '</span>';
+                                } else {
+                                    html = '<span style="color:#008000;text-transform:capitalize">Success</span>';
+                                }
+                            }
+                            return html;
+                        }
+                    }]
+                },{
+                    xtype: 'dbmshistoryfield',
+                    name: 'backup_history',
+                    fieldLabel: 'History',
                     hideOn: 'backupsDisabled'
-				},{
-					xtype: 'container',
+                },{
+                    xtype: 'container',
                     hideOn: 'backupsDisabled',
-					layout: {
-						type: 'hbox'						
-					},
-					margin: '24 0 12 0',
-					padding: '0 0 0 90',
-					defaults: {
-						width: 140,
-						margin: '0 16 0 0'
-					},
-					items: [{
-						xtype: 'btn',
-						cls: 'x-button-text-large',
-						text: 'Manage',
-						handler: function(){
-							var data = this.up('form').moduleParams;
-							Scalr.event.fireEvent('redirect', '#/db/backups?farmId='+data['farmId']);
-						}
-					},{
-						xtype: 'btn',
-						cls: 'x-button-text-large',
-						text: 'Create now',
-						hideOn: 'backupInProgress',
-						margin: 0,
-						hidden: true,
-						handler: function(){
-							var data = this.up('form').moduleParams;
-							Scalr.Request({
-								confirmBox: {
-									type: 'action',
-									msg: 'Are you sure want to create backup?'
-								},
-								processBox: {
-									type: 'action',
-									msg: 'Sending backup request ...'
-								},
-								url: '/db/manager/xCreateBackup/',
-								params: {farmId: data['farmId'], farmRoleId: data['farmRoleId']},
-								success: function(){
-									Scalr.event.fireEvent('refresh');
-								}
-							});
-						}
-					},{
-						xtype: 'container',
-						showOn: 'backupInProgress',
-						hidden: true,
-						width: null,
-						padding: '2 0 0 0',
-						layout: {
-							type: 'hbox'
-						},
-						items: [{
-							xtype: 'component',
-							cls: 'scalr-ui-dbmsr-status-inprogress',
-							width: 145,
-							height: 24,
-							html: 'In progress...'
-						},{
-							xtype: 'btnfield',
-							itemId: 'cancelDataBackupBtn',
-							cls: 'scalr-ui-dbmsr-status-stop',
-							baseCls: 'x-btn-base-image-background',
-							margin: '0 0 0 6',
-							width: 30,
-							height: 26,
-							submitValue: false,
-							handler: function(){
-								var data = this.up('form').moduleParams;
-								Scalr.Request({
-									confirmBox: {
-										type: 'action',
-										msg: 'Are you sure want to cancel running backup?'
-									},
-									processBox: {
-										type: 'action',
-										msg: 'Sending backup cancel request ...'
-									},
-									url: '/db/manager/xCancelBackup/',
-									params: {farmId: data['farmId'], farmRoleId: data['farmRoleId']},
-									success: function(){
-										Scalr.event.fireEvent('refresh');
-									}
-								});
-							}
-						}]
-					}]
-				}]
-			},{
-				xtype: 'fieldset',
-				flex: 1,
-				title: 'Binary storage snapshots <img data-qtip="Binary storage snapshots" class="tipHelp" src="/ui2/images/icons/info_icon_16x16.png" style="cursor: help; height: 16px;">',
-				items: [{
-					xtype: 'displayfield',
+                    layout: {
+                        type: 'hbox'
+                    },
+                    margin: '24 0 12 0',
+                    padding: '0 0 0 90',
+                    defaults: {
+                        margin: '0 16 0 0'
+                    },
+                    items: [{
+                        xtype: 'button',
+                        text: 'Manage',
+                        width: 140,
+                        handler: function(){
+                            var data = this.up('form').moduleParams;
+                            Scalr.event.fireEvent('redirect', '#/db/backups?farmId='+data['farmId']);
+                        }
+                    },{
+                        xtype: 'button',
+                        text: 'Create now',
+                        hideOn: 'backupInProgress',
+                        margin: 0,
+                        hidden: true,
+                        width: 140,
+                        handler: function(){
+                            var data = this.up('form').moduleParams;
+                            Scalr.Request({
+                                confirmBox: {
+                                    type: 'action',
+                                    msg: 'Are you sure want to create backup?'
+                                },
+                                processBox: {
+                                    type: 'action',
+                                    msg: 'Sending backup request ...'
+                                },
+                                url: '/db/manager/xCreateBackup/',
+                                params: {farmId: data['farmId'], farmRoleId: data['farmRoleId']},
+                                success: function(){
+                                    Scalr.event.fireEvent('refresh');
+                                }
+                            });
+                        }
+                    },{
+                        xtype: 'container',
+                        showOn: 'backupInProgress',
+                        hidden: true,
+                        layout: {
+                            type: 'hbox'
+                        },
+                        padding: '1 0 0 0',
+                        items: [{
+                            xtype: 'component',
+                            cls: 'scalr-ui-dbmsr-status-inprogress',
+                            html: 'In progress...'
+                        },{
+                            xtype: 'buttonfield',
+                            itemId: 'cancelDataBackupBtn',
+                            ui: 'custom',
+                            cls: 'scalr-ui-dbmsr-status-stop',
+                            margin: '0 0 0 12',
+                            submitValue: false,
+                            handler: function(){
+                                var data = this.up('form').moduleParams;
+                                Scalr.Request({
+                                    confirmBox: {
+                                        type: 'action',
+                                        msg: 'Are you sure want to cancel running backup?'
+                                    },
+                                    processBox: {
+                                        type: 'action',
+                                        msg: 'Sending backup cancel request ...'
+                                    },
+                                    url: '/db/manager/xCancelBackup/',
+                                    params: {farmId: data['farmId'], farmRoleId: data['farmRoleId']},
+                                    success: function(){
+                                        Scalr.event.fireEvent('refresh');
+                                    }
+                                });
+                            }
+                        }]
+                    }]
+                }]
+            },{
+                xtype: 'fieldset',
+                cls: 'x-fieldset-separator-none',
+                flex: 1,
+                title: 'Binary storage snapshots <img data-qtip="Binary storage snapshots" class="tipHelp" src="/ui2/images/icons/info_icon_16x16.png" style="cursor: help; height: 16px;">',
+                defaults: {
+                    labelWidth: 110
+                },
+                items: [{
+                    xtype: 'displayfield',
                     showOn: 'bundleDisabled',
                     hidden: true,
                     value: 'Binary storage snapshots disabled.'
                 },{
-					xtype: 'displayfield',
-					name: 'bundles_schedule',
-					fieldLabel: 'Schedule',
-					hideOn: 'bundleDisabled'
-				},{
-					xtype: 'displayfield',
-					name: 'bundles_next',
-					fieldLabel: 'Next data bundle',
-					hideOn: 'bundleDisabled'
-				},{
-					xtype: 'fieldcontainer',
-					fieldLabel: 'Last data bundle',
-					hideOn: 'bundleDisabled',
-					layout: 'column',
-					items: [{
-						xtype: 'displayfield',
-						name: 'bundles_last'
-					},{
-						xtype: 'displayfield',
-						name: 'bundles_last_result',
-						margin: '0 0 0 20',
-						style: 'font-weight:bold;',
-						valueToRaw: function(value) {
-							return value;
-						},
-						renderer: function(rawValue) {
-							var html = '';
-							if (rawValue.status) {
-								if (rawValue.status != 'ok') {
-									html = '<span style="position:relative;top:-3px;color:#C00000;text-transform:capitalize">Failed';
-									if (rawValue.error) {
-										html += ' <img data-qtip="'+Ext.String.htmlEncode(rawValue.error)+'" src="/ui2/images/icons/question.png" style="cursor: help; height: 16px;position:relative;top:2px">';
-									}
-									html += '</span>';
-								} else {
-									html = '<span style="color:#008000;text-transform:capitalize">Success</span>';
-								}
-							}
-							return html;
-						}
-					}]
-				},{
-					xtype: 'dbmshistoryfield',
-					name: 'bundles_history',
-					fieldLabel: 'History',
-					hideOn: 'bundleDisabled'
-				},{
-					xtype: 'container',
-					hideOn: 'bundleDisabled',
-					layout: {
-						type: 'hbox'
-					},
-					margin: '24 0 12 0',
-					padding: '0 0 0 160',
-					defaults: {
-						width: 140,
-						margin: '0 16 0 0'
-					},
-					items: [{
-						xtype: 'btn',
-						cls: 'x-button-text-large',
-						text: 'Manage',
-						hidden: true,
-						handler: function(){
-							Scalr.message.Success('Under construction...');
-						}
-					},{
-						xtype: 'btn',
-						cls: 'x-button-text-large',
-						hideOn: 'bundleInProgress',
-						text: 'Create now',
-						hidden: true,
-						handler: function(){
-							var form = this.up('form'),
-								data = form.moduleParams;
-							Scalr.Request({
-								confirmBox: {
-									type: 'action',
-									msg: 'Create data bundle?',
-									formWidth: 600,
-									form: form.getConfirmationDataBundleOptions()
-								},
-								processBox: {
-									type: 'action',
-									msg: 'Sending data bundle request ...'
-								},
-								url: '/db/manager/xCreateDataBundle/',
-								params: {farmId: data['farmId'], farmRoleId: data['farmRoleId']},
-								success: function(){
-									Scalr.event.fireEvent('refresh');
-								}
-							});
-						}
-						
-					},{
-						xtype: 'container',
-						showOn: 'bundleInProgress',
-						width: null,
-						hidden: true,
-						padding: '2 0 0 0',
-						layout: {
-							type: 'hbox'
-						},
-						items: [{
-							xtype: 'component',
-							cls: 'scalr-ui-dbmsr-status-inprogress',
-							width: 145,
-							height: 24,
-							html: 'In progress...'
-						},{
-							xtype: 'btnfield',
-							itemId: 'cancelDataBundleBtn',
-							cls: 'scalr-ui-dbmsr-status-stop',
-							baseCls: 'x-btn-base-image-background',
-							margin: '0 0 0 6',
-							width: 30,
-							height: 26,
-							submitValue: false,
-							handler: function(){
-								var data = this.up('form').moduleParams;
-								Scalr.Request({
-									confirmBox: {
-										type: 'action',
-										msg: 'Are you sure want to cancel data bundle?'
-									},
-									processBox: {
-										type: 'action',
-										msg: 'Sending data bundle cancel request ...'
-									},
-									url: '/db/manager/xCancelDataBundle/',
-									params: {farmId: data['farmId'], farmRoleId: data['farmRoleId']},
-									success: function(){
-										Scalr.event.fireEvent('refresh');
-									}
-								});
-							}
-							
-						}]
-					}]
-				}]
-			}]
-		}],
+                    xtype: 'displayfield',
+                    name: 'bundles_schedule',
+                    fieldLabel: 'Schedule',
+                    hideOn: 'bundleDisabled'
+                },{
+                    xtype: 'displayfield',
+                    name: 'bundles_next',
+                    fieldLabel: 'Next data bundle',
+                    hideOn: 'bundleDisabled'
+                },{
+                    xtype: 'fieldcontainer',
+                    fieldLabel: 'Last data bundle',
+                    hideOn: 'bundleDisabled',
+                    layout: 'column',
+                    items: [{
+                        xtype: 'displayfield',
+                        name: 'bundles_last'
+                    },{
+                        xtype: 'displayfield',
+                        name: 'bundles_last_result',
+                        margin: '0 0 0 20',
+                        style: 'font-weight:bold;',
+                        valueToRaw: function(value) {
+                            return value;
+                        },
+                        renderer: function(rawValue) {
+                            var html = '';
+                            if (rawValue.status) {
+                                if (rawValue.status != 'ok') {
+                                    html = '<span style="position:relative;top:-3px;color:#C00000;text-transform:capitalize">Failed';
+                                    if (rawValue.error) {
+                                        html += ' <img data-qtip="'+Ext.String.htmlEncode(rawValue.error)+'" src="/ui2/images/icons/question.png" style="cursor: help; height: 16px;position:relative;top:2px">';
+                                    }
+                                    html += '</span>';
+                                } else {
+                                    html = '<span style="color:#008000;text-transform:capitalize">Success</span>';
+                                }
+                            }
+                            return html;
+                        }
+                    }]
+                },{
+                    xtype: 'dbmshistoryfield',
+                    name: 'bundles_history',
+                    fieldLabel: 'History',
+                    hideOn: 'bundleDisabled'
+                },{
+                    xtype: 'container',
+                    hideOn: 'bundleDisabled',
+                    layout: {
+                        type: 'hbox'
+                    },
+                    margin: '24 0 12 0',
+                    padding: '0 0 0 160',
+                    defaults: {
+                        margin: '0 16 0 0'
+                    },
+                    items: [{
+                        xtype: 'button',
+                        text: 'Manage',
+                        hidden: true,
+                        width: 140,
+                        handler: function(){
+                            Scalr.message.Success('Under construction...');
+                        }
+                    },{
+                        xtype: 'button',
+                        hideOn: 'bundleInProgress',
+                        text: 'Create now',
+                        width: 140,
+                        hidden: true,
+                        handler: function(){
+                            var form = this.up('form'),
+                                data = form.moduleParams;
+                            Scalr.Request({
+                                confirmBox: {
+                                    type: 'action',
+                                    msg: 'Create data bundle?',
+                                    formWidth: 600,
+                                    form: form.getConfirmationDataBundleOptions()
+                                },
+                                processBox: {
+                                    type: 'action',
+                                    msg: 'Sending data bundle request ...'
+                                },
+                                url: '/db/manager/xCreateDataBundle/',
+                                params: {farmId: data['farmId'], farmRoleId: data['farmRoleId']},
+                                success: function(){
+                                    Scalr.event.fireEvent('refresh');
+                                }
+                            });
+                        }
+
+                    },{
+                        xtype: 'container',
+                        showOn: 'bundleInProgress',
+                        hidden: true,
+                        padding: '1 0 0 0',
+                        layout: {
+                            type: 'hbox'
+                        },
+                        items: [{
+                            xtype: 'component',
+                            cls: 'scalr-ui-dbmsr-status-inprogress',
+                            html: 'In progress...'
+                        },{
+                            xtype: 'buttonfield',
+                            itemId: 'cancelDataBundleBtn',
+                            ui: 'custom',
+                            cls: 'scalr-ui-dbmsr-status-stop',
+                            margin: '0 0 0 12',
+                            submitValue: false,
+                            handler: function(){
+                                var data = this.up('form').moduleParams;
+                                Scalr.Request({
+                                    confirmBox: {
+                                        type: 'action',
+                                        msg: 'Are you sure want to cancel data bundle?'
+                                    },
+                                    processBox: {
+                                        type: 'action',
+                                        msg: 'Sending data bundle cancel request ...'
+                                    },
+                                    url: '/db/manager/xCancelDataBundle/',
+                                    params: {farmId: data['farmId'], farmRoleId: data['farmRoleId']},
+                                    success: function(){
+                                        Scalr.event.fireEvent('refresh');
+                                    }
+                                });
+                            }
+
+                        }]
+                    }]
+                }]
+            }]
+        }],
 		listeners: {
 			afterrender: function() {//todo: replace with something better
 				this.loadData(moduleParams);
@@ -647,7 +649,7 @@ Scalr.regPage('Scalr.ui.db.manager.dashboard', function (loadParams, moduleParam
 
             this.toggleElementsByFeature('bundleDisabled', !data['bundles']);
 			if (data['bundles']) {
-			this.toggleElementsByFeature('bundleInProgress', data['bundles']['inProgress']['status'] != '0');
+                this.toggleElementsByFeature('bundleInProgress', data['bundles']['inProgress']['status'] != '0');
             }
             
             this.toggleElementsByFeature('backupsDisabled', !data['backups']);
@@ -665,10 +667,10 @@ Scalr.regPage('Scalr.ui.db.manager.dashboard', function (loadParams, moduleParam
 			
 			if (data['pma']) {
 				this.down('#phpMyAdminAccess').setVisible(true);
-			this.down('#setupPMA').setVisible(!(data['pma']['accessSetupInProgress'] || data['pma']['configured']));
-			this.down('#launchPMA').setVisible(data['pma']['configured']);
-			this.down('#resetPMA').setVisible(data['pma']['accessError'] || data['pma']['configured']);
-			this.down('#PMAinProgress').setVisible(data['pma']['accessSetupInProgress'] && !data['pma']['configured'] ? true : false);
+                this.down('#setupPMA').setVisible(!(data['pma']['accessSetupInProgress'] || data['pma']['configured']));
+                this.down('#launchPMA').setVisible(data['pma']['configured']);
+                this.down('#resetPMA').setVisible(data['pma']['accessError'] || data['pma']['configured']);
+                this.down('#PMAinProgress').setVisible(data['pma']['accessSetupInProgress'] && !data['pma']['configured'] ? true : false);
 			} else {
 				this.down('#phpMyAdminAccess').setVisible(false);
 			}
@@ -759,7 +761,7 @@ Scalr.regPage('Scalr.ui.db.manager.dashboard', function (loadParams, moduleParam
 					},
 					items: [{
 						xtype: 'displayfield',
-						fieldCls: 'x-form-field-info',
+						cls: 'x-form-field-info',
 						value: 'Public - To connect to the service from the Internet<br / >Private - To connect to the service from another instance'
 					}, {
 						xtype: 'displayfield',
@@ -1079,16 +1081,17 @@ if (!Ext.ClassManager.isCreated('Scalr.ui.FormFieldDbmsClusterMap')) {
                 items: [{
                     xtype: 'container',
                     layout: {
-                        type: 'column'
+                        type: 'hbox',
+                        align: 'stretch'
                     },
                     defaults: {
-                        width: 516,
-                        margin:0
+                        flex: 1
                     },
+                    cls: 'x-fieldset-separator-bottom',
                     items: [{
                         xtype: 'fieldset',
                         title: 'Basic info',
-                        style: 'border-right: 1px solid #CCD1D9;box-shadow: 1px 0 #F5F6F7;',
+                        cls: 'x-fieldset-separator-none',
                         defaults: {
                             labelWidth: 180
                         },
@@ -1108,7 +1111,7 @@ if (!Ext.ClassManager.isCreated('Scalr.ui.FormFieldDbmsClusterMap')) {
                     },{
                         xtype: 'toolfieldset',
                         title: 'General metrics',
-                        margin: '0 0 0 1',
+                        cls: 'x-fieldset-separator-left',
                         items: [{
                             xtype: 'progressfield',
                             fieldLabel: 'Memory usage',
@@ -1137,32 +1140,27 @@ if (!Ext.ClassManager.isCreated('Scalr.ui.FormFieldDbmsClusterMap')) {
                             }			
                         }]
                     }]
-                }, {
-                    xtype: 'component',
-                    cls: 'x-fieldset-delimiter',
-                    margin: '0 0 1 0'
                 },{
                     xtype: 'container',
                     layout: {
-                        type: 'column',
+                        type: 'hbox',
                         align: 'stretch'
                     },
                     defaults: {
-                        width: 516,
-                        margin:0
+                        flex: 1
                     },
                     items: [{
                         xtype: 'fieldset',
                         title: 'Database metrics',
                         itemId: 'serverMetrics',
-                        style: 'border-right: 1px solid #CCD1D9;box-shadow: 1px 0 #F5F6F7;',
+                        cls: 'x-fieldset-separator-none',
                         defaults: {
                             labelWidth: 180
                         }
                     },{
                         xtype: 'toolfieldset',
                         title: 'Statistics',
-                        style: 'border-left: 1px solid #F5F6F7;box-shadow: -1px 0 #CCD1D9;',
+                        cls: 'x-fieldset-separator-left',
                         items: [{
                             xtype: 'container',
                             layout: 'column',
@@ -1183,10 +1181,10 @@ if (!Ext.ClassManager.isCreated('Scalr.ui.FormFieldDbmsClusterMap')) {
                                 margin: '0 20 10 0'
                             },
                             items: [{
-                                xtype: 'dbmschart',
+                                xtype: 'chartpreview',
                                 itemId: 'memoryChart'
                             },{
-                                xtype: 'dbmschart',
+                                xtype: 'chartpreview',
                                 itemId: 'cpuChart'
                             }]
                         },{
@@ -1209,10 +1207,10 @@ if (!Ext.ClassManager.isCreated('Scalr.ui.FormFieldDbmsClusterMap')) {
                                 margin: '0 20 0 0'
                             },
                             items: [{
-                                xtype: 'dbmschart',
+                                xtype: 'chartpreview',
                                 itemId: 'laChart'
                             },{
-                                xtype: 'dbmschart',
+                                xtype: 'chartpreview',
                                 itemId: 'netChart'
                             }]
                         }],
@@ -1250,7 +1248,7 @@ if (!Ext.ClassManager.isCreated('Scalr.ui.FormFieldDbmsClusterMap')) {
                     replication = data['replication'] || {};
 				form.suspendLayouts();
 				this.detailsForm.getForm().setValues({
-					server_id: '<a href="#/servers/' + data.serverId + '/extendedInfo">' + (data.serverId || '') + '</a>',
+					server_id: '<a href="#/servers/' + data.serverId + '/dashboard">' + (data.serverId || '') + '</a>',
 					server_remote_ip: data.remoteIp || '',
 					server_local_ip: data.localIp || '',
 					server_metrics_memory: null,
@@ -1301,11 +1299,11 @@ if (!Ext.ClassManager.isCreated('Scalr.ui.FormFieldDbmsClusterMap')) {
 
 				this.detailsForm.show();
 				form.resumeLayouts(true);
-				form.body.scrollTo('top', scrollTop);
-				this.currentServerInfo = null;
+				delete this.currentServerInfo;
 				this.currentServerInfo = data;
 				this.loadGeneralMetrics();
 				this.loadChartsData();
+				form.body.scrollTo('top', scrollTop);
 			}
 		},
 
@@ -1338,7 +1336,7 @@ if (!Ext.ClassManager.isCreated('Scalr.ui.FormFieldDbmsClusterMap')) {
 					},
 					success: function (res) {
 						if (
-                            !form.destroyed && !me.destroyed && serverId == me.currentServerInfo.serverId &&
+                            !form.isDestroyed && !me.isDestroyed && serverId == me.currentServerInfo.serverId &&
                             res.data['memory'] && res.data['cpu']
                         ) {
 							form.suspendLayouts();
@@ -1354,13 +1352,15 @@ if (!Ext.ClassManager.isCreated('Scalr.ui.FormFieldDbmsClusterMap')) {
 						}
 					},
                     failure: function() {
-                        form.suspendLayouts();
-                        me.detailsForm.getForm().setValues({
-                            server_load_average: 'not available',
-                            server_metrics_memory: 'not available',
-                            server_metrics_cpu: 'not available'
-                        });
-                        form.resumeLayouts(false);
+                        if (!form.isDestroyed && !me.isDestroyed ) {
+                            form.suspendLayouts();
+                            me.detailsForm.getForm().setValues({
+                                server_load_average: 'not available',
+                                server_metrics_memory: 'not available',
+                                server_metrics_cpu: 'not available'
+                            });
+                            form.resumeLayouts(false);
+                        }
                     }
 				});
 			}
@@ -1368,114 +1368,6 @@ if (!Ext.ClassManager.isCreated('Scalr.ui.FormFieldDbmsClusterMap')) {
 
 		getInputId: function() {
 			return this.inputId || (this.inputId = this.id + '-inputEl');
-		}
-	});
-}
-
-if (!Ext.ClassManager.isCreated('Scalr.ui.DbmsChart')) {
-	Ext.define('Scalr.ui.DbmsChart', {
-		extend: 'Ext.container.Container',
-		alias: 'widget.dbmschart',
-
-		width: 200,
-		height: 80,
-		cls: 'scalr-ui-dbmschart',
-		
-		listeners: {
-			boxready: function() {
-				var me = this;
-				me.el.mask('Loading...');
-				me.on('click', 
-					function(){
-						Scalr.utils.Window({
-							animationTarget: me,
-							xtype: 'monitoring.statisticswindow',
-							title: me.serverName + me.statistics[me.watcher].title,
-							
-							toolMenu: false,
-							typeMenu: true,
-							removeDockedItem: false,
-							
-							watchername: me.watcher,
-							farm: me.farmId,
-							role: me.role,
-							
-							width: 537,
-							height: me.statistics[me.watcher].height,
-							bodyPadding: 0,
-							padding: 0,
-							autoScroll: false,
-							
-							closable: true,
-							cls: null,
-							titleAlign: 'left',
-							tools: [{
-								type: 'refresh',
-								handler: function () {
-									this.up('panel').fillByStatistics();
-								}
-							}]
-						});
-					},
-					me,
-					{element: 'el'}
-				);
-			}
-		},
-		role: null,
-		farmId: null,
-		watcher: null,
-		serverName: null,
-		src: null,
-		
-		statistics: {
-			MEMSNMP: {
-				height: 400,
-				title: ' / Memory Usage'
-			},
-			CPUSNMP: {
-				height: 352,
-				title: ' / CPU Utilization'
-			},
-			LASNMP: {
-				height: 319,
-				title: ' / Load Averages'
-			},
-			NETSNMP: {
-				height: 264,
-				title: ' / Network Usage'
-			}
-		},
-		
-		
-		loadStatistics: function (farmId, watcher, type, farmRoleId, serverInfo) {
-			var me = this,
-				role = 'INSTANCE_' + farmRoleId + '_' + serverInfo.index;
-			me.role = role;
-			me.farmId = farmId;
-			me.watcher = watcher;
-			me.serverName = serverInfo.title;
-			
-			if(me.rendered && !me.destroyed) {
-				me.el.mask('Loading...');
-				Scalr.Request({
-					scope: this,
-					url: '/server/statistics.php?version=2&task=get_stats_image_url&farmid=' + farmId + '&watchername=' + watcher + '&graph_type=' + type + '&role=' + role,
-					success: function (data, response, options) {
-						if(me.rendered && !me.destroyed && role == me.role) {
-							me.el.unmask();
-							me.src = data.msg;
-							me.update('<div style="position: relative; text-align: center; width: 100%; height: 50%;"><img width="200" height="80" src = "' + data.msg + '"/></div>');
-						}
-					},
-					failure: function(data, response, options) {
-						if (me.rendered && !me.destroyed && role == me.role) {
-							me.el.unmask();
-							me.update('<div style="position: relative; top: 2%; text-align: center; width: 100%;"><font color = "red">' + (data ? data['msg'] : '') + '</font></div>');
-						}
-					}
-				});
-			}
 		}
 	});
 }

@@ -1,4 +1,4 @@
-<?
+<?php
     final class X86_64_TYPE
     {
         const T1_MICRO 	= "t1.micro";

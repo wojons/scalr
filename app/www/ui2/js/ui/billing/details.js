@@ -55,6 +55,12 @@ Scalr.regPage('Scalr.ui.billing.details', function (loadParams, moduleParams) {
 			return 'Not subscribed [<a href="#" type="subscribe">Subscribe for $300 / month</a>]';
 	}
 
+    var isEmergSupportEnabled = function()
+    {
+        var emergeSupport = moduleParams['billing']['emergSupport'];
+        return emergeSupport == 'included' || emergeSupport == 'enabled'
+    }
+
 	var getState = function()
 	{
 		if (moduleParams['billing']['state'] == 'Subscribed')
@@ -88,42 +94,44 @@ Scalr.regPage('Scalr.ui.billing.details', function (loadParams, moduleParams) {
 	var panel = Ext.create('Ext.form.Panel', {
 		width: 700,
 		title: 'Subscription details',
-		bodyCls:'x-panel-body-frame',
 		fieldDefaults: {
 			anchor: '100%',
 			labelWidth: 130
 		},
 		items: [{
-			hidden: (moduleParams['billing']['type'] == 'paypal' || (!moduleParams['billing']['isLegacyPlan'] && !!moduleParams['billing']['id'])),
-			xtype: 'displayfield',
-			fieldCls: 'x-form-field-warning',
-			value: "You're under an old plan that doesn't allow for metered billing. If you want to get access to the new features we recently announced, <a href='#/billing/changePlan'>please upgrade your subscription</a>.",
-		}, {
-			hidden: (moduleParams['billing']['type'] != 'paypal'),
-			fieldCls: 'x-form-field-warning',
-			xtype: 'displayfield',
-			value: "Hey mate, I see that you are using Paypal for your subscription. Unfortunately paypal hasn't been working too well for us, so we've discontinued its use."+
-				  "<br/><a href='#/billing/changePlan'>Click here to switch to direct CC billing</a>, and have your subscription to paypal canceled.",
-		}, {
-			xtype: 'displayfield',
-			fieldLabel: 'Plan',
-			value: getPlanDetails()
-		}, {
-			xtype: 'displayfield',
-			hidden: (!!moduleParams['billing']['type']),
-			fieldLabel: 'Status',
-			value: getState()
-		}, {
-			xtype: 'displayfield',
-			hidden: (!!moduleParams['billing']['type']),
-			fieldLabel: 'Balance',
-			value: "$"+moduleParams['billing']['balance']
-		}, {
-			xtype: 'displayfield',
-			hidden: (!!moduleParams['billing']['type']),
-			fieldLabel: 'Discount',
-			value: couponString
-		}, {
+            xtype: 'fieldset',
+            items: [{
+                hidden: (moduleParams['billing']['type'] == 'paypal' || (!moduleParams['billing']['isLegacyPlan'] && !!moduleParams['billing']['id'])),
+                xtype: 'displayfield',
+                cls: 'x-form-field-warning',
+                value: "You're under an old plan that doesn't allow for metered billing. If you want to get access to the new features we recently announced, <a href='#/billing/changePlan'>please upgrade your subscription</a>.",
+            }, {
+                hidden: (moduleParams['billing']['type'] != 'paypal'),
+                cls: 'x-form-field-warning',
+                xtype: 'displayfield',
+                value: "Hey mate, I see that you are using Paypal for your subscription. Unfortunately paypal hasn't been working too well for us, so we've discontinued its use."+
+                      "<br/><a href='#/billing/changePlan'>Click here to switch to direct CC billing</a>, and have your subscription to paypal canceled.",
+            }, {
+                xtype: 'displayfield',
+                fieldLabel: 'Plan',
+                value: getPlanDetails()
+            }, {
+                xtype: 'displayfield',
+                hidden: (!!moduleParams['billing']['type']),
+                fieldLabel: 'Status',
+                value: getState()
+            }, {
+                xtype: 'displayfield',
+                hidden: (!!moduleParams['billing']['type']),
+                fieldLabel: 'Balance',
+                value: "$"+moduleParams['billing']['balance']
+            }, {
+                xtype: 'displayfield',
+                hidden: (!!moduleParams['billing']['type']),
+                fieldLabel: 'Discount',
+                value: couponString
+            }]
+        }, {
 			xtype: 'fieldset',
 			title: '"Pay As You Go" usage',
 			defaults: {
@@ -192,8 +200,8 @@ Scalr.regPage('Scalr.ui.billing.details', function (loadParams, moduleParams) {
 			items: [{
 				hidden:true,
 				xtype: 'displayfield',
-				fieldCls: 'x-form-field-warning',
-				value: "You're using more servers than allowed by your plan. <a href='#/billing/changePlan'>Click here to upgrade your subscription</a>.",
+				cls: 'x-form-field-warning',
+				value: "You're using more servers than allowed by your plan. <a href='#/billing/changePlan'>Click here to upgrade your subscription</a>."
 			}, {
 				xtype: 'fieldcontainer',
 				fieldLabel: 'Servers',
@@ -274,7 +282,7 @@ Scalr.regPage('Scalr.ui.billing.details', function (loadParams, moduleParams) {
 		}, {
 			xtype: 'fieldset',
 			title: '<a href="http://scalr.net/emergency_support/" target="_blank">Emergency support</a>',
-			hidden: (moduleParams['billing']['type'] == 'paypal'  || moduleParams['billing']['isLegacyPlan']),
+			hidden: (moduleParams['billing']['type'] == 'paypal'  || moduleParams['billing']['isLegacyPlan'] || !isEmergSupportEnabled()),//emergency support is no longer available and visible only to existing subscribers
 			//padding: 10,
 			items:[{
 				xtype:'component',
@@ -288,7 +296,7 @@ Scalr.regPage('Scalr.ui.billing.details', function (loadParams, moduleParams) {
 						Scalr.Request({
 							confirmBox: {
 								type: 'action',
-								msg: (action == 'subscribe') ? 'Are you sure want to subscribe to Emergency Support for $300 / month?' : 'Are you sure want to unsubscribe from Emergency Support?',
+								msg: (action == 'subscribe') ? 'Are you sure want to subscribe to Emergency Support for $300 / month?' : 'Are you sure want to unsubscribe from Emergency Support?'
 							},
 							processBox: {
 								type: 'action'

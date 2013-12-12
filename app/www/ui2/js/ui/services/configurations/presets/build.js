@@ -6,7 +6,6 @@ Scalr.regPage('Scalr.ui.services.configurations.presets.build', function (loadPa
 		var behaviorsStore = [['mysql','MySQL'], ['mysql2','MySQL 5.5'], ['percona','Percona 5.5'], ['app','Apache'], ['memcached','Memcached'], ['cassandra','Cassandra'], ['www','Nginx'], ['redis', ['Redis']]];
 	
 	var form = Ext.create('Ext.form.Panel', {
-		bodyCls: 'x-panel-body-frame',
 		width: 900,
 		title: 'Services &raquo; Configurations &raquo; Presets &raquo Create',
 
@@ -66,7 +65,7 @@ Scalr.regPage('Scalr.ui.services.configurations.presets.build', function (loadPa
 		dockedItems: [{
 			xtype: 'container',
 			dock: 'bottom',
-			cls: 'x-docked-bottom-frame',
+			cls: 'x-docked-buttons',
 			layout: {
 				type: 'hbox',
 				pack: 'center'
@@ -89,7 +88,6 @@ Scalr.regPage('Scalr.ui.services.configurations.presets.build', function (loadPa
 				}
 			}, {
 				xtype: 'button',
-				margin: '0 0 0 5',
 				text: 'Cancel',
 				handler: function() {
 					Scalr.event.fireEvent('close');

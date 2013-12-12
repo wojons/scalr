@@ -65,7 +65,8 @@ class Scalr_UI_Controller_Dashboard_Widget_Status extends Scalr_UI_Controller_Da
             $html = @file_get_contents('http://status.aws.amazon.com');
             if ($html) {
                 $dom = new domDocument;
-                $dom->loadHTML($html);
+                $dom->validateOnParse = false;
+                @$dom->loadHTML($html);
                 $dom->preserveWhiteSpace = false;
 
                 foreach ($compliance as $compKey=>$compValue) {

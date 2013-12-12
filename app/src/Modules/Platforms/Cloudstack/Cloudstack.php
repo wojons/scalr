@@ -98,6 +98,23 @@
             );
         }
 
+        public function determineServerIps($client, $server)
+        {
+            $addr = $server->nic[0]->ipaddress;
+            if (strpos($addr, "10.") === 0 || strpos($addr, "192.168") === 0)
+                $localIp = $addr;
+            else
+                $remoteIp = $addr;
+
+            if ($server->publicip)
+                $remoteIp = $server->publicip;
+
+            return array(
+                'localIp'   => $localIp,
+                'remoteIp'  => $remoteIp
+            );
+        }
+
         public function GetServerIPAddresses(DBServer $DBServer)
         {
             $cloudLocation = $this->GetServerCloudLocation($DBServer);
@@ -109,15 +126,11 @@
             } catch (Exception $e) {}
 
             if ($iinfo->id && $iinfo->id == $DBServer->GetProperty(CLOUDSTACK_SERVER_PROPERTIES::SERVER_ID))
-            {
-                $localIp = $iinfo->nic[0]->ipaddress;
-                if ($iinfo->publicip)
-                    $remoteIp = $iinfo->publicip;
-            }
+            	return $this->determineServerIps($cs, $iinfo);
 
             return array(
-                'localIp'   => $localIp,
-                'remoteIp'  => $remoteIp
+                'localIp'   => null,
+                'remoteIp'  => null
             );
         }
 
@@ -133,7 +146,7 @@
                     $results = $cs->listVirtualMachines(null, $region);
                 }
                 catch(Exception $e) {
-                    throw new Exception(sprintf("Cannot get list of servers for platfrom ec2: %s", $e->getMessage()));
+                    throw new Exception(sprintf("Cannot get list of servers for platfrom {$this->platform}: %s", $e->getMessage()));
                 }
 
 
@@ -196,7 +209,20 @@
 
         public function RemoveServerSnapshot(DBRole $DBRole)
         {
-            //TODO:
+            foreach ($DBRole->getImageId(SERVER_PLATFORMS::CLOUDSTACK) as $location => $imageId) {
+
+                $cs = $this->getCloudStackClient($DBRole->getEnvironmentObject(), $location);
+
+                try {
+                    $cs->deleteTemplate($imageId, $location);
+                }
+                catch(Exception $e)
+                {
+                    throw $e;
+                }
+            }
+
+            return true;
         }
 
         public function CheckServerSnapshotStatus(BundleTask $BundleTask)
@@ -239,6 +265,9 @@
         {
             $cs = $this->getCloudStackClient($DBServer->GetEnvironmentObject(), $this->GetServerCloudLocation($DBServer));
 
+            if (!$DBServer->GetProperty(CLOUDSTACK_SERVER_PROPERTIES::SERVER_ID))
+                return false;
+
             try {
                 $iinfo = $cs->listVirtualMachines($DBServer->GetProperty(CLOUDSTACK_SERVER_PROPERTIES::SERVER_ID));
                 $iinfo = (is_array($iinfo)) ? $iinfo[0] : null;
@@ -246,7 +275,13 @@
 
             if ($iinfo->id /*&& $iinfo->id == $DBServer->GetProperty(CLOUDSTACK_SERVER_PROPERTIES::SERVER_ID)*/)
             {
-                $retval = array(
+            	$addr = $iinfo->nic[0]->ipaddress;
+            	if (strpos($addr, "10.") === 0 || strpos($addr, "192.168") === 0)
+            		$localIp = $addr;
+            	else
+            		$remoteIp = $addr;
+
+            	$retval = array(
                     'Cloud Server ID' => $iinfo->id,
                     'Name'			=> $iinfo->name,
                     'State'			=> $iinfo->state,
@@ -255,7 +290,8 @@
                     'Template name' => $iinfo->templatename,
                     'Offering name' => $iinfo->serviceofferingname,
                     'Root device type' => $iinfo->rootdevicetype,
-                    'Internal IP'	=> $iinfo->nic[0]->ipaddress,
+                    'Internal IP'	=> $localIp,
+            		'Public IP'		=> $remoteIp,
                     'Hypervisor'    => $iinfo->hypervisor
                 );
 
@@ -281,16 +317,19 @@
         {
             $environment = $DBServer->GetEnvironmentObject();
 
-            $farmRole = $DBServer->GetFarmRoleObject();
+            $diskOffering = null;
+            $size = null;
 
             if (!$launchOptions)
             {
+                $farmRole = $DBServer->GetFarmRoleObject();
+
                 $launchOptions = new Scalr_Server_LaunchOptions();
                 $dbRole = DBRole::loadById($DBServer->roleId);
 
                 $launchOptions->imageId = $dbRole->getImageId($this->platform, $DBServer->GetFarmRoleObject()->CloudLocation);
                 $launchOptions->serverType = $DBServer->GetFarmRoleObject()->GetSetting(DBFarmRole::SETTING_CLOUDSTACK_SERVICE_OFFERING_ID);
-                   $launchOptions->cloudLocation = $DBServer->GetFarmRoleObject()->CloudLocation;
+                $launchOptions->cloudLocation = $DBServer->GetFarmRoleObject()->CloudLocation;
 
                 /*
                  * User Data
@@ -300,25 +339,28 @@
 
                 $launchOptions->userData = trim($u_data, ";");
 
-                $launchOptions->architecture = 'x86_64';
+                $diskOffering = $farmRole->GetSetting(DBFarmRole::SETTING_CLOUDSTACK_DISK_OFFERING_ID);
+                if ($diskOffering === false || $diskOffering === null)
+                    $diskOffering = null;
+
+                $sharedIp = $farmRole->GetSetting(DBFarmRole::SETTING_CLOUDSTACK_SHARED_IP_ID);
+                $networkType = $farmRole->GetSetting(DBFarmRole::SETTING_CLOUDSTACK_NETWORK_TYPE);
+                $networkId = $farmRole->GetSetting(DBFarmRole::SETTING_CLOUDSTACK_NETWORK_ID);
+
+                $roleName = $farmRole->GetRoleObject()->name;
+            } else {
+                $launchOptions->userData = array();
+                $roleName = 'TemporaryScalrServer'.rand(100,999);
             }
+
+            $launchOptions->architecture = 'x86_64';
 
             $cs = $this->getCloudStackClient(
                 $environment,
                 $launchOptions->cloudLocation
             );
 
-            $diskOffering = null;
-            $size = null;
-
-            $diskOffering = $farmRole->GetSetting(DBFarmRole::SETTING_CLOUDSTACK_DISK_OFFERING_ID);
-            if ($diskOffering === false || $diskOffering === null)
-                $diskOffering = null;
-
-            $sharedIp = $farmRole->GetSetting(DBFarmRole::SETTING_CLOUDSTACK_SHARED_IP_ID);
             if (!$sharedIp) {
-                $networkType = $farmRole->GetSetting(DBFarmRole::SETTING_CLOUDSTACK_NETWORK_TYPE);
-                $networkId = $farmRole->GetSetting(DBFarmRole::SETTING_CLOUDSTACK_NETWORK_ID);
                 if ($networkId && ($networkType == 'Virtual' || $networkType == 'Isolated' || !$networkType)) {
                     $sharedIpId = $this->getConfigVariable(self::SHARED_IP_ID.".{$launchOptions->cloudLocation}", $environment, false);
                     if (!$sharedIpId)
@@ -353,7 +395,13 @@
                 }
             }
 
-            $keyName = "FARM-{$DBServer->farmId}-".SCALR_ID;
+            if ($DBServer->status == SERVER_STATUS::TEMPORARY) {
+                $keyName = "SCALR-ROLESBUILDER-".SCALR_ID;
+                $farmId = 0;
+            } else {
+                $keyName = "FARM-{$DBServer->farmId}-".SCALR_ID;
+                $farmId = $DBServer->farmId;
+            }
 
             $sshKey = Scalr_SshKey::init();
             try {
@@ -362,7 +410,7 @@
                     $result = $cs->createSSHKeyPair($keyName);
                     if ($result->keypair->privatekey)
                     {
-                        $sshKey->farmId = $DBServer->farmId;
+                        $sshKey->farmId = $farmId;
                         $sshKey->clientId = $DBServer->clientId;
                         $sshKey->envId = $DBServer->envId;
                         $sshKey->type = Scalr_SshKey::TYPE_GLOBAL;
@@ -380,8 +428,6 @@
                 Logger::getLogger("CloudStack")->error(new FarmLogMessage($DBServer->farmId, "Unable to generate keypair: {$e->getMessage()}"));
             }
 
-            $roleName = $farmRole->GetRoleObject()->name;
-
             $vResult = $cs->deployVirtualMachine(
                 $launchOptions->serverType,
                 $launchOptions->imageId,
@@ -395,7 +441,7 @@
                 null, //hypervisor
                 $keyName,
                 "",//$DBServer->serverId, //name
-                $farmRole->GetSetting(DBFarmRole::SETTING_CLOUDSTACK_NETWORK_ID),
+                $networkId,
                 null, //securityGroupIds
                 null, //SecGroupNames
                 $size, //size
@@ -405,15 +451,7 @@
                 $DBServer->SetProperty(CLOUDSTACK_SERVER_PROPERTIES::SERVER_ID, $vResult->id);
                 $DBServer->SetProperty(CLOUDSTACK_SERVER_PROPERTIES::CLOUD_LOCATION, $launchOptions->cloudLocation);
                 $DBServer->SetProperty(CLOUDSTACK_SERVER_PROPERTIES::LAUNCH_JOB_ID, $vResult->jobid);
-
-                try {
-                    $res = $cs->queryAsyncJobResult($vResult->jobid);
-                    $DBServer->SetProperty(CLOUDSTACK_SERVER_PROPERTIES::TMP_PASSWORD, $res->jobresult->virtualmachine->password);
-                    $DBServer->SetProperty(CLOUDSTACK_SERVER_PROPERTIES::SERVER_NAME, $res->jobresult->virtualmachine->name);
-                } catch (Exception $e) {
-                    if ($DBServer->farmId)
-                      Logger::getLogger("CloudStack")->error(new FarmLogMessage($DBServer->farmId, $e->getMessage()));
-                }
+                $DBServer->SetProperty(SERVER_PROPERTIES::ARCHITECTURE, $launchOptions->architecture);
 
                 return $DBServer;
             } else

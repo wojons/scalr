@@ -1,4 +1,4 @@
-<?
+<?php
     final class SERVER_STATUS
     {
         const TEMPORARY			= "Temporary";

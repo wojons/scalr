@@ -4,9 +4,8 @@ Scalr.regPage('Scalr.ui.tools.aws.autoSnapshotSettings', function (loadParams, m
 	else text += 'EC2 &raquo; EBS &raquo; ';
 	form = Ext.create('Ext.form.Panel', {
 		title: text + loadParams.objectId + ' &raquo; Autosnapshot Settings',
-		bodyCls: 'x-panel-body-frame',
 		width: 630,
-		items: [{
+        items: [{
 			xtype: 'fieldset',
 			title: 'Enable auto-snapshots',
 			checkboxToggle: true,
@@ -63,7 +62,7 @@ Scalr.regPage('Scalr.ui.tools.aws.autoSnapshotSettings', function (loadParams, m
 		dockedItems: [{
 			xtype: 'container',
 			dock: 'bottom',
-			cls: 'x-docked-bottom-frame',
+			cls: 'x-docked-buttons',
 			layout: {
 				type: 'hbox',
 				pack: 'center'
@@ -85,7 +84,6 @@ Scalr.regPage('Scalr.ui.tools.aws.autoSnapshotSettings', function (loadParams, m
 				}
 			},{
 				xtype: 'button',
-				margin: '0 0 0 5',
 				text: 'Cancel',
 				handler: function() {
 					Scalr.event.fireEvent('close');

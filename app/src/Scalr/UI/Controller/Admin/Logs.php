@@ -57,7 +57,7 @@ class Scalr_UI_Controller_Admin_Logs extends Scalr_UI_Controller
 
         $response = $this->buildResponseFromSql($sql, array('dtadded'), array('message'));
         foreach ($response['data'] as &$row) {
-            $meta = $this->db->GetRow('SELECT * FROM syslog_metadata WHERE transactionid = ?', array($value['transactionid']));
+            $meta = $this->db->GetRow('SELECT * FROM syslog_metadata WHERE transactionid = ? LIMIT 1', array($value['transactionid']));
             $row['warn'] = $meta['warnings'] ? $meta['warnings'] : 0;
             $row['err'] = $meta['errors'] ? $meta['errors'] : 0;
         }

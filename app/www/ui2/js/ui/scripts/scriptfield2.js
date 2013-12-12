@@ -1,102 +1,155 @@
+Ext.define('Scalr.ui.RoleScriptingGrid', {
+	extend: 'Ext.grid.Panel',
+	alias: 'widget.scriptinggrid',
+    hideHeaders: true,
+    groupingStartCollapsed: false,
+    groupingShowTotal: false,
+    hideDeleteButton: false,
+    addButtonHandler: null,
+    features: [{
+        ftype: 'rowbody',
+        getAdditionalData: function(data, rowIndex, record, orig) {
+            var name = '',
+                target = record.get('target');
+            switch (target) {
+                case '':
+                    name = '<span>No target (no execution)</span>';
+                break;
+                case 'farm':
+                    name = 'on <span style="color:#2BAF23">all instances in the farm</span>';
+                break;
+                case 'role':
+                    name = 'on <span style="color:#9e5ac7">all instances of this role</span>';
+                break;
+                case 'instance':
+                    name = 'on <span style="color:#1582EE">triggering instance only</span>';
+                break;
+                case 'roles':
+                    var roleIds = target == 'role' ? [this.grid.up('scriptfield2').farmRoleId] : (record.get('target_roles') || []),
+                        roles = [],
+                        rolesStore = this.grid.form.getForm().findField('target_roles').getStore();
+
+                    for (var i=0, len=roleIds.length; i<len; i++) {
+                        var res = rolesStore.query('farm_role_id', roleIds[i]);
+                        if (res.length){
+                            var rec = res.first();
+                            roles.push('<span style="color:#' + Scalr.utils.getColorById(rec.get('farm_role_id'))+'">' + rec.get('alias') + '</span>');
+                        }
+                    }
+                    name = roles.length ? 'on <span><i>' + roles.join(', ') + '</i></span>' : '&nbsp;';
+                break;
+                case 'behaviors':
+                    var bahaviorIds = record.get('target_behaviors') || [],
+                        behaviors = [],
+                        behaviorsStore = this.grid.form.getForm().findField('target_behaviors').getStore();
+
+                    for (var i=0, len=bahaviorIds.length; i<len; i++) {
+                        var res = behaviorsStore.query('id', bahaviorIds[i]);
+                        if (res.length){
+                            var rec = res.first();
+                            behaviors.push(rec.get('name'));
+                        }
+                    }
+                    name = behaviors.length ? 'on all <span><i>' + behaviors.join(', ') + '</i></span> roles' : '&nbsp;';
+                break;
+            }
+
+            return {
+                rowBody: '<span title="Execution mode" style="float:left;width:52px;margin-right:7px;text-align:center;font-size:90%;line-height:95%;word-wrap:break-word">' + (record.get('issync') == 1 ? 'blocking' : '<span style="color:green;position:relative;top:-5px;">non blocking</span>') + '</span><div style="margin:0 57px 5px">'+name+'</div>',
+                rowBodyColspan: this.view.headerCt.getColumnCount(),
+                rowBodyCls: record.get('system') ? 'x-grid-row-system' : ''
+            };
+        }
+    },{
+        ftype: 'rowwrap'
+    }],
+    store: {
+        fields: [ 'script_id', 'script', 'event', /*'event_order',*/ 'target', 'target_roles', 'target_behaviors', 'issync', 'timeout', 'version', 'params', {name: 'order_index', type: 'int'}, 'system', 'role_script_id', 'hash', 'script_path', 'run_as' ],
+        filterOnLoad: true,
+        sortOnLoad: true,
+        sorters: ['order_index'],
+        proxy: 'object',
+        groupField: 'event'
+    },
+    columns: [{
+        flex: 1,
+        dataIndex: 'order_index',
+        renderer: function(val, meta, record, rowIndex, colIndex, store) {
+            var script = record.get('script') || record.get('script_path');
+            if (record.dirty) {
+                meta.tdCls += ' x-grid-dirty-cell';
+            }
+            return '<span style="float:left;width:46px;font-size:90%;">#'+record.get('order_index')+'</span> <b>'+script+'</b>';
+        }
+    }],
+    initComponent: function() {
+        var me = this;
+        this.features = Ext.clone(this.features);
+        this.features.push({
+            id:'grouping',
+            ftype:'grouping',
+            startCollapsed: this.groupingStartCollapsed,
+            groupHeaderTpl: [
+                '{children:this.getGroupName}',
+                {
+                    getGroupName: function(children) {
+                        if (children.length > 0) {
+                            var name = children[0].get('event');
+                            return '<span style="font-weight:normal">On <span style="font-weight:bold">' + (name === "*" ? "All events" : name) + '</span> perform: ' + (me.groupingShowTotal ? '&nbsp;' + children.length + ' script' + (children.length > 1? 's' : '') : '') + '</span>';
+                        }
+                    }
+                }
+            ]
+        });
+        if (this.addButtonHandler) {
+            this.features.push({
+                ftype: 'addbutton',
+                text: 'Add orchestration rule',
+                handler: this.addButtonHandler
+            });
+        }
+        if (!this.hideDeleteButton) {
+            this.columns = Ext.clone(this.columns);
+            this.columns.push({
+                xtype: 'templatecolumn',
+                tpl: '<tpl if="!system"><img style="cursor:pointer" width="15" height="15" class="x-icon-action x-icon-action-delete" title="Delete rule" src="'+Ext.BLANK_IMAGE_URL+'"/></tpl>',
+                width: 42,
+                sortable: false,
+                dataIndex: 'id',
+                align:'left'
+            });
+        }
+        this.callParent(arguments);
+    }
+});
+
 Ext.define('Scalr.ui.RoleScriptingPanel', {
 	extend: 'Ext.container.Container',
 	alias: 'widget.scriptfield2',
-	
+
+    mode: 'farmrole',
 	layout: {
 		type: 'hbox',
 		align: 'stretch'
 	},
+    beforeRender: function() {
+        if (this.mode === 'role') {
+            this.down('#targetRolesWrap').hide();
+            this.down('#targetBehaviorsWrap').hide();
+            this.down('#targetRole').show();
+        }
+        this.callParent(arguments);
+    },
 	items: [{
-		xtype: 'grid',
-		hideHeaders: true,
-		cls: 'x-panel-columned-leftcol x-grid-shadow x-grid-role-scripting x-grid-dark-focus',
-		padding: 9,
-		maxWidth: 500,
+        xtype: 'scriptinggrid',
+        cls: 'x-panel-column-left x-grid-shadow x-grid-role-scripting',
+        maxWidth: 500,
+        minWidth: 350,
         flex: .6,
-		multiSelect: true,
-		selModel: {
-			selType: 'selectedmodel',
-			getVisibility: function(record) {
-				return !record.get('system');
-			}
-		},
-		features: [{
-			ftype: 'rowbody',
-			getAdditionalData: function(data, rowIndex, record, orig) {
-				var name = '',
-					target = record.get('target');
-				switch (target) {
-					case '':
-						name = '<span>No target (no execution)</span>';
-					break;
-					case 'farm':
-						name = 'on <span style="color:#2BAF23">all instances in the farm</span>';
-					break;
-					case 'instance':
-						name = 'on <span style="color:#1582EE">triggering instance only</span>';
-					break;
-					case 'role':
-					case 'roles':
-						var roleIds = target == 'role' ? [this.grid.up('scriptfield2').farmRoleId] : (record.get('target_roles') || []),
-							roles = [],
-							rolesStore = this.grid.form.getForm().findField('target_roles').getStore();
-							
-						for (var i=0, len=roleIds.length; i<len; i++) {
-							var res = rolesStore.query('farm_role_id', roleIds[i]);
-							if (res.length){
-								var rec = res.first();
-								roles.push('<span style="color:#' + Scalr.utils.getColorById(rec.get('farm_role_id'))+'">' + rec.get('name') + '</span>');
-							}
-						}
-						name = roles.length ? 'on <span><i>' + roles.join(', ') + '</i></span>' : '&nbsp;';
-					break;
-					case 'behaviors':
-						var bahaviorIds = record.get('target_behaviors') || [],
-							behaviors = [],
-							behaviorsStore = this.grid.form.getForm().findField('target_behaviors').getStore();
-							
-						for (var i=0, len=bahaviorIds.length; i<len; i++) {
-							var res = behaviorsStore.query('id', bahaviorIds[i]);
-							if (res.length){
-								var rec = res.first();
-								behaviors.push(rec.get('name'));
-							}
-						}
-						name = behaviors.length ? 'on all <span><i>' + behaviors.join(', ') + '</i></span> roles' : '&nbsp;';
-					break;
-				}
-					
-				return {
-					rowBody: '<span style="float:left;width:44px;margin-right:7px;text-align:center;font-size:90%;font-weight:bold;">(' + (record.get('issync') == 1 ? 'sync' : 'async') + ')</span><div style="margin:0 51px 5px">'+name+'</div>',
-					rowBodyColspan: this.view.headerCt.getColumnCount()
-				};
-			}
-		},{
-			ftype: 'rowwrap'
-		},{
-			id:'grouping',
-			ftype:'grouping',
-			groupHeaderTpl: [
-				'<span style="font-weight:normal">On <span style="font-weight:bold">{name:this.formatName}</span> perform:</span>',
-				{
-					formatName: function(value) {
-						return value == "*" ? "All events" : value;
-					}
-				}
-			]
-		}],
-		store: {
-			fields: [ 'script_id', 'script', 'event', 'target', 'target_roles', 'target_behaviors', 'issync', 'timeout', 'version', 'params', {name: 'order_index', type: 'int'}, 'system', 'role_script_id', 'hash' ],
-			filterOnLoad: true,
-			sortOnLoad: true,
-			sorters: ['order_index'],
-			proxy: 'object',
-			groupField: 'event'
-		},
+        bodyStyle: 'box-shadow:none',
 		plugins: [{
-			ptype: 'rowpointer',
-			addOffset: 8,
-			addCls: 'x-panel-columned-row-pointer-light'
+			ptype: 'focusedrowpointer',
+			addOffset: 12
 		}],
 		listeners: {
 			viewready: function() {
@@ -115,15 +168,28 @@ Ext.define('Scalr.ui.RoleScriptingPanel', {
 					}
 				});
 			},
-			selectionchange: function(selModel, selected) {
-				this.down('#delete').setDisabled(!selected.length);
-			}
+            itemclick: function (view, record, item, index, e) {
+                if (e.getTarget('img.x-icon-action-delete')) {
+                    var selModel = view.getSelectionModel();
+                    if (record === selModel.getLastFocused()) {
+                        selModel.deselectAll();
+                        selModel.setLastFocused(null);
+                    }
+                    view.store.remove(record);
+                    return false;
+                }
+            },
+            rowbodyclick: function(view, node) {
+                var selModel = view.getSelectionModel();
+                selModel.deselectAll();
+                selModel.setLastFocused(view.getRecord(Ext.fly(node).prev()));
+            }
 		},
 		viewConfig: {
 			plugins: {
 				ptype: 'dynemptytext',
 				emptyText: '<div class="title">No rules were found to match your search.</div> Try modifying your search criteria or <a class="add-link" href="#">creating a new orchestration&nbsp;rule</a>.',
-				emptyTextNoItems: 'Click on the <a class="add-link" href="#"><img src="'+Ext.BLANK_IMAGE_URL+'" class="scalr-ui-action-icon scalr-ui-action-icon-add" /></a> button above to create your first orchestration&nbsp;rule',
+				emptyTextNoItems: 'Click on the button above to create your first orchestration&nbsp;rule',
 				onAddItemClick: function() {
 					this.client.ownerCt.down('#add').handler();
 				}
@@ -138,76 +204,38 @@ Ext.define('Scalr.ui.RoleScriptingPanel', {
 					cls.push('x-grid-row-system');
 				}
 				return cls.join(' ');
-			}
+            }
 		},
 
-		columns: [{
-			flex: 1, 
-			dataIndex: 'order_index',
-			renderer: function(val, meta, record, rowIndex, colIndex, store) {
-				if (record.dirty) {
-					meta.tdCls += ' x-grid-dirty-cell';
-				}
-				return '<span style="float:left;width:40px;font-size:90%;">#'+record.get('order_index')+'</span> <b>'+record.get('script')+'</b>';
-			}
-		}],
 		dockedItems: [{
-			cls: 'x-toolbar',
+			xtype: 'toolbar',
+            ui: 'simple',
 			dock: 'top',
-			layout: 'hbox',
-			defaults: {
-				margin: '0 0 0 10'
-			},
+            style: 'padding-right:0',
 			items: [{
-				xtype: 'livesearch',
+				xtype: 'filterfield',
 				itemId: 'scriptsLiveSearch',
 				margin: 0,
-				fields: ['script'],
+                width: 180,
+				filterFields: ['script', 'script_path'],
 				listeners: {
 					afterfilter: function(){
-						//workaround of the extjs grouped store/grid bug
-						var grid = this.up('grid'),
-							grouping = grid.getView().getFeature('grouping');
-						grid.disableOnFocusChange = true;
-						grid.suspendLayouts();
-						grouping.disable();
-						grouping.enable();
-						grid.resumeLayouts(true);
-						grid.disableOnFocusChange = false;
+                        var selModel = this.up('grid').getSelectionModel();
+                        selModel.deselectAll();
+                        selModel.setLastFocused(null);
 					}
 				}
 			},{
-				xtype: 'tbfill' 
-			},{
-				itemId: 'delete',
-				xtype: 'button',
-				iconCls: 'x-btn-groupacton-delete',
-				ui: 'action-dark',
-				disabled: true,
-				tooltip: 'Delete selected scripts',
-				handler: function() {
-					var grid = this.up('grid'),
-						selection = grid.getSelectionModel().getSelection();
-					//are we going to ask for a confirmation here?
-					/*Scalr.Confirm({
-						type: 'delete',
-						msg: 'Delete selected ' + selection.length + ' script(s)?',
-						success: function (data) {*/
-							grid.suspendLayouts();
-							grid.getStore().remove(selection);
-							grid.resumeLayouts(true);
-						/*}
-					});*/
-				}
+				xtype: 'tbfill'
 			},{
 				itemId: 'add',
-				xtype: 'button',
-				iconCls: 'x-btn-groupacton-add',
-				ui: 'action-dark',
-				tooltip: 'Add script',
+                text: 'Add rule',
+                cls: 'x-btn-green-bg',
 				handler: function() {
-					var grid = this.up('grid');
-					grid.getSelectionModel().setLastFocused(null);
+					var grid = this.up('grid'),
+                        selModel = grid.getSelectionModel();
+                    selModel.deselectAll();
+					selModel.setLastFocused(null);
 					grid.form.loadRecord(grid.getStore().createModel({issync: '1', order_index: 10}));
 				}
 			}]
@@ -216,45 +244,26 @@ Ext.define('Scalr.ui.RoleScriptingPanel', {
         xtype: 'container',
         layout: 'fit',
         flex: 1,
-        style: 'background: #F0F1F4;border-radius:0 4px 4px 0',
         margin: 0,
         items: {
             xtype: 'form',
-
-            margin: 0,
-
             hidden: true,
             overflowY: 'auto',
             items: [{
                 xtype: 'fieldset',
-                margin: 0,
+                title: 'Trigger event<img src="/ui2/images/icons/info_icon_16x16.png" style="position:relative;top: 2px;left:8px">',
                 defaults: {
                     anchor: '100%',
                     maxWidth: 700,
                     labelWidth: 120
                 },
                 items: [{
-                    xtype: 'container',
-                    cls: 'x-fieldset-subheader',
-                    layout: {
-                        type: 'hbox',
-                        align: 'left'
-                    },
-                    items: [{
-                        xtype: 'label',
-                        html: 'Trigger'
-                    }, {
-                        xtype: 'displayinfofield',
-                        margin: '0 0 0 10',
-                        info: 'Trigger description.'
-                    }]
-                },{
                     xtype: 'combo',
                     store: {
                         fields: [
-                            'id', 
+                            'id',
                             {
-                                name: 'title', 
+                                name: 'title',
                                 convert: function(v, record){
                                     return record.get('id')=='*' ? 'All Events' : record.get('id');
                                 }
@@ -315,7 +324,7 @@ Ext.define('Scalr.ui.RoleScriptingPanel', {
                                     formPanel.down('#targetInstance').enable();
                                 break;
                             }
-                            comp.next().update(scriptRecord ? scriptRecord.get('name') : '&nbsp;');
+                            comp.next().update(scriptRecord ? scriptRecord.get('name') : '');
                             formPanel.body.scrollTo('top', formPanel.savedScrollTop);
 
                             formPanel.updateRecordSuspended--;
@@ -327,197 +336,272 @@ Ext.define('Scalr.ui.RoleScriptingPanel', {
                     xtype: 'container',
                     itemId: 'eventDescription',
                     style: 'color:#666',
-                    html: '&nbsp;'
-                }, {
-                    xtype: 'component',
-                    cls: 'x-fieldset-delimiter-large',
-                    maxWidth: null
-                },{
-                    xtype: 'container',
-                    cls: 'x-fieldset-subheader',
-                    hideOn: 'x-empty-trigger-hide',
-                    layout: {
-                        type: 'hbox',
-                        align: 'left'
-                    },
-                    items: [{
-                        xtype: 'label',
-                        html: 'Action'
-                    }, {
-                        xtype: 'displayinfofield',
-                        margin: '0 0 0 10',
-                        info: 'Action description.'
-                    }]
-                },{
-                    xtype: 'container',
-                    hideOn: 'x-empty-trigger-hide',
-                    layout: {
-                        type: 'hbox',
-                        align: 'stretch'
-                    },
-                    items: [{
-                        xtype: 'combo',
-                        fieldLabel: 'Script',
-                        store: {
-                            fields: [ 'id', 'name', 'description', 'issync', 'timeout', 'revisions' ],
-                            proxy: 'object'
-                        },
-                        valueField: 'id',
-                        displayField: 'name',
-                        queryMode: 'local',
-                        editable: true,
-                        allowBlank: false,
-                        validateOnChange: false,
-                        forceSelection: true,
-                        itemId: 'script',
-                        name: 'script_id',
-                        flex: 1,
-                        labelWidth: 110,
-                        emptyText: 'Please select script',
-                        anyMatch: true,
+                    margin: '12 0 0'
+                }]
+            },{
+                xtype: 'fieldset',
+                title: 'Action<img src="/ui2/images/icons/info_icon_16x16.png" style="position:relative;top: 2px;left:8px">',
+                hideOn: 'x-empty-trigger-hide',
+                defaults: {
+                    anchor: '100%',
+                    maxWidth: 700,
+                    labelWidth: 120
+                },
+                items: [{
+                    xtype: 'tabpanel',
+                    itemId: 'tabs',
+                    cls: 'x-tabs-dark',
+                    margin: '0 0 18 0',
+                    height: 100,
+                    defaults: {
                         listeners: {
-                            change: function(comp, value) {
-                                var scriptRecord = comp.findRecordByValue(value),
-                                    formPanel = comp.up('form'),
-                                    form = formPanel.getForm(),
-                                    versionField = form.findField('version');
-                                formPanel.updateRecordSuspended++;
-                                formPanel.suspendLayouts();
-                                versionField.getStore().removeAll();
-                                if (value) {
-                                    var c = formPanel.query('component[hideOn~=x-empty-action-hide]');
-                                    for (var i=0, len=c.length; i<len; i++) {
-                                        c[i].setVisible(true);
-                                    }
+                            activate: function(tab) {
+                                var scriptParamsWrapper = this.up('form').down('#scriptParamsWrapper');
+                                scriptParamsWrapper.setVisible(tab.itemId === 'scalrscript' ? !!scriptParamsWrapper.scriptHasParams : false);
+                                var fields = tab.query('[isFormField]');
+                                for (var i = 0, len = fields.length; i < len; i++) {
+                                    fields[i].setDisabled(false);
                                 }
-
-                                if (scriptRecord) {
-                                    form.findField('script').setValue(scriptRecord.get('name'));
-                                    var	revisions = Scalr.utils.CloneObject(scriptRecord.get('revisions'));
-
-                                    //load script revisions
-                                    for (var i in revisions) {
-                                        revisions[i]['revisionName'] = revisions[i]['revision'];
-                                    }
-                                    var latestRev = Ext.Array.max(Object.keys(revisions), function (a, b) {
-                                        return parseInt(a) > parseInt(b) ? 1 : -1;
-                                    });
-
-                                    revisions.splice(0, 0, { revision: -1, revisionName: 'Latest', fields: revisions[latestRev]['fields'] });
-                                    versionField.getStore().load({data: revisions});
-
-                                    versionField.reset();
-                                    versionField.setValue('-1');
-
-                                    form.findField('target').setValue(scriptRecord.get('target'));
-                                    form.findField('issync').setValue(scriptRecord.get('issync') || '0');
-                                    form.findField('timeout').setValue(scriptRecord.get('timeout'));
-
-                                    var order_index = form.findField('order_index').getValue();
-                                    form.findField('order_index').setValue(order_index > 0 ? order_index : comp.up('scriptfield2').getNextOrderIndexForEvent(form.findField('event').getValue()));
+                            },
+                            deactivate: function(tab) {
+                                var fields = tab.query('[isFormField]');
+                                for (var i = 0, len = fields.length; i < len; i++) {
+                                    fields[i].setDisabled(true);
                                 }
-                                formPanel.updateRecordSuspended--;
-                                formPanel.updateRecord(['script_id', 'script', 'version', 'target', 'issync', 'timeout', 'order_index']);
-                                formPanel.resumeLayouts(true);
                             }
                         }
-                    }, {
-                        xtype: 'hiddenfield',
-                        name: 'script'
-                    }, {
-                        xtype: 'combo',
-                        fieldLabel: 'Version',
-                        store: {
-                            fields: [{ name: 'revision', type: 'string' }, 'revisionName', 'fields' ],
-                            proxy: 'object'
+                    },
+                    items: [{
+                        xtype: 'container',
+                        itemId: 'scalrscript',
+                        tabConfig: {
+                            title: 'Scalr script'
                         },
-                        valueField: 'revision',
-                        displayField: 'revisionName',
-                        queryMode: 'local',
-                        editable: false,
-                        name: 'version',
-                        width: 140,
-                        labelWidth: 50,
-                        margin: '0 0 0 20',
-                        listeners: {
-                            change: function (comp, value) {
-                                var formPanel = this.up('form'),
-                                    scriptParams = formPanel.down('#scripting_edit_parameters'),
-                                    getParamValues = function(){
-                                        var res = {};
-                                        scriptParams.items.each(function(){
-                                            res[this.paramName] = this.getValue();
-                                        })
-                                        return res;
-                                    };
-
-                                formPanel.updateRecordSuspended++;
-                                formPanel.savedScrollTop = formPanel.body.getScroll().top;
-                                formPanel.down('#scriptParamsDelimiter').hide();
-                                formPanel.down('#scriptParamsWrapper').hide();
-                                formPanel.suspendLayouts();
-                                if (value) {
-                                    var revisionRecord = this.findRecord('revision', value),
-                                        fields = revisionRecord ? revisionRecord.get('fields') : null;
-                                    if (Ext.isObject(fields)) {
-                                        var record = formPanel.getForm().getRecord(),
-                                            values = formPanel.isLoading && record ? record.get('params') : getParamValues();
-
-                                        scriptParams.removeAll();
-                                        formPanel.removeScriptParams();
-                                        for (var i in fields) {
-                                            formPanel.updateScriptParam(i, values[i] || '');
-                                            scriptParams.add({
-                                                xtype: 'textfield',
-                                                fieldLabel: fields[i],
-                                                isScriptParamField: true,
-                                                paramName: i,
-                                                value: values[i] || '',
-                                                submitValue: false,
-                                                listeners: {
-                                                    change: function(comp, value) {
-                                                        formPanel.updateScriptParam(comp.paramName, value);
-                                                    }
-                                                }
-                                            });
+                        items: [{
+                            xtype: 'container',
+                            cls: 'x-container-fieldset',
+                            layout: {
+                                type: 'hbox',
+                                align: 'stretch'
+                            },
+                            items: [{
+                                xtype: 'combo',
+                                fieldLabel: 'Script',
+                                disabled: true,
+                                store: {
+                                    fields: [ 'id', 'name', 'description', 'issync', 'timeout', 'revisions' ],
+                                    proxy: 'object'
+                                },
+                                valueField: 'id',
+                                displayField: 'name',
+                                queryMode: 'local',
+                                editable: true,
+                                allowBlank: false,
+                                validateOnChange: false,
+                                forceSelection: true,
+                                itemId: 'script',
+                                name: 'script_id',
+                                flex: 1,
+                                labelWidth: 50,
+                                emptyText: 'Please select script',
+                                anyMatch: true,
+                                listeners: {
+                                    change: function(comp, value) {
+                                        var scriptRecord = comp.findRecordByValue(value),
+                                            formPanel = comp.up('form'),
+                                            form = formPanel.getForm(),
+                                            versionField = form.findField('version');
+                                        if (!scriptRecord) return;
+                                        formPanel.updateRecordSuspended++;
+                                        formPanel.suspendLayouts();
+                                        versionField.getStore().removeAll();
+                                        versionField.reset();
+                                        if (value) {
+                                            var c = formPanel.query('component[hideOn~=x-empty-action-hide]');
+                                            for (var i=0, len=c.length; i<len; i++) {
+                                                c[i].setVisible(true);
+                                            }
                                         }
-                                        formPanel.down('#scriptParamsDelimiter').show();
-                                        formPanel.down('#scriptParamsWrapper').show();
-                                    } else {
-                                        scriptParams.removeAll();
-                                        formPanel.removeScriptParams();
-                                    }
-                                } else {
-                                    formPanel.removeScriptParams();
-                                    scriptParams.removeAll();
-                                }
-                                formPanel.resumeLayouts(true);
-                                formPanel.body.scrollTo('top', formPanel.savedScrollTop);
-                                formPanel.updateRecordSuspended--;
-                                formPanel.updateRecord(['version']);
 
+                                        if (scriptRecord) {
+                                            form.findField('script').setValue(scriptRecord.get('name'));
+                                            var	revisions = Scalr.utils.CloneObject(scriptRecord.get('revisions'));
+
+                                            //load script revisions
+                                            for (var i in revisions) {
+                                                revisions[i]['revisionName'] = revisions[i]['revision'];
+                                            }
+                                            var latestRev = Ext.Array.max(Object.keys(revisions), function (a, b) {
+                                                return parseInt(a) > parseInt(b) ? 1 : -1;
+                                            });
+
+                                            revisions.splice(0, 0, { revision: -1, revisionName: 'Latest', fields: revisions[latestRev]['fields'] });
+                                            versionField.getStore().load({data: revisions});
+
+                                            versionField.setValue('-1');
+
+                                            form.findField('target').setValue(scriptRecord.get('target'));
+                                            form.findField('issync').setValue(scriptRecord.get('issync') || '0');
+                                            form.findField('timeout').setValue(scriptRecord.get('timeout'));
+
+                                            var order_index = form.findField('order_index').getValue();
+                                            form.findField('order_index').setValue(order_index > 0 ? order_index : comp.up('scriptfield2').getNextOrderIndexForEvent(form.findField('event').getValue()));
+                                        }
+                                        formPanel.updateRecordSuspended--;
+                                        formPanel.updateRecord(['script_id', 'script', 'version', 'target', 'issync', 'timeout', 'order_index']);
+                                        formPanel.resumeLayouts(true);
+                                    }
+                                }
+                            }, {
+                                xtype: 'hiddenfield',
+                                name: 'script'
+                            }, {
+                                xtype: 'combo',
+                                fieldLabel: 'Version',
+                                disabled: true,
+                                store: {
+                                    fields: [{ name: 'revision', type: 'string' }, 'revisionName', 'fields' ],
+                                    proxy: 'object'
+                                },
+                                valueField: 'revision',
+                                displayField: 'revisionName',
+                                forceSelection: true,
+                                queryMode: 'local',
+                                editable: false,
+                                name: 'version',
+                                width: 140,
+                                labelWidth: 50,
+                                margin: '0 0 0 20',
+                                listeners: {
+                                    change: function (comp, value) {
+                                        var formPanel = this.up('form'),
+                                            scriptParamsWrapper = formPanel.down('#scriptParamsWrapper'),
+                                            scriptParams = scriptParamsWrapper.down('#scripting_edit_parameters'),
+                                            getParamValues = function(){
+                                                var res = {};
+                                                scriptParams.items.each(function(){
+                                                    res[this.paramName] = this.getValue();
+                                                })
+                                                return res;
+                                            };
+
+                                        formPanel.updateRecordSuspended++;
+                                        formPanel.savedScrollTop = formPanel.body.getScroll().top;
+                                        scriptParamsWrapper.hide();
+                                        scriptParamsWrapper.scriptHasParams = false;
+                                        formPanel.suspendLayouts();
+                                        if (value) {
+                                            var revisionRecord = this.findRecord('revision', value),
+                                                fields = revisionRecord ? revisionRecord.get('fields') : null;
+                                            if (Ext.isObject(fields)) {
+                                                var record = formPanel.getForm().getRecord(),
+                                                    values = formPanel.isLoading && record ? record.get('params') : getParamValues();
+
+                                                scriptParams.removeAll();
+                                                formPanel.removeScriptParams();
+                                                for (var i in fields) {
+                                                    formPanel.updateScriptParam(i, values[i] || '');
+                                                    scriptParams.add({
+                                                        xtype: 'textfield',
+                                                        fieldLabel: fields[i],
+                                                        isScriptParamField: true,
+                                                        paramName: i,
+                                                        value: values[i] || '',
+                                                        submitValue: false,
+                                                        listeners: {
+                                                            change: function(comp, value) {
+                                                                formPanel.updateScriptParam(comp.paramName, value);
+                                                            }
+                                                        }
+                                                    });
+                                                }
+                                                scriptParamsWrapper.scriptHasParams = true;
+                                                scriptParamsWrapper.show();
+                                            } else {
+                                                scriptParams.removeAll();
+                                                formPanel.removeScriptParams();
+                                            }
+                                            formPanel.getForm().findField('script_path').reset();
+                                        } else {
+                                            formPanel.removeScriptParams();
+                                            scriptParams.removeAll();
+                                        }
+                                        formPanel.resumeLayouts(true);
+                                        formPanel.body.scrollTo('top', formPanel.savedScrollTop);
+                                        formPanel.updateRecordSuspended--;
+                                        formPanel.updateRecord(['version']);
+
+                                    }
+                                }
+                            }]
+                        }]
+                    },{
+                        xtype: 'container',
+                        itemId: 'localscript',
+                        cls: 'x-container-fieldset',
+                        layout: 'anchor',
+                        defaults: {
+                            anchor: '100%'
+                        },
+                        tabConfig: {
+                            title: 'Local script'
+                        },
+                        items: [{
+                            xtype: 'textfield',
+                            name: 'script_path',
+                            disabled: true,
+                            fieldLabel: 'Path',
+                            allowBlank: false,
+                            emptyText: '/path/to/the/script',
+                            labelWidth: 50,
+                            listeners: {
+                                change: function(comp, value) {
+                                    var formPanel = this.up('form');
+                                    if (value) {
+                                        var c = formPanel.query('component[hideOn~=x-empty-action-hide]');
+                                        for (var i=0, len=c.length; i<len; i++) {
+                                            c[i].setVisible(true);
+                                        }
+                                        formPanel.getForm().findField('script_id').reset();
+                                    }
+                                    formPanel.updateRecord(['script_path']);
+                                }
                             }
-                        }
+                        }]
+                    },{
+                        xtype: 'container',
+                        itemId: 'chef',
+                        cls: 'x-container-fieldset',
+                        layout: 'anchor',
+                        defaults: {
+                            anchor: '100%'
+                        },
+                        tabConfig: {
+                            title: 'Chef runlist'
+                        },
+                        items: [{
+                            xtype: 'label',
+                            text: 'Coming soon...'
+                        }]
                     }]
                 },{
                     xtype: 'container',
-                    hideOn: 'x-empty-trigger-hide',
-                    margin: '8 0 12 0',
-                    layout: {
-                        type: 'hbox',
-                        align: 'middle'
-                    },
+                    layout: 'hbox',
                     items: [{
                         xtype: 'buttongroupfield',
                         fieldLabel: 'Execution mode',
                         editable: false,
                         name: 'issync',
                         labelWidth: 110,
+                        width: 380,
+                        defaults: {
+                            width: 110
+                        },
                         items: [{
-                            text: 'Synchronous',
+                            text: 'Blocking',
                             value: '1'
                         },{
-                            text: 'Asynchronous',
+                            text: 'Non-blocking',
                             value: '0'
                         }],
                         listeners: {
@@ -526,16 +610,37 @@ Ext.define('Scalr.ui.RoleScriptingPanel', {
                                 formPanel.updateRecord(['issync']);
                             }
                         }
-                    },{xtype: 'tbfill'},{
+                    },{
+                        xtype: 'textfield',
+                        fieldLabel: 'Run as',
+                        labelWidth: 50,
+                        name: 'run_as',
+                        emptyText: 'root',
+                        hidden: true,
+                        flex: 1,
+                        listeners: {
+                            change: function (comp, value) {
+                                var formPanel = comp.up('form');
+                                formPanel.updateRecord(['run_as']);
+                            }
+                        }
+                    }]
+                },{
+                    xtype: 'container',
+                    layout: {
+                        type: 'hbox',
+                        align: 'middle'
+                    },
+                    items: [{
                         xtype: 'textfield',
                         fieldLabel: 'Timeout',
                         name: 'timeout',
                         allowBlank: false,
                         validateOnChange: false,
                         regex: /^[0-9]+$/,
-                        width: 115,
-                        labelWidth: 50,
-                        margin: '0 5 0 10',
+                        width: 160,
+                        labelWidth: 110,
+                        margin: '0 5 0 0',
                         listeners: {
                             change: function (comp, value) {
                                 var formPanel = comp.up('form');
@@ -546,7 +651,7 @@ Ext.define('Scalr.ui.RoleScriptingPanel', {
                         xtype: 'label',
                         html: 'sec'
                     }]
-                }, {
+                },{
                     xtype: 'textfield',
                     hideOn: 'x-empty-trigger-hide',
                     fieldLabel: 'Order',
@@ -554,7 +659,7 @@ Ext.define('Scalr.ui.RoleScriptingPanel', {
                     allowBlank: false,
                     validateOnChange: false,
                     regex: /^[0-9]+$/,
-                    maxWidth: 200,
+                    maxWidth: 160,
                     labelWidth: 110,
                     listeners: {
                         change: function (comp, value) {
@@ -562,30 +667,18 @@ Ext.define('Scalr.ui.RoleScriptingPanel', {
                             formPanel.updateRecord(['order_index']);
                         }
                     }
-                }, {
-                    xtype: 'component',
-                    hideOn: 'x-empty-trigger-hide',
-                    cls: 'x-fieldset-delimiter-large',
-                    maxWidth: null
-                }, {
-                    xtype: 'container',
-                    cls: 'x-fieldset-subheader',
-                    hideOn: 'x-empty-action-hide',
-                    layout: {
-                        type: 'hbox',
-                        align: 'left'
-                    },
-                    items: [{
-                        xtype: 'label',
-                        html: 'Target'
-                    }, {
-                        xtype: 'displayinfofield',
-                        margin: '0 0 0 10',
-                        info: 'Target description.'
-                    }]
-                },{
+                }]
+            },{
+                xtype: 'fieldset',
+                title: 'Target<img src="/ui2/images/icons/info_icon_16x16.png" style="position:relative;top: 2px;left:8px">',
+                hideOn: 'x-empty-action-hide',
+                defaults: {
+                    anchor: '100%',
+                    maxWidth: 700,
+                    labelWidth: 120
+                },
+                items: [{
                     xtype: 'fieldcontainer',
-                    hideOn: 'x-empty-action-hide',
                     defaults: {
                         listeners: {
                             change: function(comp, checked) {
@@ -606,14 +699,13 @@ Ext.define('Scalr.ui.RoleScriptingPanel', {
                         boxLabel: 'No target (no execution)'
                     },{
                         xtype: 'radio',
-                        margin: '6 0 10 0',
                         name: 'target',
                         itemId: 'targetInstance',
                         inputValue: 'instance',
                         boxLabel: 'Triggering instance only'
                     },{
                         xtype: 'container',
-                        margin: '6 0 0',
+                        itemId: 'targetRolesWrap',
                         layout: {
                             type: 'column'
                         },
@@ -623,8 +715,7 @@ Ext.define('Scalr.ui.RoleScriptingPanel', {
                             itemId: 'targetRoles',
                             inputValue: 'roles',
                             boxLabel: 'Selected roles:',
-                            fieldBodyCls: 'x-form-cb-wrap-top',
-                            width: 160,
+                            width: 168,
                             listeners: {
                                 change: function(comp, checked) {
                                     if (checked) {
@@ -640,28 +731,37 @@ Ext.define('Scalr.ui.RoleScriptingPanel', {
                             xtype: 'comboboxselect',
                             itemId: 'targetRolesList',
                             name: 'target_roles',
-                            displayField: 'title',
+                            displayField: 'alias',
                             valueField: 'farm_role_id',
-                            //allowBlank: false,
-                            //validateOnChange: false,
                             columnWidth: 1,
                             queryMode: 'local',
                             store: {
-                                fields: ['farm_role_id', 'platform', 'cloud_location', 'role_id',  'name', {name: 'title', convert: function(v, rec){return '<span style=\'color:#' + Scalr.utils.getColorById(rec.data.farm_role_id)+'\'>' + rec.data.name + '</span> (' + rec.data.cloud_location +')'}}],
+                                fields: ['farm_role_id', 'platform', 'cloud_location', 'role_id',  'name', 'alias'],
                                 proxy: 'object'
                             },
                             flex: 1,
-                            listeners: {
-                                change: function(){//prevent form scroll top reset after change comboboxselect value
-                                    var formPanel = this.up('form');
-                                    formPanel.savedScrollTop = formPanel.body.getScroll().top;
-                                    formPanel.on('afterlayout', function(){
-                                        if (this.savedScrollTop) {
-                                            this.body.scrollTo('top', this.savedScrollTop);
+                            grow: false,
+                            labelTpl: new Ext.XTemplate(
+                                '{[this.getLabel(values)]}',
+                                {
+                                    getLabel: function(values) {
+                                        return '<span style=\'color:#' + Scalr.utils.getColorById(values.farm_role_id)+'\'>' + values.alias + '</span> (' + values.cloud_location +')'
+                                    }
+                                }
+                            ),
+                            listConfig: {
+                                tpl: new Ext.XTemplate(
+                                    '<tpl for="."><div class="x-boundlist-item">{[this.getLabel(values)]}</div></tpl>',
+                                    {
+                                        getLabel: function(values) {
+                                            return '<span style=\'color:#' + Scalr.utils.getColorById(values.farm_role_id)+'\'>' + values.alias + '</span> (' + values.cloud_location +')'
                                         }
-                                    }, formPanel, {single: true});
-
-                                    formPanel.updateRecord(['target', 'target_roles']);
+                                    }
+                                )
+                            },
+                            listeners: {
+                                change: function(){
+                                    this.up('form').updateRecord(['target', 'target_roles']);
 
                                 }
                             }
@@ -669,6 +769,7 @@ Ext.define('Scalr.ui.RoleScriptingPanel', {
                         }]
                     },{
                         xtype: 'container',
+                        itemId: 'targetBehaviorsWrap',
                         margin: '6 0 0',
                         layout: {
                             type: 'column'
@@ -678,9 +779,8 @@ Ext.define('Scalr.ui.RoleScriptingPanel', {
                             name: 'target',
                             itemId: 'targetBehaviors',
                             inputValue: 'behaviors',
-                            boxLabel: 'Selected behaviors:',
-                            fieldBodyCls: 'x-form-cb-wrap-top',
-                            width: 160,
+                            boxLabel: 'Roles with automation:',
+                            width: 168,
                             listeners: {
                                 change: function(comp, checked) {
                                     if (checked) {
@@ -698,31 +798,29 @@ Ext.define('Scalr.ui.RoleScriptingPanel', {
                             name: 'target_behaviors',
                             displayField: 'name',
                             valueField: 'id',
-                            //allowBlank: false,
-                            //validateOnChange: false,
                             columnWidth: 1,
                             queryMode: 'local',
+                            grow: false,
                             store: {
                                 fields: ['id', 'name'],
                                 proxy: 'object'
                             },
                             flex: 1,
                             listeners: {
-                                change: function(){//prevent form scroll top reset after change comboboxselect value
-                                    var formPanel = this.up('form');
-                                    formPanel.savedScrollTop = formPanel.body.getScroll().top;
-                                    formPanel.on('afterlayout', function(){
-                                        if (this.savedScrollTop) {
-                                            this.body.scrollTo('top', this.savedScrollTop);
-                                        }
-                                    }, formPanel, {single: true});
-
-                                    formPanel.updateRecord(['target', 'target_behaviors']);
-
+                                change: function(){
+                                    this.up('form').updateRecord(['target', 'target_behaviors']);
                                 }
                             }
 
                         }]
+                    },{
+                        xtype: 'radio',
+                        name: 'target',
+                        inputValue: 'role',
+                        itemId: 'targetRole',
+                        hidden: true,
+                        boxLabel: 'All instances of this role',
+                        margin: '6 0 0'
                     },{
                         xtype: 'radio',
                         name: 'target',
@@ -731,41 +829,22 @@ Ext.define('Scalr.ui.RoleScriptingPanel', {
                         boxLabel: 'All instances in the farm',
                         margin: '6 0 0'
                     }]
-                },{
-                    xtype: 'component',
-                    cls: 'x-fieldset-delimiter-large',
-                    itemId: 'scriptParamsDelimiter',
-                    maxWidth: null
-                },{
-                    xtype: 'fieldcontainer',
-                    itemId: 'scriptParamsWrapper',
-                    items: [{
-                        xtype: 'container',
-                        cls: 'x-fieldset-subheader',
-                        maxWidth: 700,
-                        layout: {
-                            type: 'hbox',
-                            align: 'left'
-                        },
-                        items: [{
-                            xtype: 'label',
-                            html: 'Script parameters'
-                        }, {
-                            xtype: 'displayinfofield',
-                            margin: '0 0 0 10',
-                            info: 'Script parameters description.'
-                        }]
-                    },{
-                        maxWidth: 700,
-                        xtype: 'container',
-                        itemId: 'scripting_edit_parameters',
-                        layout: 'anchor',
-                        defaults: {
-                            labelWidth: 120,
-                            anchor: '100%'
-                        }
-                    }],
-                    hidden: true
+                }]
+            },{
+                xtype: 'fieldset',
+                title: 'Script parameters<img src="/ui2/images/icons/info_icon_16x16.png" style="position:relative;top: 2px;left:8px">',
+                cls: 'x-fieldset-separator-none',
+                itemId: 'scriptParamsWrapper',
+                hidden: true,
+                items: [{
+                    xtype: 'container',
+                    maxWidth: 700,
+                    itemId: 'scripting_edit_parameters',
+                    layout: 'anchor',
+                    defaults: {
+                        labelWidth: 120,
+                        anchor: '100%'
+                    }
                 }]
             }],
             listeners: {
@@ -773,26 +852,33 @@ Ext.define('Scalr.ui.RoleScriptingPanel', {
                     this.grid = this.up('scriptfield2').down('grid');
                 },
                 beforeloadrecord: function(record) {
-                    var form = this.getForm();
+                    var form = this.getForm(), mode = this.up('scriptfield2').mode;
                     this.isLoading = true;
+                    this.down('#scripting_edit_parameters').removeAll();
                     form.reset(true);
                     if (record.get('version') == 'latest') {
                         record.set('version', '-1');
                     }
+                    
+                    if (record.get('timeout') === '') {
+                        record.set('timeout', '1200');
+                    }
 
-                    if (record.get('target') == 'role') {
+                    if (record.get('target') == 'role' && mode !== 'role') {
                         record.set('target', 'roles');
                         record.set('target_roles', [this.up('scriptfield2').farmRoleId]);
                     }
-
                 },
                 loadrecord: function(record) {
                     var isNewRecord = !record.store,
-                        form = this.getForm();
-
+                        form = this.getForm(),
+                        tabs = this.down('#tabs'),
+                        readOnly = !!record.get('system');
+                    tabs.setActiveTab(isNewRecord || record.get('script_id') ? 'scalrscript' : (record.get('script_path') ? 'localscript' : ''));
+                    tabs.setDisabled(readOnly);
                     form.getFields().each(function(){
                         if (!this.isScriptParamField) {
-                            this.setReadOnly(record.get('system'));
+                            this.setReadOnly(readOnly, this.editable);
                         }
                     });
                     if (isNewRecord || record.get('target') != 'roles') {
@@ -801,7 +887,7 @@ Ext.define('Scalr.ui.RoleScriptingPanel', {
                     form.clearInvalid();
                     if (!this.isVisible()) {
                         this.setVisible(true);
-                        this.ownerCt.updateLayout();//this is required in extjs 4.1 to recalculate form dimensions after container size was changed, while form was hidden
+                        this.ownerCt.updateLayout();//recalculate form dimensions after container size was changed, while form was hidden
                     }
 
                     var c = this.query('component[hideOn~=x-empty-trigger-hide], component[hideOn~=x-empty-action-hide]');
@@ -819,10 +905,8 @@ Ext.define('Scalr.ui.RoleScriptingPanel', {
                 var form = this.getForm();
                 this.setVisible(false);
                 this.isLoading = true;
-                form.reset();
-                if (form._record) {
-                    delete form._record;//todo: replace with .getForm().reset(true) in latest extjs
-                }
+                this.down('#scripting_edit_parameters').removeAll();
+                form.reset(true);
                 this.isLoading = false;
 
             },
@@ -882,28 +966,31 @@ Ext.define('Scalr.ui.RoleScriptingPanel', {
                         }
                     }
                 }
-
+                
                 if (values.target && values.target_roles) {
                     if (values.target == 'roles' && values.target_roles.length == 0) {
                         values.target = '';
                     }
                 }
-
+                if (values['script_path']) {
+                    values['script_id'] = null;
+                    values['script'] = null;
+                    values['version'] = -1;
+                    values['params'] = {};
+                } else if (values['script_id']) {
+                    values['script_path'] = null;
+                }
+                
                 if (Ext.Object.getSize(values) && record) {
-                    var scrollTop = this.grid.getView().el.getScroll().top;
                     this.grid.disableOnFocusChange = true;
-                    this.grid.suspendLayouts();
-                    this.grid.getView().getFeature('grouping').disable();
                     record.set(values);
                     if (record.store === undefined) {
                         this.grid.getStore().add(record);
-                        this.grid.getSelectionModel().setLastFocused(record);
+                        this.grid.getSelectionModel().setLastFocused(record, true);
+                    } else {
+                        this.grid.store.sort('order_index', 'ASC');
                     }
-                    this.grid.getView().getFeature('grouping').enable();
                     this.grid.disableOnFocusChange = false;
-                    this.grid.resumeLayouts(true);
-                    this.grid.getView().el.scrollTo('top', scrollTop);
-                    this.grid.getView().focusRow(record);
                 }
 
             }
@@ -913,16 +1000,24 @@ Ext.define('Scalr.ui.RoleScriptingPanel', {
 	setCurrentRole: function(role) {
 		this.farmRoleId = role.get('farm_role_id');
 		this.farmRoleId = Ext.isEmpty(this.farmRoleId) ? '*self*' : this.farmRoleId;
+        this.down('form').down('[name="run_as"]').setVisible(role.get('os_family') !== 'windows');
 	},
-			
+
 	loadRoleScripts: function(data) {
-		this.down('grid').getStore().load({data: data});
+		this.down('grid').getStore().load({data: this.mode === 'role' ? Ext.Array.map(data, function(item){
+            item['event'] = item['event_name'];
+            item['script'] = item['script_name'];
+            item['version'] = item['version'] + '';
+            return item;
+        }) : data});
 	},
 
 	clearRoleScripts: function(data) {
-		this.down('grid').getStore().removeAll();
-		this.down('#scriptsLiveSearch').reset();
+        var grid = this.down('grid');
+        grid.getView().getSelectionModel().setLastFocused(null, true);
+		grid.getStore().removeAll();
 		this.down('form').deselectRecord();
+		this.down('#scriptsLiveSearch').reset();
 	},
 
 	getRoleScripts: function(data) {
@@ -939,7 +1034,7 @@ Ext.define('Scalr.ui.RoleScriptingPanel', {
 		Ext.apply(events, data);
 		this.down('#event').getStore().load({data: events});
 	},
-	
+
 	loadBehaviors: function(data) {
 		this.down('#targetBehaviorsList').getStore().load({data: data});
 	},
@@ -955,7 +1050,7 @@ Ext.define('Scalr.ui.RoleScriptingPanel', {
 
 		this.down('#targetRolesList').getStore().load({data: roles});
 	},
-	
+
 	getNextOrderIndexForEvent: function(eventName) {
 		var index = 10;
 		this.getRoleScripts().each(function(){
@@ -966,6 +1061,6 @@ Ext.define('Scalr.ui.RoleScriptingPanel', {
 		});
 		return index;
 	}
-	
+
 
 });

@@ -61,7 +61,7 @@ class Scalr_Db_Msr_Redis_Info extends Scalr_Db_Msr_Info {
                 $roleSettings[Scalr_Db_Msr_Redis::PASSWD_ARRAY] = @json_encode($settings->passwords);
 
             foreach ($roleSettings as $name=>$value)
-                $this->dbFarmRole->SetSetting($name, $value);
+                $this->dbFarmRole->SetSetting($name, $value, DBFarmRole::TYPE_LCL);
 
         }
     }

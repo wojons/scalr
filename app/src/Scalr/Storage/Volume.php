@@ -56,7 +56,7 @@ class Scalr_Storage_Volume extends Scalr_Model
             $args[] = $purpose;
         }
 
-        $info = $this->db->GetRow($sql, $args);
+        $info = $this->db->GetRow($sql . " LIMIT 1", $args);
         if (! $info)
             throw new Exception("Storage not found ({$farmRoleId}, {$serverIndex}, {$purpose})");
 
@@ -65,7 +65,9 @@ class Scalr_Storage_Volume extends Scalr_Model
 
     public function getConfig($encoded = false)
     {
-        return (!$encoded) ? json_decode($this->config) : $this->config;
+        $retval =  (!$encoded) ? json_decode($this->config) : $this->config;
+
+        return $retval;
     }
 
     /**

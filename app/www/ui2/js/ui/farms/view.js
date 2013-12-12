@@ -1,9 +1,3 @@
-Ext.getHead().createChild('<style type="text/css">' +
-	'.scalr-ui-farms-view-td-lock .x-grid-cell-inner { padding: 0px 17px 2px; }' +
-	'.scalr-ui-farms-view-lock { background: url("/ui2/images/ui/farms/view/lock.png") 0px 0px; width: 20px; height: 20px; cursor: pointer; }' +
-	'.scalr-ui-farms-view-unlock { background: url("/ui2/images/ui/farms/view/lock.png") 0px -20px; width: 20px; height: 20px; cursor: pointer; }' +
-	'</style>');
-
 Scalr.regPage('Scalr.ui.farms.view', function (loadParams, moduleParams) {
 	var store = Ext.create('store.store', {
 		fields: [
@@ -11,7 +5,7 @@ Scalr.regPage('Scalr.ui.farms.view', function (loadParams, moduleParams) {
 			{name: 'clientid', type: 'int'},
 			'name', 'status', 'dtadded', 'running_servers', 'non_running_servers', 'roles', 'zones','client_email',
 			'havemysqlrole','shortcuts', 'havepgrole', 'haveredisrole', 'haverabbitmqrole', 'havemongodbrole', 'havemysql2role', 'havemariadbrole', 
-			'haveperconarole', 'lock', 'lock_comment', 'created_by_id', 'created_by_email', 'alerts'
+			'haveperconarole', 'lock', 'lock_comment', 'created_by_id', 'created_by_email', 'alerts', 'lease'
 		],
 		proxy: {
 			type: 'scalr.paging',
@@ -56,8 +50,10 @@ Scalr.regPage('Scalr.ui.farms.view', function (loadParams, moduleParams) {
 		},
 
 		columns: [
-			{ text: "Farm ID", width: 70, dataIndex: 'id', sortable: true },
-			{ text: "Farm Name", flex: 1, dataIndex: 'name', sortable: true },
+			{ text: "ID", width: 80, dataIndex: 'id', sortable: true },
+			{ text: "Farm Name", flex: 1, dataIndex: 'name', sortable: true, xtype: 'templatecolumn', tpl:
+                '{name}<tpl if="lease"> <a href="#/farms/{id}/extendedInfo"><img src="/ui2/images/ui/farms/view/<tpl if="lease == &quot;Expire&quot;">leased_expire<tpl else>leased</tpl>.png" style="vertical-align: top"></a></tpl>'
+            },
 			{ text: "Added", flex: 1, dataIndex: 'dtadded', sortable: true },
 			{ text: "Owner", flex: 1, dataIndex: 'created_by_email', sortable: true },
 			{ text: "Servers", width: 100, dataIndex: 'servers', sortable: false, xtype: 'templatecolumn',
@@ -94,18 +90,30 @@ Scalr.regPage('Scalr.ui.farms.view', function (loadParams, moduleParams) {
 					'<tpl if="alerts &gt; 0"><span style="color:red;">{alerts}</span> [<a href="#/alerts/view?farmId={id}&status=failed">View</a>]<tpl else><span style="color:green;">0</span></tpl>'+
 				'<tpl else><img src="/ui2/images/icons/false.png" /></tpl>'
 			}, {
-				text: 'Lock', width: 55, dataIndex: 'lock', fixed: true, resizable: false, sortable: false, tdCls: 'scalr-ui-farms-view-td-lock', xtype: 'templatecolumn', tpl:
+				text: 'Lock', width: 60, dataIndex: 'lock', fixed: true, resizable: false, sortable: false, tdCls: 'scalr-ui-farms-view-td-lock', xtype: 'templatecolumn', tpl:
 					'<tpl if="lock"><div class="scalr-ui-farms-view-lock" title="{lock_comment}"></div><tpl else><div class="scalr-ui-farms-view-unlock" title="Lock farm"></div></tpl>'
 			}, {
 				xtype: 'optionscolumn',
 				getOptionVisibility: function (item, record) {
 					var data = record.data;
-                    
+
+                    if (item.itemId == 'option.clone')
+                        return Scalr.isAllowed('FARMS', 'clone');
+
+                    if (item.itemId == 'option.alerts')
+                        return Scalr.isAllowed('FARMS_ALERTS');
+
+                    if (item.itemId == 'option.events')
+                        return Scalr.isAllowed('FARMS_EVENTS_AND_NOTIFICATIONS');
+
+                    if (item.itemId == 'option.usageStats')
+                        return Scalr.isAllowed('FARMS_STATISTICS');
+
 					if (item.itemId == 'option.launchFarm')
-						return (data.status == 0);
+						return (data.status == 0 && Scalr.isAllowed('FARMS', 'launch'));
 
 					if (item.itemId == 'option.terminateFarm')
-						return (data.status == 1);
+						return (data.status == 1 && Scalr.isAllowed('FARMS', 'terminate'));
 
 					if (item.itemId == 'option.controlSep')
 						return (data.status == 1 || data.status == 0);
@@ -183,7 +191,7 @@ Scalr.regPage('Scalr.ui.farms.view', function (loadParams, moduleParams) {
 
 				optionsMenu: [{
 					itemId: 'option.addToDash',
-					text: 'Add to Dashboard',
+					text: 'Add to dashboard',
 					iconCls: 'x-menu-icon-dashboard',
 					request: {
 						processBox: {
@@ -237,7 +245,7 @@ Scalr.regPage('Scalr.ui.farms.view', function (loadParams, moduleParams) {
 							return { farmId: record.get('id') };
 						},
 						success: function (data) {
-							var items = [];
+							/*var items = [];
 							for (var i = 0; i < data.roles.length; i++) {
 								var t = {
 									xtype: 'checkbox',
@@ -312,33 +320,37 @@ Scalr.regPage('Scalr.ui.farms.view', function (loadParams, moduleParams) {
 										items: s
 									});
 								}
-							}
+							}*/
 
 							Scalr.Request({
 								confirmBox: {
 									type: 'terminate',
 									disabled: data.isMongoDbClusterRunning || false,
-									msg: 'Hey mate! Have you made any modifications to your instances since you launched the farm <b>' + data['farmName'] + '</b>? \'Cause if you did, you might want to save your modifications lest you lose them! Save them by taking a snapshot, which creates a machine image.',
+									msg: 'If you have made any modifications to your instances in <b>' + data['farmName'] + '</b> after launching, you may wish to save them as a machine image by creating a server snapshot.',
 									multiline: true,
-									formWidth: 700,
+									formWidth: 740,
 									form: [{
 										hidden: !data.isMongoDbClusterRunning,
 										xtype: 'displayfield',
-										fieldCls: 'x-form-field-warning',
+										cls: 'x-form-field-warning',
 										value: 'You currently have some Mongo instances in this farm. <br> Terminating it will result in <b>TOTAL DATA LOSS</b> (yeah, we\'re serious).<br/> Please <a href=\'#/services/mongodb/status?farmId='+data.farmId+'\'>shut down the mongo cluster</a>, then wait, then you\'ll be able to terminate the farm or just use force termination option (that will remove all mongodb data).'
 									}, {
 										hidden: !data.isMysqlRunning,
 										xtype: 'displayfield',
-										fieldCls: 'x-form-field-warning',
+										cls: 'x-form-field-warning',
 										value: 'Server snapshot will not include database data. You can create db data bundle on database manager page.'
 									}, {
 										xtype: 'fieldset',
 										title: 'Synchronization settings',
-										hidden: items.length ? false : true,
-										items: items
+                                        hidden: true
+										//hidden: items.length ? false : true,
+										//items: items
 									}, {
 										xtype: 'fieldset',
 										title: 'Termination options',
+                                        defaults: {
+                                            anchor: '100%'
+                                        },
 										items: [{
 											xtype: 'checkbox',
 											boxLabel: 'Forcefully terminate mongodb cluster (<b>ALL YOUR MONGODB DATA ON THIS FARM WILL BE REMOVED</b>)',
@@ -367,10 +379,17 @@ Scalr.regPage('Scalr.ui.farms.view', function (loadParams, moduleParams) {
 											name: 'deleteCloudObjects'
 										}, {
 											xtype: 'checkbox',
-											checked: true,
-											boxLabel: 'Forcefully terminate farm (Do not process beforeHostTerminate event)',
+											checked: false,
+                                            disabled: !!data.isRabbitMQ,
+											boxLabel: 'Skip all shutdown routines (Do not process the BeforeHostTerminate event)',
 											name: 'forceTerminate'
-										}]
+										},{
+                                            xtype: 'displayfield',
+                                            cls: 'x-form-field-info',
+                                            margin: '12 0 0',
+                                            hidden: !data.isRabbitMQ,
+                                            value: '<b>Skiping all shutdown routines</b> is not allowed for farms with RabbitMQ role'
+                                        }]
 									}]
 								},
 								processBox: {
@@ -404,7 +423,7 @@ Scalr.regPage('Scalr.ui.farms.view', function (loadParams, moduleParams) {
 					href: '#/monitoring/view?farmId={id}'
 				}, {
 					itemId: 'option.events',
-					text: 'Events & Notifications',
+					text: 'Events & notifications',
 					iconCls: 'x-menu-icon-events',
 					href: '#/farms/{id}/events'
 				}, {
@@ -423,7 +442,7 @@ Scalr.regPage('Scalr.ui.farms.view', function (loadParams, moduleParams) {
 				}, {
 					itemId: 'option.percona',
 					iconCls: 'x-menu-icon-percona',
-					text: 'Percona Server status',
+					text: 'Percona server status',
 					href: "#/db/manager/dashboard?farmId={id}&type=percona"
 				}, {
 					itemId: 'option.postgresql',
@@ -459,13 +478,18 @@ Scalr.regPage('Scalr.ui.farms.view', function (loadParams, moduleParams) {
 					xtype: 'menuseparator',
 					itemId: 'option.logsSep'
 				}, {
+                    itemId: 'option.ssh_key',
+                    text: 'Download SSH private key',
+                    iconCls: 'x-menu-icon-downloadprivatekey',
+                    href: '#/sshkeys/view?farmId={id}'
+                }, {
 					itemId: 'option.logs',
 					iconCls: 'x-menu-icon-logs',
 					text: 'View log',
 					href: "#/logs/system?farmId={id}"
 				}, {
-					itemId: 'option.logs',
-					iconCls: 'x-menu-icon-logs',
+					itemId: 'option.alerts',
+					iconCls: 'x-menu-icon-alerts',
 					text: 'Alerts',
 					href: "#/alerts/view?farmId={id}"
 				},{
@@ -546,17 +570,18 @@ Scalr.regPage('Scalr.ui.farms.view', function (loadParams, moduleParams) {
 					Scalr.Request({
 						confirmBox: {
 							type: 'action',
-							msg: 'Are you sure want to lock farm "' + record.get('name') + '" and protect it from any changes to configuration and launch / terminate / remove actions ?',
-							formWidth: 500,
+							msg: 'Are you sure you would like to lock farm "' + record.get('name') + '"? This will prevent the farm from being launched, terminated or removed, along with any configuration changes.',
+							formWidth: 600,
 							formValidate: true,
 							form: [{
 								xtype: 'fieldset',
+                                cls: 'x-fieldset-separator-none',
 								defaults: {
 									anchor: '100%'
 								},
 								items: [{
 									xtype: 'textarea',
-									fieldLabel: 'Comment',
+									fieldLabel: 'Comment (required)',
 									labelWidth: 65,
 									name: 'comment',
 									allowBlank: false
@@ -591,21 +616,30 @@ Scalr.regPage('Scalr.ui.farms.view', function (loadParams, moduleParams) {
 			store: store,
 			dock: 'top',
 			beforeItems: [{
-				ui: 'paging',
-				iconCls: 'x-tbar-add',
+                text: 'Add farm',
+                cls: 'x-btn-green-bg',
 				handler: function() {
 					Scalr.event.fireEvent('redirect', '#/farms/build');
 				}
 			}],
 			items: [{
 				xtype: 'filterfield',
-				store: store
-			}, ' ', {
+				store: store,
+                width: 300,
+                form: moduleParams['leaseEnabled'] ? {
+                    items: [{
+                        xtype: 'textfield',
+                        fieldLabel: 'Show farms that will expire in N days',
+                        labelAlign: 'top',
+                        name: 'expirePeriod'
+                    }]
+                } : null
+            }, ' ', {
 				xtype: 'button',
 				text: 'Show only my farms',
 				enableToggle: true,
+                width: 170,
                 pressed: Scalr.storage.get('grid-farms-view-show-only-my-farms'),
-				width: 150,
 				toggleHandler: function (field, checked) {
 					store.proxy.extraParams.showOnlyMy = checked ? '1' : '';
                     Scalr.storage.set('grid-farms-view-show-only-my-farms', checked);

@@ -1,4 +1,4 @@
-<?
+<?php
     final class I386_TYPE
     {
         const T1_MICRO 	= "t1.micro";

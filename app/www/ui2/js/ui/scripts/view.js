@@ -2,7 +2,7 @@ Scalr.regPage('Scalr.ui.scripts.view', function (loadParams, moduleParams) {
 	var store = Ext.create('store.store', {
 		fields: [
 			{ name: 'id', type: 'int' }, { name: 'accountId', type: 'int' },
-			'name', 'description', 'dtUpdated', 'version'
+			'name', 'description', 'dtUpdated', 'version', 'issync'
 		],
 		proxy: {
 			type: 'scalr.paging',
@@ -42,9 +42,10 @@ Scalr.regPage('Scalr.ui.scripts.view', function (loadParams, moduleParams) {
 		},
 
 		columns: [
-			{ header: 'ID', width: 50, dataIndex: 'id', sortable: true },
+			{ header: 'ID', width: 60, dataIndex: 'id', sortable: true },
 			{ header: 'Name', flex: 1, dataIndex: 'name', sortable: true },
 			{ header: 'Description', flex: 2, dataIndex: 'description', sortable: true },
+            { header: 'Execution mode', width: 150, dataIndex: 'issync', sortable: true, xtype: 'templatecolumn', tpl: '<tpl if="issync == 1"><span style="color:gray">Blocking</span><tpl else><span style="color:green">Non-blocking</span></tpl>' },
 			{ header: 'Latest version', width: 100, dataIndex: 'version', sortable: false, align:'center' },
 			{ header: 'Updated on', width: 160, dataIndex: 'dtUpdated', sortable: true },
 			{ header: 'Origin', width: 80, dataIndex: 'origin', sortable: false, align:'center', xtype: 'templatecolumn', tpl:
@@ -84,6 +85,7 @@ Scalr.regPage('Scalr.ui.scripts.view', function (loadParams, moduleParams) {
 						Scalr.Request({
 							confirmBox: {
 								formValidate: true,
+                                formSimple: true,
 								form: [{
 									xtype: 'textfield',
 									name: 'newName',
@@ -136,8 +138,8 @@ Scalr.regPage('Scalr.ui.scripts.view', function (loadParams, moduleParams) {
 			store: store,
 			dock: 'top',
 			beforeItems: [{
-				ui: 'paging',
-				iconCls: 'x-tbar-add',
+                text: 'Add script',
+                cls: 'x-btn-green-bg',
 				handler: function() {
 					Scalr.event.fireEvent('redirect', '#/scripts/create');
 				}
@@ -186,16 +188,16 @@ Scalr.regPage('Scalr.ui.scripts.view', function (loadParams, moduleParams) {
 					xtype: 'button',
 					text: 'All',
 					value: '',
-					width: 60
+					width: 70
 				}, {
 					xtype: 'button',
 					text: 'Scalr',
-					width: 60,
+					width: 70,
 					value: 'Shared'
 				}, {
 					xtype: 'button',
 					text: 'Private',
-					width: 60,
+					width: 70,
 					value: 'Custom'
 				}],
 				listeners: {

@@ -1,12 +1,14 @@
 <?php
 
+use Scalr\Acl\Acl;
+
 class Scalr_UI_Controller_Tools_Aws_Rds_Instances extends Scalr_UI_Controller
 {
     const CALL_PARAM_NAME = 'instanceId';
 
-    public static function getPermissionDefinitions()
+    public function hasAccess()
     {
-        return array();
+        return parent::hasAccess() && $this->request->isAllowed(Acl::RESOURCE_AWS_RDS);
     }
 
     public function defaultAction()

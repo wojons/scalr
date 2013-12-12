@@ -89,12 +89,17 @@ Scalr.regPage('Scalr.ui.dm.applications.view', function (loadParams, moduleParam
 		],
 
 		dockedItems: [{
+            dock: 'top',
+			xtype: 'displayfield',
+			cls: 'x-form-field-warning x-form-field-warning-fit',
+			value: Scalr.strings['deprecated_warning']
+        },{
 			xtype: 'scalrpagingtoolbar',
 			store: store,
 			dock: 'top',
-			afterItems: [{
-				ui: 'paging',
-				iconCls: 'x-tbar-add',
+			beforeItems: [{
+                text: 'Add application',
+                cls: 'x-btn-green-bg',
 				handler: function() {
 					Scalr.event.fireEvent('redirect','#/dm/applications/create');
 				}

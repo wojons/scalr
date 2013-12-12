@@ -2,7 +2,7 @@ Scalr.regPage('Scalr.ui.farms.roles.view', function (loadParams, moduleParams) {
 	var store = Ext.create('store.store', {
 		fields: [
 			{name: 'id', type: 'int'}, 'platform', 'location',
-			'name', 'min_count', 'max_count', 'min_LA', 'max_LA', 'running_servers', 'non_running_servers' ,'domains',
+			'name', 'alias', 'min_count', 'max_count', 'min_LA', 'max_LA', 'running_servers', 'non_running_servers' ,'domains',
 			'image_id', 'farmid','shortcuts', 'role_id', 'scaling_algos', 'farm_status', 'location', 'allow_launch_instance', 'is_vpc'
 		],
 		proxy: {
@@ -36,18 +36,18 @@ Scalr.regPage('Scalr.ui.farms.roles.view', function (loadParams, moduleParams) {
 		},
 
 		columns: [
-			{ header: "Cloud", width: 100, dataIndex: 'platform', sortable: true },
+			{ header: "Cloud", width: 80, dataIndex: 'platform', sortable: true, align: 'center', xtype: 'templatecolumn', tpl:
+                '<img class="x-icon-platform-small x-icon-platform-small-{platform}" title="{platform}" src="' + Ext.BLANK_IMAGE_URL + '"/>'
+            },
 			{ header: "Location", width: 100, dataIndex: 'location', sortable: false },
-			{ header: "Role name", flex: 1, dataIndex: 'name', sortable: false, xtype: 'templatecolumn', tpl:
+			{ header: "Name", flex: 1, dataIndex: 'alias', sortable: false},
+			{ header: "Role", flex: 1, dataIndex: 'name', sortable: false, xtype: 'templatecolumn', tpl:
 				'<a href="#/roles/{role_id}/view">{name}</a>'
 			},
-			{header: "Image ID", width: 120, dataIndex: 'image_id', sortable: false, xtype: 'templatecolumn', tpl:
-				'<a href="#/roles/{role_id}/view">{image_id}</a>'
-			},
-			{ header: "Min servers", width: 80, dataIndex: 'min_count', sortable: false, align:'center', xtype:'templatecolumn',  tpl:
+			{ header: "Min servers", width: 90, dataIndex: 'min_count', sortable: false, align:'center', xtype:'templatecolumn',  tpl:
 				'<tpl if="min_count">{min_count}</tpl>' +
 				'<tpl if="!min_count"><img src="/ui2/images/icons/false.png" /></tpl>'},
-			{ header: "Max servers", width: 80, dataIndex: 'max_count', sortable: false, align:'center', xtype:'templatecolumn',  tpl:
+			{ header: "Max servers", width: 90, dataIndex: 'max_count', sortable: false, align:'center', xtype:'templatecolumn',  tpl:
 				'<tpl if="max_count">{max_count}</tpl>' +
 				'<tpl if="!max_count"><img src="/ui2/images/icons/false.png" /></tpl>'},
 			{ header: "Enabled scaling algorithms", flex: 1, dataIndex: 'scaling_algos', sortable: false, align:'center' },
@@ -116,7 +116,7 @@ Scalr.regPage('Scalr.ui.farms.roles.view', function (loadParams, moduleParams) {
 					text: 'Download SSH private key',
 					iconCls: 'x-menu-icon-downloadprivatekey',
 					menuHandler: function (item) {
-						Scalr.utils.UserLoadFile('/farms/' + loadParams['farmId'] + '/roles/' + item.record.get('id') + '/xGetRoleSshPrivateKey');
+						Scalr.utils.UserLoadFile('/sshkeys/downloadPrivate?farmId=' + loadParams['farmId'] + '&platform=' + item.record.get('platform') + "&cloudLocation=" + item.record.get('location'));
 					}
 				}, {
 					itemId: 'option.cfg',
@@ -138,7 +138,6 @@ Scalr.regPage('Scalr.ui.farms.roles.view', function (loadParams, moduleParams) {
 					itemId: 'option.mainSep'
 				}, {
 					itemId: 'option.downgrade',
-					iconCls: 'scalr-menu-icon-downgrade',
 					iconCls: 'x-menu-icon-downgrade',
 					text: 'Downgrade role to previous version',
 					href: "#/farms/" + loadParams['farmId'] + "/roles/{id}/downgrade"
@@ -153,11 +152,6 @@ Scalr.regPage('Scalr.ui.farms.roles.view', function (loadParams, moduleParams) {
 				}, {
 					xtype: 'menuseparator',
 					itemId: 'option.eSep'
-				}, {
-					itemId: 'option.sgEdit',
-					text: 'Edit security group',
-					iconCls: 'x-menu-icon-edit',
-					href: '#/security/groups/edit?farmRoleId={id}&cloudLocation={location}&platform={platform}'
 				}, {
 					xtype: 'menuseparator',
 					itemId: 'option.sgSep'

@@ -1,4 +1,4 @@
-<?
+<?php
     final class EBS_ARRAY_STATUS
     {
         const CREATING_VOLUMES 	= "Creating volumes";

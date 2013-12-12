@@ -7,8 +7,9 @@ class FarmTerminatedEvent extends Event
     public $TermOnSyncFail;
     public $KeepEBS;
     public $ForceTerminate;
+    public $userId;
 
-    public function __construct($RemoveZoneFromDNS, $KeepElasticIPs, $TermOnSyncFail, $KeepEBS, $ForceTerminate = true)
+    public function __construct($RemoveZoneFromDNS, $KeepElasticIPs, $TermOnSyncFail, $KeepEBS, $ForceTerminate = true, $userId = null)
     {
         parent::__construct();
 
@@ -17,6 +18,7 @@ class FarmTerminatedEvent extends Event
         $this->TermOnSyncFail = $TermOnSyncFail;
         $this->KeepEBS = $KeepEBS;
         $this->ForceTerminate = $ForceTerminate;
+        $this->userId = $userId;
     }
 
     public function getTextDetails()

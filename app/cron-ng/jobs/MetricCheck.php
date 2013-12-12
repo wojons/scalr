@@ -160,7 +160,7 @@ class Scalr_Cronjob_MetricCheck extends Scalr_System_Cronjob_MultiProcess_Defaul
                                     $dbServer->farmId,
                                     new CheckRecoveredEvent($dbServer, $check)
                                 );
-                            } elseif ($statusInfo->systemStatus->status != 'ok' && !$hasActiveAlert) {
+                            } elseif ($statusInfo->systemStatus->status != 'ok' && $statusInfo->systemStatus->status != 'initializing' && !$hasActiveAlert) {
                                 $txtDetails = "";
                                 $details = $statusInfo->systemStatus->details;
                                 if ($details) {
@@ -186,7 +186,7 @@ class Scalr_Cronjob_MetricCheck extends Scalr_System_Cronjob_MultiProcess_Defaul
                                 Scalr::FireEvent($dbServer->farmId,
                                     new CheckRecoveredEvent($dbServer, $check)
                                 );
-                            } else if ($statusInfo->instanceStatus->status != 'ok' && !$hasActiveAlert) {
+                            } else if ($statusInfo->instanceStatus->status != 'ok' && $statusInfo->instanceStatus->status != 'initializing' && !$hasActiveAlert) {
                                 $txtDetails = "";
                                 $details = $statusInfo->instanceStatus->details;
                                 if ($details) {

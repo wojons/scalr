@@ -123,7 +123,6 @@ function __autoload($class_name)
         'MYSQL_STORAGE_ENGINE' => SRCPATH . "/types/enum.MYSQL_STORAGE_ENGINE.php",
         'CLIENT_SETTINGS' => SRCPATH . "/types/enum.CLIENT_SETTINGS.php",
         'BASIC_MESSAGE_NAMES' => SRCPATH . "/types/enum.BASIC_MESSAGE_NAMES.php",
-        'RESERVED_ROLE_OPTIONS' => SRCPATH . "/types/enum.RESERVED_ROLE_OPTIONS.php",
         'AUTOSNAPSHOT_TYPE' => SRCPATH . "/types/enum.AUTOSNAPSHOT_TYPE.php",
         'SCHEDULE_TASK_TYPE' => SRCPATH . "/types/enum.SCHEDULE_TASK_TYPE.php",
         'TASK_STATUS' => SRCPATH . "/types/enum.TASK_STATUS.php",

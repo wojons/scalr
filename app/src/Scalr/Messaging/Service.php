@@ -63,15 +63,11 @@ class Scalr_Messaging_Service {
             $string = $this->cryptoTool->decrypt($payload, $cryptoKey);
 
             if ($contentType == 'application/json') {
-                $this->logger->info(sprintf(_("Unserializing JSON message '%s'"), htmlspecialchars($string)));
                 $message = $this->jsonSerializer->unserialize($string);
-                $xml = null;
-                $json = $string;
+                $type = 'json';
             } else {
-                $this->logger->info(sprintf(_("Unserializing message '%s'"), htmlspecialchars($string)));
                 $message = $this->serializer->unserialize($string);
-                $xml = $string;
-                $json = null;
+                $type = 'xml';
             }
 
             if ($isOneTimeKey && !$message instanceof Scalr_Messaging_Msg_HostInit) {
@@ -88,7 +84,7 @@ class Scalr_Messaging_Service {
         foreach ($this->handlers as $handler) {
             if ($handler->accept($queue)) {
                 $this->logger->info("Notify handler " . get_class($handler));
-                $handler->handle($queue, $message, $xml, $json);
+                $handler->handle($queue, $message, $string, $type);
                 $accepted = true;
             }
         }

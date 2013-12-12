@@ -1,5 +1,5 @@
 <?php
-
+use Scalr\Acl\Acl;
 use Scalr\Service\Aws\Elb\DataType\ListenerData;
 use Scalr\Service\Aws\Elb\DataType\LoadBalancerDescriptionData;
 use Scalr\Service\Aws\Elb\DataType\ListenerList;
@@ -10,9 +10,9 @@ class Scalr_UI_Controller_Tools_Aws_Ec2_Elb extends Scalr_UI_Controller
 {
     const CALL_PARAM_NAME = 'elbName';
 
-    public static function getPermissionDefinitions()
+    public function hasAccess()
     {
-        return array();
+        return parent::hasAccess() && $this->request->isAllowed(Acl::RESOURCE_AWS_ELB);
     }
 
     public function defaultAction()
@@ -20,22 +20,41 @@ class Scalr_UI_Controller_Tools_Aws_Ec2_Elb extends Scalr_UI_Controller
         $this->viewAction();
     }
 
-    public function xDeleteAction()
+    protected function validateAccessToLoadBalancer()
     {
-        $roleid = $this->db->GetOne("SELECT farm_roleid FROM farm_role_settings WHERE name=? AND value=?",
+        $roleid = $this->db->GetOne("SELECT farm_roleid FROM farm_role_settings WHERE name=? AND value=? LIMIT 1",
         array(
             DBFarmRole::SETTING_BALANCING_NAME,
             $this->getParam('elbName')
         ));
 
-        $elb = $this->getEnvironment()->aws($this->getParam('cloudLocation'))->elb;
-        $elb->loadBalancer->delete($this->getParam('elbName'));
+        if ($roleid) {
+            $DBFarmRole = DBFarmRole::LoadByID($roleid);
+            $this->user->getPermissions()->validate($DBFarmRole);
+        }
+    }
+
+
+    public function xDeleteAction()
+    {
+        $roleid = $this->db->GetOne("SELECT farm_roleid FROM farm_role_settings WHERE name=? AND value=? LIMIT 1",
+        array(
+            DBFarmRole::SETTING_BALANCING_NAME,
+            $this->getParam('elbName')
+        ));
 
         if ($roleid) {
             $DBFarmRole = DBFarmRole::LoadByID($roleid);
-            $DBFarmRole->SetSetting(DBFarmRole::SETTING_BALANCING_USE_ELB, 0);
-            $DBFarmRole->SetSetting(DBFarmRole::SETTING_BALANCING_HOSTNAME, "");
-            $DBFarmRole->SetSetting(DBFarmRole::SETTING_BALANCING_NAME, "");
+            $this->user->getPermissions()->validate($DBFarmRole);
+        }
+
+        $elb = $this->getEnvironment()->aws($this->getParam('cloudLocation'))->elb;
+        $elb->loadBalancer->delete($this->getParam('elbName'));
+
+        if ($DBFarmRole instanceof \DBFarmRole) {
+            $DBFarmRole->SetSetting(DBFarmRole::SETTING_BALANCING_USE_ELB, 0, DBFarmRole::TYPE_LCL);
+            $DBFarmRole->SetSetting(DBFarmRole::SETTING_BALANCING_HOSTNAME, "", DBFarmRole::TYPE_LCL);
+            $DBFarmRole->SetSetting(DBFarmRole::SETTING_BALANCING_NAME, "", DBFarmRole::TYPE_LCL);
         }
         $this->response->success("Selected Elastic Load Balancers successfully removed");
     }
@@ -114,6 +133,7 @@ class Scalr_UI_Controller_Tools_Aws_Ec2_Elb extends Scalr_UI_Controller
 
     public function xDeleteListenersAction()
     {
+        $this->validateAccessToLoadBalancer();
         $elb = $this->getEnvironment()->aws($this->getParam('cloudLocation'))->elb;
         $elb->loadBalancer->deleteListeners($this->getParam('elbName'), $this->getParam('lbPort'));
         $this->response->success('Listener successfully removed from load balancer');
@@ -121,6 +141,7 @@ class Scalr_UI_Controller_Tools_Aws_Ec2_Elb extends Scalr_UI_Controller
 
     public function xCreateListenersAction()
     {
+        $this->validateAccessToLoadBalancer();
         $elb = $this->getEnvironment()->aws($this->getParam('cloudLocation'))->elb;
         $elb->loadBalancer->createListeners($this->getParam('elbName'), new ListenerData(
             $this->getParam('lbPort'), $this->getParam('instancePort'),
@@ -132,6 +153,7 @@ class Scalr_UI_Controller_Tools_Aws_Ec2_Elb extends Scalr_UI_Controller
 
     public function xDeregisterInstanceAction()
     {
+        $this->validateAccessToLoadBalancer();
         $elb = $this->getEnvironment()->aws($this->getParam('cloudLocation'))->elb;
         $elb->loadBalancer->deregisterInstances($this->getParam('elbName'), $this->getParam('awsInstanceId'));
         $this->response->success(_("Instance successfully deregistered from the load balancer"));
@@ -139,6 +161,7 @@ class Scalr_UI_Controller_Tools_Aws_Ec2_Elb extends Scalr_UI_Controller
 
     public function instanceHealthAction()
     {
+        $this->validateAccessToLoadBalancer();
         $elb = $this->getEnvironment()->aws($this->getParam('cloudLocation'))->elb;
         $info = $elb->loadBalancer->describeInstanceHealth($this->getParam('elbName'), $this->getParam('awsInstanceId'))->get(0);
         $this->response->page('ui/tools/aws/ec2/elb/instanceHealth.js', $info->toArray());
@@ -146,6 +169,7 @@ class Scalr_UI_Controller_Tools_Aws_Ec2_Elb extends Scalr_UI_Controller
 
     public function xDeleteSpAction()
     {
+        $this->validateAccessToLoadBalancer();
         $elb = $this->getEnvironment()->aws($this->getParam('cloudLocation'))->elb;
         $elb->loadBalancer->deletePolicy($this->getParam('elbName'), $this->getParam('policyName'));
         $this->response->success(_("Stickiness policy successfully removed"));
@@ -153,6 +177,7 @@ class Scalr_UI_Controller_Tools_Aws_Ec2_Elb extends Scalr_UI_Controller
 
     public function xCreateSpAction()
     {
+        $this->validateAccessToLoadBalancer();
         $elb = $this->getEnvironment()->aws($this->getParam('cloudLocation'))->elb;
 
         if ($this->getParam('policyType') == 'AppCookie') {
@@ -169,6 +194,7 @@ class Scalr_UI_Controller_Tools_Aws_Ec2_Elb extends Scalr_UI_Controller
 
     public function xAssociateSpAction()
     {
+        $this->validateAccessToLoadBalancer();
         $elb = $this->getEnvironment()->aws($this->getParam('cloudLocation'))->elb;
         $policyName = $this->getParam('policyName');
         $elb->loadBalancer->setPoliciesOfListener(
@@ -179,6 +205,7 @@ class Scalr_UI_Controller_Tools_Aws_Ec2_Elb extends Scalr_UI_Controller
 
     public function detailsAction()
     {
+        $this->validateAccessToLoadBalancer();
         $elb = $this->getEnvironment()->aws($this->getParam('cloudLocation'))->elb;
         $lb = $elb->loadBalancer->describe($this->getParam('elbName'))->get(0);
 
@@ -215,7 +242,7 @@ class Scalr_UI_Controller_Tools_Aws_Ec2_Elb extends Scalr_UI_Controller
         foreach ($elb->loadBalancer->describe() as $lb) {
             if (!$lb->dnsName) continue;
 
-            $roleid = $this->db->GetOne("SELECT farm_roleid FROM farm_role_settings WHERE name=? AND value=?",
+            $roleid = $this->db->GetOne("SELECT farm_roleid FROM farm_role_settings WHERE name=? AND value=? LIMIT 1",
                 array(DBFarmRole::SETTING_BALANCING_HOSTNAME, $lb->dnsName)
             );
 
@@ -227,22 +254,31 @@ class Scalr_UI_Controller_Tools_Aws_Ec2_Elb extends Scalr_UI_Controller
             if ($roleid) {
                 try {
                     $DBFarmRole = DBFarmRole::LoadByID($roleid);
+
+                    if ($DBFarmRole instanceof \DBFarmRole && !$this->user->getPermissions()->check($DBFarmRole))
+                        continue;
+
                     $farmId = $DBFarmRole->FarmID;
                     $farmRoleId = $roleid;
                     $farmName = $DBFarmRole->GetFarmObject()->Name;
                     $roleName = $DBFarmRole->GetRoleObject()->name;
-                } catch (Exception $e) {}
+                } catch (Exception $e) {
+                }
             }
 
             try {
                 $farmRoleService = FarmRoleService::findFarmRoleService($this->environment->id, $lb->loadBalancerName);
                 if ($farmRoleService) {
+                    if (!$this->user->getPermissions()->check($farmRoleService->getFarmRole()))
+                        continue;
+
                     $farmRoleId = $farmRoleService->getFarmRole()->ID;
                     $farmId = $farmRoleService->getFarmRole()->FarmID;
                     $roleName = $farmRoleService->getFarmRole()->GetRoleObject()->name;
                     $farmName = $farmRoleService->getFarmRole()->GetFarmObject()->Name;
                 }
-            } catch (Exception $e) {}
+            } catch (Exception $e) {
+            }
 
             $rowz1[] = array(
                 "name"		 => $lb->loadBalancerName,

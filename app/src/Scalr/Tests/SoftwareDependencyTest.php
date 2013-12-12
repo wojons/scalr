@@ -38,10 +38,10 @@ class SoftwareDependencyTest extends TestCase
         $phpBranch = substr(PHP_VERSION, 0, 3);
 
         $this->assertTrue(
-            !($phpBranch == '5.3' && version_compare(PHP_VERSION, '5.3.16', '<')) &&
-            !($phpBranch == '5.4' && version_compare(PHP_VERSION, '5.4.5', '<')) &&
-            version_compare($phpBranch, '5.3', '>=') ,
-            sprintf('You have %s PHP version. It must be >= 5.3.16 for 5.3 branch or >= 5.4.5 for 5.4 branch', PHP_VERSION)
+            !($phpBranch == '5.4' && version_compare(PHP_VERSION, '5.4.19', '<')) &&
+            !($phpBranch == '5.5' && version_compare(PHP_VERSION, '5.5.4', '<')) &&
+            version_compare($phpBranch, '5.4', '>=') ,
+            sprintf('You have %s PHP version. It must be >= 5.4.19 for 5.4 branch or >= 5.5.4 for 5.5 branch', PHP_VERSION)
         );
 
         $this->assertTrue(

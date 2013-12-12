@@ -31,8 +31,7 @@ class Scalr_UI_Controller_Dashboard extends Scalr_UI_Controller
                             array('name' => 'dashboard.usagelaststat', 'params' => array('farmCount' => 5))
                         ),
                         array(
-                            array('name' => 'dashboard.lasterrors', 'params' => array('errorCount' => 10)),
-                            array('name' => 'dashboard.uservoice', 'params' => array('sugCount' => 5))
+                            array('name' => 'dashboard.lasterrors', 'params' => array('errorCount' => 10))
                         )
                     );
 
@@ -102,6 +101,9 @@ class Scalr_UI_Controller_Dashboard extends Scalr_UI_Controller
                 $name = str_replace('dashboard.', '', $wid['name']);
                 try {
                     $widget = Scalr_UI_Controller::loadController($name, 'Scalr_UI_Controller_Dashboard_Widget');
+                } catch (Scalr_Exception_InsufficientPermissions $e) {
+                    $wid = null;
+                    continue;
                 } catch (Exception $e) {
                     continue;
                 }
@@ -112,7 +114,11 @@ class Scalr_UI_Controller_Dashboard extends Scalr_UI_Controller
                     $loadJs[] = $info['js'];
 
                 if ($info['type'] == 'local') {
-                    $wid['widgetContent'] = $widget->getContent($wid['params']);
+                    try {
+                        $wid['widgetContent'] = $widget->getContent($wid['params']);
+                    } catch (Exception $e) {
+                        $wid['widgetError'] = $e->getMessage();
+                    }
                     $wid['time'] = microtime(true) - $tt;
                 }
             }
@@ -174,13 +180,18 @@ class Scalr_UI_Controller_Dashboard extends Scalr_UI_Controller
                 continue;
             }
 
-            $result[$id] = $widget->getContent($object['params']);
+            try {
+                $result[$id]['widgetContent'] = $widget->getContent($object['params']);
+            } catch (Exception $e) {
+                $result[$id]['widgetError'] = $e->getMessage();
+            }
         }
 
         return $result;
     }
 
-    public function xAutoUpdateDashAction () {
+    public function xAutoUpdateDashAction()
+    {
         $this->request->defineParams(array(
             'updateDashboard' => array('type' => 'json')
         ));

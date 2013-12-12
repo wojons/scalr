@@ -42,6 +42,27 @@ class VolumeApi
     }
 
     /**
+     * List Extensions action
+     *
+     * This operation returns a response body. In the response body, each extension is identified
+     * by two unique identifiers, a namespace and an alias. Additionally an extension contains
+     * documentation links in various formats
+     *
+     * @return  array      Returns list of available extensions
+     * @throws  RestClientException
+     */
+    public function listExtensions()
+    {
+        $result = null;
+        $response = $this->getClient()->call($this->service, '/extensions');
+        if ($response->hasError() === false) {
+            $result = json_decode($response->getContent());
+            $result = $result->extensions;
+        }
+        return $result;
+    }
+
+    /**
      * List Volumes action
      *
      * View a list of Volume entities.
@@ -200,7 +221,7 @@ class VolumeApi
      * @return  array     Returns the list of snapshots.
      * @throws  RestClientException
      */
-    public function listShanpshots($detailed = true)
+    public function listSnapshots($detailed = true)
     {
         $result = null;
         $response = $this->getClient()->call(

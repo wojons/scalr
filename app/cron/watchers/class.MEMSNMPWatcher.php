@@ -37,6 +37,8 @@
                     "--x-grid" => $r["x_grid"],
                     "--end" => $r["end"],
                     "--start" => $r["start"],
+                    "--border" => 0,
+                    "--color" => "BACK#FFFFFF",
                     "--width" => 440,
                     "--height" => 180,
                     "--font-render-mode" => "normal",

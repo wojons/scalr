@@ -40,9 +40,9 @@ Scalr.regPage('Scalr.ui.tools.aws.iam.serverCertificates.view', function (loadPa
 			xtype: 'scalrpagingtoolbar',
 			store: store,
 			dock: 'top',
-			afterItems: [{
-				ui: 'paging',
-				iconCls: 'x-tbar-add',
+			beforeItems: [{
+                text: 'Add certificate',
+                cls: 'x-btn-green-bg',
 				handler: function() {
 					Scalr.event.fireEvent('redirect', '#/tools/aws/iam/servercertificates/create');
 				}

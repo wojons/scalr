@@ -1,4 +1,5 @@
 <?php
+use Scalr\Acl\Acl;
 
 class Scalr_UI_Controller_Guest extends Scalr_UI_Controller
 {
@@ -17,6 +18,7 @@ class Scalr_UI_Controller_Guest extends Scalr_UI_Controller
     {
         $initParams = array();
 
+        // always sync list of files (js, css) to Scalr_UI_Response->pageUiHash
         $initParams['extjs'] = array(
             $this->response->getModuleName("init.js"),
             $this->response->getModuleName("override.js"),
@@ -27,10 +29,15 @@ class Scalr_UI_Controller_Guest extends Scalr_UI_Controller
             $this->response->getModuleName("ui.js")
         );
 
+        $mode = Scalr_Session::getInstance()->getDebugMode();
+        if (isset($mode['sql']) && $mode['sql'])
+            $initParams['extjs'][] = $this->response->getModuleName('ui-debug.js');
+
         $initParams['css'] = array(
             $this->response->getModuleName("ui.css")
         );
 
+        $initParams['uiHash'] = $this->response->pageUiHash();
         $initParams['context'] = $this->getContext();
 
         $this->response->data(array('initParams' => $initParams));
@@ -51,7 +58,7 @@ class Scalr_UI_Controller_Guest extends Scalr_UI_Controller
                 'type' => $this->user->getType()
             );
 
-            if ($this->user->getType() != Scalr_Account_User::TYPE_SCALR_ADMIN) {
+            if (!$this->user->isScalrAdmin()) {
                 $data['farms'] = $this->db->getAll('SELECT id, name FROM farms WHERE env_id = ? ORDER BY name', array($this->getEnvironmentId()));
 
                 if ($this->user->getAccountId() != 0) {
@@ -61,22 +68,19 @@ class Scalr_UI_Controller_Guest extends Scalr_UI_Controller
                     $data['flags'] = array();
                 }
 
-                $data['flags']['platformEc2Enabled'] = !!$this->environment->isPlatformEnabled(SERVER_PLATFORMS::EC2);
-                $data['flags']['platformCloudstackEnabled'] = !!$this->environment->isPlatformEnabled(SERVER_PLATFORMS::CLOUDSTACK);
-                $data['flags']['platformIdcfEnabled'] = !!$this->environment->isPlatformEnabled(SERVER_PLATFORMS::IDCF);
-                $data['flags']['platformUcloudEnabled'] = !!$this->environment->isPlatformEnabled(SERVER_PLATFORMS::UCLOUD);
-                $data['flags']['platformRackspaceEnabled'] = !!$this->environment->isPlatformEnabled(SERVER_PLATFORMS::RACKSPACE);
-
                 $data['flags']['billingExists'] = \Scalr::config('scalr.billing.enabled');
                 $data['flags']['featureUsersPermissions'] = $this->user->getAccount()->isFeatureEnabled(Scalr_Limits::FEATURE_USERS_PERMISSIONS);
 
                 $data['flags']['wikiUrl'] = \Scalr::config('scalr.ui.wiki_url');
                 $data['flags']['supportUrl'] = \Scalr::config('scalr.ui.support_url');
 
-                if ($this->user->getType() == Scalr_Account_User::TYPE_ACCOUNT_OWNER) {
+                $data['acl'] = $this->request->getAclRoles()->getAllowedArray(true);
+
+                if ($this->user->isAccountOwner()) {
                     if (! $this->user->getAccount()->getSetting(Scalr_Account::SETTING_DATE_ENV_CONFIGURED)) {
-                        if (count($this->environment->getEnabledPlatforms()) == 0)
+                        if (count($this->environment->getEnabledPlatforms()) == 0) {
                             $data['flags']['needEnvConfig'] = Scalr_Environment::init()->loadDefault($this->user->getAccountId())->id;
+                        }
                     }
                 }
 
@@ -86,9 +90,27 @@ class Scalr_UI_Controller_Guest extends Scalr_UI_Controller
                     $data['user']['isTeamOwner'] = true;
                 }
             }
+
+            $data['platforms'] = array();
+            $allowedClouds = (array) \Scalr::config('scalr.allowed_clouds');
+            foreach (SERVER_PLATFORMS::getList() as $platform => $platformName) {
+                if (!in_array($platform, $allowedClouds) || 
+                    $platform == SERVER_PLATFORMS::UCLOUD && !$this->request->getHeaderVar('Interface-Beta'))
+                {
+                    continue;
+                }
+                
+                $data['platforms'][$platform] = array(
+                    'enabled' => $this->user->isScalrAdmin() ? false : !!$this->environment->isPlatformEnabled($platform),
+                    'name'    => $platformName
+                );
+            }
+
+
         }
 
         $data['flags']['authMode'] = $this->getContainer()->config->get('scalr.auth_mode');
+        $data['flags']['specialToken'] = Scalr_Session::getInstance()->getToken();
         return $data;
     }
 
@@ -176,6 +198,8 @@ class Scalr_UI_Controller_Guest extends Scalr_UI_Controller
             $account->save();
 
             $account->createEnvironment("Environment 1");
+
+            $account->initializeAcl();
 
             $user = $account->createUser($this->getParam('email'), $password, Scalr_Account_User::TYPE_ACCOUNT_OWNER);
             $user->fullname = $name;
@@ -279,10 +303,25 @@ class Scalr_UI_Controller_Guest extends Scalr_UI_Controller
 
             if ($this->getContainer()->config->get('scalr.auth_mode') == 'ldap' && $login != 'admin') {
                 $ldap = $this->getContainer()->ldap($login, $this->getParam('scalrPass'));
-                $result = $ldap->isValidUser($login, $this->getParam('scalrPass'));
+
+                $this->response->setHeader('X-Scalr-LDAP-Login', $login);
+
+                $tldap = 0;
+                $start = microtime(true);
+                $result = $ldap->isValidUser();
+                $tldap = microtime(true) - $start;
+
                 if ($result) {
-                    $name = strtok($login, '@');
-                    $groups = $ldap->getUserGroups($name);
+                    //Tries to retrieve user's email address from LDAP or provides that login is always with domain suffix
+                    $login = $ldap->getUsername();
+
+                    $start = microtime(true);
+                    $groups = $ldap->getUserGroups();
+                    $gtime = microtime(true) - $start;
+                    $tldap += $gtime;
+                    $this->response->setHeader('X-Scalr-LDAP-G-Query-Time', sprintf('%0.4f sec', $gtime));
+                    $this->response->setHeader('X-Scalr-LDAP-Query-Time', sprintf('%0.4f sec', $tldap));
+
                     $this->ldapGroups = $groups;
 
                     foreach ($groups as $key => $name)
@@ -290,12 +329,16 @@ class Scalr_UI_Controller_Guest extends Scalr_UI_Controller
 
                     $userAvailableAccounts = array();
 
-                    //For debugging purposes
-                    $this->response->varDump(json_encode($groups));
+                    if ($ldap->getConfig()->debug) {
+                        $this->response->varDump($groups);
+                        $this->response->setHeader('X-Scalr-LDAP-Debug', json_encode($ldap->getLog()));
+                    }
 
                     // System users are not members of any group so if there is no groups then skip this.
                     if (count($groups) > 0) {
-                        foreach ($this->db->GetAll('SELECT clients.id, clients.name FROM clients
+                        foreach ($this->db->GetAll('
+                            SELECT clients.id, clients.name
+                            FROM clients
                             JOIN client_environments ON client_environments.client_id = clients.id
                             JOIN account_team_envs ON account_team_envs.env_id = client_environments.id
                             JOIN account_teams ON account_teams.id = account_team_envs.team_id
@@ -304,15 +347,23 @@ class Scalr_UI_Controller_Guest extends Scalr_UI_Controller
                         }
                     }
 
-                    foreach ($this->db->GetAll(
-                        'SELECT clients.id, clients.name FROM clients JOIN account_users ON account_users.account_id = clients.id WHERE account_users.email = ? AND account_users.type = ?',
+                    foreach ($this->db->GetAll("
+                        SELECT clients.id, clients.name, clients.org, clients.dtadded
+                        FROM clients
+                        JOIN account_users ON account_users.account_id = clients.id
+                        WHERE account_users.email = ? AND account_users.type = ?",
                         array($login, Scalr_Account_User::TYPE_ACCOUNT_OWNER)) as $value) {
+                            $value['dtadded'] = Scalr_Util_DateTime::convertTz($value['dtadded'], 'M j, Y');
                             $userAvailableAccounts[$value['id']] = $value;
                     }
                     $userAvailableAccounts = array_values($userAvailableAccounts);
 
-                    if (count($userAvailableAccounts) == 0)
-                        throw new Scalr_Exception_Core('You don\'t have access to any account');
+                    if (count($userAvailableAccounts) == 0) {
+                        throw new Scalr_Exception_Core(
+                            'You don\'t have access to any account. '
+                          . $ldap->getLog()
+                        );
+                    }
 
                     if (count($userAvailableAccounts) == 1) {
                         $accountId = $userAvailableAccounts[0]['id'];
@@ -326,26 +377,46 @@ class Scalr_UI_Controller_Guest extends Scalr_UI_Controller
                             $this->response->data(array(
                                 'accounts' => $userAvailableAccounts
                             ));
-                            throw new Exception();
+                            throw new Exception(
+                                'There are no account. ' . $ldap->getLog()
+                            );
                         }
                     }
 
                     $user = new Scalr_Account_User();
                     $user = $user->loadByEmail($login, $accountId);
 
-                    if (! $user) {
+                    if (!$user) {
                         $user = new Scalr_Account_User();
                         $user->type = Scalr_Account_User::TYPE_TEAM_USER;
                         $user->status = Scalr_Account_User::STATUS_ACTIVE;
                         $user->create($login, $accountId);
                     }
 
+                    if ($ldap->getUsername() != $ldap->getEmail()) {
+                        $user->setSetting(Scalr_Account_User::SETTING_LDAP_EMAIL, $ldap->getEmail());
+                    } else {
+                        $user->setSetting(Scalr_Account_User::SETTING_LDAP_EMAIL, '');
+                    }
                 } else {
-                    throw new Exception("Incorrect login or password (1)");
+                    throw new Exception(
+                        "Incorrect login or password (1) "
+                      . $ldap->getLog()
+                    );
                 }
             } else {
-                $userAvailableAccounts = $this->db->GetAll('SELECT account_users.id AS userId, clients.id, clients.name FROM account_users
-                    LEFT JOIN clients ON clients.id = account_users.account_id WHERE account_users.email = ?', array($login));
+                $userAvailableAccounts = $this->db->GetAll('
+                    SELECT account_users.id AS userId, clients.id, clients.name, clients.org, clients.dtadded, au.email AS `owner`
+                    FROM account_users
+                    LEFT JOIN clients ON clients.id = account_users.account_id
+                    LEFT JOIN account_users au ON account_users.account_id = au.account_id
+                    WHERE account_users.email = ? AND (au.type = ? OR account_users.type = ?)
+                    GROUP BY userId
+                ', array($login, Scalr_Account_User::TYPE_ACCOUNT_OWNER, Scalr_Account_User::TYPE_SCALR_ADMIN));
+
+                foreach ($userAvailableAccounts as &$ac) {
+                    $ac['dtadded'] = Scalr_Util_DateTime::convertTz($ac['dtadded'], 'M j, Y');
+                }
 
                 if (count($userAvailableAccounts) == 1) {
                     $user = new Scalr_Account_User();
@@ -375,11 +446,11 @@ class Scalr_UI_Controller_Guest extends Scalr_UI_Controller
                 if ($user) {
                     // kaptcha
                     if ($user->loginattempts > 2) {
-                        $text = file_get_contents('http://www.google.com/recaptcha/api/challenge?k=' . urlencode(SCALR_RECAPTCHA_PUBLIC_KEY));
+                        $text = file_get_contents('http://www.google.com/recaptcha/api/challenge?k=' . urlencode($this->getContainer()->config->get('scalr.ui.recaptcha.public_key')));
                         $start = strpos($text, "challenge : '")+13;
                         $length = strpos($text, ",", $start)-$start;
                         $curl = curl_init();
-                        curl_setopt($curl, CURLOPT_URL, 'http://www.google.com/recaptcha/api/verify?privatekey=' . urlencode(SCALR_RECAPTCHA_PRIVATE_KEY) .'&remoteip=my.scalr.net&challenge='.substr($text, $start, $length).'&response='.$this->getParam('scalrCaptcha'));
+                        curl_setopt($curl, CURLOPT_URL, 'http://www.google.com/recaptcha/api/verify?privatekey=' . urlencode($this->getContainer()->config->get('scalr.ui.recaptcha.private_key')) .'&remoteip=my.scalr.net&challenge='.substr($text, $start, $length).'&response='.$this->getParam('scalrCaptcha'));
                         curl_setopt($curl, CURLOPT_TIMEOUT, 10);
                         curl_setopt($curl, CURLOPT_FOLLOWLOCATION, true);
                         curl_setopt($curl, CURLOPT_RETURNTRANSFER, true);
@@ -403,15 +474,10 @@ class Scalr_UI_Controller_Guest extends Scalr_UI_Controller
             }
 
             // valid user, other checks
-            if ($user->getSetting(Scalr_Account_User::SETTING_SECURITY_IP_WHITELIST)) {
-                $ips = explode(',', $user->getSetting(Scalr_Account_User::SETTING_SECURITY_IP_WHITELIST));
-                $inList = false;
-                foreach ($ips as $ip) {
-                    $ip = trim($ip);
-                    if($ip && preg_match('/^'.$ip.'$/', $_SERVER['REMOTE_ADDR']))
-                        $inList = true;
-                }
-                if (!$inList)
+            $whitelist = $user->getVar(Scalr_Account_User::VAR_SECURITY_IP_WHITELIST);
+            if ($whitelist) {
+                $subnets = unserialize($whitelist);
+                if (! Scalr_Util_Network::isIpInSubnets($this->request->getRemoteAddr(), $subnets))
                     throw new Exception('The IP address you are attempting to log in from isn\'t authorized');
             }
 
@@ -430,7 +496,7 @@ class Scalr_UI_Controller_Guest extends Scalr_UI_Controller
         Scalr_Session::create($user->getId());
 
         if (Scalr::config('scalr.auth_mode') == 'ldap') {
-            Scalr_Session::getInstance()->setLdapGroups($this->ldapGroups);
+            $user->applyLdapGroups($this->ldapGroups);
         } else {
             if ($this->getParam('scalrKeepSession') == 'on')
                 Scalr_Session::keepSession();
@@ -441,7 +507,7 @@ class Scalr_UI_Controller_Guest extends Scalr_UI_Controller
 
     public function xLoginFakeAction()
     {
-        $this->response->setBody(file_get_contents(APPPATH . '/www/login.html'));
+        $this->response->setResponse(file_get_contents(APPPATH . '/www/login.html'));
     }
 
     public function xLoginAction()

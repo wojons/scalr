@@ -42,25 +42,20 @@ class LdapClientTest extends TestCase
             $this->markTestSkipped('scalr.connections.ldap section is not defined in the config.');
         }
 
-        $ldap = \Scalr::getContainer()->ldap();
-        $config = $ldap->getConfig();
+        $config = \Scalr::getContainer()->get('ldap.config');
+        $ldap = \Scalr::getContainer()->ldap($config->user, $config->password);
+        $valid = $ldap->isValidUser();
+        $this->assertTrue($valid, 'It expects valid user\'s credentials. ' . $ldap->getLog());
+        $ldap->unbind();
 
-        $valid = $ldap->isValidUser($config->user, $config->password);
-        $this->assertTrue($valid);
+        $ldap = \Scalr::getContainer()->ldap($config->user, '');
+        $valid = $ldap->isValidUser();
+        $this->assertFalse($valid, 'User can be authenticated without password. ' . $ldap->getLog());
+        $ldap->unbind();
 
-        $valid = $ldap->isValidUser($config->user, '');
-        $this->assertFalse($valid);
-
-        $valid = $ldap->isValidUser($config->user, 'ff');
-        $this->assertFalse($valid);
-
-        return;
-        //This is for local environment
-        $groups = $ldap->getUserGroups('airfull1');
-        $this->assertContains('Scalr_Air_Full', $groups);
-
-        $groups = $ldap->getUserGroups('airnest1');
-        $this->assertContains('Scalr_Air_Full', $groups);
-        $this->assertContains('All_Air_Users', $groups);
+        $ldap = \Scalr::getContainer()->ldap($config->user, 'invalidpassword');
+        $valid = $ldap->isValidUser();
+        $this->assertFalse($valid, 'User with invalid password should not be authenticated. ' . $ldap->getLog());
+        $ldap->unbind();
     }
 }

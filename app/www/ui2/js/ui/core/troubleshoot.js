@@ -1,6 +1,5 @@
 Scalr.regPage('Scalr.ui.core.troubleshoot', function (loadParams, moduleParams) {
 	return Ext.create('Ext.form.Panel', {
-		bodyCls: 'x-panel-body-frame',
 		width: 700,
 		title: 'Troubleshoot page',
 

@@ -2,13 +2,14 @@
 
 class Scalr_UI_Response
 {
-    public
-        $body = '',
-        $headers = array(),
-        $httpResponseCode = 200,
-        $jsResponse = array('success' => true),
-        $jsResponseFlag = false,
-        $serverDebugLog = array();
+    public $body = '';
+    public $headers = array();
+    public $httpResponseCode = 200;
+    public $jsResponse = array('success' => true);
+    public $jsResponseFlag = false;
+    public $serverDebugLog = array();
+    public $serverDebugSql = array();
+    public $uiDebugLog = array();
 
     private static $_instance = null;
 
@@ -65,11 +66,6 @@ class Scalr_UI_Response
         );
     }
 
-    public function setBody($body)
-    {
-        $this->body = $body;
-    }
-
     public function setRedirect($url, $code = 302)
     {
         $this->setHeader('Location', $url, true);
@@ -86,24 +82,9 @@ class Scalr_UI_Response
         $this->body = $value;
     }
 
-    /**
-     * Deprecated
-     *
-    public function setJsonResponse($value, $type = "javascript")
-    {
-        $this->setResponse(json_encode($value));
-
-        if ($type == "javascript")
-            $this->setHeader('content-type', 'text/javascript', true);
-        elseif ($type == "text")
-            $this->setHeader('content-type', 'text/html'); // hack for ajax file uploads
-    }
-     */
-
     public function sendResponse()
     {
-        if ($this->jsResponseFlag)
-            $this->prepareJsonResponse();
+        $response = $this->getResponse();
 
         foreach ($this->headers as $header) {
             header($header['name'] . ': ' . $header['value'], $header['replace']);
@@ -123,7 +104,7 @@ class Scalr_UI_Response
             header("Set-Cookie: {$key}={$value}", false);
 
         header("HTTP/1.0 {$this->httpResponseCode}");
-        echo $this->body;
+        echo $response;
     }
 
     public function resetResponse()
@@ -134,6 +115,7 @@ class Scalr_UI_Response
         $this->jsResponse = array('success' => true);
         $this->jsResponseFlag = false;
         $this->serverDebugLog = array();
+        $this->uiDebugLog = array();
     }
 
     public function getResponse()
@@ -148,8 +130,29 @@ class Scalr_UI_Response
     // divide into set headers and set body
     public function prepareJsonResponse()
     {
+        if (count($this->serverDebugSql))
+            $this->jsResponse['scalrDebugModeSql'] = $this->serverDebugSql;
+
         $this->setResponse(json_encode($this->jsResponse));
-        $this->setHeader('X-Scalr-Interface-Version', 1); // for major interface updates
+
+        $output = array();
+        $createdVars = array();
+        foreach ($this->uiDebugLog as $value) {
+            if (isset($createdVars[$value['name']])) {
+                $output[$value['name']][] = $value['value'];
+            } else if (! isset($createdVars[$value['name']])) {
+                if (isset($output[$value['name']])) {
+                    $output[$value['name']] = array($output[$value['name']]);
+                    $output[$value['name']][] = $value['value'];
+                    $createdVars[$value['name']] = true;
+                } else {
+                    $output[$value['name']] = $value['value'];
+                }
+            }
+        }
+
+        if ($output)
+            $this->setHeader('X-Scalr-Debug', json_encode($output));
 
         if (isset($_REQUEST['X-Requested-With']) && $_REQUEST['X-Requested-With'] == 'XMLHttpRequest')
             $this->setHeader('content-type', 'text/html', true); // hack for ajax file uploads and other cases
@@ -159,8 +162,8 @@ class Scalr_UI_Response
 
     public function getModuleName($name)
     {
-        $headers = apache_request_headers();
-        $vPath = isset($headers['X-Scalr-Interface']) ? intval(trim($headers['X-Scalr-Interface'], 'v')) : '2';
+        $v = Scalr_UI_Request::getInstance()->getHeaderVar('Interface');
+        $vPath = !is_null($v) ? intval(trim($v, 'v')) : '2';
         $path = "ui{$vPath}/js/";
 
         $fl = APPPATH . "/www/{$path}{$name}";
@@ -173,6 +176,20 @@ class Scalr_UI_Response
         $nameTm = str_replace('.css', "-{$tm}.css", $nameTm);
 
         return "/{$path}{$nameTm}";
+    }
+
+    public function pageUiHash()
+    {
+        return sha1(join(';', array(
+            $this->getModuleName("init.js"),
+            $this->getModuleName("override.js"),
+            $this->getModuleName("utils.js"),
+            $this->getModuleName("ui-form.js"),
+            $this->getModuleName("ui-grid.js"),
+            $this->getModuleName("ui-plugins.js"),
+            $this->getModuleName("ui.js"),
+            $this->getModuleName("ui.css")
+        )));
     }
 
     public function page($name, $params = array(), $requires = array(), $requiresCss = array(), $requiresData = array())
@@ -194,6 +211,7 @@ class Scalr_UI_Response
             $this->jsResponse['moduleRequiresData'] = $requiresData;
         }
 
+        $this->jsResponse['moduleUiHash'] = $this->pageUiHash();
         $this->jsResponseFlag = true;
     }
 
@@ -228,14 +246,9 @@ class Scalr_UI_Response
         $this->jsResponseFlag = true;
     }
 
-    public function jsonDump($value, $name = 'var')
-    {
-        $this->setHeader('X-Scalr-Debug', $name . ': ' . json_encode($value));
-    }
-
     public function varDump($value, $name = 'var')
     {
-        $this->setHeader('X-Scalr-Debug', $name . ': ' . print_r($value, true));
+        $this->uiDebugLog[] = array('name' => $name, 'value' => $value);
     }
 
     public function debugLog($key, $value)
@@ -251,9 +264,10 @@ class Scalr_UI_Response
         if ($enabled) {
             $ADODB_OUTP = function($msg, $newline) {
                 static $i = 1;
+
                 $msg = str_replace('<br>', '', $msg);
-                $msg = str_replace("\n", '', $msg);
-                Scalr_UI_Response::getInstance()->varDump($msg, sprintf('adodb-%04d', $i++));
+                $msg = str_replace('(mysqli): ', '', $msg);
+                Scalr_UI_Response::getInstance()->serverDebugSql[] = array('sql' => $msg);
             };
 
             $db->debug = -1;

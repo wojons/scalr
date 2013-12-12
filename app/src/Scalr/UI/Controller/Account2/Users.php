@@ -3,9 +3,9 @@ class Scalr_UI_Controller_Account2_Users extends Scalr_UI_Controller
 {
     const CALL_PARAM_NAME = 'userId';
 
-    public static function getApiDefinitions()
+    public function hasAccess()
     {
-        return array('xSave', 'xRemove');
+        return parent::hasAccess() && $this->user->canManageAcl();
     }
 
     public function defaultAction()
@@ -15,9 +15,12 @@ class Scalr_UI_Controller_Account2_Users extends Scalr_UI_Controller
 
     public function viewAction()
     {
-        $this->response->page('ui/account2/users/view.js', array(
-            'permissionsManage' => $this->user->getAccount()->isFeatureEnabled(Scalr_Limits::FEATURE_USERS_PERMISSIONS),
-        ), array('ui/account2/dataconfig.js'), array('ui/account2/users/view.css'), array('account.users', 'account.teams', 'account.groups'));
+        $this->response->page('ui/account2/users/view.js',
+            array(),
+            array('ui/account2/dataconfig.js'),
+            array('ui/account2/users/view.css'),
+            array('account.users', 'account.teams', 'account.roles')
+        );
     }
 
     public function xGroupActionHandlerAction()
@@ -26,53 +29,41 @@ class Scalr_UI_Controller_Account2_Users extends Scalr_UI_Controller
             'ids' => array('type' => 'json'), 'action'
         ));
 
-        if (! ($this->user->getType() == Scalr_Account_User::TYPE_ACCOUNT_OWNER || $this->user->isTeamOwner()))
-            throw new Scalr_Exception_InsufficientPermissions(); // check permissions
-
         $processed = array();
         $errors = array();
+
         foreach($this->getParam('ids') as $userId) {
             try {
                 $user = Scalr_Account_User::init();
                 $user->loadById($userId);
 
-                if ($user->getAccountId() != $this->user->getAccountId())
-                    continue; // check security
-
                 switch($this->getParam('action')) {
                     case 'delete':
-                        if ($user->getType() == Scalr_Account_User::TYPE_TEAM_USER && !$user->isTeamOwner()) {
-                            // could delete only simple user, not team owner
+                        if ($this->user->canRemoveUser($user)) {
                             $user->delete();
                             $processed[] = $user->getId();
                         } else {
-                            throw new Scalr_Exception_Core('You couldn\'t delete team owner or account owner');
+                            throw new Scalr_Exception_Core('Insufficient permissions to remove user');
                         }
                         break;
 
                     case 'activate':
-                        // account owner could do everything (except himself), team owner - only simple users, not team owners
-                        if ($this->user->getType() == Scalr_Account_User::TYPE_ACCOUNT_OWNER && $user->getType() != Scalr_Account_User::TYPE_ACCOUNT_OWNER ||
-                            $this->user->isTeamOwner() && $user->getType() == Scalr_Account_User::TYPE_TEAM_USER && !$user->isTeamOwner()
-                        ) {
+                        if ($this->user->getId() !== $user->getId() && $this->user->canEditUser($user)) {
                             $user->status = Scalr_Account_User::STATUS_ACTIVE;
                             $user->save();
                             $processed[] = $user->getId();
                         } else {
-                            throw new Scalr_Exception_Core('You couldn\'t change status of team owner or account owner');
+                            throw new Scalr_Exception_Core('Insufficient permissions to activate user');
                         }
                         break;
 
                     case 'deactivate':
-                        // account owner could do everything (except himself), team owner - only simple users, not team owners
-                        if ($this->user->getType() == Scalr_Account_User::TYPE_ACCOUNT_OWNER && $user->getType() != Scalr_Account_User::TYPE_ACCOUNT_OWNER ||
-                            $this->user->isTeamOwner() && $user->getType() == Scalr_Account_User::TYPE_TEAM_USER && !$user->isTeamOwner()
-                        ) {
+                        if ($this->user->getId() !== $user->getId() && $this->user->canEditUser($user)) {
                             $user->status = Scalr_Account_User::STATUS_INACTIVE;
                             $user->save();
                             $processed[] = $user->getId();
                         } else {
-                            throw new Scalr_Exception_Core('You couldn\'t change status of team owner or account owner');
+                            throw new Scalr_Exception_Core('Insufficient permissions to deactivate user');
                         }
                         break;
                 }
@@ -87,7 +78,7 @@ class Scalr_UI_Controller_Account2_Users extends Scalr_UI_Controller
             $this->response->success('All users processed');
         } else {
             array_walk($errors, function(&$item) { $item = '- ' . $item; });
-            $this->response->warning(sprintf('Successfully processed only %d from %d users. <br>Such errors have occured:<br>%s', count($processed), $num, join($errors, '')));
+            $this->response->warning(sprintf('Successfully processed only %d from %d users. <br>Following errors occurred:<br>%s', count($processed), $num, join($errors, '')));
         }
 
         $this->response->data(array('processed' => $processed));
@@ -100,151 +91,128 @@ class Scalr_UI_Controller_Account2_Users extends Scalr_UI_Controller
         ));
 
         $user = Scalr_Account_User::init();
+        $validator = new Scalr_Validator();
 
         if (! $this->getParam('email'))
             throw new Scalr_Exception_Core('Email cannot be null');
 
-        if ($this->user->getType() == Scalr_Account_User::TYPE_ACCOUNT_OWNER || $this->user->isTeamOwner()) {
-            if ($this->getParam('id')) {
-                $user->loadById($this->getParam('id'));
+        if ($validator->validateEmail($this->getParam('email'), null, true) !== true)
+            throw new Scalr_Exception_Core('Email should be correct');
 
-                if ($user->getAccountId() == $this->user->getAccountId()) {
-                    if ($this->user->isTeamOwner() && $this->user->getId() != $user->getId()) {
-                        if ($user->getType() == Scalr_Account_User::TYPE_ACCOUNT_OWNER || $user->isTeamOwner())
-                            throw new Scalr_Exception_InsufficientPermissions();
-                    }
-                } else
-                    throw new Scalr_Exception_InsufficientPermissions();
+        if ($this->getParam('id')) {
+            $user->loadById((int)$this->getParam('id'));
 
-                $user->updateEmail($this->getParam('email'));
-            } else {
-                $this->user->getAccount()->validateLimit(Scalr_Limits::ACCOUNT_USERS, 1);
-                $user->create($this->getParam('email'), $this->user->getAccountId());
-                $user->type = Scalr_Account_User::TYPE_TEAM_USER;
-                $newUser = true;
+            if (!$this->user->canEditUser($user)) {
+                throw new Scalr_Exception_InsufficientPermissions();
             }
 
-            $password = $this->getParam('password');
-            if ($password === '' || $newUser && !$password) {
-                $password = $this->getCrypto()->sault(10);
-                $sendResetLink = true;
-            }
-            if ($password) {
-                $user->updatePassword($password);
-            }
+            $user->updateEmail($this->getParam('email'));
+        } else {
+            $this->user->getAccount()->validateLimit(Scalr_Limits::ACCOUNT_USERS, 1);
+            $user->create($this->getParam('email'), $this->user->getAccountId());
 
-            if (in_array($this->getParam('status'), array(Scalr_Account_User::STATUS_ACTIVE, Scalr_Account_User::STATUS_INACTIVE)) &&
-                $user->getType() != Scalr_Account_User::TYPE_ACCOUNT_OWNER
-            )
-                $user->status = $this->getParam('status');
+            $user->type = Scalr_Account_User::TYPE_TEAM_USER;
+            $newUser = true;
+        }
 
-            $user->fullname = $this->getParam('fullname');
-            $user->comments = $this->getParam('comments');
+        $password = $this->getParam('password');
+        if ($password === '' || $newUser && !$password) {
+            $password = $this->getCrypto()->sault(10);
+            $sendResetLink = true;
+        }
+        if ($password) {
+            $user->updatePassword($password);
+        }
 
-            $user->save();
+        if ($user->getId() != $this->user->getId() &&
+            in_array($this->getParam('status'), array(Scalr_Account_User::STATUS_ACTIVE, Scalr_Account_User::STATUS_INACTIVE))) {
+            $user->status = $this->getParam('status');
+        }
 
-            $this->db->BeginTrans();
+        if (!$user->isAccountOwner()) {
+            $user->type = $this->getParam('isAccountAdmin') ? Scalr_Account_User::TYPE_ACCOUNT_ADMIN : Scalr_Account_User::TYPE_TEAM_USER;
+        }
+
+        $user->fullname = $this->getParam('fullname');
+        $user->comments = $this->getParam('comments');
+
+        $user->save();
+
+        $user->setAclRoles($this->getParam('teams'));
+
+        if ($this->getParam('enableApi')) {
+            $keys = Scalr::GenerateAPIKeys();
+            $user->setSetting(Scalr_Account_User::SETTING_API_ENABLED, true);
+            $user->setSetting(Scalr_Account_User::SETTING_API_ACCESS_KEY, $keys['id']);
+            $user->setSetting(Scalr_Account_User::SETTING_API_SECRET_KEY, $keys['key']);
+        }
+
+        $creatorName = $this->user->fullname;
+        if (empty($creatorName)) {
+            $creatorName = $this->user->isAccountOwner() ? 'Account owner' : ($this->user->isAccountAdmin() ? 'Account admin' : 'Team user');
+        }
+
+        if ($newUser) {
             try {
-                $teams = $this->getParam('teams');
-                if ($teams) {
-                    foreach ($teams as $teamId => $teamData) {
-                        if (($this->user->getType() == Scalr_Account_User::TYPE_ACCOUNT_OWNER || $this->user->isTeamOwner($teamId)) && !$user->isTeamOwner($teamId)) {
-                            $team = Scalr_Account_Team::init()->loadById($teamId);
-                            $team->removeUser($user->id);
-                            if (in_array($teamData['permissions'], array(Scalr_Account_Team::PERMISSIONS_GROUPS, Scalr_Account_Team::PERMISSIONS_FULL))) {
-                                $team->addUser($user->id, $teamData['permissions']);
-                                if ($teamData['permissions'] == Scalr_Account_Team::PERMISSIONS_GROUPS) {
-                                    $gr = array();
-                                    foreach ($teamData['groups'] as $groupId) {
-                                        if ($team->isTeamGroup($groupId)) {
-                                            $gr[] = $groupId;
-                                        }
-                                    }
-                                    $team->setUserGroups($user->id, $gr);
-                                }
-                            }
-                        }
-                    }
-                }
+                $clientinfo = array(
+                    'fullname'	=> $user->fullname,
+                    'firstname' => $user->fullname,
+                    'email'		=> $user->getEmail(),
+                    'password'	=> $password,
+                );
+
+                $res = $this->getContainer()->mailer->sendTemplate(
+                    SCALR_TEMPLATES_PATH . '/emails/welcome.eml.php',
+                    array(
+                        "creatorName"     => $creatorName,
+                        "clientFirstname" => $clientinfo['firstname'],
+                        "email"           => $clientinfo['email'],
+                        "password"        => $clientinfo['password'],
+                        "siteUrl"         => "http://{$_SERVER['HTTP_HOST']}",
+                        "wikiUrl"         => \Scalr::config('scalr.ui.wiki_url'),
+                        "supportUrl"      => \Scalr::config('scalr.ui.support_url'),
+                        "isUrl"           => (preg_match('/^http(s?):\/\//i', \Scalr::config('scalr.ui.support_url'))),
+                    ),
+                    $user->getEmail()
+                );
             } catch (Exception $e) {
-                $this->db->RollbackTrans();
-                throw $e;
             }
+        } elseif ($sendResetLink) {
+            try {
+                $hash = $this->getCrypto()->sault(10);
 
-            $this->db->CommitTrans();
+                $user->setSetting(Scalr_Account::SETTING_OWNER_PWD_RESET_HASH, $hash);
 
-            if ($this->getParam('enableApi')) {
-                $keys = Scalr::GenerateAPIKeys();
-                $user->setSetting(Scalr_Account_User::SETTING_API_ENABLED, true);
-                $user->setSetting(Scalr_Account_User::SETTING_API_ACCESS_KEY, $keys['id']);
-                $user->setSetting(Scalr_Account_User::SETTING_API_SECRET_KEY, $keys['key']);
+                $clientinfo = array(
+                    'email'    => $user->getEmail(),
+                    'fullname' => $user->fullname
+                );
+
+                $res = $this->getContainer()->mailer->sendTemplate(
+                    SCALR_TEMPLATES_PATH . '/emails/user_account_confirm.eml',
+                    array(
+                        "{{fullname}}" => $clientinfo['fullname'],
+                        "{{pwd_link}}" => "https://{$_SERVER['HTTP_HOST']}/#/guest/updatePassword/?hash={$hash}"
+                    ),
+                    $clientinfo['email'],
+                    $clientinfo['fullname']
+                );
+            } catch (Exception $e) {
             }
+        }
 
-            if ($newUser) {
+        $userTeams = array();
+        $troles = $this->environment->acl->getUserRoleIdsByTeam(
+            $user->id, array_map(create_function('$v', 'return $v["id"];'), $user->getTeams()), $user->getAccountId()
+        );
+        foreach ($troles as $teamId => $roles) {
+            $userTeams[$teamId] = array(
+                'roles' => $roles,
+            );
+        }
 
-                if ($user->getType() == Scalr_Account_User::TYPE_ACCOUNT_OWNER)
-                {
-                    try {
-                        $clientinfo = array(
-                            'fullname'	=> $user->fullname,
-                            'firstname' => $user->fullname,
-                            'email'		=> $user->getEmail(),
-                            'password'	=> $this->getParam('password')
-                        );
-
-                        $res = $this->getContainer()->mailer->sendTemplate(
-                            SCALR_TEMPLATES_PATH . '/emails/welcome.eml',
-                            array(
-                                "{{client_firstname}}" => $clientinfo['firstname'],
-                                "{{password}}"         => $clientinfo['password'],
-                                "{{site_url}}"         => "http://{$_SERVER['HTTP_HOST']}"
-                            ),
-                            $user->getEmail()
-                        );
-                    } catch (Exception $e) {
-                    }
-                } elseif ($sendResetLink) {
-                    try {
-                        $hash = $this->getCrypto()->sault(10);
-
-                        $user->setSetting(Scalr_Account::SETTING_OWNER_PWD_RESET_HASH, $hash);
-
-                        $clientinfo = array(
-                            'email' => $user->getEmail(),
-                            'fullname'	=> $user->fullname
-                        );
-
-                        $res = $this->getContainer()->mailer->sendTemplate(
-                            SCALR_TEMPLATES_PATH . '/emails/user_account_confirm.eml',
-                            array(
-                                "{{fullname}}" => $clientinfo['fullname'],
-                                "{{pwd_link}}" => "https://{$_SERVER['HTTP_HOST']}/#/guest/updatePassword/?hash={$hash}"
-                            ),
-                            $clientinfo['email'],
-                            $clientinfo['fullname']
-                        );
-                    } catch (Exception $e) {
-                    }
-                }
-            }
-
-            $teams = $this->db->getAll('
-                SELECT account_teams.id, permissions FROM account_teams JOIN account_team_users
-                ON account_teams.id = account_team_users.team_id WHERE account_team_users.user_id = ?
-            ', array($user->id));
-
-            $userTeams = array();
-            foreach ($teams as $team) {
-                $userTeams[$team['id']] = array('groups' => array(), 'permissions' => $team['permissions']);
-                foreach (Scalr_Account_Team::init()->loadById($team['id'])->getUserGroups($user->id) as $group) {
-                    $userTeams[$team['id']]['groups'][] = $group['id'];
-                }
-            }
-
-            $this->response->data(array('user' => $user->getUserInfo(), 'teams' => $userTeams));
-            $this->response->success('User successfully saved');
-        } else
-            throw new Scalr_Exception_InsufficientPermissions();
+        $this->response->data(array('user' => $user->getUserInfo(), 'teams' => $userTeams));
+        $this->response->success('User successfully saved');
     }
 
     public function xRemoveAction()
@@ -252,17 +220,12 @@ class Scalr_UI_Controller_Account2_Users extends Scalr_UI_Controller
         $user = Scalr_Account_User::init();
         $user->loadById($this->getParam('userId'));
 
-        if ($user->getAccountId() == $this->user->getAccountId() &&
-            $user->getType() == Scalr_Account_User::TYPE_TEAM_USER &&
-            !$user->isTeamOwner())
-        {
-            if ($this->user->getType() == Scalr_Account_User::TYPE_ACCOUNT_OWNER || $this->user->isTeamOwner()) {
-                $user->delete();
-                $this->response->success('User successfully removed');
-                return;
-            }
+        if (!$this->user->canRemoveUser($user)) {
+            throw new Scalr_Exception_InsufficientPermissions();
         }
 
-        throw new Scalr_Exception_InsufficientPermissions();
+        $user->delete();
+        $this->response->success('User successfully removed');
+        return;
     }
 }

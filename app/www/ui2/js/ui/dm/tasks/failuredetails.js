@@ -3,7 +3,6 @@ Scalr.regPage('Scalr.ui.dm.tasks.failuredetails', function (loadParams, modulePa
 		fieldDefaults: {
 			anchor: '100%'
 		},
-		bodyCls: 'x-panel-body-frame',
 		width:700,
 		title: 'Deploy task information',
 		items: [{
@@ -23,7 +22,7 @@ Scalr.regPage('Scalr.ui.dm.tasks.failuredetails', function (loadParams, modulePa
 		dockedItems: [{
 			xtype: 'container',
 			dock: 'bottom',
-			cls: 'x-docked-bottom-frame',
+			cls: 'x-docked-buttons',
 			layout: {
 				type: 'hbox',
 				pack: 'center'

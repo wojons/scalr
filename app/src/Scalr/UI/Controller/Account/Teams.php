@@ -9,40 +9,80 @@ class Scalr_UI_Controller_Account_Teams extends Scalr_UI_Controller
         return array('xListTeams', 'xCreate', 'xRemove', 'xAddUser', 'xRemoveUser', 'xAddEnvironment', 'xRemoveEnvironment');
     }
 
+    public function hasAccess()
+    {
+        return parent::hasAccess() && $this->user->canManageAcl();
+    }
+
     public function xListTeamsAction()
     {
+        $acl = $this->getEnvironment()->acl;
+
         $this->request->defineParams(array(
             'sort' => array('type' => 'json')
         ));
 
         // account owner, team owner
-        if ($this->user->getType() == Scalr_Account_User::TYPE_ACCOUNT_OWNER || $this->user->isTeamOwner())
-            $sql = "SELECT id, name FROM account_teams WHERE account_id='" . $this->user->getAccountId() . "'";
-        else
+        if ($this->user->isAccountOwner() || $this->user->isAccountAdmin()) {
+            $sql = "
+                SELECT id, name FROM account_teams
+                WHERE account_id='" . $this->user->getAccountId() . "'
+            ";
+        } else {
             // team user
-            $sql = 'SELECT account_teams.id, name FROM account_teams
-                JOIN account_team_users ON account_teams.id = account_team_users.team_id WHERE user_id="' . $this->user->getId() . '"';
-
+            $sql = '
+                SELECT account_teams.id, name FROM account_teams
+                JOIN account_team_users ON account_teams.id = account_team_users.team_id
+                WHERE user_id="' . $this->user->getId() . '"
+            ';
+        }
         $response = $this->buildResponseFromSql($sql, array('id', 'name'));
         foreach ($response["data"] as &$row) {
+            $team = Scalr_Account_Team::init();
+            $team->loadById($row['id']);
+
+            $row['environments'] = $team->getEnvironments();
             try {
-                $team = Scalr_Account_Team::init();
-                $team->loadById($row['id']);
+                $owner = $team->getOwner();
                 $row['owner'] = array(
-                    'id' => $team->getOwner()->getId(),
-                    'email' => $team->getOwner()->getEmail()
+                    'id'    => $owner->getId(),
+                    'email' => $owner->getEmail(),
                 );
-
-                $row['environments'] = $team->getEnvironments();
-            } catch (Exception $e) {}
-
-            $row['ownerTeam'] = $this->user->isTeamOwner($row['id']);
-            $team = Scalr_Account_Team::init()->loadById($row['id']);
-            $row['groups'] = $team->getGroups();
-            $users = $team->getUsers();
-            foreach ($users as &$user) {
-                $user['groups'] = $team->getUserGroups($user['id']);
+            } catch (Exception $e) {
             }
+
+            $row['ownerTeam'] = !empty($row['owner']['id']) && $row['owner']['id'] == $this->user->getId() ?
+                true : $this->user->isAccountAdmin();
+
+            $row['groups'] = array();
+            //Gets ACL roles of account level
+            $accRoles = $acl->getAccountRoles($this->user->getAccountId());
+            foreach ($accRoles as $accRole) {
+                /* @var $accRole \Scalr\Acl\Role\AccountRoleObject */
+                $row['groups'][] = array(
+                    'id'   => $accRole->getRoleId(),
+                    'name' => $accRole->getName(),
+                );
+            }
+
+            $users = $team->getUsers();
+            $teamUserIds = array_map(function($u){ return $u['id']; }, $users);
+            if (!empty($teamUserIds)) {
+                //Gets ACL roles which are assigned to this user with this team.
+                $userRoles = $acl->getUserRoleIdsByTeam($teamUserIds, $team->id, $this->user->getAccountId());
+                foreach ($users as &$user) {
+                    $user['groups'] = array();
+                    if (isset($userRoles[$user['id']])) {
+                        foreach ($userRoles[$user['id']] as $accountRoleId) {
+                            $user['groups'][] = array(
+                                'id'   => $accountRoleId,
+                                'name' => isset($accRoles[$accountRoleId]) ? $accRoles[$accountRoleId]->getName() : null,
+                            );
+                        }
+                    }
+                }
+            }
+
             $row['users'] = $users;
         }
         $this->response->data($response);
@@ -54,58 +94,16 @@ class Scalr_UI_Controller_Account_Teams extends Scalr_UI_Controller
         return $v;
     }
 
-    public function editAction()
-    {
-        $team = Scalr_Account_Team::init();
-        $team->loadById($this->getParam('teamId'));
-
-        if ($team->accountId == $this->user->getAccountId() &&
-            ($this->user->getType() == Scalr_Account_User::TYPE_ACCOUNT_OWNER || $this->user->isTeamOwner($team->id))
-        ) {
-            $users = $this->db->GetAll("SELECT id, email, fullname FROM account_users WHERE type = ? AND status = ? AND account_id = ?", array(
-                Scalr_Account_User::TYPE_TEAM_USER,
-                Scalr_Account_User::STATUS_ACTIVE,
-                $this->user->getAccountId()
-            ));
-            $teamUsers = $team->getUsers();
-
-            foreach ($teamUsers as $key => $user) {
-                $teamUsers[$key]['groups'] = $team->getUserGroups($user['id']);
-            }
-
-            $envs = $this->db->GetAll("SELECT id, name FROM client_environments WHERE client_id = ?", array(
-                $this->user->getAccountId()
-            ));
-
-            $users = array_udiff($users, $teamUsers, array($this, 'diffUsersCmp'));
-            sort($users);
-
-            $this->response->page('ui/account/teams/create.js', array(
-                'users' => $users,
-                'envs' => $envs,
-                'teamManage' => $this->user->getType() == Scalr_Account_User::TYPE_ACCOUNT_OWNER ? true : false,
-                'permissionsManage' => $this->user->getAccount()->isFeatureEnabled(Scalr_Limits::FEATURE_USERS_PERMISSIONS),
-                'teamCreate' => false,
-                'team' => array(
-                    'id' => $team->id,
-                    'name' => $team->name,
-                    'envs' => $team->getEnvironments(),
-                    'users' => $teamUsers,
-                    'groups' => $team->getGroups()
-                )
-            ));
-        } else
-            throw new Scalr_Exception_InsufficientPermissions();
-    }
-
     public function xCreateAction()
     {
-        if ($this->user->getType() != Scalr_Account_User::TYPE_ACCOUNT_OWNER)
+        if (!$this->user->isAccountOwner())
             throw new Scalr_Exception_InsufficientPermissions();
+
+        $acl = $this->getEnvironment()->acl;
 
         $this->request->defineParams(array(
             'name' => array('type' => 'string', 'validator' => array(
-                Scalr_Validator::NOHTML => true,
+                Scalr_Validator::NOHTML   => true,
                 Scalr_Validator::REQUIRED => true
             )),
             'ownerId' => array('type' => 'int'), 'validator' => array(
@@ -117,10 +115,12 @@ class Scalr_UI_Controller_Account_Teams extends Scalr_UI_Controller
         $this->request->validate();
 
         try {
-            $user = Scalr_Account_User::init();
-            $user->loadById($this->getParam('ownerId'));
-            if ($user->getAccountId() != $this->user->getAccountId())
+            $teamOwner = Scalr_Account_User::init();
+            $teamOwner->loadById($this->getParam('ownerId'));
+            if ($teamOwner->getAccountId() != $this->user->getAccountId()) {
+                //Specified user belongs to different account.
                 throw new Scalr_Exception_InsufficientPermissions();
+            }
         } catch (Exception $e) {
             $this->request->addValidationErrors('ownerId', array($e->getMessage()));
         }
@@ -129,14 +129,16 @@ class Scalr_UI_Controller_Account_Teams extends Scalr_UI_Controller
             if ($this->getParam('envId')) {
                 $env = Scalr_Environment::init();
                 $env->loadById($this->getParam('envId'));
-                if ($env->clientId != $this->user->getAccountId())
+                if ($env->clientId != $this->user->getAccountId()) {
+                    //Specified environment belongs to different account
                     throw new Scalr_Exception_InsufficientPermissions();
+                }
             }
         } catch (Exception $e) {
             $this->request->addValidationErrors('envId', array($e->getMessage()));
         }
 
-        if (! $this->request->isValid()) {
+        if (!$this->request->isValid()) {
             $this->response->failure();
             $this->response->data($this->request->getValidationErrors());
             return;
@@ -145,18 +147,27 @@ class Scalr_UI_Controller_Account_Teams extends Scalr_UI_Controller
         $team = Scalr_Account_Team::init();
         $team->name = $this->getParam('name');
         $team->accountId = $this->user->getAccountId();
+        //Assigns the full access role of account level to the team.
+        //If role does not exist it will be initialized.
+        $team->accountRoleId = $acl->getFullAccessAccountRole($this->user->getAccountId(), true)->getRoleId();
         $team->save();
+
         $team->addUser($this->getParam('ownerId'), Scalr_Account_Team::PERMISSIONS_OWNER);
+        //We need to make sure the specified team owner has AccountAdmin type.
+        if (!$teamOwner->isAccountOwner() && !$teamOwner->isAccountAdmin()) {
+            $teamOwner->type = \Scalr_Account_User::TYPE_ACCOUNT_ADMIN;
+            $teamOwner->save();
+        }
+
         if ($this->getParam('envId'))
             $team->addEnvironment($this->getParam('envId'));
 
-        $this->response->success('Team successfully saved');
+        $this->response->success('Team has been successfully created.');
         $this->response->data(array('teamId' => $team->id));
     }
 
     /**
-     *
-     * @return Scalr_Account_Team
+     * @return \Scalr_Account_Team
      */
     public function getTeam()
     {
@@ -172,43 +183,43 @@ class Scalr_UI_Controller_Account_Teams extends Scalr_UI_Controller
     public function xAddUserAction()
     {
         $this->request->defineParams(array(
-            'userId' => array('type' => 'int'),
+            'userId'          => array('type' => 'int'),
             'userPermissions' => array('type' => 'string', 'validator' => array(
-                Scalr_Validator::REQUIRED => true,
-                Scalr_Validator::RANGE => array(
-                    Scalr_Account_Team::PERMISSIONS_FULL,
-                    Scalr_Account_Team::PERMISSIONS_GROUPS,
-                    Scalr_Account_Team::PERMISSIONS_OWNER
-                )
+                Scalr_Validator::REQUIRED => false,
             )),
-            'userGroups' => array('type' => 'json')
+            'userGroups'       => array('type' => 'json')
         ));
 
         $team = $this->getTeam();
-        if ($this->user->getType() == Scalr_Account_User::TYPE_ACCOUNT_OWNER || $this->user->isTeamOwner($team->id)) {
+
+        $acl = $this->getContainer()->acl;
+
+        if ($this->user->isAccountOwner() || $this->user->isAccountAdmin() || $this->user->isTeamOwner($team->id)) {
             if ($this->request->validate()->isValid()) {
                 $user = Scalr_Account_User::init();
                 $user->loadById($this->getParam('userId'));
                 $this->user->getPermissions()->validate($user);
 
-                if ($this->user->getType() != Scalr_Account_User::TYPE_ACCOUNT_OWNER) {
-                    if ($this->getParam('userPermissions') == Scalr_Account_Team::PERMISSIONS_OWNER ||
-                        $team->isTeamOwner($user->id)
-                    ) {
+                if (!$this->user->isAccountOwner()) {
+                    if ($this->getParam('userPermissions') == Scalr_Account_Team::PERMISSIONS_OWNER) {
                         throw new Scalr_Exception_InsufficientPermissions();
                     }
                 }
 
                 $team->addUser($user->id, $this->getParam('userPermissions'));
 
-                $groups = array();
-                foreach ($this->getParam('userGroups') as $id) {
-                    if ($team->isTeamGroup($id))
-                        $groups[] = $id;
-                }
-                $team->setUserGroups($user->id, $groups);
+                $roles = $acl->getAccountRoles($this->user->getAccountId());
 
-                $this->response->success('User successfully added to team');
+                $groups = array();
+                foreach ((array)$this->getParam('userGroups') as $id) {
+                    if (isset($roles[$id])) {
+                        $groups[] = $id;
+                    }
+                }
+
+                $acl->setUserRoles($team->id, $user->id, $groups, $this->user->getAccountId());
+
+                $this->response->success('User has been successfully added to the team.');
             } else {
                 $this->response->failure();
                 $this->response->data($this->request->getValidationErrors());
@@ -222,19 +233,19 @@ class Scalr_UI_Controller_Account_Teams extends Scalr_UI_Controller
     public function xRemoveUserAction()
     {
         $team = $this->getTeam();
-        if ($this->user->getType() == Scalr_Account_User::TYPE_ACCOUNT_OWNER || $this->user->isTeamOwner($team->id)) {
+        if ($this->user->canManageAcl() || $this->user->isTeamOwner($team->id)) {
             $user = Scalr_Account_User::init();
             $user->loadById($this->getParam('userId'));
             $this->user->getPermissions()->validate($user);
 
-            if ($this->user->getType() != Scalr_Account_User::TYPE_ACCOUNT_OWNER) {
+            if (!$this->user->isAccountOwner()) {
                 if ($team->isTeamOwner($user->id)) {
                     throw new Scalr_Exception_InsufficientPermissions();
                 }
             }
 
             $team->removeUser($user->id);
-            $this->response->success('User successfully removed from team');
+            $this->response->success('User has been successfully removed from the team.');
         } else {
             throw new Scalr_Exception_InsufficientPermissions();
         }
@@ -243,13 +254,13 @@ class Scalr_UI_Controller_Account_Teams extends Scalr_UI_Controller
     public function xAddEnvironmentAction()
     {
         $team = $this->getTeam();
-        if ($this->user->getType() == Scalr_Account_User::TYPE_ACCOUNT_OWNER) {
+        if ($this->user->isAccountOwner()) {
             $env = Scalr_Environment::init();
             $env->loadById($this->getParam('envId'));
             $this->user->getPermissions()->validate($env);
 
             $team->addEnvironment($env->id);
-            $this->response->success('Environment successfully added to team');
+            $this->response->success('Environment has been successfully added to the team.');
         } else {
             throw new Scalr_Exception_InsufficientPermissions();
         }
@@ -258,256 +269,29 @@ class Scalr_UI_Controller_Account_Teams extends Scalr_UI_Controller
     public function xRemoveEnvironmentAction()
     {
         $team = $this->getTeam();
-        if ($this->user->getType() == Scalr_Account_User::TYPE_ACCOUNT_OWNER) {
+        if ($this->user->isAccountOwner()) {
             $env = Scalr_Environment::init();
             $env->loadById($this->getParam('envId'));
             $this->user->getPermissions()->validate($env);
 
             $team->removeEnvironment($env->id);
-            $this->response->success('Environment successfully removed from team');
+            $this->response->success('Environment has been successfully removed from the team.');
         } else {
             throw new Scalr_Exception_InsufficientPermissions();
         }
-    }
-
-    public function xSaveAction()
-    {
-        $this->request->defineParams(array(
-            'envs' => array('type' => 'json'),
-            'users' => array('type' => 'json'),
-            'teamName', 'teamOwner'
-        ));
-
-        if (! $this->getParam('teamName'))
-            throw new Exception('Team name should not be empty');
-
-        $team = Scalr_Account_Team::init();
-        if ($this->getParam('teamId')) {
-            $team->loadById($this->getParam('teamId'));
-            if (! ($team->accountId == $this->user->getAccountId() &&
-                    ($this->user->getType() == Scalr_Account_User::TYPE_ACCOUNT_OWNER || $this->user->isTeamOwner($team->id))
-            ))
-                throw new Scalr_Exception_InsufficientPermissions();
-        } else {
-            if ($this->user->getType() != Scalr_Account_User::TYPE_ACCOUNT_OWNER)
-                throw new Scalr_Exception_InsufficientPermissions();
-            $team->accountId = $this->user->getAccountId();
-        }
-
-        $this->db->BeginTrans();
-
-        try {
-            if ($this->user->getType() == Scalr_Account_User::TYPE_ACCOUNT_OWNER) {
-                $team->name = $this->getParam('teamName');
-            }
-            $team->save();
-
-            if ($this->user->getType() == Scalr_Account_User::TYPE_ACCOUNT_OWNER) {
-                $team->clearUsers();
-                foreach ($this->getParam('users') as $user) {
-                    $team->addUser($user['id'], $user['permissions']);
-
-                    $gr = array();
-                    if ($user['permissions'] == Scalr_Account_Team::PERMISSIONS_GROUPS) {
-                        foreach ($user['groups'] as $value) {
-                            if ($team->isTeamGroup($value['id']))
-                                $gr[] = $value['id'];
-                        }
-                    }
-                    $team->clearUserGroups($user['id']);
-                    $team->setUserGroups($user['id'], $gr);
-                }
-
-                $team->clearEnvironments();
-                foreach ($this->getParam('envs') as $id)
-                    $team->addEnvironment($id);
-            } else {
-                $owner = $team->getOwner();
-                $team->clearUsers();
-                foreach ($this->getParam('users') as $user) {
-                    if (! in_array($user['permissions'], array(
-                        Scalr_Account_Team::PERMISSIONS_FULL,
-                        Scalr_Account_Team::PERMISSIONS_GROUPS,
-                        Scalr_Account_Team::PERMISSIONS_OWNER
-                    )))
-                        $user['permissions'] = Scalr_Account_Team::PERMISSIONS_GROUPS;
-
-                    if ($user['permissions'] == Scalr_Account_Team::PERMISSIONS_OWNER && $user['id'] != $owner->id)
-                        $user['permissions'] = Scalr_Account_Team::PERMISSIONS_GROUPS;
-
-                    $team->addUser($user['id'], $user['permissions']);
-
-                    $gr = array();
-                    if ($user['permissions'] == Scalr_Account_Team::PERMISSIONS_GROUPS) {
-                        foreach ($user['groups'] as $value) {
-                            if ($team->isTeamGroup($value['id']))
-                                $gr[] = $value['id'];
-                        }
-                    }
-                    $team->clearUserGroups($user['id']);
-                    $team->setUserGroups($user['id'], $gr);
-                }
-            }
-        } catch (Exception $e) {
-            $this->db->RollbackTrans();
-            throw $e;
-        }
-
-        $this->db->CommitTrans();
-        $this->response->success('Team successfully saved');
     }
 
     public function xRemoveAction()
     {
         $team = Scalr_Account_Team::init();
         $team->loadById($this->getParam('teamId'));
-        if ($this->user->getType() == Scalr_Account_User::TYPE_ACCOUNT_OWNER && $team->accountId == $this->user->getAccountId())
+
+        if ($this->user->isAccountOwner() && $team->accountId == $this->user->getAccountId()) {
             $team->delete();
-        else
-            throw new Scalr_Exception_InsufficientPermissions();
-
-        $this->response->success();
-    }
-
-    /*
-     * Permission Groups
-     */
-    public function getPermissions($path)
-    {
-        $result = array();
-        foreach(scandir($path) as $p) {
-            if ($p == '.' || $p == '..' || $p == '.svn')
-                continue;
-
-            $p1 = $path . '/' . $p;
-
-            if (is_dir($p1)) {
-                $result = array_merge($result, $this->getPermissions($p1));
-                continue;
-            }
-
-            $p1 = str_replace(SRCPATH . '/', '', $p1);
-            $p1 = str_replace('.php', '', $p1);
-            $p1 = str_replace('/', '_', $p1);
-
-            if (method_exists($p1, 'getPermissionDefinitions'))
-                $result[str_replace('Scalr_UI_Controller_', '', $p1)] = array_values(array_unique(array_values($p1::getPermissionDefinitions())));
-        }
-
-        return $result;
-    }
-
-
-    public function xCreatePermissionGroupAction()
-    {
-        $team = Scalr_Account_Team::init()->loadById($this->getParam(self::CALL_PARAM_NAME));
-        $this->user->getPermissions()->validate($team);
-        if (! ($this->user->getType() == Scalr_Account_User::TYPE_ACCOUNT_OWNER || $team->isTeamOwner($this->user->getId())))
-            throw new Scalr_Exception_InsufficientPermissions();
-
-        $this->request->defineParams(array(
-            'name' => array('type' => 'string', 'validator' => array(
-                Scalr_Validator::REQUIRED => true,
-                Scalr_Validator::NOHTML => true
-            ))
-        ));
-
-        $this->request->validate();
-        if ($this->request->isValid()) {
-            $group = Scalr_Account_Group::init();
-            $group->name = $this->getParam('name');
-            $group->teamId = $team->id;
-            $group->isActive = 1;
-            $group->save();
-
-            $this->response->data(array('group' => array('id' => $group->id, 'name' => $group->name)));
         } else {
-            $this->response->failure($this->request->getValidationErrorsMessage());
+            throw new Scalr_Exception_InsufficientPermissions();
         }
-    }
-
-    public function xSavePermissionGroupAction()
-    {
-        $this->request->defineParams(array(
-            'access' => array('type' => 'array'),
-            'permission' => array('type' => 'array'),
-            'controller' => array('type' => 'array')
-        ));
-
-        $team = Scalr_Account_Team::init()->loadById($this->getParam(self::CALL_PARAM_NAME));
-        $this->user->getPermissions()->validate($team);
-        if (! ($this->user->getType() == Scalr_Account_User::TYPE_ACCOUNT_OWNER || $team->isTeamOwner($this->user->getId())))
-            throw new Scalr_Exception_InsufficientPermissions();
-
-        $group = Scalr_Account_Group::init();
-        $group->loadById($this->getParam('groupId'));
-        if ($group->teamId != $team->id)
-            throw new Scalr_Exception_InsufficientPermissions();
-
-        $permissions = $this->getPermissions(SRCPATH . '/Scalr/UI/Controller');
-        $rules = array();
-        $access = $this->getParam('access');
-        $perms = $this->getParam('permission');
-        $controller = $this->getParam('controller');
-
-        foreach ($controller as $key => $value) {
-            if (array_key_exists($key, $permissions)) {
-                $rules[$key] = array();
-
-                if ($access[$key] == 'FULL')
-                    $rules[$key][] = 'FULL';
-                else if ($access[$key] == 'VIEW') {
-                    $rules[$key][] = 'VIEW';
-                    if (isset($perms[$key])) {
-                        foreach ($perms[$key] as $k => $val) {
-                            if (in_array($k, $permissions[$key]))
-                                $rules[$key][] = $k;
-                        }
-                    }
-                }
-            }
-        }
-
-        foreach ($rules as $key => $value)
-            $rules[$key] = implode(',', $value);
-
-        $group->setPermissions($rules);
-        $this->response->success();
-    }
-
-    public function xRemovePermissionGroupAction()
-    {
-        $team = Scalr_Account_Team::init()->loadById($this->getParam(self::CALL_PARAM_NAME));
-        $this->user->getPermissions()->validate($team);
-        if (! ($this->user->getType() == Scalr_Account_User::TYPE_ACCOUNT_OWNER || $team->isTeamOwner($this->user->getId())))
-            throw new Scalr_Exception_InsufficientPermissions();
-
-        $group = Scalr_Account_Group::init();
-        $group->loadById($this->getParam('groupId'));
-        if ($group->teamId != $team->id)
-            throw new Scalr_Exception_InsufficientPermissions();
-
-        $group->delete();
 
         $this->response->success();
-    }
-
-    public function xGetUsersAction()
-    {
-        $sql = "SELECT id, email, fullname FROM account_users WHERE account_id = {$this->user->getAccountId()} ORDER BY email";
-        $users = $this->db->GetAll($sql);
-        $sql = "SELECT user_id FROM account_team_users WHERE team_id = {$this->getParam('teamId')}";
-        $teamUsers = $this->db->GetAll($sql);
-        $user = array();
-        foreach ($users as $key => $userValue) {
-            $inTeam = false;
-            foreach ($teamUsers as $key => $teamValue) {
-                if($userValue['id'] == $teamValue['user_id'])
-                    $inTeam = true;
-            }
-            if(!$inTeam)
-                $user[] = $userValue;
-        }
-        $this->response->data(array('data'=>$user));
     }
 }

@@ -28,5 +28,20 @@ if ($JobLauncher->GetProcessName() != 'DBQueueEvent') {
     }
 }
 
+/*
+if ($JobLauncher->GetProcessName() == 'EBSManager') {
+    print "SET DEBUG LEVEL\n";
+    $Logger->removeAllAppenders();
+    $Logger->resetConfiguration();
+    $Logger->addAppender(new LoggerAppenderConsole());
+    $Logger->setLevel(LoggerOptionConverter::toLevel('DEBUG', LoggerLevel::getLevelDebug()));
+
+    Logger::getRootLogger()->removeAllAppenders();
+    Logger::getRootLogger()->resetConfiguration();
+    Logger::getRootLogger()->addAppender(new LoggerAppenderConsole());
+    Logger::getRootLogger()->setLevel(LoggerOptionConverter::toLevel('DEBUG', LoggerLevel::getLevelDebug()));
+}
+*/
+
 $Logger->info(sprintf("Starting %s cronjob...", $JobLauncher->GetProcessName()));
 $JobLauncher->Launch(7, 180);

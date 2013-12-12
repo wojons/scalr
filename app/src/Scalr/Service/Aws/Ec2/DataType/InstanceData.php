@@ -456,6 +456,26 @@ class InstanceData extends AbstractEc2DataType
     }
 
     /**
+     * GetPasswordData action
+     *
+     * Retrieves the encrypted administrator password for an instance running Windows.
+     *
+     * Note!
+     * The Windows password is only generated the first time an AMI is launched.
+     * It is not generated for rebundled AMIs or after the password is changed on an instance.
+     * The password is encrypted using the key pair that you provided.
+     *
+     * @return  GetPasswordDataResponseData   Returns object which represents console output.
+     * @throws  ClientException
+     * @throws  Ec2Exception
+     */
+    public function getPasswordData()
+    {
+        $this->throwExceptionIfNotInitialized();
+        return $this->getEc2()->instance->getPasswordData($this->instanceId);
+    }
+
+    /**
      * AttachNetworkInterface action
      *
      * Attaches a network interface to an instance.
@@ -491,6 +511,23 @@ class InstanceData extends AbstractEc2DataType
     {
         $this->throwExceptionIfNotInitialized();
         return $this->getEc2()->instance->modifyAttribute($this->instanceId, $attribute, $value);
+    }
+
+    /**
+     * DescribeInstanceAttribute action
+     *
+     * Describes an attribute of the specified instance
+     *
+     * @param   InstanceAttributeType|string $attribute  The attribute.
+     * @return  mixed                 Returns attribute value. It may be scalar value or object
+     *                                depends on attribute.
+     * @throws  ClientException
+     * @throws  Ec2Exception
+     */
+    public function describeAttribute($attribute)
+    {
+        $this->throwExceptionIfNotInitialized();
+        return $this->getEc2()->instance->describeAttribute($this->instanceId, $attribute);
     }
 
     /**

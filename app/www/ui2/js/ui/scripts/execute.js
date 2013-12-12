@@ -1,6 +1,5 @@
 Scalr.regPage('Scalr.ui.scripts.execute', function (loadParams, moduleParams) {
 	var form = Ext.create('Ext.form.Panel', {
-		bodyCls: 'x-panel-body-frame',
 		width: 900,
 		title: 'Execute script',
 		fieldDefaults: {
@@ -56,7 +55,7 @@ Scalr.regPage('Scalr.ui.scripts.execute', function (loadParams, moduleParams) {
 				}
 			}, {
 				xtype: 'combo',
-				store: [ ['1', 'Synchronous'], ['0', 'Asynchronous']],
+				store: [ ['1', 'Blocking'], ['0', 'Non-blocking']],
 				editable: false,
 				queryMode: 'local',
 				name: 'scriptIsSync',
@@ -135,7 +134,7 @@ Scalr.regPage('Scalr.ui.scripts.execute', function (loadParams, moduleParams) {
 		dockedItems: [{
 			xtype: 'container',
 			dock: 'bottom',
-			cls: 'x-docked-bottom-frame',
+			cls: 'x-docked-buttons',
 			layout: {
 				type: 'hbox',
 				pack: 'center'
@@ -198,7 +197,6 @@ Scalr.regPage('Scalr.ui.scripts.execute', function (loadParams, moduleParams) {
 				}
 			}, {
 				xtype: 'button',
-				margin: '0 0 0 5',
 				text: 'Cancel',
 				handler: function() {
 					Scalr.event.fireEvent('close');

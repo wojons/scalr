@@ -1,12 +1,3 @@
-Ext.Ajax.on('requestcomplete', function(conn, response) {
-	var resp = Ext.isFunction(response.getResponseHeader);
-	if (! Scalr.state['pageInterfaceVersion'] && resp) {
-		Scalr.state['pageInterfaceVersion'] = response.getResponseHeader('X-Scalr-Interface-Version');
-	} else if (resp && response.getResponseHeader('X-Scalr-Interface-Version') && response.getResponseHeader('X-Scalr-Interface-Version') != Scalr.state['pageInterfaceVersion']) {
-		Scalr.message.Warning("New version of user interface has been released. Please save your work and refresh the page.");
-	}
-});
-
 // catch server error page (404, 403, timeOut and other)
 Ext.Ajax.on('requestexception', function(conn, response, options) {
 	if (options.hideErrorMessage == true)
@@ -29,9 +20,25 @@ Ext.Ajax.on('requestexception', function(conn, response, options) {
 			//Scalr.timeoutHandler.forceCheck = true;
 			//Scalr.timeoutHandler.restart();
 		}
-		Scalr.message.Error('Cannot proceed your request at the moment. Please try again later.');
+		Scalr.message.Error('Cannot proceed with your request. Please try again later.');
 	}
 });
+
+(function() {
+    var handler = function(conn, response) {
+        if (Scalr.flags['betaMode']) {
+            try {
+                var h = response.getResponseHeader('X-Scalr-Debug');
+                if (h) {
+                    console.debug(Ext.decode(h, true));
+                }
+            } catch (e) {}
+        }
+    }
+
+    Ext.Ajax.on('requestcomplete', handler);
+    Ext.Ajax.on('requestexception', handler);
+})();
 
 Scalr.storage = {
 	prefix: 'scalr-',
@@ -124,6 +131,7 @@ Scalr.state = {
 	pageSuspend: false,
 	pageSuspendForce: false,
 	pageRedirectParams: {},
+    pageRedirectCounter: 0,
 	userNeedLogin: false
 };
 
@@ -240,6 +248,16 @@ Scalr.data = {
 	}
 };
 
+// fix, remove old storage data, it isn't compatible with 4.2
+if (!localStorage.getItem('scalr-grid-ui-fix42')) {
+    for (var i in localStorage) {
+        if (/^scalr-grid-.*/.test(i) && i != 'scalr-grid-ui-page-size')
+            localStorage.removeItem(i);
+    }
+    localStorage.removeItem('scalr-system-link-statistic');
+    localStorage.setItem('scalr-grid-ui-fix42', 'commit');
+}
+
 Ext.getBody().setStyle('overflow', 'hidden');
 Ext.tip.QuickTipManager.init();
 
@@ -292,6 +310,8 @@ Scalr.event.on('maximize', function () {
 	} else {
 		if (item.savedWidth)
 			item.width = item.savedWidth;
+        delete item.savedWidth;
+        delete item.height;
 		item.scalrOptions.maximize = '';
 	}
 
@@ -315,16 +335,96 @@ Scalr.event.on('clear', function (url) {
 		window.onhashchange(true);
 });
 
+/*
+ * Messages system
+ */
+Ext.ns('Scalr.message');
+
+Scalr.message = {
+    queue: [],
+    Add: function(message, type) {
+        if (Ext.isArray(message)) {
+            var s = '';
+            for (var i = 0; i < message.length; i++)
+                '<li>' + message[i] + '</li>'
+            message = '<ul>' + s + '</ul>';
+        }
+
+        this.Flush(false, message);
+
+        var tip = new Ext.tip.ToolTip({
+            autoShow: true,
+            autoHide: false,
+            closable: true,
+            closeAction: 'destroy',
+            header: false,
+            layout: {
+                type: 'hbox'
+            },
+            minWidth: 200,
+            maxWidth: 700,
+            dt: Ext.Date.add(new Date(), Ext.Date.SECOND, 2),
+            type: type,
+            cls: 'x-tip-message x-tip-message-' + type,
+            items: [{
+                xtype: 'component',
+                flex: 1,
+                tpl: '{message}',
+                data: {
+                    message: message
+                }
+            }, {
+                xtype: 'tool',
+                type: 'close',
+                handler: function () {
+                    this.up('tooltip').close();
+                }
+            }],
+            onDestroy: function () {
+                Ext.Array.remove(Scalr.message.queue, this);
+            }
+        });
+
+        tip.el.alignTo(Ext.getBody(), 't-t', [0, 15]);
+        Scalr.message.queue.push(tip);
+    },
+    Error: function(message) {
+        this.Add(message, 'error');
+    },
+    Success: function(message) {
+        this.Add(message, 'success');
+    },
+    Warning: function(message) {
+        this.Add(message, 'warning');
+    },
+    InfoTip: function(message, el, params) {
+        var config = {
+            target: el,
+            anchorToTarget: true,
+            anchor: 'top',
+            html: message,
+            autoShow: true,
+            listeners: {
+                hide: function() {
+                    this.destroy();
+                }
+            }
+        };
+        if (params !== undefined) {
+            Ext.apply(config, params);
+        }
+        new Ext.tip.ToolTip(config);
+    },
+    Flush: function(force, message) {
+        var i = this.queue.length - 1, dt = new Date();
+
+        while (i >= 0) {
+            if (force || this.queue[i].dt < dt || this.queue[i].child('component').initialConfig.data.message == message) {
+                this.queue[i].destroy();
+            }
+            i--;
+        }
+    }
+};
+
 Ext.Ajax.timeout = 60000;
-
-(function preload(){
-	var url = [
-		'/ui2/images/icons/loading.gif',
-		'/ui2/js/extjs-4.1/theme/images/topmenu/scalr_logo_icon_36x27.png'
-	];
-
-	for (var i = 0; i < url.length; i++) {
-		var image = new Image();
-		image.src = url[i];
-	}
-})();

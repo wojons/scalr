@@ -11,6 +11,7 @@ class Scalr_UI_Controller_Tools_Aws extends Scalr_UI_Controller
 
         return $locations;
     }
+
     public function autoSnapshotSettingsAction()
     {
         $object_type = '';
@@ -20,7 +21,7 @@ class Scalr_UI_Controller_Tools_Aws extends Scalr_UI_Controller
         if($this->getParam('type') == 'rds')
             $object_type = AUTOSNAPSHOT_TYPE::RDSSnap;
 
-        $infos = $this->db->GetRow("SELECT * FROM autosnap_settings WHERE objectid = ? AND object_type = ? AND env_id = ?",
+        $infos = $this->db->GetRow("SELECT * FROM autosnap_settings WHERE objectid = ? AND object_type = ? AND env_id = ? LIMIT 1",
             array(
                 $this->getParam('objectId'),
                 $object_type,
@@ -40,7 +41,7 @@ class Scalr_UI_Controller_Tools_Aws extends Scalr_UI_Controller
 
         if ($this->getParam('enabling'))
         {
-            $infos = $this->db->GetRow("SELECT * FROM autosnap_settings WHERE objectid = ? AND object_type = ? AND env_id = ?",
+            $infos = $this->db->GetRow("SELECT * FROM autosnap_settings WHERE objectid = ? AND object_type = ? AND env_id = ? LIMIT 1",
             array(
                 $this->getParam('objectId'),
                 $object_type,

@@ -1,22 +1,21 @@
 Scalr.regPage('Scalr.ui.db.backups.view', function (loadParams, moduleParams) {
 	//TODO back-end part
 	var panel = Ext.create('Ext.panel.Panel', {
-		title: 'DB Backups',
+		title: 'DB backups',
 		scalrOptions: {
 			maximize: 'all'
 			//reload: false
 		},
 		dataStore: {},
 		scalrReconfigureParams: {},
-		autoScroll: true,
-		items: [{
-			xtype: 'db.backup.monthcalendar',
-			itemId: 'dbbackupsScalrMonthcalendar'
-		}, {
-			xtype: 'db.backup.daycalendar',
-			itemId: 'dbbackupsScalrDaycalendar',
-			hidden: true
-		}],
+
+        layout: 'fit',
+		items: {
+            autoScroll: true,
+			xtype: 'db.backup.calendar',
+			itemId: 'dbbackupsScalrCalendar',
+            backups: moduleParams['backups']
+		},
 
 		tools: [{
 			xtype: 'favoritetool',
@@ -30,9 +29,109 @@ Scalr.regPage('Scalr.ui.db.backups.view', function (loadParams, moduleParams) {
 			xtype: 'toolbar',
 			dock: 'top',
 			items: [{
+                xtype: 'button',
+                iconCls: 'scalr-ui-dbbackups-button-prev',
+                width: 29,
+                handler: function() {
+                    var monthField = panel.down('#dateSelector'),
+                        date = new Date(monthField.getValue()),
+                        farmIdCombobox = panel.down('#farmId'),
+                        calendar = panel.down('#dbbackupsScalrCalendar');
+
+                    date = Ext.Date.add(date, Ext.Date.MONTH, -1);
+                    monthField.setValue(date);
+                    calendar.checkCacheThenRefreshCalendar(date, farmIdCombobox.getValue());
+                }
+            }, {
+                xtype: 'datefield',
+                editable: false,
+                selectMonth: null,
+                createPicker: function () {
+                    var me = this,
+                        format = Ext.String.format;
+                    return Ext.create('Ext.picker.Month', {
+                        pickerField: me,
+                        ownerCt: me.ownerCt,
+                        renderTo: document.body,
+                        floating: true,
+                        hidden: true,
+                        focusOnShow: true,
+                        minDate: me.minValue,
+                        maxDate: me.maxValue,
+                        disabledDatesRE: me.disabledDatesRE,
+                        disabledDatesText: me.disabledDatesText,
+                        disabledDays: me.disabledDays,
+                        disabledDaysText: me.disabledDaysText,
+                        format: me.format,
+                        showToday: me.showToday,
+                        startDay: me.startDay,
+                        minText: format(me.minText, me.formatDate(me.minValue)),
+                        maxText: format(me.maxText, me.formatDate(me.maxValue)),
+                        listeners: {
+                            select: { scope: me, fn: me.onSelect     },
+                            monthdblclick: { scope: me, fn: me.onOKClick     },
+                            yeardblclick: { scope: me, fn: me.onOKClick     },
+                            OkClick: { scope: me, fn: me.onOKClick     },
+                            CancelClick: { scope: me, fn: me.onCancelClick }
+                        },
+                        keyNavConfig: {
+                            esc: function () {
+                                me.collapse();
+                            }
+                        }
+                    });
+                },
+                onCancelClick: function () {
+                    var me = this;
+                    me.selectMonth = null;
+                    me.collapse();
+                },
+                onOKClick: function () {
+                    var me = this;
+                    if (me.selectMonth) {
+                        me.setValue(me.selectMonth);
+                        me.fireEvent('select', me, me.selectMonth);
+                    }
+                    me.collapse();
+                },
+                onSelect: function (m, d) {
+                    var me = this;
+                    me.selectMonth = new Date(( d[0] + 1 ) + '/1/' + d[1]);
+                },
+                format: 'F Y',
+                value: new Date(),
+                itemId: 'dateSelector',
+                margin: '0 0 0 6',
+                width: 170,
+                listeners: {
+                    select: function() {
+                        var me = this,
+                            date = new Date(me.getValue()),
+                            farmIdCombobox = panel.down('#farmId'),
+                            calendar = panel.down('#dbbackupsScalrCalendar');
+                        calendar.checkCacheThenRefreshCalendar(date, farmIdCombobox.getValue());
+                    }
+                }
+            }, {
+                xtype: 'button',
+                iconCls: 'scalr-ui-dbbackups-button-next',
+                margin: '0 0 0 6',
+                width: 29,
+                handler: function() {
+                    var monthField = panel.down('#dateSelector'),
+                        date = new Date(monthField.getValue()),
+                        farmIdCombobox = panel.down('#farmId'),
+                        calendar = panel.down('#dbbackupsScalrCalendar');
+
+                    date = Ext.Date.add(date, Ext.Date.MONTH, +1);
+                    monthField.setValue(date);
+                    calendar.checkCacheThenRefreshCalendar(date, farmIdCombobox.getValue());
+                }
+            },  {
 				xtype: 'combo',
 				fieldLabel: 'Farm',
 				labelWidth: 34,
+                margin: '0 0 0 20',
 				width: 250,
 				matchFieldWidth: false,
 				listConfig: {
@@ -51,135 +150,27 @@ Scalr.regPage('Scalr.ui.db.backups.view', function (loadParams, moduleParams) {
 				displayField: 'name',
 				listeners: {
 					change: function() {
-						panel.getListbyDateAndSet({
-							farmId: this.getValue()
-						});
+                        var me = this,
+                            monthField = panel.down('#dateSelector'),
+                            date = new Date(monthField.getValue()),
+                            calendar = panel.down('#dbbackupsScalrCalendar');
+                        calendar.checkCacheThenRefreshCalendar(date, me.getValue());
 					}
 				}
-			}, ' ', {
-				iconCls: 'x-tbar-page-prev',
-				ui: 'paging',
-				xtype: 'button',
-				handler: function() {
-					var dt = new Date(this.next().getValue());
-					dt = Ext.Date.add(dt, Ext.Date.MONTH, -1);
-					this.next().setValue(dt);
-					panel.down('#dbbackupsScalrMonthcalendar').setCurrentDate(dt);
-					panel.getListbyDateAndSet();
-				}
-			}, {
-				xtype: 'monthfield',
-				format: 'F Y',
-				value: new Date(),
-				itemId: 'dateSelector',
-				width: 178,
-				listeners: {
-					select: function (picker, value) {
-						panel.down('#dbbackupsScalrMonthcalendar').setCurrentDate(new Date(value));
-						panel.getListbyDateAndSet();
-					}
-				}
-			}, {
-				iconCls: 'x-tbar-page-next',
-				ui: 'paging',
-				xtype: 'button',
-				handler: function() {
-					var dt = new Date(this.prev().getValue());
-					dt = Ext.Date.add(dt, Ext.Date.MONTH, 1);
-					this.prev().setValue(dt);
-					panel.down('#dbbackupsScalrMonthcalendar').setCurrentDate(dt);
-					panel.getListbyDateAndSet();
-				}
-			}, '-', {
-                iconCls: 'x-tbar-loading',
-                ui: 'paging',
+			},  {
                 xtype: 'button',
+                text: 'Refresh',
+                margin: '0 0 0 20',
+                width: 120,
                 handler: function() {
-                    panel.getListbyDateAndSet();
+                    var monthField = panel.down('#dateSelector'),
+                        date = new Date(monthField.getValue()),
+                        farmIdCombobox = panel.down('#farmId'),
+                        calendar = panel.down('#dbbackupsScalrCalendar');
+                    calendar.getBackupsThenRefreshCalendar(date, farmIdCombobox.getValue());
                 }
-            },' ', {
-				hidden: true,
-				xtype: 'button',
-				text: 'Back to the month view',
-				width: 160,
-				itemId: 'monthView',
-				handler: function () {
-					this.up('panel').down('#dbbackupsScalrMonthcalendar').show();
-					this.up('panel').down('#dbbackupsScalrDaycalendar').hide();
-					this.hide();
-				}
-			}]
-		}],
-		getListbyDateAndSet: function () {
-			Scalr.Request({
-				url: '/db/backups/xGetListBackups',
-				processBox: {
-					type: 'action'
-				},
-				params: {
-					time: panel.convertDateFromPicker(),
-					farmId: panel.down('#farmId').getValue()
-				},
-				success: function (data, response, options) {
-					if(data && data['backups']) {
-						panel.down('#dbbackupsScalrMonthcalendar').setStoreData(data['backups'][panel.getCurrentMonthAndYear()]);
-                        panel.down('#dbbackupsScalrDaycalendar').setStoreData(
-                            panel.down('#dbbackupsScalrMonthcalendar').getStoreData(panel.down('#dbbackupsScalrDaycalendar').getCurrentDate())
-                        );
-						panel.dataStore = data['backups'];
-					}
-				}
-			});
-		},
-		convertDateFromPicker: function () {
-			if(this.down('#dateSelector')) {
-				var value = this.down('#dateSelector').getValue();
-				return new Date(value);
-			} else return '';
-		},
-		convertDateForDayView: function (day) {
-			if (this.down('#dateSelector')) {
-				var value = this.down('#dateSelector').getValue();
-				return new Date((value.getMonth()+1) + '/' + day + '/' + value.getFullYear());
-			} else return '';
-		},
-		getCurrentMonthAndYear: function () {
-			return Ext.Date.format(panel.down('#dbbackupsScalrMonthcalendar').getCurrentDate(),'n Y');
-		},
-		onBoxReady: function () {
-			if(!moduleParams['backups'])
-				panel.getListbyDateAndSet();
-			else {
-				panel.dataStore = moduleParams['backups'];
-				panel.down( '#dbbackupsScalrMonthcalendar' ).setStoreData(moduleParams['backups'][panel.getCurrentMonthAndYear()]);
-			}
-			/*panel.on('resize', function () {
-				console.log('e');
-				//this.down('#dbbackupsScalrMonthcalendar').resizeCells(this.getHeight());
-			});*/
-			panel.body.on('click', function ( e, el, obj ) {
-				if (e.getTarget('div.scalr-ui-dbbackups-cell-content')) {
-					Scalr.event.fireEvent('redirect', '#/db/backups/details?backupId=' + e.getTarget('div.scalr-ui-dbbackups-cell-content').getAttribute('backupId'));
-				}
-				if (e.getTarget('div.scalr-ui-dbbackups-cell-title-right') && !e.getTarget('div.scalr-ui-dbbackups-cell-content')) {
-					var currentMonthYear = panel.down('#dateSelector').getValue();
-					panel.down('#dbbackupsScalrDaycalendar').setCurrentDate(
-						panel.convertDateForDayView(
-							e.getTarget('div.scalr-ui-dbbackups-cell-title-right').getElementsByTagName('div')[0].getAttribute('day')
-						)
-					);
-					panel.down('#dbbackupsScalrDaycalendar').setStoreData(
-						panel.down('#dbbackupsScalrMonthcalendar').getStoreData(panel.down('#dbbackupsScalrDaycalendar').getCurrentDate())
-					);
-					panel.down('#dbbackupsScalrMonthcalendar').hide();
-					panel.down('#dbbackupsScalrDaycalendar').show();
-
-					if (panel.down('#monthView')) {
-						panel.down('#monthView').show();
-					}
-				}
-			});
-		}
+            }]
+		}]
 	});
 	return panel;
 });

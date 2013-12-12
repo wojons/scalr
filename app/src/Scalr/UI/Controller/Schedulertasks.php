@@ -1,12 +1,13 @@
 <?php
+use Scalr\Acl\Acl;
 
 class Scalr_UI_Controller_Schedulertasks extends Scalr_UI_Controller
 {
     const CALL_PARAM_NAME = 'schedulerTaskId';
 
-    public static function getPermissionDefinitions()
+    public function hasAccess()
     {
-        return array();
+        return parent::hasAccess() && $this->request->isAllowed(Acl::RESOURCE_GENERAL_SCHEDULERTASKS);
     }
 
     public function defaultAction()
@@ -48,8 +49,8 @@ class Scalr_UI_Controller_Schedulertasks extends Scalr_UI_Controller
             'type' => $task->type,
             'comments' => htmlspecialchars_decode($task->comments),
             'config' => $task->config,
-            'startTime' => $task->startTime ? Scalr_Util_DateTime::convertDateTime(new DateTime($task->startTime), $task->timezone)->format('Y-m-d H:i') : '',
-            'endTime' => $task->endTime ? Scalr_Util_DateTime::convertDateTime(new DateTime($task->endTime), $task->timezone)->format('Y-m-d H:i') : '',
+            'startTime' => $task->startTime ? Scalr_Util_DateTime::convertTimeZone(new DateTime($task->startTime), $task->timezone)->format('Y-m-d H:i') : '',
+            'endTime' => $task->endTime ? Scalr_Util_DateTime::convertTimeZone(new DateTime($task->endTime), $task->timezone)->format('Y-m-d H:i') : '',
             'restartEvery' => $task->restartEvery,
             'timezone' => $task->timezone
         );
@@ -150,7 +151,12 @@ class Scalr_UI_Controller_Schedulertasks extends Scalr_UI_Controller
             $row['lastStartTime'] = $row['lastStartTime'] ? Scalr_Util_DateTime::convertTz($row['lastStartTime']) : '';
 
             $row['config'] = unserialize($row['config']);
-            $row['config']['scriptName'] = $this->db->GetOne("SELECT name FROM scripts WHERE id = ? and clientid = ?", array($row['config']['scriptId'], $this->user->getAccountId()));
+            $row['config']['scriptName'] = $this->db->GetOne("
+                SELECT name FROM scripts WHERE id = ? and clientid = ? LIMIT 1
+            ", array(
+                $row['config']['scriptId'],
+                $this->user->getAccountId()
+            ));
         }
 
         $this->response->data($response);
@@ -199,10 +205,10 @@ class Scalr_UI_Controller_Schedulertasks extends Scalr_UI_Controller
         $endTm = $this->getParam('endTime') ? new DateTime($this->getParam('endTime'), $timezone) : NULL;
 
         if ($startTm)
-            Scalr_Util_DateTime::convertDateTime($startTm, NULL);
+            Scalr_Util_DateTime::convertTimeZone($startTm, NULL);
 
         if ($endTm)
-            Scalr_Util_DateTime::convertDateTime($endTm, NULL);
+            Scalr_Util_DateTime::convertTimeZone($endTm, NULL);
 
         if ($startTm && $endTm && $endTm < $startTm)
             $this->request->addValidationErrors('endTimeDate', array('End time must be greater then start time'));

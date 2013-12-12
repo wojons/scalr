@@ -1,6 +1,5 @@
 Scalr.regPage('Scalr.ui.core.variables', function (loadParams, moduleParams) {
 	return Ext.create('Ext.form.Panel', {
-		bodyCls: 'x-panel-body-frame',
 		width: 1000,
 		title: 'Global variables',
 		fieldDefaults: {
@@ -8,6 +7,7 @@ Scalr.regPage('Scalr.ui.core.variables', function (loadParams, moduleParams) {
 		},
 		items: [{
 			xtype: 'fieldset',
+            cls: 'x-fieldset-separator-none',
 			items: [{
 				xtype: 'variablefield',
 				name: 'variables',
@@ -19,7 +19,7 @@ Scalr.regPage('Scalr.ui.core.variables', function (loadParams, moduleParams) {
 		dockedItems: [{
 			xtype: 'container',
 			dock: 'bottom',
-			cls: 'x-docked-bottom-frame',
+			cls: 'x-docked-buttons',
 			layout: {
 				type: 'hbox',
 				pack: 'center'
@@ -42,7 +42,6 @@ Scalr.regPage('Scalr.ui.core.variables', function (loadParams, moduleParams) {
 				}
 			}, {
 				xtype: 'button',
-				margin: '0 0 0 5',
 				text: 'Cancel',
 				handler: function() {
 					Scalr.event.fireEvent('close');

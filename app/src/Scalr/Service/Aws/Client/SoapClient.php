@@ -1,6 +1,8 @@
 <?php
 namespace Scalr\Service\Aws\Client;
 
+use Scalr\Service\Aws\Event\SendRequestEvent;
+use Scalr\Service\Aws\Event\EventType;
 use Scalr\Service\Aws;
 use Scalr\Service\Aws\DataType\ErrorData;
 use \stdClass;
@@ -266,23 +268,29 @@ class SoapClient extends \SoapClient implements ClientInterface
             //Options array must be compartible with wsdl schema definition.
             $res = $this->$action($options);
         }
+
         if ($this->getAws() && $this->getAws()->getDebug()) {
             echo "\n";
             echo $this->__getLastRequest() . "\n";
             echo $this->__getLastResponseHeaders() . "\n";
             echo $this->__getLastResponse() . "\n";
         }
+
         $dom = new \DOMDocument();
         $dom->loadXML($this->__getLastResponse());
         if (($nodeList = $dom->getElementsByTagName($action . 'Response')) && $nodeList->length) {
             $node = $nodeList->item(0);
         }
+
         $response = new SoapClientResponse(
             isset($node) ? $dom->saveXML($node) : $this->__getLastResponse(),
             $this->__getLastResponseHeaders(),
             $this->__getLastRequest()
         );
+        $this->_incrementQueriesQuantity();
+
         unset($dom);
+
         return $response;
     }
 
@@ -741,5 +749,28 @@ class SoapClient extends \SoapClient implements ClientInterface
             return $this->sigNode;
         }
         return null;
+    }
+
+	/**
+     * {@inheritdoc}
+     * @see Scalr\Service\Aws\Client.ClientInterface::getQueriesQuantity()
+     */
+    public function getQueriesQuantity()
+    {
+        return $this->getAws()->queriesQuantity;
+    }
+
+    /**
+     * Increments the quantity of the processed queries during current client instance
+     */
+    protected function _incrementQueriesQuantity()
+    {
+        $this->getAws()->queriesQuantity++;
+        $eventObserver = $this->getAws()->getEventObserver();
+        if (isset($eventObserver) && $eventObserver->isSubscribed(EventType::EVENT_SEND_REQUEST)) {
+            $eventObserver->fireEvent(new SendRequestEvent(array(
+                'requestNumber' => $this->getAws()->queriesQuantity,
+            )));
+        }
     }
 }

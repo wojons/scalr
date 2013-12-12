@@ -5,7 +5,6 @@ Scalr.regPage( 'Scalr.ui.db.backups.details', function ( loadParams, moduleParam
 			'modal': true
 		},
 		width: 850,
-		bodyCls: 'x-panel-body-frame',
 		items: [{
 			xtype: 'fieldset',
 			title: 'General',
@@ -43,7 +42,7 @@ Scalr.regPage( 'Scalr.ui.db.backups.details', function ( loadParams, moduleParam
 				type: 'hbox',
 				pack: 'center'
 			},
-			cls: 'x-docked-bottom-frame',
+			cls: 'x-docked-buttons',
 			items: {
 				xtype: 'button',
 				cls: 'x-btn-default-small-red',

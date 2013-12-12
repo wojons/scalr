@@ -23,16 +23,23 @@ class FarmRoleStorageConfig
     const TYPE_RAID_EBS = 'raid.ebs';
     const TYPE_RAID_CSVOL = 'raid.csvol';
     const TYPE_RAID_CINDER = 'raid.cinder';
+    const TYPE_RAID_GCE_PD = 'raid.gce_pd';
 
     const TYPE_EBS = 'ebs';
     const TYPE_CSVOL = 'csvol';
     const TYPE_CINDER = 'cinder';
+    const TYPE_GCE_PD = 'gce_persistent';
 
     const SETTING_RAID_LEVEL = 'raid.level';
     const SETTING_RAID_VOLUMES_COUNT = 'raid.volumes_count';
 
     const SETTING_CSVOL_SIZE = 'csvol.size';
-    const SETTING_CSVOL_SNAPSHOT = 'csvol.snapshot';
+    const SETTING_CSVOL_SNAPSHOT = 'csvol.snapshot_id';
+    const SETTING_CSVOL_DISK_OFFERING = 'csvol.disk_offering_id';
+    const SETTING_CSVOL_DISK_OFFERING_TYPE = 'csvol.disk_offering_type';
+
+    const SETTING_GCE_PD_SIZE = 'gce_persistent.size';
+    const SETTING_GCE_PD_SNAPSHOT = 'gce_persistent.snapshot';
 
     const SETTING_CINDER_SIZE = 'cinder.size';
     const SETTING_CINDER_SNAPSHOT = 'cinder.snapshot';
@@ -72,7 +79,7 @@ class FarmRoleStorageConfig
 
     public function loadById($id)
     {
-        $data = $this->db->GetRow('SELECT * FROM farm_role_storage_config WHERE id = ? AND farm_role_id = ?', array($id, $this->farmRole->ID));
+        $data = $this->db->GetRow('SELECT * FROM farm_role_storage_config WHERE id = ? AND farm_role_id = ? LIMIT 1', array($id, $this->farmRole->ID));
         if (empty($data))
             return false;
 
@@ -97,32 +104,33 @@ class FarmRoleStorageConfig
     {
         $deleteFlag = false;
 
-        if (!is_array($config) || !is_array($config['settings']))
-            return;
-
         $type = $config['type'];
         $settings = array();
 
-        if (! (in_array($type, array(self::TYPE_RAID_EBS, self::TYPE_RAID_CSVOL, self::TYPE_RAID_CINDER, self::TYPE_EBS, self::TYPE_CSVOL, self::TYPE_CINDER)))) {
+        if (! (in_array($type, array(self::TYPE_RAID_EBS, self::TYPE_RAID_CSVOL, self::TYPE_RAID_CINDER, self::TYPE_EBS, self::TYPE_CSVOL, self::TYPE_CINDER, self::TYPE_GCE_PD, self::TYPE_RAID_GCE_PD)))) {
             throw new FarmRoleStorageException('[Storage] Invalid type');
         }
 
         if ($type == self::TYPE_CSVOL || $type == self::TYPE_RAID_CSVOL) {
             $volSize = intval($config['settings'][self::SETTING_CSVOL_SIZE]);
 
-            if ($volSize < 1 || $volSize > 1024)
-                throw new FarmRoleStorageException('Volume size should be from 1 to 1024 GB');
-
             $settings[self::SETTING_CSVOL_SNAPSHOT] = $config['settings'][self::SETTING_CSVOL_SNAPSHOT];
             $settings[self::SETTING_CSVOL_SIZE] = $volSize;
+            $settings[self::SETTING_CSVOL_DISK_OFFERING] = $config['settings'][self::SETTING_CSVOL_DISK_OFFERING];
+            $settings[self::SETTING_CSVOL_DISK_OFFERING_TYPE] = $config['settings'][self::SETTING_CSVOL_DISK_OFFERING_TYPE];
         } elseif ($type == self::TYPE_CINDER || $type == self::TYPE_RAID_CINDER) {
             $volSize = intval($config['settings'][self::SETTING_CINDER_SIZE]);
 
-            if ($volSize < 100 || $volSize > 1024)
-                throw new FarmRoleStorageException('Volume size should be from 100 to 1024 GB');
+            if ($volSize < 1 || $volSize > 1024)
+                throw new FarmRoleStorageException('Volume size should be from 1 to 1024 GB');
 
             $settings[self::SETTING_CINDER_SNAPSHOT] = $config['settings'][self::SETTING_CINDER_SNAPSHOT];
             $settings[self::SETTING_CINDER_SIZE] = $volSize;
+        } elseif ($type == self::TYPE_GCE_PD || $type == self::TYPE_RAID_GCE_PD) {
+            $volSize = intval($config['settings'][self::SETTING_GCE_PD_SIZE]);
+
+            $settings[self::SETTING_GCE_PD_SNAPSHOT] = $config['settings'][self::SETTING_GCE_PD_SNAPSHOT];
+            $settings[self::SETTING_GCE_PD_SIZE] = $volSize;
         } elseif ($type == self::TYPE_EBS || $type == self::TYPE_RAID_EBS) {
             $ebsSize = intval($config['settings'][self::SETTING_EBS_SIZE]);
             $ebsType = $config['settings'][self::SETTING_EBS_TYPE];

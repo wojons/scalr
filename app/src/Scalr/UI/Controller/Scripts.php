@@ -1,4 +1,5 @@
 <?php
+use Scalr\Acl\Acl;
 
 class Scalr_UI_Controller_Scripts extends Scalr_UI_Controller
 {
@@ -9,11 +10,6 @@ class Scalr_UI_Controller_Scripts extends Scalr_UI_Controller
         return true;
     }
 
-    public static function getPermissionDefinitions()
-    {
-        return array();
-    }
-
     public function defaultAction()
     {
         $this->viewAction();
@@ -21,6 +17,8 @@ class Scalr_UI_Controller_Scripts extends Scalr_UI_Controller
 
     public function viewAction()
     {
+        $this->request->restrictAccess(Acl::RESOURCE_FARMS_SCRIPTS);
+
         if ($this->getParam(self::CALL_PARAM_NAME)) {
             $script = new Scalr_Script();
             $script->loadById($this->getParam(self::CALL_PARAM_NAME));
@@ -47,6 +45,8 @@ class Scalr_UI_Controller_Scripts extends Scalr_UI_Controller
 
     public function xGetScriptContentAction()
     {
+        $this->request->restrictAccess(Acl::RESOURCE_FARMS_SCRIPTS);
+
         $this->request->defineParams(array(
             'scriptId' => array('type' => 'int'),
             'version' => array('type' => 'int')
@@ -66,6 +66,8 @@ class Scalr_UI_Controller_Scripts extends Scalr_UI_Controller
 
     public function xRemoveAction()
     {
+        $this->request->restrictAccess(Acl::RESOURCE_FARMS_SCRIPTS, Acl::PERM_FARMS_SCRIPTS_MANAGE);
+
         $this->request->defineParams(array(
             'scripts' => array('type' => 'json')
         ));
@@ -88,13 +90,31 @@ class Scalr_UI_Controller_Scripts extends Scalr_UI_Controller
         }
 
         if (count($errors))
-            $this->response->warning('Script(s) successfully removed, but some errors were occured:<br>' . implode('<br>', $errors));
+            $this->response->warning('Script(s) successfully removed, but some errors were occurred:<br>' . implode('<br>', $errors));
         else
             $this->response->success('Script(s) successfully removed');
     }
 
+    public function xRemoveRevisionAction()
+    {
+        $this->request->restrictAccess(Acl::RESOURCE_FARMS_SCRIPTS, Acl::PERM_FARMS_SCRIPTS_MANAGE);
+
+        $script = new Scalr_Script();
+        $script->loadById($this->getParam('id'));
+
+        if ($script->accountId)
+            $this->user->getPermissions()->validate($script);
+        elseif ($this->user->getType() != Scalr_Account_User::TYPE_SCALR_ADMIN)
+            throw new Scalr_Exception_InsufficientPermissions();
+
+        $script->removeRevision($this->getParam('rev'));
+        $this->response->success();
+    }
+
     public function xSaveAction()
     {
+        $this->request->restrictAccess(Acl::RESOURCE_FARMS_SCRIPTS, Acl::PERM_FARMS_SCRIPTS_MANAGE);
+
         $this->request->defineParams(array(
             'id' => array('type' => 'int'),
             'name' => array('type' => 'string', 'validator' => array(
@@ -141,6 +161,7 @@ class Scalr_UI_Controller_Scripts extends Scalr_UI_Controller
         $script->name = htmlspecialchars($this->getParam('name'));
         $script->description = htmlspecialchars($this->getParam('description'));
         $script->accountId = $this->user->getAccountId();
+        $script->isSync = $this->getParam('isSync');
         $script->save();
         $script->setRevision($scriptText, $this->getParam('saveCurrentRevision') == '1' ? $this->getParam('version') : NULL);
 
@@ -149,6 +170,8 @@ class Scalr_UI_Controller_Scripts extends Scalr_UI_Controller
 
     public function xForkAction()
     {
+        $this->request->restrictAccess(Acl::RESOURCE_FARMS_SCRIPTS, Acl::PERM_FARMS_SCRIPTS_FORK);
+
         $this->request->defineParams(array(
             'scriptId' => array('type' => 'int')
         ));
@@ -168,6 +191,8 @@ class Scalr_UI_Controller_Scripts extends Scalr_UI_Controller
 
     public function editAction()
     {
+        $this->request->restrictAccess(Acl::RESOURCE_FARMS_SCRIPTS, Acl::PERM_FARMS_SCRIPTS_MANAGE);
+
         $this->request->defineParams(array(
             'scriptId' => array('type' => 'int'),
             'version' => array('type' => 'int')
@@ -189,12 +214,12 @@ class Scalr_UI_Controller_Scripts extends Scalr_UI_Controller
                 'id' => $script->id,
                 'name' => $script->name,
                 'description' => $script->description,
-                'isSync' => $script->isSync,
+                'isSync' => !is_null($script->isSync) ? $script->isSync : 0,
                 'script' => $revision['script'],
                 'version' => $revision['revision']
             ),
 
-            'versions' => range(1, $script->getLatestRevision()),
+            'versions' => $script->getRevisionIds(),
             'latestVersion' => $script->getLatestRevision(),
             'variables' => "%" . implode("%, %", array_keys($vars)) . "%"
 
@@ -203,6 +228,8 @@ class Scalr_UI_Controller_Scripts extends Scalr_UI_Controller
 
     public function createAction()
     {
+        $this->request->restrictAccess(Acl::RESOURCE_FARMS_SCRIPTS, Acl::PERM_FARMS_SCRIPTS_MANAGE);
+
         $vars = Scalr_Scripting_Manager::getScriptingBuiltinVariables();
 
         $this->response->page('ui/scripts/create.js', array(
@@ -214,6 +241,8 @@ class Scalr_UI_Controller_Scripts extends Scalr_UI_Controller
 
     public function xListScriptsAction()
     {
+        $this->request->restrictAccess(Acl::RESOURCE_FARMS_SCRIPTS);
+
         $this->request->defineParams(array(
             'scriptId', 'origin',
             'sort' => array('type' => 'json', 'default' => array('property' => 'name', 'direction' => 'desc'))
@@ -225,6 +254,7 @@ class Scalr_UI_Controller_Scripts extends Scalr_UI_Controller
                 scripts.name,
                 scripts.description,
                 scripts.clientid as accountId,
+                scripts.issync,
                 MAX(script_revisions.dtcreated) as dtUpdated, MAX(script_revisions.revision) AS version FROM scripts
             INNER JOIN script_revisions ON script_revisions.scriptid = scripts.id
             WHERE :FILTER:";
@@ -244,7 +274,7 @@ class Scalr_UI_Controller_Scripts extends Scalr_UI_Controller
         }
 
         $sql .= ' GROUP BY script_revisions.scriptid';
-        $response = $this->buildResponseFromSql2($sql, array('id', 'name', 'description', 'dtUpdated'), array('scripts.name', 'scripts.description'), $args);
+        $response = $this->buildResponseFromSql2($sql, array('id', 'name', 'description', 'dtUpdated', 'issync'), array('scripts.name', 'scripts.description'), $args);
         foreach ($response['data'] as &$row) {
             $row['dtUpdated'] = Scalr_Util_DateTime::convertTz($row["dtUpdated"]);
         }
@@ -299,52 +329,9 @@ class Scalr_UI_Controller_Scripts extends Scalr_UI_Controller
         return $retval;
     }
 
-    // TODO: remove
-    public function getFarmRolesAction()
-    {
-        $this->request->defineParams(array(
-            'allValue' => array('type' => 'bool')
-        ));
-
-        $farmRolesController = self::loadController('Roles', 'Scalr_UI_Controller_Farms');
-        if (is_null($farmRolesController))
-            throw new Exception('Controller Farms_Roles not created');
-
-        $farmRoles = $farmRolesController->getList();
-        if (count($farmRoles) && $this->getParam('allValue'))
-            $farmRoles[0] = array('id' => 0, 'name' =>'On all roles');
-
-        $this->response->data(array(
-            'farmRoles' => $farmRoles
-        ));
-    }
-
-    // TODO: remove
-    public function getServersAction()
-    {
-        $this->request->defineParams(array(
-            'allValue' => array('type' => 'bool')
-        ));
-
-        $dbFarmRole = DBFarmRole::LoadByID($this->getParam('farmRoleId'));
-        $dbFarm = DBFarm::LoadById($dbFarmRole->FarmID);
-        $servers = array();
-
-        $this->user->getPermissions()->validate($dbFarm);
-
-        foreach ($dbFarmRole->GetServersByFilter(array('status' => SERVER_STATUS::RUNNING)) as $key => $value)
-            $servers[$value->serverId] = "{$value->remoteIp} ({$value->localIp})";
-
-        if (count($servers) && $this->getParam('allValue'))
-            $servers[0] = 'On all servers';
-
-        $this->response->data(array(
-            'servers' => $servers
-        ));
-    }
-
     public function executeAction()
     {
+        $this->request->restrictAccess(Acl::RESOURCE_FARMS_SCRIPTS, Acl::PERM_FARMS_SCRIPTS_EXECUTE);
         $farmId = $this->getParam('farmId');
         $farmRoleId = $this->getParam('farmRoleId');
         $serverId = $this->getParam('serverId');
@@ -354,7 +341,7 @@ class Scalr_UI_Controller_Scripts extends Scalr_UI_Controller
         $scripts = $this->getList();
 
         if ($eventName) {
-            $scriptInfo = $this->db->GetRow("SELECT * FROM farm_role_scripts WHERE event_name=?", array($eventName));
+            $scriptInfo = $this->db->GetRow("SELECT * FROM farm_role_scripts WHERE event_name=? LIMIT 1", array($eventName));
             if (!$scriptInfo)
                 throw new Exception("Scalr unable to find script execution options for used link");
 
@@ -388,6 +375,7 @@ class Scalr_UI_Controller_Scripts extends Scalr_UI_Controller
 
     public function xExecuteAction()
     {
+        $this->request->restrictAccess(Acl::RESOURCE_FARMS_SCRIPTS, Acl::PERM_FARMS_SCRIPTS_EXECUTE);
         $this->request->defineParams(array(
             'farmId' => array('type' => 'int'),
             'farmRoleId' => array('type' => 'int'),
@@ -530,6 +518,7 @@ class Scalr_UI_Controller_Scripts extends Scalr_UI_Controller
                     $DBServer = DBServer::LoadByID($server['server_id']);
 
                     $msg = new Scalr_Messaging_Msg_ExecScript("Manual");
+                    $msg->setServerMetaData($DBServer);
 
                     $script = Scalr_Scripting_Manager::prepareScript($scriptSettings, $DBServer);
 
@@ -537,8 +526,14 @@ class Scalr_UI_Controller_Scripts extends Scalr_UI_Controller
                     // Script
                     $itm->asynchronous = ($script['issync'] == 1) ? '0' : '1';
                     $itm->timeout = $script['timeout'];
-                    $itm->name = $script['name'];
-                    $itm->body = $script['body'];
+
+                    if ($script['body']) {
+                        $itm->name = $script['name'];
+                        $itm->body = $script['body'];
+                    } else {
+                        $itm->path = $script['path'];
+                    }
+                    $itm->executionId = $script['execution_id'];
 
                     $msg->scripts = array($itm);
 

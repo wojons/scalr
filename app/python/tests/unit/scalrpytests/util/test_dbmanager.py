@@ -19,9 +19,13 @@ class DBManagerTest(unittest.TestCase):
 
 
     def test_init(self):
+        db_manager = dbmanager.DBManager(self.config, kw='kw')
+        assert db_manager.connection == 'mysql+pymysql://user:pass@localhost:10/scalr'
+        assert db_manager.kwargs == {'kw':'kw'}
+
         db_manager = dbmanager.DBManager(self.config)
         assert db_manager.connection == 'mysql+pymysql://user:pass@localhost:10/scalr'
-        assert db_manager.kwargs == {'pool_recycle':120, 'pool_size':4}
+        assert db_manager.kwargs == {}
 
         db = db_manager.get_db()
         assert db is not None

@@ -1,0 +1,9 @@
+#!/usr/bin/env php
+<?php
+/**
+ * Automatic upgrade console command
+ *
+ * @author  Vitaliy Demidov <vitaliy@scalr.com>
+ * @since   4.5 (10.10.2013)
+ */
+include __DIR__ . '/upgrade.php';

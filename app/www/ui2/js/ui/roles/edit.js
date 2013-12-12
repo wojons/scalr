@@ -1,6 +1,10 @@
 Scalr.regPage('Scalr.ui.roles.edit', function (loadParams, moduleParams) {
 	var removeImages = [];
-
+    
+    var showLocationAsTextField = function (platform) {
+        return Scalr.user['type'] === 'ScalrAdmin' && (Scalr.isCloudstack(platform) || Scalr.isOpenstack(platform));
+    };
+    
 	var imagesStore = Ext.create('store.store', {
 		data: moduleParams.role.images,
 		fields: [ 'platform', 'location', 'platform_name', 'location_name', 'image_id', 'architecture'],
@@ -18,6 +22,12 @@ Scalr.regPage('Scalr.ui.roles.edit', function (loadParams, moduleParams) {
 		fields: [ 'id', 'name', 'locations' ],
 		proxy: 'object'
 	});
+	
+	var categoriesStore = Ext.create('store.store', {
+        data: moduleParams.categories,
+        fields: [ 'id', 'name' ],
+        proxy: 'object'
+    });
 
 	var locationsStore = Ext.create('store.store', {
 		fields: [ 'id', 'name' ],
@@ -30,11 +40,11 @@ Scalr.regPage('Scalr.ui.roles.edit', function (loadParams, moduleParams) {
 		},
 		title: moduleParams.role.id ? 'Roles &raquo; Edit &raquo; ' + moduleParams.role.name : 'Roles &raquo; Create new role',
 		layout: 'fit',
-
+        bodyStyle: 'box-shadow:none',
 		dockedItems: [{
 			xtype: 'container',
 			dock: 'bottom',
-			cls: 'x-docked-bottom-frame',
+			cls: 'x-docked-buttons-mini',
 			layout: {
 				type: 'hbox',
 				pack: 'center'
@@ -67,7 +77,6 @@ Scalr.regPage('Scalr.ui.roles.edit', function (loadParams, moduleParams) {
 				}
 			}, {
 				xtype: 'button',
-				margin: '0 0 0 5',
 				text: 'Cancel',
 				itemId: 'cancel',
 				handler: function() {
@@ -121,7 +130,6 @@ Scalr.regPage('Scalr.ui.roles.edit', function (loadParams, moduleParams) {
 		xtype: 'form',
 		title: 'Role Information',
 		autoScroll: true,
-		bodyCls: 'x-panel-body-frame',
 		scalrPrivateGetData: function (params) {
 			Ext.apply(params, this.getForm().getValues());
 		},
@@ -136,18 +144,45 @@ Scalr.regPage('Scalr.ui.roles.edit', function (loadParams, moduleParams) {
 				value: moduleParams.role.name
 			}, {
 				xtype: 'combo',
-				fieldLabel: 'Scalr agent',
-				name: 'agent',
+				fieldLabel: 'Category',
+				name: 'cat_id',
 				width: 400,
 				readOnly: moduleParams.role.id != 0 ? true : false,
-				store: [ [ '1', 'ami-scripts' ], [ '2', 'scalarizr' ] ],
-				value: moduleParams.role.agent,
+				store: categoriesStore,
+				value: moduleParams.role.cat_id,
+				valueField: 'id',
+                displayField: 'name',
 				queryMode: 'local',
 				allowBlank: false,
 				editable: false
 			}, {
+                xtype: 'combo',
+                fieldLabel: 'OS family',
+                name: 'os_family',
+                width: 400,
+                readOnly: moduleParams.role.id != 0 ? true : false,
+                store: [ [ 'ubuntu', 'Ubuntu' ], [ 'centos', 'CentOS' ], [ 'windows', 'Windows' ], [ 'redhat', 'Redhat' ], [ 'oel', 'OEL' ], [ 'amazon', 'Amazon Linux' ], [ 'gcel', 'GCE Linux' ], [ 'debian', 'Debian' ] ],
+                value: moduleParams.role.os_family,
+                queryMode: 'local',
+                allowBlank: false,
+                editable: false
+            }, {
+                xtype: 'textfield',
+                fieldLabel: 'OS generation',
+                width: 400,
+                name: 'os_generation',
+                readOnly: moduleParams.role.id != 0 ? true : false,
+                value: moduleParams.role.os_generation
+            }, {
+                xtype: 'textfield',
+                fieldLabel: 'OS version',
+                width: 400,
+                name: 'os_version',
+                readOnly: moduleParams.role.id != 0 ? true : false,
+                value: moduleParams.role.os_version
+            }, {
 				xtype: 'textfield',
-				fieldLabel: 'OS',
+				fieldLabel: 'OS full name',
 				width: 400,
 				name: 'os',
 				readOnly: moduleParams.role.id != 0 ? true : false,
@@ -342,6 +377,7 @@ Scalr.regPage('Scalr.ui.roles.edit', function (loadParams, moduleParams) {
 	});
 	
 	var tabImages = panel.add({
+        xtype: 'container',
 		title: 'Images',
 		layout: {
 			type: 'hbox',
@@ -365,6 +401,7 @@ Scalr.regPage('Scalr.ui.roles.edit', function (loadParams, moduleParams) {
 			this.down('[name="image_platform"]').reset();
 			this.down('[name="image_platform"]').setReadOnly(false);
 			this.down('[name="image_location"]').setReadOnly(false);
+            this.down('[name="image_location_text"]').setReadOnly(false);
 			this.down('[name="image_id"]').reset();
 			this.down('[name="architecture"]').reset();
 
@@ -375,11 +412,12 @@ Scalr.regPage('Scalr.ui.roles.edit', function (loadParams, moduleParams) {
 		},
 
 		items: [{
-			bodyCls: 'x-panel-body-frame',
+            xtype: 'container',
 			width: 400,
 			items: [{
 				xtype: 'fieldset',
 				title: 'Role details',
+                cls: 'x-fieldset-separator-none',
 				defaults: {
 					anchor: '100%',
 					labelWidth: 100
@@ -395,14 +433,19 @@ Scalr.regPage('Scalr.ui.roles.edit', function (loadParams, moduleParams) {
 					name: 'image_platform',
 					queryMode: 'local',
 					listeners: {
-						change: function () {
+						change: function (comp, value) {
 							tabImages.down('[name="image_location"]').reset();
+                            tabImages.down('[name="image_location_text"]').reset();
 							
-							if (this.getValue() == 'gce') {
+							if (value === 'gce') {
 								tabImages.down('[name="image_location"]').hide();
 								tabImages.down('[name="image_location"]').setValue('');
+                            } else if (showLocationAsTextField(value)) {
+                                tabImages.down('[name="image_location"]').hide();
+                                tabImages.down('[name="image_location_text"]').show();
 							} else {
-								if (this.getValue()) {
+                                tabImages.down('[name="image_location_text"]').hide();
+								if (value) {
 									tabImages.down('[name="image_location"]').show();
 									locationsStore.load({ data: this.store.findRecord('id', this.getValue()).get('locations') });
 								} else
@@ -423,6 +466,12 @@ Scalr.regPage('Scalr.ui.roles.edit', function (loadParams, moduleParams) {
 					queryMode: 'local',
 					matchFieldWidth: false
 				}, {
+					xtype: 'textfield',
+					fieldLabel: 'Location',
+					hidden: true,
+					allowBlank: false,
+					name: 'image_location_text'
+				}, {
 					xtype: 'combo',
 					fieldLabel: 'Architecture',
 					store: ['i386', 'x86_64'],
@@ -437,7 +486,12 @@ Scalr.regPage('Scalr.ui.roles.edit', function (loadParams, moduleParams) {
 					allowBlank: false,
 					name: 'image_id'
 				}, {
-					layout: 'column',
+                    xtype: 'container',
+                    margin: '18 0 0',
+					layout: {
+                        type: 'hbox',
+                        pack: 'center'
+                    },
 					items: [{
 						text: 'Add',
 						itemId: 'image_add',
@@ -450,21 +504,26 @@ Scalr.regPage('Scalr.ui.roles.edit', function (loadParams, moduleParams) {
 							
 							invalid = !tabImages.down('[name="image_platform"]').isValid() || invalid;
 							
-							if (platform != 'gce')
-								invalid = !tabImages.down('[name="image_location"]').isValid() || invalid;
-								
+							if (platform !== 'gce') {
+                                if (showLocationAsTextField(platform)) {
+                                    invalid = !tabImages.down('[name="image_location_text"]').isValid() || invalid;
+                                } else {
+                                    invalid = !tabImages.down('[name="image_location"]').isValid() || invalid;
+                                }
+                            }
+                            
 							invalid = !tabImages.down('[name="image_id"]').isValid() || invalid;
 							invalid = !tabImages.down('[name="architecture"]').isValid() || invalid;
 
 							if (! invalid) {
 								var platform = tabImages.down('[name="image_platform"]').getValue(),
-									location = tabImages.down('[name="image_location"]').getValue(),
+									location = tabImages.down('[name="image_location' + (showLocationAsTextField(platform) ? '_text' : '') + '"]').getValue(),
 									image_id = tabImages.down('[name="image_id"]').getValue(),
 									arch = tabImages.down('[name="architecture"]').getValue();
 
-								if (platform == 'gce')
+								if (platform === 'gce') {
 									location = '';
-
+                                }
 								Scalr.message.Flush();
 
 								if (imagesStore.findBy(function (record) {
@@ -479,9 +538,9 @@ Scalr.regPage('Scalr.ui.roles.edit', function (loadParams, moduleParams) {
 									}
 								}) == -1) {
 									var location_name = '';
-									if (location != '')
+									if (location !== '' && locationsStore.getById(location)) {
 										location_name = locationsStore.getById(location).get('name');
-
+                                    }
 									
 									imagesStore.add({
 										platform: platform,
@@ -502,20 +561,23 @@ Scalr.regPage('Scalr.ui.roles.edit', function (loadParams, moduleParams) {
 						hidden: true,
 						width: 70,
 						handler: function () {
-							var records = tabImages.down('#images_view').getSelectionModel().getSelection();
+							var records = tabImages.down('#images_view').getSelectionModel().getSelection(), platform;
 
 							if (records[0]) {
+                                platform = records[0].get('platform');
 								records[0].set('architecture', tabImages.down('[name="architecture"]').getValue());
 								
-								var location = tabImages.down('[name="image_location"]').getValue();
-								if (records[0].get('platform') == 'gce')
+								var location = tabImages.down('[name="image_location' + (showLocationAsTextField(platform) ? '_text' : '') + '"]').getValue();
+								if (platform === 'gce') {
 									location = '';
+                                }
 								
 								records[0].set('location', location);
-								if (location != '')
+								if (location !== '' && locationsStore.getById(location)) {
 									records[0].set('location_name', locationsStore.getById(location).get('name'));
-								else
+                                } else {
 									records[0].set('location_name', '');
+                                }
 								
 								
 								records[0].set('image_id', tabImages.down('[name="image_id"]').getValue());
@@ -557,9 +619,8 @@ Scalr.regPage('Scalr.ui.roles.edit', function (loadParams, moduleParams) {
 			xtype: 'grid',
 			flex: 1,
 			itemId: 'images_view',
-			border: false,
-			bodyStyle: 'border-left-width: 1px !important',
-
+            cls: 'x-grid-shadow x-fieldset-separator-left',
+            padding: 12,
 			store: imagesStore,
 			singleSelect: true,
 
@@ -568,13 +629,14 @@ Scalr.regPage('Scalr.ui.roles.edit', function (loadParams, moduleParams) {
 			},
 
 			viewConfig: {
+                deferEmptyText: false,
 				emptyText: 'No images found'
 			},
 
 			columns: [
 			    { header: "Image ID", width: 300, dataIndex: 'image_id', sortable: true },
 				{ header: "Platform", width: 200, dataIndex: 'platform_name', sortable: true },
-				{ header: "Location", flex: 1, dataIndex: 'location_name', sortable: true },
+				{ header: "Location", flex: 1, dataIndex: 'location_name', sortable: true, xtype: 'templatecolumn', tpl: '<tpl if="values.location_name">{location_name}<tpl else>{location}</tpl>' },
 				{ header: "Architecture", width: 120, dataIndex: 'architecture', sortable: true }
 			],
 
@@ -584,9 +646,9 @@ Scalr.regPage('Scalr.ui.roles.edit', function (loadParams, moduleParams) {
 				},
 				selectionchange: function(c, selections) {
 					if (selections.length) {
-						var rec = selections[0];
-						tabImages.down('[name="image_platform"]').setValue(rec.get('platform')).setReadOnly(true);
-						tabImages.down('[name="image_location"]').setValue(rec.get('location')).setReadOnly(true);
+						var rec = selections[0], platform = rec.get('platform');
+						tabImages.down('[name="image_platform"]').setValue(platform).setReadOnly(true);
+						tabImages.down('[name="image_location' + (showLocationAsTextField(platform) ? '_text' : '') + '"]').setValue(rec.get('location')).setReadOnly(true);
 						tabImages.down('[name="image_id"]').setValue(rec.get('image_id'));
 						
 						tabImages.down('[name="architecture"]').setValue(rec.get('architecture'));
@@ -602,38 +664,10 @@ Scalr.regPage('Scalr.ui.roles.edit', function (loadParams, moduleParams) {
 		}]
 	});
 
-	var tabProperties = panel.add({
-		title: 'Properties',
-		bodyCls: 'x-panel-body-frame',
-		scalrPrivateGetData: function (params) {
-			params['properties'] = Ext.encode({
-				'system.ssh-port': this.down('[name="default_ssh_port"]').getValue()
-			});
-		},
-
-		items: [{
-			xtype: 'fieldset',
-			items: {
-				xtype: 'fieldcontainer',
-				fieldLabel: 'SSH port',
-				layout: 'hbox',
-				labelWidth: 60,
-				items: [{
-					xtype: 'textfield',
-					name: 'default_ssh_port',
-					width: 60,
-					value: moduleParams.role['properties']['system.ssh-port']
-				}, {
-					xtype: 'displayinfofield',
-					margin: '0 0 0 5',
-					info: 'This setting WON\'T change default SSH port on the servers. This port should be opened in the security groups.'
-				}]
-			}
-		}]
-	});
-
 	var tabParameters = panel.add({
+        xtype: 'container',
 		title: 'Parameters',
+        hidden: !optionsStore.getCount(),
 		layout: {
 			type: 'hbox',
 			align: 'stretch'
@@ -681,12 +715,12 @@ Scalr.regPage('Scalr.ui.roles.edit', function (loadParams, moduleParams) {
 		},
 
 		items: [{
-			border: false,
+            xtype: 'container',
 			width: 450,
-			bodyCls: 'x-panel-body-plain-frame',
 			items: [{
 				xtype: 'fieldset',
 				title: 'Parameter details',
+                cls: 'x-fieldset-separator-none',
 				defaults: {
 					anchor: '100%',
 					labelWidth: 80
@@ -729,11 +763,14 @@ Scalr.regPage('Scalr.ui.roles.edit', function (loadParams, moduleParams) {
 					xtype: 'textarea',
 					fieldLabel: 'Default value',
 					name: 'fielddefval_textarea',
-					hidden: true,
+					hidden: true
 				}, {
-					layout: 'column',
-					border: false,
-					margin: '0 0 5 0',
+                    xtype: 'container',
+					layout: {
+                        type: 'hbox',
+                        pack: 'center'
+                    },
+                    margin: '18 0 0',
 					items: [{
 						text: 'Add',
 						itemId: 'param_add',
@@ -800,8 +837,8 @@ Scalr.regPage('Scalr.ui.roles.edit', function (loadParams, moduleParams) {
 			xtype: 'grid',
 			flex: 1,
 			itemId: 'options_view',
-			border: false,
-			bodyStyle: 'border-left-width: 1px !important',
+            cls: 'x-grid-shadow x-fieldset-separator-left',
+            padding: 12,
 
 			store: optionsStore,
 			singleSelect: true,
@@ -811,6 +848,7 @@ Scalr.regPage('Scalr.ui.roles.edit', function (loadParams, moduleParams) {
 			},
 
 			viewConfig: {
+                deferEmptyText: false,
 				emptyText: 'No parameters found'
 			},
 
@@ -855,6 +893,7 @@ Scalr.regPage('Scalr.ui.roles.edit', function (loadParams, moduleParams) {
 	if (moduleParams.role.id) {
 		var tabSecurityRules = panel.add({
 			title: 'Security rules',
+            hidden: !(moduleParams.role.security_rules || []).length,
 			scalrPrivateGetData: function (params) {
 				var data = [];
 				Ext.each (tabSecurityRules.store.getRange(), function (item) {
@@ -866,7 +905,9 @@ Scalr.regPage('Scalr.ui.roles.edit', function (loadParams, moduleParams) {
 	
 			xtype: 'grid',
 			itemId: 'view',
-			border: false,
+            cls: 'x-tabpanel-child x-grid-shadow',
+            padding: 12,
+            
 			store: {
 				proxy: 'object',
 				fields: ['id', 'ipProtocol', 'fromPort', 'toPort' , 'cidrIp', 'comment']
@@ -901,64 +942,73 @@ Scalr.regPage('Scalr.ui.roles.edit', function (loadParams, moduleParams) {
 			dockedItems: [{
 				xtype: 'toolbar',
 				dock: 'top',
+                ui: 'simple',
 				layout: {
 					type: 'hbox',
-					align: 'left',
-					pack: 'start'
+					pack: 'end'
 				},
+                style: 'padding-right: 2px',
 				items: [{
-					ui: 'paging',
-					iconCls: 'x-tbar-add',
+                    text: 'Add rule',
+                    cls: 'x-btn-green-bg',
 					handler: function() {
 						Scalr.Confirm({
 							form: [{
-								xtype: 'combo',
-								name: 'ipProtocol',
-								fieldLabel: 'Protocol',
-								labelWidth: 120,
-								editable: false,
-								store: [ 'tcp', 'udp', 'icmp' ],
-								value: 'tcp',
-								queryMode: 'local',
-								allowBlank: false
-							}, {
-								xtype: 'textfield',
-								name: 'fromPort',
-								fieldLabel: 'From port',
-								labelWidth: 120,
-								allowBlank: false,
-								validator: function (value) {
-									if (value < -1 || value > 65535) {
-										return 'Valid ports are - 1 through 65535';
-									}
-									return true;
-								}
-							}, {
-								xtype: 'textfield',
-								name: 'toPort',
-								fieldLabel: 'To port',
-								labelWidth: 120,
-								allowBlank: false,
-								validator: function (value) {
-									if (value < -1 || value > 65535) {
-										return 'Valid ports are - 1 through 65535';
-									}
-									return true;
-								}
-							}, {
-								xtype: 'textfield',
-								name: 'cidrIp',
-								fieldLabel: 'CIDR IP',
-								value: '0.0.0.0/0',
-								labelWidth: 120,
-								allowBlank: false
-							}, {
-								xtype: 'textfield',
-								name: 'comment',
-								fieldLabel: 'Comment',
-								value: '',
-								labelWidth: 120,
-								allowBlank: true
+                                xtype: 'container',
+                                cls: 'x-container-fieldset',
+                                layout: 'anchor',
+                                defaults: {
+                                    anchor: '100%'
+                                },
+                                items: [{
+                                    xtype: 'combo',
+                                    name: 'ipProtocol',
+                                    fieldLabel: 'Protocol',
+                                    labelWidth: 120,
+                                    editable: false,
+                                    store: [ 'tcp', 'udp', 'icmp' ],
+                                    value: 'tcp',
+                                    queryMode: 'local',
+                                    allowBlank: false
+                                }, {
+                                    xtype: 'textfield',
+                                    name: 'fromPort',
+                                    fieldLabel: 'From port',
+                                    labelWidth: 120,
+                                    allowBlank: false,
+                                    validator: function (value) {
+                                        if (value < -1 || value > 65535) {
+                                            return 'Valid ports are - 1 through 65535';
+                                        }
+                                        return true;
+                                    }
+                                }, {
+                                    xtype: 'textfield',
+                                    name: 'toPort',
+                                    fieldLabel: 'To port',
+                                    labelWidth: 120,
+                                    allowBlank: false,
+                                    validator: function (value) {
+                                        if (value < -1 || value > 65535) {
+                                            return 'Valid ports are - 1 through 65535';
+                                        }
+                                        return true;
+                                    }
+                                }, {
+                                    xtype: 'textfield',
+                                    name: 'cidrIp',
+                                    fieldLabel: 'CIDR IP',
+                                    value: '0.0.0.0/0',
+                                    labelWidth: 120,
+                                    allowBlank: false
+                                }, {
+                                    xtype: 'textfield',
+                                    name: 'comment',
+                                    fieldLabel: 'Comment',
+                                    value: '',
+                                    labelWidth: 120,
+                                    allowBlank: true
+                                }]
 							}],
 							ok: 'Add',
 							title: 'Add security rule',
@@ -995,6 +1045,7 @@ Scalr.regPage('Scalr.ui.roles.edit', function (loadParams, moduleParams) {
 	}
 
 	var tabScripts = panel.add({
+        xtype: 'container',
 		title: 'Scripts',
 
 		scalrPrivateGetData: function (params) {
@@ -1019,13 +1070,14 @@ Scalr.regPage('Scalr.ui.roles.edit', function (loadParams, moduleParams) {
 		items: [{
 			xtype: 'scriptfield',
 			width: 400,
-			bodyCls: 'x-panel-body-plain-frame',
 			scalrModuleData: moduleParams['scriptData'],
-			scalrModuleStepStart: 5
+			scalrModuleStepStart: 5,
+            bodyStyle: 'box-shadow:none'
 		}, {
 			xtype: 'scripteventgrid',
 			flex: 1,
-			border: false
+            cls: 'x-grid-shadow x-fieldset-separator-left',
+            padding: 12
 		}]
 	});
 
@@ -1038,7 +1090,6 @@ Scalr.regPage('Scalr.ui.roles.edit', function (loadParams, moduleParams) {
 				params['variables'] = this.down('[name="variables"]').getValue();
 			},
 			layout: 'fit',
-			bodyCls: 'x-panel-body-frame',
 			items: [{
 				xtype: 'fieldset',
 				autoScroll: true,

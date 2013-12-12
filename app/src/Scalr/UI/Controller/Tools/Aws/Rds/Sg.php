@@ -1,9 +1,16 @@
 <?php
 
 use Scalr\Service\Aws\Rds\DataType\DBSecurityGroupIngressRequestData;
+use Scalr\Acl\Acl;
 
 class Scalr_UI_Controller_Tools_Aws_Rds_Sg extends Scalr_UI_Controller
 {
+
+    public function hasAccess()
+    {
+        return parent::hasAccess() && $this->request->isAllowed(Acl::RESOURCE_AWS_RDS);
+    }
+
     /**
      * Gets AWS Client for the current environment
      *

@@ -39,9 +39,9 @@ Scalr.regPage('Scalr.ui.services.configurations.presets.view', function (loadPar
 		},
 
 		columns:[
-			{ header: "ID", width: 50, dataIndex: 'id', sortable:true },
+			{ header: "ID", width: 60, dataIndex: 'id', sortable:true },
 			{ header: "Name", flex: 1, dataIndex: 'name', sortable:true },
-			{ header: "Role behavior", flex: 1, dataIndex: 'role_behavior', sortable: true },
+			{ header: "Role automation", flex: 1, dataIndex: 'role_behavior', sortable: true },
 			{ header: "Added at", flex: 1, dataIndex: 'dtadded', sortable: false },
 			{ header: "Last time modified", flex: 1, dataIndex: 'dtlastmodified', sortable: false },
 			{
@@ -54,52 +54,61 @@ Scalr.regPage('Scalr.ui.services.configurations.presets.view', function (loadPar
 			}
 		],
 
-		multiSelect: true,
-		selModel: {
-			selType: 'selectedmodel',
-			selectedMenu: [{
-				text: 'Delete',
-				iconCls: 'x-menu-icon-delete',
-				request: {
-					confirmBox: {
-						type: 'delete',
-						msg: 'Remove selected configuration preset(s): %s ?'
-					},
-					processBox: {
-						type: 'delete',
-						msg: 'Removing configuration preset(s) ...'
-					},
-					url: '/services/configurations/presets/xRemove/',
-					dataHandler: function(records) {
-						var presets = [];
-						this.confirmBox.objects = [];
-						for (var i = 0, len = records.length; i < len; i++) {
-							presets.push(records[i].get('id'));
-							this.confirmBox.objects.push(records[i].get('name'));
-						}
-						return { presets: Ext.encode(presets) };
-					}
-				}
-			}]
-		},
+        multiSelect: true,
+        selModel: {
+            selType: 'selectedmodel'
+        },
 
-		dockedItems: [{
-			xtype: 'scalrpagingtoolbar',
-			store: store,
-			dock: 'top',
-			/*
-			afterItems: [{
-				ui: 'paging',
-				iconCls: 'x-tbar-add',
-				handler: function() {
-					Scalr.event.fireEvent('redirect', '#/services/configurations/presets/build');
-				}
-			}],
-			*/
-			items: [{
-				xtype: 'filterfield',
-				store: store
-			}]
-		}]
+        listeners: {
+            selectionchange: function(selModel, selections) {
+                this.down('scalrpagingtoolbar').down('#delete').setDisabled(!selections.length);
+            }
+        },
+
+        dockedItems: [{
+            dock: 'top',
+			xtype: 'displayfield',
+			cls: 'x-form-field-warning x-form-field-warning-fit',
+			value: Scalr.strings['deprecated_warning']
+        },{
+            xtype: 'scalrpagingtoolbar',
+            store: store,
+            dock: 'top',
+            afterItems: [{
+                ui: 'paging',
+                itemId: 'delete',
+                iconCls: 'x-tbar-delete',
+                tooltip: 'Select one or more configuration preset(s) to delete them',
+                disabled: true,
+                handler: function() {
+                    var request = {
+                        confirmBox: {
+                            type: 'delete',
+                            msg: 'Delete selected configuration preset(s): %s ?'
+                        },
+                        processBox: {
+                            type: 'delete',
+                            msg: 'Deleting preset(s) ...'
+                        },
+                        url: '/services/configurations/presets/xRemove/',
+                        success: function() {
+                            store.load();
+                        }
+                    }, records = this.up('grid').getSelectionModel().getSelection(), data = [];
+
+                    request.confirmBox.objects = [];
+                    for (var i = 0, len = records.length; i < len; i++) {
+                        data.push(records[i].get('id'));
+                        request.confirmBox.objects.push(records[i].get('name'));
+                    }
+                    request.params = { presets: Ext.encode(data) };
+                    Scalr.Request(request);
+                }
+            }],
+            items: [{
+                xtype: 'filterfield',
+                store: store
+            }]
+        }]
 	});
 });

@@ -1,4 +1,5 @@
 <?php
+use Scalr\Acl\Acl;
 
 class Scalr_UI_Controller_Services_Mysql extends Scalr_UI_Controller
 {
@@ -24,6 +25,7 @@ class Scalr_UI_Controller_Services_Mysql extends Scalr_UI_Controller
 
     public function pmaAction()
     {
+        $this->request->restrictAccess(Acl::RESOURCE_DB_DATABASE_STATUS, Acl::PERM_DB_DATABASE_STATUS_PMA);
         if ($this->getParam('c')) {
             switch ($this->getParam('c')) {
                 case 1:
@@ -99,13 +101,13 @@ class Scalr_UI_Controller_Services_Mysql extends Scalr_UI_Controller
             if ($DBFarmRole->GetSetting(DBFarmRole::SETTING_MYSQL_PMA_USER)) {
                 $r = array();
                 $r['s'] = md5(mt_rand());
-                $key = substr($r['s'], 5).SCALR_PMA_KEY;
+                $key = substr($r['s'], 5) . \Scalr::config('scalr.ui.pma_key');
                 $r['r'] = $this->pmaEncrypt(serialize(array(
                     'user' => $DBFarmRole->GetSetting(DBFarmRole::SETTING_MYSQL_PMA_USER),
                     'password' => $DBFarmRole->GetSetting(DBFarmRole::SETTING_MYSQL_PMA_PASS),
                     'host' => $DBServer->remoteIp
                 )), $key);
-                $r['h'] = md5($r['r'].$r['s'].SCALR_PMA_KEY);
+                $r['h'] = md5($r['r'].$r['s'] . \Scalr::config('scalr.ui.pma_key'));
                 $r['f'] = $dbFarm->ID;
 
                 $query = http_build_query($r);

@@ -1,4 +1,4 @@
-<?
+<?php
     final class RRD_STORAGE_TYPE
     {
         const AMAZON_S3 	= "S3";

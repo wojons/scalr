@@ -2,7 +2,7 @@
 
 class Scalr_Util_DateTime
 {
-    public static function convertDateTime(DateTime $dt, $remoteTz = NULL)
+    public static function convertTimeZone(DateTime $dt, $remoteTz = NULL)
     {
         if (is_null($remoteTz)) {
             $remoteTz = date_default_timezone_get();
@@ -18,13 +18,14 @@ class Scalr_Util_DateTime
     }
 
     /**
-     * Converts Time according to timezone settings of current user.
+     * Converts Time according to timezone parameter.
      *
      * @param   DateTime|string|int  $value  DateTime object or Unix Timestamp or string that represents time.
+     * @param   string               $timezone  TimeZone
      * @param   string               $format  Format
      * @return  string               Returns updated time in given format.
      */
-    public static function convertTz($value, $format = 'M j, Y H:i:s')
+    public static function convertDateTime($value, $timezone, $format = 'M j, Y H:i:s')
     {
         if (is_integer($value)) {
             $value = "@{$value}";
@@ -37,18 +38,33 @@ class Scalr_Util_DateTime
         }
 
         if ($dt && $dt->getTimestamp()) {
-            if (Scalr_UI_Request::getInstance()->getUser()) {
-                $timezone = Scalr_UI_Request::getInstance()->getUser()->getSetting(Scalr_Account_User::SETTING_UI_TIMEZONE);
-                if (! $timezone) {
-                    $timezone = 'UTC';
-                }
-
-                self::convertDateTime($dt, $timezone);
-            }
+            if ($timezone)
+                self::convertTimeZone($dt, $timezone);
 
             return $dt->format($format);
         } else
             return NULL;
+
+    }
+
+    /**
+     * Converts Time according to timezone settings of current user.
+     *
+     * @param   DateTime|string|int  $value  DateTime object or Unix Timestamp or string that represents time.
+     * @param   string               $format  Format
+     * @return  string               Returns updated time in given format.
+     */
+    public static function convertTz($value, $format = 'M j, Y H:i:s')
+    {
+        $timezone = '';
+        if (Scalr_UI_Request::getInstance()->getUser()) {
+            $timezone = Scalr_UI_Request::getInstance()->getUser()->getSetting(Scalr_Account_User::SETTING_UI_TIMEZONE);
+            if (! $timezone) {
+                $timezone = 'UTC';
+            }
+        }
+
+        return self::convertDateTime($value, $timezone, $format);
     }
 
     public static function getTimezones()
@@ -224,5 +240,31 @@ class Scalr_Util_DateTime
 
             return $timestring;
         }
+    }
+
+    /**
+     * Calculates difference between two dates.
+     *
+     * @param   DateTime|string      $value  DateTime object or string that represents time.
+     * @param   bool                 $humanReadable Return number of seconds or human readable string
+     * @return  string|int           Returns difference between dates.
+     */
+    public static function getDateTimeDiff($dateTime1, $dateTime2, $humanReadable = true)
+    {
+        if (!($dateTime1 instanceof DateTime)) {
+            $dateTime1 = new DateTime($dateTime1);
+        }
+        if (!($dateTime2 instanceof DateTime)) {
+            $dateTime2 = new DateTime($dateTime2);
+        }
+
+        $diff = $dateTime1->getTimestamp() - $dateTime2->getTimestamp();
+
+        if ($humanReadable) {
+            $diff = Scalr_Util_DateTime::getHumanReadableTimeout($diff);
+        }
+
+        return $diff;
+        
     }
 }

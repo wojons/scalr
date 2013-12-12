@@ -1,4 +1,4 @@
-<?
+<?php
     final class FORM_FIELD_TYPE
     {
         const TEXT 		= "text";

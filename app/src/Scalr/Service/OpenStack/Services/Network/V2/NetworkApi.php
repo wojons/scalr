@@ -1,6 +1,8 @@
 <?php
 namespace Scalr\Service\OpenStack\Services\Network\V2;
 
+use Scalr\Service\OpenStack\Services\Network\Type\CreateRouter;
+use Scalr\Service\OpenStack\Services\Network\Type\ListRoutersFilter;
 use Scalr\Service\OpenStack\Services\Network\Type\ListPortsFilter;
 use Scalr\Service\OpenStack\Services\Network\Type\CreatePort;
 use Scalr\Service\OpenStack\Services\Network\Type\CreateSubnet;
@@ -56,6 +58,27 @@ class NetworkApi
     public function escape($string)
     {
         return rawurlencode($string);
+    }
+
+    /**
+     * List Extensions action
+     *
+     * This operation returns a response body. In the response body, each extension is identified
+     * by two unique identifiers, a namespace and an alias. Additionally an extension contains
+     * documentation links in various formats
+     *
+     * @return  array      Returns list of available extensions
+     * @throws  RestClientException
+     */
+    public function listExtensions()
+    {
+        $result = null;
+        $response = $this->getClient()->call($this->service, '/extensions');
+        if ($response->hasError() === false) {
+            $result = json_decode($response->getContent());
+            $result = $result->extensions;
+        }
+        return $result;
     }
 
     /**
@@ -476,6 +499,389 @@ class NetworkApi
             $result = true;
         }
 
+        return $result;
+    }
+
+
+    /**
+     * Gets the routers list
+     *
+     * This operation returns a list of routers to which the tenant has access.
+     * Default policy settings return only those routers that are owned by the tenant who submits the request,
+     * unless the request is submitted by an user with administrative rights.
+     * Users can control which attributes should be returned by using the fields query parameter.
+     * Additionally, results can be filtered by using query string parameters.
+     *
+     * @param   string            $routerId     optional The ID of the router to show detailed info
+     * @param   ListRoutersFilter $filter       optional The filter options. Filter doesn't apply to detailed info
+     * @param   array             $fields       optional The list of the fields to show
+     * @return  array|object Returns the list of the router or the information about one router
+     * @throws  RestClientException
+     */
+    public function listRouters($routerId = null, ListRoutersFilter $filter = null, array $fields = null)
+    {
+        $result = null;
+        $detailed = ($routerId !== null ? sprintf("/%s", $this->escape($routerId)) : '');
+        if (!empty($fields)) {
+            $acceptedFields = array('status', 'name', 'admin_state_up', 'id', 'tenant_id', 'external_gateway_info', 'admin_state_up');
+            $fields = join('&fields=', array_map("rawurlencode", array_intersect(array_values($fields), $acceptedFields)));
+        }
+        $querystr = ($filter !== null && $detailed == '' ? $filter->getQueryString() : '')
+                  . ($fields ? '&fields=' . $fields : '');
+        $querystr = (!empty($querystr) ? '?' . ltrim($querystr, '&') : '');
+
+        $response = $this->getClient()->call(
+            $this->service,
+            '/routers' . $detailed . $querystr
+        );
+
+        if ($response->hasError() === false) {
+            $result = json_decode($response->getContent());
+            $result = empty($detailed) ? $result->routers : $result->router;
+        }
+
+        return $result;
+    }
+
+    /**
+     * Create Router action (POST /routers)
+     *
+     * This operation creates a new logical router.
+     * When it is created, a logical router does not have any internal interface.
+     * In other words, it is not associated to any subnet.
+     * The user can optionally specify an external gateway for a router at create time;
+     * a router's external gateway must be plugged into an external network,
+     * that is to say a network for which the extended field router:external is set to true.
+     *
+     * @param   CreateRouter $request Create router request object
+     * @return  object       Returns router object on success or throws an exception otherwise
+     * @throws  RestClientException
+     */
+    public function createRouter(CreateRouter $request)
+    {
+        $result = null;
+
+        $options = array('router' => array_filter(
+            (array)$request,
+            create_function('$v', 'return $v !== null;')
+        ));
+
+        $response = $this->getClient()->call(
+            $this->service, '/routers',
+            $options, 'POST'
+        );
+
+        if ($response->hasError() === false) {
+            $result = json_decode($response->getContent());
+            $result = $result->router;
+        }
+
+        return $result;
+    }
+
+    /**
+     * Delete Router action (DELETE /routers/router-id)
+     *
+     * This operation removes a logical router;
+     * The operation will fail if the router still has some internal interfaces.
+     * Users must remove all router interfaces before deleting the router,
+     * by removing all internal interfaces through remove router interface operation.
+     *
+     * @param   string     $routerId    The ID of the router to remove.
+     * @return  bool       Returns true on success or throws an exception otherwise
+     * @throws  RestClientException
+     */
+    public function deleteRouter($routerId)
+    {
+        $result = false;
+
+        $response = $this->getClient()->call(
+            $this->service, sprintf('/routers/%s', $this->escape($routerId)),
+            null, 'DELETE'
+        );
+
+        if ($response->hasError() === false) {
+            $result = json_decode($response->getContent());
+            $result = true;
+        }
+
+        return $result;
+    }
+
+    /**
+     * Update Router action (PUT /routers/router-id)
+     *
+     * This operation updates a logical router. Beyond the name and the administrative state,
+     * the only parameter which can be updated with this operation is the external gateway.
+     *
+     * Please note that this operation does not allow to update router interfaces.
+     * To this aim, the add router interface and remove router interface should be used.
+     *
+     * @param   string       $routerId The Id of the router
+     * @param   array|object $options  Raw options object (It will be json_encoded and passed as is.)
+     * @return  object       Returns router object on success or throws an exception otherwise
+     * @throws  RestClientException
+     */
+    public function updateRouter($routerId, $options)
+    {
+        $result = null;
+
+        $response = $this->getClient()->call(
+            $this->service, sprintf('/routers/%s', $this->escape($routerId)),
+            array('_putData' => json_encode(array('router' => $options))), 'PUT'
+        );
+
+        if ($response->hasError() === false) {
+            $result = json_decode($response->getContent());
+            $result = $result->router;
+        }
+
+        return $result;
+    }
+
+    /**
+     * Add Router Interface action (PUT /routers/router-id/add_router_interface)
+     *
+     * This operation attaches a subnet to an internal router interface.
+     * Either a subnet identifier or a port identifier must be passed in the request body.
+     * If both are specified, a 400 Bad Request error is returned.
+     *
+     * When the subnet_id attribute is specified in the request body,
+     * the subnet's gateway ip address is used to create the router interface;
+     * otherwise, if port_id is specified, the IP address associated with the port is used
+     * for creating the router interface.
+     *
+     * It is worth remarking that a 400 Bad Request error is returned if several IP addresses are associated with the specified port,
+     * or if no IP address is associated with the port;
+     * also a 409 Conflict is returned if the port is already used.
+     *
+     * @param   string     $routerId The ID of the router
+     * @param   string     $subnetId optional The identifier of the subnet
+     * @param   string     $portId   optional The identifier of the port
+     * @throws  \InvalidArgumentException
+     * @throws  RestClientException
+     * @return  object     Returns both port and subnet identifiers as object's properties
+     */
+    public function addRouterInterface($routerId, $subnetId = null, $portId = null)
+    {
+        $result = null;
+        $options = array();
+
+        if (!empty($subnetId)) {
+            $options['subnet_id'] = $this->escape($subnetId);
+        }
+        if (!empty($portId)) {
+            $options['port_id'] = $this->escape($portId);
+        }
+        if (empty($options) || isset($options['port_id']) && isset($options['subnet_id'])) {
+            throw new \InvalidArgumentException(sprintf(
+                'Either a subnet identifier or a port identifier must be passed in the method.'
+            ));
+        }
+
+        $response = $this->getClient()->call(
+            $this->service, sprintf('/routers/%s/add_router_interface', $this->escape($routerId)),
+            array('_putData' => json_encode($options)), 'PUT'
+        );
+
+        if ($response->hasError() === false) {
+            $result = json_decode($response->getContent());
+        }
+
+        return $result;
+    }
+
+    /**
+     * Remove Router Interface action (PUT /routers/router-id/remove_router_interface)
+     *
+     * This operation removes an internal router interface, thus detaching a subnet from the router.
+     * Either a subnet identifier (subnet_id) or a port identifier (port_id) should be passed in the request body;
+     * this will be used to identify the router interface to remove.
+     * If both are specified, the subnet identifier must correspond to the one of the first ip address on the port specified by the port identifier;
+     * Otherwise a 409 Conflict error will be returned.
+     *
+     * The response will contain information about the affected router and interface.
+     *
+     * A 404 Not Found error will be returned either if the router or the subnet/port do not exist or are not visible to the user.
+     * As a consequence of this operation, the port connecting the router with the subnet is removed from the subnet's network.
+     *
+     * @param   string     $routerId The ID of the router
+     * @param   string     $subnetId optional The identifier of the subnet
+     * @param   string     $portId   optional The identifier of the port
+     * @throws  \InvalidArgumentException
+     * @throws  RestClientException
+     * @return  object     Returns raw response as object
+     */
+    public function removeRouterInterface($routerId, $subnetId = null, $portId = null)
+    {
+        $result = null;
+        $options = array();
+
+        if (!empty($subnetId)) {
+            $options['subnet_id'] = $this->escape($subnetId);
+        }
+        if (!empty($portId)) {
+            $options['port_id'] = $this->escape($portId);
+        }
+        if (empty($options)) {
+            throw new \InvalidArgumentException(sprintf(
+                'Either a subnet identifier or a port identifier must be passed in the method.'
+            ));
+        }
+
+        $response = $this->getClient()->call(
+            $this->service, sprintf('/routers/%s/remove_router_interface', $this->escape($routerId)),
+            array('_putData' => json_encode($options)), 'PUT'
+        );
+
+        if ($response->hasError() === false) {
+            $result = json_decode($response->getContent());
+        }
+
+        return $result;
+    }
+
+    /**
+     * List Floating Ips action
+     *
+     * Lists floating IP addresses associated with the tenant or account.
+     *
+     * @return  array Returns the list floating IP addresses associated with the tenant or account.
+     * @throws  RestClientException
+     */
+    public function listFloatingIps()
+    {
+        $result = null;
+        $response = $this->getClient()->call($this->service, '/floatingips');
+        if ($response->hasError() === false) {
+            $result = json_decode($response->getContent());
+            $result = $result->floatingips;
+        }
+        return $result;
+    }
+
+    /**
+     * Gets floating Ip details
+     *
+     * Lists details of the floating IP address associated with floating_IP_address_ID.
+     *
+     * @param   int    $floatingIpId     The unique identifier associated with allocated floating IP address.
+     * @return  object Returns details of the floating IP address.
+     * @throws  RestClientException
+     */
+    public function getFloatingIp($floatingIpId)
+    {
+        $result = null;
+        $response = $this->getClient()->call(
+            $this->service,
+            sprintf('/floatingips/%s', $floatingIpId)
+        );
+        if ($response->hasError() === false) {
+            $result = json_decode($response->getContent());
+            $result = $result->floatingip;
+        }
+        return $result;
+    }
+
+    /**
+     * This operation creates a floating IP.
+     *
+     * Creates a new floating IP,
+     * and configures its association with an internal port,
+     * if the relevant information are specified.
+     *
+     * @param   string   $floatingNetworkId The identifier of the external network
+     * @param   string   $portId            optional Internal port
+     * @return  object   Returns allocated floating ip details
+     * @throws  RestClientException
+     */
+    public function createFloatingIp($floatingNetworkId, $portId = null)
+    {
+        $result = null;
+        $options = array();
+        if (isset($floatingNetworkId)) {
+            $options['floating_network_id'] = (string)$floatingNetworkId;
+        }
+        if (isset($portId)) {
+            $options['port_id'] = (string)$portId;
+        }
+
+        $options = array('floatingip' => $options);
+
+        $response = $this->getClient()->call(
+            $this->service,
+            '/floatingips',
+            $options,
+            'POST'
+        );
+
+        if ($response->hasError() === false) {
+            $result = json_decode($response->getContent());
+            $result = $result->floatingip;
+        }
+        return $result;
+    }
+
+    /**
+     * This operation updates a floating IP.
+     *
+     * This operation has the name of setting, unsetting, or updating the
+     * assocation between a floating ip and a Quantum port.
+     * The association process is exactly the same as the one discussed
+     * for the create floating IP operation.
+     *
+     * @param   string   $floatingIpId      The identifier of the floating IP
+     * @param   string   $portId            optional Internal port
+     * @return  object   Returns allocated floating ip details
+     * @throws  RestClientException
+     */
+    public function updateFloatingIp($floatingIpId, $portId = null)
+    {
+        $result = null;
+
+        $options = new \stdClass();
+        if (isset($portId)) {
+            $options->port_id = (string)$portId;
+        }
+
+        $options = array('floatingip' => $options);
+
+        $response = $this->getClient()->call(
+            $this->service,
+            sprintf('/floatingips/%s', $this->escape($floatingIpId)),
+            array('_putData' => json_encode($options)),
+            'PUT'
+        );
+
+        if ($response->hasError() === false) {
+            $result = json_decode($response->getContent());
+            $result = $result->floatingip;
+        }
+
+        return $result;
+    }
+
+
+    /**
+     * The operation removes the floating IP
+     *
+     * If the floating IP being removed is associated with a Quantum port, the association is removed as well.
+     *
+     * @param   int $floatingIpId Floating IP address ID
+     * @return  bool Returns true on success or throws an exception
+     * @throws  RestClientException
+     */
+    public function deleteFloatingIp($floatingIpId)
+    {
+        $result = false;
+        $response = $this->getClient()->call(
+            $this->service,
+            sprintf('/floatingips/%s', $floatingIpId),
+            null, 'DELETE'
+        );
+        if ($response->hasError() === false) {
+            $result = true;
+        }
         return $result;
     }
 }

@@ -88,11 +88,13 @@ class AwsTest extends AwsTestCase
     public function providerRegion()
     {
         $data = array();
-        foreach (Aws::getAvailableRegions() as $region) {
-            $data[] = array(
-                $region
-            );
+
+        $reflection = new \ReflectionClass(self::CLASS_AWS);
+        foreach ($reflection->getConstants() as $name => $value) {
+            if (strpos($name, 'REGION_') !== 0) continue;
+            $data[] = array($name);
         }
+
         return $data;
     }
 

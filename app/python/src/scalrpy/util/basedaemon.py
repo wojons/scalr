@@ -1,4 +1,3 @@
-
 import os
 import sys
 import atexit
@@ -7,40 +6,35 @@ import logging
 from scalrpy.util import helper
 
 
-logger = logging.getLogger(__file__)
-logger.setLevel(logging.DEBUG)
-hndlr = logging.StreamHandler()
-hndlr.setFormatter(logging.Formatter('%(asctime)s-%(name)s-%(levelname)s# %(message)s'))
-hndlr.setLevel(logging.ERROR)
-logger.addHandler(hndlr)
+LOG = logging.getLogger('ScalrPy')
 
 
 class BaseDaemon(object):
-    """Base class for daemon"""
 
-    def __init__(
-                self, pid_file, logger_name=None,
-                stdin='/dev/null',
-                stdout='/dev/null',
-                stderr='/dev/null'):
+    def __init__(self,
+            pid_file=None,
+            stdin='/dev/null',
+            stdout='/dev/null',
+            stderr='/dev/null'
+            ):
 
         self.pid_file = pid_file
-        if logger_name:
-            global logger
-            logger = logging.getLogger('%s.%s' % (logger_name, os.path.basename(__file__)))
         self.stdin = stdin
         self.stdout = stdout
         self.stderr = stderr
 
 
     def start(self):
-        logger.debug('Start')
-        self.daemonize()
+        self._daemonize()
+        LOG.info('Start')
         self.run()
 
 
     def stop(self):
-        logger.debug('Stop')
+        LOG.info('Stop')
+        if not self.pid_file:
+            raise Exception("Can't stop, you must specify pid file")
+
         try:
             pf = file(self.pid_file, 'r')
             pid = int(pf.read().strip())
@@ -53,20 +47,16 @@ class BaseDaemon(object):
 
         if not pid:
             message = "Pid file %s does not exist"
-            logger.critical(message % self.pid_file)
+            LOG.warning(message % self.pid_file)
             return
 
-        helper.kill_ps(pid, child=True)
+        try:
+            helper.kill_ps(pid, child=True)
+        except Exception:
+            LOG.error(helper.exc_info())
 
         if os.path.exists(self.pid_file):
             os.remove(self.pid_file)
-            self.running = False
-
-
-    def restart(self):
-        logger.debug('Restart')
-        self.stop()
-        self.start()
 
 
     def run(self):
@@ -76,41 +66,46 @@ class BaseDaemon(object):
         pass
 
 
-    def delpid(self):
-        logger.debug('Remove pid file')
+    def _create_pid_file(self):
+        pid = str(os.getpid())
+        if not self.pid_file:
+            self.pid_file = '/var/run/%s.pid' % pid
+        file(self.pid_file,'w+').write("%s\n" % pid)
+
+
+    def _delete_pid_file(self):
+        LOG.debug('Remove pid file %s' % self.pid_file)
         os.remove(self.pid_file)
 
 
-    def daemonize(self):
+    def _daemonize(self):
+        LOG.info('Daemonize')
+
+        # first fork
         try:
-            # first fork
             pid = os.fork()
             if pid > 0:
                 sys.exit(0)
-        except OSError, e:
-            logger.error(e)
+        except OSError as e:
+            LOG.error(e)
             raise
 
         os.chdir('/')
         os.setsid()
         os.umask(0)
 
+        # second fork
         try:
-            # second fork
             pid = os.fork()
             if pid > 0:
                 sys.exit(0)
-        except OSError, e:
-            logger.critical(e)
+        except OSError as e:
+            LOG.critical(e)
             raise
 
-        atexit.register(self.delpid)
-        pid = str(os.getpid())
-        try:
-            file(self.pid_file,'w+').write("%s\n" % pid)
-        except Exception as e:
-            logger.critical(e)
-            raise
+        self._create_pid_file()
+
+        atexit.register(self._delete_pid_file)
 
         # redirect standard file descriptors
         sys.stdout.flush()
@@ -121,4 +116,3 @@ class BaseDaemon(object):
         os.dup2(si.fileno(), sys.stdin.fileno())
         os.dup2(so.fileno(), sys.stdout.fileno())
         os.dup2(se.fileno(), sys.stderr.fileno())
-

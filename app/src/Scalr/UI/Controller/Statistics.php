@@ -1,6 +1,17 @@
 <?php
+use Scalr\Acl\Acl;
+
 class Scalr_UI_Controller_Statistics extends Scalr_UI_Controller
 {
+    /**
+     * {@inheritdoc}
+     * @see Scalr_UI_Controller::hasAccess()
+     */
+    public function hasAccess()
+    {
+        return parent::hasAccess() && $this->request->isAllowed(Acl::RESOURCE_FARMS_STATISTICS);
+    }
+
     public function defaultAction()
     {
         $this->serversUsageAction();
@@ -23,6 +34,7 @@ class Scalr_UI_Controller_Statistics extends Scalr_UI_Controller
 
     public function getInstancePrice()
     {
+        //FIXME this output should be cached within 1 - 2 hours
         $priceList = file_get_contents('http://aws.amazon.com/ec2/pricing/pricing-on-demand-instances.json');
         $priceList = (array)json_decode($priceList);
         $priceList = $priceList['config']->regions;
@@ -66,7 +78,11 @@ class Scalr_UI_Controller_Statistics extends Scalr_UI_Controller
                     if (isset($compliance[$size['size']]) && $compliance[$size['size']] == '8xlarge')
                         $iType = 'cc2';
 
-                    $price[$region][$iType . '.' . (isset($compliance[$size['size']]) ? $compliance[$size['size']] : '')] = $size['valueColumns'][0]->prices->USD;
+                    if ($iType) {
+                        $price[$region][$iType . '.' . (isset($compliance[$size['size']]) ? $compliance[$size['size']] : '')] = $size['valueColumns'][0]->prices->USD;
+                    } else {
+                        $price[$region][$size['size']] = $size['valueColumns'][0]->prices->USD;
+                    }
                 }
 
             }
@@ -79,11 +95,18 @@ class Scalr_UI_Controller_Statistics extends Scalr_UI_Controller
     {
         // Check permissions
         if ($this->getParam('envId') == '0' && $this->user->getType() == Scalr_Account_User::TYPE_ACCOUNT_OWNER) {
-            $data = $this->db->GetAll("SELECT id, name FROM farms WHERE clientid = ?", $this->user->getAccountId());
+            $sql = 'SELECT id, name FROM farms WHERE clientid = ?';
+            $args = $this->user->getAccountId();
         } else {
             $this->user->getPermissions()->validate(Scalr_Environment::init()->loadById($this->getParam('envId')));
-            $data = $this->db->GetAll("SELECT id, name FROM farms WHERE env_id = ?", $this->getParam('envId'));
+            $sql = 'SELECT id, name FROM farms WHERE env_id = ?';
+            $args = array($this->getParam('envId'));
+            if (!$this->request->isAllowed(Acl::RESOURCE_FARMS, Acl::PERM_FARMS_NOT_OWNED_FARMS)) {
+                $sql .= ' AND created_by_id = ?';
+                $args[] = $this->user->getId();
+            }
         }
+        $data = $this->db->GetAll($sql, $args);
 
         array_unshift($data, array(
             'id' => '0',
@@ -95,32 +118,45 @@ class Scalr_UI_Controller_Statistics extends Scalr_UI_Controller
 
     public function xListServersUsageAction()
     {
-        foreach($this->user->getEnvironments() as $key => $value)
+        foreach($this->user->getEnvironments() as $key => $value) {
             $env[] = $value['id'];
-        $env = implode(',',$env);
+        }
+
+        $env = implode(',', $env);
+
         $params = array($this->getParam('year'));
 
-        $sql = 'SELECT SUM(`usage`) as `usage`, `month`, `instance_type` as `instanceType`, `cloud_location` as `cloudLocation` FROM `servers_stats` WHERE `year` = ?';
-        if($this->getParam('envId') != 0) {
-            $sql.= " AND `env_id` = ?";
+        $sql = "
+            SELECT SUM(`usage`) as `usage`, `month`, `instance_type` as `instanceType`, `cloud_location` as `cloudLocation`
+            FROM `servers_stats`
+            WHERE `year` = ?
+        ";
 
+        $allFarms = $this->request->isAllowed(Acl::RESOURCE_FARMS, Acl::PERM_FARMS_NOT_OWNED_FARMS);
+        if (!$allFarms) {
+            $sql .= " AND `farm_id` IN (SELECT id FROM `farms` WHERE env_id IN ("
+                  . (!empty($env) ? $env : intval($this->getEnvironmentId())) . ") "
+                  . " AND created_by_id = " . intval($this->user->getId()) . ") ";
+        }
+
+        if ($this->getParam('envId') != 0) {
+            $sql .= " AND `env_id` = ?";
             $this->user->getPermissions()->validate(Scalr_Environment::init()->loadById($this->getParam('envId')));
-
             $params[] = $this->getParam('envId');
-        }else
-            $sql.= " AND `env_id` IN (".$env.")";
-        if($this->getParam('farmId') != 0) {
-            $sql.= " AND `farm_id` = ?";
+        } else {
+            $sql .= " AND `env_id` IN (" . $env . ")";
+        }
 
+        if ($this->getParam('farmId') != 0) {
+            $sql .= " AND `farm_id` = ?";
             $this->user->getPermissions()->validate(DBFarm::LoadByID($this->getParam('farmId')));
-
             $params[] = $this->getParam('farmId');
         }
-        $sql.= 'GROUP BY `month`, `instance_type`, `cloud_location`';
+
+        $sql .= 'GROUP BY `month`, `instance_type`, `cloud_location`';
 
         $usages = $this->db->GetAll($sql, $params);
         $result = array();
-
         foreach ($usages as $value) {
             $key = "{$value['cloudLocation']}-{$value['instanceType']}";
             if (! isset($result[$key])) {

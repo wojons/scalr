@@ -43,11 +43,11 @@ Scalr.regPage('Scalr.ui.account2.environments.platform.ec2', function (loadParam
 	}
 	
 	var form = Ext.create('Ext.form.Panel', {
-		bodyCls: 'x-panel-body-frame',
 		scalrOptions: {
 			'modal': true
 		},
-		width: 600,
+		width: 700,
+        bodyCls: 'x-container-fieldset',
 		title: 'Environments &raquo; ' + moduleParams.env.name + '&raquo; Amazon EC2',
 		fieldDefaults: {
 			anchor: '100%',
@@ -56,15 +56,15 @@ Scalr.regPage('Scalr.ui.account2.environments.platform.ec2', function (loadParam
 
 		items: [{
 			xtype: 'displayfield',
-			fieldCls: 'x-form-field-info',
+			cls: 'x-form-field-info',
 			hidden: !Scalr.flags.needEnvConfig,
 			value: 'Thanks for signing up to Scalr!<br><br>' +
 				'The next step after signing up is to share your EC2 keys with us, or keys from any other infrastructure cloud. We use these keys to make the API calls to the cloud, on your behalf. These keys are stored encrypted on a secured, firewalled server.<br><br>' +
 				'You can <a href="http://wiki.scalr.net/Tutorials/Create_an_AWS_account" target="_blank" style="font-weight: bold">get these keys by following this video</a>'
 		}, {
 			xtype: 'displayfield',
-			fieldCls: 'x-form-field-info',
-			hidden: Scalr.flags.needEnvConfig,
+			cls: 'x-form-field-info',
+			hidden: !!Scalr.flags.needEnvConfig,
 			value: '<a href="http://wiki.scalr.net/Tutorials/Create_an_AWS_account" target="_blank" style="font-weight: bold">Tutorial: How to obtain all this information.</a>'
 		}, {
 			xtype: 'hidden',
@@ -110,7 +110,11 @@ Scalr.regPage('Scalr.ui.account2.environments.platform.ec2', function (loadParam
 		dockedItems: [{
 			xtype: 'container',
 			dock: 'bottom',
-			cls: 'x-docked-bottom-frame',
+			cls: 'x-docked-buttons',
+            defaults:{
+                flex: 1,
+                maxWidth: 150
+            },
 			layout: {
 				type: 'hbox',
 				pack: 'center'
@@ -123,17 +127,15 @@ Scalr.regPage('Scalr.ui.account2.environments.platform.ec2', function (loadParam
 				}
 			}, {
 				xtype: 'button',
-				margin: '0 0 0 5',
-				hidden: Scalr.flags.needEnvConfig,
+				hidden: !!Scalr.flags.needEnvConfig,
 				text: 'Cancel',
 				handler: function() {
 					Scalr.event.fireEvent('close');
 				}
 			},{
 				xtype: 'button',
-				margin: '0 0 0 10',
 				cls: 'x-btn-default-small-red',
-				hidden: !params['ec2.is_enabled'] || Scalr.flags.needEnvConfig,
+				hidden: !params['ec2.is_enabled'] || !!Scalr.flags.needEnvConfig,
 				text: 'Delete',
 				handler: function() {
 					sendForm(true);
@@ -141,15 +143,15 @@ Scalr.regPage('Scalr.ui.account2.environments.platform.ec2', function (loadParam
 			}, {
 				xtype: 'button',
 				hidden: !Scalr.flags.needEnvConfig,
-				margin: '0 0 0 5',
 				text: "I'm not using AWS EC2, let me configure another cloud",
+                flex: 3.4,
+                maxWidth: 600,
 				handler: function () {
 					Scalr.event.fireEvent('redirect', '#/account/environments/?envId=' + moduleParams.env.id, true);
 				}
 			}, {
 				xtype: 'button',
 				hidden: !Scalr.flags.needEnvConfig,
-				margin: '0 0 0 5',
 				text: 'Do this later',
 				handler: function () {
 					sessionStorage.setItem('needEnvConfigLater', true);

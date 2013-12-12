@@ -5,12 +5,11 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.instances.create', function (loadParams, m
 	}
 	form = Ext.create('Ext.form.Panel', {
 		title: (loadParams['instanceId']) ? 'Tools &raquo; Amazon Web Services &raquo; RDS &raquo; DB Instances &raquo; ' + loadParams['instanceId'] + ' &raquo; Edit' : 'Tools &raquo; Amazon Web Services &raquo; RDS &raquo; DB Instances &raquo; Launch',
-		bodyCls: 'x-panel-body-frame',
 		width: 800,
 		dockedItems: [{
 			xtype: 'container',
 			dock: 'bottom',
-			cls: 'x-docked-bottom-frame',
+			cls: 'x-docked-buttons',
 			layout: {
 				type: 'hbox',
 				pack: 'center'
@@ -26,9 +25,6 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.instances.create', function (loadParams, m
 						processBox: {
 							type: 'save'
 						},
-						params: {
-                            cloudLocation: loadParams['cloudLocation']
-                        },
 						url: (loadParams['instanceId']) ? '/tools/aws/rds/instances/xModifyInstance' : '/tools/aws/rds/instances/xLaunchInstance',
 						form: form.getForm(),
 						success: function (data) {
@@ -38,7 +34,6 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.instances.create', function (loadParams, m
 				}
 			},{
 				xtype: 'button',
-				margin: '0 0 0 5',
 				text: 'Cancel',
 				handler: function() {
 					Scalr.event.fireEvent('close');
@@ -53,6 +48,7 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.instances.create', function (loadParams, m
 				padding: 5,
 				xtype: 'combo',
 				name: 'cloudLocation',
+                value: loadParams['cloudLocation'],
 				store: {
 					fields: [ 'id', 'name' ],
 					data: moduleParams.locations,

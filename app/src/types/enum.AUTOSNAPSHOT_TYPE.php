@@ -1,4 +1,4 @@
-<?
+<?php
     final class AUTOSNAPSHOT_TYPE
     {
         const EBSSnap		= 'EBS';

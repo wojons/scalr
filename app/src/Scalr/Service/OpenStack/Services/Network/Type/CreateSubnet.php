@@ -2,7 +2,6 @@
 namespace Scalr\Service\OpenStack\Services\Network\Type;
 
 use Scalr\Service\OpenStack\Type\BooleanType;
-
 use Scalr\Service\OpenStack\Type\AbstractInitType;
 
 /**
@@ -104,12 +103,12 @@ class CreateSubnet extends AbstractInitType
     /**
      * Initializes a new CreateSubnet
      *
-     * @param   string     $networkId The ID of the network
-     * @param   string     $cidr      The CIDR
-     * @param   int        $ipVersion The version of the IP protocol
+     * @param   string     $networkId optional The ID of the network
+     * @param   string     $cidr      optional The CIDR
+     * @param   int        $ipVersion optional The version of the IP protocol
      * @return  CreateSubnet
      */
-    public static function init($networkId = null, $cidr = null, $ipVersion = 4)
+    public static function init()
     {
         return call_user_func_array('parent::init', func_get_args());
     }

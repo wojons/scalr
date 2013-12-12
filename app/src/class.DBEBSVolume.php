@@ -37,6 +37,11 @@ class DBEBSVolume
      */
     private $server;
 
+    /**
+     * @var \DBFarm
+     */
+    private $dbFarm;
+
     private static $FieldPropertyMap = array(
         'id' 			=> 'id',
         'env_id'		=> 'envId',
@@ -81,6 +86,20 @@ class DBEBSVolume
     }
 
     /**
+     * Gets DBFarm object
+     *
+     * @return \DBFarm
+     */
+    public function getFarmObject()
+    {
+        if (!$this->dbFarm && !empty($this->farmId)) {
+            $this->dbFarm = \DBFarm::LoadByID($this->farmId);
+        }
+
+        return $this->dbFarm;
+    }
+
+    /**
      * @return DBEBSVolume
      * @param string $id
      */
@@ -111,14 +130,15 @@ class DBEBSVolume
     {
         $db = \Scalr::getDb();
 
-        $ebs_info = $db->GetRow("SELECT id FROM ec2_ebs WHERE volume_id = ?", array($volumeId));
+        $ebs_info = $db->GetRow("SELECT id FROM ec2_ebs WHERE volume_id = ? LIMIT 1", array($volumeId));
         if (!$ebs_info)
             throw new Exception(sprintf(_("EBS volume ID#%s not found in database"), $volumeId));
 
         return self::loadById($ebs_info['id']);
     }
 
-    private function unBind () {
+    private function unBind ()
+    {
         $row = array();
         foreach (self::$FieldPropertyMap as $field => $property) {
             $row[$field] = $this->{$property};

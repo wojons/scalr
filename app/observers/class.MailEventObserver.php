@@ -67,9 +67,9 @@ class MailEventObserver implements IDeferredEventObserver
         $name = substr($method, 2);
 
         // Event message
-        $message = $DB->GetOne("SELECT message FROM events WHERE event_id = ?", array($args[0]->GetEventID()));
+        $message = $DB->GetOne("SELECT message FROM events WHERE event_id = ? LIMIT 1", array($args[0]->GetEventID()));
 
-        $farm_name = $DB->GetOne("SELECT name FROM farms WHERE id=?", array($args[0]->GetFarmID()));
+        $farm_name = $DB->GetOne("SELECT name FROM farms WHERE id=? LIMIT 1", array($args[0]->GetFarmID()));
 
         // Set subject
         if (!$farm_name) {

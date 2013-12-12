@@ -1,0 +1,8 @@
+[subject]Farm's non-standard request was declined[/subject]
+
+{{user_name}} declined your request for farm "{{farm_name}}" with comment "{{comment}}".
+
+Your farm will be terminated on {{date}}.
+
+Regards,
+The Scalr Team

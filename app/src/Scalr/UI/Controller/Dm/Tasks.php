@@ -1,7 +1,14 @@
 <?php
+use Scalr\Acl\Acl;
+
 class Scalr_UI_Controller_Dm_Tasks extends Scalr_UI_Controller
 {
     const CALL_PARAM_NAME = 'deploymentTaskId';
+
+    public function hasAccess()
+    {
+        return parent::hasAccess() && $this->request->isAllowed(Acl::RESOURCE_DEPLOYMENTS_TASKS);
+    }
 
     public function defaultAction()
     {
@@ -88,11 +95,28 @@ class Scalr_UI_Controller_Dm_Tasks extends Scalr_UI_Controller
             'sort' => array('type' => 'json', 'default' => array('property' => 'dtadded', 'direction' => 'DESC'))
         ));
 
-        $sql = "SELECT id FROM dm_deployment_tasks WHERE status !='".Scalr_Dm_DeploymentTask::STATUS_ARCHIVED."' AND env_id = '{$this->getEnvironmentId()}'";
+        $sql = "
+            SELECT
+                dt.id, dma.name AS application_name, servers.index AS server_index, farms.name AS farm_name, roles.name AS role_name,
+                dt.status AS status, dt.dtadded AS dtadded
+            FROM dm_deployment_tasks dt
+            LEFT JOIN dm_applications dma ON dt.dm_application_id = dma.id
+            LEFT JOIN servers ON servers.id = dt.server_id
+            LEFT JOIN farms ON servers.farm_id = farms.id
+            LEFT JOIN roles ON servers.farm_roleid = roles.id
+            WHERE dt.`status` != ? AND dt.env_id = ?
+        ";
 
-        $response = $this->buildResponseFromSql($sql, array("id"));
+        $allFarms = $this->request->isAllowed(Acl::RESOURCE_FARMS, Acl::PERM_FARMS_NOT_OWNED_FARMS);
+        if (!$allFarms) {
+            //join becomes inner
+            $sql .= " AND farms.created_by_id = " . $this->db->qstr($this->user->getId()) . " ";
+        }
 
-        foreach ($response["data"] as $k=> $row) {
+        $response = $this->buildResponseFromSql2($sql, array('id', 'application_name', 'farm_name', 'role_name', 'server_index', 'status', 'dtadded', 'dtdeployed'),
+            array(), array(Scalr_Dm_DeploymentTask::STATUS_ARCHIVED, $this->getEnvironmentId()));
+
+        foreach ($response["data"] as $k => $row) {
             $data = false;
             try {
                 $deploymentTask = Scalr_Dm_DeploymentTask::init()->loadById($row['id']);
@@ -101,7 +125,8 @@ class Scalr_UI_Controller_Dm_Tasks extends Scalr_UI_Controller
                 try {
                     $dbServer = DBServer::LoadByID($deploymentTask->serverId);
                     $serverIndex = $dbServer->index;
-                } catch (Exception $e) {}
+                } catch (Exception $e) {
+                }
 
                 $data = array(
                     'id'				=> $deploymentTask->id,
@@ -122,8 +147,10 @@ class Scalr_UI_Controller_Dm_Tasks extends Scalr_UI_Controller
                     $data['role_name'] = $dbFarmRole->GetRoleObject()->name;
                     $data['farm_id'] = $dbFarmRole->FarmID;
                     $data['farm_name'] = $dbFarmRole->GetFarmObject()->Name;
-                } catch (Exception $e) {}
-            } catch(Exception $e) {}
+                } catch (Exception $e) {
+                }
+            } catch (Exception $e) {
+            }
 
             $response["data"][$k] = $data;
         }

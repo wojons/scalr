@@ -168,7 +168,7 @@ Scalr.regPage('Scalr.ui.statistics.serversusage', function (loadParams, modulePa
 				}
 			},'->', {
 				xtype: 'button',
-				width: 170,
+				width: 180,
 				text: 'Download statistics',
 				iconCls: 'scalr-ui-btn-icon-download',
 				handler: function () {

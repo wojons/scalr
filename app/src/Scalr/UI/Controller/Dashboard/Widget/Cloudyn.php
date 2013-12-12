@@ -38,7 +38,7 @@ class Scalr_UI_Controller_Dashboard_Widget_Cloudyn extends Scalr_UI_Controller_D
         $session = $container->session;
 
         $owner = $this->user->getType() == Scalr_Account_User::TYPE_ACCOUNT_OWNER ||
-            $this->user->isTeamUserInEnvironment($this->getEnvironmentId(), Scalr_Account_Team::PERMISSIONS_OWNER);
+            $this->user->isTeamOwnerInEnvironment($this->getEnvironmentId());
 
         if ($env->getPlatformConfigValue(ENVIRONMENT_SETTINGS::CLOUDYN_ENABLED)) {
             //Gets a Cloudyn instance
@@ -105,7 +105,7 @@ class Scalr_UI_Controller_Dashboard_Widget_Cloudyn extends Scalr_UI_Controller_D
     public function xRemoveCloudynAction()
     {
         if (! ($this->user->getType() == Scalr_Account_User::TYPE_ACCOUNT_OWNER ||
-            $this->user->isTeamUserInEnvironment($this->getEnvironmentId(), Scalr_Account_Team::PERMISSIONS_OWNER)))
+            $this->user->isTeamOwnerInEnvironment($this->getEnvironmentId())))
             throw new Scalr_Exception_InsufficientPermissions();
 
         $env = $this->getEnvironment();
@@ -130,7 +130,7 @@ class Scalr_UI_Controller_Dashboard_Widget_Cloudyn extends Scalr_UI_Controller_D
     public function xSetupAction()
     {
         if (! ($this->user->getType() == Scalr_Account_User::TYPE_ACCOUNT_OWNER ||
-            $this->user->isTeamUserInEnvironment($this->getEnvironmentId(), Scalr_Account_Team::PERMISSIONS_OWNER)))
+            $this->user->isTeamOwnerInEnvironment($this->getEnvironmentId())))
             throw new Scalr_Exception_InsufficientPermissions();
 
         $env = $this->getEnvironment();

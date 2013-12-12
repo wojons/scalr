@@ -209,7 +209,6 @@ class Scalr_System_Cronjob_Distributed extends Scalr_System_Cronjob_MultiProcess
             }
         }
         if (!$nodeName) {
-            $shell = new Scalr_System_Shell();
             $nodeName = php_uname("n");
         }
         if (!$nodeName) {

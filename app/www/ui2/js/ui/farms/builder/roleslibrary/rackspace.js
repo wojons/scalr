@@ -4,8 +4,7 @@ Scalr.regPage('Scalr.ui.farms.builder.addrole.rackspace', function () {
         isExtraSettings: true,
         hidden: true,
 
-        cls: 'x-delimiter-top',
-        padding: '18 24',
+        cls: 'x-container-fieldset x-fieldset-separator-bottom',
         
         layout: 'hbox',
 
@@ -52,20 +51,20 @@ Scalr.regPage('Scalr.ui.farms.builder.addrole.rackspace', function () {
 
         items: [{
             xtype: 'combo',
+            name: 'rs.flavor-id',
+            maxWidth: 385,
+            flex: 1,
+            fieldLabel: 'Flavor',
+            labelWidth: 50,
+            submitValue: false,
+            editable: false,
+            queryMode: 'local',
             store: {
                 fields: [ 'id', 'name' ],
                 proxy: 'object'
             },
-            maxWidth: 710,
-            flex: 1,
-            submitValue: false,
             valueField: 'id',
-            displayField: 'name',
-            fieldLabel: 'Flavor',
-            labelWidth: 50,
-            editable: false,
-            queryMode: 'local',
-            name: 'rs.flavor-id'
+            displayField: 'name'
         }]
     }
 });

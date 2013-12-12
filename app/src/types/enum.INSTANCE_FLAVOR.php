@@ -1,4 +1,4 @@
-<?
+<?php
     final class INSTANCE_FLAVOR // Flavor
     {
         const T1_MICRO 	= "t1.micro";

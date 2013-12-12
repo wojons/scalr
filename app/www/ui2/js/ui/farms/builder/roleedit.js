@@ -8,30 +8,32 @@ Ext.define('Scalr.ui.FarmBuilderRoleEdit', {
 	},
 	currentRole: null,
     cls: 'scalr-ui-farmbuilder-roleedit',
-    bodyCls: 'x-panel-body-frame-dark',
     items: [{
         xtype: 'panel',
         flex: 1,
         layout: 'card',
         itemId: 'tabspanel',
-        margin: '0 0 12 0',
+        padding: '12 0 0 0',
+        style: 'background:#b5c0ce;',
         dockedItems: [{
+            xtype: 'container',
+            itemId: 'tabs',
             dock: 'left',
+            cls: 'x-docked-tabs',
             width: 200,
-            border: false,
-            cls: 'scalr-ui-farmbuilder-tabs',
-            autoScroll: true,
-            itemId: 'tabs'
+            padding: 0,
+            autoScroll: true
         }],
-
         onAdd: function (cmp) {
             cmp.tabButton = this.getDockedComponent('tabs').add({
-                xtype: 'btn',
-                text: cmp.tabTitle + (cmp.deprecated ? '<span class="deprecated">deprecated</span>' : ''),
-                toggleGroup: 'tabs',
+                xtype: 'button',
+                ui: 'tab',
+                textAlign: 'left',
+                text: cmp.deprecated ? '<span class="x-btn-inner-html-wrap">' + cmp.tabTitle + (cmp.deprecated ? '<span class="superscript">deprecated</span>' : '') + '</span>' : cmp.tabTitle,
+                toggleGroup: 'editrole-tabs',
                 allowDepress: false,
                 tabCmp: cmp,
-                cls: cmp.deprecated ? 'scalr-ui-farmbuilder-button-deprecated' : '',
+                cls: cmp.deprecated ? 'x-btn-tab-deprecated' : '',
                 handler: function (b) {
                     this.layout.setActiveItem(b.tabCmp);
                 },
@@ -50,14 +52,15 @@ Ext.define('Scalr.ui.FarmBuilderRoleEdit', {
     },
 
     addRoleDefaultValues: function (record) {
-		var settings = record.get('settings');
-
+		var settings = record.get('settings'),
+            roleDefaultSettings = this.moduleParams.roleDefaultSettings || {};
+    
 		this.down('#tabspanel').items.each(function(item) {
 			if (item.isActive(record)) {
-				Ext.applyIf(settings, item.getDefaultValues(record));
+				Ext.applyIf(settings, item.getDefaultValues(record, roleDefaultSettings));
             }
 		});
-        Ext.applyIf(settings, this.down('#maintab').getDefaultValues(record));
+        Ext.applyIf(settings, this.down('#maintab').getDefaultValues(record, roleDefaultSettings));
         
 		record.set('settings', settings);
 	},
@@ -66,8 +69,9 @@ Ext.define('Scalr.ui.FarmBuilderRoleEdit', {
 		this.currentRole = record;
 	},
 
-    createTabs: function(moduleParams) {
-        var tabsPanel = this.down('#tabspanel');
+    createTabs: function() {
+        var tabsPanel = this.down('#tabspanel'),
+            moduleParams = this.moduleParams;
         this.tabs = [];
         this.tabs.push(this.insert(0, Scalr.cache['Scalr.ui.farms.builder.tabs.main'](moduleParams['tabParams'])));
         for (var i = 0; i < moduleParams.tabs.length; i++) {
@@ -110,15 +114,15 @@ Ext.define('Scalr.ui.FarmBuilderRoleEdit', {
                                     firstTab = this.tabs[i].tabButton;
                                 }
                                 lastTab = this.tabs[i].tabButton;
-                                this.tabs[i].tabButton.removeCls('scalr-ui-farmbuilder-button-first scalr-ui-farmbuilder-button-last');
+                                this.tabs[i].tabButton.removeCls('x-btn-tab-first x-btn-tab-last');
                             }
                         }
                     }
                     if (firstTab !== undefined) {
-                        firstTab.addCls('scalr-ui-farmbuilder-button-first');
+                        firstTab.addCls('x-btn-tab-first');
                     }
                     if (lastTab !== undefined) {
-                        lastTab.addCls('scalr-ui-farmbuilder-button-last');
+                        lastTab.addCls('x-btn-tab-last');
                     }
                 }
                 this.resumeLayouts(true);
@@ -144,9 +148,7 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.main', function (tabParams) {
             type: 'hbox',
             align: 'stretch'
         },
-        margin: '0 0 12 12',
-        cls: 'scalr-ui-farmbuilder-roleedit-tab scalr-ui-farmbuilder-roleedit-maintab',
-        bodyCls: 'x-panel-body-frame x-panel-body-plain',
+        cls: 'x-panel-column-left scalr-ui-farmbuilder-roleedit-maintab',
         isLoading: false,
         
         minified: false,
@@ -160,12 +162,12 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.main', function (tabParams) {
             boxready: function() {
                 var me = this;
                 me.add({
-                    xtype: 'btn',
-                    cls: 'scalr-ui-btn-collapse',
-                    baseCls: 'x-btn-base',
+                    xtype: 'button',
+                    ui: '',
+                    cls: 'x-btn-collapse',
                     enableToggle: true,
                     disableMouseDownPressed: true,
-                    margin: '17 12 0 0',
+                    margin: '20 32 0 0',
                     pressed: this.minified,
                     toggleHandler: function(btn) {
                         me.toggleMinified();
@@ -203,7 +205,7 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.main', function (tabParams) {
                 item.setVisible(!minified && !item.forceHidden);
             });
             this.resumeLayouts(true);
-            this.setHeight(minified ? 54 : null);
+            this.setHeight(minified ? 66 : null);
             this.minified = minified;
         },
         
@@ -245,7 +247,6 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.main', function (tabParams) {
 		},
 
 		beforeShowTab: function (record, handler) {
-            this.down('#mainroletitle').setText('<div style="float:left;margin:2px 10px 0 0" class="scalr-ui-icon-platform-small scalr-ui-icon-platform-small-' + record.get('platform') + '"></div>' + record.get('name'), false);
             if (this.callPlatformHandler('beforeShowTab', arguments) === false) {
                 handler();
             }
@@ -285,30 +286,31 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.main', function (tabParams) {
                 platform = record.get('platform'),
                 arch = record.get('arch'),
                 roleBehaviors = record.get('behaviors').split(','),
-                behaviors = [];
+                behaviors = [],
+                osName = record.get('os') + (!Ext.isEmpty(arch) ? ' (' + (arch == 'i386' ? '32' : '64') + 'bit)' : '');
             me.isLoading = true;
             
             Ext.Array.each(roleBehaviors, function(b) {
                behaviors.push(tabParams['behaviors'][b] || b); 
             });
-            
             behaviors = behaviors.join(', ');
-            if (behaviors.length > 26){
-                behaviors = '<span title="' + Ext.htmlEncode(behaviors)+ '">' + behaviors.substr(0, 26) + '...</span>';
-            }
+            
             me.setFieldValues({
-                os: record.get('os') + (!Ext.isEmpty(arch) ? ' (' + (arch == 'i386' ? '32' : '64') + 'bit)' : ''),//'<div style="float:left" class="scalr-ui-icon-osfamily-small scalr-ui-icon-osfamily-small-' + record.get('os_family') + '"></div>&nbsp;' + 
-                behaviors: behaviors,
+                alias: record.get('alias'),
                 min_instances: settings['scaling.min_instances'] || 1,
                 max_instances: settings['scaling.max_instances'] || 2,
                 running_servers: record.get('running_servers') || 0
             });
+            me.down('#roleName').update('<img src="' + Ext.BLANK_IMAGE_URL + '" class="x-icon-platform-small x-icon-platform-small-' + record.get('platform') + '"/>&nbsp;&nbsp;<label class="x-label-grey" title="' + record.get('name') + '">' + record.get('name') + '</label>');
+            me.down('#replaceRole').setVisible(!record.get('new') && record.get('os_family'))
+            me.down('#osName').update('<img src="' + Ext.BLANK_IMAGE_URL + '" class="x-icon-osfamily-small x-icon-osfamily-small-' + record.get('os_family') + '"/>&nbsp;&nbsp;<label class="x-label-grey" title="' + osName + '">' + osName + '</label>');
+            me.down('#behaviors').update('<label class="x-label-grey" title="' + behaviors + '">' + behaviors + '</label>');
             me.down('#cloud_location').selectLocation(platform, record.get('cloud_location'));
             
             me.suspendLayouts();
             Ext.Array.each(['#column1', '#column2'], function(itemId){
                 me.down(itemId).items.each(function(comp) {
-                    comp.setVisible(Ext.Array.contains(comp.platform, platform));
+                    comp.setVisible(comp.checkPlatform !== undefined ? comp.checkPlatform(platform) : Ext.Array.contains(comp.platform, platform));
                 });
             });
             me.resumeLayouts(true);
@@ -348,6 +350,10 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.main', function (tabParams) {
                         settings['scaling.' + name] = value;
                         record.set('settings', settings);
                     break;
+                    case 'alias':
+                        record.set('alias', value);
+                        this.up('farmroleedit').fireEvent('rolealiaschange', value);
+                    break;
                     default:
                         this.callPlatformHandler('saveParam', arguments);
                     break;
@@ -358,7 +364,7 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.main', function (tabParams) {
         
         callPlatformHandler: function(method, args) {
             var handler = this.currentRole.get('platform');
-            if (Ext.Array.contains(['rackspacengus', 'rackspacenguk'], handler)) {
+            if (Scalr.isOpenstack(handler)) {
                 handler = 'openstack';
             } else if (Ext.Array.contains(['idcf', 'ucloud'], handler)) {
                 handler = 'cloudstack';
@@ -395,13 +401,17 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.main', function (tabParams) {
             },
             showTab: function(record) {
                 var settings = record.get('settings', true),
-                    instType = record.getEc2InstanceType(),
-                    field;
+                    instTypeLimits = this.up('#farmbuilder').getLimits('aws.instance_type'),
+                    instType = record.getEc2InstanceType(instTypeLimits),
+                    field, readonly;
 
                 //instance type
                 field = this.down('[name="aws.instance_type"]');
                 field.store.load({data: instType.list});
                 field.setValue(instType.value);
+                readonly = instType.list.length === 0 || (instType.list.length === 1 && instType.list[0] === instType.value);
+                field.setReadOnly(readonly, false);
+                field[instTypeLimits?'addCls':'removeCls']('x-field-governance');
 
                 //availability zone
                 field = this.down('[name="aws.availability_zone"]');
@@ -462,6 +472,102 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.main', function (tabParams) {
             }
         },
         
+        eucalyptus: {
+            beforeShowTab: function(record, handler) {
+                this.cache = null;
+                if (this.up('#fbcard').down('#farm').getVpcSettings() !== false || Ext.Array.contains(record.get('behaviors').split(','), 'router')) {
+                    this.down('[name="euca.availability_zone"]').hide();
+                    this.down('[name="euca.cloud_location"]').setValue(record.get('cloud_location')).show();
+                    handler();
+                } else {
+                    Scalr.cachedRequest.load(
+                        {
+                            url: '/platforms/eucalyptus/xGetAvailZones',
+                            params: {cloudLocation: record.get('cloud_location')}
+                        },
+                        function(data, status, cacheId){
+                            this.cache = data;
+                            this.down('[name="euca.availability_zone"]').show().setDisabled(!status);
+                            this.down('[name="euca.cloud_location"]').hide();
+                            handler();
+                        },
+                        this
+                    );
+                }
+            },
+            showTab: function(record) {
+                var settings = record.get('settings', true),
+                    instTypeLimits = this.up('#farmbuilder').getLimits('euca.instance_type'),
+                    instType = record.getEucaInstanceType(instTypeLimits),
+                    field, readonly;
+
+                //instance type
+                field = this.down('[name="euca.instance_type"]');
+                field.store.load({data: instType.list});
+                field.setValue(instType.value);
+                readonly = instType.list.length === 0 || (instType.list.length === 1 && instType.list[0] === instType.value);
+                field.setReadOnly(readonly, false);
+                field[instTypeLimits?'addCls':'removeCls']('x-field-governance');
+
+                //availability zone
+                field = this.down('[name="euca.availability_zone"]');
+                var zones = Ext.Array.map(this.cache || [], function(item){ item.disabled = item.state != 'available'; return item;}),
+                    data = [{ 
+                        id: 'x-scalr-diff', 
+                        name: 'Distribute equally' 
+                    },{ 
+                        id: '', 
+                        name: 'Euca-chosen' 
+                    },{ 
+                        id: 'x-scalr-custom', 
+                        name: 'Selected by me',
+                        items: zones
+                    }],
+                    zone = settings['euca.availability_zone'] || '',
+                    disableAvailZone =  record.get('behaviors').match('mysql') && settings['mysql.data_storage_engine'] == 'ebs' &&
+                                        settings['mysql.master_ebs_volume_id'] != '' && settings['mysql.master_ebs_volume_id'] != undefined &&
+                                        record.get('generation') != 2 && this.down('[name="aws.availability_zone"]').getValue() != '' &&
+                                        this.down('[name="euca.availability_zone"]').getValue() != 'x-scalr-diff';
+                    
+                field.store.loadData(data);
+                if (zone.match(/x-scalr-custom/)) {
+                    zone = {id: 'x-scalr-custom', items: zone.replace('x-scalr-custom=', '').split(':')};
+                } else if (!Ext.isEmpty(zone) && zone !== 'x-scalr-diff' && zone != 'x-scalr-custom') {
+                    zone = {id: 'x-scalr-custom', items: [zone]};
+                }
+
+                field.setValue(zone);
+                if (!field.disabled) {
+                    field.setDisabled(disableAvailZone);
+                }
+                this.down('#euca_availability_zone_warn').setVisible(disableAvailZone && field.isVisible());
+            },
+            saveParam: function(name, value) {
+                var record = this.currentRole,
+                    settings = record.get('settings');
+                switch (name) {
+                    case 'euca.availability_zone':
+                        if (Ext.isObject(value)) {
+                            if (value.items) {
+                                if (value.items.length === 1) {
+                                    settings[name] = value.items[0];
+                                } else if (value.items.length > 1) {
+                                    settings[name] = value.id + '=' + value.items.join(':');
+                                }
+                            }
+                        } else {
+                            settings[name] = value;
+                        }
+                    break;
+                    case 'euca.instance_type':
+                        settings['euca.instance_type'] = value;
+                    break;
+                }
+                record.set('settings', settings);
+            
+            }
+        },
+        
         rackspace: {
             beforeShowTab: function(record, handler) {
                 Scalr.cachedRequest.load(
@@ -502,9 +608,20 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.main', function (tabParams) {
                         }
                     },
                     function(data, status){
-                        var field = this.down('[name="openstack.flavor-id"]');
+                        var field = this.down('[name="openstack.flavor-id"]'),
+                            ipPools = data ? data['ipPools'] : null;
                         field.setDisabled(!status);
                         field.store.load({ data:  data ? data['flavors'] : []});
+                        
+                        field = this.down('[name="openstack.ip-pool"]');
+                        if (ipPools) {
+                            field.store.load({ data:  ipPools});
+                            field.show();
+                            this.down('[name="openstack.cloud_location"]').hide();
+                        } else {
+                            field.hide();
+                            this.down('[name="openstack.cloud_location"]').show();
+                        }
                         handler();
                     },
                     this
@@ -518,8 +635,14 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.main', function (tabParams) {
                 if (field.store.getCount() > 0) {
                     defaultValue = field.store.getAt(0).get('id');
                 }
-                field.setValue(!Ext.isEmpty(settings['openstack.flavor-id']) ? settings['openstack.flavor-id']*1 : defaultValue);
-                this.down('[name="openstack.cloud_location"]').setValue(record.get('cloud_location'));
+                field.setValue(!Ext.isEmpty(settings['openstack.flavor-id']) ? settings['openstack.flavor-id'] : defaultValue);
+                
+                field = this.down('[name="openstack.ip-pool"]');
+                if (field.isVisible()) {
+                    field.setValue(settings['openstack.ip-pool']);
+                } else {
+                    this.down('[name="openstack.cloud_location"]').setValue(record.get('cloud_location'));
+                }
             },
             saveParam: function(name, value) {
                 var record = this.currentRole,
@@ -531,18 +654,31 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.main', function (tabParams) {
 
         cloudstack: {
             beforeShowTab: function(record, handler) {
+                var platform = record.get('platform');
                 Scalr.cachedRequest.load(
                     {
-                        url: '/platforms/cloudstack/xGetOfferingsList/',
+                        url: '/platforms/cloudstack/xGetServiceOfferings/',
                         params: {
-                            cloudLocation: record.get('cloud_location'),
-                            platform: record.get('platform')
+                            platform: platform
                         }
                     },
                     function(data, status){
-                        var field = this.down('[name="cloudstack.service_offering_id"]');
+                        var field = this.down('[name="cloudstack.service_offering_id"]'),
+                            limits = this.up('#farmbuilder').getLimits(platform + '.service_offering_id'),
+                            offerings;
+                        if (limits && limits.value) {
+                            offerings = [];
+                            Ext.Array.each(data || [], function(offering) {
+                                if (Ext.Array.contains(limits.value, offering.id)) {
+                                    offerings.push(offering);
+                                }
+                            });
+                        } else {
+                            offerings = data || [];
+                        }
                         field.setDisabled(!status);
-                        field.store.load({ data: data ? data['serviceOfferings'] : []});
+                        field.store.load({ data: offerings});
+                        field[limits?'addCls':'removeCls']('x-field-governance');
                         handler();
                     },
                     this
@@ -601,25 +737,35 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.main', function (tabParams) {
                 field.reset();
                 field.setValue(value);
                 
-                this.gce.refreshMachineType.call(this, record, settings['gce.machine-type'], settings['db.msr.data_storage.engine']);
+                this.gce.refreshMachineType.call(this, record);
             },
-            refreshMachineType: function(record, machineType, storageEngine){
-                var field = this.down('[name="gce.machine-type"]'),
-                    data = this.cache || {},
-                    value = machineType || field.getValue();
-				
-                if (record.isDbMsr() && (storageEngine == 'lvm' || storageEngine == 'eph' || !storageEngine)) {
-                    field.store.load({ data: data['dbTypes'] || [] });
-                    if (value && !field.findRecordByValue(value)) {
-                        value = null;
-                    }
-                    field.setValue(value || 'n1-standard-1-d');
-                } else {
-                    field.store.load({ data: data['types'] || [] });
-                    if (value && !field.findRecordByValue(value)) {
-                        value = null;
-                    }
-                    field.setValue(value || 'n1-standard-1');
+            refreshMachineType: function(record){
+                var me = this,
+                    cloudLocation = me.down('[name="gce.cloud-location"]').getValue();
+                if (cloudLocation.length > 0) {    
+                    Scalr.cachedRequest.load(
+                        {
+                            url: '/platforms/gce/xGetMachineTypes',
+                            params: {
+                                cloudLocation: cloudLocation[0]
+                            }
+                        },
+                        function(data, status) {
+                            var field = me.down('[name="gce.machine-type"]');
+                            if (status) {
+                                var settings = record.get('settings', true),
+                                    storageEngine = settings['db.msr.data_storage.engine'],
+                                    value = settings['gce.machine-type'] || field.getValue();
+
+                                field.store.load({ data: data['types'] || [] });
+                                /*if (value && !field.findRecordByValue(value)) {
+                                    value = null;
+                                }*/
+                                field.setValue(value || 'n1-standard-1');
+                            }
+                            field.setDisabled(!status);
+                        }
+                    );   
                 }
             },
             saveParam: function(name, value) {
@@ -634,6 +780,7 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.main', function (tabParams) {
                         } else {
                             settings[name] = '';
                         }
+                        this.gce.refreshMachineType.call(this, record);
                     break;
                     case 'gce.machine-type':
                         settings[name] = value;
@@ -646,40 +793,95 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.main', function (tabParams) {
 
         items: [{
             xtype: 'container',
-            flex: 1,
+            flex: 1.5,
             minWidth: 320,
-            maxWidth: 360,
-            padding: '16 16 16 20',
-            layout: {
-                type: 'vbox',
-                align: 'stretch'
-            },
-            cls: 'x-delimiter-vertical',
+            maxWidth: 440,
+            layout: 'anchor',
+            cls: 'x-container-fieldset x-fieldset-separator-right',
             defaults: {
                 labelWidth: 90,
-                fieldBodyCls: 'align-top'
+                anchor: '100%'
             },
             items: [{
-                xtype: 'label',
-                html: '&nbsp;',
-                itemId: 'mainroletitle',
-                cls: 'x-fieldset-subheader',
+                xtype: 'textfield',
+                name: 'alias',
+                fieldLabel: 'Alias',
                 hideOnMinify: true,
-                style: 'white-space:nowrap;overflow:hidden;text-overflow:ellipsis',
-                margin: '0 0 16 0'
+                margin: '0 0 10',
+                validateOnChange: false,
+                validator: function(value){
+                    var error = false;
+                    if (!(/^[A-Za-z0-9]+[A-Za-z0-9-]*[A-Za-z0-9]+$/).test(value)) {
+                        error = 'Alias should start and end with letter or number and contain only letters, numbers and dashes';
+                    } else if (this.up('farmroleedit').farmRolesStore.countBy('alias', Ext.String.trim(value), this.up('#maintab').currentRole) > 0) {
+                        error = 'Alias must be unique within the farm';
+                    }
+                    return error || true;
+                },
+                listeners: {
+                    change: function(comp, value) {
+                        if (comp.validate()) {
+                            comp.up('#maintab').onParamChange(comp.name, Ext.String.trim(value));
+                        }
+                    }
+                }
             },{
-                xtype: 'displayfield',
-                name: 'os',
-                fieldLabel: 'OS',
-                style: 'white-space:nowrap',
-                height: 34,
-                hideOnMinify: true
+                xtype: 'container',
+                hideOnMinify: true,
+                layout: 'hbox',
+                height: 30,
+                items: [{
+                    xtype: 'label',
+                    text: 'Role name:',
+                    width: 95
+                },{
+                    xtype: 'component',
+                    cls: 'x-overflow-ellipsis',
+                    itemId: 'roleName',
+                    flex: 1
+                },{
+                    xtype: 'button',
+                    itemId: 'replaceRole',
+                    hidden: true,
+                    width: 30,
+                    height: 20,
+                    iconCls: 'x-icon-replace',
+                    tooltip: 'Replace role',
+                    padding: '2 0 0 7',
+                    handler: function() {
+                        Scalr.event.fireEvent('redirect','#/farms/roles/replaceRole?farmId=' + tabParams['farmId'] + '&farmRoleId=' + this.up('#maintab').currentRole.get('farm_role_id'));
+                    }
+                }]
             },{
-                xtype: 'displayfield',
-                name: 'behaviors',
-                fieldLabel: 'Behaviors',
-                height:38,
-                hideOnMinify: true
+                xtype: 'container',
+                hideOnMinify: true,
+                layout: 'hbox',
+                height: 30,
+                items: [{
+                    xtype: 'label',
+                    text: 'OS:',
+                    width: 95
+                },{
+                    xtype: 'component',
+                    cls: 'x-overflow-ellipsis',
+                    itemId: 'osName',
+                    flex: 1
+                }]
+            },{
+                xtype: 'container',
+                hideOnMinify: true,
+                layout: 'hbox',
+                height: 30,
+                items: [{
+                    xtype: 'label',
+                    text: 'Automation:',
+                    width: 95
+                },{
+                    xtype: 'component',
+                    cls: 'x-overflow-ellipsis',
+                    itemId: 'behaviors',
+                    flex: 1
+                }]
             },{
                 xtype: 'container',
                 itemId: 'column1',
@@ -702,10 +904,12 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.main', function (tabParams) {
                         xtype: 'combo',
                         margin: 0,
                         editable: false,
+                        hideInputOnReadOnly: true,
                         labelWidth: 90,
                         queryMode: 'local',
                         name: 'aws.instance_type',
                         fieldLabel: 'Instance type',
+                        governance: true,
                         store: {
                             fields: [ 'id', 'name' ],
                             proxy: 'object'
@@ -718,7 +922,36 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.main', function (tabParams) {
                             }
                         }
                     }]
-                },{
+                }, {
+                    xtype: 'container',
+                    platform: ['eucalyptus'],
+                    layout: 'anchor',
+                    defaults: {
+                        anchor: '100%'
+                    },
+                    items: [{
+                        xtype: 'combo',
+                        margin: 0,
+                        editable: false,
+                        hideInputOnReadOnly: true,
+                        labelWidth: 90,
+                        queryMode: 'local',
+                        name: 'euca.instance_type',
+                        fieldLabel: 'Instance type',
+                        governance: true,
+                        store: {
+                            fields: [ 'id', 'name' ],
+                            proxy: 'object'
+                        },
+                        valueField: 'name',
+                        displayField: 'name',
+                        listeners: {
+                            change: function(comp, value) {
+                                comp.up('#maintab').onParamChange(comp.name, value);
+                            }
+                        }
+                    }]
+                }, {
                     xtype: 'combo',
                     platform: ['rackspace'],
                     store: {
@@ -728,7 +961,7 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.main', function (tabParams) {
                     valueField: 'id',
                     displayField: 'name',
                     fieldLabel: 'Flavor',
-                    labelWidth: 50,
+                    labelWidth: 90,
                     editable: false,
                     queryMode: 'local',
                     name: 'rs.flavor-id',
@@ -739,7 +972,9 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.main', function (tabParams) {
                     }
                 },{
                     xtype: 'combo',
-                    platform: ['openstack', 'rackspacengus', 'rackspacenguk'],
+                    checkPlatform: function(platform) {
+                        return Scalr.isOpenstack(platform);
+                    },
                     store: {
                         fields: [ 'id', 'name' ],
                         proxy: 'object'
@@ -747,7 +982,7 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.main', function (tabParams) {
                     valueField: 'id',
                     displayField: 'name',
                     fieldLabel: 'Flavor',
-                    labelWidth: 50,
+                    labelWidth: 90,
                     editable: false,
                     queryMode: 'local',
                     name: 'openstack.flavor-id',
@@ -771,7 +1006,8 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.main', function (tabParams) {
                     valueField: 'id',
                     displayField: 'name',
                     fieldLabel: 'Service offering',
-                    labelWidth: 100,
+                    governance: true,
+                    labelWidth: 90,
                     editable: false,
                     labelStyle: 'white-space:nowrap',
                     queryMode: 'local',
@@ -813,20 +1049,19 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.main', function (tabParams) {
         },{
             xtype: 'container',
             flex: 1,
-            maxWidth: 300,
+            maxWidth: 320,
             minWidth: 260,
-            padding: 16,
-            cls: 'x-delimiter-vertical',
-            layout: {
-                type: 'vbox',
-                align: 'stretch'
+            cls: 'x-container-fieldset x-fieldset-separator-right',
+            layout: 'anchor',
+            defaults: {
+                anchor: '100%'
             },
             items: [{
                 xtype: 'cloudlocationmap',
                 //platforms: tabParams['platforms'],
                 mode: 'single',
                 itemId: 'cloud_location',
-                margin: '0 0 10 0',
+                margin: '10 0 16 0',
                 hideOnMinify: true,
                 listeners: {
                     selectlocation: function(location, state){
@@ -843,7 +1078,7 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.main', function (tabParams) {
                                     }
                                 } else {
                                     if (value.length === 1) {
-                                        Scalr.message.Warning('At least one cloud location must be selected!');
+                                        Scalr.message.InfoTip('At least one cloud location must be selected!', field.inputEl);
                                     } else {
                                         Ext.Array.remove(value, location);
                                     }
@@ -912,17 +1147,89 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.main', function (tabParams) {
                         hidden: true
                     }]
                 },{
+                    xtype: 'container',
+                    platform: ['eucalyptus'],
+                    layout: {
+                        type: 'hbox',
+                        align: 'stretch'
+                    },
+                    items:[{
+                        xtype: 'comboradio',
+                        fieldLabel: 'Avail zone',
+                        flex: 1,
+                        name: 'euca.availability_zone',
+                        valueField: 'id',
+                        displayField: 'name',
+                        listConfig: {
+                            cls: 'x-menu-light'
+                        },
+                        store: {
+                            fields: [ 'id', 'name', 'state', 'disabled', 'items' ],
+                            proxy: 'object'
+                        },
+                        margin: 0,
+                        labelWidth: 70,
+                        listeners: {
+                            collapse: function() {
+                                var value = this.getValue();
+                                if (Ext.isObject(value) && value.items.length === 0) {
+                                    this.setValue('');
+                                }
+                            },
+                            change: function(comp, value) {
+                                comp.up('#maintab').onParamChange(comp.name, value);
+                            }
+                        }
+                    },{
+                        xtype: 'displayinfofield',
+                        itemId: 'euca_availability_zone_warn',
+                        hidden: true,
+                        margin: '0 0 0 10',
+                        info: 'If you want to change placement, you need to remove Master EBS volume first.'
+                    },{
+                        xtype: 'displayfield',
+                        fieldLabel: 'Cloud location',
+                        labelWidth: 95,
+                        name: 'euca.cloud_location',
+                        hidden: true
+                    }]
+                },{
                     xtype: 'displayfield',
                     platform: ['rackspace'],
                     fieldLabel: 'Cloud location',
                     labelWidth: 95,
                     name: 'rs.cloud_location'
                 },{
-                    xtype: 'displayfield',
-                    platform: ['openstack', 'rackspacengus', 'rackspacenguk'],
-                    fieldLabel: 'Cloud location',
-                    labelWidth: 95,
-                    name: 'openstack.cloud_location'
+                    xtype: 'container',
+                    checkPlatform: function(platform) {
+                        return Scalr.isOpenstack(platform);
+                    },
+                    layout: 'fit',
+                    items: [{
+                        xtype: 'displayfield',
+                        fieldLabel: 'Cloud location',
+                        labelWidth: 95,
+                        name: 'openstack.cloud_location'
+                    },{
+                        xtype: 'combo',
+                        store: {
+                            fields: [ 'id', 'name' ],
+                            proxy: 'object'
+                        },
+                        valueField: 'id',
+                        displayField: 'name',
+                        labelWidth: 110,
+                        fieldLabel: 'Floating IPs pool',
+                        editable: false,
+                        hidden: true,
+                        queryMode: 'local',
+                        name: 'openstack.ip-pool',
+                        listeners: {
+                            change: function(comp, value) {
+                                comp.up('#maintab').onParamChange(comp.name, value);
+                            }
+                        }
+                    }]
                 },{
                     xtype: 'displayfield',
                     platform: ['cloudstack', 'idcf', 'ucloud'],
@@ -942,9 +1249,9 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.main', function (tabParams) {
                         cls: 'x-boundlist-checkboxes',
                         tpl : '<tpl for=".">'+
                                 '<tpl if="state != &quot;UP&quot;">'+
-                                    '<div class="x-boundlist-item x-boundlist-item-disabled" title="Zone is offline for maintenance">{description}&nbsp;<span class="warning"></span></div>'+
+                                    '<div class="x-boundlist-item x-boundlist-item-disabled" title="Zone is offline for maintenance"><img class="x-boundlist-icon" src="' + Ext.BLANK_IMAGE_URL + '"/>{description}&nbsp;<span class="warning"></span></div>'+
                                 '<tpl else>'+
-                                    '<div class="x-boundlist-item">{description}</div>'+
+                                    '<div class="x-boundlist-item"><img class="x-boundlist-icon" src="' + Ext.BLANK_IMAGE_URL + '"/>{description}</div>'+
                                 '</tpl>'+
                               '</tpl>'
 				    },
@@ -958,14 +1265,18 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.main', function (tabParams) {
                     labelWidth: 90,
                     listeners: {
                         beforeselect: function(comp, record, index) {
-                            return record.get('state') === 'UP';
+                            if (comp.isExpanded) {
+                                return record.get('state') === 'UP';
+                            }
                         },
                         beforedeselect: function(comp, record, index) {
-                            if (comp.getValue().length < 2) {
-                                Scalr.message.Warning('At least one cloud location must be selected!');
-                                return false;
-                            } else {
-                                return true;
+                            if (comp.isExpanded) {
+                                if (comp.getValue().length < 2) {
+                                    Scalr.message.InfoTip('At least one cloud location must be selected!', comp.inputEl, {anchor: 'bottom'});
+                                    return false;
+                                } else {
+                                    return true;
+                                }
                             }
                         },
                         change: function(comp, value) {
@@ -980,144 +1291,139 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.main', function (tabParams) {
            }]
         },{
             xtype: 'container',
-            flex: 2,
+            itemId: 'mainscaling',
+            layout: 'anchor',
+            cls: 'x-container-fieldset',
+            flex: 1.8,
             minWidth: 320,
             items: [{
+                xtype: 'label',
+                text: 'Scaling',
+                itemId: 'mainscalingtitle',
+                cls: 'x-fieldset-subheader',
+                hideOnMinify: true
+            },{
                 xtype: 'container',
-                itemId: 'mainscaling',
-                layout: 'anchor',
-                padding: 16,
+                anchor: '100%',
+                layout: 'hbox',
                 items: [{
-                    xtype: 'label',
-                    text: 'Scaling',
-                    itemId: 'mainscalingtitle',
-                    cls: 'x-fieldset-subheader',
-                    hideOnMinify: true,
-                    margin: '0 0 16 0'
-                },{
-                    xtype: 'container',
-                    anchor: '100%',
-                    layout: 'hbox',
-                    items: [{
-                        xtype: 'textfield',
-                        fieldLabel: 'Min&nbsp;instances',
-                        labelWidth: 90,
-                        fieldStyle: 'width: 36px',
-                        margin: '0 18 0 0',
-                        name: 'min_instances',
-                        hideOnDisabled: true,
-                        listeners: {
-                            change: function(comp, value) {
-                                comp.up('#maintab').onParamChange(comp.name, value);
-                            }
-                        }
-                    },{
-                        xtype: 'textfield',
-                        fieldLabel: 'Max&nbsp;instances',
-                        labelWidth: 90,
-                        fieldStyle: 'width: 36px',
-                        margin: '0 18 0 0',
-                        name: 'max_instances',
-                        hideOnDisabled: true,
-                        listeners: {
-                            change: function(comp, value) {
-                                comp.up('#maintab').onParamChange(comp.name, value);
-                            }
-                        }
-                    },{
-                        xtype: 'displayfield',
-                        fieldLabel: 'Running&nbsp;servers',
-                        value: 0,
-                        name: 'running_servers',
-                        renderer: function(value) {
-                            return value > 0 ? '<a href="#">' + value + '</a>' : value;
-                        },
-                        listeners: {
-                            boxready: function() {
-                                this.inputEl.on('click', function(e) {
-                                    var link = document.location.href.split('#'),
-                                        farmRoleId = this.up('#maintab').currentRole.get('farm_role_id');
-                                    if (farmRoleId) {
-                                        window.open(link[0] + '#/servers/view?farmId=' + tabParams['farmId'] + '&farmRoleId=' + farmRoleId);
-                                    }
-                                    e.preventDefault();
-                                }, this)
-                                
-                            }
-                        }
-                    }]
-
-                },{
-                    xtype: 'grid',
-                    itemId: 'mainscalinggrid',
-                    cls: 'x-grid-shadow',
-                    hideOnMinify: true,
+                    xtype: 'textfield',
+                    fieldLabel: 'Min&nbsp;instances',
+                    labelWidth: 90,
+                    width: 132,
+                    margin: '0 18 0 0',
+                    name: 'min_instances',
                     hideOnDisabled: true,
-                    margin: '13 0 -2 0',
-                    enableColumnResize: false,
-                    maxWidth: 410,
-                    store: {
-                        fields: ['id', 'name', 'max', 'min', 'last'],
-                        proxy: 'object'
-                    },
-                    columns: [{
-                        text: 'Metric',
-                        sortable: false,
-                        dataIndex: 'name',
-                        flex: 1.6
-                    },{
-                        text: 'Scale out',
-                        sortable: false,
-                        dataIndex: 'max',
-                        flex: 1
-                    },{
-                        text: 'Scale in',
-                        sortable: false,
-                        dataIndex: 'min',
-                        flex: 1
-                    },{
-                        text: 'Last value',
-                        sortable: false,
-                        dataIndex: 'last',
-                        flex: 1
-                    }],
-                    viewConfig: {
-                        focusedItemCls: '',
-                        selectedItemCls: '',
-                        overItemCls: '',
-                        emptyText: 'No scaling algorithm yet added.',
-                        deferEmptyText: false
-                    },
-                    loadMetrics: function(data) {
-                        var dataToLoad = [],
-                            metrics = tabParams['metrics'];
-                        if (data) {
-                            Ext.Object.each(data, function(id, value){
-                                dataToLoad.push({
-                                    id:id, 
-                                    name: metrics[id].name, 
-                                    min: metrics[id].alias === 'ram' ? (value.max ? '> ' + value.max : '') : (value.min ? '< ' + value.min : ''), 
-                                    max: metrics[id].alias === 'ram' ? (value.min ? '< ' + value.min : '') : (value.max ? '> ' + value.max : ''), 
-                                    last: metrics[id].last || ''
-                                });
-                            })
+                    listeners: {
+                        change: function(comp, value) {
+                            comp.up('#maintab').onParamChange(comp.name, value);
                         }
-                        this.store.loadData(dataToLoad);
                     }
+                },{
+                    xtype: 'textfield',
+                    fieldLabel: 'Max&nbsp;instances',
+                    labelWidth: 90,
+                    width: 132,
+                    margin: '0 18 0 0',
+                    name: 'max_instances',
+                    hideOnDisabled: true,
+                    listeners: {
+                        change: function(comp, value) {
+                            comp.up('#maintab').onParamChange(comp.name, value);
+                        }
+                    }
+                },{
+                    xtype: 'displayfield',
+                    fieldLabel: 'Running&nbsp;servers',
+                    value: 0,
+                    name: 'running_servers',
+                    renderer: function(value) {
+                        return value > 0 ? '<a href="#">' + value + '</a>' : value;
+                    },
+                    listeners: {
+                        boxready: function() {
+                            this.inputEl.on('click', function(e) {
+                                var link = document.location.href.split('#'),
+                                    farmRoleId = this.up('#maintab').currentRole.get('farm_role_id');
+                                if (farmRoleId) {
+                                    window.open(link[0] + '#/servers/view?farmId=' + tabParams['farmId'] + '&farmRoleId=' + farmRoleId);
+                                }
+                                e.preventDefault();
+                            }, this)
 
+                        }
+                    }
+                }]
+
+            },{
+                xtype: 'grid',
+                itemId: 'mainscalinggrid',
+                cls: 'x-grid-shadow',
+                hideOnMinify: true,
+                hideOnDisabled: true,
+                margin: '16 0 0 0',
+                enableColumnResize: false,
+                maxWidth: 430,
+                store: {
+                    fields: ['id', 'name', 'max', 'min', 'last'],
+                    proxy: 'object'
+                },
+                columns: [{
+                    text: 'Metric',
+                    sortable: false,
+                    dataIndex: 'name',
+                    flex: 1.6
+                },{
+                    text: 'Scale out',
+                    sortable: false,
+                    dataIndex: 'max',
+                    flex: 1
+                },{
+                    text: 'Scale in',
+                    sortable: false,
+                    dataIndex: 'min',
+                    flex: 1
+                },{
+                    text: 'Last value',
+                    sortable: false,
+                    dataIndex: 'last',
+                    flex: 1
                 }],
-                setScalingDisabled: function(disabled) {
-                    this.suspendLayouts();
-                    this.down('#mainscalingtitle').setText(disabled ? ' <span style="color:#777">Auto scaling disabled</span>' : 'Scaling', false);
-                    Ext.Array.each(this.query('[hideOnDisabled]'), function(item){
-                        item.setVisible(!disabled);
-                        item.forceHidden = disabled;
-                    });
-                    this.resumeLayouts(true);
+                viewConfig: {
+                    focusedItemCls: '',
+                    selectedItemCls: '',
+                    overItemCls: '',
+                    emptyText: 'No scaling rule yet added.',
+                    deferEmptyText: false
+                },
+                loadMetrics: function(data) {
+                    var dataToLoad = [],
+                        metrics = tabParams['metrics'];
+                    if (data) {
+                        Ext.Object.each(data, function(id, value){
+                            dataToLoad.push({
+                                id:id, 
+                                name: metrics[id].name, 
+                                min: metrics[id].alias === 'ram' ? (value.max ? '> ' + value.max : '') : (value.min ? '< ' + value.min : ''), 
+                                max: metrics[id].alias === 'ram' ? (value.min ? '< ' + value.min : '') : (value.max ? '> ' + value.max : ''), 
+                                last: metrics[id].last || ''
+                            });
+                        })
+                    }
+                    this.store.loadData(dataToLoad);
                 }
-            }]
-        }]
 
+            }],
+            setScalingDisabled: function(disabled) {
+                this.suspendLayouts();
+                this.down('#mainscalingtitle').setText(disabled ? ' <span style="color:#777">Auto scaling disabled</span>' : 'Scaling', false);
+                Ext.Array.each(this.query('[hideOnDisabled]'), function(item){
+                    item.setVisible(!disabled);
+                    item.forceHidden = disabled;
+                });
+                this.resumeLayouts(true);
+            }
+        }]
 	})
 });
 
@@ -1446,8 +1752,7 @@ Ext.define('Scalr.ui.FarmsBuilderTab', {
 	extend: 'Ext.panel.Panel',
 	tabTitle: '',
 	autoScroll: true,
-    bodyCls: 'x-panel-body-frame',
-    cls: 'scalr-ui-farmbuilder-roleedit-tab',
+    cls: 'scalr-ui-farmbuilder-roleedit-tab x-panel-column-left',
     layout: 'anchor',
     
 	currentRole: null,
@@ -1455,15 +1760,33 @@ Ext.define('Scalr.ui.FarmsBuilderTab', {
     tab: 'tab',
     
     initComponent: function() {
+        if (this.itemId !== 'maintab' && this.itemId !== 'scaling' && this.itemId !== 'dbmsr') {
+            this.hiddenItems = this.items;
+            delete this.items;
+        }
+        
         this.callParent(arguments);
         this.on({
             activate: function () {
-                var handler = Ext.bind(this.showTab, this, [this.currentRole]);
-                this.beforeShowTab(this.currentRole, handler);
-                this.up('farmroleedit').onTabActivate(this);
+                var me = this,
+                    handler = function(){
+                        me.activateTab();
+                        me.showTab(me.currentRole);
+                        me.highlightErrors(me.currentRole);
+                    };
+                if (me.items.length === 0) {
+                    me.add(me.hiddenItems);
+                }
+                if (me.itemId !== 'maintab') {
+                    me.deactivateTab(true);
+                }
+                me.beforeShowTab(this.currentRole, handler);
+                me.up('farmroleedit').onTabActivate(me);
             },
             deactivate: function () {
-                this.hideTab(this.currentRole);
+                if (!this.deactivated) {
+                    this.hideTab(this.currentRole);
+                }
                 this.up('farmroleedit').onTabDeactivate(this);
             },
             added: {
@@ -1480,19 +1803,60 @@ Ext.define('Scalr.ui.FarmsBuilderTab', {
     },
     
 	setCurrentRole: function (record, activate) {
-        var enabled = this.isActive(record);
+        var enabled = this.isActive(record),
+            hasError;
 		this.currentRole = record;
         this.tabButton.setVisible(enabled);
-        if (enabled && this.getTitle !== undefined) {
-            this.tabButton.setText(this.getTitle(record));
-        }
-        if (enabled && activate) {
-            this.ownerCt.layout.setActiveItem(this);
-            this.tabButton.toggle(true);
-            activate = false;
+        if (enabled) {
+            if (this.getTitle !== undefined) {
+                this.tabButton.setText(this.getTitle(record));
+            }
+            hasError = this.hasError();
+            if (activate === true || hasError && activate !== 'error' ) {
+                this.ownerCt.layout.setActiveItem(this);
+                this.tabButton.toggle(true);
+                activate = hasError ? 'error' : false;
+            }
+            this.tabButton[hasError ? 'addCls' : 'removeCls']('x-btn-tab-invalid');
         }
         return activate;
 	},
+    
+    hasError: function(){
+        var me = this, 
+            errors = me.currentRole.get('errors', true),
+            hasError = false;
+        if (errors) {
+            var tabSettings = me.getSettingsList();
+            if (tabSettings !== undefined) {
+                Ext.Object.each(errors, function(name, error){
+                    if (name in tabSettings) {
+                        hasError = true;
+                        return false;
+                    }
+                });
+            }
+        }
+        return hasError;
+    },
+    
+	highlightErrors: function (record) {
+        var me = this, 
+            errors = record.get('errors', true);
+        if (errors) {
+            var tabSettings = me.getSettingsList();
+            if (tabSettings !== undefined) {
+                Ext.Object.each(errors, function(name, error){
+                    if (name in tabSettings) {
+                        var field = me.down('[name="' + name + '"]');
+                        if (field && field.markInvalid) {
+                            field.markInvalid(error);
+                        }
+                    }
+                });
+            }
+        }
+    },
     
 	beforeShowTab: function (record, handler) {
 		this.el.unmask();
@@ -1505,10 +1869,16 @@ Ext.define('Scalr.ui.FarmsBuilderTab', {
 	// hide tab
 	hideTab: function (record) {},
 
-    deactivateTab: function () {
-		this.el.mask();
+    deactivateTab: function (noMessage) {
+        this.deactivated = true;
+		this.el.mask(noMessage ? null : 'Unable to load data from server.', 'x-mask-error');
 	},
 
+    activateTab: function () {
+        this.deactivated = false;
+        this.el.unmask();
+	},
+    
 	// tab can show or used for this role
 	isEnabled: function (record) {
 		return true;
@@ -1524,9 +1894,23 @@ Ext.define('Scalr.ui.FarmsBuilderTab', {
         }
 	},
 
-	// default values for new role
-	getDefaultValues: function (record) {
-		return {};
+	getDefaultValues: function (record, roleDefaultSettings) {
+        var me = this,
+            values = {};
+        if (me.settings !== undefined) {
+            Ext.Object.each(me.settings, function(name, defaultValue){
+                if (roleDefaultSettings !== undefined && roleDefaultSettings[name] !== undefined) {
+                    values[name] = roleDefaultSettings[name];
+                } else if (defaultValue !== undefined) {
+                    values[name] = Ext.isFunction(defaultValue) ? defaultValue.call(me, record) : defaultValue;
+                }
+            });
+        }
+		return values;
+	},
+    
+    getSettingsList: function() {
+        return this.settings;
 	},
     
     suspendOnRoleUpdate: 0

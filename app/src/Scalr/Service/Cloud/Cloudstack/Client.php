@@ -1056,7 +1056,7 @@ class Scalr_Service_Cloud_Cloudstack_Client extends Scalr_Service_Cloud_Cloudsta
     * @param string $page Pagination
     */
 
-    public function listVolumes($zoneId = "", $virtualMachineId = "", $account = "", $domainId = "", $hostId = "", $id = "", $isRecursive = "", $keyword = "", $name = "", $page = "", $pageSize = "", $podId = "", $type = "", $page = "") {
+    public function listVolumes($zoneId = "", $listall = "", $virtualMachineId = "", $account = "", $domainId = "", $hostId = "", $id = "", $isRecursive = "", $keyword = "", $name = "", $page = "", $pageSize = "", $podId = "", $type = "", $page = "") {
 
         return $this->request("listVolumes", array(
             'account' => $account,
@@ -1073,6 +1073,7 @@ class Scalr_Service_Cloud_Cloudstack_Client extends Scalr_Service_Cloud_Cloudsta
             'virtualmachineid' => $virtualMachineId,
             'zoneid' => $zoneId,
             'page' => $page,
+            'listall' => $listall,
         ));
     }
 

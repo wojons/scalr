@@ -80,12 +80,17 @@ Scalr.regPage('Scalr.ui.dm.sources.view', function (loadParams, moduleParams) {
 		],
 
 		dockedItems: [{
+            dock: 'top',
+			xtype: 'displayfield',
+			cls: 'x-form-field-warning x-form-field-warning-fit',
+			value: Scalr.strings['deprecated_warning']
+        },{
 			xtype: 'scalrpagingtoolbar',
 			store: store,
 			dock: 'top',
-			afterItems: [{
-				ui: 'paging',
-				iconCls: 'x-tbar-add',
+			beforeItems: [{
+                text: 'Add source',
+                cls: 'x-btn-green-bg',
 				handler: function() {
 					Scalr.event.fireEvent('redirect', '#/dm/sources/create');
 				}

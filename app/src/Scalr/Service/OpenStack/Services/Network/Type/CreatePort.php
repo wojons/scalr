@@ -2,7 +2,6 @@
 namespace Scalr\Service\OpenStack\Services\Network\Type;
 
 use Scalr\Service\OpenStack\Type\BooleanType;
-
 use Scalr\Service\OpenStack\Type\AbstractInitType;
 
 /**
@@ -93,7 +92,7 @@ class CreatePort extends AbstractInitType
      * @param   string     $networkId The ID of the network
      * @return  CreatePort
      */
-    public static function init($networkId = null)
+    public static function init()
     {
         return call_user_func_array('parent::init', func_get_args());
     }

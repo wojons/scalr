@@ -785,7 +785,7 @@ class Scalr_System_Ipc_ProcessPool extends Scalr_Util_Observable
 
                 default:
                     $this->logger->warn("Peeked unknown message from child event queue. "
-                            . "Serialized message: {$message0}");
+                            . "Serialized message: {$message}");
             }
 
             $this->logger->info("Child message handle: " . round(microtime(true) - $t1, 4) . " sec");

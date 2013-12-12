@@ -43,7 +43,7 @@ class Scalr_Cronjob_MessagingQueue extends Scalr_System_Cronjob_MultiProcess_Def
     {
         // Reopen DB connection in child
         $this->db = $this->getContainer()->adodb(true);
-        $this->messageSerializer = new Scalr_Messaging_XmlSerializer();
+        $this->messageSerializer = new Scalr_Messaging_JsonSerializer();
     }
 
     function enqueueWork ($workQueue)
@@ -51,7 +51,7 @@ class Scalr_Cronjob_MessagingQueue extends Scalr_System_Cronjob_MultiProcess_Def
         $this->logger->info("Fetching pending messages...");
 
         $rows = $this->db->GetAll("SELECT id FROM messages
-            WHERE `type`='out' AND status=? AND DATE_ADD(dtlasthandleattempt, INTERVAL handle_attempts MINUTE) < NOW() ORDER BY id DESC LIMIT 0,3000",
+            WHERE `type`='out' AND status=? AND message_format='json' AND DATE_ADD(dtlasthandleattempt, INTERVAL handle_attempts MINUTE) < NOW() ORDER BY id DESC LIMIT 0,3000",
             array(MESSAGE_STATUS::PENDING)
         );
 
@@ -86,14 +86,11 @@ class Scalr_Cronjob_MessagingQueue extends Scalr_System_Cronjob_MultiProcess_Def
                     $DBServer->status == SERVER_STATUS::TEMPORARY ||
                     $DBServer->status == SERVER_STATUS::PENDING_TERMINATE)
                 {
-                    // Only 0.2-68 or greater version support this feature.
-                    if ($DBServer->IsSupported("0.2-68")) {
-                        $msg = $this->messageSerializer->unserialize($message['message']);
-                        $DBServer->SendMessage($msg);
-                    }
-                    else {
-                        $this->db->Execute("UPDATE messages SET status=? WHERE id=?", array(MESSAGE_STATUS::UNSUPPORTED, $message['id']));
-                    }
+
+                    $msg = $this->messageSerializer->unserialize($message['message']);
+                    $msg->dbMessageId = $message['id'];
+
+                    $DBServer->SendMessage($msg);
                 }
                 elseif (in_array($DBServer->status, array(SERVER_STATUS::TROUBLESHOOTING, SERVER_STATUS::TERMINATED))) {
                     $this->db->Execute("UPDATE messages SET status=? WHERE id=?", array(MESSAGE_STATUS::FAILED, $message['id']));

@@ -90,6 +90,12 @@ abstract class Scalr_Service_Cloud_Cloudstack_Connection {
         $httpRequest->setMethod(HTTP_METH_GET);
         $url = $this->endpoint . "?" . $query;
 
+        $httpRequest->setOptions(array(
+            "redirect" 		=> 2,
+            "useragent" 	=> "Scalr",
+            'timeout'		=> 10,
+            'connecttimeout'=> 10
+        ));
 
         $httpRequest->setUrl($url);
 
@@ -101,6 +107,7 @@ abstract class Scalr_Service_Cloud_Cloudstack_Connection {
         if (empty($data)) {
             throw new Scalr_Service_Cloud_Cloudstack_Exception(NO_DATA_RECEIVED_MSG, NO_DATA_RECEIVED);
         }
+
         //echo $data['body'] . "\n";
         $result = @json_decode($data['body']);
 
@@ -127,7 +134,7 @@ abstract class Scalr_Service_Cloud_Cloudstack_Connection {
 
             /*
              * Request to cloudstack failed. general error (503) (
-             * apikey=SToPdZsJPWXRwJavlmP6Jy5FqB7SzAsSeoNzNPtRH-wyhBd4DqTdv6uKIBNPKkcuRZSjo52BfU1b6Dt0jzuSdQ&
+             * apikey=very-secret-key&
              * command=deployVirtualMachine&
              * group=base-ubuntu1004-devel&
              * response=json&

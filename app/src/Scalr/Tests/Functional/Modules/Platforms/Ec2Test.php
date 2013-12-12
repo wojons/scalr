@@ -39,7 +39,7 @@ class Ec2Test extends WebTestCase
 
     /**
      * {@inheritdoc}
-     * @see Scalr\Tests.WebTestCase::tearDown()
+     * @see Scalr\Tests.WebTestCase::tearDown(
      */
     protected function tearDown()
     {
@@ -61,7 +61,6 @@ class Ec2Test extends WebTestCase
                 $this->assertStringStartsWith('i-', $instanceid);
                 $this->assertNotEmpty($v);
                 $this->assertTrue(is_string($v));
-                $this->assertTrue($ref->hasConstant('NAME_' . strtoupper($v)));
             }
         }
     }

@@ -77,7 +77,7 @@ Scalr.regPage('Scalr.ui.dnszones.view', function (loadParams, moduleParams) {
 				optionsMenu: [{
 					text: 'Edit DNS Zone',
 					iconCls: 'x-menu-icon-edit',
-					href: '#/dnszones/{id}/edit2'
+					href: '#/dnszones/{id}/edit'
 				}, {
 					text: 'Settings',
 					iconCls: 'x-menu-icon-settings',
@@ -108,10 +108,10 @@ Scalr.regPage('Scalr.ui.dnszones.view', function (loadParams, moduleParams) {
 			store: store,
 			dock: 'top',
 			beforeItems: [{
-				ui: 'paging',
-				iconCls: 'x-tbar-add',
+                text: 'Add DNS zone',
+                cls: 'x-btn-green-bg',
 				handler: function() {
-					Scalr.event.fireEvent('redirect', '#/dnszones/create2');
+					Scalr.event.fireEvent('redirect', '#/dnszones/create');
 				}
 			}],
 			afterItems: [{
@@ -153,7 +153,7 @@ Scalr.regPage('Scalr.ui.dnszones.view', function (loadParams, moduleParams) {
 				width: 120,
 				tooltip: 'Manage Default DNS records',
 				handler: function() {
-					Scalr.event.fireEvent('redirect', '#/dnszones/defaultRecords2');
+					Scalr.event.fireEvent('redirect', '#/dnszones/defaultRecords');
 				}
 			}]
 		}]

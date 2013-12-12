@@ -1,7 +1,6 @@
 Scalr.regPage('Scalr.ui.core.security', function (loadParams, moduleParams) {
 	var form = Ext.create('Ext.form.Panel', {
 		width: 700,
-		bodyCls: 'x-panel-body-frame',
 		title: 'Security',
 		fieldDefaults: {
 			anchor: '100%',
@@ -9,13 +8,14 @@ Scalr.regPage('Scalr.ui.core.security', function (loadParams, moduleParams) {
 		},
 		items: [{
 			xtype: 'fieldset',
+            title: 'Change password',
             hidden: Scalr.flags['authMode'] == 'ldap',
 			items: [{
 				xtype: 'textfield',
 				inputType:'password',
 				name: 'password',
 				allowBlank: false,
-				fieldLabel: 'Password',
+				fieldLabel: 'New password',
 				value: '******'
 			},{
 				xtype: 'textfield',
@@ -46,8 +46,10 @@ Scalr.regPage('Scalr.ui.core.security', function (loadParams, moduleParams) {
 								xtype: 'form',
 								title: 'Enable two-factor authentication',
 								width: 400,
+                                layout: 'auto',
 								items: [{
 									xtype: 'fieldset',
+                                    cls: 'x-fieldset-separator-none x-fieldset-no-bottom-padding',
 									defaults: {
 										labelWidth: 50,
 										anchor: '100%'
@@ -64,7 +66,7 @@ Scalr.regPage('Scalr.ui.core.security', function (loadParams, moduleParams) {
 										padding: '0 0 0 55',
 										name: 'qr',
 										value: qrcode,
-										height: 203
+										height: 210
 									}, {
 										xtype: 'textfield',
 										name: 'code',
@@ -75,6 +77,7 @@ Scalr.regPage('Scalr.ui.core.security', function (loadParams, moduleParams) {
 								dockedItems: [{
 									xtype: 'container',
 									dock: 'bottom',
+                                    cls: 'x-docked-buttons',
 									layout: {
 										type: 'hbox',
 										pack: 'center'
@@ -102,7 +105,6 @@ Scalr.regPage('Scalr.ui.core.security', function (loadParams, moduleParams) {
 										}
 									}, {
 										xtype: 'button',
-										margin: '0 0 0 12',
 										text: 'Cancel',
 										handler: function() {
 											this.up('#box').close();
@@ -131,13 +133,14 @@ Scalr.regPage('Scalr.ui.core.security', function (loadParams, moduleParams) {
 						return false;
 					}
 				},
+                defaults: {
+                    width: 95
+                },
 				items: [{
-					xtype: 'button',
 					text: 'Disabled',
 					value: ''
 				}, {
 					text: 'Enabled',
-					xtype: 'button',
 					value: '1'
 				}]
 			}]
@@ -160,7 +163,7 @@ Scalr.regPage('Scalr.ui.core.security', function (loadParams, moduleParams) {
 
 		dockedItems: [{
 			xtype: 'container',
-			cls: 'x-docked-bottom-frame',
+			cls: 'x-docked-buttons',
 			dock: 'bottom',
 			layout: {
 				type: 'hbox',
@@ -183,7 +186,6 @@ Scalr.regPage('Scalr.ui.core.security', function (loadParams, moduleParams) {
 				}
 			}, {
 				xtype: 'button',
-				margin: '0 0 0 5',
 				text: 'Cancel',
 				handler: function() {
 					Scalr.event.fireEvent('close');

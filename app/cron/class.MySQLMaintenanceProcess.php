@@ -78,7 +78,7 @@ class MySQLMaintenanceProcess implements \Scalr\System\Pcntl\ProcessInterface
 
                 if ($bcp_timeouted)
                 {
-                    $DBFarmRole->SetSetting(DBFarmRole::SETTING_MYSQL_IS_BCP_RUNNING, 0);
+                    $DBFarmRole->SetSetting(DBFarmRole::SETTING_MYSQL_IS_BCP_RUNNING, 0, DBFarmRole::TYPE_LCL);
                     $this->Logger->info("[FarmID: {$DBFarm->ID}] MySQL Backup already running. Timeout. Clear lock.");
                 }
             }
@@ -105,8 +105,8 @@ class MySQLMaintenanceProcess implements \Scalr\System\Pcntl\ProcessInterface
                             $msg = new Scalr_Messaging_Msg_Mysql_CreateBackup($DBFarmRole->GetSetting(DBFarmRole::SETTING_MYSQL_ROOT_PASSWORD));
                             $DBServer->SendMessage($msg);
 
-                            $DBFarmRole->SetSetting(DBFarmRole::SETTING_MYSQL_IS_BCP_RUNNING, 1);
-                            $DBFarmRole->SetSetting(DBFarmRole::SETTING_MYSQL_BCP_SERVER_ID, $DBServer->serverId);
+                            $DBFarmRole->SetSetting(DBFarmRole::SETTING_MYSQL_IS_BCP_RUNNING, 1, DBFarmRole::TYPE_LCL);
+                            $DBFarmRole->SetSetting(DBFarmRole::SETTING_MYSQL_BCP_SERVER_ID, $DBServer->serverId, DBFarmRole::TYPE_LCL);
                         }
                     }
                     else
@@ -127,7 +127,7 @@ class MySQLMaintenanceProcess implements \Scalr\System\Pcntl\ProcessInterface
 
                 if ($bundle_timeouted)
                 {
-                    $DBFarmRole->SetSetting(DBFarmRole::SETTING_MYSQL_IS_BUNDLE_RUNNING, 0);
+                    $DBFarmRole->SetSetting(DBFarmRole::SETTING_MYSQL_IS_BUNDLE_RUNNING, 0, DBFarmRole::TYPE_LCL);
                     $this->Logger->info("[FarmID: {$DBFarm->ID}] MySQL Bundle already running. Timeout. Clear lock.");
                 }
             }
@@ -192,8 +192,8 @@ class MySQLMaintenanceProcess implements \Scalr\System\Pcntl\ProcessInterface
                         {
                             $DBServer->SendMessage(new Scalr_Messaging_Msg_Mysql_CreateDataBundle());
 
-                            $DBFarmRole->SetSetting(DBFarmRole::SETTING_MYSQL_IS_BUNDLE_RUNNING, 1);
-                            $DBFarmRole->SetSetting(DBFarmRole::SETTING_MYSQL_BUNDLE_SERVER_ID, $DBServer->serverId);
+                            $DBFarmRole->SetSetting(DBFarmRole::SETTING_MYSQL_IS_BUNDLE_RUNNING, 1, DBFarmRole::TYPE_LCL);
+                            $DBFarmRole->SetSetting(DBFarmRole::SETTING_MYSQL_BUNDLE_SERVER_ID, $DBServer->serverId, DBFarmRole::TYPE_LCL);
                         }
                     }
                     else

@@ -3,6 +3,8 @@ namespace Scalr\Service\Aws\Client;
 
 use Scalr\Service\Aws;
 use Scalr\Service\Aws\DataType\ErrorData;
+use Scalr\Service\Aws\Event\EventType;
+use Scalr\Service\Aws\Event\ErrorResponseEvent;
 
 /**
  * Amazon Query API client.
@@ -44,6 +46,11 @@ class QueryClient extends AbstractClient implements ClientInterface
      */
     protected $apiVersion;
 
+    /**
+     * Useragent
+     *
+     * @var string
+     */
     protected $useragent;
 
     /**
@@ -143,20 +150,35 @@ class QueryClient extends AbstractClient implements ClientInterface
         }
         $time = time();
         $httpMethod = 'POST';
+
+        $this->lastApiCall = null;
+
         $commonDefault = array(
             'AWSAccessKeyId'   => $this->awsAccessKeyId,
             'Action'           => $action,
             'SignatureVersion' => '2',
             'SignatureMethod'  => 'HmacSHA1',
             'Version'          => $this->getApiVersion(),
-            'Timestamp'        => gmdate('c', $time),
+            'Timestamp'        => gmdate('Y-m-d\TH:i:s', $time) . "Z",
         );
+
         if (isset($options['_host'])) {
             $host = $options['_host'];
             unset($options['_host']);
         } else {
             $host = $this->url;
         }
+
+
+        if (strpos($host, 'http') === 0) {
+            $arr = parse_url($host);
+            $scheme = $arr['scheme'];
+            $host = $arr['host'] . (isset($arr['port']) ? ':' . $arr['port'] : '');
+            $path = (!empty($arr['path']) && $arr['path'] != '/' ? rtrim($arr['path'], '/') : '') . $path;
+        } else {
+            $scheme = 'https';
+        }
+
         $options = array_merge($commonDefault, $options);
         //Sorting is necessary according to Query API rules
         ksort($options);
@@ -185,23 +207,28 @@ class QueryClient extends AbstractClient implements ClientInterface
                     'Unknown SignatureMethod ' . $options['SignatureMethod']
                 );
         }
+
+        if (isset($options['Action'])) {
+            $this->lastApiCall = $options['Action'];
+        }
+
         $options['Signature'] = base64_encode(hash_hmac($algo, $stringToSign, $this->secretAccessKey, 1));
+
         $httpRequest = $this->createRequest();
         $httpRequest->addHeaders(array(
             'Content-Type' => 'application/x-www-form-urlencoded; charset=UTF-8',
             'Date'         => gmdate('r', $time),
         ));
-        $httpRequest->setUrl('https://' . $host . $path);
+        $httpRequest->setUrl($scheme . '://' . $host . $path);
         $httpRequest->setMethod(constant('HTTP_METH_' . $httpMethod));
         $httpRequest->setOptions(array(
             'redirect'  => 10,
             'useragent' => $this->useragent,
         ));
         $httpRequest->addPostFields($options);
-        /* @var $message \HttpMessage */
-        $message = $this->tryCall($httpRequest);
-        $response = new QueryClientResponse($message);
-        $response->setRequest($httpRequest);
+
+        $response = $this->tryCall($httpRequest);
+
         if ($this->getAws() && $this->getAws()->getDebug()) {
             echo "\n";
             echo $httpRequest->getRawRequestMessage() . "\n";
@@ -230,28 +257,59 @@ class QueryClient extends AbstractClient implements ClientInterface
      * @param    \HttpRequest    $httpRequest
      * @param    int             $attempts     Attempts count.
      * @param    int             $interval     An sleep interval between an attempts in microseconds.
+     * @returns  QueryClientResponse  Returns response on success
      * @throws   QueryClientException
-     * @returns  \HttpMessage    Returns HttpMessage if success.
      */
-    protected function tryCall($httpRequest, $attempts = 5, $interval = 200)
+    protected function tryCall($httpRequest, $attempts = 3, $interval = 200)
     {
         try {
             $message = $httpRequest->send();
+
             if (preg_match('/^<html.+ Service Unavailable/', $message->getBody()) && --$attempts > 0) {
                 usleep($interval);
-                $message = $this->tryCall($httpRequest, $attempts, $interval * 2);
+                return $this->tryCall($httpRequest, $attempts, $interval * 2);
+            }
+
+            //Increments the queries quantity
+            $this->_incrementQueriesQuantity();
+
+            $response = new QueryClientResponse($message);
+            $response->setRequest($httpRequest);
+            $response->setQueryNumber($this->getQueriesQuantity());
+
+            if ($response->hasError()) {
+                $eventObserver = $this->getAws()->getEventObserver();
+                /* @var $clientException ClientException */
+                $clientException = $response->getException();
+                //It does not need anymore
+                //$response->setEventObserver($eventObserver);
+                if (isset($eventObserver) && $eventObserver->isSubscribed(EventType::EVENT_ERROR_RESPONSE)) {
+                    $eventObserver->fireEvent(new ErrorResponseEvent(array(
+                        'exception' => $clientException,
+                        'apicall'   => $clientException->getApiCall(),
+                    )));
+                }
+                if ($clientException->getErrorData() instanceof ErrorData &&
+                    $clientException->getErrorData()->getCode() == ErrorData::ERR_REQUEST_LIMIT_EXCEEDED) {
+                    if (--$attempts > 0) {
+                        //Tries to handle RequestLimitExceeded AWS Response
+                        sleep(3);
+                        return $this->tryCall($httpRequest, $attempts, $interval);
+                    }
+                }
             }
         } catch (\HttpException $e) {
             if (--$attempts > 0) {
                 usleep($interval);
-                $message = $this->tryCall($httpRequest, $attempts, $interval * 2);
+                return $this->tryCall($httpRequest, $attempts, $interval * 2);
             } else {
                 $error = new ErrorData();
                 $error->message = 'Cannot establish connection to AWS server. ' . $e->getMessage();
                 throw new ClientException($error);
             }
         }
-        return $message;
+
+        return $response;
     }
 
     /**

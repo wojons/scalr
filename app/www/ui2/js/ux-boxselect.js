@@ -365,6 +365,7 @@ Ext.define('Ext.ux.form.field.BoxSelect', {
 			if (me.ignoreSelection > 0) {
 				--me.ignoreSelection;
 			}
+            me.inputEl.focus();
 		}
 	},
 

@@ -1,7 +1,6 @@
 Scalr.regPage('Scalr.ui.tools.aws.rds.instances.restore', function (loadParams, moduleParams) {
 	form = Ext.create('Ext.form.Panel', {
 		title: 'Tools &raquo; Amazon Web Services &raquo; RDS &raquo; DB Instances &raquo; Restore',
-		bodyCls: 'x-panel-body-frame',
 		width: 630,
 		items: [{
 			xtype: 'fieldset',
@@ -75,7 +74,7 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.instances.restore', function (loadParams, 
 		dockedItems: [{
 			xtype: 'container',
 			dock: 'bottom',
-			cls: 'x-docked-bottom-frame',
+			cls: 'x-docked-buttons',
 			layout: {
 				type: 'hbox',
 				pack: 'center'
@@ -100,7 +99,6 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.instances.restore', function (loadParams, 
 				}
 			},{
 				xtype: 'button',
-				margin: '0 0 0 5',
 				text: 'Cancel',
 				handler: function() {
 					Scalr.event.fireEvent('close');

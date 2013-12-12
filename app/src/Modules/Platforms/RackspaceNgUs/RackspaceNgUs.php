@@ -15,7 +15,9 @@ class Modules_Platforms_RackspaceNgUs extends Modules_Platforms_Openstack implem
     {
         return array(
             'ORD' => 'Rackspace US / ORD',
-            'DFW' => 'Rackspace US / DFW'
+            'DFW' => 'Rackspace US / DFW',
+            'IAD' => 'Rackspace US / IAD',
+            'SYD' => 'Rackspace US / SYD'
         );
     }
 

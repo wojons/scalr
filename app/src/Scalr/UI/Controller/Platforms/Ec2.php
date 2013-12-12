@@ -1,4 +1,5 @@
 <?php
+use Scalr\Acl\Acl;
 
 use Scalr\Service\Aws\Ec2\DataType\SnapshotFilterNameType;
 use Scalr\Service\Aws\Ec2\DataType\AddressFilterNameType;
@@ -34,7 +35,7 @@ class Scalr_UI_Controller_Platforms_Ec2 extends Scalr_UI_Controller
 
             //OLD notation
             try {
-                $farmRoleId = $this->db->GetOne("SELECT farm_roleid FROM farm_role_settings WHERE name='lb.name' AND value=?", array(
+                $farmRoleId = $this->db->GetOne("SELECT farm_roleid FROM farm_role_settings WHERE name='lb.name' AND value=? LIMIT 1", array(
                     $elb->loadBalancerName
                 ));
                 if ($farmRoleId) {
@@ -147,7 +148,8 @@ class Scalr_UI_Controller_Platforms_Ec2 extends Scalr_UI_Controller
         foreach ($tables as $tableData) {
             $rows[] = array(
                 'id'   => $tableData->routeTableId,
-                'name' => $tableData->routeTableId
+                'name' => $tableData->routeTableId,
+                'info' => $tableData->toArray()
             );
         }
 
@@ -164,9 +166,17 @@ class Scalr_UI_Controller_Platforms_Ec2 extends Scalr_UI_Controller
         $rows = array();
         /* @var $vpcData Scalr\Service\Aws\Ec2\DataType\VpcData */
         foreach ($vpcList as $vpcData) {
+            $name = 'No name';
+            foreach ($vpcData->tagSet as $tag) {
+                if ($tag->key == 'Name') {
+                    $name = $tag->value;
+                    break;
+                }
+            }
+
             $rows[] = array(
                 'id'   => $vpcData->vpcId,
-                'name' => "{$vpcData->vpcId} ({$vpcData->cidrBlock}, Tenancy: {$vpcData->instanceTenancy})",
+                'name' => "{$name} - {$vpcData->vpcId} ({$vpcData->cidrBlock}, Tenancy: {$vpcData->instanceTenancy})",
             );
         }
 
@@ -187,7 +197,6 @@ class Scalr_UI_Controller_Platforms_Ec2 extends Scalr_UI_Controller
         $retval['eips'] = $this->getFarmRoleElasticIps($cloudLocation, $farmRoleId, $vpcId);
         $retval['subnets'] = $this->getSubnetsList($cloudLocation, $vpcId);
         $this->response->data(array('data' => $retval));
-
     }
 
     public function getFarmRoleElasticIps($cloudLocation, $farmRoleId, $vpcId = null) {
@@ -235,7 +244,7 @@ class Scalr_UI_Controller_Platforms_Ec2 extends Scalr_UI_Controller
             );
 
             $info = $this->db->GetRow("
-                SELECT * FROM elastic_ips WHERE ipaddress = ?
+                SELECT * FROM elastic_ips WHERE ipaddress = ? LIMIT 1
             ", array($itm['ipAddress']));
 
             if ($info) {
@@ -284,13 +293,20 @@ class Scalr_UI_Controller_Platforms_Ec2 extends Scalr_UI_Controller
                 'description' => "{$subnet->subnetId}",
                 'sidr'        => $subnet->cidrBlock,
                 'availability_zone' => $subnet->availabilityZone,
-                'ips_left' => $subnet->availableIpAddressCount
+                'ips_left' => $subnet->availableIpAddressCount,
+                'name'      => 'No name'
             );
 
             foreach ($subnet->tagSet as $tag) {
                 if ($tag->key == 'scalr-sn-type')
                     $item['internet'] = $tag->value;
+
+                if ($tag->key == 'Name')
+                    $item['name'] = $tag->value;
             }
+
+            $item['description'] = "{$item['name']} - {$subnet->subnetId}";
+
             $rows[] = $item;
         }
 

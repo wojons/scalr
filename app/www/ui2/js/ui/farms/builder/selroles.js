@@ -10,9 +10,10 @@ Ext.define('Scalr.ui.FarmBuilderSelRoles', {
             xtype: 'dataview',
             store: me.store,
             preserveScrollOnRefresh: true,
-            cls: 'scalr-ui-dataview-boxes scalr-ui-dataview-selroles',
+            cls: 'x-dataview-boxes scalr-ui-dataview-selroles',
             plugins: [{
                 ptype: 'flyingbutton',
+                pluginId: 'flyingbutton',
                 cls: 'scalr-ui-dataview-selroles-add',
                 handler: function(){
                     this.fireEvent('addrole');
@@ -23,19 +24,20 @@ Ext.define('Scalr.ui.FarmBuilderSelRoles', {
                 offsetY: 50
             }],
             deferInitialRefresh: false,
+            allowDeselect: true,
             tpl  : new Ext.XTemplate(
                 '<tpl for=".">',
-                    '<div class="x-item" title="{name}">',
+                    '<div class="x-item<tpl if="errors"> x-item-invalid</tpl>" title="{alias}">',
                         '<div class="x-item-color-corner-role x-item-color-corner x-item-color-corner-{[Scalr.utils.getColorById(values.farm_role_id || 0)]}"></div>',
                         '<div class="x-item-inner">',
                             '<div class="name">',
-                                '<tpl if="name.length &gt; 11">',
-                                    '{[this.getName(values.name)]}',
+                                '<tpl if="alias.length &gt; 11">',
+                                    '{[this.getName(values.alias)]}',
                                 '<tpl else>',
-                                    '{name}',
+                                    '{alias}',
                                 '</tpl>',
                             '</div>',
-                            '<div class="icon scalr-ui-icon-role-medium scalr-ui-icon-role-medium-{[this.getRoleCls(values)]}"></div>',
+                            '<div class="icon x-icon-role x-icon-role-{[this.getRoleCls(values)]}"></div>',
                             '<div class="platform">{platform}</div>',
                             '<div class="location" title="{cloud_location}">{cloud_location}</div>',
                         '</div>',
@@ -88,17 +90,18 @@ Ext.define('Scalr.ui.FarmBuilderSelRoles', {
 
             itemSelector: '.x-item',
             overItemCls : 'x-item-over',
-            padding: '48 10 0 10',
+            padding: '51 12 0 12',
             trackOver: true,
             overflowY: 'scroll',
-            width: 120,
+            width: 124,
             onUpdate: function () {
                 this.refresh();
             },
             listeners: {
                 itemadd: function(record, index, node) {
-                    this.scrollBy(0, 9000, true);
-                    if (node.length) {
+                    //disable animation due to unpredictable chrome tab crashing since v30
+                    this.scrollBy(0, 9000/*, true*/);
+                    /*if (node.length) {
                         var box = Ext.fly(node[0]);
                         box.animate({
                             duration: 800,
@@ -109,7 +112,7 @@ Ext.define('Scalr.ui.FarmBuilderSelRoles', {
                                 100: {opacity: 1}
                             }
                         });
-                    }
+                    }*/
                 },
                 drop: function(node, data, record, position) {
                     if (data.records[0]) {
@@ -134,12 +137,18 @@ Ext.define('Scalr.ui.FarmBuilderSelRoles', {
 
                         Scalr.Confirm({
                             type: 'delete',
-                            msg: 'Delete role "' + record.get('name') + '" from farm?',
+                            msg: 'Delete role "' + record.get('alias') + '" from farm?',
                             success: function () {
                                 view.store.remove(record);
                                 view.refresh();
                             }
                         });
+                        return false;
+                    }
+                },
+                beforeselect: function(view, record) {
+                    if (record.get('is_bundle_running') == true) {
+                        Scalr.message.Error('This role is locked by server snapshot creation process. Please wait till snapshot will be created.');
                         return false;
                     }
                 }
@@ -149,8 +158,8 @@ Ext.define('Scalr.ui.FarmBuilderSelRoles', {
             xtype: 'container',
             dock: 'top',
             layout: 'hbox',
-            padding: '11 0 9 10',
-            margin: '1 '+ Ext.getScrollbarSize().width +' 0 0',
+            padding: '13 0 3 12',
+            margin: '0 '+ Ext.getScrollbarSize().width +' 0 0',
             cls: 'scalr-ui-selroles-filter',
             overlay: true,
             items: [{
@@ -159,7 +168,7 @@ Ext.define('Scalr.ui.FarmBuilderSelRoles', {
                 width: 100,
                 hideFilterIcon: true,
                 store: me.store,
-                filterFields: ['name', 'platform', 'cloud_location'],
+                filterFields: ['alias', 'platform', 'cloud_location'],
                 listeners: {
                     afterfilter: function() {
                         me.down('dataview').getStore().sort();//if launch order was updated on filtered store we must to re-apply sorting
@@ -167,10 +176,10 @@ Ext.define('Scalr.ui.FarmBuilderSelRoles', {
                 }
             }]
   		},{
+			xtype: 'button',
 			itemId: 'farmbutton',
 			dock: 'bottom',
 			margin: '0 '+ Ext.getScrollbarSize().width +' 0 0',
-			xtype: 'button',
 			cls: 'scalr-ui-farm-settings-btn',
 			text: 'Farm settings',
 			overlay: true,
@@ -182,7 +191,7 @@ Ext.define('Scalr.ui.FarmBuilderSelRoles', {
 				}
 			},
 			height: 33,
-			iconCls: 'icon'
+			iconCls: 'x-icon-configure'
       }]);
         
     },
@@ -257,11 +266,17 @@ Ext.define('Scalr.ui.FarmRolesFlyingButton', {
 		})
 	},
 
+    setDisabled: function(disabled) {
+        if (this.button) {
+            this.button[disabled ? 'addCls' : 'removeCls']('x-disabled');
+        }
+    },
+    
 	updatePosition: function() {
 		if (this.button) {
             var buttonTop = '';
 			if (this.client.el.dom.scrollHeight <= this.client.el.getHeight()) {
-                buttonTop = (this.client.getStore().getCount()*112+42)+'px';
+                buttonTop = (this.client.getStore().getCount()*112+46)+'px';
 			}
             if (buttonTop !== this.buttonTop) {
                 this.button.setStyle('top', buttonTop);

@@ -1,7 +1,7 @@
 Scalr.regPage('Scalr.ui.security.groups.view', function (loadParams, moduleParams) {
 	var store = Ext.create('store.store', {
 		fields: [
-			'name', 'description', 'id',
+			'name', 'description', 'id', 'vpcId',
 			'farm_name', 'farm_id', 'role_name', 'farm_roleid'
 		],
 		proxy: {
@@ -15,7 +15,7 @@ Scalr.regPage('Scalr.ui.security.groups.view', function (loadParams, moduleParam
 	return Ext.create('Ext.grid.Panel', {
 		title: 'Security &raquo; Groups &raquo; View',
 		scalrOptions: {
-			'reload': false,
+			'reload': true,
 			'maximize': 'all'
 		},
 		scalrReconfigureParams: {},
@@ -46,6 +46,7 @@ Scalr.regPage('Scalr.ui.security.groups.view', function (loadParams, moduleParam
 			},
 			{ header: "Name", flex: 1, dataIndex: 'name', sortable: true },
 			{ header: "Description", flex: 2, dataIndex: 'description', sortable: true },
+			{ header: "VPC ID", width: 180, dataIndex: 'vpcId', sortable: true },
 			{
 				xtype: 'optionscolumn',
 				optionsMenu: [
@@ -64,63 +65,73 @@ Scalr.regPage('Scalr.ui.security.groups.view', function (loadParams, moduleParam
 			}
 		],
 
-		multiSelect: true,
-		selModel: {
-			selType: 'selectedmodel',
-			selectedMenu: [{
-				text: 'Delete',
-				iconCls: 'x-menu-icon-delete',
-				request: {
-					confirmBox: {
-						msg: 'Remove selected security group(s): %s?',
-						type: 'delete'
-					},
-					processBox: {
-						msg: 'Removing security group(s) ...',
-						type: 'delete'
-					},
-					url: '/security/groups/xRemove',
-					dataHandler: function (records) {
-						var groups = [];
-						this.confirmBox.objects = [];
-						for (var i = 0, len = records.length; i < len; i++) {
-							groups.push(records[i].get('id'));
-							this.confirmBox.objects.push(records[i].get('name'));
-						}
+        multiSelect: true,
+        selModel: {
+            selType: 'selectedmodel'
+        },
 
-						return { groups: Ext.encode(groups), platform:loadParams['platform'], cloudLocation: store.proxy.extraParams.cloudLocation};
-					}
-				}
-			}]
-		},
+        listeners: {
+            selectionchange: function(selModel, selections) {
+                this.down('scalrpagingtoolbar').down('#delete').setDisabled(!selections.length);
+            }
+        },
 
-		dockedItems: [{
-			xtype: 'scalrpagingtoolbar',
-			store: store,
-			dock: 'top',
-			items: [{
-				xtype: 'filterfield',
-				store: store
-			}, ' ', {
-				xtype: 'fieldcloudlocation',
-				itemId: 'cloudLocation',
-				store: {
-					fields: [ 'id', 'name' ],
-					data: moduleParams.locations,
-					proxy: 'object'
-				},
-				gridStore: store,
-				cloudLocation: loadParams['cloudLocation'] || ''
-			}, ' ', {
-				xtype: 'button',
-				enableToggle: true,
-				width: 190,
-				text: 'Show all security groups',
-				toggleHandler: function (field, checked) {
-					store.proxy.extraParams.showAll = checked ? 'true' : 'false';
-					store.loadPage(1);
-				}
-			}]
-		}]
+        dockedItems: [{
+            xtype: 'scalrpagingtoolbar',
+            store: store,
+            dock: 'top',
+			beforeItems: [{
+                text: 'Add group',
+                cls: 'x-btn-green-bg',
+                handler: function() {
+                    Scalr.event.fireEvent('redirect', '#/security/groups/create?platform=' + loadParams['platform'] + '&cloudLocation=' + store.proxy.extraParams.cloudLocation);
+                }
+            }],
+            afterItems: [{
+                ui: 'paging',
+                itemId: 'delete',
+                iconCls: 'x-tbar-delete',
+                tooltip: 'Select one or more security group(s) to delete them',
+                disabled: true,
+                handler: function() {
+                    var request = {
+                        confirmBox: {
+                            type: 'delete',
+                            msg: 'Delete selected security group(s): %s ?'
+                        },
+                        processBox: {
+                            type: 'delete',
+                            msg: 'Deleting group(s) ...'
+                        },
+                        url: '/security/groups/xRemove',
+                        success: function() {
+                            store.load();
+                        }
+                    }, records = this.up('grid').getSelectionModel().getSelection(), data = [];
+
+                    request.confirmBox.objects = [];
+                    for (var i = 0, len = records.length; i < len; i++) {
+                        data.push(records[i].get('id'));
+                        request.confirmBox.objects.push(records[i].get('name'));
+                    }
+                    request.params = { groups: Ext.encode(data), platform:loadParams['platform'], cloudLocation: store.proxy.extraParams.cloudLocation };
+                    Scalr.Request(request);
+                }
+            }],
+            items: [{
+                xtype: 'filterfield',
+                store: store
+            }, ' ', {
+                xtype: 'fieldcloudlocation',
+                itemId: 'cloudLocation',
+                store: {
+                    fields: [ 'id', 'name' ],
+                    data: moduleParams.locations,
+                    proxy: 'object'
+                },
+                gridStore: store,
+                cloudLocation: loadParams['cloudLocation'] || ''
+            }]
+        }]
 	});
 });

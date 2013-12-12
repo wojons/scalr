@@ -1,14 +1,7 @@
 <?php
 namespace Scalr\Service\Aws;
 
-use Scalr\Service\Aws\S3\Handler\ObjectHandler;
-use Scalr\Service\Aws\S3\Handler\BucketHandler;
-use Scalr\Service\Aws\Client\ClientException;
-use Scalr\Service\Aws\DataType\ErrorData;
-use Scalr\Service\Aws\DataType\ListDataType;
-use Scalr\Service\Aws\Client\QueryClient;
-use Scalr\Service\Aws;
-use Scalr\Service\Aws\S3\V20060301\S3Api;
+use Scalr\Service\Eucalyptus;
 
 /**
  * Amazon Simple Storage Service (S3) interface
@@ -38,7 +31,6 @@ class S3 extends AbstractService implements ServiceInterface
      */
     public function getAllowedEntities()
     {
-
         return array('bucket', 'object');
     }
 
@@ -66,7 +58,13 @@ class S3 extends AbstractService implements ServiceInterface
      */
     public function getUrl()
     {
-        return 's3.amazonaws.com';
+        $aws = $this->getAws();
+        if ($aws instanceof Eucalyptus) {
+            $url = rtrim($aws->getUrl('s3'), '/ ');
+        } else {
+            $url = 's3.amazonaws.com';
+        }
+        return $url;
     }
 }
 

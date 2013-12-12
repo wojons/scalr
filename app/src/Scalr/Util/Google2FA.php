@@ -1,4 +1,4 @@
-<?
+<?php
 
 class Scalr_Util_Google2FA
 {

@@ -9,45 +9,27 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.mongodb', function (moduleParams) {
 		itemId: 'mongodb',
         tabData: null,
         
+        settings: {
+            'mongodb.data_storage.engine': function(record){return record.getMongoDefaultStorageEngine()},
+            'mongodb.data_storage.ebs.size': 10,
+            'mongodb.data_storage.ebs.type': undefined,
+            'mongodb.data_storage.ebs.iops': undefined,
+            'mongodb.mms.api_key': undefined,
+            'mongodb.mms.secret_key': undefined,
+            'mongodb.data_storage.raid.level': undefined,
+            'mongodb.data_storage.raid.volume_size': undefined,
+            'mongodb.data_storage.raid.volumes_count': undefined,
+            'mongodb.ssl.enabled': undefined,
+            'mongodb.ssl.cert_id': undefined
+        },
+        
 		isEnabled: function (record) {
 			return record.get('behaviors').match('mongodb');
 		},
         
-		getDefaultValues: function (record) {
-            var platform = record.get('platform'),
-                default_storage_engine;
-			if (platform === 'ec2') 
-				default_storage_engine = 'ebs';
-			else if (platform === 'rackspace') 
-				default_storage_engine = 'eph';
-			else if (platform === 'gce') 
-				default_storage_engine = 'gce_persistent';
-			else if (platform === 'cloudstack' || platform === 'idcf') 
-				default_storage_engine = 'csvol';
-			else if (platform === 'openstack' || platform === 'rackspacengus' || platform === 'rackspacenguk') 
-				default_storage_engine = 'cinder';
-			
-			return {
-				'mongodb.data_storage.engine': default_storage_engine,
-				'mongodb.data_storage.ebs.size': 10
-			};
-		},
-
-        beforeShowTab: function (record, handler) {
-            this.up('#farmbuilder').cache.load(
-                {url: '/services/ssl/certificates/xListCertificates'},
-                function(data, status){
-                    this.tabData = data;
-                    status ? handler() : this.deactivateTab();
-                },
-                this,
-                0
-            );
-        },
-
 		showTab: function (record) {
-			var settings = record.get('settings'),
-                platform = record.get('platform'),
+			var settings = record.get('settings', true),
+                platform = record.get('platform', true),
                 storages = [];
 			
 			if (platform === 'ec2') {
@@ -59,7 +41,7 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.mongodb', function (moduleParams) {
 				storages.push({name:'csvol', description:'Cloudstack Block Device'});
 			} else if (platform === 'gce') {
                 storages.push({name:'gce_persistent', description:'GCE persistent disk'});
-			} else if (platform === 'openstack' || platform == 'rackspacengus' || platform == 'rackspacenguk') {
+			} else if (Scalr.isOpenstack(platform)) {
 				storages.push({name:'cinder', description:'Cinder Block Device'});
 			}
             
@@ -115,12 +97,18 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.mongodb', function (moduleParams) {
             var sslFieldset = this.down('[name="mongodb.ssl.enabled"]'),
                 sslCertIdField = this.down('[name="mongodb.ssl.cert_id"]');
             sslFieldset[settings['mongodb.ssl.enabled'] == 1 ? 'expand' : 'collapse']();
-            
-            sslCertIdField.store.loadData(this.tabData || []);
+            if (settings['mongodb.ssl.cert_id']) {
+                sslCertIdField.store.load();
+            }
             sslCertIdField.setValue(settings['mongodb.ssl.cert_id']);
             
-            sslFieldset[moduleParams.farm.status > 0 ? 'mask' : 'unmask']();
-            this.down('#mongo_ssl_warning').setVisible(moduleParams.farm.status > 0);
+            if (sslFieldset.rendered) {
+                sslFieldset.show();
+                sslFieldset[(moduleParams.farm.status || 0) > 0 ? 'mask' : 'unmask']();
+            } else {
+                sslFieldset.setVisible((moduleParams.farm.status || 0) == 0);
+            }
+            this.down('#mongo_ssl_warning').setVisible((moduleParams.farm.status || 0) > 0);
 		},
 
 		hideTab: function (record) {
@@ -170,7 +158,7 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.mongodb', function (moduleParams) {
             itemId: 'mongo_ssl_warning',
             hidden: true,
             anchor: '100%',
-			fieldCls: 'x-form-field-info',
+			cls: 'x-form-field-info',
 			value: 'SSL settings can be changed on TERMINATED farm only.'
         },{
 			xtype: 'fieldset',
@@ -185,25 +173,34 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.mongodb', function (moduleParams) {
                 xtype: 'combo',
                 name: 'mongodb.ssl.cert_id',
                 fieldLabel: 'SSL certificate',
-                maxWidth: 400,
-                anchor: '100%',
-                store: {
-                    fields: [ 'id', 'name' ],
-                    data: []
-                },
-                queryMode: 'local',
+                labelWidth: 160,
+                width: 500,
                 emptyText: 'Choose certificate',
                 valueField: 'id',
                 displayField: 'name',
-                forceSelection: true,
                 allowBlank: false,
+
+                forceSelection: true,
+                queryCaching: false,
+                minChars: 0,
+                queryDelay: 10,
+                store: {
+                    fields: [ 'id', 'name' ],
+                    proxy: {
+                        type: 'cachedrequest',
+                        crscope: 'farmbuilder',
+                        url: '/services/ssl/certificates/xListCertificates',
+                        filterFields: ['name']
+                    }
+                },
                 plugins: [{
                     ptype: 'comboaddnew',
-                    url: '/services/ssl/certificates/create'
+                    url: '/services/ssl/certificates/create',
+                    disabled: !Scalr.isAllowed('SERVICES_SSL')
                 }],
                 listeners: {
                     addnew: function(item) {
-                        this.up('#farmbuilder').cache.setExpired({url: '/services/ssl/certificates/xListCertificates'});
+                        Scalr.CachedRequestManager.get('farmbuilder').setExpired({url: '/services/ssl/certificates/xListCertificates'});
                     }
                 }
             }]
@@ -243,185 +240,186 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.mongodb', function (moduleParams) {
 				queryMode: 'local',
 				listeners: {
 					change: function(){
-						this.up('#mongodb').down('[name="ebs_settings"]').hide();
-						this.up('#mongodb').down('[name="raid_settings"]').hide();
+                        var ct = this.up('#mongodb'),
+                            engine = this.getValue();
+						ct.down('#ebs_settings').hide();
+						ct.down('#raid_settings').hide();
 						
-						if (this.getValue() == 'ebs' || this.getValue() == 'csvol' || this.getValue() == 'cinder') {
-							this.up('#mongodb').down('[name="ebs_settings"]').show();
-						}
-						
-						if (this.getValue() == 'raid.ebs') {
-							this.up('#mongodb').down('[name="raid_settings"]').show();
+						if (Ext.Array.contains(['ebs', 'csvol', 'cinder', 'gce_persistent'], engine)) {
+							ct.down('#ebs_settings').show();
+                            ct.down('#ebs_type').setVisible(engine !== 'gce_persistent');
+						} else if (engine == 'raid.ebs') {
+							ct.down('#raid_settings').show();
 						}
 					}
 				}
-			}]
-		}, {
-			xtype: 'fieldset',
-			name: 'ebs_settings',
-			title: 'Block Storage settings',
-			hidden: true,
-			items: [{
+			},{
                 xtype: 'container',
-                layout: 'hbox',
-                width: 600,
+                itemId: 'ebs_settings',
+                hidden: true,
                 items: [{
-                    xtype: 'combo',
-                    store: [['standard', 'Standard'],['io1', 'Provisioned IOPS (' + iopsMin + ' - ' + iopsMax + '): ']],
-                    fieldLabel: 'EBS type',
-                    labelWidth:160,
-                    valueField: 'id',
-                    displayField: 'name',
-                    editable: false,
-                    queryMode: 'local',
-                    value: 'standard',
-                    name: 'mongodb.data_storage.ebs.type',
-                    width: 400,
-                    listeners: {
-                        change: function (comp, value) {
-                            var tab = comp.up('#mongodb'),
-                                iopsField = comp.next();
-                            iopsField.setVisible(value === 'io1');
-                            if (tab.currentRole.get('new')) {
-                                if (value === 'io1') {
-                                    iopsField.reset();
-                                    iopsField.setValue(100);
-                                } else {
-                                    tab.down('[name="mongodb.data_storage.ebs.size"]').isValid();
-                                }
-                            }
-                        }
-                    }
-                }, {
-                    xtype: 'textfield',
-                    itemId: 'mongodb.data_storage.ebs.iops',
-                    name: 'mongodb.data_storage.ebs.iops',
-                    hidden: true,
-                    margin: '0 0 0 2',
-                    width: 60,
-                    maskRe: integerRe,
-                    validator: function(value){
-                        if (value*1 > iopsMax) {
-                            return 'Maximum value is ' + iopsMax + '.';
-                        } else if (value*1 < iopsMin) {
-                            return 'Minimum value is ' + iopsMin + '.';
-                        }
-                        return true;
-                    },
-                    allowBlank: false,
-                    listeners: {
-                        change: function(comp, value){
-                            var tab = comp.up('#mongodb'),
-                                sizeField = tab.down('[name="mongodb.data_storage.ebs.size"]');
-                            if (tab.currentRole.get('new')) {
-                                if (comp.isValid() && comp.prev().getValue() === 'io1') {
-                                    var minSize = Math.ceil(value*1/10);
-                                    if (sizeField.getValue()*1 < minSize) {
-                                        sizeField.setValue(minSize);
+                    xtype: 'container',
+                    layout: 'hbox',
+                    itemId: 'ebs_type',
+                    width: 600,
+                    margin: '0 0 6',
+                    items: [{
+                        xtype: 'combo',
+                        store: [['standard', 'Standard'],['io1', 'Provisioned IOPS (' + iopsMin + ' - ' + iopsMax + '): ']],
+                        fieldLabel: 'EBS type',
+                        labelWidth:160,
+                        valueField: 'id',
+                        displayField: 'name',
+                        editable: false,
+                        queryMode: 'local',
+                        value: 'standard',
+                        name: 'mongodb.data_storage.ebs.type',
+                        width: 400,
+                        listeners: {
+                            change: function (comp, value) {
+                                var tab = comp.up('#mongodb'),
+                                    iopsField = comp.next();
+                                iopsField.setVisible(value === 'io1');
+                                if (tab.currentRole.get('new')) {
+                                    if (value === 'io1') {
+                                        iopsField.reset();
+                                        iopsField.setValue(100);
+                                    } else {
+                                        tab.down('[name="mongodb.data_storage.ebs.size"]').isValid();
                                     }
                                 }
                             }
                         }
-                    }
+                    }, {
+                        xtype: 'textfield',
+                        itemId: 'mongodb.data_storage.ebs.iops',
+                        name: 'mongodb.data_storage.ebs.iops',
+                        hidden: true,
+                        margin: '0 0 0 6',
+                        width: 60,
+                        maskRe: integerRe,
+                        validator: function(value){
+                            if (value*1 > iopsMax) {
+                                return 'Maximum value is ' + iopsMax + '.';
+                            } else if (value*1 < iopsMin) {
+                                return 'Minimum value is ' + iopsMin + '.';
+                            }
+                            return true;
+                        },
+                        allowBlank: false,
+                        listeners: {
+                            change: function(comp, value){
+                                var tab = comp.up('#mongodb'),
+                                    sizeField = tab.down('[name="mongodb.data_storage.ebs.size"]');
+                                if (tab.currentRole.get('new')) {
+                                    if (comp.isValid() && comp.prev().getValue() === 'io1') {
+                                        var minSize = Math.ceil(value*1/10);
+                                        if (sizeField.getValue()*1 < minSize) {
+                                            sizeField.setValue(minSize);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }]
+                }, {
+                    xtype: 'container',
+                    layout: {
+                        type: 'hbox',
+                        align: 'middle'
+                    },
+                    items: [{
+                        xtype: 'textfield',
+                        fieldLabel: 'Storage size',
+                        labelWidth: 160,
+                        width: 220,
+                        name: 'mongodb.data_storage.ebs.size',
+                        maskRe: integerRe,
+                        value: 10,
+                        validator: function(value){
+                            var minValue = 10,
+                                tab = this.up('#mongodb');
+                            if (tab.down('[name="mongodb.data_storage.ebs.type"]').getValue() === 'io1') {
+                                minValue = Math.ceil(tab.down('[name="mongodb.data_storage.ebs.iops"]').getValue()*1/10);
+                            }
+                            if (value*1 > maxEbsStorageSize) {
+                                return 'Maximum value is ' + maxEbsStorageSize + '.';
+                            } else if (value*1 < minValue) {
+                                return 'Minimum value is ' + minValue + '.';
+                            }
+                            return true;
+                        }
+                    },{
+                        xtype: 'label',
+                        text: 'GB',
+                        margin: '0 0 0 6'
+                    }]
                 }]
             }, {
                 xtype: 'container',
-                layout: {
-                    type: 'hbox',
-                    align: 'middle'
-                },
+                itemId: 'raid_settings',
+                hidden: true,
                 items: [{
+                    xtype: 'combo',
+                    name: 'mongodb.data_storage.raid.level',
+                    fieldLabel: 'RAID level',
+                    editable: false,
+                    store: {
+                        fields: [ 'name', 'description' ],
+                        proxy: 'object'
+                    },
+                    valueField: 'name',
+                    displayField: 'description',
+                    width: 500,
+                    value: '',
+                    labelWidth: 160,
+                    queryMode: 'local',
+                    listeners:{
+                        change:function() {
+                            try {
+                                var data = [];
+                                if (this.getValue() == '0') {
+                                    data = {'2':'2', '3':'3', '4':'4', '5':'5', '6':'6', '7':'7', '8':'8'};
+                                } else if (this.getValue() == '1') {
+                                    data = {'2':'2'};
+                                } else if (this.getValue() == '5') {
+                                    data = {'3':'3', '4':'4', '5':'5', '6':'6', '7':'7', '8':'8'};
+                                } else if (this.getValue() == '10') {
+                                    data = {'4':'4', '6':'6', '8':'8'};
+                                }
+
+                                var obj = this.up('#mongodb').down('[name="mongodb.data_storage.raid.volumes_count"]');
+                                obj.store.load({data: data});
+                                var val = obj.store.getAt(0).get('id');
+                                obj.setValue(val);
+                            } catch (e) {}
+                        }
+                    }
+                }, {
+                    xtype: 'combo',
+                    name: 'mongodb.data_storage.raid.volumes_count',
+                    fieldLabel: 'Number of volumes',
+                    editable: false,
+                    store: {
+                        fields: [ 'id', 'name'],
+                        proxy: 'object'
+                    },
+                    valueField: 'id',
+                    displayField: 'name',
+                    width: 500,
+                    labelWidth: 160,
+                    queryMode: 'local'
+                }, {
                     xtype: 'textfield',
-                    fieldLabel: 'Storage size',
+                    fieldLabel: 'Each volume size',
                     labelWidth: 160,
                     width: 220,
-                    name: 'mongodb.data_storage.ebs.size',
+                    value: '10',
                     maskRe: integerRe,
-                    value: 10,
-                    validator: function(value){
-                        var minValue = 10,
-                            tab = this.up('#mongodb');
-                        if (tab.down('[name="mongodb.data_storage.ebs.type"]').getValue() === 'io1') {
-                            minValue = Math.ceil(tab.down('[name="mongodb.data_storage.ebs.iops"]').getValue()*1/10);
-                        }
-                        if (value*1 > maxEbsStorageSize) {
-                            return 'Maximum value is ' + maxEbsStorageSize + '.';
-                        } else if (value*1 < minValue) {
-                            return 'Minimum value is ' + minValue + '.';
-                        }
-                        return true;
-                    }
-                },{
-                    xtype: 'label',
-                    text: 'GB',
-                    margin: '0 0 0 6'
+                    allowBlank: false,
+                    name: 'mongodb.data_storage.raid.volume_size'
                 }]
             }]
-		}, {
-			xtype:'fieldset',
-			name: 'raid_settings',
-			title: 'RAID storage settings',
-			hidden: true,
-			items: [{ 
-				xtype: 'combo',
-				name: 'mongodb.data_storage.raid.level',
-				fieldLabel: 'RAID level',
-				editable: false,
-				store: {
-					fields: [ 'name', 'description' ],
-					proxy: 'object'
-				},
-				valueField: 'name',
-				displayField: 'description',
-				width: 500,
-				value: '',
-				labelWidth: 160,
-				queryMode: 'local',
-				listeners:{
-					change:function() {
-						try {
-							var data = [];
-							if (this.getValue() == '0') {
-								data = {'2':'2', '3':'3', '4':'4', '5':'5', '6':'6', '7':'7', '8':'8'};
-							} else if (this.getValue() == '1') {
-								data = {'2':'2'};
-							} else if (this.getValue() == '5') {
-								data = {'3':'3', '4':'4', '5':'5', '6':'6', '7':'7', '8':'8'};
-							} else if (this.getValue() == '10') {
-								data = {'4':'4', '6':'6', '8':'8'};
-							}
-							
-							var obj = this.up('#mongodb').down('[name="mongodb.data_storage.raid.volumes_count"]');
-							obj.store.load({data: data});
-							var val = obj.store.getAt(0).get('id');
-							obj.setValue(val);
-						} catch (e) {}
-					}
-				}
-			}, {
-				xtype: 'combo',
-				name: 'mongodb.data_storage.raid.volumes_count',
-				fieldLabel: 'Number of volumes',
-				editable: false,
-				store: {
-					fields: [ 'id', 'name'],
-					proxy: 'object'
-				},
-				valueField: 'id',
-				displayField: 'name',
-				width: 500,
-				labelWidth: 160,
-				queryMode: 'local'
-			}, {
-				xtype: 'textfield',
-				fieldLabel: 'Each volume size',
-				labelWidth: 160,
-				width: 220,
-				value: '10',
-                maskRe: integerRe,
-                allowBlank: false,
-				name: 'mongodb.data_storage.raid.volume_size'
-			}]
 		}]
 	});
 });

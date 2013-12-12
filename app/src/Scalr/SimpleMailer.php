@@ -1,6 +1,8 @@
 <?php
 namespace Scalr;
 
+use Scalr\Util\PhpTemplate;
+
 /**
  * Simple Mailer class
  *
@@ -12,7 +14,18 @@ class SimpleMailer
 
     const DEFAULT_CHARSET = 'UTF-8';
 
-    private $version = '0.1';
+    const ENCODING_QUOTED_PRINTABLE = 'QUOTED-PRINTABLE';
+
+    const ENCODING_BASE64 = 'BASE64';
+
+    private $version = '0.2';
+
+    /**
+     * Default content-transfer-encoding
+     *
+     * @var string
+     */
+    private $defaultEncoding = self::ENCODING_BASE64;
 
     /**
      * The list of the addresses by type
@@ -238,7 +251,18 @@ class SimpleMailer
      */
     public function setMessage($message)
     {
-        $this->message = quoted_printable_encode($message);
+        switch ($this->defaultEncoding) {
+        	case self::ENCODING_BASE64:
+        	    $this->message = chunk_split(base64_encode($message));
+        	    break;
+
+        	case self::ENCODING_QUOTED_PRINTABLE:
+        	    $this->message = quoted_printable_encode($message);
+        	    break;
+
+        	default:
+        	    throw new \Exception(sprintf("Unexpected content-transfer-encoding %s.", $this->defaultEncoding));
+        }
         return $this;
     }
 
@@ -492,7 +516,7 @@ class SimpleMailer
 
         $this->setHeader('Content-type', $this->contentType . '; charset=' . $this->charset)
              ->setHeader('Date', date('r'))
-             ->setHeader('Content-Transfer-Encoding', 'QUOTED-PRINTABLE')
+             ->setHeader('Content-Transfer-Encoding', $this->defaultEncoding)
              ->setHeader('Message-ID', md5(uniqid(time())) . "." . $this->getHostname())
         ;
 
@@ -520,9 +544,13 @@ class SimpleMailer
         }
 
         //Loads template
-        $body = file_get_contents($template);
-        if (!empty($translate)) {
-            $body = str_replace(array_keys($translate), array_values($translate), $body);
+        if (strtolower(substr($template, -4)) == '.php') {
+            $body = PhpTemplate::load($template, $translate);
+        } else {
+            $body = file_get_contents($template);
+            if (!empty($translate)) {
+                $body = str_replace(array_keys($translate), array_values($translate), $body);
+            }
         }
 
         //Extracts subject from the template

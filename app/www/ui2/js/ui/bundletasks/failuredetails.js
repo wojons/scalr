@@ -4,7 +4,6 @@ Scalr.regPage('Scalr.ui.bundletasks.failuredetails', function (loadParams, modul
 		scalrOptions: {
 			'modal': true
 		},
-		bodyCls: 'x-panel-body-frame',
 		tools: [{
 			type: 'close',
 			handler: function () {
@@ -15,6 +14,7 @@ Scalr.regPage('Scalr.ui.bundletasks.failuredetails', function (loadParams, modul
 			xtype: 'fieldset',
 			title: 'General information',
 			labelWidth: 130,
+            cls: 'x-fieldset-separator-none',
 			items: [{
 				xtype: 'displayfield',
 				name: 'email',

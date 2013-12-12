@@ -52,9 +52,9 @@ class ListSubnetsFilter extends Marker
      * @param   string|array        $id           optional The one or more ID of the subnet
      * @param   string              $marker       optional A marker.
      * @param   int                 $limit        optional Limit.
-     * @return  ListSubnetsFilter  Returns a new ListSubnetsFilter object
+     * @return  ListSubnetsFilter   Returns a new ListSubnetsFilter object
      */
-    public static function init($name = null, $id = null, $marker = null, $limit = null)
+    public static function init()
     {
         return call_user_func_array('parent::init', func_get_args());
     }
@@ -109,7 +109,7 @@ class ListSubnetsFilter extends Marker
      */
     public function setId($id = null)
     {
-        $this->id = $id;
+        $this->id = array();
         return $id === null ? $this : $this->addId($id);
     }
 
@@ -122,39 +122,6 @@ class ListSubnetsFilter extends Marker
     public function addId($id)
     {
         return $this->_addPropertyValue('id', $id);
-    }
-
-    /**
-     * Adds property's value
-     *
-     * @param   string       $name     PropertyName
-     * @param   array|string $value    value
-     * @param   \Closure     $typeCast optional Type casting closrure
-     * @return  ListNetworksFilter
-     */
-    private function _addPropertyValue($name, $value, \Closure $typeCast = null)
-    {
-        if (!property_exists($this, $name)) {
-            throw new \InvalidArgumentException(sprintf(
-                'Property "%s" does not exist in "%s"',
-                $name, get_class($this)
-            ));
-        }
-        if ($this->$name === null) {
-            $this->$name = array();
-        }
-        $property =& $this->$name;
-        if (!is_array($value) && !($value instanceof \Traversable)) {
-            $value = array($value);
-        }
-        foreach ($value as $v) {
-            if ($typeCast !== null) {
-                $property[] = $typeCast($v);
-            } else {
-                $property[] = (string)$v;
-            }
-        }
-        return $this;
     }
 
     /**
@@ -183,13 +150,7 @@ class ListSubnetsFilter extends Marker
     {
         $str = parent::getQueryString();
 
-        foreach (array('name', 'id') as $prop) {
-            if (!empty($this->$prop)) {
-                foreach ($this->$prop as $v) {
-                    $str .= '&' . $prop . '=' . rawurlencode($v);
-                }
-            }
-        }
+        $str .= $this->_getQueryStringForFields(array('name', 'id'), __CLASS__);
 
         return ltrim($str, '&');
     }

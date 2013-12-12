@@ -1,11 +1,13 @@
 <?php
+use Scalr\Acl\Acl;
 
 class Scalr_UI_Controller_Tools_Aws_Rds extends Scalr_UI_Controller
 {
     public function hasAccess()
     {
-        $enabledPlatforms = $this->getEnvironment()->getEnabledPlatforms();
-        if (!in_array(SERVER_PLATFORMS::EC2, $enabledPlatforms))
+        if (!parent::hasAccess() || !$this->request->isAllowed(Acl::RESOURCE_AWS_RDS)) return false;
+
+        if (!in_array(SERVER_PLATFORMS::EC2, $this->getEnvironment()->getEnabledPlatforms()))
             throw new Exception("You need to enable RDS platform for current environment");
 
         return true;

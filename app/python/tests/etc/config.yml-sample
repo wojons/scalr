@@ -1,49 +1,27 @@
+# Scalr\System\Config\Extension class determines the 
+# structure of this config and defines default values.
+# If you add/delete values in this config, mentioned class should be updated accordingly.
 scalr:
   connections:
     mysql: &connections_mysql
-      user: 'scalr'
-      pass: 'scalr'
       host: 'localhost'
-      name: 'scalr'
-    mongo: &connections_mongo
-      host: 'localhost'
-      name: 'db'
-    gearman: &connections_gearman
-      servers: ['localhost']
-    
-  auditlog:
-    enabled: false
-    connetcions:
-      mongo:
-        <<: *connections_mongo
-        driver: 'mongodb'
-        collection: 'auditlog'
-        
-  cloudyn:
-    master_email: ''
-    #Allowed values for the cloudyn.environment are [DEV|ITG|QA|PROD]
-    environment: DEV
-    
-  billing:
-    enabled: true
-    chargify:
-      api_key: ''
-      site_name: ''
-      
-  dns:
-    mysql: 
-      user: 'scalr'
-      pass: 'scalr'
-      host: 'localhost'
-      name: 'scalr'
-    global:
-      enabled: true
-      nameservers: ['ns1.example.net', 'ns2.example.net', 'ns3.example.net', 'ns4.example.net']
-    static:
-      enabled: true
-      nameservers: ['ns1.example-dns.net', 'ns2.example-dns.net']
-      domain_name: 'example-dns.net'
-      
+      port: ~
+      name: 'test'
+      user: 'root'
+      pass: 'root'
+
+#  email:
+#    # Default value: null
+#    address: ~
+#    # Default value: null
+#    name: ~   
+
+  system:
+    instances_connection_timeout: 4
+
+  # Allowed values: public | local | auto. 
+  instances_connection_policy: public
+
   msg_sender:
     connections: 
       mysql:
@@ -51,9 +29,9 @@ scalr:
         driver: 'mysql+pymysql'
         pool_recycle: 120
         pool_size: 10
-    pool_size: 10
-    log_file: "/var/log/scalr.messaging.log"
-    pid_file: "/var/run/scalr.messaging.pid"
+    pool_size: 50
+    log_file: "/var/log/scalr.messaging-test.log"
+    pid_file: "/var/run/scalr.messaging-test.pid"
 
   stats_poller:
     connections: 
@@ -64,9 +42,35 @@ scalr:
         pool_size: 4
     metrics: ['cpu', 'la', 'mem', 'net']
     farm_procs: 2
-    serv_thrds: 35
+    serv_thrds: 50
     rrd_thrds: 2
     rrd_db_dir: '/tmp/rrd_db_dir'
-    log_file: '/var/log/scalr.stats-poller.log'
-    pid_file: '/var/run/scalr.stats-poller.pid'
+    images_path: '/var/www/graphics'
+    graphics_url: 'http://example.com/graphics'
+    log_file: '/var/log/scalr.stats-poller-test.log'
+    pid_file: '/var/run/scalr.stats-poller-test.pid'
 
+#  # optional, if not exist using default values
+#  dbqueue_event:
+#    # optional, default value - scalr:connections
+#    connections: 
+#      mysql:
+#        host: 'localhost'
+#        port: ~
+#        name: 'scalr'
+#        user: 'user'
+#        pass: 'pass'
+#        # MySQL connection pool size
+#        # optional, default value - 4
+#        pool_size: 4
+#    # optional, default value - scalr:email
+#    email:
+#      address: 'admin@scalr.net'
+#    # workers pool size
+#    # optional, default value - 100
+#    pool_size: 100
+#    # optional, default value - /var/log/scalr.dbqueue-event.log
+#    log_file: '/var/log/scalr.dbqueue-event-test.log'
+#    # optional, default value - /var/log/scalr.dbqueue-event.pid
+#    pid_file: '/var/run/scalr.dbqueue-event-test.pid'
+#

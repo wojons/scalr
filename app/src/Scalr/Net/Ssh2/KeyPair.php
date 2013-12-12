@@ -1,4 +1,4 @@
-<?
+<?php
     class Scalr_Net_Ssh2_KeyPair
     {
         var $_math_obj;

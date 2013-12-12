@@ -35,15 +35,17 @@
         if ($validToken != $token)
             throw new Exception("Invalid authentification token");
 
-        $request = Scalr_UI_Request::initializeInstance(Scalr_UI_Request::REQUEST_TYPE_API, $user->id, $envId);
-        $request->requestApiVersion = intval(trim($version, 'v'));
         // prepate input data
         $postDataConvert = array();
         foreach (json_decode($postData, true) as $key => $value) {
             $postDataConvert[str_replace('.', '_', $key)] = $value;
         }
 
-        Scalr_Api_Controller::handleRequest($pathChunks, $postDataConvert);
+        $request = Scalr_UI_Request::initializeInstance(Scalr_UI_Request::REQUEST_TYPE_API, apache_request_headers(), $_SERVER, $postDataConvert, $_FILES, $user->id, $envId);
+        $request->requestApiVersion = intval(trim($version, 'v'));
+
+        Scalr_Api_Controller::handleRequest($pathChunks);
+        Scalr_UI_Response::getInstance()->sendResponse();
     } catch (Exception $e) {
         Scalr_UI_Response::getInstance()->failure($e->getMessage());
         Scalr_UI_Response::getInstance()->sendResponse();

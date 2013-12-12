@@ -2,97 +2,128 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.dbmsr', function (moduleTabParams) {
     var iopsMin = 100, 
         iopsMax = 4000, 
         integerRe = new RegExp('[0123456789]', 'i'), 
-        maxEbsStorageSize = 1000;
+        maxEbsStorageSize = 1000,
+        redisPersistenceTypeData;
+
+    redisPersistenceTypeData = [
+        {name:'aof', description:'Append Only File'},
+        {name:'snapshotting', description:'Snapshotting'},
+        {name: 'nopersistence', description: 'No persistence'}
+    ];
 
     return Ext.create('Scalr.ui.FarmsBuilderTab', {
 		tabTitle: 'Database settings',
 		itemId: 'dbmsr',
-
+        
+        settings: {
+            'db.msr.redis.persistence_type': undefined,
+            'db.msr.redis.use_password': undefined,
+            'db.msr.redis.num_processes': undefined,
+            'db.msr.data_bundle.enabled': 1,
+            'db.msr.data_bundle.every': 24,
+            'db.msr.data_bundle.timeframe.start_hh': '05',
+            'db.msr.data_bundle.timeframe.start_mm': '00',
+            'db.msr.data_bundle.timeframe.end_hh': '09',
+            'db.msr.data_bundle.timeframe.end_mm': '00',
+            'db.msr.data_bundle.use_slave': undefined,
+            'db.msr.no_data_bundle_on_promote': undefined,
+            'db.msr.data_bundle.compression': undefined,
+            'db.msr.data_backup.enabled': 1,
+            'db.msr.data_backup.every': 48,
+            'db.msr.data_backup.timeframe.start_hh': '05',
+            'db.msr.data_backup.timeframe.start_mm': '00',
+            'db.msr.data_backup.timeframe.end_hh': '09',
+            'db.msr.data_backup.timeframe.end_mm': '00',
+            'db.msr.data_storage.engine': function(record) {return record.getDefaultStorageEngine()},
+            'db.msr.data_storage.fstype': undefined,
+            'db.msr.data_storage.ebs.size': 10,
+            'db.msr.data_storage.ebs.type': undefined,
+            'db.msr.data_storage.ebs.iops': undefined,
+            'db.msr.data_storage.ebs.snaps.enable_rotation': 1,
+            'db.msr.data_storage.ebs.snaps.rotate': 5,
+            'db.msr.data_storage.eph.disk': undefined,
+            'db.msr.data_storage.eph.disks': undefined,
+            'db.msr.storage.lvm.volumes': undefined,
+            'db.msr.data_storage.raid.level': undefined,
+            'db.msr.data_storage.raid.volume_size': undefined,
+            'db.msr.data_storage.raid.volumes_count': undefined,
+            'db.msr.data_storage.raid.ebs.type': undefined,
+            'db.msr.data_storage.raid.ebs.iops': undefined,
+            'db.msr.data_storage.cinder.size': 100,
+            'db.msr.data_storage.gced.size': 1
+        },
+        
 		isEnabled: function (record) {
 			return record.isDbMsr();
 		},
         
-		getDefaultValues: function (record) {
-			return {
-				'db.msr.data_bundle.enabled': 1,
-				'db.msr.data_bundle.every': 24,
-				'db.msr.data_bundle.timeframe.start_hh': '05',
-				'db.msr.data_bundle.timeframe.start_mm': '00',
-				'db.msr.data_bundle.timeframe.end_hh': '09',
-				'db.msr.data_bundle.timeframe.end_mm': '00',
-				
-				'db.msr.data_storage.engine': record.getDefaultStorageEngine(),
-				'db.msr.data_storage.ebs.size': 10,
-				'db.msr.data_storage.ebs.snaps.enable_rotation' : 1,
-				'db.msr.data_storage.ebs.snaps.rotate' : 5,
-				
-				'db.msr.data_storage.cinder.size': 100,
-				'db.msr.data_storage.gced.size': 1,
-				
-				'db.msr.data_backup.enabled': 1,
-				'db.msr.data_backup.every' : 48,
-				'db.msr.data_backup.timeframe.start_hh': '05',
-				'db.msr.data_backup.timeframe.start_mm': '00',
-				'db.msr.data_backup.timeframe.end_hh': '09',
-				'db.msr.data_backup.timeframe.end_mm': '00'
-			};
-		},
-		
        onRoleUpdate: function(record, name, value, oldValue) {
             if (!this.isActive(record)) return;
             
             var fullname = name.join('.'),
-                platform = record.get('platform'),
                 settings = record.get('settings');
             if (fullname === 'settings.aws.instance_type' || fullname === 'settings.gce.machine-type') {
-                if (platform === 'ec2' || platform === 'gce')
-                    var devices = record.getAvailableStorageDisks(),
-                        fistDevice = '';
-
-                    Ext.Array.each(devices, function(disk){
-                        if (fistDevice === ''){
-                            fistDevice = disk.device;
-                        }
-                        if (settings['db.msr.data_storage.eph.disk'] == disk.device) {
-                            fistDevice = disk.device;
-                        }
+                var devices = record.getAvailableStorageDisks(),
+                    fistDevice = '',
+                    field, currentValue;
+                if (record.get('new')) {
+                    field = this.down('[name="db.msr.data_storage.engine"]');
+                    currentValue = field.getValue();
+                    field.store.load({
+                        data: record.getAvailableStorages()
                     });
-                    
-                    if (this.isVisible()) {
-                        var field = this.down('[name="db.msr.data_storage.eph.disk"]');
+
+                    field.setValue(field.findRecordByValue(currentValue) ? currentValue : record.getDefaultStorageEngine());
+                }
+
+                Ext.Array.each(devices, function(disk){
+                    if (fistDevice === ''){
+                        fistDevice = disk.device;
+                    }
+                    if (settings['db.msr.data_storage.eph.disk'] == disk.device) {
+                        fistDevice = disk.device;
+                    }
+                });
+
+                if (this.isVisible()) {
+                    if (record.isMultiEphemeralDevicesEnabled()) {
+                        this.refreshDisksCheckboxes(record, 'eph_checkboxes', 'db.msr.data_storage.eph.disks');
+                    } else {
+                        field = this.down('[name="db.msr.data_storage.eph.disk"]');
                         field.store.load({data: devices});
                         field.setValue(fistDevice);
-                        
-                        this.refreshLvmCheckboxes(record);
                     }
-                    if (settings['db.msr.data_storage.engine'] === 'eph') {
+                    this.refreshDisksCheckboxes(record, 'lvm_settings', 'db.msr.storage.lvm.volumes');
+                }
+                if (settings['db.msr.data_storage.engine'] === 'eph') {
+                    if (!record.isMultiEphemeralDevicesEnabled()) {
                         settings['db.msr.data_storage.eph.disk'] = fistDevice;
-                        record.set('settings', settings);
                     }
+                    record.set('settings', settings);
+                }
             }
             
         },
         
-        refreshLvmCheckboxes: function(record) {
+        refreshDisksCheckboxes: function(record, itemId, optionName) {
+            var cont = this.down('#' + itemId);
+            cont.suspendLayouts();
+            cont.removeAll();
             var ephemeralDevicesMap = record.getEphemeralDevicesMap();
-            if (ephemeralDevicesMap === undefined) return;
             
 			var platform = record.get('platform'),
                 settings = record.get('settings', true),
-                iType = false;
+                instanceType;
 			
 			if (platform === 'gce') {
-				iType = settings['gce.machine-type'];
+				instanceType = settings['gce.machine-type'];
 			} else if (platform === 'ec2') {
-				iType = settings['aws.instance_type'];
+				instanceType = settings['aws.instance_type'];
 			} 
 			
-            var cont = this.down('[name="lvm_settings"]');
-            cont.suspendLayouts();
-            cont.removeAll();
-			if (Ext.isDefined(ephemeralDevicesMap[iType])) {
-				var devices = ephemeralDevicesMap[iType], size = 0,
-					volumes = Ext.decode(settings['db.msr.storage.lvm.volumes']), def = Ext.Object.getSize(volumes) ? false : true;
+			if (instanceType !== undefined && ephemeralDevicesMap[instanceType] !== undefined) {
+				var devices = ephemeralDevicesMap[instanceType], size = 0,
+					volumes = Ext.decode(settings[optionName]);
 
 				for (var d in devices) {
 					cont.add({
@@ -100,29 +131,28 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.dbmsr', function (moduleTabParams) {
 						name: d,
 						boxLabel: d + ' (' + devices[d]['size'] + 'Gb)',
 						ephSize: devices[d]['size'],
-						checked: def || Ext.isDefined(volumes[d]),
-						handler: function() {
-							/*var c = this.up('fieldset'), s = 0;
-							Ext.each(c.query('checkbox'), function() {
-								if (this.getValue())
-									s += parseInt(this.ephSize);
-							});
-
-							c.down('displayfield').setValue(s + 'Gb');*/
-						}
+						checked: volumes && Ext.isDefined(volumes[d])
 					});
 					size += parseInt(devices[d]['size']);
 				}
-
-				/*cont.add({
+			} else {
+                cont.add({
 					xtype: 'displayfield',
-					fieldLabel: 'Total size',
-					labelWidth: 80,
-					value: size + 'Gb'
-				});*/
+					value: 'LVM device'
+                });
 			}
             cont.resumeLayouts(true);
             cont.setDisabled(!record.get('new'))
+        },
+
+        getDisksCheckboxesValues: function(itemId) {
+            var volumes = {};
+            Ext.each(this.down('#' + itemId).query('checkbox'), function() {
+                if (this.getValue()) {
+                    volumes[this.getName()] = this.ephSize;
+                }
+            });
+            return Ext.encode(volumes);
         },
         
 		showTab: function (record) {
@@ -156,13 +186,16 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.dbmsr', function (moduleTabParams) {
 			// Ephemeral devices
             this.down('[name="lvm_settings"]').setVisible(settings['db.msr.data_storage.engine'] === 'lvm');
             this.down('[name="db.msr.data_bundle.compression"]').setVisible(settings['db.msr.data_storage.engine'] === 'lvm');
-			this.refreshLvmCheckboxes(record);
+			this.refreshDisksCheckboxes(record, 'lvm_settings', 'db.msr.storage.lvm.volumes');
 			
 			//redis
 			if (record.get('behaviors').match('redis')) {
 				this.down('[name="db.msr.redis.persistence_type"]').setValue(settings['db.msr.redis.persistence_type'] || 'snapshotting');
 				this.down('[name="db.msr.redis.use_password"]').setValue(settings['db.msr.redis.use_password'] || 1);
-				this.down('[name="db.msr.redis.num_processes"]').setValue(settings['db.msr.redis.num_processes'] || 1);
+
+                field = this.down('[name="db.msr.redis.num_processes"]');
+				field.setValue(settings['db.msr.redis.num_processes'] || 1);
+                field.setReadOnly(moduleTabParams.farm.status > 0 && !record.get('new'))
 				
 				this.down('[name="redis_settings"]').show();
 			} else {
@@ -171,9 +204,16 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.dbmsr', function (moduleTabParams) {
 			
             //eph
             field = this.down('[name="db.msr.data_storage.eph.disk"]');
-			field.store.load({data: record.getAvailableStorageDisks()});
-			field.setValue(settings['db.msr.data_storage.eph.disk'] || (field.store.getAt(field.store.getCount() > 1 ? 1 : 0).get('device')));
-			
+            if (record.isMultiEphemeralDevicesEnabled()) {
+                field.hide();
+                this.down('#eph_checkboxes').show();
+                this.refreshDisksCheckboxes(record, 'eph_checkboxes', 'db.msr.data_storage.eph.disks');
+            } else {
+                field.show();
+                this.down('#eph_checkboxes').hide();
+                field.store.load({data: record.getAvailableStorageDisks()});
+                field.setValue(settings['db.msr.data_storage.eph.disk'] || (field.store.getAt(field.store.getCount() > 1 ? 1 : 0).get('device')));
+            }
 			//raid
             field = this.down('[name="db.msr.data_storage.raid.level"]');
 			field.store.load({data: record.getAvailableStorageRaids()});
@@ -233,16 +273,16 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.dbmsr', function (moduleTabParams) {
 			this.down('[name="db.msr.data_storage.engine"]').setValue(settings['db.msr.data_storage.engine']);
 			
             //RAID Settings
-            this.down('[name="db.msr.data_storage.raid.level"]').setDisabled(notANewRecord)
+            this.down('[name="db.msr.data_storage.raid.level"]').setDisabled(notANewRecord);
             this.down('[name="db.msr.data_storage.raid.volumes_count"]').setDisabled(notANewRecord);
             this.down('[name="db.msr.data_storage.raid.volume_size"]').setDisabled(notANewRecord);
-            this.down('[name="db.msr.data_storage.raid.ebs.type"]').setDisabled(notANewRecord);
+            this.down('[name="db.msr.data_storage.raid.ebs.type"]').setDisabled(notANewRecord || platform === 'eucalyptus');
             this.down('[name="db.msr.data_storage.raid.ebs.iops"]').setDisabled(notANewRecord);
 
             // Engine & EBS Settings
             this.down('[name="db.msr.data_storage.engine"]').setDisabled(notANewRecord);
             this.down('[name="db.msr.data_storage.ebs.size"]').setDisabled(notANewRecord);
-            this.down('[name="db.msr.data_storage.ebs.type"]').setDisabled(notANewRecord);
+            this.down('[name="db.msr.data_storage.ebs.type"]').setDisabled(notANewRecord || platform === 'eucalyptus');
             this.down('[name="db.msr.data_storage.ebs.iops"]').setDisabled(notANewRecord);
             this.down('[name="db.msr.data_storage.fstype"]').setDisabled(notANewRecord);				
 
@@ -326,20 +366,18 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.dbmsr', function (moduleTabParams) {
 			}
 
 			if (settings['db.msr.data_storage.engine'] === 'eph') {
-				settings['db.msr.data_storage.eph.disk'] = this.down('[name="db.msr.data_storage.eph.disk"]').getValue();
+                if (record.isMultiEphemeralDevicesEnabled()) {
+                    settings['db.msr.data_storage.eph.disks'] = this.getDisksCheckboxesValues('eph_checkboxes');
+                } else {
+                    settings['db.msr.data_storage.eph.disk'] = this.down('[name="db.msr.data_storage.eph.disk"]').getValue();
+                }
 			}
 
 			if (settings['db.msr.data_storage.engine'] === 'lvm') {
 				//Remove this settings because if instance type was changed we need to update this setting.
 				// Update it manually still not allowed, need consider to allow to change this setting.
 				//if (record.get('new')) {
-					var volumes = {};
-					Ext.each(this.down('[name="lvm_settings"]').query('checkbox'), function() {
-						if (this.getValue()) {
-							volumes[this.getName()] = this.ephSize;
-						}
-					});
-					settings['db.msr.storage.lvm.volumes'] = Ext.encode(volumes);
+                    settings['db.msr.storage.lvm.volumes'] = this.getDisksCheckboxesValues('lvm_settings');
 				//}
 			}
 
@@ -380,10 +418,7 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.dbmsr', function (moduleTabParams) {
                         store: {
                             fields: [ 'name', 'description' ],
                             proxy: 'object',
-                            data: [
-                                {name:'aof', description:'Append Only File'},
-                                {name:'snapshotting', description:'Snapshotting'}
-                            ]
+                            data: redisPersistenceTypeData
                         },
                         valueField: 'name',
                         displayField: 'description',
@@ -503,10 +538,16 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.dbmsr', function (moduleTabParams) {
 							//TODO:
 						}
 					}
+                },{
+                    xtype: 'container',
+                    itemId: 'eph_checkboxes',
+                    margin: 0,
+                    hidden: true
 				}]
 			}, {
 				xtype:'fieldset',
 				name: 'lvm_settings',
+                itemId: 'lvm_settings',
 				title: 'LVM Storage settings',
 				hidden: true,
 				items: [{
@@ -701,7 +742,7 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.dbmsr', function (moduleTabParams) {
 				hidden: true,
 				items: [{
 					xtype: 'displayfield',
-					fieldCls: 'x-form-field-warning',
+					cls: 'x-form-field-warning',
 					value: 'RAID arrays are not available for your pricing plan. <a href="#/billing">Please upgrade your account to be able to use this feature.</a>'
 				}]
 			}, {

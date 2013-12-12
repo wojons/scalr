@@ -13,21 +13,34 @@ class Scalr_UI_Controller_Platforms_Openstack extends Scalr_UI_Controller
         $data['flavors'] = array();
         foreach ($client->servers->listFlavors() as $flavor) {
             $data['flavors'][] = array(
-                'id' => (int)$flavor->id,
+                'id' => (string)$flavor->id,
                 'name' => $flavor->name
             );
         }
 
-        //Check floating IPs
-        if ($client->servers->isExtensionSupported(ServersExtension::EXT_FLOATING_IP_POOLS))
-        {
+        if ($client->hasService('network')) {
             $data['ipPools'] = array(array('id' =>'', 'name' => ''));
-            $pools = $client->servers->listFloatingIpPools();
-            foreach ($pools as $pool) {
-                $data['ipPools'][] = array(
-                    'id' => $pool->name,
-                    'name' => $pool->name
-                );
+            $networks = $client->network->listNetworks();
+            foreach ($networks as $network) {
+                if ($network->{"router:external"} == true) {
+                    $data['ipPools'][] = array(
+                        'id' => $network->id,
+                        'name' => $network->name
+                    );
+                }
+            }
+        } else {
+            //Check floating IPs
+            if ($client->servers->isExtensionSupported(ServersExtension::EXT_FLOATING_IP_POOLS))
+            {
+                $data['ipPools'] = array(array('id' =>'', 'name' => ''));
+                $pools = $client->servers->listFloatingIpPools();
+                foreach ($pools as $pool) {
+                    $data['ipPools'][] = array(
+                        'id' => $pool->name,
+                        'name' => $pool->name
+                    );
+                }
             }
         }
 

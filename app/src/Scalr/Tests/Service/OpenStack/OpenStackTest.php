@@ -1,22 +1,18 @@
 <?php
 namespace Scalr\Tests\Service\OpenStack;
 
+use Scalr\Service\OpenStack\Services\Network\Type\CreateRouter;
+use Scalr\Service\OpenStack\Services\Network\Type\NetworkExtension;
 use Scalr\Service\OpenStack\Services\Network\Type\CreatePort;
 use Scalr\Service\OpenStack\Services\Network\Type\AllocationPool;
-use Scalr\Service\OpenStack\Services\Servers\Type\Network;
-use Scalr\Service\OpenStack\Services\Servers\Type\NetworkList;
 use Scalr\Service\OpenStack\Services\Servers\Type\Personality;
 use Scalr\Service\OpenStack\Services\Servers\Type\PersonalityList;
 use Scalr\Service\OpenStack\Services\Volume\Type\VolumeStatus;
 use Scalr\Service\OpenStack\Exception\OpenStackException;
 use Scalr\Service\OpenStack\Services\Servers\Type\ServersExtension;
 use Scalr\Service\OpenStack\Exception\RestClientException;
-use Scalr\Service\OpenStack\Services\Servers\Type\ListServersFilter;
-use Scalr\Service\OpenStack\Services\Servers\Type\ImageStatus;
-use Scalr\Service\OpenStack\Services\Servers\Type\ListImagesFilter;
-use Scalr\Service\OpenStack\OpenStackConfig;
-use Scalr\Service\OpenStack\Type\AppFormat;
 use Scalr\Service\OpenStack\OpenStack;
+use SERVER_PLATFORMS;
 
 /**
  * OpenStack TestCase
@@ -35,26 +31,22 @@ class OpenStackTest extends OpenStackTestCase
 
     const NAME_PORT = 'port';
 
+    const NAME_ROUTER = 'router';
+
     /**
      * Provider of the instances for the functional tests
      */
     public function providerRs()
     {
-        return array(
-            //Enter.It Grizzly
-            array(\SERVER_PLATFORMS::OPENSTACK, 'EnterIt', 'cb457ffd-469e-4fae-9bb0-3f618e69d74f'),
+        $data = \Scalr::config('scalr.phpunit.openstack.platforms');
 
-//             //Nebula
-//             array(\SERVER_PLATFORMS::OPENSTACK, 'RegionOne', '07b26892-9716-453f-9443-9b5e90d2c978'),
+        if (empty($data) || !is_array($data)) {
+            return array(
+                array(SERVER_PLATFORMS::RACKSPACENG_US, 'DFW', '3afe97b2-26dc-49c5-a2cc-a2fc8d80c001')
+            );
+        }
 
-//             //Open Cloud System
-//             array(\SERVER_PLATFORMS::OPENSTACK, 'RegionOne', '7a0d5ff5-efa1-4dae-a18e-0238fe27f287'),
-
-            //Rackspace US
-            array(\SERVER_PLATFORMS::RACKSPACENG_US, 'DFW', '3afe97b2-26dc-49c5-a2cc-a2fc8d80c001'),
-            //Rackspase UK
-            array(\SERVER_PLATFORMS::RACKSPACENG_UK, 'LON', '3afe97b2-26dc-49c5-a2cc-a2fc8d80c001'),
-        );
+        return $data;
     }
 
     /**
@@ -132,7 +124,7 @@ class OpenStackTest extends OpenStackTestCase
         /* @var $rs OpenStack */
         if ($this->getContainer()->environment->isPlatformEnabled($platform)) {
             $rs = $this->getContainer()->openstack($platform, $region);
-//             $rs->getClient()->setDebug(true);
+//             $rs->setDebug();
             $this->assertInstanceOf($this->getOpenStackClassName('OpenStack'), $rs);
         } else {
             //Environment has not been activated yet.
@@ -175,13 +167,22 @@ class OpenStackTest extends OpenStackTestCase
         $this->assertTrue(is_array($aExtensions));
         unset($aExtensions);
 
+        $aExtensions = $rs->volume->listExtensions();
+        $this->assertTrue(is_array($aExtensions));
+        unset($aExtensions);
+
         $hasNetwork = $rs->hasService(OpenStack::SERVICE_NETWORK);
 
-        if ($hasNetwork) {
+        if ($platform != SERVER_PLATFORMS::ECS && $hasNetwork) {
+            $aExtensions = $rs->network->listExtensions();
+            $this->assertTrue(is_array($aExtensions));
+            unset($aExtensions);
+
             //Quantum API tests
             $testNetworkName = self::getTestName(self::NAME_NETWORK);
             $testSubnetName = self::getTestName(self::NAME_SUBNET);
             $testPortName = self::getTestName(self::NAME_PORT);
+            $testRouterName = self::getTestName(self::NAME_ROUTER);
 
             //ListNetworks test
             $networks = $rs->network->networks->list(null, array(
@@ -228,18 +229,6 @@ class OpenStackTest extends OpenStackTestCase
             }
             unset($ports);
 
-            //Tries to find the networks that were created recently by this test
-            //but hadn't been removed at any reason.
-            $networks = $rs->network->networks->list(null, array(
-                'name' => $testNetworkName
-            ));
-            foreach ($networks as $network) {
-                //Removes previously created networks
-                $rs->network->networks->update($network->id, null, false);
-                $rs->network->networks->delete($network->id);
-            }
-            unset($networks);
-
             //Tries to find the ports that were created recently by this test
             //but hadn't been removed at any reason.
             $ports = $rs->network->ports->list(null, array(
@@ -250,6 +239,26 @@ class OpenStackTest extends OpenStackTestCase
                 $rs->network->ports->delete($port->id);
             }
             unset($ports);
+
+            //Tries to find the networks that were created recently by this test
+            //but hadn't been removed at any reason.
+            $networks = $rs->network->networks->list(null, array(
+                'name' => $testNetworkName
+            ));
+            foreach ($networks as $network) {
+                //Removes previously created networks
+                $rs->network->networks->update($network->id, null, false);
+                //Trying to remove allocated ports
+                $portsToRemove = $rs->network->ports->list(null, array('networkId' => $network->id));
+                foreach ($portsToRemove as $p) {
+                    if (isset($p->device_owner) && isset($p->device_id) && $p->device_owner == 'network:router_interface') {
+                        $rs->network->ports->update($p->id, array('admin_state_up' => false));
+                        $rs->network->routers->removeInterface($p->device_id, null, $p->id);
+                    }
+                }
+                $rs->network->networks->delete($network->id);
+            }
+            unset($networks);
 
             //Tries to find the subnets that where created by this test but hadn't been removed yet.
             $subnets = $rs->network->subnets->list(null, array(
@@ -279,9 +288,7 @@ class OpenStackTest extends OpenStackTestCase
                 //ip_version is set internally with 4, but you can provide it explicitly
                 'cidr'             => '10.0.3.0/24',
                 'name'             => $testSubnetName,
-                'allocation_pools' => array(
-                                          new AllocationPool('10.0.3.20', '10.0.3.22')
-                                      ),
+                'allocation_pools' => array(new AllocationPool('10.0.3.20', '10.0.3.22')),
             ));
             $this->assertInternalType('object', $subnet);
             $this->assertEquals($testSubnetName, $subnet->name);
@@ -298,12 +305,7 @@ class OpenStackTest extends OpenStackTestCase
             $this->assertNotEmpty($subnet->name);
             $this->assertEquals($testSubnetName . '1', $subnet->name);
 
-            //Removes subnet
-            $ret = $rs->network->subnets->delete($subnet->id);
-            $this->assertTrue($ret);
-
             //Creates port
-
             //Let's use object here
             $req = new CreatePort($network->id);
             $req->name = $testPortName;
@@ -322,8 +324,69 @@ class OpenStackTest extends OpenStackTestCase
             $this->assertInternalType('object', $port);
             $this->assertEquals($testPortName . '1', $port->name);
 
+
+            //Quantum L3 Router related tests
+            if ($rs->network->isExtensionSupported(NetworkExtension::quantumL3Router())) {
+                //ListRouters test
+                $routers = $rs->network->routers->list(null, array('status' => array('ACTIVE', 'PENDING')), array('id', 'name'));
+                $this->assertInternalType('array', $routers);
+                foreach ($routers as $r) {
+                    $router = $rs->network->routers->list($r->id);
+                    $this->assertInternalType('object', $router);
+                    if ($r->name == $testRouterName) {
+                        //Removes the router which is created by phpunit test before and is still alive by any reason.
+                        //It requires all internal interfaces to be removed from router.
+                        $ret = $rs->network->routers->delete($r->id);
+                        $this->assertTrue($ret);
+                    }
+                }
+                unset($routers);
+
+                //Creates router
+                $router = $rs->network->routers->create(new CreateRouter($testRouterName));
+                $this->assertInternalType('object', $router);
+                $this->assertObjectHasAttribute('name', $router);
+                $this->assertNotEmpty($router->name);
+                $this->assertEquals($testRouterName, $router->name);
+                $this->assertObjectHasAttribute('id', $router);
+                $this->assertNotEmpty($router->id);
+                $this->assertObjectHasAttribute('admin_state_up', $router);
+                $this->assertTrue($router->admin_state_up);
+
+                //Updates the router
+                $r2 = $rs->network->routers->update($router->id, array('admin_state_up' => false));
+                $this->assertInternalType('object', $r2);
+                $this->assertObjectHasAttribute('admin_state_up', $r2);
+                $this->assertEquals(false, $r2->admin_state_up);
+
+                //Adds interface to router
+                $routerInterface1 = $rs->network->routers->addInterface($router->id, $subnet->id);
+                $this->assertInternalType('object', $routerInterface1);
+                $this->assertObjectHasAttribute('subnet_id', $routerInterface1);
+                $this->assertEquals($subnet->id, $routerInterface1->subnet_id);
+                $this->assertObjectHasAttribute('port_id', $routerInterface1);
+
+                //Removes interface from router
+                $obj = $rs->network->routers->removeInterface($router->id, $subnet->id);
+//                 It returns nothing NULL
+//                 $this->assertInternalType('object', $obj);
+//                 $this->assertObjectHasAttribute('subnet_id', $obj);
+//                 $this->assertEquals($subnet->id, $obj->subnet_id);
+//                 $this->assertObjectHasAttribute('port_id', $obj);
+//                 unset($obj);
+
+                //Removes router
+                $ret = $rs->network->routers->delete($router->id);
+                $this->assertTrue($ret);
+                unset($router);
+            }
+
             //Removes port
             $ret = $rs->network->ports->delete($port->id);
+            $this->assertTrue($ret);
+
+            //Removes subnet
+            $ret = $rs->network->subnets->delete($subnet->id);
             $this->assertTrue($ret);
 
             //Removes created network
@@ -474,9 +537,9 @@ class OpenStackTest extends OpenStackTestCase
             }
         }
 
-        $personality = new PersonalityList(array(
-            new Personality('/etc/scalr/private.d/.user-data', base64_encode('super data'))
-        ));
+        $personality = new PersonalityList();
+        $personality->append(new Personality('/etc/scalr/private.d/.user-data', base64_encode('super data')));
+        $personality->append(new Personality('/etc/.scalr-user-data', base64_encode('super data')));
 
         $netList = null;
 

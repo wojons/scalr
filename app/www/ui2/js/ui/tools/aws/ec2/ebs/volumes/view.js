@@ -65,20 +65,20 @@ Scalr.regPage('Scalr.ui.tools.aws.ec2.ebs.volumes.view', function (loadParams, m
 				'<tpl if="!farmId"><img src="/ui2/images/icons/false.png" /></tpl>'
 			},
 			{ header: "Volume ID", width: 120, dataIndex: 'volumeId', sortable: true },
-			{ header: "Size (GB)", width: 80, dataIndex: 'size', sortable: true },
+			{ header: "Size (GB)", width: 110, dataIndex: 'size', sortable: true },
 			{ header: "Type", width: 80, dataIndex: 'type', sortable: true },
 			{ header: "Snapshot ID", width: 35, dataIndex: 'snapshotId', sortable: true, hidden: true },
-			{ header: "Placement", width: 100, dataIndex: 'availZone', sortable: true },
+			{ header: "Placement", width: 110, dataIndex: 'availZone', sortable: true },
 			{ header: "Status", width: 250, dataIndex: 'status', sortable: true, xtype: 'templatecolumn', tpl:
 				'{status}' +
 				'<tpl if="attachmentStatus"> / {attachmentStatus}</tpl>' +
 				'<tpl if="device"> ({device})</tpl>'
 			},
-			{ header: "Mount status", width: 100, dataIndex: 'mountStatus', sortable: false, xtype: 'templatecolumn', tpl:
+			{ header: "Mount status", width: 110, dataIndex: 'mountStatus', sortable: false, xtype: 'templatecolumn', tpl:
 				'<tpl if="mountStatus">{mountStatus}</tpl>' +
 				'<tpl if="!mountStatus"><img src="/ui2/images/icons/false.png" /></tpl>'
 			},
-			{ header: "Instance ID", width: 110, dataIndex: 'instanceId', sortable: true, xtype: 'templatecolumn', tpl:
+			{ header: "Instance ID", width: 120, dataIndex: 'instanceId', sortable: true, xtype: 'templatecolumn', tpl:
 				'<tpl if="instanceId">{instanceId}</tpl>'
 			},
 			{ header: "Auto-snaps", width: 110, dataIndex: 'autoSnaps', sortable: false, align:'center', xtype: 'templatecolumn', tpl:
@@ -236,8 +236,8 @@ Scalr.regPage('Scalr.ui.tools.aws.ec2.ebs.volumes.view', function (loadParams, m
 			store: store,
 			dock: 'top',
 			beforeItems: [{
-				ui: 'paging',
-				iconCls: 'x-tbar-add',
+                text: 'Add volume',
+                cls: 'x-btn-green-bg',
 				handler: function() {
 					Scalr.event.fireEvent('redirect', '#/tools/aws/ec2/ebs/volumes/create');
 				}

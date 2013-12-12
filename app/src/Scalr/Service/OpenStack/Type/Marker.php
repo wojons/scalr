@@ -21,6 +21,53 @@ class Marker extends AbstractInitType
      */
     private $marker;
 
+    /**
+     * Adds property's value
+     *
+     * This method expects the property to be array type
+     *
+     * @param   string       $name     PropertyName
+     * @param   array|string $value    value
+     * @param   \Closure     $typeCast optional Type casting closrure
+     * @return  Marker
+     */
+    protected function _addPropertyValue($name, $value, \Closure $typeCast = null)
+    {
+        $refl = $this->getReflectionClass();
+
+        if (!$refl->hasProperty($name)) {
+            throw new \InvalidArgumentException(sprintf(
+                'Property "%s" does not exist in "%s"',
+                $name, get_class($this)
+            ));
+        }
+
+        $prop = $refl->getProperty($name);
+
+        if ($prop->isPrivate()) {
+            $prop->setAccessible(true);
+        }
+
+        if (($property = $prop->getValue($this)) === null) {
+            $property = array();
+        }
+
+        if (!is_array($value) && !($value instanceof \Traversable)) {
+            $value = array($value);
+        }
+
+        foreach ($value as $v) {
+            if ($typeCast !== null) {
+                $property[] = $typeCast($v);
+            } else {
+                $property[] = (string)$v;
+            }
+        }
+
+        $prop->setValue($this, $property);
+
+        return $this;
+    }
 
     /**
      * Convenient constuctor
@@ -87,7 +134,7 @@ class Marker extends AbstractInitType
      * @param   int        $limit   optional Maximum number of items at time (<=1000)
      * @return  Marker Returns new Marker
      */
-    public static function init($marker = null, $limit = null)
+    public static function init()
     {
         return call_user_func_array('parent::init', func_get_args());
     }
@@ -112,19 +159,63 @@ class Marker extends AbstractInitType
     }
 
     /**
+     * Gets the query string for the fields
+     *
+     * @param   array  $fields The fields list looks like (fild1, field2, .. or fieldN => uriParameterAlias)
+     * @param   array  $class  optional The called class
+     * @return  string Returns the query string
+     */
+    protected function _getQueryStringForFields(array $fields = null, $class = null)
+    {
+        $str = '';
+        if ($class === null || $class == get_class($this)) {
+            $refl = $this->getReflectionClass();
+        } else {
+            $refl = new \ReflectionClass($class);
+        }
+
+        if ($fields === null) {
+            //Trying to determine fields from reflection class
+            $fields = array_map(function(\ReflectionProperty $prop){
+                return $prop->getName();
+            }, $refl->getProperties());
+        }
+
+        foreach ($fields as $index => $prop) {
+            if (!is_numeric($index)) {
+                $uriProp = $prop;
+                $prop = $index;
+            } else {
+                $uriProp = $prop;
+            }
+            if (!$refl->hasProperty($prop)) continue;
+            $refProp = $refl->getProperty($prop);
+            if ($refProp->isPrivate()) {
+                $refProp->setAccessible(true);
+            }
+            $value = $refProp->getValue($this);
+            if ($value !== null) {
+                if (is_array($value) || $value instanceof \Traversable) {
+                    foreach ($value as $v) {
+                        $str .= '&' . $uriProp . '=' . rawurlencode((string)$v);
+                    }
+                } else {
+                    $str .= '&' . $uriProp . '=' . rawurlencode((string)$value);
+                }
+            }
+            unset($uriProp);
+        }
+
+        return $str;
+    }
+
+    /**
      * Gets a query string
      *
      * @return string Returns a query string
      */
     public function getQueryString()
     {
-        $str = '';
-        if ($this->getMarker() !== null) {
-            $str .= '&marker=' . rawurlencode($this->getMarker());
-        }
-        if ($this->getLimit() !== null) {
-            $str .= '&limit=' . intval($this->getLimit());
-        }
-        return ltrim($str, '&');
+        return ltrim($this->_getQueryStringForFields(array('marker', 'limit'), __CLASS__), '&');
     }
 }

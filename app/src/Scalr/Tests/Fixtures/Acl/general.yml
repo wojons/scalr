@@ -1,0 +1,19 @@
+GENERAL_CUSTOM_EVENTS:
+- [/scripts/events, null, all]
+
+GENERAL_GLOBAL_VARIABLES:
+- /core/variables
+- /core/xSaveVariables
+
+GENERAL_CUSTOM_SCALING_METRICS:
+- /scaling/metrics/xSave
+- /scaling/metrics/xRemove
+- /scaling/metrics/default
+- /scaling/metrics/view
+- /scaling/metrics/create
+- /scaling/metrics/edit
+- /scaling/metrics/getList
+- /scaling/metrics/xGetList
+
+GENERAL_SCHEDULERTASKS:
+- [/schedulertasks, null, all]

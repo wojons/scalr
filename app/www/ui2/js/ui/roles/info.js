@@ -13,7 +13,6 @@ Scalr.regPage('Scalr.ui.roles.info', function (loadParams, moduleParams) {
 		scalrOptions: {
 			'modal': true
 		},
-		bodyCls: 'x-panel-body-frame',
 		width: 700,
 		tools: [{
 			type: 'refresh',
@@ -46,6 +45,7 @@ Scalr.regPage('Scalr.ui.roles.info', function (loadParams, moduleParams) {
 		}, {
 			xtype: 'fieldset',
 			title: 'Parameters',
+            cls: 'x-fieldset-separator-none',
 			defaults: {
 				labelWidth: 150,
                 anchor: '100%',
@@ -55,7 +55,7 @@ Scalr.regPage('Scalr.ui.roles.info', function (loadParams, moduleParams) {
 				fieldLabel: 'Group',
 				name: 'groupName'
 			}, {
-				fieldLabel: 'Behaviors',
+				fieldLabel: 'Automation',
 				name: 'behaviorsList'
 			}, {
 				fieldLabel: 'OS',

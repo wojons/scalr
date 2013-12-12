@@ -3,7 +3,7 @@ namespace Scalr\Tests\Logger;
 
 use Scalr\Logger\AuditLog\KeyValueRecord;
 use Scalr\Logger\AuditLog\Documents\FarmSettingsDocument;
-use Scalr\Tests\TestCase;
+use Scalr\Tests\WebTestCase;
 use Scalr\Logger\AuditLog\AuditLogTags;
 use Scalr\Logger\AuditLog;
 use Scalr\DependencyInjection\Container;
@@ -15,10 +15,8 @@ use Scalr\Logger\AuditLog\Documents\FarmDocument;
  * @author    Vitaliy Demidov   <vitaliy@scalr.com>
  * @since     01.11.2012
  */
-class AuditLogTest extends TestCase
+class AuditLogTest extends WebTestCase
 {
-    const TEST_USER_ID = 7362;
-
     const CLASS_AUDITLOG_LOG_RECORD = 'Scalr\\Logger\\AuditLog\\LogRecord';
 
     /**
@@ -52,8 +50,7 @@ class AuditLogTest extends TestCase
     private function setTestUserToContainer()
     {
         $container = \Scalr::getContainer();
-        $container->user = new \Scalr_Account_User();
-        $container->user->loadById(self::TEST_USER_ID);
+        $container->user = $this->getUser();
     }
 
     /**
@@ -62,6 +59,7 @@ class AuditLogTest extends TestCase
      */
     public function tearDown()
     {
+        \Scalr::getContainer()->user = null;
         unset($this->logger);
         parent::tearDown();
     }
@@ -100,7 +98,7 @@ class AuditLogTest extends TestCase
         $tags = new AuditLogTags();
         try {
             $tags->add('unknown-tag--');
-            $this->assertTrue(false, 'Exeption must be thrown in this case.');
+            $this->assertTrue(false, 'Exception must be thrown in this case.');
         } catch(\InvalidArgumentException $e) {}
         $tags->add(AuditLogTags::TAG_STOP, AuditLogTags::TAG_PAUSE);
         $this->assertEquals(AuditLogTags::TAG_STOP . ',' . AuditLogTags::TAG_PAUSE, (string)$tags);

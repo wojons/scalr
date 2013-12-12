@@ -6,6 +6,11 @@ class Scalr_Service_Apache_Vhost extends Scalr_Model
     protected $dbPrimaryKey = "id";
     protected $dbMessageKeyNotFound = "Apache virtualhost #%s not found in database";
 
+    /**
+     * @var \DBFarm
+     */
+    private $dbFarm;
+
     protected $dbPropertyMap = array(
         'id'			=> 'id',
         'name'			=> array('property' => 'domainName', 'is_filter' => true),
@@ -43,6 +48,20 @@ class Scalr_Service_Apache_Vhost extends Scalr_Model
     public static function init($className = null)
     {
         return parent::init($className);
+    }
+
+    /**
+     * Gets DBFarm object
+     *
+     * @return \DBFarm
+     */
+    public function getFarmObject()
+    {
+        if (!$this->dbFarm && !empty($this->farmId)) {
+            $this->dbFarm = \DBFarm::LoadByID($this->farmId);
+        }
+
+        return $this->dbFarm;
     }
 
     /**

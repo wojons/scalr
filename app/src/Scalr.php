@@ -152,8 +152,11 @@ class Scalr
             self::$ConfigsCache[$farmid][$observer->ObserverName] = $observer->GetConfigurationForm();
 
             // Get farm observer id
-            $farm_observer_id = $DB->GetOne("SELECT * FROM farm_event_observers
-                WHERE farmid=? AND event_observer_name=?",
+            $farm_observer_id = $DB->GetOne("
+                SELECT * FROM farm_event_observers
+                WHERE farmid=? AND event_observer_name=?
+                LIMIT 1
+            ",
                 array($farmid, get_class($observer))
             );
 
@@ -220,34 +223,37 @@ class Scalr
     /**
      * File event in database
      *
-     * @param integer $farmid
-     * @param string $event_name
+     * @param  integer $farmid
+     * @param  string  $event_name
      */
     public static function FireEvent($farmid, Event $event)
     {
-        if (!self::$observersSetuped)
+        if (!self::$observersSetuped) {
             self::setupObservers();
+        }
 
         $startTime = microtime(true);
 
-        try
-        {
+        try {
             $event->SetFarmID($farmid);
+            $handledObservers = array();
 
             // Notify class observers
-            foreach (self::$EventObservers as $observer)
-            {
+            foreach (self::$EventObservers as $observer) {
+                $observerStartTime = microtime(true);
+
                 $observer->SetFarmID($farmid);
                 Logger::getLogger(__CLASS__)->info(sprintf("Event %s. Observer: %s", "On{$event->GetName()}", get_class($observer)));
 
-                if ($event instanceof CustomEvent)
+                if ($event instanceof CustomEvent) {
                     call_user_func(array($observer, "OnCustomEvent"), $event);
-                else
+                } else {
                     call_user_func(array($observer, "On{$event->GetName()}"), $event);
+                }
+
+                $handledObservers[get_class($observer)] = microtime(true) - $observerStartTime;
             }
-        }
-        catch(Exception $e)
-        {
+        } catch (Exception $e) {
             Logger::getLogger(__CLASS__)->fatal(
                 sprintf("Exception thrown in Scalr::FireEvent(%s:%s, %s:%s): %s",
                     @get_class($observer),
@@ -259,10 +265,9 @@ class Scalr
             throw new Exception($e->getMessage());
         }
 
-        $eventTime = microtime(true) - $startTime;
+        $event->handledObservers = $handledObservers;
 
-        // invoke StoreEvent method
-        self::StoreEvent($farmid, $event, $eventTime);
+        self::StoreEvent($farmid, $event, microtime(true) - $startTime);
     }
 
     /**
@@ -300,10 +305,13 @@ class Scalr
                 event_object = ?,
                 event_id	 = ?,
                 event_server_id = ?,
-                short_message = ?
+                short_message = ?,
+                msg_expected = ?,
+                msg_created = ?
                 ",
-                array($farmid, $event->GetName(), $message, $eventStr, $event->GetEventID(), $eventServerId, $eventTime)
-            );
+                array($farmid, $event->GetName(), $message, $eventStr, $event->GetEventID(), $eventServerId, $eventTime,
+                    $event->msgExpected, $event->msgCreated
+            ));
         }
         catch(Exception $e)
         {
@@ -311,40 +319,53 @@ class Scalr
         }
     }
 
+
     /**
+     * Launches server
      *
-     * @param ServerCreateInfo $ServerCreateInfo
-     * @return DBServer
+     * @param   \ServerCreateInfo       $ServerCreateInfo optional The server create info
+     * @param   \DBServer               $DBServer         optional The DBServer object
+     * @param   bool                    $delayed          optional
+     * @param   string                  $reason           optional
+     * @param   \Scalr_Account_User|int $user             optional The Scalr_Account_User object or its unique identifier
+     * @return  DBServer|null           Returns the DBServer object on cussess or null otherwise
      */
-    public static function LaunchServer(ServerCreateInfo $ServerCreateInfo = null, DBServer $DBServer = null, $delayed = false, $reason = "")
+    public static function LaunchServer(ServerCreateInfo $ServerCreateInfo = null, DBServer $DBServer = null,
+                                        $delayed = false, $reason = "", $user = null)
     {
         $db = self::getDb();
 
-        if(!$DBServer && $ServerCreateInfo)
-        {
+        //Ensures handling identifier of the user instead of the object
+        if ($user !== null && !($user instanceof \Scalr_Account_User)) {
+            try {
+                $user = Scalr_Account_User::init()->loadById(intval($user));
+            } catch (\Exception $e) {
+            }
+        }
+
+        if (!$DBServer && $ServerCreateInfo) {
             $ServerCreateInfo->SetProperties(array(
                 SERVER_PROPERTIES::SZR_KEY => Scalr::GenerateRandomKey(40),
                 SERVER_PROPERTIES::SZR_KEY_TYPE => SZR_KEY_TYPE::ONE_TIME
             ));
 
             $DBServer = DBServer::Create($ServerCreateInfo, false, true);
-
-            try {
-                Scalr_Server_History::init($DBServer)->setLaunchReason($reason);
-            } catch (Exception $e) {
-                Logger::getLogger(LOG_CATEGORY::FARM)->error(sprintf("Cannot update servers history: {$e->getMessage()}"));
-            }
-        }
-        elseif(!$DBServer && !$ServerCreateInfo)
-        {
+        } elseif (!$DBServer && !$ServerCreateInfo) {
             // incorrect arguments
             Logger::getLogger(LOG_CATEGORY::FARM)->error(sprintf("Cannot create server"));
-
             return null;
+        }
+
+        if ($user instanceof \Scalr_Account_User) {
+            $DBServer->SetProperties(array(
+                SERVER_PROPERTIES::LAUNCHED_BY_ID    => $user->id,
+                SERVER_PROPERTIES::LAUNCHED_BY_EMAIL => $user->getEmail(),
+            ));
         }
 
         if ($delayed) {
             $DBServer->status = SERVER_STATUS::PENDING_LAUNCH;
+            $DBServer->SetProperty(SERVER_PROPERTIES::LAUNCH_REASON, $reason);
             $DBServer->Save();
             return $DBServer;
         }
@@ -361,8 +382,7 @@ class Scalr
             }
         }
 
-        try
-        {
+        try {
             $account = Scalr_Account::init()->loadById($DBServer->clientId);
             $account->validateLimit(Scalr_Limits::ACCOUNT_SERVERS, 1);
 
@@ -372,11 +392,14 @@ class Scalr
             $DBServer->Save();
 
             try {
-                Scalr_Server_History::init($DBServer)->save();
-            } catch (Exception $e) {}
-        }
-        catch(Exception $e)
-        {
+                if (!$reason)
+                    $reason = $DBServer->GetProperty(SERVER_PROPERTIES::LAUNCH_REASON);
+
+                $DBServer->getServerHistory()->markAsLaunched($reason);
+            } catch (Exception $e) {
+                Logger::getLogger('SERVER_HISTORY')->error(sprintf("Cannot update servers history: {$e->getMessage()}"));
+            }
+        } catch (Exception $e) {
             Logger::getLogger(LOG_CATEGORY::FARM)->error(new FarmLogMessage($DBServer->farmId,
                 sprintf("Cannot launch server on '%s' platform: %s",
                     $DBServer->platform,
@@ -389,8 +412,7 @@ class Scalr
             $DBServer->Save();
         }
 
-        if ($DBServer->status == SERVER_STATUS::PENDING)
-        {
+        if ($DBServer->status == SERVER_STATUS::PENDING) {
             Scalr::FireEvent($DBServer->farmId, new BeforeInstanceLaunchEvent($DBServer));
             $DBServer->SetProperty(SERVER_PROPERTIES::LAUNCH_ERROR, "");
         }
@@ -499,31 +521,117 @@ class Scalr
      */
     public static function errorHandler($errno, $errstr, $errfile, $errline)
     {
-        $logpath = '/var/log/';
-        $logfile = 'php-warnings.log';
+        // Handles error suppression.
+        if (0 === error_reporting()) {
+            return false;
+        }
 
-        $message = "Error {$errno} {$errstr}, in {$errfile}:{$errline}";
+        $logfile = '/var/log/php-warnings.log';
+        $date = date("Y-m-d H:i:s");
+
+        //Friendly error name
+        switch ($errno) {
+            case E_NOTICE:
+                $errname = 'E_NOTICE';
+                break;
+            case E_WARNING:
+                $errname = 'E_WARNING';
+                break;
+            case E_USER_DEPRECATED:
+                $errname = 'E_USER_DEPRECATED';
+                break;
+            case E_STRICT:
+                $errname = 'E_STRICT';
+                break;
+            case E_USER_NOTICE:
+                $errname = 'E_USER_NOTICE';
+                break;
+            case E_USER_WARNING:
+                $errname = 'E_USER_WARNING';
+                break;
+            case E_COMPILE_ERROR:
+                $errname = 'E_COMPILE_ERROR';
+                break;
+            case E_COMPILE_WARNING:
+                $errname = 'E_COMPILE_WARNING';
+                break;
+            case E_CORE_ERROR:
+                $errname = 'E_CORE_ERROR';
+                break;
+            case E_CORE_WARNING:
+                $errname = 'E_CORE_WARNING';
+                break;
+            case E_DEPRECATED:
+                $errname = 'E_DEPRECATED';
+                break;
+            case E_ERROR:
+                $errname = 'E_ERROR';
+                break;
+            case E_PARSE:
+                $errname = 'E_PARSE';
+                break;
+            case E_RECOVERABLE_ERROR:
+                $errname = 'E_RECOVERABLE_ERROR';
+                break;
+            case E_USER_ERROR:
+                $errname = 'E_USER_ERROR';
+                break;
+            default:
+                $errname = $errno;
+        }
+
+        $message = "Error {$errname} {$errstr}, in {$errfile}:{$errline}\n";
 
         switch ($errno) {
+            case E_USER_NOTICE:
+            case E_NOTICE:
+                //Ignore for a while.
+                break;
+
             case E_CORE_ERROR:
             case E_ERROR:
             case E_USER_ERROR:
+                $exception = new \Exception($message, $errno);
+                $message = $date . " " . $message . "Backtrace:\n " . str_replace("\n#", "\n  #", $exception->getTraceAsString()) . "\n\n";
+                @error_log($message, 3, $logfile);
+                throw $exception;
+                break;
+
+            case E_WARNING:
             case E_USER_WARNING:
-                throw new \Exception($message, $errno);
-                break;
-
-            case E_USER_NOTICE:
-            case E_NOTICE:
-                //DO NOTHNG
-                break;
-
+            case E_RECOVERABLE_ERROR:
+                $exception = new \Exception($message, $errno);
+                $message = $message . "Backtrace:\n  " . str_replace("\n#", "\n  #", $exception->getTraceAsString()) . "\n\n";
             default:
-                //!TODO remove errorHandler method
-                // This is temporary solution according to [SCALRCORE-376]
-                if (is_writable($logpath . $logfile)) {
-                    @file_put_contents($logpath . $logfile, $message . "\n", FILE_APPEND);
-                }
+                @error_log($date . " " . $message, 3, $logfile);
                 break;
         }
+    }
+
+    /**
+     * Camelizes string
+     *
+     * @param   string   $input  A string to camelize
+     * @return  string   Returns Camelized string
+     */
+    public static function camelize($input)
+    {
+        $u = preg_replace_callback('/(_|^)([^_]+)/', function($c){
+            return ucfirst(strtolower($c[2]));
+        }, $input);
+        return $u;
+    }
+
+    /**
+     * Decamelizes a string
+     *
+     * @param   string    $str A string
+     * @return  string    Returns decamelized string
+     */
+    public static function decamelize($str)
+    {
+        return strtolower(preg_replace_callback('/([a-z])([A-Z]+)/', function ($m) {
+            return $m[1] . '_' . $m[2];
+        }, $str));
     }
 }

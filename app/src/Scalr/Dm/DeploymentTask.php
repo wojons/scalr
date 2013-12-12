@@ -75,7 +75,7 @@ class Scalr_Dm_DeploymentTask extends Scalr_Model
 
     public static function getId($applicationId, $serverId, $remotePath)
     {
-        return \Scalr::getDb()->GetOne("SELECT id FROM dm_deployment_tasks WHERE server_id=? AND dm_application_id=? AND remote_path=?", array(
+        return \Scalr::getDb()->GetOne("SELECT id FROM dm_deployment_tasks WHERE server_id=? AND dm_application_id=? AND remote_path=? LIMIT 1", array(
             $serverId, $applicationId, $remotePath
         ));
     }
@@ -115,7 +115,7 @@ class Scalr_Dm_DeploymentTask extends Scalr_Model
         parent::save($forceInsert);
     }
 
-    public function getDeployMessage()
+    public function getDeployMessageProperties()
     {
         $dbServer = DBServer::LoadByID($this->serverId);
         $application = Scalr_Dm_Application::init()->loadById($this->applicationId);
@@ -127,13 +127,13 @@ class Scalr_Dm_DeploymentTask extends Scalr_Model
 
         switch ($source->authType)
         {
-            case Scalr_Dm_Source::AUTHTYPE_PASSWORD:
-                $msgSource->login = $source->getAuthInfo()->login;
-                $msgSource->password = $source->getAuthInfo()->password;
-            break;
-            case Scalr_Dm_Source::AUTHTYPE_CERT:
-                $msgSource->sshPrivateKey = $source->getAuthInfo()->sshPrivateKey;
-            break;
+        	case Scalr_Dm_Source::AUTHTYPE_PASSWORD:
+        	    $msgSource->login = $source->getAuthInfo()->login;
+        	    $msgSource->password = $source->getAuthInfo()->password;
+        	    break;
+        	case Scalr_Dm_Source::AUTHTYPE_CERT:
+        	    $msgSource->sshPrivateKey = $source->getAuthInfo()->sshPrivateKey;
+        	    break;
         }
 
         $params['remote_path'] = $this->remotePath;
@@ -151,19 +151,34 @@ class Scalr_Dm_DeploymentTask extends Scalr_Model
         $postDeployScriptContents = str_replace($keys, $values, $application->getPostDeployScript());
         $postDeployScriptContents = str_replace('\%', "%", $postDeployScriptContents);
 
-        return new Scalr_Messaging_Msg_Deploy(
-            $this->id,
-            $this->remotePath,
-            $msgSource,
-            $preDeployScriptContents,
-            $postDeployScriptContents
-        );
+        $retval = new stdClass();
+        $retval->deployTaskId = $this->id;
+        $retval->source = $msgSource;
+        $retval->remotePath = $this->remotePath;
+
+        $retval->preDeployRoutines = new stdClass();
+        $retval->preDeployRoutines->body = $preDeployScriptContents;
+        $retval->preDeployRoutines->execTimeout = 900;
+
+        $retval->postDeployRoutines = new stdClass();
+        $retval->postDeployRoutines->body = $postDeployScriptContents;
+        $retval->postDeployRoutines->execTimeout = 900;
+
+        return $retval;
     }
 
     public function deploy()
     {
         try {
-            $msg = $this->getDeployMessage();
+            $config = $this->getDeployMessageProperties();
+
+            $msg = new Scalr_Messaging_Msg_Deploy(
+                $config->deployTaskId,
+                $config->remotePath,
+                $config->source,
+                $config->preDeployRoutines->body,
+                $config->postDeployRoutines->body
+            );;
 
             $this->log("Sending deploy message to the server");
 

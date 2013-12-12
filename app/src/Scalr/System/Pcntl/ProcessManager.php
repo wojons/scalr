@@ -149,27 +149,30 @@ class ProcessManager
                     }
                 }
 
-                sleep(2);
-
                 if ($iteration++ == 10) {
                     $this->Logger->debug("Goin to MPWL. PIDs(" . implode(", ", array_keys($this->PIDs)) . ")");
 
                     // Zomby does not need
-                    $pid = pcntl_wait($status, WNOHANG | WUNTRACED);
+                    $pid = 1;
+                    while ($pid > 0) {
+                        $pid = pcntl_wait($status, WNOHANG | WUNTRACED);
 
-                    if ($pid > 0) {
-                        $this->Logger->debug("MPWL: pcntl_wait() from child with PID# {$pid} (Exit code: {$status})");
-                        foreach ((array) $this->PIDs as $ipid => $ipid_info) {
-                            if ($ipid == $pid) {
-                                if ($this->PIDDir) {
-                                    $this->Logger->debug("Delete thread PID file $pid");
-                                    @unlink($this->PIDDir . "/" . $pid);
+                        if ($pid > 0) {
+                            $this->Logger->debug("MPWL: pcntl_wait() from child with PID# {$pid} (Exit code: {$status})");
+                            foreach ((array) $this->PIDs as $ipid => $ipid_info) {
+                                if ($ipid == $pid) {
+                                    if ($this->PIDDir) {
+                                        $this->Logger->debug("Delete thread PID file $pid");
+                                        @unlink($this->PIDDir . "/" . $pid);
+                                    }
+                                    unset($this->PIDs[$ipid]);
                                 }
-                                unset($this->PIDs[$ipid]);
                             }
                         }
-                        $this->ForkThreads();
                     }
+
+                    sleep(2);
+                    $this->ForkThreads();
 
                     foreach ($this->PIDs as $ipid => $ipid_info) {
                         $res = posix_kill($ipid, 0);

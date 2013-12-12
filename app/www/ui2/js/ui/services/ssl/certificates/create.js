@@ -1,6 +1,5 @@
 Scalr.regPage('Scalr.ui.services.ssl.certificates.create', function (loadParams, moduleParams) {
 	var form = Ext.create('Ext.form.Panel', {
-		bodyCls: 'x-panel-body-frame',
 		title: moduleParams.cert ? 'Services &raquo; Ssl &raquo; Certificates &raquo; Edit' : 'Services &raquo; Ssl &raquo; Certificates &raquo; Create',
 		fieldDefaults: {
 			anchor: '100%'
@@ -11,17 +10,16 @@ Scalr.regPage('Scalr.ui.services.ssl.certificates.create', function (loadParams,
 		width: 600,
 
 		items: [{
-			xtype: 'textfield',
-			fieldLabel: 'Name',
-			labelWidth: 60,
-			name: 'name',
-			allowBlank: false
-		}, {
-			xtype: 'hidden',
-			name: 'id'
-		}, {
 			xtype: 'fieldset',
 			items: [{
+                xtype: 'textfield',
+                fieldLabel: 'Name',
+                name: 'name',
+                allowBlank: false
+            }, {
+                xtype: 'hidden',
+                name: 'id'
+            },{
 				xtype: 'filefield',
 				name: 'sslCert',
 				fieldLabel: 'Certificate'
@@ -39,7 +37,7 @@ Scalr.regPage('Scalr.ui.services.ssl.certificates.create', function (loadParams,
 		dockedItems: [{
 			xtype: 'container',
 			dock: 'bottom',
-			cls: 'x-docked-bottom-frame',
+			cls: 'x-docked-buttons',
 			layout: {
 				type: 'hbox',
 				pack: 'center'
@@ -65,7 +63,6 @@ Scalr.regPage('Scalr.ui.services.ssl.certificates.create', function (loadParams,
 				}
 			}, {
 				xtype: 'button',
-				margin: '0 0 0 5',
 				text: 'Cancel',
 				handler: function() {
 					Scalr.event.fireEvent('close');

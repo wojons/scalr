@@ -37,11 +37,11 @@ Scalr.regPage('Scalr.ui.account2.environments.platform.nimbula', function (loadP
 	}
 	
 	var form = Ext.create('Ext.form.Panel', {
-		bodyCls: 'x-panel-body-frame',
 		scalrOptions: {
 			'modal': true
 		},
-		width: 600,
+        bodyCls: 'x-container-fieldset',
+		width: 700,
 		title: 'Environments &raquo; ' + moduleParams.env.name + '&raquo; Nimbula',
 		fieldDefaults: {
 			anchor: '100%',
@@ -72,11 +72,15 @@ Scalr.regPage('Scalr.ui.account2.environments.platform.nimbula', function (loadP
 		dockedItems: [{
 			xtype: 'container',
 			dock: 'bottom',
-			cls: 'x-docked-bottom-frame',
+			cls: 'x-docked-buttons',
 			layout: {
 				type: 'hbox',
 				pack: 'center'
 			},
+            defaults:{
+                flex: 1,
+                maxWidth: 150
+            },
 			items: [{
 				xtype: 'button',
 				text: 'Save',
@@ -85,17 +89,15 @@ Scalr.regPage('Scalr.ui.account2.environments.platform.nimbula', function (loadP
 				}
 			}, {
 				xtype: 'button',
-				margin: '0 0 0 5',
-				hidden: Scalr.flags.needEnvConfig,
+				hidden: !!Scalr.flags.needEnvConfig,
 				text: 'Cancel',
 				handler: function() {
 					Scalr.event.fireEvent('close');
 				}
 			},{
 				xtype: 'button',
-				margin: '0 0 0 10',
 				cls: 'x-btn-default-small-red',
-				hidden: !params['nimbula.is_enabled'] || Scalr.flags.needEnvConfig,
+				hidden: !params['nimbula.is_enabled'] || !!Scalr.flags.needEnvConfig,
 				text: 'Delete',
 				handler: function() {
 					sendForm(true);
@@ -103,15 +105,15 @@ Scalr.regPage('Scalr.ui.account2.environments.platform.nimbula', function (loadP
 			}, {
 				xtype: 'button',
 				hidden: !Scalr.flags.needEnvConfig,
-				margin: '0 0 0 5',
 				text: "I'm not using Nimbula, let me configure another cloud",
+                flex: 3.4,
+                maxWidth: 600,
 				handler: function () {
 					Scalr.event.fireEvent('redirect', '#/account/environments/?envId=' + moduleParams.env.id, true);
 				}
 			}, {
 				xtype: 'button',
 				hidden: !Scalr.flags.needEnvConfig,
-				margin: '0 0 0 5',
 				text: 'Do this later',
 				handler: function () {
 					sessionStorage.setItem('needEnvConfigLater', true);

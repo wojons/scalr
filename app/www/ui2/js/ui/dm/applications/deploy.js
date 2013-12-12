@@ -1,6 +1,5 @@
 Scalr.regPage('Scalr.ui.dm.applications.deploy', function (loadParams, moduleParams) {
 	var form = Ext.create('Ext.form.Panel', {
-		bodyCls: 'x-panel-body-frame',
 		width: 700,
 		title: 'Deployments &raquo; Applications &raquo; Deploy',
 		fieldDefaults: {
@@ -28,7 +27,7 @@ Scalr.regPage('Scalr.ui.dm.applications.deploy', function (loadParams, modulePar
 		dockedItems: [{
 			xtype: 'container',
 			dock: 'bottom',
-			cls: 'x-docked-bottom-frame',
+			cls: 'x-docked-buttons',
 			layout: {
 				type: 'hbox',
 				pack: 'center'
@@ -52,7 +51,6 @@ Scalr.regPage('Scalr.ui.dm.applications.deploy', function (loadParams, modulePar
 				}
 			}, {
 				xtype: 'button',
-				margin: '0 0 0 5',
 				text: 'Cancel',
 				handler: function() {
 					Scalr.event.fireEvent('close');

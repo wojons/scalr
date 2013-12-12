@@ -160,9 +160,9 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.instances.view', function (loadParams, mod
 			xtype: 'scalrpagingtoolbar',
 			store: store,
 			dock: 'top',
-			afterItems: [{
-				ui: 'paging',
-				iconCls: 'x-tbar-add',
+			beforeItems: [{
+                text: 'Add instance',
+                cls: 'x-btn-green-bg',
 				handler: function() {
 					Scalr.event.fireEvent('redirect', '#/tools/aws/rds/instances/create');
 				}

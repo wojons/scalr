@@ -30,7 +30,7 @@ Ext.define('Ext.layout.container.Scalr', {
 				});
 
 				if (o.scalrOptions.modal)
-					o.addCls('x-panel-modal-shadow');
+					o.addCls('x-panel-shadow');
 
 				o.scalrDestroy = function () {
 					this.destroy();
@@ -147,6 +147,15 @@ Ext.define('Ext.layout.container.Scalr', {
 							oldPage.el.mask();
 							oldPage.fireEvent('deactivate');
 						} else {
+                            if (Scalr.state.pageReloadRequired) {
+                                // reload page because of changed core js files
+                                Scalr.utils.CreateProcessBox({
+                                    type: 'action'
+                                });
+                                Scalr.event.fireEvent('reload');
+                                return;
+                            }
+
 							if (oldPage.scalrOptions.reload) {
 								//oldPage.el.unmask();
 								oldPage.scalrDestroy();
@@ -171,7 +180,7 @@ Ext.define('Ext.layout.container.Scalr', {
 
 			if (! newPage.scalrOptions.modal) {
 				var docTitle = this.activeItem.title || (this.activeItem.scalrOptions ? (this.activeItem.scalrOptions.title || null) : null);
-				document.title = ((docTitle ? (docTitle + ' - ') : '') + 'Scalr CP').replace(/&raquo;/g, '»');
+				document.title = ((docTitle ? (docTitle + ' - ') : '') + 'Scalr CMP').replace(/&raquo;/g, '»');
 			}
 			if (this.activeItem.scalrReconfigureFlag && this.activeItem.scalrReconfigure)
 				this.activeItem.scalrReconfigure(param || {});
@@ -210,15 +219,18 @@ Ext.define('Ext.layout.container.Scalr', {
 
 		if (comp.scalrOptions.maximize == 'all') {
 			comp.setSize(r);
-			comp.removeCls('x-panel-shadow');
+            comp.removeCls('x-panel-separated');
+            comp.removeCls('x-panel-separated-modal');
 		} else {
 			comp.setAutoScroll(true);
 			comp.maxHeight = Math.max(0, r.height - 5*2);
 			left = (r.width - comp.getWidth()) / 2;
 
-			if (! comp.scalrOptions.modal)
-				comp.addCls('x-panel-shadow');
-		}
+			if (comp.scalrOptions.modal)
+				comp.addCls('x-panel-separated-modal');
+            else
+                comp.addCls('x-panel-separated');
+        }
 
 		comp.setPosition(left, top);
 
@@ -238,10 +250,9 @@ Ext.define('Ext.layout.container.Scalr', {
 Scalr.application = Ext.create('Ext.panel.Panel', {
 	layout: 'scalr',
 	border: 0,
-	padding: 5,
 	autoScroll: false,
 	bodyCls: 'x-panel-background',
-	bodyStyle: 'border-radius: 4px',
+	//bodyStyle: 'border-radius: 4px',
 	plugins: {
 		ptype: 'leftmenu',
 		pluginId: 'leftmenu'
@@ -266,10 +277,9 @@ Scalr.application = Ext.create('Ext.panel.Panel', {
 		dock: 'top',
 		itemId: 'top',
 		enableOverflow: true,
-		height: 36,
-		margin: '0 0 5 0',
+		height: 45,
 		//items: menu,
-		cls: 'x-toolbar-menu',
+		cls: 'x-topmenu-menu',
 		layout: {
 			type: 'hbox',
 			align: 'stretch'
@@ -301,11 +311,11 @@ Scalr.application = Ext.create('Ext.panel.Panel', {
 		},
 		render: function () {
 			this.width = Ext.Element.getViewportWidth();
-			this.height = Ext.Element.getViewportHeight() - 5;
+			this.height = Ext.Element.getViewportHeight();
 		},
 		boxready: function () {
 			Ext.EventManager.onWindowResize(function (width, height) {
-				Scalr.application.setSize(width, height - 5); // for margin-top at body; margin-bottom doesn't work
+				Scalr.application.setSize(width, height);
 			});
 		}
 	}
@@ -347,6 +357,8 @@ Scalr.application.applyContext = function(context) {
 	context = context || {};
 	Scalr.user = context['user'] || {};
 	Scalr.flags = context['flags'] || {};
+    Scalr.acl = context['acl'] || {};
+    Scalr.platforms = context['platforms'] || {};
 
 	if (Ext.isDefined(Scalr.user.userId)) {
 		Ext.Ajax.defaultHeaders['X-Scalr-EnvId'] = Scalr.user.envId;
@@ -358,8 +370,10 @@ Scalr.application.applyContext = function(context) {
 
 	Scalr.user['envVars'] = Ext.decode(Scalr.user['envVars'], true) || {};
 
-	// TODO: add posibility to inverse beta via !beta in url
-	Scalr.flags['betaMode'] = Scalr.user['envVars']['beta'] == 1 || document.location.search.indexOf('beta') != -1 ? true : false;
+	Scalr.flags['betaMode'] = Scalr.user['envVars']['beta'] == 1;
+    Scalr.flags['betaMode'] = Scalr.flags['betaMode'] || document.location.search.indexOf('beta') != -1;
+    Scalr.flags['betaMode'] = Scalr.flags['betaMode'] && document.location.search.indexOf('!beta') == -1;
+
 	if (Scalr.flags['betaMode']) {
 		Ext.Ajax.defaultHeaders['X-Scalr-Interface-Beta'] = 1;
 	} else {
@@ -371,10 +385,12 @@ Scalr.application.applyContext = function(context) {
 		// excludes
 		if (this.itemId != 'blank' && this.scalrCache != '/guest/login') {
 			this.destroy();
+            if (Scalr.application.layout.activeItem == this)
+                Scalr.application.layout.activeItem = null;
 		}
 	});
 
-	// clear global store
+    // clear global store
 	Scalr.data.reloadDefer('*');
     Scalr.cachedRequest.clearCache();
 
@@ -410,8 +426,8 @@ Scalr.application.applyContext = function(context) {
 							Scalr.message.Success('Cloud credentials successfully configured. You need to create some roles before you will be able to create your first farm.');
 							Scalr.event.fireEvent('redirect', '#/roles/builder', true);
 						} else {
-							Scalr.message.Success('Cloud credentials successfully configured. Please create role from already running server. <a href="http://wiki.scalr.com/display/docs/Import+a+non+Scalr+server" target="_blank">More info here.</a>');
-							Scalr.event.fireEvent('redirect', '#/servers/import2', true);
+							Scalr.message.Success('Cloud credentials successfully configured. Please create role from already running server. <a href="https://scalr-wiki.atlassian.net/wiki/x/1w8b" target="_blank">More info here.</a>');
+							Scalr.event.fireEvent('redirect', '#/roles/import', true);
 						}
 					}
 				}
@@ -423,7 +439,7 @@ Scalr.application.applyContext = function(context) {
 }
 
 Scalr.application.createMenu = function(context) {
-	var ct = this.down('#top'), menu = [];
+	var ct = this.down('#top'), menu = [], mainMenu;
 
 	if (Scalr.user.type != 'ScalrAdmin') {
 		var farms = [];
@@ -434,263 +450,239 @@ Scalr.application.createMenu = function(context) {
 			});
 		});
 
-		menu.push({
-			cls: 'x-scalr-icon',
-			hideOnClick: false,
-			width: 65,
-			style: 'margin-right: 15px; border-top-left-radius: 3px; border-bottom-left-radius: 3px;',
-			reorderable: false,
-			listeners: {
-				boxready: function () {
-					// fix height of vertical separator
-					Ext.override(this.menu, {
-						afterComponentLayout: function(width, height, oldWidth, oldHeight) {
-							var me = this;
-							me.callOverridden();
+        mainMenu = [{
+            xtype: 'filterfield',
+            emptyText: 'Menu filter',
+            cls: 'x-menu-item-cmp-search',
+            listeners: {
+                change: function (field, value) {
+                    var items = field.up().items.items, cls = 'x-menu-item-blur';
 
-							if (me.showSeparator && me.items.getAt(1)) {
-								var y = me.items.getAt(1).el.getTop(true); // top coordinate for first separator after textfield
-								me.iconSepEl.setTop(y);
-								me.iconSepEl.setHeight(me.componentLayout.lastComponentSize.contentHeight - y);
-							}
-						}
-					});
-				},
-				afterrender: function () {
-					this.btnInnerEl.applyStyles('padding: 0px 0px 0px 4px');
-				},
-				menushow: function () {
-					this.menu.down('textfield').focus(true, true);
-				}
-			},
-			menu: [{
-				xtype: 'textfield',
-				emptyText: 'Menu filter',
-				cls: 'x-menu-item-cmp-search',
-				listeners: {
-					change: function (field, value) {
-						var items = field.up().items.items, cls = 'x-menu-item-blur';
+                    if (value.length < 2)
+                        value = '';
+                    else
+                        value = value.toLowerCase();
 
-						if (value.length < 2)
-							value = '';
-						else
-							value = value.toLowerCase();
+                    var search = function (ct) {
+                        var flag = false;
 
-						var search = function (ct) {
-							var flag = false;
+                        if (ct.menu) {
+                            for (var j = 0; j < ct.menu.items.items.length; j++) {
+                                var t = search(ct.menu.items.items[j]);
+                                flag = flag || t;
+                            }
+                        }
 
-							if (ct.menu) {
-								for (var j = 0; j < ct.menu.items.items.length; j++) {
-									var t = search(ct.menu.items.items[j]);
-									flag = flag || t;
-								}
-							}
+                        if (ct.text && value && ct.text.toLowerCase().indexOf(value) != -1) {
+                            if (!flag && ct.menu) {
+                                // found only root menu item, so highlight all childrens
+                                for (var j = 0; j < ct.menu.items.items.length; j++) {
+                                    ct.menu.items.items[j].removeCls(cls);
+                                }
+                            }
+                            flag = true;
+                        }
 
-							if (ct.text && value && ct.text.toLowerCase().indexOf(value) != -1) {
-								if (!flag && ct.menu) {
-									// found only root menu item, so highlight all childrens
-									for (var j = 0; j < ct.menu.items.items.length; j++) {
-										ct.menu.items.items[j].removeCls(cls);
-									}
-								}
-								flag = true;
-							}
+                        if (flag || !value)
+                            ct.removeCls(cls);
+                        else
+                            ct.addCls(cls);
 
-							if (flag || !value)
-								ct.removeCls(cls);
-							else
-								ct.addCls(cls);
+                        return flag;
+                    };
 
-							return flag;
-						};
+                    for (var i = 0; i < items.length; i++)
+                        search(items[i]);
+                }
+            }
+        }, {
+            xtype: 'menuseparator'
+        }, {
+            text: 'Dashboard',
+            iconCls: 'x-topmenu-icon-dashboard',
+            href: '#/dashboard'
+        }, {
+            xtype: 'menuseparator'
+        }, {
+            xtype: 'menuitemtop',
+            text: 'Farms',
+            href: '#/farms/view',
+            iconCls: 'x-topmenu-icon-farms',
+            addLinkHref: '#/farms/build',
+            menu: farms,
+            hidden: !Scalr.isAllowed('FARMS')
+        }, {
+            xtype: 'menuitemtop',
+            text: 'Roles',
+            href: '#/roles/view',
+            iconCls: 'x-topmenu-icon-roles',
+            addLinkHref: '#/roles/builder',
+            hidden: !Scalr.isAllowed('FARMS_ROLES'),
+        }, {
+            text: 'Servers',
+            href: '#/servers/view',
+            iconCls: 'x-topmenu-icon-servers',
+            hidden: !Scalr.isAllowed('FARMS_SERVERS')
+        }, {
+            xtype: 'menuitemtop',
+            text: 'Scripts',
+            href: '#/scripts/view',
+            iconCls: 'x-topmenu-icon-scripts',
+            addLinkHref: '#/scripts/create',
+            hidden: !Scalr.isAllowed('FARMS_SCRIPTS')
+        }, {
+            text: 'Logs',
+            iconCls: 'x-topmenu-icon-logs',
+            hidden: !(Scalr.isAllowed('LOGS_SYSTEM_LOGS') || Scalr.isAllowed('LOGS_API_LOGS') || Scalr.isAllowed('LOGS_SCRIPTING_LOGS')),
+            menu: [{
+                text: 'System',
+                href: '#/logs/system',
+                hidden: !Scalr.isAllowed('LOGS_SYSTEM_LOGS')
+            }, {
+                text: 'Scripting',
+                href: '#/logs/scripting',
+                hidden: !Scalr.isAllowed('LOGS_SCRIPTING_LOGS')
+            }, {
+                text: 'API',
+                href: '#/logs/api',
+                hidden: !Scalr.isAllowed('LOGS_API_LOGS')
+            }]
+        }, {
+            xtype: 'menuseparator'
+        }, {
+            xtype: 'menuitemtop',
+            text: 'DNS zones',
+            href: '#/dnszones/view',
+            iconCls: 'x-topmenu-icon-dnszones',
+            addLinkHref: '#/dnszones/create',
+            hidden: !Scalr.isAllowed('DNS_ZONES')
+        }, {
+            xtype: 'menuitemtop',
+            text: 'Apache virtual hosts',
+            href: '#/services/apache/vhosts/view',
+            iconCls: 'x-topmenu-icon-apachevhosts',
+            addLinkHref: '#/services/apache/vhosts/create',
+            hidden: !Scalr.isAllowed('SERVICES_APACHE')
+        }, {
+            text: 'Deployments',
+            iconCls: 'x-topmenu-icon-deployments',
+            hidden: !(Scalr.isAllowed('DEPLOYMENTS_APPLICATIONS') || Scalr.isAllowed('DEPLOYMENTS_SOURCES') || Scalr.isAllowed('DEPLOYMENTS_TASKS')),
+            menu: [{
+                text: 'Deployments',
+                href: '#/dm/tasks/view',
+                hidden: !Scalr.isAllowed('DEPLOYMENTS_TASKS')
+            }, {
+                text: 'Sources',
+                href: '#/dm/sources/view',
+                hidden: !Scalr.isAllowed('DEPLOYMENTS_SOURCES')
+            }, {
+                text: 'Applications',
+                href: '#/dm/applications/view',
+                hidden: !Scalr.isAllowed('DEPLOYMENTS_APPLICATIONS')
+            }]
+        }, {
+            text: 'Create role from non-Scalr server',
+            href: '#/roles/import',
+            iconCls: 'x-topmenu-icon-import',
+            hidden: !Scalr.isAllowed('FARMS_ROLES', 'create')
+        }, {
+            text: 'DB backups',
+            href: '#/db/backups',
+            iconCls: 'x-topmenu-icon-dbbackup',
+            hidden: !Scalr.isAllowed('DB_BACKUPS')
+        }, {
+            text: 'Tasks scheduler',
+            href: '#/schedulertasks/view',
+            iconCls: 'x-topmenu-icon-scheduler',
+            hidden: !Scalr.isAllowed('GENERAL_SCHEDULERTASKS')
+        }, {
+            text: 'SSH keys',
+            href: '#/sshkeys/view',
+            iconCls: 'x-topmenu-icon-sshkeys',
+            hidden: !Scalr.isAllowed('SECURITY_SSH_KEYS')
+        }, {
+            text: 'Bundle tasks',
+            href: '#/bundletasks/view',
+            iconCls: 'x-topmenu-icon-bundletasks',
+            hidden: !Scalr.isAllowed('FARMS_ROLES', 'bundletasks')
+        }, {
+            text: 'Server config presets',
+            href: '#/services/configurations/presets/view',
+            iconCls: 'x-topmenu-icon-presets',
+            hidden: !Scalr.isAllowed('DB_SERVICE_CONFIGURATION')
+        }, {
+            text: 'Custom scaling metrics',
+            href: '#/scaling/metrics/view',
+            iconCls: 'x-topmenu-icon-metrics',
+            hidden: !Scalr.isAllowed('GENERAL_CUSTOM_SCALING_METRICS')
+        }, {
+            text: 'Custom events',
+            href: '#/scripts/events',
+            iconCls: 'x-topmenu-icon-events',
+            hidden: !Scalr.isAllowed('GENERAL_CUSTOM_EVENTS')
+        }, {
+            text: 'Global variables',
+            href: '#/core/variables',
+            iconCls: 'x-topmenu-icon-variables',
+            hidden: !Scalr.isAllowed('GENERAL_GLOBAL_VARIABLES')
+        }, {
+            text: 'Governance',
+            href: '#/core/governance',
+            iconCls: 'x-topmenu-icon-governance',
+            hidden: !Scalr.isAllowed('ADMINISTRATION_GOVERNANCE')
+        }, {
+            text: 'SSL certificates',
+            href: '#/services/ssl/certificates/view',
+            iconCls: 'x-topmenu-icon-sslcertificates',
+            hidden: !Scalr.isAllowed('SERVICES_SSL')
+        }, {
+            text: 'Chef servers',
+            href: '#/services/chef/servers/view',
+            iconCls: 'x-topmenu-icon-chef',
+            hidden: !Scalr.isAllowed('SERVICES_CHEF')
+        }];
 
-						for (var i = 0; i < items.length; i++)
-							search(items[i]);
-					}
-				}
-			}, {
-				xtype: 'menuseparator'
-			}, {
-				text: 'Dashboard',
-				iconCls: 'x-topmenu-icon-dashboard',
-				href: '#/dashboard'
-			}, {
-				xtype: 'menuseparator'
-			}, {
-				xtype: 'menuitemtop',
-				text: 'Farms',
-				href: '#/farms/view',
-				iconCls: 'x-topmenu-icon-farms',
-				links: [{
-					cls: 'list',
-					href: '#/farms/view'
-				}, {
-					cls: 'create',
-					href: '#/farms/build'
-				}],
-				menu: farms
-			}, {
-				xtype: 'menuitemtop',
-				text: 'Roles',
-				href: '#/roles/view',
-				iconCls: 'x-topmenu-icon-roles',
-				links: [{
-					cls: 'list',
-					href: '#/roles/view'
-				}, {
-					cls: 'create',
-					href: '#/roles/builder'
-				}]
-			}, {
-				text: 'Servers',
-				href: '#/servers/view',
-				iconCls: 'x-topmenu-icon-servers'
-			}, {
-				xtype: 'menuitemtop',
-				text: 'Scripts',
-				href: '#/scripts/view',
-				iconCls: 'x-topmenu-icon-scripts',
-				links: [{
-					cls: 'list',
-					href: '#/scripts/view'
-				}, {
-					cls: 'create',
-					href: '#/scripts/create'
-				}]
-			}, {
-				text: 'Logs',
-				iconCls: 'x-topmenu-icon-logs',
-				menu: [{
-					text: 'System',
-					href: '#/logs/system'
-				}, {
-					text: 'Scripting',
-					href: '#/logs/scripting'
-				}, {
-					text: 'API',
-					href: '#/logs/api'
-				}]
-			}, {
-				xtype: 'menuseparator'
-			}, {
-				xtype: 'menuitemtop',
-				text: 'DNS zones',
-				href: '#/dnszones/view',
-				iconCls: 'x-topmenu-icon-dnszones',
-				links: [{
-					cls: 'list',
-					href: '#/dnszones/view'
-				}, {
-					cls: 'create',
-					href: '#/dnszones/create2'
-				}]
-			}, {
-				xtype: 'menuitemtop',
-				text: 'Apache virtual hosts',
-				href: '#/services/apache/vhosts/view',
-				iconCls: 'x-topmenu-icon-apachevhosts',
-				links: [{
-					cls: 'list',
-					href: '#/services/apache/vhosts/view'
-				}, {
-					cls: 'create',
-					href: '#/services/apache/vhosts/create'
-				}]
-			}, {
-				text: 'Deployments',
-				iconCls: 'x-topmenu-icon-deployments',
-				menu: [{
-					text: 'Deployments',
-					href: '#/dm/tasks/view'
-				}, {
-					text: 'Sources',
-					href: '#/dm/sources/view'
-				}, {
-					text: 'Applications',
-					href: '#/dm/applications/view'
-				}]
-			}, {
-				text: 'Create role from non-Scalr server',
-				href: '#/servers/import2',
-				iconCls: 'x-topmenu-icon-import'
-			}, {
-				text: 'DB backups',
-				href: '#/db/backups',
-				iconCls: 'x-topmenu-icon-dbbackup'
-			}, {
-				text: 'Tasks scheduler',
-				href: '#/schedulertasks/view',
-				iconCls: 'x-topmenu-icon-scheduler'
-			}, {
-				text: 'SSH keys',
-				href: '#/sshkeys/view',
-				iconCls: 'x-topmenu-icon-sshkeys'
-			}, {
-				text: 'Bundle tasks',
-				href: '#/bundletasks/view',
-				iconCls: 'x-topmenu-icon-bundletasks'
-			}, {
-				text: 'Server config presets',
-				href: '#/services/configurations/presets/view',
-				iconCls: 'x-topmenu-icon-presets'
-			}, {
-				text: 'Custom scaling metrics',
-				href: '#/scaling/metrics/view',
-				iconCls: 'x-topmenu-icon-metrics'
-			}, {
-				text: 'Custom events',
-				href: '#/scripts/events',
-				iconCls: 'x-topmenu-icon-events'
-			}, {
-				text: 'Global variables',
-				href: '#/core/variables',
-				iconCls: 'x-topmenu-icon-variables'
-			}, {
-				text: 'SSL certificates',
-				href: '#/services/ssl/certificates/view',
-				iconCls: 'x-topmenu-icon-sslcertificates'
-			}, {
-				text: 'Chef',
-				hideOnClick: false,
-				iconCls: 'x-topmenu-icon-chef',
-				menu: [{
-					text: 'Servers',
-					href: '#/services/chef/servers/view'
-				}, {
-					text: 'Runlists',
-					href: '#/services/chef/runlists/view'
-				}]
-			}, {
+        if (Scalr.isPlatformEnabled('ec2')) {
+            mainMenu.push({
 				xtype: 'menuseparator',
-				hidden: !Scalr.flags['platformEc2Enabled']
 			}, {
 				text: 'AWS',
 				hideOnClick: false,
 				iconCls: 'x-topmenu-icon-aws',
-				hidden: !Scalr.flags['platformEc2Enabled'],
 				menu: [{
 					text: 'S3 & Cloudfront',
 					href: '#/tools/aws/s3/manageBuckets'
 				}, {
 					text: 'IAM SSL Certificates',
-					href: '#/tools/aws/iam/servercertificates/view'
+					href: '#/tools/aws/iam/servercertificates/view',
+                    hidden: !Scalr.isAllowed('AWS_IAM')
 				}, {
 					text: 'Security groups',
-					href: '#/security/groups/view?platform=ec2'
+					href: '#/security/groups/view?platform=ec2',
+                    hidden: !Scalr.isAllowed('SECURITY_AWS_SECURITY_GROUPS')
 				}, {
 					text: 'Elastic IPs',
-					href: '#/tools/aws/ec2/eips'
+					href: '#/tools/aws/ec2/eips',
+                    hidden: !Scalr.isAllowed('AWS_ELASTIC_IPS')
 				}, {
 					text: 'Elastic LB',
-					href: '#/tools/aws/ec2/elb'
+					href: '#/tools/aws/ec2/elb',
+                    hidden: !Scalr.isAllowed('AWS_ELB')
 				}, {
 					text: 'EBS Volumes',
-					href: '#/tools/aws/ec2/ebs/volumes'
+					href: '#/tools/aws/ec2/ebs/volumes',
+                    hidden: !Scalr.isAllowed('AWS_VOLUMES')
 				}, {
 					text: 'EBS Snapshots',
-					href: '#/tools/aws/ec2/ebs/snapshots'
+					href: '#/tools/aws/ec2/ebs/snapshots',
+                    hidden: !Scalr.isAllowed('AWS_SNAPSHOTS')
 				}]
-			}, {
+
+            })
+        }
+
+        if (Scalr.isAllowed('AWS_RDS')) {
+            mainMenu.push({
 				xtype: 'menuseparator'
 			}, {
 				text: 'RDS',
@@ -709,38 +701,62 @@ Scalr.application.createMenu = function(context) {
 					text: 'DB Snapshots',
 					href: '#/tools/aws/rds/snapshots'
 				}]
-			}, {
+            });
+        }
+
+        Ext.Array.each(['cloudstack', 'idcf'], function(platform){
+            if (Scalr.isPlatformEnabled(platform) && (Scalr.isAllowed('CLOUDSTACK_VOLUMES') || Scalr.isAllowed('CLOUDSTACK_SNAPSHOTS') || Scalr.isAllowed('CLOUDSTACK_PUBLIC_IPS'))) {
+                mainMenu.push({
+                    xtype: 'menuseparator'
+                }, {
+                    text: Scalr.utils.getPlatformName(platform),
+                    hideOnClick: false,
+                    iconCls: 'x-topmenu-icon-' + platform,
+                    menu: [{
+                        text: 'Volumes',
+                        href: '#/tools/cloudstack/volumes?platform=' + platform,
+                        hidden: !Scalr.isAllowed('CLOUDSTACK_VOLUMES')
+                    }, {
+                        text: 'Snapshots',
+                        href: '#/tools/cloudstack/snapshots?platform=' + platform,
+                        hidden: !Scalr.isAllowed('CLOUDSTACK_SNAPSHOTS')
+                    }, {
+                        text: 'Public IPs',
+                        href: '#/tools/cloudstack/ips?platform=' + platform,
+                        hidden: !Scalr.isAllowed('CLOUDSTACK_PUBLIC_IPS')
+                    }]
+                });
+            }
+        });
+
+        Ext.Array.each(['openstack', 'ecs', 'nebula', 'ocs'], function(platform){
+            if (Scalr.isPlatformEnabled(platform) && (Scalr.isAllowed('OPENSTACK_VOLUMES') || Scalr.isAllowed('OPENSTACK_SNAPSHOTS'))) {
+                mainMenu.push({
+                    xtype: 'menuseparator'
+                }, {
+                    text: Scalr.utils.getPlatformName(platform),
+                    hideOnClick: false,
+                    iconCls: 'x-topmenu-icon-' + platform,
+                    menu: [{
+                        text: 'Volumes',
+                        href: '#/tools/openstack/volumes?platform=' + platform,
+                        hidden: !Scalr.isAllowed('OPENSTACK_VOLUMES')
+                    }, {
+                        text: 'Snapshots',
+                        href: '#/tools/openstack/snapshots?platform=' + platform,
+                        hidden: !Scalr.isAllowed('OPENSTACK_SNAPSHOTS')
+                    }]
+                });
+            }
+        });
+
+        if (Scalr.isPlatformEnabled('ucloud')) {
+            mainMenu.push({
 				xtype: 'menuseparator',
-				hidden: !Scalr.flags['platformCloudstackEnabled']
-			}, {
-				text: 'Cloudstack',
-				hideOnClick: false,
-				iconCls: 'x-topmenu-icon-cloudstack',
-				hidden: !Scalr.flags['platformCloudstackEnabled'],
-				menu: [{
-					text: 'Volumes',
-					href: '#/tools/cloudstack/volumes'
-				}, {
-					text: 'Snapshots',
-					href: '#/tools/cloudstack/snapshots'
-				}]
-			}, {
-				text: 'IDCF',
-				hideOnClick: false,
-				iconCls: 'x-topmenu-icon-idcf',
-				hidden: !Scalr.flags['platformIdcfEnabled'],
-				menu: [{
-					text: 'Volumes',
-					href: '#/tools/cloudstack/volumes?platform=idcf'
-				}, {
-					text: 'Snapshots',
-					href: '#/tools/cloudstack/snapshots?platform=idcf'
-				}]
 			}, {
 				text: 'uCloud',
 				hideOnClick: false,
 				iconCls: 'x-topmenu-icon-ucloud',
-				hidden: !Scalr.flags['platformUcloudEnabled'],
 				menu: [{
 					text: 'Volumes',
 					href: '#/tools/cloudstack/volumes?platform=ucloud'
@@ -748,19 +764,53 @@ Scalr.application.createMenu = function(context) {
 					text: 'Snapshots',
 					href: '#/tools/cloudstack/snapshots?platform=ucloud'
 				}]
-			}, {
+            });
+        }
+
+        if (Scalr.isPlatformEnabled('rackspace')) {
+            mainMenu.push({
 				xtype: 'menuseparator',
-				hidden: !Scalr.flags['platformRackspaceEnabled']
 			}, {
 				text: 'Rackspace',
 				hideOnClick: false,
 				iconCls: 'x-topmenu-icon-rackspace',
-				hidden: !Scalr.flags['platformRackspaceEnabled'],
 				menu: [{
 					text: 'Limits Status',
 					href: '#/tools/rackspace/limits'
 				}]
-			}]
+            })
+        }
+
+		menu.push({
+			cls: 'x-scalr-icon',
+			hideOnClick: false,
+			width: 77,
+			reorderable: false,
+			listeners: {
+				boxready: function () {
+					// fix height of vertical separator
+					Ext.override(this.menu, {
+						afterComponentLayout: function(width, height, oldWidth, oldHeight) {
+							var me = this;
+							me.callOverridden();
+
+							if (me.showSeparator && me.items.getAt(1)) {
+								var y = me.items.getAt(1).el.getTop(true); // top coordinate for first separator after textfield
+								me.iconSepEl.setTop(y);
+								me.iconSepEl.setHeight(me.componentLayout.lastComponentSize.contentHeight - y);
+							}
+						},
+                        menuOffset: [ 1, 1 ]
+					});
+				},
+				menushow: function () {
+					this.menu.down('textfield').focus(true, true);
+				}
+			},
+			menu: {
+                cls: 'x-topmenu-dropdown',
+                items: mainMenu
+            }
 		});
 
 		if (!Scalr.storage.get('system-favorites') && !Scalr.storage.get('system-favorites-created')) {
@@ -788,8 +838,8 @@ Scalr.application.createMenu = function(context) {
 				item['hrefTarget'] = '_self';
 				item['reorderable'] = true;
 				item['cls'] = 'x-btn-favorite';
-				item['overCls'] = 'btn-favorite-over';
-				item['pressedCls'] = 'btn-favorite-pressed';
+				//item['overCls'] = 'btn-favorite-over';
+				//item['pressedCls'] = 'btn-favorite-pressed';
 				menu.push(item);
 			}
 		}, this);
@@ -801,9 +851,9 @@ Scalr.application.createMenu = function(context) {
 
 		if (Scalr.user['userIsTrial'])
 			menu.push({
-				text: 'Live Chat',
+				text: 'Live chat',
 				reorderable: 'false',
-				iconCls: 'scalr-menu-icon-supportchat',
+				cls: 'x-icon-supportchat',
 				listeners: {
 					afterrender: function() {
 						var me = this;
@@ -853,35 +903,36 @@ Scalr.application.createMenu = function(context) {
 					}, this);
 				}
 			},
-			menu: [{
-				text: 'API access',
-				href: '#/core/api',
-				iconCls: 'x-topmenu-icon-api'
-			}, '-', {
-				text: 'Security',
-				href: '#/core/security',
-				iconCls: 'x-topmenu-icon-security'
-			}, {
-				text: 'Settings',
-				href: '#/core/settings',
-				iconCls: 'x-topmenu-icon-settings'
-			}, '-', {
-				text: 'Logout',
-				href: '/guest/logout',
-				iconCls: 'x-topmenu-icon-logout'
-			}]
+			menu: {
+                cls: 'x-topmenu-dropdown',
+                items: [{
+                    text: 'API access',
+                    href: '#/core/api',
+                    iconCls: 'x-topmenu-icon-api'
+                }, '-', {
+                    text: 'Security',
+                    href: '#/core/security',
+                    iconCls: 'x-topmenu-icon-security'
+                }, {
+                    text: 'Settings',
+                    href: '#/core/settings',
+                    iconCls: 'x-topmenu-icon-settings'
+                }, '-', {
+                    text: 'Logout',
+                    href: '/guest/logout',
+                    iconCls: 'x-topmenu-icon-logout'
+                }]
+            }
 		});
 
 		var envs = [];
-		if (Scalr.user['type'] == 'AccountOwner' || Scalr.user['isTeamOwner']) {
-			envs.push({
-				href: '#/account/environments',
-				iconCls: 'x-topmenu-icon-settings',
-				text: 'Manage'
-			}, {
-				xtype: 'menuseparator'
-			});
-		}
+        envs.push({
+            href: '#/account/environments',
+            iconCls: 'x-topmenu-icon-settings',
+            text: 'Manage'
+        }, {
+            xtype: 'menuseparator'
+        });
 
 		Ext.each(context['environments'], function(item) {
 			envs.push({
@@ -896,7 +947,10 @@ Scalr.application.createMenu = function(context) {
 			cls: 'x-icon-environment',
 			reorderable: false,
 			text: Scalr.user['envName'],
-			menu: envs,
+			menu: {
+                cls: 'x-topmenu-dropdown',
+                items: envs
+            },
 			tooltip: 'Environment',
 			listeners: {
 				boxready: function() {
@@ -947,7 +1001,7 @@ Scalr.application.createMenu = function(context) {
 			}
 		});
 
-		if (Scalr.user['type'] == 'AccountOwner' && Scalr.flags['billingExists'])
+		if (Scalr.isAllowed('ADMINISTRATION_BILLING') && Scalr.flags['billingExists'])
 			menu.push({
 				text: 'Billing',
 				href: '#/billing',
@@ -977,24 +1031,25 @@ Scalr.application.createMenu = function(context) {
 			cls: 'x-icon-help',
 			tooltip: 'Help',
 			reorderable: false,
-			menu: [{
-				text: 'Wiki',
-				href: Scalr.flags['wikiUrl'],
-				iconCls: 'x-topmenu-icon-wiki',
-				hrefTarget: '_blank'
-			}, {
-				text: 'Support',
-				href: Scalr.flags['supportUrl'],
-				iconCls: 'x-topmenu-icon-support',
-				hrefTarget: '_blank'
-			}]
-
-		})
+			menu: {
+                cls: 'x-topmenu-dropdown',
+                items: [{
+                    text: 'Wiki',
+                    href: Scalr.flags['wikiUrl'],
+                    iconCls: 'x-topmenu-icon-wiki',
+                    hrefTarget: '_blank'
+                }, {
+                    text: 'Support',
+                    href: Scalr.flags['supportUrl'],
+                    iconCls: 'x-topmenu-icon-support',
+                    hrefTarget: '_blank'
+                }]
+            }
+		});
 	} else {
 		menu.push({
-			text: '<img src="/ui2/js/extjs-4.1/theme/images/topmenu/scalr_logo_icon_36x27.png">',
-			width: 65,
-			style: 'border-top-left-radius: 3px; border-bottom-left-radius: 3px;'
+            cls: 'x-scalr-icon',
+			width: 65
 		}, {
 			text: 'Accounts',
 			href: '#/admin/accounts',
@@ -1027,8 +1082,11 @@ Scalr.application.createMenu = function(context) {
 			text: 'Settings',
 			menu: [{
 				text: 'Default DNS records',
-				href: '#/dnszones/defaultRecords2'
-			}]
+				href: '#/dnszones/defaultRecords'
+			}, {
+                text: 'Debug',
+                href: '#/admin/utils/debug'
+            }]
 		});
 
 		menu.push('->');
@@ -1036,11 +1094,14 @@ Scalr.application.createMenu = function(context) {
 			text: Scalr.user['userName'],
 			reorderable: false,
 			cls: 'x-icon-login',
-			menu: [{
-				text: 'Logout',
-				href: '/guest/logout',
-				iconCls: 'x-topmenu-icon-logout'
-			}]
+			menu: {
+                cls: 'x-topmenu-dropdown',
+                items: [{
+                    text: 'Logout',
+                    href: '/guest/logout',
+                    iconCls: 'x-topmenu-icon-logout'
+                }]
+            }
 		});
 	}
 
@@ -1059,9 +1120,11 @@ window.onhashchange = function (e) {
 	/*if (Scalr.state.pageChangeInProgress) {
 		Scalr.state.pageChangeInProgressInvalid = true; // User changes link while loading page
 		Scalr.message.Warning('Please wait');
+		TODO: when we do some loading (processBox), also block to change the page
 	}*/
 
 	Scalr.state.pageChangeInProgress = true;
+    Scalr.state.pageRedirectCounter++;
 	Scalr.message.Flush();
 
 	if (Ext.WindowManager.getActive()) {
@@ -1148,13 +1211,15 @@ window.onhashchange = function (e) {
 
 	if (loaded) {
 		// update statistic
-		var stats = Ext.state.Manager.get('system-link-statistic') || {}, link = Scalr.application.layout.activeItem.scalrCache;
+        // it isn't actual, may be remove in future
+		/*var stats = Ext.state.Manager.get('system-link-statistic') || {}, link = Scalr.application.layout.activeItem.scalrCache;
 
 		if (! Ext.isDefined(stats[link]))
 			stats[link] = { cnt: 1 };
 
 		stats[link]['cnt']++;
 		Ext.state.Manager.set('system-link-statistic', stats);
+		*/
 		return;
 	}
 
@@ -1178,11 +1243,13 @@ window.onhashchange = function (e) {
 		params: param,
 		success: function (data, response, options) {
 			try {
+                if (data['moduleUiHash'] && Scalr.state.pageUiHash && data['moduleUiHash'] != Scalr.state.pageUiHash)
+                    Scalr.state.pageReloadRequired = true; // reload page, when non-modal window created
+
 				// TODO: replace ui2 -> ui
 				var c = 'Scalr.' + data.moduleName.replace('/ui2/js/', '').replace(/-[0-9]+.js/, '').replace(/\//g, '.'), cacheId = response.getResponseHeader('X-Scalr-Cache-Id'), cache = cacheLink(link, cacheId);
 				var initComponent = function (c) {
 					if (Ext.isObject(c)) {
-
 						Ext.apply(c, cache);
 						Scalr.application.add(c);
                         addStatisticGa(c.scalrCacheStr);
@@ -1201,7 +1268,7 @@ window.onhashchange = function (e) {
 						if (options.processBox)
 							options.processBox.destroy();
 
-						Scalr.application.layout.setActiveItem(Scalr.application.getComponent('blank'));
+                        Scalr.application.layout.setActiveItem(Scalr.application.getComponent('blank'));
 						finishChange();
 					}
 				};
@@ -1216,38 +1283,64 @@ window.onhashchange = function (e) {
 				};
 				
 				Ext.apply(param, cache.scalrParamGets(link));
-				if (Ext.isDefined(Scalr.cache[c]))
-					loadModuleData(c, param, data);
-				else {
-					var head = Ext.getHead();
-					if (data.moduleRequiresCss) {
-						for (var i = 0; i < data.moduleRequiresCss.length; i++) {
-							var el = document.createElement('link');
-							el.type = 'text/css';
-							el.rel = 'stylesheet';
-							el.href = data.moduleRequiresCss[i];
 
-							head.appendChild(el);
-						}
-					}
+                if (data.moduleRequires)
+                    data.moduleRequires.unshift(data.moduleName);
+                else
+                    data.moduleRequires = [ data.moduleName ];
 
-					var sc = [ data.moduleName ];
-					if (data.moduleRequires)
-						sc = sc.concat(data.moduleRequires);
+                // get loaded js files
+                var domScripts = document.getElementsByTagName('script'), loadedScripts = [], i, attr;
+                for (i = 0; i < domScripts.length; i++) {
+                    attr = domScripts[i].getAttribute('src');
+                    if (attr)
+                        loadedScripts.push(attr);
+                }
+                data.moduleRequires = Ext.Array.difference(data.moduleRequires, loadedScripts); // also reload all changed files
 
-					Ext.Loader.loadScripts(sc, function() {
-						loadModuleData(c, param, data);
-					})
+                // get loaded css files
+                var domCss = document.getElementsByTagName('link'), loadedCss = [];
+                for (i = 0; i < domCss.length; i++) {
+                    attr = domCss[i].getAttribute('href');
+                    if (attr)
+                        loadedCss.push(attr);
+                }
+                data.moduleRequiresCss = Ext.Array.difference(data.moduleRequiresCss || [], loadedCss);
 
-					/*var load = function () {
-						if (sc.length)
-							Ext.Loader.injectScriptElement(sc.shift(), load);
-						else {
-							loadModuleData(c, param, data);
-						}
-					};
+                // check for old css to replace them
+                if (data.moduleRequiresCss.length) {
+                    var requiredCssSim = [];
+                    for (i = 0; i < data.moduleRequiresCss.length; i++)
+                        requiredCssSim.push(data.moduleRequiresCss[i].replace(/-[0-9]+.css/, '.css'));
 
-					load();*/
+                    for (i = 0; i < domCss.length; i++) {
+                        if (Ext.Array.contains(requiredCssSim, domCss[i].getAttribute('href').replace(/-[0-9]+.css/, '.css'))) {
+                            domCss[i].parentNode.removeChild(domCss[i]);
+                        }
+                    }
+                }
+
+                if (data.moduleRequires.length || data.moduleRequiresCss.length) {
+                    var head = Ext.getHead();
+                    if (data.moduleRequiresCss.length) {
+                        for (i = 0; i < data.moduleRequiresCss.length; i++) {
+                            var el = document.createElement('link');
+                            el.type = 'text/css';
+                            el.rel = 'stylesheet';
+                            el.href = data.moduleRequiresCss[i];
+
+                            head.appendChild(el);
+                        }
+                    }
+
+                    if (data.moduleRequires.length)
+                        Ext.Loader.loadScripts(data.moduleRequires, function() {
+                            loadModuleData(c, param, data);
+                        });
+                    else
+                        loadModuleData(c, param, data);
+                } else {
+                    loadModuleData(c, param, data);
 				}
 			} catch (e) {
 				Scalr.utils.PostException(e);
@@ -1257,7 +1350,7 @@ window.onhashchange = function (e) {
 			if (options.processBox)
 				options.processBox.destroy();
 
-			Scalr.application.layout.setActiveItem(Scalr.application.getComponent('blank'));
+            Scalr.application.layout.setActiveItem(Scalr.application.getComponent('blank'));
 			finishChange();
 		}
 	};
@@ -1338,7 +1431,7 @@ Scalr.timeoutHandler = {
 						this.timeoutRun = this.defaultTimeout;
 
 						if (! response.isAuthenticated) {
-							Scalr.application.MaiWindow.layout.setActiveItem(Scalr.application.MainWindow.getComponent('loginForm'));
+							Scalr.application.layout.setActiveItem(Scalr.application.getComponent('loginForm'));
 							this.schedule();
 							return;
 						} else if (! response.equal) {
@@ -1659,7 +1752,7 @@ Scalr.Init = function (context) {
 
 	window.onerror = function (message, file, lineno) {
 		Scalr.utils.PostError({
-			message: message,
+			message: 't3 ' + message,
 			file: file,
 			lineno: lineno,
 			url: document.location.href
@@ -1668,7 +1761,7 @@ Scalr.Init = function (context) {
 		return false;
 	};
 
-    Scalr.cachedRequest = Ext.create('Scalr.CachedRequest');
+    Scalr.cachedRequest = Scalr.CachedRequestManager.create();
 	Scalr.application.render('body-container');
 	Scalr.application.applyContext(context);
 };

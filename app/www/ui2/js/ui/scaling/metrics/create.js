@@ -2,7 +2,6 @@ Scalr.regPage('Scalr.ui.scaling.metrics.create', function (loadParams, modulePar
 	var action = (!loadParams['metricId']) ? 'Create' : 'Edit';
 
 	var form = Ext.create('Ext.form.Panel', {
-		bodyCls: 'x-panel-body-frame',
 		width: 700,
 		title: 'Scaling &raquo; Metrics &raquo; ' + action,
 		fieldDefaults: {
@@ -45,7 +44,7 @@ Scalr.regPage('Scalr.ui.scaling.metrics.create', function (loadParams, modulePar
 		dockedItems: [{
 			xtype: 'container',
 			dock: 'bottom',
-			cls: 'x-docked-bottom-frame',
+			cls: 'x-docked-buttons',
 			layout: {
 				type: 'hbox',
 				pack: 'center'
@@ -68,7 +67,6 @@ Scalr.regPage('Scalr.ui.scaling.metrics.create', function (loadParams, modulePar
 				}
 			}, {
 				xtype: 'button',
-				margin: '0 0 0 5',
 				text: 'Cancel',
 				handler: function() {
 					Scalr.event.fireEvent('close');

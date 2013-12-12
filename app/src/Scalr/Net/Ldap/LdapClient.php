@@ -2,20 +2,56 @@
 
 namespace Scalr\Net\Ldap;
 
+use Scalr\Net\Ldap\Exception\LdapException;
+
 /**
- * LdapClient (v0.2)
+ * LdapClient
  *
  * @author  Vitaliy Demidov   <vitaliy@scalr.com>
  * @since   06.06.2013
  */
 class LdapClient
 {
+
+    const VERSION = '0.5';
+
+    /**
+     * When regular binding is used, a user can be authenticated by User logon name (user@domain.com).
+     */
+    const BIND_TYPE_REGULAR = 'regular';
+
+    /**
+     * When simple binding is used, a user can be authenticated by Full name, Display name or sAMAccountName
+     */
+    const BIND_TYPE_SIMPLE = 'simple';
+
     /**
      * Ldap config object
      *
      * @var LdapConfig
      */
     private $config;
+
+    /**
+     * User's rdn
+     *
+     * @var string
+     */
+    private $username;
+
+    /**
+     * User's email which is retrieved from LDAP
+     *
+     * @var string
+     */
+    private $email;
+
+    /**
+     * User's password
+     *
+     * @var string
+     */
+    private $password;
 
     /**
      * Ldap connection link identifier
@@ -25,14 +61,83 @@ class LdapClient
     private $conn;
 
     /**
+     * Cached Distinguished Name of the user
+     *
+     * @var string
+     */
+    private $dn;
+
+    /**
+     * Cached memberof distinguished names
+     *
+     * @var array
+     */
+    private $memberofDn;
+
+    /**
+     * Whether ldap bound
+     *
+     * @var bool
+     */
+    private $isbound;
+
+    /**
+     * Log output
+     *
+     * @var array
+     */
+    private $aLog;
+
+    /**
      * Constructor
      *
-     * @param  LdapConfig  $config LDAP config
+     * @param  LdapConfig  $config    LDAP config
+     * @param  string      $username  LDAP rdn to check. It should look like login@host.domain
+     * @param  string      $password  LDAP password for the specified user
      * @throws Exception\LdapException
      */
-    public function __construct(LdapConfig $config)
+    public function __construct(LdapConfig $config, $username, $password)
     {
         $this->config = $config;
+        $this->username = $username;
+        $this->password = $password;
+        $this->dn = null;
+        $this->isbound = false;
+        $this->aLog = array();
+        $this->log('LdapClient v-%s', self::VERSION);
+    }
+
+    /**
+     * Adds formatted string to log output
+     *
+     * @param   string     $format format string. see sprintf rules
+     * @param   mixed      $args   optional argument 1
+     * @param   mixed      $_      optional argument list
+     */
+    protected function log($format, $args = null, $_ = null)
+    {
+        if (!empty($this->config->debug)) {
+            $string = call_user_func_array('sprintf', func_get_args());
+            $this->aLog[] = sprintf("%s - %s\n", date('i:s'), $string);
+        }
+    }
+
+    /**
+     * Gets log
+     *
+     * @return  string  Returns the log output
+     */
+    public function getLog()
+    {
+        return join('', $this->aLog);
+    }
+
+    /**
+     * Clears log
+     */
+    public function clearLog()
+    {
+        $this->aLog = array();
     }
 
     /**
@@ -46,6 +151,16 @@ class LdapClient
     }
 
     /**
+     * Gets username
+     *
+     * @return string Returns username which should look like login@host.domain
+     */
+    public function getUsername()
+    {
+        return $this->username;
+    }
+
+    /**
      * Gets LDAP connection link identifier
      *
      * @return  resource Returns LDAP connection link edentifier
@@ -55,6 +170,11 @@ class LdapClient
     {
         if (!$this->conn) {
             $this->conn = ldap_connect($this->config->host, $this->config->port);
+
+            $this->log('Create connection host:%s port:%s - %s', $this->config->host,
+                ($this->config->port ? $this->config->port : 'default'),
+                ($this->conn ? 'OK' : 'Failed'));
+
             if ($this->conn == false) {
                 throw new Exception\LdapException(sprintf(
                     "Could not establish LDAP connection to host '%s' port '%d'",
@@ -90,51 +210,193 @@ class LdapClient
     protected function bindRdn($username = null, $password = null)
     {
         if (!func_num_args()) {
-            $res = @ldap_bind($this->conn, $this->config->user, $this->config->password);
-        } else {
-            $res = @ldap_bind($this->conn, (string)$username, (string)$password);
+            if ($this->config->user !== null) {
+                //Admin user is provided in config.
+                $username = $this->config->user;
+                $password = $this->config->password;
+            } else {
+                //Without admin user we use specified rdn
+                $username = $this->username;
+                $password = $this->password;
+            }
         }
+
+        $res = @ldap_bind($this->conn, (string)$username, (string)$password);
+
+        $this->isbound = $res ? true : false;
+
+        $this->log("Bind username:%s password:%s - %s",
+            $username, str_repeat('*', strlen($password)),
+            ($this->isbound ? 'OK' : 'Failed')
+        );
 
         return $res;
     }
 
     /**
+     * Unbinds LDAP connection
+     *
+     * @return bool
+     */
+    public function unbind()
+    {
+        return $this->conn ? @ldap_unbind($this->conn) : true;
+    }
+
+    /**
+     * Destructor
+     */
+    public function __destruct()
+    {
+        $this->unbind();
+    }
+
+    /**
+     * Gets the user email
+     *
+     * @return  string  Returns user email address
+     */
+    public function getEmail()
+    {
+        return !empty($this->email) ? $this->email : $this->username;
+    }
+
+    /**
+     * Checks if the username exists in the LDAP
+     *
+     * @return  bool Returns true on success or false if user does not exist
+     * @throws  LdapException
+     */
+    public function isValidUsername()
+    {
+        $this->log('%s is called.', __FUNCTION__);
+
+        if (empty($this->config->user) || !isset($this->config->password)) {
+            throw new LdapException(
+                "Both LDAP user and password must be provided in the config "
+              . "for the scalr.connections.ldap parameter's bag."
+            );
+        }
+
+        $this->getConnection();
+
+        if (($ret = $this->bindRdn()) == false) {
+            throw new LdapException(sprintf(
+                "Cannot bind to ldap server. Check user and password in the scalr.connections.ldap section of config. %s"
+                , $this->getLdapError()));
+        } else {
+            $filter = sprintf('(&%s(sAMAccountName=%s))', $this->config->userFilter, self::realEscape(strtok($this->username, '@')));
+
+            $attrs = array('dn', 'memberof');
+            if ($this->config->mailAttribute) {
+                $mailAttribute = strtolower($this->config->mailAttribute);
+                $attrs[] = $mailAttribute;
+            }
+
+            $query = @ldap_search(
+                $this->conn, $this->config->baseDn, $filter, $attrs, 0, 1
+            );
+
+            $this->log("Query baseDn:%s filter:%s, attributes: %s - %s",
+                $this->config->baseDn, $filter, join(', ', $attrs),
+                ($query !== false ? 'OK' : 'Failed')
+            );
+
+            if ($query !== false) {
+                $results = ldap_get_entries($this->conn, $query);
+                if ($results['count'] == 1) {
+                    //Caches base DN to increase performance
+                    $this->dn = $results[0]['dn'];
+                    $this->memberofDn = $results[0]['memberof'];
+                    if (isset($mailAttribute) && isset($results[0][$mailAttribute])) {
+                        $this->email = (is_array($results[0][$mailAttribute]) ? $results[0][$mailAttribute][0] : $results[0][$mailAttribute]) . '';
+                        $this->log('Email has been retrieved: %s', $this->email);
+                    }
+                    if (isset($this->memberofDn['count'])) {
+                        unset($this->memberofDn['count']);
+                    }
+                    $ret = true;
+                } else {
+                    $ret = false;
+                }
+            } else {
+                $ret = false;
+            }
+        }
+
+        return $ret;
+    }
+
+    /**
      * Checks is this user can be authenticated to LDAP
      *
-     * @param   string     $rdn        User's RDN (username@scalr)
-     * @param   string     $password   User's password
      * @return  boolean    Returns true on success or false otherwise
      */
-    public function isValidUser($rdn, $password)
+    public function isValidUser()
     {
-        if (empty($rdn)) {
+        $this->log('%s is called.', __FUNCTION__);
+
+        if (empty($this->username) || !isset($this->password)) {
             return false;
         }
 
         $this->getConnection();
 
-        $ret = $this->bindRdn($rdn, $password);
+        $ret = $this->bindRdn($this->username, $this->password);
 
         //It is not enough only successfull bind.
         //It should find the user with the specified credentials.
         if ($ret) {
-            $name = strtok($rdn, '@');
-            $query = @ldap_search(
-                $this->conn, $this->config->baseDn,
-                "(&(objectCategory=person)(objectClass=user)(sAMAccountName=" . self::realEscape($name) . "))",
-                array('dn'), 0, 1
-            );
+            $attrs = array('dn', 'memberof');
+            if ($this->config->mailAttribute) {
+                $mailAttribute = strtolower($this->config->mailAttribute);
+                $attrs[] = $mailAttribute;
+            }
+
+            if (($pos = strpos($this->username, "@")) !== false) {
+                $filter = sprintf('(&%s(sAMAccountName=%s))', $this->config->userFilter, self::realEscape(strtok($this->username, '@')));
+                $query = @ldap_search($this->conn, $this->config->baseDn, $filter, $attrs, 0, 1);
+                $this->log("Query baseDn:%s filter:%s, attributes: %s - %s",
+                    $this->config->baseDn, $filter, join(', ', $attrs),
+                    ($query !== false ? 'OK' : 'Failed')
+                );
+            } elseif (preg_match('/(^|,)cn=/i', $this->username)) {
+                //username is provided as distinguished name.
+                //We need to make additional query to validate user's password
+                $filter = sprintf('(&%s(sAMAccountName=*))', $this->config->userFilter);
+                $query = @ldap_search($this->conn, $this->username, $filter, $attrs, 0, 1);
+                $this->log("Query baseDn:%s filter:%s, attributes: %s - %s",
+                    $this->username, $filter, join(', ', $attrs),
+                    ($query !== false ? 'OK' : 'Failed')
+                );
+            } else {
+                $this->log("Valid username or user's DN is expected, \"%s\" specified", $this->username);
+                return false;
+            }
+
 
             if ($query !== false) {
                 $results = ldap_get_entries($this->conn, $query);
 
+                $this->log(sprintf("Query result count: %s", $results['count']));
+
                 if ($results['count'] == 1) {
                     //If it is successful, we should take the DN and bind
                     //again using that DN and the provided password.
-                    $dn = $results[0]['dn'];
+                    $this->dn = $results[0]['dn'];
+                    $this->memberofDn = $results[0]['memberof'];
+                    if (isset($mailAttribute) && isset($results[0][$mailAttribute])) {
+                        $this->email = (is_array($results[0][$mailAttribute]) ? $results[0][$mailAttribute][0] : $results[0][$mailAttribute]) . '';
+                        $this->log('Email has been retrieved: %s', $this->email);
+                    }
+                    if (isset($this->memberofDn['count'])) {
+                        unset($this->memberofDn['count']);
+                    }
 
-                    //Now his should either succeed or fail properly
-                    $ret = $this->bindRdn($dn, $password);
+                    $this->log(sprintf("Query result DN: %s", $this->dn));
+
+                    //Now this should either succeed or fail properly
+                    $ret = $this->bindRdn($this->dn, $this->password);
                 } else {
                     $ret = false;
                 }
@@ -149,44 +411,70 @@ class LdapClient
     /**
      * Gets the list of the groups in which specified user has memberships.
      *
-     * @param   string    $name  User's sAMAccount name
      * @return  array     Returns array of the sAMAccount name of the Groups
      * @throws  Exception\LdapException
      */
-    public function getUserGroups($name)
+    public function getUserGroups()
     {
+        $this->log('%s is called.', __FUNCTION__);
+
+        $name = strtok($this->username, '@');
+
         $groups = array();
 
         $this->getConnection();
 
         //Ldap bind
-        if ($this->bindRdn() === false) {
-            throw new Exception\LdapException(sprintf(
-                "Could not bind LDAP. %s",
-                $this->getLdapError()
-            ));
+        if (!$this->isbound || !empty($this->config->user) && !empty($this->password)) {
+            if ($this->bindRdn() === false) {
+                throw new Exception\LdapException(sprintf(
+                    "Could not bind LDAP. %s",
+                    $this->getLdapError()
+                ));
+            }
         }
 
-        $query = @ldap_search(
-            $this->conn, $this->config->baseDn,
-            "(&(objectCategory=person)(objectClass=user)(sAMAccountName=" . self::realEscape($name) . "))",
-            array('dn'), 0, 1
-        );
-        if ($query === false) {
-            throw new Exception\LdapException(sprintf(
-                "Could not perform ldap_search. %s",
-                $this->getLdapError()
-            ));
+        if (empty($this->dn)) {
+            $filter = sprintf('(&%s(sAMAccountName=%s))', $this->config->userFilter, self::realEscape($name));
+            $query = @ldap_search(
+                $this->conn, $this->config->baseDn, $filter, array('dn'), 0, 1
+            );
+
+            $this->log("Query user baseDn:%s filter:%s - %s",
+                $this->config->baseDn, $filter,
+                ($query !== false ? 'OK' : 'Failed')
+            );
+
+            if ($query === false) {
+                throw new Exception\LdapException(sprintf(
+                    "Could not perform ldap_search. %s",
+                    $this->getLdapError()
+                ));
+            }
+
+            $results = ldap_get_entries($this->conn, $query);
+
+            $this->dn = $results[0]['dn'];
         }
 
-        $results = ldap_get_entries($this->conn, $query);
+        $baseDn = !empty($this->config->baseDnGroups) ? $this->config->baseDnGroups : $this->config->baseDn;
 
-        $dn = $results[0]['dn'];
+        if ($this->memberofDn !== null && empty($this->memberofDn)) {
+            //User has no membership in any group.
+            return array();
+        }
 
-        $filter = "(member:1.2.840.113556.1.4.1941:=" . $dn . ")";
+        $filter = "(&" . $this->config->groupFilter . "(member"
+          . ($this->config->groupNesting ? ":1.2.840.113556.1.4.1941:" : "")
+          . "=" . self::escape($this->dn) . "))";
 
         $search = @ldap_search(
-            $this->conn, $this->config->baseDn, $filter, array("sAMAccountName")
+            $this->conn, $baseDn, $filter, array("sAMAccountName")
+        );
+
+        $this->log("Query user's groups baseDn:%s filter:%s - %s",
+            $baseDn, $filter,
+            ($search !== false ? 'OK' : 'Failed')
         );
 
         if ($search === false) {
@@ -203,32 +491,6 @@ class LdapClient
         }
 
         return $groups;
-    }
-
-    /**
-     * Checks whether specified user is member of the Group including all nested groups.
-     *
-     * @param   string $userDn      User's DN
-     * @param   string $groupToFind Group to find
-     * @return  bool   Returns true if specified userDN is member of group
-     */
-    public function isMemberOfGroup($userDn, $groupToFind)
-    {
-        $this->getConnection();
-
-        //Ldap bind
-        if ($this->bindRdn() === false) {
-            throw new Exception\LdapException(sprintf(
-                "Could not bind LDAP. %s",
-                $this->getLdapError()
-            ));
-        }
-
-        $filter = "(memberof:1.2.840.113556.1.4.1941:=" . $groupToFind . ")";
-        $search = ldap_search($this->conn, $userDn, $filter, array("dn"), 1);
-        $items = ldap_get_entries($this->conn, $search);
-
-        return !isset($items["count"]) ? false : (bool) $items["count"];
     }
 
     public function __sleep()
@@ -252,11 +514,33 @@ class LdapClient
         return preg_replace(
             array(
                 '/[\r\n]+/',
-                '/(^ |[\\\\]|[,#+<>;"=]| $)/',
+                '/\\\\/',
+                '/\*/',
+                '/\(/',
+                '/\)/',
+                '/\0/',
+                '/\//',
+                '/á/',
+                '/é/',
+                '/í/',
+                '/ó/',
+                '/ú/',
+                '/ñ/',
             ),
             array(
                 '',
-                '\\\\$1',
+                '\\\\5C',
+                '\\\\2A',
+                '\\\\28',
+                '\\\\29',
+                '\\\\00',
+                '\\\\2F',
+                '\\\\E1',
+                '\\\\E9',
+                '\\\\ED',
+                '\\\\F3',
+                '\\\\FA',
+                '\\\\F1',
             ),
             $string
         );
@@ -273,7 +557,7 @@ class LdapClient
         return preg_replace(
             array(
                 '/[\r\n]+/',
-                '/(^ |[\\\\]|[,#+<>;"=*\(\)]| $)/',
+                '/(^ |[\\\\]|[,#+<>;"=*\(\)\/]| $)/',
             ),
             array(
                 '',

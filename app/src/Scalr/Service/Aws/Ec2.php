@@ -2,13 +2,9 @@
 namespace Scalr\Service\Aws;
 
 use Scalr\Service\Aws\Ec2\DataType\AccountAttributeSetList;
-use Scalr\Service\Aws\Ec2\Handler\AvailabilityZoneHandler;
-use Scalr\Service\Aws\Ec2\Handler\SecurityGroupHandler;
 use Scalr\Service\Aws\Client\ClientException;
-use Scalr\Service\Aws\DataType\ErrorData;
 use Scalr\Service\Aws\DataType\ListDataType;
-use Scalr\Service\Aws\Client\QueryClient;
-use Scalr\Service\Aws;
+use Scalr\Service\Eucalyptus;
 
 /**
  * Amazon EC2 interface
@@ -99,7 +95,12 @@ class Ec2 extends AbstractService implements ServiceInterface
         if (isset($args[0])) {
             $region = $args[0];
         } else {
-            $region = $this->getAws()->getRegion();
+            $aws = $this->getAws();
+            if ($aws instanceof Eucalyptus) {
+                return rtrim($aws->getUrl('ec2'), '/ ');
+            } else {
+                $region = $aws->getRegion();
+            }
         }
         return 'ec2.' . $region . '.amazonaws.com';
     }

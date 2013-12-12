@@ -163,33 +163,39 @@ Scalr.regPage('Scalr.ui.tools.aws.s3.buckets', function (loadParams, moduleParam
 			store: store,
 			dock: 'top',
             beforeItems: [{
-                ui: 'paging',
-                iconCls: 'x-tbar-add',
+                text: 'Add bucket',
+                cls: 'x-btn-green-bg',
                 handler: function() {
                     Scalr.Request({
                         confirmBox: {
                             title: 'Create new Bucket',
+                            width: 480,
                             form: [{
-                                xtype: 'combo',
-                                name: 'location',
-                                fieldLabel: 'Select location',
-                                width: 303,
-                                editable: false,
-                                allowBlank: false,
-                                queryMode: 'local',
-                                store: {
-                                    fields: [ 'id', 'name' ],
-                                    data: moduleParams.locations,
-                                    proxy: 'object'
+                                xtype: 'fieldset',
+                                cls: 'x-fieldset-separator-none',
+                                defaults: {
+                                    anchor: '100%'
                                 },
-                                valueField: 'id',
-                                displayField: 'name'
-                            },{
-                                xtype: 'textfield',
-                                name: 'bucketName',
-                                fieldLabel: 'Bucket Name',
-                                allowBlank: false,
-                                width: 303
+                                items: [{
+                                    xtype: 'combo',
+                                    name: 'location',
+                                    fieldLabel: 'Select location',
+                                    editable: false,
+                                    allowBlank: false,
+                                    queryMode: 'local',
+                                    store: {
+                                        fields: [ 'id', 'name' ],
+                                        data: moduleParams.locations,
+                                        proxy: 'object'
+                                    },
+                                    valueField: 'id',
+                                    displayField: 'name'
+                                },{
+                                    xtype: 'textfield',
+                                    name: 'bucketName',
+                                    fieldLabel: 'Bucket Name',
+                                    allowBlank: false
+                                }]
                             }],
                             formValidate: true,
                             ok: 'Add'

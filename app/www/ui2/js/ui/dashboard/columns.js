@@ -8,11 +8,11 @@ Ext.define('Scalr.ui.dashboard.Column', {
 		this.callParent();
 		this.html =
 			'<div class = "editpanel">' +
-				'<div class = "add" style= "height: 55px;" align="center" index=' + this.index + '>' +
-				'<div class="scalr-ui-dashboard-icon-add-widget"></div>Add widget' +
+				'<div class = "add" style= "height: 56px;" align="center" index=' + this.index + '>' +
+				'<div class="scalr-ui-dashboard-icon-add-widget"></div>' +
 				'</div>' +
-				'<div class = "remove" style= "height: 55px;" align="center">' +
-				'<div class="scalr-ui-dashboard-icon-remove-column"></div>Remove column' +
+				'<div class = "remove" style= "height: 56px;" align="center">' +
+				'<div class="scalr-ui-dashboard-icon-remove-column"></div>' +
 				'</div>' +
 			'</div>';
 	}
@@ -28,7 +28,8 @@ Ext.define('Scalr.ui.dashboard.Panel', {
 	border: false,
 
 	layout: {
-		type : 'column'
+		type : 'column',
+        reserveScrollbar: true
 	},
 
 	initComponent : function() {
@@ -90,7 +91,7 @@ Ext.define('Scalr.ui.dashboard.Panel', {
 		this.add({
 			layout: 'anchor',
 			index: index || 0,
-			margin: '0 5 0 0'
+			margin: '0 12 0 0'
 		});
 	},
 
@@ -103,7 +104,7 @@ Ext.define('Scalr.ui.dashboard.Panel', {
 			layout: 'fit',
 			anchor: '100%',
 			params: params,
-			margin: '0 0 5 0'
+			margin: '0 0 12 0'
 		};
 	},
 	setTools: function() { //function for all moduls
@@ -336,11 +337,7 @@ Ext.define('Scalr.ui.dashboard.Farm', {
 	alias: 'widget.dashboard.farm',
 
 	title: 'Farm servers',
-	bodyStyle: 'background-color: #F5F5F5; padding: 10px',
 	layout: 'fit',
-	defaults: {
-		anchor: '100%'
-	},
 	items: [{
 		xtype: 'dataview',
 		store: {
@@ -349,71 +346,31 @@ Ext.define('Scalr.ui.dashboard.Farm', {
 		},
 		border: true,
 		deferEmptyText: false,
-		emptyText: 'No servers running',
 		loadMask: false,
 		itemSelector: 'div.scalr-ui-dashboard-farms-servers',
 		tpl: new Ext.XTemplate(
-			'<ul class="scalr-ui-dashboard-farms" align="center">' +
-				'<tpl for=".">' +
-				'<li>' +
-				'<a href="#/farms/{farmId}/roles/{farmRoleId}/view"><div class="icon" ><img src="/ui2/images/ui/dashboard/behaviors/{[this.getLocationIcon(values)]}.png" title="{behaviors}"/></div></a>' +
-				'<a href="#/servers/view?farmId={farmId}&farmRoleId={farmRoleId}"><div class="count">{servCount}</div></a>' +
-				'<p class="scalr-ui-dashboard-farms-text" style="margin-top: 11px;">{[this.getBehaviorName(values)]}</p>' +
-				'</li>' +
-				'</tpl>' +
+            '<tpl if="values.length">',
+                '<ul class="scalr-ui-dashboard-farms" align="center">' +
+                    '<tpl for=".">' +
+                    '<li>' +
+                    '<a href="#/farms/{farmId}/roles/{farmRoleId}/view" title="{behaviors}" class="icon"><div class="x-icon-role x-icon-role-{[Scalr.utils.getRoleCls(values)]}" /></div></a>' +
+                    '<a href="#/servers/view?farmId={farmId}&farmRoleId={farmRoleId}" class="count">{servCount}</a>' +
+                    '</li>' +
+                    '</tpl>' +
 				'</ul>',
-			{
-				getBehaviorName: function (values) {
-					if (values['behaviors'].length < 10)
-						return values['behaviors'];
-					else {
-						return Ext.util.Format.substr(values['behaviors'], 0, 4) + '...' + Ext.util.Format.substr(values['behaviors'], values['behaviors'].length - 3, 3);
-					}
-
-				},
-				getLocationIcon: function (context) {
-                    // TODO: rewrite to plugin (use the same code as in farm builder)
-                    var behaviors = [
-                        "cf_cchm", "cf_dea", "cf_router", "cf_service",
-                        "rabbitmq", "www",
-                        "app", "tomcat", 'haproxy',
-                        "mysqlproxy",
-                        "memcached",
-                        "cassandra", "mysql", "mysql2", "percona", "postgresql", "redis", "mongodb"
-                    ];
-
-                    if (context['behaviors']) {
-                        //Handle CF all-in-one role
-                        if (context['behaviors'].match("cf_router") && context['behaviors'].match("cf_cloud_controller") && context['behaviors'].match("cf_health_manager") && context['behaviors'].match("cf_dea")) {
-                            return 'cf_all_in_one';
-                        }
-                        //Handle CF CCHM role
-                        if (context['behaviors'].match("cf_cloud_controller") || context['behaviors'].match("cf_health_manager")) {
-                            return 'cf_cchm';
-                        }
-
-                        var b = (context['behaviors'] || '').split(',');
-                        for (var i=0, len=b.length; i < len; i++) {
-                            for (var k = 0; k < behaviors.length; k++ ) {
-                                if (behaviors[k] == b[i]) {
-                                    return b[i].replace('-', '_');
-                                }
-                            }
-                        }
-                    }
-
-                    return 'base';
-				}
-			})
+            '</tpl>')
 	}],
 	widgetType: 'local',
 	widgetUpdate: function (content) {
-		if (content['servers'])
-			this.down('dataview').store.load({
-				data: content['servers']
-			});
+        this.down('dataview').emptyText = '<div class="x-grid-empty">No servers running</div>';
+        this.down('dataview').store.load({
+            data: content['servers']
+        });
 		this.title = 'Farm ' + content['name'];
-	}
+	},
+    widgetError: function (msg) {
+        this.down('dataview').emptyText = '<div class="x-grid-empty x-error">' + msg + '</div>';
+    }
 });
 
 Ext.define('Scalr.ui.dashboard.Monitoring', {
@@ -447,152 +404,13 @@ Ext.define('Scalr.ui.dashboard.Monitoring', {
 			else
 				this.html = '<div style="position: relative; text-align: center; width: 100%; height: 50%; padding: 3px;"><font color = "red">No info</font></div>';
 		}
-	}
-});
-
-Ext.define('Scalr.ui.dashboard.Uservoice', {
-	extend: 'Ext.panel.Panel',
-	alias: 'widget.dashboard.uservoice',
-
-	title: 'Uservoice feedback',
-	cls: 'scalr-ui-dashboard-widgets-feedback',
-
-	items: {
-		xtype: 'grid',
-		store: {
-			fields: [ 'url', 'id', 'state', 'title', 'vote_count', 'status'],
-			proxy: 'object',
-			data: []
-		},
-		columns: [{
-			header: 'Votes',
-			width: 68,
-			hideable: false,
-			xtype: 'templatecolumn',
-			dataIndex: 'vote_count',
-			tpl: '<span style="font-size: 13px; font-weight: bold; color: #333">{vote_count}</span>'
-		}, {
-			header: 'Suggestion',
-			flex: 3,
-			hideable: false,
-			xtype: 'templatecolumn',
-			dataIndex: 'title',
-			tpl: '<a href={url} target="_blank" style="font-size: 13px;">{title}</a>'
-		}, {
-			header: 'Status',
-			width: 106,
-			hideable: false,
-			xtype: 'templatecolumn',
-			dataIndex: 'state',
-			tpl: new Ext.XTemplate('<div class="scalr-ui-dashboard-widgets-feedback-status scalr-ui-dashboard-widgets-feedback-status-{[this.getSugState(values)]}"><tpl if="status.name">{status.name}</tpl><tpl if="!status">no status</tpl></div>',
-				{
-					getSugState: function (values) {
-						if (values['status'])
-							return values['status']['key'];
-						else
-							return 'no';
-					}
-				})
-		}],
-		plugins: {
-			ptype: 'gridstore'
-		},
-		viewConfig: {
-			emptyText: 'No suggestions found',
-			deferEmptyText: false,
-			disableSelection: true,
-			getRowClass: function(rec, rowIdx) {
-				return rowIdx % 2 == 1 ? 'scalr-ui-dashboard-grid-row' : 'scalr-ui-dashboard-grid-row-alt';
-			}
-		}
 	},
-	widgetType: 'nonlocal',
-	loadContent: function () {
-		if (this.rendered)
-			this.body.mask('Loading content ...');
-
-		Scalr.Request({
-			url: '/dashboard/widget/uservoice/xGetContent',
-			scope: this,
-			success: function (content) {
-				if (this.isDestroyed)
-					return;
-
-				if (this.rendered)
-					this.body.unmask();
-				this.updateForm(content);
-			},
-			failure: function () {
-				if (this.isDestroyed)
-					return;
-
-				if (this.rendered)
-					this.body.unmask();
-			}
-		});
-	},
-	updateForm: function(content) {
-		this.down('grid').store.loadData(content['sugs']);
-	},
-	listeners: {
-		boxready: function() {
-			this.feedbackPanel = this.el.createChild({
-				tag: 'div',
-				cls: 'scalr-ui-dashboard-widgets-feedbackpanel',
-				html: '<div class="scalr-ui-dashboard-widgets-message" style="margin-left: 5px; float: left;"> ' +
-					'<a href="http://scalr.uservoice.com/" target="_blank" class="simple">Feedback</a>' +
-					'</div>'
-			});
-
-			if (!this.collapsed)
-				this.loadContent();
-		},
-		beforeexpand: function() {
-			if (this.rendered)
-				this.body.mask();
-		},
-		expand: function() {
-			this.loadContent();
-		}
-	},
-
-/*
-	widgetUpdate: function (content) {
-		if (!this.params || !this.params['sugCount'])
-			this.params = {'sugCount': 5};
-		this.store.load({
-			data: content
-		});
-	},
-	*/
-
-
-	showSettingsWindow: function () {
-		if (!this.params || !this.params['sugCount'])
-			this.params = {'sugCount': 5};
-		Scalr.Confirm({
-			form: [{
-				xtype: 'combo',
-				margin: 5,
-				store: [5, 10],
-				fieldLabel: 'Number of suggestions:',
-				labelWidth: 150,
-				editable: false,
-				value: this.params['sugCount'],
-				queryMode: 'local',
-				name: 'sugCount',
-				anchor: '100%'
-			}],
-			title: 'Settings',
-			success: function (data) {
-				if (data['sugCount']) {
-					this.params['sugCount'] = data['sugCount'];
-					this.up('dashpanel').savePanel(1);
-				}
-			},
-			scope: this
-		});
-	}
+    widgetError: function (msg) {
+        if (this.body)
+            this.body.update('<div class="x-grid-empty x-error">' + msg + '</div>');
+        else
+            this.html = '<div class="x-grid-empty x-error">' + msg + '</div>';
+    }
 });
 
 Ext.define('Scalr.ui.dashboard.Announcement', {
@@ -607,14 +425,11 @@ Ext.define('Scalr.ui.dashboard.Announcement', {
 			proxy: 'object'
 		},
 		deferEmptyText: false,
-		emptyText: 'No news',
 		loadMask: false,
 		itemSelector: 'div.scalr-ui-dashboard-widgets-div',
 		tpl: new Ext.XTemplate(
 			'<tpl for=".">',
-			'<div class="scalr-ui-dashboard-widgets-div',
-			'<tpl if="xindex%2==1"> scalr-ui-dashboard-widgets-panelcolor</tpl>',
-			'">',
+			'<div class="scalr-ui-dashboard-widgets-div">',
 			'<div class="scalr-ui-dashboard-widgets-desc">{time}</div>',
 			'<div>' +
 				'<a href="{url}" target="_blank"><span class="scalr-ui-dashboard-widgets-message-slim">{text}</span></a>' +
@@ -628,17 +443,22 @@ Ext.define('Scalr.ui.dashboard.Announcement', {
 	widgetUpdate: function (content) {
 		if (!this.params || !this.params['newsCount'])
 			this.params = {'newsCount': 5};
-		this.down('dataview').store.load({
+        this.down('dataview').emptyText = '<div class="x-grid-empty">No news</div>';
+        this.down('dataview').store.load({
 			data: content
 		});
 	},
+    widgetError: function (msg) {
+        this.down('dataview').emptyText = '<div class="x-grid-empty x-error">' + msg + '</div>';
+    },
 	showSettingsWindow: function () {
 		if (!this.params || !this.params['newsCount'])
 			this.params = {'newsCount': 5};
 		Scalr.Confirm({
+            formSimple: true,
 			form: [{
 				xtype: 'combo',
-				margin: 5,
+				//margin: 5,
 				store: [1, 2, 5, 10],
 				fieldLabel: 'Number of news:',
 				labelWidth: 120,
@@ -673,15 +493,13 @@ Ext.define('Scalr.ui.dashboard.LastErrors', {
 			proxy: 'object'
 		},
 		deferEmptyText: false,
-		emptyText: 'No errors',
+		emptyText: '<div class="x-grid-empty">No errors</div>',
 		loadMask: false,
 		itemSelector: 'div.scalr-ui-dashboard-widgets-div',
 		tpl: new Ext.XTemplate(
 			'<tpl for=".">',
-			'<div title = "{message}" class="scalr-ui-dashboard-widgets-div',
-			'<tpl if="xindex%2==1"> scalr-ui-dashboard-widgets-panelcolor</tpl>',
-			'">',
-			'<div class="scalr-ui-dashboard-widgets-desc"><tpl if="server_id"><a href="#/servers/{server_id}/extendedInfo">{time}</a><tpl else>{time}</tpl></div>',
+			'<div title="{message}" class="scalr-ui-dashboard-widgets-div">',
+			'<div class="scalr-ui-dashboard-widgets-desc"><tpl if="server_id"><a href="#/servers/{server_id}/dashboard">{time}</a><tpl else>{time}</tpl></div>',
 			'<div style="max-height: 60px; overflow: hidden;"><span class="scalr-ui-dashboard-widgets-message-slim">{message}</span></div>',
 			'</div>',
 			'</tpl>'
@@ -691,17 +509,22 @@ Ext.define('Scalr.ui.dashboard.LastErrors', {
 	widgetUpdate: function (content) {
 		if (!this.params || !this.params['errorCount'])
 			this.params = {'errorCount': 10};
-		this.down('dataview').store.load({
+        this.down('dataview').emptyText = '<div class="x-grid-empty">No errors</div>';
+        this.down('dataview').store.load({
 			data: content
 		});
 	},
+    widgetError: function (msg) {
+        this.down('dataview').emptyText = '<div class="x-grid-empty x-error">' + msg + '</div>';
+    },
 	showSettingsWindow: function () {
 		if (!this.params || !this.params['errorCount'])
 			this.params = {errorCount: 10};
 		Scalr.Confirm({
+            formSimple: true,
 			form: [{
 				xtype: 'combo',
-				margin: 5,
+				//margin: 5,
 				store: [5, 10, 15, 20, 50, 100],
 				fieldLabel: 'Number of errors:',
 				labelWidth: 120,
@@ -740,7 +563,8 @@ Ext.define('Scalr.ui.dashboard.UsageLastStat', {
 			data: []
 		},
 		features: [{
-			ftype: 'summary'
+			ftype: 'summary',
+            id: 'summary'
 		}],
 		columns: [{
 			header: 'Farm',
@@ -757,6 +581,7 @@ Ext.define('Scalr.ui.dashboard.UsageLastStat', {
 			hideable: false,
 			xtype: 'templatecolumn',
 			dataIndex: 'current',
+            flex: 1,
 			tpl: '<tpl if="current"><a href="#/statistics/serversusage?farmId={farm_id}">${current}</a></tpl><tpl if="!current"><img src="/ui2/images/icons/false.png" /></tpl>',
 			summaryType: 'sum',
 			summaryRenderer: function(value) {
@@ -767,6 +592,7 @@ Ext.define('Scalr.ui.dashboard.UsageLastStat', {
 			hideable: false,
 			xtype: 'templatecolumn',
 			dataIndex: 'recent',
+            flex: 1,
 			tpl: '<tpl if="recent"><a href="#/statistics/serversusage?farmId={farm_id}">${recent}</a></tpl><tpl if="!recent"><img src="/ui2/images/icons/false.png" /></tpl>',
 			summaryType: 'sum',
 			summaryRenderer: function(value) {
@@ -792,19 +618,25 @@ Ext.define('Scalr.ui.dashboard.UsageLastStat', {
 	},
 	widgetType: 'local',
 	widgetUpdate: function (content) {
-		if (content['farms']) {
-			this.down('gridpanel').store.load({
-				data: content['farms']
-			});
-		}
+        this.down('gridpanel').view.emptyText = 'No statistics found';
+        if (content['farms']) {
+            this.down('gridpanel').store.load({
+                data: content['farms']
+            });
+        }
+        this.down('gridpanel').view.getFeature('summary').toggleSummaryRow(!!content['farms']);
 	},
+    widgetError: function (msg) {
+        this.down('gridpanel').view.emptyText = '<div class="x-error">' + msg + '</div>';
+    },
 	showSettingsWindow: function () {
 		if (!this.params || !this.params['farmCount'])
 			this.params = {'farmCount': 5};
 		Scalr.Confirm({
+            formSimple: true,
 			form: [{
 				xtype: 'combo',
-				margin: 5,
+				//margin: 5,
 				store: [1, 2, 5, 10, 15, 20, 'all'],
 				fieldLabel: 'Number of farms:',
 				labelWidth: 120,
@@ -830,7 +662,6 @@ Ext.define('Scalr.ui.dashboard.Billing', {
 	extend: 'Ext.form.Panel',
 	alias: 'widget.dashboard.billing',
 	cls: 'scalr-ui-dashboard-widgets-billing',
-	bodyCls: 'x-panel-body-frame',
 	bodyStyle: 'background-color: whiteSmoke; padding: 21px 12px 16px 12px;',
 
 	title: 'Billing',
@@ -887,7 +718,8 @@ Ext.define('Scalr.ui.dashboard.Billing', {
 	}],
 	widgetType: 'nonlocal',
 	updateForm: function(data) {
-		var values = {};
+		var values = {},
+            frm = this.getForm();
 		this.data = data;
 		values['plan'] = data['productName'] + ' ( ' + data['productPrice'] + ' / month ) [<a href = "#/billing/changePlan">Change Plan</a>]';
 
@@ -917,8 +749,8 @@ Ext.define('Scalr.ui.dashboard.Billing', {
 		else
 			values['support'] = 'Not subscribed [<a type="subscribe" class="dashed">Subscribe for $300 / month</a>]';
 
-
-		this.getForm().setValues(values);
+        frm.findField('support').setVisible(data['emergSupport'] == 'included' || data['emergSupport'] == "enabled");
+		frm.setValues(values);
 	},
 	listeners: {
 		boxready: function() {
@@ -1422,26 +1254,12 @@ Ext.define('Scalr.ui.dashboard.Cloudyn', {
 		viewConfig: {
 			emptyText: 'No metrics found',
 			deferEmptyText: false,
-			disableSelection: true,
-			listeners: {
-				render: function() {
-					var comp = this.up('grid').down('#icon');
-					this.doStripeRows = Ext.Function.createSequence(this.doStripeRows, function() {
-						if (this.all.last() && comp.el.down('tr.x-grid-row')) {
-							if (this.all.last().hasCls('x-grid-row-alt')) {
-								comp.el.down('tr.x-grid-row').removeCls('x-grid-row-alt');
-							} else {
-								comp.el.down('tr.x-grid-row').addCls('x-grid-row-alt');
-							}
-						}
-					});
-				}
-			}
+			disableSelection: true
 		},
 		dockedItems: [{
 			xtype: 'component',
 			dock: 'bottom',
-			style: 'line-height: 40px; text-align: center;',
+			style: 'line-height: 40px; text-align: center; background-color: white;',
 			height: 40,
 			itemId: 'icon',
 			html: '&nbsp;'
@@ -1453,7 +1271,7 @@ Ext.define('Scalr.ui.dashboard.Cloudyn', {
 			setup.hide();
 			info.show();
 			if (content.owner) {
-				info.down('#icon').update('<table class="x-grid-table" style="width:100%"><tr class="x-grid-row"><td class="x-grid-cell"><img src="/ui2/images/ui/dashboard/cloudyn_icon.png" style="float:center; vertical-align: middle; padding-right: 10px;"><a target="_blank" style="font-weight: bold;" href="' + content['consoleUrl'] + '">See more details ...</a></td></tr></table>');
+				info.down('#icon').update('<img src="/ui2/images/ui/dashboard/cloudyn_icon.png" style="float:center; vertical-align: middle; padding-right: 10px;"><a target="_blank" style="font-weight: bold;" href="' + content['consoleUrl'] + '">See more details ...</a>');
 				info.down('#icon').show();
 			} else {
 				info.down('#icon').hide();
@@ -1501,13 +1319,4 @@ Ext.define('Scalr.ui.dashboard.Cloudyn', {
 			}
 		});
 	}
-});
-
-
-Ext.define('Scalr.ui.dashboard.Loading', {
-	extend: 'Ext.container.Container',
-	alias: 'widget.dashboard.loading',
-
-	width: '100%',
-	html: '<div align="center" class="scalr-ui-dashboard-body-loading2" style="height: 100px; vertical-align: middle; text-align: center;"><img src="/ui2/images/ui/dashboard/load_widget.gif"/><br/><br/>Loading content...</div>'
 });

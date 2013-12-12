@@ -7,13 +7,12 @@ Scalr.regPage('Scalr.ui.dashboard.view', function (loadParams, moduleParams) {
 		});
 		var widgets = [
 			{name: 'dashboard.announcement', title: 'Announcement', desc: 'Displays last 10 news from The Official Scalr blog'},
-			{name: 'dashboard.uservoice', title: 'Uservoice feedback', desc: 'Displays top 10 of suggestions from our Uservoice'},
 			{name: 'dashboard.lasterrors', title: 'Last errors', desc: 'Displays last 10 errors from system logs'},
 			{name: 'dashboard.usagelaststat', title: 'Usage statistic', desc: 'Displays total spent money for this and last months'},
 			{name: 'dashboard.status', title: 'AWS health status', desc: 'Display most up-to-the-minute information on service availability of Amazon Web Services'}
 		];
 
-		if (moduleParams.flags['cloudynEnabled'] && Scalr.flags['platformEc2Enabled'])
+		if (moduleParams.flags['cloudynEnabled'] && Scalr.isPlatformEnabled('ec2'))
 			widgets.push({
 				name: 'dashboard.cloudyn',
 				title: 'Cloudyn',
@@ -85,8 +84,12 @@ Scalr.regPage('Scalr.ui.dashboard.view', function (loadParams, moduleParams) {
 					},
 					success: function (data) {
 						for (var i in data['updateDashboard']) {
-							if (panel.down('#' + i))
-								panel.down('#' + i).widgetUpdate(data.updateDashboard[i]);
+							if (panel.down('#' + i)) {
+                                if (data.updateDashboard[i]['widgetContent'])
+                                    panel.down('#' + i).widgetUpdate(data.updateDashboard[i]['widgetContent']);
+                                else
+                                    panel.down('#' + i).widgetError(data.updateDashboard[i]['widgetError'] || 'Some error has occurred');
+                            }
 						}
 						this.schedule();
 					},
@@ -108,6 +111,8 @@ Scalr.regPage('Scalr.ui.dashboard.view', function (loadParams, moduleParams) {
 			overflowX: 'hidden'
 		},
 
+        bodyStyle: 'background-color: transparent', // should be padding: 12px, but extjs goes into recursion in 4.2.2
+
 		isSaving: false,
 		savingPanel: 0,
 
@@ -119,6 +124,9 @@ Scalr.regPage('Scalr.ui.dashboard.view', function (loadParams, moduleParams) {
 				panel.newCol(i);
 				if (configuration[i]) {
 					for (var j = 0; j < configuration[i].length; j++) { // all widgets in column
+                        if (! configuration[i][j])
+                            continue;
+
 					    if (configuration[i][j]['name'] == 'dashboard.billing' && !moduleParams.flags['billingEnabled'])
                             continue;
 					
@@ -128,8 +136,13 @@ Scalr.regPage('Scalr.ui.dashboard.view', function (loadParams, moduleParams) {
 								configuration[i][j]['params']
 							)
 						);
-						if (widget.widgetType == 'local' && configuration[i][j]['widgetContent'])
-							widget.widgetUpdate(configuration[i][j]['widgetContent']);
+						if (widget.widgetType == 'local') {
+                            if (configuration[i][j]['widgetContent'])
+                                widget.widgetUpdate(configuration[i][j]['widgetContent']);
+                            else
+                                widget.widgetError(configuration[i][j]['widgetError'] || 'Some error has occurred');
+                        }
+
 					}
 				}
 			}
@@ -202,8 +215,19 @@ Scalr.regPage('Scalr.ui.dashboard.view', function (loadParams, moduleParams) {
 					'</div>', true);
 				this.savingPanel.hide();													/*end*/
 				panel.body.on('mouseover', function(e, el, obj) {
+                    // TODO: move to column's code
+                    var column = e.getTarget('.scalr-ui-dashboard-container');
+                    if (column) {
+                        column = Ext.fly(column).child('span');
+                        if (column) {
+                            column = column.child('div');
+                            if (column)
+                                column = column.dom;
+                        }
+                    }
+
 					if (
-							e.getTarget('.scalr-ui-dashboard-container') == e.target ||
+							column == e.target ||
 							e.getTarget('div.editpanel') == e.target ||
 							e.getTarget('div.remove') == e.target ||
 							e.getTarget('div.add') == e.target ||

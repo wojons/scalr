@@ -1,18 +1,19 @@
 Scalr.regPage('Scalr.ui.core.settings', function (loadParams, moduleParams) {
 	var form = Ext.create('Ext.form.Panel', {
-		bodyCls: 'x-panel-body-frame',
 		width: 800,
 		title: 'Settings',
+        fieldDefaults: {
+            labelWidth: 70
+        },
 		items: [{
 			xtype: 'container',
+            cls: 'x-fieldset-separator-bottom',
 			layout: 'hbox',
 			items: [{
 				xtype: 'fieldset',
 				flex: 1,
+                cls: 'x-fieldset-separator-none',
 				title: 'Profile information',
-				defaults: {
-					labelWidth: 80
-				},
 				items: [{
 					xtype: 'displayfield',
 					name: 'user_email',
@@ -22,38 +23,42 @@ Scalr.regPage('Scalr.ui.core.settings', function (loadParams, moduleParams) {
 					xtype: 'textfield',
 					name: 'user_fullname',
 					fieldLabel: 'Full name',
-					width: 280
-				}]
+					anchor: '100%'
+                }]
 			},{
 				xtype: 'fieldset',
 				flex: 1,
-				title: 'Avatar settings',
-				margin: '0 0 0 12',
+                title: 'Avatar settings',
+                cls: 'x-fieldset-separator-left',
 				items: [{
-					xtype: 'textfield',
+                    xtype: 'image',
+                    style: 'position:absolute;right:32px;top:16px;border-radius:4px',
+                    width: 46,
+                    height: 46,
+                    src: Scalr.utils.getGravatarUrl(moduleParams['gravatar_hash'], 'large')
+                }, {
+                    xtype: 'displayfield',
+                    value: '<a href="http://gravatar.com/" target="blank">Change your avatar at Gravatar.com</a>'
+                }, {
+                    xtype: 'textfield',
 					name: 'gravatar_email',
 					fieldLabel: 'Gravatar email',
 					vtype: 'email',
-					width: 280
-				},{
-					xtype: 'displayfield',
-					itemId: 'gravatar'
+                    labelWidth: 95,
+					anchor: '100%'
 				}]
 			}]
 		}, {
 			xtype: 'fieldset',
-			title: 'RSS feed',
-			defaults: {
-				labelWidth: 80
-			},
+            title: 'RSS feed',
 			items: [{
 				xtype: 'displayfield',
-				fieldCls: 'x-form-field-info',
+				cls: 'x-form-field-info',
 				value: 'Each farm has an events and notifications page. You can get these events outside of Scalr on an RSS reader with the below credentials.'
 			}, {
 				xtype: 'textfield',
 				name: 'rss_login',
-				width: 285,
+				width: 336,
 				fieldLabel: 'Login'
 			}, {
 				xtype: 'fieldcontainer',
@@ -62,12 +67,13 @@ Scalr.regPage('Scalr.ui.core.settings', function (loadParams, moduleParams) {
 				items: [{
 					xtype: 'textfield',
 					name: 'rss_pass',
-					width: 200,
+					width: 261,
 					hideLabel: true
 				}, {
 					xtype: 'button',
 					text: 'Generate',
-					margin: '0 0 0 10',
+                    width: 90,
+					margin: '0 0 0 8',
 					handler: function() {
 						function getRandomNum() {
 							var rndNum = Math.random();
@@ -100,9 +106,6 @@ Scalr.regPage('Scalr.ui.core.settings', function (loadParams, moduleParams) {
 		}, {
 			xtype: 'fieldset',
 			title: 'User interface',
-			defaults: {
-				labelWidth: 80
-			},
 			items: [{
 				xtype: 'combo',
 				fieldLabel: 'Timezone',
@@ -112,19 +115,18 @@ Scalr.regPage('Scalr.ui.core.settings', function (loadParams, moduleParams) {
 				editable: true,
 				name: 'timezone',
 				queryMode: 'local',
-				width: 400,
+				width: 336,
 				anyMatch: true
 			}]
 		}, {
 			xtype: 'container',
 			layout: 'hbox',
+            cls: 'x-fieldset-separator-bottom',
 			items: [{
 				xtype: 'fieldset',
 				title: 'Dashboard',
+                cls: 'x-fieldset-separator-none',
 				flex: 1,
-				defaults: {
-					labelWidth: 80
-				},
 				items: [{
 					xtype: 'buttongroupfield',
 					fieldLabel: 'Columns',
@@ -133,47 +135,62 @@ Scalr.regPage('Scalr.ui.core.settings', function (loadParams, moduleParams) {
 					items: [{
 						text: '1',
 						value: '1',
-						width: 42
+						width: 50
 					}, {
 						text: '2',
 						value: '2',
-						width: 42
+						width: 50
 					}, {
 						text: '3',
 						value: '3',
-						width: 42
+						width: 50
 					}, {
 						text: '4',
 						value: '4',
-						width: 42
+						width: 50
 					}, {
 						text: '5',
 						value: '5',
-						width: 42
+						width: 50
 					}]
 				}]
 			}, {
 				xtype: 'fieldset',
-				title: 'Grids',
+				title: 'Default table length',
 				flex: 1,
-				margin: '0 0 0 12',
-				items: [{
-					xtype: 'combo',
-					anchor: '100%',
-					store: ['auto', 10, 15, 25, 50, 100],
-					valueField: 'id',
-					displayField: 'name',
-					value: Ext.state.Manager.get('grid-ui-page-size', 'auto'),
-					fieldLabel: 'Items per page',
-					queryMode: 'local',
-					editable: false,
-					name: 'items_per_page',
-					submitValue: false,
-					listeners: {
-						change: function(component, newValue) {
-							Ext.state.Manager.set('grid-ui-page-size', newValue);
-						}
-					}
+                cls: 'x-fieldset-separator-left',
+                items: [{
+                    xtype: 'buttongroupfield',
+                    fieldLabel: 'Items per page',
+                    labelWidth: 95,
+                    value: Ext.state.Manager.get('grid-ui-page-size', 'auto'),
+                    items: [{
+                        text: 'Auto',
+                        value: 'auto',
+                        width: 45
+                    }, {
+                        text: '10',
+                        value: 10,
+                        width: 45
+                    }, {
+                        text: '25',
+                        value: 25,
+                        width: 45
+                    }, {
+                        text: '50',
+                        value: 50,
+                        width: 45
+                    }, {
+                        text: '100',
+                        value: 100,
+                        width: 45
+                    }],
+                    submitValue: false,
+                    listeners: {
+                        change: function(component, newValue) {
+                            Ext.state.Manager.set('grid-ui-page-size', newValue);
+                        }
+                    }
 				}]
 			}]
 		}],
@@ -181,7 +198,8 @@ Scalr.regPage('Scalr.ui.core.settings', function (loadParams, moduleParams) {
 		dockedItems: [{
 			xtype: 'container',
 			dock: 'bottom',
-			cls: 'x-docked-bottom-frame',
+			cls: 'x-docked-buttons',
+            style: 'padding-top: 50px',
 			layout: {
 				type: 'hbox',
 				pack: 'center'
@@ -210,7 +228,6 @@ Scalr.regPage('Scalr.ui.core.settings', function (loadParams, moduleParams) {
 				}
 			}, {
 				xtype: 'button',
-				margin: '0 0 0 5',
 				text: 'Cancel',
 				handler: function() {
 					Scalr.event.fireEvent('close');
@@ -220,6 +237,5 @@ Scalr.regPage('Scalr.ui.core.settings', function (loadParams, moduleParams) {
 	});
 
 	form.getForm().setValues(moduleParams);
-	form.down('#gravatar').setValue('<img style="position:absolute;width:23px;height:23px;margin-top:-5px" src="'+Scalr.utils.getGravatarUrl(moduleParams['gravatar_hash'])+'" /><a  style="margin-left:30px" href="http://gravatar.com/" target="blank">Change your avatar at Gravatar.com.</a>')
 	return form;
 });

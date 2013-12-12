@@ -11,6 +11,7 @@ class Scalr_Account_User extends Scalr_Model
 
     const TYPE_SCALR_ADMIN = 'ScalrAdmin';
     const TYPE_ACCOUNT_OWNER = 'AccountOwner';
+    const TYPE_ACCOUNT_ADMIN = 'AccountAdmin';
     const TYPE_TEAM_USER = 'TeamUser';
 
     const SETTING_API_ACCESS_KEY 	= 'api.access_key';
@@ -25,12 +26,15 @@ class Scalr_Account_User extends Scalr_Model
     const SETTING_UI_TIMEZONE = 'ui.timezone';
 
     const SETTING_GRAVATAR_EMAIL = 'gravatar.email';
+    const SETTING_LDAP_EMAIL = 'ldap.email';
 
+    // @deprecated in favor of VAR_SECURITY_IP_WHITELIST
     const SETTING_SECURITY_IP_WHITELIST 	= 'security.ip.whitelist';
     const SETTING_SECURITY_2FA_GGL = 'security.2fa.ggl';
     const SETTING_SECURITY_2FA_GGL_KEY = 'security.2fa.ggl.key';
 
     const VAR_UI_STORAGE = 'ui.storage';
+    const VAR_SECURITY_IP_WHITELIST = 'security.ip.whitelist';
 
     protected $dbPropertyMap = array(
         'id'			=> 'id',
@@ -49,8 +53,8 @@ class Scalr_Account_User extends Scalr_Model
     public
         $status,
         $fullname,
-        $dtcreated,
-        $dtlastlogin,
+        $dtCreated,
+        $dtLastLogin,
         $type,
         $comments,
         $loginattempts;
@@ -63,6 +67,15 @@ class Scalr_Account_User extends Scalr_Model
 
     protected $account;
     protected $permissions;
+    protected $settingsCache = array();
+    protected $varCache = array();
+
+    /**
+     * Misc. cache
+     *
+     * @var array
+     */
+    private $_cache = array();
 
     /**
      *
@@ -75,11 +88,11 @@ class Scalr_Account_User extends Scalr_Model
 
     /**
      *
-     * @return Scalr_Account
+     * @return Scalr_Account_User
      */
     public function loadBySetting($name, $value)
     {
-        $id = $this->db->GetOne("SELECT user_id FROM account_user_settings WHERE name = ? AND value = ?",
+        $id = $this->db->GetOne("SELECT user_id FROM account_user_settings WHERE name = ? AND value = ? LIMIT 1",
             array($name, $value)
         );
         if (!$id)
@@ -88,6 +101,10 @@ class Scalr_Account_User extends Scalr_Model
             return $this->loadById($id);
     }
 
+    /**
+     * @param $accessKey
+     * @return Scalr_Account_User
+     */
     public function loadByApiAccessKey($accessKey)
     {
         return $this->loadBySetting(Scalr_Account_User::SETTING_API_ACCESS_KEY, $accessKey);
@@ -100,11 +117,11 @@ class Scalr_Account_User extends Scalr_Model
     public function loadByEmail($email, $accountId = null)
     {
         if ($accountId)
-            $info = $this->db->GetRow("SELECT * FROM account_users WHERE `email` = ? AND account_id = ?",
+            $info = $this->db->GetRow("SELECT * FROM account_users WHERE `email` = ? AND account_id = ? LIMIT 1",
                 array($email, $accountId)
             );
         else
-            $info = $this->db->GetRow("SELECT * FROM account_users WHERE `email` = ?",
+            $info = $this->db->GetRow("SELECT * FROM account_users WHERE `email` = ? LIMIT 1",
                 array($email)
             );
 
@@ -120,7 +137,7 @@ class Scalr_Account_User extends Scalr_Model
      */
     public function getPermissions()
     {
-        if (! $this->permissions)
+        if (!$this->permissions)
             $this->permissions = new Scalr_Permissions($this);
 
         return $this->permissions;
@@ -153,7 +170,6 @@ class Scalr_Account_User extends Scalr_Model
         parent::delete();
 
         $this->db->Execute('DELETE FROM `account_team_users` WHERE user_id = ?', array($this->id));
-        $this->db->Execute('DELETE FROM `account_user_groups` WHERE user_id = ?', array($this->id));
         $this->db->Execute('DELETE FROM `account_user_settings` WHERE user_id = ?', array($this->id));
     }
 
@@ -209,15 +225,21 @@ class Scalr_Account_User extends Scalr_Model
      * Returns user setting value by name
      *
      * @param string $name
+     * @param bool $ignoreCache
      * @return mixed $value
      */
-    public function getSetting($name)
+    public function getSetting($name, $ignoreCache = false)
     {
-        $r = $this->db->GetOne("SELECT value FROM account_user_settings WHERE user_id=? AND `name`=?",
-            array($this->id, $name)
-        );
+        if (!array_key_exists($name, $this->settingsCache) || $ignoreCache) {
+            $value = $this->db->GetOne("SELECT value FROM account_user_settings WHERE user_id=? AND `name`=? LIMIT 1",
+                array($this->id, $name)
+            );
 
-        return $r == 'false' ? '' : $r;
+            // TODO: fix bug with false returning when empty result
+            $this->settingsCache[$name] = $value == 'false' ? '' : $value;
+        }
+
+        return $this->settingsCache[$name];
     }
 
     /**
@@ -228,24 +250,39 @@ class Scalr_Account_User extends Scalr_Model
      */
     public function setSetting($name, $value)
     {
-        $this->db->Execute("REPLACE INTO account_user_settings SET `name`=?, `value`=?, user_id=?",
-            array($name, $value, $this->id)
-        );
+        //UNIQUE KEY `userid_name` (`user_id`,`name`),
+        $this->db->Execute("
+            INSERT account_user_settings
+            SET `user_id` = ?,
+                `name` = ?,
+                `value` = ?
+            ON DUPLICATE KEY UPDATE
+                `value` = ?
+        ", array(
+            $this->id, $name, $value, $value
+        ));
+
+        $this->settingsCache[$name] = $value;
     }
 
     /**
      * Returns user var value by name
      *
      * @param string $name
+     * @param bool $ignoreCache
      * @return mixed $value
      */
-    public function getVar($name)
+    public function getVar($name, $ignoreCache = false)
     {
-        $r = $this->db->GetOne("SELECT value FROM account_user_vars WHERE user_id=? AND `name`=?",
-            array($this->id, $name)
-        );
+        if (!array_key_exists($name, $this->settingsCache) || $ignoreCache) {
+            $value = $this->db->GetOne("SELECT value FROM account_user_vars WHERE user_id=? AND `name`=? LIMIT 1",
+                array($this->id, $name)
+            );
 
-        return $r == 'false' ? '' : $r;
+            $this->varCache[$name] = $value == 'false' ? '' : $value;
+        }
+
+        return $this->varCache[$name];
     }
 
     /**
@@ -256,9 +293,19 @@ class Scalr_Account_User extends Scalr_Model
      */
     public function setVar($name, $value)
     {
-        $this->db->Execute("REPLACE INTO account_user_vars SET `name`=?, `value`=?, user_id=?",
-            array($name, $value, $this->id)
-        );
+        //UNIQUE KEY `userid_name` (`user_id`,`name`),
+        $this->db->Execute("
+            INSERT account_user_vars
+            SET `user_id`=?,
+                `name`=?,
+                `value`=?
+            ON DUPLICATE KEY UPDATE
+                `value`=?
+        ", array(
+            $this->id, $name, $value, $value
+        ));
+
+        $this->varCache[$name] = $value;
     }
 
     /**
@@ -268,7 +315,7 @@ class Scalr_Account_User extends Scalr_Model
      */
     public function getDashboard($envId)
     {
-        $obj = unserialize($this->db->GetOne("SELECT value FROM account_user_dashboard WHERE `user_id` = ? AND `env_id` = ?",
+        $obj = unserialize($this->db->GetOne("SELECT value FROM account_user_dashboard WHERE `user_id` = ? AND `env_id` = ? LIMIT 1",
             array($this->id, $envId)
         ));
 
@@ -276,6 +323,7 @@ class Scalr_Account_User extends Scalr_Model
             $obj = array('configuration' => array(), 'flags' => array(), 'widgets' => array());
             $this->setDashboard($envId, $obj);
             $obj = $this->getDashboard($envId);
+            $obj['widgets'] = array_values($obj['widgets']); // it should be array, not object
         }
 
         return $obj;
@@ -310,14 +358,21 @@ class Scalr_Account_User extends Scalr_Model
             }
 
             $value['configuration'] = $configuration;
-            $value['widgets'] = array_unique($usedWidgets);
+            $value['widgets'] = array_values(array_unique($usedWidgets));
         } else {
             throw new Scalr_Exception_Core('Invalid configuration for dashboard');
         }
 
-        $this->db->Execute("REPLACE INTO account_user_dashboard SET `value` = ?, `user_id` = ?, `env_id` = ?",
-            array(serialize($value), $this->id, $envId)
-        );
+        $srlvalue = serialize($value);
+        //UNIQUE KEY `user_id` (`user_id`,`env_id`)
+        $this->db->Execute("
+            INSERT account_user_dashboard
+            SET `user_id` = ?, `env_id` = ?, `value` = ?
+            ON DUPLICATE KEY UPDATE
+                `value` = ?
+        ", array(
+            $this->id, $envId, $srlvalue, $srlvalue
+        ));
     }
 
     /**
@@ -333,11 +388,7 @@ class Scalr_Account_User extends Scalr_Model
 
         // we could use maximum only last column, do not create new one
         $columnNumber = $columnNumber >= count($dashboard['configuration']) ? count($dashboard['configuration']) - 1 : $columnNumber;
-        $column = $dashboard['configuration'][$columnNumber];
-        $position = $position > count($column) ? count($column) : $position;
-        $column = array_merge(array_slice($column, 0, $position), array($widgetConfig), array_slice($column, $position));
-        $dashboard['configuration'][$columnNumber] = $column;
-
+        array_splice($dashboard['configuration'][$columnNumber], min($position, count($dashboard['configuration'][$columnNumber])), 0, array($widgetConfig));
         $this->setDashboard($envId, $dashboard);
     }
 
@@ -377,50 +428,127 @@ class Scalr_Account_User extends Scalr_Model
 
     public function isEmailExists($email)
     {
-        return $this->db->getOne('SELECT * FROM `account_users` WHERE email = ? AND account_id = ?', array($email, $this->accountId)) ? true : false;
+        return $this->db->getOne('SELECT * FROM `account_users` WHERE email = ? AND account_id = ? LIMIT 1', array($email, $this->accountId)) ? true : false;
     }
 
     public function getTeams()
     {
-        return $this->db->getAll('SELECT account_teams.id, account_teams.name FROM account_teams JOIN account_team_users
-            ON account_teams.id = account_team_users.team_id WHERE account_team_users.user_id = ?', array($this->id));
+        return $this->db->getAll('
+            SELECT at.id, at.name
+            FROM account_teams at
+            JOIN account_team_users tu ON at.id = tu.team_id
+            WHERE tu.user_id = ?
+        ', array($this->id));
     }
 
-    public function getLdapTeams()
+    /**
+     * Gets roles by specified ID of environment
+     *
+     * @param   int   $envId       The ID of the client's environment
+     * @param   bool  $ingoreCache optional Ignore cache.
+     * @return  \Scalr\Acl\Role\AccountRoleSuperposition Returns the list of the roles of account level by specified environment
+     */
+    public function getAclRolesByEnvironment($envId, $ignoreCache = false)
     {
-        $session = Scalr_Session::getInstance();
-        if ($session->getUserId() != $this->id)
-            throw new Exception('Illegal use. You can\'t get ldap teams for this user.');
+        $cid = 'roles.env';
+        if (!isset($this->_cache[$cid][$envId]) || $ignoreCache) {
+            $this->_cache[$cid][$envId] = \Scalr::getContainer()->acl->getUserRolesByEnvironment($this, $envId, $this->accountId);
+        }
+        return $this->_cache[$cid][$envId];
+    }
 
-        $teams = array();
-        foreach($session->getLdapGroups() as $name) {
-            $teamId = $this->db->GetOne('SELECT id FROM account_teams WHERE name = ? AND account_id = ?', array($name, $this->accountId));
-            if ($teamId)
-                $teams[] = $teamId;
+    /**
+     * Gets roles by specified ID of team
+     *
+     * @param   int                      $teamId The ID of the team
+     * @return  \Scalr\Acl\Role\AccountRoleSuperposition Returns the list of the roles of account level by specified team
+     */
+    public function getAclRolesByTeam($teamId)
+    {
+        return \Scalr::getContainer()->acl->getUserRolesByTeam($this, $teamId, $this->getAccountId());
+    }
+
+    /**
+     * Sets ACL roles to this user
+     *
+     * This method modifies resords of two tables
+     * `account_team_users` and `account_team_user_acls`.
+     *
+     * Attention! It expects full list of the ACL roles relations for user.
+     * All missing relations will be removed.
+     *
+     * @param   array   $data ACL roles array which looks like
+     *                        array(teamId => array(accountRoleId1, accountRoleId2, ...))
+     */
+    public function setAclRoles(array $data = array())
+    {
+        if (empty($this->id)) {
+            throw new \Scalr\Acl\Exception\AclException(
+                "Object hasn't been initialized. Identifier of the user is expected."
+            );
         }
 
-        return $teams;
+        \Scalr::getContainer()->acl->setAllRolesForUser($this->id, $data, $this->getAccountId());
+    }
+
+    /**
+     * Special method for LDAP auth
+     * sync LDAP groups to Scalr groups
+     *
+     * @param $groups
+     */
+    public function applyLdapGroups($groups)
+    {
+        // get current teams
+        $currentTeamIds = array();
+        foreach ($this->getTeams() as $t) {
+            $currentTeamIds[$t['id']] = $t['name'];
+        }
+
+        if (count($groups)) {
+            // create all links between LDAP user and teams ( == LDAP group)
+            $groups[] = $this->getAccountId();
+
+            $teams = $this->db->GetCol('SELECT id FROM account_teams
+            WHERE name IN(' . join(',', array_fill(0, count($groups) - 1, '?')) . ') AND account_id = ?', $groups);
+
+            // team exists in DB, so we can save link
+            foreach ($teams as $id) {
+                $team = new Scalr_Account_Team();
+                $team->loadById($id);
+
+                if (! $team->isTeamUser($this->id))
+                    $team->addUser($this->id);
+
+                unset($currentTeamIds[$id]);
+            }
+        }
+
+        // remove old teams
+        foreach ($currentTeamIds as $id => $name) {
+            $team = new Scalr_Account_Team();
+            $team->loadById($id);
+            $team->removeUser($this->id);
+        }
     }
 
     public function getEnvironments()
     {
-        if ($this->type == self::TYPE_ACCOUNT_OWNER) {
+        if ($this->canManageAcl()) {
             return $this->db->getAll('SELECT id, name FROM client_environments WHERE client_id = ?', array(
                 $this->getAccountId()
             ));
         } else {
-            if ($this->getContainer()->config->get('scalr.auth_mode') == 'ldap') {
-                $teams = $this->getLdapTeams();
-            } else {
-                $teams = array();
-                foreach ($this->getTeams() as $team)
-                    $teams[] = $team['id'];
-            }
+            $teams = array();
+            foreach ($this->getTeams() as $team)
+                $teams[] = $team['id'];
 
             if (count($teams))
-                return $this->db->getAll('SELECT client_environments.id, client_environments.name FROM client_environments
-                    JOIN account_team_envs ON client_environments.id = account_team_envs.env_id WHERE team_id IN (' . implode(',', $teams) . ')
-                    GROUP BY client_environments.id
+                return $this->db->getAll('
+                    SELECT ce.id, ce.name FROM client_environments ce
+                    JOIN account_team_envs te ON ce.id = te.env_id
+                    WHERE te.team_id IN (' . implode(',', $teams) . ')
+                    GROUP BY ce.id
                 ');
         }
 
@@ -470,52 +598,56 @@ class Scalr_Account_User extends Scalr_Model
         return $environment;
     }
 
-    public function getGroupPermissions($envId)
-    {
-        $result = array();
-        $permissions = $this->db->getAll(
-            'SELECT controller, permissions FROM account_group_permissions
-            JOIN account_groups ON account_group_permissions.group_id = account_groups.id WHERE account_groups.is_active = 1 AND team_id IN(
-                SELECT account_team_users.team_id FROM account_team_users JOIN account_team_envs
-                ON account_team_users.team_id = account_team_envs.team_id WHERE user_id = ? AND env_id = ?
-            ) AND account_groups.id IN(
-                SELECT group_id FROM account_user_groups WHERE user_id = ?
-            )',
-            array($this->id, $envId, $this->id)
-        );
-
-        foreach ($permissions as $perm) {
-            $c = $perm['controller'];
-            if (isset($result[$c])) {
-                if (in_array('FULL', $result[$c]))
-                    continue;
-                elseif ($perm['permissions'] == 'FULL')
-                    $result[$c] = array('FULL');
-                else
-                    $result[$c] = array_unique(array_merge($result[$c], explode(',', $perm['permissions'])));
-
-            } else
-                $result[$c] = explode(',', $perm['permissions']);
-        }
-
-        return $result;
-    }
-
+    /**
+     * Checks wheter this user is considered to be the team owner for the specified team.
+     *
+     * @param   int     $teamId  The identifier of the team.
+     * @return  boolean Returns true if the user is considered to be the team owner for the specified team.
+     * @deprecated This function has been deprecated since new ACL
+     */
     public function isTeamOwner($teamId = null)
     {
-        if ($teamId)
-            return $this->db->getOne('SELECT permissions FROM `account_team_users` WHERE user_id = ? AND team_id = ? AND permissions = "owner"', array($this->id, $teamId)) == Scalr_Account_Team::PERMISSIONS_OWNER ? true : false;
-        else
-            return $this->db->getOne('SELECT permissions FROM `account_team_users` WHERE user_id = ? AND permissions = "owner"', array($this->id)) == Scalr_Account_Team::PERMISSIONS_OWNER ? true : false;
+        $ret = false;
+        if ($teamId) {
+            try {
+                $team = Scalr_Account_Team::init();
+                $team->loadById($teamId);
+                $ret = $team->isTeamOwner($this->id);
+            } catch (\Exception $e) {
+            }
+        } else {
+            $ret = $this->canManageAcl();
+        }
+
+        return $ret;
     }
 
-    public function isTeamUserInEnvironment($envId, $permissions)
+    /**
+     * Checks if the user is both AccountAdmin and member of the
+     * specified environment
+     *
+     * @param   int      $envId  The identifier of the environment
+     * @return  boolean
+     * @deprecated This function has been deprecated since new ACL
+     */
+    public function isTeamOwnerInEnvironment($envId)
     {
-        $all = $this->db->getCol('SELECT permissions FROM account_team_users
-            JOIN account_team_envs ON account_team_users.team_id = account_team_envs.team_id
-            WHERE user_id = ? AND env_id = ?', array($this->id, $envId));
+        if (!$this->isAccountAdmin()) return false;
 
-        return in_array($permissions, $all) ? true : false;
+        $ret = $this->db->GetOne("
+            SELECT 1
+            FROM account_team_users tu
+            JOIN account_team_envs te ON te.team_id = tu.team_id
+            JOIN account_teams t ON t.id = tu.team_id
+            JOIN client_environments e ON e.id = te.env_id
+            WHERE tu.user_id = ? AND e.client_id = ?
+            AND t.account_id = ? AND te.env_id = ?
+            LIMIT 1
+        ", array(
+            $this->id, $this->accountId, $this->accountId, $envId
+        ));
+
+        return (bool) $ret;
     }
 
     public function getUserInfo()
@@ -534,15 +666,85 @@ class Scalr_Account_User extends Scalr_Model
         $info['is2FaEnabled'] = $this->getSetting(Scalr_Account_User::SETTING_SECURITY_2FA_GGL) == '1' ? true : false;
         $info['password'] = $this->password ? true : false;
 
-        switch ($info['type']) {
-            case Scalr_Account_User::TYPE_ACCOUNT_OWNER:
-                $info['type'] = 'Account Owner';
-                break;
-            default:
-                $info['type'] = $this->isTeamOwner() ? 'Team Owner' : 'Team User';
-                break;
-        }
         return $info;
 
+    }
+
+    /**
+     * Checks whether the user is allowed to manage ACL
+     *
+     * @return  boolean Returns true if user is allowed to manage ACL
+     */
+    public function canManageAcl()
+    {
+        return $this->getType() == Scalr_Account_User::TYPE_ACCOUNT_OWNER ||
+               $this->getType() == Scalr_Account_User::TYPE_ACCOUNT_ADMIN;
+    }
+
+    /**
+     * Checks if the user is account owher
+     *
+     * @return  boolean Returns true if user is account owner.
+     */
+    public function isAccountOwner()
+    {
+        return $this->getType() == Scalr_Account_User::TYPE_ACCOUNT_OWNER;
+    }
+
+    /**
+     * Checks if the user is account admin
+     *
+     * @return  boolean Returns true if user is account admin
+     */
+    public function isAccountAdmin()
+    {
+        return $this->getType() == Scalr_Account_User::TYPE_ACCOUNT_ADMIN;
+    }
+
+    /**
+     * Checks if the user is Scalr admin
+     *
+     * @return  boolean Returns true if user is Scalr Admin
+     */
+    public function isScalrAdmin()
+    {
+        return $this->getType() == Scalr_Account_User::TYPE_SCALR_ADMIN;
+    }
+
+    /**
+     * Checks if the user is team user
+     *
+     * @return  boolean  Returns true if user is team user
+     */
+    public function isTeamUser()
+    {
+        return $this->getType() == Scalr_Account_User::TYPE_TEAM_USER;
+    }
+
+    /**
+     * Checks whether the user is allowed to remove specified user
+     *
+     * @param   \Scalr_Account_User $user The user to remove
+     * @return  boolean   Returns true if the user is allowed to remove specified user
+     */
+    public function canRemoveUser($user)
+    {
+        return !$this->isTeamUser() &&
+               ($user->getAccountId() == $this->getAccountId()) &&
+               !$user->isAccountOwner() &&
+               ($this->getId() != $user->getId());
+    }
+
+    /**
+     * Checks whether the user is allowed to edit specified user
+     *
+     * @param   \Scalr_Account_User  $user The user to edit
+     * @return  boolean              Returns true if the user is allowed to edit specified user
+     */
+    public function canEditUser($user)
+    {
+        return !$this->isTeamUser() &&
+               ($user->getAccountId() == $this->getAccountId()) &&
+               (!$user->isAccountOwner() || $this->getId() == $user->getId());
     }
 }

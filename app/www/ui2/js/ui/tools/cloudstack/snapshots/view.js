@@ -41,11 +41,11 @@ Scalr.regPage('Scalr.ui.tools.cloudstack.snapshots.view', function (loadParams, 
 
 		columns: [
 			{ header: "ID", width: 80, dataIndex: 'snapshotId', sortable: true },
-			{ header: "Type", width: 150, dataIndex: 'type', sortable: true},
+			{ header: "Type", flex: 1, dataIndex: 'type', sortable: true},
 			{ header: "Volume ID", width: 90, dataIndex: 'volumeId', sortable: true },
 			{ header: "Volume type", width: 180, dataIndex: 'volumeType', sortable: true },
-			{ header: "Status", width: 180, dataIndex: 'state', sortable: true },
-			{ header: "Created at", width: 180, dataIndex: 'createdAt', sortable: true },
+			{ header: "Status", flex: 1, dataIndex: 'state', sortable: true },
+			{ header: "Created at", flex: 1, dataIndex: 'createdAt', sortable: true },
 			{
 				xtype: 'optionscolumn',
 				getOptionVisibility: function (item, record) {

@@ -3,7 +3,6 @@ Scalr.regPage('Scalr.ui.servers.createsnapshot', function (loadParams, modulePar
 		scalrOptions: {
 			'modal': true
 		},
-		bodyCls: 'x-panel-body-frame',
 		width: 900,
 		title: 'Create new role',
 		fieldDefaults: {
@@ -12,7 +11,7 @@ Scalr.regPage('Scalr.ui.servers.createsnapshot', function (loadParams, modulePar
 
 		items: [{
 			xtype: 'displayfield',
-			fieldCls: 'x-form-field-warning',
+			cls: 'x-form-field-warning',
 			value: moduleParams['showWarningMessage'] || '',
 			hidden: ! moduleParams['showWarningMessage']
 		}, {
@@ -108,7 +107,7 @@ Scalr.regPage('Scalr.ui.servers.createsnapshot', function (loadParams, modulePar
 		dockedItems: [{
 			xtype: 'container',
 			dock: 'bottom',
-			cls: 'x-docked-bottom-frame',
+			cls: 'x-docked-buttons',
 			layout: {
 				type: 'hbox',
 				pack: 'center'
@@ -130,7 +129,6 @@ Scalr.regPage('Scalr.ui.servers.createsnapshot', function (loadParams, modulePar
 				}
 			}, {
 				xtype: 'button',
-				margin: '0 0 0 5',
 				text: 'Cancel',
 				handler: function() {
 					Scalr.event.fireEvent('close');

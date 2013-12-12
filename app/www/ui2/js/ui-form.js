@@ -1,5 +1,5 @@
 Ext.define('Scalr.ui.FormFilterField', {
-	extend:'Ext.form.field.Picker',
+	extend: 'Ext.form.field.Picker',
 	alias: 'widget.filterfield',
 
 	hideTrigger: true,
@@ -9,31 +9,33 @@ Ext.define('Scalr.ui.FormFilterField', {
 	hideSearchButton: false,
 	cls: 'x-filterfield',
     filterId: 'filterfield',
-    
+    width: 240, //fast solution: missing width cause overlapping with the next control of the toolbar
+
 	initComponent: function() {
 		var me = this;
-		this.callParent(arguments);
+		me.callParent(arguments);
 
-		if (! this.form) {
-			this.hideTriggerButton = true;
+		if (! me.form) {
+			me.hideTriggerButton = true;
 		} else {
-			this.on({
+			me.on({
 				expand: function() {
 					var picker = this.getPicker(), values = this.getParseValue();
 					picker.getForm().reset();
 					picker.getForm().setValues(values);
-					this.triggerButton.addCls('x-filterfield-trigger-pressed');
+					this.triggerButton.addCls('x-btn-default-small-pressed');
 				},
 				collapse: function() {
-					var picker = this.getPicker(), values = this.getParseValue();
+					var picker = this.getPicker(), values = this.getParseValue(true);
 					Ext.Object.merge(values, picker.getForm().getValues());
 					this.setParseValue(values);
-					this.triggerButton.removeCls('x-filterfield-trigger-pressed');
+					this.triggerButton.removeCls('x-btn-default-small-pressed');
 				}
 			});
 		}
 
-		if (this.form && this.form.items) {
+		// in createPicker we re-enter list of params, find better solution
+        if (this.form && this.form.items) {
 			Ext.each(this.form.items, function(item) {
 				if (item.name)
 					me.separatedParams.push(item.name);
@@ -53,6 +55,7 @@ Ext.define('Scalr.ui.FormFilterField', {
 		}
 
 		if (Ext.isFunction(this.handler)) {
+            // TODO: remove or make adjustable
 			this.on('change', this.handler, this, { buffer: 300 });
 		}
 	},
@@ -60,6 +63,7 @@ Ext.define('Scalr.ui.FormFilterField', {
 	clearFilter: function() {
 		this.collapse();
 		this.reset();
+        this.applyFilter(this, this.getValue());
 		if (! this.hideSearchButton)
 			this.storeHandler();
 		this.focus();
@@ -91,7 +95,7 @@ Ext.define('Scalr.ui.FormFilterField', {
 					}
 				}
 				return result;
-			}
+			};
 
 			if (value != '') {
 				filters.push({
@@ -110,9 +114,10 @@ Ext.define('Scalr.ui.FormFilterField', {
 
 		this.clearButton = this.bodyEl.down('tr').createChild({
 			tag: 'td',
-			width: 22,
+			width: 26,
 			html: '<div class="x-filterfield-reset"></div>'
 		});
+        this.clearButton.setVisibilityMode(Ext.dom.AbstractElement.DISPLAY);
 		this.clearButton[ this.getValue() != '' ? 'show' : 'hide' ]();
 		this.applyFilter(this, this.getValue());
 		this.clearButton.on('click', this.clearFilter, this);
@@ -128,9 +133,10 @@ Ext.define('Scalr.ui.FormFilterField', {
 		if (! this.hideTriggerButton) {
 			this.triggerButton = this.bodyEl.down('tr').createChild({
 				tag: 'td',
-				width: 29,
-				html: '<div class="x-filterfield-trigger"><div class="x-filterfield-trigger-inner"></div></div>'
+				width: 32,
+				html: '<div class="x-filterfield-trigger x-btn-default-small"><div class="x-filterfield-trigger-inner"></div></div>'
 			}).down('div');
+            this.triggerButton.addClsOnOver('x-btn-default-small-over');
 			this.triggerButton.on('click', this.onTriggerClick, this);
 
 			if (this.hideSearchButton) {
@@ -141,9 +147,11 @@ Ext.define('Scalr.ui.FormFilterField', {
 		if (! this.hideSearchButton) {
 			this.searchButton = this.bodyEl.up('tr').createChild({
 				tag: 'td',
-				width: 44,
-				html: '<div class="x-filterfield-btn"><div class="x-filterfield-btn-inner"></div></div>'
+				width: 42,
+				html: '<div class="x-filterfield-btn x-btn-default-small"><div class="x-filterfield-btn-inner"></div></div>'
 			}).down('div');
+            this.searchButton.addClsOnOver('x-btn-default-small-over');
+            this.searchButton.addClsOnClick('x-btn-default-small-pressed');
 			this.searchButton.on('click', this.storeHandler, this);
 			this.on('specialkey', function(f, e) {
 				if(e.getKey() == e.ENTER){
@@ -161,10 +169,13 @@ Ext.define('Scalr.ui.FormFilterField', {
 	createPicker: function() {
 		var me = this,
 			formDefaults = {
-				style: 'background:#F0F1F4; border-radius: 3px; box-shadow: 0 1px 3px #708098; margin-top:1px',
+                // TODO: move to class, remove bodyCls
+				style: 'margin-top:1px',
+                cls: 'x-panel-shadow',
 				fieldDefaults: {
 					anchor: '100%'
 				},
+                bodyCls: 'x-fieldset-separator-none',
 				focusOnToFront: false,
 				padding: 12,
 				pickerField: me,
@@ -173,41 +184,17 @@ Ext.define('Scalr.ui.FormFilterField', {
 				ownerCt: this.ownerCt
 			};
 
-		/*if (!this.form.dockedItems) {
-			this.form.dockedItems = {
-				xtype: 'container',
-				layout: {
-					type: 'hbox',
-					pack: 'left'
-				},
-				dock: 'bottom',
-				items: [{
-					xtype: 'button',
-					text: '<img src="/ui2/images/icons/search_icon_13x13.png">',
-					handler: function() {
-						me.focus();
-						me.collapse();
-						me.storeHandler();
-					}
-				}]
-			}
-		}*/
-		/*if (this.form.items) {
-		 this.form.items.unshift({
-		 xtype: 'textfield',
-		 name: 'keywords',
-		 fieldLabel: 'Has words',
-		 labelAlign: 'top'
-		 });
-		 }*/
 		var form = Ext.create('Ext.form.Panel', Ext.apply(formDefaults, this.form));
-		form.getForm().getFields().each(function(){
-			if (this.xtype == 'combo') {
-				this.on('expand', function(){
-					this.picker.el.on('mousedown', function(e){
-						me.keepVisible = true;
-					});
-				}, this, {single: true})
+        form.keepVisibleEls = [];
+        me.separatedParams = []; // re-fill because of nested elements in form
+		form.getForm().getFields().each(function() {
+            if (this.name)
+                me.separatedParams.push(this.name);
+
+			if (this instanceof Ext.form.field.Picker) {
+                this.on('expand', function(c) {
+                    this.keepVisibleEls.push(c.getPicker().el);
+                }, form, { single: true });
 			} else if (this.xtype == 'textfield') {
 				this.on('specialkey', function(f, e) {
 					if(e.getKey() == e.ENTER){
@@ -217,19 +204,34 @@ Ext.define('Scalr.ui.FormFilterField', {
 					}
 				});
 			}
-		})
+		});
 		return form;
 	},
 
-	getParseValue: function() {
-		var v = this.getValue(), res = {};
+	getParseValue: function(onlyQuery) {
+		var v = this.getValue(), res = {}, i, j, s, ss, sj;
 		if (this.separatedParams.length) {
-			var params = v.trim().split(' '), paramsQuery = [], paramsSeparated = {};
-			for (var i = 0; i < params.length; i++) {
+			var pars = v.trim().split('('), params = [], paramsQuery = [], paramsSeparated = {};
+            for (i = 0; i < pars.length; i++) {
+                s = pars[i].trim();
+                if (s) {
+                    ss = s.split(')');
+                    for (j = 0; j < ss.length; j++) {
+                        sj = ss[j].trim();
+                        if (sj)
+                            params.push(sj);
+                    }
+                }
+            }
+
+			for (i = 0; i < params.length; i++) {
 				var paramsSplited = params[i].trim().split(':');
 				if (paramsSplited.length == 1) {
 					paramsQuery.push(params[i]);
 				} else {
+                    if (paramsSplited.length > 2)
+                        paramsSplited[1] = paramsSplited.slice(1).join(':');
+
 					if (this.separatedParams.indexOf(paramsSplited[0]) != -1)
 						paramsSeparated[paramsSplited[0]] = paramsSplited[1];
 					else
@@ -238,7 +240,8 @@ Ext.define('Scalr.ui.FormFilterField', {
 			}
 
 			res['query'] = paramsQuery.join(' ');
-			Ext.Object.merge(res, paramsSeparated);
+            if (! onlyQuery)
+			    Ext.Object.merge(res, paramsSeparated);
 		} else {
 			res['query'] = v;
 		}
@@ -251,19 +254,37 @@ Ext.define('Scalr.ui.FormFilterField', {
 		delete params['query'];
 		for (var i in params) {
 			if (params[i])
-				s += ' ' + i + ':' + params[i];
+				s += ' (' + i + ':' + params[i] + ')';
 		}
 
-		this.setValue(s);
+		this.setValue(s.trim());
 	},
 
-	collapseIf: function(e) {
+	isElNested: function(e) {
+        var flag = false, i;
+        for (i = 0; i < this.picker.keepVisibleEls.length; i++)
+            flag = flag || e.within(this.picker.keepVisibleEls[i], false, true);
+
+        return flag;
+    },
+
+    collapseIf: function(e) {
 		var me = this;
-		if (!me.keepVisible && !me.isDestroyed && !e.within(me.bodyEl, false, true) && !e.within(me.picker.el, false, true) && !me.isEventWithinPickerLoadMask(e)) {
+
+		if (!me.isElNested(e) && !me.isDestroyed && !e.within(me.bodyEl, false, true) && !e.within(me.picker.el, false, true) && !me.isEventWithinPickerLoadMask(e)) {
 			me.collapse();
 		}
-		me.keepVisible = false;
 	},
+
+    triggerBlur: function(e) {
+        var picker = this.picker;
+
+        Ext.form.field.Picker.superclass.triggerBlur.apply(this, arguments);
+
+        if (picker && picker.isVisible() && !this.isElNested(e)) { // exclude nested picker elements
+            picker.hide();
+        }
+    },
 
 	storeHandler: function() {
 		this.clearButton[this.getValue() != '' ? 'show' : 'hide' ]();
@@ -275,7 +296,7 @@ Ext.define('Scalr.ui.FormFilterField', {
 		Ext.apply(this.store.proxy.extraParams, this.getParseValue());
 		this.store.load();
 	},
-    
+
     bindStore: function(store) {
         this.store = store;
         this.applyFilter(this, this.getValue());
@@ -285,14 +306,14 @@ Ext.define('Scalr.ui.FormFilterField', {
 Ext.define('Scalr.ui.FormFieldButtonGroup', {
 	extend: 'Ext.form.FieldContainer',
 	alias: 'widget.buttongroupfield',
-	
+
 	mixins: {
 		field: 'Ext.form.field.Field'
 	},
-	
-	baseCls: 'x-container x-form-buttongroupfield',
+	baseCls: 'x-form-buttongroupfield',
 	allowBlank: false,
-	
+    readOnly: false,
+
 	initComponent: function() {
 		var me = this, defaults;
 		defaults = {
@@ -301,6 +322,7 @@ Ext.define('Scalr.ui.FormFieldButtonGroup', {
 			//toggleGroup: me.getInputId(),
 			allowDepress: me.allowBlank,
 			scope: me,
+            disabled: me.readOnly,
 			doToggle: function(){
 				/* Changed */
 				if (this.enableToggle && this.allowDepress !== false || !this.pressed && this.ownerCt.fireEvent('beforetoggle', this, this.value) !== false) {
@@ -323,8 +345,9 @@ Ext.define('Scalr.ui.FormFieldButtonGroup', {
 		};
 		me.defaults = me.initialConfig.defaults ? Ext.clone(me.initialConfig.defaults) : {};
 		Ext.applyIf(me.defaults, defaults);
-		
+
 		me.callParent();
+        me.addCls(me.baseCls);
 		me.initField();
 		if (!me.name) {
 			me.name = me.getInputId();
@@ -343,7 +366,7 @@ Ext.define('Scalr.ui.FormFieldButtonGroup', {
 		me.setRawValue(value);
 		return me.mixins.field.setValue.call(me, value);
 	},
-	
+
 	getRawValue: function() {
 		var me = this, v, b;
 		me.items.each(function(){
@@ -351,7 +374,7 @@ Ext.define('Scalr.ui.FormFieldButtonGroup', {
                 b = this;
 			}
 		});
-        
+
 		if (b) {
 			v = b.value;
 			me.rawValue = v;
@@ -360,48 +383,24 @@ Ext.define('Scalr.ui.FormFieldButtonGroup', {
 		}
 		return v;
 	},
-	
+
 	setRawValue: function(value) {
 		var me = this;
 		me.rawValue = value;
 		me.items.each(function(){
 			if (me.rendered) {
 				this.toggle(this.value == value, this.value != value);
-			} else if (this.value == value){
-				this.pressed = true;
+			} else {
+				this.pressed = this.value == value;
 			}
 		});
 		return value;
 	},
-	
-	onAdd: function(item, pos) {
-	   var me = this;
-	   me.setFirstLastCls();
-	   me.callParent();
-	},
 
-	onRemove: function(item) {
-	   var me = this;
-	   me.setFirstLastCls();
-	   me.callParent();
-	},
-
-	setFirstLastCls: function() {
-		this.items.each(function(item, index, len){
-			item.removeCls('x-btn-default-small-combo-first x-btn-default-small-combo-last');
-			if (index == 0) {
-				item.addCls('x-btn-default-small-combo-first');
-			}
-			if (index + 1 == len) {
-				item.addCls('x-btn-default-small-combo-last');
-			}
-		});
-	},
-	
 	getInputId: function() {
 		return this.inputId || (this.inputId = this.id + '-inputEl');
 	},
-	
+
     setReadOnly: function(readOnly) {
         var me = this;
         readOnly = !!readOnly;
@@ -416,633 +415,28 @@ Ext.define('Scalr.ui.FormFieldButtonGroup', {
 
 });
 
-Ext.define('Scalr.ui.FormCustomButton', {
-	alias: 'widget.btn',
-	extend: 'Ext.Component',
+Ext.define('Scalr.ui.FormButtonField', {
+    alias: 'widget.buttonfield',
+    extend: 'Ext.button.Button',
 
-	hidden: false,
-	disabled: false,
-	pressed: false,
-	enableToggle: false,
-	maskOnDisable: false,
-
-	childEls: [ 'btnEl', 'btnTextEl', 'iconEl' ],
-
-	baseCls: 'x-button-text',
-	overCls: 'over',
-	pressedCls: 'pressed',
-	disabledCls: 'disabled',
-	expandBaseCls: true,
-	text: '',
-	type: 'base',
-	tooltipType: 'qtip',
-
-    menuAlign: 'tl-bl?',
-    menuActiveCls: 'menu-active',
-    arrowAlign: 'right',
-    arrowCls: 'arrow',
-    split: false,
-
-	renderTpl: '<div class="x-btn-inner {innerCls}" id="{id}-btnEl"><div class="x-button-text-wrap" id="{id}-btnTextEl">{text}</div></div>',
-
-	initComponent: function() {
-		var me = this;
-
-		me.callParent(arguments);
-		me.addEvents('click', 'toggle');
-
-        if (me.menu) {
-            me.split = true;
-            me.menu = Ext.menu.Manager.get(me.menu);
-            me.menu.ownerButton = me;
-        }
-
-		if (Ext.isString(me.toggleGroup)) {
-			me.enableToggle = true;
-		}
-
-		if (! me.baseCls) {
-			me.baseCls = 'x-btn-' + me.type;
-		}
-
-		if (me.expandBaseCls) {
-			me.overCls = me.baseCls + '-' + me.overCls;
-			me.pressedCls = me.baseCls + '-' + me.pressedCls;
-			me.disabledCls = me.baseCls + '-' + me.disabledCls;
-		}
-        
-		me.renderData['id'] = me.getId();
-		me.renderData['disabled'] = me.disabled;
-		me.renderData['text'] = me.text;
-        me.renderData['innerCls'] = me.innerCls || '';
-	},
-
-	onRender: function () {
-		var me = this;
-
-		me.doc = Ext.getDoc();
-		me.callParent(arguments);
-
-		if (me.el) {
-			me.mon(me.el, {
-				click: me.onClick,
-				mouseup: me.onMouseUp,
-				mousedown: me.onMouseDown,
-				scope: me
-			});
-
-			me.mon()
-		}
-
-		if (me.pressed)
-			me.addCls(me.pressedCls);
-
-		Ext.ButtonToggleManager.register(me);
-		
-        if (me.tooltip) {
-            me.setTooltip(me.tooltip, true);
-        }
-        
-        if (me.menu) {
-            var btnListeners = {
-                scope: me,
-                mouseover: me.onMouseOver,
-                mouseout: me.onMouseOut,
-                mousedown: me.onMouseDown
-            };
-            if (me.split) {
-                btnListeners.mousemove = me.onMouseMove;
-            }
-            me.mon(me.el, btnListeners);
-            
-            me.mon(me.menu, {
-                scope: me,
-                show: me.onMenuShow,
-                hide: me.onMenuHide
-            });
-
-            me.keyMap = new Ext.util.KeyMap({
-                target: me.el,
-                key: Ext.EventObject.DOWN,
-                handler: me.onDownKey,
-                scope: me
-            });
-        }
-        
-        me.el.unselectable();
-		
-	},
-
-	// @private
-	onMouseDown: function(e) {
-		var me = this;
-		if (!me.disabled && e.button === 0) {
-            if (me.disableMouseDownPressed !== true) {
-                me.addCls(me.pressedCls);
-            }
-			me.doc.on('mouseup', me.onMouseUp, me);
-		}
-	},
-	// @private
-	onMouseUp: function(e) {
-		var me = this;
-		if (e.button === 0) {
-			if (!me.pressed) {
-				me.removeCls(me.pressedCls);
-			}
-			me.doc.un('mouseup', me.onMouseUp, me);
-		}
-	},
-
-	onDestroy: function() {
-		var me = this;
-		if (me.rendered) {
-			Ext.ButtonToggleManager.unregister(me);
-			me.clearTip();
-		}
-		me.callParent();
-	},
-
-	toggle: function(state, suppressEvent) {
-		var me = this;
-		state = state === undefined ? !me.pressed : !!state;
-		if (state !== me.pressed) {
-			if (me.rendered) {
-				me[state ? 'addCls': 'removeCls'](me.pressedCls);
-			}
-			me.pressed = state;
-			if (!suppressEvent) {
-				me.fireEvent('toggle', me, state);
-				Ext.callback(me.toggleHandler, me.scope || me, [me, state]);
-			}
-		}
-		return me;
-	},
-
-	onClick: function(e) {
-		var me = this;
-
-		if (! me.disabled) {
-			me.doToggle();
-            me.maybeShowMenu();
-			me.fireHandler(e);
-		}
-	},
-
-	fireHandler: function(e){
-		var me = this,
-			handler = me.handler;
-
-		me.fireEvent('click', me, e);
-		if (handler) {
-			handler.call(me.scope || me, me, e);
-		}
-	},
-
-	doToggle: function(){
-		var me = this;
-		if (me.enableToggle && (me.allowDepress !== false || !me.pressed)) {
-			me.toggle();
-		}
-	},
-	
-	setTooltip: function(tooltip, initial) {
-		var me = this;
-
-		if (me.rendered) {
-			if (!initial) {
-				me.clearTip();
-			}
-			if (Ext.isObject(tooltip)) {
-				Ext.tip.QuickTipManager.register(Ext.apply({
-					target: me.btnEl.id
-				},
-				tooltip));
-				me.tooltip = tooltip;
-			} else {
-				me.btnEl.dom.setAttribute(me.getTipAttr(), tooltip);
-			}
-		} else {
-			me.tooltip = tooltip;
-		}
-		return me;
-	},
-	
-	getTipAttr: function(){
-		return this.tooltipType == 'qtip' ? 'data-qtip' : 'title';
-	},
-	
-    clearTip: function() {
-        if (Ext.isObject(this.tooltip)) {
-            Ext.tip.QuickTipManager.unregister(this.btnEl);
-        }
+    mixins: {
+        field: 'Ext.form.field.Field'
     },
-    
-    setText: function(text) {
-        var me = this;
-        me.text = text;
-        if (me.rendered) {
-            me.btnTextEl.update(text || '&#160;');
-            me.updateLayout();
-        }
-        return me;
-    },
-    
-    //all methods below are button menu related
-    onMouseOver: function(e) {
-        var me = this;
-        if (!me.disabled && !e.within(me.el, true, true)) {
-            me.onMouseEnter(e);
-        }
-    },
-
-    onMouseOut: function(e) {
-        var me = this;
-        if (!e.within(me.el, true, true)) {
-            if (me.overMenuTrigger) {
-                me.onMenuTriggerOut(e);
-            }
-            me.onMouseLeave(e);
-        }
-    },
-    
-    onMouseEnter: function(e) {
-        var me = this;
-        me.addClsWithUI(me.overCls);
-        me.fireEvent('mouseover', me, e);
-    },
-
-    onMouseLeave: function(e) {
-        var me = this;
-        me.removeClsWithUI(me.overCls);
-        me.fireEvent('mouseout', me, e);
-    },
-
-    getRefItems: function(deep){
-        var menu = this.menu,
-            items;
-        
-        if (menu) {
-            items = menu.getRefItems(deep);
-            items.unshift(menu);
-        }
-        return items || [];
-    },
-    
-    beforeDestroy: function() {
-        var me = this;
-        if (me.menu && me.destroyMenu !== false) {
-            Ext.destroy(me.menu);
-        }
-        me.callParent();
-    },
-    
-    maybeShowMenu: function(){
-        var me = this;
-        if (me.menu && !me.hasVisibleMenu() && !me.ignoreNextClick) {
-            me.showMenu();
-        }
-    },
-
-    showMenu: function() {
-        var me = this;
-        if (me.rendered && me.menu) {
-            if (me.tooltip && me.getTipAttr() != 'title') {
-                Ext.tip.QuickTipManager.getQuickTip().cancelShow(me.btnEl);
-            }
-            if (me.menu.isVisible()) {
-                me.menu.hide();
-            }
-
-            me.menu.showBy(me.el, me.menuAlign, ((!Ext.isStrict && Ext.isIE) || Ext.isIE6) ? [-2, -2] : undefined);
-        }
-        return me;
-    },
-
-    hideMenu: function() {
-        if (this.hasVisibleMenu()) {
-            this.menu.hide();
-        }
-        return this;
-    },
-
-    hasVisibleMenu: function() {
-        var menu = this.menu;
-        return menu && menu.rendered && menu.isVisible();
-    },
-    
-    onMenuShow: function(e) {
-        var me = this;
-        me.ignoreNextClick = 0;
-        me.addClsWithUI(me.menuActiveCls);
-        me.fireEvent('menushow', me, me.menu);
-    },
-
-    onMenuHide: function(e) {
-        var me = this;
-        me.removeClsWithUI(me.menuActiveCls);
-        me.ignoreNextClick = Ext.defer(me.restoreClick, 250, me);
-        me.fireEvent('menuhide', me, me.menu);
-    },
-    
-    onMouseMove: function(e) {
-        var me = this,
-            el = me.el,
-            over = me.overMenuTrigger,
-            overlap, btnSize;
-
-        if (me.split) {
-            if (me.arrowAlign === 'right') {
-                overlap = e.getX() - el.getX();
-                btnSize = el.getWidth();
-            } else {
-                overlap = e.getY() - el.getY();
-                btnSize = el.getHeight();
-            }
-
-            if (overlap > (btnSize - me.getTriggerSize())) {
-                if (!over) {
-                    me.onMenuTriggerOver(e);
-                }
-            } else {
-                if (over) {
-                    me.onMenuTriggerOut(e);
-                }
-            }
-        }
-    },
-
-    getTriggerSize: function() {
-        var me = this,
-            size = me.triggerSize,
-            side, sideFirstLetter, undef;
-
-        if (size === undef) {
-            side = me.arrowAlign;
-            sideFirstLetter = side.charAt(0);
-            size = me.triggerSize = me.el.getFrameWidth(sideFirstLetter) + me.btnEl.getFrameWidth(sideFirstLetter) + me.frameSize[side];
-        }
-        return size;
-    },
-    
-    onMenuTriggerOver: function(e) {
-        var me = this;
-        me.overMenuTrigger = true;
-        me.fireEvent('menutriggerover', me, me.menu, e);
-    },
-
-    onMenuTriggerOut: function(e) {
-        var me = this;
-        delete me.overMenuTrigger;
-        me.fireEvent('menutriggerout', me, me.menu, e);
-    },
-    
-    restoreClick: function() {
-        this.ignoreNextClick = 0;
-    },
-    
-    onDownKey: function() {
-        var me = this;
-
-        if (!me.disabled) {
-            if (me.menu) {
-                me.showMenu();
-            }
-        }
-    },
-    
-    getSplitCls: function() {
-        var me = this;
-        return me.split ? (me.baseCls + '-' + me.arrowCls) + ' ' + (me.baseCls + '-' + me.arrowCls + '-' + me.arrowAlign) : '';
-    },
-    
-    setIconCls: function(cls) {
-        var me = this,
-            btnIconEl = me.btnIconEl,
-            oldCls = me.iconCls;
-            
-        me.iconCls = cls;
-        if (btnIconEl) {
-            // Remove the previous iconCls from the button
-            btnIconEl.removeCls(oldCls);
-            btnIconEl.addCls(cls || '');
-            //me.setComponentCls();
-            if (me.didIconStateChange(oldCls, cls)) {
-                me.updateLayout();
-            }
-        }
-        return me;
-    },
-    
-     didIconStateChange: function(old, current) {
-        var currentEmpty = Ext.isEmpty(current);
-        return Ext.isEmpty(old) ? !currentEmpty : currentEmpty;
-    }
-   
-});
-
-Ext.define('Scalr.ui.FormCustomButtonSplit', {
-    alias: 'widget.splitbtn',
-    extend: 'Scalr.ui.FormCustomButton',
-    arrowCls      : 'split',
-    split         : true,
-
-    setArrowHandler : function(handler, scope){
-        this.arrowHandler = handler;
-        this.scope = scope;
-    },
-
-    onRender: function() {
-        this.callParent();
-        this.btnEl.addCls(this.getSplitCls());
-    },
-    
-    onClick : function(e, t) {
-        var me = this;
-        
-        e.preventDefault();
-        if (!me.disabled) {
-            if (me.overMenuTrigger) {
-                me.maybeShowMenu();
-                me.fireEvent("arrowclick", me, e);
-                if (me.arrowHandler) {
-                    me.arrowHandler.call(me.scope || me, me, e);
-                }
-            } else {
-                me.doToggle();
-                me.fireHandler(e);
-            }
-        }
-    }
-});
-
-Ext.define('Scalr.ui.FormCustomButtonCycle', {
-    alias: 'widget.cyclebtn',
-    extend: 'Scalr.ui.FormCustomButtonSplit',
-    
-    showText: true,
-    deferChangeEvent: true,
-    suspendChangeEvent: 0,
-    
-    getButtonText: function(item) {
-        var me = this,
-            text = '';
-        
-        if (item && me.showText === true) {
-            if (me.prependText) {
-                text += me.prependText;
-            }
-            text += Ext.isDefined(me.getItemText) ? me.getItemText(item) : item.text;
-            return text;
-        }
-        return me.text;
-    },
-
-    setActiveItem: function(item, suppressEvent) {
-        var me = this;
-        
-        if (!Ext.isObject(item)) {
-            item = me.menu.getComponent(item);
-        }
-        if (item) {
-            me.suspendChangeEvent++;
-            if (!me.rendered) {
-                me.text = me.getButtonText(item);
-                me.iconCls = item.iconCls;
-            } else {
-                me.setText(me.getButtonText(item));
-                me.setIconCls(item.iconCls);
-            }
-            me.activeItem = item;
-            if (!item.checked) {
-                item.setChecked(true, false);
-            }
-            if (me.forceIcon) {
-                me.setIconCls(me.forceIcon);
-            }
-            me.suspendChangeEvent--;
-            if (!suppressEvent && me.suspendChangeEvent === 0) {
-                me.fireEvent('change', me, item);
-            }
-        }
-        
-    },
-
-    getActiveItem: function() {
-        return this.activeItem;
-    },
-    
-    getValue: function() {
-       var item = this.getActiveItem();
-       return item ? item.value : null;
-    },
+    inputValue: true,
 
     initComponent: function() {
-        var me      = this,
-            checked = 0,
-            items,
-            i, iLen, item;
-
-        if (me.changeHandler) {
-            me.on('change', me.changeHandler, me.scope || me);
-            delete me.changeHandler;
-        }
-
-        items = (me.menu.items || []).concat(me.items || []);
-        me.menu = Ext.applyIf({
-            //cls: Ext.baseCSSPrefix + 'cycle-menu',
-            items: []
-        }, me.menu);
-
-        iLen = items.length;
-
-        // Convert all items to CheckItems
-        for (i = 0; i < iLen; i++) {
-            item = items[i];
-
-            item = Ext.applyIf({
-                group        : me.id,
-                itemIndex    : i,
-                checkHandler : me.checkHandler,
-                scope        : me,
-                checked      : item.checked || false
-            }, item);
-
-            me.menu.items.push(item);
-
-            if (item.checked) {
-                checked = i;
-            }
-        }
-
-        me.itemCount = me.menu.items.length;
-        me.callParent(arguments);
-        me.on('click', me.toggleSelected, me);
-        me.setActiveItem(checked, me.deferChangeEvent);
-
-        // If configured with a fixed width, the cycling will center a different child item's text each click. Prevent this.
-        if (me.width && me.showText) {
-            me.addCls(Ext.baseCSSPrefix + 'cycle-fixed-width');
-        }
-    },
-
-    // private
-    checkHandler: function(item, pressed) {
-        if (pressed) {
-            this.setActiveItem(item);
-        }
-    },
-
-    toggleSelected: function() {
-        var me = this,
-            m = me.menu,
-            checkItem;
-
-        checkItem = me.activeItem.next(':not([disabled])') || m.items.getAt(0);
-        checkItem.setChecked(true);
-    },
-    
-    add: function(item){
         var me = this;
-        me.itemCount++;
-        return me.menu.add(Ext.applyIf({
-            group        : me.id,
-            itemIndex    : me.itemCount,
-            checkHandler : me.checkHandler,
-            scope        : me,
-            checked      : item.checked || false
-        }, item));
+        me.callParent();
+        me.initField();
     },
-    
-    removeAll: function() {
-        var me = this;
-        me.activeItem = null;
-        me.menu.removeAll();
+
+    getValue: function() {
+        return this.pressed ? this.inputValue : '';
+    },
+
+    setValue: function(value) {
+        this.toggle(value == this.inputValue ? true : false);
     }
-});
-
-Ext.define('Scalr.ui.FormCustomButtonField', {
-	alias: 'widget.btnfield',
-	extend: 'Scalr.ui.FormCustomButton',
-
-	mixins: {
-		field: 'Ext.form.field.Field'
-	},
-	inputValue: true,
-
-	initComponent : function() {
-		var me = this;
-		me.callParent();
-		me.initField();
-	},
-
-	getValue: function() {
-		return this.pressed ? this.inputValue : '';
-	},
-
-	setValue: function(value) {
-		this.toggle(value == this.inputValue ? true : false);
-	}
 });
 
 Ext.define('Scalr.ui.FormFieldInfoTooltip', {
@@ -1310,60 +704,41 @@ Ext.define('Scalr.ui.FormFieldFarmRoles', {
 Ext.define('Scalr.ui.FormFieldProgress', {
 	extend: 'Ext.form.field.Display',
 	alias: 'widget.progressfield',
-	
+
     fieldSubTpl: [
         '<div id="{id}"',
-        '<tpl if="fieldStyle"> style="{fieldStyle}"</tpl>', 
+        '<tpl if="fieldStyle"> style="{fieldStyle}"</tpl>',
         ' class="{fieldCls}"><div class="x-form-progress-bar"></div><span class="x-form-progress-text">{value}</span></div>',
         {
             compiled: true,
             disableFormats: true
         }
     ],
-	
+
 	fieldCls: Ext.baseCSSPrefix + 'form-progress-field',
-	
+
 	progressTextCls: 'x-form-progress-text',
 	progressBarCls: 'x-form-progress-bar',
 	warningPercentage: 60,
 	alertPercentage: 80,
 	warningCls: 'x-form-progress-bar-warning',
 	alertCls: 'x-form-progress-bar-alert',
-	
+
 	valueField: 'value',
 	emptyText: '',
 	units: '%',
-	
-	setRawValue: function(value) {
-		var me = this, 
-			percentage;
-		me.rawValue = Ext.isObject(value) ? Ext.clone(value) : value;
-		percentage = this.getProgressBarPercentage()*1;
-		if (me.rendered) {
-			var progressbar = me.inputEl.down('.'+me.progressBarCls);
-			progressbar.stopAnimation();
-			progressbar.setWidth(0).removeCls(me.warningCls + ' ' + me.alertCls);
 
-			if (percentage > me.alertPercentage) {
-				progressbar.addCls(me.alertCls);
-			} else if (percentage > me.warningPercentage) {
-				progressbar.addCls(me.warningCls);
-			}
-			progressbar.animate({
-				duration: 500,
-				from: {
-					width: 0
-				},
-				to: {
-					width: percentage+ '%'
-				}
-			});
-			me.inputEl.down('.'+me.progressTextCls).dom.innerHTML = me.getDisplayValue();
-			//me.updateLayout();
-		}
+	setRawValue: function(value) {
+		var me = this;
+		me.rawValue = Ext.isObject(value) ? Ext.clone(value) : value;
+		if (me.rendered) {
+            me.doRenderProgressBar();
+		} else {
+            me.deferredRender = true;
+        }
 		return value;
 	},
-	
+
 	getProgressBarPercentage: function() {
         var value = this.getRawValue(),
             size = 0;
@@ -1374,7 +749,7 @@ Ext.define('Scalr.ui.FormFieldProgress', {
 		}
 		return size;
 	},
-	
+
     getDisplayValue: function() {
         var value = this.getRawValue(),
             display;
@@ -1392,19 +767,54 @@ Ext.define('Scalr.ui.FormFieldProgress', {
 		} else if (value){
             display = value;
         }
-		
+
         return display !== undefined ? display : this.emptyText;
     },
-	
+
 	setText: function(text) {
 		var me = this;
 		if (me.rendered) {
 			me.inputEl.down('.'+me.progressTextCls).dom.innerHTML = text;
 		}
 	},
-	
+
     valueToRaw: function(value) {
         return value;
+    },
+
+    doRenderProgressBar: function() {
+        var me = this,
+            percentage;
+        percentage = this.getProgressBarPercentage()*1;
+        var progressbar = me.inputEl.down('.'+me.progressBarCls);
+        //progressbar.stopAnimation();
+        progressbar.setWidth(0).removeCls(me.warningCls + ' ' + me.alertCls);
+
+        if (percentage > me.alertPercentage) {
+            progressbar.addCls(me.alertCls);
+        } else if (percentage > me.warningPercentage) {
+            progressbar.addCls(me.warningCls);
+        }
+        progressbar.setStyle('width', percentage+ '%');
+        //disable animation due to unpredictable chrome tab crashing since v30
+        /*progressbar.animate({
+            duration: 500,
+            from: {
+                width: 0
+            },
+            to: {
+                width: percentage+ '%'
+            }
+        });*/
+        me.inputEl.down('.'+me.progressTextCls).dom.innerHTML = me.getDisplayValue();
+    },
+
+    onRender: function() {
+        this.callParent(arguments);
+        if (this.deferredRender) {
+            this.doRenderProgressBar();
+            this.deferredRender = false;
+        }
     }
 });
 
@@ -1412,7 +822,7 @@ Ext.define('Scalr.ui.CloudLocationMap', {
 	extend: 'Ext.Component',
 	alias: 'widget.cloudlocationmap',
 	baseCls: 'scalr-ui-cloudlocationmap',
-	
+
 	settings: {
 		common: {
 			size: {
@@ -1430,7 +840,7 @@ Ext.define('Scalr.ui.CloudLocationMap', {
 		}
 	},
 	size: 'common',
-	
+
 	mode: 'multi',
 	platforms: {},
 	regions: {
@@ -1442,6 +852,7 @@ Ext.define('Scalr.ui.CloudLocationMap', {
 		all: 5,
         jp: 6
 	},
+    autoSelect: false,
 	locations: {
 		ec2: {
 			'ap-northeast-1': {region: 'ap', x: {common: 125, large: 183}, y: {common:27, large: 40}},
@@ -1468,19 +879,34 @@ Ext.define('Scalr.ui.CloudLocationMap', {
 			'rs-ORD1': {region: 'us', x: {common: 120, large: 180}, y: {common:32, large: 44}}
 		},
 		rackspace_world: {
-			'rs-LONx': {region: 'all', x: {common: 88, large: 0}, y: {common:24, large: 0}},
-			'rs-ORD1': {region: 'all', x: {common: 40, large: 0}, y: {common:28, large: 0}}
+			'rs-LONx': {region: 'all', x: {common: 88, large: 144}, y: {common:24, large: 30}},
+			'rs-ORD1': {region: 'all', x: {common: 40, large: 70}, y: {common:28, large: 45}}
 		},
 		rackspacengus: {
 			'DFW': {region: 'us', x: {common: 100, large: 154}, y: {common:60, large: 78}},
-			'ORD': {region: 'us', x: {common: 120, large: 180}, y: {common:32, large: 44}}
+			'ORD': {region: 'us', x: {common: 120, large: 180}, y: {common:32, large: 44}},
+            'IAD': {region: 'us', x: {common: 145, large: 180}, y: {common:44, large: 44}},
+            'SYD': {region: 'ap', x: {common: 135, large: 180}, y: {common:88, large: 44}}
+		},
+		rackspacengus_world: {
+			'DFW': {region: 'all', x: {common: 40, large: 63}, y: {common:37, large: 52}},
+			'ORD': {region: 'all', x: {common: 45, large: 70}, y: {common:30, large: 45}},
+            'IAD': {region: 'all', x: {common: 53, large: 78}, y: {common:34, large: 47}},
+            'SYD': {region: 'all', x: {common: 186, large: 285}, y: {common:76, large: 112}}
 		},
 		rackspacenguk: {
 			'LON': {region: 'eu', x: {common: 75, large: 120}, y: {common:14, large: 18}}
 		},
+		rackspacenguk_world: {
+			'LON': {region: 'all', x: {common: 88, large: 144}, y: {common:24, large: 34}}
+		},
         idcf: {
             'jp-east-t1v': {region: 'jp', x: {common: 114, large: 168}, y: {common:66, large: 88}},//Tokyo
             'jp-east-f2v': {region: 'jp', x: {common: 116, large: 176}, y: {common:46, large: 68}}//Shirakawa
+        },
+        idcf_world: {
+            'jp-east-t1v': {region: 'all', x: {common: 182, large: 274}, y: {common:32, large: 46}},
+            'jp-east-f2v': {region: 'all', x: {common: 182, large: 278}, y: {common:32, large: 40}}
         },
         gce: {
             'us-central1-a': {region: 'all', x: {common: 30, large: 46}, y: {common:32, large: 48}},
@@ -1488,7 +914,13 @@ Ext.define('Scalr.ui.CloudLocationMap', {
             'us-central2-a': {region: 'all', x: {common: 42, large: 66}, y: {common:34, large: 48}},
             'europe-west1-a': {region: 'all', x: {common: 95, large: 150}, y: {common:28, large: 38}},
             'europe-west1-b': {region: 'all', x: {common: 100, large: 160}, y: {common:26, large: 36}}
-        }
+        },
+		openstack: {
+			'ItalyMilano1': {region: 'all', x: {common: 105, large: 164}, y: {common:30, large: 42}}
+		},
+		openstack_world: {
+			'ItalyMilano1': {region: 'all', x: {common: 105, large: 164}, y: {common:30, large: 42}}
+		}
 	},
 	renderTpl: [
 		'<div class="map" style="{mapStyle}"><div class="title"></div></div>'
@@ -1498,20 +930,22 @@ Ext.define('Scalr.ui.CloudLocationMap', {
 		mapEl: '.map'
 	},
     renderData: {},
-    
+
 	constructor: function(config) {
 		this.callParent([config]);
 		this.locations.rds = this.locations.ec2;
+        this.locations.ecs = this.locations.openstack;
+        this.locations.ecs_world = this.locations.openstack_world;
 		this.settings[this.size].style += 'width:' + this.settings[this.size].size.width + 'px;';
 		this.settings[this.size].style += 'height:' + this.settings[this.size].size.height + 'px;';
 		this.mapSize = this.settings[this.size].size;
-        this.renderData.mapStyle = this.settings[this.size].style
+        this.renderData.mapStyle = this.settings[this.size].style;
 	},
-	
+
 	selectLocation: function(platform, selectedLocations, allLocations, map){
         var me = this,
             locationFound = false,
-            platformMap = me.locations[platform + '_' + map] !== undefined ? platform + '_' + map : platform;
+            platformMap = platform !== 'idcf' && (me.locations[platform + '_' + map] !== undefined) ? platform + '_' + map : platform;
         me.suspendLayouts();
 		allLocations = allLocations || [];
 		me.reset();
@@ -1544,17 +978,28 @@ Ext.define('Scalr.ui.CloudLocationMap', {
 		}
         me.resumeLayouts(true);
 	},
-    
+
     addLocation: function(platform, name, data, selected, silent) {
         var me = this,
             title = name;
-        if (me.platforms[platform] && me.platforms[platform].locations[name]) {
+        if (platform !== 'gce' && me.platforms[platform] && me.platforms[platform].locations[name]) {
             title = me.platforms[platform].locations[name];
         }
         var el = Ext.DomHelper.append(me.mapEl.dom, '<div data-location="'+Ext.util.Format.htmlEncode(name)+'" style="top:'+data.y[me.size]+'px;left:'+data.x[me.size]+'px" class="location'+(selected ? ' selected' : '')+'" title="'+Ext.util.Format.htmlEncode(title)+'"></div>', true)
         if (!silent) {
             el.on('click', function(){
-                me.fireEvent('selectlocation', this.getAttribute('data-location'), !this.hasCls('selected'));
+                var isSelected = this.hasCls('selected');
+                if (me.fireEvent('beforeselectlocation', this.getAttribute('data-location')) === false) {
+                    return;
+                }
+                if (!isSelected && me.autoSelect) {
+                    var loc = me.mapEl.query('.location');
+                    for (var i=0, len=loc.length; i<len; i++) {
+                        Ext.fly(loc[i]).removeCls('selected');
+                    }
+                    this.addCls('selected');
+                }
+                me.fireEvent('selectlocation', this.getAttribute('data-location'), !isSelected);
             });
         }
         if (me.mode == 'single' && platform === 'ec2' && selected) {
@@ -1562,7 +1007,17 @@ Ext.define('Scalr.ui.CloudLocationMap', {
             me.fixTitlePosition();
         }
     },
-	
+
+    addLocations: function(locations) {
+        var me = this;
+        me.mapEl.setStyle('background-position', this.getRegionPosition('all'));
+        Ext.Array.each(locations, function(item){
+            if (item.location && me.locations[item.platform + '_world'] && me.locations[item.platform + '_world'][item.location]) {
+                me.addLocation(item.platform, item.location, me.locations[item.platform + '_world'][item.location], false, false);
+            }
+        });
+    },
+
 	fixTitlePosition: function() {
 		var loc = this.mapEl.query('.location');
 		if (loc[0]) {
@@ -1575,7 +1030,7 @@ Ext.define('Scalr.ui.CloudLocationMap', {
 			}
 		}
 	},
-	
+
 	reset: function() {
 		var loc = this.mapEl.query('.location');
 		for (var i=0, len=loc.length; i<len; i++) {
@@ -1583,9 +1038,377 @@ Ext.define('Scalr.ui.CloudLocationMap', {
 		}
         this.titleEl.setHTML('');
 	},
-	
+
 	getRegionPosition: function(region) {
 		return '0 -' + (this.regions[region]*this.mapSize.height) + 'px';
-	}
-	
+	},
+
+    setLocation: function(location) {
+		var locations = this.mapEl.query('.location');
+        Ext.Array.each(locations, function(loc){
+            var el = Ext.fly(loc);
+            el[el.getAttribute('data-location') == location ? 'addCls' : 'removeCls']('selected');
+        });
+    }
+
+});
+
+Ext.define('Scalr.ui.FormTextCodeMirror', {
+    extend: 'Ext.form.field.Base',
+    alias: 'widget.codemirror',
+
+    readOnly: false,
+    addResizeable: false,
+
+    fieldSubTpl: '<div id="{id}"></div>',
+    enterIsSpecial: false,
+    mode: '', // set to prevent mode recognition
+
+    setMode: function (cm) {
+        if (this.mode) {
+            cm.setOption('mode', this.mode);
+            return;
+        }
+
+        // #! ... /bin/(language)
+        var value = cm.getValue(), mode = /^#!.*\/bin\/(.*)$/.exec(Ext.String.trim(value.split("\n")[0]));
+        mode = mode && mode.length == 2 ? mode[1] : '';
+
+        switch (mode) {
+            case 'python':
+                cm.setOption('mode', 'python');
+                break;
+
+            case 'bash': case 'sh':
+            cm.setOption('mode', 'shell');
+            break;
+
+            case 'php':
+                cm.setOption('mode', 'php');
+                break;
+
+            case 'python':
+                cm.setOption('mode', 'python');
+                break;
+
+            default:
+                cm.setOption('mode', 'text/plain');
+                break;
+        }
+    },
+    afterRender: function () {
+        this.callParent(arguments);
+        this.codeMirror = CodeMirror(this.inputEl, {
+            value: this.getRawValue(),
+            readOnly: this.readOnly,
+            onChange: Ext.Function.bind(function (editor, changes) {
+                if (changes.from.line == 0)
+                    this.setMode(editor);
+
+                var value = editor.getValue();
+                this.setRawValue(value);
+                this.mixins.field.setValue.call(this, value);
+
+                /*var el = Ext.fly(this.codeMirror.getWrapperElement()).down('.CodeMirror-lines').child('div');
+                 console.log(el.getHeight());
+                 this.setHeight(el.getHeight() + 14); // padding
+                 //this.setSize();
+                 this.updateLayout();
+
+                 //console.log(editor.get)*/
+            }, this)
+        });
+
+        this.setMode(this.codeMirror);
+
+        //this.codeMirror.setSize('100%', '100%');
+
+        this.on('resize', function (comp, width, height) {
+            //debugger;
+            Ext.fly(this.codeMirror.getWrapperElement()).setSize(width, height);
+            this.codeMirror.refresh();
+        });
+
+        if (this.addResizeable) {
+            Ext.fly(this.codeMirror.getWrapperElement()).addCls('codemirror-resizeable');
+            new Ext.Resizable(this.codeMirror.getWrapperElement(), {
+                minHeight:this.minHeight,
+                handles: 's',
+                pinned: true,
+                listeners: {
+                    resizedrag: function(){
+                        this.target.up('.x-panel-body').dom.scrollTop = 99999;
+                    }
+                }
+            });
+        }
+    },
+    getRawValue: function () {
+        var me = this,
+            v = (me.codeMirror ? me.codeMirror.getValue() : Ext.value(me.rawValue, ''));
+        me.rawValue = v;
+        return v;
+    },
+    setRawValue: function (value) {
+        var me = this;
+        value = Ext.value(me.transformRawValue(value), '');
+        me.rawValue = value;
+
+        return value;
+    },
+    setValue: function(value) {
+        var me = this;
+        me.setRawValue(me.valueToRaw(value));
+
+        if (me.codeMirror)
+            me.codeMirror.setValue(value);
+
+        return me.mixins.field.setValue.call(me, value);
+    }
+});
+
+Ext.define('Scalr.ui.CycleButtonAlt', {
+    alias: 'widget.cyclealt',
+
+    extend: 'Ext.button.Split',
+
+    showText: true,
+    getItemIconCls: true,
+    deferChangeEvent: true,
+    suspendChangeEvent: 0,
+
+    getButtonText: function(item) {
+        var me = this,
+            text = '';
+
+        if (item && me.showText === true) {
+            if (me.prependText) {
+                text += me.prependText;
+            }
+            text += Ext.isDefined(me.getItemText) ? me.getItemText(item) : item.text;
+            return text;
+        }
+        return me.text;
+    },
+
+    setActiveItem: function(item, suppressEvent) {
+        var me = this;
+
+        if (!Ext.isObject(item)) {
+            item = me.menu.getComponent(item);
+        }
+        if (item) {
+            me.suspendChangeEvent++;
+            if (!me.rendered) {
+                me.text = me.getButtonText(item);
+                if (me.getItemIconCls) {
+                    me.iconCls = item.iconCls;
+                }
+                me.glyph = item.glyph;
+            } else {
+                me.setText(me.getButtonText(item));
+                if (me.getItemIconCls) {
+                    me.setIconCls(item.iconCls);
+                }
+                me.setGlyph(item.glyph);
+            }
+            me.activeItem = item;
+            if (!item.checked) {
+                item.setChecked(true, false);
+            }
+            if (me.forceIcon) {
+                me.setIconCls(me.forceIcon);
+            }
+            me.suspendChangeEvent--;
+            if (!suppressEvent && me.suspendChangeEvent === 0) {
+                me.fireEvent('change', me, item);
+            }
+        }
+
+    },
+
+    getActiveItem: function() {
+        return this.activeItem;
+    },
+
+    initComponent: function() {
+        var me      = this,
+            checked = 0,
+            items,
+            i, iLen, item;
+
+        if (me.changeHandler) {
+            me.on('change', me.changeHandler, me.scope || me);
+            delete me.changeHandler;
+        }
+
+        items = (me.menu.items || []).concat(me.items || []);
+        me.menu = Ext.applyIf({
+            //cls: Ext.baseCSSPrefix + 'cycle-menu',
+            items: []
+        }, me.menu);
+
+        iLen = items.length;
+
+        // Convert all items to CheckItems
+        for (i = 0; i < iLen; i++) {
+            item = items[i];
+
+            item = Ext.applyIf({
+                group        : me.id,
+                itemIndex    : i,
+                checkHandler : me.checkHandler,
+                scope        : me,
+                checked      : item.checked || false
+            }, item);
+
+            me.menu.items.push(item);
+
+            if (item.checked) {
+                checked = i;
+            }
+        }
+
+        me.itemCount = me.menu.items.length;
+        me.callParent(arguments);
+        me.on('click', me.toggleSelected, me);
+        me.setActiveItem(checked, me.deferChangeEvent);
+
+        // If configured with a fixed width, the cycling will center a different child item's text each click. Prevent this.
+        if (me.width && me.showText) {
+            me.addCls(Ext.baseCSSPrefix + 'cycle-fixed-width');
+        }
+    },
+
+    checkHandler: function(item, pressed) {
+        if (pressed) {
+            this.setActiveItem(item);
+        }
+    },
+
+    toggleSelected: function() {
+        var me = this,
+            m = me.menu,
+            checkItem;
+
+        checkItem = me.activeItem.next(':not([disabled])') || m.items.getAt(0);
+        checkItem.setChecked(true);
+    },
+
+    getValue: function() {
+       var item = this.getActiveItem();
+       return item ? item.value : null;
+    },
+
+    add: function(item){
+        var me = this;
+        me.itemCount++;
+        return me.menu.add(Ext.applyIf({
+            group        : me.id,
+            itemIndex    : me.itemCount,
+            checkHandler : me.checkHandler,
+            scope        : me,
+            checked      : item.checked || false
+        }, item));
+    },
+
+    removeAll: function() {
+        var me = this;
+        me.activeItem = null;
+        me.menu.removeAll();
+    }
+});
+
+Ext.define('Scalr.ui.FormFieldColor', {
+    extend: 'Ext.Component',
+    mixins: {
+        labelable: 'Ext.form.Labelable',
+        field: 'Ext.form.field.Field'
+    },
+    alias: 'widget.colorfield',
+	cls: 'x-form-colorpicker',
+    fieldSubTpl: [],
+
+	allowBlank: false,
+	componentLayout: 'field',
+	button:null,
+	backgroundColor: '#000000',
+
+    initComponent : function() {
+        var me = this;
+		me.callParent();
+        me.initLabelable();
+        me.initField();
+        if (!me.name) {
+            me.name = me.getInputId();
+        }
+    },
+
+	afterRender: function() {
+		var me = this;
+		me.button = Ext.create('Ext.Button', {
+			renderTo: this.bodyEl,
+			pressedCls: '',
+			menuActiveCls: '',
+			menu: {
+				xtype: 'colormenu',
+				cls: 'x-form-colorpicker-menu',
+				allowReselect: true,
+				colors: ['333333', 'DF2200', 'AA00AA', '1A4D99', '3D690C', '006666', '6F8A02', '0C82C0', 'CA4B00', '671F92'],
+				listeners: {
+					select: function(picker, color){
+						me.setValue(color);
+					}
+				}
+			}
+		});
+		this.fieldReady = true;
+	},
+
+    getInputId: function() {
+        return this.inputId || (this.inputId = this.id + '-inputEl');
+    },
+
+    initRenderTpl: function() {
+        var me = this;
+        me.renderTpl = me.getTpl('labelableRenderTpl');
+        return me.callParent();
+    },
+
+    initRenderData: function() {
+        return Ext.applyIf(this.callParent(), this.getLabelableRenderData());
+    },
+
+	setRawValue: function(value) {
+		if (this.fieldReady) {
+			var color = this.backgroundColor;
+			if (!Ext.isEmpty(value)) {
+				color = '#'+value;
+			}
+			this.button.el.down('.x-btn-inner').setStyle('background', color);
+		}
+	},
+
+	setValue: function(value) {
+		this.value = value;
+		this.setRawValue(value);
+		this.fireEvent('change', this, this.value);
+	},
+
+    getRawValue: function() {
+		return this.value || '';
+    },
+
+	getValue: function() {
+		return this.getRawValue();
+	},
+
+    setReadOnly: function(readOnly) {
+        var me = this;
+        readOnly = !!readOnly;
+        me.readOnly = readOnly;
+		if (this.fieldReady) {
+		}
+    }
+
 });

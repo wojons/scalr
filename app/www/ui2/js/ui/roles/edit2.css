@@ -1,0 +1,43 @@
+.scalr-ui-role-edit-icon{
+    background: url('/ui2/images/ui/roles/edit/tab_icon_sprite.png') 0 0 no-repeat;
+}
+
+.scalr-ui-role-edit-icon-overview{
+    background-position: 0 0;
+}
+
+.x-btn-pressed .scalr-ui-role-edit-icon-overview{
+    background-position: -80px 0;
+}
+
+.scalr-ui-role-edit-icon-images{
+    background-position: 0 -65px;
+}
+
+.x-btn-pressed .scalr-ui-role-edit-icon-images{
+    background-position: -80px -65px;
+}
+
+.scalr-ui-role-edit-icon-scripting{
+    background-position: 0 -130px;
+}
+
+.x-btn-pressed .scalr-ui-role-edit-icon-scripts{
+    background-position: -80px -130px;
+}
+
+.scalr-ui-role-edit-icon-variables{
+    background-position: 0 -195px;
+}
+
+.x-btn-pressed .scalr-ui-role-edit-icon-variables{
+    background-position: -80px -195px;
+}
+
+.scalr-ui-role-edit-icon-chef{
+    background-position: 0 -260px;
+}
+
+.x-btn-pressed .scalr-ui-role-edit-icon-chef{
+    background-position: -80px -260px;
+}

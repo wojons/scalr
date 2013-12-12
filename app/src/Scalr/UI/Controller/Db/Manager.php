@@ -1,9 +1,13 @@
 <?php
+use Scalr\Acl\Acl;
+use Scalr\Server\Operations;
+
 class Scalr_UI_Controller_Db_Manager extends Scalr_UI_Controller
 {
-    public static function getPermissionDefinitions()
+
+    public function hasAccess()
     {
-        return array();
+        return parent::hasAccess() && $this->request->isAllowed(Acl::RESOURCE_DB_DATABASE_STATUS);
     }
 
     private function getDbAccessDetails(DBFarmRole $dbFarmRole)
@@ -68,24 +72,22 @@ class Scalr_UI_Controller_Db_Manager extends Scalr_UI_Controller
             'configured' => false
         );
 
-        if ($dbFarmRole->GetSetting(DBFarmRole::SETTING_MYSQL_PMA_USER))
+        if ($dbFarmRole->GetSetting(DBFarmRole::SETTING_MYSQL_PMA_USER)) {
             $retval['configured'] = true;
-        else
-        {
-
+        } else {
             $errmsg = $dbFarmRole->GetSetting(DBFarmRole::SETTING_MYSQL_PMA_REQUEST_ERROR);
-            if (!$errmsg)
-            {
+            if (!$errmsg) {
                 $time = $dbFarmRole->GetSetting(DBFarmRole::SETTING_MYSQL_PMA_REQUEST_TIME);
-                if ($time)
-                {
-                    if ($time+3600 < time())
+                if ($time) {
+                    if ($time + 3600 < time()) {
                         $retval['accessError'] = _("Scalr didn't receive auth info from MySQL instance. Please check that MySQL running and Scalr has access to it.");
-                    else
+                    } else {
                         $retval['accessSetupInProgress'] = true;
+                    }
                 }
-            } else
+            } else {
                 $retval['accessError'] = $errmsg;
+            }
         }
 
         return $retval;
@@ -102,7 +104,10 @@ class Scalr_UI_Controller_Db_Manager extends Scalr_UI_Controller
 
         try {
             $port = $masterServer->GetProperty(SERVER_PROPERTIES::SZR_API_PORT);
-                if (!$port) $port = 8010;
+
+            if (!$port) {
+                $port = 8010;
+            }
 
             $client = Scalr_Net_Scalarizr_Client::getClient($masterServer, Scalr_Net_Scalarizr_Client::NAMESPACE_SYSTEM, $port);
 
@@ -168,7 +173,7 @@ class Scalr_UI_Controller_Db_Manager extends Scalr_UI_Controller
     public function dashboardAction()
     {
         $this->request->defineParams(array(
-            'farmId' => array('type' => 'int'),
+            'farmId'     => array('type' => 'int'),
             'farmRoleId' => array('type' => 'int'),
             'type'
         ));
@@ -252,7 +257,7 @@ class Scalr_UI_Controller_Db_Manager extends Scalr_UI_Controller
                 'status' => (int)$dbFarmRole->GetSetting(Scalr_Db_Msr::DATA_BUNDLE_IS_RUNNING),
                 'serverId' => $dbFarmRole->GetSetting(Scalr_Db_Msr::DATA_BUNDLE_SERVER_ID),
                 //TODO:
-                'operationId' => $this->db->GetOne("SELECT id FROM server_operations WHERE server_id = ? AND name = ? AND status = ? ORDER BY timestamp DESC", array(
+                'operationId' => $this->db->GetOne("SELECT id FROM server_operations WHERE server_id = ? AND name = ? AND status = ? ORDER BY timestamp DESC LIMIT 1", array(
                     $data['backupServerId'], "TODO data bundle", 'running'
                 ))
             ),
@@ -288,7 +293,7 @@ class Scalr_UI_Controller_Db_Manager extends Scalr_UI_Controller
                 'status' => (int)$dbFarmRole->GetSetting(Scalr_Db_Msr::DATA_BACKUP_IS_RUNNING),
                 'serverId' => $dbFarmRole->GetSetting(Scalr_Db_Msr::DATA_BACKUP_SERVER_ID),
                 //TODO:
-                'operationId' => $this->db->GetOne("SELECT id FROM server_operations WHERE server_id = ? AND name = ? AND status = ? ORDER BY timestamp DESC", array(
+                'operationId' => $this->db->GetOne("SELECT id FROM server_operations WHERE server_id = ? AND name = ? AND status = ? ORDER BY timestamp DESC LIMIT 1", array(
                     $data['backupServerId'], "TODO backup", 'running'
                 ))
             ),
@@ -436,12 +441,11 @@ class Scalr_UI_Controller_Db_Manager extends Scalr_UI_Controller
                 $volumeConfig = $volume->getConfig();
                 $platformAccessData = PlatformFactory::NewPlatform($dbFarmRole->Platform)->GetPlatformAccessData($this->environment, $master);
 
-                $result = $client->growStorage($volumeConfig, $this->getParam('newSize'), $platformAccessData);
+                $operationId = $client->growStorage($volumeConfig, $this->getParam('newSize'), $platformAccessData);
 
-                // Do not remove. We need to wait a bit before operation will be registered in scalr.
-                sleep(2);
+                $master->operations->add($operationId, Operations::MYSQL_GROW_VOLUME);
 
-                $this->response->data(array('operationId' => $result));
+                $this->response->data(array('operationId' => $operationId));
 
             } catch (Exception $e) {
                 throw new Exception("Cannot grow storage: {$e->getMessage()}");
@@ -452,6 +456,7 @@ class Scalr_UI_Controller_Db_Manager extends Scalr_UI_Controller
 
     public function xSetupPmaAccessAction()
     {
+        $this->request->restrictAccess(Acl::RESOURCE_DB_DATABASE_STATUS, Acl::PERM_DB_DATABASE_STATUS_PMA);
         $this->request->defineParams(array(
             'farmId' => array('type' => 'int'),
             'farmRoleId' => array('type' => 'int')
@@ -475,8 +480,8 @@ class Scalr_UI_Controller_Db_Manager extends Scalr_UI_Controller
                 $msg = new Scalr_Messaging_Msg_Mysql_CreatePmaUser($dbFarmRole->ID, \Scalr::config('scalr.pma_instance_ip_address'));
                 $masterDbServer->SendMessage($msg);
 
-                $dbFarmRole->SetSetting(DBFarmRole::SETTING_MYSQL_PMA_REQUEST_TIME, time());
-                $dbFarmRole->SetSetting(DBFarmRole::SETTING_MYSQL_PMA_REQUEST_ERROR, "");
+                $dbFarmRole->SetSetting(DBFarmRole::SETTING_MYSQL_PMA_REQUEST_TIME, time(), DBFarmRole::TYPE_LCL);
+                $dbFarmRole->SetSetting(DBFarmRole::SETTING_MYSQL_PMA_REQUEST_ERROR, "", DBFarmRole::TYPE_LCL);
 
                 $this->response->success();
             }

@@ -11,8 +11,10 @@ require ("src/prepend.inc.php");
 $imageId = $_GET['imageId'];
 
 $envId = Scalr_Session::getInstance()->getEnvironmentId();
-/* @var $env Scalr_Environment */
+
 $env = Scalr_Environment::init()->loadById($envId);
+\Scalr::getContainer()->environment = $env;
+
 $aws = $env->aws('eu-west-1');
 print "Retrieving AMI information...";
 
@@ -84,7 +86,7 @@ if ($imageInfo->rootDeviceType == 'ebs') {
 
                     print "Updating Scalr database AMI...";
 
-                    $roleId = $db->GetOne("SELECT role_id FROM role_images WHERE image_id = ?", array($imageId));
+                    $roleId = $db->GetOne("SELECT role_id FROM role_images WHERE image_id = ? LIMIT 1", array($imageId));
                     if ($roleId) {
                         $dbRole = DBRole::loadById($roleId);
                         if ($dbRole->clientId = Scalr_Session::getInstance()->getClientId()) {

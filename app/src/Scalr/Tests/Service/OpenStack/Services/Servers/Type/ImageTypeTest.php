@@ -24,7 +24,7 @@ class ImageTypeTest extends OpenStackTestCase
         $ref = new ReflectionClass($this->getOpenStackClassName(self::TYPE_CLASS_NAME));
         $len = strlen('TYPE_');
         foreach ($ref->getConstants() as $name => $value) {
-            $arr[] = array(lcfirst($this->decamilize(substr($name, $len))), $value, false);
+            $arr[] = array(lcfirst($this->camelize(substr($name, $len))), $value, false);
         }
         return $arr;
     }
@@ -33,9 +33,9 @@ class ImageTypeTest extends OpenStackTestCase
      * @test
      * @dataProvider provider
      */
-    public function testInit($name, $value, $exeption)
+    public function testInit($name, $value, $exception)
     {
-        if ($exeption) {
+        if ($exception) {
             try{
                 $status = ImageType::$name();
                 $this->assertTrue(false, 'Exception must be thrown here.');

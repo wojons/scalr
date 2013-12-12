@@ -37,6 +37,7 @@ class ServersExtension extends StringType
     const EXT_FLOATING_IP_DNS = 'FloatingIpDns';
     const EXT_FLOATING_IP_POOLS = 'FloatingIpPools';
     const EXT_FLOATING_IPS = 'FloatingIps';
+    const EXT_EXTENDED_IPS = 'ExtendedIps';
     const EXT_HOSTS = 'Hosts';
     const EXT_HYPERVISORS = 'Hypervisors';
     const EXT_OS_INSTANCE_USAGE_AUDIT_LOG = 'OSInstanceUsageAuditLog';

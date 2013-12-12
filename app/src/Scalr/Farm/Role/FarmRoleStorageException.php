@@ -1,4 +1,6 @@
-<?
+<?php
 namespace Scalr\Farm\Role;
 
-class FarmRoleStorageException extends \Exception {}
+class FarmRoleStorageException extends \Exception
+{
+}

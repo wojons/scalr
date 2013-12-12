@@ -1,4 +1,4 @@
-<?
+<?php
     final class RESERVED_ROLE_OPTIONS
     {
         const APACHE_HTTPS_VHOST_TEMPLATE 	= "apache_https_vhost_template";

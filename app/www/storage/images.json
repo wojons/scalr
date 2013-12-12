@@ -1,5 +1,24 @@
 {
+"ecs": [
+    {"cloud_location":"ItalyMilano1","os_family":"ubuntu","os_version":"12.04","architecture":"x86_64","image_id":"b9af9734-eab0-4e9b-8772-8f33be3989e1"},
+    {"cloud_location":"ItalyMilano1","os_family":"centos","os_version":"6.4","architecture":"x86_64","image_id":"2a6427b2-225a-4242-a841-8db4828a84e2"}
+],
+"idcf": [
+    {"cloud_location":"jp-east-t1v","os_family":"ubuntu","os_version":"12.04","architecture":"x86_64","image_id":"2212"},
+    {"cloud_location":"jp-east-t1v","os_family":"centos","os_version":"6.4","architecture":"x86_64","image_id":"3039"},
+    {"cloud_location":"jp-east-f2v","os_family":"ubuntu","os_version":"12.04","architecture":"x86_64","image_id":"2212"},
+    {"cloud_location":"jp-east-f2v","os_family":"centos","os_version":"6.4","architecture":"x86_64","image_id":"3039"}
+],
 "ec2":[
+    {"image_id":"ami-b1fe9bb0","os_version":"6.4","os_family":"amazon","cloud_location":"ap-northeast-1","architecture":"x86_64","root_device_type":"ebs"},
+    {"image_id":"ami-4296c310","os_version":"6.4","os_family":"amazon","cloud_location":"ap-southeast-1","architecture":"x86_64","root_device_type":"ebs"},
+    {"image_id":"ami-717be74b","os_version":"6.4","os_family":"amazon","cloud_location":"ap-southeast-2","architecture":"x86_64","root_device_type":"ebs"},
+    {"image_id":"ami-c7ec0eb0","os_version":"6.4","os_family":"amazon","cloud_location":"eu-west-1","architecture":"x86_64","root_device_type":"ebs"},
+    {"image_id":"ami-8779df9a","os_version":"6.4","os_family":"amazon","cloud_location":"sa-east-1","architecture":"x86_64","root_device_type":"ebs"},
+    {"image_id":"ami-83e4bcea","os_version":"6.4","os_family":"amazon","cloud_location":"us-east-1","architecture":"x86_64","root_device_type":"ebs"},
+    {"image_id":"ami-981f29dd","os_version":"6.4","os_family":"amazon","cloud_location":"us-west-1","architecture":"x86_64","root_device_type":"ebs"},
+    {"image_id":"ami-be1c848e","os_version":"6.4","os_family":"amazon","cloud_location":"us-west-2","architecture":"x86_64","root_device_type":"ebs"},
+
 	{"image_id":"ami-2cca7c2d","os_version":"5.7","os_family":"oel","cloud_location":"ap-northeast-1","architecture":"x86_64","root_device_type":"ebs"},
 	{"image_id":"ami-e8f4b1ba","os_version":"5.7","os_family":"oel","cloud_location":"ap-southeast-1","architecture":"x86_64","root_device_type":"ebs"},
 	{"image_id":"ami-d594aba1","os_version":"5.7","os_family":"oel","cloud_location":"eu-west-1","architecture":"x86_64","root_device_type":"ebs"},
@@ -57,17 +76,26 @@
 	{"image_id":"ami-2a66f31a","os_version":"6.4","os_family":"centos","cloud_location":"us-west-2","architecture":"x86_64","root_device_type":"ebs"}
 ],
 "gce":[
-	{"os_family":"centos","os_version":"6.X","architecture":"x86_64","image_id":"centos-cloud\/global\/images\/centos-6-v20130522"},
-	{"os_family":"debian","os_version":"6.0.7","architecture":"x86_64","image_id":"debian-cloud\/global\/images\/debian-6-squeeze-v20130617"},
-	{"os_family":"debian","os_version":"7.1","architecture":"x86_64","image_id":"debian-cloud\/global\/images\/debian-7-wheezy-v20130617"}
+	{"os_family":"centos","os_version":"6.X","architecture":"x86_64","image_id":"centos-cloud\/global\/images\/centos-6-v20131120"},
+	{"os_family":"debian","os_version":"7.1","architecture":"x86_64","image_id":"debian-cloud\/global\/images\/debian-7-wheezy-v20131120"}
 ],
 "rackspacengus":[
-	{"cloud_location":"DFW","os_family":"ubuntu","os_version":"12.04","architecture":"x86_64","image_id":"5cebb13a-f783-4f8c-8058-c4182c724ccd"},
-	{"cloud_location":"ORD","os_family":"ubuntu","os_version":"12.04","architecture":"x86_64","image_id":"5cebb13a-f783-4f8c-8058-c4182c724ccd"},
-	{"cloud_location":"DFW","os_family":"centos","os_version":"6.3","architecture":"x86_64","image_id":"c195ef3b-9195-4474-b6f7-16e5bd86acd0"},
-	{"cloud_location":"ORD","os_family":"centos","os_version":"6.3","architecture":"x86_64","image_id":"c195ef3b-9195-4474-b6f7-16e5bd86acd0"},
-	{"cloud_location":"DFW","os_family":"rhel","os_version":"6.1","architecture":"x86_64","image_id":"d6dd6c70-a122-4391-91a8-decb1a356549"},
-	{"cloud_location":"ORD","os_family":"rhel","os_version":"6.1","architecture":"x86_64","image_id":"d6dd6c70-a122-4391-91a8-decb1a356549"}
+	{"cloud_location":"DFW","os_family":"ubuntu","os_version":"12.04","architecture":"x86_64","image_id":"25de7af5-1668-46fb-bd08-9974b63a4806"},
+	{"cloud_location":"ORD","os_family":"ubuntu","os_version":"12.04","architecture":"x86_64","image_id":"25de7af5-1668-46fb-bd08-9974b63a4806"},
+	{"cloud_location":"IAD","os_family":"ubuntu","os_version":"12.04","architecture":"x86_64","image_id":"25de7af5-1668-46fb-bd08-9974b63a4806"},
+    {"cloud_location":"SYD","os_family":"ubuntu","os_version":"12.04","architecture":"x86_64","image_id":"25de7af5-1668-46fb-bd08-9974b63a4806"},
+	{"cloud_location":"DFW","os_family":"centos","os_version":"6.4","architecture":"x86_64","image_id":"25a5f2e8-f522-4fe0-b0e0-dbaa62405c25"},
+	{"cloud_location":"ORD","os_family":"centos","os_version":"6.4","architecture":"x86_64","image_id":"25a5f2e8-f522-4fe0-b0e0-dbaa62405c25"},
+	{"cloud_location":"IAD","os_family":"centos","os_version":"6.4","architecture":"x86_64","image_id":"25a5f2e8-f522-4fe0-b0e0-dbaa62405c25"},
+    {"cloud_location":"SYD","os_family":"centos","os_version":"6.4","architecture":"x86_64","image_id":"25a5f2e8-f522-4fe0-b0e0-dbaa62405c25"},
+	{"cloud_location":"DFW","os_family":"rhel","os_version":"6.4","architecture":"x86_64","image_id":"e0c3a14d-b1dc-451b-ade4-d419501aa121"},
+	{"cloud_location":"ORD","os_family":"rhel","os_version":"6.4","architecture":"x86_64","image_id":"e0c3a14d-b1dc-451b-ade4-d419501aa121"},
+	{"cloud_location":"IAD","os_family":"rhel","os_version":"6.4","architecture":"x86_64","image_id":"e0c3a14d-b1dc-451b-ade4-d419501aa121"},
+    {"cloud_location":"SYD","os_family":"rhel","os_version":"6.4","architecture":"x86_64","image_id":"e0c3a14d-b1dc-451b-ade4-d419501aa121"},
+	{"cloud_location":"DFW","os_family":"debian","os_version":"7.1","architecture":"x86_64","image_id":"f45b4de7-6013-4eb9-8df4-133b913ffb40"},
+    {"cloud_location":"ORD","os_family":"debian","os_version":"7.1","architecture":"x86_64","image_id":"f45b4de7-6013-4eb9-8df4-133b913ffb40"},
+    {"cloud_location":"IAD","os_family":"debian","os_version":"7.1","architecture":"x86_64","image_id":"f45b4de7-6013-4eb9-8df4-133b913ffb40"},
+    {"cloud_location":"SYD","os_family":"debian","os_version":"7.1","architecture":"x86_64","image_id":"f45b4de7-6013-4eb9-8df4-133b913ffb40"}
 ],
 "rackspacenguk":[
 	{"cloud_location":"LON","os_family":"ubuntu","os_version":"12.04","architecture":"x86_64","image_id":"5cebb13a-f783-4f8c-8058-c4182c724ccd"},

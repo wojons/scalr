@@ -95,7 +95,7 @@ class Client
     {
         $db = \Scalr::getDb();
 
-        $clientid = $db->GetOne("SELECT id FROM clients WHERE email=?", array($email));
+        $clientid = $db->GetOne("SELECT id FROM clients WHERE email=? LIMIT 1", array($email));
         if (!$clientid)
             throw new Exception(sprintf(_("Client with email=%s not found in database"), $email));
 
@@ -110,7 +110,7 @@ class Client
      */
     public function GetSettingValue($name)
     {
-        return $this->DB->GetOne("SELECT value FROM client_settings WHERE clientid=? AND `key`=?",
+        return $this->DB->GetOne("SELECT value FROM client_settings WHERE clientid=? AND `key`=? LIMIT 1",
             array($this->ID, $name)
         );
     }
@@ -123,9 +123,17 @@ class Client
      */
     public function SetSettingValue($name, $value)
     {
-        $this->DB->Execute("REPLACE INTO client_settings SET `key`=?, `value`=?, clientid=?",
-            array($name, $value, $this->ID)
-        );
+        //UNIQUE KEY `NewIndex1` (`clientid`,`key`)
+        $this->DB->Execute("
+            INSERT client_settings
+            SET `clientid`=?,
+                `key`=?,
+                `value`=?
+            ON DUPLICATE KEY UPDATE
+                `value`=?
+        ", array(
+            $this->ID, $name, $value, $value
+        ));
     }
 
     public function ClearSettings ($filter)

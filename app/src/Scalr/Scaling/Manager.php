@@ -100,7 +100,7 @@ class Scalr_Scaling_Manager
 
             Logger::getLogger(LOG_CATEGORY::FARM)->info(new FarmLogMessage($this->dbFarmRole->FarmID, sprintf("%s: Role '%s' on farm '%s'. Metric name: %s. Last metric value: %s.",
                 $scalingMetricDecision,
-                $this->dbFarmRole->GetRoleObject()->name,
+                $this->dbFarmRole->Alias ? $this->dbFarmRole->Alias : $this->dbFarmRole->GetRoleObject()->name,
                 $this->dbFarmRole->GetFarmObject()->Name,
                 $farmRoleMetric->getMetric()->name,
                 $farmRoleMetric->lastValue

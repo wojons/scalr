@@ -104,7 +104,7 @@ class Scalr_Validator
 
     public function validateNohtml($value, $type, $options)
     {
-        if ($options === true && preg_match('/^[A-Za-z0-9-\s]+$/si', $value))
+        if ($options === true && preg_match('/^[A-Za-z0-9-_\s]+$/si', $value))
             return true;
         else
             return array('Value should contain only letters and numbers');

@@ -1,12 +1,25 @@
 <?php
-
-class ServerNotFoundException extends Exception
-{
-
-}
+use Scalr\Server\Operations;
 
 class DBServer
 {
+    const TERMINATE_REASON_SHUTTING_DOWN_CLUSTER = 'Shutting-down %s cluster.';
+    const TERMINATE_REASON_REMOVING_REPLICA_SET_FROM_CLUSTER = 'Removing replica set from %s cluster.';
+    const TERMINATE_REASON_FARM_ROLE_NOT_FOUND = 'Farm role does not exist.';
+    const TERMINATE_REASON_ROLE_REMOVED = 'Role removed from farm.';
+    const TERMINATE_REASON_SERVER_DID_NOT_SEND_EVENT = 'Server did not send %s event in %s seconds after launch.';
+    const TERMINATE_REASON_TEMPORARY_SERVER = 'Terminating temporary server.';
+    const TERMINATE_REASON_TEMPORARY_SERVER_ROLE_BUILDER = 'Terminating role builder temporary server.';
+    const TERMINATE_REASON_SCALING_DOWN = 'Scaling down.';
+    const TERMINATE_REASON_SNAPSHOT_CANCELLATION = 'Snapshot cancellation.';
+    const TERMINATE_REASON_MANUALLY = 'Manually terminated by %s.';
+    const TERMINATE_REASON_MANUALLY_API = 'Terminated through the Scalr API by %s.';
+    const TERMINATE_REASON_BUNDLE_TASK_FINISHED = 'Farm was in "%s" state. Server terminated when bundle task had been finished. Bundle task #%s.';
+    const TERMINATE_REASON_FARM_TERMINATED = 'Terminating server because the farm has been terminated.';
+    const TERMINATE_REASON_REPLACE_SERVER_FROM_SNAPSHOT = 'Server replaced with new one after snapshotting.';
+    const TERMINATE_REASON_OPERATION_CANCELLATION = 'Operation cancellation.';
+    const TERMINATE_REASON_CRASHED = 'Server was crashed or terminated outside scalr';
+
     public $serverId,
         $farmId,
         $farmRoleId,
@@ -21,8 +34,11 @@ class DBServer
         $dateShutdownScheduled,
         $dateRebootStart,
         $dateLastSync,
+        $osType,
         $replaceServerID,
-        $index;
+        $index,
+
+        $operations;
 
     private
         $platformProps,
@@ -32,11 +48,19 @@ class DBServer
         $flavor,
         $Db,
         $dbId,
+        $globalVariablesCache = array(),
         $propsCache = array(),
         $environment,
         $client,
         $dbFarmRole,
         $dbFarm;
+
+    /**
+     * Server history instance
+     *
+     * @var \Scalr\Server\History
+     */
+    private $serverHistory;
 
     public static $platformPropsClasses = array(
         SERVER_PLATFORMS::EC2 => 'EC2_SERVER_PROPERTIES',
@@ -52,7 +76,10 @@ class DBServer
 
         SERVER_PLATFORMS::OPENSTACK => 'OPENSTACK_SERVER_PROPERTIES',
         SERVER_PLATFORMS::RACKSPACENG_UK => 'OPENSTACK_SERVER_PROPERTIES',
-        SERVER_PLATFORMS::RACKSPACENG_US => 'OPENSTACK_SERVER_PROPERTIES'
+        SERVER_PLATFORMS::RACKSPACENG_US => 'OPENSTACK_SERVER_PROPERTIES',
+        SERVER_PLATFORMS::ECS => 'OPENSTACK_SERVER_PROPERTIES',
+        SERVER_PLATFORMS::OCS => 'OPENSTACK_SERVER_PROPERTIES',
+        SERVER_PLATFORMS::NEBULA => 'OPENSTACK_SERVER_PROPERTIES'
     );
 
     private static $FieldPropertyMap = array(
@@ -65,6 +92,7 @@ class DBServer
         'client_id'		=> 'clientId',
         'platform'		=> 'platform',
         'status'		=> 'status',
+        'os_type'       => 'osType',
         'remote_ip'		=> 'remoteIp',
         'local_ip'		=> 'localIp',
         'dtadded'		=> 'dateAdded',
@@ -79,6 +107,7 @@ class DBServer
     const PORT_CTRL = SERVER_PROPERTIES::SZR_CTRL_PORT;
     const PORT_SNMP = SERVER_PROPERTIES::SZR_SNMP_PORT;
     const PORT_UPDC = SERVER_PROPERTIES::SZR_UPDC_PORT;
+    const PORT_SSH = SERVER_PROPERTIES::CUSTOM_SSH_PORT;
 
     public function __sleep()
     {
@@ -89,10 +118,11 @@ class DBServer
     {
         $this->serverId = $serverId;
         $this->Db = \Scalr::getDb();
+        $this->operations = new Operations($this);
     }
 
-    public function getPort($portType) {
-
+    public function getPort($portType)
+    {
         $port = $this->GetProperty($portType);
         if (!$port) {
             switch ($portType) {
@@ -108,10 +138,23 @@ class DBServer
                 case self::PORT_UPDC:
                     $port = 8008;
                     break;
+                case self::PORT_SSH:
+                    $port = 22;
+                    break;
             }
         }
 
         return $port;
+    }
+
+    public function isOpenstack()
+    {
+        return PlatformFactory::isOpenstack($this->platform);
+    }
+
+    public function isCloudstack()
+    {
+        return PlatformFactory::isCloudstack($this->platform);
     }
 
     /**
@@ -130,16 +173,16 @@ class DBServer
                     'root',
                     $this->GetProperty(OPENSTACK_SERVER_PROPERTIES::ADMIN_PASS)
                 );
-
+                break;
             case SERVER_PLATFORMS::RACKSPACE:
                 $ssh2Client->addPassword(
                     'root',
                     $this->GetProperty(RACKSPACE_SERVER_PROPERTIES::ADMIN_PASS)
                 );
 
-             break;
+                break;
 
-             case SERVER_PLATFORMS::GCE:
+            case SERVER_PLATFORMS::GCE:
 
                 $userName = 'scalr';
 
@@ -175,6 +218,8 @@ class DBServer
 
                  break;
 
+            case SERVER_PLATFORMS::IDCF:
+            case SERVER_PLATFORMS::ECS:
             case SERVER_PLATFORMS::EC2:
 
                 $userName = 'root';
@@ -182,12 +227,18 @@ class DBServer
                 // Temporary server for role builder
                 if ($this->status == SERVER_STATUS::TEMPORARY) {
                     $keyName = 'SCALR-ROLESBUILDER-'.SCALR_ID;
+                    try {
+                        $bundleTaskId = $this->GetProperty(SERVER_PROPERTIES::SZR_IMPORTING_BUNDLE_TASK_ID);
+                        $bundleTask = BundleTask::LoadById($bundleTaskId);
+                        if ($bundleTask->osFamily == 'amazon')
+                            $userName = 'ec2-user';
+                    } catch (Exception $e) {}
                 }
                 else {
                     $keyName = "FARM-{$this->farmId}-".SCALR_ID;
                        $farmId = $DBServer->farmId;
                     $oldKeyName = "FARM-{$this->farmId}";
-                    if ($key = Scalr_Model::init(Scalr_Model::SSH_KEY)->loadGlobalByName($oldKeyName, $this->GetProperty(EC2_SERVER_PROPERTIES::REGION), $this->envId, SERVER_PLATFORMS::EC2)) {
+                    if ($key = Scalr_Model::init(Scalr_Model::SSH_KEY)->loadGlobalByName($oldKeyName, $this->GetCloudLocation(), $this->envId, $this->platform)) {
                         $keyName = $oldKeyName;
                         $skipKeyValidation = true;
                     }
@@ -197,9 +248,9 @@ class DBServer
                     try {
                         $key = Scalr_Model::init(Scalr_Model::SSH_KEY)->loadGlobalByName(
                             $keyName,
-                            $this->GetProperty(EC2_SERVER_PROPERTIES::REGION),
+                            $this->GetCloudLocation(),
                             $this->envId,
-                            SERVER_PLATFORMS::EC2
+                            $this->platform
                         );
 
                         if (!$key)
@@ -239,13 +290,13 @@ class DBServer
         $retval = array(
             "farmid" 			=> $this->farmId,
             "role"				=> implode(",", $dbFarmRole->GetRoleObject()->getBehaviors()),
-            "eventhandlerurl"	=> \Scalr::config('scalr.endpoint.host'),
-            "hash"				=> $this->GetFarmObject()->Hash,
-            "realrolename"		=> $dbFarmRole->GetRoleObject()->name,
+            //"eventhandlerurl"	=> \Scalr::config('scalr.endpoint.host'),
             "httpproto"			=> \Scalr::config('scalr.endpoint.scheme'),
             "region"			=> $this->GetCloudLocation(),
 
             /*** For Scalarizr ***/
+            "hash"				    => $this->GetFarmObject()->Hash,
+            "realrolename"		    => $dbFarmRole->GetRoleObject()->name,
             "szr_key"				=> $this->GetKey(),
             "serverid"				=> $this->serverId,
             'p2p_producer_endpoint'	=> $baseurl . "/messaging",
@@ -256,39 +307,40 @@ class DBServer
             'env_id'				=> $dbFarmRole->GetFarmObject()->EnvID,
             'platform'				=> $dbFarmRole->Platform,
             'server_index'          => $this->index,
+            'cloud_server_id'       => $this->GetCloudServerID(),
 
             /*** General information ***/
             "owner_email"			=> $dbFarmRole->GetFarmObject()->createdByUserEmail
         );
 
-        switch($this->platform)
-        {
-            case SERVER_PLATFORMS::EC2:
+        //FIXME remove environment
+        //if ($this->envId == 3414) {
+            $retval['message_format'] = 'json';
+        //}
 
-                $retval["s3bucket"]	= $dbFarmRole->GetSetting(DBFarmRole::SETTING_AWS_S3_BUCKET);
-                $retval["cloud_storage_path"] = "s3://".$dbFarmRole->GetSetting(DBFarmRole::SETTING_AWS_S3_BUCKET);
+        if (PlatformFactory::isOpenstack($this->platform)) {
+            $retval["cloud_storage_path"] = "swift://";
+        } else {
+            switch($this->platform) {
+            	case SERVER_PLATFORMS::EC2:
 
-                break;
+            	    $retval["s3bucket"]	= $dbFarmRole->GetSetting(DBFarmRole::SETTING_AWS_S3_BUCKET);
+            	    $retval["cloud_storage_path"] = "s3://".$dbFarmRole->GetSetting(DBFarmRole::SETTING_AWS_S3_BUCKET);
 
-            case SERVER_PLATFORMS::RACKSPACE:
+            	    break;
 
-                $retval["cloud_storage_path"] = "cf://scalr-{$this->GetFarmObject()->Hash}";
+            	case SERVER_PLATFORMS::RACKSPACE:
 
-                break;
+            	    $retval["cloud_storage_path"] = "cf://scalr-{$this->GetFarmObject()->Hash}";
 
-            case SERVER_PLATFORMS::GCE:
+            	    break;
 
-                $retval["cloud_storage_path"] = "gcs://";
+            	case SERVER_PLATFORMS::GCE:
 
-                break;
+            	    $retval["cloud_storage_path"] = "gcs://";
 
-            case SERVER_PLATFORMS::OPENSTACK:
-            case SERVER_PLATFORMS::RACKSPACENG_UK:
-            case SERVER_PLATFORMS::RACKSPACENG_US:
-
-                $retval["cloud_storage_path"] = "swift://";
-
-                break;
+            	    break;
+            }
         }
 
         // Custom settings
@@ -454,7 +506,7 @@ class DBServer
             $this->propsCache[$propertyName] = $this->Db->GetOne("
                 SELECT value
                 FROM server_properties
-                WHERE server_id=? AND name=?
+                WHERE server_id=? AND name=? LIMIT 1
             ", array(
                 $this->serverId,
                 $propertyName
@@ -470,12 +522,27 @@ class DBServer
      */
     public function Remove()
     {
-        $this->Db->Execute('DELETE FROM servers WHERE server_id=?', array($this->serverId));
+        try {
+            $this->Db->BeginTrans();
 
-        $this->Db->Execute('DELETE FROM messages WHERE server_id=?', array($this->serverId));
-        $this->Db->Execute('DELETE FROM scripting_log WHERE server_id=?', array($this->serverId));
+            // We need to perpetuate server_properties records for removed servers
+            $this->Db->Execute('DELETE FROM servers WHERE server_id=?', array($this->serverId));
 
-        $this->Db->Execute('UPDATE dm_deployment_tasks SET status=? WHERE server_id=?', array(Scalr_Dm_DeploymentTask::STATUS_ARCHIVED, $this->serverId));
+            $this->Db->Execute('DELETE FROM messages WHERE server_id=?', array($this->serverId));
+            $this->Db->Execute('DELETE FROM scripting_log WHERE server_id=?', array($this->serverId));
+            $this->Db->Execute('DELETE FROM global_variables WHERE server_id = ?', array($this->serverId));
+
+            $this->Db->Execute("
+                UPDATE `dm_deployment_tasks` SET status=? WHERE server_id=?
+            ", array(
+                Scalr_Dm_DeploymentTask::STATUS_ARCHIVED, $this->serverId
+            ));
+
+            $this->Db->CommitTrans();
+        } catch (Exception $e) {
+            $this->Db->RollbackTrans();
+            throw $e;
+        }
     }
 
     /**
@@ -497,20 +564,15 @@ class DBServer
      */
     public function SetProperty($propertyName, $propertyValue)
     {
-        /*
-        if (!$this->platformProps)
-        {
-            $Reflect = new ReflectionClass(DBServer::$platformPropsClasses[$this->platform]);
-            foreach ($Reflect->getConstants() as $k=>$v)
-                $this->platformProps[] = $v;
-        }
-
-        if (!in_array($propertyName, $this->platformProps))
-            throw new Exception(sprintf("Unknown property '%s' for server on '%s'", $k, $this->platform));
-        */
-
-        $this->Db->Execute("REPLACE INTO server_properties SET server_id = ?, name = ?, value = ?", array(
-            $this->serverId, $propertyName, $propertyValue
+        // UNIQUE KEY `serverid_name` (`server_id`,`name`),
+        $this->Db->Execute("
+            INSERT INTO server_properties
+            SET server_id = ?, name = ?, value = ?
+            ON DUPLICATE KEY UPDATE
+                value = ?
+        ", array(
+            $this->serverId, $propertyName, $propertyValue,
+            $propertyValue,
         ));
 
         $this->propsCache[$propertyName] = $propertyValue;
@@ -522,7 +584,7 @@ class DBServer
     {
         $db = \Scalr::getDb();
 
-        return (bool)$db->GetOne("SELECT id FROM servers WHERE server_id=?", array($serverId));
+        return (bool)$db->GetOne("SELECT id FROM servers WHERE server_id=? LIMIT 1", array($serverId));
     }
 
     /**
@@ -535,7 +597,7 @@ class DBServer
     {
         $db = \Scalr::getDb();
 
-        $server_id = $db->GetOne("SELECT server_id FROM servers WHERE farm_roleid = ? AND `index` = ? AND status != ?",
+        $server_id = $db->GetOne("SELECT server_id FROM servers WHERE farm_roleid = ? AND `index` = ? AND status != ? LIMIT 1",
             array($farm_roleid, $index, SERVER_STATUS::TERMINATED)
         );
 
@@ -555,9 +617,9 @@ class DBServer
     {
         $db = \Scalr::getDb();
 
-        $serverId = $db->GetOne("SELECT server_id FROM servers WHERE `local_ip`=? AND `farm_id`=?", array($localIp, $farmId));
+        $serverId = $db->GetOne("SELECT server_id FROM servers WHERE `local_ip`=? AND `farm_id`=? LIMIT 1", array($localIp, $farmId));
         if (!$serverId)
-            throw new ServerNotFoundException(sprintf("Server with local IP '%s' not found in database", $localIp));
+            throw new \Scalr\Exception\ServerNotFoundException(sprintf("Server with local IP '%s' not found in database", $localIp));
 
         return self::LoadByID($serverId);
     }
@@ -572,9 +634,9 @@ class DBServer
     {
         $db = \Scalr::getDb();
 
-        $serverId = $db->GetOne("SELECT server_id FROM server_properties WHERE `name`=? AND `value`=?", array($propName, $propValue));
+        $serverId = $db->GetOne("SELECT server_id FROM server_properties WHERE `name`=? AND `value`=? LIMIT 1", array($propName, $propValue));
         if (!$serverId)
-            throw new ServerNotFoundException(sprintf("Server with property '%s'='%s' not found in database", $propName, $propValue));
+            throw new \Scalr\Exception\ServerNotFoundException(sprintf("Server with property '%s'='%s' not found in database", $propName, $propValue));
 
         return self::LoadByID($serverId);
     }
@@ -588,9 +650,9 @@ class DBServer
     {
         $db = \Scalr::getDb();
 
-        $serverinfo = $db->GetRow("SELECT * FROM servers WHERE server_id=?", array($serverId));
+        $serverinfo = $db->GetRow("SELECT * FROM servers WHERE server_id=? LIMIT 1", array($serverId));
         if (!$serverinfo)
-            throw new ServerNotFoundException(sprintf(_("Server ID#%s not found in database"), $serverId));
+            throw new \Scalr\Exception\ServerNotFoundException(sprintf(_("Server ID#%s not found in database"), $serverId));
 
         $DBServer = new DBServer($serverId);
 
@@ -834,45 +896,39 @@ class DBServer
         }
     }
 
-    function Delete ()
+    private function GetVersionInfo($v)
     {
-        $this->Db->Execute("DELETE FROM servers WHERE server_id = ?", array($this->serverId));
-        $this->Db->Execute("DELETE FROM server_properties WHERE server_id = ?", array($this->serverId));
-        $this->Db->Execute("DELETE FROM messages WHERE server_id = ?", array($this->serverId));
-    }
-
-
-    private function GetVersionInfo($v) {
-
-        // For SVN: 0.7.11 or 0.9.r565 or 0.2-151
-        if (preg_match("/^([0-9]+)\.([0-9]+)[-\.]?[r]*([0-9]+)?$/si", $v, $matches)) {
+        if (preg_match('/^([0-9]+)\.([0-9]+)[-\.]?[r]*([0-9]+)?$/si', $v, $matches)) {
+            // For SVN: 0.7.11 or 0.9.r565 or 0.2-151
             $verInfo = array_map("intval", array_slice($matches, 1));
             while (count($verInfo) < 3) {
                 $verInfo[] = 0;
             }
-            return $verInfo;
-
-        // For GIT: 0.13.b500.57a5ab9
-        } elseif (preg_match("/^([0-9]+)\.([0-9]+)\.b([0-9]+)\.[a-z0-9]+$/si", $v, $matches)) {
+        } elseif (preg_match('/^([0-9]+)\.([0-9]+)\.b([0-9]+)\.[a-z0-9]+$/si', $v, $matches)) {
+            // For GIT: 0.13.b500.57a5ab9
             $verInfo = array_map("intval", array_slice($matches, 1));
             while (count($verInfo) < 3) {
                 $verInfo[] = 0;
             }
-            return $verInfo;
         } else {
-            return array(0, 0, 0);
+            $verInfo = array(0, 0, 0);
         }
+
+        return $verInfo;
     }
 
     /**
      * Return information about scalarizr version installed on instance
+     *
      * @return array
      */
-    public function GetScalarizrVersion() {
+    public function GetScalarizrVersion()
+    {
         return $this->GetVersionInfo($this->GetProperty(SERVER_PROPERTIES::SZR_VESION, true));
     }
 
-    public function IsSupported($v) {
+    public function IsSupported($v)
+    {
         return $this->GetScalarizrVersion() >= $this->GetVersionInfo($v);
     }
 
@@ -883,6 +939,8 @@ class DBServer
      */
     public function SendMessage(Scalr_Messaging_Msg $message, $isEventNotice = false, $delayed = false)
     {
+        $startTime = microtime(true);
+
         if ($this->farmId && $message->getName() != 'BeforeHostTerminate') {
             if ($this->GetFarmObject()->Status == FARM_STATUS::TERMINATED) {
                 $this->Db->Execute("UPDATE messages SET status = ? WHERE messageid = ?", array(MESSAGE_STATUS::FAILED, $message->messageId));
@@ -902,164 +960,216 @@ class DBServer
         $serializer = Scalr_Messaging_XmlSerializer::getInstance();
         $cryptoTool = Scalr_Messaging_CryptoTool::getInstance();
 
-        if ($this->farmRoleId && $this->GetFarmRoleObject()->GetSetting('user-data.scm_branch') == 'branches/feature-json-messaging') {
+        if ($this->GetProperty(SERVER_PROPERTIES::SZR_MESSAGE_FORMAT) == 'json') {
             $serializer = Scalr_Messaging_JsonSerializer::getInstance();
-            $rawMessage = null;
-            $rawJsonMessage = $serializer->serialize($message);
+            $rawMessage = $serializer->serialize($message);
+            $messageType = 'json';
         } else {
             $rawMessage = $serializer->serialize($message);
-            $rawJsonMessage = null;
+            $messageType = 'xml';
         }
 
         //$rawJsonMessage = @json_encode($message);
 
-        // Add message to database
-        $this->Db->Execute("INSERT INTO messages SET
-            `messageid`	= ?,
-            `server_id`	= ?,
-            `message`	= ?,
-            `json_message` = ?,
-            `type`		= 'out',
-            `message_name` = ?,
-            `handle_attempts` = ?,
-            `message_version` = ?,
-            `dtlasthandleattempt` = NOW()
-        ON DUPLICATE KEY UPDATE handle_attempts = handle_attempts+1, dtlasthandleattempt = NOW()
-        ", array(
-            $message->messageId,
-            $this->serverId,
-            $rawMessage,
-            $rawJsonMessage,
-            $message->getName(),
-            ($delayed) ? '0' : '1',
-            ($this->IsSupported("0.5")) ? 2 : 1
-        ));
+        $time = microtime(true) - $startTime;
 
-        if ($delayed || $rawJsonMessage)
+        if (!$message->dbMessageId) {
+            // Add message to database
+            $this->Db->Execute("INSERT INTO messages SET
+                `messageid`	= ?,
+                `processing_time` = ?,
+                `server_id`	= ?,
+                `message`	= ?,
+                `type`		= 'out',
+                `message_name` = ?,
+                `handle_attempts` = ?,
+                `message_version` = ?,
+                `dtlasthandleattempt` = NOW(),
+                `dtadded` = NOW(),
+                `message_format` = ?,
+                `event_id` = ?
+            ON DUPLICATE KEY UPDATE handle_attempts = handle_attempts+1, dtlasthandleattempt = NOW()
+            ", array(
+                $message->messageId,
+                $time,
+                $this->serverId,
+                $rawMessage,
+                $message->getName(),
+                ($delayed) ? '0' : '1',
+                2,
+                $messageType,
+                $message->eventId
+            ));
+
+            $message->dbMessageId = $this->Db->Insert_ID();
+        } else {
+            $this->Db->Execute("UPDATE messages SET handle_attempts = handle_attempts+1, dtlasthandleattempt = NOW() WHERE id = ?", array(
+                $message->dbMessageId
+            ));
+        }
+
+        if ($delayed)
             return $message;
 
         $isVPC = false;
 
-        if ($this->IsSupported("0.5") && !$isEventNotice)
-        {
-            if ($this->farmId)
-                if (DBFarm::LoadByID($this->farmId)->GetSetting(DBFarm::SETTING_EC2_VPC_ID))
-                    $isVPC = true;
 
-            if (!$this->remoteIp && !$this->localIp && !$isVPC)
-                return;
+        if ($this->farmId)
+            if (DBFarm::LoadByID($this->farmId)->GetSetting(DBFarm::SETTING_EC2_VPC_ID))
+                $isVPC = true;
 
-            $rawMessage = $serializer->serialize($message);
+        if (!$this->remoteIp && !$this->localIp && !$isVPC)
+            return;
 
-            $cryptoKey = $this->GetKey(true);
-            $encMessage = $cryptoTool->encrypt($rawMessage, $cryptoKey);
-            list($signature, $timestamp) = $cryptoTool->sign($encMessage, $cryptoKey);
 
-            try
-            {
-                $request = new HttpRequest();
-                $request->setMethod(HTTP_METH_POST);
+        $cryptoKey = $this->GetKey(true);
+        $encMessage = $cryptoTool->encrypt($rawMessage, $cryptoKey);
+        list($signature, $timestamp) = $cryptoTool->sign($encMessage, $cryptoKey);
 
-                $ctrlPort = $this->GetProperty(SERVER_PROPERTIES::SZR_CTRL_PORT);
-                if (!$ctrlPort)
-                    $ctrlPort = 8013;
+        try {
+            $request = new HttpRequest();
+            $request->setMethod(HTTP_METH_POST);
 
-                if (\Scalr::config('scalr.instances_connection_policy') == 'local')
-                    $requestHost = "{$this->localIp}:{$ctrlPort}";
-                elseif (\Scalr::config('scalr.instances_connection_policy') == 'public')
+            $ctrlPort = $this->GetProperty(SERVER_PROPERTIES::SZR_CTRL_PORT);
+            if (!$ctrlPort)
+                $ctrlPort = 8013;
+
+            if (\Scalr::config('scalr.instances_connection_policy') == 'local')
+                $requestHost = "{$this->localIp}:{$ctrlPort}";
+            elseif (\Scalr::config('scalr.instances_connection_policy') == 'public')
+                $requestHost = "{$this->remoteIp}:{$ctrlPort}";
+            elseif (\Scalr::config('scalr.instances_connection_policy') == 'auto') {
+                if ($this->remoteIp)
                     $requestHost = "{$this->remoteIp}:{$ctrlPort}";
-                elseif (\Scalr::config('scalr.instances_connection_policy') == 'auto') {
-                    if ($this->remoteIp)
-                        $requestHost = "{$this->remoteIp}:{$ctrlPort}";
-                    else
-                        $requestHost = "{$this->localIp}:{$ctrlPort}";
-                }
+                else
+                    $requestHost = "{$this->localIp}:{$ctrlPort}";
+            }
 
-                if ($isVPC) {
-                    $routerRole = $this->GetFarmObject()->GetFarmRoleByBehavior(ROLE_BEHAVIORS::VPC_ROUTER);
-                    if ($routerRole) {
-                        // No remote IP need to use proxy
-                        if (!$this->remoteIp) {
-                            $routerRole = $this->GetFarmObject()->GetFarmRoleByBehavior(ROLE_BEHAVIORS::VPC_ROUTER);
-                            $requestHost = $routerRole->GetSetting(Scalr_Role_Behavior_Router::ROLE_VPC_IP) . ":80";
-                            $request->addHeaders(array(
-                                "X-Receiver-Host" =>  $this->localIp,
-                                "X-Receiver-Port" => $ctrlPort
-                            ));
-                        // There is public IP, can use it
-                        } else {
-                            $requestHost = "{$this->remoteIp}:{$ctrlPort}";
-                        }
+            if ($isVPC) {
+                $routerRole = $this->GetFarmObject()->GetFarmRoleByBehavior(ROLE_BEHAVIORS::VPC_ROUTER);
+                if ($routerRole) {
+                    // No remote IP need to use proxy
+                    if (!$this->remoteIp) {
+                        $routerRole = $this->GetFarmObject()->GetFarmRoleByBehavior(ROLE_BEHAVIORS::VPC_ROUTER);
+                        $requestHost = $routerRole->GetSetting(Scalr_Role_Behavior_Router::ROLE_VPC_IP) . ":80";
+                        $request->addHeaders(array(
+                            "X-Receiver-Host" =>  $this->localIp,
+                            "X-Receiver-Port" => $ctrlPort
+                        ));
+                    // There is public IP, can use it
+                    } else {
+                        $requestHost = "{$this->remoteIp}:{$ctrlPort}";
                     }
                 }
+            }
 
-                //Prepare request
-                $request->setUrl("http://{$requestHost}/control");
-                $request->setOptions(array(
-                    'timeout'	=> 4,
-                    'connecttimeout' => 4
-                ));
+            //Prepare request
+            $request->setUrl("http://{$requestHost}/control");
+            $request->setOptions(array(
+                'timeout'	=> \Scalr::config('scalr.system.instances_connection_timeout'),
+                'connecttimeout' => \Scalr::config('scalr.system.instances_connection_timeout')
+            ));
+            $request->addHeaders(array(
+                "Date" =>  $timestamp,
+                "X-Signature" => $signature
+            ));
+
+            if ($messageType == 'json') {
                 $request->addHeaders(array(
-                    "Date" =>  $timestamp,
-                    "X-Signature" => $signature
+                	'Content-type' => 'application/json'
                 ));
+            }
 
-                $request->setBody($encMessage);
+            $request->setBody($encMessage);
 
-                // Send request
-                $request->send();
+            // Send request
+            $request->send();
 
-                // Process response
-                if ($request->getResponseCode() == 201) {
-                    $logger->info(sprintf("[FarmID: %s] Sending message '%s' via REST to server '%s' (server_id: %s) complete",
-                        $this->farmId, $message->getName(), $this->remoteIp, $this->serverId));
+            // Process response
+            if ($request->getResponseCode() == 201) {
+                $logger->info(sprintf("[FarmID: %s] Sending message '%s' via REST to server '%s' (server_id: %s) complete",
+                    $this->farmId, $message->getName(), $this->remoteIp, $this->serverId));
 
-                    if (in_array($message->getName(), array('ExecScript'))) {
-                        $this->Db->Execute("DELETE FROM messages WHERE messageid = ?",
-                            array($message->messageId));
-                    } else {
+                if (in_array($message->getName(), array('ExecScript'))) {
+                    $this->Db->Execute("DELETE FROM messages WHERE messageid = ?",
+                        array($message->messageId));
+                } else {
+                    if ($messageType != 'json') {
                         $this->Db->Execute("UPDATE messages SET status = ?, message = '' WHERE messageid = ?",
                             array(MESSAGE_STATUS::HANDLED, $message->messageId));
+                    } else {
+                        $this->Db->Execute("UPDATE messages SET status = ? WHERE messageid = ?",
+                            array(MESSAGE_STATUS::HANDLED, $message->messageId));
                     }
-                } else {
-                    $logger->warn(sprintf("[FarmID: %s] Cannot deliver message '%s' (message_id: %s) via REST"
-                        . " to server '%s' (server_id: %s). Error: %s %s",
-                        $this->farmId, $message->getName(), $message->messageId,
-                        $this->remoteIp, $this->serverId, $request->getResponseCode(), $request->getResponseStatus()));
-                }
-            }
-            catch(HttpException $e)
-            {
-                if (isset($e->innerException))
-                    $msg = $e->innerException->getMessage();
-                else
-                    $msg = $e->getMessage();
 
-                if ($this->farmId)
-                {
-                    $logger->warn(new FarmLogMessage($this->farmId, sprintf("Cannot deliver message '%s' (message_id: %s) via REST"
-                        . " to server '%s' (server_id: %s). Error: %s %s",
-                        $message->getName(), $message->messageId,
-                        $this->remoteIp, $this->serverId, $request->getResponseCode(), $msg
-                    )));
-                } else {
-                    $logger->fatal(sprintf("Cannot deliver message '%s' (message_id: %s) via REST"
-                        . " to server '%s' (server_id: %s). Error: %s %s",
-                        $message->getName(), $message->messageId,
-                        $this->remoteIp, $this->serverId, $request->getResponseCode(), $msg
-                    ));
+                    if ($message->eventId)
+                        $this->Db->Execute("UPDATE events SET msg_sent = msg_sent + 1 WHERE event_id = ?", array(
+                            $message->eventId
+                        ));
                 }
-
-                return false;
+            } else {
+                $logger->warn(sprintf("[FarmID: %s] Cannot deliver message '%s' (message_id: %s) via REST"
+                    . " to server '%s' (server_id: %s). Error: %s %s",
+                    $this->farmId, $message->getName(), $message->messageId,
+                    $this->remoteIp, $this->serverId, $request->getResponseCode(), $request->getResponseStatus()));
             }
         }
-        else
-        {
-            $this->Db->Execute("DELETE FROM messages WHERE messageid = ?",
-                    array($message->messageId));
+        catch(HttpException $e) {
+            if (isset($e->innerException))
+                $msg = $e->innerException->getMessage();
+            else
+                $msg = $e->getMessage();
+
+            if ($this->farmId) {
+                $logger->warn(new FarmLogMessage($this->farmId, sprintf("Cannot deliver message '%s' (message_id: %s) via REST"
+                    . " to server '%s' (server_id: %s). Error: %s %s",
+                    $message->getName(), $message->messageId,
+                    $this->remoteIp, $this->serverId, $request->getResponseCode(), $msg
+                )));
+            } else {
+                $logger->fatal(sprintf("Cannot deliver message '%s' (message_id: %s) via REST"
+                    . " to server '%s' (server_id: %s). Error: %s %s",
+                    $message->getName(), $message->messageId,
+                    $this->remoteIp, $this->serverId, $request->getResponseCode(), $msg
+                ));
+            }
+
+            return false;
         }
 
         return $message;
+    }
+
+    public function applyGlobalVarsToValue($value)
+    {
+        if (empty($this->globalVariablesCache)) {
+            $formats = \Scalr::config("scalr.system.global_variables.format");
+
+            // Get list of Server system vars
+            foreach ($this->GetScriptingVars() as $name => $val) {
+                $name = "SCALR_".strtoupper($name);
+                $val = trim($val);
+
+                if (isset($formats[$name]))
+                    $value = @sprintf($formats[$name], $val);
+
+                $this->globalVariablesCache[$name] = $val;
+            }
+
+            // Add custom variables
+            $gv = new Scalr_Scripting_GlobalVariables($this->envId);
+            $vars = $gv->listVariables($this->roleId, $this->farmId, $this->farmRoleId);
+            foreach ($vars as $k => $v)
+                $this->globalVariablesCache[$k] = trim($v);
+        }
+
+        //Parse variable
+        $keys = array_keys($this->globalVariablesCache);
+        $f = create_function('$item', 'return "{".$item."}";');
+        $keys = array_map($f, $keys);
+        $values = array_values($this->globalVariablesCache);
+
+        return str_replace($keys, $values, $value);
     }
 
     /**
@@ -1085,19 +1195,21 @@ class DBServer
             'role_name'		=> $dbRole->name,
             'isdbmaster'	=> $isMaster,
             'instance_index'=> $this->index,
+            'server_type'   => $this->GetFlavor(),
             'server_id'		=> $this->serverId,
             'farm_id'		=> $this->farmId,
             'farm_role_id'	=> $this->farmRoleId,
+            'farm_role_alias'	=> $this->GetFarmRoleObject()->Alias,
             'farm_name'		=> $this->GetFarmObject()->Name,
             'farm_hash'     => $this->GetFarmObject()->Hash,
             'behaviors'		=> implode(",", $dbRole->getBehaviors()),
             'env_id'		=> $this->GetEnvironmentObject()->id,
             'env_name'		=> $this->GetEnvironmentObject()->name,
-            'cloud_location' => $dbFarmRole->CloudLocation
+            'cloud_location' => $dbFarmRole->CloudLocation,
+            'cloud_server_id'=> $this->GetCloudServerID()
         );
 
-        if ($this->platform == SERVER_PLATFORMS::EC2)
-        {
+        if ($this->platform == SERVER_PLATFORMS::EC2) {
             $retval['instance_id'] = $this->GetProperty(EC2_SERVER_PROPERTIES::INSTANCE_ID);
             $retval['ami_id'] = $this->GetProperty(EC2_SERVER_PROPERTIES::AMIID);
             $retval['region'] = $this->GetProperty(EC2_SERVER_PROPERTIES::REGION);
@@ -1105,5 +1217,132 @@ class DBServer
         }
 
         return $retval;
+    }
+
+    /**
+     * Marks server as to be terminated.
+     *
+     * @param   string|array           $reason      The reason possibly with the format parameters.
+     * @param   bool                   $forcefully  optional Method: forcefully (true) | gracefully (false)
+     * @param   Scalr_Account_User|int $user        optional The user object or its unique identifier
+     */
+    public function terminate($reason, $forcefully = null, $user = null)
+    {
+        if ($this->status == SERVER_STATUS::PENDING_TERMINATE || $this->status == SERVER_STATUS::TERMINATED) {
+            return;
+        }
+
+        $forcefully = $forcefully === null ? true : (bool) $forcefully;
+
+        //Ensures handling identifier of the user instead of the object
+        if ($user !== null && !($user instanceof \Scalr_Account_User)) {
+            try {
+                $user = Scalr_Account_User::init()->loadById(intval($user));
+            } catch (\Exception $e) {
+            }
+        }
+
+        $class = get_class($this);
+
+        $fnGetReason = function ($reason) use ($class) {
+            $args = func_get_args();
+            if (is_string($reason)) {
+                if (defined($class . '::TERMINATE_REASON_' . $reason)) {
+                    $args[0] = constant($class . '::TERMINATE_REASON_' . $reason);
+                } elseif (strpos($reason, 'TERMINATE_REASON_') === 0 && defined($class . '::' . $reason)) {
+                    $args[0] = constant($class . '::' . $reason);
+                }
+            }
+            return call_user_func_array('sprintf', $args);
+        };
+
+        $reason = is_array($reason) ? call_user_func_array($fnGetReason, $reason) : $fnGetReason($reason);
+
+        //Set who does terminate the server
+        if ($user instanceof \Scalr_Account_User) {
+            $this->SetProperties(array(
+            	SERVER_PROPERTIES::TERMINATED_BY_ID    => $user->id,
+                SERVER_PROPERTIES::TERMINATED_BY_EMAIL => $user->getEmail(),
+            ));
+        }
+
+        $this->status = SERVER_STATUS::PENDING_TERMINATE;
+        $this->dateShutdownScheduled = date("Y-m-d H:i:s", ($forcefully ? time() : strtotime(Scalr::config('scalr.system.server_terminate_timeout'))));
+        $this->Save();
+
+        $this->getServerHistory()->markAsTerminated($reason);
+
+        if (isset($this->farmId)) {
+            Scalr::FireEvent($this->farmId, new BeforeHostTerminateEvent($this, $forcefully));
+        }
+    }
+
+    /**
+     * Gets server history object
+     *
+     * @return  \Scalr\Server\History Returns server history object
+     */
+    public function getServerHistory()
+    {
+        if (!isset($this->serverHistory)) {
+            $this->serverHistory = new \Scalr\Server\History();
+
+            $info = $this->Db->GetRow("
+                SELECT * FROM servers_history WHERE server_id = ? LIMIT 1
+            ", array($this->serverId));
+
+            $bSave = false;
+            $mapping = array('envId' => 'envId', 'farmId' => 'farmId', 'farmRoleid' => 'farmRoleId', 'serverIndex' => 'index');
+
+            if (!$info) {
+                $this->serverHistory->clientId = $this->clientId;
+                $this->serverHistory->serverId = $this->serverId;
+                $this->serverHistory->platform = $this->platform;
+                foreach ($mapping as $prop => $key) {
+                    $this->serverHistory->$prop = $this->$key;
+                }
+                $bSave = true;
+            } else {
+                foreach ($info as $key => $value) {
+                    $prop = lcfirst(\Scalr::camelize($key));
+                    $this->serverHistory->$prop = $value;
+                    if (array_key_exists($prop, $mapping)) {
+                        if ($value != $this->{$mapping[$prop]}) {
+                            $this->serverHistory->$prop = $this->{$mapping[$prop]};
+                            $bSave = true;
+                        }
+                    }
+                }
+            }
+
+            if (!$this->serverHistory->cloudServerId) {
+                $this->serverHistory->cloudServerId = $this->GetCloudServerID();
+                $this->serverHistory->type = $this->GetFlavor();
+                $bSave = true;
+            }
+
+            if ($bSave) {
+                $this->serverHistory->save();
+            }
+        }
+
+        return $this->serverHistory;
+    }
+
+    /**
+     * Gets a list of servers which in the termination process
+     *
+     * @return array Returns the list of the servers
+     */
+    public static function getTerminatingServers()
+    {
+        return Scalr::getDb()->GetAll("
+            SELECT
+                server_id, client_id, env_id, platform, status, dtshutdownscheduled
+            FROM `servers`
+            WHERE `dtshutdownscheduled` IS NOT NULL
+            AND (`status` = ? OR `status` = ?)
+            ORDER BY `dtshutdownscheduled`
+        ", array(SERVER_STATUS::TERMINATED, SERVER_STATUS::PENDING_TERMINATE));
     }
 }

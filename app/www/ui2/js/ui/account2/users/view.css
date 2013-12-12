@@ -1,125 +1,84 @@
-.scalr-ui-account2-edituser-form .x-panel-collapsed{
+.x-panel-collapsible-mini.x-panel-collapsed{
 	height:0!important;
 	margin-bottom:0!important;
 }
 
 /*access control column*/
-.scalr-ui-account-users .user-permission{
+.scalr-ui-panel-account-users .user-permission{
 	font-weight:bold;
 }
 
-.scalr-ui-account-users .x-grid-cell-inner{
+.scalr-ui-panel-account-users .x-grid-cell-inner{
 	position:relative;
 }
 
-.scalr-ui-account-users .x-grid-row-options{
-	width:40px;
-	line-height:22px;
-	height:22px;
+.scalr-ui-panel-account-users .x-grid-row-options{
 	display:none;
 	position:absolute;
-	top:1px;
-	right:5px;
-	background:#eeeeee;
-	box-shadow:none;
+	top:2px;
+	right:10px;
+    height: 20px;
+    width: 48px;
+    background: #FAFAFA;
+    border-radius: 2px;
 }
 
-.scalr-ui-account-users .x-grid-row-options:hover{
-	background:#eeeeee;
-	box-shadow:none;
-}
-
-.scalr-ui-account-users .x-grid-row-over .x-grid-row-options, .scalr-ui-account-users .x-grid-row-selected .x-grid-row-options{
+.scalr-ui-panel-account-users .x-grid-row-over .x-grid-row-options,
+.scalr-ui-panel-account-users .x-grid-row-selected .x-grid-row-options{
 	display:block;
 }
 
-.scalr-ui-account-users .x-grid-row-options-icon{
-	width:16px;
-	height:16px;
-	background:url("/ui2/js/extjs-4.1/theme/images/tools/tool-sprites.png") 0 -48px no-repeat;
-}
-
-.scalr-ui-account-users .x-grid-row-options-trigger{
-	right:5px;
-}
-
-
-/*permissions menu*/
-.x-menu-account2-teams-permissions,  .x-menu-account2-teams-permissions .x-menu-body{
-	background:#fff!important;
-	border-radius: 3px;
-	box-shadow: 0 1px 3px #7B8BA1;	
-}
-
-.x-menu-account2-teams-permissions .x-menu-icon-separator{
-	display:none;
-}
-
-.x-menu-account2-teams-permissions .x-menu-item-text{
-	color:#000;
-}
-
-.x-menu-account2-teams-permissions .x-menu-item-link{
-	padding:4px 4px 4px 30px;
-}
-
-.x-menu-account2-teams-permissions .x-menu-item-active .x-menu-item-link{
-	background:#eee;
-	box-shadow:none;
-}
-
-.x-menu-account2-teams-permissions .x-menu-item-separator{
-	height:1px;
-	border:0;
-	background:#eee;
-}
-
-.x-menu-account2-teams-permissions .x-menu-item-icon{
-	top:6px;
-}
-.x-menu-account2-teams-permissions .x-menu-item-text{
-	font-weight:bold;
-	color:#333;
+.scalr-ui-panel-account-users .x-grid-row-options-icon{
+	width:32px;
+	height:20px;
+	background:url("/ui2/images/ui/account/manage_access.png") 0 0 no-repeat;
+    margin: 0 auto;
 }
 
 /*edit teams button*/
-.scalr-ui-account-user-teams-list{
+.scalr-ui-panel-account-users .user-teams{
 	line-height: 24px;
 }
 
-.scalr-ui-account-user-teams-list a{
+.scalr-ui-panel-account-users .user-teams a{
 	color:#0055cc;
 }
 
-.scalr-ui-account-user-teams-list .user-teams-edit{
-	background: rgba(255, 255, 255, 0.8);
-	padding: 1px 8px;
-	border: 1px dotted #B1B7C7;
-	border-radius: 3px;
-	color: #333333;
-	font: normal 12px arial, helvetica, sans-serif;
+.scalr-ui-panel-account-users .user-teams .x-form-display-field {
+    padding-right: 60px;
+    position: relative;
 }
 
-.scalr-ui-account-user-teams-list .user-teams-edit:hover{
-	background: rgba(255, 255, 255, 0.5);
-	color: #333333;
+.scalr-ui-panel-account-users .user-teams-edit{
+	/*background: rgba(255, 255, 255, 0.8);
+	padding: 2px 10px;
+	border: 1px dotted #B1B7C7;
+	border-radius: 3px;
+	color: #333333;*/
+
+    padding: 2px 10px;
+    background: #cfd8e2;
+    border-radius: 3px;
+    color: #212b3d!important;
+    text-shadow: 0 1px rgba(255,255,255,0.3);
+    
+	font: bold 12px arial, helvetica, sans-serif;
+    position: absolute;
+    top: 0;
+    right: 0;
+}
+
+.scalr-ui-panel-account-users .user-teams-edit:hover{
+	background: #dae2eb;
 	text-decoration:none;
 }
 
-.hide-edit-teams-button .user-teams-edit{
+.scalr-ui-panel-account-users .user-teams.expanded .user-teams-edit{
 	display:none;
 }
 
-
-/*hide grid button*/
-.scalr-ui-account-users .x-btn-groupacton-close{
-	width: 19px;
-	height:19px;
-	background: url('/ui2/images/ui/account/close_button_sprite.png?1.2') 0 0 no-repeat;
-}
-
-.scalr-ui-account-users .x-btn-action-small-over .x-btn-groupacton-close{
-	background-position:0 -19px;
-	transition:none;
-	-webkit-transition: none;
+.scalr-ui-users-account-admin{
+    background: #fefde0;
+    border-radius: 3px;
+    padding: 18px;
 }

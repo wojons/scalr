@@ -60,7 +60,7 @@ class RESTEventObserver implements IDeferredEventObserver
         $DB = \Scalr::getDb();
 
         // Event message
-        $message = urlencode($DB->GetOne("SELECT message FROM events WHERE event_id = ?", array($args[0]->GetEventID())));
+        $message = urlencode($DB->GetOne("SELECT message FROM events WHERE event_id = ? LIMIT 1", array($args[0]->GetEventID())));
 
         $ch = @curl_init();
 

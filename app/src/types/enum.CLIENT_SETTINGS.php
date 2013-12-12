@@ -1,4 +1,4 @@
-<?
+<?php
     final class CLIENT_SETTINGS
     {
         const MAX_INSTANCES_LIMIT 	= 'client_max_instances';

@@ -1,0 +1,8 @@
+[subject]Farm's non-standard request was approved[/subject]
+
+{{user_name}} approved your request for farm "{{farm_name}}" with comment "{{comment}}".
+
+New termination date was set to {{date}}.
+
+Regards,
+The Scalr Team

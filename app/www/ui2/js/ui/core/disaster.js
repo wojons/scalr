@@ -13,7 +13,6 @@ Scalr.regPage('Scalr.ui.core.disaster', function (loadParams, moduleParams) {
 	
 	var panel = Ext.create('Ext.form.Panel', {
 		width: 700,
-		bodyCls: 'x-panel-body-frame',
 		title: 'Infrastructure disaster status',
 		bodyPadding: 5,
 		fieldDefaults: {
@@ -32,7 +31,7 @@ Scalr.regPage('Scalr.ui.core.disaster', function (loadParams, moduleParams) {
 
 		dockedItems: [{
 			xtype: 'container',
-			cls: 'x-docked-bottom-frame',
+			cls: 'x-docked-buttons',
 			dock: 'bottom',
 			layout: {
 				type: 'hbox',

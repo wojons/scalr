@@ -1,16 +1,14 @@
 Scalr.regPage('Scalr.ui.farms.builder.tabs.cloudfoundry', function () {
 	return Ext.create('Scalr.ui.FarmsBuilderTab', {
 		tabTitle: 'CloudFoundry settings',
-
+        
+        settings: {
+            'cf.data_storage.engine': 'ebs',
+            'cf.data_storage.ebs.size': 5
+        },
+        
 		isEnabled: function (record) {
 			return (record.get('behaviors').match('cf_') && record.get('platform') == 'ec2');
-		},
-
-		getDefaultValues: function (record) {
-			return {
-				'cf.data_storage.engine': 'ebs',
-				'cf.data_storage.ebs.size': 5
-			};
 		},
 
 		showTab: function (record) {

@@ -52,7 +52,7 @@ class Modules_Platforms_Ec2_Observers_Ebs extends EventObserver
                     $res = $aws->ec2->volume->create($req);
 
                     if (!empty($res->volumeId)) {
-                        $DBFarmRole->SetSetting(DBFarmRole::SETTING_MYSQL_MASTER_EBS_VOLUME_ID, $res->volumeId);
+                        $DBFarmRole->SetSetting(DBFarmRole::SETTING_MYSQL_MASTER_EBS_VOLUME_ID, $res->volumeId, DBFarmRole::TYPE_LCL);
                         Logger::getLogger(LOG_CATEGORY::FARM)->info(
                             new FarmLogMessage($event->DBServer->farmId, sprintf(
                                 _("MySQL %S volume created. Volume ID: %s..."),
@@ -179,6 +179,7 @@ class Modules_Platforms_Ec2_Observers_Ebs extends EventObserver
             if (!$this->DB->GetOne("
                     SELECT id FROM ec2_ebs
                     WHERE farm_roleid=? AND server_index=? AND ismanual='0'
+                    LIMIT 1
                 ", array(
                     $event->DBServer->farmRoleId,
                     $event->DBServer->index

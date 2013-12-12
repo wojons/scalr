@@ -28,21 +28,31 @@ class ListPortsFilter extends Marker
      */
     private $id;
 
+
+    /**
+     * Filter by ID of the network
+     *
+     * @var array
+     */
+    private $networkId;
+
     //TODO Additional filters can be added
 
     /**
      * Convenient constructor
      *
-     * @param   string|array        $name         optional The one or more name of the subnet
-     * @param   string|array        $id           optional The one or more ID of the subnet
+     * @param   string|array        $name         optional The one or more name of the port
+     * @param   string|array        $id           optional The one or more ID of the port
+     * @param   string|array        $networkid    optional The one or more ID of the network
      * @param   string              $marker       optional A marker.
      * @param   int                 $limit        optional Limit.
      */
-    public function __construct($name = null, $id = null, $marker = null, $limit = null)
+    public function __construct($name = null, $id = null, $networkId = null, $marker = null, $limit = null)
     {
         parent::__construct($marker, $limit);
         $this->setName($name);
         $this->setId($id);
+        $this->setNetworkId($networkId);
     }
 
     /**
@@ -50,11 +60,12 @@ class ListPortsFilter extends Marker
      *
      * @param   string|array        $name         optional The one or more name of the subnet
      * @param   string|array        $id           optional The one or more ID of the subnet
+     * @param   string|array        $networkid    optional The one or more ID of the network
      * @param   string              $marker       optional A marker.
      * @param   int                 $limit        optional Limit.
-     * @return  ListSubnetsFilter  Returns a new ListSubnetsFilter object
+     * @return  ListPortsFilter  Returns a new ListPortsFilter object
      */
-    public static function init($name = null, $id = null, $marker = null, $limit = null)
+    public static function init()
     {
         return call_user_func_array('parent::init', func_get_args());
     }
@@ -73,7 +84,7 @@ class ListPortsFilter extends Marker
      * Sets one or more name of the subnet to filter
      *
      * @param   string $name The list of the name of the subnet to filter
-     * @return  ListSubnetsFilter
+     * @return  ListPortsFilter
      */
     public function setName($name = null)
     {
@@ -105,11 +116,11 @@ class ListPortsFilter extends Marker
      * Sets the list of ID of the subnet
      *
      * @param   array|string   $id  The one or more ID of the subnet
-     * @return  ListSubnetsFilter
+     * @return  ListPortsFilter
      */
     public function setId($id = null)
     {
-        $this->id = $id;
+        $this->id = array();
         return $id === null ? $this : $this->addId($id);
     }
 
@@ -117,7 +128,7 @@ class ListPortsFilter extends Marker
      * Adds one or more ID of the subnet to filter
      *
      * @param   string|array $id The one or more ID of the subnet to filter
-     * @return  ListSubnetsFilter
+     * @return  ListPortsFilter
      */
     public function addId($id)
     {
@@ -125,36 +136,35 @@ class ListPortsFilter extends Marker
     }
 
     /**
-     * Adds property's value
+     * Gets the list of the name of the networks.
      *
-     * @param   string       $name     PropertyName
-     * @param   array|string $value    value
-     * @param   \Closure     $typeCast optional Type casting closrure
-     * @return  ListNetworksFilter
+     * @return  array  Returns array of the name of the networks to filter
      */
-    private function _addPropertyValue($name, $value, \Closure $typeCast = null)
+    public function getNetworkId()
     {
-        if (!property_exists($this, $name)) {
-            throw new \InvalidArgumentException(sprintf(
-                'Property "%s" does not exist in "%s"',
-                $name, get_class($this)
-            ));
-        }
-        if ($this->$name === null) {
-            $this->$name = array();
-        }
-        $property =& $this->$name;
-        if (!is_array($value) && !($value instanceof \Traversable)) {
-            $value = array($value);
-        }
-        foreach ($value as $v) {
-            if ($typeCast !== null) {
-                $property[] = $typeCast($v);
-            } else {
-                $property[] = (string)$v;
-            }
-        }
-        return $this;
+        return $this->networkId;
+    }
+
+    /**
+     * Sets one or more identifiers of the networks to filter
+     *
+     * @param   string|array $networkId The list of the identifiers of the networks to filter
+     * @return  ListPortsFilter
+     */
+    public function setNetworkId($newtorkId = null)
+    {
+        $this->networkId = array();
+        return $newtorkId == null ? $this : $this->addNetworkId($newtorkId);
+    }
+
+    /**
+     * Adds one or more identifiers of the networks to filter
+     *
+     * @param   string|array $networkId The identifier of the network to filter
+     */
+    public function addNetworkId($networkId)
+    {
+        return $this->_addPropertyValue('networkId', $networkId);
     }
 
     /**
@@ -171,6 +181,9 @@ class ListPortsFilter extends Marker
         if (!empty($this->id)) {
             $options['id'] = $this->getId();
         }
+        if (!empty($this->networkId)) {
+            $options['network_id'] = $this->getNetworkId();
+        }
 
         return $options;
     }
@@ -183,13 +196,7 @@ class ListPortsFilter extends Marker
     {
         $str = parent::getQueryString();
 
-        foreach (array('name', 'id') as $prop) {
-            if (!empty($this->$prop)) {
-                foreach ($this->$prop as $v) {
-                    $str .= '&' . $prop . '=' . rawurlencode($v);
-                }
-            }
-        }
+        $str .= $this->_getQueryStringForFields(array('name', 'id', 'networkId' => 'network_id'), __CLASS__);
 
         return ltrim($str, '&');
     }

@@ -39,11 +39,11 @@ class FixedIp extends AbstractInitType
     /**
      * Initializes a new FixedIp
      *
-     * @param   string     $ipAddress An IP Address
-     * @param   string     $subnetId  The ID of the subnet
+     * @param   string     $ipAddress optional An IP Address
+     * @param   string     $subnetId  optional The ID of the subnet
      * @return  FixedIp
      */
-    public static function init($ipAddress = null, $subnetId = null)
+    public static function init()
     {
         return call_user_func_array('parent::init', func_get_args());
     }

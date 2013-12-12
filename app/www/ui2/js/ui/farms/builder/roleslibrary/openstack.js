@@ -4,13 +4,16 @@ Scalr.regPage('Scalr.ui.farms.builder.addrole.openstack', function () {
         isExtraSettings: true,
         hidden: true,
 
-        cls: 'x-delimiter-top',
-        padding: '18 24',
+        cls: 'x-container-fieldset x-fieldset-separator-bottom',
         
-        layout: 'hbox',
+        layout: 'fit',
+        defaults: {
+            maxWidth: 762
+        },
 
         isVisibleForRole: function(record) {
-            return Ext.Array.contains(['openstack', 'rackspacengus', 'rackspacenguk'], record.get('platform'));
+            var platform = record.get('platform');
+            return Scalr.isOpenstack(platform);
         },
 
         onSelectImage: function(record) {
@@ -33,7 +36,9 @@ Scalr.regPage('Scalr.ui.farms.builder.addrole.openstack', function () {
                 },
                 function(data, status){
                     var flavorIdField = this.down('[name="openstack.flavor-id"]'),
-                        value = '';
+                        ipPoolsField = this.down('[name="openstack.ip-pool"]'),
+                        value = '', 
+                        ipPools = data ? data['ipPools'] : null;
                     if (status) {
                         flavorIdField.store.load({ data:  data['flavors'] || []});
                         if (flavorIdField.store.getCount() > 0) {
@@ -42,6 +47,10 @@ Scalr.regPage('Scalr.ui.farms.builder.addrole.openstack', function () {
                     }
                     flavorIdField.setValue(value);
                     flavorIdField.setDisabled(!status);
+                    
+                    ipPoolsField.reset();
+                    ipPoolsField.store.load({data: ipPools || []});
+                    ipPoolsField.setVisible(!!ipPools);
                 },
                 this
             );
@@ -53,25 +62,46 @@ Scalr.regPage('Scalr.ui.farms.builder.addrole.openstack', function () {
 
         getSettings: function() {
             return {
-                'openstack.flavor-id': this.down('[name="openstack.flavor-id"]').getValue()
+                'openstack.flavor-id': this.down('[name="openstack.flavor-id"]').getValue(),
+                'openstack.ip-pool': this.down('[name="openstack.ip-pool"]').getValue()
             };
         },
 
         items: [{
-            xtype: 'combo',
-            store: {
-                fields: [ 'id', 'name' ],
-                proxy: 'object'
-            },
-            maxWidth: 710,
-            flex: 1,
-            valueField: 'id',
-            displayField: 'name',
-            fieldLabel: 'Flavor',
-            labelWidth: 50,
-            editable: false,
-            queryMode: 'local',
-            name: 'openstack.flavor-id'
+            xtype: 'container',
+            layout: 'hbox',
+            items: [{
+                xtype: 'combo',
+                name: 'openstack.flavor-id',
+                flex: 1,
+                maxWidth: 385,
+                fieldLabel: 'Flavor',
+                labelWidth: 50,
+                editable: false,
+                queryMode: 'local',
+                store: {
+                    fields: [ 'id', 'name' ],
+                    proxy: 'object'
+                },
+                valueField: 'id',
+                displayField: 'name'
+            },{
+                xtype: 'combo',
+                name: 'openstack.ip-pool',
+                flex: 1,
+                fieldLabel: 'Floating IPs pool',
+                labelWidth: 110,
+                editable: false,
+                hidden: true,
+                margin: '0 0 0 64',
+                queryMode: 'local',
+                store: {
+                    fields: [ 'id', 'name' ],
+                    proxy: 'object'
+                },
+                valueField: 'id',
+                displayField: 'name'
+            }]
         }]
     }
 });

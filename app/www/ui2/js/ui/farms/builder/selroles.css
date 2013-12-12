@@ -1,15 +1,13 @@
 /*farm roles filter toolbar*/
 .scalr-ui-selroles-filter{
     z-index:3;
-	background-color:#DFE4EA;
-	background:-webkit-gradient(linear, center bottom, center top, color-stop(0,rgba(223,228,234,0)), color-stop(14%,rgba(223,228,234,1)));
-	background:-moz-linear-gradient(center bottom, rgba(223,228,234,0), rgba(223,228,234,1) 14%);
-	background:linear-gradient(center bottom, rgba(223,228,234,0), rgba(223,228,234,1) 14%);
+	background-color:#f0f1f4;
+    box-shadow: 0 1px #DBDFE6 inset;
 }
 
 /*boxes dataview selroles*/
 .scalr-ui-dataview-selroles{
-    background: #DFE4EA;
+    background: #f0f1f4;
 }
 
 .scalr-ui-dataview-selroles .x-item{
@@ -17,7 +15,7 @@
 }
 
 .scalr-ui-dataview-selroles .x-item:last-child{
-	margin-bottom:154px;
+	margin-bottom:160px;
 }
 
 .scalr-ui-dataview-selroles .x-item-inner{
@@ -59,24 +57,31 @@
 	display:none;
 	position:absolute;
     z-index: 1;
-	bottom:-11px;
-	left:-10px;
+	bottom:-10px;
+	left:-9px;
 	font-weight:bold;
-	width:27px;
-    height:28px;
-    line-height:27px;
+	width:24px;
+    height:25px;
+    line-height:25px;
     text-align:center;
-    background: url('/ui2/images/ui/farms/selroles/role_number_sprite.png') 0 0 no-repeat;
+    background: url('/ui2/images/ui/farms/selroles/role_number_sprite.png?1.3') 0 0 no-repeat;
 }
 
 .scalr-ui-dataview-selroles .x-item-over .launchindex{
-    background-position:0 -28px;
+    background-position:0 -25px;
 }
 
 .scalr-ui-dataview-selroles .x-item-selected .launchindex{
-    background-position:0 -56px;
+    background-position:0 -50px;
 }
 
+.scalr-ui-dataview-selroles .x-item-invalid .launchindex{
+    background-position:0 -75px;
+}
+
+.scalr-ui-dataview-selroles .x-item-invalid.x-item-selected .launchindex{
+    background-position:0 -125px;
+}
 
 .scalr-ui-dataview-selroles-sortable .launchindex{
 	display:block;
@@ -89,15 +94,15 @@
     z-index: 1;
 	right: -10px;
 	top: -9px;
-	width: 27px;
-	height: 26px;
+	width: 24px;
+	height: 24px;
     cursor:pointer;
-    background: url('/ui2/images/ui/farms/selroles/close_bg.png?1.1') 0 0 no-repeat;
+    background: url('/ui2/images/ui/farms/selroles/close_bg.png?1.3') 0 0 no-repeat;
     visibility:hidden;
 }
 
 .scalr-ui-dataview-selroles .delete-role{
-    background: url('/ui2/images/ui/farms/selroles/close_small_sprite.png?1.1') 0 0 no-repeat;
+    background: url('/ui2/images/ui/farms/selroles/close_small_sprite.png?1.2') 0 0 no-repeat;
     z-index: 2;
 }
 
@@ -108,84 +113,79 @@
 
 
 .scalr-ui-dataview-selroles .delete-role:hover{
-    background-position: 0 -26px;
+    background-position: 0 -24px;
 }
 
 .scalr-ui-dataview-selroles .x-item-selected .delete-role-bg{
-	background-position: 0 -26px;
+	background-position: 0 -24px;
+}
+
+.scalr-ui-dataview-selroles .x-item-invalid .delete-role-bg{
+	background-position: 0 -48px;
+}
+
+.scalr-ui-dataview-selroles .x-item-selected.x-item-invalid .delete-role-bg{
+	background-position: 0 -72px;
 }
 
 .scalr-ui-dataview-selroles .x-item-selected .delete-role{
-	background-position: -27px 0;
+	background-position: -24px 0;
 }
 
 .scalr-ui-dataview-selroles .x-item-selected .delete-role:hover{
-    background-position: -27px -26px;
+    background-position: -24px -24px;
 }
 
 /*add role flying button*/
 .scalr-ui-dataview-selroles-add{
-	width: 110px;
+	width: 112px;
 	height: 150px;
 	text-align: center;
 	font: bold 13px/20px arial;
-	color: #4A5E82;
-	text-shadow: 0 1px #E9ECF0;
-	cursor:pointer;
+	color: #49634C;
 	position:absolute;
 	padding-left:10px;
 	bottom:0px;
-	background-color:#DFE4EA;
-	background:-webkit-gradient(linear, center top, center bottom, color-stop(0,rgba(223,228,234,0)), color-stop(2%,rgba(223,228,234,1)));
-	background:-moz-linear-gradient(center top, rgba(223,228,234,0), rgba(223,228,234,1) 2%);
-	background:linear-gradient(center top, rgba(223,228,234,0), rgba(223,228,234,1) 2%);
+	background:#f0f1f4;
     z-index:3;
 }
 
 .scalr-ui-dataview-selroles-add .x-item-inner{
 	height:100px;
-	margin:6px 0 10px;
+	margin:3px 0 12px;
 	border-radius: 4px;
-	border: 2px dashed #A9BCD8;
+    background: #E1ECDD;
+	border: 2px dashed #E1ECDD;
+    cursor:pointer;
 }
 
 .scalr-ui-dataview-selroles-add span{
 	display:block;
-	margin-top:23px;
+	margin-top:25px;
 }
 
 .scalr-ui-dataview-selroles-add .x-item-inner:hover{
-	background: #CED8E2;
+	background: #E4EEDF;
+    border: 2px solid #E4EEDF;
+}
+
+.scalr-ui-dataview-selroles-add.x-disabled .x-item-inner{
+    background-color: #E4E4E4;
+    color:#555555;
+    cursor: default;
+    border: 2px solid #E4E4E4;
 }
 
 /*farm settings button*/
 .scalr-ui-farm-settings-btn{
 	border-radius:0;
-	padding: 3px 0;
     position:relative;
     z-index:4;
 }
 
-.scalr-ui-farm-settings-btn .x-btn-inner{
-	font: bold 12px arial;
-	color: #333333;
-	text-shadow: 0 1px rgba(255, 255, 255, 0.3);
-}
-
-.scalr-ui-farm-settings-btn.x-btn-pressed .x-btn-inner{
-	color:#fff;
-}
-
-.scalr-ui-farm-settings-btn .x-btn-icon{
-	width:17px;
-	height:18px;
-	left:0;
-	top:5px;
-	background: url('/ui2/images/ui/farms/gear_sprite.png') 0 0 no-repeat;
-}
-
-.scalr-ui-farm-settings-btn.x-btn-pressed .x-btn-icon{
-	background-position: 0 -19px;
+.scalr-ui-farm-settings-btn .x-btn-icon-el{
+	left: 2px;
+	top: 3px;
 }
 
 /*color corner*/
@@ -199,4 +199,26 @@
 
 .scalr-ui-show-color-corners .x-item-color-corner-role{
     visibility:visible;
+}
+
+@media only screen and (-webkit-min-device-pixel-ratio: 1.5),
+    only screen and (-o-min-device-pixel-ratio: 3/2),
+    only screen and (min--moz-device-pixel-ratio: 1.5),
+    only screen and (min-device-pixel-ratio: 1.5) {
+
+    .scalr-ui-dataview-selroles .delete-role-bg,
+    .scalr-ui-dataview-selroles .delete-role{
+        background-image: url('/ui2/images/ui/farms/selroles/close_bg_retina.png?1.1');
+        background-size: 24px 96px;
+    }
+
+    .scalr-ui-dataview-selroles .delete-role {
+        background-image: url('/ui2/images/ui/farms/selroles/close_small_sprite_retina.png?1.1');
+        background-size: 48px 48px;
+    }
+
+    .scalr-ui-dataview-selroles .launchindex{
+        background-image: url('/ui2/images/ui/farms/selroles/role_number_sprite_retina.png?1.1');
+        background-size: 24px 150px;
+    }
 }

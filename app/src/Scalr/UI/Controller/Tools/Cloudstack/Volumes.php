@@ -1,8 +1,14 @@
 <?php
+use Scalr\Acl\Acl;
 
 class Scalr_UI_Controller_Tools_Cloudstack_Volumes extends Scalr_UI_Controller
 {
     const CALL_PARAM_NAME = 'volumeId';
+
+    public function hasAccess()
+    {
+        return parent::hasAccess() && $this->request->isAllowed(Acl::RESOURCE_CLOUDSTACK_VOLUMES);
+    }
 
     public function defaultAction()
     {
@@ -29,18 +35,9 @@ class Scalr_UI_Controller_Tools_Cloudstack_Volumes extends Scalr_UI_Controller
             'cloudLocation'
         ));
 
-        $platformLocations = self::loadController('Platforms')->getEnabledPlatforms(true);
-        foreach ($platformLocations as $p => $details) {
-            foreach ($details['locations'] as $key => $loc) {
-                if ($key == $this->getParam('cloudLocation')) {
-                    $platformName = $p;
-                    break;
-                }
-            }
-
-            if ($platformName)
-                break;
-        }
+        $platformName = $this->getParam('platform');
+        if (!$platformName)
+            throw new Exception("Cloud should be specified");
 
         $platform = PlatformFactory::NewPlatform($platformName);
 
@@ -65,18 +62,9 @@ class Scalr_UI_Controller_Tools_Cloudstack_Volumes extends Scalr_UI_Controller
             'volumeId'
         ));
 
-        $platformLocations = self::loadController('Platforms')->getEnabledPlatforms(true);
-        foreach ($platformLocations as $p => $details) {
-            foreach ($details['locations'] as $key => $loc) {
-                if ($key == $this->getParam('cloudLocation')) {
-                    $platformName = $p;
-                    break;
-                }
-            }
-
-            if ($platformName)
-                break;
-        }
+        $platformName = $this->getParam('platform');
+        if (!$platformName)
+            throw new Exception("Cloud should be specified");
 
         $platform = PlatformFactory::NewPlatform($platformName);
 
@@ -87,7 +75,7 @@ class Scalr_UI_Controller_Tools_Cloudstack_Volumes extends Scalr_UI_Controller
             $platformName
         );
 
-        $volumes = $cs->listVolumes($this->getParam('cloudLocation'));
+        $volumes = $cs->listVolumes($this->getParam('cloudLocation'), 1);
 
         $vols = array();
         foreach ($volumes as $pk=>$pv)
@@ -106,7 +94,7 @@ class Scalr_UI_Controller_Tools_Cloudstack_Volumes extends Scalr_UI_Controller
                 'storage'		=> $pv->storage
             );
 
-            $item['autoSnaps'] = ($this->db->GetOne("SELECT id FROM autosnap_settings WHERE objectid=? AND object_type=?",
+            $item['autoSnaps'] = ($this->db->GetOne("SELECT id FROM autosnap_settings WHERE objectid=? AND object_type=? LIMIT 1",
                  array($pv->id, AUTOSNAPSHOT_TYPE::CSVOL))) ? true : false;
 
 

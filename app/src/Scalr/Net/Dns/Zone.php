@@ -1,4 +1,4 @@
-<?
+<?php
     class Scalr_Net_Dns_Zone
     {
 

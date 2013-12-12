@@ -39,8 +39,6 @@ class Scalr_ServiceConfiguration extends Scalr_Model
     {
         parent::loadBy($info);
 
-        error_reporting(E_ALL);
-
         $filePath = @dirname(__FILE__)."/../../www/storage/service-configuration-manifests/{$this->roleBehavior}.ini";
 
         $ini_params = @parse_ini_file($filePath, true, INI_SCANNER_RAW);

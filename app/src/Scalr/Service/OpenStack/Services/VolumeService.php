@@ -137,9 +137,9 @@ class VolumeService extends AbstractService implements ServiceInterface
      * @return  array     Returns the list of snapshots.
      * @throws  RestClientException
      */
-    public function listShanpshots($detailed = true)
+    public function listSnapshots($detailed = true)
     {
-        return $this->getApiHandler()->listShanpshots($detailed);
+        return $this->getApiHandler()->listSnapshots($detailed);
     }
 
     /**

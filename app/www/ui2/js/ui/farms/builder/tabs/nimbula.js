@@ -2,20 +2,19 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.nimbula', function () {
 	return Ext.create('Scalr.ui.FarmsBuilderTab', {
 		tabTitle: 'Nimbula settings',
         itemId: 'numbula',
+        
+        settings: {
+            'nimbula.shape': 'small'
+        },
+        
 		tabData: null,
 
 		isEnabled: function (record) {
 			return record.get('platform') == 'nimbula';
 		},
 
-		getDefaultValues: function (record) {
-			return {
-				'nimbula.shape': 'small'
-			};
-		},
-
 		beforeShowTab: function (record, handler) {
-            this.up('#farmbuilder').cache.load(
+            Scalr.CachedRequestManager.get('farmbuilder').load(
                 {
                     url: '/platforms/nimbula/xGetShapes/',
                     params: {

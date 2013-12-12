@@ -20,7 +20,6 @@ Scalr.regPage('Scalr.ui.services.mongodb.status', function (loadParams, modulePa
 	var panel = Ext.create('Ext.form.Panel', {
 		width: 800,
 		title: 'MongoDB status',
-		bodyCls: 'x-panel-body-frame',
 		fieldDefaults: {
 			anchor: '100%',
 			labelWidth: 130
@@ -47,7 +46,7 @@ Scalr.regPage('Scalr.ui.services.mongodb.status', function (loadParams, modulePa
 			title: 'DNS endpoints',
 			items: [{
 				xtype: 'displayfield',
-				fieldCls: 'x-form-field-info',
+				cls: 'x-form-field-info',
 				value: 'Public - To connect to the service from the Internet<br / >Private - To connect to the service from another instance'
 			}, {
 				xtype: 'displayfield',
@@ -81,7 +80,7 @@ Scalr.regPage('Scalr.ui.services.mongodb.status', function (loadParams, modulePa
 									url: '/services/mongodb/xAddShard/',
 									params: {farmId: loadParams['farmId'], farmRoleId: moduleParams['farmRoleId']},
 									success: function() {
-
+                                        Scalr.event.fireEvent('refresh');
 									}
 								});
 							else if (e.getTarget('div.scalr-ui-services-mongodb-status-replica-add') && (clusterStatus && (serverStatus && serverStatus != 'terminated')))
@@ -97,7 +96,7 @@ Scalr.regPage('Scalr.ui.services.mongodb.status', function (loadParams, modulePa
 									url: '/services/mongodb/xAddReplicaSet/',
 									params: {farmId: loadParams['farmId'], farmRoleId: moduleParams['farmRoleId']},
 									success: function(){
-
+                                        Scalr.event.fireEvent('refresh');
 									}
 								});
 						});
@@ -160,7 +159,7 @@ Scalr.regPage('Scalr.ui.services.mongodb.status', function (loadParams, modulePa
                         url: '/services/mongodb/xRemoveShard/',
                         params: {farmId: loadParams['farmId'], farmRoleId: moduleParams['farmRoleId']},
                         success: function(){
-
+                            Scalr.event.fireEvent('refresh');
                         }
                     });
                 }
@@ -181,7 +180,7 @@ Scalr.regPage('Scalr.ui.services.mongodb.status', function (loadParams, modulePa
                         url: '/services/mongodb/xRemoveReplicaSet/',
                         params: {farmId: loadParams['farmId'], farmRoleId: moduleParams['farmRoleId']},
                         success: function(){
-
+                            Scalr.event.fireEvent('refresh');
                         }
                     });
                 }
@@ -265,7 +264,7 @@ Scalr.regPage('Scalr.ui.services.mongodb.status', function (loadParams, modulePa
 				}, {
 					text: 'Severity',
 					dataIndex: 'severity',
-					width: 90
+					width: 100
 				}, {
 					text: 'Message',
 					dataIndex: 'message',

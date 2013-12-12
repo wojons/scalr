@@ -1,20 +1,5 @@
-/*fieldset*/
-.scalr-ui-dbmsrstatus-panel .x-fieldset-with-toggle .x-fieldset-header:hover{
-	background:transparent;
-}
-
-.scalr-ui-dbmsrstatus-panel .x-fieldset-with-toggle .x-fieldset .x-fieldset-header{
-	padding-left: 32px;
-}
-.x-dbmsclustermapfield-container .x-fieldset{
-	border-radius:0;
-}
-
-
-/*increase storage size btn*/
-.scalr-ui-dbmsr-status-increase .x-btn-inner {
-    background:transparent url("/ui2/images/ui/db/increase.png") 0 1px no-repeat;
-    height: 22px;
+.scalr-ui-dbmsrstatus-panel{
+    overflow-x: hidden!important;/*there is horizontal scrollbar in firefox only for unknown reason*/
 }
 
 /*inprogress indicator*/
@@ -25,21 +10,18 @@
 	line-height:24px;
 	text-align:center;
 	font-size:13px;
+    height: 26px;
+    width:145px;
 }
 
 /*button stop*/
 .scalr-ui-dbmsr-status-stop{
-	background:transparent;
-	box-shadow:none;
-}
-
-.scalr-ui-dbmsr-status-stop .x-btn-inner{
 	background:transparent url("/ui2/images/ui/db/stop_backup_sprite.png") 0 0 no-repeat;
-	width:30px;
-	height:26px;
+    width: 30px;
+    height: 26px;
 }
 
-.x-btn-base-image-background-over.scalr-ui-dbmsr-status-stop .x-btn-inner{
+.scalr-ui-dbmsr-status-stop.x-btn-over{
 	background-position:0 -26px;
 }
 
@@ -66,6 +48,11 @@
 .x-dbmsclustermapfield-container{
 	background: #E6E8EC;
 	border-radius: 4px;
+}
+
+.x-dbmsclustermapfield-container .x-panel-body-default{
+    background:transparent;
+    box-shadow: none;
 }
 
 .x-dbmsclustermapfield-btn{
@@ -141,7 +128,7 @@
 }
 
 .x-dbmsclustermapfield-add{
-    border: 2px dashed #A9BCD8;
+    background: #EDF3EB;
     border-radius: 4px 4px 4px 4px;
     margin-bottom: 5px;
 	cursor: pointer;
@@ -150,12 +137,11 @@
 .x-dbmsclustermapfield-add .x-dbmsclustermapfield-inner{
 	padding:0;
 	font: bold 13px/90px arial, helvetica, sans-serif;
-	color:#4A5E82;
+    color: #49634C;
 	height:100%;
 	text-align:center;
 }
 
-/*charts preview*/
-.scalr-ui-dbmschart{
-	cursor: pointer;
+.x-dbmsclustermapfield-add:hover{
+    background: #F2F7F0;
 }

@@ -39,7 +39,7 @@ Scalr.regPage('Scalr.ui.scaling.metrics.view', function (loadParams, moduleParam
 		},
 
 		columns: [
-			{ header: "ID", width: 40, dataIndex: 'id', sortable: true },
+			{ header: "ID", width: 60, dataIndex: 'id', sortable: true },
 			{ header: "Name", flex: 1, dataIndex: 'name', sortable:true },
 			{ header: "File path", flex: 1, dataIndex: 'file_path', sortable: true },
 			{ header: "Retrieve method", flex: 1, dataIndex: 'retrieve_method', sortable: false, xtype: 'templatecolumn', tpl:
@@ -81,8 +81,8 @@ Scalr.regPage('Scalr.ui.scaling.metrics.view', function (loadParams, moduleParam
 			store: store,
 			dock: 'top',
 			beforeItems: [{
-				ui: 'paging',
-				iconCls: 'x-tbar-add',
+                text: 'Add metric',
+                cls: 'x-btn-green-bg',
 				handler: function() {
 					Scalr.event.fireEvent('redirect', '#/scaling/metrics/create');
 				}

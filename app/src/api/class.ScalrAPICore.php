@@ -1,5 +1,6 @@
 <?php
 
+
 abstract class ScalrAPICore
 {
     const HASH_ALGO = 'SHA256';
@@ -28,6 +29,13 @@ abstract class ScalrAPICore
     protected $LastTransactionID;
 
     /**
+     * Acl role superposition object for current user's session
+     *
+     * @var \Scalr\Acl\Role\AccountRoleSuperposition
+     */
+    protected $aclRoles;
+
+    /**
      * DI Container instance
      *
      * @var \Scalr\DependencyInjection\Container
@@ -51,7 +59,8 @@ abstract class ScalrAPICore
         return $this->container;
     }
 
-    protected function insensitiveUksort($a,$b) {
+    protected function insensitiveUksort($a,$b)
+    {
         return strtolower($a)>strtolower($b);
     }
 
@@ -70,23 +79,41 @@ abstract class ScalrAPICore
             throw new Exception("LDAP auth not enabled on Scalr");
 
         $ldap = \Scalr::getContainer()->ldap($request['Login'], $request['Password']);
-        $result = $ldap->isValidUser($request['Login'], $request['Password']);
+
+        $tldap = 0;
+        $start = microtime(true);
+        $result = $ldap->isValidUser();
+        $tldap = microtime(true) - $start;
+
         if ($result) {
+            //Provides that login is always with domain suffix
+            $request['Login'] = $ldap->getUsername();
+
             //TODO:
             $this->Environment = Scalr_Environment::init()->loadById($request['EnvID']);
 
+            $start = microtime(true);
+            $groups = $ldap->getUserGroups();
+            $tldap += microtime(true) - $start;
+
+            header(sprintf('X-Scalr-LDAP-Query-Time: %0.4f sec', $tldap));
+
             //Get User
-            try {
-                $this->user = Scalr_Account_User::init()->loadByEmail($request['Login'], $this->Environment->clientId);
-            } catch (Exception $e) {}
+            $this->user = Scalr_Account_User::init()->loadByEmail($request['Login'], $this->Environment->clientId);
+            if (!$this->user) {
+                $this->user = new Scalr_Account_User();
+                $this->user->type = Scalr_Account_User::TYPE_TEAM_USER;
+                $this->user->status = Scalr_Account_User::STATUS_ACTIVE;
+                $this->user->create($request['Login'], $this->Environment->clientId);
+            }
 
-            if (!$this->user)
-                throw new Exception("{$request['Login']} has no access to environment #{$request['EnvID']}");
-
-            $this->user->getPermissions()->validate($this->Environment);
-        }
-        else
+            $this->user->applyLdapGroups($groups);
+            $this->user->getPermissions()->setEnvironmentId($this->Environment->id)->validate($this->Environment);
+            //We must set environment to DI Container.
+            $this->getContainer()->environment = $this->Environment;
+        } else {
             throw new Exception("Incorrect login or password (1)");
+        }
     }
 
     private function AuthenticateRESTv3($request)
@@ -110,7 +137,8 @@ abstract class ScalrAPICore
 
         try {
             $this->user = Scalr_Account_User::init()->loadByApiAccessKey($request['KeyID']);
-        } catch (Exception $e) {}
+        } catch (Exception $e) {
+        }
 
         if (!$this->user)
             throw new Exception("API Key #{$request['KeyID']} not found in database");
@@ -118,18 +146,31 @@ abstract class ScalrAPICore
         $auth_key = $this->user->getSetting(Scalr_Account_User::SETTING_API_SECRET_KEY);
 
         if ($this->user->getAccountId()) {
-            if (!$request['EnvID']) {
-                $envs = $this->user->getEnvironments();
-                if (!$envs[0]['id'])
-                    throw new Exception("User has no access to any environemnts");
-
-                $this->Environment = Scalr_Environment::init()->loadById($envs[0]['id']);
-            }
-            else {
+            if (\Scalr::config('scalr.auth_mode') == 'ldap') {
                 $this->Environment = Scalr_Environment::init()->loadById($request['EnvID']);
+
+                $ldap = \Scalr::getContainer()->ldap($this->user->getEmail(), null);
+                if (! $ldap->isValidUsername()) {
+                    throw new Exception('Incorrect login or password (1)');
+                }
+
+                $this->user->applyLdapGroups($ldap->getUserGroups());
+            } else {
+                if (!$request['EnvID']) {
+                    $envs = $this->user->getEnvironments();
+                    if (!$envs[0]['id'])
+                        throw new Exception("User has no access to any environments");
+
+                    $this->Environment = Scalr_Environment::init()->loadById($envs[0]['id']);
+                }
+                else {
+                    $this->Environment = Scalr_Environment::init()->loadById($request['EnvID']);
+                }
             }
 
-            $this->user->getPermissions()->validate($this->Environment);
+            $this->user->getPermissions()->setEnvironmentId($this->Environment->id)->validate($this->Environment);
+            //We must set environment to DI Container.
+            $this->getContainer()->environment = $this->Environment;
         }
 
         $valid_sign = base64_encode(hash_hmac(self::HASH_ALGO, trim($string_to_sign), $auth_key, 1));
@@ -141,7 +182,7 @@ abstract class ScalrAPICore
         $this->debug['reqSignature'] = urldecode($request['Signature']);
         $this->debug['validSignature'] = $valid_sign;
         $this->debug['usedAuthVersion'] = 3;
-        $this->debug['md5AccessKey'] = md5($auth_key);
+        $this->debug['sha256AccessKey'] = hash(self::HASH_ALGO, $auth_key);
 
         if ($valid_sign != $request['Signature']) {
             //This is workaround to bugfix SCALRCORE-400.
@@ -165,12 +206,11 @@ abstract class ScalrAPICore
         if (!$request['Timestamp'] && !$request['TimeStamp'])
             throw new Exception("Timestamp is missing");
 
-        foreach ($request as $k=>$v)
-        {
-            if (is_array($v))
-            {
-                foreach ($v as $kk => $vv)
+        foreach ($request as $k => $v) {
+            if (is_array($v)) {
+                foreach ($v as $kk => $vv) {
                     $request["{$k}[{$kk}]"] = $vv;
+                }
 
                 unset($request[$k]);
             }
@@ -179,15 +219,13 @@ abstract class ScalrAPICore
         uksort($request, array($this, 'insensitiveUksort'));
 
         $string_to_sign = "";
-        foreach ($request as $k=>$v)
-        {
+        foreach ($request as $k => $v) {
             if (!in_array($k, array("Signature", "SysDebug"))) {
                 if (is_array($v)) {
                     foreach ($v as $kk => $vv) {
-                        $string_to_sign.= "{$k}[{$kk}]{$vv}";
+                        $string_to_sign .= "{$k}[{$kk}]{$vv}";
                     }
-                }
-                else {
+                } else {
                     $string_to_sign.= "{$k}{$v}";
                 }
             }
@@ -209,12 +247,13 @@ abstract class ScalrAPICore
                     throw new Exception("User has no access to any environemnts");
 
                 $this->Environment = Scalr_Environment::init()->loadById($envs[0]['id']);
-            }
-            else {
+            } else {
                 $this->Environment = Scalr_Environment::init()->loadById($request['EnvID']);
             }
 
-            $this->user->getPermissions()->validate($this->Environment);
+            $this->user->getPermissions()->setEnvironmentId($this->Environment->id)->validate($this->Environment);
+            //We must set environment to DI Container.
+            $this->getContainer()->environment = $this->Environment;
         }
 
         $valid_sign = base64_encode(hash_hmac(self::HASH_ALGO, trim($string_to_sign), $auth_key, 1));
@@ -242,14 +281,13 @@ abstract class ScalrAPICore
         ksort($request);
 
         $string_to_sign = "";
-        foreach ($request as $k=>$v) {
+        foreach ($request as $k => $v) {
             if (!in_array($k, array("Signature"))) {
                 if (is_array($v)) {
                     foreach ($v as $kk => $vv) {
                         $string_to_sign.= "{$k}[{$kk}]{$vv}";
                     }
-                }
-                else {
+                } else {
                     $string_to_sign.= "{$k}{$v}";
                 }
             }
@@ -271,12 +309,13 @@ abstract class ScalrAPICore
                     throw new Exception("User has no access to any environemnts");
 
                 $this->Environment = Scalr_Environment::init()->loadById($envs[0]['id']);
-            }
-            else {
+            } else {
                 $this->Environment = Scalr_Environment::init()->loadById($request['EnvID']);
             }
 
-            $this->user->getPermissions()->validate($this->Environment);
+            $this->user->getPermissions()->setEnvironmentId($this->Environment->id)->validate($this->Environment);
+            //We must set environment to DI Container.
+            $this->getContainer()->environment = $this->Environment;
         }
 
         $valid_sign = base64_encode(hash_hmac(self::HASH_ALGO, trim($string_to_sign), $auth_key, 1));
@@ -286,11 +325,9 @@ abstract class ScalrAPICore
 
     public function BuildRestServer($request)
     {
-        try
-        {
+        try {
             $Reflect = new ReflectionObject($this);
-            if ($Reflect->hasMethod($request['Action']))
-            {
+            if ($Reflect->hasMethod($request['Action'])) {
                 //Authenticate
                 if ($request['AuthType'] == 'ldap') {
                     $this->AuthenticateLdap($request);
@@ -306,8 +343,7 @@ abstract class ScalrAPICore
                         throw new Exception(_("API disabled for you. You can enable it at 'Settings -> Environments'"));
 
                     //Check IP Addresses
-                    if ($this->user->getSetting(Scalr_Account_User::SETTING_API_IP_WHITELIST))
-                    {
+                    if ($this->user->getSetting(Scalr_Account_User::SETTING_API_IP_WHITELIST)) {
                         $ips = explode(",", $this->user->getSetting(Scalr_Account_User::SETTING_API_IP_WHITELIST));
                         if (!$this->IPAccessCheck($ips))
                             throw new Exception(sprintf(_("Access to the API is not allowed from your IP '%s'"), $_SERVER['REMOTE_ADDR']));
@@ -342,12 +378,15 @@ abstract class ScalrAPICore
                 //Execute API call
                 $ReflectMethod = $Reflect->getMethod($request['Action']);
                 $args = array();
-                foreach ($ReflectMethod->getParameters() as $param)
-                {
+                foreach ($ReflectMethod->getParameters() as $param) {
                     if (!$param->isOptional() && !isset($request[$param->getName()]))
                         throw new Exception(sprintf("Missing required parameter '%s'", $param->getName()));
-                    else
-                        $args[$param->getName()] = $request[$param->getName()];
+                    else {
+                        if($param->isArray())
+                            $args[$param->getName()] = (array)$request[$param->getName()];
+                        else
+                            $args[$param->getName()] = $request[$param->getName()];
+                    }
                 }
 
                 $result = $ReflectMethod->invokeArgs($this, $args);
@@ -360,52 +399,39 @@ abstract class ScalrAPICore
                 $this->ObjectToXML($result, $DOMDocument->documentElement, $DOMDocument);
 
                 $retval = $DOMDocument->saveXML();
-            }
-            else
+            } else {
                 throw new Exception(sprintf("Action '%s' is not defined", $request['Action']));
-        }
-        catch(Exception $e)
-        {
-
+            }
+        } catch (Exception $e) {
             if (!$this->LastTransactionID)
                 $this->LastTransactionID = Scalr::GenerateUID();
-
-            if ($request['SysDebug'])
-            {
-                $debugInfo = "<StringToSign>{$this->debug['stringToSign']}</StringToSign>";
-                $debugInfo .= "<reqSignature>{$this->debug['reqSignature']}</reqSignature>";
-                $debugInfo .= "<validSignature>{$this->debug['validSignature']}</validSignature>";
-                $debugInfo .= "<md5AccessKey>{$this->debug['md5AccessKey']}</md5AccessKey>";
-                $debugInfo .= "<usedAuthVersion>{$this->debug['usedAuthVersion']}</usedAuthVersion>";
-            }
 
             $retval = "<?xml version=\"1.0\"?>\n".
             "<Error>\n".
                 "\t<TransactionID>{$this->LastTransactionID}</TransactionID>\n".
                 "\t<Message>{$e->getMessage()}</Message>\n".
-                $debugInfo.
             "</Error>\n";
         }
-
-        $this->LogRequest(
-            $this->LastTransactionID,
-            $request['Action'],
-            $_SERVER['REMOTE_ADDR'],
-            $request,
-            $retval
-        );
+        if (isset($this->user)) {
+            $this->LogRequest(
+                $this->LastTransactionID,
+                $request['Action'],
+                $_SERVER['REMOTE_ADDR'],
+                $request,
+                $retval
+            );
+        }
 
         header("Content-type: text/xml");
         header("Content-length: ".strlen($retval));
+
         print $retval;
     }
 
     protected function LogRequest($trans_id, $action, $ipaddr, $request, $response)
     {
-        if ($request['debug'] == 1 || $request['Debug'] == 1 || $request['Action'] == 'DNSZoneRecordAdd')
-        {
-            try
-            {
+        if ($request['debug'] == 1 || $request['Debug'] == 1 || $request['Action'] == 'DNSZoneRecordAdd') {
+            try {
                 $this->DB->Execute("INSERT INTO api_log SET
                     transaction_id	= ?,
                     dtadded			= ?,
@@ -425,8 +451,8 @@ abstract class ScalrAPICore
                     $this->user->getAccountId(),
                     $this->Environment->id
                 ));
+            } catch (Exception $e) {
             }
-            catch(Exception $e) {}
         }
     }
 
@@ -435,33 +461,25 @@ abstract class ScalrAPICore
         $current_ip = $_SERVER['REMOTE_ADDR'];
         $current_ip_parts = explode(".", $current_ip);
 
-        foreach ($allowed_ips as $allowed_ip)
-        {
+        foreach ($allowed_ips as $allowed_ip) {
             $allowedhost = trim($allowed_ip);
             if ($allowedhost == '')
                 continue;
 
-            if (preg_match("/^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$/si", $allowedhost))
-            {
+            if (preg_match("/^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$/si", $allowedhost)) {
                 if (ip2long($allowedhost) == ip2long($current_ip))
                    return true;
-            }
-            elseif (stristr($allowedhost, "*"))
-            {
+            } elseif (stristr($allowedhost, "*")) {
                 $ip_parts = explode(".", trim($allowedhost));
-                if (
-                    ($ip_parts[0] == "*" || $ip_parts[0] == $current_ip_parts[0]) &&
+                if (($ip_parts[0] == "*" || $ip_parts[0] == $current_ip_parts[0]) &&
                     ($ip_parts[1] == "*" || $ip_parts[1] == $current_ip_parts[1]) &&
                     ($ip_parts[2] == "*" || $ip_parts[2] == $current_ip_parts[2]) &&
-                    ($ip_parts[3] == "*" || $ip_parts[3] == $current_ip_parts[3])
-                   )
-                return true;
-            }
-            else
-            {
+                    ($ip_parts[3] == "*" || $ip_parts[3] == $current_ip_parts[3])) {
+                    return true;
+                }
+            } else {
                 $ip = @gethostbyname($allowedhost);
-                if ($ip != $allowedhost)
-                {
+                if ($ip != $allowedhost) {
                     if (ip2long($ip) == ip2long($current_ip))
                        return true;
                 }
@@ -473,24 +491,30 @@ abstract class ScalrAPICore
 
     protected function ObjectToXML($obj, $DOMElement, $DOMDocument)
     {
-        if (is_object($obj) || is_array($obj))
-        {
-            foreach ($obj as $k=>$v)
-            {
-                if (is_object($v))
+        if (is_object($obj) || is_array($obj)) {
+            foreach ($obj as $k => $v) {
+                if (is_object($v)) {
                     $this->ObjectToXML($v, $DOMElement->appendChild($DOMDocument->createElement($k)), $DOMDocument);
-                elseif (is_array($v))
-                    foreach ($v as $vv)
-                    {
+                } elseif (is_array($v)) {
+                    foreach ($v as $vv) {
                         $e = $DOMElement->appendChild($DOMDocument->createElement($k));
                         $this->ObjectToXML($vv, $e, $DOMDocument);
                     }
-                else
-                    $DOMElement->appendChild($DOMDocument->createElement($k, $v));
+                } else {
+                    if (preg_match("/[\<\>\&]+/", $v)) {
+                        $valueEl = $DOMDocument->createCDATASection($v);
+                    } else {
+                        $valueEl = $DOMDocument->createTextNode($v);
+                    }
+
+                    $el = $DOMDocument->createElement($k);
+                    $el->appendChild($valueEl);
+                    $DOMElement->appendChild($el);
+                }
             }
-        }
-        else
+        } else {
             $DOMElement->appendChild($DOMDocument->createTextNode($obj));
+        }
     }
 
     protected function CreateInitialResponse()
@@ -499,5 +523,70 @@ abstract class ScalrAPICore
         $response->{"TransactionID"} = Scalr::GenerateUID();
 
         return $response;
+    }
+
+    /**
+     * Gets acl roles superposition for the request
+     *
+     * @return \Scalr\Acl\Role\AccountRoleSuperposition
+     */
+    protected function getAclRoles()
+    {
+        if (!$this->aclRoles) {
+            $this->aclRoles = $this->user->getAclRolesByEnvironment($this->Environment->id);
+        }
+        return $this->aclRoles;
+    }
+
+    /**
+     * Checks if access to ACL resource or unique permission is allowed
+     *
+     * Usage:
+     * --
+     * use \Scalr\Acl\Acl;
+     *
+     * //it is somewhere inside controller action method
+     * $this->isAllowed(Acl::RESOURCE_FARMS, Acl::PERM_FARMS_MANAGE);
+     *
+     * //or you can do something like that
+     * $this->isAllowed('FARMS', 'manage');
+     *
+     * @param   int        $resourceId            The ID of the ACL resource or its symbolic name without "RESOURCE_" prefix.
+     * @param   string     $permissionId optional The ID of the uniqure permission which is
+     *                                            related to specified resource.
+     * @return  bool       Returns TRUE if access is allowed
+     */
+    protected function isAllowed($resourceId, $permissionId = null)
+    {
+        return $this->getContainer()->acl->isUserAllowedByEnvironment($this->user, $this->Environment, $resourceId, $permissionId);
+    }
+
+    /**
+     * Checks if access to ACL resource or unique permission is allowed
+     * and throws an exception if negative.
+     *
+     * @param   int        $resourceId            The ID of the ACL resource or its symbolic name
+     *                                            without "RESOURCE_" prefix.
+     * @param   string     $permissionId optional The ID of the uniqure permission which is
+     *                                            related to specified resource.
+     * @throws  Scalr_Exception_InsufficientPermissions
+     */
+    protected function restrictAccess($resourceId, $permissionId = null)
+    {
+        if (is_string($resourceId)) {
+            $sName = 'Scalr\\Acl\\Acl::RESOURCE_' . strtoupper($resourceId);
+            if (defined($sName)) {
+                $resourceId = constant($sName);
+            } else {
+                throw new \InvalidArgumentException(sprintf(
+                    'Cannot find ACL resource %s by specified symbolic name %s.',
+                    $sName, $resourceId
+                ));
+            }
+        }
+
+        if (!$this->isAllowed($resourceId, $permissionId)) {
+           throw new \Scalr_Exception_InsufficientPermissions();
+        }
     }
 }

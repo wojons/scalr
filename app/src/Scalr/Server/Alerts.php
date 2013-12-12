@@ -49,8 +49,9 @@ class Alerts
 
     public function getActiveAlertsCount()
     {
-        return (int)$this->db->GetOne("SELECT COUNT(*) FROM `server_alerts` WHERE
-            `server_id` = ? AND `status` = ?
+        return (int)$this->db->GetOne("
+            SELECT COUNT(*) FROM `server_alerts`
+            WHERE `server_id` = ? AND `status` = ?
         ", array(
             $this->dbServer->serverId,
             self::STATUS_FAILED
@@ -58,8 +59,10 @@ class Alerts
     }
 
     public function hasActiveAlert($metric) {
-        return (int)$this->db->GetOne("SELECT `id` FROM `server_alerts` WHERE
-            `server_id` = ? AND `metric` = ? AND `status` = ?
+        return (int)$this->db->GetOne("
+            SELECT `id` FROM `server_alerts`
+            WHERE `server_id` = ? AND `metric` = ? AND `status` = ?
+            LIMIT 1
         ", array(
             $this->dbServer->serverId,
             $metric,

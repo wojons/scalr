@@ -20,7 +20,7 @@
         public function onFarmTerminated(DBFarmRole $dbFarmRole)
         {
             if (in_array($this->behavior, array(ROLE_BEHAVIORS::PERCONA, ROLE_BEHAVIORS::MYSQL2, ROLE_BEHAVIORS::MARIADB))) {
-                $dbFarmRole->SetSetting(self::ROLE_NO_DATA_BUNDLE_FOR_SLAVES, 1);
+                $dbFarmRole->SetSetting(self::ROLE_NO_DATA_BUNDLE_FOR_SLAVES, 1, DBFarmRole::TYPE_LCL);
             }
         }
 
@@ -71,9 +71,9 @@
                 throw new Exception("No suitable server for backup");
 
             $currentServer->SendMessage(new Scalr_Messaging_Msg_DbMsr_CreateBackup());
-            $dbFarmRole->SetSetting(Scalr_Db_Msr::getConstant("DATA_BACKUP_IS_RUNNING"), 1);
-            $dbFarmRole->SetSetting(Scalr_Db_Msr::getConstant("DATA_BACKUP_RUNNING_TS"), time());
-            $dbFarmRole->SetSetting(Scalr_Db_Msr::getConstant("DATA_BACKUP_SERVER_ID"), $currentServer->serverId);
+            $dbFarmRole->SetSetting(Scalr_Db_Msr::getConstant("DATA_BACKUP_IS_RUNNING"), 1, DBFarmRole::TYPE_LCL);
+            $dbFarmRole->SetSetting(Scalr_Db_Msr::getConstant("DATA_BACKUP_RUNNING_TS"), time(), DBFarmRole::TYPE_LCL);
+            $dbFarmRole->SetSetting(Scalr_Db_Msr::getConstant("DATA_BACKUP_SERVER_ID"), $currentServer->serverId, DBFarmRole::TYPE_LCL);
         }
 
         public function createDataBundle(DBFarmRole $dbFarmRole, array $params = array()) {
@@ -98,19 +98,18 @@
             $storageType = $dbFarmRole->GetSetting(Scalr_Db_Msr::DATA_STORAGE_ENGINE);
             $storageGeneration = $storageType == 'lvm' ? 2 : 1;
 
-            switch($dbFarmRole->Platform) {
-                case SERVER_PLATFORMS::EC2:
-                    $driver = 's3';
-                    break;
+            if ($dbFarmRole->isOpenstack()) {
+                $driver = 'swift';
+            } else {
+                switch($dbFarmRole->Platform) {
+                    case SERVER_PLATFORMS::EC2:
+                        $driver = 's3';
+                        break;
 
-                case SERVER_PLATFORMS::GCE:
-                    $driver = 'gcs';
-                    break;
-                case SERVER_PLATFORMS::RACKSPACENG_US:
-                case SERVER_PLATFORMS::RACKSPACENG_UK:
-                case SERVER_PLATFORMS::OPENSTACK:
-                    $driver = 'swift';
-                    break;
+                    case SERVER_PLATFORMS::GCE:
+                        $driver = 'gcs';
+                        break;
+                }
             }
 
             if ($storageGeneration == 2) {
@@ -134,7 +133,7 @@
                 );
 
                 if ($params['dataBundleType'] == 'incremental') {
-                    $previousManifest = $this->db->GetOne("SELECT manifest FROM storage_restore_configs WHERE farm_roleid = ? ORDER BY id DESC", array($dbFarmRole->ID));
+                    $previousManifest = $this->db->GetOne("SELECT manifest FROM storage_restore_configs WHERE farm_roleid = ? ORDER BY id DESC LIMIT 1", array($dbFarmRole->ID));
                     $message->{$behavior}->backup->prevCloudfsSource = $previousManifest;
                 }
             }
@@ -143,9 +142,9 @@
 
             $currentServer->SendMessage($message);
 
-            $dbFarmRole->SetSetting(Scalr_Db_Msr::getConstant("DATA_BUNDLE_IS_RUNNING"), 1);
-            $dbFarmRole->SetSetting(Scalr_Db_Msr::getConstant("DATA_BUNDLE_RUNNING_TS"), time());
-            $dbFarmRole->SetSetting(Scalr_Db_Msr::getConstant("DATA_BUNDLE_SERVER_ID"), $currentServer->serverId);
+            $dbFarmRole->SetSetting(Scalr_Db_Msr::getConstant("DATA_BUNDLE_IS_RUNNING"), 1, DBFarmRole::TYPE_LCL);
+            $dbFarmRole->SetSetting(Scalr_Db_Msr::getConstant("DATA_BUNDLE_RUNNING_TS"), time(), DBFarmRole::TYPE_LCL);
+            $dbFarmRole->SetSetting(Scalr_Db_Msr::getConstant("DATA_BUNDLE_SERVER_ID"), $currentServer->serverId, DBFarmRole::TYPE_LCL);
         }
 
         public function getServerForDataBundle(DBFarmRole $dbFarmRole, $useSlave = false)
@@ -253,19 +252,17 @@
                         $message->{$this->behavior}->volume = new stdClass();
                         $message->{$this->behavior}->volume->type = 'lvm';
 
-                        switch ($dbFarmRole->Platform) {
-                            case SERVER_PLATFORMS::EC2:
-                                $diskType = 'ec2_ephemeral';
-                                break;
-                            case SERVER_PLATFORMS::GCE:
-                                $diskType = 'gce_ephemeral';
-                                break;
-
-                            case SERVER_PLATFORMS::RACKSPACENG_UK:
-                            case SERVER_PLATFORMS::RACKSPACENG_US:
-                            case SERVER_PLATFORMS::OPENSTACK:
-                                $diskType = 'loop';
-                                break;
+                        if ($dbFarmRole->isOpenstack()) {
+                            $diskType = 'loop';
+                        } else {
+                            switch ($dbFarmRole->Platform) {
+                                case SERVER_PLATFORMS::EC2:
+                                    $diskType = 'ec2_ephemeral';
+                                    break;
+                                case SERVER_PLATFORMS::GCE:
+                                    $diskType = 'gce_ephemeral';
+                                    break;
+                            }
                         }
 
                         $message->{$this->behavior}->volume->pvs = array();
@@ -289,26 +286,25 @@
                           $message->{$this->behavior}->volume->fstype = $fs;
 
                         // Add restore configuration
-                        $restore = $this->db->GetRow("SELECT manifest FROM storage_restore_configs WHERE farm_roleid = ? ORDER BY id DESC", array($dbFarmRole->ID));
+                        $restore = $this->db->GetRow("SELECT manifest FROM storage_restore_configs WHERE farm_roleid = ? ORDER BY id DESC LIMIT 1", array($dbFarmRole->ID));
                         if ($restore) {
                             $message->{$this->behavior}->restore = new stdClass();
                             $message->{$this->behavior}->restore->type = 'xtrabackup';
                             $message->{$this->behavior}->restore->cloudfsSource = $restore['manifest'];
                         }
 
-                        switch($dbFarmRole->Platform) {
-                            case SERVER_PLATFORMS::EC2:
-                                $driver = 's3';
-                                break;
+                        if ($dbFarmRole->isOpenstack()) {
+                            $driver = 'swift';
+                        } else {
+                            switch($dbFarmRole->Platform) {
+                                case SERVER_PLATFORMS::EC2:
+                                    $driver = 's3';
+                                    break;
 
-                            case SERVER_PLATFORMS::GCE:
-                                $driver = 'gcs';
-                                break;
-                            case SERVER_PLATFORMS::RACKSPACENG_US:
-                            case SERVER_PLATFORMS::RACKSPACENG_UK:
-                            case SERVER_PLATFORMS::OPENSTACK:
-                                $driver = 'swift';
-                                break;
+                                case SERVER_PLATFORMS::GCE:
+                                    $driver = 'gcs';
+                                    break;
+                            }
                         }
 
                         // Add backup configuration
@@ -337,7 +333,7 @@
                     $message->addDbMsrInfo($dbMsrInfo);
 
                     // Reset Slaves data bundle
-                    $dbFarmRole->SetSetting(self::ROLE_NO_DATA_BUNDLE_FOR_SLAVES, 1);
+                    $dbFarmRole->SetSetting(self::ROLE_NO_DATA_BUNDLE_FOR_SLAVES, 1, DBFarmRole::TYPE_LCL);
 
                     $noDataBundle = $dbFarmRole->GetSetting(self::ROLE_NO_DATA_BUDNLE_ON_PROMOTE);
                     if ($noDataBundle)
@@ -359,19 +355,18 @@
                         $message->{$this->behavior}->volumeConfig = null;
                         $message->{$this->behavior}->snapshotConfig = null;
 
-                        switch($dbFarmRole->Platform) {
-                            case SERVER_PLATFORMS::EC2:
-                                $driver = 's3';
-                                break;
+                        if ($dbFarmRole->isOpenstack()) {
+                            $driver = 'swift';
+                        } else {
+                            switch($dbFarmRole->Platform) {
+                                case SERVER_PLATFORMS::EC2:
+                                    $driver = 's3';
+                                    break;
 
-                            case SERVER_PLATFORMS::GCE:
-                                $driver = 'gcs';
-                                break;
-                            case SERVER_PLATFORMS::RACKSPACENG_US:
-                            case SERVER_PLATFORMS::RACKSPACENG_UK:
-                            case SERVER_PLATFORMS::OPENSTACK:
-                                $driver = 'swift';
-                                break;
+                                case SERVER_PLATFORMS::GCE:
+                                    $driver = 'gcs';
+                                    break;
+                            }
                         }
 
                         $message->{$this->behavior}->backup = new stdClass();
@@ -401,7 +396,7 @@
                         $message->{$this->behavior}->volumeConfig = null;
                         $message->{$this->behavior}->snapshotConfig = null;
 
-                        $restore = $this->db->GetRow("SELECT manifest FROM storage_restore_configs WHERE farm_roleid = ? ORDER BY id DESC", array($dbFarmRole->ID));
+                        $restore = $this->db->GetRow("SELECT manifest FROM storage_restore_configs WHERE farm_roleid = ? ORDER BY id DESC LIMIT 1", array($dbFarmRole->ID));
                         if ($restore) {
                             $message->{$this->behavior}->restore = new stdClass();
                             $message->{$this->behavior}->restore->type = 'xtrabackup';
@@ -462,21 +457,21 @@
                         $dbMsrInfo = Scalr_Db_Msr_Info::init($dbFarmRole, $dbServer, $message->dbType);
                            $dbMsrInfo->setMsrSettings($message->{$message->dbType});
                         if ($message->{$message->dbType}->snapshotConfig) {
-                            $dbFarmRole->SetSetting(self::ROLE_NO_DATA_BUNDLE_FOR_SLAVES, 0);
+                            $dbFarmRole->SetSetting(self::ROLE_NO_DATA_BUNDLE_FOR_SLAVES, 0, DBFarmRole::TYPE_LCL);
                         }
 
                         if ($message->{$message->dbType}->restore) {
-                            $this->db->GetRow("INSERT INTO storage_restore_configs SET farm_roleid = ?, dtadded=NOW(), manifest = ?", array(
+                            $this->db->Execute("INSERT INTO storage_restore_configs SET farm_roleid = ?, dtadded=NOW(), manifest = ?", array(
                                 $dbFarmRole->ID,
                                 $message->{$message->dbType}->restore->cloudfsSource
                             ));
-                            $dbFarmRole->SetSetting(self::ROLE_NO_DATA_BUNDLE_FOR_SLAVES, 0);
-                            $dbFarmRole->SetSetting(Scalr_Db_Msr::DATA_BUNDLE_LAST_TS, time());
-                            $dbFarmRole->SetSetting(Scalr_Db_Msr::DATA_BUNDLE_IS_RUNNING, 0);
+                            $dbFarmRole->SetSetting(self::ROLE_NO_DATA_BUNDLE_FOR_SLAVES, 0, DBFarmRole::TYPE_LCL);
+                            $dbFarmRole->SetSetting(Scalr_Db_Msr::DATA_BUNDLE_LAST_TS, time(), DBFarmRole::TYPE_LCL);
+                            $dbFarmRole->SetSetting(Scalr_Db_Msr::DATA_BUNDLE_IS_RUNNING, 0, DBFarmRole::TYPE_LCL);
                         }
 
                         if ($message->{$message->dbType}->masterPassword) {
-                            $dbFarmRole->SetSetting(self::ROLE_MASTER_PASSWORD, $message->{$message->dbType}->masterPassword);
+                            $dbFarmRole->SetSetting(self::ROLE_MASTER_PASSWORD, $message->{$message->dbType}->masterPassword, DBFarmRole::TYPE_LCL);
                         }
                     }
 
@@ -485,18 +480,18 @@
                 case "Scalr_Messaging_Msg_DbMsr_PromoteToMasterResult":
 
                     if ($message->{$message->dbType}->restore) {
-                        $this->db->GetRow("INSERT INTO storage_restore_configs SET farm_roleid = ?, dtadded=NOW(), manifest = ?", array(
+                        $this->db->Execute("INSERT INTO storage_restore_configs SET farm_roleid = ?, dtadded=NOW(), manifest = ?", array(
                             $dbFarmRole->ID,
                             $message->{$message->dbType}->restore->cloudfsSource
                         ));
 
-                        $dbFarmRole->SetSetting(self::ROLE_NO_DATA_BUNDLE_FOR_SLAVES, 0);
+                        $dbFarmRole->SetSetting(self::ROLE_NO_DATA_BUNDLE_FOR_SLAVES, 0, DBFarmRole::TYPE_LCL);
                     }
 
                     if (Scalr_Db_Msr::onPromoteToMasterResult($message, $dbServer)) {
 
                         if ($message->{$this->behavior}->snapshotConfig) {
-                            $dbFarmRole->SetSetting(self::ROLE_NO_DATA_BUNDLE_FOR_SLAVES, 0);
+                            $dbFarmRole->SetSetting(self::ROLE_NO_DATA_BUNDLE_FOR_SLAVES, 0, DBFarmRole::TYPE_LCL);
                         }
 
                            Scalr::FireEvent($dbServer->farmId, new NewDbMsrMasterUpEvent($dbServer));
@@ -507,29 +502,34 @@
                 case "Scalr_Messaging_Msg_DbMsr_CreateDataBundleResult":
 
                     if ($message->status == "ok") {
-                        if ($message->{$message->dbType}->restore) {
-                                if ($message->{$message->dbType}->restore->backupType == 'incremental') {
-                                    $parentManifest = $this->db->GetOne("SELECT manifest FROM storage_restore_configs WHERE farm_roleid = ? ORDER BY id DESC", array($dbFarmRole->ID));
-                                }
+                        if (isset($message->{$message->dbType}->restore) && isset($message->{$message->dbType}->restore->backupType)) {
+                            $t = $message->{$message->dbType}->restore;
+                            if ($t->backupType == 'incremental') {
+                                $parentManifest = $this->db->GetOne("
+                                    SELECT manifest FROM storage_restore_configs WHERE farm_roleid = ? ORDER BY id DESC LIMIT 1
+                                ", array($dbFarmRole->ID));
+                            }
 
-                                $this->db->GetRow("INSERT INTO storage_restore_configs SET farm_roleid = ?, dtadded=NOW(), manifest = ?, type = ?, parent_manifest = ?", array(
+                            $this->db->Execute("
+                                INSERT INTO storage_restore_configs SET farm_roleid = ?, dtadded=NOW(), manifest = ?, type = ?, parent_manifest = ?
+                            ", array(
                                 $dbFarmRole->ID,
-                                $message->{$message->dbType}->restore->cloudfsSource,
-                                $message->{$message->dbType}->restore->backupType,
+                                $t->cloudfsSource,
+                                $t->backupType,
                                 $parentManifest
                             ));
+                            unset($t);
                         }
 
-                        $dbFarmRole->SetSetting(self::ROLE_NO_DATA_BUNDLE_FOR_SLAVES, 0);
+                        $dbFarmRole->SetSetting(self::ROLE_NO_DATA_BUNDLE_FOR_SLAVES, 0, DBFarmRole::TYPE_LCL);
 
-                           Scalr_Db_Msr::onCreateDataBundleResult($message, $dbServer);
-                       }
-                       else {
-                           $dbFarmRole->SetSetting(Scalr_Db_Msr::DATA_BUNDLE_IS_RUNNING, 0);
-                               //TODO: store last error
-                       }
+                        Scalr_Db_Msr::onCreateDataBundleResult($message, $dbServer);
+                    } else {
+                        $dbFarmRole->SetSetting(Scalr_Db_Msr::DATA_BUNDLE_IS_RUNNING, 0, DBFarmRole::TYPE_LCL);
+                        // TODO: store last error
+                    }
 
-                       $this->updateBackupHistory($dbServer, 'bundle', $message->status, $message->lastError);
+                    $this->updateBackupHistory($dbServer, 'bundle', $message->status, $message->lastError);
 
                     break;
 
@@ -538,7 +538,7 @@
                     if ($message->status == "ok")
                            Scalr_Db_Msr::onCreateBackupResult($message, $dbServer);
                        else {
-                           $dbFarmRole->SetSetting(Scalr_Db_Msr::DATA_BACKUP_IS_RUNNING, 0);
+                           $dbFarmRole->SetSetting(Scalr_Db_Msr::DATA_BACKUP_IS_RUNNING, 0, DBFarmRole::TYPE_LCL);
 
                        }
 

@@ -54,10 +54,10 @@ class Scalr_Role_Behavior_Router extends Scalr_Role_Behavior implements Scalr_Ro
             'name'  => SubnetFilterNameType::vpcId(),
             'value' => $vpcId,
         ), array(
-            'name'  => 'tag-key',
+            'name'  => SubnetFilterNameType::tagKey(),
             'value' => 'scalr-sn-type'
         ), array(
-            'name'  => 'tag-value',
+            'name'  => SubnetFilterNameType::tagValue(),
             'value' => self::INTERNET_ACCESS_FULL
         ));
 
@@ -140,7 +140,7 @@ class Scalr_Role_Behavior_Router extends Scalr_Role_Behavior implements Scalr_Ro
             $networkInterface->modifyAttribute(NetworkInterfaceAttributeType::sourceDestCheck(), 0);
 
             $niId = $networkInterface->networkInterfaceId;
-            $dbFarmRole->SetSetting(self::ROLE_VPC_NID, $niId);
+            $dbFarmRole->SetSetting(self::ROLE_VPC_NID, $niId, DBFarmRole::TYPE_LCL);
 
             try {
                 $networkInterface->createTags(array(
@@ -156,8 +156,8 @@ class Scalr_Role_Behavior_Router extends Scalr_Role_Behavior implements Scalr_Ro
             $address = $aws->ec2->address->allocate('vpc');
             $publicIp = $address->publicIp;
 
-            $dbFarmRole->SetSetting(self::ROLE_VPC_IP, $publicIp);
-            $dbFarmRole->SetSetting(self::ROLE_VPC_AID, $address->allocationId);
+            $dbFarmRole->SetSetting(self::ROLE_VPC_IP, $publicIp, DBFarmRole::TYPE_LCL);
+            $dbFarmRole->SetSetting(self::ROLE_VPC_AID, $address->allocationId, DBFarmRole::TYPE_LCL);
 
             $associateAddressRequestData = new AssociateAddressRequestData();
             $associateAddressRequestData->networkInterfaceId = $niId;
@@ -167,7 +167,7 @@ class Scalr_Role_Behavior_Router extends Scalr_Role_Behavior implements Scalr_Ro
             $aws->ec2->address->associate($associateAddressRequestData);
         }
 
-        $dbFarmRole->SetSetting(self::ROLE_VPC_ROUTER_CONFIGURED, 1);
+        $dbFarmRole->SetSetting(self::ROLE_VPC_ROUTER_CONFIGURED, 1, DBFarmRole::TYPE_LCL);
     }
 
     public function extendMessage(Scalr_Messaging_Msg $message, DBServer $dbServer)

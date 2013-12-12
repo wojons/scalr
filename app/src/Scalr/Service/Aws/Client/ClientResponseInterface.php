@@ -2,6 +2,7 @@
 
 namespace Scalr\Service\Aws\Client;
 
+
 /**
  * Client response interface
  *
@@ -20,12 +21,28 @@ interface ClientResponseInterface
     public function getRawContent();
 
     /**
-     * Gets Error.
+     * Gets and error if it happens
      *
      * @return  boolean         Returns FALSE if no error or throws an ClientException.
-     * @throws  ClientException
+     * @throws  \Scalr\Service\Aws\Client\ClientException
      */
     public function getError();
+
+    /**
+     * Gets an exception when AWS responds with an error
+     *
+     * @return  \Scalr\Service\Aws\Client\ClientException|null Returns client exception
+     */
+    public function getException();
+
+    /**
+     * Checks whether AWS responses with an error message.
+     *
+     * This method does not cause exception.
+     *
+     * @return  boolean        Returns TRUE on error or FALSE otherwise
+     */
+    public function hasError();
 
     /**
      * Gets message headers.
@@ -62,4 +79,20 @@ interface ClientResponseInterface
      * @return  \HttpRequest  Returns request object
      */
     public function getRequest();
+
+    /**
+     * Sets raw request message
+     *
+     * @param   \HttpRequest|\SoapRequest   $request Request object
+     * @return  ClientResponseInterface
+     */
+    public function setRequest($request);
+
+    /**
+     * Sets current query number during the user session
+     *
+     * @param    int     $number  The number
+     * @return   ClientResponseInterface
+     */
+    public function setQueryNumber($number);
 }

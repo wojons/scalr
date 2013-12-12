@@ -1,4 +1,4 @@
-<?
+<?php
     final class TASK_STATUS
     {
         const ACTIVE		= "Active";

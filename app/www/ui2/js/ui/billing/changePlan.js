@@ -18,13 +18,12 @@ Scalr.regPage('Scalr.ui.billing.changePlan', function (loadParams, moduleParams)
 				Scalr.event.fireEvent('close');
 			}
 		}],
-		bodyCls: 'x-panel-body-frame',
 		width: !moduleParams['subscriptionId'] ? 780 : 900,
 		title: 'Billing &raquo; Change Pricing Plan',
 
 		dockedItems: [{
 			xtype: 'container',
-			cls: 'x-docked-bottom-frame',
+			cls: 'x-docked-buttons',
 			dock: 'bottom',
 			layout: {
 				type: 'hbox',
@@ -50,7 +49,6 @@ Scalr.regPage('Scalr.ui.billing.changePlan', function (loadParams, moduleParams)
 				}
 			}, {
 				xtype: 'button',
-				margin: '0 0 0 5',
 				text: 'Cancel',
 				handler: function() {
 					Scalr.event.fireEvent('close');
@@ -114,7 +112,7 @@ Scalr.regPage('Scalr.ui.billing.changePlan', function (loadParams, moduleParams)
 		padding: 15,
 		items:[{
 			xtype: 'displayfield',
-			fieldCls: 'x-form-field-info',
+			cls: 'x-form-field-info',
 			value: 'Your card will be pre-authorized for $1. <a href="http://en.wikipedia.org/wiki/Authorization_hold" target="_blank">What does this mean?</a>'
 		}, {
 			xtype: 'fieldcontainer',

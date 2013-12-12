@@ -34,15 +34,19 @@ class Scalr_UI_Controller_Platforms extends Scalr_UI_Controller
         return $locations;
     }
 
-    public function getEnabledPlatforms($addLocations = false)
+    public function getEnabledPlatforms($addLocations = false, $includeGCELocations = true)
     {
-        $ePlatforms = $this->getEnvironment()->getEnabledPlatforms();
+        $ePlatforms = $this->user->isScalrAdmin() ? array_keys(SERVER_PLATFORMS::GetList()) : $this->getEnvironment()->getEnabledPlatforms();
         $lPlatforms = SERVER_PLATFORMS::GetList();
         $platforms = array();
 
         foreach ($ePlatforms as $platform)
             $platforms[$platform] = $addLocations ?
-                array('id' => $platform, 'name' => $lPlatforms[$platform], 'locations' => PlatformFactory::NewPlatform($platform)->getLocations()) :
+                array(
+                    'id' => $platform,
+                    'name' => $lPlatforms[$platform],
+                    'locations' => $platform !== SERVER_PLATFORMS::GCE || $includeGCELocations ? PlatformFactory::NewPlatform($platform)->getLocations() : array()
+                ) :
                 $lPlatforms[$platform];
 
         return $platforms;

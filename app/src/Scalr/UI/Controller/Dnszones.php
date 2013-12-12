@@ -1,22 +1,17 @@
 <?php
+use Scalr\Acl\Acl;
 
 class Scalr_UI_Controller_Dnszones extends Scalr_UI_Controller
 {
     const CALL_PARAM_NAME = 'dnsZoneId';
 
-    public static function getPermissionDefinitions()
-    {
-        return array(
-            'xSaveSettings' => 'Edit',
-            'create' => 'Edit',
-            'xSave' => 'Edit',
-            'xRemoveZones' => 'Edit'
-        );
-    }
-
+    /**
+     * {@inheritdoc}
+     * @see Scalr_UI_Controller::hasAccess()
+     */
     public function hasAccess()
     {
-        return true;
+        return $this->request->isAllowed(Acl::RESOURCE_DNS_ZONES);
     }
 
     public function defaultAction()
@@ -35,16 +30,12 @@ class Scalr_UI_Controller_Dnszones extends Scalr_UI_Controller
             throw new Scalr_Exception_InsufficientPermissions();
 
         $records = $this->db->GetAll("SELECT * FROM default_records WHERE clientid=? ORDER BY `type`", array($this->user->getAccountId()));
-        $this->response->page('ui/dnszones/defaultRecords.js', array('records' => $records), array('ui/dnszones/dnsfield.js'));
+        $this->response->page('ui/dnszones/defaultRecords.js', array('records' => $records), array('ui/dnszones/dnsfield.js'), array('ui/dnszones/create.css'));
     }
 
     public function defaultRecords2Action()
     {
-        if ($this->user->getType() == Scalr_Account_User::TYPE_TEAM_USER)
-            throw new Scalr_Exception_InsufficientPermissions();
-
-        $records = $this->db->GetAll("SELECT * FROM default_records WHERE clientid=? ORDER BY `type`", array($this->user->getAccountId()));
-        $this->response->page('ui/dnszones/defaultRecords2.js', array('records' => $records), array('ui/dnszones/dnsfield2.js'), array('ui/dnszones/create2.css'));
+        $this->defaultRecordsAction();
     }
 
     public function xSaveDefaultRecordsAction()
@@ -183,39 +174,12 @@ class Scalr_UI_Controller_Dnszones extends Scalr_UI_Controller
                 'soaExpire' => '86400'
             ),
             'records' => $records
-        ), array('ui/dnszones/dnsfield.js'));
+        ), array('ui/dnszones/dnsfield.js'), array('ui/dnszones/create.css'));
     }
 
     public function create2Action()
     {
-
-        $farms = self::loadController('Farms')->getList();
-        array_unshift($farms, array('id'=>0, 'name'=>''));
-
-        $records = array();
-        $nss = $this->db->GetAll("SELECT * FROM nameservers WHERE isbackup='0'");
-        foreach ($nss as $ns)
-            $records[] = array("id" => "c".rand(10000, 999999), "type" => "NS", "ttl" => 14400, "value" => "{$ns["host"]}.", "name" => "%hostname%.", "issystem" => 0);
-
-        $defRecords = $this->db->GetAll("SELECT * FROM default_records WHERE clientid=?", array($this->user->getAccountId()));
-        foreach ($defRecords as $record)
-            $records[] = $record;
-
-        $this->response->page('ui/dnszones/create2.js', array(
-            'farms' => $farms,
-            'farmRoles' => array(),
-            'action' => 'create',
-            'allowManageSystemRecords' => '0',
-            'zone' => array(
-                'domainName' => Scalr::GenerateUID() . '.' . \Scalr::config('scalr.dns.global.default_domain_name'),
-                'domainType' => 'scalr',
-                'soaOwner'   => str_replace('@', '.', $this->user->getEmail()),
-                'soaRetry' => '7200',
-                'soaRefresh' => '14400',
-                'soaExpire' => '86400'
-            ),
-            'records' => $records
-        ), array('ui/dnszones/dnsfield2.js'), array('ui/dnszones/create2.css'));
+        $this->createAction();
     }
 
     public function editAction()
@@ -255,47 +219,12 @@ class Scalr_UI_Controller_Dnszones extends Scalr_UI_Controller
                 'domainFarmRole' => $DBDNSZone->farmRoleId
             ),
             'records' => $DBDNSZone->getRecords()
-        ), array('ui/dnszones/dnsfield.js'));
+        ), array('ui/dnszones/dnsfield.js'), array('ui/dnszones/create.css'));
     }
 
     public function edit2Action()
     {
-        $this->request->defineParams(array(
-            'dnsZoneId' => array('type' => 'int')
-        ));
-
-        $DBDNSZone = DBDNSZone::loadById($this->getParam('dnsZoneId'));
-        $this->user->getPermissions()->validate($DBDNSZone);
-
-        $farms = self::loadController('Farms')->getList();
-        array_unshift($farms, array('id'=>0, 'name'=>''));
-        $farmRoles = array();
-
-        if ($DBDNSZone->farmId) {
-            $this->request->setParams(array('farmId' => $DBDNSZone->farmId));
-
-            $farmRoles = self::loadController('Roles', 'Scalr_UI_Controller_Farms')->getList();
-            if (count($farmRoles))
-                array_unshift($farmRoles, array('id' => 0, 'name' => ''));
-        }
-
-        $this->response->page('ui/dnszones/create2.js', array(
-            'farms' => $farms,
-            'farmRoles' => $farmRoles,
-            'action' => 'edit',
-            'allowManageSystemRecords' => $DBDNSZone->allowManageSystemRecords,
-            'zone' => array(
-                'domainId' => $DBDNSZone->id,
-                'domainName' => $DBDNSZone->zoneName,
-                'soaRetry' => $DBDNSZone->soaRetry,
-                'soaOwner' => $DBDNSZone->soaOwner,
-                'soaRefresh' => $DBDNSZone->soaRefresh,
-                'soaExpire' => $DBDNSZone->soaExpire,
-                'domainFarm' => $DBDNSZone->farmId,
-                'domainFarmRole' => $DBDNSZone->farmRoleId
-            ),
-            'records' => $DBDNSZone->getRecords()
-        ), array('ui/dnszones/dnsfield2.js'), array('ui/dnszones/create2.css'));
+        $this->editAction();
     }
 
     public function xSaveAction()
@@ -357,7 +286,7 @@ class Scalr_UI_Controller_Dnszones extends Scalr_UI_Controller
                         if (in_array($chkDmn, array('scalr.net', 'scalr.com', 'scalr-dns.net', 'scalr-dns.com')))
                             $errors['domainName'] = sprintf(_("You cannot use %s domain name because top level domain %s does not belong to you"), $domainName, $chkDmn);
                         else {
-                            $chkDomainId = $this->db->GetOne("SELECT id FROM dns_zones WHERE zone_name=? AND client_id != ?", array($chkDmn, $this->user->getAccountId()));
+                            $chkDomainId = $this->db->GetOne("SELECT id FROM dns_zones WHERE zone_name=? AND client_id != ? LIMIT 1", array($chkDmn, $this->user->getAccountId()));
                             if ($chkDomainId) {
                                 if ($chkDmn == $domainName)
                                     $errors['domainName'] = sprintf(_("%s already exists on scalr nameservers"), $domainName);
@@ -380,7 +309,7 @@ class Scalr_UI_Controller_Dnszones extends Scalr_UI_Controller
                 $domainName = Scalr::GenerateUID() . '.' . \Scalr::config('scalr.dns.global.default_domain_name');
 
             // check in DB
-            $rez = $this->db->GetOne("SELECT id FROM dns_zones WHERE zone_name = ?", array($domainName));
+            $rez = $this->db->GetOne("SELECT id FROM dns_zones WHERE zone_name = ? LIMIT 1", array($domainName));
             if ($rez)
                 $errors['domainName'] = 'Domain name already exist in database';
         }

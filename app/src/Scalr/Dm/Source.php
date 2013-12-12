@@ -38,7 +38,7 @@ class Scalr_Dm_Source extends Scalr_Model
         $cryptoKey = @file_get_contents(dirname(__FILE__)."/../../etc/.cryptokey");
         $eAuthInfo = $crypto->encrypt(serialize($authInfo), $cryptoKey);
 
-        return \Scalr::getDb()->GetOne("SELECT id FROM dm_sources WHERE `url`=? AND auth_info=?", array($url, $eAuthInfo));
+        return \Scalr::getDb()->GetOne("SELECT id FROM dm_sources WHERE `url`=? AND auth_info=? LIMIT 1", array($url, $eAuthInfo));
     }
 
     public function setAuthInfo(stdClass $authInfo = null)

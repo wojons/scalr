@@ -1,4 +1,4 @@
-<?
+<?php
     final class GCE_SERVER_PROPERTIES extends SERVER_PROPERTIES
     {
         const SERVER_NAME	= 'gce.server-name';

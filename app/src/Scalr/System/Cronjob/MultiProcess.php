@@ -141,14 +141,14 @@ class Scalr_System_Cronjob_MultiProcess extends Scalr_System_Cronjob implements 
             if ($poolConfig["daemonize"]) {
                 $poolConfig["workQueue"]["blocking"] = true;
             }
-            $poolConfig["workQueue"]["name"] = "scalr.system.cronjob.multiprocess.workQueue-{$this->jobName}";
+            $poolConfig["workQueue"]["name"] = "scalr.workQueue-{$this->jobName}";
         }
         $this->processPool = new Scalr_System_Ipc_ProcessPool($poolConfig);
         $this->processPool->addListener($this);
 
         // Init shared memory segment
         $this->shm = new Scalr_System_Ipc_Shm(array(
-            "name" => "scalr.system.cronjob.multiprocess.shm-{$this->jobName}"
+            "name" => "scalr.shm-{$this->jobName}"
         ));
 
         if ($this->config["fileName"]) {
@@ -167,8 +167,6 @@ class Scalr_System_Cronjob_MultiProcess extends Scalr_System_Cronjob implements 
         if ($this->worker) {
             $this->worker->runOptions = $options;
         }
-
-        $this->onReady($this->processPool);
     }
 
     function run ($options=array()) {
@@ -181,7 +179,7 @@ class Scalr_System_Cronjob_MultiProcess extends Scalr_System_Cronjob implements 
         }
 
         if ($this->poolIsRunning($poolPid)) {
-            $this->logger->info(sprintf("Cronjob '%s' is already running (pid: %d)", $this->jobName, $poolPid));
+            $this->logger->info(sprintf("[IPC] Cronjob '%s' is already running (pid: %d)", $this->jobName, $poolPid));
             if ($this->worker) {
                 $this->logger->info("Enqueue work...");
 
@@ -192,11 +190,13 @@ class Scalr_System_Cronjob_MultiProcess extends Scalr_System_Cronjob implements 
                 }
 
                 // Enqueue tasks
-                $this->worker->enqueueWork($queue);
-                posix_kill($poolPid, SIGUSR1);
+                //$this->worker->enqueueWork($queue);
+                //posix_kill($poolPid, SIGUSR1);
             }
             return;
         }
+
+        $this->onReady($this->processPool);
 
         $this->processPool->start();
     }
@@ -233,8 +233,9 @@ class Scalr_System_Cronjob_MultiProcess extends Scalr_System_Cronjob implements 
     }
 
     function onReady ($pool) {
-        $this->logger->debug("Store process pool (pid: {$this->processPool->getPid()}) in shm");
+        $this->logger->info("[IPC] Store process pool (pid: {$this->processPool->getPid()}) in shm");
         $this->shm->put(0, $this->processPool->getPid());
+        $this->logger->info("[IPC] Process pool PID check: ". $this->shm->get(0));
     }
 
     function onTick ($pool, $tick) {

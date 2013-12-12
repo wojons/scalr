@@ -22,7 +22,7 @@ class Scalr_System_Ipc_Shm
         $this->logger = Logger::getLogger(__CLASS__);
         if (!isset($this->key) && $config["name"]) {
             $this->key = Scalr_System_OS::getInstance()->tok($config["name"]);
-            //$this->logger->error(sprintf("Shm key 0x%08x from name '%s' is generated", $this->key, $config["name"]));
+            $this->logger->info(sprintf("[SHM] Shm key 0x%08x from name '%s' is generated", $this->key, $config["name"]));
         }
 
         $this->logger->debug(sprintf("Initialize shm segment (key: 0x%08x)", $this->key));

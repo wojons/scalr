@@ -1,8 +1,14 @@
 <?php
+use Scalr\Acl\Acl;
 
 class Scalr_UI_Controller_Tools_Cloudstack_Snapshots extends Scalr_UI_Controller
 {
     const CALL_PARAM_NAME = 'snapshotId';
+
+    public function hasAccess()
+    {
+        return parent::hasAccess() && $this->request->isAllowed(Acl::RESOURCE_CLOUDSTACK_SNAPSHOTS);
+    }
 
     public function defaultAction()
     {
@@ -29,18 +35,9 @@ class Scalr_UI_Controller_Tools_Cloudstack_Snapshots extends Scalr_UI_Controller
             'cloudLocation'
         ));
 
-        $platformLocations = self::loadController('Platforms')->getEnabledPlatforms(true);
-        foreach ($platformLocations as $p => $details) {
-            foreach ($details['locations'] as $key => $loc) {
-                if ($key == $this->getParam('cloudLocation')) {
-                    $platformName = $p;
-                    break;
-                }
-            }
-
-            if ($platformName)
-                break;
-        }
+        $platformName = $this->getParam('platform');
+        if (!$platformName)
+            throw new Exception("Cloud should be specified");
 
         $platform = PlatformFactory::NewPlatform($platformName);
 
@@ -55,28 +52,13 @@ class Scalr_UI_Controller_Tools_Cloudstack_Snapshots extends Scalr_UI_Controller
             $cs->deleteSnapshot($snapshotId);
         }
 
-        $this->response->success('Volume(s) successfully removed');
+        $this->response->success('Snapshot(s) successfully removed');
     }
 
-    public function xListSnapshotsAction()
+    public function getSnapshots($platformName, $snapshotId = null)
     {
-        $this->request->defineParams(array(
-            'sort' => array('type' => 'json', 'default' => array('property' => 'volumeId', 'direction' => 'ASC')),
-            'volumeId'
-        ));
-
-        $platformLocations = self::loadController('Platforms')->getEnabledPlatforms(true);
-        foreach ($platformLocations as $p => $details) {
-            foreach ($details['locations'] as $key => $loc) {
-                if ($key == $this->getParam('cloudLocation')) {
-                    $platformName = $p;
-                    break;
-                }
-            }
-
-            if ($platformName)
-                break;
-        }
+        if (!$platformName)
+            throw new Exception("Cloud should be specified");
 
         $platform = PlatformFactory::NewPlatform($platformName);
 
@@ -90,13 +72,12 @@ class Scalr_UI_Controller_Tools_Cloudstack_Snapshots extends Scalr_UI_Controller
         $snapshots = $cs->listSnapshots();
 
         $snaps = array();
-        foreach ($snapshots as $pk=>$pv)
-        {
-            if ($this->getParam('snapshotId') && $this->getParam('snapshotId') != $pv->id)
+        foreach ($snapshots as $pk => $pv) {
+            if ($snapshotId && $snapshotId != $pv->id)
                 continue;
 
             $item = array(
-                'snapshotId'	=> $pv->id,
+                'snapshotId' => (string) $pv->id,
                 'type'	=> $pv->snapshottype,
                 'volumeId' => $pv->volumeid,
                 'volumeType' => $pv->volumetype,
@@ -108,8 +89,24 @@ class Scalr_UI_Controller_Tools_Cloudstack_Snapshots extends Scalr_UI_Controller
             $snaps[] = $item;
         }
 
-        $response = $this->buildResponseFromData($snaps, array('snapshotId', 'volumeId', 'state'));
+        return $snaps;
+    }
 
+    public function xGetSnapshotsAction()
+    {
+        $snaps = $this->getSnapshots($this->getParam('platform'));
+        $this->response->data(array('data' => $snaps));
+    }
+
+    public function xListSnapshotsAction()
+    {
+        $this->request->defineParams(array(
+            'sort' => array('type' => 'json', 'default' => array('property' => 'volumeId', 'direction' => 'ASC')),
+            'volumeId'
+        ));
+
+        $snaps = $this->getSnapshots($this->getParam('platform'), $this->getParam('snapshotId'));
+        $response = $this->buildResponseFromData($snaps, array('snapshotId', 'volumeId', 'state'));
         $this->response->data($response);
     }
 }

@@ -7,6 +7,24 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.mysql', function () {
     return Ext.create('Scalr.ui.FarmsBuilderTab', {
 		tabTitle: 'MySQL settings',
         itemId: 'mysql',
+        
+        settings: {
+            'mysql.enable_bundle': 1,
+            'mysql.bundle_every': 24,
+            'mysql.pbw1_hh': '05',
+            'mysql.pbw1_mm': '00',
+            'mysql.pbw2_hh': '09',
+            'mysql.pbw2_mm': '00',
+            'mysql.data_storage_engine': function(record){return record.getOldMySqlDefaultStorageEngine()},
+            'mysql.enable_bcp': 1,
+            'mysql.bcp_every': 720,
+            'mysql.ebs_volume_size': 100,
+            'mysql.ebs.type': 'standard',
+            'mysql.ebs.iops': 100,
+            'mysql.ebs.rotate_snaps': undefined,
+            'mysql.ebs.rotate': undefined
+        },
+        
 		isEnabled: function (record) {
 			return (record.get('behaviors').match('mysql') && !record.get('behaviors').match('mysql2') && !record.get('behaviors').match('mysqlproxy') &&
 				(
@@ -17,31 +35,6 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.mysql', function () {
 					record.get('platform') == 'ucloud'
 				)
 			);
-		},
-
-		getDefaultValues: function (record) {
-			if (record.get('platform') == 'ec2')
-				var default_storage_engine = 'ebs';
-			else if (record.get('platform') == 'rackspace')
-				var default_storage_engine = 'eph';
-			else if (record.get('platform') == 'cloudstack' || record.get('platform') == 'idcf' || record.get('platform') == 'ucloud')
-				var default_storage_engine = 'csvol';
-
-			return {
-				'mysql.enable_bundle': 1,
-				'mysql.bundle_every': 24,
-				'mysql.pbw1_hh': '05',
-				'mysql.pbw1_mm': '00',
-				'mysql.pbw2_hh': '09',
-				'mysql.pbw2_mm': '00',
-				'mysql.data_storage_engine': default_storage_engine,
-				'mysql.ebs_volume_size': 100,
-				'mysql.ebs.type': 'standard',
-				'mysql.ebs.iops': 100,
-				'mysql.enable_bcp': 1,
-				'mysql.bcp_every' : 720
-				// Rotate 10 times. Re-think interface
-			};
 		},
 
 		showTab: function (record) {

@@ -24,7 +24,7 @@ class SnapshotsHandler extends AbstractServiceHandler implements ServiceHandlerI
     public function getServiceMethodAliases()
     {
         return array(
-            'list'   => 'listShanpshots',
+            'list'   => 'listSnapshots',
             'create' => 'createSnapshot',
             'get'    => 'getSnapshot',
             'delete' => 'deleteSnapshot',

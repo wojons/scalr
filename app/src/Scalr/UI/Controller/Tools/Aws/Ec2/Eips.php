@@ -1,14 +1,14 @@
 <?php
-
+use Scalr\Acl\Acl;
 use Scalr\Service\Aws\Ec2\DataType as Ec2DataType;
 
 class Scalr_UI_Controller_Tools_Aws_Ec2_Eips extends Scalr_UI_Controller
 {
     const CALL_PARAM_NAME = 'elasticIp';
 
-    public static function getPermissionDefinitions()
+    public function hasAccess()
     {
-        return array();
+        return parent::hasAccess() && $this->request->isAllowed(Acl::RESOURCE_AWS_ELASTIC_IPS);
     }
 
     public function defaultAction()
@@ -18,13 +18,20 @@ class Scalr_UI_Controller_Tools_Aws_Ec2_Eips extends Scalr_UI_Controller
 
     public function xDeleteAction()
     {
+        $this->request->defineParams(array(
+            'eips' => array('type' => 'json')
+        ));
+
         $aws = $this->environment->aws($this->getParam('cloudLocation'));
 
-        $address = $aws->ec2->address->describe($this->getParam('elasticIp'))->get(0);
-        if ($address->domain == 'vpc')
-            $aws->ec2->address->release(null, $address->allocationId);
-        else
-            $aws->ec2->address->release($this->getParam('elasticIp'));
+        foreach ($this->getParam('eips') as $ip) {
+            $address = $aws->ec2->address->describe($ip)->get(0);
+            if ($address->domain == 'vpc')
+                $aws->ec2->address->release(null, $address->allocationId);
+            else
+                $aws->ec2->address->release($ip);
+        }
+
         $this->response->success();
     }
 
@@ -74,7 +81,7 @@ class Scalr_UI_Controller_Tools_Aws_Ec2_Eips extends Scalr_UI_Controller
                 'domain' => $address->domain,
                 'instance_id' => ($address->instanceId === null ? '' : $address->instanceId),
             );
-            $info = $this->db->GetRow("SELECT * FROM elastic_ips WHERE ipaddress=?", array($address->publicIp));
+            $info = $this->db->GetRow("SELECT * FROM elastic_ips WHERE ipaddress=? LIMIT 1", array($address->publicIp));
             if ($info) {
                 $item['farm_id'] = $info['farmid'];
                 $item['farm_roleid'] = $info['farm_roleid'];

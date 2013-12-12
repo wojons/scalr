@@ -1,0 +1,1 @@
+John <?= $verb ?> this <?= $b ?>

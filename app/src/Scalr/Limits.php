@@ -100,9 +100,9 @@ class Scalr_Limits extends Scalr_Model
         $this->limitName = $limitName;
 
         $features = self::getFeatures();
-        $this->isFeature = (bool)($features[$limitName]);
+        $this->isFeature = isset($features[$limitName]) ? (bool)($features[$limitName]) : false;
 
-        $info = $this->db->GetRow("SELECT * FROM account_limits WHERE account_id=? AND limit_name=?", array($accountId, $limitName));
+        $info = $this->db->GetRow("SELECT * FROM account_limits WHERE account_id=? AND limit_name=? LIMIT 1", array($accountId, $limitName));
         if ($info)
             return $this->loadBy($info);
         else

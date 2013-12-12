@@ -1,7 +1,6 @@
 Scalr.regPage('Scalr.ui.billing.applyCouponCode', function (loadParams, moduleParams) {
 	
 	var form = Ext.create('Ext.form.Panel', {
-		bodyCls: 'x-panel-body-frame',
 		width: 500,
 		title: 'Billing &raquo; Apply coupon code',
 		fieldDefaults: {
@@ -10,6 +9,7 @@ Scalr.regPage('Scalr.ui.billing.applyCouponCode', function (loadParams, modulePa
 		scalrOptions: {
 			'modal': true
 		},
+        bodyCls: 'x-container-fieldset',
 		items: [{
 			xtype: 'textfield',
 			labelWidth: 80,
@@ -26,7 +26,7 @@ Scalr.regPage('Scalr.ui.billing.applyCouponCode', function (loadParams, modulePa
 		
 		dockedItems: [{
 			xtype: 'container',
-			cls: 'x-docked-bottom-frame',
+			cls: 'x-docked-buttons',
 			dock: 'bottom',
 			layout: {
 				type: 'hbox',
@@ -49,7 +49,6 @@ Scalr.regPage('Scalr.ui.billing.applyCouponCode', function (loadParams, modulePa
 				}
 			}, {
 				xtype: 'button',
-				margin: '0 0 0 5',
 				text: 'Cancel',
 				handler: function() {
 					Scalr.event.fireEvent('close');
