@@ -309,7 +309,7 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.security', function (moduleTabParams)
                 width: 200,
                 dataIndex: 'name',
                 xtype: 'templatecolumn',
-                tpl: '<tpl if="values.name">{name}<tpl if="values.addedByGovernance">&nbsp;&nbsp;<img src="' + Ext.BLANK_IMAGE_URL + '" title="Added by account owner" class="x-icon-governance" style="vertical-align:top" /></tpl><tpl else>-</tpl>'
+                tpl: '<tpl if="values.name">{name}<tpl if="values.addedByGovernance">&nbsp;&nbsp;<img src="' + Ext.BLANK_IMAGE_URL + '" data-qtip="Security group is forcefully added by account owner" class="x-icon-governance" style="vertical-align:top" /></tpl><tpl else>-</tpl>'
 
             },{
                 text: 'Description',

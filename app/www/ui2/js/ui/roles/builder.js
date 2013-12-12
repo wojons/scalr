@@ -732,7 +732,7 @@ Scalr.regPage('Scalr.ui.roles.builder', function (loadParams, moduleParams) {
                                             me.loadBundleTaskData();
                                         }, 5000);
                                     } else {
-                                        panel.onBundleTaskSuccess(data['roleId']);
+                                        panel.onBundleTaskSuccess(data);
                                     }
                                 }
                             }
@@ -799,8 +799,7 @@ Scalr.regPage('Scalr.ui.roles.builder', function (loadParams, moduleParams) {
                 hidden: true,
                 cls: 'x-fieldset-subheader',
                 style: 'text-align:center',
-                margin: '48 0 16',
-                html: 'New role has successfully been created'
+                margin: '48 0 16'
             },{
                 xtype: 'container',
                 itemId: 'failed',
@@ -1290,13 +1289,15 @@ Scalr.regPage('Scalr.ui.roles.builder', function (loadParams, moduleParams) {
             panel.resumeLayouts(true);
         },
 
-        onBundleTaskSuccess: function(roleId) {
-            var progresscol = this.getComponent('progresscol');
+        onBundleTaskSuccess: function(role) {
+            var progresscol = this.getComponent('progresscol'),
+                success = progresscol.down('#success');
             progresscol.down('#successButtons').show();
             progresscol.down('#commonButtons').hide();
             progresscol.down('#log').hide();
-            progresscol.down('#success').show();
-            this.roleId = roleId;
+            success.update('New role &laquo;' + role['roleName'] + '&raquo; has successfully been created');
+            success.show();
+            this.roleId = role['roleId'];
         },
         onBundleTaskFailed: function(failureReason) {
             var progresscol = this.getComponent('progresscol'),

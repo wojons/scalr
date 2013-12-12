@@ -11,15 +11,17 @@ Ext.define('Scalr.ui.RoleDesignerTabOverview', {
         xtype: 'form',
         itemId: 'roleSettings',
         cls: 'x-panel-column-left',
-        layout: 'column',
+        layout: {
+            type: 'hbox',
+            align: 'stretch'
+        },
         defaults: {
-            columnWidth: .5
+            flex: 1
         },
         items: [{
             xtype: 'container',
             cls: 'x-container-fieldset',
             layout: 'anchor',
-            maxWidth: 760,
             defaults: {
                 anchor: '100%',
                 labelWidth: 80
@@ -36,11 +38,6 @@ Ext.define('Scalr.ui.RoleDesignerTabOverview', {
                 fieldLabel: 'Name',
                 hideInputOnReadOnly: true,
                 allowBlank: false
-            },{
-                xtype: 'displayfield',
-                itemId: 'osReadonly',
-                fieldLabel: 'OS',
-                hidden: true
             },{
                 xtype: 'fieldcontainer',
                 itemId: 'os',
@@ -137,14 +134,12 @@ Ext.define('Scalr.ui.RoleDesignerTabOverview', {
                 xtype: 'textarea',
                 name: 'description',
                 fieldLabel: 'Description',
-                height: 50
+                height: 70
 
             }]
         },{
             xtype: 'container',
-            itemId: 'topRightcol',
-            hidden: true,
-            cls: 'x-container-fieldset',
+            cls: 'x-container-fieldset x-fieldset-separator-right',
             layout: 'anchor',
             defaults: {
                 anchor: '100%',
@@ -152,12 +147,15 @@ Ext.define('Scalr.ui.RoleDesignerTabOverview', {
             },
             items: [{
                 xtype: 'component',
+                itemId: 'topRightcol',
+                hidden: true,
                 cls: 'x-fieldset-subheader',
                 html: '&nbsp;'
             },{
                 xtype: 'displayfield',
-                name: 'usage',
-                fieldLabel: 'Role usage'
+                itemId: 'osReadonly',
+                fieldLabel: 'OS',
+                hidden: true
             },{
                 xtype: 'displayfield',
                 name: 'software',
@@ -167,12 +165,29 @@ Ext.define('Scalr.ui.RoleDesignerTabOverview', {
                 name: 'created',
                 fieldLabel: 'Created by'
             }]
+        },{
+            xtype: 'container',
+            cls: 'x-container-fieldset',
+            layout: 'anchor',
+            defaults: {
+                anchor: '100%'
+            },
+            items: [{
+                xtype: 'component',
+                cls: 'x-fieldset-subheader',
+                html: 'Role usage'
+            },{
+                xtype: 'displayfield',
+                name: 'usage',
+                //fieldLabel: 'Role usage'
+
+            }]
         }]
     },{
         xtype: 'container',
         flex: 1,
         cls: 'x-fieldset-separator-top',
-        minHeight: 400,
+        minHeight: 340,
         layout: {
             type: 'hbox',
             align: 'stretch'
@@ -288,13 +303,14 @@ Ext.define('Scalr.ui.RoleDesignerTabOverview', {
             xtype: 'container',
             overflowY: 'auto',
             overflowX: 'hidden',
+            cls: ' x-fieldset-separator-right',
             items: [{
                 xtype: 'container',
                 cls: 'x-container-fieldset x-fieldset-separator-bottom',
                 autoScroll: true,
                 items: [{
                     xtype: 'container',
-                    layout: 'column',
+                    layout: 'hbox',
                     items: [{
                         xtype: 'component',
                         cls: 'x-fieldset-subheader',
@@ -303,8 +319,9 @@ Ext.define('Scalr.ui.RoleDesignerTabOverview', {
                         xtype: 'button',
                         itemId: 'configureAutomation',
                         text: '<img src="' + Ext.BLANK_IMAGE_URL + '" class="x-icon-configure" />&nbsp;Configure',
-                        width: 120,
-                        margin: '-2 0 0 20',
+                        maxWidth: 120,
+                        flex: 1,
+                        margin: '0 0 0 20',
                         handler: function() {
                             var behaviors = ['base','chef', 'mysql','mariadb','mysql2','percona','postgresql'/*,'cassandra'*/,'redis','mongodb','app','www','haproxy','memcached','rabbitmq','cf_router','cf_cloud_controller','cf_health_manager','cf_dea','cf_service'],
                                 store = this.up('roleeditoverview').down('#automation').store;
@@ -356,15 +373,15 @@ Ext.define('Scalr.ui.RoleDesignerTabOverview', {
                     }),
                     tpl  : new Ext.XTemplate(
                         '<tpl for=".">',
-                            '<div class="x-item" style="line-height:20px;margin:0 16px 8px 0;color:#666;float:left">',
-                                '<img src="'+Ext.BLANK_IMAGE_URL+'" class="x-icon-role-small x-icon-role-small-{name}"/>&nbsp;{[Scalr.utils.beautifyBehavior(values.name)]}',
+                            '<div class="x-item" style="line-height:18px;margin:0 16px 8px 0;">',
+                                '<img style="float:left" src="'+Ext.BLANK_IMAGE_URL+'" class="x-icon-role-small x-icon-role-small-{name}"/><div style="margin-left:28px">{[Scalr.utils.beautifyBehavior(values.name)]} <i style="color:#666;">(Lorem ipsum dolor sit amet, consectetur adipisicing elit)</i></div>',
                             '</div>',
                         '</tpl>'
                     )
                 }]
             },{
                 xtype: 'container',
-                cls: 'x-container-fieldset x-fieldset-separator-bottom',
+                cls: 'x-container-fieldset',
                 items: [{
                     xtype: 'container',
                     layout: 'hbox',
@@ -374,7 +391,8 @@ Ext.define('Scalr.ui.RoleDesignerTabOverview', {
                         html: 'Bootstrap role with Chef'
                     },{
                         xtype: 'button',
-                        width: 120,
+                        maxWidth: 120,
+                        flex: 1,
                         margin: '0 0 0 20',
                         text: '<img style="vertical-align:top;" width="16" height="16" src="/ui2/images/ui/roles/edit/chef_config.png" />&nbsp;Configure',
                         handler: function() {
@@ -386,26 +404,25 @@ Ext.define('Scalr.ui.RoleDesignerTabOverview', {
                     itemId: 'chefStatus',
                     style: 'color:#666'
                 }]
-            },{
-                xtype: 'fieldset',
-                flex: 1,
-                title: 'Orchestration',
-                cls: 'x-fieldset-separator-none',
-                //layout: 'hbox',
-                items: [{
-                    xtype: 'scriptinggrid',
-                    itemId: 'scripts',
-                    groupingStartCollapsed: true,
-                    groupingShowTotal: true,
-                    cls: 'x-grid-shadow x-grid-role-scripting x-grid-no-highlighting',
-                    maxWidth: 600,
-                    flex: 1,
-                    hideDeleteButton: true,
-                    addButtonHandler: function(view) {
-                        view.up('roleeditoverview').fireEvent('addscript');
-                    }
-                }]
             }]
+        },{
+            xtype: 'fieldset',
+            flex: 1,
+            title: 'Orchestration',
+            cls: 'x-fieldset-separator-none',
+            layout: 'fit',
+            items: [{
+                xtype: 'scriptinggrid',
+                itemId: 'scripts',
+                groupingStartCollapsed: true,
+                groupingShowTotal: true,
+                cls: 'x-grid-shadow x-grid-role-scripting x-grid-no-highlighting',
+                hideDeleteButton: true,
+                addButtonHandler: function(view) {
+                    view.up('roleeditoverview').fireEvent('addscript');
+                }
+            }]
+
         }]
     }],
     initComponent: function() {

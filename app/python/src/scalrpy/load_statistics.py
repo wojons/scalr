@@ -343,7 +343,7 @@ class Poller(object):
         try:
             for clients in self._get_db_clients():
                 for farms in self._get_db_farms(clients):
-                    ra = fa = rs = fs = None
+                    ra, fa, rs, fs = dict(), dict(), dict(), dict()
                     for servers in self._get_servers(farms):
                         results = srv_pool.map(_process_server, servers)
                         for result in results:
@@ -578,7 +578,7 @@ class Plotter(object):
         except (Plotter.BadRequestError, Plotter.IOError, Plotter.FarmTerminatedError) as e:
             result = {'success': False, 'msg': str(e)}
         except:
-            result = {'success': False, 'msg': 'Internal error. Unable to load statistics.'}
+            result = {'success': False, 'msg': 'Internal error. Unable to load statistics'}
             LOG.error(helper.exc_info())
         cherrypy.response.headers['Access-Control-Allow-Origin'] = '*'
         cherrypy.response.headers['Access-Control-Max-Age'] = 300

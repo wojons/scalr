@@ -65,7 +65,7 @@ Ext.override(Ext.form.field.Base, {
 
 	initComponent: function() {
         if (this.governance) {
-            this.beforeSubTpl = '<span class="x-icon-governance" title="This functionality is limited by account owner"></span>' + (this.beforeSubTpl || '');
+            this.beforeSubTpl = '<span class="x-icon-governance" data-qtip="' + this.getGovernanceMessage() + '"></span>' + (this.beforeSubTpl || '');
         }
 
 		this.callParent(arguments);
@@ -116,6 +116,18 @@ Ext.override(Ext.form.field.Base, {
         this.setValue(governanceEnabled ? limit.value : value);
         this.setReadOnly(governanceEnabled);
         this[governanceEnabled ? 'addCls' : 'removeCls']('x-field-governance');
+    },
+
+    getGovernanceMessage: function(raw) {
+        var message = 'The account owner has enforced a specific policy on ';
+        if (this.governanceTitle) {
+            message += 'the <b>' + this.governanceTitle + '</b>.';
+        } else if (this.fieldLabel) {
+            message += 'the <b>' + this.fieldLabel.toLowerCase() + '</b> setting.';
+        } else {
+            message += 'this setting.';
+        }
+        return raw ? message : Ext.String.htmlEncode(message);
     }
 });
 
@@ -1019,4 +1031,9 @@ Ext.define(null, {
 Ext.define(null, {
     override: 'Ext.layout.container.Accordion',
     animate: false
+});
+
+Ext.define(null, {
+    override: 'Ext.tip.QuickTip',
+    maxWidth: 600
 });

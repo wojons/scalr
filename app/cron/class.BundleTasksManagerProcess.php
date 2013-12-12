@@ -406,12 +406,37 @@ class BundleTasksManagerProcess implements \Scalr\System\Pcntl\ProcessInterface
 
                 // For CGE we need to use sudo
                 if ($BundleTask->platform == SERVER_PLATFORMS::GCE || $BundleTask->osFamily == 'amazon') {
+
+                    $shell = $ssh2Client->getShell();
+
+                    fwrite($shell, "sudo su\n");
+                    fwrite($shell, "touch /var/log/role-builder-output.log 2>&1\n");
+                    fwrite($shell, "chmod 0666 /var/log/role-builder-output.log 2>&1\n");
+                    fwrite($shell, "setsid /tmp/scalr-builder.sh > /var/log/role-builder-output.log 2>&1 &\n");
+
+                    // Get output
+                    $iterations = 0;
+                    while($l = @fgets($shell, 4096) && $iterations < 10)
+                    {
+                        $meta = stream_get_meta_data($shell);
+                        if ($meta["timed_out"])
+                            break;
+                        $retval .= $l;
+                        $iterations ++;
+                    }
+
+                    @fclose($shell);
+
+                    $BundleTask->Log("Exec result: {$retval}");
+
+                    /*
                     $r1 = $ssh2Client->exec("sudo touch /var/log/role-builder-output.log");
-                    $BundleTask->Log("1: {$r1}");
+                    $BundleTask->Log("1: {$r1} ({$ssh2Client->stdErr})");
                     $r2 = $ssh2Client->exec("sudo chmod 0666 /var/log/role-builder-output.log");
-                    $BundleTask->Log("2: {$r2}");
+                    $BundleTask->Log("2: {$r2} ({$ssh2Client->stdErr})");
                     $r3 = $ssh2Client->exec("sudo setsid /tmp/scalr-builder.sh > /var/log/role-builder-output.log 2>&1 &");
-                    $BundleTask->Log("3: {$r3}");
+                    $BundleTask->Log("3: {$r3} ({$ssh2Client->stdErr})");
+                    */
                 } else {
                     $ssh2Client->exec("setsid /tmp/scalr-builder.sh > /var/log/role-builder-output.log 2>&1 &");
                 }

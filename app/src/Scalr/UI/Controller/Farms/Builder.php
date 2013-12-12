@@ -1012,7 +1012,7 @@ class Scalr_UI_Controller_Farms_Builder extends Scalr_UI_Controller
                 'config_presets'=> $presets,
                 'tags'			=> $dbFarmRole->GetRoleObject()->getTags(),
                 'storages'      => $storages,
-                'variables'     => $farmRoleVariables->getValues(null, null, $dbFarmRole->ID),
+                'variables'     => $farmRoleVariables->getValues($dbFarmRole->GetRoleID(), $dbFarm->ID, $dbFarmRole->ID),
                 'running_servers' => $dbFarmRole->GetRunningInstancesCount(),
                 'security_groups' => $securityGroups
             );

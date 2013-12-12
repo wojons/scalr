@@ -617,20 +617,26 @@ class Scalr_UI_Controller_Roles extends Scalr_UI_Controller
                     $launchOptions->serverType = 3;
                 break;
             case SERVER_PLATFORMS::EC2:
-                if ($this->getParam('osfamily') == 'oel') {
-                    $launchOptions->serverType = 'm1.large';
+
+                if ($this->getParam('hvm') == 1) {
+                    $launchOptions->serverType = 'm3.xlarge';
                     $bundleType = SERVER_SNAPSHOT_CREATION_TYPE::EC2_EBS_HVM;
+                } else {
+                    if ($this->getParam('osfamily') == 'oel') {
+                        $launchOptions->serverType = 'm1.large';
+                        $bundleType = SERVER_SNAPSHOT_CREATION_TYPE::EC2_EBS_HVM;
+                    }
+                    elseif ($this->getParam('osfamily') == 'rhel') {
+                        $launchOptions->serverType = 'm1.large';
+                        $bundleType = SERVER_SNAPSHOT_CREATION_TYPE::EC2_EBS_HVM;
+                    }
+                    elseif ($this->getParam('osfamily') == 'scientific') {
+                        $launchOptions->serverType = 'm1.large';
+                        $bundleType = SERVER_SNAPSHOT_CREATION_TYPE::EC2_EBS_HVM;
+                    }
+                    else
+                        $launchOptions->serverType = 'm1.small';
                 }
-                elseif ($this->getParam('osfamily') == 'rhel') {
-                    $launchOptions->serverType = 'm1.large';
-                    $bundleType = SERVER_SNAPSHOT_CREATION_TYPE::EC2_EBS_HVM;
-                }
-                elseif ($this->getParam('osfamily') == 'scientific') {
-                    $launchOptions->serverType = 'm1.large';
-                    $bundleType = SERVER_SNAPSHOT_CREATION_TYPE::EC2_EBS_HVM;
-                }
-                else
-                    $launchOptions->serverType = 'm1.small';
 
                 $launchOptions->userData = "#cloud-config\ndisable_root: false";
                 break;

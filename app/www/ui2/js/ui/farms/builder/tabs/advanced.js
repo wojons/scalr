@@ -77,7 +77,8 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.advanced', function (moduleTabParams)
                     name: 'base.hostname_format',
 					emptyText: 'Leave blank to use cloud generated hostname',
                     flex: 1,
-                    governance: true
+                    governance: true,
+                    governanceTitle: 'format of server hostnames'
                 },{
                     xtype: 'displayinfofield',
                     margin: '0 0 0 5',

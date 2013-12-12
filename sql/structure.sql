@@ -2677,69 +2677,12 @@ CREATE TABLE `syslog` (
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
--- Table structure for table `syslog_15102013`
---
-
-/*!40101 SET @saved_cs_client     = @@character_set_client */;
-/*!40101 SET character_set_client = utf8 */;
-CREATE TABLE `syslog_15102013` (
-  `id` int(11) NOT NULL AUTO_INCREMENT,
-  `dtadded` datetime DEFAULT NULL,
-  `message` text,
-  `severity` varchar(10) DEFAULT NULL,
-  `transactionid` varchar(50) DEFAULT NULL,
-  PRIMARY KEY (`id`)
-) ENGINE=MyISAM DEFAULT CHARSET=latin1;
-/*!40101 SET character_set_client = @saved_cs_client */;
 
 --
--- Table structure for table `syslog_22112013`
---
-
-/*!40101 SET @saved_cs_client     = @@character_set_client */;
-/*!40101 SET character_set_client = utf8 */;
-CREATE TABLE `syslog_22112013` (
-  `id` int(11) NOT NULL AUTO_INCREMENT,
-  `dtadded` datetime DEFAULT NULL,
-  `message` text,
-  `severity` varchar(10) DEFAULT NULL,
-  `transactionid` varchar(50) DEFAULT NULL,
-  PRIMARY KEY (`id`)
-) ENGINE=MyISAM DEFAULT CHARSET=latin1;
-/*!40101 SET character_set_client = @saved_cs_client */;
 
 --
--- Table structure for table `syslog_24042013`
---
-
-/*!40101 SET @saved_cs_client     = @@character_set_client */;
-/*!40101 SET character_set_client = utf8 */;
-CREATE TABLE `syslog_24042013` (
-  `id` int(11) NOT NULL AUTO_INCREMENT,
-  `dtadded` datetime DEFAULT NULL,
-  `message` text,
-  `severity` varchar(10) DEFAULT NULL,
-  `transactionid` varchar(50) DEFAULT NULL,
-  PRIMARY KEY (`id`)
-) ENGINE=MyISAM DEFAULT CHARSET=latin1;
-/*!40101 SET character_set_client = @saved_cs_client */;
 
 --
--- Table structure for table `syslog_metadata`
---
-
-/*!40101 SET @saved_cs_client     = @@character_set_client */;
-/*!40101 SET character_set_client = utf8 */;
-CREATE TABLE `syslog_metadata` (
-  `id` int(11) NOT NULL AUTO_INCREMENT,
-  `transactionid` varchar(50) DEFAULT NULL,
-  `errors` int(5) DEFAULT NULL,
-  `warnings` int(5) DEFAULT NULL,
-  `message` varchar(255) DEFAULT NULL,
-  PRIMARY KEY (`id`),
-  UNIQUE KEY `transid` (`transactionid`)
-) ENGINE=MyISAM DEFAULT CHARSET=latin1;
-/*!40101 SET character_set_client = @saved_cs_client */;
 
 --
 -- Table structure for table `task_queue`
@@ -2862,4 +2805,4 @@ CREATE TABLE `wus_info` (
 /*!40014 SET UNIQUE_CHECKS=@OLD_UNIQUE_CHECKS */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
--- Dump completed on 2013-12-11  9:03:08
+-- Dump completed on 2013-12-12  8:42:32

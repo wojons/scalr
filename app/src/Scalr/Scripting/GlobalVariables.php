@@ -299,30 +299,21 @@ class Scalr_Scripting_GlobalVariables
 
     public function getValues($roleId = 0, $farmId = 0, $farmRoleId = 0, $serverId = '')
     {
-        $sql = 'SELECT name, value, scope, flag_final AS flagFinal, flag_required AS flagRequired, flag_hidden AS flagHidden, `validator`, `format` FROM `global_variables` WHERE env_id = ?';
-        $args = array($this->envId);
+        $sql = "SELECT name, value, scope, flag_final AS flagFinal, flag_required AS flagRequired, flag_hidden AS flagHidden, `validator`, `format` FROM `global_variables` WHERE env_id = ?";
+        $vars = $this->db->GetAll($sql . " AND (role_id = '0' OR role_id = ?) AND (farm_id = '0' OR farm_id = ?) AND farm_role_id = '0' AND server_id = ''", array(
+            $this->envId,
+            $roleId,
+            $farmId
+        ));
 
-        if ($roleId) {
-            $sql .= " AND (role_id = '0' OR role_id = ?)";
-            $args[] = $roleId;
-        }
-
-        if ($farmId) {
-            $sql .= " AND (farm_id = '0' OR farm_id = ?)";
-            $args[] = $farmId;
-        }
-
+        // snapshot of role changes roleId of FarmRole
         if ($farmRoleId) {
-            $sql .= " AND (farm_role_id = '0' OR farm_role_id = ?)";
-            $args[] = $farmRoleId;
+            $vars = array_merge($vars, $this->db->GetAll($sql . " AND farm_role_id = ? AND server_id = ''", array($this->envId, $farmRoleId)));
         }
 
         if ($serverId) {
-            $sql .= " AND (server_id = '0' OR server_id = ?)";
-            $args[] = $serverId;
+            $vars = array_merge($vars, $this->db->GetAll($sql . " AND server_id = ?", array($this->envId, $serverId)));
         }
-
-        $vars = $this->db->GetAll($sql, $args);
 
         $groupByName = array();
         foreach ($vars as $value) {

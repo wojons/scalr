@@ -801,7 +801,7 @@ Scalr.regPage('Scalr.ui.farms.builder', function (loadParams, moduleParams) {
                                 disallowVpcToggle = true;
                                 defaultVpcEnabled = vpcLimits['value'] == 1;
                             }
-                            vpcFieldset.setTitle(vpcFieldset.baseTitle + (vpcLimits?'&nbsp;&nbsp;<img src="' + Ext.BLANK_IMAGE_URL + '" title="VPC settings is limited by account owner" class="x-icon-governance" />':''));
+                            vpcFieldset.setTitle(vpcFieldset.baseTitle + (vpcLimits?'&nbsp;&nbsp;<img src="' + Ext.BLANK_IMAGE_URL + '" data-qtip="' + Ext.String.htmlEncode(Scalr.strings['farmbuilder.vpc.enforced']) + '" class="x-icon-governance" />':''));
 
                             if (farm.vpc && farm.vpc.id) {
                                 farm.vpc_enabled = true;

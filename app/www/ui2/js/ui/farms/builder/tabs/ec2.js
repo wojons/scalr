@@ -143,7 +143,7 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.ec2', function (moduleParams) {
                 internetAccessField.down('[value="full"]').setDisabled(forceInternetAccess && forceInternetAccess !== 'full');
                 internetAccessField.down('[value="outbound-only"]').setDisabled(forceInternetAccess && forceInternetAccess !== 'outbound-only');
                 
-                vpcFieldset.setTitle(vpcFieldset.baseTitle + (limits['aws.vpc']?'&nbsp;&nbsp;<img src="' + Ext.BLANK_IMAGE_URL + '" title="VPC settings is limited by account owner" class="x-icon-governance" />':''));
+                vpcFieldset.setTitle(vpcFieldset.baseTitle + (limits['aws.vpc']?'&nbsp;&nbsp;<img src="' + Ext.BLANK_IMAGE_URL + '" data-qtip="' + Ext.String.htmlEncode(Scalr.strings['farmbuilder.vpc.enforced']) + '" class="x-icon-governance" />':''));
                 vpcFieldset.show();
             } else {
                 vpcFieldset.hide();

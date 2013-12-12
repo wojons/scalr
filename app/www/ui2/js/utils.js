@@ -587,7 +587,8 @@ Scalr.strings = {
     'farmbuilder.hostname_format.info': 'You can use global variables in the following format: {GLOBAL_VAR_NAME}<br />'+
                                              '<b>For example:</b> {SCALR_FARM_NAME} -> {SCALR_ROLE_NAME} #{SCALR_INSTANCE_INDEX}',
     'farmbuilder.available_variables.info': '<b>You can use the following variables:</b> %image_id%, %external_ip%, %internal_ip%, %role_name%, %isdbmaster%, %instance_index%, ' +
-                                             '%server_id%, %farm_id%, %farm_name%, %env_id%, %env_name%, %cloud_location%, %instance_id%, %avail_zone%'
+                                             '%server_id%, %farm_id%, %farm_name%, %env_id%, %env_name%, %cloud_location%, %instance_id%, %avail_zone%',
+    'farmbuilder.vpc.enforced': 'The account owner has enforced a specific policy on launching farms in a VPC.'
 }
 /*
  CryptoJS v3.1.2

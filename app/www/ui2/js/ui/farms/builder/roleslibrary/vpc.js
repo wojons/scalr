@@ -69,7 +69,7 @@ Scalr.regPage('Scalr.ui.farms.builder.addrole.vpc', function () {
                 filterFnScope: this
             });
 
-            this.setTitle(this.baseTitle + (limits?'&nbsp;&nbsp;<img src="' + Ext.BLANK_IMAGE_URL + '" title="VPC settings is limited by account owner" class="x-icon-governance" />':''));
+            this.setTitle(this.baseTitle + (limits?'&nbsp;&nbsp;<img src="' + Ext.BLANK_IMAGE_URL + '" data-qtip="' + Ext.String.htmlEncode(Scalr.strings['farmbuilder.vpc.enforced']) + '" class="x-icon-governance" />':''));
         },
 
         isValid: function() {

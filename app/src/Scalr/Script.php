@@ -44,6 +44,13 @@ class Scalr_Script extends Scalr_Model
         ));
     }
 
+    public function getRevisionIds()
+    {
+        return $this->db->GetCol("SELECT revision FROM script_revisions WHERE scriptid=? ORDER BY revision DESC", array(
+            $this->id
+        ));
+    }
+
     /**
      * @return array
      */
@@ -109,6 +116,16 @@ class Scalr_Script extends Scalr_Model
             $script,
             $variables
         ));
+    }
+
+    public function removeRevision($version)
+    {
+        $cnt = $this->db->GetOne('SELECT COUNT(*) FROM `script_revisions` WHERE scriptid = ?', array($this->id));
+        if ($cnt > 1) {
+            $this->db->Execute('DELETE FROM `script_revisions` WHERE scriptid = ? AND revision = ?', array($this->id, $version));
+        } else {
+            throw new Scalr_Exception_Core('You cannot delete the latest version of script');
+        }
     }
 
     public function fork($newName, $accountId)

@@ -177,7 +177,7 @@ class MsgSender(basedaemon.BaseDaemon):
         if message['message_format'] == 'json':
             headers['Content-type'] = 'application/json'
         if not ip:
-            raise Exception("server:%s error:can't determine IP")
+            raise Exception("server:%s error:can't determine IP" % server['server_id'])
         url = 'http://%s:%s/%s' % (ip, port, 'control')
         request = {
             'url':url,
@@ -279,7 +279,7 @@ class MsgSender(basedaemon.BaseDaemon):
             except:
                 msg = "Delivery failed message:'%s' error:'%s'" \
                         % (message['messageid'], helper.exc_info())
-                LOG.exception(msg)
+                LOG.error(msg)
                 messages_for_update['fail'].append(message)
         for result, message in results.iteritems():
             try:
@@ -288,7 +288,7 @@ class MsgSender(basedaemon.BaseDaemon):
                 messages_for_update['ok'].append(message)
             except:
                 msg = "Delivery failed message:'%s' error:'%s'" \
-                        % (message['messageid'], helper.exc_info())
+                        % (message['messageid'], helper.exc_info(line_no=False))
                 LOG.warning(msg)
                 messages_for_update['fail'].append(message)
         self.db_update(messages_for_update['ok'], 'ok')

@@ -112,8 +112,8 @@ class MessagingAlert(basedaemon.BaseDaemon):
 def configure(config, args=None):
     global CONFIG
     helper.update_config(config['connections']['mysql'], CONFIG['connections']['mysql'])
-    if 'dbqueue_event_alert' in config:
-        helper.update_config(config['dbqueue_event_alert'], CONFIG)
+    if 'msg_sender_alert' in config:
+        helper.update_config(config['msg_sender_alert'], CONFIG)
     helper.update_config(config_to=CONFIG, args=args)
     helper.validate_config(CONFIG)
     helper.configure_log(

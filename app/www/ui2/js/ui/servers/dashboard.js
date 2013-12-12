@@ -600,7 +600,7 @@ Scalr.regPage('Scalr.ui.servers.dashboard', function (loadParams, moduleParams) 
             items.push({
                 xtype: 'displayfield',
                 fieldLabel: key,
-                labelWidth: 160,
+                labelWidth: 220,
                 value: value || '-'
             });
         });
@@ -622,7 +622,7 @@ Scalr.regPage('Scalr.ui.servers.dashboard', function (loadParams, moduleParams) 
             items.push({
                 xtype: 'displayfield',
                 fieldLabel: key,
-                labelWidth: 160,
+                labelWidth: 220,
                 value: value || '-'
             });
         });

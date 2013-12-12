@@ -51,11 +51,11 @@ class Update20131125
         $cnt = 0;
         $rows = $db->GetAll("SELECT g.*, r.name AS rname FROM global_variables g
             LEFT JOIN roles r ON g.role_id = r.id
-            WHERE role_id != 0 AND ISNULL(r.name)
+            WHERE role_id != 0 AND ISNULL(r.name) AND farm_role_id = 0
         ");
         foreach ($rows as $row) {
             $cnt++;
-            $db->Execute('DELETE FROM `global_variables` WHERE name = ? AND role_id = ?', array($row['name'], $row['role_id']));
+            $db->Execute('DELETE FROM `global_variables` WHERE name = ? AND role_id = ? AND farm_role_id = 0', array($row['name'], $row['role_id']));
         }
         echo "removed {$cnt} records (role)\n";
 

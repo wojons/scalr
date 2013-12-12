@@ -45,7 +45,7 @@ Scalr.regPage('Scalr.ui.scripts.create', function (loadParams, moduleParams) {
 			items: [{
 				xtype: 'container',
 				layout: 'hbox',
-				maxWidth: 820,
+				maxWidth: 836,
 				items: [{
 					xtype: 'textfield',
 					name: 'name',
@@ -60,6 +60,7 @@ Scalr.regPage('Scalr.ui.scripts.create', function (loadParams, moduleParams) {
 					labelWidth: 50,
 					margin: '0 0 0 12',
 					width: 110,
+                    hidden: !moduleParams['script'],
 					store: moduleParams['versions'],
 					editable: false,
 					value: moduleParams['script'] ? parseInt(moduleParams['script']['version']) : 1,
@@ -82,12 +83,39 @@ Scalr.regPage('Scalr.ui.scripts.create', function (loadParams, moduleParams) {
 							}
 						}
 					}
-				}]
+				}, {
+                    xtype: 'button',
+                    ui: 'action',
+                    itemId: 'delete',
+                    hidden: !moduleParams['script'] || moduleParams['versions'].length < 2,
+                    margin: '0 0 0 8',
+                    cls: 'x-btn-action-delete',
+                    tooltip: 'Remove selected version',
+                    handler: function() {
+                        Scalr.Request({
+                            confirmBox: {
+                                type: 'delete',
+                                msg: 'Are you sure want to delete selected version? This cannot be undone.'
+                            },
+                            processBox: {
+                                type: 'delete'
+                            },
+                            url: '/scripts/xRemoveRevision',
+                            params: {
+                                id: moduleParams['script']['id'],
+                                rev: this.prev().getValue()
+                            },
+                            success: function() {
+                                Scalr.event.fireEvent('refresh');
+                            }
+                        });
+                    }
+                }]
 			}, {
 				xtype: 'textfield',
 				name: 'description',
 				labelWidth: 150,
-				maxWidth: 820,
+				maxWidth: 836,
 				fieldLabel: 'Description'
 			},{
                 xtype: 'buttongroupfield',

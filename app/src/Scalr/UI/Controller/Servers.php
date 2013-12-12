@@ -1257,7 +1257,7 @@ class Scalr_UI_Controller_Servers extends Scalr_UI_Controller
         $roleinfo = $this->db->GetRow("SELECT * FROM roles WHERE name=? AND (env_id=? OR env_id='0') LIMIT 1", array($this->getParam('roleName'), $dbServer->envId, $dbServer->roleId));
         if ($this->getParam('replaceType') != SERVER_REPLACEMENT_TYPE::REPLACE_ALL) {
             if ($roleinfo)
-                $err[] = _("Specified role name is already used by another role. You can use this role name only if you will replace old on on ALL your farms.");
+                $err[] = _("Specified role name is already used by another role. You can use this role name only if you will replace old one on ALL your farms.");
         } else {
             if ($roleinfo && $roleinfo['env_id'] == 0)
                 $err[] = _("Selected role name is reserved and cannot be used for custom role");

@@ -54,7 +54,7 @@ UNLOCK TABLES;
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
--- Dump completed on 2013-12-11  9:03:12
+-- Dump completed on 2013-12-12  8:42:35
 
 INSERT INTO `role_categories` (`id`, `env_id`, `name`) VALUES
 (1, 0, 'Base'),
@@ -65,7 +65,6 @@ INSERT INTO `role_categories` (`id`, `env_id`, `name`) VALUES
 (6, 0, 'Caches'),
 (7, 0, 'Cloudfoundry'),
 (8, 0, 'Mixed');
-
 
 INSERT INTO `account_users` (`id`, `account_id`, `status`, `email`, `fullname`, `password`, `dtcreated`, `dtlastlogin`, `type`, `comments`) VALUES
 (1, 0, 'Active', 'admin', 'Scalr Admin', '8c6976e5b5410415bde908bd4dee15dfb167a9c873fc4bb8a81f6f2ab448a918', '2011-09-09 10:49:07', '2011-12-06 02:28:16', 'ScalrAdmin', NULL);

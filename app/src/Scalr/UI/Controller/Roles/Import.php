@@ -443,7 +443,8 @@ class Scalr_UI_Controller_Roles_Import extends Scalr_UI_Controller
             'status'        => $task->status,
             'failureReason' => $task->failureReason,
             'logs'          => $logs,
-            'roleId'        => $task->roleId
+            'roleId'        => $task->roleId,
+            'roleName'      => $task->roleName
         ));
     }
 

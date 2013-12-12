@@ -418,6 +418,7 @@ class DBRole
 
         $this->db->Execute("DELETE FROM roles WHERE id = ?", array($this->id));
         $this->db->Execute("DELETE FROM roles_queue WHERE role_id = ?", array($this->id));
+        $this->db->Execute("DELETE FROM global_variables WHERE env_id = ? AND role_id = ? AND farm_role_id = 0", array($this->envId, $this->id));
     }
 
     public function isUsed()
@@ -700,20 +701,8 @@ class DBRole
             }
 
             //Set global variables
-            $rsr12 = $this->db->Execute("SELECT * FROM global_variables WHERE role_id = ? AND farm_id = '0' AND farm_role_id = '0'", array($this->id));
-            while ($r12 = $rsr12->FetchRow()) {
-                $this->db->Execute("INSERT INTO global_variables SET
-                    `env_id`  = ?,
-                    `role_id` = ?,
-                    `farm_id` = '0',
-                    `farm_role_id` = '0',
-                    `name` = ?,
-                    `value` = ?,
-                    `flag_final` = ?,
-                    `flag_required` = ?,
-                    `scope` = 'role'
-                ", array($r12['env_id'], $newRoleId, $r12['name'], $r12['value'], $r12['flag_final'], $r12['flag_required']));
-            }
+            $variables = new Scalr_Scripting_GlobalVariables($this->envId, Scalr_Scripting_GlobalVariables::SCOPE_ROLE);
+            $variables->setValues($variables->getValues($this->id), $newRoleId);
 
             //Set scripts
             $rsr8 = $this->db->Execute("SELECT * FROM role_scripts WHERE role_id = ?", array($this->id));
@@ -892,6 +881,9 @@ class DBRole
                 $script['params'] = unserialize($script['params']);
 
             $role->setScripts($scripts);
+
+            $variables = new Scalr_Scripting_GlobalVariables($proto_role['env_id'], Scalr_Scripting_GlobalVariables::SCOPE_ROLE);
+            $variables->setValues($variables->getValues($proto_role['id']), $role->id);
         }
 
         // Set software

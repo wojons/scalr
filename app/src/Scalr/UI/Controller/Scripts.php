@@ -90,9 +90,25 @@ class Scalr_UI_Controller_Scripts extends Scalr_UI_Controller
         }
 
         if (count($errors))
-            $this->response->warning('Script(s) successfully removed, but some errors were occured:<br>' . implode('<br>', $errors));
+            $this->response->warning('Script(s) successfully removed, but some errors were occurred:<br>' . implode('<br>', $errors));
         else
             $this->response->success('Script(s) successfully removed');
+    }
+
+    public function xRemoveRevisionAction()
+    {
+        $this->request->restrictAccess(Acl::RESOURCE_FARMS_SCRIPTS, Acl::PERM_FARMS_SCRIPTS_MANAGE);
+
+        $script = new Scalr_Script();
+        $script->loadById($this->getParam('id'));
+
+        if ($script->accountId)
+            $this->user->getPermissions()->validate($script);
+        elseif ($this->user->getType() != Scalr_Account_User::TYPE_SCALR_ADMIN)
+            throw new Scalr_Exception_InsufficientPermissions();
+
+        $script->removeRevision($this->getParam('rev'));
+        $this->response->success();
     }
 
     public function xSaveAction()
@@ -203,7 +219,7 @@ class Scalr_UI_Controller_Scripts extends Scalr_UI_Controller
                 'version' => $revision['revision']
             ),
 
-            'versions' => range(1, $script->getLatestRevision()),
+            'versions' => $script->getRevisionIds(),
             'latestVersion' => $script->getLatestRevision(),
             'variables' => "%" . implode("%, %", array_keys($vars)) . "%"
 
