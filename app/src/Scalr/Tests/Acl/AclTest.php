@@ -64,6 +64,10 @@ class AclTest extends TestCase
      */
     public function testPredefinedRoles($roleId, $allowed)
     {
+        if (\Scalr::config('scalr.phpunit.skip_functional_tests')) {
+            $this->markTestSkipped();
+        }
+
         $acl = \Scalr::getContainer()->acl;
 
         $role = $acl->getRole($roleId);

@@ -1,3 +1,7 @@
 /.settings
 /.buildpath
 /.project
+/app/etc/.cryptokey
+/app/etc/config.yml
+/app/etc/id
+/app/cache
