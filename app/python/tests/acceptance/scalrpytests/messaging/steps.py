@@ -410,7 +410,7 @@ def start_daemon(step):
         assert len(world.right_msgs) != 0
 
         config = ETC_DIR + '/config.yml'
-        assert lib.start_daemon('messaging', config)
+        assert lib.start_daemon('msg_sender', config)
     finally:
         db.session.remove()
 
@@ -418,7 +418,7 @@ def start_daemon(step):
 @step(u"I stop messaging daemon")
 def stop_daemon(step):
     config = ETC_DIR + '/config.yml'
-    assert lib.stop_daemon('messaging', config)
+    assert lib.stop_daemon('msg_sender', config)
 
 
 @step(u"I see right messages were delivered")

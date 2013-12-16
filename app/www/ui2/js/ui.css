@@ -322,3 +322,18 @@
 .scalr-ui-progress-step.inprogress{
     background: url('/ui2/images/widget/progress/progress.gif') 0 0 no-repeat;
 }
+
+.scalr-ui-environment-cloud-disabled:not(.x-btn-over) .x-btn-icon-el{
+    -webkit-filter: grayscale(100%);
+    -moz-filter: grayscale(100%);
+    filter: grayscale(100%);
+    filter: url('/ui2/js/extjs-4.2/theme/svg/grayscale.svg#greyscale');
+    opacity: .4;
+}
+
+/*exclusively for chrome + retina to fix disappearing buttons on #/account/roles*/
+.x-grid-cell-buttongroupcolumn .x-btn,
+.x-grid-cell-buttongroupcolumn .x-btn-wrap,
+.x-grid-cell-buttongroupcolumn .x-btn-button{
+    position: static;
+}

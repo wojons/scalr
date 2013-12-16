@@ -957,6 +957,8 @@ def configure(args, config):
 
 
 def main():
+    sys.stderr.write("This script is deprecated. Instead use load_statistics.py\n\n")
+
     parser = argparse.ArgumentParser()
 
     group = parser.add_mutually_exclusive_group()
@@ -999,7 +1001,7 @@ def main():
 
         if args.start:
             LOG.info('Start')
-            if not helper.check_pid(CONFIG['pid_file']):
+            if helper.check_pid(CONFIG['pid_file']):
                 LOG.info('Another copy of process already running. Exit')
                 sys.exit(0)
             daemon.start(daemon= not args.no_daemon)

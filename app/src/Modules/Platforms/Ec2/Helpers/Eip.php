@@ -260,6 +260,8 @@ class Modules_Platforms_Ec2_Helpers_Eip
 
                 if (!$serverIndex) continue;
 
+                $allocationId = null;
+
                 try {
                     $dbServer = DBServer::LoadByFarmRoleIDAndIndex($DBFarmRole->ID, $serverIndex);
                 } catch (Exception $e) {}

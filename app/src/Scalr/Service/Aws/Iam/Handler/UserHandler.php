@@ -3,7 +3,6 @@ namespace Scalr\Service\Aws\Iam\Handler;
 
 use Scalr\Service\Aws\Iam\DataType\AccessKeyData;
 use Scalr\Service\Aws\Iam\DataType\UserData;
-use Scalr\Service\Aws\DataType\ListDataType;
 use Scalr\Service\Aws\IamException;
 use Scalr\Service\Aws\Client\ClientException;
 use Scalr\Service\Aws\Iam\AbstractIamHandler;

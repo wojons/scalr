@@ -382,6 +382,8 @@ def configure(config, args=None):
 
 
 def main():
+    sys.stderr.write("This script is deprecated. Instead use msg_sender.py\n\n")
+
     parser = argparse.ArgumentParser()
     group = parser.add_mutually_exclusive_group()
     group.add_argument('--start', action='store_true', default=False, help='start daemon')
@@ -411,7 +413,7 @@ def main():
         daemon = Messaging()
         if args.start:
             LOG.info('Start')
-            if not helper.check_pid(CONFIG['pid_file']):
+            if helper.check_pid(CONFIG['pid_file']):
                 LOG.info('Another copy of process already running. Exit')
                 return
             daemon.start(daemon=not args.no_daemon)

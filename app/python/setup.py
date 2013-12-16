@@ -8,6 +8,7 @@ requires = [
         'psutil',
         'sqlsoup',
         'pymysql',
+        'cherrypy',
         'requests',
         'sqlalchemy',
         ]

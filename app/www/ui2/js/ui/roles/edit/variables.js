@@ -3,12 +3,13 @@ Ext.define('Scalr.ui.RoleDesignerTabVariables', {
     alias: 'widget.roleeditvariables',
     autoScroll: true,
     cls: 'x-container-fieldset x-panel-column-left',
+    layout: 'fit',
     items: [{
         xtype: 'variablefield',
         name: 'variables',
         currentScope: 'role',
         addFieldCls: 'scalr-ui-addfield-light',
-        maxWidth: 1300
+        maxWidth: 1200
     }],
     initComponent: function(){
         this.callParent(arguments);

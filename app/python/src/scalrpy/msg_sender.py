@@ -268,7 +268,7 @@ class MsgSender(basedaemon.BaseDaemon):
         for message in messages:
             try:
                 if message['messageid'] not in servers or not servers[message['messageid']]:
-                    LOG.warning("Server:'%s' dosn't exist" % message['server_id'])
+                    LOG.warning("Server:'%s' dosn't exists" % message['server_id'])
                     messages_for_update['wrong'].append(message)
                     continue
                 request = self.make_request(message, servers[message['messageid']])
@@ -277,7 +277,7 @@ class MsgSender(basedaemon.BaseDaemon):
                 LOG.debug(msg)
                 results.update({self.send_request(request, pool=self._pool):message})
             except:
-                msg = "Delivery failed message:'%s' error:'%s'" \
+                msg = "Delivery failed, message:'%s' error:'%s'" \
                         % (message['messageid'], helper.exc_info())
                 LOG.error(msg)
                 messages_for_update['fail'].append(message)
@@ -287,7 +287,7 @@ class MsgSender(basedaemon.BaseDaemon):
                 LOG.debug("Delivery ok, message:'%s'" % message['messageid'])
                 messages_for_update['ok'].append(message)
             except:
-                msg = "Delivery failed message:'%s' error:'%s'" \
+                msg = "Delivery failed, message:'%s' error:'%s'" \
                         % (message['messageid'], helper.exc_info(line_no=False))
                 LOG.warning(msg)
                 messages_for_update['fail'].append(message)
@@ -370,7 +370,7 @@ def main():
         daemon = MsgSender()
         if args.start:
             LOG.info('Start')
-            if not helper.check_pid(CONFIG['pid_file']):
+            if helper.check_pid(CONFIG['pid_file']):
                 LOG.info('Another copy of process already running. Exit')
                 sys.exit(0)
             daemon.start(daemon= not args.no_daemon)

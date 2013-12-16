@@ -36,10 +36,15 @@ class Modules_Platforms_Ec2_Helpers_Elb
                 if ($oldSettings[DBFarmRole::SETTING_AWS_ELB_ID] == $newSettings[DBFarmRole::SETTING_AWS_ELB_ID])
                     return true;
 
-                // Setup new service
-                // ADD ELB to role_cloud_services
-                $service = new FarmRoleService($DBFarmRole, $newSettings[DBFarmRole::SETTING_AWS_ELB_ID]);
-                $service->setType(FarmRoleService::SERVICE_AWS_ELB);
+                $service = FarmRoleService::findFarmRoleService($DBFarm->EnvID, $newSettings[DBFarmRole::SETTING_AWS_ELB_ID]);
+                if (!$service) {
+                    // Setup new service
+                    // ADD ELB to role_cloud_services
+                    $service = new FarmRoleService($DBFarmRole, $newSettings[DBFarmRole::SETTING_AWS_ELB_ID]);
+                    $service->setType(FarmRoleService::SERVICE_AWS_ELB);
+                } else {
+                    $service->setFarmRole($DBFarmRole);
+                }
                 $service->save();
 
                 // Add running instances to ELB
@@ -72,17 +77,20 @@ class Modules_Platforms_Ec2_Helpers_Elb
                 $clearSettings = true;
             }
 
-            if ($newSettings['aws.elb.remove']) {
-                if ($newSettings[DBFarmRole::SETTING_AWS_ELB_ID])
-                    $elb->loadBalancer->delete($newSettings[DBFarmRole::SETTING_AWS_ELB_ID]);
 
-                $clearSettings = true;
+            // Remove OLD ELB
+            if ($oldSettings[DBFarmRole::SETTING_AWS_ELB_ID]) {
+                $oldService = FarmRoleService::findFarmRoleService($DBFarm->EnvID, $oldSettings[DBFarmRole::SETTING_AWS_ELB_ID]);
+                if ($oldService->getFarmRole()->ID == $DBFarmRole->ID)
+                    $oldService->remove();
+
+                if ($newSettings['aws.elb.remove']) {
+                    $elb->loadBalancer->delete($oldSettings[DBFarmRole::SETTING_AWS_ELB_ID]);
+                }
             }
 
             if ($clearSettings) {
                 $DBFarmRole->ClearSettings("aws.elb.");
-                $service = new FarmRoleService($DBFarmRole, $newSettings[DBFarmRole::SETTING_AWS_ELB_ID]);
-                $service->remove();
             }
 
             // Check and remove OLD ELB settings

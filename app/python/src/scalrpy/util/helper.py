@@ -54,10 +54,8 @@ def check_pid(pid_file):
     if os.path.exists(pid_file):
         pid = open(pid_file).read().strip()
         if pid and os.path.exists('/proc/' + pid):
-            return False
-    with open(pid_file, 'w+') as fp:
-        fp.write(str(os.getpid()))
-    return True
+            return True
+    return False
 
 
 def kill_ps(pid, child=False):
@@ -82,7 +80,7 @@ def validate_config(config, key=None):
             validate_config(config[k], key='%s:%s' % (key, k) if key else k)
     else:
         value = config
-        assert config != None , 'Wrong config value %s:%s' % (key, value) 
+        assert config != None , "Wrong config value '%s:%s'" % (key, value)
 
 
 def update_config(config_from=None, config_to=None, args=None):
@@ -111,7 +109,7 @@ class Pool(object):
     def __init__(self, factory, validator, size):
         self._used = list()
         self._free = list()
-        self._size = size 
+        self._size = size
         self._factory = factory
         self._validator = validator
         self._get_lock = threading.Lock()

@@ -924,12 +924,12 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.dbmsr', function (moduleTabParams) {
 				}, {
 					xtype: 'displayinfofield',
 					margin: '0 0 0 5',
-					info:   'DB snapshots contain a hotcopy of database data directory, file that holds binary log position and debian.cnf' +
+					info:   'DB snapshots contain a hotcopy of the database data directory, a file that holds binary log position and debian.cnf' +
 							'<br>' +
-							'When farm starts:<br>' +
-							'1. Database master dowloads and extracts a snapshot from storage depends on cloud platfrom<br>' +
-							'2. When data is loaded and master starts, slaves download and extract a snapshot as well<br>' +
-							'3. Slaves are syncing with master for some time'
+							'When your farm starts:<br>' +
+							'1. The database master downloads and extracts a snapshot from storage depending on the cloud platform<br>' +
+							'2. When this data is loaded and the master starts, all slaves download and extract a snapshot from storage as well<br>' +
+							'3. Slaves will then sync with the master for some time'
 				}]
 			}, {
 				xtype: 'fieldcontainer',

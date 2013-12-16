@@ -88,7 +88,7 @@ class Security(object):
 
     def __init__(self, crypto_key, encrypt=True, crypto_algo=None):
         assert crypto_key, 'Crypto key is None'
-        self.crypto_key = crypto_key
+        self.crypto_key = str(crypto_key)
         self.encrypt = encrypt
         if not crypto_algo:
             self.crypto_algo = dict(name="des_ede3_cbc", key_size=24, iv_size=8)

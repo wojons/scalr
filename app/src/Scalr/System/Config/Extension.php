@@ -176,8 +176,6 @@ class Extension implements \IteratorAggregate
                     ->end()
                 ->end()
 
-                ->node('pma_instance_ip_address')
-
                 ->node('rss_cache_lifetime', 300)
 
                 ->sub('script', false)
@@ -213,7 +211,11 @@ class Extension implements \IteratorAggregate
                     ->end()
                     ->node('mindterm_enabled', true)
                     // Hidden stuff, should not be in config.yml
-                    ->node('pma_key', '')
+                    ->sub('pma', false)
+                        ->node('key', '')
+                        ->node('url', '')
+                        ->node('server_ip', '')
+                    ->end()
                     ->node('tender_api_key', '')
                     ->node('tender_site_key', '')
                 ->end()

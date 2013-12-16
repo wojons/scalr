@@ -42,8 +42,7 @@ Scalr.regPage('Scalr.ui.tools.aws.ec2.elb.view', function (loadParams, modulePar
 				'<tpl if="farmId">' +
 					'<a href="#/farms/{farmId}/view" title="Farm {farmName}">{farmName}</a>' +
 					'<tpl if="roleName">' +
-						'&nbsp;&rarr;&nbsp;<a href="#/farms/{farmId}/roles/{farmRoleId}/view" title="Role {roleName}">' +
-						'{roleName}</a> #<a href="#/servers/{serverId}/view">{serverIndex}</a>' +
+						'&nbsp;&rarr;&nbsp;<a href="#/farms/{farmId}/roles/{farmRoleId}/view" title="Role {roleName}">{roleName}</a>' +
 					'</tpl>' +
 				'</tpl>' +
 				'<tpl if="!farmId"><img src="/ui2/images/icons/false.png" /></tpl>'

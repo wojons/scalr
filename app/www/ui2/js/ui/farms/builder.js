@@ -1120,7 +1120,7 @@ Ext.define('Scalr.ui.FarmRoleModel', {
 
             if (tagsString.indexOf('ec2.ebs') != -1 || settings['aws.instance_type'] == 't1.micro') {
                 if (tagsString.indexOf('ec2.hvm') != -1 && me.get('os') != '2008Server' && me.get('os') != '2008ServerR2' && me.get('os_family') != 'windows') {
-                    result.list = ['cc1.4xlarge', 'cc2.8xlarge', 'cg1.4xlarge', 'hi1.4xlarge', 'cr1.8xlarge'];
+                    result.list = ['cc1.4xlarge', 'cc2.8xlarge', 'cg1.4xlarge', 'hi1.4xlarge', 'cr1.8xlarge', 'g2.2xlarge'];
                     if (settings['aws.instance_type'] != 'm1.large') {
                         result.value = settings['aws.instance_type'] || 'cc1.4xlarge';
                     } else {
@@ -1128,14 +1128,15 @@ Ext.define('Scalr.ui.FarmRoleModel', {
                     }
                 } else {
                     result.list = [
-                        't1.micro', 
-                        'm1.small', 'm1.medium', 'm1.large', 'm1.xlarge', 
-                        'm2.xlarge', 'm2.2xlarge', 'm2.4xlarge', 
-                        'm3.xlarge', 'm3.2xlarge', 
-                        'c1.medium', 'c1.xlarge',
-                        'c3.large', 'c3.xlarge', 'c3.2xlarge', 'c3.4xlarge', 'c3.8xlarge',
-                        'i2.large', 'i2.xlarge', 'i2.2xlarge', 'i2.4xlarge', 'i2.8xlarge',
-                        'hi1.4xlarge', 'hs1.8xlarge', 'cr1.8xlarge'
+						't1.micro', 
+						'm1.small', 'm1.medium', 'm1.large', 'm1.xlarge',
+						'm2.xlarge', 'm2.2xlarge', 'm2.4xlarge', 
+						'm3.xlarge', 'm3.2xlarge',
+						'c1.medium', 'c1.xlarge',
+						'c3.large', 'c3.xlarge', 'c3.2xlarge', 'c3.4xlarge', 'c3.8xlarge',
+						'i2.large', 'i2.xlarge', 'i2.2xlarge', 'i2.4xlarge', 'i2.8xlarge',
+						'g2.2xlarge',
+						'cc1.4xlarge', 'cc2.8xlarge', 'cg1.4xlarge', 'hi1.4xlarge', 'cr1.8xlarge'
                     ];
                     result.value = (settings['aws.instance_type'] || 'm1.small');
                 }

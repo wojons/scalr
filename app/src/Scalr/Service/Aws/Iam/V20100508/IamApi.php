@@ -6,15 +6,15 @@ use Scalr\Service\Aws\Iam\DataType\AccessKeyMetadataData;
 use Scalr\Service\Aws\Iam\DataType\AccessKeyMetadataList;
 use Scalr\Service\Aws\Iam\DataType\AccessKeyData;
 use Scalr\Service\Aws\Iam\DataType\UserData;
-use Scalr\Service\Aws\Client\QueryClient;
 use Scalr\Service\Aws\IamException;
 use Scalr\Service\Aws\Iam;
 use Scalr\Service\Aws\Client\ClientException;
 use Scalr\Service\Aws\EntityManager;
-use Scalr\Service\Aws\DataType\ErrorData;
-use Scalr\Service\Aws\Client\QueryClientResponse;
-use Scalr\Service\Aws\DataType\ListDataType;
 use Scalr\Service\Aws\Client\ClientInterface;
+use Scalr\Service\Aws\Iam\DataType\RoleData;
+use SimpleXMLElement;
+use DateTime;
+use DateTimeZone;
 
 /**
  * Iam Api messaging.
@@ -38,7 +38,7 @@ class IamApi extends AbstractApi
      * @param   Iam                $iam           An Iam instance
      * @param   ClientInterface    $client        Client Interface
      */
-    public function __construct (Iam $iam, ClientInterface $client)
+    public function __construct(Iam $iam, ClientInterface $client)
     {
         $this->iam = $iam;
         $this->client = $client;
@@ -59,7 +59,7 @@ class IamApi extends AbstractApi
      * @throws  IamException
      * @throws  ClientException
      */
-    public function putUserPolicy ($userName, $policyName, $policyDocument)
+    public function putUserPolicy($userName, $policyName, $policyDocument)
     {
         $result = false;
         $options = array(
@@ -90,7 +90,7 @@ class IamApi extends AbstractApi
      * @throws  IamException
      * @throws  ClientException
      */
-    public function deleteUserPolicy ($userName, $policyName)
+    public function deleteUserPolicy($userName, $policyName)
     {
         $result = false;
         $options = array(
@@ -122,7 +122,7 @@ class IamApi extends AbstractApi
      * @throws  IamException
      * @throws  ClientException
      */
-    public function getUserPolicy ($userName, $policyName)
+    public function getUserPolicy($userName, $policyName)
     {
         $result = null;
         $options = array(
@@ -154,7 +154,7 @@ class IamApi extends AbstractApi
      * @throws  IamException
      * @throws  ClientException
      */
-    public function createUser ($userName, $path = null)
+    public function createUser($userName, $path = null)
     {
         $result = null;
         $options = array(
@@ -182,7 +182,7 @@ class IamApi extends AbstractApi
      * @param   \SimpleXMLElement $sxml
      * @return  UserData Returns new user data object
      */
-    private function _loadUserData (\SimpleXMLElement &$sxml)
+    private function _loadUserData(\SimpleXMLElement &$sxml)
     {
         $userData = new UserData();
         $userData->setIam($this->iam);
@@ -212,7 +212,7 @@ class IamApi extends AbstractApi
      * @throws  IamException
      * @throws  ClientException
      */
-    public function getUser ($userName = null)
+    public function getUser($userName = null)
     {
         $result = null;
         $options = array();
@@ -245,7 +245,7 @@ class IamApi extends AbstractApi
      * @throws  IamException
      * @throws  ClientException
      */
-    public function deleteUser ($userName)
+    public function deleteUser($userName)
     {
         $result = false;
         $options = array(
@@ -288,7 +288,7 @@ class IamApi extends AbstractApi
      * @throws  IamException
      * @throws  ClientException
      */
-    public function listAccessKeys ($userName = null, $marker = null, $maxItems = null)
+    public function listAccessKeys($userName = null, $marker = null, $maxItems = null)
     {
         $result = null;
         $options = array();
@@ -324,8 +324,8 @@ class IamApi extends AbstractApi
                         ->setStatus((string)$v->Status)
                         ->setCreateDate(
                             isset($v->CreateDate) ?
-                            new \DateTime((string)$v->CreateDate, new \DateTimeZone('UTC')) :
-                            new \DateTime(null, new \DateTimeZone('UTC'))
+                            new DateTime((string)$v->CreateDate, new DateTimeZone('UTC')) :
+                            new DateTime(null, new DateTimeZone('UTC'))
                         )
                     ;
                     $result->append($acm);
@@ -357,7 +357,7 @@ class IamApi extends AbstractApi
      * @throws  IamException
      * @throws  ClientException
      */
-    public function createAccessKey ($userName = null)
+    public function createAccessKey($userName = null)
     {
         $result = null;
         $options = array(
@@ -406,7 +406,7 @@ class IamApi extends AbstractApi
      * @throws  IamException
      * @throws  ClientException
      */
-    public function deleteAccessKey ($accessKeyId, $userName = null)
+    public function deleteAccessKey($accessKeyId, $userName = null)
     {
         $result = false;
         $options = array(
@@ -428,11 +428,93 @@ class IamApi extends AbstractApi
     }
 
     /**
+     * Creates a new role for your AWS account.
+     *
+     * The policy grants permission to an EC2 instance to assume the role.
+     * Currently, only EC2 instances can assume roles.
+     *
+     * @param   string     $roleName                 Name of the role to create. (1 - 64 characters)
+     * @param   string     $assumeRolePolicyDocument The policy that grants an entity permission to assume the role.
+     *                                               Length constraints: Minimum length of 1. Maximum length of 131072.
+     * @param   string     $path                     optional
+     * @return  RoleData   Returns RoleData on success or throws an exception
+     * @throws  IamException
+     * @throws  ClientException
+     */
+    public function createRole($roleName, $assumeRolePolicyDocument, $path = null)
+    {
+        $result = null;
+        $options = array(
+            'RoleName'                 => (string) $roleName,
+            'AssumeRolePolicyDocument' => (string) $assumeRolePolicyDocument,
+        );
+        if ($path !== null) {
+            $options['Path'] = (string) $path;
+        }
+        $response = $this->client->call(ucfirst(__FUNCTION__), $options);
+        if ($response->getError() === false) {
+            //Success
+            $sxml = simplexml_load_string($response->getRawContent());
+            if (!isset($sxml->CreateRoleResult->Role)) {
+                throw new IamException('Unexpected response! ' . $response->getRawContent());
+            }
+            $result = $this->_loadRoleData($sxml->CreateRoleResult->Role);
+        }
+        return $result;
+    }
+
+    /**
+     * Deletes the specified role.
+     *
+     * The role must not have any policies attached.
+     *
+     * @param   string     $roleName Name of the role to remove. (1 - 64 characters)
+     * @return  boolean    Returns true on success or throws an exception
+     * @throws  IamException
+     * @throws  ClientException
+     */
+    public function deleteRole($roleName)
+    {
+        $result = false;
+        $options = array(
+            'RoleName' => (string) $roleName,
+        );
+        $response = $this->client->call(ucfirst(__FUNCTION__), $options);
+        if ($response->getError() === false) {
+            $sxml = simplexml_load_string($response->getRawContent());
+            $result = true;
+        }
+        return $result;
+    }
+
+    /**
+     * Loads RoleData from simple xml object
+     *
+     * @param   \SimpleXMLElement $sxml
+     * @return  RoleData Returns RoleData
+     */
+    protected function _loadRoleData(\SimpleXMLElement $sxml)
+    {
+        $item = null;
+        if ($this->exist($sxml)) {
+            $item = new RoleData();
+            $item->setIam($this->iam);
+            $item->roleId = (string) $sxml->RoleId;
+            $item->roleName = (string) $sxml->RoleName;
+            $item->arn = $this->exist($sxml->Arn) ? (string)$sxml->Arn : null;
+            $item->assumeRolePolicyDocument = rawurldecode((string)$sxml->AssumeRolePolicyDocument);
+            $item->createDate = $this->exist($sxml->CreateDate) ? new DateTime((string)$sxml->CreateDate, new DateTimeZone('UTC')) : null;
+            $item->path = $this->exist($sxml->Path) ? (string)$sxml->Path : null;
+        }
+        return $item;
+    }
+
+    /**
      * Gets an entity manager
      *
      * @return EntityManager
      */
-    public function getEntityManager ()
+    public function getEntityManager()
     {
         return $this->iam->getEntityManager();
     }

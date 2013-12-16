@@ -84,7 +84,7 @@ class Scalr_UI_Controller_Dbmsr extends Scalr_UI_Controller
         if ($masterDbServer) {
             $time = $dbFarmRole->GetSetting(DBFarmRole::SETTING_MYSQL_PMA_REQUEST_TIME);
             if (!$time || $time+3600 < time()) {
-                $msg = new Scalr_Messaging_Msg_Mysql_CreatePmaUser($dbFarmRole->ID, \Scalr::config('scalr.pma_instance_ip_address'));
+                $msg = new Scalr_Messaging_Msg_Mysql_CreatePmaUser($dbFarmRole->ID, \Scalr::config('scalr.ui.pma.server_ip'));
                 $masterDbServer->SendMessage($msg);
 
                 $dbFarmRole->SetSetting(DBFarmRole::SETTING_MYSQL_PMA_REQUEST_TIME, time(), DBFarmRole::TYPE_LCL);

@@ -2,7 +2,6 @@
 namespace Scalr\Service\Aws\Iam\DataType;
 
 use Scalr\Service\Aws\Iam\AbstractIamListDataType;
-use Scalr\Service\Aws\DataType\ListDataType;
 
 /**
  * AccessKeyMetadataList
@@ -31,7 +30,7 @@ class AccessKeyMetadataList extends AbstractIamListDataType
      */
     public function __construct($aListData = null)
     {
-        parent::__construct($aListData, array('accessKeyId'), 'Scalr\\Service\\Aws\\Iam\\DataType\\AccessKeyMetadataData');
+        parent::__construct($aListData, array('accessKeyId'), __NAMESPACE__ . '\\AccessKeyMetadataData');
     }
 
     /**

@@ -409,25 +409,13 @@ class BundleTasksManagerProcess implements \Scalr\System\Pcntl\ProcessInterface
 
                     $shell = $ssh2Client->getShell();
 
-                    fwrite($shell, "sudo su\n");
-                    fwrite($shell, "touch /var/log/role-builder-output.log 2>&1\n");
-                    fwrite($shell, "chmod 0666 /var/log/role-builder-output.log 2>&1\n");
-                    fwrite($shell, "setsid /tmp/scalr-builder.sh > /var/log/role-builder-output.log 2>&1 &\n");
+                    @stream_set_blocking($shell, true);
 
-                    // Get output
-                    $iterations = 0;
-                    while($l = @fgets($shell, 4096) && $iterations < 10)
-                    {
-                        $meta = stream_get_meta_data($shell);
-                        if ($meta["timed_out"])
-                            break;
-                        $retval .= $l;
-                        $iterations ++;
-                    }
+                    @fwrite($shell, "sudo touch /var/log/role-builder-output.log 2>&1" . PHP_EOL);
+                    @fwrite($shell, "sudo chmod 0666 /var/log/role-builder-output.log 2>&1" . PHP_EOL);
+                    @fwrite($shell, "sudo setsid /tmp/scalr-builder.sh > /var/log/role-builder-output.log 2>&1 &" . PHP_EOL);
 
                     @fclose($shell);
-
-                    $BundleTask->Log("Exec result: {$retval}");
 
                     /*
                     $r1 = $ssh2Client->exec("sudo touch /var/log/role-builder-output.log");

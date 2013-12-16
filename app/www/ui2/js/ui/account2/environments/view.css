@@ -26,14 +26,6 @@
     left: 10px;
 }
 
-.scalr-ui-environment-cloud-disabled:not(.x-btn-over) .x-btn-icon-el{
-    -webkit-filter: grayscale(100%);
-    -moz-filter: grayscale(100%);
-    filter: grayscale(100%);
-    filter: url('/ui2/js/extjs-4.2/theme/svg/grayscale.svg#greyscale');
-    opacity: .4;
-}
-
 .scalr-ui-panel-account-env .x-fieldset-clouds .x-fieldset-body{
     margin: -10px 0 0 -10px;
     padding-right: 22px;

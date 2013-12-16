@@ -571,7 +571,7 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.storage', function (moduleTabParams) 
                         items: [{
                             xtype: 'checkbox',
                             name: 'reUse',
-                            boxLabel: 'Re-use'
+                            boxLabel: 'Reuse this storage if the instance is replaced'
                         }, {
                             xtype: 'displayinfofield',
                             value: "If an instance is terminated, reattach this same volume to the replacement server",
@@ -583,7 +583,7 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.storage', function (moduleTabParams) 
                         items: [{
                             xtype: 'checkbox',
                             name: 'rebuild',
-                            boxLabel: 'Regenerate storage if missing volumes'
+                            boxLabel: 'Regenerate this storage if missing volumes are detected in it'
                         }, {
                             xtype: 'displayinfofield',
                             value: "If Scalr detects any missing volumes, regenerate this storage from scratch (based on configuration)",

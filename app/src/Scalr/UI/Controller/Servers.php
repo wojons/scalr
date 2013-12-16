@@ -177,16 +177,22 @@ class Scalr_UI_Controller_Servers extends Scalr_UI_Controller
         } catch (Exception $e) {}
 
         try {
-            $cpu1 = $client->cpuStat();
-            sleep(1);
-            $cpu2 = $client->cpuStat();
+            if ($dbServer->osType == 'windows') {
+                $cpu = $client->cpuStat();
+            } else {
+                $cpu1 = $client->cpuStat();
+                sleep(1);
+                $cpu2 = $client->cpuStat();
 
-            $dif['user'] = $cpu2->user - $cpu1->user;
-            $dif['nice'] = $cpu2->nice - $cpu1->nice;
-            $dif['sys'] =  $cpu2->system - $cpu1->system;
-            $dif['idle'] = $cpu2->idle - $cpu1->idle;
-            $total = array_sum($dif);
-            foreach($dif as $x=>$y) $cpu[$x] = round($y / $total * 100, 1);
+                $dif['user'] = $cpu2->user - $cpu1->user;
+                $dif['nice'] = $cpu2->nice - $cpu1->nice;
+                $dif['sys'] =  $cpu2->system - $cpu1->system;
+                $dif['idle'] = $cpu2->idle - $cpu1->idle;
+                $total = array_sum($dif);
+                foreach($dif as $x=>$y)
+                    $cpu[$x] = round($y / $total * 100, 1);
+            }
+
             $data['cpu'] = $cpu;
         } catch (Exception $e) {}
 

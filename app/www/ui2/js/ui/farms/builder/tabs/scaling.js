@@ -443,8 +443,8 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.scaling', function (moduleTabParams) 
                        }, {
                            xtype: 'displayinfofield',
                            margin: '0 0 0 5',
-                           info:   'Scalr will terminate instance ONLY if script &#39;/usr/local/scalarizr/hooks/auth-shutdown&#39; return 1. ' +
-                                   'If script not found or return any other value Scalr WON&#39;T terminate this server.'
+                           info:   'Scalr will terminate an instance ONLY IF the script &#39;/usr/local/scalarizr/hooks/auth-shutdown&#39; returns 1. ' +
+                                   'If this script is not found or returns any other value, Scalr WILL NOT terminate that server.'
                        }]
                    },{
                         xtype: 'component',

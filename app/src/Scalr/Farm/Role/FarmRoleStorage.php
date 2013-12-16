@@ -221,7 +221,7 @@ class FarmRoleStorage
                 $volume = $volumeConfigTemplate;
             elseif ($config->rebuild && $volume->id) {
                 $volume->template = $volumeConfigTemplate;
-                $volume->fromTemplateIfMissing = true;
+                $volume->fromTemplateIfMissing = 1;
             }
 
             $volumes[] = $volume;

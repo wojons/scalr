@@ -155,7 +155,7 @@ def main():
         daemon = DBQueueEventAlert()
         if args.start:
             LOG.info('Start')
-            if not helper.check_pid(CONFIG['pid_file']):
+            if helper.check_pid(CONFIG['pid_file']):
                 LOG.info('Another copy of process already running. Exit')
                 sys.exit(0)
             daemon.start(daemon= not args.no_daemon)

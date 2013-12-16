@@ -33,30 +33,25 @@ class BaseDaemon(object):
     def stop(self):
         LOG.info('Stop')
         if not self.pid_file:
-            raise Exception("Can't stop, you must specify pid file")
+            raise Exception("You must specify pid file")
 
         try:
             pf = file(self.pid_file, 'r')
             pid = int(pf.read().strip())
             pf.close()
         except IOError:
-            pid = None
+            LOG.error("Pid file %s dosn't exist" % self.pid_file)
+            return
         except ValueError:
-            pid = None
-            os.remove(self.pid_file)
-
-        if not pid:
-            message = "Pid file %s does not exist"
-            LOG.warning(message % self.pid_file)
+            LOG.error("Wrong value in pid file %s" % self.pid_file)
+            self._delete_pid_file()
             return
 
         try:
-            helper.kill_ps(pid, child=True)
+            if helper.check_pid(self.pid_file):
+                helper.kill_ps(pid, child=True)
         except Exception:
             LOG.error(helper.exc_info())
-
-        if os.path.exists(self.pid_file):
-            os.remove(self.pid_file)
 
 
     def run(self):
@@ -74,7 +69,7 @@ class BaseDaemon(object):
 
 
     def _delete_pid_file(self):
-        LOG.debug('Remove pid file %s' % self.pid_file)
+        LOG.debug('Removing pid file %s' % self.pid_file)
         os.remove(self.pid_file)
 
 

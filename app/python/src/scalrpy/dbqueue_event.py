@@ -181,7 +181,7 @@ class DBQueueEvent(basedaemon.BaseDaemon):
             mail['From'] = CONFIG['email']['address']
             mail['To'] = config['EventMailTo']
             mail['Subject'] = subj
-            LOG.debug('Event:%s. Send mail \'%s\'' % (event['id'], mail['Subject']))
+            LOG.debug("Event:%s. Send mail:'%s'" % (event['id'], mail['Subject']))
             server = smtplib.SMTP('localhost')
             server.sendmail(mail['From'], mail['To'], mail.as_string())
         except:
@@ -196,8 +196,8 @@ class DBQueueEvent(basedaemon.BaseDaemon):
                 return
             payload = {'event': event['type'], 'message': event['message']}
             r = requests.post(config[key], params=payload, timeout=10)
-            LOG.debug('Event:%s. Send request url:%s status %s' \
-                    % (event['id'], config[key], r.status))
+            LOG.debug("Event:%s. Send request:'url:%s' status:'%s'" \
+                    % (event['id'], config[key], r.status_code))
         except requests.exceptions.RequestException:
             LOG.warning(helper.exc_info())
         except:
@@ -293,7 +293,7 @@ def main():
         daemon = DBQueueEvent()
         if args.start:
             LOG.info('Start')
-            if not helper.check_pid(CONFIG['pid_file']):
+            if helper.check_pid(CONFIG['pid_file']):
                 LOG.critical('Another copy of process already running. Exit')
                 return
             daemon.start(daemon=not args.no_daemon)

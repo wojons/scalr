@@ -101,9 +101,10 @@ scalr:
       public_key: ''
       private_key: ''
     mindterm_enabled: true
-
-  # It must be defined  
-  pma_instance_ip_address: '127.0.0.1'
+    pma:
+      key: ''
+      url: ''
+      server_ip: ''
 
   # Allowed values: scalr | ldap 
   auth_mode: scalr
@@ -244,7 +245,8 @@ scalr:
     connections:
       # required
       plotter:
-        # host to connect to load statistics web server. required
+        # host to connect to load statistics web server. Required
+        # Example: http://example.com or http://127.0.0.1 
         host: ~
 #        port: 8080
 #        # web server connection pool size

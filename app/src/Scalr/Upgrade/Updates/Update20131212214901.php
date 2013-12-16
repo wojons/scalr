@@ -1,12 +1,11 @@
-<?= '<' . '?php' ?>
-
+<?php
 namespace Scalr\Upgrade\Updates;
 
 use Scalr\Upgrade\SequenceInterface;
 use Scalr\Upgrade\UpdateInterface;
 use Scalr\Upgrade\AbstractUpdate;
 
-class Update<?= $upd_released ?> extends AbstractUpdate implements SequenceInterface
+class Update20131212214901 extends AbstractUpdate implements SequenceInterface
 {
     /**
      * A UUID is a 16-octet (128-bit) number.
@@ -17,7 +16,7 @@ class Update<?= $upd_released ?> extends AbstractUpdate implements SequenceInter
      *
      * @var string
      */
-    protected $uuid = '<?= $upd_uuid ?>';
+    protected $uuid = '8cd24661-9b31-4056-89e4-465d0f07f4dd';
 
     /**
      * The list of identifiers of updates this upgrade depends upon.
@@ -38,7 +37,7 @@ class Update<?= $upd_released ?> extends AbstractUpdate implements SequenceInter
      *
      * @var string
      */
-    protected $description;
+    protected $description = 'Cleanup ELB settings and make sure that ELB usage db is consistent';
 
     /**
      * The source type of upgrade.
@@ -47,7 +46,7 @@ class Update<?= $upd_released ?> extends AbstractUpdate implements SequenceInter
      *
      * @var string
      */
-    protected $type;
+    protected $type = UpdateInterface::TYPE_MYSQL;
 
 
 	/**
@@ -56,7 +55,7 @@ class Update<?= $upd_released ?> extends AbstractUpdate implements SequenceInter
      */
     public function getNumberStages()
     {
-        //provide the number of consecutive stages
+        //TODO provide the number of consecutive stages
         return 1;
     }
 
@@ -72,7 +71,6 @@ class Update<?= $upd_released ?> extends AbstractUpdate implements SequenceInter
      */
 	protected function isApplied1($stage)
     {
-        //implement verification whether the stage one is already applied
         return false;
     }
 
@@ -88,7 +86,6 @@ class Update<?= $upd_released ?> extends AbstractUpdate implements SequenceInter
      */
 	protected function validateBefore1($stage)
     {
-        //implement validation whether the stage one has valid environment before update
         return true;
     }
 
@@ -106,6 +103,22 @@ class Update<?= $upd_released ?> extends AbstractUpdate implements SequenceInter
      */
     protected function run1($stage)
     {
-        //implement update script for the stage 1
+        $this->db->Execute("DELETE FROM farm_role_cloud_services WHERE id NOT IN (SELECT value FROM farm_role_settings WHERE name='aws.elb.id')");
+
+        $elbs = $this->db->Execute("SELECT * from farm_role_settings WHERE name='aws.elb.id'");
+        while ($elb = $elbs->FetchRow()) {
+            $service = $this->db->GetRow("SELECT * FROM farm_role_cloud_services WHERE id = ?", array($elb['value']));
+            if ($service['farm_role_id'] != $elb['farm_roleid']) {
+                $this->db->Execute("UPDATE farm_role_cloud_services SET
+                   farm_role_id = ?,
+                   farm_id =?
+                WHERE id = ?
+                ", array(
+                    $elb['farm_roleid'],
+                    $this->db->GetOne("SELECT farmid FROM farm_roles WHERE id = ?", array($elb['farm_roleid'])),
+                    $elb['value']
+                ));
+            }
+        }
     }
 }

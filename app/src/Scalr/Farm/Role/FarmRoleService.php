@@ -51,6 +51,13 @@ class FarmRoleService
         return false;
     }
 
+    public function setFarmRole(\DBFarmRole $dbFarmRole)
+    {
+        $this->farmRole = $dbFarmRole;
+        $this->farmRoleId = $dbFarmRole->ID;
+        $this->farmId = $dbFarmRole->FarmID;
+    }
+
     public function getFarmRole()
     {
         return $this->farmRole;
@@ -101,18 +108,26 @@ class FarmRoleService
     }
 
     public function remove() {
-        $this->db->Execute("DELETE FROM farm_role_cloud_services WHERE id = ? AND env_id = ?", array(
-            $this->serviceId, $this->envId
+        $this->db->Execute("DELETE FROM farm_role_cloud_services WHERE id = ? AND env_id = ? AND farm_role_id = ?", array(
+            $this->serviceId, $this->envId, $this->farmRole->ID
         ));
     }
 
     public function save() {
         if ($this->exists) {
-            /*
             $this->db->Execute("UPDATE farm_role_cloud_services SET
-
-            ");
-            */
+                `farm_id` = ?,
+                `farm_role_id` = ?,
+                `platform` = ?,
+                `cloud_location` = ?
+                WHERE `id` = ?
+            ", array(
+                $this->farmId,
+                $this->farmRoleId,
+                $this->platform,
+                $this->cloudLocation,
+                $this->serviceId
+            ));
         } else {
             $this->db->Execute("INSERT INTO farm_role_cloud_services SET
                 `id`      = ?,

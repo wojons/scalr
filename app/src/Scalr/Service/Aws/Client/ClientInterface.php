@@ -1,8 +1,6 @@
 <?php
 namespace Scalr\Service\Aws\Client;
 
-use Scalr\Service\Aws\Plugin\EventObserver;
-
 /**
  * Client interface
  *

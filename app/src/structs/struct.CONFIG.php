@@ -90,7 +90,6 @@ final class CONFIG
 
     public static $HTTP_PROTO = "http";
 
-    public static $PMA_INSTANCE_IP_ADDRESS = '184.73.181.141';
 
     //**** Statistics and monitoring *******//
     public static $MONITORING_SERVER_URL = 'http://monitoring.scalr.net';

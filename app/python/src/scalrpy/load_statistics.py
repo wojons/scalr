@@ -4,6 +4,7 @@ import time
 import yaml
 import socket
 import logging
+import urlparse
 import cherrypy
 import argparse
 import multiprocessing
@@ -23,7 +24,7 @@ from scalrpy import __version__
 CONFIG = {
     'connections': {
         'plotter':{
-            'host':None,
+            'host':'127.0.0.1',
             'port':8080,
             'pool_size':100,
             },
@@ -408,14 +409,22 @@ class Plotter(object):
 
 
     def __call__(self):
-        cherrypy.config.update({
-            'engine.autoreload_on':False,
-            'server.socket_host':socket.gethostname(),
-            'server.socket_port':CONFIG['connections']['plotter']['port'],
-            'server.thread_pool':CONFIG['connections']['plotter']['pool_size'],
-            #'error_page.404': Plotter.error_page_404,
-            })
-        cherrypy.quickstart(self)
+        try:
+            hostname = urlparse.urlparse(CONFIG['connections']['plotter']['host']).hostname
+            if hostname:
+                host = socket.gethostbyaddr(hostname)[0]
+            else:
+                host = CONFIG['connections']['plotter']['host']
+            cherrypy.config.update({
+                'engine.autoreload_on':False,
+                'server.socket_host':host,
+                'server.socket_port':CONFIG['connections']['plotter']['port'],
+                'server.thread_pool':CONFIG['connections']['plotter']['pool_size'],
+                'error_page.404': Plotter.error_page_404,
+                })
+            cherrypy.quickstart(self)
+        except:
+            LOG.critical(helper.exc_info())
 
 
     def _get_farm(self, kwds):
@@ -448,7 +457,7 @@ class Plotter(object):
             assert 'metric' in kwds, "Missing required parameter 'metric'"
             assert 'period' in kwds, "Missing required parameter 'period'"
             if 'index' in kwds:
-                assert 'farmRoleId' in kwds, "Missing 'farmRoleId' parameter"
+                assert 'farmRoleId' in kwds, "Missing required parameter 'farmRoleId'"
             assert kwds['metric'] in ['cpu', 'la', 'mem', 'net', 'io', 'snum'], \
                     "Unsupported metric '%s'" % kwds['metric']
             assert kwds['period'] in ['daily', 'weekly', 'monthly', 'yearly'], \
@@ -614,7 +623,7 @@ class LoadStatistics(basedaemon.BaseDaemon):
                         try:
                             helper.kill_ps(poller_ps.pid, child=True)
                         except:
-                            LOG.error('Exception')
+                            LOG.error(sys.exc_info())
                         poller_ps.terminate()
                     LOG.info('Working time: %.2f' % (time.time() - start_time))
                     sleep_time = start_time + CONFIG['interval'] - time.time() - 0.1
@@ -698,7 +707,7 @@ def main():
         daemon = LoadStatistics()
         if args.start:
             LOG.info('Start')
-            if not helper.check_pid(CONFIG['pid_file']):
+            if helper.check_pid(CONFIG['pid_file']):
                 LOG.info('Another copy of process already running. Exit')
                 sys.exit(0)
             daemon.start(daemon=not args.no_daemon)

@@ -25,6 +25,7 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.variables', function (moduleTabParams
 			xtype: 'fieldset',
 			autoScroll: true,
             cls: 'x-fieldset-separator-none',
+            title: 'Global variables are a key value store in Scalr that can be used in your scripts',
 			items: [{
 				xtype: 'variablefield',
 				name: 'variables',

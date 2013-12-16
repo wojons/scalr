@@ -8,8 +8,6 @@ use Scalr\Service\OpenStack\Services\Servers\Type\PersonalityList;
 use Scalr\Service\OpenStack\Services\Servers\Type\DiscConfig;
 use Scalr\Service\OpenStack\Services\Servers\Type\ListServersFilter;
 use Scalr\Service\OpenStack\Exception\RestClientException;
-use Scalr\Service\OpenStack\Type\AppFormat;
-use Scalr\Service\OpenStack\Client\RestClientResponse;
 use Scalr\Service\OpenStack\Client\ClientInterface;
 use Scalr\Service\OpenStack\Services\ServersService;
 
@@ -412,6 +410,50 @@ class ServersApi
         );
         if ($response->hasError() === false) {
             $result = true;
+        }
+        return $result;
+    }
+
+    /**
+     * Gets the ecrypted administrative password for a specified server set through metadata service.
+     *
+     * @param   string    $serverId   The unique identifier of the server
+     * @return  string    Returns password on success or throws an exception
+     * @throws  RestClientException
+     */
+    public function getEncryptedAdminPassword($serverId)
+    {
+        $result = null;
+        $response = $this->getClient()->call(
+            $this->service,
+            sprintf('/servers/%s/os-server-password', $serverId)
+        );
+        if ($response->hasError() === false) {
+            $result = $response->password;
+        }
+        return $result;
+    }
+
+    /**
+     * Clears the encrypted copy of the password in the metadata server.
+     *
+     * This is done after the client has retrieved the password and knows it doesn't need
+     * it in the metadata server anymore. The password for the server remains the same.
+     *
+     * @param   string    $serverId   The unique identifier of the server
+     * @return  object    Returns response object
+     * @throws  RestClientException
+     */
+    public function deleteEncryptedAdminPassword($serverId)
+    {
+        $result = null;
+        $response = $this->getClient()->call(
+            $this->service,
+            sprintf('/servers/%s/os-server-password', $serverId),
+            null, 'DELETE'
+        );
+        if ($response->hasError() === false) {
+            $result = $response->server;
         }
         return $result;
     }
