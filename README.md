@@ -48,6 +48,6 @@ This project is dedicated to you.*
 [2]: http://www.scalr.com/product/ "Product"
 [3]: https://scalr-wiki.atlassian.net/wiki/display/docs/Roadmap "Roadmap"
 [4]: https://scalr-wiki.atlassian.net/wiki/display/docs/System+Requirements "System Requirements"
-[5]: https://scalr-wiki.atlassian.net/wiki/display/docs/Installation "Installation"
+[5]: https://scalr-wiki.atlassian.net/wiki/display/docs/Installation+instructions "Installation"
 [6]: https://scalr-wiki.atlassian.net/wiki/display/docs/Troubleshooting "Troubleshooting"
 
