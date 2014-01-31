@@ -104,10 +104,8 @@ class EventObserver
             $this->subscriptions[$eventName] = array();
         }
 
-        $iterator = new \RegexIterator(new \DirectoryIterator(__DIR__ . DIRECTORY_SEPARATOR . 'Handlers'), '/^(.+)Plugin\.php$/');
-        foreach ($iterator as $di) {
-            /* @var $di \DirectoryIterator */
-            $plugin = substr($di->getFilename(), 0, -4);
+        foreach (glob(__DIR__ . DIRECTORY_SEPARATOR . 'Handlers' . DIRECTORY_SEPARATOR . '*Plugin.php', GLOB_NOSORT) as $filename) {
+            $plugin = substr(basename($filename), 0, -4);
             $class = __NAMESPACE__ . '\\Handlers\\' . $plugin;
 
             $p = new $class;
