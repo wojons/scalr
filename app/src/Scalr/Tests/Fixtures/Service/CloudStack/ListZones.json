@@ -1,0 +1,61 @@
+{
+    "listzonesresponse": {
+        "count": 2,
+        "zone": [{
+                "id": 1,
+                "description": "test",
+                "displaytext": "some text",
+                "dns1": "dns1",
+                "dns2": "dns2",
+                "domain": "test.com",
+                "domainid": 1,
+                "domainname": "testio",
+                "guestcidraddress": "guest",
+                "internaldns1": "test1",
+                "internaldns2": "test2",
+                "ip6dns1": "120.0.0.1",
+                "ip6dns2": "120.0.0.1",
+                "localstorageenabled": true,
+                "name": "jp-east-t1v",
+                "networktype": "Advanced",
+                "resourcedetails": "key/value",
+                "securitygroupsenabled": false,
+                "vlan": 42,
+                "allocationstate": "Enabled",
+                "zonetoken": "6a3bfa26-67cd-3ff2-867e-20e86b211bb1",
+                "dhcpprovider": "VirtualRouter",
+                "capacity" : [{
+                    "capacitytotal": 42,
+                    "capacityused": 10,
+                    "clusterid": 10,
+                    "clustername": "testio",
+                    "percentused": 100,
+                    "podid": 1,
+                    "podname": "testio",
+                    "type": "Type",
+                    "zoneid": 2,
+                    "zonename": "TestZone"
+                }],
+                "tags": [{
+                    "account": "testio",
+                    "customer": "testio",
+                    "domain": "test.com",
+                    "domainid": 42,
+                    "key": "key test",
+                    "project": "Project Test",
+                    "projectid": 666,
+                    "resourceid": 11,
+                    "resourcetype": "test",
+                    "value": "testvalue"
+                }]
+            }, {
+                "id": 2,
+                "name": "jp-east-f2v",
+                "networktype": "Advanced",
+                "securitygroupsenabled": false,
+                "allocationstate": "Enabled",
+                "zonetoken": "8366e550-542d-373d-88e3-ca7c90bc8e6c",
+                "dhcpprovider": "VirtualRouter"
+            }]
+    }
+}

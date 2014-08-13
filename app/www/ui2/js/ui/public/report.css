@@ -1,0 +1,73 @@
+.x-panel-white-background .x-panel-body-default{
+    background: #fff;
+}
+
+.x-panel-cost-report{
+    background: #fff;
+    color: #1A487B;
+    font-weight: bold;
+    border: 1px solid #A8CCDF;
+    margin: 12px auto;
+}
+
+.x-panel-cost-report .x-header{
+    font: 22px 'open_sanssemibold', Arial, sans-serif;
+    line-height: 65px;
+    background: #A8CCDF;
+    height: 65px;
+    color: #fff;
+    padding: 0 32px;
+}
+
+.x-panel-cost-report .x-footer {
+    margin: 28px 0 0;
+	font-size: 12px;
+	line-height: 55px;
+	background: #eef4f8;
+	text-align: center;
+	line-height: 65px;
+	color: #0055CC;
+    text-decoration: underline;
+}
+
+.x-panel-cost-report .x-title1{
+    font: 13px 'open_sansbold', Arial, sans-serif;
+    color: #5997BF;
+    font-weight: bold;
+    line-height: 24px;
+    text-transform: uppercase;
+}
+
+.x-panel-cost-report .x-totals .x-title1{
+    margin-top: 14px;
+}
+
+.x-panel-cost-report .x-title2{
+    font: 23px 'open_sansbold', Arial, sans-serif;
+    color: #1A487B;
+    font-weight: bold;
+    line-height:46px;
+}
+
+.x-panel-cost-report .x-title3{
+    font: 13px 'open_sansbold', Arial, sans-serif;
+    color: #1A487B;
+    font-weight: bold;
+    line-height: 24px;
+    text-transform: uppercase;
+}
+
+.x-panel-cost-report .x-totals .x-label-pct{
+    position:relative;
+    top: 10px;
+}
+
+.x-panel-cost-report .bar-wrapper{
+    background: #caddec;
+}
+
+
+.x-panel-cost-report .x-item td{
+    padding: 6px 0 8px;
+    font-size: 110%;
+}

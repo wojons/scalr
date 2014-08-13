@@ -1,0 +1,173 @@
+.scalr-ui-monitoring-tree-panel .x-grid-cell-inner {
+    max-width: 300px;
+    padding-right: 30px;
+}
+
+.scalr-ui-monitoring-tree-panel .x-tree-node-text {
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+.scalr-ui-monitoring-checked-node {
+    background-color: #dfe7ec !important;
+}
+
+.scalr-ui-monitoring-main-container {
+    background: inherit;
+}
+
+.scalr-ui-monitoring-loading-message {
+    background: white;
+    border-radius: 3px;
+    height: 110px;
+    width: 313px;
+    text-align: center;
+    font-size:  18px;
+    box-shadow: 0 1px rgba(65,92,120,0.2),0 1px 1px rgba(65,92,120,0.3);
+    -webkit-box-shadow: 0 1px 1px rgba(65,92,120,0.4),0 1px 2px rgba(65,92,120,0.2);
+    display: none;
+}
+
+.scalr-ui-monitoring-loading-message div {
+    margin-top: 20px;
+    margin-bottom: 20px;
+}
+
+.scalr-ui-monitoring-container-for-statistics {
+    float: left;
+    margin: 14px 0 0 12px;
+}
+
+.scalr-ui-monitoring-container-for-statistics div {
+    margin-bottom: 12px;
+}
+
+.scalr-ui-monitoring-title {
+    color: white;
+    font-size: 18px;
+    margin-bottom: 14px !important;
+}
+
+.scalr-ui-monitoring-statistics-container {
+    width: 530px;
+    position: relative;
+}
+
+.scalr-ui-monitoring-statistics-container-compare-mode-off {
+    margin: 12px 0 0 12px;
+    width: 530px;
+    position: relative;
+    display: inline-block;
+    vertical-align: top;
+}
+
+.scalr-ui-monitoring-statistics-container-compare-mode-off:last-child {
+    margin-bottom: 12px;
+}
+
+.scalr-ui-monitoring-add-to-dashboard-tool-container {
+    position: absolute;
+    top: -6px;
+    right: -6px;
+    visibility: hidden;
+}
+
+.scalr-ui-monitoring-add-to-dashboard-tool {
+    background: #E0E6EB;
+    border-radius: 3px;
+    height: 42px;
+    width: 42px;
+    position: relative;
+    box-shadow: 0 1px rgba(65,92,120,0.2),0 1px 1px rgba(65,92,120,0.3);
+    -webkit-box-shadow: 0 1px 1px rgba(65,92,120,0.4),0 1px 2px rgba(65,92,120,0.2);
+    z-index: 10;
+    cursor: pointer;
+}
+
+.scalr-ui-monitoring-add-to-dashboard-tool:after {
+    background: url(/ui2/js/extjs-4.2/theme/images/tools/tool-sprites.png) 0 32px;
+    content: '';
+    position: absolute;
+    top: 13px;
+    left: 13px;
+    right: 13px;
+    bottom: 13px;
+    z-index: -1;
+}
+
+.scalr-ui-monitoring-add-to-dashboard-tool-container:hover {
+    visibility: visible;
+}
+
+.scalr-ui-monitoring-add-to-dashboard-tool-container:hover .scalr-ui-monitoring-add-to-dashboard-tool:after {
+    background-position: 16px 32px;
+}
+
+.scalr-ui-monitoring-add-to-dashboard-tool a {
+    display: block;
+    height: 100%;
+}
+
+.scalr-ui-monitoring-image-container:hover + .scalr-ui-monitoring-add-to-dashboard-tool-container {
+    visibility: visible;
+}
+
+.scalr-ui-monitoring-image-container-compare-mode-off:hover + .scalr-ui-monitoring-add-to-dashboard-tool-container {
+    visibility: visible;
+}
+
+.scalr-ui-monitoring-image-container,
+.scalr-ui-monitoring-image-container-compare-mode-off {
+    background: white;
+    border-radius: 3px;
+    color: #F04A46;
+    text-align: center;
+    height: 300px;
+    width: 530px;
+    line-height: 300px;
+    overflow: hidden;
+}
+
+.scalr-ui-monitoring-disk-name-container {
+    position: absolute;
+    top: 3px;
+    left: 3px;
+    opacity: 0.7;
+}
+
+.scalr-ui-monitoring-disk-name {
+    position: relative;
+    background: #E0E6EB;
+    border-radius: 3px;
+    height: 20px;
+    width: 60px;
+    text-align: center;
+    padding-top: 2px;
+}
+
+.scalr-ui-monitoring-disk-name-container:hover + .scalr-ui-monitoring-add-to-dashboard-tool-container {
+    visibility: visible;
+}
+
+.scalr-ui-monitoring-message {
+    display: inline-block;
+    vertical-align: middle;
+}
+
+.scalr-ui-monitoring-filter-highlight {
+    background-color: #FFFF96;
+}
+
+.scalr-ui-monitoring-filter-node-background {
+    background-color: #E2E8EE !important;
+}
+
+.scalr-ui-monitoring-filter-no-matches-found-message {
+    background-color: inherit !important;
+    text-align: center;
+    font-size: 12px;
+    color: #F04A46;
+}
+
+

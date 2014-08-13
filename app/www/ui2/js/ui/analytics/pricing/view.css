@@ -1,0 +1,44 @@
+.scalr-ui-analytics-pricing-platform-buttons {
+    background-color: #DFE4EA;
+    padding: 12px 0;
+    overflow: hidden;
+}
+
+.scalr-ui-analytics-pricing-grid-cell .x-grid-cell {
+    height: 36px;
+    vertical-align: middle;
+}
+
+.scalr-ui-dbbackups-button-prev, .scalr-ui-dbbackups-button-next {
+    background: url(/ui2/images/ui/db/trigger_month_sprite.png);
+}
+
+.scalr-ui-dbbackups-button-prev {
+    background-position: -5px -5px;
+}
+
+.x-pressed .scalr-ui-dbbackups-button-prev{
+    background-position: -5px 21px;
+}
+
+.scalr-ui-dbbackups-button-next {
+    background-position: -34px -5px;
+}
+
+.x-pressed .scalr-ui-dbbackups-button-next {
+    background-position: -34px 21px;
+}
+
+.scalr-ui-analytics-pricing-pricefield:focus {
+    box-shadow: 0 1px 2px #5c6b83 inset,0 -1px 1px rgba(147,160,179,0.4) inset;
+    -webkit-box-shadow: 0 1px 3px #5c6b83 inset,0 -1px 1px rgba(147,160,179,0.4) inset;
+}
+
+.scalr-ui-analytics-pricing-history-instances {
+    font-weight: bold;
+}
+
+.scalr-ui-analytics-pricing-history-date-title {
+    color: #0054CC;
+}
+
