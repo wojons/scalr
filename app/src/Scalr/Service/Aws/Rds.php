@@ -1,10 +1,6 @@
 <?php
 namespace Scalr\Service\Aws;
 
-use Scalr\Service\Aws\Client\ClientException;
-use Scalr\Service\Aws\DataType\ErrorData;
-use Scalr\Service\Aws\DataType\ListDataType;
-
 /**
  * Amazon RDS interface
  *

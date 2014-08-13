@@ -192,7 +192,7 @@ class Scalr_UI_Controller_Services_Configurations_Presets extends Scalr_UI_Contr
         if (count($err) == 0)
             $this->response->success();
         else
-            $this->response->warning(implode('<br>', $err));
+            $this->response->warning(implode("\n", $err));
     }
 
     public function viewAction()

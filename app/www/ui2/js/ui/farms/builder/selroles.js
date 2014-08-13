@@ -16,7 +16,7 @@ Ext.define('Scalr.ui.FarmBuilderSelRoles', {
                 pluginId: 'flyingbutton',
                 cls: 'scalr-ui-dataview-selroles-add',
                 handler: function(){
-                    this.fireEvent('addrole');
+                    this.fireEvent('addrole', 0);
                 }
             },{
                 ptype: 'viewdragdrop',
@@ -27,7 +27,7 @@ Ext.define('Scalr.ui.FarmBuilderSelRoles', {
             allowDeselect: true,
             tpl  : new Ext.XTemplate(
                 '<tpl for=".">',
-                    '<div class="x-item<tpl if="errors"> x-item-invalid</tpl>" title="{alias}">',
+                    '<div class="x-item<tpl if="errors"> x-item-invalid</tpl>" {[values.errors?\'data-qtip="\'+this.getErrors(values.errors):\'title="\'+values.alias]}">',
                         '<div class="x-item-color-corner-role x-item-color-corner x-item-color-corner-{[Scalr.utils.getColorById(values.farm_role_id || 0)]}"></div>',
                         '<div class="x-item-inner">',
                             '<div class="name">',
@@ -47,6 +47,13 @@ Ext.define('Scalr.ui.FarmBuilderSelRoles', {
                     '</div>',
                 '</tpl>'			
             ,{
+                getErrors: function(errors) {
+                    var html = [];
+                    Ext.Object.each(errors, function(key, value){
+                        html.push(value);
+                    });
+                    return Ext.String.htmlEncode('Errors: <ul class="x-tip-errors-list"><li>' + html.join('</li><li>') + '</li></ul>');
+                },
                 getRoleCls: function (context) {
                     var behaviors = [
                             "cf_cchm", "cf_dea", "cf_router", "cf_service",
@@ -129,15 +136,19 @@ Ext.define('Scalr.ui.FarmBuilderSelRoles', {
                 },
                 beforeitemclick: function (view, record, item, index, e) {
                     if (e.getTarget('.delete-role', 10, true)) {
-
+                        var msg = 'Delete role "' + record.get('alias') + '" from farm?';
                         if (record.get('is_bundle_running') == true) {
                             Scalr.message.Error('This role is locked by server snapshot creation process. Please wait till snapshot will be created.');
                             return false;
                         }
-
+                        if (record.isVpcRouter()) {
+                            msg = 'This VPC Router Farm Role may be used by other farms/roles. Are you '+
+                                  'sure you want to remove it?<br/> Farm Roles that using this router may not '+
+                                  'longer be able to communicate with Scalr.';
+                        }
                         Scalr.Confirm({
                             type: 'delete',
-                            msg: 'Delete role "' + record.get('alias') + '" from farm?',
+                            msg: msg,
                             success: function () {
                                 view.store.remove(record);
                                 view.refresh();
@@ -276,7 +287,7 @@ Ext.define('Scalr.ui.FarmRolesFlyingButton', {
 		if (this.button) {
             var buttonTop = '';
 			if (this.client.el.dom.scrollHeight <= this.client.el.getHeight()) {
-                buttonTop = (this.client.getStore().getCount()*112+46)+'px';
+                buttonTop = (this.client.getStore().getCount()*112+48)+'px';
 			}
             if (buttonTop !== this.buttonTop) {
                 this.button.setStyle('top', buttonTop);

@@ -98,10 +98,16 @@ Scalr.regPage('Scalr.ui.services.apache.vhosts.create', function (loadParams, mo
 				name: 'nonSslTemplate',
 				fieldLabel: 'Server non-SSL template',
 				grow: true,
+				icons: {
+                    globalvars: true
+                },
 				growMax: 400
 			}, {
 				xtype: 'textarea',
 				name: 'sslTemplate',
+				icons: {
+                    globalvars: true
+                },
 				hidden: !moduleParams['vhost']['isSslEnabled'],
 				fieldLabel: 'Server SSL template',
 				grow: true,

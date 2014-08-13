@@ -6,7 +6,6 @@ Scalr.regPage('Scalr.ui.admin.accounts.view', function (loadParams, moduleParams
 		],
 		proxy: {
 			type: 'scalr.paging',
-			extraParams: loadParams,
 			url: '/admin/accounts/xListAccounts'
 		},
 		remoteSort: true
@@ -18,7 +17,6 @@ Scalr.regPage('Scalr.ui.admin.accounts.view', function (loadParams, moduleParams
 			'reload': false,
 			'maximize': 'all'
 		},
-		scalrReconfigureParams: { accountId: '' },
 		store: store,
 		stateId: 'grid-admin-accounts-view',
 		stateful: true,
@@ -36,7 +34,7 @@ Scalr.regPage('Scalr.ui.admin.accounts.view', function (loadParams, moduleParams
 		columns: [
 			{ header: "ID", width: 60, dataIndex: 'id', sortable: true },
 			{ header: "Name", flex:1, dataIndex: 'name', sortable: true },
-			{ header: "Owner email", flex: 1, dataIndex: 'ownerEmail', sortable: false },
+			{ header: Scalr.flags['authMode'] == 'ldap' ? 'LDAP login' : 'Owner email', flex: 1, dataIndex: 'ownerEmail', sortable: false },
 			{ header: "Added", flex: 1, dataIndex: 'dtadded', sortable: true, xtype: 'templatecolumn',
 				tpl: '{[values.dtadded ? values.dtadded : ""]}'
 			},
@@ -68,41 +66,31 @@ Scalr.regPage('Scalr.ui.admin.accounts.view', function (loadParams, moduleParams
 				tpl: '{dnsZones}'
 			},
 			{
-				xtype: 'optionscolumn',
-				getOptionVisibility: function (item, record) {
-					var data = record.data;
-
-					return true;
-				},
-
-				optionsMenu: [{
-					itemId: 'option.edit',
+				xtype: 'optionscolumn2',
+				menu: [{
 					iconCls: 'x-menu-icon-edit',
 					text: 'Edit',
 					href: "#/admin/accounts/{id}/edit"
 				}, {
-					itemId: 'option.login',
 					iconCls: 'x-menu-icon-login',
 					text: 'Login as owner',
-					menuHandler: function(item) {
-						Scalr.Request({
-							processBox: {
-								type: 'action'
-							},
-							url: '/admin/accounts/xLoginAs',
-							params: {
-								accountId: item.record.get('id')
-							},
-							success: function() {
-								Scalr.event.fireEvent('lock');
-								Scalr.event.fireEvent('redirect', '#/dashboard', true);
-								Scalr.event.fireEvent('unlock');
-								Scalr.application.updateContext();
-							}
-						});
-					}
+                    request: {
+                        processBox: {
+                            type: 'action'
+                        },
+                        url: '/admin/accounts/xLoginAs',
+                        dataHandler: function (data) {
+                            return { accountId: data['id'] };
+                        },
+                        success: function() {
+                            Scalr.event.fireEvent('lock');
+                            Scalr.application.updateContext(function() {
+                                Scalr.event.fireEvent('unlock');
+                                Scalr.event.fireEvent('redirect', '#/dashboard', true);
+                            });
+                        }
+                    }
 				}, {
-					itemId: 'option.terminateFarm',
 					iconCls: 'x-menu-icon-login',
 					text: 'Login as user',
 					request: {
@@ -110,8 +98,8 @@ Scalr.regPage('Scalr.ui.admin.accounts.view', function (loadParams, moduleParams
 							type: 'action'
 						},
 						url: '/admin/accounts/xGetUsers',
-						dataHandler: function (record) {
-							return { accountId: record.get('id') };
+						dataHandler: function (data) {
+							return { accountId: data['id'] };
 						},
 						success: function (data) {
 							Scalr.Request({
@@ -128,7 +116,7 @@ Scalr.regPage('Scalr.ui.admin.accounts.view', function (loadParams, moduleParams
 											proxy: 'object'
 										},
 										allowBlank: false,
-										forceSelection: true,
+                                        editable: false,
 										filterFn: function(queryString, item) {
 											var value = new RegExp(queryString);
 											return (
@@ -155,10 +143,11 @@ Scalr.regPage('Scalr.ui.admin.accounts.view', function (loadParams, moduleParams
 								},
 								url: '/admin/accounts/xLoginAs',
 								success: function() {
-									Scalr.event.fireEvent('lock');
-									Scalr.event.fireEvent('redirect', '#/dashboard', true);
-									Scalr.event.fireEvent('unlock');
-									Scalr.application.updateContext();
+                                    Scalr.event.fireEvent('lock');
+                                    Scalr.application.updateContext(function() {
+                                        Scalr.event.fireEvent('unlock');
+                                        Scalr.event.fireEvent('redirect', '#/dashboard', true);
+                                    });
 								}
 							});
 						}
@@ -223,6 +212,11 @@ Scalr.regPage('Scalr.ui.admin.accounts.view', function (loadParams, moduleParams
 				width: 250,
 				form: {
 					items: [{
+						xtype: 'textfield',
+						fieldLabel: 'ServerId',
+						labelAlign: 'top',
+						name: 'serverId'
+					},{
 						xtype: 'textfield',
 						fieldLabel: 'FarmId',
 						labelAlign: 'top',

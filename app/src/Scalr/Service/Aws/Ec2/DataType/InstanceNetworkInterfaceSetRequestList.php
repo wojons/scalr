@@ -2,7 +2,6 @@
 namespace Scalr\Service\Aws\Ec2\DataType;
 
 use Scalr\Service\Aws\Ec2\Ec2ListDataType;
-use Scalr\Service\Aws\Ec2Exception;
 
 /**
  * InstanceNetworkInterfaceSetRequestList
@@ -24,7 +23,8 @@ class InstanceNetworkInterfaceSetRequestList extends Ec2ListDataType
             $aListData,
             array(
                 'networkInterfaceId', 'deviceIndex', 'subnetId', 'description', 'privateIpAddress',
-                'securityGroupId', 'deleteOnTermination', 'privateIpAddresses', 'secondaryPrivateIpAddressCount'
+                'securityGroupId', 'deleteOnTermination', 'privateIpAddresses', 'secondaryPrivateIpAddressCount',
+                'associatePublicIpAddress'
             ),
             __NAMESPACE__ . '\\InstanceNetworkInterfaceSetRequestData'
         );

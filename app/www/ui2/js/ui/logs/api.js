@@ -42,8 +42,8 @@ Scalr.regPage('Scalr.ui.logs.api', function (loadParams, moduleParams) {
 			{ header: 'Action', flex: 1, dataIndex: 'action', sortable: true },
 			{ header: 'IP address', flex: 1, dataIndex: 'ipaddress', sortable: true },
 			{
-				xtype: 'optionscolumn',
-				optionsMenu: [
+				xtype: 'optionscolumn2',
+				menu: [
 					{ text:'Details', href: "#/logs/apiLogEntryDetails?transactionId={transaction_id}" }
 				]
 			}

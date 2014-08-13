@@ -85,11 +85,13 @@ class Scalr_Scaling_FarmRoleMetric extends Scalr_Model
         {
             try {
                 $sensorValue = $sensor->getValue($dbFarmRole, $this);
+                if ($sensorValue === false)
+                    return Scalr_Scaling_Decision::NOOP;
             }
             catch(Exception $e)
             {
                 $this->logger->warn(new FarmLogMessage($dbFarmRole->FarmID,
-                    sprintf("Unable to read Scaling Metric (%s) value: %s", $this->getMetric()->alias, $e->getMessage())
+                    sprintf("Unable to read Scaling Metric (%s) on farmrole %s value: %s", $this->getMetric()->alias, $dbFarmRole->ID, $e->getMessage())
                 ));
 
                 return Scalr_Scaling_Decision::NOOP;

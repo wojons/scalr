@@ -70,22 +70,14 @@ class ScalrAPI_2_1_0 extends ScalrAPI_2_0_0
 
         //SSL stuff
         if ($vHost->isSslEnabled) {
-            $this->DB->Execute("INSERT INTO services_ssl_certs SET
-                env_id = ?,
-                name = ?,
-                ssl_pkey = ?
-                ssl_cert = ?,
-                ssl_cabundle = ?
-            ", array(
-                $DBFarm->EnvID,
-                $DomainName,
-                base64_decode($SSLPrivateKey),
-                base64_decode($SSLCertificate),
-                ""
-            ));
-            $id = $this->DB->Insert_ID();
-            $vHost->sslCertId = $id;
+            $cert = new Scalr_Service_Ssl_Certificate();
+            $cert->envId = $DBFarm->EnvID;
+            $cert->name = $DomainName;
+            $cert->privateKey = base64_decode($SSLPrivateKey);
+            $cert->certificate = base64_decode($SSLCertificate);
+            $cert->save();
 
+            $vHost->sslCertId = $cert->id;
             $vHost->httpdConfSsl = $httpConfigTemplateSSL;
         } else {
             $vHost->sslCertId = 0;
@@ -94,10 +86,10 @@ class ScalrAPI_2_1_0 extends ScalrAPI_2_0_0
         $vHost->save();
 
         $servers = $DBFarm->GetServersByFilter(array('status' => array(SERVER_STATUS::INIT, SERVER_STATUS::RUNNING)));
-        foreach ($servers as $dBServer) {
-            if ($dBServer->GetFarmRoleObject()->GetRoleObject()->hasBehavior(ROLE_BEHAVIORS::NGINX) ||
-                $dBServer->GetFarmRoleObject()->GetRoleObject()->hasBehavior(ROLE_BEHAVIORS::APACHE))
-                $dBServer->SendMessage(new Scalr_Messaging_Msg_VhostReconfigure());
+        foreach ($servers as $DBServer) {
+            if ($DBServer->GetFarmRoleObject()->GetRoleObject()->hasBehavior(ROLE_BEHAVIORS::NGINX) ||
+                $DBServer->GetFarmRoleObject()->GetRoleObject()->hasBehavior(ROLE_BEHAVIORS::APACHE))
+                $DBServer->SendMessage(new Scalr_Messaging_Msg_VhostReconfigure());
         }
 
         $response = $this->CreateInitialResponse();

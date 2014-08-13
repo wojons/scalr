@@ -1,8 +1,6 @@
 <?php
 namespace Scalr\Service\OpenStack\Services\Network\Handler;
 
-use Scalr\Service\OpenStack\Services\Network\Type\CreateSubnet;
-use Scalr\Service\OpenStack\Services\Network\Type\ListSubnetsFilter;
 use Scalr\Service\OpenStack\Services\NetworkService;
 use Scalr\Service\OpenStack\Services\ServiceHandlerInterface;
 use Scalr\Service\OpenStack\Services\AbstractServiceHandler;
@@ -12,7 +10,7 @@ use Scalr\Service\OpenStack\Services\AbstractServiceHandler;
  * @author   Vitaliy Demidov  <vitaliy@scalr.com>
  * @since    07.05.2013
  *
- * @method   array|object list()
+ * @method   \Scalr\Service\OpenStack\Type\DefaultPaginationList|object list()
  *           list(string $subnetId = null, \Scalr\Service\OpenStack\Services\Network\Type\ListSubnetsFilter|array $filter = null)
  *           ListSubnets action (GET /subnets[/subnet-id])
  *           Lists all subnets that are accessible to the tenant who submits the request.

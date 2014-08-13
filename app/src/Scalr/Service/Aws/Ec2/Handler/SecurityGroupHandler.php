@@ -1,15 +1,10 @@
 <?php
 namespace Scalr\Service\Aws\Ec2\Handler;
 
-use Scalr\Service\Aws\Ec2\DataType\IpPermissionData;
 use Scalr\Service\Aws\Ec2\DataType\IpPermissionList;
-use Scalr\Service\Aws\Ec2\DataType\SecurityGroupFilterData;
-use Scalr\Service\Aws\Ec2\DataType\SecurityGroupList;
 use Scalr\Service\Aws\Ec2\DataType\SecurityGroupFilterList;
-use Scalr\Service\Aws\Ec2\DataType\SecurityGroupData;
 use Scalr\Service\Aws\DataType\ListDataType;
 use Scalr\Service\Aws\Client\ClientException;
-use Scalr\Service\Aws\DataType\ErrorData;
 use Scalr\Service\Aws\Ec2Exception;
 use Scalr\Service\Aws\Ec2\AbstractEc2Handler;
 

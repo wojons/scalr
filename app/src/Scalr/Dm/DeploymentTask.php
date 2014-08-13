@@ -127,13 +127,13 @@ class Scalr_Dm_DeploymentTask extends Scalr_Model
 
         switch ($source->authType)
         {
-        	case Scalr_Dm_Source::AUTHTYPE_PASSWORD:
-        	    $msgSource->login = $source->getAuthInfo()->login;
-        	    $msgSource->password = $source->getAuthInfo()->password;
-        	    break;
-        	case Scalr_Dm_Source::AUTHTYPE_CERT:
-        	    $msgSource->sshPrivateKey = $source->getAuthInfo()->sshPrivateKey;
-        	    break;
+            case Scalr_Dm_Source::AUTHTYPE_PASSWORD:
+                $msgSource->login = $source->getAuthInfo()->login;
+                $msgSource->password = $source->getAuthInfo()->password;
+                break;
+            case Scalr_Dm_Source::AUTHTYPE_CERT:
+                $msgSource->sshPrivateKey = $source->getAuthInfo()->sshPrivateKey;
+                break;
         }
 
         $params['remote_path'] = $this->remotePath;

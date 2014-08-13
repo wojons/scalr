@@ -20,38 +20,6 @@ function __autoload($class_name)
         'DBDNSZone' => SRCPATH . '/class.DBDNSZone.php',
         /********************** Service Configuration Modules ********************/
         'ServiceConfigurationFactory' => SRCPATH . '/Modules/class.ServiceConfigurationFactory.php',
-        /****************************** Modules **********************************/
-        'Modules_Platforms_Aws' => SRCPATH . '/Modules/Platforms/abstract.Aws.php',  // Abstract
-        'Modules_Platform' => SRCPATH . '/Modules/abstract.Platform.php',  // Abstract
-        'Modules_Platforms_Ec2' => SRCPATH . '/Modules/Platforms/Ec2/Ec2.php',
-        'Modules_Platforms_Eucalyptus' => SRCPATH . '/Modules/Platforms/Eucalyptus/Eucalyptus.php',
-        'Modules_Platforms_Rackspace' => SRCPATH . '/Modules/Platforms/Rackspace/Rackspace.php',
-        'Modules_Platforms_Nimbula' => SRCPATH . '/Modules/Platforms/Nimbula/Nimbula.php',
-        'Modules_Platforms_Cloudstack' => SRCPATH . '/Modules/Platforms/Cloudstack/Cloudstack.php',
-        'Modules_Platforms_Openstack' => SRCPATH . '/Modules/Platforms/Openstack/Openstack.php',
-        'Modules_Platforms_RackspaceNgUs' => SRCPATH . '/Modules/Platforms/RackspaceNgUs/RackspaceNgUs.php',
-        'Modules_Platforms_RackspaceNgUk' => SRCPATH . '/Modules/Platforms/RackspaceNgUk/RackspaceNgUk.php',
-        'Modules_Platforms_uCloud' => SRCPATH . '/Modules/Platforms/uCloud/uCloud.php',
-        'Modules_Platforms_Idcf' => SRCPATH . '/Modules/Platforms/Idcf/Idcf.php',
-        'Modules_Platforms_GoogleCE' => SRCPATH . '/Modules/Platforms/GoogleCE/GoogleCE.php',
-        'IModules_Platforms_Adapters_Status' => SRCPATH . '/Modules/Platforms/interface.IModules_Platforms_Adapters_Status.php',
-        'IPlatformModule' => SRCPATH . '/Modules/interface.IPlatformModule.php',
-        'PlatformFactory' => SRCPATH . '/Modules/class.PlatformFactory.php',
-        'Modules_Platforms_Ec2_Helpers_Ebs' => SRCPATH . '/Modules/Platforms/Ec2/Helpers/Ebs.php',
-        'Modules_Platforms_Ec2_Helpers_Eip' => SRCPATH . '/Modules/Platforms/Ec2/Helpers/Eip.php',
-        'Modules_Platforms_Ec2_Helpers_Elb' => SRCPATH . '/Modules/Platforms/Ec2/Helpers/Elb.php',
-        'Modules_Platforms_Ec2_Observers_Ebs' => SRCPATH . '/Modules/Platforms/Ec2/Observers/Ebs.php',
-        'Modules_Platforms_Ec2_Observers_Ec2' => SRCPATH . '/Modules/Platforms/Ec2/Observers/Ec2.php',
-        'Modules_Platforms_Ec2_Adapters_Status' => SRCPATH . '/Modules/Platforms/Ec2/Adapters/Status.php',
-        'Modules_Platforms_Rackspace_Adapters_Status' => SRCPATH . '/Modules/Platforms/Rackspace/Adapters/Status.php',
-        'Modules_Platforms_Openstack_Adapters_Status' => SRCPATH . '/Modules/Platforms/Openstack/Adapters/Status.php',
-        'Modules_Platforms_Nimbula_Adapters_Status' => SRCPATH . '/Modules/Platforms/Nimbula/Adapters/Status.php',
-        'Modules_Platforms_Cloudstack_Adapters_Status' => SRCPATH . '/Modules/Platforms/Cloudstack/Adapters/Status.php',
-        'Modules_Platforms_GoogleCE_Adapters_Status' => SRCPATH . '/Modules/Platforms/GoogleCE/Adapters/Status.php',
-        'Modules_Platforms_Openstack_Observers_Openstack' => SRCPATH . '/Modules/Platforms/Openstack/Observers/Openstack.php',
-        'Modules_Platforms_Eucalyptus_Helpers_Eucalyptus' => SRCPATH . '/Modules/Platforms/Eucalyptus/Helpers/Eucalyptus.php',
-        'Modules_Platforms_Cloudstack_Helpers_Cloudstack' => SRCPATH . '/Modules/Platforms/Cloudstack/Helpers/Cloudstack.php',
-        'Modules_Platforms_Cloudstack_Observers_Cloudstack' => SRCPATH . '/Modules/Platforms/Cloudstack/Observers/Cloudstack.php',
         /***************************** API ***********************************/
         'ScalrAPICoreFactory' => SRCPATH . '/api/class.ScalrAPICoreFactory.php',
         'ScalrAPICore' => SRCPATH . '/api/class.ScalrAPICore.php',
@@ -77,6 +45,7 @@ function __autoload($class_name)
         'HostDownEvent' => SRCPATH . '/events/class.HostDownEvent.php',
         'HostInitEvent' => SRCPATH . '/events/class.HostInitEvent.php',
         'HostUpEvent' => SRCPATH . '/events/class.HostUpEvent.php',
+        'HostInitFailedEvent' => SRCPATH . '/events/class.HostInitFailedEvent.php',
         'IPAddressChangedEvent' => SRCPATH . '/events/class.IPAddressChangedEvent.php',
         'MysqlBackupCompleteEvent' => SRCPATH . '/events/class.MysqlBackupCompleteEvent.php',
         'MysqlBackupFailEvent' => SRCPATH . '/events/class.MysqlBackupFailEvent.php',
@@ -90,20 +59,16 @@ function __autoload($class_name)
         'RebundleFailedEvent' => SRCPATH . '/events/class.RebundleFailedEvent.php',
         'EBSVolumeMountedEvent' => SRCPATH . '/events/class.EBSVolumeMountedEvent.php',
         'BeforeInstanceLaunchEvent' => SRCPATH . '/events/class.BeforeInstanceLaunchEvent.php',
+        'InstanceLaunchFailedEvent' => SRCPATH . '/events/class.InstanceLaunchFailedEvent.php',
         'BeforeHostTerminateEvent' => SRCPATH . '/events/class.BeforeHostTerminateEvent.php',
         'DNSZoneUpdatedEvent' => SRCPATH . '/events/class.DNSZoneUpdatedEvent.php',
         'EBSVolumeAttachedEvent' => SRCPATH . '/events/class.EBSVolumeAttachedEvent.php',
         'BeforeHostUpEvent' => SRCPATH . '/events/class.BeforeHostUpEvent.php',
         'ServiceConfigurationPresetChangedEvent' => SRCPATH . '/events/class.ServiceConfigurationPresetChangedEvent.php',
-        /****************************** Structs ******************************/
-        'CONFIG' => SRCPATH . "/structs/struct.CONFIG.php",
         /****************************** ENUMS ******************************/
         'APPCONTEXT' => SRCPATH . "/types/enum.APPCONTEXT.php",
         'FORM_FIELD_TYPE' => SRCPATH . "/types/enum.FORM_FIELD_TYPE.php",
         'SUBSCRIPTION_STATUS' => SRCPATH . "/types/enum.SUBSCRIPTION_STATUS.php",
-        //'INSTANCE_FLAVOR'		=> SRCPATH."/types/enum.INSTANCE_FLAVOR.php",
-        //'X86_64_TYPE'			=> SRCPATH."/types/enum.X86_64_TYPE.php",
-        //'I386_TYPE'				=> SRCPATH."/types/enum.I386_TYPE.php",
         'EVENT_TYPE' => SRCPATH . "/types/enum.EVENT_TYPE.php",
         'RRD_STORAGE_TYPE' => SRCPATH . "/types/enum.RRD_STORAGE_TYPE.php",
         'GRAPH_TYPE' => SRCPATH . "/types/enum.GRAPH_TYPE.php",
@@ -147,7 +112,6 @@ function __autoload($class_name)
         'SERVER_SNAPSHOT_CREATION_TYPE' => SRCPATH . "/types/enum.SERVER_SNAPSHOT_CREATION_TYPE.php",
         'SERVER_SNAPSHOT_CREATION_STATUS' => SRCPATH . "/types/enum.SERVER_SNAPSHOT_CREATION_STATUS.php",
         'MESSAGE_STATUS' => SRCPATH . "/types/enum.MESSAGE_STATUS.php",
-        'ENVIRONMENT_SETTINGS' => SRCPATH . "/types/enum.ENVIRONMENT_SETTINGS.php",
         'EC2_EBS_ATTACH_STATUS' => SRCPATH . "/types/enum.EC2_EBS_ATTACH_STATUS.php",
         'EC2_EBS_MOUNT_STATUS' => SRCPATH . "/types/enum.EC2_EBS_MOUNT_STATUS.php",
         /****************************** Observers ***************************/
@@ -156,10 +120,7 @@ function __autoload($class_name)
         'DBEventObserver' => APPPATH . '/observers/class.DBEventObserver.php',
         'MessagingEventObserver' => APPPATH . '/observers/class.MessagingEventObserver.php',
         'ScalarizrEventObserver' => APPPATH . '/observers/class.ScalarizrEventObserver.php',
-        'BehaviorEventObserver' => APPPATH . '/observers/class.BehaviorEventObserver.php',
-        // Deferred observers
-        'MailEventObserver' => APPPATH . '/observers/class.MailEventObserver.php',
-        'RESTEventObserver' => APPPATH . '/observers/class.RESTEventObserver.php'
+        'BehaviorEventObserver' => APPPATH . '/observers/class.BehaviorEventObserver.php'
     );
     if (key_exists($class_name, $paths)) {
         require $paths[$class_name];

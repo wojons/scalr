@@ -553,7 +553,7 @@ class Cloudyn
      * @throws   CloudynException
      * @returns  \HttpMessage    Returns HttpMessage if success.
      */
-    protected function tryCall ($httpRequest, $attempts = 3, $interval = 200)
+    protected function tryCall($httpRequest, $attempts = 1, $interval = 200)
     {
         try {
             $message = $httpRequest->send();

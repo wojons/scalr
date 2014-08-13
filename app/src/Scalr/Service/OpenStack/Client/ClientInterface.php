@@ -1,7 +1,6 @@
 <?php
 namespace Scalr\Service\OpenStack\Client;
 
-use Scalr\Service\OpenStack\Services\ServiceInterface;
 use Scalr\Service\Aws\Client\ClientException;
 use Scalr\Service\OpenStack\Type\AppFormat;
 
@@ -17,7 +16,7 @@ interface ClientInterface
     /**
      * Makes a REST request to OpenStack service
      *
-     * @param   ServiceInterface|string $service  Service or endpoint url
+     * @param   \Scalr\Service\OpenStack\Services\ServiceInterface|string $service  Service or endpoint url
      * @param   string           $path     optional Uri path
      * @param   array            $options  optional An array of the query parameters
      * @param   string           $verb     optional An HTTP Verb

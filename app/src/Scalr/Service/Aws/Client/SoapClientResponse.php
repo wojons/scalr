@@ -3,7 +3,6 @@ namespace Scalr\Service\Aws\Client;
 
 use Scalr\Service\Aws\Plugin\EventObserver;
 use Scalr\Service\Aws\DataType\ErrorData;
-use Scalr\Service\Aws\LoaderException;
 use Scalr\Service\Aws\DataType\Loader\ErrorLoader;
 
 /**
@@ -144,7 +143,7 @@ class SoapClientResponse implements ClientResponseInterface
         return $this->errorData instanceof ErrorData;
     }
 
-	/**
+    /**
      * {@inheritdoc}
      * @see Scalr\Service\Aws\Client.ClientResponseInterface::getResponseCode()
      */
@@ -171,7 +170,7 @@ class SoapClientResponse implements ClientResponseInterface
         return $this->request;
     }
 
-	/**
+    /**
      * {@inheritdoc}
      * @see Scalr\Service\Aws\Client.ClientResponseInterface::setQueryNumber()
      */
@@ -180,7 +179,7 @@ class SoapClientResponse implements ClientResponseInterface
         $this->queryNumber = $number;
     }
 
-	/**
+    /**
      * {@inheritdoc}
      * @see Scalr\Service\Aws\Client.ClientResponseInterface::setRequest()
      */
@@ -190,9 +189,9 @@ class SoapClientResponse implements ClientResponseInterface
     }
 
     /**
-	 * @param EventObserver $eventObserver
-	 * @return \Scalr\Service\Aws\Client\QueryClientResponse
-	 */
+     * @param EventObserver $eventObserver
+     * @return \Scalr\Service\Aws\Client\QueryClientResponse
+     */
     public function setEventObserver(EventObserver $eventObserver = null)
     {
         $this->eventObserver = $eventObserver;

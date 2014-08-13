@@ -31,7 +31,7 @@ class AccountsTest extends WebTestCase
         }
     }
 
-	/**
+    /**
      * {@inheritdoc}
      * @see Scalr\Tests.WebTestCase::isAdminUserTestClass()
      */
@@ -63,7 +63,7 @@ class AccountsTest extends WebTestCase
     /**
      * @test
      */
-	public function testXListAccountsAction()
+    public function testXListAccountsAction()
     {
         $res = $this->request('/admin/accounts/xListAccounts');
         $this->assertResponseDataHasKeys(array(

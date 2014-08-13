@@ -5,7 +5,9 @@ Scalr.regPage('Scalr.ui.farms.builder.addrole.openstack', function () {
         hidden: true,
 
         cls: 'x-container-fieldset x-fieldset-separator-bottom',
-        
+
+        instanceTypeFieldName: 'openstack.flavor-id',
+         
         layout: 'fit',
         defaults: {
             maxWidth: 762
@@ -16,16 +18,8 @@ Scalr.regPage('Scalr.ui.farms.builder.addrole.openstack', function () {
             return Scalr.isOpenstack(platform);
         },
 
-        onSelectImage: function(record) {
-            if (this.isVisibleForRole(record)) {
-                this.setRole(record);
-                this.show();
-            } else {
-                this.hide();
-            }
-        },
-
         setRole: function(record) {
+            this.currentRole = record;
             Scalr.cachedRequest.load(
                 {
                     url: '/platforms/openstack/xGetOpenstackResources',
@@ -35,56 +29,44 @@ Scalr.regPage('Scalr.ui.farms.builder.addrole.openstack', function () {
                     }
                 },
                 function(data, status){
-                    var flavorIdField = this.down('[name="openstack.flavor-id"]'),
-                        ipPoolsField = this.down('[name="openstack.ip-pool"]'),
-                        value = '', 
+                    var ipPoolsField = this.down('[name="openstack.ip-pool"]'),
                         ipPools = data ? data['ipPools'] : null;
-                    if (status) {
-                        flavorIdField.store.load({ data:  data['flavors'] || []});
-                        if (flavorIdField.store.getCount() > 0) {
-                            value = flavorIdField.store.getAt(0).get('id');
-                        }
-                    }
-                    flavorIdField.setValue(value);
-                    flavorIdField.setDisabled(!status);
                     
                     ipPoolsField.reset();
                     ipPoolsField.store.load({data: ipPools || []});
-                    ipPoolsField.setVisible(!!ipPools);
+                    ipPoolsField.setVisible(Scalr.getPlatformConfigValue(record.get('platform'), 'ext.floating_ips_enabled') == 1 && !!ipPools);
                 },
                 this
             );
         },
 
         isValid: function() {
-            return true;
+            var res = true,
+                field;
+            field = this.down('[name="openstack.flavor-id"]');
+            res = field.validate() || {comp: field, message: 'Instance type is required'};
+            return res;
         },
 
         getSettings: function() {
-            return {
-                'openstack.flavor-id': this.down('[name="openstack.flavor-id"]').getValue(),
-                'openstack.ip-pool': this.down('[name="openstack.ip-pool"]').getValue()
+            var settings = {
+                'openstack.flavor-id': this.down('[name="openstack.flavor-id"]').getValue()
             };
+            if (Scalr.getPlatformConfigValue( this.currentRole.get('platform'), 'ext.floating_ips_enabled') == 1) {
+                settings['openstack.ip-pool'] = this.down('[name="openstack.ip-pool"]').getValue();
+            }
+            return settings;
         },
 
         items: [{
             xtype: 'container',
             layout: 'hbox',
             items: [{
-                xtype: 'combo',
+                xtype: 'instancetypefield',
                 name: 'openstack.flavor-id',
+                labelWidth: 90,
                 flex: 1,
-                maxWidth: 385,
-                fieldLabel: 'Flavor',
-                labelWidth: 50,
-                editable: false,
-                queryMode: 'local',
-                store: {
-                    fields: [ 'id', 'name' ],
-                    proxy: 'object'
-                },
-                valueField: 'id',
-                displayField: 'name'
+                allowBlank: false
             },{
                 xtype: 'combo',
                 name: 'openstack.ip-pool',

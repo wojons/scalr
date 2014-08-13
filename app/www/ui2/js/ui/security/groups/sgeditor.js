@@ -1,6 +1,7 @@
 Ext.define('Scalr.ui.SecurityGroupEditor', {
 	extend: 'Ext.form.Panel',
 	alias: 'widget.sgeditor',
+    vpcIdReadOnly: false,
     items: {
         xtype: 'fieldset',
         itemId: 'formtitle',
@@ -17,9 +18,6 @@ Ext.define('Scalr.ui.SecurityGroupEditor', {
             xtype: 'hidden',
             name: 'cloudLocation'
         }, {
-            xtype: 'hidden',
-            name: 'vpcId'
-        }, {
             xtype: 'textfield',
             name: 'id',
             fieldLabel: 'ID',
@@ -35,6 +33,34 @@ Ext.define('Scalr.ui.SecurityGroupEditor', {
             fieldLabel: 'Description',
             allowBlank: false
         }, {
+            xtype: 'combo',
+            name: 'vpcId',
+            fieldLabel: 'VPC ID',
+            editable: false,
+
+            queryCaching: false,
+            clearDataBeforeQuery: true,
+            store: {
+                fields: [ 'id', 'name' ],
+                proxy: {
+                    type: 'cachedrequest',
+                    url: '/platforms/ec2/xGetVpcList',
+                    root: 'vpc',
+                    ttl: 1
+                }
+            },
+            valueField: 'id',
+            displayField: 'name',
+            plugins: [{
+                ptype: 'comboaddnew',
+                pluginId: 'comboaddnew',
+                url: '/tools/aws/vpc/create'
+            }],
+            icons: {
+                governance: true
+            },
+            iconsPosition: 'outer'
+        }, {
             xtype: 'displayfield',
             name: 'cloudLocationName',
             fieldLabel: 'Cloud location'
@@ -48,7 +74,7 @@ Ext.define('Scalr.ui.SecurityGroupEditor', {
             },
             store: {
                 proxy: 'object',
-                fields: ['id', 'ipProtocol', 'fromPort', 'toPort', 'sourceType', 'sourceValue', 'comment']
+                fields: ['id', 'type', 'direction', 'ipProtocol', 'fromPort', 'toPort', 'sourceType', 'sourceValue', 'comment']
             },
             plugins: {
                 ptype: 'gridstore'
@@ -79,13 +105,17 @@ Ext.define('Scalr.ui.SecurityGroupEditor', {
                 },
                 items: [{
                     xtype: 'tbfill'
-                },{
+                }, {
                     itemId: 'add',
                     text: 'Add security rule',
                     cls: 'x-btn-green-bg',
                     tooltip: 'New security sule',
                     handler: function() {
-                        var accountId = this.up('sgeditor').accountId;
+                        var editor = this.up('sgeditor'),
+                            accountId = editor.accountId,
+                            remoteAddress = editor.remoteAddress,
+                            platform = editor.down('[name="platform"]').getValue(),
+                            cloudLocation = editor.down('[name="cloudLocation"]').getValue();
                         Scalr.Confirm({
 							form: [{
                                 xtype: 'fieldset',
@@ -111,8 +141,24 @@ Ext.define('Scalr.ui.SecurityGroupEditor', {
                                         value: 'udp'
                                     },{
                                         text: 'ICMP',
-                                        value: 'icmp'
-                                    }]
+                                        value: 'icmp',
+                                        disabled: Scalr.isCloudstack(platform)
+                                    },{
+                                        text: 'SCTP',
+                                        value: '132',
+                                        disabled: !Scalr.isOpenstack(platform)
+                                    }],
+                                    listeners: {
+                                        change: function(comp, value) {
+                                            if (value == '132') {
+                                                comp.next('[name="fromPort"]').hide().disable();
+                                                comp.next('[name="toPort"]').hide().disable();
+                                            } else {
+                                            	comp.next('[name="fromPort"]').show().enable();
+                                                comp.next('[name="toPort"]').show().enable();
+                                            }
+                                        }
+                                    }
                                 }, {
                                     xtype: 'textfield',
                                     name: 'fromPort',
@@ -154,20 +200,69 @@ Ext.define('Scalr.ui.SecurityGroupEditor', {
                                             value: 'ip'
                                         },{
                                             text: 'Security group',
-                                            value: 'sg'
+                                            value: 'sg',
+                                            disabled: Scalr.isCloudstack(platform)
                                         }],
                                         listeners: {
                                             change: function(comp, value) {
-                                                comp.next().setValue(value === 'ip' ? '0.0.0.0/0' : accountId + '/default');
+                                                comp.next('#sourceValue').setValue(value === 'ip' ? '0.0.0.0/0' : accountId + '/default');
+                                                if (Scalr.isOpenstack(platform)) {
+                                                    if (value === 'ip') {
+                                                        comp.next('#sourceValue').show().enable();
+                                                        comp.next('#sgSourceValue').hide().disable();
+                                                    } else {
+                                                        comp.next('#sgSourceValue').show().enable();
+                                                        comp.next('#sourceValue').hide().disable();
+                                                    }
+                                                }
+                                                if (remoteAddress) {
+                                                    comp.next('#myIp').setVisible(value === 'ip');
+                                                }
                                             }
                                         }
                                     },{
+                                        xtype: 'combo',
+                                        itemId: 'sgSourceValue',
+                                        name: 'sourceValue',
+                                        editable: false,
+
+                                        queryCaching: false,
+                                        clearDataBeforeQuery: true,
+                                        store: {
+                                            fields: [ 'id', 'name' ],
+                                            proxy: {
+                                                type: 'cachedrequest',
+                                                url: '/security/groups/xListGroups',
+                                                ttl: 1,
+                                                params: {
+                                                    platform: platform,
+                                                    cloudLocation: cloudLocation
+                                                }
+                                            }
+                                        },
+                                        valueField: 'id',
+                                        displayField: 'name',
+                                        flex: 1,
+                                        allowBlank: false,
+                                        hidden: true,
+                                        disabled: true
+                                    },{
                                         xtype: 'textfield',
+                                        itemId: 'sourceValue',
                                         name: 'sourceValue',
                                         value: '0.0.0.0/0',
                                         flex: 1,
                                         allowBlank: false
-                                    }],
+                                    },{
+                                        xtype: 'button',
+                                        itemId: 'myIp',
+                                        text: 'My IP',
+                                        margin: '0 0 0 10',
+                                        hidden: !remoteAddress,
+                                        handler: function() {
+                                            this.prev('[name="sourceValue"]').setValue(remoteAddress + '/32').focus(10);
+                                        }
+                                    }]
                                 }, {
                                     xtype: 'textarea',
                                     name: 'comment',
@@ -224,12 +319,13 @@ Ext.define('Scalr.ui.SecurityGroupEditor', {
     setValues: function(data) {
         var isNewRecord,
             frm = this.getForm(),
-            allRules = [];
+            allRules = [],
+            cloudLocation = data['cloudLocation'];
         if (!data['id'] && data['securityGroupId']) {
             data['id'] = data['securityGroupId'];
         }
         if (!data['cloudLocationName']) {
-            data['cloudLocationName'] = data['cloudLocation'];
+            data['cloudLocationName'] = cloudLocation;
         }
         isNewRecord = !data['id'];
 
@@ -257,6 +353,35 @@ Ext.define('Scalr.ui.SecurityGroupEditor', {
         frm.findField('id').setVisible(!isNewRecord);
         frm.findField('name').setReadOnly(!isNewRecord);
         frm.findField('description').setReadOnly(!isNewRecord);
+        frm.findField('description').allowBlank = Scalr.isOpenstack(data['platform']) ? true : false;
+        frm.findField('cloudLocationName').setVisible(!Scalr.isCloudstack(data['platform']));
+
+        var vpcIdField = frm.findField('vpcId');
+        vpcIdField.getStore().getProxy().params = {cloudLocation: cloudLocation};
+        vpcIdField.getPlugin('comboaddnew').postUrl = '?cloudLocation=' + cloudLocation;
+        vpcIdField.setVisible(data['platform'] === 'ec2' && (isNewRecord && !this.vpcIdReadOnly || data['vpcId']));
+        vpcIdField.setReadOnly(!!data['vpcId'] || this.vpcIdReadOnly, false);
+
+        var vpcLimits = data['vpcLimits'];
+        if (isNewRecord && data['platform'] === 'ec2' && Ext.isObject(data['vpcLimits'])) {
+            vpcIdField.toggleIcon('governance', true);
+            vpcIdField.allowBlank = vpcLimits['value'] == 0;
+            if (vpcLimits['value'] == 1 && vpcLimits['regions'] && vpcLimits['regions'][cloudLocation]) {
+                if (vpcLimits['regions'][cloudLocation]['ids'] && vpcLimits['regions'][cloudLocation]['ids'].length > 0) {
+                    var vpcList = Ext.Array.map(vpcLimits['regions'][cloudLocation]['ids'], function(vpcId){
+                        return {id: vpcId, name: vpcId};
+                    });
+                    vpcIdField.getStore().getProxy().data = vpcList;
+                    vpcIdField.store.load();
+                    vpcIdField.setValue(vpcIdField.store.first());
+                    vpcIdField.getPlugin('comboaddnew').setDisabled(true);
+                }
+            } else {
+                vpcIdField.setVisible(vpcLimits['value'] == 1);
+                vpcIdField.setReadOnly(true, false);
+            }
+        }
+        
         this.down('#formtitle').setTitle((isNewRecord ? 'New' :'Edit') + ' security group', false);
     },
 
@@ -433,7 +558,9 @@ Ext.define('Scalr.ui.SecurityGroupMultiSelect', {
                     },
                     form: [{
                          xtype: 'sgeditor',
+                         vpcIdReadOnly: true,
                          accountId: me.accountId,
+                         remoteAddress: me.remoteAddress,
                          listeners: {
                              afterrender: function() {
                                  this.setValues(data);

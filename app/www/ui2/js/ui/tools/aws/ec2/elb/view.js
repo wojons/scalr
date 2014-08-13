@@ -1,11 +1,10 @@
 Scalr.regPage('Scalr.ui.tools.aws.ec2.elb.view', function (loadParams, moduleParams) {
 	var store = Ext.create('store.store', {
 		fields: [
-			'name','dtcreated','dnsName','farmId','farmRoleId','farmName','roleName'
+			'name','dtcreated','dnsName','farmId','farmRoleId','farmName','roleName', 'vpcId'
 		],
 		proxy: {
 			type: 'scalr.paging',
-			extraParams: loadParams,
 			url: '/tools/aws/ec2/elb/xListElasticLoadBalancers/'
 		},
 		remoteSort: true
@@ -16,7 +15,6 @@ Scalr.regPage('Scalr.ui.tools.aws.ec2.elb.view', function (loadParams, modulePar
 			'reload': false,
 			'maximize': 'all'
 		},
-		scalrReconfigureParams: { volumeId: '' },
 		store: store,
 		stateId: 'grid-tools-aws-ec2-elb-view',
 		stateful: true,
@@ -48,14 +46,15 @@ Scalr.regPage('Scalr.ui.tools.aws.ec2.elb.view', function (loadParams, modulePar
 				'<tpl if="!farmId"><img src="/ui2/images/icons/false.png" /></tpl>'
 			)},
 			{ flex: 2, header: "DNS name", dataIndex: 'dnsName', sortable: true },
+            { header: "Placement", width: 150, dataIndex: 'vpcId', sortable: true, xtype: 'templatecolumn', tpl: '{[values.vpcId || \'EC2\']}' },
 			{ header: "Created at", width: 150, dataIndex: 'dtcreated', sortable: true },
 			{
-				xtype: 'optionscolumn',
-				optionsMenu: [{
+				xtype: 'optionscolumn2',
+				menu: [{
 					text: 'Details',
 					iconCls: 'x-menu-icon-info',
-					menuHandler:function(item) {			
-						Scalr.event.fireEvent('redirect', '#/tools/aws/ec2/elb/' + item.record.get('name') + '/details?cloudLocation=' + store.proxy.extraParams.cloudLocation);
+					menuHandler:function(data) {
+						Scalr.event.fireEvent('redirect', '#/tools/aws/ec2/elb/' + data['name'] + '/details?cloudLocation=' + store.proxy.extraParams.cloudLocation);
 					} 
 				},{
 					xtype: 'menuseparator'
@@ -72,9 +71,9 @@ Scalr.regPage('Scalr.ui.tools.aws.ec2.elb.view', function (loadParams, modulePar
 							msg: 'Removing Elastic Load Balancer ...'
 						},
 						url: '/tools/aws/ec2/elb/xDelete/',
-						dataHandler: function (record) {
+						dataHandler: function (data) {
 							return {
-								elbName: record.get('name'),
+								elbName: data['name'],
 								cloudLocation: store.proxy.extraParams.cloudLocation
 							};
 						},
@@ -92,7 +91,6 @@ Scalr.regPage('Scalr.ui.tools.aws.ec2.elb.view', function (loadParams, modulePar
 			beforeItems: [{
                 text: 'Add ELB',
                 cls: 'x-btn-green-bg',
-				hidden: !Scalr.flags['betaMode'],
 				handler: function() {
 					Scalr.event.fireEvent('redirect', '#/tools/aws/ec2/elb/create?cloudLocation=' + store.proxy.extraParams.cloudLocation);
 				}
@@ -108,8 +106,7 @@ Scalr.regPage('Scalr.ui.tools.aws.ec2.elb.view', function (loadParams, modulePar
 					data: moduleParams.locations,
 					proxy: 'object'
 				},
-				gridStore: store,
-				cloudLocation: loadParams['cloudLocation'] || ''
+				gridStore: store
 			}]
 		}]
 	});

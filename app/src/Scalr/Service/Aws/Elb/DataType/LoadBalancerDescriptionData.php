@@ -1,12 +1,9 @@
 <?php
 namespace Scalr\Service\Aws\Elb\DataType;
 
-use Scalr\Service\Aws\Elb\Handler\LoadBalancerHandler;
-use Scalr\Service\Aws\Elb;
 use Scalr\Service\Aws\Client\ClientException;
 use Scalr\Service\Aws\DataType\ListDataType;
 use Scalr\Service\Aws\Elb\AbstractElbDataType;
-use Scalr\Service\Aws;
 use Scalr\Service\Aws\ElbException;
 use Scalr\Service\Aws\Elb\DataType\ListenerDescriptionList;
 use Scalr\Service\Aws\Elb\DataType\InstanceList;

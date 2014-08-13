@@ -88,7 +88,7 @@ class ResourceObject
         }
     }
 
-	/**
+    /**
      * Gets ID of the resource
      *
      * @return  int     returns ID of the resource
@@ -98,7 +98,7 @@ class ResourceObject
         return $this->resourceId;
     }
 
-	/**
+    /**
      * Gets ACL resource name
      *
      * @return  string Returns the name of the resource
@@ -108,7 +108,7 @@ class ResourceObject
         return $this->name;
     }
 
-	/**
+    /**
      * Gets description of the ACL resource
      *
      * @return  string The description of the resource
@@ -118,7 +118,7 @@ class ResourceObject
         return $this->description;
     }
 
-	/**
+    /**
      * Gets available permissions definition for the resource
      *
      * @return  array Returns permissions array that looks like array(permissionid => description)

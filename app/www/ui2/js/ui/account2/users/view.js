@@ -23,8 +23,9 @@ Scalr.regPage('Scalr.ui.account2.users.view', function (loadParams, moduleParams
         return teams.join(', ');
     };
 
+    var firstReconfigure = true;
     var reconfigurePage = function(params) {
-        if (params.userId) {
+        if (!firstReconfigure && params.userId) {
             var selModel = grid.getSelectionModel();
             selModel.deselectAll()
             if (params.userId == 'new') {
@@ -37,6 +38,7 @@ Scalr.regPage('Scalr.ui.account2.users.view', function (loadParams, moduleParams
                 }
             }
         }
+        firstReconfigure = false;
     };
 
     var store = Ext.create('Scalr.ui.ChildStore', {
@@ -181,7 +183,22 @@ Scalr.regPage('Scalr.ui.account2.users.view', function (loadParams, moduleParams
 
         columns: [
             {text: 'Name', flex: 1, dataIndex: 'fullname', sortable: true},
-            {text: Scalr.flags['authMode'] == 'ldap' ? 'LDAP login' : 'Email', flex: 1, dataIndex: 'email', sortable: true, xtype: 'templatecolumn', tpl: '{email}&nbsp;<tpl if="type==\'AccountOwner\'"><img style="vertical-align:top" title="Account owner" src="/ui2/images/ui/account/owner.png" /></tpl><tpl if="type==\'AccountAdmin\'"><img style="vertical-align:top" title="Account admin" src="/ui2/images/ui/account/admin.png" /></tpl>'},
+            {
+                text: Scalr.flags['authMode'] == 'ldap' ? 'LDAP login' : 'Email',
+                flex: 1,
+                dataIndex: 'email',
+                sortable: true,
+                xtype: 'templatecolumn',
+                tpl:
+                    '{email}&nbsp;' +
+                    '<tpl if="type==\'AccountOwner\'">'+
+                        '<img style="vertical-align:top" title="Account owner" src="/ui2/images/ui/account/owner.png" />' +
+                    '<tpl elseif="type==\'AccountAdmin\'">' +
+                        '<img style="vertical-align:top" title="Account admin" src="/ui2/images/ui/account/admin.png" />'+
+                    '<tpl elseif="type==\'AccountSuperAdmin\'">' +
+                        '<img style="vertical-align:top" title="Account admin with access to manage environments" src="/ui2/images/ui/account/super-admin.png" />'+
+                    '</tpl>'
+            },
             {text: 'Teams', flex: 1, dataIndex: 'id', sortable: false, xtype: 'templatecolumn', hidden: (Scalr.flags['authMode'] == 'ldap'), tpl:
                 new Ext.XTemplate(
                 '{[this.getUserTeamsList(values.id)]}',
@@ -191,15 +208,11 @@ Scalr.regPage('Scalr.ui.account2.users.view', function (loadParams, moduleParams
                     }
                 }
             )},
-            {text: 'Last login',  width: 150, dataIndex: 'dtlastlogin', sortable: true, xtype: 'templatecolumn', tpl: '{dtlastloginhr}'},
-            { text: 'Status', width: 90, dataIndex: 'status', sortable: true, xtype: 'templatecolumn', tpl:
-                '<span ' +
-                '<tpl if="status == &quot;Active&quot;">' +
-                '<span style="color: green">{status}</span>' +
-                '<tpl else>' +
-                '<span style="color: red">Suspended</span>' +
-                '</tpl>'
-            }
+            { text: '2FA',  width: 70, align: 'center', dataIndex: 'is2FaEnabled', sortable: true, xtype: 'templatecolumn',
+                tpl: '<img src="' + Ext.BLANK_IMAGE_URL + '" class="x-icon-<tpl if="is2FaEnabled">ok<tpl else>minus</tpl>"/>'
+            },
+            { text: 'Last login',  width: 150, dataIndex: 'dtlastlogin', sortable: true, xtype: 'templatecolumn', tpl: '{dtlastloginhr}' },
+            { text: 'Status', width: 100, minWidth: 100, dataIndex: 'status', sortable: true, xtype: 'statuscolumn', statustype: 'user', qtipConfig: {width: 280}}
 
         ],
         dockedItems: [{
@@ -278,6 +291,7 @@ Scalr.regPage('Scalr.ui.account2.users.view', function (loadParams, moduleParams
                 itemId: 'add',
                 text: 'Add user',
                 cls: 'x-btn-green-bg',
+                hidden: Scalr.flags['authMode'] == 'ldap',
                 handler: function() {
                     grid.getSelectionModel().setLastFocused(null);
                     form.loadRecord(store.createModel({status: 'Active', password: false}));
@@ -337,6 +351,7 @@ Scalr.regPage('Scalr.ui.account2.users.view', function (loadParams, moduleParams
             beforeloadrecord: function(record) {
                 var form = this.getForm(),
                     isNewRecord = !record.get('id'),
+                    userType = record.get('type'),
                     currentRecord = form.getRecord(),
                     wasNewRecord = currentRecord ? !currentRecord.get('id') : true,
                     gridTeams = this.down('#userTeamsGrid');
@@ -371,8 +386,9 @@ Scalr.regPage('Scalr.ui.account2.users.view', function (loadParams, moduleParams
                         this.down('#userTeams').show();
                 }
 
-                this.down('#isAccountAdmin').setVisible(record.get('type') != 'AccountOwner');
-                form.findField('isAccountAdmin').setValue(record.get('type') == 'AccountAdmin' ? '1' : '0');
+                this.down('#isAccountAdmin').setVisible(userType != 'AccountOwner');
+                form.findField('isAccountAdmin').setValue(userType == 'AccountAdmin' || userType == 'AccountSuperAdmin' ? '1' : '0');
+                form.findField('isAccountSuperAdmin').setValue(userType == 'AccountSuperAdmin');
                 this.down('#save').setText(isNewRecord ? 'Add user' : 'Save');
             },
             loadrecord: function(record) {
@@ -429,12 +445,29 @@ Scalr.regPage('Scalr.ui.account2.users.view', function (loadParams, moduleParams
                     },{
                         text: 'Off',
                         value: '0'
-                    }]
+                    }],
+                    listeners: {
+                        change: function(comp, value) {
+                            var featuresField = comp.up().down('[name="isAccountSuperAdmin"]');
+                            featuresField.setVisible(value == '1' && isAccountOwner);
+                        }
+                    }
                 },{
-                    xtype: 'component',
-                    style: 'color:#C00000',
+                    xtype: 'container',
                     flex: 1,
-                    html: '<b>Admin access to user management</b><br/>Allow this user to create, modify and remove all account users, teams and ACL\'s.'
+                    items: [{
+                        xtype: 'component',
+                        style: 'color:#C00000',
+                        html: '<b>Admin access to user management</b><br/>Allow this user to create, modify and remove all account users, teams and ACL\'s.'
+                    },{
+                        xtype: 'checkbox',
+                        name: 'isAccountSuperAdmin',
+                        boxLabel: 'Allow to manage environments',
+                        style: 'color:#C00000',
+                        hidden: true,
+                        inputValue: 1,
+                        margin: 0
+                    }]
                 }]
                 //todo: ?hidden: Scalr.flags['authMode'] == 'ldap'
             },{
@@ -446,6 +479,7 @@ Scalr.regPage('Scalr.ui.account2.users.view', function (loadParams, moduleParams
                 name: 'email',
                 fieldLabel: Scalr.flags['authMode'] == 'ldap' ? 'LDAP login' : 'Email',
                 allowBlank: false,
+                readOnly: Scalr.flags['authMode'] == 'ldap',
                 vtype: Scalr.flags['authMode'] == 'ldap' ? '' : 'email'
             }, {
                 xtype: 'passwordfield',
@@ -774,8 +808,8 @@ Scalr.regPage('Scalr.ui.account2.users.view', function (loadParams, moduleParams
                 itemId: 'users'
             }
         },
-        scalrReconfigure: function(params){
-            reconfigurePage(params);
+        listeners: {
+            applyparams: reconfigurePage
         },
         items: [
             grid

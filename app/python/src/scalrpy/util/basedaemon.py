@@ -15,20 +15,17 @@ class BaseDaemon(object):
             pid_file=None,
             stdin='/dev/null',
             stdout='/dev/null',
-            stderr='/dev/null'
-            ):
+            stderr='/dev/null'):
 
         self.pid_file = pid_file
         self.stdin = stdin
         self.stdout = stdout
         self.stderr = stderr
 
-
     def start(self):
         self._daemonize()
         LOG.info('Start')
         self.run()
-
 
     def stop(self):
         LOG.info('Stop')
@@ -49,10 +46,10 @@ class BaseDaemon(object):
 
         try:
             if helper.check_pid(self.pid_file):
-                helper.kill_ps(pid, child=True)
-        except Exception:
+                helper.kill_child(pid)
+                helper.kill(pid)
+        except:
             LOG.error(helper.exc_info())
-
 
     def run(self):
         """
@@ -60,18 +57,12 @@ class BaseDaemon(object):
         """
         pass
 
-
     def _create_pid_file(self):
-        pid = str(os.getpid())
-        if not self.pid_file:
-            self.pid_file = '/var/run/%s.pid' % pid
-        file(self.pid_file,'w+').write("%s\n" % pid)
-
+        helper.create_pid_file(self.pid_file or '/var/run/%s.pid' % os.getpid())
 
     def _delete_pid_file(self):
         LOG.debug('Removing pid file %s' % self.pid_file)
         os.remove(self.pid_file)
-
 
     def _daemonize(self):
         LOG.info('Daemonize')
@@ -111,3 +102,4 @@ class BaseDaemon(object):
         os.dup2(si.fileno(), sys.stdin.fileno())
         os.dup2(so.fileno(), sys.stdout.fileno())
         os.dup2(se.fileno(), sys.stderr.fileno())
+

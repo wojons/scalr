@@ -27,9 +27,9 @@ class SignalHandler
     {
         $this->Logger = \Logger::getLogger('SignalHandler');
 
-    	if (!function_exists("pcntl_signal")) {
+        if (!function_exists("pcntl_signal")) {
             throw new \Exception("Function pcntl_signal() is not found. PCNTL must be enabled in PHP.", E_ERROR);
-    	}
+        }
     }
 
     /**
@@ -37,7 +37,7 @@ class SignalHandler
      */
     final public function SetSignalHandlers()
     {
-    	$this->Logger->debug("Begin add handler to signals...");
+        $this->Logger->debug("Begin add handler to signals...");
 
         foreach (array('SIGCHLD', 'SIGTERM', 'SIGABRT', 'SIGUSR2') as $sig) {
             $res = @pcntl_signal(constant($sig), array($this, "HandleSignals"));

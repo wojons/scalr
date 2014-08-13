@@ -2,8 +2,6 @@
 namespace Scalr\Service\Aws\Ec2\DataType;
 
 use Scalr\Service\Aws\DataType\StringType;
-use Scalr\Service\Aws\Ec2Exception;
-use Scalr\Service\Aws\Ec2\AbstractEc2DataType;
 
 /**
  * VolumeFilterNameType
@@ -99,7 +97,7 @@ class VolumeFilterNameType extends StringType
 
     /**
      * The Amazon EBS volume type. If the volume is an io1 volume, the response includes the IOPS as well.
-     * Valid values: standard | io1
+     * Valid values: standard | io1 | gp2
      */
     const TYPE_VOLUME_TYPE = 'volume-type';
 

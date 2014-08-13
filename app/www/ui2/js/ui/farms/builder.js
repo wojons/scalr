@@ -1,8 +1,15 @@
 Scalr.regPage('Scalr.ui.farms.builder', function (loadParams, moduleParams) {
+    var farmLocked = moduleParams['farm'] && moduleParams['farm']['lock'];
+
 	var reconfigurePage = function(params) {
         var record;
-        if (params['roleId']) {
-            record = farmRolesStore.findRecord('role_id', params['roleId']);
+
+        if (loadParams['roleId']) {
+            farmbuilder.down('#farmroles').fireEvent('addrole', loadParams['roleId']);
+        }
+
+        if (params['farmRoleId']) {
+            record = farmRolesStore.findRecord('farm_role_id', params['farmRoleId']);
             if (record) {
                 farmbuilder.down('#farmroles').select(record);
             }
@@ -108,91 +115,45 @@ Scalr.regPage('Scalr.ui.farms.builder', function (loadParams, moduleParams) {
 
     var addRoleHandler = function (role) {
         var behaviors = role.get('behaviors'),
-            alias = role.get('alias'),
-            isMultiRoleAllowed = function(behaviors){
-                behaviors = behaviors || [];
-                var allowed = behaviors.length > 0,
-                    disallowedBehaviors = ['mysql', 'mysql2', 'percona', 'redis', 'postgresql', 'mariadb', 'mongodb'];
-                Ext.Array.each(behaviors, function(behavior){
-                    if (Ext.Array.contains(disallowedBehaviors, behavior)) {
-                        return allowed = false;
-                    }
-                });
-                return allowed;
-            };
+            alias = role.get('alias');
 
-        if (!(/^[A-Za-z0-9]+[A-Za-z0-9-]*[A-Za-z0-9]+$/).test(alias)) {
-            Scalr.message.Error('Alias should start and end with letter or number and contain only letters, numbers and dashes');
+        if (!Ext.form.field.VTypes.rolename(alias)) {
+            Scalr.message.Error(Ext.form.field.VTypes.rolenameText);
             return false;
         } else if (farmRolesStore.countBy('alias', alias) > 0) {
             Scalr.message.Error('Alias must be unique within the farm');
             return false;
         }
 
-        if (!isMultiRoleAllowed(behaviors)) {
+        if ((Ext.Array.contains(behaviors, 'mysql') || Ext.Array.contains(behaviors, 'mysql2') || Ext.Array.contains(behaviors, 'percona')) && !Ext.Array.contains(behaviors, 'mysqlproxy')) {
             if (
                 farmRolesStore.queryBy(function(record) {
-                    if (
-                        record.get('platform') == role.get('platform') &&
-                        record.get('role_id') == role.get('role_id') &&
-                        (record.get('cloud_location') == role.get('cloud_location') || record.get('platform') === 'gce')
-                    )
+                    if ((record.get('behaviors').match('mysql') || record.get('behaviors').match('mysql2') || record.get('behaviors').match('percona')) && !record.get('behaviors').match('mysqlproxy'))
                         return true;
                 }).length > 0
             ) {
-                Scalr.message.Error('Role "' + role.get('name') + '" already added');
+                Scalr.message.Error('Only one MySQL / Percona role can be added to farm');
                 return false;
             }
+        }
 
-            // check before adding
-            if ((Ext.Array.contains(behaviors, 'mysql') || Ext.Array.contains(behaviors, 'mysql2') || Ext.Array.contains(behaviors, 'percona')) && !Ext.Array.contains(behaviors, 'mysqlproxy')) {
+        var exhistingBehavior;
+        Ext.Array.each(['postgresql', 'redis', 'mongodb', 'rabbitmq', 'mariadb'], function(behavior){
+            if (Ext.Array.contains(behaviors, behavior)) {
                 if (
                     farmRolesStore.queryBy(function(record) {
-                        if ((record.get('behaviors').match('mysql') || record.get('behaviors').match('mysql2') || record.get('behaviors').match('percona')) && !record.get('behaviors').match('mysqlproxy'))
+                        if (record.get('behaviors').match(behavior))
                             return true;
                     }).length > 0
                 ) {
-                    Scalr.message.Error('Only one MySQL / Percona role can be added to farm');
+                    exhistingBehavior = behavior;
                     return false;
                 }
             }
-
-            if (Ext.Array.contains(behaviors, 'postgresql')) {
-                if (
-                    farmRolesStore.queryBy(function(record) {
-                        if (record.get('behaviors').match('postgresql'))
-                            return true;
-                    }).length > 0
-                ) {
-                    Scalr.message.Error('Only one PostgreSQL role can be added to farm');
-                    return false;
-                }
-            }
-
-            if (Ext.Array.contains(behaviors, 'redis')) {
-                if (
-                    farmRolesStore.queryBy(function(record) {
-                        if (record.get('behaviors').match('redis'))
-                            return true;
-                    }).length > 0
-                ) {
-                    Scalr.message.Error('Only one Redis role can be added to farm');
-                    return false;
-                }
-            }
-
-            if (Ext.Array.contains(behaviors, 'mongodb')) {
-                if (
-                    farmRolesStore.queryBy(function(record) {
-                        if (record.get('behaviors').match('mongodb'))
-                            return true;
-                    }).length > 0
-                ) {
-                    Scalr.message.Error('Only one MongoDB role can be added to farm');
-                    return false;
-                }
-            }
-
+        });
+        if (exhistingBehavior) {
+            Scalr.message.Error('Only one ' + Scalr.utils.beautifyBehavior(exhistingBehavior) + ' role can be added to farm');
+            return false;
         }
 
         role.set({
@@ -212,16 +173,23 @@ Scalr.regPage('Scalr.ui.farms.builder', function (loadParams, moduleParams) {
 
     var saveErrorHandler = function(errors) {
         var fbcard = farmbuilder.getComponent('fbcard'),
-            activeRole;
+            activeRole,
+            farmErrors = [],
+            rolesErrors = [],
+            errorTipEl,
+            errorTipText = 'Some errors occured while saving the farm';
+
         (farmRolesStore.snapshot || farmRolesStore.data).each(function (rec) {
             rec.set('errors', undefined);
         });
+
         errors = errors || {};
         if (errors.roles !== undefined) {
             Ext.Object.each(errors.roles, function(farmRoleId, errors){
                 var role = farmRolesStore.query('farm_role_id', farmRoleId).first();
                 if (role) {
                     role.set('errors', errors);
+                    rolesErrors.push('role <b>' + (role.get('alias') || role.get('name')) + '</b>: ' + Ext.Object.getSize(errors) + ' error(s)');
                     if (activeRole === undefined) {
                         activeRole = role;
                     }
@@ -232,22 +200,30 @@ Scalr.regPage('Scalr.ui.farms.builder', function (loadParams, moduleParams) {
             var farmPanel = fbcard.getComponent('farm');
             Ext.Object.each(errors.farm, function(name, error){
                 var field = farmPanel.down('[name="' + name + '"]');
+                field = field || farmPanel.down('#' + name);
                 if (field && field.markInvalid) {
                     field.markInvalid(error);
                 }
+                farmErrors.push(error);
             });
+            
+            fbcard.layout.setActiveItem('farm');
+            errorTipEl = farmPanel.el;
+        } else if (activeRole !== undefined) {
+            var farmRolesPanel = farmbuilder.getComponent('farmroles');
+            farmRolesPanel.select(activeRole);
+            errorTipEl = farmRolesPanel.el;
         }
 
-        if (errors.farm === undefined && activeRole !== undefined) {
-            //var editPanel = fbcard.getComponent('edit');
-            farmbuilder.getComponent('farmroles').select(activeRole);
-        } else {
-            fbcard.layout.setActiveItem('farm');
+        if (farmErrors.length || rolesErrors.length) {
+            errorTipText += ':<ul class="x-tip-errors-list"><li>' + Ext.Array.merge(farmErrors, rolesErrors).join('</li><li>') + '</li></ul>'
+            Scalr.message.ErrorTip(errorTipText, errorTipEl);
+
         }
     };
 
     var saveHandler = function (farm) {
-        var p = {};
+        var p = {}, farmOwnerCmp;
         farm = farm || {};
 
         farmbuilder.down('#farmroles').deselectAll();
@@ -255,19 +231,22 @@ Scalr.regPage('Scalr.ui.farms.builder', function (loadParams, moduleParams) {
         farmbuilder.getComponent('fbcard').layout.setActiveItem('farm');
 
         farm['farmId'] = moduleParams['farmId'];
+        farmOwnerCmp = farmbuilder.down('#farmOwner');
 
         p['name'] = farmbuilder.down('#farmName').getValue();
         p['description'] = farmbuilder.down('#farmDescription').getValue();
+        p['owner'] = farmOwnerCmp && !farmOwnerCmp.readOnly ? farmOwnerCmp.getValue() : null;
         p['timezone'] = farmbuilder.down('#timezone').getValue();
         p['rolesLaunchOrder'] = farmbuilder.down('#launchorder').getValue();
         p['variables'] = farmbuilder.down('#variables').getValue();
+        p['projectId'] = farmbuilder.down('#projectId').getValue();
 
         //vpc
         var vpcEnabledField = farmbuilder.down('[name="vpc_enabled"]'),
             vpcRegionField = farmbuilder.down('[name="vpc_region"]'),
             vpcIdField = farmbuilder.down('[name="vpc_id"]');
         if (vpcEnabledField.getValue()) {
-            var vpcLimits = farmbuilder.getLimits('aws.vpc');
+            var vpcLimits = farmbuilder.getLimits('ec2', 'aws.vpc');
             if (vpcLimits) {
                 if (vpcLimits['value'] == 1 && (!vpcRegionField.getValue() || !vpcIdField.getValue())) {
                     farmbuilder.getComponent('fbcard').layout.setActiveItem('farm');
@@ -414,7 +393,7 @@ Scalr.regPage('Scalr.ui.farms.builder', function (loadParams, moduleParams) {
                         c.layout.setActiveItem('farm');
                     }
                 },
-                addrole: function () {
+                addrole: function (roleId) {
                     this.deselectAll();
                     var card = farmbuilder.down('#fbcard');
                     if (!card.getComponent('add')) {
@@ -424,15 +403,26 @@ Scalr.regPage('Scalr.ui.farms.builder', function (loadParams, moduleParams) {
                             hidden: true,
                             autoRender: false,
                             itemId: 'add',
+                            roleId: roleId,
                             listeners: {
                                 activate: function() {
                                     farmbuilder.updateTitle('Add new role');
                                     farmbuilder.getComponent('farmroles').down('dataview').getPlugin('flyingbutton').setDisabled(true);
+                                    if (this.down('form').isVisible()) {
+                                        farmbuilder.up().getDockedComponent('buttons').getComponent('save').lockButton();
+                                    }
                                 },
                                 deactivate: function() {
                                     farmbuilder.getComponent('farmroles').down('dataview').getPlugin('flyingbutton').setDisabled(false);
+                                    farmbuilder.up().getDockedComponent('buttons').getComponent('save').unlockButton();
                                 },
                                 addrole: addRoleHandler,
+                                showform: function() {
+                                    farmbuilder.up().getDockedComponent('buttons').getComponent('save').lockButton();
+                                },
+                                hideform: function() {
+                                    farmbuilder.up().getDockedComponent('buttons').getComponent('save').unlockButton();
+                                },
                                 beforesetalias: function(name, res){
                                     var count = farmRolesStore.countBy('name', name);
                                     res.alias = name + (count > 0 ? '-' + count : '');
@@ -501,10 +491,89 @@ Scalr.regPage('Scalr.ui.farms.builder', function (loadParams, moduleParams) {
                             allowBlank: false,
                             anchor: '100%',
                             forceSelection: true,
-                            editable: true,
+                            editable: false,
                             queryMode: 'local',
                             anyMatch: true
-                        }, {
+                        }, moduleParams.farm ? {
+                            xtype: 'container',
+                            layout: 'hbox',
+                            items: [{
+                                xtype: 'combo',
+                                flex: 1,
+                                itemId: 'farmOwner',
+                                name: 'owner',
+                                fieldLabel: 'Owner',
+                                labelWidth: 80,
+                                editable: false,
+                                queryMode: 'local',
+                                store: {
+                                    fields: ['id', 'email'],
+                                    data: moduleParams['usersList'],
+                                    proxy: 'object'
+                                },
+                                valueField: 'id',
+                                displayField: 'email',
+                                tooltipText: !moduleParams['farm']['farm']['ownerEditable'] ? 'Only account owner or farm owner can change this field' : null,
+                                readOnly: !moduleParams['farm']['farm']['ownerEditable']
+                            }, {
+                                xtype: 'button',
+                                margin: '0 0 0 6',
+                                width: 80,
+                                hidden: !moduleParams['farm']['farm']['ownerEditable'],
+                                text: 'History',
+                                handler: function() {
+                                    Scalr.Request({
+                                        processBox: {
+                                            action: 'load'
+                                        },
+                                        url: '/farms/xGetOwnerHistory',
+                                        params: {
+                                            farmId: moduleParams['farmId']
+                                        },
+                                        success: function(data) {
+                                            Scalr.utils.Window({
+                                                xtype: 'grid',
+                                                title: 'History',
+                                                margin: 16,
+                                                width: 600,
+                                                //padding: 16,
+                                                store: {
+                                                    fields: ['newId', 'newEmail', 'changedById', 'changedByEmail', 'dt'],
+                                                    data: data.history,
+                                                    reader: 'object'
+                                                },
+                                                viewConfig: {
+                                                    emptyText: 'No changes have been made',
+                                                    deferEmptyText: false
+                                                },
+                                                columns: [
+                                                    { header: 'New Owner', flex: 1, dataIndex: 'newEmail', sortable: true },
+                                                    { header: 'Was set by', flex: 1, dataIndex: 'changedByEmail', sortable: true },
+                                                    { header: 'On', flex: 1, dataIndex: 'dt', sortable: true }
+                                                ],
+                                                dockedItems: [{
+                                                    xtype: 'container',
+                                                    dock: 'bottom',
+                                                    cls: 'x-docked-buttons',
+                                                    layout: {
+                                                        type: 'hbox',
+                                                        pack: 'center'
+                                                    },
+                                                    items: [{
+                                                        xtype: 'button',
+                                                        text: 'Close',
+                                                        width: 150,
+                                                        handler: function() {
+                                                            this.up('grid').close();
+                                                        }
+                                                    }]
+                                                }]
+                                            });
+                                        }
+                                    })
+                                }
+                            }]
+                        } : null, {
                             xtype: 'textarea',
                             name: 'description',
                             itemId: 'farmDescription',
@@ -553,48 +622,121 @@ Scalr.regPage('Scalr.ui.farms.builder', function (loadParams, moduleParams) {
                         }]
                     }]
                 },{
+                    xtype: 'fieldset',
+                    title: 'Cost metering',
+                    hidden: !moduleParams['analytics'] || (!Scalr.flags['betaMode'] && !Scalr.flags['allowManageAnalytics']),
+                    layout: 'hbox',
+                    items: [{
+                        xtype: 'combo',
+                        store: {
+                            fields: [ 'projectId', 'name' ],
+                            data: moduleParams['analytics'] ? moduleParams['analytics']['projects'] : []
+                        },
+                        flex: 1,
+                        maxWidth: 370,
+                        editable: false,
+                        autoSetSingleValue: true,
+                        valueField: 'projectId',
+                        displayField: 'name',
+                        fieldLabel: 'Project',
+                        labelWidth: 60,
+                        name: 'projectId',
+                        itemId: 'projectId',
+                        plugins: [{
+                            ptype: 'comboaddnew',
+                            pluginId: 'comboaddnew',
+                            url: '/analytics/projects/add',
+                            disabled: !Scalr.isAllowed('ANALYTICS_PROJECTS')
+                        }]
+                    },{
+                        xtype: 'displayfield',
+                        fieldLabel: 'Cost center',
+                        value: moduleParams['analytics'] ? moduleParams['analytics']['costCenterName'] : null,
+                        margin: '0 0 0 24',
+                        labelWidth: 90
+
+                   }]
+                },{
                     xtype: 'displayfield',
                     itemId: 'vpcinfo',
                     cls: 'x-form-field-info',
                     maxWidth: 740,
                     margin: '18 32 8',
                     hidden: true,
-                    value: 'VPC settings can be changed on TERMINATED farm only.'
+                    value: 'Amazon VPC settings can be changed on TERMINATED farm only.'
                 },{
                     xtype: 'fieldset',
                     itemId: 'vpc',
                     title: '&nbsp;',
-                    baseTitle: 'Launch this farm inside VPC',
-                    toggleOnTitleClick: true,
+                    baseTitle: 'Launch this farm inside Amazon VPC',
                     checkboxToggle: true,
                     collapsed: true,
                     collapsible: true,
                     hidden: !moduleParams['farmVpcEc2Enabled'],
                     checkboxName: 'vpc_enabled',
                     layout: 'hbox',
+                    markInvalid: function(error) {
+                        Scalr.message.ErrorTip(error, this.down('[name="vpc_enabled"]').getEl(), {anchor: 'bottom'});
+                    },
                     disableToggle: function(disable) {
-                        this.toggleDisabled = disable;
                         this.checkboxCmp.setDisabled(disable);
                     },
                     listeners: {
                         beforecollapse: function() {
-                            if (this.toggleDisabled) {
-                                this.checkboxCmp.setValue(true);
+                            var me = this;
+                            if (me.checkboxCmp.disabled) {
+                                return false;
+                            } else if (!me.forcedCollapse && me.down('[name="vpc_id"]').getValue()) {
+                                me.maybeResetVpcId(function(){
+                                    me.forcedCollapse = true;
+                                    me.collapse();
+                                    me.forcedCollapse = false;
+                                });
                                 return false;
                             }
                         },
                         beforeexpand: function() {
-                            if (this.toggleDisabled) {
-                                this.checkboxCmp.setValue(false);
-                                return false;
-                            }
+                            return !this.checkboxCmp.disabled;
                         }
+                    },
+                    maybeResetVpcId: function(okCb) {
+                        var me = this;
+                        Scalr.utils.Confirm({
+                            form: {
+                                xtype: 'container',
+                                items: {
+                                    xtype: 'component',
+                                    style: 'text-align: center',
+                                    margin: '36 32 0',
+                                    html: '<span class="x-fieldset-subheader1">All VPC-related settings of all roles will be reset<br/>(including <b>Security groups</b> and <b>VPC subnets</b>).<br/>Are you sure you want to continue?</span>'
+                                }
+                            },
+                            ok: 'Continue',
+                            success: function() {
+                                me.resetVpcId();
+                                if (Ext.isFunction(okCb)) {
+                                    okCb();
+                                }
+                            }
+                        });
+                    },
+                    resetVpcId: function() {
+                        this.down('[name="vpc_id"]').reset();
+                        (farmRolesStore.snapshot || farmRolesStore.data).each(function (rec) {
+                            if (rec.get('platform') === 'ec2') {
+                                var settings = rec.get('settings', true);
+                                delete settings['aws.vpc_subnet_id'];
+                                delete settings['router.vpc.networkInterfaceId'];
+                                delete settings['router.scalr.farm_role_id'];
+                                settings['aws.security_groups.list'] = moduleParams['roleDefaultSettings']['security_groups.list'];
+                            }
+                        });
                     },
                     items: [{
                         xtype: 'combo',
                         width: 300,
                         name: 'vpc_region',
-                        emptyText: 'Please, select VPC region',
+                        emptyText: 'Please select a VPC region',
                         editable: false,
                         store: {
                             fields: [ 'id', 'name' ],
@@ -605,25 +747,36 @@ Scalr.regPage('Scalr.ui.farms.builder', function (loadParams, moduleParams) {
                         valueField: 'id',
                         displayField: 'name',
                         listeners: {
+                            beforeselect: function(field, record) {
+                                var me = this,
+                                    fieldset;
+                                if (!me.forcedSelect && me.next('[name="vpc_id"]').getValue()) {
+                                    fieldset = me.up('#vpc');
+                                    fieldset.maybeResetVpcId(function(){
+                                        me.forcedSelect = true;
+                                        me.setValue(record.get('id'));
+                                        me.forcedSelect = false;
+                                    });
+                                    return false;
+                                }
+                            },
                             change: function(field, value) {
                                 var vpcIdField = field.next(),
                                     vpcIdFieldProxy = vpcIdField.store.getProxy(),
-                                    vpcLimits = farmbuilder.getLimits('aws.vpc'),
+                                    vpcLimits = farmbuilder.getLimits('ec2', 'aws.vpc'),
                                     disableAddNew = false;
 
                                 vpcIdField.reset();
                                 vpcIdField.getPlugin('comboaddnew').postUrl = '?cloudLocation=' + value;
                                 vpcIdFieldProxy.params = {cloudLocation: value};
-                                delete vpcIdFieldProxy.data;
+                                delete vpcIdFieldProxy.filterFn;
 
                                 if (vpcLimits && vpcLimits['regions'] && vpcLimits['regions'][value]) {
                                     if (vpcLimits['regions'][value]['ids'] && vpcLimits['regions'][value]['ids'].length > 0) {
-                                        var vpcList = Ext.Array.map(vpcLimits['regions'][value]['ids'], function(vpcId){
-                                            return {id: vpcId, name: vpcId};
-                                        });
-                                        vpcIdFieldProxy.data = vpcList;
-                                        vpcIdField.store.load();
-                                        vpcIdField.setValue(vpcIdField.store.first());
+                                        vpcIdFieldProxy.filterFn = function(record) {
+                                            return Ext.Array.contains(vpcLimits['regions'][value]['ids'], record.get('id'));
+                                        };
+                                        vpcIdField.setValue(vpcLimits['regions'][value]['ids'][0]);
                                         disableAddNew = true;
                                     }
                                 }
@@ -635,7 +788,7 @@ Scalr.regPage('Scalr.ui.farms.builder', function (loadParams, moduleParams) {
                         flex: 1,
                         maxWidth: 430,
                         name: 'vpc_id',
-                        emptyText: 'Please, select VPC ID',
+                        emptyText: 'Please select a VPC ID',
                         margin: '0 0 0 12',
                         editable: false,
 
@@ -655,7 +808,8 @@ Scalr.regPage('Scalr.ui.farms.builder', function (loadParams, moduleParams) {
                         plugins: [{
                             ptype: 'comboaddnew',
                             pluginId: 'comboaddnew',
-                            url: '/tools/aws/vpc/create'
+                            url: '/tools/aws/vpc/create',
+                            applyNewValue: false
                         }],
                         listeners: {
                             addnew: function(item) {
@@ -673,12 +827,25 @@ Scalr.regPage('Scalr.ui.farms.builder', function (loadParams, moduleParams) {
                                     Scalr.message.InfoTip('Select VPC region first.', vpcRegionField.getEl());
                                     return false;
                                 }
+                            },
+                            beforeselect: function(field, record) {
+                                var me = this,
+                                    fieldset;
+                                if (!me.forcedSelect && me.getValue()) {
+                                    fieldset = me.up('#vpc');
+                                    fieldset.maybeResetVpcId(function(){
+                                        me.forcedSelect = true;
+                                        me.setValue(record.get('id'));
+                                        me.forcedSelect = false;
+                                    });
+                                    return false;
+                                }
                             }
                         }
                     }]
                 }, {
                     xtype: 'fieldset',
-                    title: 'Global variables',
+                    title: 'Farm global variables',
                     cls: 'x-fieldset-separator-none',
                     hidden: false,
                     items: [{
@@ -699,10 +866,11 @@ Scalr.regPage('Scalr.ui.farms.builder', function (loadParams, moduleParams) {
                                         }
                                     }
                                     if (flag) {
-                                        item['defaultValue'] = item['value'];
-                                        item['defaultScope'] = item['scope'];
-                                        item['value'] = '';
-                                        variables.push(item);
+                                        variables.push({
+                                            'default': item['current'],
+                                            locked: item['locked'],
+                                            name: item['name']
+                                        });
                                     }
 
                                     this.set('variables', variables);
@@ -714,36 +882,23 @@ Scalr.regPage('Scalr.ui.farms.builder', function (loadParams, moduleParams) {
 
                                     for (var i = 0; i < variables.length; i++) {
                                         if (variables[i]['name'] == item['name']) {
-                                            if (item['flagFinal']) {
-                                                variables[i]['flagFinalGlobal'] = item['flagFinal'];
-                                                variables[i]['flagFinal'] = item['flagFinal'];
-                                                variables[i]['scope'] = item['scope'];
-                                                variables[i]['value'] = '';
-                                                variables[i]['defaultScope'] = item['scope'];
-                                                variables[i]['defaultValue'] = item['value'];
-                                            } else {
-                                                variables[i]['flagFinalGlobal'] = '';
-                                                variables[i]['flagFinal'] = '';
+                                            if (item['locked']) {
+                                                variables[i]['locked'] = item['locked'];
+                                                if (item['default'])
+                                                    variables[i]['default'] = item['default'];
                                             }
 
-                                            if (variables[i]['defaultScope'] == item['scope']) {
-                                                variables[i]['defaultValue'] = item['value'];
-
-                                            } else if ((variables[i]['defaultScope'] == item['defaultScope']) && item.value) {
-                                                // we change item's scope from env to farm, add as defaultScope
-                                                if (variables[i]['scope'] == variables[i]['defaultScope']) {
-                                                    variables[i]['scope'] = item['scope'];
+                                            if (item['current']) {
+                                                if (item['current']['flagFinal'] == 1 || item['current']['flagRequired'] || item['current']['flagHidden'] == 1 ||
+                                                    item['current']['format'] || item['current']['validator']
+                                                ) {
+                                                    variables[i]['locked'] = item['current'];
                                                 }
 
-                                                variables[i]['defaultScope'] = item['scope'];
-                                                variables[i]['defaultValue'] = item['value'];
+                                                if (item['current']['flagHidden'] == 1)
+                                                    item['current']['value'] = '******';
 
-                                            } else if (variables[i]['defaultScope'] == 'farm' && !item.value) {
-                                                variables[i]['defaultScope'] = item['defaultScope'];
-                                                variables[i]['defaultValue'] = item['defaultValue'];
-                                                if (variables[i]['scope'] == 'farm') {
-                                                    variables[i]['scope'] = item['scope'];
-                                                }
+                                                variables[i]['default'] = item['current'];
                                             }
                                         }
                                     }
@@ -756,7 +911,7 @@ Scalr.regPage('Scalr.ui.farms.builder', function (loadParams, moduleParams) {
                                     var variables = this.get('variables', true) || [], result = [];
 
                                     for (var i = 0; i < variables.length; i++) {
-                                        if (! (variables[i]['name'] == item['name'] && variables[i]['scope'] == item['scope'])) {
+                                        if (! (variables[i]['name'] == item['name'] && !variables[i]['current'])) {
                                             result.push(variables[i]);
                                         }
                                     }
@@ -773,7 +928,8 @@ Scalr.regPage('Scalr.ui.farms.builder', function (loadParams, moduleParams) {
                             farm = moduleParams.farm ? Ext.clone(moduleParams.farm.farm) : {isNew: true},
                             vpcFieldset = form.down('#vpc'),
                             disallowVpcToggle = false,
-                            defaultVpcEnabled = false;
+                            defaultVpcEnabled = false,
+                            preloadVpcIdList = false;
                         Ext.apply(farm, {
                             timezone: farm.timezone || moduleParams['timezone_default'],
                             rolesLaunchOrder: farm.rolesLaunchOrder || '0',
@@ -782,7 +938,7 @@ Scalr.regPage('Scalr.ui.farms.builder', function (loadParams, moduleParams) {
                         });
 
                         if (moduleParams['farmVpcEc2Enabled']) {
-                            var vpcLimits = farmbuilder.getLimits('aws.vpc');
+                            var vpcLimits = farmbuilder.getLimits('ec2', 'aws.vpc');
                             if (vpcLimits) {
                                 if (vpcLimits['regions']) {
                                     var vpcRegionField = form.down('[name="vpc_region"]'),
@@ -797,6 +953,7 @@ Scalr.regPage('Scalr.ui.farms.builder', function (loadParams, moduleParams) {
                                     if (!farm.vpc || !farm.vpc.region) {
                                         vpcRegionField.setValue(defaultRegion || vpcRegionField.store.first());
                                     }
+                                    preloadVpcIdList = true;
                                 }
                                 disallowVpcToggle = true;
                                 defaultVpcEnabled = vpcLimits['value'] == 1;
@@ -810,6 +967,7 @@ Scalr.regPage('Scalr.ui.farms.builder', function (loadParams, moduleParams) {
                                 if (disallowVpcToggle && !defaultVpcEnabled) {
                                     disallowVpcToggle = false;
                                 }
+                                preloadVpcIdList = true;
                             } else {
                                 if (farm.isNew) {
                                     farm.vpc_enabled = defaultVpcEnabled;
@@ -821,13 +979,16 @@ Scalr.regPage('Scalr.ui.farms.builder', function (loadParams, moduleParams) {
                             if (farm.status != 0) {
                                 disallowVpcToggle = true;
                                 Ext.Array.each(vpcFieldset.query('[isFormField]'), function(field){
-                                    field.disable();
+                                    if(field.name!=='vpc_enabled') field.disable();
                                 });
                                 form.down('#vpcinfo').show();
                             }
                         }
                         form.setFieldValues(farm);
                         vpcFieldset.disableToggle(disallowVpcToggle);
+                        if (preloadVpcIdList) {
+                            form.down('[name="vpc_id"]').store.load();
+                        }
                         reconfigurePage(loadParams);
                     },
                     activate: function() {
@@ -879,20 +1040,21 @@ Scalr.regPage('Scalr.ui.farms.builder', function (loadParams, moduleParams) {
         }]
     });
 
-    if (moduleParams['farm'] && moduleParams['farm']['lock'])
+    if (farmLocked) {
         Scalr.message.Warning(moduleParams['farm']['lock'] + ' You won\'t be able to save any changes.');
+    }
 
     Ext.apply(moduleParams['tabParams'], {
         farmRolesStore: farmRolesStore,
         behaviors: moduleParams['behaviors'] || {},
-        platforms: moduleParams['platforms'] || {},
         metrics: moduleParams['metrics'] || {},
         farm: moduleParams['farm'] ? moduleParams['farm'].farm : {}
     });
 
 
-    farmbuilder.getLimits = function (name){
+    farmbuilder.getLimits = function (category, name){
         var limits = moduleParams.governance || {};
+        limits = limits[category] || {};
         return name !== undefined ? limits[name] : limits;
     }
 
@@ -900,7 +1062,7 @@ Scalr.regPage('Scalr.ui.farms.builder', function (loadParams, moduleParams) {
 
 	Scalr.event.on('update', function (type, data) {
 		if (type == '/farms/roles/replaceRole' && data['farmId'] == loadParams['farmId']) {
-            var record = farmRolesStore.findRecord('farm_role_id', data['farmRoleId']),
+            var record = farmRolesStore.findRecord('farm_role_id', data['farmRoleId'], false, false, true),
                 farmRoles;
             if (record) {
                 farmRoles = farmbuilder.down('#farmroles');
@@ -932,6 +1094,7 @@ Scalr.regPage('Scalr.ui.farms.builder', function (loadParams, moduleParams) {
         items: farmbuilder,
         dockedItems: [{
             xtype: 'container',
+            itemId: 'buttons',
             dock: 'bottom',
             cls: 'x-docked-buttons-mini',
             layout: {
@@ -940,8 +1103,22 @@ Scalr.regPage('Scalr.ui.farms.builder', function (loadParams, moduleParams) {
             },
             items: [{
                 xtype: 'button',
-                text: 'Save',
-                disabled: moduleParams['farm'] ? !!moduleParams['farm']['lock'] : false,
+                itemId: 'save',
+                text: 'Save farm',
+                disabled: farmLocked,
+                lockButton: function() {
+                    if (!farmLocked) {
+                        this.setTooltip({
+                            text: 'Add selected role to the farm or cancel role adding before saving farm.',
+                            align: 'bc-tc'
+                        }).setDisabled(true);
+                    }
+                },
+                unlockButton: function() {
+                    if (!farmLocked) {
+                        this.setTooltip('').setDisabled(false);
+                    }
+                },
                 handler: function() {
                     saveHandler();
                 }
@@ -989,6 +1166,7 @@ Ext.define('Scalr.ui.FarmRoleModel', {
         'tags',
         'variables',
         'running_servers',
+        'suspended_servers',
         'security_groups'
     ],
 
@@ -1059,106 +1237,156 @@ Ext.define('Scalr.ui.FarmRoleModel', {
         });
     },
 
-    getEucaInstanceType: function(limits) {
+    getInstanceType: function(availableInstanceTypes, limits) {
         var me = this,
             settings = me.get('settings', true),
             tagsString = (me.get('tags', true) || []).join(' '),
             behaviors = me.get('behaviors', true),
-            result = {
-                list: [],
-                value: ''
-            };
+            platform = me.get('platform'),
+            allowedTypes,
+            instanceType = settings[this.getInstanceTypeParamName()],
+            defaultInstanceType,
+            defaultInstanceTypeAllowed,
+            instanceTypes = [];
 
         behaviors = Ext.isArray(behaviors) ? behaviors : behaviors.split(',');
-
-        result.list = [
-            't1.micro', 
-            'm1.small', 'm1.medium', 'm1.large', 'm1.xlarge', 
-            'm2.xlarge', 'm2.2xlarge', 'm2.4xlarge', 
-            'm3.xlarge', 'm3.2xlarge', 
-            'c1.medium', 'c1.xlarge',
-            'hi1.4xlarge', 'hs1.8xlarge', 'cr1.8xlarge'
-        ];
-        result.value = (settings['euca.instance_type'] || 'm1.small');
-
-        if (limits) {
-            if (limits['value'] !== undefined) {
-                result.list = Ext.Array.intersect(limits['value'], result.list);
-            }
-            if (!settings['euca.instance_type']) {
-                if (limits['default'] !== undefined && Ext.Array.contains(result.list, limits['default'])) {
-                    result.value = limits['default'];
+        if (platform === 'ec2') {
+            if (me.get('arch') === 'i386') {
+                if ((tagsString.indexOf('ec2.ebs') != -1 || instanceType == 't1.micro') && !Ext.Array.contains(behaviors, 'cf_cloud_controller')) {
+                    allowedTypes = ['t1.micro', 'm1.small', 'm1.medium', 'c1.medium'];
                 } else {
-                    result.value = result.list.length > 0 ? result.list[0] : null;
+                    allowedTypes = ['m1.small', 'm1.medium', 'c1.medium'];
                 }
-            }
-        }
-        return result;
-    },
-    
-    getEc2InstanceType: function(limits) {
-        var me = this,
-            settings = me.get('settings', true),
-            tagsString = (me.get('tags', true) || []).join(' '),
-            behaviors = me.get('behaviors', true),
-            result = {
-                list: [],
-                value: ''
-            };
-
-        behaviors = Ext.isArray(behaviors) ? behaviors : behaviors.split(',');
-
-        if (me.get('arch') === 'i386') {
-            if ((tagsString.indexOf('ec2.ebs') != -1 || settings['aws.instance_type'] == 't1.micro') && !Ext.Array.contains(behaviors, 'cf_cloud_controller')) {
-                result.list = ['t1.micro', 'm1.small', 'm1.medium', 'c1.medium'];
+                defaultInstanceType = 'm1.small';
             } else {
-                result.list = ['m1.small', 'm1.medium', 'c1.medium'];
-            }
-            result.value = settings['aws.instance_type'] || 'm1.small';
-        } else {
-            result.value = settings['aws.instance_type'] || 'm1.small';
+                defaultInstanceType = 'm1.small';
 
-            if (tagsString.indexOf('ec2.ebs') != -1 || settings['aws.instance_type'] == 't1.micro') {
-                if (tagsString.indexOf('ec2.hvm') != -1 && me.get('os') != '2008Server' && me.get('os') != '2008ServerR2' && me.get('os_family') != 'windows') {
-                    result.list = ['cc1.4xlarge', 'cc2.8xlarge', 'cg1.4xlarge', 'hi1.4xlarge', 'cr1.8xlarge', 'g2.2xlarge'];
-                    if (settings['aws.instance_type'] != 'm1.large') {
-                        result.value = settings['aws.instance_type'] || 'cc1.4xlarge';
+                if (tagsString.indexOf('ec2.ebs') != -1 || instanceType == 't1.micro') {
+                    if (tagsString.indexOf('ec2.hvm') != -1 && me.get('os') != '2008Server' && me.get('os') != '2008ServerR2' && me.get('os_family') != 'windows') {
+                        allowedTypes = [
+                            't2.micro', 't2.small', 't2.medium',
+                            'cc1.4xlarge', 'cc2.8xlarge', 'cg1.4xlarge', 'hi1.4xlarge',
+                            'cr1.8xlarge', 'g2.2xlarge',
+                            'i2.xlarge', 'i2.2xlarge', 'i2.4xlarge', 'i2.8xlarge',
+                            'm3.medium', 'm3.large', 'm3.xlarge', 'm3.2xlarge',
+                            'c3.large', 'c3.xlarge', 'c3.2xlarge', 'c3.4xlarge', 'c3.8xlarge',
+                            'r3.large', 'r3.xlarge', 'r3.2xlarge', 'r3.4xlarge', 'r3.8xlarge'
+                        ];
+                        defaultInstanceType = 'c3.large';
+                        
                     } else {
-                        result.value = 'cc1.4xlarge';
+                        allowedTypes = [
+                            't1.micro',
+                            'm1.small', 'm1.medium', 'm1.large', 'm1.xlarge',
+                            'm2.xlarge', 'm2.2xlarge', 'm2.4xlarge',
+                            'm3.medium', 'm3.large', 'm3.xlarge', 'm3.2xlarge',
+                            'c1.medium', 'c1.xlarge',
+                            'c3.large', 'c3.xlarge', 'c3.2xlarge', 'c3.4xlarge', 'c3.8xlarge',
+                            //'r3.large', 'r3.xlarge', 'r3.2xlarge', 'r3.4xlarge', 'r3.8xlarge',
+                            'i2.xlarge', 'i2.2xlarge', 'i2.4xlarge', 'i2.8xlarge',
+                            'g2.2xlarge',
+                            'cc1.4xlarge', 'cc2.8xlarge', 'cg1.4xlarge', 'hi1.4xlarge', 'cr1.8xlarge', 'hs1.8xlarge'
+                        ];
+                        defaultInstanceType = 'm1.small';
                     }
                 } else {
-                    result.list = [
-						't1.micro', 
-						'm1.small', 'm1.medium', 'm1.large', 'm1.xlarge',
-						'm2.xlarge', 'm2.2xlarge', 'm2.4xlarge', 
-						'm3.xlarge', 'm3.2xlarge',
-						'c1.medium', 'c1.xlarge',
-						'c3.large', 'c3.xlarge', 'c3.2xlarge', 'c3.4xlarge', 'c3.8xlarge',
-						'i2.large', 'i2.xlarge', 'i2.2xlarge', 'i2.4xlarge', 'i2.8xlarge',
-						'g2.2xlarge',
-						'cc1.4xlarge', 'cc2.8xlarge', 'cg1.4xlarge', 'hi1.4xlarge', 'cr1.8xlarge'
-                    ];
-                    result.value = (settings['aws.instance_type'] || 'm1.small');
+                    if (tagsString.indexOf('ec2.hvm') != -1) {
+                        allowedTypes = [
+                            't2.micro', 't2.small', 't2.medium',
+                            'm1.small', 'm1.medium', 'm1.large', 'm1.xlarge',
+                            'm2.xlarge', 'm2.2xlarge', 'm2.4xlarge',
+                            'm3.medium', 'm3.large', 'm3.xlarge', 'm3.2xlarge',
+                            'c1.medium', 'c1.xlarge',
+                            'c3.large', 'c3.xlarge', 'c3.2xlarge', 'c3.4xlarge', 'c3.8xlarge',
+                            'r3.large', 'r3.xlarge', 'r3.2xlarge', 'r3.4xlarge', 'r3.8xlarge',
+                            'hi1.4xlarge', 'hs1.8xlarge'
+                        ];
+                    } else {
+                        allowedTypes = [
+                            'm1.small', 'm1.medium', 'm1.large', 'm1.xlarge',
+                            'm2.xlarge', 'm2.2xlarge', 'm2.4xlarge',
+                            'm3.medium', 'm3.large', 'm3.xlarge', 'm3.2xlarge',
+                            'c1.medium', 'c1.xlarge',
+                            'c3.large', 'c3.xlarge', 'c3.2xlarge', 'c3.4xlarge', 'c3.8xlarge',
+                            'hi1.4xlarge', 'hs1.8xlarge'
+                        ];
+                    }
+                    defaultInstanceType = 'm1.small';
                 }
-            } else {
-                result.list = ['m1.large', 'm1.xlarge', 'c1.xlarge', 'm2.xlarge', 'm2.2xlarge', 'm2.4xlarge'];
-                result.value = settings['aws.instance_type'] || 'm1.large';
             }
+        } else if (platform === 'eucalyptus') {
+            allowedTypes = [
+                't1.micro',
+                'm1.small', 'm1.medium', 'm1.large', 'm1.xlarge',
+                'm2.xlarge', 'm2.2xlarge', 'm2.4xlarge',
+                'm3.xlarge', 'm3.2xlarge',
+                'c1.medium', 'c1.xlarge',
+                'hi1.4xlarge', 'hs1.8xlarge', 'cr1.8xlarge'
+            ];
+            defaultInstanceType = 'm1.small';
+
+        } else if (platform === 'gce') {
+            defaultInstanceType = 'n1-standard-1';
         }
 
-        if (limits) {
-            if (limits['value'] !== undefined) {
-                result.list = Ext.Array.intersect(limits['value'], result.list);
-            }
-            if (!settings['aws.instance_type']) {
-                if (limits['default'] !== undefined && Ext.Array.contains(result.list, limits['default'])) {
-                    result.value = limits['default'];
-                } else {
-                    result.value = result.list.length > 0 ? result.list[0] : null;
+        Ext.each(availableInstanceTypes, function(item) {
+            var allowed = true;
+            if (instanceType !== item.id) {
+                if (allowedTypes !== undefined && !Ext.Array.contains(allowedTypes, item.id)) {
+                    allowed = false;
+                }
+                if (allowed && limits && limits['value'] !== undefined && !Ext.Array.contains(limits['value'], item.id)) {
+                    allowed = false;
                 }
             }
+            if (allowed) {
+                if (defaultInstanceType == item.id) {
+                    defaultInstanceTypeAllowed = true;
+                }
+                instanceTypes.push(item);
+                if (limits && !instanceType && limits['default'] == item.id ) {
+                    instanceType = limits['default'];
+                }
+            }
+        });
+
+        if (!instanceType) {
+            if (defaultInstanceType && defaultInstanceTypeAllowed) {
+                instanceType = defaultInstanceType;
+            } else if (instanceTypes.length) {
+                instanceType = instanceTypes[0].id;
+            }
         }
-        return result;
+        
+        return {
+            value: instanceType,
+            list: instanceTypes
+        };
+    },
+
+    getGceCloudLocation: function() {
+        var cloudLocation = this.get('settings', true)['gce.cloud-location'] || '';
+        if (cloudLocation.match(/x-scalr-custom/)) {
+            cloudLocation = cloudLocation.replace('x-scalr-custom=', '').split(':');
+        } else {
+            if (Ext.isEmpty(cloudLocation)) {
+                cloudLocation = 'us-central1-a';
+            }
+            cloudLocation = [cloudLocation];
+        }
+        return cloudLocation;
+    },
+
+    setGceCloudLocation: function(value) {
+        var settings = this.get('settings');
+        if (value.length === 1) {
+            settings['gce.cloud-location'] = value[0];
+        } else if (value.length > 1) {
+            settings['gce.cloud-location'] = 'x-scalr-custom=' + value.join(':');
+        } else {
+            settings['gce.cloud-location'] = '';
+        }
+        this.set('settings', settings);
     },
 
     isEc2EbsOptimizedFlagVisible: function(instType) {
@@ -1166,19 +1394,64 @@ Ext.define('Scalr.ui.FarmRoleModel', {
             result = false,
             tagsString = (me.get('tags', true) || []).join(' ');
         if (instType === undefined) {
-            instType = me.getEc2InstanceType()['value'];
+            instType = me.get('settings', true)['aws.instance_type'];
         }
         if (tagsString.indexOf('ec2.ebs') !== -1) {
-            result = Ext.Array.contains(['m1.large', 'm1.xlarge', 'm2.4xlarge', 'm3.xlarge','m3.2xlarge'], instType);
+            result = Ext.Array.contains([
+            'c1.xlarge', 'c3.xlarge', 'c3.2xlarge', 'c3.4xlarge',
+            'r3.large', 'r3.xlarge', 'r3.2xlarge', 'r3.4xlarge', 'r3.8xlarge',
+            'g2.2xlarge', 'i2.xlarge', 'i2.2xlarge', 'i2.4xlarge',
+            'm1.large', 'm1.xlarge', 'm2.4xlarge', 'm2.4xlarge', 'm3.xlarge','m3.2xlarge'], instType);
         }
         return result;
+    },
+
+    isEc2ClusterPlacementGroupVisible: function(instType) {
+        var me = this,
+            result = false;
+        if (instType === undefined) {
+            instType = me.get('settings', true)['aws.instance_type'];
+        }
+        result = Ext.Array.contains([
+            'c3.large', 'c3.xlarge', 'c3.2xlarge', 'c3.4xlarge', 'c3.8xlarge','cc2.8xlarge',
+            'cg1.4xlarge', 'g2.2xlarge','cr1.8xlarge', 'r3.large', 'r3.xlarge', 'r3.2xlarge',
+            'r3.4xlarge', 'r3.8xlarge','hi1.4xlarge', 'hs1.8xlarge', 'i2.xlarge', 'i2.2xlarge',
+            'i2.4xlarge', 'i2.8xlarge'], instType);
+        return result;
+    },
+
+    getInstanceTypeParamName: function() {
+        var platform = this.get('platform'),
+            name;
+        switch (platform) {
+            case 'ec2':
+                name = 'aws.instance_type';
+            break;
+            case 'eucalyptus':
+                name = 'euca.instance_type';
+            break;
+            case 'gce':
+                name = 'gce.machine-type';
+            break;
+            case 'rackspace':
+                name = 'rs.flavor-id';
+            break;
+            default:
+                if (Scalr.isOpenstack(platform)) {
+                    name = 'openstack.flavor-id';
+                } else if (Scalr.isCloudstack(platform)) {
+                    name = 'cloudstack.service_offering_id';
+                }
+            break;
+        }
+        return name;
     },
 
     getDefaultStorageEngine: function() {
         var engine = '',
             platform = this.get('platform', true);
 
-        if (platform === 'ec2') {
+        if (platform === 'ec2' || platform === 'eucalyptus') {
             engine = 'ebs';
         } else if (platform === 'rackspace') {
             engine = 'eph';
@@ -1265,6 +1538,13 @@ Ext.define('Scalr.ui.FarmRoleModel', {
         });
     },
 
+    isVpcRouter: function() {
+        var behaviors = this.get('behaviors', true);
+        
+        behaviors = Ext.isArray(behaviors) ? behaviors : behaviors.split(',');
+        return Ext.Array.contains(behaviors, 'router');
+    },
+
     ephemeralDevicesMap: {
         ec2: {
             'm1.small': {'ephemeral0':{'size': 150}},
@@ -1328,28 +1608,19 @@ Ext.define('Scalr.ui.FarmRoleModel', {
         } else if (platform === 'rackspace') {
             storages.push({name:'eph', description:'Ephemeral device'});
         } else if (platform === 'gce') {
-            //remove gce eph
-            /*if (this.isMySql()) {
-                storages = [{name:'lvm', description:'LVM on ephemeral devices'}];
-            } else {
-                storages.push({name:'eph', description:'Ephemeral device'});
-            }*/
-
             storages.push({name:'gce_persistent', description:'GCE Persistent disk'});
-            if (Scalr.flags['betaMode']) {
-                storages.push({name:'raid.gce_persistent', description:'RAID array on GCE Persistent disk'});
-            }
         } else if (Scalr.isOpenstack(platform)) {
-            storages.push({name:'cinder', description:'Cinder volume'});
-
-            if (this.isMySql()) {
-                storages.push({name:'lvm', description:'LVM on loop device (75% from /)'});
-            } else {
-                storages.push({name:'eph', description:'Ephemeral device'});
+            if (Scalr.getPlatformConfigValue(platform, 'ext.cinder_enabled') == 1) {
+                storages.push({name:'cinder', description:'Cinder volume'});
             }
-
-
-        } else if (Ext.Array.contains(['cloudstack', 'idcf', 'ucloud'], platform)) {
+            if (Scalr.getPlatformConfigValue(platform, 'ext.swift_enabled') == 1) {
+                if (this.isMySql()) {
+                    storages.push({name:'lvm', description:'LVM on loop device (75% from /)'});
+                } else {
+                    storages.push({name:'eph', description:'Ephemeral device'});
+                }
+            }
+        } else if (Scalr.isCloudstack(platform)) {
             storages.push({name:'csvol', description:'CloudStack Block Volume'});
         }
         return storages;
@@ -1361,12 +1632,12 @@ Ext.define('Scalr.ui.FarmRoleModel', {
             arch = this.get('arch'),
             osVersion = this.get('os_generation'),
             extraFs = (osFamily === 'centos' && arch === 'x86_64') ||
-                      (osFamily === 'ubuntu' && (osVersion == '10.04' || osVersion == '12.04')),
+                      (osFamily === 'ubuntu' && (osVersion == '10.04' || osVersion == '12.04' || osVersion == '14.04')),
             disabledText = extraFs && !featureMFS ? 'Not available for your pricing plan' : '';
         list = [
             {value: 'ext3', text: 'Ext3'},
-            {value: 'ext4', text: 'Ext4', disabled: !extraFs || !featureMFS, tooltip: disabledText},
-            {value: 'xfs', text: 'XFS', disabled: !extraFs || !featureMFS, tooltip: disabledText}
+            {value: 'ext4', text: 'Ext4', unavailable: !extraFs || !featureMFS, disabled: !extraFs || !featureMFS, tooltip: disabledText},
+            {value: 'xfs', text: 'XFS', unavailable: !extraFs || !featureMFS, disabled: !extraFs || !featureMFS, tooltip: disabledText}
         ];
         return list;
     },
@@ -1429,4 +1700,108 @@ Ext.define('Scalr.ui.FarmRoleModel', {
         behaviors = Ext.isArray(behaviors) ? behaviors : behaviors.split(',');
         return Ext.Array.contains(behaviors, behavior);
     },
+
+    loadRoleChefSettings: function(cb) {
+        var record = this,
+            chefSettings = {};
+        Scalr.CachedRequestManager.get('farmbuilder').load(
+            {
+                url: '/farms/builder/xGetRoleChefSettings/',
+                params: {
+                    roleId: record.get('role_id')
+                }
+            },
+            function(data, status) {
+                var roleChefEnabled = Ext.isObject(data['chef']) && data['chef']['chef.bootstrap'] == 1,
+                    settings;
+                if (status) {
+                    settings = record.get('settings', true);
+                    if (roleChefEnabled) {
+                        Ext.apply(chefSettings, data['chef']);
+                    } else {
+                        Ext.Object.each(settings || {}, function(key, value){
+                            if (key.indexOf('chef.') === 0) {
+                                chefSettings[key] = value;
+                            }
+                        });
+                    }
+                    if (roleChefEnabled && settings['chef.attributes']) {
+                        chefSettings['chef.attributes'] = settings['chef.attributes'];
+                    }
+                }
+                cb({chefSettings: chefSettings, roleChefEnabled: roleChefEnabled}, status);
+            }
+        );
+
+    },
+
+    loadEBSEncryptionSupport: function(cb) {
+        var platform = this.get('platform'),
+            cloudLocation = this.get('cloud_location'),
+            instType = this.get('settings', true)['aws.instance_type'],
+            encryption = false;
+        Scalr.loadInstanceTypes(platform, cloudLocation, function(data, status){
+            Ext.each(data, function(i){
+                if (i.id === instType) {
+                    encryption = i.ebsencryption;
+                    return false;
+                }
+            });
+            cb(encryption);
+        });
+        
+    }
+});
+
+Ext.define('Scalr.ui.FormInstanceTypeField', {
+	extend: 'Ext.form.field.ComboBox',
+	alias: 'widget.instancetypefield',
+
+    editable: true,
+    hideInputOnReadOnly: true,
+    queryMode: 'local',
+    fieldLabel: 'Instance type',
+    anyMatch: true,
+    autoSearch: false,
+    icons: {
+        governance: true
+    },
+    store: {
+        fields: [ 'id', 'name', 'note', 'ram', 'type', 'vcpus', 'disk', 'ebsencryption' ],
+        proxy: 'object'
+    },
+    valueField: 'id',
+    displayField: 'name',
+    listConfig: {
+        //emptyText: 'No instance types found.',
+        cls: 'x-boundlist-alt',
+        tpl:
+            '<tpl for="."><div class="x-boundlist-item" style="height: auto; width: auto">' +
+                '<div style="font-weight: bold">{name}</div>' +
+                '<div style="line-height: 26px;white-space:nowrap;">{[this.instanceTypeInfo(values)]}</div>' +
+            '</div></tpl>'
+    },
+    initComponent: function() {
+        this.callParent(arguments);
+        this.on('specialkey', function(comp, e){
+            if(e.getKey() === e.ESC){
+                comp.reset();
+            }
+        });
+        this.on('blur', function(comp){
+            if (!comp.findRecordByValue(comp.getValue())) {
+                comp.reset();
+            }
+        });
+        this.on('afterrender', function(comp){
+            comp.inputEl.on('click', function(){
+                comp.expand();
+            });
+        });
+        this.on('change', function(comp){
+            if (comp.findRecordByValue(comp.getValue())) {
+                comp.resetOriginalValue();
+            }
+        });
+    }
 });

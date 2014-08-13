@@ -11,7 +11,7 @@ Ext.define('Scalr.ui.RoleDesignerTabChef', {
         this.addListener({
             showtab: {
                 fn: function(params){
-                    this.down('chefsettings').setValue(params['chef'] || {});
+                    this.down('chefsettings').setValue(params['role']['chef'] || {});
                 },
                 single: true
             },
@@ -23,5 +23,8 @@ Ext.define('Scalr.ui.RoleDesignerTabChef', {
     },
     getSubmitValues: function() {
         return {chef: this.down('chefsettings').getValue()};
+    },
+    isValid: function() {
+        return this.down('chefsettings').isValid();
     }
 });

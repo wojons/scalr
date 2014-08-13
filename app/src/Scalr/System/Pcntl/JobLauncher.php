@@ -78,14 +78,16 @@ class JobLauncher
             exit();
         } else {
             $this->ProcessName = $opts[0];
+            /*
             if (in_array("piddir", $opts)) {
                 $piddir = trim($Getopt->getOption("piddir"));
                 if (substr($piddir, 0, 1) != '/') {
-                    $this->PIDDir = realpath($process_classes_folder . "/" . $piddir);
+                    //$this->PIDDir = realpath($process_classes_folder . "/" . $piddir);
                 } else {
-                    $this->PIDDir = $piddir;
+                    //$this->PIDDir = $piddir;
                 }
             }
+            */
         }
     }
 

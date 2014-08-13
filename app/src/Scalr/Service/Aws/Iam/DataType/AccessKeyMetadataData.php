@@ -1,7 +1,6 @@
 <?php
 namespace Scalr\Service\Aws\Iam\DataType;
 
-use Scalr\Service\Aws\IamException;
 use Scalr\Service\Aws\Iam\AbstractIamDataType;
 
 /**

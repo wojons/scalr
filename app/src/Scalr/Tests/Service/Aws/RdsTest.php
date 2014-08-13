@@ -5,24 +5,18 @@ use Scalr\Service\Aws\Rds\DataType\DescribeEventRequestData;
 use Scalr\Service\Aws\Rds\DataType\DBSnapshotData;
 use Scalr\Service\Aws\Rds\DataType\ParameterData;
 use Scalr\Service\Aws\Rds\DataType\DBParameterGroupData;
-use Scalr\Service\Aws\Rds\DataType\DBSecurityGroupIngressRequestData;
 use Scalr\Service\Aws\Rds\DataType\EC2SecurityGroupData;
 use Scalr\Service\Aws\Rds\DataType\IPRangeData;
 use Scalr\Service\Aws\Rds\DataType\DBSecurityGroupData;
 use Scalr\Service\Aws\Rds\DataType\VpcSecurityGroupMembershipData;
 use Scalr\Service\Aws\Rds\DataType\DBParameterGroupStatusData;
 use Scalr\Service\Aws\Rds\DataType\DBSecurityGroupMembershipData;
-use Scalr\Service\Aws\Rds\DataType\ModifyDBInstanceRequestData;
 use Scalr\Service\Aws\DataType\ErrorData;
 use Scalr\Service\Aws\Rds\DataType\DBInstanceData;
 use Scalr\Service\Aws\Rds\DataType\CreateDBInstanceRequestData;
-use Scalr\Service\Aws\Rds\DataType as RdsDataType;
 use Scalr\Service\Aws\Client\ClientException;
-use Scalr\Service\Aws\Client\ClientResponseInterface;
-use Scalr\Service\Aws;
 use Scalr\Service\Aws\Rds;
 use Scalr\Tests\Service\AwsTestCase;
-use \SplFileInfo;
 
 /**
  * Amazon Rds Test

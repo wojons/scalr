@@ -1,7 +1,7 @@
 Scalr.regPage('Scalr.ui.farms.builder.tabs.scaling', function (moduleTabParams) {
-	return Ext.create('Scalr.ui.FarmsBuilderTab', {
-		tabTitle: 'Scaling',
-		itemId: 'scaling',
+    return Ext.create('Scalr.ui.FarmsBuilderTab', {
+        tabTitle: 'Scaling',
+        itemId: 'scaling',
 
         layout: {
             type: 'hbox',
@@ -23,12 +23,14 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.scaling', function (moduleTabParams) 
             'scaling.upscale.timeout_enabled': undefined,
             'scaling.upscale.timeout': undefined,
             'scaling.downscale.timeout_enabled': undefined,
-            'scaling.downscale.timeout': undefined
-         },
+            'scaling.downscale.timeout': undefined,
+            'base.resume_strategy': undefined,
+            'base.terminate_strategy': undefined
+        },
 
         isEnabled: function (record) {
-			return  record.get('platform') != 'rds' && !record.get('behaviors').match('mongodb');
-		},
+            return  record.get('platform') != 'rds' && !record.get('behaviors').match('mongodb');
+        },
 
         onRoleUpdate: function(record, name, value, oldValue) {
             if (this.suspendOnRoleUpdate > 0 || !this.isVisible()) {
@@ -57,11 +59,13 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.scaling', function (moduleTabParams) 
 
             return isCfRole || isRabbitMqRole;
         },
-		showTab: function (record) {
-			var settings = record.get('settings'),
+        showTab: function (record) {
+            var settings = record.get('settings'),
                 scaling = record.get('scaling'),
                 metrics = moduleTabParams['metrics'],
-                readonly = this.isTabReadonly(record);
+                readonly = this.isTabReadonly(record),
+                platform = record.get('platform'),
+                field, disableStrategy;
             this.suspendLayouts();
 
             if (record.get('behaviors').match("rabbitmq")) {
@@ -69,7 +73,6 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.scaling', function (moduleTabParams) 
             }
             this.down('[name="scaling.enabled"]').setValue(settings['scaling.enabled'] == 1 ? '1' : '0').setReadOnly(readonly);
             this.down('#scalinggrid').setReadOnly(readonly);
-            //this.down('#scalingsettings').setVisible(!readonly);
 
             var isCfRole = (record.get('behaviors').match("cf_cloud_controller") || record.get('behaviors').match("cf_health_manager"));
             Ext.each(this.query('field'), function(item){
@@ -77,8 +80,20 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.scaling', function (moduleTabParams) 
             });
 
             this.down('#scaling_safe_shutdown_compositefield').setVisible(true);
-            this.down('[name="scaling.ignore_full_hour"]').setVisible(record.get('platform') === 'ec2');
+            this.down('[name="scaling.ignore_full_hour"]').setVisible(platform === 'ec2');
 
+            disableStrategy = platform !== 'ec2' && !Scalr.isOpenstack(platform);
+            field = this.down('[name="base.terminate_strategy"]');
+            field.setValue(disableStrategy ? 'terminate' : settings['base.terminate_strategy'] || 'terminate');
+            field.updateIconTooltip('question', 'This setting is not supported by ' + Scalr.utils.getPlatformName(platform)+ ' cloud');
+            field.setDisabled(disableStrategy);
+
+			field = this.down('[name="base.consider_suspended"]');
+            field.setValue(disableStrategy ? 'terminated' : settings['base.consider_suspended'] || 'running');
+            field.updateIconTooltip('question', 'This setting is not supported by ' + Scalr.utils.getPlatformName(platform)+ ' cloud');
+            field.toggleIcon('question', disableStrategy);
+            field.setDisabled(disableStrategy);
+            
             //set values
             this.setFieldValues({
                 'scaling.min_instances': settings['scaling.min_instances'] || 1,
@@ -99,7 +114,7 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.scaling', function (moduleTabParams) 
 
             this.down('[name="scaling.exclude_dbmsr_master"]').setVisible(record.isDbMsr(true));
 
-			this.down('[name="scaling_algo"]').store.load({ data: metrics });
+            this.down('[name="scaling_algo"]').store.load({ data: metrics });
 
             var dataToLoad = [];
             Ext.Object.each(scaling, function(id, settings){
@@ -112,17 +127,11 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.scaling', function (moduleTabParams) 
             })
             this.down('grid').store.loadData(dataToLoad);
 
-			this.down('#timezone').setText('Time zone: <span style="color:#666">' + this.up('#fbcard').down('#farm').down('#timezone').getValue() +
-					'</span> <a href="#">Change</a>', false);
+            this.down('#timezone').setText('Time zone: <span style="color:#666">' + this.up('#fbcard').down('#farm').down('#timezone').getValue() +
+                '</span> <a href="#">Change</a>', false);
 
-            //workaround of restore collapsed state problem
-            var scalingSettings = this.down('#scalingsettings');
-            if (scalingSettings.collapsed) {
-                scalingSettings.expand();
-                scalingSettings.collapse();
-            }
             this.resumeLayouts(true);
-		},
+        },
 
         onScalingUpdate: function() {
             var record = this.currentRole,
@@ -136,51 +145,54 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.scaling', function (moduleTabParams) 
             this.suspendOnRoleUpdate--;
         },
 
-		hideTab: function (record) {
-			var settings = record.get('settings'),
+        hideTab: function (record) {
+            var settings = record.get('settings'),
                 scaling = {},
                 grid = this.down('grid'),
                 store = grid.getStore(),
                 selModel = grid.getSelectionModel();
-        
+
             selModel.setLastFocused(null);
             selModel.deselectAll();
             (store.snapshot || store.data).each(function(item){
                 scaling[item.get('id')] = item.get('settings');
             });
 
-			settings['scaling.enabled'] = this.down('[name="scaling.enabled"]').getValue();
+            settings['scaling.enabled'] = this.down('[name="scaling.enabled"]').getValue();
 
-			settings['scaling.min_instances'] = this.down('[name="scaling.min_instances"]').getValue();
-			settings['scaling.max_instances'] = this.down('[name="scaling.max_instances"]').getValue();
-			settings['scaling.polling_interval'] = this.down('[name="scaling.polling_interval"]').getValue();
-			settings['scaling.keep_oldest'] = this.down('[name="scaling.keep_oldest"]').getValue() == true ? 1 : 0;
-			settings['scaling.ignore_full_hour'] = this.down('[name="scaling.ignore_full_hour"]').getValue() == true ? 1 : 0;
-			settings['scaling.safe_shutdown'] = this.down('[name="scaling.safe_shutdown"]').getValue() == true ? 1 : 0;
-			settings['scaling.exclude_dbmsr_master'] = this.down('[name="scaling.exclude_dbmsr_master"]').getValue() == true ? 1 : 0;
-			settings['scaling.one_by_one'] = this.down('[name="scaling.one_by_one"]').getValue() == true ? 1 : 0;
+            settings['base.terminate_strategy'] = this.down('[name="base.terminate_strategy"]').getValue();
+			settings['base.consider_suspended'] = this.down('[name="base.consider_suspended"]').getValue();
+            
+            settings['scaling.min_instances'] = this.down('[name="scaling.min_instances"]').getValue();
+            settings['scaling.max_instances'] = this.down('[name="scaling.max_instances"]').getValue();
+            settings['scaling.polling_interval'] = this.down('[name="scaling.polling_interval"]').getValue();
+            settings['scaling.keep_oldest'] = this.down('[name="scaling.keep_oldest"]').getValue() == true ? 1 : 0;
+            settings['scaling.ignore_full_hour'] = this.down('[name="scaling.ignore_full_hour"]').getValue() == true ? 1 : 0;
+            settings['scaling.safe_shutdown'] = this.down('[name="scaling.safe_shutdown"]').getValue() == true ? 1 : 0;
+            settings['scaling.exclude_dbmsr_master'] = this.down('[name="scaling.exclude_dbmsr_master"]').getValue() == true ? 1 : 0;
+            settings['scaling.one_by_one'] = this.down('[name="scaling.one_by_one"]').getValue() == true ? 1 : 0;
 
-			if (this.down('[name="scaling.upscale.timeout_enabled"]').getValue()) {
-				settings['scaling.upscale.timeout_enabled'] = 1;
-				settings['scaling.upscale.timeout'] = this.down('[name="scaling.upscale.timeout"]').getValue();
-			} else {
-				settings['scaling.upscale.timeout_enabled'] = 0;
-				delete settings['scaling.upscale.timeout'];
-			}
+            if (this.down('[name="scaling.upscale.timeout_enabled"]').getValue()) {
+                settings['scaling.upscale.timeout_enabled'] = 1;
+                settings['scaling.upscale.timeout'] = this.down('[name="scaling.upscale.timeout"]').getValue();
+            } else {
+                settings['scaling.upscale.timeout_enabled'] = 0;
+                delete settings['scaling.upscale.timeout'];
+            }
 
-			if (this.down('[name="scaling.downscale.timeout_enabled"]').getValue()) {
-				settings['scaling.downscale.timeout_enabled'] = 1;
-				settings['scaling.downscale.timeout'] = this.down('[name="scaling.downscale.timeout"]').getValue();
-			} else {
-				settings['scaling.downscale.timeout_enabled'] = 0;
-				delete settings['scaling.downscale.timeout'];
-			}
+            if (this.down('[name="scaling.downscale.timeout_enabled"]').getValue()) {
+                settings['scaling.downscale.timeout_enabled'] = 1;
+                settings['scaling.downscale.timeout'] = this.down('[name="scaling.downscale.timeout"]').getValue();
+            } else {
+                settings['scaling.downscale.timeout_enabled'] = 0;
+                delete settings['scaling.downscale.timeout'];
+            }
             this.down('[name="scaling.enabled"]').reset();
-			record.set('settings', settings);
-			record.set('scaling', scaling);
-		},
+            record.set('settings', settings);
+            record.set('scaling', scaling);
+        },
 
-		items: [{
+        items: [{
             xtype: 'container',
             maxWidth: 600,
             minWidth: 490,
@@ -314,27 +326,39 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.scaling', function (moduleTabParams) 
                         dataIndex: 'name',
                         flex: 1.6
                     },{
-                        text: 'Scale out',
+                        text: 'Scale up',
                         sortable: false,
                         dataIndex: 'max',
                         flex: 1,
                         xtype: 'templatecolumn',
-                        tpl: '<tpl if="alias===\'ram\'">'+
-                             '{[values.settings.min ? \'< \' + values.settings.min : \'\']}'+
-                             '<tpl else>'+
-                             '{[values.settings.max ? \'> \' + values.settings.max : \'\']}'+
-                             '</tpl>'
+                        tpl: [
+                            '<tpl if="alias===\'ram\'">',
+                                '<tpl if="settings.min">',
+                                    '< {settings.min:htmlEncode}',
+                                '</tpl>',
+                            '<tpl else>',
+                                '<tpl if="settings.max">',
+                                    '> {settings.max:htmlEncode}',
+                                '</tpl>',
+                            '</tpl>'
+                        ]
                     },{
-                        text: 'Scale in',
+                        text: 'Scale down',
                         sortable: false,
                         dataIndex: 'min',
                         flex: 1,
                         xtype: 'templatecolumn',
-                        tpl: '<tpl if="alias===\'ram\'">'+
-                             '{[values.settings.max ? \'> \' + values.settings.max : \'\']}'+
-                             '<tpl else>'+
-                             '{[values.settings.min ? \'< \' + values.settings.min : \'\']}'+
-                             '</tpl>'
+                        tpl: [
+                            '<tpl if="alias===\'ram\'">',
+                                '<tpl if="settings.max">',
+                                    '> {settings.max:htmlEncode}',
+                                '</tpl>',
+                            '<tpl else>',
+                                '<tpl if="settings.min">',
+                                    '< {settings.min:htmlEncode}',
+                                '</tpl>',
+                            '</tpl>'
+                        ]
                     }, {
                         xtype: 'templatecolumn',
                         tpl: '<img style="cursor:pointer" width="15" height="15" class="x-icon-action x-icon-action-delete" title="Delete scaling rule" src="'+Ext.BLANK_IMAGE_URL+'"/>',
@@ -386,123 +410,166 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.scaling', function (moduleTabParams) 
                         this.getView().findFeature('addbutton').setDisabled(!!readonly);
                     }
                 }, {
-                   xtype: 'fieldset',
-                   itemId: 'scalingsettings',
-                   overflowY: 'auto',
-                   overflowX: 'hidden',
-                   title: 'Scaling refinements',
-                   collapsible: true,
-                   stateId: 'farms-builder-scaling-options',
-                   stateful: true,
-                   toggleOnTitleClick: true,
-                   style: 'padding-bottom:0',
-                   flex: 1,
-                   items: [{
-                       xtype: 'container',
-                       layout: {
-                           type: 'hbox',
-                           align: 'middle'
-                       },
-                       items: [{
-                           xtype: 'label',
-                           text: 'Polling interval (every)'
-                       }, {
-                           xtype: 'textfield',
-                           name: 'scaling.polling_interval',
-                           margin: '0 5',
-                           width: 40
-                       }, {
-                           xtype: 'label',
-                           text: 'minute(s)'
-                       }]
-                   },{
-                       xtype: 'checkbox',
-                       name: 'scaling.one_by_one',
-                       boxLabel: 'Do not up-scale role if there is at least one pending instance'
-                   },{
-                       xtype: 'checkbox',
-                       name: 'scaling.exclude_dbmsr_master',
-                       boxLabel: 'Exclude database master from scaling metric calculations'
-                   },{
-                       xtype: 'checkbox',
-                       name: 'scaling.keep_oldest',
-                       boxLabel: 'Keep oldest instance running after scaling down'
-                   },{
-                       xtype: 'checkbox',
-                       name: 'scaling.ignore_full_hour',
-                       boxLabel: 'Do not wait for full hour during downscaling'
-                   },{
-                       xtype: 'container',
-                       layout: 'hbox',
-                       itemId: 'scaling_safe_shutdown_compositefield',
-                       items: [{
-                           xtype: 'checkbox',
-                           name: 'scaling.safe_shutdown',
-                           width: 260,
-                           boxLabel: 'Enable safe shutdown during downscaling'
-                       }, {
-                           xtype: 'displayinfofield',
-                           margin: '0 0 0 5',
-                           info:   'Scalr will terminate an instance ONLY IF the script &#39;/usr/local/scalarizr/hooks/auth-shutdown&#39; returns 1. ' +
-                                   'If this script is not found or returns any other value, Scalr WILL NOT terminate that server.'
-                       }]
-                   },{
+                    xtype: 'fieldset',
+                    itemId: 'scalingsettings',
+                    flex: 1,
+                    cls: 'x-fieldset-scaling-settings x-fieldset-separator-none',
+                    overflowY: 'auto',
+                    items: [{
+                        xtype: 'component',
+                        cls: 'x-fieldset-subheader',
+                        html: 'Scaling decision frequency'
+                    },{
+                        xtype: 'container',
+                        layout: {
+                            type: 'hbox',
+                            align: 'middle'
+                        },
+                        items: [{
+                            xtype: 'label',
+                            text: 'Make scaling decisions every'
+                        }, {
+                            xtype: 'textfield',
+                            name: 'scaling.polling_interval',
+                            margin: '0 5',
+                            width: 40
+                        }, {
+                            xtype: 'label',
+                            text: 'minute(s)'
+                        }]
+                    }, {
+                        xtype: 'container',
+                        layout: {
+                            type: 'hbox',
+                            align: 'middle'
+                        },
+                        items: [{
+                            xtype: 'checkbox',
+                            boxLabel: 'Limit scale up decisions to one per',
+                            name: 'scaling.upscale.timeout_enabled',
+                            handler: function (checkbox, checked) {
+                                if (checked)
+                                    this.next('[name="scaling.upscale.timeout"]').enable();
+                                else
+                                    this.next('[name="scaling.upscale.timeout"]').disable();
+                            }
+                        }, {
+                            xtype: 'textfield',
+                            name: 'scaling.upscale.timeout',
+                            margin: '0 5',
+                            width: 40
+                        }, {
+                            xtype: 'label',
+                            flex: 1,
+                            text: 'minute(s)'
+                        }]
+                    }, {
+                        xtype: 'container',
+                        layout: {
+                            type: 'hbox',
+                            align: 'middle'
+                        },
+                        items: [{
+                            xtype: 'checkbox',
+                            boxLabel: 'Limit scale down decisions to one per',
+                            name: 'scaling.downscale.timeout_enabled',
+                            handler: function (checkbox, checked) {
+                                if (checked)
+                                    this.next('[name="scaling.downscale.timeout"]').enable();
+                                else
+                                    this.next('[name="scaling.downscale.timeout"]').disable();
+                            }
+                        }, {
+                            xtype: 'textfield',
+                            name: 'scaling.downscale.timeout',
+                            margin: '0 5',
+                            width: 40
+                        }, {
+                            xtype: 'label',
+                            flex: 1,
+                            text: 'minute(s)'
+                        }]
+                    }, {
+                        xtype: 'checkbox',
+                        name: 'scaling.one_by_one',
+                        boxLabel: 'Wait until running state is reached before next decision to scale up'
+                    }, {
+                        xtype: 'checkbox',
+                        name: 'scaling.exclude_dbmsr_master',
+                        boxLabel: 'Exclude database master from scaling metric calculations'
+                    },{
                         xtype: 'component',
                         cls: 'x-fieldset-subheader x-fieldset-separator-top',
-                        html: 'Delays'
-                   },{
-                       xtype: 'container',
-                       layout: {
-                           type: 'hbox',
-                           align: 'middle'
-                       },
-                       items: [{
-                           xtype: 'checkbox',
-                           boxLabel: 'While scaling up, wait',
-                           name: 'scaling.upscale.timeout_enabled',
-                           handler: function (checkbox, checked) {
-                               if (checked)
-                                   this.next('[name="scaling.upscale.timeout"]').enable();
-                               else
-                                   this.next('[name="scaling.upscale.timeout"]').disable();
-                           }
-                       }, {
-                           xtype: 'textfield',
-                           name: 'scaling.upscale.timeout',
-                           margin: '0 5',
-                           width: 40
-                       }, {
-                           xtype: 'label',
-                           flex: 1,
-                           text: 'min(s) between each instance addition'
-                       }]
-                   }, {
-                       xtype: 'container',
-                       layout: {
-                           type: 'hbox',
-                           align: 'middle'
-                       },
-                       items: [{
-                           xtype: 'checkbox',
-                           boxLabel: 'While scaling down, wait',
-                           name: 'scaling.downscale.timeout_enabled',
-                           handler: function (checkbox, checked) {
-                               if (checked)
-                                   this.next('[name="scaling.downscale.timeout"]').enable();
-                               else
-                                   this.next('[name="scaling.downscale.timeout"]').disable();
-                           }
-                       }, {
-                           xtype: 'textfield',
-                           name: 'scaling.downscale.timeout',
-                           margin: '0 5',
-                           width: 40
-                       }, {
-                           xtype: 'label',
-                           flex: 1,
-                           text: 'min(s) between each instance shut down'
-                       }]
-                   }]
+                        html: 'Termination preferences'
+                    }, {
+        				xtype: 'combo',
+        				store: [['terminate', 'Launch / Terminate'], ['suspend', 'Resume / Suspend']],
+        				valueField: 'name',
+        				displayField: 'description',
+        				fieldLabel: 'Scaling behavior',
+        				editable: false,
+        				labelWidth: 210,
+        				width: 390,
+        				queryMode: 'local',
+        				name: 'base.terminate_strategy',
+                        icons: {
+                            question: true
+                        },
+                        iconsPosition: 'outer',
+                        listeners: {
+                            disable: function() {
+                                this.toggleIcon('question', true);
+                            },
+                            enable: function() {
+                                this.toggleIcon('question', false);
+                            },
+                            change: function(comp, value) {
+                                var comp2 = comp.next('[name="base.consider_suspended"]');
+                                if (value === 'suspend') {
+                                    comp2.setValue('terminated').setDisabled(true);
+                                } else {
+                                    comp2.setDisabled(false);
+                                }
+                            }
+                        }
+        			}, {
+        				xtype: 'combo',
+        				store: [['running', 'Running'], ['terminated', 'Terminated']],
+        				valueField: 'name',
+        				displayField: 'description',
+        				fieldLabel: 'Consider suspended servers',
+        				labelWidth: 210,
+        				width: 390,
+        				editable: false,
+        				queryMode: 'local',
+        				name: 'base.consider_suspended',
+                        icons: {
+                            question: true
+                        },
+                        iconsPosition: 'outer'
+        			}, {
+                        xtype: 'checkbox',
+                        name: 'scaling.keep_oldest',
+                        boxLabel: 'Scale down by shutting down newest servers first'
+                    },{
+                        xtype: 'checkbox',
+                        name: 'scaling.ignore_full_hour',
+                        boxLabel: 'Skip waiting full billing period when scaling down'
+                    },{
+                        xtype: 'container',
+                        layout: 'hbox',
+                        itemId: 'scaling_safe_shutdown_compositefield',
+                        items: [{
+                            xtype: 'checkbox',
+                            name: 'scaling.safe_shutdown',
+                            boxLabel: 'Enable safe shutdown when scaling down'
+                        }, {
+                            xtype: 'displayinfofield',
+                            margin: '0 0 0 5',
+                            info:   'Scalr will terminate an instance ONLY IF the script &#39;/usr/local/scalarizr/hooks/auth-shutdown&#39; returns 1. ' +
+                                'If this script is not found or returns any other value, Scalr WILL NOT terminate that server.'
+                        }]
+                    }]
                 }]
             }]
         },{
@@ -546,8 +613,8 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.scaling', function (moduleTabParams) 
                                             forbidChange = true;
                                         } else if (
                                             !record.store && (formPanel.grid.store.find('alias', 'time') !== -1 || alias === 'time' && formPanel.grid.store.getCount() > 0) ||
-                                            record.store && alias === 'time' && formPanel.grid.store.getCount() > 1
-                                        ){
+                                                record.store && alias === 'time' && formPanel.grid.store.getCount() > 1
+                                            ){
                                             error = 'DateAndTime metric cannot be used with others';
                                             forbidChange = true;
                                         }
@@ -654,10 +721,11 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.scaling', function (moduleTabParams) 
                             items: [{
                                 xtype: 'label',
                                 flex: 1,
-                                text: 'Scale in (release instances) when LA goes under'
+                                text: 'Scale down when LA goes under'
                             }, {
                                 xtype: 'textfield',
                                 name: 'min',
+                                maskRe: /[0-9.]/,
                                 margin: '0 0 0 5',
                                 width: 40
                             }]
@@ -670,10 +738,11 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.scaling', function (moduleTabParams) 
                             items: [{
                                 xtype: 'label',
                                 flex: 1,
-                                text: 'Scale out (add more instances) when LA goes over'
+                                text: 'Scale up when LA goes over'
                             }, {
                                 xtype: 'textfield',
                                 name: 'max',
+                                maskRe: /[0-9.]/,
                                 margin: '0 0 0 5',
                                 width: 40
                             }]
@@ -699,10 +768,11 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.scaling', function (moduleTabParams) 
                             items: [{
                                 xtype: 'label',
                                 flex: 1,
-                                text: 'Scale out (add more instances) when free RAM goes under'
+                                text: 'Scale up when free RAM goes below'
                             }, {
                                 xtype: 'textfield',
                                 name: 'min',
+                                maskRe: /[0-9.]/,
                                 margin: '0 5',
                                 width: 40
                             }, {
@@ -718,10 +788,11 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.scaling', function (moduleTabParams) 
                             items: [{
                                 xtype: 'label',
                                 flex: 1,
-                                text: 'Scale in (release instances) when free RAM goes over'
+                                text: 'Scale down when free RAM goes above'
                             }, {
                                 xtype: 'textfield',
                                 name: 'max',
+                                maskRe: /[0-9.]/,
                                 margin: '0 5',
                                 width: 40
                             }, {
@@ -778,10 +849,11 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.scaling', function (moduleTabParams) 
                             items: [{
                                 xtype: 'label',
                                 flex: 1,
-                                text: 'Scale in (release instances) when average bandwidth usage on role is less than'
+                                text: 'Scale up when average bandwidth usage on role is less than'
                             }, {
                                 xtype: 'textfield',
                                 name: 'min',
+                                maskRe: /[0-9.]/,
                                 margin: '0 5',
                                 width: 40
                             }, {
@@ -797,10 +869,11 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.scaling', function (moduleTabParams) 
                             items: [{
                                 xtype: 'label',
                                 flex: 1,
-                                text: 'Scale out (add more instances) when average bandwidth usage on role is more than'
+                                text: 'Scale down when average bandwidth usage on role is more than'
                             }, {
                                 xtype: 'textfield',
                                 name: 'max',
+                                maskRe: /[0-9.]/,
                                 margin: '0 5',
                                 width: 40
                             }, {
@@ -835,10 +908,11 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.scaling', function (moduleTabParams) 
                             items: [{
                                 xtype: 'label',
                                 flex: 1,
-                                text: 'Scale out (add more instances) when queue size goes over'
+                                text: 'Scale up when queue size goes over'
                             }, {
                                 xtype: 'textfield',
                                 name: 'max',
+                                maskRe: /[0-9.]/,
                                 margin:'0 5',
                                 width: 40
                             }, {
@@ -854,10 +928,11 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.scaling', function (moduleTabParams) 
                             items: [{
                                 xtype: 'label',
                                 flex: 1,
-                                text: 'Scale in (release instances) when queue size goes under'
+                                text: 'Scale down when queue size goes under'
                             }, {
                                 xtype: 'textfield',
                                 name: 'min',
+                                maskRe: /[0-9.]/,
                                 margin: '0 5',
                                 width: 40
                             }, {
@@ -887,10 +962,11 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.scaling', function (moduleTabParams) 
                             items: [{
                                 xtype: 'label',
                                 flex: 1,
-                                text: 'Scale out (add more instances) when URL response time more than'
+                                text: 'Scale up when URL response time more than'
                             }, {
                                 xtype: 'textfield',
                                 name: 'max',
+                                maskRe: /[0-9.]/,
                                 margin: '0 5',
                                 width: 40
                             }, {
@@ -906,10 +982,11 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.scaling', function (moduleTabParams) 
                             items: [{
                                 xtype: 'label',
                                 flex: 1,
-                                text: 'Scale in (release instances) when URL response time less than'
+                                text: 'Scale down when URL response time less than'
                             }, {
                                 xtype: 'textfield',
                                 name: 'min',
+                                maskRe: /[0-9.]/,
                                 margin: '0 5',
                                 width: 40
                             }, {
@@ -942,10 +1019,11 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.scaling', function (moduleTabParams) 
                             items: [{
                                 xtype: 'label',
                                 flex: 1,
-                                text: 'Scale out (add more instances) when metric value goes over'
+                                text: 'Scale up when metric value goes over'
                             }, {
                                 xtype: 'textfield',
                                 name: 'max',
+                                maskRe: /[0-9.]/,
                                 margin: '0 0 0 5',
                                 width: 40
                             }]
@@ -958,10 +1036,11 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.scaling', function (moduleTabParams) 
                             items: [{
                                 xtype: 'label',
                                 flex: 1,
-                                text: 'Scale in (release instances) when metric value goes under'
+                                text: 'Scale down when metric value goes under'
                             }, {
                                 xtype: 'textfield',
                                 name: 'min',
+                                maskRe: /[0-9.]/,
                                 margin: '0 0 0 5',
                                 width: 40
                             }]
@@ -1151,8 +1230,8 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.scaling', function (moduleTabParams) 
                             }],
                             onDataChange: function() {
                                 var me = this,
-                                form = me.up('form'),
-                                data = [], records = me.store.getRange();
+                                    form = me.up('form'),
+                                    data = [], records = me.store.getRange();
                                 for (var i = 0; i < records.length; i++)
                                     data[data.length] = records[i].data;
                                 form.updateRecord('settings', data);
@@ -1208,6 +1287,13 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.scaling', function (moduleTabParams) 
                     cls: 'x-fieldset-separator-none',
                     hidden: true,
                     items: [{
+                        xtype: 'chartpreview',
+                        itemId: 'chartPreview',
+                        height: 250,
+                        width: 442
+                    }]
+                    /*
+                    items: [{
                         xtype: 'label',
                         itemId: 'statstatus',
                         style: 'color:#666'
@@ -1229,7 +1315,7 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.scaling', function (moduleTabParams) 
                                 );
                             }
                         }
-                    }]
+                    }]*/
                 }],
                 listeners: {
                     afterrender: function() {
@@ -1323,92 +1409,40 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.scaling', function (moduleTabParams) 
                     this.down('#statpanel').hide();
                 },
 
-                showStat: function(alias) {
-                    var statPanel = this.down('#statpanel'),
-                        stat = statPanel.down('#stat'),
-                        statStatus = statPanel.down('#statstatus'),
-                        record = this.up('#scaling').currentRole,
-                        watchers = {la: 'LASNMP', ram: 'MEMSNMP', bw: 'NETSNMP'},
-                        role = record.get('farm_role_id');
-                    if (!record.get('new') && watchers[alias]) {
-                        statStatus.setText('Loading...');
-                        stat.hide();
-                        statPanel.show();
-                        stat.role = role;
-                        stat.watcher = watchers[alias];
-                        Scalr.Request({
-                            scope: this,
-                            //url: '/server/statistics_proxy.php?version=2&task=get_stats_image_url&farmid=13997&watchername=LASNMP&graph_type=daily&role=48557&_dc=1366717697420',
-                            url: '/server/statistics_proxy.php?version=2&task=get_stats_image_url&farmid=' + stat.farm + '&watchername=' + stat.watcher + '&graph_type=daily&role=' + stat.role,
-                            success: function (data, response, options) {
-                                if (stat.rendered && !stat.isDestroyed && role == stat.role) {
-                                    statStatus.setText('');
-                                    stat.setSrc(data.msg);
-                                    stat.show();
-                                }
-                            },
-                            failure: function(data, response, options) {
-                                if (stat.rendered && !stat.isDestroyed && role == stat.role) {
-                                    statStatus.setText(data.msg);
-                                }
-                            }
+                showStat: function(metric) {
+                    var me = this;
+                    var roleRecord = me.up('#scaling').currentRole;
+                    var isRoleNew = roleRecord.get('new');
+                    var statPanel = me.down('#statpanel');
+
+                    var isMetricCorrect = function (metric) {
+                        var metrics = ['mem', 'cpu', 'la', 'net', 'snum'];
+                        return metrics.some(function (currentMetric) {
+                            return currentMetric === metric;
                         });
+                    };
+
+                    if (!isRoleNew && isMetricCorrect(metric)) {
+                        var hostUrl = moduleTabParams['monitoringHostUrl'];
+                        var farmId = moduleTabParams['farmId'];
+                        var farmRoleId = roleRecord.get('farm_role_id');
+                        var farmHash = moduleTabParams['farmHash'];
+                        var period = 'daily';
+                        var params = {farmId: farmId, farmRoleId: farmRoleId, hash: farmHash, period: period, metrics: metric};
+                        var size = {height: 250, width: 442};
+                        var chartPreview = me.down('#chartPreview');
+
+                        var callback = function () {
+                            //me.lcdDelayed = Ext.Function.defer(me.showStat, 6000, me);
+                        };
+
+                        statPanel.show();
+                        chartPreview.loadStatistics(hostUrl, params, callback, size);
                     } else {
                         statPanel.hide();
                     }
-                },
-
-                showStatPopup: function(comp, farm, role, watcher) {
-                    var record = this.up('#scaling').currentRole,
-                        statistics = {
-                            MEMSNMP: {
-                                height: 400,
-                                title: ' / Memory Usage'
-                            },
-                            CPUSNMP: {
-                                height: 352,
-                                title: ' / CPU Utilization'
-                            },
-                            LASNMP: {
-                                height: 319,
-                                title: ' / Load Averages'
-                            },
-                            NETSNMP: {
-                                height: 264,
-                                title: ' / Network Usage'
-                            }
-                        };
-                    Scalr.utils.Window({
-                        animationTarget: comp,
-                        xtype: 'monitoring.statisticswindow',
-                        title: record.get('name') + statistics[watcher].title,
-
-                        toolMenu: false,
-                        typeMenu: true,
-                        removeDockedItem: false,
-
-                        watchername: watcher,
-                        farm: farm,
-                        role: role,
-
-                        width: 537,
-                        height: statistics[watcher].height,
-                        bodyPadding: 0,
-                        padding: 0,
-                        autoScroll: false,
-
-                        closable: true,
-                        cls: null,
-                        titleAlign: 'left',
-                        tools: [{
-                            type: 'refresh',
-                            handler: function () {
-                                this.up('panel').fillByStatistics();
-                            }
-                        }]
-                    });
                 }
             }
-		}]
-	});
+        }]
+    });
 });

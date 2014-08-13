@@ -1,11 +1,64 @@
 Scalr.regPage('Scalr.ui.core.governance.edit', function (loadParams, moduleParams) {
+    var instanceTypeDescription = 'Limit the types of instances that can be configured in Farm Designer.';
+    var configOptions = {
+        openstack: [{
+            name: 'openstack.flavor-id',
+            title: 'Instance type',
+            type: 'instancetype',
+            defaults: {value: []},
+            subheader: instanceTypeDescription
+        },{
+            name: 'openstack.networks',
+            title: 'Networks',
+            type: 'networks',
+            defaults: {value: {}},
+            subheader: 'Limit the networks that instances can be launched in.'
+        },{
+            name: 'openstack.additional_security_groups',
+            title: 'Security groups',
+            type: 'securityGroups',
+            emptyText: 'ex. xxx,yyy',
+            defaults: {
+                value: '',
+                allow_additional_sec_groups: 0
+            },
+            subheader: 'Set security groups list that will be applied to all instances.',
+            warning: 'Please ensure that the security groups that you list already exist within your cloud setup. Scalr WILL NOT create these groups and instances will fail to launch otherwise.'
+        }],
+        cloudstack: [{
+            name: 'cloudstack.service_offering_id',
+            title: 'Instance type',
+            type: 'instancetype',
+            defaults: {value: []},
+            subheader: instanceTypeDescription
+        },{
+            name: 'cloudstack.network_id',
+            title: 'Network',
+            type: 'networks',
+            defaults: {value: {}},
+            subheader: 'Limit the networks that instances can be launched in.'
+        },{
+            name: 'cloudstack.additional_security_groups',
+            title: 'Security groups',
+            type: 'securityGroups',
+            emptyText: 'ex. xxx,yyy',
+            defaults: {
+                value: '',
+                allow_additional_sec_groups: 0
+            },
+            subheader: 'Set security groups list that will be applied to all instances.',
+            warning: 'Please ensure that the security groups that you list already exist within your cloud setup. Scalr WILL NOT create these groups and instances will fail to launch otherwise.'
+        }]
+    };
+
     var config = {
         general: {
             title: 'Scalr',
             options: [{
                 name: 'general.lease',
                 type: 'lease',
-                title: 'Lease management'
+                title: 'Lease management',
+                subheader: 'Automatically terminate farms after a predefined period of time, with optional extensions and exemptions.'
             },{
                 name: 'general.hostname_format',
                 title: 'Server hostname format',
@@ -14,12 +67,14 @@ Scalr.regPage('Scalr.ui.core.governance.edit', function (loadParams, moduleParam
                 defaults: {
                     value: ''
                 },
-                subheader: '',
-                warning: Scalr.strings['farmbuilder.hostname_format.info']
+                subheader: 'Define a hostname format that will be used for all servers across this environment.',
+                icons: {
+                    globalvars: true
+                }
             }]
         },
         ec2: {
-            title: 'Amazon EC2',
+            title: Scalr.utils.getPlatformName('ec2', true),
             options: [{
                 name: 'aws.vpc',
                 title: 'VPC',
@@ -32,27 +87,16 @@ Scalr.regPage('Scalr.ui.core.governance.edit', function (loadParams, moduleParam
             },{
                 name: 'aws.instance_type',
                 title: 'Instance type',
-                type: 'list',
-                values: [
-                    't1.micro', 
-                    'm1.small', 'm1.medium', 'm1.large', 'm1.xlarge',
-                    'm2.xlarge', 'm2.2xlarge', 'm2.4xlarge', 
-                    'm3.xlarge', 'm3.2xlarge',
-                    'c1.medium', 'c1.xlarge',
-                    'c3.large', 'c3.xlarge', 'c3.2xlarge', 'c3.4xlarge', 'c3.8xlarge',
-                    'i2.large', 'i2.xlarge', 'i2.2xlarge', 'i2.4xlarge', 'i2.8xlarge',
-                    'g2.2xlarge',
-                    'cc1.4xlarge', 'cc2.8xlarge', 'cg1.4xlarge', 'hi1.4xlarge', 'cr1.8xlarge'
-                ],
+                type: 'instancetype',
                 defaults: {
                     value: ['m1.small'],
                     'default': 'm1.small'
                 },
-                subheader: 'Limit the types of instances that can be configured in Farm Designer.'
+                subheader: instanceTypeDescription
             },{
                 name: 'aws.additional_security_groups',
                 title: 'Security groups',
-                type: 'awsSecurityGroups',
+                type: 'securityGroups',
                 emptyText: 'ex. xxx,yyy',
                 defaults: {
                     value: '',
@@ -63,48 +107,63 @@ Scalr.regPage('Scalr.ui.core.governance.edit', function (loadParams, moduleParam
             },{
                 name: 'aws.ssh_key_pair',
                 title: 'SSH key pair',
-                type: 'text',
+                type: 'textarea',
                 defaults: {
                     value: ''
                 },
                 subheader: 'Set a common SSH key pair for all instances.',
                 warning: 'Make sure this key pair already exists within your EC2 setup. Scalr WILL NOT create this pair and instances will fail to launch otherwise.'
-            }]
-        },
-        idcf: {
-            title: 'IDC Frontier',
-            options: [{
-                name: 'idcf.service_offering_id',
-                title: 'Service offering',
-                type: 'csofferings',
-                defaults: {value: []},
-                subheader: 'Limit service offerings.'
             },{
-                name: 'idcf.network_id',
-                title: 'Network',
-                type: 'csnetworks',
-                defaults: {value: {}},
-                subheader: 'Limit networks.'
-            }]
-        },
-        cloudstack: {
-            title: 'Cloudstack',
-            options: [{
-                name: 'cloudstack.service_offering_id',
-                title: 'Service offering',
-                type: 'csofferings',
-                defaults: {value: []},
-                subheader: 'Limit service offerings.'
-            },{
-                name: 'cloudstack.network_id',
-                title: 'Network',
-                type: 'csnetworks',
-                defaults: {value: {}},
-                subheader: 'Limit networks.'
+                name: 'aws.iam',
+                title: 'IAM',
+                type: 'awsIAM',
+                defaults: {
+                    value: '',
+                    iam_instance_profile_arn: ''
+                },
+                subheader: 'Limit which IAM instance profiles can be applied to instances.',
+                warning: 'List the names of all IAM instance profiles you want to ALLOW. Users will be limited to only these profiles in Farm Designer.<br/>' +
+                         '<b>Choose profiles that ALREADY EXIST in your EC2 account. Scalr will NOT CREATE any new profiles.</b>',
+                emptyText: 'ex. Name1,Name2,...'
             }]
         }
-
     };
+
+    if (Scalr.flags['betaMode']) {
+        config['ec2']['options'].push({
+            name: 'aws.tags',
+            title: 'Tags',
+            type: 'tags',
+            alwaysEnabled: true,
+            defaultTags: {
+                'scalr-env-id': {value: '{SCALR_ENV_ID}', readOnly: true},
+                'scalr-owner': {value: '{SCALR_FARM_OWNER_EMAIL}', readOnly: true},
+                'scalr-farm-id': {value: '{SCALR_FARM_ID}', readOnly: true},
+                'scalr-farm-role-id': {value: '{SCALR_FARM_ROLE_ID}', readOnly: true},
+                'scalr-server-id': {value: '{SCALR_SERVER_ID}', readOnly: true},
+                'Name': {value: '{SCALR_FARM_NAME} -> {SCALR_FARM_ROLE_ALIAS} #{SCALR_SERVER_INDEX}'}
+            },
+            defaults: {
+                value: {}
+            },
+            subheader: 'Define tags that should be automatically assigned to every resource',
+            warning: 'Global Variable Interpolation is supported for tags values <img src="'+Ext.BLANK_IMAGE_URL+'" class="x-icon-globalvars" style="vertical-align:top;position:relative;top:2px" />'
+        });
+    }
+    Ext.Object.each(moduleParams['platforms'], function(key, value){
+        if (Scalr.isOpenstack(key, true)) {
+            config[key] = {
+                title: Scalr.utils.getPlatformName(key, true),
+                options: Ext.clone(configOptions['openstack'])
+            };
+        } else if (Scalr.isCloudstack(key)) {
+            config[key] = {
+                title: Scalr.utils.getPlatformName(key, true),
+                options: Ext.clone(configOptions['cloudstack'])
+            }
+        }
+    });
+    
     var platformsTabs = Ext.Array.clean(Ext.Array.map(Ext.Object.getKeys(config), function(platform, index, platforms){
         if (moduleParams['platforms'][platform] !== undefined) {
             return {
@@ -164,32 +223,17 @@ Scalr.regPage('Scalr.ui.core.governance.edit', function (loadParams, moduleParam
                     return '<span style="font-weight:bold">' + value.title + '</span>';
                 }
             },{
-                xtype: 'buttongroupcolumn',
-                header: 'Enforce',
+                xtype: 'statuscolumn',
+                statustype: 'policy',
+                header: 'Status',
                 sortable: false,
                 resizable: false,
-                width: 120,
+                width: 100,
+                minWidth: 100,
                 align: 'center',
-                buttons: [{
-                    text: 'Yes',
-                    value: '1',
-                    width: 50
-                },{
-                    text: 'No',
-                    value: '0',
-                    width: 50
-                }],
-                toggleHandler: function(view, record, value) {
-                    var settings = Ext.clone(record.get('settings')),
-                        selModel = view.getSelectionModel();
-                    settings['enabled'] = value;
-                    record.set('settings', settings);
-                    selModel.deselectAll();
-                    selModel.select(record);
-                    view.up().saveOption(record);
-                },
-                getValue: function(record){
-                    return record.get('settings')['enabled'] || '0';
+                padding: 2,
+                qtipConfig: {
+                    width: 310
                 }
             }],
             listeners: {
@@ -201,24 +245,25 @@ Scalr.regPage('Scalr.ui.core.governance.edit', function (loadParams, moduleParam
                     }
                 }
             },
-            saveOption: function(record){
-                var value, limits;
-                if (!record) {
-                    value = this.getSelectionModel().getSelection()[0].getData();
-                    limits = panel.down('#rightcol').getOptionValue();
-                    if (! limits)
-                        return;
-                    value.settings.limits = limits;
-                } else {
-                    value = record.getData();
-                }
-                governanceSettings[value.config.name] = value.settings;
+            saveOption: function(enabled){
+                var value, limits,
+                    rightcol = panel.down('#rightcol'),
+                    record = this.getSelectionModel().getSelection()[0];
+                value = this.getSelectionModel().getSelection()[0].getData();
+                limits = rightcol.getOptionValue(value.config);
+                if (! limits)
+                    return;
+                value.settings.limits = limits;
+                value.settings.enabled = enabled !== undefined ? enabled : value.settings.enabled;
+                governanceSettings[value.platform][value.config.name] = value.settings;
+                record.set('settings', Ext.clone(value.settings));
                 Scalr.Request({
                     processBox: {
                         type: 'save'
                     },
                     url: '/core/governance/xSave/',
                     params: {
+                        category: value.platform,
                         name: value.config.name,
                         value: Ext.encode(value.settings)
                     },
@@ -230,25 +275,33 @@ Scalr.regPage('Scalr.ui.core.governance.edit', function (loadParams, moduleParam
             itemId: 'rightcol',
             flex: 1,
             hidden: true,
-            layout: 'fit',
-            toggleMode: function(readonly) {
-                this[readonly ? 'mask' : 'unmask']();
-                var mask = this.getEl().child('.x-mask');
-                if (mask) {
-                    mask.setStyle({
-                        background: '#ffffff',
-                        opacity: .6
-                    });
-                }
-                this.getDockedComponent('toolbar').down('#save').setDisabled(readonly);
+            layout: {
+                type: 'vbox',
+                align: 'stretch'
+            },
+            setTitle: function(header, subheader){
+                this.getComponent('title').update('<div class="x-fieldset-header-text" style="float:none">'+header + '</div>' + (subheader? '<div class="x-fieldset-header-description">' + subheader + '</div>' : ''));
+            },
+            setToolbar: function(option){
+                var toolbar = this.getDockedComponent('toolbar');
+                toolbar.down('#save').setVisible(option.settings.enabled == 1 || option.config.alwaysEnabled).enable();
+                toolbar.down('#disable').setVisible(option.settings.enabled == 1 && !option.config.alwaysEnabled).enable();
+                toolbar.down('#enforce').setVisible(option.settings.enabled != 1 && !option.config.alwaysEnabled).enable();
+            },
+            disableButtons: function() {
+                var toolbar = this.getDockedComponent('toolbar');
+                toolbar.down('#save').disable();
+                toolbar.down('#disable').disable();
+                toolbar.down('#enforce').disable();
             },
             editOption: function(option){
-                var container = this.child(),
+                var container = this.down('#policySettings'),
                     warning = container.getComponent('warning');
 
                 this.suspendLayouts();
                 this.currentItem = container.getComponent(option.config.type);
-                container.setTitle(option.config.title, option.config.subheader);
+                this.setTitle(option.config.title, option.config.subheader);
+                this.setToolbar(option);
                 this.currentItem.setValues(option);
                 container.items.each(function(){
                     if (this.tab !== undefined) {
@@ -258,7 +311,6 @@ Scalr.regPage('Scalr.ui.core.governance.edit', function (loadParams, moduleParam
 
                 this.show();
                 
-                this.toggleMode(option.settings.enabled != 1);
                 this.resumeLayouts(true);
 
                 if (option.config.warning) {
@@ -268,37 +320,70 @@ Scalr.regPage('Scalr.ui.core.governance.edit', function (loadParams, moduleParam
                     warning.hide();
                 }
             },
-            getOptionValue: function() {
-                return this.currentItem.getValues();
+            getOptionValue: function(config) {
+                return this.currentItem.getValues(config);
             },
-            items: {
+            items: [{
+                xtype: 'component',
+                cls: 'x-fieldset-header',
+                itemId: 'title'
+            },{
                 xtype: 'container',
+                itemId: 'policySettings',
+                cls: 'x-fieldset-separator-top',
+                flex: 1,
+                defaults: {
+                    margin: '12 32 0'
+                },
                 layout: {
                     type: 'vbox',
                     align: 'stretch'
                 },
-                defaults: {
-                    margin: '12 32 0'
-                },
-                setTitle: function(header, subheader){
-                    this.getComponent('title').update('<div class="x-fieldset-header-text" style="float:none">'+header + '</div>' + (subheader? '<div class="x-fieldset-header-description">' + subheader + '</div>' : ''));
-                },
                 items: [{
-                    xtype: 'component',
-                    cls: 'x-fieldset-header',
-                    itemId: 'title',
-                    margin: 0
-                },{
                     xtype: 'displayfield',
                     itemId: 'warning',
                     hidden: true,
                     cls: 'x-form-field-info',
-                    maxWidth: maxFormWidth
+                    maxWidth: maxFormWidth,
+                    margin: '18 32 0'
                 },{
                     xtype: 'container',
                     hidden: true,
                     tab: true,
                     itemId: 'text',
+                    layout: 'anchor',
+                    maxWidth: maxFormWidth,
+                    defaults: {
+                        anchor: '100%'
+                    },
+                    setValues: function(data){
+                        var limits = data.settings.limits,
+                            field = this.down('[name="value"]');
+                        field.emptyText = data.config.emptyText || ' ';
+                        field.hideIcons();
+                        if (data.config.icons) {
+                            Ext.Object.each(data.config.icons, function(icon){
+                                field.toggleIcon(icon, true);
+                            });
+                        }
+                        field.applyEmptyText();
+                        field.setValue(limits.value);
+                    },
+                    getValues: function(){
+                        return this.getFieldValues();
+                    },
+                    items: [{
+                        xtype: 'textfield',
+                        name: 'value',
+                        icons: {
+                            globalvars: true
+                        }
+                    }]
+                },{
+                    xtype: 'container',
+                    hidden: true,
+                    tab: true,
+                    itemId: 'textarea',
                     layout: 'anchor',
                     maxWidth: maxFormWidth,
                     defaults: {
@@ -350,7 +435,7 @@ Scalr.regPage('Scalr.ui.core.governance.edit', function (loadParams, moduleParam
                     xtype: 'container',
                     hidden: true,
                     tab: true,
-                    itemId: 'awsSecurityGroups',
+                    itemId: 'securityGroups',
                     layout: 'anchor',
                     maxWidth: maxFormWidth,
                     defaults: {
@@ -359,13 +444,15 @@ Scalr.regPage('Scalr.ui.core.governance.edit', function (loadParams, moduleParam
                     setValues: function(data){
                         var limits = data.settings.limits,
                             field = this.down('[name="value"]');
-                        field.emptyText = data.config.emptyText;
+                        field.emptyText = data.config.emptyText || ' ';
                         field.applyEmptyText();
                         this.setFieldValues(limits);
                     },
                     getValues: function(){
-                        var result = this.getFieldValues();
-                        result['allow_additional_sec_groups'] = result['allow_additional_sec_groups'] ? 1 : 0;
+                        var result = this.isValidFields() ? this.getFieldValues() : null;
+                        if (result) {
+                            result['allow_additional_sec_groups'] = result['allow_additional_sec_groups'] ? 1 : 0;
+                        }
                         return result;
                     },
                     items: [{
@@ -377,6 +464,9 @@ Scalr.regPage('Scalr.ui.core.governance.edit', function (loadParams, moduleParam
                             heightIncrement: 26,
                             pinned: true
                         },
+                        maskRe: /[\w+=,.@-]/i,
+                        regex: /^[\w+=,.@-]*$/,
+                        regexText: 'SG names must be alphanumeric, including the following common characters: plus (+), equal (=), comma (,), period (.), at (@), and dash (-).',
 
                         mode: null,
                         setMode: function(mode, resize) {
@@ -406,34 +496,75 @@ Scalr.regPage('Scalr.ui.core.governance.edit', function (loadParams, moduleParam
                         boxLabel: '&nbsp;Allow user to specify additional security groups'
                     }]
                 },{
+                    xtype: 'container',
+                    hidden: true,
+                    tab: true,
+                    itemId: 'awsIAM',
+                    layout: 'anchor',
+                    maxWidth: maxFormWidth,
+                    defaults: {
+                        anchor: '100%'
+                    },
+                    setValues: function(data){
+                        var limits = data.settings.limits,
+                            field = this.down('[name="iam_instance_profile_arn"]');
+                        field.emptyText = data.config.emptyText || ' ';
+                        field.applyEmptyText();
+
+                        this.setFieldValues(limits);
+                    },
+                    getValues: function(){
+                        return this.isValidFields() ? this.getFieldValues(true) : null;
+                    },
+                    items: [{
+                        xtype: 'textfield',
+                        name: 'iam_instance_profile_arn',
+                        fieldLabel: 'IAM profile name(s)',
+                        labelWidth: 130,
+                        maskRe: /[\w+=,.@-]/i,
+                        regex: /^[\w+=,.@-]*$/,
+                        regexText: 'Instance profile names must be alphanumeric, including the following common characters: plus (+), equal (=), comma (,), period (.), at (@), and dash (-).'
+                    }]
+                },{
                     xtype: 'notagridview',
                     hidden: true,
                     tab: true,
-                    itemId: 'list',
+                    itemId: 'instancetype',
                     flex: 1,
                     maxWidth: maxFormWidth,
                     setValues: function(data){
-                        var limits = data.settings.limits;
-                        this.addItems(Ext.Array.map(data.config.values, function(option){
-                            return {
-                                itemData: {
-                                    settings: {
-                                        name: option,
-                                        'default': limits['default'] === option,
-                                        enabled: Ext.Array.contains(limits.value, option) ?  1 : 0
-                                    }
-                                }
-                            };
-                        }), false);
+                        var me = this,
+                            limits = data.settings.limits;
+                        callback = function(data, status) {
+                            if (data && data.length) {
+                                me.addItems(Ext.Array.map(data, function(item){
+                                    return {
+                                        itemData: {
+                                            settings: {
+                                                name: (new Ext.XTemplate('<b>{name}</b> ({[this.instanceTypeInfo(values)]})').apply(item)),
+                                                id: item.id,
+                                                'default': limits['default'] === item.id,
+                                                enabled: Ext.Array.contains(limits.value, item.id) ?  1 : 0
+                                            }
+                                        }
+                                    };
+                                }), false);
+                            } else {
+                                me.showEmptyText('Unable to load instance types');
+                                panel.down('#rightcol').disableButtons();
+                                me.removeItems();
+                            }
+                        };
+                        Scalr.loadInstanceTypes(data.platform, '', callback);
                     },
                     getValues: function(){
                         var limits = {value:[], 'default': null};
                         this.getItems().each(function(item){
                             if (item.down('[name="enabled"]').getValue() === 1) {
-                                limits.value.push(item.itemData.settings.name);
+                                limits.value.push(item.itemData.settings.id);
                             }
                             if (item.down('[name="default"]').getValue()) {
-                                limits['default'] = item.itemData.settings.name;
+                                limits['default'] = item.itemData.settings.id;
                             }
                         });
                         return limits;
@@ -458,21 +589,17 @@ Scalr.regPage('Scalr.ui.core.governance.edit', function (loadParams, moduleParam
                         }
                     },{
                         name: 'enabled',
-                        title: 'Allowed',
+                        title: 'Available instance types',
                         header: {
                             flex: 1
                         },
                         defaultValue: 0,
-                        extendInitialConfig: function(config, itemData){
-                            config.fieldLabel = itemData.settings.name;
-                        },
                         control: {
                             xtype: 'buttongroupfield',
-                            labelWidth: 134,
-                            labelSeparator: '',
                             defaults: {
                                 width: 40
                             },
+                            margin: '0 18 0 0',
                             items: [{
                                 text: 'On',
                                 value: 1
@@ -488,6 +615,13 @@ Scalr.regPage('Scalr.ui.core.governance.edit', function (loadParams, moduleParam
                                     }
                                 }
                             }
+                        }
+                    },{
+                        name: 'name',
+                        header: false,
+                        control: {
+                            xtype: 'displayfield',
+                            fieldStyle: 'color:#000'
                         }
                     }]
                 },{
@@ -552,7 +686,7 @@ Scalr.regPage('Scalr.ui.core.governance.edit', function (loadParams, moduleParam
                             vpsidsField.hide();
                         }
                         this.toggleControls(limits['value'] ? true : false);
-                        
+
                         this.resumeLayouts(true);
                     },
                     getValues: function(){
@@ -763,7 +897,7 @@ Scalr.regPage('Scalr.ui.core.governance.edit', function (loadParams, moduleParam
                                     margin: '0 20 0 0',
                                     store: [
                                         ['', 'No limits'],
-                                        ['internet', 'Internet access'],
+                                        ['internet', 'Type'],
                                         ['ids', 'To specific subnet(s)']
                                     ],
                                     name: 'type',
@@ -790,10 +924,10 @@ Scalr.regPage('Scalr.ui.core.governance.edit', function (loadParams, moduleParam
                                         width: 120
                                     },
                                     items: [{
-                                        text: 'Outbound-only',
+                                        text: 'Private',
                                         value: 'outbound-only'
                                     },{
-                                        text: 'Full',
+                                        text: 'Public',
                                         value: 'full'
                                     }]
                                 }
@@ -805,7 +939,8 @@ Scalr.regPage('Scalr.ui.core.governance.edit', function (loadParams, moduleParam
                                     config.store.data = Ext.Array.map(itemData.settings.ids || [], function(id){return {id: id, description: id}});
                                     config.store.proxy.params = {
                                         cloudLocation: itemData.settings.region,
-                                        vpcId: itemData.settings.name
+                                        vpcId: itemData.settings.name,
+                                        extended: 1
                                     };
                                 },
                                 control: {
@@ -816,23 +951,22 @@ Scalr.regPage('Scalr.ui.core.governance.edit', function (loadParams, moduleParam
                                     columnWidth: 1,
                                     flex: 1,
                                     margin: '0 10 0 0',
-
+                                    clearDataBeforeQuery: true,
                                     queryCaching: false,
                                     store: {
-                                        fields: ['id', 'description', 'internet', 'availability_zone', 'ips_left'],
+                                        fields:['id', 'name', 'description', 'ips_left', 'type', 'availability_zone', 'cidr'],
                                         proxy: {
                                             type: 'cachedrequest',
                                             crscope: 'governance',
-                                            url: '/platforms/ec2/xGetSubnetsList'
+                                            url: '/tools/aws/vpc/xListSubnets'
                                         }
                                     },
                                     listConfig: {
                                         style: 'white-space:nowrap',
                                         cls: 'x-boundlist-alt',
-                                        tpl:
-                                            '<tpl for="."><div class="x-boundlist-item" style="height: auto; width: auto;line-height:20px">' +
-                                                '<div><span style="font-weight: bold">{id}</span> <span style="font-style: italic;font-size:90%">(Internet access: <b>{[values.internet || \'unknown\']}</b>)</span></div>' +
-                                                '<div>{sidr} in {availability_zone} [IPs left: {ips_left}]</div>' +
+                                        tpl: '<tpl for="."><div class="x-boundlist-item" style="height: auto; width: auto;line-height:20px">' +
+                                                '<div><span style="font-weight: bold">{[values.name || \'<i>No name</i>\' ]} - {id}</span> <span style="font-style: italic;font-size:90%">(Type: <b>{type:capitalize}</b>)</span></div>' +
+                                                '<div>{cidr} in {availability_zone} [IPs left: {ips_left}]</div>' +
                                             '</div></tpl>'
                                     }
                                 }
@@ -841,92 +975,25 @@ Scalr.regPage('Scalr.ui.core.governance.edit', function (loadParams, moduleParam
                     }]
                 },{
                     xtype: 'notagridview',
-                    itemId: 'csofferings',
+                    itemId: 'networks',
                     hidden: true,
                     tab: true,
                     flex: 1,
                     maxWidth: maxFormWidth,
                     setValues: function(data){
                         var me = this,
-                            limits = data.settings.limits;
-                        Scalr.CachedRequestManager.get('governance').load(
-                            {
-                                url: '/platforms/cloudstack/xGetServiceOfferings/',
-                                params: {
-                                    platform: data.platform
-                                }
-                            },
-                            function(data, status){
-                                data = data || [];
-                                me.addItems(Ext.Array.map(data, function(item){
-                                    return {
-                                        itemData: {
-                                            settings: {
-                                                id: item.id,
-                                                name: item.name,
-                                                enabled: Ext.Array.contains(limits.value, item.id)
-                                            }
-                                        }
-                                    };
-                                }), false);
-                            }
-                        );
-                    },
-                    getValues: function(){
-                        var limits = {value: []};
-                        this.getItems().each(function(item){
-                            if (item.down('[name="enabled"]').getValue() === 1) {
-                                limits.value.push(item.itemData.settings.id);
-                            }
-                        });
-                        return limits;
-                    },
-                    columns: [{
-                        name: 'enabled',
-                        title: 'Allowed',
-                        header: {
-                            width: 104
-                        },
-                        defaultValue: 0,
-                        control: {
-                            xtype: 'buttongroupfield',
-                            width: 104,
-                            defaults: {
-                                width: 40
-                            },
-                            items: [{
-                                text: 'On',
-                                value: 1
-                            },{
-                                text: 'Off',
-                                value: 0
-                            }]
+                            limits = data.settings.limits,
+                            cloudFamily = data.platform;
+                        if (Scalr.isCloudstack(data.platform)) {
+                            cloudFamily = 'cloudstack';
+                        } else if (Scalr.isOpenstack(data.platform)) {
+                            cloudFamily = 'openstack';
                         }
-                    },{
-                        name: 'name',
-                        title: 'Available service offerings',
-                        header: {
-                            flex: 1
-                        },
-                        control: {
-                            xtype: 'displayfield',
-                            fieldStyle: 'font-weight:bold;color:#000'
-                        }
-                    }]
-                },{
-                    xtype: 'notagridview',
-                    itemId: 'csnetworks',
-                    hidden: true,
-                    tab: true,
-                    flex: 1,
-                    maxWidth: maxFormWidth,
-                    setValues: function(data){
-                        var me = this,
-                            limits = data.settings.limits;
+
                         me.removeItems();
                         Scalr.CachedRequestManager.get('governance').load(
                             {
-                                url: '/platforms/cloudstack/xGetNetworks/',
+                                url: '/platforms/'+cloudFamily+'/xGetNetworks/',
                                 params: {
                                     platform: data.platform
                                 }
@@ -934,18 +1001,24 @@ Scalr.regPage('Scalr.ui.core.governance.edit', function (loadParams, moduleParam
                             function(data, status){
                                 var items = [];
                                 data = data || {};
-                                Ext.Object.each(data, function(region, networks){
-                                    items.push({
-                                        itemData: {
-                                            networks: networks,
-                                            settings: {
-                                                name: region,
-                                                ids: limits.value[region] || []
+                                if (!Ext.Object.getSize(data)) {
+                                    me.removeItems();
+                                    me.showEmptyText(status ? 'Networking governance is not available for your private cloud' : 'Unable to load networks list');
+                                    panel.down('#rightcol').disableButtons();
+                                } else {
+                                    Ext.Object.each(data, function(region, networks){
+                                        items.push({
+                                            itemData: {
+                                                networks: networks,
+                                                settings: {
+                                                    name: region,
+                                                    ids: limits.value[region] || []
+                                                }
                                             }
-                                        }
+                                        });
                                     });
-                                });
-                                me.addItems(items);
+                                    me.addItems(items);
+                                }
                             }
                         );
                     },
@@ -1000,14 +1073,185 @@ Scalr.regPage('Scalr.ui.core.governance.edit', function (loadParams, moduleParam
                     flex: 1,
                     margin: 0,
                     autoScroll: true
+                },{
+                    xtype: 'container',
+                    flex: 1,
+                    hidden: true,
+                    tab: true,
+                    itemId: 'tags',
+                    layout: 'fit',
+                    maxWidth: maxFormWidth,
+                    setValues: function(data){
+                        var limits = data.settings.limits,
+                            grid = this.down('grid'),
+                            savedTags = limits.value || {},
+                            savedTagsCount = Ext.Object.getSize(savedTags),
+                            tags = [];
+                        Ext.Object.each(data.config.defaultTags, function(tagName, tagData){
+                            if (tagData.readOnly && savedTags[tagName] === undefined || !tagData.readOnly && savedTagsCount === 0) {
+                                tags.push({
+                                    name: tagName,
+                                    value: tagData.value,
+                                    readOnly: tagData.readOnly
+                                });
+                            }
+                        });
+                        Ext.Object.each(savedTags, function(name, value){
+                            tags.push({
+                                name: name,
+                                value: value
+                            });
+                        });
+                        grid.store.loadData(tags);
+                    },
+                    getValues: function(config){
+                        var valid = true,
+                            grid = this.down('grid'),
+                            cellEditing = grid.getPlugin('cellediting'),
+                            result = {};
+                        (grid.store.snapshot || grid.store.data).each(function(record){
+                            var name = record.get('name'),
+                                value = record.get('value');
+                            if (!name) {
+                                cellEditing.startEdit(record, 0);
+                                cellEditing.context.column.field.validate();
+                                valid = false;
+                                return false;
+                            } else if (!config.defaultTags[name] || config.defaultTags[name].value != value) {
+                                result[name] = value;
+                            }
+                        });
+                        return valid ? {value: result} : null;
+                    },
+                    items: [{
+                        xtype: 'grid',
+                        flex: 1,
+                        cls: 'x-grid-shadow x-grid-no-highlighting',
+                        store: {
+                            fields: ['name', 'value', 'readOnly'],
+                            proxy: 'object'
+                        },
+                        features: {
+                            ftype: 'addbutton',
+                            text: 'Add new tag',
+                            maxCount: 10,
+                            handler: function(view) {
+                                view.up().store.add({});
+                            }
+                        },
+                        plugins: [
+                            Ext.create('Ext.grid.plugin.CellEditing', {
+                                pluginId: 'cellediting',
+                                clicksToEdit: 1,
+                                listeners: {
+                                    beforeedit: function(editor, o) {
+                                        if (o.column.isEditable) {
+                                            return o.column.isEditable(o.record);
+                                        }
+                                    }
+                                }
+                            })
+                        ],
+                        listeners: {
+                            viewready: function() {
+                                var view = this.view;
+                                cb = function() {
+                                    view.findFeature('addbutton').setDisabled((view.store.snapshot || view.store.data).length >= 10, 'Tags limit of 10 reached');
+                                }
+                                this.store.on({
+                                    add: cb,
+                                    remove: cb
+                                });
+                            },
+                            itemclick: function (view, record, item, index, e) {
+                                if (e.getTarget('img.x-icon-action-delete')) {
+                                    var selModel = view.getSelectionModel();
+                                    if (record === selModel.getLastFocused()) {
+                                        selModel.deselectAll();
+                                        selModel.setLastFocused(null);
+                                    }
+                                    view.store.remove(record);
+                                    if (!view.store.getCount()) {
+                                        view.up().store.add({});
+                                    }
+                                    return false;
+                                }
+                            }
+                        },
+                        columns: [{
+                            header: 'Name',
+                            sortable: false,
+                            resizable: false,
+                            dataIndex: 'name',
+                            flex: 1,
+                            editor: {
+                                xtype: 'textfield',
+                                editable: false,
+                                margin: '0 12 0 13',
+                                fixWidth: -25,
+                                maxLength: 127,
+                                //validateOnChange: false,
+                                allowBlank: false
+                            },
+                            isEditable: function(record) {
+                                return !record.get('readOnly');
+                            },
+                            renderer: function(value, meta, record, rowIndex, colIndex, store, grid) {
+                                var column = grid.panel.columns[colIndex],
+                                   valueEncoded = Ext.String.htmlEncode(value);
+                                return  '<div class="x-form-text" style="background:#fff;padding:2px 12px 3px 13px;text-overflow: ellipsis;overflow:hidden;cursor:text"  data-qtip="'+valueEncoded+'">'+
+                                            (record.get('readOnly') ? '<span style="color:#999">' + valueEncoded + '</span>' : valueEncoded) +
+                                        '</div>';
+                            }
+                        },{
+                            header: 'Value',
+                            sortable: false,
+                            resizable: false,
+                            dataIndex: 'value',
+                            flex: 2,
+                            editor: {
+                                xtype: 'textfield',
+                                editable: false,
+                                margin: '0 12 0 13',
+                                fixWidth: -25,
+                                maxLength: 255,
+                                //validateOnChange: false,
+                                allowBlank: false
+                            },
+                            isEditable: function(record) {
+                                return !record.get('readOnly');
+                            },
+                            renderer: function(value, meta, record, rowIndex, colIndex, store, grid) {
+                                var column = grid.panel.columns[colIndex],
+                                    valueEncoded = Ext.String.htmlEncode(value);
+                                return  '<div class="x-form-text" style="background:#fff;padding:2px 12px 3px 13px;text-overflow: ellipsis;overflow:hidden;cursor:text"  data-qtip="'+valueEncoded+'">'+
+                                            (record.get('readOnly') ? '<span style="color:#999">' + valueEncoded + '</span>' : valueEncoded) +
+                                        '</div>';
+                            }
+                        },{
+                            renderer: function(value, meta, record, rowIndex, colIndex, store, grid) {
+                                var result = '<img style="cursor:pointer;margin-top:6px;';
+                                if (record.get('readOnly')) {
+                                    result += 'cursor:default;opacity:.4" width="16" height="16" class="x-icon-server-action x-icon-lock" title="This tag is used by Scalr and cannot be changed or removed"';
+                                } else {
+                                    result += '" width="15" height="15" class="x-icon-action x-icon-action-delete" title="Delete tag"';
+                                }
+                                result += ' src="'+Ext.BLANK_IMAGE_URL+'"/>';
+                                return result;
+                            },
+                            width: 42,
+                            sortable: false,
+                            align:'left'
+
+                        }]
+                    }]
                 }]
-            },
+            }],
             dockedItems:[{
                 xtype: 'container',
                 itemId: 'toolbar',
                 dock: 'bottom',
                 cls: 'x-docked-buttons',
-                style: 'z-index:101;background:transparent;',
                 maxWidth: maxFormWidth,
                 layout: {
                     type: 'hbox',
@@ -1016,9 +1260,25 @@ Scalr.regPage('Scalr.ui.core.governance.edit', function (loadParams, moduleParam
                 items: [{
                     xtype: 'button',
                     itemId: 'save',
-                    text: 'Save',
+                    text: 'Save policy',
                     handler: function() {
                         panel.down('#options').saveOption();
+                    }
+                }, {
+                    xtype: 'button',
+                    itemId: 'enforce',
+                    text: 'Save & Enforce',
+                    handler: function() {
+                        panel.down('#options').saveOption(1);
+                        this.up('#rightcol').setToolbar(1);
+                    }
+                }, {
+                    xtype: 'button',
+                    itemId: 'disable',
+                    text: 'Disable policy',
+                    handler: function() {
+                        panel.down('#options').saveOption(0);
+                        this.up('#rightcol').setToolbar(0);
                     }
                 }, {
                     xtype: 'button',
@@ -1036,7 +1296,8 @@ Scalr.regPage('Scalr.ui.core.governance.edit', function (loadParams, moduleParam
             itemId: 'tabs',
             dock: 'left',
             cls: 'x-docked-tabs',
-            width: 112,
+            width: 112 + Ext.getScrollbarSize().width,
+            overflowY: 'auto',
             defaults: {
                 xtype: 'button',
                 ui: 'tab',
@@ -1060,13 +1321,17 @@ Scalr.regPage('Scalr.ui.core.governance.edit', function (loadParams, moduleParam
 			},
 			selectplatform: function(platform) {
                 panel.getComponent('options').store.loadData(Ext.Array.map(config[platform]['options'], function(optionConfig){
-                    if (governanceSettings[optionConfig.name] === undefined) {
-                        governanceSettings[optionConfig.name] = {limits: optionConfig.defaults};
+                    governanceSettings[platform] = governanceSettings[platform] || {};
+                    if (governanceSettings[platform][optionConfig.name] === undefined) {
+                        governanceSettings[platform][optionConfig.name] = {limits: optionConfig.defaults};
+                        if (optionConfig.alwaysEnabled) {
+                            governanceSettings[platform][optionConfig.name]['enabled'] = 1;
+                        }
                     }
                     return {
                         platform: platform,
                         config: optionConfig,
-                        settings: governanceSettings[optionConfig.name]
+                        settings: governanceSettings[platform][optionConfig.name]
                     }
                 }));
 			}

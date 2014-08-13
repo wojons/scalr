@@ -17,7 +17,7 @@ class TeamsTest extends WebTestCase
 
     public static $testTeamId;
 
-	/**
+    /**
      * {@inheritdoc}
      * @see Scalr\Tests.WebTestCase::setUp()
      */
@@ -32,7 +32,7 @@ class TeamsTest extends WebTestCase
         }
     }
 
-	/**
+    /**
      * @test
      */
     public function testXListTeams()
@@ -113,7 +113,7 @@ class TeamsTest extends WebTestCase
         $this->assertTrue($user->isAccountAdmin() || $user->isAccountOwner());
     }
 
-	/**
+    /**
      * {@inheritdoc}
      * @see Scalr\Tests.WebTestCase::tearDown()
      */

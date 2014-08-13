@@ -3,7 +3,6 @@ Scalr.regPage('Scalr.ui.tools.aws.ec2.ebs.snapshots.view', function (loadParams,
 		fields: [ 'snapshotId', 'volumeId', 'volumeSize', 'status', 'startTime', 'comment', 'progress', 'owner','volumeSize' ],
 		proxy: {
 			type: 'scalr.paging',
-			extraParams: loadParams,
 			url: '/tools/aws/ec2/ebs/snapshots/xListSnapshots/'
 		},
 		remoteSort: true
@@ -15,7 +14,6 @@ Scalr.regPage('Scalr.ui.tools.aws.ec2.ebs.snapshots.view', function (loadParams,
 			'reload': false,
 			'maximize': 'all'
 		},
-		scalrReconfigureParams: { volumeId: '', snapshotId: '' },
 		store: store,
 		stateId: 'grid-tools-aws-ec2-ebs-snapshots-view',
 		stateful: true,
@@ -47,16 +45,16 @@ Scalr.regPage('Scalr.ui.tools.aws.ec2.ebs.snapshots.view', function (loadParams,
 			{ header: "Completed", width: 100, dataIndex: 'progress', sortable: false, align:'center', xtype: 'templatecolumn', tpl: '{progress}%' },
 			{ header: "Comment", flex: 1, dataIndex: 'comment', sortable: true, xtype: 'templatecolumn', tpl: '<tpl if="comment">{comment}</tpl>' },
 			{
-				xtype: 'optionscolumn',
-				optionsMenu: [{
+				xtype: 'optionscolumn2',
+				menu: [{
 					itemId: 'option.create',
 					text: 'Create new volume based on this snapshot',
 					iconCls: 'x-menu-icon-create',
-					menuHandler: function(menuItem) {
+					menuHandler: function(data) {
 						Scalr.event.fireEvent('redirect','#/tools/aws/ec2/ebs/volumes/create?' +
 							Ext.Object.toQueryString({
-								'snapshotId': menuItem.record.get('snapshotId'),
-								'size': menuItem.record.get('volumeSize'),
+								'snapshotId': data['snapshotId'],
+								'size': data['volumeSize'],
 								'cloudLocation': store.proxy.extraParams.cloudLocation
 							})
 						);
@@ -70,9 +68,9 @@ Scalr.regPage('Scalr.ui.tools.aws.ec2.ebs.snapshots.view', function (loadParams,
 							type:'action'
 						},
 						url: '/tools/aws/ec2/ebs/snapshots/xGetMigrateDetails/',
-						dataHandler: function (record) {
+						dataHandler: function (data) {
 							return { 
-								'snapshotId': record.get('snapshotId'),
+								'snapshotId': data['snapshotId'],
 								'cloudLocation': store.proxy.extraParams.cloudLocation 
 							};
 						},
@@ -144,8 +142,8 @@ Scalr.regPage('Scalr.ui.tools.aws.ec2.ebs.snapshots.view', function (loadParams,
 							msg: 'Deleting EBS snapshot ...'
 						},
 						url: '/tools/aws/ec2/ebs/snapshots/xRemove/',
-						dataHandler: function (record) {
-							return { snapshotId: Ext.encode([record.get('snapshotId')]), cloudLocation: store.proxy.extraParams.cloudLocation };
+						dataHandler: function (data) {
+							return { snapshotId: Ext.encode([data['snapshotId']]), cloudLocation: store.proxy.extraParams.cloudLocation };
 						},
 						success: function () {
 							store.load();
@@ -210,8 +208,7 @@ Scalr.regPage('Scalr.ui.tools.aws.ec2.ebs.snapshots.view', function (loadParams,
 					data: moduleParams.locations,
 					proxy: 'object'
 				},
-				gridStore: store,
-				cloudLocation: loadParams['cloudLocation'] || ''
+				gridStore: store
 			}, ' ', {
 				xtype: 'button',
 				enableToggle: true,

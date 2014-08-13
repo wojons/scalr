@@ -5,19 +5,17 @@ Scalr.regPage('Scalr.ui.tools.openstack.snapshots.view', function (loadParams, m
 		],
 		proxy: {
 			type: 'scalr.paging',
-			extraParams: loadParams,
 			url: '/tools/openstack/snapshots/xListSnapshots/'
 		},
 		remoteSort: true
 	});
 
 	return Ext.create('Ext.grid.Panel', {
-		title: 'Tools &raquo; Openstack &raquo; Snapshots',
+		title: Scalr.utils.getPlatformName(loadParams['platform']) + ' &raquo; Snapshots',
 		scalrOptions: {
-			'reload': false,
+			'reload': true,
 			'maximize': 'all'
 		},
-		scalrReconfigureParams: { snapshotId: '' },
 		store: store,
 		stateId: 'grid-tools-openstack-volumes-view',
 		stateful: true,
@@ -48,12 +46,8 @@ Scalr.regPage('Scalr.ui.tools.openstack.snapshots.view', function (loadParams, m
             },
 			{ header: "Created at", flex: 1, dataIndex: 'createdAt', sortable: true },
 			{
-				xtype: 'optionscolumn',
-				getOptionVisibility: function (item, record) {
-					return true;
-				},
-
-				optionsMenu: [{
+				xtype: 'optionscolumn2',
+				menu: [{
 					itemId: 'option.delete',
 					text: 'Delete',
 					iconCls: 'x-menu-icon-delete',
@@ -67,9 +61,9 @@ Scalr.regPage('Scalr.ui.tools.openstack.snapshots.view', function (loadParams, m
 							msg: 'Deleting volume(s) ...'
 						},
 						url: '/tools/openstack/snapshots/xRemove/',
-						dataHandler: function (record) {
+						dataHandler: function (data) {
 							return { 
-								snapshotId: Ext.encode([record.get('snapshotId')]), 
+								snapshotId: Ext.encode([data['snapshotId']]),
 								cloudLocation: store.proxy.extraParams.cloudLocation,
 								platform: loadParams['platform']
 							};
@@ -95,6 +89,7 @@ Scalr.regPage('Scalr.ui.tools.openstack.snapshots.view', function (loadParams, m
 
 		dockedItems: [{
 			xtype: 'scalrpagingtoolbar',
+            ignoredLoadParams: ['platform'],
 			store: store,
 			dock: 'top',
 			afterItems: [{
@@ -129,15 +124,18 @@ Scalr.regPage('Scalr.ui.tools.openstack.snapshots.view', function (loadParams, m
 				}
 			}],
 			items: [{
+                xtype: 'filterfield',
+                store: store
+            }, {
 				xtype: 'fieldcloudlocation',
 				itemId: 'cloudLocation',
+                margin: '0 0 0 12',
 				store: {
 					fields: [ 'id', 'name' ],
 					data: moduleParams.locations,
 					proxy: 'object'
 				},
-				gridStore: store,
-				cloudLocation: loadParams['cloudLocation'] || ''
+				gridStore: store
 			}]
 		}]
 	});

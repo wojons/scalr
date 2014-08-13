@@ -2,8 +2,6 @@
 namespace Scalr\Service\Aws;
 
 use Scalr\Service\Aws\DataType\StringType;
-use Scalr\Service\Aws\Elb\AbstractElbListDataType;
-use Scalr\Service\Aws\Elb\AbstractElbDataType;
 use Scalr\Service\Aws\DataType\ListDataType;
 
 /**

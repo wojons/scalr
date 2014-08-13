@@ -1,12 +1,21 @@
 <?php
 
 use Scalr\DependencyInjection\Container;
+use Scalr\Modules\PlatformFactory;
+use Scalr\Modules\Platforms\Cloudstack\Observers\CloudstackObserver;
+use Scalr\Modules\Platforms\Ec2\Observers\EbsObserver;
+use Scalr\Modules\Platforms\Ec2\Observers\Ec2Observer;
+use Scalr\Modules\Platforms\Ec2\Observers\EipObserver;
+use Scalr\Modules\Platforms\Ec2\Observers\ElbObserver;
+use Scalr\Modules\Platforms\Openstack\Observers\OpenstackObserver;
+
+use Scalr\Model\Entity\WebhookConfig;
+use Scalr\Model\Entity\WebhookHistory;
 
 class Scalr
 {
     private static $observersSetuped = false;
     private static $EventObservers = array();
-    private static $DeferredEventObservers = array();
     private static $ConfigsCache = array();
     private static $InternalObservable;
 
@@ -61,25 +70,20 @@ class Scalr
     private static function setupObservers()
     {
         Scalr::AttachObserver(new DBEventObserver());
-
         Scalr::AttachObserver(new DNSEventObserver());
 
-        Scalr::AttachObserver(new Modules_Platforms_Ec2_Observers_Ebs());
-        Scalr::AttachObserver(new Modules_Platforms_Cloudstack_Observers_Cloudstack());
+        Scalr::AttachObserver(new EbsObserver());
+        Scalr::AttachObserver(new CloudstackObserver());
 
         Scalr::AttachObserver(new MessagingEventObserver());
         Scalr::AttachObserver(new ScalarizrEventObserver());
         Scalr::AttachObserver(new BehaviorEventObserver());
 
-        Scalr::AttachObserver(new Modules_Platforms_Ec2_Observers_Ec2());
+        Scalr::AttachObserver(new Ec2Observer());
+        Scalr::AttachObserver(new EipObserver());
+        Scalr::AttachObserver(new ElbObserver());
 
-        Scalr::AttachObserver(new Modules_Platforms_Ec2_Observers_Eip());
-        Scalr::AttachObserver(new Modules_Platforms_Ec2_Observers_Elb());
-
-        Scalr::AttachObserver(new Modules_Platforms_Openstack_Observers_Openstack());
-
-        Scalr::AttachObserver(new MailEventObserver(), true);
-        Scalr::AttachObserver(new RESTEventObserver(), true);
+        Scalr::AttachObserver(new OpenstackObserver());
 
         self::$observersSetuped = true;
     }
@@ -89,12 +93,9 @@ class Scalr
      *
      * @param EventObserver $observer
      */
-    public static function AttachObserver ($observer, $isdeffered = false)
+    public static function AttachObserver ($observer)
     {
-        if ($isdeffered)
-            $list = & self::$DeferredEventObservers;
-        else
-            $list = & self::$EventObservers;
+        $list = & self::$EventObservers;
 
         if (array_search($observer, $list) !== false)
             throw new Exception(_('Observer already attached to class <Scalr>'));
@@ -110,114 +111,10 @@ class Scalr
         if (!self::$observersSetuped)
             self::setupObservers();
 
-        foreach (self::$EventObservers as &$observer)
-        {
+        foreach (self::$EventObservers as &$observer) {
             if (method_exists($observer, "__construct"))
                 $observer->__construct();
         }
-    }
-
-    /**
-     * Return observer configuration for farm
-     *
-     * @param string $farmid
-     * @param EventObserver $observer
-     * @return DataForm
-     */
-    private static function GetFarmNotificationsConfig($farmid, $observer)
-    {
-        $DB = self::getDb();
-
-        // Reconfigure farm settings if changes made
-        $farms = $DB->GetAll("SELECT farms.id as fid FROM farms INNER JOIN client_settings ON client_settings.clientid = farms.clientid WHERE client_settings.`key` = 'reconfigure_event_daemon' AND client_settings.`value` = '1'");
-        if (count($farms) > 0)
-        {
-            Logger::getLogger(__CLASS__)->debug("Found ".count($farms)." with new settings. Cleaning cache.");
-            foreach ($farms as $cfarmid)
-            {
-                Logger::getLogger(__CLASS__)->info("Cache for farm {$cfarmid["fid"]} cleaned.");
-                self::$ConfigsCache[$cfarmid["fid"]] = false;
-            }
-        }
-
-        // Update reconfig flag
-        $DB->Execute("UPDATE client_settings SET `value`='0' WHERE `key`='reconfigure_event_daemon'");
-
-        // Check config in cache
-        if (!self::$ConfigsCache[$farmid] || !self::$ConfigsCache[$farmid][$observer->ObserverName])
-        {
-            Logger::getLogger(__CLASS__)->debug("There is no cached config for this farm or config updated. Loading config...");
-
-            // Get configuration form
-            self::$ConfigsCache[$farmid][$observer->ObserverName] = $observer->GetConfigurationForm();
-
-            // Get farm observer id
-            $farm_observer_id = $DB->GetOne("
-                SELECT * FROM farm_event_observers
-                WHERE farmid=? AND event_observer_name=?
-                LIMIT 1
-            ",
-                array($farmid, get_class($observer))
-            );
-
-            // Get Configuration values
-            if ($farm_observer_id)
-            {
-                Logger::getLogger(__CLASS__)->info("Farm observer id: {$farm_observer_id}");
-
-                $config_opts = $DB->Execute("SELECT * FROM farm_event_observers_config
-                    WHERE observerid=?", array($farm_observer_id)
-                );
-
-                // Set value for each config option
-                while($config_opt = $config_opts->FetchRow())
-                {
-                    $field = self::$ConfigsCache[$farmid][$observer->ObserverName]->GetFieldByName($config_opt['key']);
-                    if ($field)
-                        $field->Value = $config_opt['value'];
-                }
-            }
-            else
-                return false;
-        }
-
-        return self::$ConfigsCache[$farmid][$observer->ObserverName];
-    }
-
-    /**
-     * Fire event
-     *
-     * @param integer $farmid
-     * @param string $event_name
-     * @param string $event_message
-     */
-    public static function FireDeferredEvent (Event $event)
-    {
-        if (!self::$observersSetuped)
-            self::setupObservers();
-
-        try
-        {
-            // Notify class observers
-            foreach (self::$DeferredEventObservers as $observer)
-            {
-                // Get observer config for farm
-                $config = self::GetFarmNotificationsConfig($event->GetFarmID(), $observer);
-
-                // If observer configured -> set config and fire event
-                if ($config)
-                {
-                    $observer->SetConfig($config);
-                    $res = call_user_func(array($observer, "On{$event->GetName()}"), $event);
-                }
-            }
-        }
-        catch(Exception $e)
-        {
-            Logger::getLogger(__CLASS__)->fatal("Exception thrown in Scalr::FireDeferredEvent(): ".$e->getMessage());
-        }
-
-        return;
     }
 
     /**
@@ -251,7 +148,7 @@ class Scalr
                     call_user_func(array($observer, "On{$event->GetName()}"), $event);
                 }
 
-                $handledObservers[get_class($observer)] = microtime(true) - $observerStartTime;
+                $handledObservers[substr(strrchr(get_class($observer), "\\"), 1)] = microtime(true) - $observerStartTime;
             }
         } catch (Exception $e) {
             Logger::getLogger(__CLASS__)->fatal(
@@ -278,8 +175,10 @@ class Scalr
      */
     public static function StoreEvent($farmid, Event $event, $eventTime = null)
     {
-        try
-        {
+        if ($event->DBServer)
+            $eventServerId = $event->DBServer->serverId;
+
+        try {
             $DB = self::getDb();
 
             // Generate event message
@@ -291,9 +190,6 @@ class Scalr
             } catch (Exception $e) {
 
             }
-
-            if ($event->DBServer)
-                $eventServerId = $event->DBServer->serverId;
 
             //short_message temporary used for time tracking
             // Store event in database
@@ -313,12 +209,103 @@ class Scalr
                     $event->msgExpected, $event->msgCreated
             ));
         }
-        catch(Exception $e)
-        {
+        catch(Exception $e) {
             Logger::getLogger(__CLASS__)->fatal(sprintf(_("Cannot store event in database: %s"), $e->getMessage()));
+        }
+
+        try {
+            if ($eventServerId) {
+                $dbServer = DBServer::LoadByID($eventServerId);
+
+                $dt = new DateTime('now', new DateTimeZone("UTC"));
+                $timestamp = $dt->format("D d M Y H:i:s e");
+
+                $payload = new stdClass();
+                $payload->eventName = $event->GetName();
+                $payload->eventId = $event->GetEventID();
+                $payload->timestamp = $timestamp;
+
+                $globalVars = Scalr_Scripting_GlobalVariables::listServerGlobalVariables(
+                    $dbServer,
+                    true,
+                    $event
+                );
+
+                $webhooks = WebhookConfig::findByEvent(
+                    $event->GetName(),
+                    $farmid,
+                    $dbServer->clientId,
+                    $dbServer->envId
+                );
+
+                foreach ($webhooks as $webhook) {
+                    /* @var $webhook \Scalr\Model\Entity\WebhookConfig */
+
+                    $payload->data = array();
+                    foreach ($globalVars as $gv) {
+                        if ($gv->private && $webhook->skipPrivateGv == 1 && !$gv->system)
+                            continue;
+
+                        $payload->data[$gv->name] = $gv->value;
+                    }
+
+                    if ($webhook->postData)
+                        $payload->userData = $dbServer->applyGlobalVarsToValue($webhook->postData);
+                    else
+                        $payload->userData = '';
+
+                    $encPayload = json_encode($payload);
+
+                    foreach ($webhook->getEndpoints() as $ce) {
+                        /* @var $ce \Scalr\Model\Entity\WebhookConfigEndpoint */
+
+                        $endpoint = $ce->getEndpoint();
+                        if (!$endpoint->isValid)
+                            continue;
+
+                        $history = new WebhookHistory();
+                        $history->eventId = $event->GetEventID();
+                        $history->eventType = $event->GetName();
+                        $history->payload = $encPayload;
+                        $history->endpointId = $endpoint->endpointId;
+                        $history->webhookId = $webhook->webhookId;
+                        $history->farmId = $farmid;
+
+                        $history->save();
+                    }
+                }
+            }
+        } catch (Exception $e) {
+            Logger::getLogger(__CLASS__)->fatal(sprintf(_("WebHooks: %s"), $e->getMessage()));
         }
     }
 
+    /**
+     * Checks whether current install is hosted scalr
+     *
+     * @return   boolean  Returns true if current install is a hosted Scalr
+     */
+    public static function isHostedScalr()
+    {
+        $hosted = self::config('scalr.hosted.enabled');
+
+        return !empty($hosted);
+    }
+
+    /**
+     * Checks whether specified account is allowed to manage Cost centers and Projects on hosted scalr account
+     *
+     * @param    int      $accountId  Identifier of the client's account
+     * @return   boolean  Returns true if it is allowed of false otherwise
+     */
+    public static function isAllowedAnalyticsOnHostedScalrAccount($accountId)
+    {
+        if (!self::isHostedScalr()) return true;
+
+        $accounts = self::config('scalr.hosted.analytics.managed_accounts');
+
+        return !empty($accounts) && is_array($accounts) && in_array($accountId, $accounts) ? true : false;
+    }
 
     /**
      * Launches server
@@ -326,14 +313,15 @@ class Scalr
      * @param   \ServerCreateInfo       $ServerCreateInfo optional The server create info
      * @param   \DBServer               $DBServer         optional The DBServer object
      * @param   bool                    $delayed          optional
-     * @param   string                  $reason           optional
+     * @param   integer|array            $reason           optional
      * @param   \Scalr_Account_User|int $user             optional The Scalr_Account_User object or its unique identifier
      * @return  DBServer|null           Returns the DBServer object on cussess or null otherwise
      */
     public static function LaunchServer(ServerCreateInfo $ServerCreateInfo = null, DBServer $DBServer = null,
-                                        $delayed = false, $reason = "", $user = null)
+                                        $delayed = false, $reason = 0, $user = null)
     {
         $db = self::getDb();
+        $farm = null;
 
         //Ensures handling identifier of the user instead of the object
         if ($user !== null && !($user instanceof \Scalr_Account_User)) {
@@ -356,16 +344,44 @@ class Scalr
             return null;
         }
 
+        $propsToSet = array();
         if ($user instanceof \Scalr_Account_User) {
-            $DBServer->SetProperties(array(
-                SERVER_PROPERTIES::LAUNCHED_BY_ID    => $user->id,
-                SERVER_PROPERTIES::LAUNCHED_BY_EMAIL => $user->getEmail(),
+            $propsToSet[SERVER_PROPERTIES::LAUNCHED_BY_ID] = $user->id;
+            $propsToSet[SERVER_PROPERTIES::LAUNCHED_BY_EMAIL] = $user->getEmail();
+        }
+        try {
+            if ($DBServer->farmId && (($farm = $DBServer->GetFarmObject()) instanceof DBFarm)) {
+                $propsToSet[SERVER_PROPERTIES::FARM_CREATED_BY_ID] = $farm->createdByUserId;
+                $propsToSet[SERVER_PROPERTIES::FARM_CREATED_BY_EMAIL] = $farm->createdByUserEmail;
+                $propsToSet[SERVER_PROPERTIES::FARM_PROJECT_ID] = $farm->GetSetting(DBFarm::SETTING_PROJECT_ID);
+            }
+            if ($DBServer->envId && (($environment = $DBServer->GetEnvironmentObject()) instanceof Scalr_Environment)) {
+                $propsToSet[SERVER_PROPERTIES::ENV_CC_ID] = $environment->getPlatformConfigValue(Scalr_Environment::SETTING_CC_ID);
+            }
+        } catch (Exception $e) {
+            Logger::getLogger(LOG_CATEGORY::FARM)->error(sprintf(
+                "Could not load related object for recently created server %s. It says: %s",
+                $DBServer->serverId, $e->getMessage()
             ));
         }
 
+        if (!empty($propsToSet)) {
+            $DBServer->SetProperties($propsToSet);
+        }
+
+        $fnGetReason = function ($reasonId) {
+            $args = func_get_args();
+            $args[0] = DBServer::getLaunchReason($reasonId);
+            return [call_user_func_array('sprintf', $args), $reasonId];
+        };
+
         if ($delayed) {
             $DBServer->status = SERVER_STATUS::PENDING_LAUNCH;
-            $DBServer->SetProperty(SERVER_PROPERTIES::LAUNCH_REASON, $reason);
+            list($reasonMsg, $reasonId) = is_array($reason) ? call_user_func_array($fnGetReason, $reason) : $fnGetReason($reason);
+            $DBServer->SetProperties([
+                SERVER_PROPERTIES::LAUNCH_REASON    => $reasonMsg,
+                SERVER_PROPERTIES::LAUNCH_REASON_ID => $reasonId,
+            ]);
             $DBServer->Save();
             return $DBServer;
         }
@@ -392,10 +408,15 @@ class Scalr
             $DBServer->Save();
 
             try {
-                if (!$reason)
-                    $reason = $DBServer->GetProperty(SERVER_PROPERTIES::LAUNCH_REASON);
+                if ($reason) {
+                    list($reasonMsg, $reasonId) = is_array($reason) ? call_user_func_array($fnGetReason, $reason) : $fnGetReason($reason);
+                } else {
+                    $reasonMsg = $DBServer->GetProperty(SERVER_PROPERTIES::LAUNCH_REASON);
+                    $reasonId = $DBServer->GetProperty(SERVER_PROPERTIES::LAUNCH_REASON_ID);
+                }
 
-                $DBServer->getServerHistory()->markAsLaunched($reason);
+                $DBServer->getServerHistory()->markAsLaunched($reasonMsg, $reasonId);
+                $DBServer->updateTimelog('ts_launched');
             } catch (Exception $e) {
                 Logger::getLogger('SERVER_HISTORY')->error(sprintf("Cannot update servers history: {$e->getMessage()}"));
             }
@@ -407,9 +428,14 @@ class Scalr
                 )
             ));
 
+            $existingLaunchError = $DBServer->GetProperty(SERVER_PROPERTIES::LAUNCH_ERROR);
+
             $DBServer->status = SERVER_STATUS::PENDING_LAUNCH;
             $DBServer->SetProperty(SERVER_PROPERTIES::LAUNCH_ERROR, $e->getMessage());
             $DBServer->Save();
+
+            if ($DBServer->farmId && !$existingLaunchError)
+                Scalr::FireEvent($DBServer->farmId, new InstanceLaunchFailedEvent($DBServer, $e->getMessage()));
         }
 
         if ($DBServer->status == SERVER_STATUS::PENDING) {

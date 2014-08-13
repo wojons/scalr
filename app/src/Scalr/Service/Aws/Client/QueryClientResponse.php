@@ -161,7 +161,7 @@ class QueryClientResponse implements ClientResponseInterface
         return $this->hasError() ? $this->exception : null;
     }
 
-	/**
+    /**
      * {@inheritdoc}
      * @see Scalr\Service\Aws\Client.ClientResponseInterface::getResponseCode()
      */
@@ -170,10 +170,10 @@ class QueryClientResponse implements ClientResponseInterface
         return $this->message->getResponseCode();
     }
 
-	/**
-	 * @param EventObserver $eventObserver
-	 * @return \Scalr\Service\Aws\Client\QueryClientResponse
-	 */
+    /**
+     * @param EventObserver $eventObserver
+     * @return \Scalr\Service\Aws\Client\QueryClientResponse
+     */
     public function setEventObserver(EventObserver $eventObserver = null)
     {
         $this->eventObserver = $eventObserver;
@@ -181,7 +181,7 @@ class QueryClientResponse implements ClientResponseInterface
         return $this;
     }
 
-	/**
+    /**
      * {@inheritdoc}
      * @see Scalr\Service\Aws\Client.ClientResponseInterface::getResponseStatus()
      */

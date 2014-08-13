@@ -4,11 +4,9 @@ namespace Scalr\Service\Aws\Ec2\Handler;
 use Scalr\Service\Aws\Ec2\DataType\AddressData;
 use Scalr\Service\Aws\Ec2\DataType\AssociateAddressRequestData;
 use Scalr\Service\Aws\Ec2\DataType\AddressFilterList;
-use Scalr\Service\Aws\Ec2\DataType\AddressFilterData;
 use Scalr\Service\Aws\Ec2\DataType\AddressList;
 use Scalr\Service\Aws\DataType\ListDataType;
 use Scalr\Service\Aws\Client\ClientException;
-use Scalr\Service\Aws\DataType\ErrorData;
 use Scalr\Service\Aws\Ec2Exception;
 use Scalr\Service\Aws\Ec2\AbstractEc2Handler;
 

@@ -87,10 +87,8 @@ Scalr.regPage('Scalr.ui.db.manager.dashboard', function (loadParams, moduleParam
                 //width: null,
                 items: [{
                     xtype: 'image',
-                    src: '/ui2/images/ui/db/phpmyadmin_logo.png',
-                    width: 146,
-                    height: 88,
-                    margin: '20 0 21 50'
+                    src: Ext.BLANK_IMAGE_URL,
+                    cls: 'scalr-ui-dbmsr-phpmyadmin'
                 },{
                     xtype: 'container',
                     layout: {
@@ -282,7 +280,7 @@ Scalr.regPage('Scalr.ui.db.manager.dashboard', function (loadParams, moduleParam
                 cls: 'x-fieldset-separator-right',
                 hideOn: 'backupsNotSupported',
                 flex: 1.04,
-                title: 'Database dumps <img data-qtip="Database dumps description" class="tipHelp" src="/ui2/images/icons/info_icon_16x16.png" style="cursor: help; height: 16px;">',
+                title: 'Database dumps <img data-qwidth="400" data-qtip="Scalr will backup the database and store it in SQL form in your cloud. This backup will be taken from a slave. Click on Manage to configure the schedule for backups from the Farm Manager." class="tipHelp" src="/ui2/images/icons/info_icon_16x16.png" style="cursor: help; height: 16px;">',
                 items: [{
                     xtype: 'displayfield',
                     showOn: 'backupsDisabled',
@@ -320,7 +318,7 @@ Scalr.regPage('Scalr.ui.db.manager.dashboard', function (loadParams, moduleParam
                                 if (rawValue.status != 'ok') {
                                     html = '<span style="position:relative;top:-3px;color:#C00000;text-transform:capitalize">Failed';
                                     if (rawValue.error) {
-                                        html += ' <img data-qtip="'+Ext.String.htmlEncode(rawValue.error)+'" src="/ui2/images/icons/question.png" style="cursor: help; height: 16px;position:relative;top:2px">';
+                                        html += ' <img data-qtip="'+Ext.String.htmlEncode(rawValue.error)+'" src="' + Ext.BLANK_IMAGE_URL + '" class="x-icon-question" style="cursor: help; height: 16px;position:relative;top:2px">';
                                     }
                                     html += '</span>';
                                 } else {
@@ -423,7 +421,7 @@ Scalr.regPage('Scalr.ui.db.manager.dashboard', function (loadParams, moduleParam
                 xtype: 'fieldset',
                 cls: 'x-fieldset-separator-none',
                 flex: 1,
-                title: 'Binary storage snapshots <img data-qtip="Binary storage snapshots" class="tipHelp" src="/ui2/images/icons/info_icon_16x16.png" style="cursor: help; height: 16px;">',
+                title: 'Binary storage snapshots <img data-qwidth="400" data-qtip="Scalr will perform a data bundle to snapshot the database and store it in binary form in your cloud. This snapshot will be taken from the master." class="tipHelp" src="/ui2/images/icons/info_icon_16x16.png" style="cursor: help; height: 16px;">',
                 defaults: {
                     labelWidth: 110
                 },
@@ -464,7 +462,7 @@ Scalr.regPage('Scalr.ui.db.manager.dashboard', function (loadParams, moduleParam
                                 if (rawValue.status != 'ok') {
                                     html = '<span style="position:relative;top:-3px;color:#C00000;text-transform:capitalize">Failed';
                                     if (rawValue.error) {
-                                        html += ' <img data-qtip="'+Ext.String.htmlEncode(rawValue.error)+'" src="/ui2/images/icons/question.png" style="cursor: help; height: 16px;position:relative;top:2px">';
+                                        html += ' <img data-qtip="'+Ext.String.htmlEncode(rawValue.error)+'" src="' + Ext.BLANK_IMAGE_URL + '" class="x-icon-question" style="cursor: help; height: 16px;position:relative;top:2px">';
                                     }
                                     html += '</span>';
                                 } else {
@@ -1101,11 +1099,11 @@ if (!Ext.ClassManager.isCreated('Scalr.ui.FormFieldDbmsClusterMap')) {
                             name: 'server_id'
                         },{
                             xtype: 'displayfield',
-                            fieldLabel: 'Remote IP',
+                            fieldLabel: 'Public IP',
                             name: 'server_remote_ip'
                         },{
                             xtype: 'displayfield',
-                            fieldLabel: 'Local IP',
+                            fieldLabel: 'Private IP',
                             name: 'server_local_ip'
                         }]
                     },{
@@ -1162,57 +1160,8 @@ if (!Ext.ClassManager.isCreated('Scalr.ui.FormFieldDbmsClusterMap')) {
                         title: 'Statistics',
                         cls: 'x-fieldset-separator-left',
                         items: [{
-                            xtype: 'container',
-                            layout: 'column',
-                            defaults: {
-                                width: 220
-                            },
-                            items: [{
-                                xtype: 'label',
-                                text: 'Memory:'
-                            },{
-                                xtype: 'label',
-                                text: 'CPU:'
-                            }]
-                        },{
-                            xtype: 'container',
-                            layout: 'column',
-                            defaults: {
-                                margin: '0 20 10 0'
-                            },
-                            items: [{
-                                xtype: 'chartpreview',
-                                itemId: 'memoryChart'
-                            },{
-                                xtype: 'chartpreview',
-                                itemId: 'cpuChart'
-                            }]
-                        },{
-                            xtype: 'container',
-                            layout: 'column',
-                            defaults: {
-                                width: 220
-                            },
-                            items: [{
-                                xtype: 'label',
-                                text: 'Load averages:'
-                            },{
-                                xtype: 'label',
-                                text: 'Network:'
-                            }]
-                        },{
-                            xtype: 'container',
-                            layout: 'column',
-                            defaults: {
-                                margin: '0 20 0 0'
-                            },
-                            items: [{
-                                xtype: 'chartpreview',
-                                itemId: 'laChart'
-                            },{
-                                xtype: 'chartpreview',
-                                itemId: 'netChart'
-                            }]
+                            xtype: 'chartpreview',
+                            itemId: 'chartPreview'
                         }],
                         tools: [{
                             type: 'refresh',
@@ -1308,14 +1257,26 @@ if (!Ext.ClassManager.isCreated('Scalr.ui.FormFieldDbmsClusterMap')) {
 		},
 
 		loadChartsData: function() {
-			var me = this,
-				data = me.up('form').moduleParams;
-			if (me.currentServerInfo) {
-				me.down('#memoryChart').loadStatistics(data['farmId'], 'MEMSNMP', 'daily', data['farmRoleId'], me.currentServerInfo);	
-				me.down('#cpuChart').loadStatistics(data['farmId'], 'CPUSNMP', 'daily', data['farmRoleId'], me.currentServerInfo);	
-				me.down('#laChart').loadStatistics(data['farmId'], 'LASNMP', 'daily', data['farmRoleId'], me.currentServerInfo);	
-				me.down('#netChart').loadStatistics(data['farmId'], 'NETSNMP', 'daily', data['farmRoleId'], me.currentServerInfo);	
-			}
+            var me = this;
+
+            if (me.currentServerInfo) {
+                var params = me.currentServerInfo['monitoring'];
+                var hostUrl = params['hostUrl'];
+                var farmId = params['farmId'];
+                var farmRoleId = params['farmRoleId'];
+                var index = params['index'];
+                var farmHash = params['hash'];
+                var metrics = 'mem,cpu,la,net';
+                var period = 'daily';
+                var paramsForStatistic = {farmId: farmId, farmRoleId: farmRoleId, index: index, hash: farmHash, period: period, metrics: metrics};
+                var chartPreview = me.down('#chartPreview');
+
+                var callback = function() {
+                    me.lcdDelayed = Ext.Function.defer(me.loadChartsData, 60000, me);
+                };
+
+                chartPreview.loadStatistics(hostUrl, paramsForStatistic, callback);
+            }
 		},
 		loadGeneralMetrics: function() {
 			var me = this,

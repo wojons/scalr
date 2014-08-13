@@ -4,7 +4,6 @@ namespace Scalr\Service\Aws\Ec2\DataType;
 
 use Scalr\Service\Aws\Ec2Exception;
 use Scalr\Service\Aws\Ec2\AbstractEc2DataType;
-use \DateTime;
 
 /**
  * AWS Ec2 ImageData (DescribeImagesResponseItemType)
@@ -121,6 +120,14 @@ class ImageData extends AbstractEc2DataType
      * @var string
      */
     public $platform;
+
+    /**
+     * Specifies whether enhanced networking is enabled.
+     * Valid values: simple
+     *
+     * @var string
+     */
+    public $sriovNetSupport;
 
     /**
      * The AWS account alias (e.g., amazon, self, etc.) or AWS account ID that owns the AMI.

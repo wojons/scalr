@@ -763,10 +763,15 @@ class ADODB_mysqli extends ADOConnection {
 			if ($rs) return $rs;
 		}
 
-		if($this->debug)
-			ADOConnection::outp("Query: " . $sql . " failed. " . $this->ErrorMsg());
-		
-		return false;
+		if($this->debug) {
+            ADOConnection::outp("Query: " . $sql . " failed. " . $this->ErrorMsg());
+            ob_start();
+            debug_print_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS);
+            ADOConnection::outp(ob_get_contents());
+            ob_end_clean();
+        }
+
+        return false;
 		
 	}
 

@@ -4,18 +4,14 @@ class Scalr_UI_Controller_Admin_Accounts extends Scalr_UI_Controller
 {
     const CALL_PARAM_NAME = 'accountId';
 
+    public function hasAccess()
+    {
+        return $this->user->isScalrAdmin();
+    }
+
     public static function getApiDefinitions()
     {
         return array('xRemove', 'xSave', 'xListAccounts', 'xGetInfo');
-    }
-
-    /**
-     * {@inheritdoc}
-     * @see Scalr_UI_Controller::hasAccess()
-     */
-    public function hasAccess()
-    {
-        return $this->user && $this->user->isScalrAdmin();
     }
 
     public function defaultAction()
@@ -37,6 +33,11 @@ class Scalr_UI_Controller_Admin_Accounts extends Scalr_UI_Controller
 
         $sql = "SELECT id, name, dtadded, status FROM clients WHERE :FILTER:";
         $args = array();
+
+        if ($this->getParam('serverId')) {
+            $sql .= " AND `id` IN (SELECT `client_id` FROM `servers_history` WHERE `server_id` = ?)";
+            $args[] = $this->getParam('serverId');
+        }
 
         if ($this->getParam('farmId')) {
             $sql .= ' AND id IN (SELECT clientid FROM farms WHERE id = ?)';

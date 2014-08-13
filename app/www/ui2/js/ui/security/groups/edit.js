@@ -5,6 +5,7 @@ Scalr.regPage('Scalr.ui.security.groups.edit', function (loadParams, moduleParam
 			modal:true
 		},
         accountId: moduleParams['accountId'],
+        remoteAddress: moduleParams['remoteAddress'],
 		dockedItems: [{
 			xtype: 'container',
 			dock: 'bottom',

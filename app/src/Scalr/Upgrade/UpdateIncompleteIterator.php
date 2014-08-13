@@ -38,7 +38,7 @@ class UpdateIncompleteIterator extends \FilterIterator
         }
     }
 
-	/**
+    /**
      * {@inheritdoc}
      * @see FilterIterator::accept()
      */

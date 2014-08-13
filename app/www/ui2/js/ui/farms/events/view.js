@@ -9,11 +9,11 @@ Scalr.regPage('Scalr.ui.farms.events.view', function (loadParams, moduleParams) 
 			'event_role_id', 
 			'event_farm_roleid',
 			'event_role_name',
-			'event_server_index'
+			'event_server_index',
+            'webhooks_count'
 		],
 		proxy: {
 			type: 'scalr.paging',
-			extraParams: loadParams,
 			url: '/farms/events/xListEvents'
 		},
 		remoteSort: true
@@ -24,7 +24,6 @@ Scalr.regPage('Scalr.ui.farms.events.view', function (loadParams, moduleParams) 
 		scalrOptions: {
 			maximize: 'all'
 		},
-		scalrReconfigureParams: { farmId: '' },
 		store: store,
 		stateId: 'grid-farms-events-view',
 		stateful: true,
@@ -53,30 +52,32 @@ Scalr.regPage('Scalr.ui.farms.events.view', function (loadParams, moduleParams) 
 						'&nbsp;&rarr;&nbsp;*removed role*&nbsp;' +
 					'</tpl>' +
 					'#<a href="#/servers/{event_server_id}/view">{event_server_index}</a>'+
-				'<tpl else><img src="/ui2/images/icons/false.png"></tpl>'
+				'<tpl else><img src="'+Ext.BLANK_IMAGE_URL+'" class="x-icon-minus" /></tpl>'
 			},
 			{ header: "Executed scripts", width: 150, dataIndex: 'scripts', sortable: false, xtype: 'templatecolumn', tpl:
 				'<tpl if="scripts &gt; 0">'+
 				'{scripts} [<a href="#/logs/scripting?eventId={event_id}">Logs</a>]'+
-				'<tpl else><img src="/ui2/images/icons/false.png"></tpl>'
+				'<tpl else><img src="'+Ext.BLANK_IMAGE_URL+'" class="x-icon-minus" /></tpl>'
 			},
-			{ header: "Details", flex: 3, dataIndex: 'message', sortable: false }
+			{ header: "Details", flex: 3, dataIndex: 'message', sortable: false },
+            { header: 'Webhooks', width: 110, dataIndex: 'webhooks_count', sortable: false, xtype: 'templatecolumn', tpl: '{[values.webhooks_count>0?\'<a href="#/webhooks/history?eventId=\'+values.event_id+\'">\'+values.webhooks_count+\'</a>\':\'<img src="'+Ext.BLANK_IMAGE_URL+'" class="x-icon-minus" />\']}'}
 		],
 
 		dockedItems: [{
 			xtype: 'scalrpagingtoolbar',
+            ignoredLoadParams: ['farmId'],
 			store: store,
 			dock: 'top',
 			items: [{
 				xtype: 'filterfield',
 				store: store
-			}, ' ', {
+			}/*, ' ', {
 				xtype: 'button',
 				text: 'Configure event notifications',
 				handler: function () {
 					document.location.href = '#/farms/events/configure?farmId=' + store.proxy.extraParams.farmId;
 				}
-			}]
+			}*/]
 		}]
 	});
 });

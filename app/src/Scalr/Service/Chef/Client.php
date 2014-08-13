@@ -43,6 +43,15 @@
             return $this->request("/cookbooks/{$cookbookName}/{$cookbookVersion}", "GET");
         }
 
+        public function createClient($name)
+        {
+            $client = new stdClass();
+            $client->name = $name;
+            $client->admin = false;
+
+            return $this->request("/clients", "POST", json_encode($client));
+        }
+
         public function removeClient($name)
         {
             return $this->request("/clients/{$name}", "DELETE");
@@ -232,7 +241,7 @@
             $headers = array();
             $key = openssl_get_privatekey($this->key);
 
-            openssl_private_encrypt($string, $crypt, $key);
+            @openssl_private_encrypt($string, $crypt, $key);
 
             $sigs = preg_split("/\n/", chunk_split(base64_encode($crypt), 60));
 

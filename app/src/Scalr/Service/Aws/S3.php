@@ -2,6 +2,7 @@
 namespace Scalr\Service\Aws;
 
 use Scalr\Service\Eucalyptus;
+use Scalr\Service\Aws;
 
 /**
  * Amazon Simple Storage Service (S3) interface
@@ -62,26 +63,9 @@ class S3 extends AbstractService implements ServiceInterface
         if ($aws instanceof Eucalyptus) {
             $url = rtrim($aws->getUrl('s3'), '/ ');
         } else {
-            $url = 's3.amazonaws.com';
+            $region = $this->getAws()->getRegion();
+            $url = 's3' . ($region && $region != Aws::REGION_US_EAST_1 ? '-' . $region : '') . '.amazonaws.com';
         }
         return $url;
     }
 }
-
-/*
- TODO [postponed] Following Simple Storage Service API actions need to be implemented:
-        GET Bucket Object versions
-        PUT Bucket versioning
-        LIST Multipart Uploads
-        Delete Multiple Objects
-        GET Object torrent (p. 158)
-        HEAD Object (p. 160)
-        OPTIONS object (p. 164)
-        POST Object (p. 167)
-        Initiate Multipart Upload (p. 200)
-        Upload Part (p. 206)
-        Upload Part - Copy (p. 209)
-        Complete Multipart Upload (p. 214)
-        Abort Multipart Upload (p. 219)
-        List Parts (p. 221)
- */

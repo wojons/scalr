@@ -144,7 +144,7 @@
 	font: bold 13px/20px arial;
 	color: #49634C;
 	position:absolute;
-	padding-left:10px;
+	padding-left: 12px;
 	bottom:0px;
 	background:#f0f1f4;
     z-index:3;
@@ -154,8 +154,8 @@
 	height:100px;
 	margin:3px 0 12px;
 	border-radius: 4px;
-    background: #E1ECDD;
-	border: 2px dashed #E1ECDD;
+    background: #E3EBDE;
+	border: 2px dashed #E3EBDE;
     cursor:pointer;
 }
 
@@ -165,8 +165,8 @@
 }
 
 .scalr-ui-dataview-selroles-add .x-item-inner:hover{
-	background: #E4EEDF;
-    border: 2px solid #E4EEDF;
+	background: #EAEEE3;
+    border: 2px solid #EAEEE3;
 }
 
 .scalr-ui-dataview-selroles-add.x-disabled .x-item-inner{

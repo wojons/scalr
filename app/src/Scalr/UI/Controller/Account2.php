@@ -56,6 +56,11 @@ class Scalr_UI_Controller_Account2 extends Scalr_UI_Controller
             }
             $row['dtAdded'] = Scalr_Util_DateTime::convertTz($env->dtAdded);
             $row['status'] = $env->status;
+
+            if ($this->getContainer()->analytics->enabled) {
+                $row['ccId'] = $env->getPlatformConfigValue(Scalr_Environment::SETTING_CC_ID);
+            }
+
             $result[] = &$row;
         }
 
@@ -108,7 +113,7 @@ class Scalr_UI_Controller_Account2 extends Scalr_UI_Controller
         } else {
             $teamIds = $this->user->getTeams();
         }
-        
+
         $result = array();
         foreach ($teamIds as &$row) {
             $team = Scalr_Account_Team::init()->loadById($row['id']);
@@ -143,7 +148,7 @@ class Scalr_UI_Controller_Account2 extends Scalr_UI_Controller
         } else {
             return $this->db->getAll('SELECT `account_role_id` as `id`, `name`, HEX(`color`) AS color FROM `acl_account_roles` WHERE `account_id` = ?', $this->request->getUser()->getAccountId());
         }
-        
+
     }
 
     public function getBaseRolesList()

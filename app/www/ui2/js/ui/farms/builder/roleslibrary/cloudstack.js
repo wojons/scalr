@@ -6,22 +6,17 @@ Scalr.regPage('Scalr.ui.farms.builder.addrole.cloudstack', function () {
 
         cls: 'x-container-fieldset x-fieldset-separator-bottom',
 
+        instanceTypeFieldName: 'cloudstack.service_offering_id',
+
         layout: 'anchor',
         defaults: {
-            maxWidth: 760
+            anchor: '100%',
+            maxWidth: 762,
+            labelWidth: 110
         },
         
         isVisibleForRole: function(record) {
             return Ext.Array.contains(['cloudstack', 'idcf', 'ucloud'], record.get('platform'));
-        },
-
-        onSelectImage: function(record) {
-            if (this.isVisibleForRole(record)) {
-                this.setRole(record);
-                this.show();
-            } else {
-                this.hide();
-            }
         },
 
         setRole: function(record) {
@@ -41,37 +36,15 @@ Scalr.regPage('Scalr.ui.farms.builder.addrole.cloudstack', function () {
                         field,
                         defaultValue = null,
                         limits,
-                        offerings,
                         fb = this.up('#farmbuilder');
                     data = data || {};
-                    field = this.down('[name="cloudstack.service_offering_id"]');
-
-                    limits = fb.getLimits(platform + '.service_offering_id');
-                    if (limits && limits.value) {
-                        offerings = [];
-                        Ext.Array.each(data ? data['serviceOfferings'] : [], function(offering) {
-                            if (Ext.Array.contains(limits.value, offering.id)) {
-                                offerings.push(offering);
-                            }
-                        });
-                    } else {
-                        offerings = data ? data['serviceOfferings'] : [];
-                    }
-
-                    field.store.load({ data: offerings});
-                    if (field.store.getCount() > 0) {
-                        defaultValue = field.store.getAt(0).get('id');
-                    }
-                    field.setValue(defaultValue);
-                    field.setDisabled(!status);
-                    field[limits?'addCls':'removeCls']('x-field-governance');
-
+                    this.down('[name="cloudstack.static_nat.map"]').hide().reset();
                     Ext.Object.each({
                         'cloudstack.network_id': 'networks',
                         'cloudstack.shared_ip.id': 'ipAddresses'
                     }, function(fieldName, dataFieldName){
                         var storeData;
-                        limits = fb.getLimits(platform + fieldName.replace('cloudstack', ''));
+                        limits = fb.getLimits(platform, fieldName);
                         if (limits && limits.value && limits.value[cloudLocation] && limits.value[cloudLocation].length > 0) {
                             storeData = [];
                             Ext.Array.each(data ? data[dataFieldName] : [], function(item) {
@@ -93,7 +66,7 @@ Scalr.regPage('Scalr.ui.farms.builder.addrole.cloudstack', function () {
                             field.show();
                         }
                         field.setValue(defaultValue);
-                        field[limits?'addCls':'removeCls']('x-field-governance');
+                        field.toggleIcon('governance', !!limits);
                     });
                 },
                 this
@@ -104,7 +77,11 @@ Scalr.regPage('Scalr.ui.farms.builder.addrole.cloudstack', function () {
             var res = true,
                 field;
             field = this.down('[name="cloudstack.service_offering_id"]');
-            res = field.validate() || {comp: field, message: 'Service offering is required'};
+            res = field.validate() || {comp: field, message: 'Instance type is required'};
+            if (res === true && this.down('[name="cloudstack.network_id"]').getValue() == 'SCALR_MANUAL') {
+                field = this.down('[name="cloudstack.static_nat.map"]');
+                res = field.validate() || {comp: field, message: 'Static IPs is required'};
+            }
             return res;
         },
 
@@ -112,92 +89,82 @@ Scalr.regPage('Scalr.ui.farms.builder.addrole.cloudstack', function () {
             var sharedIpIdField = this.down('[name="cloudstack.shared_ip.id"]'),
                 settings = {
                 'cloudstack.service_offering_id': this.down('[name="cloudstack.service_offering_id"]').getValue(),
-                'cloudstack.network_id': this.down('[name="cloudstack.network_id"]').getValue(),
-                'cloudstack.shared_ip.id': sharedIpIdField.getValue()
+                'cloudstack.network_id': this.down('[name="cloudstack.network_id"]').getValue()
             };
-
-            if (settings['cloudstack.shared_ip.id']) {
-                var r = sharedIpIdField.findRecordByValue(settings['cloudstack.shared_ip.id']);
-                settings['cloudstack.shared_ip.address'] = r ? r.get('name') : '';
+            if (settings['cloudstack.network_id'] == 'SCALR_MANUAL') {
+                settings['cloudstack.static_nat.map'] = this.down('[name="cloudstack.static_nat.map"]').getValue();
+                settings['cloudstack.use_static_nat'] = 1;
             } else {
-                settings['cloudstack.shared_ip.address'] = '';
-            }
+                settings['cloudstack.shared_ip.id'] = sharedIpIdField.getValue();
 
+                if (settings['cloudstack.shared_ip.id']) {
+                    var r = sharedIpIdField.findRecordByValue(settings['cloudstack.shared_ip.id']);
+                    settings['cloudstack.shared_ip.address'] = r ? r.get('name') : '';
+                } else {
+                    settings['cloudstack.shared_ip.address'] = '';
+                }
+            }
             return settings;
         },
 
         items: [{
-            xtype: 'container',
-            layout: 'hbox',
-            margin: '0 0 12 0',
-            items: [{
-                xtype: 'combo',
-                name: 'cloudstack.service_offering_id',
-                flex: 1,
-                fieldLabel: 'Service offering',
-                governance: true,
-                labelWidth: 100,
-                labelStyle: 'white-space:nowrap',
-                editable: false,
-                allowBlank: false,
-                matchFieldWidth: false,
-                listConfig: {
-                    style: 'white-space:nowrap'
-                },
-                queryMode: 'local',
-                store: {
-                    fields: [ 'id', 'name' ],
-                    proxy: 'object'
-                },
-                valueField: 'id',
-                displayField: 'name'
-            }]
+            xtype: 'instancetypefield',
+            name: 'cloudstack.service_offering_id',
+            allowBlank: false,
+            iconsPosition: 'outer'
         },{
-            xtype: 'container',
-            layout: {
-                type: 'hbox',
-                align: 'stretch'
+            xtype: 'combo',
+            name: 'cloudstack.network_id',
+            flex: 1,
+            matchFieldWidth: false,
+            fieldLabel: 'Network',
+            icons: {
+                governance: true
             },
-            items: [{
-                xtype: 'combo',
-                name: 'cloudstack.network_id',
-                flex: 1,
-                matchFieldWidth: false,
-                fieldLabel: 'Network',
-                governance: true,
-                editable: false,
-                listConfig: {
-                    width: 'auto',
-                    minWidth: 350
-                },
-                queryMode: 'local',
-                store: {
-                    fields: [ 'id', 'name' ],
-                    proxy: 'object'
-                },
-                valueField: 'id',
-                displayField: 'name'
-            }, {
-                xtype: 'combo',
-                name: 'cloudstack.shared_ip.id',
-                flex: 1,
-                margin: '0 0 0 64',
-                fieldLabel: 'Shared IP',
-                labelWidth: 70,
-                editable: false,
-                matchFieldWidth: false,
-                listConfig: {
-                    width: 'auto',
-                    minWidth: 350
-                },
-                queryMode: 'local',
-                store: {
-                    fields: [ 'id', 'name' ],
-                    proxy: 'object'
-                },
-                valueField: 'id',
-                displayField: 'name'
-            }]
+            iconsPosition: 'outer',
+            editable: false,
+            listConfig: {
+                width: 'auto',
+                minWidth: 350
+            },
+            queryMode: 'local',
+            store: {
+                fields: [ 'id', 'name' ],
+                proxy: 'object'
+            },
+            valueField: 'id',
+            displayField: 'name',
+            listeners: {
+                change: function(comp, value) {
+                    comp.next('[name="cloudstack.static_nat.map"]').setVisible(value == 'SCALR_MANUAL');
+                    comp.next('[name="cloudstack.shared_ip.id"]').setVisible(value != 'SCALR_MANUAL');
+                }
+            }
+        }, {
+            xtype: 'textfield',
+            name: 'cloudstack.static_nat.map',
+            fieldLabel: 'Static IPs',
+            emptyText: 'ex. 1=192.168.0.1;2=192.168.0.2',
+            hidden: true,
+            allowBlank: false
+        },{
+            xtype: 'combo',
+            name: 'cloudstack.shared_ip.id',
+            flex: 1,
+            fieldLabel: 'Shared IP',
+            editable: false,
+            matchFieldWidth: false,
+            listConfig: {
+                width: 'auto',
+                minWidth: 350
+            },
+            queryMode: 'local',
+            store: {
+                fields: [ 'id', 'name' ],
+                proxy: 'object'
+            },
+            valueField: 'id',
+            displayField: 'name'
         }]
-    }
+    };
 });

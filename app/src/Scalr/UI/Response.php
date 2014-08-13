@@ -130,8 +130,11 @@ class Scalr_UI_Response
     // divide into set headers and set body
     public function prepareJsonResponse()
     {
+        //if (! isset($_REQUEST['X-Requested-With']) && $_REQUEST['X-Requested-With'] == 'XMLHttpRequest') {
+            // when we do file uploads, big log break json parser, may be some issue in extjs 4.2.2
         if (count($this->serverDebugSql))
             $this->jsResponse['scalrDebugModeSql'] = $this->serverDebugSql;
+        //}
 
         $this->setResponse(json_encode($this->jsResponse));
 
@@ -181,8 +184,8 @@ class Scalr_UI_Response
     public function pageUiHash()
     {
         return sha1(join(';', array(
-            $this->getModuleName("init.js"),
             $this->getModuleName("override.js"),
+            $this->getModuleName("init.js"),
             $this->getModuleName("utils.js"),
             $this->getModuleName("ui-form.js"),
             $this->getModuleName("ui-grid.js"),
@@ -215,27 +218,43 @@ class Scalr_UI_Response
         $this->jsResponseFlag = true;
     }
 
-    public function success($message = null)
+    public function success($message = null, $rawHtml = false)
     {
-        if ($message)
+        if ($message) {
+            if (! $rawHtml) {
+                // Ext.decode can't decode encoded-quotas
+                $message = str_replace("\n", '<br />', htmlspecialchars($message, ENT_NOQUOTES | ENT_HTML5));
+            }
+
             $this->jsResponse['successMessage'] = $message;
+        }
 
         $this->jsResponseFlag = true;
     }
 
-    public function failure($message = null)
+    public function failure($message = null, $rawHtml = false)
     {
-        if ($message)
+        if ($message) {
+            if (! $rawHtml) {
+                $message = str_replace("\n", '<br />', htmlspecialchars($message, ENT_NOQUOTES | ENT_HTML5));
+            }
+
             $this->jsResponse['errorMessage'] = $message;
+        }
 
         $this->jsResponse['success'] = false;
         $this->jsResponseFlag = true;
     }
 
-    public function warning($message = null)
+    public function warning($message = null, $rawHtml = false)
     {
-        if ($message)
+        if ($message) {
+            if (! $rawHtml) {
+                $message = str_replace("\n", '<br />', htmlspecialchars($message, ENT_NOQUOTES | ENT_HTML5));
+            }
+
             $this->jsResponse['warningMessage'] = $message;
+        }
 
         $this->jsResponseFlag = true;
     }
@@ -260,7 +279,6 @@ class Scalr_UI_Response
     {
         global $ADODB_OUTP;
 
-        $db = Scalr::getDb();
         if ($enabled) {
             $ADODB_OUTP = function($msg, $newline) {
                 static $i = 1;
@@ -270,9 +288,15 @@ class Scalr_UI_Response
                 Scalr_UI_Response::getInstance()->serverDebugSql[] = array('sql' => $msg);
             };
 
-            $db->debug = -1;
+            Scalr::getDb()->debug = -1;
+            if (Scalr::getContainer()->analytics->enabled) {
+                Scalr::getContainer()->cadb->debug = -1;
+            }
         } else {
-            $db->debug = false;
+            if (Scalr::getContainer()->analytics->enabled) {
+                Scalr::getContainer()->cadb->debug = false;
+            }
+            Scalr::getDb()->debug = false;
         }
     }
 }

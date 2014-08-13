@@ -2,8 +2,6 @@
 namespace Scalr\Tests\Service\Aws;
 
 use Scalr\Service\Aws\Client\QueryClientException;
-use Scalr\Service\Aws\CloudWatch\DataType\DatapointList;
-use Scalr\Service\Aws\CloudWatch\DataType\DatapointData;
 use Scalr\Service\Aws\CloudWatch\DataType\DimensionData;
 use Scalr\Service\Aws\CloudWatch\DataType\MetricData;
 use Scalr\Service\Aws\CloudWatch;

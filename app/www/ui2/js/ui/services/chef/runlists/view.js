@@ -45,12 +45,13 @@ Scalr.regPage('Scalr.ui.services.chef.runlists.view', function (loadParams, modu
 				text: 'Chef environment',
 				flex: 2,
 				dataIndex: 'chefEnv'
-			},{ xtype: 'optionscolumn',
-				optionsMenu: [{ 
+			},{ 
+                xtype: 'optionscolumn2',
+				menu: [{
 					text: 'Edit', 
 					iconCls: 'x-menu-icon-edit',
-					menuHandler: function(item) {
-						Scalr.event.fireEvent('redirect','#/services/chef/runlists/edit?runlistId=' + item.record.get('id'));
+					menuHandler: function(data) {
+						Scalr.event.fireEvent('redirect','#/services/chef/runlists/edit?runlistId=' + data['id']);
 					}
 				},{
 					xtype: 'menuseparator',
@@ -58,8 +59,8 @@ Scalr.regPage('Scalr.ui.services.chef.runlists.view', function (loadParams, modu
 				},{ 
 					text:'Source', 
 					iconCls: 'x-menu-icon-info',
-					menuHandler: function(item) {
-						Scalr.event.fireEvent('redirect','#/services/chef/runlists/source?runlistId=' + item.record.get('id'));
+					menuHandler: function(data) {
+						Scalr.event.fireEvent('redirect','#/services/chef/runlists/source?runlistId=' + data['id']);
 					}
 				},{
 					xtype: 'menuseparator',
@@ -67,28 +68,24 @@ Scalr.regPage('Scalr.ui.services.chef.runlists.view', function (loadParams, modu
 				},{ 
 					text: 'Delete', 
 					iconCls: 'x-menu-icon-delete',
-					menuHandler: function(item) {
-						Scalr.Request({
-							confirmBox: {
-								msg: 'Remove selected runlist ?',
-								type: 'delete'
-							},
-							processBox: {
-								msg: 'Removing runlist ...',
-								type: 'delete'
-							},
-							scope: this,
-							url: 'services/chef/runlists/xDeleteRunlist',
-							params: {runlistId: item.record.get('id'), runlistName: item.record.get('name'), servId: item.record.get('servId'), chefEnv: item.record.get('chefEnv')},
-							success: function (data, response, options){
-								store.load();
-							}
-						});
+                    request: {
+                        confirmBox: {
+                            msg: 'Remove selected runlist ?',
+                            type: 'delete'
+                        },
+                        processBox: {
+                            msg: 'Removing runlist ...',
+                            type: 'delete'
+                        },
+                        url: 'services/chef/runlists/xDeleteRunlist',
+                        dataHandler: function (data) {
+                            return { runlistId: data['id'], runlistName: data['name'], servId: data['servId'], chefEnv: data['chefEnv'] };
+                        },
+                        success: function (data, response, options){
+                            store.load();
+                        }
 					}
-				}],
-				getVisibility: function (record) {
-					return true;
-				}
+				}]
 			}],
 		dockedItems: [{
 			xtype: 'scalrpagingtoolbar',

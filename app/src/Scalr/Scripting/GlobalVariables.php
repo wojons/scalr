@@ -2,19 +2,29 @@
 
 class Scalr_Scripting_GlobalVariables
 {
+    const SCOPE_SCALR = 'scalr';
+    const SCOPE_ACCOUNT = 'account';
     const SCOPE_ENVIRONMENT = 'env';
     const SCOPE_ROLE = 'role';
     const SCOPE_FARM = 'farm';
     const SCOPE_FARMROLE = 'farmrole';
     const SCOPE_SERVER = 'server';
 
-    private $envId,
+    private
+        $accountId,
+        $envId,
         $scope,
         $db,
         $crypto,
-        $cryptoKey;
+        $cryptoKey,
+        $listScopes;
 
-    public function __construct($envId, $scope = Scalr_Scripting_GlobalVariables::SCOPE_ENVIRONMENT)
+    /**
+     * @param int $accountId
+     * @param int $envId
+     * @param string $scope
+     */
+    public function __construct($accountId = 0, $envId = 0, $scope = Scalr_Scripting_GlobalVariables::SCOPE_SCALR)
     {
         $this->crypto = new Scalr_Util_CryptoTool(
             MCRYPT_RIJNDAEL_256,
@@ -25,151 +35,226 @@ class Scalr_Scripting_GlobalVariables
 
         $this->cryptoKey = @file_get_contents(APPPATH."/etc/.cryptokey");
 
+        $this->accountId = $accountId;
         $this->envId = $envId;
         $this->scope = $scope;
+        $this->listScopes = [self::SCOPE_SCALR, self::SCOPE_ACCOUNT, self::SCOPE_ENVIRONMENT, self::SCOPE_ROLE, self::SCOPE_FARM, self::SCOPE_FARMROLE, self::SCOPE_SERVER];
+
         $this->db = \Scalr::getDb();
     }
 
-    private function resetGlobalFlags(&$variable)
-    {
-        // clear values if they are inherited
-        if ($variable['flagRequiredGlobal'])
-            $variable['flagRequired'] = '';
-
-        if ($variable['flagFinalGlobal'])
-            $variable['flagFinal'] = '';
-
-        if ($variable['flagHiddenGlobal'])
-            $variable['flagHidden'] = '';
-
-        if ($variable['lockConfigure']) {
-            $variable['format'] = '';
-            $variable['validator'] = '';
-        }
-    }
-
-    public function getErrorMessage($result)
+    /**
+     * @param array $result
+     * @return mixed
+     */
+    public function getErrorMessage(array $result)
     {
         $field = array_shift($result);
         return array_shift($field);
     }
 
     /**
-     * @param $variables
+     * @param int $roleId
+     * @param int $farmId
+     * @param int $farmRoleId
+     * @param string $serverId
+     * @return array
+     */
+    public function _getValues($roleId = 0, $farmId = 0, $farmRoleId = 0, $serverId = '')
+    {
+        $selectSql = 'SELECT `name`, `value`, `flag_final` AS `flagFinal`, `flag_required` AS `flagRequired`, `flag_hidden` AS `flagHidden`, `format`, `validator`';
+        $sql = array($selectSql . ', "scalr" AS scope FROM variables');
+        $args = array();
+        $result = array();
+
+        if ($this->accountId) {
+            $sql[] = $selectSql . ', "account" AS scope FROM account_variables WHERE account_id = ?';
+            $args[] = $this->accountId;
+        }
+
+        if ($this->envId) {
+            $sql[] = $selectSql . ', "env" AS scope FROM client_environment_variables WHERE env_id = ?';
+            $args[] = $this->envId;
+        }
+
+        if ($roleId) {
+            $sql[] = $selectSql . ', "role" AS scope FROM role_variables WHERE role_id = ?';
+            $args[] = $roleId;
+        }
+
+        if ($farmId) {
+            $sql[] = $selectSql . ', "farm" AS scope FROM farm_variables WHERE farm_id = ?';
+            $args[] = $farmId;
+        }
+
+        if ($farmRoleId) {
+            $sql[] = $selectSql . ', "farmrole" AS scope FROM farm_role_variables WHERE farm_role_id = ?';
+            $args[] = $farmRoleId;
+        }
+
+        if ($serverId) {
+            $sql[] = $selectSql . ', "server" AS scope FROM server_variables WHERE server_id = ?';
+            $args[] = $serverId;
+        }
+
+        $variables = $this->db->GetAll(implode(' UNION ', $sql), $args);
+        $scopes = array_flip($this->listScopes);
+        $groupByName = array();
+        foreach ($variables as $variable) {
+            $groupByName[$variable['name']][$scopes[$variable['scope']]] = $variable;
+        }
+
+        foreach ($groupByName as $name => $values) {
+            ksort($values);
+            $variable = array(
+                'name' => $name
+            );
+
+            foreach ($values as $val) {
+                if ($val['value'])
+                    $val['value'] = $this->crypto->decrypt($val['value'], $this->cryptoKey);
+
+                if ($val['scope'] != $this->scope) {
+                    if ($val['flagFinal'] == 1 || $val['flagRequired'] || $val['flagHidden'] == 1 || $val['format'] || $val['validator']) {
+                        $variable['locked'] = array(
+                            'flagFinal' => $val['flagFinal'],
+                            'flagRequired' => $val['flagRequired'],
+                            'flagHidden' => $val['flagHidden'],
+                            'format' => $val['format'],
+                            'validator' => $val['validator'],
+                            'scope' => $val['scope']
+                        );
+                    }
+
+                    $variable['default'] = array(
+                        'name' => $val['name'],
+                        'value' => $val['value'],
+                        'scope' => $val['scope']
+                    );
+                } else {
+                    $variable['current'] = $val;
+                }
+            }
+
+            $result[$name] = $variable;
+        }
+
+        return $result;
+    }
+
+    /**
+     * @param array|ArrayObject $variables
      * @param int $roleId
      * @param int $farmId
      * @param int $farmRoleId
      * @param string $serverId
      * @return array|bool
-     * @throws Scalr_Exception_Core
      */
     public function validateValues($variables, $roleId = 0, $farmId = 0, $farmRoleId = 0, $serverId = '')
     {
         $errors = array();
-
-        // info about variable from upper levels, make copy of arguments for query
-        $valFarmId = $farmId;
-        $valRoleId = $roleId;
-        $valFarmRoleId = $farmRoleId;
-        if ($this->scope == self::SCOPE_FARMROLE) {
-            $valFarmRoleId = 0;
-        } else if ($this->scope == self::SCOPE_FARM) {
-            $valFarmId = 0;
-        } else if ($this->scope == self::SCOPE_ROLE) {
-            $valRoleId = 0;
-        }
-
         $usedNames = array();
-        if (is_array($variables)) {
-            foreach ($variables as $variable) {
-                $name = $variable['name'];
-                if (empty($name))
-                    continue;
+        $currentValues = $this->_getValues($roleId, $farmId, $farmRoleId, $serverId);
 
-                $errors[$name] = array();
-                if (! preg_match('/^[A-Za-z]{1,1}[A-Za-z0-9_]{1,49}$/', $name)) {
-                    $errors[$name]['name'] = 'Invalid name';
-                } else if (in_array($variable['name'], $usedNames)) {
-                    $errors[$name]['name'] = 'Duplicate name';
-                } else {
-                    $usedNames[] = $variable['name'];
+        foreach ($variables as $variable) {
+            $deleteFlag = ($variable['flagDelete'] == 1) ? true : false;
+
+            $name = $variable['name'];
+            if (empty($name))
+                continue;
+
+            // check for required variable, because if it doesn't have value, it won't have current section
+            if ($variable['default'] && $currentValues[$name]['locked'] && $currentValues[$name]['locked']['flagRequired'] == $this->scope) {
+                if (! (
+                    $variable['default']['value'] != '' ||
+                    $variable['current'] && trim($variable['current']['value']) != ''
+                )) {
+                    $errors[$name]['value'] = sprintf('%s is required variable', $name);
                 }
+            }
 
-                $this->resetGlobalFlags($variable);
+            if ($variable['current'])
+                $variable = $variable['current'];
 
-                // check required flag only on FarmRole level
-                // we don't check scope of var, because it could be not defined on FarmRole level, exclude var from FarmRole level with nonempty value
-                if ($this->scope == self::SCOPE_FARMROLE && !($variable['scope'] == $this->scope && $variable['value'])) {
-                    $doNotCheckFarmLevel = $variable['defaultScope'] == 'farm';
+            $variable['value'] = trim($variable['value']);
+            if (!$variable['value'] && isset($currentValues[$name]['default']))
+                $deleteFlag = true;
 
-                    $values = $this->db->GetAll("SELECT * FROM global_variables
-                            WHERE name = ? AND env_id = ? AND (role_id = ? or role_id = 0) AND (farm_id = ? OR farm_id = 0) AND farm_role_id = 0", array(
-                        $name,
-                        $this->envId,
-                        $roleId,
-                        $doNotCheckFarmLevel ? 0 : $farmId
-                    ));
+            if ($deleteFlag)
+                continue;
 
-                    $flag = false; $em = false;
-                    if ($doNotCheckFarmLevel && $variable['defaultValue']) {
-                        $em = true;
+            $errors[$name] = array();
+            if (! preg_match('/^[A-Za-z]{1,1}[A-Za-z0-9_]{1,49}$/', $name)) {
+                $errors[$name]['name'] = 'Invalid name';
+            } else if (in_array($name, $usedNames)) {
+                $errors[$name]['name'] = 'Duplicate name';
+            } else {
+                $usedNames[] = $name;
+            }
+
+            // set advanced flags only on first level
+            if ($currentValues['name']['default']) {
+                $msg = 'You can\'t redefine advanced settings (flags, format, validator)';
+                if ($variable['flagRequired'])
+                    $errors[$name]['flagRequired'] = $msg;
+
+                if ($variable['flagFinal'] == 1)
+                    $errors[$name]['flagFinal'] = $msg;
+
+                if ($variable['flagHidden'] == 1)
+                    $errors[$name]['flagHidden'] = $msg;
+
+                if ($variable['format'])
+                    $errors[$name]['format'] = $msg;
+
+                if ($variable['validator'])
+                    $errors[$name]['validator'] = $msg;
+            } else {
+                if ($variable['flagRequired']) {
+                    if ($this->scope == self::SCOPE_FARMROLE || $this->scope == self::SCOPE_SERVER) {
+                        $errors[$name]['flagRequired'] = 'You can\'t set required flag on farmrole or server level';
+                    } else {
+                        $sc = $this->listScopes;
+                        array_pop($sc); // exclude SERVER scope
+                        $sc = array_slice($sc, array_search($this->scope, $sc) + 1);
+
+                        if (! in_array($variable['flagRequired'], $sc))
+                            $errors[$name]['flagRequired'] = 'Wrong required scope';
                     }
-
-                    foreach ($values as $vr) {
-                        if ($vr['flag_required'])
-                            $flag = true;
-                        if ($vr['value'])
-                            $em = true;
-                    }
-
-                    if ($flag && !$em)
-                        $errors[$name]['value'] = sprintf('%s is required variable', $name);
                 }
 
-
-                if ($variable['scope'] != $this->scope) {
-                    continue;
-                }
-
-                if ($variable['flagFinal'] && $variable['flagRequired']) {
+                if ($variable['flagFinal'] == 1 && $variable['flagRequired']) {
                     $errors[$name]['flagFinal'] = $errors[$name]['flagRequired'] = 'You can\'t set final and required flags both';
                 }
 
-                if ($variable['flagFinal'] || $variable['flagRequired'] || $variable['flagHidden'] || $variable['format'] || $variable['validator']) {
-                    $parents = $this->db->GetAll("SELECT scope, format, validator, flag_final AS flagFinal, flag_required AS flagRequired, flag_hidden AS flagHidden FROM global_variables WHERE name = ? AND env_id = ?", array($variable['name'], $this->envId));
-                    foreach ($parents as $p) {
-                        if (($p['flagFinal'] || $p['flagRequired'] || $p['flagHidden'] || $p['format'] || $p['validator']) && $p['scope'] != $this->scope) {
-                            $errors[$name]['flagFinal'] = $errors[$name]['flagRequired'] = $errors[$name]['format'] = $errors[$name]['validator'] =
-                                'You can\'t redefine advanced settings (flags, format, validator)';
-                        }
-                    }
+                if ($variable['validator'] && $variable['value']) {
+                    $validator = $variable['validator'];
+                    if ($validator[0] != '/')
+                        $validator = '/' . $validator . '/';
+
+                    if (preg_match($validator, $variable['value']) != 1)
+                        $errors[$name]['value'] = 'Value isn\'t valid because of validation pattern';
                 }
 
-                if ($this->scope != self::SCOPE_ENVIRONMENT) {
-                    // check final flag
-                    $values = $this->db->GetAll("SELECT * FROM global_variables
-                    WHERE name = ? AND flag_final = 1 AND env_id = ? AND (role_id = ? or role_id = 0) AND (farm_id = ? OR farm_id = 0) AND (farm_role_id = ? OR farm_role_id = 0)", array(
-                        $name,
-                        $this->envId,
-                        $valRoleId,
-                        $valFarmId,
-                        $valFarmRoleId
-                    ));
+                if ($variable['format']) {
+                    $cnt = count_chars($variable['format']);
+                    if ($cnt[ord('%')] != 1)
+                        $errors[$name]['format'] = 'Format isn\'t valid';
+                }
+            }
 
-                    if (count($values) && $values[0]['scope'] != $this->scope)
-                        $errors[$name]['value'] = sprintf('You can\'t change final variable locked on %s level', $values[0]['scope']);
+            if ($currentValues[$name]['locked']) {
+                if ($currentValues[$name]['locked']['flagFinal'] && $variable['value']) {
+                    $errors[$name]['value'] = sprintf('You can\'t change final variable locked on %s level', $currentValues[$name]['locked']['scope']);
                 }
 
-                $variable['value'] = trim($variable['value']);
-                if ($variable['value'] && !($variable['value'] == '*******' && $variable['flagHiddenGlobal'])) {
-                    $validator = $this->db->GetOne("SELECT validator FROM global_variables WHERE name = ? AND env_id = ? AND validator != '' LIMIT 1", array($variable['name'], $this->envId));
-                    if ($validator) {
-                        if ($validator[0] != '/')
-                            $validator = '/' . $validator . '/';
+                if ($currentValues[$name]['locked']['validator'] && $variable['value']) {
+                    $validator = $currentValues[$name]['locked']['validator'];
+                    if ($validator[0] != '/')
+                        $validator = '/' . $validator . '/';
 
-                        if (preg_match($validator, $variable['value']) != 1)
-                            throw new Scalr_Exception_Core(sprintf('Value "%s" isn\'t valid for variable "%s" at scope "%s"', $variable['value'], $variable['name'], $this->scope));
-                    }
+                    if (preg_match($validator, $variable['value']) != 1)
+                        $errors[$name]['value'] = 'Value isn\'t valid because of validation pattern';
                 }
             }
         }
@@ -183,114 +268,137 @@ class Scalr_Scripting_GlobalVariables
     }
 
     /**
-     * @param $variables
+     * @param array|ArrayObject $variables
      * @param int $roleId
      * @param int $farmId
      * @param int $farmRoleId
      * @param string $serverId
-     * @param bool|string $validation = true (return errors), false (skip), exception (throw)
+     * @param bool $throwException
+     * @param bool $skipValidation
      * @throws Scalr_Exception_Core
      * @return array|bool
      */
-    public function setValues($variables, $roleId = 0, $farmId = 0, $farmRoleId = 0, $serverId = '', $validation = 'exception')
+    public function setValues($variables, $roleId = 0, $farmId = 0, $farmRoleId = 0, $serverId = '', $throwException = true, $skipValidation = false)
     {
-        if ($validation !== false) {
+        if (!$skipValidation) {
             $validResult = $this->validateValues($variables, $roleId, $farmId, $farmRoleId, $serverId);
-            if ($validResult !== TRUE) {
-                if ($validation == 'exception')
+            if ($validResult !== true) {
+                if ($throwException)
                     throw new Scalr_Exception_Core($this->getErrorMessage($validResult));
                 else
                     return $validResult;
             }
         }
 
-        if (is_array($variables)) {
-            foreach ($variables as $variable) {
-                $name = $variable['name'];
-                if (empty($name))
-                    continue;
+        $currentValues = $this->_getValues($roleId, $farmId, $farmRoleId, $serverId);
 
-                if ($variable['scope'] != $this->scope) {
-                    if ($variable['scope'] == $variable['defaultScope'])
-                        $variable['flagDelete'] = true; // value is empty, delete variable from that scope
-                    else
-                        continue;
-                }
+        foreach ($variables as $variable) {
+            $deleteFlag = ($variable['flagDelete'] == 1) ? true : false;
+            $updateValue = true;
 
-                $this->resetGlobalFlags($variable);
+            $name = $variable['name'];
+            if (empty($name))
+                continue;
 
-                if ($variable['flagDelete']) {
-                    $this->db->Execute("DELETE FROM `global_variables` WHERE name = ? AND env_id = ? AND role_id = ? AND farm_id = ? AND farm_role_id = ?", array(
-                        $variable['name'],
-                        $this->envId,
-                        $roleId,
-                        $farmId,
-                        $farmRoleId
-                    ));
+            if (! $variable['current'] && $variable['default']) {
+                if ($currentValues[$name]['current']) {
+                    $deleteFlag = true;
+                } else if (! $deleteFlag) {
                     continue;
                 }
 
-                $updateValue = true;
-                $variable['value'] = trim($variable['value']);
-                if ($variable['value']) {
-                    if ($variable['flagHiddenGlobal'] && $variable['value'] == '******')
-                        $updateValue = false;
-                    else
-                        $variable['value'] = $this->crypto->encrypt($variable['value'], $this->cryptoKey);
-                }
+                $variable = $variable['default'];
+            } else if ($variable['current']) {
+                $variable = $variable['current'];
+            }
 
+            $variable['value'] = trim($variable['value']);
+            if ($variable['value']) {
+                $variable['value'] = $this->crypto->encrypt($variable['value'], $this->cryptoKey);
+            } else {
+                if (isset($currentValues[$name]['default']))
+                    $deleteFlag = true;
+            }
+
+            if ($deleteFlag) {
+                $sql = array('`name` = ?');
+                $params = array($variable['name']);
+            } else {
                 $sql = array(
-                    '`env_id` = ?',
-                    '`role_id` = ?',
-                    '`farm_id` = ?',
-                    '`farm_role_id` = ?',
-                    '`server_id` = ?',
                     '`name` = ?',
                     '`flag_final` = ?',
                     '`flag_required` = ?',
                     '`flag_hidden` = ?',
-                    '`scope` = ?',
+                    '`validator` = ?',
+                    '`format` = ?'
+                );
+                $sqlUpdate = array(
+                    '`flag_final` = ?',
+                    '`flag_required` = ?',
+                    '`flag_hidden` = ?',
                     '`validator` = ?',
                     '`format` = ?'
                 );
 
                 $params = array(
-                    $this->envId,
-                    $roleId,
-                    $farmId,
-                    $farmRoleId,
-                    $serverId,
                     $variable['name'],
-                    $variable['flagFinal'],
-                    $variable['flagRequired'],
-                    $variable['flagHidden'],
-                    $variable['scope'],
-                    $variable['validator'],
-                    $variable['format']
+                    $variable['flagFinal'] == 1 ? 1 : 0,
+                    $variable['flagRequired'] ? $variable['flagRequired'] : '',
+                    $variable['flagHidden'] == 1 ? 1 : 0,
+                    $variable['validator'] ? $variable['validator'] : '',
+                    $variable['format'] ? $variable['format'] : ''
                 );
+
+                $sqlUpdateParams = $params;
+                array_shift($sqlUpdateParams);
 
                 if ($updateValue) {
                     $sql[] = '`value` = ?';
                     $params[] = $variable['value'];
-                }
-
-                $sqlUpdate = array(
-                    '`flag_final` = ?', '`flag_required` = ?', '`flag_hidden` = ?', '`validator` = ?', '`format` = ?'
-                );
-                $params = array_merge($params, array(
-                    $variable['flagFinal'],
-                    $variable['flagRequired'],
-                    $variable['flagHidden'],
-                    $variable['validator'],
-                    $variable['format']
-                ));
-
-                if ($updateValue) {
                     $sqlUpdate[] = '`value` = ?';
-                    $params[] = $variable['value'];
+                    $sqlUpdateParams[] = $variable['value'];
                 }
+            }
 
-                $this->db->Execute("INSERT INTO `global_variables` SET " . implode(',', $sql) . " ON DUPLICATE KEY UPDATE " . implode(',', $sqlUpdate), $params);
+            switch ($this->scope) {
+                case self::SCOPE_SCALR:
+                    $table = 'variables';
+                    break;
+                case self::SCOPE_ACCOUNT:
+                    $table = 'account_variables';
+                    $sql[] = 'account_id = ?';
+                    $params[] = $this->accountId;
+                    break;
+                case self::SCOPE_ENVIRONMENT:
+                    $table = 'client_environment_variables';
+                    $sql[] = 'env_id = ?';
+                    $params[] = $this->envId;
+                    break;
+                case self::SCOPE_ROLE:
+                    $table = 'role_variables';
+                    $sql[] = 'role_id = ?';
+                    $params[] = $roleId;
+                    break;
+                case self::SCOPE_FARM:
+                    $table = 'farm_variables';
+                    $sql[] = 'farm_id = ?';
+                    $params[] = $farmId;
+                    break;
+                case self::SCOPE_FARMROLE:
+                    $table = 'farm_role_variables';
+                    $sql[] = 'farm_role_id = ?';
+                    $params[] = $farmRoleId;
+                    break;
+                case self::SCOPE_SERVER:
+                    $table = 'server_variables';
+                    $sql[] = 'server_id = ?';
+                    $params[] = $serverId;
+                    break;
+            }
+            if ($deleteFlag) {
+                $this->db->Execute("DELETE FROM `{$table}` WHERE " . implode(' AND ', $sql), $params);
+            } else {
+                $this->db->Execute("INSERT INTO `{$table}` SET " . implode(',', $sql) . " ON DUPLICATE KEY UPDATE " . implode(',', $sqlUpdate), array_merge($params, $sqlUpdateParams));
             }
         }
 
@@ -299,134 +407,79 @@ class Scalr_Scripting_GlobalVariables
 
     public function getValues($roleId = 0, $farmId = 0, $farmRoleId = 0, $serverId = '')
     {
-        $sql = "SELECT name, value, scope, flag_final AS flagFinal, flag_required AS flagRequired, flag_hidden AS flagHidden, `validator`, `format` FROM `global_variables` WHERE env_id = ?";
-        $vars = $this->db->GetAll($sql . " AND (role_id = '0' OR role_id = ?) AND (farm_id = '0' OR farm_id = ?) AND farm_role_id = '0' AND server_id = ''", array(
-            $this->envId,
-            $roleId,
-            $farmId
-        ));
-
-        // snapshot of role changes roleId of FarmRole
-        if ($farmRoleId) {
-            $vars = array_merge($vars, $this->db->GetAll($sql . " AND farm_role_id = ? AND server_id = ''", array($this->envId, $farmRoleId)));
-        }
-
-        if ($serverId) {
-            $vars = array_merge($vars, $this->db->GetAll($sql . " AND server_id = ?", array($this->envId, $serverId)));
-        }
-
-        $groupByName = array();
-        foreach ($vars as $value) {
-            $groupByName[$value['name']][$value['scope']] = $value;
-        }
-
-        $result = array();
-        foreach ($groupByName as $name => $value) {
-            if ($value[$this->scope])
-                $current = $value[$this->scope];
-            else
-                $current = array('name' => $name);
-
-            if ($current['value'])
-                $current['value'] = $this->crypto->decrypt($current['value'], $this->cryptoKey);
-
-            $order = array(self::SCOPE_SERVER, self::SCOPE_FARMROLE, self::SCOPE_FARM, self::SCOPE_ROLE, self::SCOPE_ENVIRONMENT);
-            $index = array_search($this->scope, $order);
-
-            if ($index)
-                $order = array_slice($order, $index + 1);
-
-            foreach ($order as $scope) {
-                if ($value[$scope]) {
-                    if (!$current['scope'])
-                        $current['scope'] = $value[$scope]['scope'];
-
-                    if (!$current['defaultValue'] || $current['defaultScope'] == $this->scope) {
-                        // if we have other scope value, replace defaultValue with it (only once)
-                        $current['defaultValue'] = $value[$scope]['value'] ? $this->crypto->decrypt($value[$scope]['value'], $this->cryptoKey) : '';
-                        $current['defaultScope'] = $scope;
-                    }
-
-                    if ($value[$scope]['flagRequired'] == 1)
-                        $current['flagRequiredGlobal'] = 1;
-
-                    if ($value[$scope]['flagFinal'] == 1)
-                        $current['flagFinalGlobal'] = 1;
-
-                    if ($value[$scope]['flagHidden'] == 1)
-                        $current['flagHiddenGlobal'] = 1;
-
-                    if ($value[$scope]['validator'] || $value[$scope]['format']) {
-                        $current['validator'] = $value[$scope]['validator'];
-                        $current['format'] = $value[$scope]['format'];
-                        $current['lockConfigure'] = true;
-                    }
-                }
+        $values = array_values($this->_getValues($roleId, $farmId, $farmRoleId, $serverId));
+        foreach ($values as &$value) {
+            if ($value['locked'] && ($value['locked']['flagHidden'] == 1) && $value['default']) {
+                $value['default']['value'] = '******';
             }
-
-            if ($current['flagHiddenGlobal'] == 1) {
-                if ($current['value'])
-                    $current['value'] = '******';
-                if ($current['defaultValue'])
-                    $current['defaultValue'] = '******';
-            }
-
-            $result[] = $current;
         }
 
-        return $result;
+        return $values;
     }
 
     public function listVariables($roleId = 0, $farmId = 0, $farmRoleId = 0, $serverId = '')
     {
-        $envVars = $this->db->GetAll("SELECT `name`, `value`, `format` FROM global_variables WHERE env_id = ? AND role_id = '0' AND farm_id = '0' AND farm_role_id = '0'", array($this->envId));
-
-        if ($roleId)
-            $roleVars = $this->db->GetAll("SELECT `name`, `value`, `format` FROM global_variables WHERE env_id = ? AND role_id = ? AND farm_id = '0' AND farm_role_id = '0'", array($this->envId, $roleId));
-
-        if ($farmId)
-            $farmVars = $this->db->GetAll("SELECT `name`, `value`, `format` FROM global_variables WHERE env_id = ? AND role_id = '0' AND farm_id = ? AND farm_role_id = '0'", array($this->envId, $farmId));
-
-        if ($farmRoleId)
-            $farmRoleVars = $this->db->GetAll("SELECT `name`, `value`, `format` FROM global_variables WHERE env_id = ? AND farm_role_id = ?", array($this->envId, $farmRoleId));
-
-        if ($serverId)
-            $serverVars = $this->db->GetAll("SELECT `name`, `value`, `format` FROM global_variables WHERE env_id = ? AND server_id = ?", array($this->envId, $serverId));
-
         $retval = array();
-        foreach ($envVars as $var) {
-            $retval[$var['name']] = $var['value'] ? $this->crypto->decrypt($var['value'], $this->cryptoKey) : '';
-            if ($var['format'])
-                $retval[$var['name']] = @sprintf($var['format'], $retval[$var['name']]);
+        foreach ($this->_getValues($roleId, $farmId, $farmRoleId, $serverId) as $name => $var) {
+            $value = $var['current'] ? $var['current']['value'] : $var['default']['value'];
+            if ($var['locked'] && $var['locked']['format'])
+                $value = @sprintf($var['locked']['format'], $value);
+
+            if ($var['current'] && $var['current']['format'])
+                $value = @sprintf($var['current']['format'], $value);
+
+            $retval[] = array(
+                'name' => $name,
+                'value' => $value,
+                'private' => ($var['locked'] && ($var['locked']['flagHidden'] == 1) || $var['current'] && ($var['current']['flagHidden'] == 1)) ? 1 : 0
+            );
         }
 
-        if ($roleVars)
-            foreach ($roleVars as $var) {
-                $retval[$var['name']] = $var['value'] ? $this->crypto->decrypt($var['value'], $this->cryptoKey) : '';
-                if ($var['format'])
-                    $retval[$var['name']] = @sprintf($var['format'], $retval[$var['name']]);
+        return $retval;
+    }
+
+    public static function listServerGlobalVariables(DBServer $dbServer, $includeSystem = false, Event $event = null)
+    {
+        $retval = array();
+
+        if ($includeSystem) {
+            $variables = $dbServer->GetScriptingVars();
+
+            if ($event) {
+                if ($event->DBServer)
+                foreach ($event->DBServer->GetScriptingVars() as $k => $v)
+                    $variables["event_{$k}"] = $v;
+
+                foreach ($event->GetScriptingVars() as $k=>$v)
+                    $variables[$k] = $event->{$v};
+
+                if (isset($event->params) && is_array($event->params))
+                foreach ($event->params as $k=>$v)
+                    $variables[$k] = $v;
+
+                $variables['event_name'] = $event->GetName();
             }
 
-        if ($farmVars)
-            foreach ($farmVars as $var) {
-                $retval[$var['name']] = $var['value'] ? $this->crypto->decrypt($var['value'], $this->cryptoKey) : '';
-                if ($var['format'])
-                    $retval[$var['name']] = @sprintf($var['format'], $retval[$var['name']]);
-            }
+            $formats = \Scalr::config("scalr.system.global_variables.format");
+            foreach ($variables as $name => $value) {
+                $name = "SCALR_".strtoupper($name);
+                $value = trim($value);
 
-        if ($farmRoleVars)
-            foreach ($farmRoleVars as $var) {
-                $retval[$var['name']] = $var['value'] ? $this->crypto->decrypt($var['value'], $this->cryptoKey) : '';
-                if ($var['format'])
-                    $retval[$var['name']] = @sprintf($var['format'], $retval[$var['name']]);
-            }
+                if (isset($formats[$name]))
+                    $value = @sprintf($formats[$name], $value);
 
-        if ($serverVars)
-            foreach ($serverVars as $var) {
-                $retval[$var['name']] = $var['value'] ? $this->crypto->decrypt($var['value'], $this->cryptoKey) : '';
-                if ($var['format'])
-                    $retval[$var['name']] = @sprintf($var['format'], $retval[$var['name']]);
+                $private = (strpos($name, 'SCALR_EVENT_') === 0) ? 1 : 0;
+
+                $retval[] = (object)array('name' => $name, 'value' => $value, 'private' => $private, 'system' => 1);
             }
+        }
+
+        try {
+            $globalVariables = new Scalr_Scripting_GlobalVariables($dbServer->GetEnvironmentObject()->clientId, $dbServer->envId, Scalr_Scripting_GlobalVariables::SCOPE_SERVER);
+            $vars = $globalVariables->listVariables($dbServer->roleId, $dbServer->farmId, $dbServer->farmRoleId, $dbServer->serverId);
+            foreach ($vars as $v)
+                $retval[] = (object)$v;
+        } catch (Exception $e) {}
 
         return $retval;
     }

@@ -10,8 +10,10 @@ class Scalr_Account_User extends Scalr_Model
     const STATUS_INACTIVE = 'Inactive';
 
     const TYPE_SCALR_ADMIN = 'ScalrAdmin';
+    const TYPE_FIN_ADMIN = 'FinAdmin';
     const TYPE_ACCOUNT_OWNER = 'AccountOwner';
     const TYPE_ACCOUNT_ADMIN = 'AccountAdmin';
+    const TYPE_ACCOUNT_SUPER_ADMIN = 'AccountSuperAdmin';
     const TYPE_TEAM_USER = 'TeamUser';
 
     const SETTING_API_ACCESS_KEY 	= 'api.access_key';
@@ -24,17 +26,28 @@ class Scalr_Account_User extends Scalr_Model
 
     const SETTING_UI_ENVIRONMENT = 'ui.environment'; // last used
     const SETTING_UI_TIMEZONE = 'ui.timezone';
+    const SETTING_UI_STORAGE_TIME = 'ui.storage.time';
+    const SETTING_UI_CHANGELOG_TIME = 'ui.changelog.time';
 
     const SETTING_GRAVATAR_EMAIL = 'gravatar.email';
     const SETTING_LDAP_EMAIL = 'ldap.email';
 
     // @deprecated in favor of VAR_SECURITY_IP_WHITELIST
     const SETTING_SECURITY_IP_WHITELIST 	= 'security.ip.whitelist';
+
     const SETTING_SECURITY_2FA_GGL = 'security.2fa.ggl';
     const SETTING_SECURITY_2FA_GGL_KEY = 'security.2fa.ggl.key';
+    const SETTING_SECURITY_2FA_GGL_RESET_CODE = 'security.2fa.ggl.reset_code';
 
     const VAR_UI_STORAGE = 'ui.storage';
     const VAR_SECURITY_IP_WHITELIST = 'security.ip.whitelist';
+
+    const VAR_SSH_CONSOLE_USERNAME = 'ssh.console.username';
+    const VAR_SSH_CONSOLE_PORT = 'ssh.console.port';
+    const VAR_SSH_CONSOLE_KEY_NAME = 'ssh.console.key_name';
+    const VAR_SSH_CONSOLE_DISABLE_KEY_AUTH = 'ssh.console.disable_key_auth';
+    const VAR_SSH_CONSOLE_LOG_LEVEL = 'ssh.console.log_level';
+    const VAR_SSH_CONSOLE_PREFERRED_PROVIDER = 'ssh.console.preferred_provider';
 
     protected $dbPropertyMap = array(
         'id'			=> 'id',
@@ -210,7 +223,8 @@ class Scalr_Account_User extends Scalr_Model
 
     public function getGravatarHash()
     {
-        return md5(strtolower(trim($this->getSetting(Scalr_Account_User::SETTING_GRAVATAR_EMAIL))));
+        $email = trim($this->getSetting(Scalr_Account_User::SETTING_GRAVATAR_EMAIL));
+        return $email && strpos($email, '@') !== FALSE ? md5(strtolower($email)) : '';
     }
 
     public function updateEmail($email)
@@ -349,6 +363,9 @@ class Scalr_Account_User extends Scalr_Model
                     $column = array();
                     foreach ($col as $wid) {
                         if (is_array($wid) && isset($wid['name'])) {
+                            if ($wid['name'] == 'dashboard.uservoice')
+                                continue;
+
                             $usedWidgets[] = $wid['name'];
                             array_push($column, $wid);
                         }
@@ -415,10 +432,13 @@ class Scalr_Account_User extends Scalr_Model
 
     public function updateLoginAttempt($loginattempt = NULL)
     {
-        if($loginattempt)
+        if ($loginattempt) {
             $this->db->Execute('UPDATE `account_users` SET loginattempts = loginattempts + ? WHERE id = ?', array($loginattempt, $this->id));
-        else
+            $this->loginattempts++;
+        } else {
             $this->db->Execute('UPDATE `account_users` SET loginattempts = 0 WHERE id = ?', array($this->id));
+            $this->loginattempts = 0;
+        }
     }
 
     public function updateLastLogin()
@@ -678,6 +698,7 @@ class Scalr_Account_User extends Scalr_Model
     public function canManageAcl()
     {
         return $this->getType() == Scalr_Account_User::TYPE_ACCOUNT_OWNER ||
+               $this->getType() == Scalr_Account_User::TYPE_ACCOUNT_SUPER_ADMIN ||
                $this->getType() == Scalr_Account_User::TYPE_ACCOUNT_ADMIN;
     }
 
@@ -698,7 +719,17 @@ class Scalr_Account_User extends Scalr_Model
      */
     public function isAccountAdmin()
     {
-        return $this->getType() == Scalr_Account_User::TYPE_ACCOUNT_ADMIN;
+        return $this->getType() == Scalr_Account_User::TYPE_ACCOUNT_ADMIN || $this->getType() == Scalr_Account_User::TYPE_ACCOUNT_SUPER_ADMIN;
+    }
+
+    /**
+     * Checks if the user is account admin
+     *
+     * @return  boolean Returns true if user is account super admin
+     */
+    public function isAccountSuperAdmin()
+    {
+        return $this->getType() == Scalr_Account_User::TYPE_ACCOUNT_SUPER_ADMIN;
     }
 
     /**
@@ -712,6 +743,16 @@ class Scalr_Account_User extends Scalr_Model
     }
 
     /**
+     * Checks if the user is Financial admin
+     *
+     * @return  boolean Returns true if user is Financial Admin
+     */
+    public function isFinAdmin()
+    {
+        return $this->getType() == Scalr_Account_User::TYPE_FIN_ADMIN;
+    }
+
+    /**
      * Checks if the user is team user
      *
      * @return  boolean  Returns true if user is team user
@@ -719,6 +760,26 @@ class Scalr_Account_User extends Scalr_Model
     public function isTeamUser()
     {
         return $this->getType() == Scalr_Account_User::TYPE_TEAM_USER;
+    }
+
+    /**
+     * Checks if the user is account user (owner, admin, team user)
+     *
+     * @return  boolean
+     */
+    public function isUser()
+    {
+        return in_array($this->getType(), [self::TYPE_ACCOUNT_OWNER, self::TYPE_ACCOUNT_ADMIN, self::TYPE_TEAM_USER]);
+    }
+
+    /**
+     * Checks if the user is admin user (scalr, financial). It means user doesn't have current environment
+     *
+     * @return  boolean
+     */
+    public function isAdmin()
+    {
+        return in_array($this->getType(), [self::TYPE_SCALR_ADMIN, self::TYPE_FIN_ADMIN]);
     }
 
     /**
@@ -730,9 +791,10 @@ class Scalr_Account_User extends Scalr_Model
     public function canRemoveUser($user)
     {
         return !$this->isTeamUser() &&
-               ($user->getAccountId() == $this->getAccountId()) &&
+               $user->getAccountId() == $this->getAccountId() &&
                !$user->isAccountOwner() &&
-               ($this->getId() != $user->getId());
+               $this->getId() != $user->getId() &&
+               ($this->isAccountOwner() || $this->isAccountSuperAdmin() || !$user>isAccountSuperAdmin()) ;
     }
 
     /**
@@ -743,8 +805,78 @@ class Scalr_Account_User extends Scalr_Model
      */
     public function canEditUser($user)
     {
-        return !$this->isTeamUser() &&
-               ($user->getAccountId() == $this->getAccountId()) &&
-               (!$user->isAccountOwner() || $this->getId() == $user->getId());
+        return
+            !$this->isTeamUser() &&
+            $user->getAccountId() == $this->getAccountId() &&
+            (
+                $this->getId() == $user->getId() ||
+                $this->isAccountOwner() ||
+                $this->isAccountSuperAdmin() && !$user->isAccountOwner() ||
+                $this->isAccountAdmin() && !$user->isAccountOwner() && !$user->isAccountSuperAdmin()
+            );
     }
+
+    /**
+     * {@inheritdoc}
+     * @see Scalr_Model::save()
+     */
+    public function save($forceInsert = false)
+    {
+        $ret = parent::save($forceInsert);
+
+        if ($this->id && \Scalr::getContainer()->analytics->enabled) {
+            \Scalr::getContainer()->analytics->tags->syncValue(
+                $this->accountId, \Scalr\Stats\CostAnalytics\Entity\TagEntity::TAG_ID_USER, $this->id,
+                ($this->fullname ?: $this->email)
+            );
+        }
+
+        return $ret;
+    }
+
+    public static function getList($accountId)
+    {
+        return Scalr::getDb()->GetAll('SELECT id, email FROM account_users WHERE account_id = ?', [$accountId]);
+    }
+
+    public function setSshConsoleSettings($settings)
+    {
+        $list = array(
+            Scalr_Account_User::VAR_SSH_CONSOLE_USERNAME,
+            Scalr_Account_User::VAR_SSH_CONSOLE_PORT,
+            Scalr_Account_User::VAR_SSH_CONSOLE_KEY_NAME,
+            Scalr_Account_User::VAR_SSH_CONSOLE_DISABLE_KEY_AUTH,
+            Scalr_Account_User::VAR_SSH_CONSOLE_LOG_LEVEL,
+            Scalr_Account_User::VAR_SSH_CONSOLE_PREFERRED_PROVIDER
+        );
+        foreach ($list as $name) {
+            $this->setVar($name, $settings[$name]);
+        }
+    }
+
+    public function getSshConsoleSettings($ignoreCache = false, $gvi = false, $serverId = null)
+    {
+        $result = array();
+        $list = array(
+            Scalr_Account_User::VAR_SSH_CONSOLE_USERNAME,
+            Scalr_Account_User::VAR_SSH_CONSOLE_PORT,
+            Scalr_Account_User::VAR_SSH_CONSOLE_KEY_NAME,
+            Scalr_Account_User::VAR_SSH_CONSOLE_DISABLE_KEY_AUTH,
+            Scalr_Account_User::VAR_SSH_CONSOLE_LOG_LEVEL,
+            Scalr_Account_User::VAR_SSH_CONSOLE_PREFERRED_PROVIDER
+        );
+
+        if ($serverId) {
+            $dbServer = DBServer::LoadByID($serverId);
+            $this->permissions->validate($dbServer);
+        }
+
+        foreach ($list as $name) {
+            $result[$name] = $this->getVar($name, $ignoreCache);
+            if ($gvi && $dbServer)
+                $result[$name] = $dbServer->applyGlobalVarsToValue($result[$name]);
+        }
+        return $result;
+    }
+
 }

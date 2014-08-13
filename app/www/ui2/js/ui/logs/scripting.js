@@ -20,7 +20,6 @@ Scalr.regPage('Scalr.ui.logs.scripting', function (loadParams, moduleParams) {
 		],
 		proxy: {
 			type: 'scalr.paging',
-			extraParams: loadParams,
 			url: '/logs/xListScriptingLogs/'
 		},
 		remoteSort: true
@@ -32,7 +31,6 @@ Scalr.regPage('Scalr.ui.logs.scripting', function (loadParams, moduleParams) {
 			reload: false,
 			maximize: 'all'
 		},
-		scalrReconfigureParams: { eventId: '', serverId: '' },
 		store: store,
 		stateId: 'grid-scripting-view',
 		stateful: true,
@@ -43,7 +41,13 @@ Scalr.regPage('Scalr.ui.logs.scripting', function (loadParams, moduleParams) {
 			ptype: 'rowexpander',
             pluginId: 'rowexpander',
 			rowBodyTpl: [
-				'<tpl if="message"><p><b>Message:</b> {message}</p><tpl else><p>Loading...</p></tpl>'
+				'<tpl if="message">' + 
+                    '<p><b>Message:</b><br/><br/>{[values.message.replace(\'STDERR:\',\'<b>STDERR:</b>\').replace(\'STDOUT:\',\'<b>STDOUT:</b>\')]}</p>' +
+                '<tpl elseif="execution_id">' +
+                    '<p>Loading...</p>' +
+                '<tpl else>' +
+                    '<p>No extended info available</p>' +
+                '</tpl>'
 			]
 		}],
 
@@ -61,7 +65,10 @@ Scalr.regPage('Scalr.ui.logs.scripting', function (loadParams, moduleParams) {
 			loadingText: 'Loading logs ...',
 			disableSelection: true,
 			getRowClass: function (record, rowIndex, rowParams) {
-                if (record.get('exec_exitcode') != '0') {
+                var exitCode = record.get('exec_exitcode');
+                if (exitCode == '130') {
+                    return 'x-grid-row-orange';
+                } else if (exitCode != '0') {
                     return 'x-grid-row-red';
                 }
 			},
@@ -78,9 +85,10 @@ Scalr.regPage('Scalr.ui.logs.scripting', function (loadParams, moduleParams) {
                     }
                 },
                 expandbody: function(rowNode, record, expandRow, eOpts){
-                    if(true || record.get('execution_id')) {
+                    if(record.get('execution_id')) {
                         if (!record.get('message')) {
                             Scalr.Request({
+                                hideErrorMessage: true,
                                 url: '/logs/getScriptingLog/',
                                 params: {
                                     executionId: record.get('execution_id')
@@ -88,8 +96,14 @@ Scalr.regPage('Scalr.ui.logs.scripting', function (loadParams, moduleParams) {
                                 success: function (data) {
                                     var node = Ext.fly(rowNode).down('.x-grid-rowbody');
                                     if (node) {
-                                        node.setHTML('<p><b>Message:</b> ' + data.message + '</p>');
+                                        node.setHTML('<p><b>Message:</b><br/><br/>' + (data.message+'').replace('STDERR:','<b>STDERR:</b>').replace('STDOUT:','<b>STDOUT:</b>') + '</p>');
                                         record.set('message', data.message);
+                                    }
+                                },
+                                failure: function(data) {
+                                    var node = Ext.fly(rowNode).down('.x-grid-rowbody');
+                                    if (node) {
+                                        node.setHTML('<p>' + (data.errorMessage || '') + '</p>');
                                     }
                                 },
                                 scope: this
@@ -156,6 +170,11 @@ Scalr.regPage('Scalr.ui.logs.scripting', function (loadParams, moduleParams) {
                         labelAlign: 'top',
                         name: 'eventId'
                     }, {
+                        xtype: 'textfield',
+                        fieldLabel: 'EventServerID',
+                        labelAlign: 'top',
+                        name: 'eventServerId'
+                    }, {
                         xtype: 'datefield',
                         fieldLabel: 'By date',
                         labelAlign: 'top',
@@ -192,6 +211,52 @@ Scalr.regPage('Scalr.ui.logs.scripting', function (loadParams, moduleParams) {
                             format: 'H:i',
                             disabled: true
                         }]
+                    }, {
+                        xtype: 'combo',
+                        store: {
+                            fields: [ 'id', 'name' ],
+                            data: moduleParams['scripts'],
+                            proxy: 'object'
+                        },
+                        valueField: 'id',
+                        displayField: 'name',
+                        name: 'script',
+                        editable: false,
+                        forceSelection: true,
+                        fieldLabel: 'Script',
+                        labelAlign: 'top'
+                    }, {
+                        xtype: 'combo',
+                        store: moduleParams['events'],
+                        name: 'event',
+                        editable: false,
+                        forceSelection: true,
+                        fieldLabel: 'Event',
+                        labelAlign: 'top'
+                    }, {
+                        xtype: 'combo',
+                        store: {
+                            fields: [ 'id', 'name' ],
+                            data: moduleParams['tasks'],
+                            proxy: 'object'
+                        },
+                        valueField: 'id',
+                        displayField: 'name',
+                        name: 'scheduler',
+                        editable: false,
+                        forceSelection: true,
+                        fieldLabel: 'Scheduler task',
+                        labelAlign: 'top',
+                        listeners: {
+                            change: function (field, value) {
+                                if (value) {
+                                    this.prev().reset();
+                                    this.prev().disable();
+                                } else {
+                                    this.prev().enable();
+                                }
+                            }
+                        }
                     }]
                 }
 			}, ' ', {

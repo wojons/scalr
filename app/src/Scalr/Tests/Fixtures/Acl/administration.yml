@@ -2,11 +2,32 @@ ADMINISTRATION_BILLING:
 # all action methods of billing controller
 - [/billing, ~, all]
 
-ADMINISTRATION_GOVERNANCE:
-- [/core/governance, ~, all]
-- [/core/governance/lease, ~, all]
+ADMINISTRATION_GLOBAL_VARIABLES:
+- /account/variables
+- /account/variables/xSaveVariables?variables=
 
-ADMINISTRATION_ENV_CLOUDS: 
-# all action methods of platform controller
-- [/account2/environments/platform, {"envId":"%ENV_ID%"}, all]
+ADMINISTRATION_ORCHESTRATION:
+- /account/orchestration
+- /account/orchestration/xSave?orchestrationRules=
+
+ADMINISTRATION_SCRIPTS:
+  self:
+  - /scripts/default
+  - /scripts/view
+  - /scripts/xGetContent?scriptId=&version=
+  - /scripts/xList
+  - [/scripts/shortcuts, ~, all]
+
+  ADMINISTRATION_SCRIPTS_MANAGE:
+  - /scripts/xRemove?scriptId=
+  - /scripts/xSave?id=&name=&description=&isSync=&envId=&timeout=&version=&content=&tags=
+  - /scripts/edit?scriptId=
+  - /scripts/create
+
+  ADMINISTRATION_SCRIPTS_EXECUTE:
+  - /scripts/execute
+  - /scripts/xExecute?farmId=&farmRoleId=&serverId=&scriptId=&scriptIsSync=&scriptTimeout=&scriptVersion=
+
+  ADMINISTRATION_SCRIPTS_FORK:
+  - /scripts/xFork?scriptId=&name=
 

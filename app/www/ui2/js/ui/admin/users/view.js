@@ -1,11 +1,10 @@
 Scalr.regPage('Scalr.ui.admin.users.view', function (loadParams, moduleParams) {
 	var store = Ext.create('store.store', {
 		fields: [
-			'id', 'status', 'email', 'fullname', 'dtcreated', 'dtlastlogin', 'type', 'comments'
+			'id', 'status', 'email', 'fullname', 'dtcreated', 'dtlastlogin', 'type', 'comments', 'is2FaEnabled'
 		],
 		proxy: {
 			type: 'scalr.paging',
-			extraParams: loadParams,
 			url: '/admin/users/xListUsers'
 		},
 		remoteSort: true
@@ -17,7 +16,6 @@ Scalr.regPage('Scalr.ui.admin.users.view', function (loadParams, moduleParams) {
 			'reload': false,
 			'maximize': 'all'
 		},
-		scalrReconfigureParams: {},
 		store: store,
 		stateId: 'grid-admin-users-view',
 		stateful: true,
@@ -33,7 +31,7 @@ Scalr.regPage('Scalr.ui.admin.users.view', function (loadParams, moduleParams) {
 		},
 
 		columns: [
-			{ text: 'ID', width: 50, dataIndex: 'id', sortable: true },
+			{ text: 'ID', width: 60, dataIndex: 'id', sortable: true },
 			{ text: 'Email', flex: 1, dataIndex: 'email', sortable: true },
 			{ text: 'Status', Width: 50, dataIndex: 'status', sortable: true, xtype: 'templatecolumn', tpl:
 				'<span ' +
@@ -41,28 +39,34 @@ Scalr.regPage('Scalr.ui.admin.users.view', function (loadParams, moduleParams) {
 				'<tpl if="status != &quot;Active&quot;">style="color: red"</tpl>' +
 				'>{status}</span>'
 			},
+            { text: 'Type', width: 140, dataIndex: 'type', sortable: true, xtype: 'templatecolumn', tpl:
+                '<tpl if="type == &quot;ScalrAdmin&quot;">Global admin' +
+                '<tpl else>Financial admin</tpl>'
+            },
 			{ text: 'Full name', flex: 1, dataIndex: 'fullname', sortable: true },
+            { text: '2FA',  width: 70, align: 'center', dataIndex: 'is2FaEnabled', sortable: true, xtype: 'templatecolumn',
+                tpl: '<img src="' + Ext.BLANK_IMAGE_URL + '" class="x-icon-<tpl if="is2FaEnabled">ok<tpl else>minus</tpl>"/>'
+            },
 			{ text: 'Created date', width: 170, dataIndex: 'dtcreated', sortable: true },
 			{ text: 'Last login', width: 170, dataIndex: 'dtlastlogin', sortable: true },
 			{
-				xtype: 'optionscolumn',
+				xtype: 'optionscolumn2',
 				getVisibility: function(record) {
 					if (record.get('email') == 'admin') {
 						return (Scalr.user.userName == 'admin');
 					} else
 						return true;
 				},
-				getOptionVisibility: function (item, record) {
-					return !(item.itemId == 'option.delete' && record.get('email') == 'admin');
-				},
-				optionsMenu: [{
+				menu: [{
 					text: 'Edit',
 					iconCls: 'x-menu-icon-edit',
 					href: '#/admin/users/{id}/edit'
 				}, {
 					text: 'Remove',
-					itemId: 'option.delete',
 					iconCls: 'x-menu-icon-delete',
+                    getVisibility: function (data) {
+                        return data['email'] !== 'admin';
+                    },
 					request: {
 						confirmBox: {
 							type: 'delete',
@@ -72,11 +76,11 @@ Scalr.regPage('Scalr.ui.admin.users.view', function (loadParams, moduleParams) {
 							type: 'delete'
 						},
 						url: '/admin/users/xRemove',
-						dataHandler: function (record) {
-							return { userId: record.get('id') };
+						dataHandler: function (data) {
+							return { userId: data['id'] };
 						},
 						success: function () {
-							store.load()
+							store.load();
 						}
 					}
 				}]

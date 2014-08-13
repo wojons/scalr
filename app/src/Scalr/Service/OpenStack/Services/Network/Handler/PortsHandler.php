@@ -1,8 +1,6 @@
 <?php
 namespace Scalr\Service\OpenStack\Services\Network\Handler;
 
-use Scalr\Service\OpenStack\Services\Network\Type\ListPortsFilter;
-use Scalr\Service\OpenStack\Services\Network\Type\CreatePort;
 use Scalr\Service\OpenStack\Services\NetworkService;
 use Scalr\Service\OpenStack\Services\ServiceHandlerInterface;
 use Scalr\Service\OpenStack\Services\AbstractServiceHandler;
@@ -13,7 +11,7 @@ use Scalr\Service\OpenStack\Services\AbstractServiceHandler;
  * @author   Vitaliy Demidov  <vitaliy@scalr.com>
  * @since    07.05.2013
  *
- * @method   array|object list()
+ * @method   \Scalr\Service\OpenStack\Type\DefaultPaginationList|object list()
  *           list(string $portId = null, \Scalr\Service\OpenStack\Services\Network\Type\ListPortsFilter|array $filter = null)
  *           ListPorts action (GET /ports[/port-id])
  *           Lists all ports to which the tenant has access.

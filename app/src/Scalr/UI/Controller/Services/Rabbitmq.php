@@ -37,14 +37,15 @@ class Scalr_UI_Controller_Services_Rabbitmq extends Scalr_UI_Controller
         $moduleParams['rabbitmq']['showStatusLabel'] = true;
 
         $dbFarmRole = $this->getFarmRole();
-        if ($dbFarmRole->GetSetting(Scalr_Role_Behavior_RabbitMQ::ROLE_CP_URL)) {
+        $cpUrl = $dbFarmRole->GetSetting(Scalr_Role_Behavior_RabbitMQ::ROLE_CP_URL);
+        if ($cpUrl) {
             $serverId = $dbFarmRole->GetSetting(Scalr_Role_Behavior_RabbitMQ::ROLE_CP_SERVER_ID);
             try {
                 $dbServer = DBServer::LoadByID($serverId);
                 if ($dbServer->status == SERVER_STATUS::RUNNING) {
                     $moduleParams['rabbitmq']['username'] = 'scalr';
                     $moduleParams['rabbitmq']['password'] = $dbFarmRole->GetSetting(Scalr_Role_Behavior_RabbitMQ::ROLE_PASSWORD);
-                    $moduleParams['rabbitmq']['url'] = "http://{$dbServer->remoteIp}:55672/mgmt/";
+                    $moduleParams['rabbitmq']['url'] = $cpUrl;
 
                     $url = str_replace('/mgmt/', '/api/overview', $moduleParams['rabbitmq']['url']);
 

@@ -3,12 +3,11 @@
 namespace Scalr\Upgrade;
 
 use Scalr\Upgrade\Entity\AbstractUpgradeEntity;
-use Scalr\Upgrade\Entity\MysqlUpgradeEntity;
-use Scalr\Upgrade\Entity\FilesystemUpgradeEntity;
 use Scalr\DependencyInjection\Container;
 use Scalr\Exception;
 use \DateTime;
 use \DateTimeZone;
+use Scalr\Upgrade\Entity\MysqlUpgradeEntity;
 
 /**
  * UpdateInterface
@@ -97,11 +96,30 @@ abstract class AbstractUpdate extends AbstractGetter implements UpdateInterface
     protected $type;
 
     /**
+     * Should upgrade script ingore changing in upgrade content or not.
+     *
+     * This will prevent re-excecution of the script again if its content is changed.
+     *
+     * @var boolean
+     */
+    protected $ignoreChanges = false;
+
+    /**
      * Database instance
      *
      * @var \ADODB_mysqli
      */
     protected $db;
+
+    /**
+     * Database target service
+     *
+     * Scalr database - adodb
+     * Analytics database - cadb
+     *
+     * @var string
+     */
+    protected $dbservice = 'adodb';
 
     /**
      * DI Container
@@ -145,6 +163,16 @@ abstract class AbstractUpdate extends AbstractGetter implements UpdateInterface
      */
     private $hash;
 
+
+    /**
+     * {@inheritdoc}
+     * @see \Scalr\Upgrade\UpdateInterface::getIgnoreChanges()
+     */
+    public function getIgnoreChanges()
+    {
+        return $this->ignoreChanges;
+    }
+
     /**
      * Constructor
      *
@@ -155,7 +183,7 @@ abstract class AbstractUpdate extends AbstractGetter implements UpdateInterface
     public function __construct(\SplFileInfo $fileInfo, \ArrayObject $collection)
     {
         $this->container = \Scalr::getContainer();
-        $this->db = $this->container->adodb;
+        $this->db = $this->container->{$this->dbservice};
         $this->console = new Console();
         $this->fileInfo = $fileInfo;
         $this->uuid = strtolower($this->uuid);
@@ -173,7 +201,7 @@ abstract class AbstractUpdate extends AbstractGetter implements UpdateInterface
             $this->released = call_user_func_array('sprintf', $m);
         }
 
-        if (empty($this->uuid) || !preg_match('/^[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}$/i', $this->uuid)) {
+        if (empty($this->uuid) || !preg_match('/^[[:xdigit:]]{8}-([[:xdigit:]]{4}-){3}[[:xdigit:]]{12}$/i', $this->uuid)) {
             throw new Exception\UpgradeException(sprintf('Invalid UUID:"%s" for the update class', $this->uuid));
         }
 
@@ -190,10 +218,13 @@ abstract class AbstractUpdate extends AbstractGetter implements UpdateInterface
             $entity->hash = $this->getHash();
             $entity->released = $this->getReleaseDt()->format('Y-m-d H:i:s');
         }
+        if ($entity instanceof MysqlUpgradeEntity) {
+            $entity->setDb($this->db);
+        }
         $this->entity = $entity;
     }
 
-	/**
+    /**
      * {@inheritdoc}
      * @see Scalr\Upgrade.UpdateInterface::isApplied()
      */
@@ -209,7 +240,7 @@ abstract class AbstractUpdate extends AbstractGetter implements UpdateInterface
         return false;
     }
 
-	/**
+    /**
      * {@inheritdoc}
      * @see Scalr\Upgrade.UpdateInterface::validateBefore()
      */
@@ -250,7 +281,7 @@ abstract class AbstractUpdate extends AbstractGetter implements UpdateInterface
         ));
     }
 
-	/**
+    /**
      * Gets Upgrade Entity
      *
      * @return  \Scalr\Upgrade\Entity\AbstractUpgradeEntity Returns entity
@@ -260,7 +291,7 @@ abstract class AbstractUpdate extends AbstractGetter implements UpdateInterface
         return $this->entity;
     }
 
-	/**
+    /**
      * {@inheritdoc}
      * @see Scalr\Upgrade.UpdateInterface::getStatus()
      */
@@ -289,7 +320,7 @@ abstract class AbstractUpdate extends AbstractGetter implements UpdateInterface
         return new \DateTime($this->released, new \DateTimeZone('UTC'));
     }
 
-	/**
+    /**
      * {@inheritdoc}
      * @see Scalr\Upgrade.UpdateInterface::setStatus()
      */
@@ -372,7 +403,7 @@ abstract class AbstractUpdate extends AbstractGetter implements UpdateInterface
         return str_replace('-', '', $uuid);
     }
 
-	/**
+    /**
      * {@inheritdoc}
      * @see Scalr\Upgrade.UpdateInterface::getName()
      */
@@ -381,7 +412,7 @@ abstract class AbstractUpdate extends AbstractGetter implements UpdateInterface
         return preg_replace('/^.+\\\\(Update[\d]+)$/', '\\1', get_class($this));
     }
 
-	/**
+    /**
      * {@inheritdoc}
      * @see Scalr\Upgrade.UpdateInterface::hasTableIndex()
      */
@@ -394,7 +425,7 @@ abstract class AbstractUpdate extends AbstractGetter implements UpdateInterface
         return $res ? true : false;
     }
 
-	/**
+    /**
      * {@inheritdoc}
      * @see Scalr\Upgrade.UpdateInterface::hasTableColumn()
      */
@@ -409,23 +440,94 @@ abstract class AbstractUpdate extends AbstractGetter implements UpdateInterface
 
     /**
      * {@inheritdoc}
+     * @see \Scalr\Upgrade\UpdateInterface::hasTableColumnType()
+     */
+    public function hasTableColumnType($table, $column, $type, $schema = null)
+    {
+        $ret = $this->db->GetOne("
+            SELECT 1 FROM `INFORMATION_SCHEMA`.`COLUMNS` s
+            WHERE s.`TABLE_SCHEMA` = " . (isset($schema) ? $this->db->qstr($schema) : "DATABASE()") . "
+            AND s.`TABLE_NAME` = ?
+            AND s.`COLUMN_NAME` = ?
+            AND s.`COLUMN_TYPE` = ?
+            LIMIT 1
+        ", array(
+            $table,
+            $column,
+            strtolower($type)
+        ));
+
+        return $ret ? true : false;
+    }
+
+    /**
+     * {@inheritdoc}
+     * @see \Scalr\Upgrade\UpdateInterface::hasTableColumnAutoIncrement()
+     */
+    public function hasTableAutoIncrement($table, $schema = null)
+    {
+        $ret = $this->db->GetOne("
+            SELECT 1 FROM `INFORMATION_SCHEMA`.`COLUMNS` s
+            WHERE s.`TABLE_SCHEMA` = " . (isset($schema) ? $this->db->qstr($schema) : "DATABASE()") . "
+            AND s.`TABLE_NAME` = ?
+            AND s.`EXTRA` LIKE '%auto_increment%'
+            LIMIT 1
+        ", array(
+            $table
+        ));
+
+        return $ret ? true : false;
+    }
+
+    /**
+     * {@inheritdoc}
+     * @see \Scalr\Upgrade\UpdateInterface::hasTableColumnDefault()
+     */
+    public function hasTableColumnDefault($table, $column, $default, $schema = null)
+    {
+        $ret = $this->db->GetOne("
+            SELECT 1 FROM `INFORMATION_SCHEMA`.`COLUMNS` s
+            WHERE s.`TABLE_SCHEMA` = " . (isset($schema) ? $this->db->qstr($schema) : "DATABASE()") . "
+            AND s.`TABLE_NAME` = " . $this->db->qstr($table) . "
+            AND s.`COLUMN_NAME` = " . $this->db->qstr($column) . "
+            AND s.`COLUMN_DEFAULT` " . ($default === null ? "IS NULL" : "=" . $this->db->qstr($default)) . "
+            LIMIT 1
+        ");
+
+        return $ret ? true : false;
+    }
+
+    /**
+     * {@inheritdoc}
      * @see Scalr\Upgrade.UpdateInterface::hasTableForeignKey()
      */
     public function hasTableForeignKey($constraintName, $table, $schema = null)
     {
-        $schema = $schema ?: $this->container->config('scalr.connections.mysql.name');
         $row = $this->db->GetRow("
-            SELECT * FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS
-            WHERE INFORMATION_SCHEMA.TABLE_CONSTRAINTS.CONSTRAINT_TYPE = 'FOREIGN KEY'
-            AND INFORMATION_SCHEMA.TABLE_CONSTRAINTS.TABLE_SCHEMA = ?
-            AND INFORMATION_SCHEMA.TABLE_CONSTRAINTS.TABLE_NAME = ?
-            AND CONSTRAINT_NAME = ?
+            SELECT * FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS s
+            WHERE s.CONSTRAINT_TYPE = 'FOREIGN KEY'
+            AND s.TABLE_SCHEMA = " . (isset($schema) ? $this->db->qstr($schema) : "DATABASE()") . "
+            AND s.TABLE_NAME = ?
+            AND s.CONSTRAINT_NAME = ?
             LIMIT 1
-        ", array(
-            $schema, $table, $constraintName
-        ));
+        ", [$table, $constraintName]);
 
         return isset($row['CONSTRAINT_NAME']) ? true : false;
+    }
+
+    /**
+     * {@inheritdoc}
+     * @see \Scalr\Upgrade\UpdateInterface::getTableConstraint()
+     */
+    public function getTableConstraint($constraintName, $table, $schema = null)
+    {
+        return $this->db->GetRow("
+            SELECT * FROM INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS s
+            WHERE s.CONSTRAINT_SCHEMA = " . (isset($schema) ? $this->db->qstr($schema) : "DATABASE()") . "
+            AND s.TABLE_NAME = ?
+            AND s.CONSTRAINT_NAME = ?
+            LIMIT 1
+        ", [$table, $constraintName]);
     }
 
     /**
@@ -434,15 +536,14 @@ abstract class AbstractUpdate extends AbstractGetter implements UpdateInterface
      */
     public function hasTableReferencedColumn($referencedTable, $referencedColumn, $referencedSchema = null)
     {
-        $referencedSchema = $referencedSchema ?: $this->container->config('scalr.connections.mysql.name');
         $row = $this->db->GetRow("
-            SELECT * FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE
-            WHERE REFERENCED_TABLE_SCHEMA = ?
-            AND REFERENCED_TABLE_NAME = ?
-            AND REFERENCED_COLUMN_NAME = ?
+            SELECT * FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE s
+            WHERE s.REFERENCED_TABLE_SCHEMA = " . (isset($referencedSchema) ? $this->db->qstr($referencedSchema) : "DATABASE()") . "
+            AND s.REFERENCED_TABLE_NAME = ?
+            AND s.REFERENCED_COLUMN_NAME = ?
             LIMIT 1
         ", array(
-            $referencedSchema, $referencedTable, $referencedColumn
+            $referencedTable, $referencedColumn
         ));
 
         return isset($row['CONSTRAINT_NAME']) ? true : false;
@@ -450,11 +551,30 @@ abstract class AbstractUpdate extends AbstractGetter implements UpdateInterface
 
     /**
      * {@inheritdoc}
+     * @see \Scalr\Upgrade\UpdateInterface::hasDatabase()
+     */
+    public function hasDatabase($database)
+    {
+        $ret = $this->db->getOne("SHOW DATABASES LIKE ?", array($database));
+        return $ret ? true : false;
+    }
+
+    /**
+     * {@inheritdoc}
      * @see Scalr\Upgrade.UpdateInterface::hasTable()
      */
-    public function hasTable($table)
+    public function hasTable($table, $database = null)
     {
-        $ret = $this->db->getOne("SHOW TABLES LIKE ?", array($table));
+        $ret = $this->db->getOne("SHOW TABLES " . ($database ? "FROM `" . $this->db->escape($database) . "` " : "") . "LIKE ?", array($table));
         return $ret ? true : false;
+    }
+
+    /**
+     * {@inheritdoc}
+     * @see \Scalr\Upgrade\UpdateInterface::isRefused()
+     */
+    public function isRefused()
+    {
+        return false;
     }
 }

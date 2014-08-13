@@ -2,17 +2,9 @@
 namespace Scalr\Service\Aws;
 
 use Scalr\Service\Aws\Client\ClientException;
-use Scalr\Service\Aws\Elb\Handler\LoadBalancerHandler;
-use Scalr\Service\Aws\DataType\ErrorData;
 use Scalr\Service\Aws\Elb\DataType\LoadBalancerDescriptionList;
-use Scalr\Service\Aws\Elb\DataType\ListenerDescriptionData;
 use Scalr\Service\Aws\Elb\DataType\ListenerList;
-use Scalr\Service\Aws\Elb\DataType\ListenerData;
 use Scalr\Service\Aws\DataType\ListDataType;
-use Scalr\Service\Aws\Client\QueryClient;
-use Scalr\Service\Aws;
-use Scalr\Service\Aws\Elb\V20120601\ElbApi;
-use Scalr\Service\Aws\Elb\DataType\LoadBalancerDescriptionData;
 
 /**
  * Amazon web servise Elastic load balancer service interface

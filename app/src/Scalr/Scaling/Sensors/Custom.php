@@ -19,12 +19,7 @@
             foreach ($servers as $dbServer)
             {
                 if ($dbServer->IsSupported('0.13.0')) {
-                    $apiClient = Scalr_Net_Scalarizr_Client::getClient(
-                        $dbServer,
-                        Scalr_Net_Scalarizr_Client::NAMESPACE_SYSTEM,
-                        $dbServer->getPort(DBServer::PORT_API)
-                    );
-                    $metrics = $apiClient->scalingMetrics();
+                    $metrics = $dbServer->scalarizr->system->scalingMetrics();
 
                     foreach ($metrics as $metric) {
                         if ($metric->id == $farmRoleMetric->metricId) {

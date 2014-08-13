@@ -2,14 +2,14 @@
 
 class CheckRecoveredEvent extends Event
 {
-    public $dBServer;
+    public $DBServer;
     public $check;
 
 
-    public function __construct(DBServer $dBServer, $check)
+    public function __construct(DBServer $DBServer, $check)
     {
         parent::__construct();
-        $this->dBServer = $dBServer;
+        $this->DBServer = $DBServer;
         $this->check = $check;
     }
 

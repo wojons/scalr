@@ -11,7 +11,6 @@ class Scalr_SshKey extends Scalr_Model
 
     protected $dbPropertyMap = array(
         'id'			=> 'id',
-        'client_id'		=> array('property' => 'clientId', 'is_filter' => true),
         'env_id'		=> array('property' => 'envId', 'is_filter' => true),
         'type'			=> array('property' => 'type', 'is_filter' => false),
         'private_key'	=> array('property' => 'privateKeyEnc', 'is_filter' => false),
@@ -30,6 +29,7 @@ class Scalr_SshKey extends Scalr_Model
         $cloudPlatform,
         $farmId,
         $cloudKeyName,
+        $cloudLocation,
         $platform;
 
     protected $privateKeyEnc;
@@ -78,15 +78,58 @@ class Scalr_SshKey extends Scalr_Model
             return parent::loadBy($info);
     }
 
-    public function loadGlobalByFarmId($farmId, $cloudLocation, $platform)
+    public function loadGlobalByFarmId($envId, $farmId, $cloudLocation, $platform)
     {
-        $info = $this->db->GetRow("SELECT * FROM ssh_keys WHERE `farm_id`=? AND (`cloud_location`=? OR `cloud_location` = '') AND `type`=? AND `platform` = ? LIMIT 1",
-            array($farmId, $cloudLocation, self::TYPE_GLOBAL, $platform)
-        );
+        $sql = "SELECT * FROM ssh_keys WHERE `env_id` = ? AND (`cloud_location`=? OR `cloud_location` = '') AND `type`=? AND `platform` = ?";
+        $params = [$envId, $cloudLocation, self::TYPE_GLOBAL, $platform];
+
+        if ($farmId == 0 || $farmId == NULL) {
+            $sql .= ' AND `farm_id` IS NULL';
+        } else {
+            $sql .= 'AND `farm_id` = ?';
+            $params[] = $farmId;
+        }
+        $sql .= ' LIMIT 1';
+
+        $info = $this->db->GetRow($sql, $params);
         if (!$info)
             return false;
         else
             return parent::loadBy($info);
+    }
+
+    public function getPuttyPrivateKey()
+    {
+        $descriptorspec = array(
+            0 => array("pipe", "r"),
+            1 => array("pipe", "w"),
+            2 => array("pipe", "w")
+        );
+
+        $pemPrivateKey = tempnam("/tmp", "SSHPEM");
+        @file_put_contents($pemPrivateKey, $this->getPrivate());
+        @chmod($pemPrivateKey, 0600);
+
+        $ppkPrivateKey = tempnam("/tmp", "SSHPPK");
+
+        $pipes = array();
+        $process = @proc_open("/usr/bin/puttygen {$pemPrivateKey} -o {$ppkPrivateKey}", $descriptorspec, $pipes);
+        if (@is_resource($process)) {
+
+            @fclose($pipes[0]);
+
+            stream_get_contents($pipes[1]);
+
+            fclose($pipes[1]);
+            fclose($pipes[2]);
+        }
+
+        $retval = file_get_contents($ppkPrivateKey);
+
+        @unlink($pemPrivateKey);
+        @unlink($ppkPrivateKey);
+
+        return $retval;
     }
 
     private function getSshKeygenValue($args, $tmpFileContents, $readTmpFile = false)

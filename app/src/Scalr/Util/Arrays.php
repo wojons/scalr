@@ -1,18 +1,19 @@
 <?php
 
-
 /**
  * Array utils
  *
  * @author Marat Komarov
  */
-class Scalr_Util_Arrays {
+class Scalr_Util_Arrays
+{
 
     /**
      * @see http://ua2.php.net/manual/en/function.array-merge-recursive.php#93905
      * @return array
      */
-   public static function mergeReplaceRecursive() {
+   public static function mergeReplaceRecursive()
+   {
         // Holds all the arrays passed
         $params = func_get_args();
 
@@ -42,5 +43,33 @@ class Scalr_Util_Arrays {
         }
 
         return $return;
+    }
+
+    /**
+     * Calculates median
+     *
+     * @param   array    $array  Not empty array with numeric values
+     * @return  number   Returns median or false for empty array
+     * @since   5.0 (01.04.2014)
+     */
+    public static function median($array)
+    {
+        $number = count($array);
+
+        if ($number == 0) {
+            return false;
+        }
+
+        $mid = floor($number / 2);
+
+        sort($array, SORT_NUMERIC);
+
+        if ($number % 2 == 0) {
+            $median = ($array[$mid] + $array[$mid - 1]) / 2;
+        } else {
+            $median = $array[$mid];
+        }
+
+        return $median;
     }
 }

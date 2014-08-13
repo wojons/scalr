@@ -6,7 +6,6 @@ Scalr.regPage('Scalr.ui.tools.aws.ec2.ebs.volumes.view', function (loadParams, m
 		],
 		proxy: {
 			type: 'scalr.paging',
-			extraParams: loadParams,
 			url: '/tools/aws/ec2/ebs/volumes/xListVolumes/'
 		},
 		remoteSort: true
@@ -18,7 +17,6 @@ Scalr.regPage('Scalr.ui.tools.aws.ec2.ebs.volumes.view', function (loadParams, m
 			'reload': false,
 			'maximize': 'all'
 		},
-		scalrReconfigureParams: { volumeId: '' },
 		store: store,
 		stateId: 'grid-tools-aws-ec2-ebs-volumes-view',
 		stateful: true,
@@ -89,46 +87,33 @@ Scalr.regPage('Scalr.ui.tools.aws.ec2.ebs.volumes.view', function (loadParams, m
 				'<tpl if="autoAttach"><img src="/ui2/images/icons/true.png" /></tpl>' +
 				'<tpl if="!autoAttach"><img src="/ui2/images/icons/false.png" /></tpl>'
 			}, {
-				xtype: 'optionscolumn',
+				xtype: 'optionscolumn2',
 				getVisibility: function (record) {
-					if (record.get('status') == 'deleting' || record.get('status') == 'deleted')
-						return false;
-					
-					return true;
+					return record.get('status') !== 'deleting' && record.get('status') !== 'deleted'
 				},
-				getOptionVisibility: function (item, record) {
-					if (item.itemId == 'option.attach' || item.itemId == 'option.detach' || item.itemId == 'option.attachSep') {
-						
-						if (!record.get('mysqMasterVolume')) {
-							if (item.itemId == 'option.attachSep')
-								return true;
-							if (item.itemId == 'option.detach' && record.get('instanceId'))
-								return true;
-							if (item.itemId == 'option.attach' && !record.get('instanceId'))
-								return true;
-						}
-						return false;
-					}
-					return true;
-				},
-
-				optionsMenu: [{
+				menu: [{
 					text: 'CloudWatch statistics',
 					iconCls: 'x-menu-icon-statsload',
-					menuHandler: function (menuItem) {
-						document.location.href = '#/tools/aws/ec2/cloudwatch/view?objectId=' + menuItem.record.get('volumeId') + '&object=VolumeId&namespace=AWS/EBS&region=' + store.proxy.extraParams.cloudLocation;
+					menuHandler: function (data) {
+						document.location.href = '#/tools/aws/ec2/cloudwatch/view?objectId=' + data['volumeId'] + '&object=VolumeId&namespace=AWS/EBS&region=' + store.proxy.extraParams.cloudLocation;
 					}
 				},{
 					itemId: 'option.attach',
 					iconCls: 'x-menu-icon-attach',
 					text: 'Attach',
-					menuHandler: function(menuItem) {
-						document.location.href = "#/tools/aws/ec2/ebs/volumes/" + menuItem.record.get('volumeId') + "/attach?cloudLocation=" + store.proxy.extraParams.cloudLocation;
-					}
-				}, {
+					menuHandler: function(data) {
+						document.location.href = "#/tools/aws/ec2/ebs/volumes/" + data['volumeId'] + "/attach?cloudLocation=" + store.proxy.extraParams.cloudLocation;
+					},
+                    getVisibility: function(data) {
+                        return !data['mysqMasterVolume'] && !data['instanceId'];
+                    }
+				},{
 					itemId: 'option.detach',
 					iconCls: 'x-menu-icon-detach',
 					text: 'Detach',
+                    getVisibility: function(data) {
+                        return !data['mysqMasterVolume'] && data['instanceId'];
+                    },
 					request: {
 						confirmBox: {
 							type: 'action',
@@ -140,22 +125,22 @@ Scalr.regPage('Scalr.ui.tools.aws.ec2.ebs.volumes.view', function (loadParams, m
 							msg: 'Detaching EBS volume ...'
 						},
 						url: '/tools/aws/ec2/ebs/volumes/xDetach/',
-						dataHandler: function (record) {
-							return { volumeId: record.get('volumeId'), cloudLocation: store.proxy.extraParams.cloudLocation };
+						dataHandler: function (data) {
+							return { volumeId: data['volumeId'], cloudLocation: store.proxy.extraParams.cloudLocation };
 						},
 						success: function (data) {
 							store.load();
 						}
 					}
-				}, {
+				},{
 					xtype: 'menuseparator',
 					itemId: 'option.attachSep'
-				}, {
+				},{
 					itemId: 'option.autosnap',
 					text: 'Auto-snapshot settings',
 					iconCls: 'x-menu-icon-autosnapshotsettings',
-					menuHandler: function(menuItem) {
-						document.location.href = '#/tools/aws/autoSnapshotSettings?type=ebs&objectId=' + menuItem.record.get('volumeId') + '&cloudLocation=' + store.proxy.extraParams.cloudLocation;
+					menuHandler: function(data) {
+						document.location.href = '#/tools/aws/autoSnapshotSettings?type=ebs&objectId=' + data['volumeId'] + '&cloudLocation=' + store.proxy.extraParams.cloudLocation;
 					}
 				}, {
 					xtype: 'menuseparator',
@@ -174,8 +159,8 @@ Scalr.regPage('Scalr.ui.tools.aws.ec2.ebs.volumes.view', function (loadParams, m
 							msg: 'Creating EBS snapshot ...'
 						},
 						url: '/tools/aws/ec2/ebs/snapshots/xCreate/',
-						dataHandler: function (record) {
-							return { volumeId: record.get('volumeId'), cloudLocation: store.proxy.extraParams.cloudLocation };
+						dataHandler: function (data) {
+							return { volumeId: data['volumeId'], cloudLocation: store.proxy.extraParams.cloudLocation };
 						},
 						success: function (data) {
 							document.location.href = '#/tools/aws/ec2/ebs/snapshots/' + data.data.snapshotId + '/view?cloudLocation=' + store.proxy.extraParams.cloudLocation;
@@ -185,8 +170,8 @@ Scalr.regPage('Scalr.ui.tools.aws.ec2.ebs.volumes.view', function (loadParams, m
 					itemId: 'option.viewSnaps',
 					text: 'View snapshots',
 					iconCls: 'x-menu-icon-view',
-					menuHandler: function(menuItem) {
-						document.location.href = '#/tools/aws/ec2/ebs/snapshots/view?volumeId=' + menuItem.record.get('volumeId') + '&cloudLocation=' + store.proxy.extraParams.cloudLocation;
+					menuHandler: function(data) {
+						document.location.href = '#/tools/aws/ec2/ebs/snapshots/view?volumeId=' + data['volumeId'] + '&cloudLocation=' + store.proxy.extraParams.cloudLocation;
 					}
 				}, {
 					xtype: 'menuseparator',
@@ -205,8 +190,8 @@ Scalr.regPage('Scalr.ui.tools.aws.ec2.ebs.volumes.view', function (loadParams, m
 							msg: 'Deleting EBS volume ...'
 						},
 						url: '/tools/aws/ec2/ebs/volumes/xRemove/',
-						dataHandler: function (record) {
-							return { volumeId: Ext.encode([record.get('volumeId')]), cloudLocation: store.proxy.extraParams.cloudLocation };
+						dataHandler: function (data) {
+							return { volumeId: Ext.encode([data['volumeId']]), cloudLocation: store.proxy.extraParams.cloudLocation };
 						},
 						success: function () {
 							store.load();
@@ -283,8 +268,7 @@ Scalr.regPage('Scalr.ui.tools.aws.ec2.ebs.volumes.view', function (loadParams, m
 					data: moduleParams.locations,
 					proxy: 'object'
 				},
-				gridStore: store,
-				cloudLocation: loadParams['cloudLocation'] || ''
+				gridStore: store
 			}]
 		}]
 	});

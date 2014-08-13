@@ -7,11 +7,9 @@ use Scalr\Service\Aws\Elb\DataType\LoadBalancerDescriptionList;
 use Scalr\Service\Aws\Elb\DataType\HealthCheckData;
 use Scalr\Service\Aws\Client\ClientException;
 use Scalr\Service\Aws\Elb\DataType\InstanceStateList;
-use Scalr\Service\Aws\Elb\DataType\InstanceData;
 use Scalr\Service\Aws\Elb\DataType\InstanceList;
 use Scalr\Service\Aws\Elb\DataType\ListenerList;
 use Scalr\Service\Aws\Elb\DataType\ListenerData;
-use Scalr\Service\Aws\DataType\ErrorData;
 use Scalr\Service\Aws\DataType\ListDataType;
 use Scalr\Service\Aws\Elb\DataType\LoadBalancerDescriptionData;
 use Scalr\Service\Aws\ElbException;
@@ -59,7 +57,7 @@ class LoadBalancerHandler extends AbstractElbHandler
     {
         return $this->getElb()->createLoadBalancer(
             $loadBalancerName, $listenersList, $availabilityZonesList,
-            $scheme, $securityGroupsList, $subnetsList
+            $subnetsList, $securityGroupsList, $scheme
         );
     }
 

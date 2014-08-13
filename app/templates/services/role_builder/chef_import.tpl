@@ -11,6 +11,8 @@ BUILD_ONLY="%BUILD_ONLY%"
 SCALARIZR_BRANCH="%SCALARIZR_BRANCH%"
 
 # Chef settings
+CHEF_NODENAME=scalr-role-builder-`date +"%s"`
+
 CHEF_SERVER_URL="%CHEF_SERVER_URL%"
 CHEF_VALIDATOR_NAME="%CHEF_VALIDATOR_NAME%"
 CHEF_VALIDATOR_KEY="%CHEF_VALIDATOR_KEY%"
@@ -20,9 +22,14 @@ CHEF_ROLE_NAME="%CHEF_ROLE_NAME%"
 # Chef client configuration
 CHEF_CLIENT_CNF_TPL="log_level        :info
 log_location     STDOUT
+node_name		 '$CHEF_NODENAME'
 chef_server_url  '$CHEF_SERVER_URL'
 environment      '$CHEF_ENVIRONMENT'
 validation_client_name '$CHEF_VALIDATOR_NAME'"
+
+# Knife client configuration
+KNIFE_RB="chef_server_url  '$CHEF_SERVER_URL'
+node_name		 '$CHEF_NODENAME'"
 
 
 for recipe in $RECIPES; do
@@ -165,18 +172,34 @@ if [ -n "$CHEF_VALIDATOR_KEY" ]; then
 	mkdir -p /etc/chef/
 	echo "$CHEF_VALIDATOR_KEY" > /etc/chef/validation.pem
 	echo '{"run_list": [ "role['$CHEF_ROLE_NAME']" ]}'  > /tmp/attributes.json
-
+    
 	action "Creating chef-client configuration file" 'echo "$CHEF_CLIENT_CNF_TPL" > /etc/chef/client.rb'
 	action "Creating new chef API client using validaton key" 'chef-client'
+    action "Creating knife configuration" 'echo "$KNIFE_RB" > /etc/chef/knife.rb'
 
 	# Deleting validation key
 	rm -f /etc/chef/validation.pem
+
+    function cleanup_chef_node {
+        knife node -y -c /etc/chef/knife.rb delete $CHEF_NODENAME > /dev/null 2>&1
+        knife client -y -c /etc/chef/knife.rb delete $CHEF_NODENAME > /dev/null 2>&1
+    }
+    # Add exit hook
+    trap cleanup_chef_node EXIT
+	
 	action "Applying specified runlist" "chef-client --json-attribute /tmp/attributes.json"
+	
+	# Remove hook
+	trap - EXIT
+	# Perform cleanup 
+	cleanup_chef_node
+
 	rm -f /etc/chef/client.pem
 fi
 
 
 if [ "0" = "$BUILD_ONLY" ]; then
+	export PATH=$PATH:/usr/local/bin
 	action "Starting importing to Scalr" "$SCALR_IMPORT_STRING &"
 	tail -f /var/log/scalarizr.log | while read LINE; do
 	        [[ "${LINE}" =~ 'Rebundle complete!' ]] && break

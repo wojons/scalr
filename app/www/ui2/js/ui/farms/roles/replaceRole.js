@@ -4,29 +4,23 @@ Scalr.regPage('Scalr.ui.farms.roles.replaceRole', function (loadParams, modulePa
 			modal: true
 		},
 		width: 700,
-        layout: 'auto',
+        layout: 'fit',
         bodyCls: 'x-container-fieldset',
 		items: [{
-			xtype: 'component',
-			cls: 'x-fieldset-subheader',
-            html: 'Select replacement role'
-        },{
-			xtype: 'displayfield',
-			cls: 'x-form-field-warning',
-			value: 'Replacing this role may lead to broken functionality! Currently running instances will NOT be replaced, only NEW instances will use this replaced role.',
-            style: 'width: 100%'
-        },{
             xtype: 'grid',
             hideHeaders: true,
-            margin: '0 -32',
-            padding: '0 32',
+            margin: '0 0 0 -32',
+            padding: '0 0 0 32',
             cls: 'x-grid-shadow x-grid-no-selection',
             plugins: [{
                 pluginId: 'rowpointer',
                 ptype: 'rowpointer',
                 align: 'left',
                 addCls: 'x-panel-row-pointer-star',
-                tooltip: 'Current role'
+                tooltip: 'Current role',
+                getPointerRecord: function() {
+                    return this.client.store.getById(moduleParams['roleId']);
+                }
             }],
             store: {
                 fields: ['id', 'name', 'os_name', 'os_family', 'os_generation', 'os_version', 'shared', 'arch', 'behaviors'],
@@ -44,7 +38,7 @@ Scalr.regPage('Scalr.ui.farms.roles.replaceRole', function (loadParams, modulePa
                 tpl: 
                     '<img src="' + Ext.BLANK_IMAGE_URL + '" class="x-icon-osfamily-small x-icon-osfamily-small-{os_family}"/>&nbsp;&nbsp;'+
                     '{os_name} {[values.arch==\'i386\'?32:64]}bit'+
-                    '&nbsp;&nbsp;(<tpl if="shared"><span style="color:#46A657" title="Pre-made role.">{name}</span><tpl else>{name}</tpl>)'
+                    '&nbsp;&nbsp;(<tpl if="shared"><span style="color:#46A657" title="Quick start role.">{name}</span><tpl else>{name}</tpl>)'
                     
             },{
                 xtype: 'templatecolumn',
@@ -66,7 +60,6 @@ Scalr.regPage('Scalr.ui.farms.roles.replaceRole', function (loadParams, modulePa
                             selModel = this.getSelectionModel(),
                             record = this.store.getById(moduleParams['roleId']);
                         selModel.setLastFocused(record);
-                        grid.up().getPlugin('rowpointer').pointTo(record);
                         selModel.on('focuschange', function(selModel, oldFocused, newFocused){
                             if (newFocused) {
                                 grid.up('form').down('#replace').setDisabled(newFocused.get('id') == moduleParams['roleId']);
@@ -77,6 +70,21 @@ Scalr.regPage('Scalr.ui.farms.roles.replaceRole', function (loadParams, modulePa
             }
         }],
         dockedItems:[{
+            xtype: 'container',
+            dock: 'top',
+            cls: 'x-container-fieldset x-fieldset-no-bottom-padding',
+            items: [{
+                xtype: 'component',
+                cls: 'x-fieldset-subheader',
+                html: 'Select replacement role'
+            },{
+                xtype: 'displayfield',
+                cls: 'x-form-field-warning',
+                value: 'Replacing this role may lead to broken functionality! Currently running instances will NOT be replaced, only NEW instances will use this replaced role.',
+                style: 'width: 100%',
+                margin: 0
+            }]
+        },{
             xtype: 'container',
             dock: 'bottom',
             cls: 'x-docked-buttons',
@@ -95,7 +103,8 @@ Scalr.regPage('Scalr.ui.farms.roles.replaceRole', function (loadParams, modulePa
                         Scalr.Request({
 							confirmBox: {
 								type: 'action',
-								msg: 'Are you sure want to replace role?'
+								msg: 'Are you sure you want to replace this role?<br>' + 
+								'This change will be saved immediately!'
 							},
                             processBox: {
                                 type: 'save'
@@ -108,7 +117,7 @@ Scalr.regPage('Scalr.ui.farms.roles.replaceRole', function (loadParams, modulePa
                                 Scalr.event.fireEvent('update', '/farms/roles/replaceRole', {
                                     farmId: loadParams['farmId'],
                                     farmRoleId: loadParams['farmRoleId'],
-                                    role: data.role,
+                                    role: data.role
                                 });
                                 Scalr.event.fireEvent('close');
                             }

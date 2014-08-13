@@ -3,7 +3,6 @@ namespace Scalr\Service\OpenStack\Services\Network\Type;
 
 use Scalr\Service\OpenStack\Type\BooleanType;
 use Scalr\Service\OpenStack\Type\Marker;
-use \DateTime;
 
 /**
  * ListNetworksFilter
@@ -234,45 +233,5 @@ class ListNetworksFilter extends Marker
     public function addId($id)
     {
         return $this->_addPropertyValue('id', $id);
-    }
-
-    /**
-     * {@inheritdoc}
-     * @see Scalr\Service\OpenStack\Type.Marker::getQueryData()
-     */
-    public function getQueryData()
-    {
-        $options = parent::getQueryData();
-
-        if (!empty($this->name)) {
-            $options['name'] = $this->getName();
-        }
-        if (!empty($this->status)) {
-            $options['status'] = $this->getStatus();
-        }
-        if (!empty($this->id)) {
-            $options['id'] = $this->getId();
-        }
-        if ($this->adminStateUp !== null) {
-            $options['admin_state_up'] = (string)$this->getAdminStateUp();
-        }
-        if ($this->shared !== null) {
-            $options['shared'] = (string)$this->getShared();
-        }
-
-        return $options;
-    }
-
-    /**
-     * {@inheritdoc}
-     * @see Scalr\Service\OpenStack\Type.Marker::getQueryString()
-     */
-    public function getQueryString()
-    {
-        $str = parent::getQueryString();
-
-        $str .= $this->_getQueryStringForFields(array('name', 'status', 'id', 'shared', 'adminStateUp' => 'admin_state_up'), __CLASS__);
-
-        return ltrim($str, '&');
     }
 }

@@ -71,10 +71,18 @@ class Scalr_Session
 
             $token = self::$_session->getToken();
             if (empty($token)) {
-                if ($_COOKIE[self::SESSION_TOKEN])
-                    self::$_session->setToken($_COOKIE[self::SESSION_TOKEN]);
-                else
-                    self::$_session->setToken(Scalr_Util_CryptoTool::sault(32));
+                if ($_COOKIE[self::SESSION_TOKEN]) {
+                    $hash = self::getInstance()->hashpwd;
+                    // validate token value
+                    if ($_COOKIE['scalr_signature']) {
+                        if (Scalr_Util_CryptoTool::hash("{$_COOKIE['scalr_signature']}:{$hash}") === $_COOKIE[self::SESSION_TOKEN])
+                            self::$_session->setToken($_COOKIE[self::SESSION_TOKEN]);
+                    } else {
+                        $id = session_id();
+                        if (Scalr_Util_CryptoTool::hash("{$id}:{$hash}") === $_COOKIE[self::SESSION_TOKEN])
+                            self::$_session->setToken($_COOKIE[self::SESSION_TOKEN]);
+                    }
+                }
             }
         }
 
@@ -94,7 +102,16 @@ class Scalr_Session
         $sault = Scalr_Util_CryptoTool::sault();
         $_SESSION[__CLASS__][self::SESSION_SAULT] = $sault;
         $_SESSION[__CLASS__][self::SESSION_HASH] = self::createHash($userId, $sault);
-        @session_write_close();
+
+        if (! $virtual) {
+            $id = session_id();
+            $hash = self::getInstance()->hashpwd;
+            $token = Scalr_Util_CryptoTool::hash("{$id}:{$hash}");;
+            $https = ($_SERVER['HTTPS']) ? true : false;
+            $_SESSION[__CLASS__][self::SESSION_TOKEN] = $token;
+            setcookie('scalr_token', $token, null, '/', null, $https, false);
+            @session_write_close();
+        }
 
         self::restore(false);
     }
@@ -226,7 +243,7 @@ class Scalr_Session
             @setcookie("scalr_hash", "", time() - 86400, "/", null, $setHttpsCookie, true);
             @setcookie("scalr_sault", "", time() - 86400, "/", null, $setHttpsCookie, true);
             @setcookie("scalr_signature", "", time() - 86400, "/", null, $setHttpsCookie, true);
-            @setcookie("scalr_token", "", time() - 86400, "/", null, $setHttpsCookie, true);
+            @setcookie("scalr_token", "", time() - 86400, "/", null, $setHttpsCookie, false);
         }
 
         @session_write_close();
@@ -246,8 +263,7 @@ class Scalr_Session
         setcookie('scalr_sault', $session->sault, $tm, "/", null, $setHttpsCookie, true);
         setcookie('scalr_hash', $session->hash, $tm, "/", null, $setHttpsCookie, true);
         setcookie('scalr_signature', $signature, $tm, "/", null, $setHttpsCookie, true);
-        setcookie('scalr_token', $token, $tm, "/", null, $setHttpsCookie, true);
-
+        setcookie('scalr_token', $token, $tm, "/", null, $setHttpsCookie, false);
         $session->setToken($token);
     }
 

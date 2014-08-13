@@ -196,9 +196,9 @@ class Scalr_System_Cronjob_MultiProcess extends Scalr_System_Cronjob implements 
             return;
         }
 
-        $this->onReady($this->processPool);
+        //$this->onReady($this->processPool);
 
-        $this->processPool->start();
+        $this->processPool->start($this);
     }
 
     protected function checkMemoryLimit () {

@@ -1,6 +1,9 @@
 <?php
+
 use Scalr\Acl\Acl;
 use Scalr\Service\Aws\Ec2\DataType as Ec2DataType;
+use Scalr\Modules\PlatformFactory;
+use Scalr\Modules\Platforms\Ec2\Ec2PlatformModule;
 
 class Scalr_UI_Controller_Tools_Aws_Ec2_Ebs_Snapshots extends Scalr_UI_Controller
 {
@@ -29,7 +32,7 @@ class Scalr_UI_Controller_Tools_Aws_Ec2_Ebs_Snapshots extends Scalr_UI_Controlle
             throw new Exception('You can migrate image between regions only on EC2 cloud');
 
         $platform = PlatformFactory::NewPlatform(SERVER_PLATFORMS::EC2);
-        $locationsList = $platform->getLocations();
+        $locationsList = $platform->getLocations($this->environment);
 
         foreach ($locationsList as $location => $name) {
             if ($location != $this->getParam('cloudLocation'))
@@ -169,7 +172,7 @@ class Scalr_UI_Controller_Tools_Aws_Ec2_Ebs_Snapshots extends Scalr_UI_Controlle
                 'progress'   => $snapshot->progress,
                 'volumeSize' => $snapshot->volumeSize,
             );
-            if ($snapshot->ownerId != $this->getEnvironment()->getPlatformConfigValue(Modules_Platforms_Ec2::ACCOUNT_ID)) {
+            if ($snapshot->ownerId != $this->getEnvironment()->getPlatformConfigValue(Ec2PlatformModule::ACCOUNT_ID)) {
                 $item['comment'] = $snapshot->description;
                 $item['owner'] = $snapshot->ownerId;
                 if (!$this->getParam('showPublicSnapshots')) continue;

@@ -24,28 +24,41 @@ Scalr.regPage('Scalr.ui.farms.extendedinfo', function (loadParams, moduleParams)
 	
 	if (form.down('#repo')) {
 		form.down('#repo').store.load({
-			data: [{name:'latest', description:'Latest'}, {name:'stable', description:'Stable'}]
+			data: moduleParams['scalarizr_repos']
 		});
 	}
 	
 	if (form.down('#updSettingsSave')) {
 		form.down('#updSettingsSave').on('click', function(){
 			
-			var params = form.getForm().getValues();
+			var params = form.getForm().getValues(),
+                isValid = true,
+                validators = {
+                    hh: /^(\*|(1{0,1}\d|2[0-3])(-(1{0,1}\d|2[0-3])){0,1}(,(1{0,1}\d|2[0-3])(-(1{0,1}\d|2[0-3])){0,1})*)(\/(1{0,1}\d|2[0-3])){0,1}$/,
+                    dd: /^(\*|([12]{0,1}\d|3[01])(-([12]{0,1}\d|3[01])){0,1}(,([12]{0,1}\d|3[01])(-([12]{0,1}\d|3[01])){0,1})*)(\/([12]{0,1}\d|3[01])){0,1}$/,
+                    dw: /^(\*|[0-6](-([0-6])){0,1}(,([0-6])(-([0-6])){0,1})*)(\/([0-6])){0,1}$/i
+                };
 			params['farmId'] = loadParams['farmId'];
-			
-			Scalr.Request({
-				processBox: {
-					type: 'action',
-					//msg: 'Saving auto-update configuration. This operation can take a few minutes, please wait...'
-					msg:  'Saving configuration ...'
-				},
-				url: '/farms/xSaveSzrUpdSettings/',
-				params: params,
-				success: function(){
-					//Scalr.event.fireEvent('refresh');
-				}
-			});
+			Ext.Object.each(validators, function(name, regexp){
+                var field = form.getForm().findField(name);
+                isValid = regexp.test(field.getValue());
+                isValid || field.markInvalid('Invalid format');
+                return isValid;
+            });
+            if (isValid) {
+                Scalr.Request({
+                    processBox: {
+                        type: 'action',
+                        //msg: 'Saving auto-update configuration. This operation can take a few minutes, please wait...'
+                        msg:  'Saving configuration ...'
+                    },
+                    url: '/farms/xSaveSzrUpdSettings/',
+                    params: params,
+                    success: function(){
+                        //Scalr.event.fireEvent('refresh');
+                    }
+                });
+            }
 		});
 	}
 

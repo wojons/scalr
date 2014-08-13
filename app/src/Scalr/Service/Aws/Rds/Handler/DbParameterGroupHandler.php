@@ -1,13 +1,10 @@
 <?php
 namespace Scalr\Service\Aws\Rds\Handler;
 
-use Scalr\Service\Aws\Rds\DataType\ParameterData;
 use Scalr\Service\Aws\Rds\DataType\ParameterList;
 use Scalr\Service\Aws\Rds\DataType\DBParameterGroupData;
 use Scalr\Service\Aws\Rds\DataType\DBParameterGroupList;
-use Scalr\Service\Aws\DataType\ListDataType;
 use Scalr\Service\Aws\Client\ClientException;
-use Scalr\Service\Aws\DataType\ErrorData;
 use Scalr\Service\Aws\RdsException;
 use Scalr\Service\Aws\Rds\AbstractRdsHandler;
 

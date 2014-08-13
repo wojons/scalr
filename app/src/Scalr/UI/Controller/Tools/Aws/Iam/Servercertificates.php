@@ -1,5 +1,7 @@
 <?php
+
 use Scalr\Acl\Acl;
+use Scalr\Modules\Platforms\Ec2\Ec2PlatformModule;
 
 class Scalr_UI_Controller_Tools_Aws_Iam_ServerCertificates extends Scalr_UI_Controller
 {
@@ -27,15 +29,15 @@ class Scalr_UI_Controller_Tools_Aws_Iam_ServerCertificates extends Scalr_UI_Cont
 
         //TODO This must be refactored to new Scalr\Service\Aws\Iam class
         $iamClient = Scalr_Service_Cloud_Aws::newIam(
-            $this->getEnvironment()->getPlatformConfigValue(Modules_Platforms_Ec2::ACCESS_KEY),
-            $this->getEnvironment()->getPlatformConfigValue(Modules_Platforms_Ec2::SECRET_KEY)
+            $this->getEnvironment()->getPlatformConfigValue(Ec2PlatformModule::ACCESS_KEY),
+            $this->getEnvironment()->getPlatformConfigValue(Ec2PlatformModule::SECRET_KEY)
         );
 
         $iamClient->uploadServerCertificate(
             @file_get_contents($_FILES['certificate']['tmp_name']),
             @file_get_contents($_FILES['privateKey']['tmp_name']),
             $this->getParam('name'),
-            ($_FILES['certificateChain']['tmp_name']) ? @file_get_contents($_FILES['certificateChain']['tmp_name']) : null
+            (!empty($_FILES['certificateChain']['tmp_name'])) ? @file_get_contents($_FILES['certificateChain']['tmp_name']) : null
         );
 
         $this->response->success('Certificate successfully uploaded');
@@ -45,8 +47,8 @@ class Scalr_UI_Controller_Tools_Aws_Iam_ServerCertificates extends Scalr_UI_Cont
     {
         //TODO This needs to be refactored. We have to use new Scalr\Service\Aws\Iam library.
         $iamClient = Scalr_Service_Cloud_Aws::newIam(
-            $this->getEnvironment()->getPlatformConfigValue(Modules_Platforms_Ec2::ACCESS_KEY),
-            $this->getEnvironment()->getPlatformConfigValue(Modules_Platforms_Ec2::SECRET_KEY)
+            $this->getEnvironment()->getPlatformConfigValue(Ec2PlatformModule::ACCESS_KEY),
+            $this->getEnvironment()->getPlatformConfigValue(Ec2PlatformModule::SECRET_KEY)
         );
 
         $rowz = array();

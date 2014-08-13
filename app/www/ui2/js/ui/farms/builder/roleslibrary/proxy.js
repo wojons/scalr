@@ -9,15 +9,6 @@ Scalr.regPage('Scalr.ui.farms.builder.addrole.proxy', function () {
             return Ext.Array.contains(record.get('behaviors', true), 'www');
         },
 
-        onSelectImage: function(record) {
-            if (this.isVisibleForRole(record)) {
-                this.setRole(record);
-                this.show();
-            } else {
-                this.hide();
-            }
-        },
-
         setRole: function(record) {
             var me = this,
                 p = this.down('proxysettings');

@@ -20,7 +20,7 @@ class Scalr_UI_Controller_Services_Apache_Vhosts extends Scalr_UI_Controller
         $this->viewAction();
     }
 
-	public function viewAction()
+    public function viewAction()
     {
         $this->request->restrictAccess(Acl::RESOURCE_SERVICES_APACHE);
         $this->response->page('ui/services/apache/vhosts/view.js');
@@ -184,7 +184,7 @@ class Scalr_UI_Controller_Services_Apache_Vhosts extends Scalr_UI_Controller
 
             $vHost->isSslEnabled = $isSslEnabled ? 1 : 0;
 
-            $vHost->httpdConf = $this->getParam("nonSslTemplate");
+            $vHost->httpdConf = $this->getParam("nonSslTemplate", true);
 
             $vHost->templateOptions = serialize(array(
                 "document_root" 	=> trim($this->getParam('documentRoot')),
@@ -200,7 +200,7 @@ class Scalr_UI_Controller_Services_Apache_Vhosts extends Scalr_UI_Controller
                 $this->user->getPermissions()->validate($cert);
 
                 $vHost->sslCertId = $cert->id;
-                $vHost->httpdConfSsl = $this->getParam("sslTemplate");
+                $vHost->httpdConfSsl = $this->getParam("sslTemplate", true);
             } else {
                 $vHost->sslCertId = 0;
                 $vHost->httpdConfSsl = "";

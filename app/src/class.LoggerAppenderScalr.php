@@ -90,7 +90,7 @@ class LoggerAppenderScalr extends LoggerAppender {
     {
         $this->db = \Scalr::getDb();
 
-        $this->layout = LoggerReflectionUtils::createObject('LoggerPatternLayoutScalr');
+        $this->layout = LoggerReflectionUtils::createObject('LoggerLayoutPattern');
         $this->layout->setConversionPattern($this->getSql());
 
         $this->canAppend = true;
@@ -98,58 +98,62 @@ class LoggerAppenderScalr extends LoggerAppender {
 
     function append(LoggerLoggingEvent $event)
     {
-        if ($this->canAppend)
-        {
-            try
-            {
+        if ($this->canAppend) {
+            try {
                 // Reopen new mysql connection (need for php threads)
                 $this->activateOptions();
 
-                if ($event->message instanceOf FarmLogMessage)
-                {
+                if ($event->message instanceof FarmLogMessage) {
                     $severity = $this->SeverityToInt($event->getLevel()->toString());
-                    $message = $this->db->qstr($event->message->Message);
+                    $message = $event->message->Message;
+                    $tm = date('YmdH');
+                    $hash = md5(":{$message}:{$event->message->FarmID}:{$event->getLoggerName()}:{$tm}", true);
 
                     $query = "INSERT DELAYED INTO logentries SET
-                        serverid	= '',
-                        message		= {$message},
-                        severity	= '{$severity}',
-                        time		= '".time()."',
-                        source 		= '".$event->getLoggerName()."',
-                        farmid 		= '{$event->message->FarmID}'
+                        `id` = ?,
+                        `serverid`	= '',
+                        `message`	= ?,
+                        `severity`	= ?,
+                        `time`		= ?,
+                        `source` 	= ?,
+                        `farmid` 	= ?
+                        ON DUPLICATE KEY UPDATE cnt = cnt + 1, `time` = ?
                     ";
 
-                    $this->db->Execute($query);
+                    $this->db->Execute($query, array(
+                        $hash,
+                        $message,
+                        $severity,
+                        time(),
+                        $event->getLoggerName(),
+                        $event->message->FarmID,
+                        time()
+                    ));
 
                     $event->message = "[FarmID: {$event->message->FarmID}] {$event->message->Message}";
 
                     return;
-                }
-                elseif ($event->message instanceof ScriptingLogMessage)
-                {
+                } elseif ($event->message instanceof ScriptingLogMessage) {
                     $message = $this->db->qstr($event->message->Message);
 
                     $query = "INSERT DELAYED INTO scripting_log SET
-                        farmid 		= '{$event->message->FarmID}',
-                        event		= '{$event->message->EventName}',
-                        server_id	= '{$event->message->ServerID}',
-                        dtadded		= NOW(),
-                        message		= {$message}
+                        `farmid` 		= ?,
+                        `event`		    = ?,
+                        `server_id` 	= ?,
+                        `dtadded`		= NOW(),
+                        `message`		= ?
                     ";
 
-                    $this->db->Execute($query);
+                    $this->db->Execute($query, array($event->message->FarmID, $event->message->EventName, $event->message->ServerID, $message));
 
                     $event->message = "[Farm: {$event->message->FarmID}] {$event->message->Message}";
 
                     return;
-                }
-                else
-                {
-                    if (stristr($event->message, "AWS was not able to validate the provided access credentials") ||
-                        stristr($event->message, "The X509 Certificate you provided does not exist in our records")
-                    )
 
-                    return;
+                } else {
+                    if (stristr($event->message, "AWS was not able to validate the provided access credentials") ||
+                        stristr($event->message, "The X509 Certificate you provided does not exist in our records"))
+                        return;
                 }
 
                 $level = $event->getLevel()->toString();
@@ -158,36 +162,33 @@ class LoggerAppenderScalr extends LoggerAppender {
                 $event->threadName = TRANSACTION_ID;
 
                 $event->subThreadName = defined("SUB_TRANSACTIONID") ? SUB_TRANSACTIONID
-                        : $GLOBALS["SUB_TRANSACTIONID"] ? $GLOBALS["SUB_TRANSACTIONID"]
-                        : TRANSACTION_ID;
+                        : (isset($GLOBALS["SUB_TRANSACTIONID"]) ? $GLOBALS["SUB_TRANSACTIONID"] : TRANSACTION_ID);
 
                 $event->farmID = defined("LOGGER_FARMID") ? LOGGER_FARMID
-                        : $GLOBALS["LOGGER_FARMID"] ? $GLOBALS["LOGGER_FARMID"]
-                        : null;
+                        : (isset($GLOBALS["LOGGER_FARMID"]) ? $GLOBALS["LOGGER_FARMID"] : null);
 
-                   if (defined('TRANSACTION_ID'))
-                   {
-                    if ($level == "FATAL" || $level == "ERROR")
-                    {
+                if (defined('TRANSACTION_ID')) {
+                    if ($level == "FATAL" || $level == "ERROR") {
                         // Set meta information
-                        $this->db->Execute("INSERT DELAYED INTO syslog_metadata SET transactionid='".TRANSACTION_ID."', errors='1', warnings='0'
+                        $this->db->Execute("
+                            INSERT DELAYED INTO syslog_metadata
+                            SET transactionid='" . TRANSACTION_ID . "', errors='1', warnings='0'
                             ON DUPLICATE KEY UPDATE errors=errors+1
                         ");
-                    }
-                    else
-                    {
-                        if ($level == "WARN")
-                        {
+                    } else {
+                        if ($level == "WARN") {
                             // Set meta information
-                            $this->db->Execute("INSERT DELAYED INTO syslog_metadata SET transactionid='".TRANSACTION_ID."', errors='0', warnings='1'
+                            $this->db->Execute("
+                                INSERT DELAYED INTO syslog_metadata
+                                SET transactionid='" . TRANSACTION_ID . "', errors='0', warnings='1'
                                 ON DUPLICATE KEY UPDATE warnings=warnings+1
                             ");
                         }
                     }
-                   }
+                }
 
-                   $msg = $event->message;
-                   $event->message = $this->db->qstr($event->message);
+                $msg = $event->message;
+                $event->message = $this->db->qstr($event->message);
 
                 $query = $this->layout->format($event);
 

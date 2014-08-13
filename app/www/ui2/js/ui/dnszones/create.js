@@ -157,11 +157,11 @@ Scalr.regPage('Scalr.ui.dnszones.create', function (loadParams, moduleParams) {
 											type: 'load',
 											msg: 'Loading farm roles ...'
 										},
-										url: '/dnszones/xGetFarmRoles/',
-										params: { farmId: value },
+										url: '/farms/xGetFarmWidgetRoles/',
+										params: { farmId: value, options: 'addEmpty' },
 										success: function (data) {
 											form.down('[name="domainFarmRole"]').setValue('');
-											form.down('[name="domainFarmRole"]').store.load({ data: data.farmRoles });
+											form.down('[name="domainFarmRole"]').store.load({ data: data.dataFarmRoles });
 										}
 									});
 								} else {
@@ -199,7 +199,13 @@ Scalr.regPage('Scalr.ui.dnszones.create', function (loadParams, moduleParams) {
 						value: 'Servers of this role will create root records. Leave blank to add root records manually.',
 						margin: '0 0 0 5'
 					}]
-				}]
+				}, {
+		            xtype: 'checkbox',
+		            name: 'privateRootRecords',
+		            width: 260,
+		            checked: parseInt(zone['privateRootRecords']) == 1,
+		            boxLabel: 'Use private IPs for root records'
+		        }]
 			}, {
 				xtype: 'fieldset',
 				flex: 1,

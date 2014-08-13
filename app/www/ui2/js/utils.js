@@ -14,10 +14,12 @@ Scalr.utils.CreateProcessBox = function (config) {
 	return Scalr.utils.Window({
 		title: config['msg'],
 		width: 313,
+        zIndexPriority: 10,
 		items: [{
 			xtype: 'component',
             cls: 'x-panel-confirm-loading'
 		}],
+        itemId: 'proccessBox',
 		closeOnEsc: false
 	});
 };
@@ -153,6 +155,7 @@ Scalr.utils.Confirm = function (config) {
 	}
 
 	var c = Scalr.utils.Window(winConfig);
+
 	if (! Ext.isDefined(config.form)) {
 		c.keyMap.addBinding({
 			key: Ext.EventObject.ENTER,
@@ -177,7 +180,6 @@ Scalr.utils.Window = function(config) {
 		border: false,
 		cls: 'x-panel-shadow x-panel-confirm',
 		width: 400,
-		maxHeight: Scalr.application.getHeight() - 10, // padding from top and bottom
 		autoScroll: true,
 		titleAlign: 'center',
 		closeOnEsc: true
@@ -193,19 +195,45 @@ Scalr.utils.Window = function(config) {
 		scope: c
 	}]);
 
+    var setSize = function () {
+        if (! this.isDestroyed) {
+            this.maxHeight = Scalr.application.getHeight() - 55 - 5;
+            this.updateLayout();
+            setPosition.call(this);
+        }
+    };
+
+    var setPosition = function() {
+        if (!this.hidden && !this.isDestroyed) {
+            var windowSize = Scalr.application.getSize();
+            var size = this.getSize();
+            var xPosition = (windowSize.width - size.width) / 2;
+            var yPosition = (windowSize.height - size.height) / 2;
+
+            if (this.alignTop) {
+                this.setY(55);
+            } else {
+                if (windowSize.height >= size.height + 55 + 5) {
+                    this.setY(yPosition);
+                } else {
+                    this.setY(55);
+                }
+            }
+
+            this.setX(xPosition);
+        }
+    };
+
+    c.on('boxready', setSize);
+    c.on('resize', setPosition);
+    c.on('show', setPosition);
+    Ext.EventManager.onWindowResize(setSize, c);
 	c.on('destroy', function () {
 		this.keyMap.destroy();
+        Ext.EventManager.removeResizeListener(setSize, this);
 	});
 
 	c.show(config.animationTarget || null);
-    
-    if (config.alignTop) {
-        var xy = c.getAlignToXY(c.container, 't-t', [0, 55]);
-        c.setPagePosition(xy);
-    } else {
-        c.center();
-    }
-	
     c.toFront();
 
 	return c;
@@ -222,6 +250,11 @@ Scalr.utils.Request = function (config) {
             if (success == true && response.responseText && (Ext.isDefined(response.status) ? response.status == 200 : true)) {
 				// only for HTTP Code = 200 (for fake ajax upload files doesn't exist response status)
 				//try {
+
+            	if (typeof _hsqTrackEvent != 'undefined') {
+            		_hsqTrackEvent(config.url);
+            	}
+
                 var result = Ext.decode(response.responseText, config.disableHandleError);
 
                 if (result && result.success == true) {
@@ -380,7 +413,7 @@ Scalr.utils.PostError = function(params) {
     } else
         return;
 
-    Scalr.storage.set('enable-debug', true, true);
+    Scalr.storage.set('debug-enable', true, true);
 	Scalr.Request({
 		url: '/guest/xPostError',
         hideErrorMessage: true,
@@ -407,20 +440,49 @@ Scalr.utils.getGravatarUrl = function (emailHash, size) {
 	return emailHash ? 'https://gravatar.com/avatar/' + emailHash + '?d=' + encodeURIComponent(defaultIcon) + '&s=' + sizes[size] : defaultIcon;
 }
 
-Scalr.utils.getColorById = function(id) {
+Scalr.utils.getStringHash = function(str){
+    var res = 0,
+        len = str.length;
+    for (var i = 0; i < len; i++) {
+        res = res * 31 + str.charCodeAt(i);
+    }
+    return res;
+}
+
+Scalr.utils.getColorById = function(id, colorSetName) {
+    var colorSets = {
+            default: ['D90000', '00B3D9', 'EC8200', '839A01', 'E916E3', '0000B9', 'B08500', '006C1C', '000000', '8B02F0'],
+            clouds: ['FD8D11', 'D316CF', '0069D2', 'B56F04', '0C7509', '65A615', '05A4D8', 'DD0202', '3691F3', '555555', '6262E8'],
+            farms: ['FD8D11', 'D316CF', '0069D2', 'B56F04', '0C7509', '65A615', '05A4D8', 'DD0202', '3691F3', '555555', '6262E8', 'B2B200', '000000', '8F20FF', '00CC00', 'B25900', '816D01', 'FF4695', '009F9F', '0000FD', '6F0AC0', '00468C', '00C695', '016B7E', 'BF8BFE', 'D19B89', 'C4A702', 'A40045', 'AAAAAA', '8B8B8B']
+        },
+        cloudsColorMap = {
+            ec2: 0,
+            gce: 1,
+            idcf: 2,
+            rackspacengus: 3,
+            rackspacenguk: 3,
+            ecs: 4,
+            eucalyptus: 5,
+            cloudstack: 6,
+            openstack: 7,
+            contrail: 8,
+            ocs: 9,
+            nebula: 10
+        },
+        colorSet = colorSets[colorSetName || 'default'],
+        color;
+
     if (Ext.isString(id) && id.indexOf('virtual_') === 0) {
         id = id.substring(id.length - 6);
     }
-    if (Ext.isNumeric(id) && id > 0) {
-        var goldenRatio = 0.618033988749895,
-            colors = [
-                'D90000', '00B3D9', 'EC8200', '839A01', 'E916E3', '0000B9', 'B08500', '006C1C', '000000', '8B02F0'
-            ],
-            colorIndex = Math.floor((id * goldenRatio - Math.floor(id * goldenRatio)) * (colors.length - 1));
-        return colors[colorIndex] ? colors[colorIndex] : colors[0];
+
+    if (cloudsColorMap[id] !== undefined) {
+        color = colorSet[cloudsColorMap[id]];
     } else {
-        return 'transparent';
+        color = colorSet[(Ext.isNumeric(id) ? id: Scalr.utils.getStringHash(id+'')) % colorSet.length];
     }
+
+    return color;
 }
 
 Scalr.utils.beautifyOsFamily = function(osfamily) {
@@ -464,7 +526,7 @@ Scalr.utils.beautifySoftware = function(name) {
     return map[name] || name;
 }
 
-Scalr.utils.beautifyBehavior = function(name) {
+Scalr.utils.beautifyBehavior = function(name, full) {
     var map = {
         mysql: 'MySQL',
         mysql2: 'MySQL 5',
@@ -481,11 +543,11 @@ Scalr.utils.beautifyBehavior = function(name) {
         mysqlproxy: 'MySQL Proxy',
         mariadb: 'MariaDB',
         cassandra: 'Cassandra',
-        cf_router: 'CF router',
-        cf_cloud_controller: 'CF controller',
-        cf_health_manager: 'CF health mngr',
-        cf_dea: 'CF DEA',
-        cf_service: 'CF service',
+        cf_router: full ? 'CloudFoundry Router' : 'CF router',
+        cf_cloud_controller: full ? 'CloudFoundry Controller' : 'CF controller',
+        cf_health_manager: full ? 'CloudFoundry Health Manager' : 'CF health mngr',
+        cf_dea: full ? 'CloudFoundry DEA' : 'CF DEA',
+        cf_service: full ? 'CloudFoundry Service' : 'CF service',
         chef: 'Chef',
         base: 'Base'
     };
@@ -505,11 +567,11 @@ Scalr.utils.isAllowed = function(resource, permission){
 }
 
 Scalr.utils.canManageAcl = function(){
-    return Scalr.user['type'] === 'AccountOwner' || Scalr.user['type'] === 'AccountAdmin'
+    return Scalr.user['type'] === 'AccountOwner' || Scalr.user['type'] === 'AccountAdmin' || Scalr.user['type'] === 'AccountSuperAdmin';
 }
 
 Scalr.utils.isOpenstack = function(platform, pureOnly) {
-    var list = ['openstack', 'ecs', 'ocs', 'nebula'];
+    var list = ['openstack', 'ecs', 'ocs', 'nebula', 'contrail'];
     if (!pureOnly) {
         list.push('rackspacengus', 'rackspacenguk');
     }
@@ -525,19 +587,87 @@ Scalr.utils.isPlatformEnabled = function(platform) {
     return Scalr.platforms[platform] !== undefined && Scalr.platforms[platform].enabled;
 }
 
+Scalr.utils.getPlatformConfigValue = function(platform, key) {
+    return Scalr.platforms[platform] !== undefined && Scalr.platforms[platform].config ? Scalr.platforms[platform].config[key] : undefined;
+}
+
 Scalr.utils.getPlatformName = function(platform, fix) {
     var name = Scalr.platforms[platform] !== undefined ? Scalr.platforms[platform].name : platform;
 
     if (fix === true) {
-        if (platform.indexOf('rackspacen') === 0) {
+        if (platform.indexOf('rackspacenguk') === 0) {
             name = '<span class="small">' + name.replace(' ', '<br/>') + '</span>';
         } else if (platform === 'ecs') {
             name = '<span class="small">' + name.replace(/\s(suite)$/i, '<br/>$1') + '</span>';
         } else if (platform === 'ocs') {
             name = '<span class="small">CloudScaling<br />OCS</span>';
+        } else if (platform === 'gce') {
+            name = '<span class="small">' + name.replace(/(Google)/i, '$1<br/>') + '</span>';
         }
     }
     return name;
+}
+
+Scalr.utils.loadInstanceTypes = function(platform, cloudLocation, callback) {
+    Scalr.cachedRequest.load(
+        {
+            url: '/platforms/xGetInstanceTypes',
+            params: {
+                platform: platform,
+                cloudLocation: cloudLocation
+            }
+        },
+        function(data, status){
+            callback(data, status);
+        },
+        this,
+        undefined,
+        {type: 'action', msg: 'Loading instance types...'}
+    );
+}
+
+Scalr.utils.loadCloudLocations = function(platforms, callback) {
+    var locations = {}, platformsToLoad = [];
+    if (!platforms) {
+        platforms = [];
+        Ext.Object.each(Scalr.platforms, function(key, value){
+            if (value.enabled) platforms.push(key);
+        });
+    } else if (Ext.isString(platforms)) {
+        platforms = [platforms];
+    }
+
+    Ext.each(platforms, function(platform){
+        var data = Scalr.platforms[platform];
+        if (data) {
+            if (data.locations === undefined) {
+                platformsToLoad.push(platform);
+            } else {
+                locations[platform] = data.locations;
+            }
+        }
+    });
+
+    if (platformsToLoad.length > 0) {
+        Scalr.Request({
+            processBox: {type: 'action', msg: 'Loading locations...'},
+            url:  '/platforms/xGetLocations',
+            params: {platforms: Ext.encode(platformsToLoad)},
+            success: function (result, response) {
+                Ext.Object.each(result.locations, function(platform, value){
+                    if (Ext.isObject(Scalr.platforms[platform])) {
+                        Scalr.platforms[platform]['locations'] = value;
+                    }
+                });
+                callback(Ext.apply(locations, result.locations), true);
+            },
+            failure: function() {
+                callback(null, false);
+            }
+        });
+    } else {
+        callback(locations, true);
+    }
 }
 
 Scalr.utils.getRoleCls = function(context) {
@@ -583,13 +713,19 @@ Scalr.utils.getRandomString = function(len) {
 };
 
 Scalr.strings = {
+    'aws.revoked_credentials': 'This environment\'s AWS access credentials have been revoked, and Scalr is no longer able to manage any of its infrastructure. Please <a href="#/account/environments/{envId}/clouds?platform=ec2">click here</a> to update environment with new and functional credentials.',
     'deprecated_warning': 'This feature has been <b>Deprecated</b> and will be removed from Scalr in the future! Please limit your usage and DO NOT create major dependencies with this feature.',
     'farmbuilder.hostname_format.info': 'You can use global variables in the following format: {GLOBAL_VAR_NAME}<br />'+
-                                             '<b>For example:</b> {SCALR_FARM_NAME} -> {SCALR_ROLE_NAME} #{SCALR_INSTANCE_INDEX}',
-    'farmbuilder.available_variables.info': '<b>You can use the following variables:</b> %image_id%, %external_ip%, %internal_ip%, %role_name%, %isdbmaster%, %instance_index%, ' +
+                                        '<b>For example:</b> {SCALR_FARM_NAME} -> {SCALR_ROLE_NAME} #{SCALR_INSTANCE_INDEX}',
+    'farmbuilder.available_variables.info':  '<b>You can use the following variables:</b> %image_id%, %external_ip%, %internal_ip%, %role_name%, %isdbmaster%, %instance_index%, ' +
                                              '%server_id%, %farm_id%, %farm_name%, %env_id%, %env_name%, %cloud_location%, %instance_id%, %avail_zone%',
-    'farmbuilder.vpc.enforced': 'The account owner has enforced a specific policy on launching farms in a VPC.'
-}
+    'farmbuilder.vpc.enforced': 'The account owner has enforced a specific policy on launching farms in a VPC.',
+    'account.need_env_config':  'Thank you for signing up to Scalr!<br><br>' +
+                                'The next step after signing up is to share your %platform% keys with us, or keys from any other infrastructure cloud. We use these keys to make the API calls to the cloud, on your behalf. These keys are stored encrypted on a secured, firewalled server.',
+    'account.cloud_access.info': 'Enable cloud access for this environment by entering the appropriate cloud credentials.<br/>You can create <b>hybrid cloud</b> infrastructure by <b>enabling multiple clouds.</b>',
+    'vpc.public_subnet.info': 'Public subnets are those that include a routing table entry which points traffic destined for 0.0.0.0/0 to an Internet Gateway. One Public IP will be automatically assigned per instance for public subnets. You can also optionally enable Elastic IP assignment.',
+    'vpc.private_subnet.info': 'Private networks have no direct access to the internet. Before launching instances in a private subnet, please make sure that a valid network route exists between the subnet and Scalr. As an alternative, you may use a VPC Router as a NAT Router for Scalr messages.  <br/>Please follow the instructions on the <a target="_blank" href="https://scalr-wiki.atlassian.net/wiki/x/PYB6">Scalr Wiki</a>'
+};
 /*
  CryptoJS v3.1.2
  code.google.com/p/crypto-js
@@ -614,3 +750,6 @@ Scalr.isAllowed = Scalr.utils.isAllowed;
 Scalr.isOpenstack = Scalr.utils.isOpenstack;
 Scalr.isCloudstack = Scalr.utils.isCloudstack;
 Scalr.isPlatformEnabled = Scalr.utils.isPlatformEnabled;
+Scalr.getPlatformConfigValue = Scalr.utils.getPlatformConfigValue;
+Scalr.loadInstanceTypes = Scalr.utils.loadInstanceTypes;
+Scalr.loadCloudLocations = Scalr.utils.loadCloudLocations;

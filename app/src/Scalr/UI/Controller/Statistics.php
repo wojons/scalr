@@ -32,10 +32,12 @@ class Scalr_UI_Controller_Statistics extends Scalr_UI_Controller
         $this->response->page('ui/statistics/serversusage.js', array('years'=> $years, 'env'=> $envs, 'price'=>$this->getInstancePrice()));
     }
 
+    /**
+     * @deprecated since 5.0.0 and will be removed soon
+     */
     public function getInstancePrice()
     {
-        //FIXME this output should be cached within 1 - 2 hours
-        $priceList = file_get_contents('http://aws.amazon.com/ec2/pricing/pricing-on-demand-instances.json');
+        $priceList = @file_get_contents('http://aws.amazon.com/ec2/pricing/pricing-on-demand-instances.json');
         $priceList = (array)json_decode($priceList);
         $priceList = $priceList['config']->regions;
         $price = array();
@@ -167,7 +169,7 @@ class Scalr_UI_Controller_Statistics extends Scalr_UI_Controller
                 );
             }
 
-            $result[$key]['usage'][date( 'F', mktime(0, 0, 0, $value['month']))] = round(($value['usage'] / 60), 2);
+            $result[$key]['usage'][date('F', mktime(0, 0, 0, $value['month']))] = round(($value['usage'] / 60), 2);
         }
 
         $response = $this->buildResponseFromData($result);
@@ -176,7 +178,7 @@ class Scalr_UI_Controller_Statistics extends Scalr_UI_Controller
             $fileContent[] = "cloudLocation;instanceType;Jan;Feb;Mar;Apr;May;Jun;Jul;Aug;Sep;Oct;Nov;Dec\r\n";
 
             foreach($response["data"] as $data) {
-                $fileContent[] = "{$data['cloudLocation']};{$data['instanceType']};{$data['usage']['Jan']};{$data['usage']['Feb']};{$data['usage']['Mar']};{$data['usage']['Apr']};{$data['usage']['May']};{$data['usage']['Jun']};{$data['usage']['Jul']};{$data['usage']['Aug']};{$data['usage']['Sep']};{$data['usage']['Oct']};{$data['usage']['Nov']};{$data['usage']['Dec']}";
+                $fileContent[] = "{$data['cloudLocation']};{$data['instanceType']};{$data['usage']['January']};{$data['usage']['February']};{$data['usage']['March']};{$data['usage']['April']};{$data['usage']['May']};{$data['usage']['June']};{$data['usage']['July']};{$data['usage']['August']};{$data['usage']['September']};{$data['usage']['October']};{$data['usage']['November']};{$data['usage']['December']}";
             }
 
             $this->response->setHeader('Content-Encoding', 'utf-8');

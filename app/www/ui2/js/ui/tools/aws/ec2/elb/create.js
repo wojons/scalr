@@ -7,7 +7,7 @@ Scalr.regPage('Scalr.ui.tools.aws.ec2.elb.create', function (loadParams, moduleP
 		scalrOptions: {
 			modal: true
 		},
-		width: 800,
+		width: 900,
 		items: [{
 			xtype: 'container',
             cls: 'x-fieldset-separator-bottom',
@@ -19,7 +19,7 @@ Scalr.regPage('Scalr.ui.tools.aws.ec2.elb.create', function (loadParams, moduleP
 				xtype: 'fieldset',
 				title: 'Healthcheck',
                 cls: 'x-fieldset-separator-none',
-				flex: 1,
+				flex: .8,
 				//margin: '0 10 10 0',
 				defaults: {
 					labelWidth: 130
@@ -109,10 +109,173 @@ Scalr.regPage('Scalr.ui.tools.aws.ec2.elb.create', function (loadParams, moduleP
 				xtype: 'fieldset',
 				flex: 1,
                 cls: 'x-fieldset-separator-left',
-				title: 'Availability zones',
-				itemId: 'availZones'
-			}]
+				title: 'Placement',
+                defaults: {
+                    labelWidth: 110
+                },
+				items: [{
+                    xtype: 'vpcidfield',
+                    emptyText: 'EC2',
+                    fieldLabel: 'Create LB inside',
+                    vpcLimits: moduleParams['vpcLimits'],
+                    proxyConfig: {
+                        prependData: [{id: '', name: 'EC2'}]
+                    },
+                    listeners: {
+                        afterrender: {
+                            fn: function() {
+                                if (loadParams['vpcId']) {
+                                    this.setValue(loadParams['vpcId']);
+                                    this.setReadOnly(true);
+                                } else {
+                                    this.setCloudLocation(loadParams['cloudLocation']);
+                                }
+                            },
+                            single: true
+                        },
+                        change: function(field, value) {
+                            if (value) {
+                                form.down('#zones').hide().disable();
+                                form.down('[name="scheme"]').show().enable();
 
+                                var field = form.down('#subnets');
+                                field.getPlugin('comboaddnew').postUrl = '?cloudLocation=' + loadParams['cloudLocation'] + '&vpcId=' + value;
+                                field.getPlugin('comboaddnew').setDisabled(moduleParams['vpcLimits'] && moduleParams['vpcLimits']['ids'] && Ext.isArray(moduleParams['vpcLimits']['ids'][value]));
+                                Ext.apply(field.store.getProxy(), {
+                                    params: {cloudLocation: loadParams['cloudLocation'], vpcId: value, extended: 1},
+                                    filterFn: moduleParams['vpcLimits'] && moduleParams['vpcLimits']['ids'] && moduleParams['vpcLimits']['ids'][value] ? field.subnetsFilterFn : null,
+                                    filterFnScope: field
+                                });
+                                field.show().enable();
+                                field.clearInvalid();
+                            } else {
+                                form.down('#zones').show().enable();
+                                form.down('[name="scheme"]').hide().disable();
+                                form.down('#subnets').hide().disable();
+                            }
+                            //this.next('[name="routeTableId"]').store.proxy.params['vpcId'] = value;
+                        }
+                    }
+                },{
+                    xtype: 'comboboxselect',
+                    itemId: 'subnets',
+                    name: 'subnets[]',
+                    fieldLabel: 'Subnets',
+                    displayField: 'description',
+                    valueField: 'id',
+                    columnWidth: 1,
+                    //flex: 1,
+                    queryCaching: false,
+                    clearDataBeforeQuery: true,
+                    //allowBlank: false,
+                    minChars: 0,
+                    queryDelay: 10,
+                    hidden: true,
+                    disabled: true,
+                    store: {
+                        fields: ['id', 'name', 'description', 'ips_left', 'type', 'availability_zone', 'cidr'],
+                        proxy: {
+                            type: 'cachedrequest',
+                            url: '/tools/aws/vpc/xListSubnets',
+                            filterFields: ['description']
+                        }
+                    },
+                    plugins: [{
+                        ptype: 'comboaddnew',
+                        pluginId: 'comboaddnew',
+                        url: '/tools/aws/vpc/createSubnet',
+                        applyNewValue: false
+                    }],
+                    listeners: {
+                        addnew: function(item) {
+                            Scalr.CachedRequestManager.get().setExpired({
+                                url: this.store.proxy.url,
+                                params: this.store.proxy.params
+                            });
+                        },
+                        beforeselect: function(comp, record) {
+                            var subnets = this.getValue(),
+                                rec;
+                            if (subnets.length > 0) {
+                                rec = comp.findRecordByValue(subnets[0]);
+                                if (rec && rec.get('type') == record.get('type')) {
+                                    return true;
+                                } else {
+                                    Scalr.message.InfoTip('Only subnets of the <b>same type</b> can be selected.', comp.bodyEl, {anchor: 'bottom'});
+                                    return false;
+                                }
+                            }
+                            return true;
+                        }
+                    },
+                    listConfig: {
+                        style: 'white-space:nowrap',
+                        cls: 'x-boundlist-alt',
+                        tpl:
+                            '<tpl for="."><div class="x-boundlist-item" style="height: auto; width: auto;line-height:20px">' +
+                                '<div><span style="font-weight: bold">{[values.name || \'<i>No name</i>\' ]} - {id}</span> <span style="font-style: italic;font-size:90%">(Type: <b>{type:capitalize}</b>)</span></div>' +
+                                '<div>{cidr} in {availability_zone} [IPs left: {ips_left}]</div>' +
+                            '</div></tpl>'
+                    },
+                    subnetsFilterFn: function(record) {
+                        var res = false,
+                            limits = moduleParams['vpcLimits'],
+                            vpcId = form.down('[name="vpcId"]').getValue(),
+                            fieldLimits = limits['ids'][vpcId],
+                            filterType = Ext.isArray(fieldLimits) ? 'subnets' : 'iaccess';
+                        var type = record.get('type');
+                        if (filterType === 'subnets' && Ext.Array.contains(fieldLimits, record.get('id'))) {
+                            res = true;
+                        } else if (filterType === 'iaccess') {
+                            res = type === 'private' && fieldLimits === 'outbound-only' || type === 'public' && fieldLimits === 'full';
+                        }
+                        return res;
+                    }
+                },{
+                    xtype: 'checkbox',
+                    name: 'scheme',
+                    inputValue: 'internal',
+                    hidden: true,
+                    disabled: true,
+                    boxLabel: 'Create an internal load balancer'
+                },{
+                    xtype: 'combobox',
+                    fieldLabel: 'Avail. zones',
+                    multiSelect: true,
+                    name: 'zones[]',
+                    itemId: 'zones',
+                    valueField: 'id',
+                    displayField: 'name',
+                    allowBlank: false,
+                    listConfig: {
+                        cls: 'x-boundlist-checkboxes',
+                        tpl : '<tpl for=".">'+
+                                '<tpl if="state != \'available\'">'+
+                                    '<div class="x-boundlist-item x-boundlist-item-disabled" title="Zone is offline for maintenance"><img class="x-boundlist-icon" src="' + Ext.BLANK_IMAGE_URL + '"/>{name}&nbsp;<span class="warning"></span></div>'+
+                                '<tpl else>'+
+                                    '<div class="x-boundlist-item"><img class="x-boundlist-icon" src="' + Ext.BLANK_IMAGE_URL + '"/>{name}</div>'+
+                                '</tpl>'+
+                              '</tpl>'
+                    },
+                    store: {
+                        fields: [ 'id', 'name', 'state' ],
+                        proxy: 'object'
+                    },
+                    editable: false,
+                    queryMode: 'local',
+                    listeners: {
+                        beforeselect: function(comp, record, index) {
+                            if (comp.isExpanded) {
+                                var result = true;
+                                if (record.get('state') !== 'available') {
+                                    result = false;
+                                }
+                                return result;
+                            }
+                        }
+                    }
+                }]
+			}]
 		}, {
             xtype: 'grid',
             itemId: 'listeners',
@@ -340,16 +503,7 @@ Scalr.regPage('Scalr.ui.tools.aws.ec2.elb.create', function (loadParams, moduleP
 		unhealthythreshold: 5
 	});
 
-	var avail = form.down('#availZones');
-	for (var i = 0; i < moduleParams.zones.length; i++) {
-		var n = 'zones[' + moduleParams.zones[i].id + ']';
-		avail.add({
-			xtype: 'checkbox',
-			name: n,
-			boxLabel: moduleParams.zones[i].name,
-			hideLabel: true
-		});
-	}
+    form.down('#zones').store.load({data: moduleParams['zones']});
 
 	return form;
 });

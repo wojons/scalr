@@ -1,5 +1,7 @@
 <?php
+
 use Scalr\Acl\Acl;
+use Scalr\Modules\PlatformFactory;
 
 class Scalr_UI_Controller_Dbmsr extends Scalr_UI_Controller
 {
@@ -17,13 +19,7 @@ class Scalr_UI_Controller_Dbmsr extends Scalr_UI_Controller
         $behavior = Scalr_Role_Behavior::loadByName($dbFarmRole->GetRoleObject()->getDbMsrBehavior());
         $master = $behavior->getMasterServer($dbFarmRole);
         if ($master) {
-            $port = $master->GetProperty(SERVER_PROPERTIES::SZR_API_PORT);
-            if (!$port)
-                $port = 8010;
-
             try {
-                $client = Scalr_Net_Scalarizr_Client::getClient($master, Scalr_Net_Scalarizr_Client::NAMESPACE_MYSQL, $port);
-
                 $volume = Scalr_Storage_Volume::init()->loadById(
                     $dbFarmRole->GetSetting(Scalr_Db_Msr::VOLUME_ID)
                 );
@@ -37,7 +33,7 @@ class Scalr_UI_Controller_Dbmsr extends Scalr_UI_Controller
                 $volumeConfig = $volume->getConfig();
                 $platformAccessData = PlatformFactory::NewPlatform($dbFarmRole->Platform)->GetPlatformAccessData($this->environment, $master);
 
-                $result = $client->growStorage($volumeConfig, $this->getParam('newSize'), $platformAccessData);
+                $result = $master->scalarizr->mysql->growStorage($volumeConfig, $this->getParam('newSize'), $platformAccessData);
 
                 // Do not remove. We need to wait a bit before operation will be registered in scalr.
                 sleep(2);
@@ -449,8 +445,6 @@ class Scalr_UI_Controller_Dbmsr extends Scalr_UI_Controller
                     $port = $masterServer->GetProperty(SERVER_PROPERTIES::SZR_API_PORT);
                     if (!$port) $port = 8010;
 
-                    $client = Scalr_Net_Scalarizr_Client::getClient($masterServer, Scalr_Net_Scalarizr_Client::NAMESPACE_SYSTEM, $port);
-
                     if ($data['dbType'] == ROLE_BEHAVIORS::REDIS)
                         $mpoint = '/mnt/redisstorage';
                     elseif ($data['dbType'] == ROLE_BEHAVIORS::POSTGRESQL)
@@ -458,7 +452,7 @@ class Scalr_UI_Controller_Dbmsr extends Scalr_UI_Controller
                     else
                         $mpoint = '/mnt/dbstorage';
 
-                    $usage = (array)$client->statvfs(array($mpoint));
+                    $usage = (array)$masterServer->scalarizr->system->statvfs(array($mpoint));
                     $size = (array)$usage[$mpoint];
 
                     if ($size['total']) {

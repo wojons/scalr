@@ -3,18 +3,11 @@ namespace Scalr\Service\OpenStack\Services;
 
 use Scalr\Service\OpenStack\OpenStack;
 use Scalr\Service\OpenStack\Services\Servers\Type\RebootType;
-use Scalr\Service\OpenStack\Services\Servers\Handler\ImagesHandler;
-use Scalr\Service\OpenStack\Services\Servers\Handler\KeypairsHandler;
-use Scalr\Service\OpenStack\Services\Servers\Handler\FloatingIpsHandler;
-use Scalr\Service\OpenStack\Services\Servers\Handler\SecurityGroupsHandler;
-use Scalr\Service\OpenStack\Services\Servers\Type\ServersExtension;
 use Scalr\Service\OpenStack\Services\Servers\Type\DiscConfig;
 use Scalr\Service\OpenStack\Services\Servers\Type\NetworkList;
 use Scalr\Service\OpenStack\Services\Servers\Type\PersonalityList;
-use Scalr\Service\OpenStack\Exception\OpenStackException;
-use Scalr\Service\OpenStack\Services\Servers\Type\ListServersFilter;
-use Scalr\Service\OpenStack\Client\RestClientResponse;
-use Scalr\Service\OpenStack\Services\Servers\V2\ServersApi;
+use Scalr\Service\OpenStack\Services\Servers\Type\ListImagesFilter;
+use Scalr\Service\OpenStack\Type\DefaultPaginationList;
 
 /**
  * OpenStack Next Generation Cloud Servers™ service interface
@@ -28,8 +21,11 @@ use Scalr\Service\OpenStack\Services\Servers\V2\ServersApi;
  * @property \Scalr\Service\OpenStack\Services\Servers\Handler\ImagesHandler         $images         Gets an Images service interface handler.
  *
  * @method   \Scalr\Service\OpenStack\Services\Servers\V2\ServersApi                 getApiHandler() getApiHandler()                 Gets an Service API handler for the specific version
- * @method   array                                                                   list()          list($detail = true, ListServersFilter $filter = null) List Servers action. This operation returns a response
- *                                                                                                   body that lists the servers associated with your account
+ *
+ * @method   \Scalr\Service\OpenStack\Type\DefaultPaginationList list()
+ *           list($detail = true, \Scalr\Service\OpenStack\Services\Servers\Type\ListServersFilter $filter = null)
+ *           List Servers action. This operation returns a response
+ *           body that lists the servers associated with your account
  */
 class ServersService extends AbstractService implements ServiceInterface
 {
@@ -145,6 +141,30 @@ class ServersService extends AbstractService implements ServiceInterface
     }
 
     /**
+     * Suspends a server
+     *
+     * @param   string     $serverId A server ID to suspend
+     * @return  bool       Returns true on success or false otherwise
+     * @throws  RestClientException
+     */
+    public function suspend($serverId)
+    {
+        return $this->getApiHandler()->suspend($serverId);
+    }
+
+    /**
+     * Resumes a server
+     *
+     * @param   string     $serverId A server ID to resume
+     * @return  bool       Returns true on success or false otherwise
+     * @throws  RestClientException
+     */
+    public function resume($serverId)
+    {
+        return $this->getApiHandler()->resume($serverId);
+    }
+
+    /**
      * Delete Server action
      *
      * This operation deletes a specified server instance from the system
@@ -163,13 +183,16 @@ class ServersService extends AbstractService implements ServiceInterface
      *
      * This operation lists all images visible by the account.
      *
-     * @param   bool             $detailed optional If true it returns detailed description for an every image.
-     * @param   ListImagesFilter $filter   optional Filter options.
-     * @return  array            Returns list of images
+     * @param   bool                   $detailed optional If true it returns detailed description for an every image.
+     * @param   ListImagesFilter|array $filter   optional Filter options.
+     * @return  DefaultPaginationList  Returns list of images
      * @throws  RestClientException
      */
-    public function listImages($detailed = true, ListImagesFilter $filter = null)
+    public function listImages($detailed = true, $filter = null)
     {
+        if ($filter !== null && !($filter instanceof ListImagesFilter)) {
+            $filter = ListImagesFilter::initArray($filter);
+        }
         return $this->getApiHandler()->listImages($detailed, $filter);
     }
 
@@ -202,8 +225,8 @@ class ServersService extends AbstractService implements ServiceInterface
      *
      * This operation lists information for all available flavors.
      *
-     * @param   bool             $detailed optional If true it returns detailed description for an every image.
-     * @return  array            Returns list of flavors
+     * @param   bool                  $detailed optional If true it returns detailed description for an every image.
+     * @return  DefaultPaginationList Returns list of flavors
      * @throws  RestClientException
      */
     public function listFlavors($detailed = true)
@@ -269,7 +292,7 @@ class ServersService extends AbstractService implements ServiceInterface
     /**
      * Checks whether given extension is supported by the service.
      *
-     * @param   ServersExtension|string  $extensionName  An extension name
+     * @param   \Scalr\Service\OpenStack\Services\Servers\Type\ServersExtension|string  $extensionName  An extension name
      * @return  bool   Returns true if an extension is supported.
      */
     public function isExtensionSupported($extensionName)
@@ -283,7 +306,7 @@ class ServersService extends AbstractService implements ServiceInterface
      *
      * View a list of Floating IP Pools.
      *
-     * @return  array Returns the list of floating ip pools.
+     * @return  DefaultPaginationList Returns the list of floating ip pools.
      * @throws  RestClientException
      */
     public function listFloatingIpPools()
@@ -296,7 +319,7 @@ class ServersService extends AbstractService implements ServiceInterface
      *
      * Lists floating IP addresses associated with the tenant or account.
      *
-     * @return  array Returns the list floating IP addresses associated with the tenant or account.
+     * @return  DefaultPaginationList Returns the list floating IP addresses associated with the tenant or account.
      * @throws  RestClientException
      */
     public function listFloatingIps()
@@ -373,7 +396,7 @@ class ServersService extends AbstractService implements ServiceInterface
      *
      * View a lists of keypairs associated with the account.
      *
-     * @return  array Returns the list of keypairs
+     * @return  DefaultPaginationList Returns the list of keypairs
      * @throws  RestClientException
      */
     public function listKeypairs()
@@ -424,7 +447,7 @@ class ServersService extends AbstractService implements ServiceInterface
      * List security groups.
      *
      * @param   string     $serverId   optional The server ID (UUID) of interest to you.
-     * @return  array Returns the list of the security groups
+     * @return  DefaultPaginationList Returns the list of the security groups
      * @throws  RestClientException
      */
     public function listSecurityGroups($serverId = null)
@@ -504,6 +527,19 @@ class ServersService extends AbstractService implements ServiceInterface
     public function listAddresses($serverId, $networkId = null)
     {
         return $this->getApiHandler()->listAddresses($serverId, $networkId);
+    }
+
+
+    /**
+     * Gets the ecrypted administrative password for a specified server set through metadata service.
+     *
+     * @param   string    $serverId   The unique identifier of the server
+     * @return  string    Returns password on success or throws an exception
+     * @throws  RestClientException
+     */
+    public function getEncryptedAdminPassword($serverId)
+    {
+        return $this->getApiHandler()->getEncryptedAdminPassword($serverId);
     }
 
     /**

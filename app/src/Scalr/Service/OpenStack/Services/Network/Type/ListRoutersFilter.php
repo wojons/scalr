@@ -1,9 +1,7 @@
 <?php
 namespace Scalr\Service\OpenStack\Services\Network\Type;
 
-use Scalr\Service\OpenStack\Type\BooleanType;
 use Scalr\Service\OpenStack\Type\Marker;
-use \DateTime;
 
 /**
  * ListRoutersFilter
@@ -36,7 +34,7 @@ class ListRoutersFilter extends Marker
      */
     private $status;
 
-    //TODO Additional filters can be added
+    //Additional filters can be added
 
     /**
      * Convenient constructor
@@ -165,39 +163,5 @@ class ListRoutersFilter extends Marker
     public function addStatus($status)
     {
         return $this->_addPropertyValue('status', $status);
-    }
-
-    /**
-     * {@inheritdoc}
-     * @see Scalr\Service\OpenStack\Type.Marker::getQueryData()
-     */
-    public function getQueryData()
-    {
-        $options = parent::getQueryData();
-
-        if (!empty($this->name)) {
-            $options['name'] = $this->getName();
-        }
-        if (!empty($this->id)) {
-            $options['id'] = $this->getId();
-        }
-        if (!empty($this->status)) {
-            $options['status'] = $this->getStatus();
-        }
-
-        return $options;
-    }
-
-    /**
-     * {@inheritdoc}
-     * @see Scalr\Service\OpenStack\Type.Marker::getQueryString()
-     */
-    public function getQueryString()
-    {
-        $str = parent::getQueryString();
-
-        $str .= $this->_getQueryStringForFields(array('name', 'id', 'status'), __CLASS__);
-
-        return ltrim($str, '&');
     }
 }

@@ -4,7 +4,7 @@ class Scalr_UI_Controller_Admin_Logs extends Scalr_UI_Controller
 {
     public function hasAccess()
     {
-        return $this->user && ($this->user->getType() == Scalr_Account_User::TYPE_SCALR_ADMIN);
+        return $this->user->isScalrAdmin();
     }
 
     public function defaultAction()
@@ -28,36 +28,36 @@ class Scalr_UI_Controller_Admin_Logs extends Scalr_UI_Controller
     {
         $this->request->defineParams(array(
             'farmId' => array('type' => 'int'),
-            'severity' => array('type' => 'array')
+            'severity' => array('type' => 'array'),
+            'sort' => array('type' => 'json')
         ));
         $sql = "SELECT transactionid, dtadded, message FROM syslog WHERE :FILTER:";
-        $where = array();
+        $args = array();
 
-        if ($this->getParam('farmId'))
-            $where[] = "farmId = '" . $this->getParam('farmId') . "'";
-
-        if (count($this->getParam('severity'))) {
-            $severity = array();
-            foreach ($this->getParam('severity') as $key => $value) {
-                if ($value == '1' && in_array($value, array('INFO', 'WARN', 'ERROR', 'FATAL')))
-                    $severity[] = $key;
-            }
-
-            if (count($severity))
-                $where[] = "severity IN (" . join($severity, ',') . ")";
+        if ($this->getParam('farmId')) {
+            $sql .= ' AND farmId = ?';
+            $args[] = $this->getParam('farmId');
         }
 
-        if ($this->getParam('toDate'))
-            $where[] = "TO_DAYS(dtadded) = TO_DAYS(" . $this->db->qstr($this->getParam('toDate')) . ")";
+        $severity = array();
+        foreach ($this->getParam('severity') as $key => $value) {
+            if ($value == '1' && in_array($key, array('INFO', 'WARN', 'ERROR', 'FATAL')))
+                $severity[] = $this->db->qstr($key);
+        }
 
-        if (count($where))
-            $sql .= ' AND ' . join($where, ' AND ');
+        if (count($severity))
+            $sql .= ' AND severity IN(' . join($severity, ',') . ')';
+
+        if ($this->getParam('toDate')) {
+            $sql .= ' AND TO_DAYS(dtadded) = TO_DAYS(?)';
+            $args[] = $this->getParam('toDate');
+        }
 
         $sql .= ' GROUP BY transactionid';
 
-        $response = $this->buildResponseFromSql($sql, array('dtadded'), array('message'));
+        $response = $this->buildResponseFromSql2($sql, array('dtadded'), array('message'), $args);
         foreach ($response['data'] as &$row) {
-            $meta = $this->db->GetRow('SELECT * FROM syslog_metadata WHERE transactionid = ? LIMIT 1', array($value['transactionid']));
+            $meta = $this->db->GetRow('SELECT * FROM syslog_metadata WHERE transactionid = ? LIMIT 1', array($row['transactionid']));
             $row['warn'] = $meta['warnings'] ? $meta['warnings'] : 0;
             $row['err'] = $meta['errors'] ? $meta['errors'] : 0;
         }
@@ -72,20 +72,23 @@ class Scalr_UI_Controller_Admin_Logs extends Scalr_UI_Controller
 
     public function xListDetailsAction()
     {
+        $this->request->defineParams(array(
+            'severity' => array('type' => 'array'),
+            'sort' => array('type' => 'json')
+        ));
+
         $sql = "SELECT id, dtadded, message, severity, transactionid, caller FROM syslog WHERE transactionid = ? AND :FILTER:";
 
-        if (count($this->getParam('severity'))) {
-            $severity = array();
-            foreach ($this->getParam('severity') as $key => $value) {
-                if ($value == '1' && in_array($value, array('INFO', 'WARN', 'ERROR', 'FATAL')))
-                    $severity[] = $key;
-            }
-
-            if (count($severity))
-                $sql .= " AND severity IN (" . join($severity, ',') . ")";
+        $severity = array();
+        foreach ($this->getParam('severity') as $key => $value) {
+            if ($value == '1' && in_array($key, array('INFO', 'WARN', 'ERROR', 'FATAL')))
+                $severity[] = $this->db->qstr($key);
         }
 
-        $response = $this->buildResponseFromSql($sql, array('transactionid'), array('caller', 'message'), array($this->getParam('trnId')));
+        if (count($severity))
+            $sql .= " AND severity IN (" . join($severity, ',') . ")";
+
+        $response = $this->buildResponseFromSql2($sql, array('dtadded', 'severity', 'id'), array('caller', 'message'), array($this->getParam('trnId')));
         $this->response->data($response);
     }
 }

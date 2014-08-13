@@ -48,7 +48,7 @@ class MySQLMaintenanceProcess implements \Scalr\System\Pcntl\ProcessInterface
         if ($DBFarm->Status != FARM_STATUS::RUNNING)
             return;
 
-        $tz = Scalr_Environment::init()->loadById($DBFarm->EnvID)->getPlatformConfigValue(ENVIRONMENT_SETTINGS::TIMEZONE);
+        $tz = Scalr_Environment::init()->loadById($DBFarm->EnvID)->getPlatformConfigValue(Scalr_Environment::SETTING_TIMEZONE);
         if ($tz)
             date_default_timezone_set($tz);
 

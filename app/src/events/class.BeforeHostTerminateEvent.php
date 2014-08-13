@@ -8,13 +8,32 @@ class BeforeHostTerminateEvent extends Event
      */
     public $DBServer;
 
-    public $ForceTerminate;
+    public $terminationReasonId = 0;
+    public $terminationReason = '';
 
-    public function __construct(DBServer $DBServer, $ForceTerminate = true)
+    public $suspend;
+
+    public function __construct(DBServer $DBServer, $suspend = false)
     {
         parent::__construct();
 
         $this->DBServer = $DBServer;
-        $this->ForceTerminate = $ForceTerminate;
+        $this->suspend = $suspend;
+
+        if (!$this->suspend) {
+            try {
+                $history = $this->DBServer->getServerHistory();
+                $this->terminationReasonId = $history->terminateReasonId;
+                $this->terminationReason = $history->terminateReason;
+            } catch (Exception $e) {}
+        }
+    }
+
+    public static function GetScriptingVars()
+    {
+        return array(
+            "termination_reason" => "terminationReason",
+            "termination_reason_code" => "terminationReasonId",
+        );
     }
 }

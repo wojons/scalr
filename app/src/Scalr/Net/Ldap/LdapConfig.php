@@ -21,6 +21,10 @@ namespace Scalr\Net\Ldap;
  * @property  string $groupFilter   The groups filter
  * @property  string $bindType      LDAP bind type
  * @property  string $mailAttribute The name of the attribute which contains email address of the user in the LDAP
+ * @property  string $usernameAttribute Username attribute
+ * @property  string $groupMemberAttribute Group member attribute
+ * @property  string $groupnameAttribute Group name attribute
+ * @property  string $groupMemberAttributeType Group member attribute type (regular | unix_netgroup)
  */
 class LdapConfig
 {
@@ -113,24 +117,65 @@ class LdapConfig
     private $mailAttribute;
 
     /**
+     * The name of the attribute which contains
+     * full name of the user in the LDAP
+     *
+     * @var string
+     */
+    private $fullNameAttribute;
+
+    /**
+     * User name attribute
+     *
+     * @var string
+     */
+    private $usernameAttribute;
+
+    /**
+     * Group member attribute
+     *
+     * @var string
+     */
+    private $groupMemberAttribute;
+
+    /**
+     * Group member attribute type
+     *
+     * @var string
+     */
+    private $groupMemberAttributeType;
+
+    /**
+     * Group name attribute
+     *
+     * @var string
+     */
+    private $groupnameAttribute;
+
+    /**
      * Contstructor
      *
-     * @param   string     $host           A connection host
-     * @param   int        $port           A connection port
-     * @param   string     $user           The username
-     * @param   string     $password       The user's password
-     * @param   string     $baseDn         The base DN
-     * @param   string     $userFilter     The users filter
-     * @param   string     $groupFilter    The groups filter
-     * @param   string     $domain         optional The domain which is used when user logs in system omitting it
-     * @param   string     $baseDnGroups   optional The base DN for Gropus
-     * @param   bool       $groupNesting   optional Nested groups support is enabled by default.
-     * @param   string     $bindType       optional LDAP bind type
-     * @param   string     $mailAttribute  optional The name of the attribute which contains email address of the user in the LDAP
-     * @param   bool       $debug          optional Turns on debug mode
+     * @param   string     $host                A connection host
+     * @param   int        $port                A connection port
+     * @param   string     $user                The username
+     * @param   string     $password            The user's password
+     * @param   string     $baseDn              The base DN
+     * @param   string     $userFilter          The users filter
+     * @param   string     $groupFilter         The groups filter
+     * @param   string     $domain              optional The domain which is used when user logs in system omitting it
+     * @param   string     $baseDnGroups        optional The base DN for Gropus
+     * @param   bool       $groupNesting        optional Nested groups support is enabled by default.
+     * @param   string     $bindType            optional LDAP bind type
+     * @param   string     $mailAttribute       optional The name of the attribute which contains email address of the user in the LDAP
+     * @param   string     $fullNameAttribute   optional The name of the attribute which contains full name of the user in the LDAP
+     * @param   string     $usernameAttribute    optional Username attribute
+     * @param   string     $groupMemberAttribute optional Group member attribute
+     * @param   string     $groupMemberAttributeType optional Group member attribute type
+     * @param   string     $groupnameAttribute   optional Group name attribute
+     * @param   bool       $debug               optional Turns on debug mode
      */
     public function __construct($host, $port, $user, $password, $baseDn, $userFilter, $groupFilter, $domain = null,
-                                $baseDnGroups = null, $groupNesting = null, $bindType = null, $mailAttribute = null, $debug = null)
+                                $baseDnGroups = null, $groupNesting = null, $bindType = null, $mailAttribute = null, $fullNameAttribute = null, $usernameAttribute = null, $groupMemberAttribute = null, $groupMemberAttributeType = 'regular', $groupnameAttribute = null, $debug = null)
     {
         $this->host = $host;
         $this->port = $port;
@@ -142,8 +187,13 @@ class LdapConfig
         $this->domain = empty($domain) ? null : $domain;
         $this->baseDnGroups = $baseDnGroups;
         $this->groupNesting = $groupNesting === null ? true : (bool) $groupNesting;
-        $this->bindType = ($bindType == LdapClient::BIND_TYPE_SIMPLE ? LdapClient::BIND_TYPE_SIMPLE : LdapClient::BIND_TYPE_REGULAR);
+        $this->bindType = (!$bindType ? LdapClient::BIND_TYPE_REGULAR : $bindType);
         $this->mailAttribute = (empty($mailAttribute) ? null : (string)$mailAttribute);
+        $this->fullNameAttribute = (empty($fullNameAttribute) ? null : (string)$fullNameAttribute);
+        $this->usernameAttribute = (empty($usernameAttribute) ? 'sAMAccountName' : (string)$usernameAttribute);
+        $this->groupMemberAttribute = (empty($groupMemberAttribute) ? 'member' : (string)$groupMemberAttribute);
+        $this->groupMemberAttributeType = (empty($groupMemberAttributeType) ? 'regular' : (string)$groupMemberAttributeType);
+        $this->groupnameAttribute = (empty($groupnameAttribute) ? 'sAMAccountName' : (string)$groupnameAttribute);
         $this->debug = $debug === null ? false : (bool) $debug;
     }
 

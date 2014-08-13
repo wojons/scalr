@@ -60,7 +60,5 @@ class LoggerFilterCategoryMatch extends LoggerFilter {
         } else {
             return LoggerFilter::DENY;
         }
-
-        return $retval;
     }
-} 
+}

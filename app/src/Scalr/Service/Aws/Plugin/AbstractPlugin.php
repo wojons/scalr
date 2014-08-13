@@ -43,7 +43,7 @@ abstract class AbstractPlugin
         $this->aws = $aws;
     }
 
-	/**
+    /**
      * {@inheritdoc}
      * @see Scalr\Service\Aws\Plugin.PluginInterface::setContainer()
      */

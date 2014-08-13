@@ -103,6 +103,9 @@ class SimpleMailer
 
     public function __construct()
     {
+        if (\Scalr::getContainer()->config->get('scalr.email.delimiter') == 'lf')
+            $this->nl = "\n";
+
         $this->addresses = array();
         $this->headers = array(
             'MIME-Version' => '1.0',
@@ -252,16 +255,16 @@ class SimpleMailer
     public function setMessage($message)
     {
         switch ($this->defaultEncoding) {
-        	case self::ENCODING_BASE64:
-        	    $this->message = chunk_split(base64_encode($message));
-        	    break;
+            case self::ENCODING_BASE64:
+                $this->message = chunk_split(base64_encode($message));
+                break;
 
-        	case self::ENCODING_QUOTED_PRINTABLE:
-        	    $this->message = quoted_printable_encode($message);
-        	    break;
+            case self::ENCODING_QUOTED_PRINTABLE:
+                $this->message = quoted_printable_encode($message);
+                break;
 
-        	default:
-        	    throw new \Exception(sprintf("Unexpected content-transfer-encoding %s.", $this->defaultEncoding));
+            default:
+                throw new \Exception(sprintf("Unexpected content-transfer-encoding %s.", $this->defaultEncoding));
         }
         return $this;
     }
@@ -566,4 +569,17 @@ class SimpleMailer
 
         return $this->send($to, (isset($subject) ? $subject : null), $body);
     }
+
+    /**
+     * Sets content type
+     *
+     * @param   string $contentType The Content-Type
+     * @return  SimpleMailer
+     */
+    public function setContentType($contentType)
+    {
+        $this->contentType = $contentType;
+        return $this;
+    }
+
 }

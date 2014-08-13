@@ -2,7 +2,6 @@
 namespace Scalr\Service\Aws\Elb\DataType;
 
 use Scalr\Service\Aws\Elb\AbstractElbListDataType;
-use Scalr\Service\Aws\DataType\ListDataType;
 
 /**
  * AppCookieStickinessPolicyList

@@ -7,7 +7,6 @@ Scalr.regPage('Scalr.ui.bundletasks.view', function (loadParams, moduleParams) {
 		],
 		proxy: {
 			type: 'scalr.paging',
-			extraParams: loadParams,
 			url: '/bundletasks/xListTasks/'
 		},
 		remoteSort: true
@@ -19,7 +18,6 @@ Scalr.regPage('Scalr.ui.bundletasks.view', function (loadParams, moduleParams) {
 			'reload': false,
 			'maximize': 'all'
 		},
-		scalrReconfigureParams: { bundleTaskId: ''},
 		store: store,
 		stateId: 'grid-bundletasks-view',
 		stateful: true,
@@ -57,20 +55,11 @@ Scalr.regPage('Scalr.ui.bundletasks.view', function (loadParams, moduleParams) {
 			)},
 			{ header: "Role name", flex: 1, dataIndex: 'rolename', sortable: true, xtype: 'templatecolumn', tpl:
                 '<tpl if="rolename && role_id && status==\'\success\'">' +
-                    '<a href="#/roles/{role_id}/view">{rolename}</a>' +
+                    '<a href="#/roles/manager?roleId={role_id}">{rolename}</a>' +
                 '<tpl else>' +
                     '{rolename}' +
                 '</tpl>'
             },
-			{ header: "Status", width: 140, dataIndex: 'status', sortable: true, xtype: 'templatecolumn', tpl:
-				'<tpl if="status==\'failed\'">'+
-                    '<span style="color:red;">{status:capitalize}</span> (<a href="#/bundletasks/{id}/failureDetails">Why?</a>)'+
-                '<tpl elseif="status==\'success\'">' +
-                    '<span style="color:green;">{status:capitalize}</span>' +
-                '<tpl else>' +
-    				'{status:capitalize}' +
-                '</tpl>'
-			},
             { header: "OS", flex: .7, dataIndex: 'os_family', sortable: true, xtype: 'templatecolumn', tpl:
                 '<tpl if="os_family">' +
                     '<img style="margin:0 3px 0 0" class="x-icon-osfamily-small x-icon-osfamily-small-{os_family}" src="' + Ext.BLANK_IMAGE_URL + '"/> {[Scalr.utils.beautifyOsFamily(values.os_family)]} {os_version} {os_name:capitalize}' +
@@ -90,16 +79,19 @@ Scalr.regPage('Scalr.ui.bundletasks.view', function (loadParams, moduleParams) {
                 '<tpl else>Ongoing</tpl>'
 			},
             { header: "Created by", width: 165, dataIndex: 'created_by_email', sortable: true },
+            { header: "Status", width: 140, dataIndex: 'status', sortable: true, xtype: 'statuscolumn', statustype: 'bundletask'},
             {
-				xtype: 'optionscolumn',
-				optionsMenu: [{
+				xtype: 'optionscolumn2',
+				menu: [{
 					text:'View log',
 					iconCls: 'x-menu-icon-logs',
 					href: '#/bundletasks/{id}/logs'
 				}, {
-					itemId: 'option.cancel',
 					iconCls: 'x-menu-icon-cancel',
 					text: 'Cancel',
+                    getVisibility: function (data) {
+                        return data['status'] !== 'success' && data['status'] !== 'failed';
+                    },
 					request: {
 						confirmBox: {
 							msg: 'Cancel selected bundle task?',
@@ -110,31 +102,25 @@ Scalr.regPage('Scalr.ui.bundletasks.view', function (loadParams, moduleParams) {
 							msg: 'Canceling...'
 						},
 						url: '/bundletasks/xCancel/',
-						dataHandler: function (record) {
-							return { bundleTaskId: record.get('id') };
+						dataHandler: function (data) {
+							return { bundleTaskId: data['id'] };
 						},
 						success: function(data) {
 							store.load();
 						}
 					}
-				}],
-				getOptionVisibility: function (item, record) {
-					if (item.itemId == 'option.cancel') {
-						if (record.get('status') != 'success' && record.get('status') != 'failed')
-							return true;
-						else
-							return false;
-					}
-
-					return true;
-				}
+				}]
 			}
 		],
 
 		dockedItems: [{
 			xtype: 'scalrpagingtoolbar',
 			store: store,
-			dock: 'top'
+			dock: 'top',
+            items: [{
+                xtype: 'filterfield',
+                store: store
+            }]
 		}]
 	});
 });

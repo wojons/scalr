@@ -1,13 +1,11 @@
 <?php
 namespace Scalr\Service\Aws\Ec2\Handler;
 
-use Scalr\Service\Aws\Ec2\DataType\VpcFilterData;
 use Scalr\Service\Aws\Ec2\DataType\VpcFilterList;
 use Scalr\Service\Aws\Ec2\DataType\VpcData;
 use Scalr\Service\Aws\Ec2\DataType\VpcList;
 use Scalr\Service\Aws\DataType\ListDataType;
 use Scalr\Service\Aws\Client\ClientException;
-use Scalr\Service\Aws\DataType\ErrorData;
 use Scalr\Service\Aws\Ec2Exception;
 use Scalr\Service\Aws\Ec2\AbstractEc2Handler;
 

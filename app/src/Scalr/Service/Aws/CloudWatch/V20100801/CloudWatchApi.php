@@ -12,9 +12,6 @@ use Scalr\Service\Aws\CloudWatchException;
 use Scalr\Service\Aws\CloudWatch\DataType\DimensionFilterList;
 use Scalr\Service\Aws\CloudWatch;
 use Scalr\Service\Aws\Client\ClientException;
-use Scalr\Service\Aws\EntityManager;
-use Scalr\Service\Aws\DataType\ErrorData;
-use Scalr\Service\Aws\Client\QueryClientResponse;
 use Scalr\Service\Aws\DataType\ListDataType;
 use Scalr\Service\Aws\Client\ClientInterface;
 

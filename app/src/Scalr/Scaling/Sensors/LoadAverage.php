@@ -34,43 +34,44 @@
                         continue;
                 }
 
-                if ($DBServer->IsSupported('0.13.0')) {
-                    $szrClient = Scalr_Net_Scalarizr_Client::getClient(
-                        $DBServer,
-                        Scalr_Net_Scalarizr_Client::NAMESPACE_SYSTEM,
-                        $DBServer->getPort(DBServer::PORT_API)
-                    );
+                try {
+                    if ($DBServer->IsSupported('0.13.0')) {
+                        $period = $farmRoleMetric->getSetting(self::SETTING_LA_PERIOD);
+                        $index = 0;
 
-                    $period = $farmRoleMetric->getSetting(self::SETTING_LA_PERIOD);
-                    $index = 0;
+                        if ($period == 15)
+                            $index = 2;
+                        elseif ($period == 5)
+                            $index = 1;
 
-                    if ($period == 15)
-                        $index = 2;
-                    elseif ($period == 5)
-                        $index = 1;
+                        $la = $DBServer->scalarizr->system->loadAverage();
+                        if ($la[$index] !== null && $la[$index] !== false)
+                            $la = (float)number_format($la[$index], 2);
 
-                    $la = $szrClient->loadAverage();
-                    if ($la[$index] !== null && $la[$index] !== false)
-                        $la = (float)number_format($la[$index], 2);
+                    } else {
+                        $port = $DBServer->GetProperty(SERVER_PROPERTIES::SZR_SNMP_PORT);
 
-                } else {
-                    $port = $DBServer->GetProperty(SERVER_PROPERTIES::SZR_SNMP_PORT);
+                        $period = $farmRoleMetric->getSetting(self::SETTING_LA_PERIOD);
+                        if (!$period)
+                            $period = '15';
 
-                    $period = $farmRoleMetric->getSetting(self::SETTING_LA_PERIOD);
-                    if (!$period)
-                        $period = '15';
+                        $this->snmpClient->connect($DBServer->remoteIp, $port ? $port : 161, $dbFarm->Hash, null, null, false);
+                        $res = $this->snmpClient->get(
+                            $this->snmpOids[$period]
+                        );
 
-                    $this->snmpClient->connect($DBServer->remoteIp, $port ? $port : 161, $dbFarm->Hash, null, null, false);
-                    $res = $this->snmpClient->get(
-                        $this->snmpOids[$period]
-                    );
+                        $la = (float)$res;
+                    }
 
-                    $la = (float)$res;
+                    $retval[] = $la;
+
+                } catch (Exception $e) {
+                    Logger::getLogger(__CLASS__)->warn(new FarmLogMessage($DBServer->farmId,
+                        sprintf("Unable to read LoadAverage value from server %s: %s", $DBServer->remoteIp, $e->getMessage())
+                    ));
                 }
-
-                $retval[] = $la;
             }
 
-            return $retval;
+            return count($retval) > 0 ? $retval : false;
         }
     }

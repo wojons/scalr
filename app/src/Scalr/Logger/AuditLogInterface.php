@@ -4,9 +4,7 @@ namespace Scalr\Logger;
 
 use Scalr\Logger\AuditLog\KeyValueRecord;
 use Scalr\Logger\AuditLog\Exception\AuditLogException;
-use Scalr\Logger\AuditLog\AuditLogTags;
 use Scalr\Logger\AuditLog\Documents\AbstractAuditLogDocument;
-use LoggerStorageInterface;
 
 /**
  * AuditLog interface.

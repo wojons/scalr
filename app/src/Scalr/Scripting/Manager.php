@@ -1,5 +1,7 @@
 <?php
 
+use Scalr\Model\Entity\Script;
+
 class Scalr_Scripting_Manager
 {
     private static $BUILTIN_VARIABLES_LOADED = false;
@@ -27,6 +29,10 @@ class Scalr_Scripting_Manager
         "instance_id" 	=> 1
     );
 
+    const ORCHESTRATION_SCRIPT_TYPE_SCALR = 'scalr';
+    const ORCHESTRATION_SCRIPT_TYPE_LOCAL = 'local';
+    const ORCHESTRATION_SCRIPT_TYPE_CHEF = 'chef';
+
     public static function getScriptingBuiltinVariables()
     {
         if (!self::$BUILTIN_VARIABLES_LOADED)
@@ -46,8 +52,8 @@ class Scalr_Scripting_Manager
                             if (!self::$BUILTIN_VARIABLES[$k])
                             {
                                 self::$BUILTIN_VARIABLES[$k] = array(
-                                "PropName"	=> $v,
-                                "EventName" => "{$event_type}"
+                                    "PropName"	=> $v,
+                                    "EventName" => "{$event_type}"
                                 );
                             }
                             else
@@ -60,8 +66,8 @@ class Scalr_Scripting_Manager
                                 $events[] = $event_type;
 
                                 self::$BUILTIN_VARIABLES[$k] = array(
-                                "PropName"	=> $v,
-                                "EventName" => $events
+                                    "PropName"	=> $v,
+                                    "EventName" => $events
                                 );
                             }
                         }
@@ -85,95 +91,49 @@ class Scalr_Scripting_Manager
         return (float) $sec + ((float) $usec * 100000);
     }
 
-    public static function generateEventName($prefix)
-    {
-        mt_srand(self::makeSeed());
-        return "{$prefix}-" . date("YmdHis") . '-' . mt_rand(100000,999999);
-    }
-
-    public static function extendMessage(Scalr_Messaging_Msg $message, Event $event, DBServer $eventServer, DBServer $targetServer, $noScripts = false)
+    public static function extendMessage(Scalr_Messaging_Msg $message, Event $event, DBServer $eventServer, DBServer $targetServer)
     {
         $db = \Scalr::getDb();
 
         $retval = array();
 
-        if (!$noScripts) {
-            try {
-                $scripts = self::getEventScriptList($event, $eventServer, $targetServer);
-                if (count($scripts) > 0) {
-                    foreach ($scripts as $script) {
-                        $itm = new stdClass();
-                        // Script
-                        $itm->asynchronous = ($script['issync'] == 1) ? '0' : '1';
-                        $itm->timeout = $script['timeout'];
+        try {
+            $scripts = self::getEventScriptList($event, $eventServer, $targetServer);
+            if (count($scripts) > 0) {
+                foreach ($scripts as $script) {
+                    $itm = new stdClass();
+                    // Script
+                    $itm->asynchronous = ($script['issync'] == 1) ? '0' : '1';
+                    $itm->timeout = $script['timeout'];
 
-                        if ($script['body']) {
-                            $itm->name = $script['name'];
-                            $itm->body = $script['body'];
-                        } else {
-                            $itm->name = "local-".crc32($script['path']).mt_rand(100, 999);
-                            $itm->path = $script['path'];
-                        }
-
-                        if ($script['run_as'])
-                            $itm->runAs = $script['run_as'];
-
-                        $itm->executionId = $script['execution_id'];
-
-                        $retval[] = $itm;
+                    if ($script['type'] == self::ORCHESTRATION_SCRIPT_TYPE_SCALR) {
+                        $itm->name = $script['name'];
+                        $itm->body = $script['body'];
+                    } elseif ($script['type'] == self::ORCHESTRATION_SCRIPT_TYPE_LOCAL) {
+                        $itm->name = "local-".crc32($script['path']).mt_rand(100, 999);
+                        $itm->path = $script['path'];
+                    } elseif ($script['type'] == self::ORCHESTRATION_SCRIPT_TYPE_CHEF) {
+                        $itm->name = "chef-".crc32($script['path']).mt_rand(100, 999);
+                        $itm->chef = $script['chef'];
                     }
+
+                    if ($script['run_as'])
+                        $itm->runAs = $script['run_as'];
+
+                    $itm->executionId = $script['execution_id'];
+
+                    $retval[] = $itm;
                 }
-            } catch (Exception $e) {}
+            }
+        } catch (Exception $e) {
+            $scriptingError = $e->getMessage();
         }
 
         $message->scripts = $retval;
         $message->eventId = $event->GetEventID();
-        $message->globalVariables = array();
-
-        //Global variables
-        try {
-
-            /** System variables **/
-            if ($targetServer)
-                $variables = $targetServer->GetScriptingVars();
-            else
-                $variables = array();
-
-            if ($event) {
-                if ($eventServer)
-                    foreach ($eventServer->GetScriptingVars() as $k => $v) {
-                        $variables["event_{$k}"] = $v;
-                    }
-
-                foreach ($event->GetScriptingVars() as $k=>$v)
-                    $variables[$k] = $event->{$v};
-
-                if (isset($event->params) && is_array($event->params))
-                    foreach ($event->params as $k=>$v)
-                        $variables[$k] = $v;
-
-
-                $variables['event_name'] = $event->GetName();
-            }
-
-            $formats = \Scalr::config("scalr.system.global_variables.format");
-            foreach ($variables as $name => $value) {
-                $name = "SCALR_".strtoupper($name);
-                $value = trim($value);
-
-                if (isset($formats[$name]))
-                   $value = @sprintf($formats[$name], $value);
-
-                $message->globalVariables[] = (object)array('name' => $name, 'value' => $value);
-            }
-
-            // Add custom variables
-            $globalVariables = new Scalr_Scripting_GlobalVariables($eventServer->envId);
-            $vars = $globalVariables->listVariables($eventServer->roleId, $eventServer->farmId, $eventServer->farmRoleId);
-            foreach ($vars as $k => $v) {
-                $message->globalVariables[] = (object)array('name' => $k, 'value' => trim($v));
-            }
-        } catch (Exception $e) {}
+        $message->debugScriptingCount = count($scripts);
+        $message->debugScriptingError = $scriptingError;
+        $message->setGlobalVariables($targetServer, true, $event);
 
         return $message;
     }
@@ -183,39 +143,35 @@ class Scalr_Scripting_Manager
         $db = \Scalr::getDb();
 
         $template = array(
+            'type'    => $scriptSettings['type'],
             'timeout' => $scriptSettings['timeout'],
             'issync'  => $scriptSettings['issync'],
             'run_as'  => $scriptSettings['run_as'],
             'execution_id' => Scalr::GenerateUID()
         );
 
-        if ($scriptSettings['scriptid']) {
+        if ($scriptSettings['type'] == self::ORCHESTRATION_SCRIPT_TYPE_SCALR) {
+            /* @var Script $script */
+            $script = Script::findPk($scriptSettings['scriptid']);
+            if (! $script)
+                return false;
+            // TODO: validate permission to access script ?
 
             if ($scriptSettings['version'] == 'latest' || (int)$scriptSettings['version'] == -1) {
-                $version = (int)$db->GetOne("SELECT MAX(revision) FROM script_revisions WHERE scriptid=?",
-                    array($scriptSettings['scriptid'])
-                );
+                $version = $script->getLatestVersion();
             }
-            else
-                $version = (int)$scriptSettings['version'];
+            else {
+                $version = $script->getVersion((int)$scriptSettings['version']);
+            }
 
-            $info = $db->GetRow("SELECT name,id FROM scripts WHERE id=? LIMIT 1",
-                array($scriptSettings['scriptid'])
-            );
-
-            $template['name'] = $info['name'];
-            $template['id'] = $info['id'];
-
-            $revisionInfo = $db->GetRow("SELECT script, variables FROM script_revisions WHERE scriptid=? AND revision=? LIMIT 1", array(
-                $template['id'], $version
-            ));
-
-            $template['body'] = $revisionInfo['script'];
-
-            if (!$template['body'])
+            if (! $version)
                 return false;
 
-            $scriptParams = (array)unserialize($revisionInfo['variables']);
+            $template['name'] = $script->name;
+            $template['id'] = $script->id;
+            $template['body'] = $version->content;
+
+            $scriptParams = (array) $version->variables; // variables could be null
             foreach ($scriptParams as &$val)
                 $val = "";
 
@@ -250,13 +206,30 @@ class Scalr_Scripting_Manager
             $script_contents = str_replace($keys, $values, $template['body']);
             $template['body'] = str_replace('\%', "%", $script_contents);
 
-            // Parse and set variables from data bag
-            //TODO: @param_name@
-
             // Generate script contents
             $template['name'] = preg_replace("/[^A-Za-z0-9]+/", "_", $template['name']);
-        } else {
-            $template['path'] = $scriptSettings['script_path'];
+        } elseif ($scriptSettings['type'] == self::ORCHESTRATION_SCRIPT_TYPE_LOCAL) {
+            $template['path'] = $targetServer->applyGlobalVarsToValue($scriptSettings['script_path']);
+        } elseif ($scriptSettings['type'] == self::ORCHESTRATION_SCRIPT_TYPE_CHEF) {
+            $chef = new stdClass();
+            $chefSettings = (array)unserialize($scriptSettings['params']);
+
+            if ($chefSettings['chef.cookbook_url'])
+                $chef->cookbookUrl = $chefSettings['chef.cookbook_url'];
+
+            if ($chefSettings['chef.cookbook_url_type'])
+                $chef->cookbookUrlType = $chefSettings['chef.cookbook_url_type'];
+
+            if ($chefSettings['chef.relative_path'])
+                $chef->relativePath = $chefSettings['chef.relative_path'];
+
+            if ($chefSettings['chef.ssh_private_key'])
+                $chef->sshPrivateKey = $chefSettings['chef.ssh_private_key'];
+
+            $chef->runList = $chefSettings['chef.runlist'];
+            $chef->jsonAttributes = $chefSettings['chef.attributes'];
+
+            $template['chef'] = $chef;
         }
 
         return $template;
@@ -266,9 +239,30 @@ class Scalr_Scripting_Manager
     {
         $db = \Scalr::getDb();
 
-        $roleScripts = $db->GetAll("SELECT * FROM role_scripts WHERE (event_name=? OR event_name='*') AND role_id=? ORDER BY order_index ASC", array($event->GetName(), $eventServer->roleId));
+        $accountScripts = $db->GetAll("SELECT * FROM account_scripts WHERE (event_name=? OR event_name='*') AND account_id=?", array($event->GetName(), $eventServer->clientId));
 
-        $scripts = $db->GetAll("SELECT * FROM farm_role_scripts WHERE (event_name=? OR event_name='*') AND farmid=? ORDER BY order_index ASC", array($event->GetName(), $eventServer->farmId));
+        $roleScripts = $db->GetAll("SELECT * FROM role_scripts WHERE (event_name=? OR event_name='*') AND role_id=?", array($event->GetName(), $eventServer->roleId));
+
+        $scripts = $db->GetAll("SELECT *, `script_type` as `type` FROM farm_role_scripts WHERE (event_name=? OR event_name='*') AND farmid=?", array($event->GetName(), $eventServer->farmId));
+
+        foreach ($accountScripts as $script) {
+            $scripts[] = array(
+                "id" => "a{$script['id']}",
+                "type" => $script['script_type'],
+                "scriptid" => $script['script_id'],
+                "params" => $script['params'],
+                "event_name" => $event->GetName(),
+                "target" => $script['target'],
+                "version" => $script['version'],
+                "timeout" => $script['timeout'],
+                "issync" => $script['issync'],
+                "order_index" => $script['order_index'],
+                "scope"   => "account",
+                'script_path' => $script['script_path'],
+                'run_as' => $script['run_as'],
+                'script_type' => $script['script_type']
+            );
+        }
 
         foreach ($roleScripts as $script) {
             $params = $db->GetOne("SELECT params FROM farm_role_scripting_params WHERE farm_role_id = ? AND `hash` = ? AND farm_role_script_id = '0' LIMIT 1", array(
@@ -281,6 +275,7 @@ class Scalr_Scripting_Manager
             $scripts[] = array(
              "id" => "r{$script['id']}",
              "scriptid" => $script['script_id'],
+             "type" => $script['script_type'],
              "params" => $script['params'],
              "event_name" => $event->GetName(),
              "target" => $script['target'],
@@ -288,9 +283,10 @@ class Scalr_Scripting_Manager
              "timeout" => $script['timeout'],
              "issync" => $script['issync'],
              "order_index" => $script['order_index'],
-             "type"   => "role",
+             "scope"   => "role",
              'script_path' => $script['script_path'],
-             'run_as' => $script['run_as']
+             'run_as' => $script['run_as'],
+             'script_type' => $script['script_type']
             );
         }
 
@@ -299,26 +295,26 @@ class Scalr_Scripting_Manager
             $scriptSettings['order_index'] = (float)$scriptSettings['order_index'];
 
             // If target set to that instance only
-            if ($scriptSettings['target'] == Scalr_Script::TARGET_INSTANCE && $eventServer->serverId != $targetServer->serverId)
+            if ($scriptSettings['target'] == Script::TARGET_INSTANCE && $eventServer->serverId != $targetServer->serverId)
                 continue;
 
             // If target set to all instances in specific role
-            if ($scriptSettings['target'] == Scalr_Script::TARGET_ROLE && $eventServer->farmRoleId != $targetServer->farmRoleId)
+            if ($scriptSettings['target'] == Script::TARGET_ROLE && $eventServer->farmRoleId != $targetServer->farmRoleId)
                 continue;
 
-            if ($scriptSettings['type'] != 'role') {
+            if (!$scriptSettings['scope']) {
                 // Validate that event was triggered on the same farmRoleId as script
                 if ($eventServer->farmRoleId != $scriptSettings['farm_roleid'])
                     continue;
 
                 // Validate that target server has the same farmRoleId as event server with target ROLE
-                if ($scriptSettings['type'] != 'role' && $scriptSettings['target'] == Scalr_Script::TARGET_ROLE && $targetServer->farmRoleId != $scriptSettings['farm_roleid'])
+                if ($scriptSettings['target'] == Script::TARGET_ROLE && $targetServer->farmRoleId != $scriptSettings['farm_roleid'])
                     continue;
             }
 
-            if ($scriptSettings['target'] == Scalr_Script::TARGET_ROLES || $scriptSettings['target'] == Scalr_Script::TARGET_BEHAVIORS) {
+            if ($scriptSettings['target'] == Script::TARGET_ROLES || $scriptSettings['target'] == Script::TARGET_BEHAVIORS) {
 
-                if ($scriptSettings['type'] != 'role')
+                if ($scriptSettings['scope'] != 'role')
                     $targets = $db->GetAll("SELECT * FROM farm_role_scripting_targets WHERE farm_role_script_id = ?", array($scriptSettings['id']));
                 else
                     $targets = array();

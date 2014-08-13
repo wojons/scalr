@@ -1,7 +1,6 @@
 <?php
 namespace Scalr\Service\OpenStack\Services\Network\Handler;
 
-use Scalr\Service\OpenStack\Services\Network\Type\ListNetworksFilter;
 use Scalr\Service\OpenStack\Services\NetworkService;
 use Scalr\Service\OpenStack\Services\ServiceHandlerInterface;
 use Scalr\Service\OpenStack\Services\AbstractServiceHandler;
@@ -12,7 +11,7 @@ use Scalr\Service\OpenStack\Services\AbstractServiceHandler;
  * @author   Vitaliy Demidov  <vitaliy@scalr.com>
  * @since    07.05.2013
  *
- * @method   array|object list()
+ * @method   \Scalr\Service\OpenStack\Type\DefaultPaginationList|object list()
  *           list(string $networkId = null, \Scalr\Service\OpenStack\Services\Network\Type\ListNetworksFilter|array $filter = null)
  *           List Networks action.
  *           Lists a summary of all networks defined in Quantum that are accessible

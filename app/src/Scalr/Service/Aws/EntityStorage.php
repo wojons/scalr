@@ -117,7 +117,7 @@ class EntityStorage implements \Countable, \Iterator
                     $value .= "," . ((string) $object->$fn());
                 }
             }
-            $value = $value !== '' ? substr($value, 1) : '';
+            $value = $value !== '' ? substr($value, 1) . '' : '';
         } else {
             $value = null;
         }

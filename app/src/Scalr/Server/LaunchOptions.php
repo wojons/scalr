@@ -1,41 +1,41 @@
 <?php
-    class Scalr_Server_LaunchOptions
-    {
-        /**
-         *
-         * Image ID
-         * @var string
-         */
-        public $imageId;
 
-        /**
-         *
-         * flavourId - RackSpace, instance_type - EC2 ...
-         * @var string
-         */
-        public $serverType;
+class Scalr_Server_LaunchOptions
+{
+    /**
+     *
+     * Image ID
+     * @var string
+     */
+    public $imageId;
 
-        /**
-         *
-         * USer data that will be passed to server
-         * @var string
-         */
-        public $userData = '';
+    /**
+     *
+     * flavourId - RackSpace, instance_type - EC2 ...
+     * @var string
+     */
+    public $serverType;
 
-        /**
-         *
-         * Cloud location
-         * @var string
-         */
-        public $cloudLocation;
+    /**
+     *
+     * USer data that will be passed to server
+     * @var string
+     */
+    public $userData = '';
 
-        /**
-         *
-         * Server architecture
-         * @var string
-         */
-        public $architecture;
+    /**
+     *
+     * Cloud location
+     * @var string
+     */
+    public $cloudLocation;
 
-        public $availZone;
-    }
-?>
+    /**
+     *
+     * Server architecture
+     * @var string
+     */
+    public $architecture;
+
+    public $availZone;
+}

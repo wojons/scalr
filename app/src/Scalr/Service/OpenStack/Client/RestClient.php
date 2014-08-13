@@ -1,13 +1,11 @@
 <?php
 namespace Scalr\Service\OpenStack\Client;
 
-use Scalr\Service\OpenStack\Exception\OpenStackException;
 use Scalr\Service\OpenStack\Services\ServiceInterface;
 use Scalr\Service\OpenStack\Exception\RestClientException;
 use Scalr\Service\OpenStack\OpenStackConfig;
 use Scalr\Service\OpenStack\Type\AppFormat;
 use \HttpRequest;
-use \HttpMessage;
 use \HttpException;
 
 /**
@@ -21,6 +19,7 @@ class RestClient implements ClientInterface
 
     /**
      * OpenStack config
+     *
      * @var OpenStackConfig
      */
     protected $config;
@@ -70,10 +69,12 @@ class RestClient implements ClientInterface
         $req = new HttpRequest();
         $req->resetCookies();
         $req->setOptions(array(
-            'redirect'  => 10,
-            'useragent' => $this->useragent,
-            'verifypeer' => false,
-            'verifyhost' => false
+            'redirect'       => 10,
+            'useragent'      => $this->useragent,
+            'verifypeer'     => false,
+            'verifyhost'     => false,
+            'timeout'        => 30,
+            'connecttimeout' => 30
         ));
         return $req;
     }
@@ -84,10 +85,10 @@ class RestClient implements ClientInterface
      * @param    HttpRequest     $httpRequest
      * @param    int             $attempts     Attempts count.
      * @param    int             $interval     An sleep interval between an attempts in microseconds.
-     * @throws   QueryClientException
-     * @returns  HttpMessage    Returns HttpMessage if success.
+     * @throws   RestClientException
+     * @return   HttpMessage    Returns HttpMessage if success.
      */
-    protected function tryCall($httpRequest, $attempts = 5, $interval = 200)
+    protected function tryCall($httpRequest, $attempts = 1, $interval = 200)
     {
         try {
             $message = $httpRequest->send();
@@ -96,7 +97,10 @@ class RestClient implements ClientInterface
                 usleep($interval);
                 $message = $this->tryCall($httpRequest, $attempts, $interval * 2);
             } else {
-                throw new RestClientException(sprintf('Cannot establish connection with OpenStack server on %s (%s).', $httpRequest->getUrl(), $e->getMessage()));
+                throw new RestClientException(sprintf(
+                        'Cannot establish connection with OpenStack server. (%s).',
+                        (isset($e->innerException) ? preg_replace('/(\(.*\))/', '', $e->innerException->getMessage()) : $e->getMessage())
+                    ));
             }
         }
         return $message;
@@ -109,6 +113,8 @@ class RestClient implements ClientInterface
     public function call($service, $path = '/', array $options = null, $verb = 'GET',
                          AppFormat $accept = null, $auth = true)
     {
+        $attempts = 1;
+
         if ($accept === null) {
             $accept = AppFormat::json();
         }
@@ -122,6 +128,22 @@ class RestClient implements ClientInterface
             $ctype = (string) $options['content-type'];
             unset($options['content-type']);
         }
+
+        $req = $this->createHttpRequest();
+
+        if (isset($options['__speedup'])) {
+            $curOptions = $req->getOptions();
+            $curOptions['timeout'] = 3;
+            $curOptions['connecttimeout'] = 3;
+            $req->setOptions($curOptions);
+            unset($options['__speedup']);
+        }
+
+        if (isset($options['_headers'])) {
+            $xHeaders = (array) $options['_headers'];
+            unset($options['_headers']);
+        }
+
         $customOptions = array();
         foreach ($options as $key => $value) {
             if (substr($key, 0, 1) === '_') {
@@ -130,13 +152,21 @@ class RestClient implements ClientInterface
             }
         }
 
-        $req = $this->createHttpRequest();
         $req->setMethod(constant('HTTP_METH_' . $verb));
         $ctype = 'json';
         $headers = array(
             'Accept'       => 'application/' . (string)$accept,
             'Content-Type' => 'application/' . (isset($ctype) ? $ctype : 'json') . '; charset=UTF-8',
         );
+
+        if (isset($xHeaders)) {
+            foreach ($xHeaders as $k => $v) {
+                if (is_string($k)) {
+                    $headers[$k] = $v;
+                }
+            }
+        }
+
         if ($auth) {
             $token = $this->getConfig()->getAuthToken();
             if (!($token instanceof AuthToken) || $token->isExpired()) {
@@ -150,6 +180,7 @@ class RestClient implements ClientInterface
             }
             $headers['X-Auth-Token'] = $token->getId();
         }
+
         $endpoint = $service instanceof ServiceInterface ? $service->getEndpointUrl() : $service;
         if (substr($endpoint, -1) === '/') {
             //removes trailing slashes
@@ -169,7 +200,7 @@ class RestClient implements ClientInterface
             $req->addQueryData($options);
         }
 
-        $message = $this->tryCall($req);
+        $message = $this->tryCall($req, $attempts);
 
         $response = new RestClientResponse($message, $accept);
         $response->setRawRequestMessage($req->getRawRequestMessage());
@@ -179,8 +210,7 @@ class RestClient implements ClientInterface
             echo $req->getRawResponseMessage() . "\n";
         }
 
-        if ($response->getResponseCode() === 401 && !isset($bAuthRequestSent) &&
-            $this->getConfig()->getAuthToken() !== null) {
+        if ($response->getResponseCode() === 401 && !isset($bAuthRequestSent) && $this->getConfig()->getAuthToken() !== null) {
             //When this token isn't expired and by some reason it causes unauthorized response
             //we should reset authurization token and force authentication request
             $this->getConfig()->setAuthToken(null);
@@ -198,22 +228,43 @@ class RestClient implements ClientInterface
     public function auth()
     {
         $cfg = $this->getConfig();
-        $options = array(
-            'auth' => $cfg->getAuthQueryString(),
-        );
+
+        $options = ['auth' => $cfg->getAuthQueryString()];
+
         $response = $this->call(
             $cfg->getIdentityEndpoint(),
             '/tokens', $options, 'POST', null, false
         );
+
         if ($response->hasError() === false) {
             $str = $response->getContent();
             $result = json_decode($str);
+
             $cfg->setAuthToken(AuthToken::loadJson($str));
-            if (($cb = $cfg->getUpdateTokenCallback()) !== null && is_callable($cb)) {
-                //It should save token in database
-                $cb($cfg->getAuthToken());
+
+            //Trying to fetch stage keystone
+            $regionEndpoints = $cfg->getAuthToken()->getRegionEndpoints();
+
+            /*
+            if (isset($regionEndpoints['identity'][$cfg->getRegion()][''][0]->publicURL)) {
+                $regionKeystoneURL = $regionEndpoints['identity'][$cfg->getRegion()][''][0]->publicURL;
+
+                if ($cfg->getIdentityEndpoint() != $regionKeystoneURL) {
+                    $response = $this->call($regionKeystoneURL, '/tokens', $options, 'POST', null, false);
+
+                    if ($response->hasError() === false) {
+                        $str = $response->getContent();
+                        $result = json_decode($str);
+
+                        //Sets original auth token for current region
+                        $cfg->setAuthToken(AuthToken::loadJson($str));
+                        $cfg->setIdentityEndpoint($regionKeystoneURL);
+                    }
+                }
             }
+            */
         }
+
         return $result;
     }
 

@@ -6,6 +6,8 @@ class Scalr_Scaling_Manager
         $farmRoleMetrics,
         $dbFarmRole;
 
+    public $decisonInfo;
+
     /**
      * Constructor
      * @param $DBFarmRole
@@ -35,6 +37,9 @@ class Scalr_Scaling_Manager
         }
 
         foreach ($metrics as $metric_id => $metric_settings) {
+            if (!is_array($metric_settings))
+                continue;
+
             if (!$this->farmRoleMetrics[$metric_id]) {
                 $this->farmRoleMetrics[$metric_id] = Scalr_Model::init(Scalr_Model::SCALING_FARM_ROLE_METRIC);
                 $this->farmRoleMetrics[$metric_id]->metricId = $metric_id;
@@ -95,6 +100,8 @@ class Scalr_Scaling_Manager
                 $scalingMetricInstancesCount = $farmRoleMetric->instancesNumber;
             }
 
+            $this->decisonInfo = '1';
+
             if ($scalingMetricDecision == Scalr_Scaling_Decision::NOOP)
                 continue;
 
@@ -106,9 +113,8 @@ class Scalr_Scaling_Manager
                 $farmRoleMetric->lastValue
             )));
 
-            if ($scalingMetricDecision != Scalr_Scaling_Decision::NOOP) {
+            if ($scalingMetricDecision != Scalr_Scaling_Decision::NOOP)
                 break;
-            }
         }
 
 
@@ -127,6 +133,7 @@ class Scalr_Scaling_Manager
                 // If we launching DbMSR instances. Master should be running.
                 if ($this->dbFarmRole->GetPendingInstancesCount() == 0 && !$pendingTerminateInstances) {
                     $this->logger->info(_("Increasing number of running instances to fit min instances setting"));
+                    $this->decisonInfo = '2';
                     return Scalr_Scaling_Decision::UPSCALE;
                 } else {
                     $this->logger->info(_("Found servers in Pending or PendingTerminate state. Waiting..."));
@@ -136,6 +143,7 @@ class Scalr_Scaling_Manager
                 // If we launching DbMSR instances. Master should be running.
                 if ($this->dbFarmRole->GetRunningInstancesCount() > 0 || $this->dbFarmRole->GetPendingInstancesCount() == 0) {
                     $this->logger->info(_("Increasing number of running instances to fit min instances setting"));
+                    $this->decisonInfo = '3';
                     return Scalr_Scaling_Decision::UPSCALE;
                 } else {
                     $this->logger->info(_("Waiting for running master"));
@@ -144,6 +152,7 @@ class Scalr_Scaling_Manager
 
             } else {
                 $this->logger->info(_("Increasing number of running instances to fit min instances setting"));
+                $this->decisonInfo = '4';
                 return Scalr_Scaling_Decision::UPSCALE;
             }
         }
@@ -152,10 +161,12 @@ class Scalr_Scaling_Manager
             if ($scalingMetricInstancesCount) {
                 if ($this->dbFarmRole->GetRunningInstancesCount() > $scalingMetricInstancesCount) {
                     $this->logger->info(_("Decreasing number of running instances to fit DateAndTime scaling settings ({$scalingMetricInstancesCount})"));
+                    $this->decisonInfo = '5';
                     return Scalr_Scaling_Decision::DOWNSCALE;
                 }
             } else {
                 $this->logger->info(_("Decreasing number of running instances to fit max instances setting ({$scalingMetricInstancesCount})"));
+                $this->decisonInfo = '6';
                 return Scalr_Scaling_Decision::DOWNSCALE;
             }
         }

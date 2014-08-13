@@ -1,6 +1,5 @@
 <?php
 
-use Scalr\Farm\Role\FarmRoleStorage;
 
 class ScalrEnvironment20120701 extends ScalrEnvironment20120417
 {
@@ -33,24 +32,27 @@ class ScalrEnvironment20120701 extends ScalrEnvironment20120417
         $paramValue = $this->GetArg("param-value");
         $final = (int)$this->GetArg("flag-final");
 
-        $globalVariables = new Scalr_Scripting_GlobalVariables($this->DBServer->envId, $scope);
+        if ($scope != Scalr_Scripting_GlobalVariables::SCOPE_SERVER && $scope != Scalr_Scripting_GlobalVariables::SCOPE_FARMROLE)
+        	throw new Exception("query-env allows you to set global variables only on server/farmrole scopes");
+        
+        $globalVariables = new Scalr_Scripting_GlobalVariables($this->DBServer->clientId, $this->DBServer->envId, $scope);
         $globalVariables->setValues(
             array(array(
                 'name' 	=> $paramName,
                 'value'	=> $paramValue,
                 'flagFinal' => $final,
-                'flagRequired' => 0,
-                'scope' => $scope
+                'flagRequired' => 0
             )),
             $this->DBServer->roleId,
             $this->DBServer->farmId,
-            $this->DBServer->farmRoleId
+            $this->DBServer->farmRoleId,
+        	$this->DBServer->serverId
         );
 
         $ResponseDOMDocument = $this->CreateResponse();
         $configNode = $ResponseDOMDocument->createElement("variables");
 
-        $settingNode = $ResponseDOMDocument->createElement("variable", $paramValue);
+        $settingNode = $ResponseDOMDocument->createElement("variable", htmlspecialchars($paramValue));
         $settingNode->setAttribute("name", $paramName);
         $configNode->appendChild($settingNode);
 
@@ -63,11 +65,19 @@ class ScalrEnvironment20120701 extends ScalrEnvironment20120417
         $ResponseDOMDocument = $this->CreateResponse();
         $configNode = $ResponseDOMDocument->createElement("variables");
 
-        $globalVariables = new Scalr_Scripting_GlobalVariables($this->DBServer->envId, Scalr_Scripting_GlobalVariables::SCOPE_FARMROLE);
-        $vars = $globalVariables->listVariables($this->DBServer->roleId, $this->DBServer->farmId, $this->DBServer->farmRoleId);
+        $globalVariables = new Scalr_Scripting_GlobalVariables($this->DBServer->clientId, $this->DBServer->envId, Scalr_Scripting_GlobalVariables::SCOPE_SERVER);
+        $vars = $globalVariables->listVariables($this->DBServer->roleId, $this->DBServer->farmId, $this->DBServer->farmRoleId, $this->DBServer->serverId);
         foreach ($vars as $key => $value) {
-            $settingNode = $ResponseDOMDocument->createElement("variable", $value);
-            $settingNode->setAttribute("name", $key);
+            $settingNode = $ResponseDOMDocument->createElement("variable");
+
+            if (preg_match("/[\<\>\&]+/", $value['value']))
+                $valueEl = $ResponseDOMDocument->createCDATASection($value['value']);
+            else
+                $valueEl = $ResponseDOMDocument->createTextNode($value['value']);
+
+            $settingNode->appendChild($valueEl);
+            $settingNode->setAttribute("name", $value['name']);
+            $settingNode->setAttribute("private", $value['private']);
             $configNode->appendChild($settingNode);
         }
 
@@ -80,7 +90,14 @@ class ScalrEnvironment20120701 extends ScalrEnvironment20120417
             if (isset($formats[$name]))
                $value = @sprintf($formats[$name], $value);
 
-            $settingNode = $ResponseDOMDocument->createElement("variable", $value);
+            $settingNode = $ResponseDOMDocument->createElement("variable");
+
+            if (preg_match("/[\<\>\&]+/", $value))
+                $valueEl = $ResponseDOMDocument->createCDATASection($value);
+            else
+                $valueEl = $ResponseDOMDocument->createTextNode($value);
+
+            $settingNode->appendChild($valueEl);
             $settingNode->setAttribute("name", $name);
             $configNode->appendChild($settingNode);
         }
@@ -101,24 +118,14 @@ class ScalrEnvironment20120701 extends ScalrEnvironment20120417
 
         $ResponseDOMDocument = $this->CreateResponse();
 
-        // Add volumes information
-        try {
-            if ($this->DBServer->farmRoleId == $farmRoleId) {
-                $storage = new FarmRoleStorage($dbFarmRole);
-                $vols = $storage->getVolumesConfigs($this->DBServer->index);
-                $volumes = array();
-                foreach ($vols as $i => $volume) {
-                    if ($volume->id)
-                        $volumes[] = $volume;
-                }
-
-                $bodyEl = $this->serialize($volumes, 'volumes', $ResponseDOMDocument);
+        // Base configuration
+        if ($this->DBServer->farmRoleId == $farmRoleId) {
+            $data = Scalr_Role_Behavior::loadByName(ROLE_BEHAVIORS::BASE)->getBaseConfiguration($this->DBServer);
+            foreach ((array)$data as $k => $v) {
+                $bodyEl = $this->serialize($v, $k, $ResponseDOMDocument);
                 $ResponseDOMDocument->documentElement->appendChild($bodyEl);
             }
-        } catch (Exception $e) {
-            $this->Logger->fatal("ListFarmRoleParams::Storage: {$e->getMessage()}");
         }
-
 
         $role = $dbFarmRole->GetRoleObject();
         $behaviors = $role->getBehaviors();

@@ -38,6 +38,11 @@ class Scalr_Messaging_Service_LogQueueHandler implements Scalr_Messaging_Service
                 if (!$message->executionId || $storage == 'scalr')
                     $msg = sprintf("STDERR: %s \n\n STDOUT: %s", base64_decode($message->stderr), base64_decode($message->stdout));
 
+                if ($message->scriptPath) {
+                    $name = (stristr($message->scriptPath, '/usr/local/bin/scalr-scripting')) ? $message->scriptName : $message->scriptPath;
+                } else
+                    $name = $message->scriptName;
+
                 $this->db->Execute("INSERT DELAYED INTO scripting_log SET
                     farmid = ?,
                     server_id = ?,
@@ -56,7 +61,7 @@ class Scalr_Messaging_Service_LogQueueHandler implements Scalr_Messaging_Service
                     $message->getServerId(),
                     $message->eventName,
                     $msg,
-                    $message->scriptName,
+                    $name,
                     $message->eventServerId,
                     round($message->timeElapsed, 2),
                     $message->returnCode,
@@ -66,7 +71,7 @@ class Scalr_Messaging_Service_LogQueueHandler implements Scalr_Messaging_Service
                 ));
 
                 if ($message->meta[Scalr_Messaging_MsgMeta::SZR_VERSION])
-                    DBServer::LoadByID($message->getServerId())->SetProperty(SERVER_PROPERTIES::SZR_VESION, $message->meta[Scalr_Messaging_MsgMeta::SZR_VERSION]);
+                    DBServer::LoadByID($message->getServerId())->setScalarizrVersion($message->meta[Scalr_Messaging_MsgMeta::SZR_VERSION]);
 
             } catch (Exception $e) {
                 $this->logger->fatal($e->getMessage());
@@ -76,7 +81,7 @@ class Scalr_Messaging_Service_LogQueueHandler implements Scalr_Messaging_Service
 
             try {
                 if ($message->meta[Scalr_Messaging_MsgMeta::SZR_VERSION])
-                    DBServer::LoadByID($message->getServerId())->SetProperty(SERVER_PROPERTIES::SZR_VESION, $message->meta[Scalr_Messaging_MsgMeta::SZR_VERSION]);
+                    DBServer::LoadByID($message->getServerId())->setScalarizrVersion($message->meta[Scalr_Messaging_MsgMeta::SZR_VERSION]);
             } catch (Exception $e) {}
 
             foreach ($message->entries as $entry) {
@@ -84,20 +89,27 @@ class Scalr_Messaging_Service_LogQueueHandler implements Scalr_Messaging_Service
                     if (self::$severityCodes[$entry->level] < 3)
                         continue;
 
+                    $tm = date('YmdH');
+                    $hash = md5("{$message->getServerId()}:{$entry->msg}:{$dbserver->farmId}:{$entry->name}:{$tm}", true);
+
                     $this->db->Execute("INSERT DELAYED INTO logentries SET
-                        serverid = ?,
-                        message = ?,
-                        severity = ?,
-                        time = ?,
-                        source = ?,
-                        farmid = ?
+                        `id` = ?,
+                        `serverid` = ?,
+                        `message` = ?,
+                        `severity` = ?,
+                        `time` = ?,
+                        `source` = ?,
+                        `farmid` = ?
+                        ON DUPLICATE KEY UPDATE cnt = cnt + 1, `time` = ?
                     ", array(
+                        $hash,
                         $message->getServerId(),
                         $entry->msg,
                         self::$severityCodes[$entry->level],
                         time(),
                         $entry->name,
-                        $dbserver->farmId
+                        $dbserver->farmId,
+                        time()
                     ));
 
                 } catch (Exception $e) {

@@ -6,19 +6,17 @@ Scalr.regPage('Scalr.ui.tools.openstack.volumes.view', function (loadParams, mod
 		],
 		proxy: {
 			type: 'scalr.paging',
-			extraParams: loadParams,
 			url: '/tools/openstack/volumes/xListVolumes/'
 		},
 		remoteSort: true
 	});
 
 	return Ext.create('Ext.grid.Panel', {
-		title: 'Tools &raquo; Openstack &raquo; Volumes',
+		title: Scalr.utils.getPlatformName(loadParams['platform']) + ' &raquo; Volumes',
 		scalrOptions: {
-			'reload': false,
+			'reload': true,
 			'maximize': 'all'
 		},
-		scalrReconfigureParams: { volumeId: '' },
 		store: store,
 		stateId: 'grid-tools-openstack-volumes-view',
 		stateful: true,
@@ -63,23 +61,33 @@ Scalr.regPage('Scalr.ui.tools.openstack.volumes.view', function (loadParams, mod
 			{ header: "Instance ID", width: 260, dataIndex: 'instanceId', sortable: true, xtype: 'templatecolumn', tpl:
 				'<tpl if="instanceId">{instanceId}</tpl>'
 			}, {
-				xtype: 'optionscolumn',
-				getOptionVisibility: function (item, record) {
-					if (item.itemId == 'option.attach' || item.itemId == 'option.detach' || item.itemId == 'option.attachSep') {
-						if (!record.get('mysqMasterVolume')) {
-							if (item.itemId == 'option.attachSep')
-								return true;
-							if (item.itemId == 'option.detach' && record.get('instanceId'))
-								return true;
-							if (item.itemId == 'option.attach' && !record.get('instanceId'))
-								return true;
+				xtype: 'optionscolumn2',
+				menu: [{
+					itemId: 'option.createSnap',
+					text: 'Create snapshot',
+					iconCls: 'x-menu-icon-create',
+					request: {
+						confirmBox: {
+							type: 'action',
+							msg: 'Are you sure want to create snapshot for Cinder volume "{volumeId}"?'
+						},
+						processBox: {
+							type: 'action',
+							msg: 'Creating snapshot ...'
+						},
+						url: '/tools/openstack/snapshots/xCreate/',
+						dataHandler: function (data) {
+							return { 
+								volumeId: data['volumeId'], 
+								cloudLocation: store.proxy.extraParams.cloudLocation,
+								platform: loadParams['platform']
+							};
+						},
+						success: function (data) {
+							document.location.href = '#/tools/openstack/snapshots/' + data.data.snapshotId + '/view?cloudLocation=' + store.proxy.extraParams.cloudLocation + '&platform=' + loadParams['platform'];
 						}
-						return false;
 					}
-					return true;
-				},
-
-				optionsMenu: [{
+				}, {
 					itemId: 'option.delete',
 					text: 'Delete',
 					iconCls: 'x-menu-icon-delete',
@@ -93,9 +101,9 @@ Scalr.regPage('Scalr.ui.tools.openstack.volumes.view', function (loadParams, mod
 							msg: 'Deleting volume(s) ...'
 						},
 						url: '/tools/openstack/volumes/xRemove/',
-						dataHandler: function (record) {
+						dataHandler: function (data) {
 							return { 
-								volumeId: Ext.encode([record.get('volumeId')]), 
+								volumeId: Ext.encode([data['volumeId']]),
 								cloudLocation: store.proxy.extraParams.cloudLocation,
 								platform: loadParams['platform']
 							};
@@ -120,6 +128,7 @@ Scalr.regPage('Scalr.ui.tools.openstack.volumes.view', function (loadParams, mod
 
 		dockedItems: [{
 			xtype: 'scalrpagingtoolbar',
+            ignoredLoadParams: ['platform'],
 			store: store,
 			dock: 'top',
 			afterItems: [{
@@ -154,15 +163,18 @@ Scalr.regPage('Scalr.ui.tools.openstack.volumes.view', function (loadParams, mod
 				}
 			}],
 			items: [{
+                xtype: 'filterfield',
+                store: store
+            }, {
 				xtype: 'fieldcloudlocation',
 				itemId: 'cloudLocation',
+                margin: '0 0 0 12',
 				store: {
 					fields: [ 'id', 'name' ],
 					data: moduleParams.locations,
 					proxy: 'object'
 				},
-				gridStore: store,
-				cloudLocation: loadParams['cloudLocation'] || ''
+				gridStore: store
 			}]
 		}]
 	});

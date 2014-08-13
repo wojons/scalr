@@ -70,9 +70,6 @@ class Scalr_Service_Apache_Vhost extends Scalr_Model
      */
     public function save($forceInsert = false)
     {
-        $this->httpdConf = str_replace(array("{literal}", "{/literal}"), array("", ""), $this->httpdConf);
-        $this->httpdConfSsl = str_replace(array("{literal}", "{/literal}"), array("", ""), $this->httpdConfSsl);
-
         return parent::save($forceInsert);
     }
 }

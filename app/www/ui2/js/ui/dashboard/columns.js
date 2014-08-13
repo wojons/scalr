@@ -95,7 +95,7 @@ Ext.define('Scalr.ui.dashboard.Panel', {
 		});
 	},
 
-	newWidget: function(type, params) {
+	newWidget: function(type, params, moduleParams) {
 		return {
 			xtype: type,
 			collapsible: true,
@@ -104,6 +104,7 @@ Ext.define('Scalr.ui.dashboard.Panel', {
 			layout: 'fit',
 			anchor: '100%',
 			params: params,
+            moduleParams: moduleParams,
 			margin: '0 0 12 0'
 		};
 	},
@@ -376,40 +377,110 @@ Ext.define('Scalr.ui.dashboard.Farm', {
 Ext.define('Scalr.ui.dashboard.Monitoring', {
 	extend: 'Ext.panel.Panel',
 	alias: 'widget.dashboard.monitoring',
+    widgetType: 'nonlocal',
+    //maxHeight: 300 + 36,
 
-	title: 'Monitoring',
-	widgetType: 'local',
-	widgetUpdate: function (content) {
-		this.title = this.params['title'];
+    loadContent: function () {
+        var me = this;
+        var hostUrl = me.moduleParams['monitoringUrl'];
+        var params = me.params;
+        var container = '<div class="scalr-ui-dashboard-monitoring-image-container" style="background-color: white; text-align: center; line-height: 300px; height: 100%; width: 100%;">';
+        var content = '';
 
-		if (this.params['height'])
-			this.setHeight(this.params['height'] - 28);
-		if (content && content['msg']) {
-			if (content['type'] && content['type'] == 'error' || content['success'] == false) {
-				if(this.body)
-					this.body.update('<div style="position: relative; top: 48%; text-align: center; width: 100%; height: 50%;"><font color = "red">' + content.msg + '</font></div>');
-				else
-					this.html = '<div style="position: relative; top: 48%; text-align: center; width: 100%; height: 50%;"><font color = "red">' + content.msg + '</font></div>';
-			}
-			else {
-				if (this.body)
-					this.body.update('<div style="position: relative; text-align: center; width: 100%; height: 50%; padding: 3px;"><img src = "' + content.msg + '"/></div>');
-				else
-					this.html = '<div style="position: relative; text-align: center; width: 100%; height: 50%; padding: 3px;"><img src = "' + content.msg + '"/></div>';
-			}
-		}
-		else {
-			if (this.body)
-				this.body.update('<div style="position: relative; text-align: center; width: 100%; height: 50%; padding: 3px;"><font color = "red">No info</font></div>');
-			else
-				this.html = '<div style="position: relative; text-align: center; width: 100%; height: 50%; padding: 3px;"><font color = "red">No info</font></div>';
-		}
-	},
-    widgetError: function (msg) {
-        if (this.body)
-            this.body.update('<div class="x-grid-empty x-error">' + msg + '</div>');
-        else
-            this.html = '<div class="x-grid-empty x-error">' + msg + '</div>';
+        if (this.rendered) {
+            this.body.mask('Loading content ...');
+        }
+
+        Scalr.Request({
+            method: 'GET',
+            url: hostUrl + '/load_statistics',
+            scope: this,
+            params: params,
+            success: function (data) {
+                if (!me.isDestroyed) {
+                    var metric = params.metrics;
+                    var metricData = data['metric'][metric];
+                    if (metricData.success) {
+                        var imageSource = metricData.img;
+                        if (typeof imageSource !== 'string') {
+                            var disk = params.disk;
+                            var graph = params.graph;
+
+                            imageSource = imageSource[disk][graph];
+                        }
+                        content = container + '<img class="scalr-ui-dashboard-monitoring-image" style="height: 100%; max-height: 300px; vertical-align: middle" src="' + imageSource + '" /></div>';
+                    } else {
+                        var message = metricData.msg;
+                        content = container + message + '</div>';
+                    }
+                    me.update(content);
+                    me.fireEvent('resize')
+                }
+            },
+
+            failure: function (data) {
+                if (!me.isDestroyed) {
+                    var message = data && data.msg ? data.msg : 'Connection error';
+                    content = container + message + '</div>';
+
+                    me.update(content);
+                }
+            }
+        });
+    },
+
+    setImageTopMargin: function () {
+        var me = this;
+        var imageContainer = me.el.down('.scalr-ui-dashboard-monitoring-image-container');
+        var image = me.el.down('.scalr-ui-dashboard-monitoring-image');
+
+        if (imageContainer && image) {
+            var imageContainerHeight = imageContainer.getHeight();
+            var imageTopMargin = 0;
+
+            if (imageContainerHeight > 300) {
+                imageTopMargin = (imageContainerHeight - 300) / 2;
+            }
+
+            image.setStyle('margin-top', imageTopMargin + 'px');
+        }
+    },
+
+    listeners: {
+        boxready: function() {
+            var me = this;
+
+            var currentWidth = me.getWidth();
+            me.initWidth = me.getWidth();
+            me.setHeight(currentWidth / 16 * 9);
+
+            me.params = me.params || {};
+
+            me.setTitle(me.params['title'] || 'Monitoring');
+            if (! me.collapsed) {
+                me.loadContent();
+            }
+
+            me.setImageTopMargin();
+        },
+        resize: function () {
+            var me = this;
+            var currentHeight = me.getHeight();
+            var currentWidth = me.getWidth();
+            var deltaWidth = currentWidth - me.initWidth;
+            var deltaHeight = deltaWidth / 16 * 9;
+
+            me.initWidth = currentWidth;
+            me.setHeight(currentHeight + deltaHeight);
+            me.setImageTopMargin();
+        },
+        beforeexpand: function() {
+            if (this.rendered)
+                this.body.mask();
+        },
+        expand: function () {
+            this.loadContent();
+        }
     }
 });
 
@@ -417,7 +488,7 @@ Ext.define('Scalr.ui.dashboard.Announcement', {
 	extend: 'Ext.panel.Panel',
 	alias: 'widget.dashboard.announcement',
 
-	title: 'Announcements',
+	title: 'From the Scalr blog',
 	items: {
 		xtype: 'dataview',
 		store: {
@@ -485,11 +556,11 @@ Ext.define('Scalr.ui.dashboard.LastErrors', {
 	alias: 'widget.dashboard.lasterrors',
 
 	title: 'Last errors',
-	autoScroll: true,
+    layout: 'fit',
 	items: {
 		xtype: 'dataview',
 		store: {
-			fields: [ 'message', 'time', 'server_id' ],
+			fields: [ 'message', 'time', 'server_id', 'cnt' ],
 			proxy: 'object'
 		},
 		deferEmptyText: false,
@@ -499,7 +570,7 @@ Ext.define('Scalr.ui.dashboard.LastErrors', {
 		tpl: new Ext.XTemplate(
 			'<tpl for=".">',
 			'<div title="{message}" class="scalr-ui-dashboard-widgets-div">',
-			'<div class="scalr-ui-dashboard-widgets-desc"><tpl if="server_id"><a href="#/servers/{server_id}/dashboard">{time}</a><tpl else>{time}</tpl></div>',
+			'<div class="scalr-ui-dashboard-widgets-desc"><tpl if="server_id"><a href="#/servers/{server_id}/dashboard">{time}</a><tpl else>{time}</tpl><tpl if="cnt &gt; 1"> (repeated {cnt} times)</tpl></div>',
 			'<div style="max-height: 60px; overflow: hidden;"><span class="scalr-ui-dashboard-widgets-message-slim">{message}</span></div>',
 			'</div>',
 			'</tpl>'

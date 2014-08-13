@@ -52,12 +52,15 @@ class Scalr_UI_Controller_Services_Configurations extends Scalr_UI_Controller
             );
 
             $params['masterServerId'] = $masterServer->serverId;
-            $config = $this->getConfig($masterServer, $behavior);
-            foreach ($config as $file => $conf) {
-                $conf = (array)$conf;
-                ksort($conf, SORT_ASC | SORT_STRING);
-                $params['config'][$file] = $conf;
-            }
+            $config = (array)$this->getConfig($masterServer, $behavior);
+            if (is_array($config)) {
+                foreach ($config as $file => $conf) {
+                    $conf = (array)$conf;
+                    ksort($conf, SORT_ASC | SORT_STRING);
+                    $params['config'][$file] = $conf;
+                }
+            } else
+                throw new Exception("Unable to retrieve configuration from master server");
         } else {
             $params['config'] = $farmRole->GetServiceConfiguration2($behavior);
         }
@@ -67,23 +70,15 @@ class Scalr_UI_Controller_Services_Configurations extends Scalr_UI_Controller
 
     private function getConfig(DBServer $dbServer, $behavior)
     {
-        $port = $dbServer->GetProperty(SERVER_PROPERTIES::SZR_API_PORT);
-        if (!$port)
-            $port = 8010;
-
-        $client = Scalr_Net_Scalarizr_Client::getClient($dbServer, Scalr_Net_Scalarizr_Client::NAMESPACE_SERVICE, $port);
-        $result = $client->getPreset($behavior);
+        $result = $dbServer->scalarizr->service->getPreset($behavior);
         return $result->result;
     }
 
     private function setConfig(DBServer $dbServer, $behavior, $config)
     {
-        $port = $dbServer->GetProperty(SERVER_PROPERTIES::SZR_API_PORT);
-        if (!$port)
-            $port = 8010;
-
-        $client = Scalr_Net_Scalarizr_Client::getClient($dbServer, Scalr_Net_Scalarizr_Client::NAMESPACE_SERVICE, $port);
-        $result = $client->setPreset($behavior, $config);
+        $service = $dbServer->scalarizr->service;
+        $service->timeout = 45;
+        $result = $service->setPreset($behavior, $config);
         return $result->result;
     }
 
@@ -156,7 +151,7 @@ class Scalr_UI_Controller_Services_Configurations extends Scalr_UI_Controller
         if (!$warn)
             $this->response->success(sprintf("Config successfully applied on %s of %s servers", $savedServers, $servers));
         else {
-            $this->response->warning(sprintf("Config was applied on %s of %s servers: %s", $savedServers, $servers, implode("<br>", $warn)));
+            $this->response->warning(sprintf("Config was applied on %s of %s servers: %s", $savedServers, $servers, implode("\n", $warn)));
         }
     }
 }

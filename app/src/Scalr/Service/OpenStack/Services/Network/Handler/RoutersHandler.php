@@ -11,7 +11,7 @@ use Scalr\Service\OpenStack\Services\AbstractServiceHandler;
  * @author   Vitaliy Demidov  <vitaliy@scalr.com>
  * @since    26.08.2013
  *
- * @method  array|object list()
+ * @method  \Scalr\Service\OpenStack\Type\DefaultPaginationList|object list()
  *          list(string $routerId = null, \Scalr\Service\OpenStack\Services\Network\Type\ListRoutersFilter|array $filter = null, array $fields = null)
  *          Gets the routers list (GET /routers[/router-id])
  *          This operation returns a list of routers to which the tenant has access.

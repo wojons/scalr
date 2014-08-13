@@ -7,9 +7,7 @@ use Scalr\Service\Aws\Rds\DataType\ModifyDBInstanceRequestData;
 use Scalr\Service\Aws\Rds\DataType\CreateDBInstanceRequestData;
 use Scalr\Service\Aws\Rds\DataType\DBInstanceList;
 use Scalr\Service\Aws\Rds\DataType\DBInstanceData;
-use Scalr\Service\Aws\DataType\ListDataType;
 use Scalr\Service\Aws\Client\ClientException;
-use Scalr\Service\Aws\DataType\ErrorData;
 use Scalr\Service\Aws\RdsException;
 use Scalr\Service\Aws\Rds\AbstractRdsHandler;
 

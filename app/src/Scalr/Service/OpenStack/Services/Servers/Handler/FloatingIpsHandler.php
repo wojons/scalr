@@ -11,7 +11,10 @@ use Scalr\Service\OpenStack\Services\AbstractServiceHandler;
  * @author   Vitaliy Demidov  <vitaliy@scalr.com>
  * @since    14.12.2012
  *
- * @method   array    list()         list()                       Gets the list of floating ips.
+ * @method   \Scalr\Service\OpenStack\Type\DefaultPaginationList list()
+ *           list()
+ *           Gets the list of floating ips.
+ *
  * @method   object   get()          get($floatingIpAddressId)    Gets floating Ip details.
  * @method   object   create()       create($pool = null)         Allocates a new floating IP address to a tenant or account.
  * @method   bool     delete()       delete($floatingIpAddressId) Deallocates the floating IP address associated with floating_IP_address_ID.

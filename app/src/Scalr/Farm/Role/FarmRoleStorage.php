@@ -95,7 +95,7 @@ class FarmRoleStorage
         //TODO: Handle zombies
     }
 
-    public function getVolumesConfigs($serverIndex)
+    public function getVolumesConfigs($serverIndex, $isHostInit = true)
     {
         $volumes = array();
 
@@ -106,7 +106,7 @@ class FarmRoleStorage
             $volume = null;
             $dbVolume = FarmRoleStorageDevice::getByConfigIdAndIndex($config->id, $serverIndex);
             if ($dbVolume) {
-                 if ($config->reUse == 0) {
+                 if ($config->reUse == 0 && $isHostInit) {
                      $dbVolume->status = FarmRoleStorageDevice::STATUS_ZOMBY;
                      $dbVolume->save();
                  } else {
@@ -161,12 +161,12 @@ class FarmRoleStorage
                         break;
                     case FarmRoleStorageConfig::TYPE_EBS:
                         $volumeConfigTemplate->size = $config->settings[FarmRoleStorageConfig::SETTING_EBS_SIZE];
+                        $volumeConfigTemplate->encrypted = (!empty($config->settings[FarmRoleStorageConfig::SETTING_EBS_ENCRYPTED])) ? 1 : 0;
 
                         // IOPS
-                        if ($config->settings[FarmRoleStorageConfig::SETTING_EBS_TYPE] == 'io1') {
-                            $volumeConfigTemplate->volumeType = $config->settings[FarmRoleStorageConfig::SETTING_EBS_TYPE];
+                        $volumeConfigTemplate->volumeType = $config->settings[FarmRoleStorageConfig::SETTING_EBS_TYPE];
+                        if ($volumeConfigTemplate->volumeType == 'io1')
                             $volumeConfigTemplate->iops = $config->settings[FarmRoleStorageConfig::SETTING_EBS_IOPS];
-                        }
 
                         // SNAPSHOT
                         if ($config->settings[FarmRoleStorageConfig::SETTING_EBS_SNAPSHOT] != '') {
@@ -188,13 +188,14 @@ class FarmRoleStorage
 
                             if ($config->type == FarmRoleStorageConfig::TYPE_RAID_EBS) {
                                 $disk->size = $config->settings[FarmRoleStorageConfig::SETTING_EBS_SIZE];
+                                $disk->encrypted = (!empty($config->settings[FarmRoleStorageConfig::SETTING_EBS_ENCRYPTED])) ? 1 : 0;
                                 $disk->type = FarmRoleStorageConfig::TYPE_EBS;
 
                                 // IOPS
-                                if ($config->settings[FarmRoleStorageConfig::SETTING_EBS_TYPE] == 'io1') {
-                                    $disk->volumeType = $config->settings[FarmRoleStorageConfig::SETTING_EBS_TYPE];
+                                $disk->volumeType = $config->settings[FarmRoleStorageConfig::SETTING_EBS_TYPE];
+                                if ($disk->volumeType == 'io1')
                                     $disk->iops = $config->settings[FarmRoleStorageConfig::SETTING_EBS_IOPS];
-                                }
+
                             } elseif ($config->type == FarmRoleStorageConfig::TYPE_RAID_CSVOL) {
                                 $disk->diskOfferingId = $config->settings[FarmRoleStorageConfig::SETTING_CSVOL_DISK_OFFERING];
                                 $disk->diskOfferingType = $config->settings[FarmRoleStorageConfig::SETTING_CSVOL_DISK_OFFERING_TYPE];

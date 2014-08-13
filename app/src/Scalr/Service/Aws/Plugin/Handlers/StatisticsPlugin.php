@@ -4,7 +4,6 @@ namespace Scalr\Service\Aws\Plugin\Handlers;
 
 use Scalr\Service\Aws\DataType\ErrorData;
 use Scalr\Service\Aws\Event\ErrorResponseEvent;
-use Scalr\Service\Aws\Event\SendRequestEvent;
 use Scalr\Service\Aws\Event\EventInterface;
 use Scalr\Service\Aws\Event\EventType;
 use Scalr\Service\Aws\Plugin\AbstractPlugin;
@@ -34,7 +33,7 @@ class StatisticsPlugin extends AbstractPlugin implements PluginInterface
      */
     const EVENT_ID_ERROR_REQUEST_LIMIT_EXCEEDED = 2;
 
-	/**
+    /**
      * {@inheritdoc}
      * @see Scalr\Service\Aws\Plugin.PluginInterface::getSubscribedEvents()
      */
@@ -43,7 +42,7 @@ class StatisticsPlugin extends AbstractPlugin implements PluginInterface
         return array(EventType::EVENT_ERROR_RESPONSE, EventType::EVENT_SEND_REQUEST);
     }
 
-	/**
+    /**
      * {@inheritdoc}
      * @see Scalr\Service\Aws\Plugin.PluginInterface::handle()
      */
@@ -148,12 +147,12 @@ class StatisticsPlugin extends AbstractPlugin implements PluginInterface
 
             $db->Execute("
                 CREATE TABLE IF NOT EXISTS `" . self::DB_TABLE_NAME . "` (
-                	`envid` INT NOT NULL,
-                	`stated` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    `envid` INT NOT NULL,
+                    `stated` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
                     `apicall` VARCHAR(64) DEFAULT NULL,
                     `pid` INT DEFAULT NULL,
-                	`event` TINYINT DEFAULT NULL,
-                	INDEX `idx_find` USING BTREE (`envid`, `event`, `stated`),
+                    `event` TINYINT DEFAULT NULL,
+                    INDEX `idx_find` USING BTREE (`envid`, `event`, `stated`),
                     INDEX `idx_stated` USING BTREE (`stated`),
                     INDEX `idx_event` USING HASH (`event`)
                 ) ENGINE = MEMORY PARTITION BY RANGE(UNIX_TIMESTAMP(stated)) (" . rtrim($patritionSet, ',') . ")

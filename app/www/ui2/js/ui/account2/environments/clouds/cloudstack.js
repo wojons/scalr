@@ -3,10 +3,10 @@ Scalr.regPage('Scalr.ui.account2.environments.clouds.cloudstack', function (load
         cloudInfo = params['_info'] || {};
 
 	var isEnabledProp = loadParams['platform'] + '.is_enabled';
-	
-	
+
 	var form = Ext.create('Ext.form.Panel', {
         bodyCls: 'x-container-fieldset',
+        autoScroll: true,
 		fieldDefaults: {
 			anchor: '100%',
 			labelWidth: 120
@@ -18,6 +18,11 @@ Scalr.regPage('Scalr.ui.account2.environments.clouds.cloudstack', function (load
 			value: 'on'
 		}, {
 			xtype: 'textfield',
+			fieldLabel: 'API URL',
+			name: 'api_url',
+			value: params['api_url']
+		}, {
+			xtype: 'textfield',
 			fieldLabel: 'API key',
 			name: 'api_key',
 			value: params['api_key']
@@ -26,11 +31,6 @@ Scalr.regPage('Scalr.ui.account2.environments.clouds.cloudstack', function (load
 			fieldLabel: 'Secret key',
 			name: 'secret_key',
 			value: params['secret_key']
-		}, {
-			xtype: 'textfield',
-			fieldLabel: 'API URL',
-			name: 'api_url',
-			value: params['api_url']
 		},{
             xtype: 'fieldset',
             hidden: Ext.Object.getSize(cloudInfo) === 0,
@@ -49,11 +49,11 @@ Scalr.regPage('Scalr.ui.account2.environments.clouds.cloudstack', function (load
             },{
                 xtype: 'displayfield',
                 fieldLabel: 'Security groups',
-                value: '<img width="16" height="16" src="/ui2/images/icons/' + (cloudInfo['securitygroupsenabled'] ? 'true.png' : 'delete_icon_16x16.png') + '" />'
+                value: '<img src="' + Ext.BLANK_IMAGE_URL + '" class="x-icon-' + (cloudInfo['securitygroupsenabled'] ? 'ok' : 'fail') + '" />'
             },{
                 xtype: 'displayfield',
                 fieldLabel: 'Load balancer',
-                value: '<img width="16" height="16" src="/ui2/images/icons/' + (cloudInfo['supportELB'] ? 'true.png' : 'delete_icon_16x16.png') + '" />'
+                value: '<img src="' + Ext.BLANK_IMAGE_URL + '" class="x-icon-' + (cloudInfo['supportELB'] ? 'ok' : 'fail') + '" />'
             }]
         }]
 	});

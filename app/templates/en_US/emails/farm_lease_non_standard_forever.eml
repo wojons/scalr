@@ -1,6 +1,8 @@
-[subject]Farm's leasing was disabled[/subject]
+[subject][Scalr] Lease management disabled for Farm: {{farm_name}}[/subject]
 
-Leasing for farm "{{farm_name}}" was disabled.
+Your request to disable lease management for the "{{farm_name}}" Farm was approved by {{user_name}}.
+
+{{user_name}} left the following comment: "{{comment}}".
 
 Regards,
 The Scalr Team

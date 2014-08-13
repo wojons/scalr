@@ -60,6 +60,7 @@ class ConnectionPool
     private static function isConnectionAlive($conn)
     {
         $alive = true;
+
         if (!empty($conn->_connectionID) && method_exists($conn->_connectionID, 'ping')) {
             $alive = (bool) @$conn->_connectionID->ping();
         } else {
@@ -71,6 +72,7 @@ class ConnectionPool
                 }
             }
         }
+
         return $alive;
     }
 
@@ -81,14 +83,13 @@ class ConnectionPool
      */
     private function getConnection()
     {
-        /* @var $conn \ADODB_mysqli */
-        $params = array(
-            'dsn' => $this->dsn,
-        );
+        $params = ['dsn' => $this->dsn];
+
         if ($this->multithreading && function_exists("posix_getpid")) {
             $params['pid'] = posix_getpid();
-            if (isset($this->currentpid)) {
 
+            if (isset($this->currentpid)) {
+                /* @var $conn \ADODB_mysqli */
                 $conn = $this->pool[$this->currentpid];
 
                 $alive = self::isConnectionAlive($conn);
@@ -103,7 +104,9 @@ class ConnectionPool
                         }
                     } catch (\Exception $e) {
                     }
+
                     unset($this->pool[$this->currentpid]);
+
                     $this->currentpid = null;
                 }
 
@@ -169,7 +172,12 @@ class ConnectionPool
 
     public function __call($name, $arguments)
     {
-        return call_user_func_array(array($this->getConnection(), $name), $arguments);
+        if ($name == 'Affected_Rows') {
+            $conn = $this->pool[$this->currentpid];
+        } else {
+            $conn = $this->getConnection();
+        }
+        return call_user_func_array(array($conn, $name), $arguments);
     }
 
     public static function __callStatic($name, $arguments)

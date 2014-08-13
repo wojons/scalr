@@ -19,6 +19,10 @@ Scalr.regPage('Scalr.ui.tools.aws.vpc.create', function (loadParams, moduleParam
             fieldLabel: 'VPC region'
         },{
             xtype: 'textfield',
+            name: 'name',
+            fieldLabel: 'Name'
+        },{
+            xtype: 'textfield',
             name: 'cidr_block',
             fieldLabel: 'Cidr block'
         },{
@@ -26,7 +30,7 @@ Scalr.regPage('Scalr.ui.tools.aws.vpc.create', function (loadParams, moduleParam
             name: 'tenancy',
             fieldLabel: 'Instance tenancy',
             defaults: {
-                width: 90
+                width: 110
             },
             items: [{
                 text: 'Default',

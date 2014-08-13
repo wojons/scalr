@@ -86,7 +86,7 @@ Scalr.data.add([{
 	name: 'account.environments',
 	dataUrl: '/account/xGetData',
 	dataLoaded: false,
-	fields: [{name: 'id', type: 'string'}, 'name', 'dtAdded', 'platforms', 'status', 'teams', 'teamIds'],
+	fields: [{name: 'id', type: 'string'}, 'name', 'dtAdded', 'platforms', 'status', 'ccId', 'teams', 'teamIds'],
 	listeners: {
 		update: function(){
 			Scalr.data.fireRefresh('account.teams');

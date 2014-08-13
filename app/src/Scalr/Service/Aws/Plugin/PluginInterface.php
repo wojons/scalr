@@ -4,7 +4,6 @@ namespace Scalr\Service\Aws\Plugin;
 
 use Scalr\Service\Aws\Exception\PluginException;
 use Scalr\Service\Aws\Event\EventInterface;
-use Scalr\Service\Aws\Event\EventType;
 use Scalr\DependencyInjection\Container;
 
 /**

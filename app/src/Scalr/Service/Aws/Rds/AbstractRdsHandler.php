@@ -10,7 +10,7 @@ use Scalr\Service\Aws\AbstractHandler;
  * @author    Vitaliy Demidov   <vitaliy@scalr.com>
  * @since     07.03.2013
  *
- * @property  Aws\Rds   $rds      An Amazon Rds instance
+ * @property  \Scalr\Service\Aws\Rds   $rds      An Amazon Rds instance
  * @method    void                __constructor()  __constructor(\Scalr\Service\Aws\Rds $rds)
  */
 abstract class AbstractRdsHandler extends AbstractHandler
@@ -28,10 +28,10 @@ abstract class AbstractRdsHandler extends AbstractHandler
     /**
      * Sets Amazon Rds service interface instance
      *
-     * @param   Aws\Rds $rds Rds service instance
+     * @param   \Scalr\Service\Aws\Rds $rds Rds service instance
      * @return  AbstractRdsHandler
      */
-    public function setRds(Aws\Rds $rds = null)
+    public function setRds(\Scalr\Service\Aws\Rds $rds = null)
     {
         $this->_services[Aws::SERVICE_INTERFACE_RDS] = $rds;
         return $this;
@@ -40,7 +40,7 @@ abstract class AbstractRdsHandler extends AbstractHandler
     /**
      * Gets Rds service interface instance
      *
-     * @return  Aws\Rds Returns Rds service interface instance
+     * @return  \Scalr\Service\Aws\Rds Returns Rds service interface instance
      */
     public function getRds()
     {

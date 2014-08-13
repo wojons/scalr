@@ -128,7 +128,7 @@ class UsersTest extends WebTestCase
         }
     }
 
-	/**
+    /**
      * @test
      */
     public function testXListUsersAction()

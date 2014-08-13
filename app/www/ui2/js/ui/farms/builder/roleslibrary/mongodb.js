@@ -16,14 +16,6 @@ Scalr.regPage('Scalr.ui.farms.builder.addrole.mongodb', function () {
             return Ext.Array.contains(record.get('behaviors'), 'mongodb');
         },
 
-        onSelectImage: function(record) {
-            if (this.isVisibleForRole(record)) {
-                this.show();
-            } else {
-                this.hide();
-            }
-        },
-
         isValid: function() {
             var res = true, field;
             if (!this.collapsed) {

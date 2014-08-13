@@ -11,7 +11,7 @@ class HostUpEvent extends Event
 
     public $ReplUserPass;
 
-    public function __construct(DBServer $DBServer, $ReplUserPass)
+    public function __construct(DBServer $DBServer, $ReplUserPass = '')
     {
         parent::__construct();
         $this->DBServer = $DBServer;

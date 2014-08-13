@@ -6,7 +6,7 @@ Scalr.regPage('Scalr.ui.dashboard.view', function (loadParams, moduleParams) {
 			title: 'Widgets list'
 		});
 		var widgets = [
-			{name: 'dashboard.announcement', title: 'Announcement', desc: 'Displays last 10 news from The Official Scalr blog'},
+			{name: 'dashboard.announcement', title: 'From the Scalr blog', desc: 'Displays last 10 news from The Official Scalr blog'},
 			{name: 'dashboard.lasterrors', title: 'Last errors', desc: 'Displays last 10 errors from system logs'},
 			{name: 'dashboard.usagelaststat', title: 'Usage statistic', desc: 'Displays total spent money for this and last months'},
 			{name: 'dashboard.status', title: 'AWS health status', desc: 'Display most up-to-the-minute information on service availability of Amazon Web Services'}
@@ -130,19 +130,21 @@ Scalr.regPage('Scalr.ui.dashboard.view', function (loadParams, moduleParams) {
 					    if (configuration[i][j]['name'] == 'dashboard.billing' && !moduleParams.flags['billingEnabled'])
                             continue;
 					
-						var widget = this.items.getAt(i).add(
-							panel.newWidget(
-								configuration[i][j]['name'],
-								configuration[i][j]['params']
-							)
-						);
-						if (widget.widgetType == 'local') {
-                            if (configuration[i][j]['widgetContent'])
-                                widget.widgetUpdate(configuration[i][j]['widgetContent']);
-                            else
-                                widget.widgetError(configuration[i][j]['widgetError'] || 'Some error has occurred');
-                        }
-
+						try {
+                            var widget = this.items.getAt(i).add(
+                                panel.newWidget(
+                                    configuration[i][j]['name'],
+                                    configuration[i][j]['params'],
+                                    moduleParams['params']
+                                )
+                            );
+                            if (widget.widgetType == 'local') {
+                                if (configuration[i][j]['widgetContent'])
+                                    widget.widgetUpdate(configuration[i][j]['widgetContent']);
+                                else
+                                    widget.widgetError(configuration[i][j]['widgetError'] || 'Some error has occurred');
+                            }
+                        } catch (e) {}
 					}
 				}
 			}

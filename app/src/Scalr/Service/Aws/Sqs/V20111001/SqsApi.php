@@ -9,9 +9,6 @@ use Scalr\Service\Aws\Sqs\DataType\QueueAttributeList;
 use Scalr\Service\Aws\Client\ClientException;
 use Scalr\Service\Aws\SqsException;
 use Scalr\Service\Aws\Sqs;
-use Scalr\Service\Aws\EntityManager;
-use Scalr\Service\Aws\DataType\ErrorData;
-use Scalr\Service\Aws\Client\QueryClientResponse;
 use Scalr\Service\Aws\DataType\ListDataType;
 use Scalr\Service\Aws\Client\ClientInterface;
 

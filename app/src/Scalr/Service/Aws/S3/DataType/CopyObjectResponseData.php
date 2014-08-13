@@ -1,7 +1,6 @@
 <?php
 namespace Scalr\Service\Aws\S3\DataType;
 
-use Scalr\Service\Aws\S3Exception;
 use Scalr\Service\Aws\S3\AbstractS3DataType;
 use \DateTime;
 

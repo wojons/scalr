@@ -12,6 +12,7 @@ Ext.define('Scalr.ui.PagingToolbar', {
 	beforeItems: [],
 	afterItems: [],
     calculatePageSize: true,
+    enableParamsCapture: true,
 
 	checkRefreshHandler: function (item, enabled) {
 		if (enabled) {
@@ -208,15 +209,6 @@ Ext.define('Scalr.ui.PagingToolbar', {
 
 		this.on('added', function (comp, container) {
 			this.gridContainer = container;
-
-			this.gridContainer.scalrReconfigure = function (loadParams) {
-				if (this.scalrReconfigureParams)
-					Ext.applyIf(loadParams, this.scalrReconfigureParams);
-				Ext.apply(this.store.proxy.extraParams, loadParams);
-                if (this.scalrReconfigureParams) {
-                    this.fireEvent('scalrreconfigure', this.store.proxy.extraParams);
-                }
-			};
 
             // TODO: on back to page event, refresh grid WITH gridHightlightNew
 			this.refreshHandler = Ext.Function.bind(function () {
@@ -507,35 +499,46 @@ Ext.define('Scalr.ui.GridOptionsColumn2', {
 	align: 'center',
 	tdCls: 'x-grid-row-options-cell',
 
-	constructor: function () {
-		this.callParent(arguments);
+    constructor: function () {
+        this.callParent(arguments);
 
-		this.sortable = false;
+        this.sortable = false;
+        if (Ext.isArray(this.menu)) {
+            this.menu = {
+                xtype: 'actionsmenu',
+                items: this.menu
+            };
+        }
         this.menu = Ext.widget(this.menu);
         this.menu.doAutoRender();
         this.menu.on('hide', function() {
             if (this.currentBtnEl)
                 this.currentBtnEl.removeCls('x-grid-row-options-pressed');
-
-            this.currentBtnEl = null;
         }, this);
-	},
+    },
 
-	initComponent: function() {
-		this.callParent(arguments);
+    initComponent: function() {
+        this.callParent(arguments);
 
-		this.on('boxready', function () {
-			this.up('panel').on('itemclick', function (view, record, item, index, e) {
-				var btnEl = Ext.get(e.getTarget('div.x-grid-row-options'));
-				if (! btnEl)
-					return;
-                btnEl.addCls('x-grid-row-options-pressed');
-                this.currentBtnEl = btnEl;
-                this.menu.setData(record.getData());
-				this.menu.showBy(btnEl, 'tr-br');
-			}, this);
-		});
-	},
+        this.on('boxready', function () {
+            this.up('panel').on('itemclick', function (view, record, item, index, e) {
+                var btnEl = Ext.get(e.getTarget('div.x-grid-row-options'));
+                if (! btnEl) {
+                    return;
+                }
+                if (this.currentBtnEl !== btnEl) {
+                    btnEl.addCls('x-grid-row-options-pressed');
+                    this.currentBtnEl = btnEl;
+                    this.menu.setData(record.getData());
+                    this.menu.showBy(btnEl, 'tr-br');
+                    return;
+                }
+                this.menu.hide();
+                this.currentBtnEl = null;
+
+            }, this);
+        });
+    },
 
 	renderer: function(value, meta, record, rowIndex, colIndex) {
 		if (this.headerCt.getHeaderAtIndex(colIndex).getVisibility(record))
@@ -696,7 +699,23 @@ Ext.define('Scalr.ui.RowPointer', {
 	init: function(client) {
 		this.client = client;
         this.baseCls += ' ' + this.baseCls + '-' + this.align;
+        this.initListeners();
 	},
+
+    initListeners: function() {
+        var me = this;
+		me.throttledUpdatePointerPosition = Ext.Function.createThrottled(me.updatePointerPosition, me.throttle, me);
+
+        this.client.on('afterrender', function() {
+            this.on('afterlayout', me.throttledUpdatePointerPosition, me);
+            this.view.el.on('scroll', me.throttledUpdatePointerPosition, me);
+
+            this.on('beforedestroy',  function() {
+                this.un('afterlayout', me.throttledUpdatePointerPosition, me);
+                this.view.el.un('scroll', me.throttledUpdatePointerPosition, me);
+            });
+        });
+    },
 
     getPointerEl: function() {
         if (this.pointerEl === undefined) {
@@ -709,7 +728,7 @@ Ext.define('Scalr.ui.RowPointer', {
 
     pointTo: function(record) {
 		var offset = this.hiddenOffset;
-		if (record) {
+		if (this.client.view && record) {
             var node = this.client.view.getNode(record);
             if (node) {
                 offset = Ext.get(node).getOffsetsTo(this.client.el)[1] + this.addOffset;
@@ -717,7 +736,13 @@ Ext.define('Scalr.ui.RowPointer', {
             }
 		}
 		this.getPointerEl().setStyle('top', offset + 'px');
-    }
+    },
+
+	updatePointerPosition: function() {
+        if (Ext.isFunction(this.getPointerRecord)) {
+            this.pointTo(this.getPointerRecord());
+        }
+	}
 
 });
 
@@ -732,28 +757,26 @@ Ext.define('Scalr.ui.FocusedRowPointer', {
 	
 	throttle: 100,
     
-	init: function(client) {
-		var me = this;
-        me.callParent(arguments);
-
+    initListeners: function() {
+        var me = this;
 		me.throttledUpdatePointerPosition = Ext.Function.createThrottled(me.updatePointerPosition, me.throttle, me);
 
-        client.on('afterrender', function() {
+        this.client.on('afterrender', function() {
             this.on('afterlayout', me.throttledUpdatePointerPosition, me);
             this.getSelectionModel().on('focuschange', me.throttledUpdatePointerPosition, me);
             this.view.el.on('scroll', me.throttledUpdatePointerPosition, me);
 
-            client.on('beforedestroy',  function() {
+            this.on('beforedestroy',  function() {
                 this.un('afterlayout', me.throttledUpdatePointerPosition, me);
                 this.getSelectionModel().un('focuschange', me.throttledUpdatePointerPosition, me);
                 this.view.el.un('scroll', me.throttledUpdatePointerPosition, me);
             });
         });
-	},
+    },
 
-	updatePointerPosition: function() {
-		this.pointTo(this.client.getSelectionModel().lastFocused);
-	},
+    getPointerRecord: function() {
+        return this.client.getSelectionModel().lastFocused;
+    }
 
 });
 
@@ -770,28 +793,31 @@ Ext.define('Ext.grid.feature.AddButton', {
 
         me.callParent(arguments);
         grid.view.addCls(me.viewCls);
-        
-        grid.view.on({
-            viewready: function() {
-                this.on('resize', me.updateButtonPosition, me);
-                this.on('refresh', me.updateButtonPosition, me);
-                this.on('itemadd', me.updateButtonPosition, me);
-                this.on('itemremove', me.updateButtonPosition, me);
-                this.el.on('scroll', me.updateButtonPosition, me);
+
+        me.updateButtonPositionBuffered = Ext.Function.createBuffered(me.updateButtonPosition, 0, me);
+        grid.view.on('viewready', function() {
+                me.updateButtonPosition();
+                this.on('resize', me.updateButtonPositionBuffered, me);
+                this.on('refresh', me.updateButtonPositionBuffered, me);
+                this.on('itemadd', me.updateButtonPositionBuffered, me);
+                this.on('itemremove', me.updateButtonPositionBuffered, me);
+                this.el.on('scroll', me.updateButtonPositionBuffered, me);
                 this.el.on('click', me.onViewClick, me);
             },
-            single: true
-        },{
-            begoredestroy: function() {
-                this.un('resize', me.updateButtonPosition, me);
-                this.un('refresh', me.updateButtonPosition, me);
-                this.un('itemadd', me.updateButtonPosition, me);
-                this.un('itemremove', me.updateButtonPosition, me);
-                this.el.un('scroll', me.updateButtonPosition, me);
+            grid.view,
+            {single: true}
+        );
+        grid.view.on('beforedestroy', function() {
+                this.un('resize', me.updateButtonPositionBuffered, me);
+                this.un('refresh', me.updateButtonPositionBuffered, me);
+                this.un('itemadd', me.updateButtonPositionBuffered, me);
+                this.un('itemremove', me.updateButtonPositionBuffered, me);
+                this.el.un('scroll', me.updateButtonPositionBuffered, me);
                 this.el.un('click', me.onViewClick, me);
             },
-            single: true
-        });
+            grid.view,
+            {single: true}
+        );
 
         me.view.addFooterFn(me.renderTFoot);
     },
@@ -801,7 +827,7 @@ Ext.define('Ext.grid.feature.AddButton', {
             me = view.findFeature('addbutton'),
             colspan = view.headerCt.getVisibleGridColumns().length;
 
-            out.push('<tfoot class="x-grid-add-button-wrap" id="' + view.id + '-add-button"><tr><td colspan="' + colspan + '"><div class="' + me.cls + (me.disabled ? ' ' + me.disabledCls : '') + '"><img src="' + Ext.BLANK_IMAGE_URL + '" class="x-icon-grid-add-item"/>&nbsp;&nbsp;' + me.text + '</div></td></tr></tfoot>');
+            out.push('<tfoot class="x-grid-add-button-wrap' + (me.disabled ? ' ' + me.disabledCls : '') + '" id="' + view.id + '-add-button"><tr><td colspan="' + colspan + '"><div class="' + me.cls + '">' + me.text + '</div></td></tr></tfoot>');//<img src="' + Ext.BLANK_IMAGE_URL + '" class="x-icon-grid-add-item"/>&nbsp;&nbsp;
     },
 
     onViewClick: function(e, t) {
@@ -811,17 +837,43 @@ Ext.define('Ext.grid.feature.AddButton', {
         }
     },
 
-    setDisabled: function(disabled) {
+    setDisabled: function(disabled, tooltip) {
         var el = this.view.el.getById(this.view.id + '-add-button');
         if (el) {
             el[disabled ? 'addCls' : 'removeCls'](this.disabledCls);
+            el.set({
+                'data-qtip': disabled && tooltip ? tooltip : ''
+            })
         }
         this.disabled = !!disabled;
     },
 
     updateButtonPosition: function() {
+        if (this.view.isDestroyed) return;
         var btn = this.view.el.getById(this.view.id + '-add-button');
         btn.setStyle('top', (this.view.el.getScroll().top + this.view.el.getHeight() - btn.getHeight()) + 'px');
     }
 
+});
+
+Ext.define('Scalr.ui.GridStatusColumn', {
+	extend: 'Ext.grid.column.Column',
+	alias: 'widget.statuscolumn',
+
+	text: '&nbsp;',
+	hideable: false,
+	width: 150,
+    minWidth: 150,
+	//fixed: true,
+	align: 'center',
+	tdCls: 'x-grid-row-colored-status-cell',
+
+	renderer: function(value, meta, record, rowIndex, colIndex, store, grid) {
+        var column = grid.panel.columns[colIndex];
+        return Scalr.ui.ColoredStatus.getHtml({
+            type: column['statustype'],
+            status: record.data.status,
+            data: record.data
+        }, column.qtipConfig);
+	}
 });

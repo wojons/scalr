@@ -1,19 +1,17 @@
 Scalr.regPage('Scalr.ui.servers.view', function (loadParams, moduleParams) {
 	var store = Ext.create('store.store', {
 		fields: [
-			'cloud_location', 'flavor', 'cloud_server_id', 'excluded_from_dns', 'server_id', 'remote_ip', 'role_alias', 
+			'cloud_location', 'flavor', 'cloud_server_id', 'excluded_from_dns', 'server_id', 'remote_ip', 'role_alias',
 			'local_ip', 'status', 'platform', 'farm_name', 'role_name', 'index', 'role_id', 'farm_id', 'farm_roleid',
 			'uptime', 'ismaster', 'os_family', 'has_eip', 'is_szr', 'cluster_position', 'agent_version', 'agent_update_needed', 'agent_update_manual',
-			'initDetailsSupported', 'isInitFailed', 'la_server', 'launch_error', 'alerts', 'cluster_role', 'is_locked'
+			'initDetailsSupported', 'isInitFailed', 'la_server', 'launch_error', 'alerts', 'cluster_role', 'is_locked', 'hostname'
 		],
 		proxy: {
 			type: 'scalr.paging',
-			extraParams: loadParams,
 			url: '/servers/xListServers/'
 		},
 		remoteSort: true
 	});
-	store.proxy.extraParams.hideTerminated = true;
 
 	var laStore = Ext.create('store.store', {
 		fields: [ 'server_id', 'la', 'time' ],
@@ -159,7 +157,6 @@ Scalr.regPage('Scalr.ui.servers.view', function (loadParams, moduleParams) {
 			'reload': false,
 			'maximize': 'all'
 		},
-		scalrReconfigureParams: { farmId: '', roleId: '', farmRoleId: '', serverId: '' },
 		store: store,
 		stateId: 'grid-servers-view',
 		stateful: true,
@@ -217,7 +214,7 @@ Scalr.regPage('Scalr.ui.servers.view', function (loadParams, moduleParams) {
 		},
 
 		columns: [
-			{ header: "Cloud", width: 80, dataIndex: 'platform', sortable: true, align: 'center', xtype: 'templatecolumn', tdCls: 'scalr-ui-servers-view-column-platform', tpl:
+			{ header: "Cloud", width: 80, dataIndex: 'platform', sortable: true, align: 'left', xtype: 'templatecolumn', tdCls: 'scalr-ui-servers-view-column-platform', tpl:
                 '<img class="x-icon-platform-small x-icon-platform-small-{platform}" title="{platform}" src="' + Ext.BLANK_IMAGE_URL + '"/>'
             },
 			{ header: "Farm & role", flex: 2, dataIndex: 'farm_name', sortable: true, xtype: 'templatecolumn',
@@ -235,7 +232,7 @@ Scalr.regPage('Scalr.ui.servers.view', function (loadParams, moduleParams) {
 			        }]);
 			    }, tpl:
 				'<tpl if="farm_id">' +
-					'<a href="#/farms/{farm_id}/view" title="Farm {farm_name}">{farm_name}</a>' +
+					'<a href="#/farms/view?farmId={farm_id}" title="Farm {farm_name}">{farm_name}</a>' +
 					'<tpl if="role_alias">' +
                         '&nbsp;&rarr;&nbsp;<a href="#/farms/{farm_id}/roles/{farm_roleid}/view" title="Role {role_alias}">{role_alias}</a> ' +
                     '</tpl>' +
@@ -249,48 +246,44 @@ Scalr.regPage('Scalr.ui.servers.view', function (loadParams, moduleParams) {
 				'</tpl>' +
 				'<tpl if="cluster_role"> ({cluster_role})</tpl>' +
 				'<tpl if="cluster_position"> ({cluster_position})</tpl>' +
-				'<tpl if="! farm_id"><img src="/ui2/images/icons/false.png" /></tpl>'
+				'<tpl if="! farm_id"><img src="' + Ext.BLANK_IMAGE_URL + '" class="x-icon-minus" /></tpl>'
 			},
 			{ header: "Server ID", flex: 1, dataIndex: 'server_id', sortable: true, xtype: 'templatecolumn', tpl: new Ext.XTemplate(
-				'<tpl if="!is_szr && status == &quot;Running&quot;"><div><a href="http://blog.scalr.net/announcements/ami-scripts/" target="_blank"><img src="/ui2/images/icons/error_icon_16x16.png" width="12" title="This server using old (deprecated) scalr agent. Please click here for more informating about how to upgrade it."></a>&nbsp;</tpl>' +
-				'<a href="#/servers/{server_id}/dashboard">{[this.serverId(values.server_id)]}</a>' +
-				'<tpl if="!is_szr && status == &quot;Running&quot;"></div></tpl>', {
+				'<tpl if="!is_szr && status == \'Running\'">' +
+                    '<a href="http://blog.scalr.com/post/53324376570/ami-scripts" target="_blank"><img src="' + Ext.BLANK_IMAGE_URL + '" class="x-icon-error"  title="This server using old (deprecated) scalr agent. Please click here for more informating about how to upgrade it." /></a>&nbsp;' +
+                '</tpl>' +
+                '<tpl if="alerts &gt; 0">' +
+                    '<a href="#/alerts?serverId={server_id}"><img src="' + Ext.BLANK_IMAGE_URL + '" class="x-icon-error" title="{alerts} alert(s). Click for more information." /></a>&nbsp;' +
+                '</tpl>' +
+				'<a href="#/servers/{server_id}/dashboard">{[this.serverId(values.server_id)]}</a>'
+                ,{
 					serverId: function(id) {
 						var values = id.split('-');
 						return values[0] + '-...-' + values[values.length - 1];
 					}
 				})
 			},
+            { header: "Hostname", flex: 1, dataIndex: 'hostname', sortable: false, hidden: true, xtype: 'templatecolumn',
+				tpl: '<tpl if="hostname">{hostname}<tpl else><img src="' + Ext.BLANK_IMAGE_URL + '" class="x-icon-minus" /></tpl>'
+			},
 			{ header: "Cloud Server ID", width: 100, dataIndex: 'cloud_server_id', sortable: false, hidden: true, xtype:'templatecolumn',  tpl:
-				'<tpl if="cloud_server_id">{cloud_server_id}</tpl>' +
-				'<tpl if="!cloud_server_id"><img src="/ui2/images/icons/false.png" /></tpl>'
+				'<tpl if="cloud_server_id">{cloud_server_id}' +
+				'<tpl else><img src="' + Ext.BLANK_IMAGE_URL + '" class="x-icon-minus" /></tpl>'
 			},
 			{ header: "Cloud Location", width: 100, dataIndex: 'cloud_location', sortable: false, hidden: true },
-			{ header: "Status", width: 150, dataIndex: 'status', sortable: true, xtype: 'templatecolumn', tpl:
-				'<tpl if="is_locked == 1"><img src="/ui2/images/ui/servers/lock.png" style="vertical-align:middle; margin-top:-2px; margin-right: 4px; cursor: pointer;" class="lock" title="disableAPITermination flag is set to ON. Click to remove."></tpl>' +
-                '<tpl if="alerts &gt; 0"><a href="#/alerts?serverId={server_id}"><img src="/ui2/images/icons/error_icon_16x16.png" style="vertical-align: top" width="13" title="{alerts} alert(s). Click for more information."></a> </tpl>' +
-				'<tpl if="initDetailsSupported">' +
-					'<tpl if="isInitFailed"><span style="color: red">Failed</span> (<a href="#/operations/details?serverId={server_id}&operation=Initialization">Why?</a>)</tpl>' +
-					'<tpl if="!isInitFailed">' +
-						'<tpl if="status == &quot;Pending&quot; || status == &quot;Initializing&quot;"><img src="/ui2/images/ui/servers/running.gif" style="vertical-align:middle; margin-top:-2px;" /> <a href="#/operations/details?serverId={server_id}&operation=Initialization">{status}</a></tpl>' +
-						'<tpl if="launch_error == 1">{status} (<a href="#/operations/details?serverId={server_id}&operation=Initialization">Why?</a>)</tpl>' +
-						'<tpl if="status != &quot;Pending&quot; && status != &quot;Initializing&quot; && launch_error != 1"><tpl if="status == &quot;Importing&quot;"><a href="#/roles/import?serverId={server_id}">{status}</a><tpl else>{status}</tpl></tpl>' +
-					'</tpl>' +
-				'</tpl>' +
-				'<tpl if="!initDetailsSupported"><tpl if="status == &quot;Pending&quot; || status == &quot;Initializing&quot;"><img src="/ui2/images/ui/servers/running.gif" style="vertical-align:middle; margin-top:-2px;" /> </tpl><tpl if="status == &quot;Importing&quot;"><a href="#/roles/import?serverId={server_id}">{status}</a><tpl else>{status}</tpl></tpl>'
-			},
+			{ header: "Status", minWidth: 160, width: 160, dataIndex: 'status', sortable: true, xtype: 'statuscolumn', statustype: 'server'},
 			{ header: 'Type', width: 100, dataIndex: 'flavor', sortable: false, hidden: true },
-			{ header: "Remote IP", width: 120, dataIndex: 'remote_ip', sortable: true, xtype: 'templatecolumn', tpl:
+			{ header: "Public IP", width: 120, dataIndex: 'remote_ip', sortable: true, xtype: 'templatecolumn', tpl:
 				'<tpl if="remote_ip">' +
 				'<tpl if="has_eip"><span style="color:green;">{remote_ip} <img title="Elastic IP" src="/ui2/images/icons/elastic_ip.png" /></span></tpl><tpl if="!has_eip">{remote_ip}</tpl>' +
 				'</tpl>'
 			},
-			{ header: "Local IP", width: 120, dataIndex: 'local_ip', sortable: true, xtype: 'templatecolumn', tpl:
+			{ header: "Private IP", width: 120, dataIndex: 'local_ip', sortable: true, xtype: 'templatecolumn', tpl:
 				'<tpl if="local_ip">{local_ip}</tpl>'
 			},
 			{ header: "Uptime", width: 200, dataIndex: 'uptime', sortable: false },
 			{ header: "DNS", width: 38, dataIndex: 'excluded_from_dns', sortable: false, xtype: 'templatecolumn', align: 'center', tpl:
-				'<tpl if="excluded_from_dns"><img src="/ui2/images/icons/false.png" /></tpl><tpl if="!excluded_from_dns"><img src="/ui2/images/icons/true.png" /></tpl>'
+				'<img src="' + Ext.BLANK_IMAGE_URL + '" class="x-icon-<tpl if="excluded_from_dns">minus<tpl else>ok</tpl>"/>'
 			},
 			{ header: "LA", width: 50, dataIndex: 'la_server', itemId: 'la', sortable: false, hidden: true, align: 'center',
 				listeners: {
@@ -307,29 +300,33 @@ Scalr.regPage('Scalr.ui.servers.view', function (loadParams, moduleParams) {
 			},
 			{ header: "Agent", width: 80, dataIndex: 'agent_version', sortable: false, xtype: 'templatecolumn',  align: 'center', tpl:
 				'<tpl if="(status == &quot;Running&quot; || status == &quot;Initializing&quot;)">' +
-				'<tpl if="agent_update_needed"><a class="updateAgent" href="/servers/{server_id}/xUpdateAgent"><img src="/ui2/images/icons/warning_16x16.png" width="12" title="Your scalr agent version is too old. Please click here to update it to the latest version."></a> {agent_version}</tpl>'+
-				'<tpl if="agent_update_manual"><a href="http://blog.scalr.net/announcements/ami-scripts/" target="_blank"><img src="/ui2/images/icons/error_icon_16x16.png" width="12" title="This server using old (deprecated) scalr agent. Please click here for more informating about how to upgrade it."></a> {agent_version}</tpl>'+
-				'<tpl if="!agent_update_needed && !agent_update_manual">{agent_version}</tpl>' +
-				'</tpl><tpl if="!(status == &quot;Running&quot; || status == &quot;Initializing&quot;)"><img src="/ui2/images/icons/false.png"></tpl>'
+                    '<tpl if="agent_update_needed">' +
+                        '<a class="updateAgent" href="/servers/{server_id}/xUpdateAgent"><img src="/ui2/images/icons/warning_16x16.png" width="12" title="Your scalr agent version is too old. Please click here to update it to the latest version."></a> {agent_version}' +
+                    '</tpl>'+
+                    '<tpl if="agent_update_manual">' +
+                        '<a href="http://blog.scalr.com/post/53324376570/ami-scripts" target="_blank"><img src="/ui2/images/icons/error_icon_16x16.png" width="12" title="This server using old (deprecated) scalr agent. Please click here for more informating about how to upgrade it."></a> {agent_version}' +
+                     '</tpl>'+
+                    '<tpl if="!agent_update_needed && !agent_update_manual">{agent_version}</tpl>' +
+				'</tpl>' + 
+                '<tpl if="!(status == &quot;Running&quot; || status == &quot;Initializing&quot;)"><img src="' + Ext.BLANK_IMAGE_URL + '" class="x-icon-minus" /></tpl>'
 			},
-			{ header: "Actions", width: 86, minWidth: 86, fixed: true, dataIndex: 'id', sortable: false, hideable: false, align: 'center', xtype: 'templatecolumn', tpl: new Ext.XTemplate(
-				'<tpl if="(status == &quot;Running&quot; || status == &quot;Initializing&quot;) && index != &quot;0&quot;">' +
-                    '<div style="position: relative; height: 16px;">' +
-					( moduleParams['mindtermEnabled'] ? '<tpl if="os_family != \'windows\'">' +
-						'<a href="#/servers/{server_id}/sshConsole" style="float:left" class="scalr-ui-servers-view-actions-console"></a>' +
-                    '</tpl>' : '') +
-					'<a href="#/monitoring/view?farmId={farm_id}&role={farm_roleid}&server_index={index}" style="float:left;margin:0 6px" class="scalr-ui-servers-view-actions-statsusage"></a>' +
-					'<a href="#/scripts/execute?serverId={server_id}" style="float:left" class="scalr-ui-servers-view-actions-execute"></a>' +
-                    '</div>' +
-				'</tpl>' +
-				'<tpl if="! ((status == &quot;Running&quot; || status == &quot;Initializing&quot;) && index != &quot;0&quot;)">' +
-					'<img src="/ui2/images/icons/false.png">' +
-				'</tpl>', {
-					getServerId: function (serverId) {
-						return serverId.replace(/-/g, '');
-					}
-				})
-			}, {
+			{ header: "Actions", width: 96, minWidth: 96, fixed: true, dataIndex: 'id', sortable: false, hideable: false, align: 'center', xtype: 'templatecolumn', tpl: new Ext.XTemplate(
+                '<div style="position: relative; height: 16px;">' +
+                    '<tpl if="(status == \'Running\' || status == \'Initializing\') && index != \'0\'">' +
+                        ( moduleParams['mindtermEnabled'] ? '<tpl if="os_family != \'windows\'">' +
+                            '<a title="SSH Launcher" href="#/servers/{server_id}/sshConsole" style="float:left"><img src="' + Ext.BLANK_IMAGE_URL + '" class="x-icon-server-action x-icon-server-action-console" /></a>' +
+                        '</tpl>' : '<img src="' + Ext.BLANK_IMAGE_URL + '" style="width: 16px; float: left">') +
+                        '<a title="Monitoring" href="#/monitoring/view?farmId={farm_id}&farmRoleId={farm_roleid}&index={index}" style="float:left;margin:0 6px"><img src="' + Ext.BLANK_IMAGE_URL + '" class="x-icon-server-action x-icon-server-action-statsusage" /></a>' +
+                        '<a title="Execute script" href="#/scripts/execute?serverId={server_id}" style="float:left"><img src="' + Ext.BLANK_IMAGE_URL + '" class="x-icon-server-action x-icon-server-action-execute" /></a>' +
+                    '</tpl>' +
+                    '<tpl if="is_locked == 1">' +
+                        '<img src="' + Ext.BLANK_IMAGE_URL + '" class="x-icon-server-action x-icon-server-action-lock lock" title="disableAPITermination flag is set to ON. Click to remove." style="cursor:pointer;margin-left:6px" />' +
+                    '</tpl>' +
+                    '<tpl if="is_locked != 1 && !((status == \'Running\' || status == \'Initializing\') && index != \'0\')">' +
+                        '<img src="' + Ext.BLANK_IMAGE_URL + '" class="x-icon-minus"/>' +
+                    '</tpl>' +
+                '</div>')
+            },{
 				xtype: 'optionscolumn2',
                 menu: {
                     xtype: 'servermenu',
@@ -409,7 +406,7 @@ Scalr.regPage('Scalr.ui.servers.view', function (loadParams, moduleParams) {
 					}
 
                     forcefulDisabled = records.length === forcefulDisabledCount ? true : (forcefulDisabledCount>0 ? 'partial' : false);
-                    
+
                     Scalr.cache['Scalr.ui.servers.terminate'](servers, forcefulDisabled, function() {
                         store.load();
                     });
@@ -429,7 +426,12 @@ Scalr.regPage('Scalr.ui.servers.view', function (loadParams, moduleParams) {
 						fieldLabel: 'Cloud server location',
 						labelAlign: 'top',
 						name: 'cloudServerLocation'
-					}]
+					}, {
+                        xtype: 'textfield',
+                        fieldLabel: 'Hostname',
+                        labelAlign: 'top',
+                        name: 'hostname'
+                    }]
 				},
 				store: store
 			}, ' ', {

@@ -2,9 +2,7 @@
 namespace Scalr\Service\Aws\Rds\DataType;
 
 use Scalr\Service\Aws\DataType\ListDataType;
-use Scalr\Service\Aws\RdsException;
 use Scalr\Service\Aws\Rds\AbstractRdsDataType;
-use \DateTime;
 
 /**
  * ModifyDBInstanceRequestData

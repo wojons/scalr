@@ -112,7 +112,7 @@ class Scalr_Util_Network
             return false;
 
         $mask = $bits == 0 ? 0: (~0 << (32 - $bits));
-        
+
         return ($base & $mask) == $base;
     }
 }

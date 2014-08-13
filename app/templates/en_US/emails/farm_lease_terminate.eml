@@ -1,8 +1,10 @@
-[subject]Farm's lease expires[/subject]
+[subject][Scalr] Farm is scheduled for termination: {{farm}}[/subject]
 
-Farm "{{farm}}" will be terminated on {{terminate_date}}.
+This is a reminder that, as per your company's lease management policy, the "{{farm}}" Farm has been scheduled for termination.
 
-You can extend this farm's lifetime on it's Farm Extended Information page
+The "{{farm}}" Farm will be terminated on {{terminate_date}}.
+
+If you do not want the "{{farm}}" Farm to be terminated, you can request a lease extension through the "Extended Information" menu for this Farm.
 
 Regards,
 The Scalr Team

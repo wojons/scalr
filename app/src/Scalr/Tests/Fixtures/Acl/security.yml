@@ -5,5 +5,5 @@ SECURITY_SSH_KEYS:
 SECURITY_RETRIEVE_WINDOWS_PASSWORDS:
 - /platforms/ec2/xGetWindowsPassword
 
-SECURITY_AWS_SECURITY_GROUPS:
+SECURITY_SECURITY_GROUPS:
 - [/security/groups, null, all]

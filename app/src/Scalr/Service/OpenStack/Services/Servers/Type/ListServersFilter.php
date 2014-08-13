@@ -228,19 +228,8 @@ class ListServersFilter extends Marker
     {
         $options = parent::getQueryData();
         if ($this->getChangesSince() !== null) {
+            unset($options['changes_since']);
             $options['changes-since'] = $this->getChangesSince()->format('c');
-        }
-        if ($this->getFlavorId() !== null) {
-            $options['flavor'] = (string) $this->getFlavorId();
-        }
-        if ($this->getImage() !== null) {
-            $options['image'] = (string) $this->getImage();
-        }
-        if ($this->getName() !== null) {
-            $options['name'] = (string) $this->getName();
-        }
-        if ($this->getStatus() !== null) {
-            $options['status'] = (string) $this->getStatus();
         }
         return $options;
     }

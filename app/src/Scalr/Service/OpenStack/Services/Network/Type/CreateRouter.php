@@ -1,7 +1,6 @@
 <?php
 namespace Scalr\Service\OpenStack\Services\Network\Type;
 
-use Scalr\Service\OpenStack\Type\BooleanType;
 use Scalr\Service\OpenStack\Type\AbstractInitType;
 
 /**

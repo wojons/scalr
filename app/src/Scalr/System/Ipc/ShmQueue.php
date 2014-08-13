@@ -13,7 +13,7 @@ class Scalr_System_Ipc_ShmQueue implements Scalr_Util_Queue
 
     public $blocking = false;
 
-    public $blockingTimeout;
+    public $blockingTimeout = 20;
 
     protected $seg;
 

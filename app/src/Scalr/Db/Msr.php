@@ -1,4 +1,7 @@
 <?php
+
+use Scalr\Modules\PlatformFactory;
+
 class Scalr_Db_Msr
 {
     /** DBServer settings **/
@@ -42,6 +45,7 @@ class Scalr_Db_Msr
     const DATA_BUNDLE_EVERY   = 'db.msr.data_bundle.every';
     const DATA_BUNDLE_IS_RUNNING = 'db.msr.data_bundle.is_running';
     const DATA_BUNDLE_SERVER_ID = 'db.msr.data_bundle.server_id';
+    const DATA_BUNDLE_OPERATION_ID = 'db.msr.data_bundle.operation_id';
     const DATA_BUNDLE_LAST_TS	= 'db.msr.data_bundle.timestamp';
     const DATA_BUNDLE_RUNNING_TS	= 'db.msr.data_bundle.r.timestamp';
     const DATA_BUNDLE_TIMEFRAME_START_HH = 'db.msr.data_bundle.timeframe.start_hh';
@@ -53,6 +57,7 @@ class Scalr_Db_Msr
     const DATA_BACKUP_ENABLED = 'db.msr.data_backup.enabled';
     const DATA_BACKUP_EVERY   = 'db.msr.data_backup.every';
     const DATA_BACKUP_IS_RUNNING = 'db.msr.data_backup.is_running';
+    const DATA_BACKUP_OPERATION_ID = 'db.msr.data_backup.operation_id';
     const DATA_BACKUP_SERVER_ID = 'db.msr.data_backup.server_id';
     const DATA_BACKUP_LAST_TS	= 'db.msr.data_backup.timestamp';
     const DATA_BACKUP_RUNNING_TS	= 'db.msr.data_backup.r.timestamp';

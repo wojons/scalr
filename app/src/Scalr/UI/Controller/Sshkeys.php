@@ -1,5 +1,7 @@
 <?php
+
 use Scalr\Acl\Acl;
+use Scalr\Modules\PlatformFactory;
 
 class Scalr_UI_Controller_Sshkeys extends Scalr_UI_Controller
 {
@@ -31,6 +33,7 @@ class Scalr_UI_Controller_Sshkeys extends Scalr_UI_Controller
             $sshKey = Scalr_SshKey::init()->loadById($this->getParam('sshKeyId'));
         else
             $sshKey = Scalr_SshKey::init()->loadGlobalByFarmId(
+                $this->getEnvironmentId(),
                 $this->getParam('farmId'),
                 $this->getParam('cloudLocation'),
                 $this->getParam('platform')

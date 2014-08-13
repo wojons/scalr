@@ -3,7 +3,6 @@ Scalr.regPage('Scalr.ui.services.configurations.presets.view', function (loadPar
 		fields: [ 'id','env_id','client_id','name','role_behavior','dtadded','dtlastmodified' ],
 		proxy: {
 			type: 'scalr.paging',
-			extraParams: loadParams,
 			url: '/services/configurations/presets/xListPresets/'
 		},
 		remoteSort: true
@@ -15,7 +14,6 @@ Scalr.regPage('Scalr.ui.services.configurations.presets.view', function (loadPar
 			'reload': false,
 			'maximize': 'all'
 		},
-		scalrReconfigureParams: { presetId: '' },
 		store: store,
 		stateId: 'grid-services-configurations-presets-view',
 		stateful: true,
@@ -45,8 +43,8 @@ Scalr.regPage('Scalr.ui.services.configurations.presets.view', function (loadPar
 			{ header: "Added at", flex: 1, dataIndex: 'dtadded', sortable: false },
 			{ header: "Last time modified", flex: 1, dataIndex: 'dtlastmodified', sortable: false },
 			{
-				xtype: 'optionscolumn',
-				optionsMenu: [{
+				xtype: 'optionscolumn2',
+				menu: [{
 					text: 'Edit',
 					iconCls: 'x-menu-icon-edit',
 					href: "#/services/configurations/presets/{id}/edit"

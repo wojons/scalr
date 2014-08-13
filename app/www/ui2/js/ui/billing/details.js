@@ -1,4 +1,5 @@
 Scalr.regPage('Scalr.ui.billing.details', function (loadParams, moduleParams) {
+    var pageTitle = 'Billing';
 	var applyLimit = function () {
 		var limit = this.limit['limit'], usage = this.limit['usage'];
 		var color = 'green';
@@ -92,14 +93,24 @@ Scalr.regPage('Scalr.ui.billing.details', function (loadParams, moduleParams) {
 	var couponString = (moduleParams['billing']['couponCode']) ? moduleParams['billing']['couponDiscount'] + ' (Used coupon: ' + moduleParams['billing']['couponCode']+')' : "No discount [<a href='#/billing/applyCouponCode'>enter coupon code</a>]";
 	
 	var panel = Ext.create('Ext.form.Panel', {
-		width: 700,
-		title: 'Subscription details',
+		scalrOptions: {
+			title: pageTitle,
+			maximize: 'all',
+			leftMenu: {
+				menuId: 'settings',
+				itemId: 'billing'
+			}
+		},
+        cls: 'x-panel-column-left',
 		fieldDefaults: {
 			anchor: '100%',
-			labelWidth: 130
+			labelWidth: 130,
+            maxWidth: 700
 		},
+        autoScroll: true,
 		items: [{
             xtype: 'fieldset',
+            title: 'Subscription details',
             items: [{
                 hidden: (moduleParams['billing']['type'] == 'paypal' || (!moduleParams['billing']['isLegacyPlan'] && !!moduleParams['billing']['id'])),
                 xtype: 'displayfield',

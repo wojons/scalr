@@ -3,7 +3,6 @@
 namespace Scalr\Server;
 
 use Exception;
-use Scalr;
 use SERVER_PLATFORMS;
 use EC2_SERVER_PROPERTIES;
 use RACKSPACE_SERVER_PROPERTIES;
@@ -34,7 +33,11 @@ class History
 
     public $launchReason;
 
+    public $launchReasonId;
+
     public $terminateReason;
+
+    public $terminateReasonId;
 
     public $platform;
 
@@ -73,17 +76,19 @@ class History
      */
     public function __construct()
     {
-        $this->db = Scalr::getDb();
+        $this->db = \Scalr::getDb();
     }
 
     /**
      * Marks server as launched.
      *
      * @param   string    $reason  The reason
+     * @param   integer   $reasonId
      */
-    public function markAsLaunched($reason)
+    public function markAsLaunched($reason, $reasonId)
     {
         $this->launchReason = $reason;
+        $this->launchReasonId = $reasonId;
         $this->dtlaunched = date("Y-m-d H:i:s");
         $this->save();
     }
@@ -92,10 +97,12 @@ class History
      * Marks server as terminated
      *
      * @param   string      $reason            The reason
+     * @param   integer     $reasonId
      */
-    public function markAsTerminated($reason)
+    public function markAsTerminated($reason, $reasonId)
     {
         $this->terminateReason = $reason;
+        $this->terminateReasonId = $reasonId;
         $this->save();
     }
 
@@ -119,14 +126,14 @@ class History
      */
     public static function loadByServerId($serverId)
     {
-        $db = Scalr::getDb();
+        $db = \Scalr::getDb();
         $row = $db->GetRow("SELECT * FROM `servers_history` WHERE server_id = ? LIMIT 1", array($serverId));
         if (empty($row)) {
             throw new \Scalr\Exception\ScalrException(sprintf('Could not find server history by server identifier "%s"', $serverId));
         }
         $history = new self;
         foreach (self::_getFields() as $field) {
-            $dbcol = Scalr::decamelize($field);
+            $dbcol = \Scalr::decamelize($field);
             $history->$field = isset($row[$dbcol]) ? $row[$dbcol] : null;
         }
 
@@ -178,13 +185,13 @@ class History
         }
 
         foreach ($cols as $field => $value) {
-            $stmt[] = "`" . Scalr::decamelize($field) . "` = ?";
+            $stmt[] = "`" . \Scalr::decamelize($field) . "` = ?";
             $bind[] = $value;
         }
 
         try {
             $stmt = (empty($idValue) ? "INSERT" : "UPDATE") . " `servers_history` SET " . (join(", ", $stmt))
-                 .  (!empty($idValue) ? " WHERE `" . Scalr::decamelize($idKey) . "` = ?" : "");
+                 .  (!empty($idValue) ? " WHERE `" . \Scalr::decamelize($idKey) . "` = ?" : "");
 
             $this->db->Execute($stmt, array_merge($bind, $idValue));
 

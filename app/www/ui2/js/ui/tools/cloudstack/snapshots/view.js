@@ -5,19 +5,17 @@ Scalr.regPage('Scalr.ui.tools.cloudstack.snapshots.view', function (loadParams, 
 		],
 		proxy: {
 			type: 'scalr.paging',
-			extraParams: loadParams,
 			url: '/tools/cloudstack/snapshots/xListSnapshots/'
 		},
 		remoteSort: true
 	});
 
 	return Ext.create('Ext.grid.Panel', {
-		title: 'Tools &raquo; Cloudstack &raquo; Snapshots',
+		title: Scalr.utils.getPlatformName(loadParams['platform']) + ' &raquo; Snapshots',
 		scalrOptions: {
-			'reload': false,
+			'reload': true,
 			'maximize': 'all'
 		},
-		scalrReconfigureParams: { volumeId: '' },
 		store: store,
 		stateId: 'grid-tools-cloudstack-volumes-view',
 		stateful: true,
@@ -47,12 +45,8 @@ Scalr.regPage('Scalr.ui.tools.cloudstack.snapshots.view', function (loadParams, 
 			{ header: "Status", flex: 1, dataIndex: 'state', sortable: true },
 			{ header: "Created at", flex: 1, dataIndex: 'createdAt', sortable: true },
 			{
-				xtype: 'optionscolumn',
-				getOptionVisibility: function (item, record) {
-					return true;
-				},
-
-				optionsMenu: [{
+				xtype: 'optionscolumn2',
+				menu: [{
 					itemId: 'option.delete',
 					text: 'Delete',
 					iconCls: 'x-menu-icon-delete',
@@ -66,8 +60,8 @@ Scalr.regPage('Scalr.ui.tools.cloudstack.snapshots.view', function (loadParams, 
 							msg: 'Deleting volume(s) ...'
 						},
 						url: '/tools/cloudstack/snapshots/xRemove/',
-						dataHandler: function (record) {
-							return { snapshotId: Ext.encode([record.get('snapshotId')]), cloudLocation: store.proxy.extraParams.cloudLocation };
+						dataHandler: function (data) {
+							return { snapshotId: Ext.encode([data['snapshotId']]), cloudLocation: store.proxy.extraParams.cloudLocation, platform: store.proxy.extraParams.platform };
 						},
 						success: function () {
 							store.load();
@@ -90,6 +84,7 @@ Scalr.regPage('Scalr.ui.tools.cloudstack.snapshots.view', function (loadParams, 
 
 		dockedItems: [{
 			xtype: 'scalrpagingtoolbar',
+            ignoredLoadParams: ['platform'],
 			store: store,
 			dock: 'top',
 			afterItems: [{
@@ -119,20 +114,23 @@ Scalr.regPage('Scalr.ui.tools.cloudstack.snapshots.view', function (loadParams, 
 						data.push(records[i].get('snapshotId'));
 						request.confirmBox.objects.push(records[i].get('snapshotId'));
 					}
-					request.params = { snapshotId: Ext.encode(data), cloudLocation: store.proxy.extraParams.cloudLocation };
+					request.params = { snapshotId: Ext.encode(data), cloudLocation: store.proxy.extraParams.cloudLocation, platform: store.proxy.extraParams.platform };
 					Scalr.Request(request);
 				}
 			}],
 			items: [{
+                xtype: 'filterfield',
+                store: store
+            }, {
 				xtype: 'fieldcloudlocation',
 				itemId: 'cloudLocation',
+                margin: '0 0 0 12',
 				store: {
 					fields: [ 'id', 'name' ],
 					data: moduleParams.locations,
 					proxy: 'object'
 				},
-				gridStore: store,
-				cloudLocation: loadParams['cloudLocation'] || ''
+				gridStore: store
 			}]
 		}]
 	});

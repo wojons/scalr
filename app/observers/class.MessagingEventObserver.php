@@ -1,5 +1,8 @@
 <?php
 
+use Scalr\Modules\PlatformFactory;
+use Scalr\Modules\Platforms\Openstack\OpenstackPlatformModule;
+
 class MessagingEventObserver extends EventObserver
 {
     public $ObserverName = 'Messaging';
@@ -31,7 +34,7 @@ class MessagingEventObserver extends EventObserver
                     foreach ($dbFarmRole->GetServersByFilter(array('status' => SERVER_STATUS::RUNNING)) as $dbServer)
                     {
                         if ($dbServer->IsSupported("0.6"))
-                            $dbServer->SendMessage($msg);
+                            $dbServer->SendMessage($msg, false, true);
                     }
                 }
                 catch(Exception $e){}
@@ -49,10 +52,10 @@ class MessagingEventObserver extends EventObserver
 
     public function OnNewDbMsrMasterUp(NewDbMsrMasterUpEvent $event)
     {
-        $this->sendNewDbMsrMasterUpMessage($event->DBServer);
+        $this->sendNewDbMsrMasterUpMessage($event->DBServer, $event);
     }
 
-    private function sendNewDbMsrMasterUpMessage(DBServer $newMasterServer)
+    private function sendNewDbMsrMasterUpMessage(DBServer $newMasterServer, $event)
     {
         $dbFarmRole = $newMasterServer->GetFarmRoleObject();
         $servers = $dbFarmRole->GetServersByFilter(array('status' => array(SERVER_STATUS::INIT, SERVER_STATUS::RUNNING)));
@@ -67,11 +70,13 @@ class MessagingEventObserver extends EventObserver
 
             $msg->{$dbType} = new stdClass();
             $msg->{$dbType}->snapshotConfig = $props->snapshotConfig;
+            
+            $msg = Scalr_Scripting_Manager::extendMessage($msg, $event, $event->DBServer, $dbServer);
 
             foreach (Scalr_Role_Behavior::getListForFarmRole($dbFarmRole) as $behavior)
                 $msg = $behavior->extendMessage($msg, $dbServer);
 
-            $dbServer->SendMessage($msg);
+            $dbServer->SendMessage($msg, false, true);
         }
     }
 
@@ -95,23 +100,23 @@ class MessagingEventObserver extends EventObserver
 
             $msg = Scalr_Scripting_Manager::extendMessage($msg, $event, $newMasterServer, $DBServer);
 
-            $msg->replPassword = $dbFarmRole->GetSetting(DbFarmRole::SETTING_MYSQL_REPL_PASSWORD);
-            $msg->rootPassword = $dbFarmRole->GetSetting(DbFarmRole::SETTING_MYSQL_ROOT_PASSWORD);
+            $msg->replPassword = $dbFarmRole->GetSetting(DBFarmRole::SETTING_MYSQL_REPL_PASSWORD);
+            $msg->rootPassword = $dbFarmRole->GetSetting(DBFarmRole::SETTING_MYSQL_ROOT_PASSWORD);
             if ($newMasterServer->platform == SERVER_PLATFORMS::RACKSPACE || $newMasterServer->isOpenstack()) {
-                $msg->logPos = $dbFarmRole->GetSetting(DbFarmRole::SETTING_MYSQL_LOG_POS);
-                $msg->logFile = $dbFarmRole->GetSetting(DbFarmRole::SETTING_MYSQL_LOG_FILE);
+                $msg->logPos = $dbFarmRole->GetSetting(DBFarmRole::SETTING_MYSQL_LOG_POS);
+                $msg->logFile = $dbFarmRole->GetSetting(DBFarmRole::SETTING_MYSQL_LOG_FILE);
 
                 $snapshot = Scalr_Storage_Snapshot::init();
 
                 try {
-                    $snapshot->loadById($dbFarmRole->GetSetting(DbFarmRole::SETTING_MYSQL_SCALR_SNAPSHOT_ID));
+                    $snapshot->loadById($dbFarmRole->GetSetting(DBFarmRole::SETTING_MYSQL_SCALR_SNAPSHOT_ID));
                     $msg->snapshotConfig = $snapshot->getConfig();
                 } catch (Exception $e) {
                     $this->Logger->error(new FarmLogMessage($event->DBServer->farmId, "Cannot get snaphotConfig for newMysqlMasterUp message: {$e->getMessage()}"));
                 }
             }
 
-            $DBServer->SendMessage($msg);
+            $DBServer->SendMessage($msg, false, true);
         }
     }
 
@@ -167,7 +172,7 @@ class MessagingEventObserver extends EventObserver
                 $msg = $behavior->extendMessage($msg, $dbServer);
         }
 
-        $msg = Scalr_Scripting_Manager::extendMessage($msg, $event, $event->DBServer, $dbServer, true);
+        $msg->setGlobalVariables($dbServer, true, $event);
 
         /**
          * TODO: Move everything to Scalr_Db_Msr_*
@@ -279,7 +284,7 @@ class MessagingEventObserver extends EventObserver
 
             if($event->DBServer->isOpenstack()) {
                 $platform = PlatformFactory::NewPlatform($event->DBServer->platform);
-                $isKeyPairsSupported = $platform->getConfigVariable(Modules_Platforms_Openstack::EXT_KEYPAIRS_ENABLED, $event->DBServer->GetEnvironmentObject(), false);
+                $isKeyPairsSupported = $platform->getConfigVariable(OpenstackPlatformModule::EXT_KEYPAIRS_ENABLED, $event->DBServer->GetEnvironmentObject(), false);
                 if ($isKeyPairsSupported != 1)
                     $authSshKey = true;
             }
@@ -289,6 +294,7 @@ class MessagingEventObserver extends EventObserver
                 $sshKey = Scalr_SshKey::init();
 
                 if (!$sshKey->loadGlobalByFarmId(
+                    $event->DBServer->envId,
                     $event->DBServer->farmId,
                     $event->DBServer->GetFarmRoleObject()->CloudLocation,
                     $event->DBServer->platform
@@ -298,7 +304,6 @@ class MessagingEventObserver extends EventObserver
                     $sshKey->generateKeypair();
 
                     $sshKey->farmId = $event->DBServer->farmId;
-                    $sshKey->clientId = $event->DBServer->clientId;
                     $sshKey->envId = $event->DBServer->envId;
                     $sshKey->type = Scalr_SshKey::TYPE_GLOBAL;
                     $sshKey->platform = $event->DBServer->platform;
@@ -310,9 +315,12 @@ class MessagingEventObserver extends EventObserver
                 }
 
                 $sshKeysMsg = new Scalr_Messaging_Msg_UpdateSshAuthorizedKeys(array($sshKey->getPublic()), array());
-                $event->DBServer->SendMessage($sshKeysMsg);
+                $event->DBServer->SendMessage($sshKeysMsg, false, true);
             }
         }
+
+        // Send HostInitResponse to target server
+        $event->DBServer->SendMessage($msg);
 
         // Send broadcast HostInit
         $servers = DBFarm::LoadByID($this->FarmID)->GetServersByFilter(array('status' => array(SERVER_STATUS::INIT, SERVER_STATUS::RUNNING)));
@@ -326,6 +334,12 @@ class MessagingEventObserver extends EventObserver
                 $event->msgExpected--;
                 continue;
             }
+
+            if ($DBServer->status == SERVER_STATUS::INIT && $DBServer->serverId != $event->DBServer->serverId) {
+                $event->msgExpected--;
+                continue;
+            }
+
 
             $hiMsg = new Scalr_Messaging_Msg_HostInit();
             $hiMsg->setServerMetaData($event->DBServer);
@@ -342,9 +356,6 @@ class MessagingEventObserver extends EventObserver
             if ($hiMsg->dbMessageId)
                 $event->msgCreated++;
         }
-
-        // Send HostInitResponse to target server
-        $event->DBServer->SendMessage($msg);
     }
 
     public function OnIPAddressChanged(IPAddressChangedEvent $event)
@@ -362,7 +373,7 @@ class MessagingEventObserver extends EventObserver
 
             $delayed = !($DBServer->serverId == $event->DBServer->serverId);
 
-            $DBServer->SendMessage($msg, false, $delayed);
+            $DBServer->SendMessage($msg, false, true);
         }
     }
 
@@ -377,8 +388,9 @@ class MessagingEventObserver extends EventObserver
             $msg = Scalr_Scripting_Manager::extendMessage($msg, $event, $event->DBServer, $DBServer);
 
             $delayed = !($DBServer->serverId == $event->DBServer->serverId);
+            $delayed = true;
 
-            $DBServer->SendMessage($msg, false, $delayed);
+            $DBServer->SendMessage($msg, false, true);
         }
     }
 
@@ -395,7 +407,7 @@ class MessagingEventObserver extends EventObserver
 
             $msg = Scalr_Scripting_Manager::extendMessage($msg, $event, $event->DBServer, $DBServer);
 
-            $DBServer->SendMessage($msg);
+            $DBServer->SendMessage($msg, false, true);
         }
     }
 
@@ -415,7 +427,7 @@ class MessagingEventObserver extends EventObserver
 
             $msg = Scalr_Scripting_Manager::extendMessage($msg, $event, $event->DBServer, $DBServer);
 
-            $DBServer->SendMessage($msg);
+            $DBServer->SendMessage($msg, false, true);
         }
     }
 
@@ -468,7 +480,7 @@ class MessagingEventObserver extends EventObserver
                     throw new Exception("Empty MSG: {$DBServer->serverId} ({$event->DBServer->serverId})");
 
             } catch (Exception $e) {
-                //TODO: Log this situation
+                Logger::getLogger(__CLASS__)->fatal("MessagingEventObserver::OnHostUp failed: {$e->getMessage()}");
             }
         }
 
@@ -477,7 +489,7 @@ class MessagingEventObserver extends EventObserver
         }
 
         if ($event->DBServer->GetProperty(Scalr_Db_Msr::REPLICATION_MASTER) == 1) {
-            $this->sendNewDbMsrMasterUpMessage($event->DBServer);
+            $this->sendNewDbMsrMasterUpMessage($event->DBServer, $event);
         }
     }
 
@@ -488,7 +500,7 @@ class MessagingEventObserver extends EventObserver
         } catch (Exception $e) {}
 
         if ($dbFarm) {
-            $servers = $dbFarm->GetServersByFilter(array('status' => array(SERVER_STATUS::INIT, SERVER_STATUS::RUNNING, SERVER_STATUS::PENDING_TERMINATE)));
+            $servers = $dbFarm->GetServersByFilter(array('status' => array(SERVER_STATUS::INIT, SERVER_STATUS::RUNNING, SERVER_STATUS::PENDING_TERMINATE, SERVER_STATUS::PENDING_SUSPEND)));
             foreach ($servers as $DBServer)
             {
                 // We don't need to send beforeHostTerminate event to all "Pending terminate" servers,
@@ -500,6 +512,7 @@ class MessagingEventObserver extends EventObserver
 
                 $msg = new Scalr_Messaging_Msg_BeforeHostTerminate();
                 $msg->setServerMetaData($event->DBServer);
+                $msg->suspend = $event->suspend;
 
                 $msg = Scalr_Scripting_Manager::extendMessage($msg, $event, $event->DBServer, $DBServer);
 
@@ -589,7 +602,7 @@ class MessagingEventObserver extends EventObserver
                     $event->DBServer->SetProperty(Scalr_Db_Msr::REPLICATION_MASTER, 0);
                     $dbFarmRole->SetSetting(Scalr_Db_Msr::SLAVE_TO_MASTER, 1);
                     $DBServer->SetProperty(Scalr_Db_Msr::REPLICATION_MASTER, 1);
-                    $DBServer->SendMessage($msg);
+                    $DBServer->SendMessage($msg, false, true);
                     return;
                 }
             }
@@ -597,18 +610,22 @@ class MessagingEventObserver extends EventObserver
             if ($firstInRoleServer) {
                 $dbFarmRole->SetSetting(Scalr_Db_Msr::SLAVE_TO_MASTER, 1);
                 $firstInRoleServer->SetProperty(Scalr_Db_Msr::REPLICATION_MASTER, 1);
-                $firstInRoleServer->SendMessage($msg);
+                $firstInRoleServer->SendMessage($msg, false, true);
             }
         }
     }
 
     public function OnHostDown(HostDownEvent $event)
     {
-        if ($event->DBServer->IsRebooting() == 1)
+        if ($event->DBServer->IsRebooting() == 1) {
+            $event->exit = 'reboot';
             return;
+        }
 
-        if (!$this->FarmID)
+        if (!$this->FarmID) {
+            $event->exit = 'no-farm';
             return;
+        }
 
         $dbFarm = DBFarm::LoadByID($this->FarmID);
         $servers = $dbFarm->GetServersByFilter(array('status' => array(SERVER_STATUS::RUNNING)));
@@ -629,6 +646,9 @@ class MessagingEventObserver extends EventObserver
 
         $first_in_role_handled = false;
         $first_in_role_server = null;
+
+        $event->msgExpected = count($servers);
+
         foreach ($servers as $DBServer) {
             if (!($DBServer instanceof DBServer))
                 continue;
@@ -674,7 +694,9 @@ class MessagingEventObserver extends EventObserver
                 }
             }
 
-            $DBServer->SendMessage($msg, false, true);
+            $msg = $DBServer->SendMessage($msg, false, true);
+            if ($msg->dbMessageId)
+                $event->msgCreated++;
 
             $loopServerIsMaster =  $DBServer->GetProperty(SERVER_PROPERTIES::DB_MYSQL_MASTER) || $DBServer->GetProperty(Scalr_Db_Msr::REPLICATION_MASTER);
             if ($loopServerIsMaster && $DBServer->status == SERVER_STATUS::RUNNING) {
@@ -739,7 +761,7 @@ class MessagingEventObserver extends EventObserver
                         if (DBRole::loadById($DBServer->roleId)->hasBehavior(ROLE_BEHAVIORS::MYSQL)) {
                             $DBFarmRole->SetSetting(DBFarmRole::SETTING_MYSQL_SLAVE_TO_MASTER, 1);
                             $DBServer->SetProperty(SERVER_PROPERTIES::DB_MYSQL_MASTER, 1);
-                            $DBServer->SendMessage($msg);
+                            $DBServer->SendMessage($msg, false, true);
                             return;
                         }
                     }
@@ -748,7 +770,7 @@ class MessagingEventObserver extends EventObserver
                 if ($first_in_role_server) {
                     $DBFarmRole->SetSetting(DBFarmRole::SETTING_MYSQL_SLAVE_TO_MASTER, 1);
                     $first_in_role_server->SetProperty(SERVER_PROPERTIES::DB_MYSQL_MASTER, 1);
-                    $first_in_role_server->SendMessage($msg);
+                    $first_in_role_server->SendMessage($msg, false, true);
                 }
             }
         }

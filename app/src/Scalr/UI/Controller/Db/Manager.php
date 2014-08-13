@@ -1,6 +1,9 @@
 <?php
+
 use Scalr\Acl\Acl;
 use Scalr\Server\Operations;
+use Scalr\Modules\PlatformFactory;
+use Scalr\Modules\Platforms\Openstack\OpenstackPlatformModule;
 
 class Scalr_UI_Controller_Db_Manager extends Scalr_UI_Controller
 {
@@ -35,7 +38,7 @@ class Scalr_UI_Controller_Db_Manager extends Scalr_UI_Controller
                     }
                 }
             } else {
-                $retval['password'] = '<span style="color:red;">Password authentication is disbaled</span>';
+                $retval['password'] = '<span style="color:red;">Password authentication is disabled</span>';
             }
 
             $behavior = ROLE_BEHAVIORS::REDIS;
@@ -53,12 +56,12 @@ class Scalr_UI_Controller_Db_Manager extends Scalr_UI_Controller
         if (\Scalr::config('scalr.dns.static.enabled')) {
             $retval['dns'] = array(
                 'master' => array(
-                    'private' 	=> "int.master.{$behavior}.{$dbFarmRole->GetFarmObject()->Hash}.scalr-dns.net",
-                    'public'	=> "ext.master.{$behavior}.{$dbFarmRole->GetFarmObject()->Hash}.scalr-dns.net"
+                    'private' 	=> "int.master.{$behavior}.{$dbFarmRole->GetFarmObject()->Hash}." . \Scalr::config('scalr.dns.static.domain_name'),
+                    'public'	=> "ext.master.{$behavior}.{$dbFarmRole->GetFarmObject()->Hash}." . \Scalr::config('scalr.dns.static.domain_name')
                 ),
                 'slave' => array(
-                    'private' 	=> "int.slave.{$behavior}.{$dbFarmRole->GetFarmObject()->Hash}.scalr-dns.net",
-                    'public'	=> "ext.slave.{$behavior}.{$dbFarmRole->GetFarmObject()->Hash}.scalr-dns.net"
+                    'private' 	=> "int.slave.{$behavior}.{$dbFarmRole->GetFarmObject()->Hash}." . \Scalr::config('scalr.dns.static.domain_name'),
+                    'public'	=> "ext.slave.{$behavior}.{$dbFarmRole->GetFarmObject()->Hash}." . \Scalr::config('scalr.dns.static.domain_name')
                 )
             );
         }
@@ -103,14 +106,6 @@ class Scalr_UI_Controller_Db_Manager extends Scalr_UI_Controller
         );
 
         try {
-            $port = $masterServer->GetProperty(SERVER_PROPERTIES::SZR_API_PORT);
-
-            if (!$port) {
-                $port = 8010;
-            }
-
-            $client = Scalr_Net_Scalarizr_Client::getClient($masterServer, Scalr_Net_Scalarizr_Client::NAMESPACE_SYSTEM, $port);
-
             if ($behavior == ROLE_BEHAVIORS::REDIS)
                 $mpoint = '/mnt/redisstorage';
             elseif ($behavior == ROLE_BEHAVIORS::POSTGRESQL)
@@ -119,7 +114,7 @@ class Scalr_UI_Controller_Db_Manager extends Scalr_UI_Controller
                 $mpoint = '/mnt/dbstorage';
 
 
-            $usage = (array)$client->statvfs(array($mpoint));
+            $usage = (array)$masterServer->scalarizr->system->statvfs(array($mpoint));
             $size = (array)$usage[$mpoint];
 
             if ($size['total']) {
@@ -137,11 +132,23 @@ class Scalr_UI_Controller_Db_Manager extends Scalr_UI_Controller
 
         $retval = array(
             'engine' => $masterServer->GetFarmRoleObject()->GetSetting(Scalr_Db_Msr::DATA_STORAGE_ENGINE),
+            'level'  => $masterServer->GetFarmRoleObject()->GetSetting(Scalr_Db_Msr::DATA_STORAGE_RAID_LEVEL),
             'id'     => $masterServer->GetFarmRoleObject()->GetSetting(Scalr_Db_Msr::VOLUME_ID) ? $masterServer->GetFarmRoleObject()->GetSetting(Scalr_Db_Msr::VOLUME_ID) : '',
             'fs'     => $masterServer->GetFarmRoleObject()->GetSetting(Scalr_Db_Msr::DATA_STORAGE_FSTYPE),
             'size'   => $size
         );
-        $retval['growSupported'] = in_array($retval['engine'], array(MYSQL_STORAGE_ENGINE::EBS, MYSQL_STORAGE_ENGINE::RAID_EBS)) && in_array($behavior, array(ROLE_BEHAVIORS::MYSQL2, ROLE_BEHAVIORS::PERCONA, ROLE_BEHAVIORS::MARIADB));
+
+        if ($this->request->getHeaderVar('Interface-Beta')) {
+            $retval['growSupported'] = in_array($retval['engine'], array(MYSQL_STORAGE_ENGINE::EBS, MYSQL_STORAGE_ENGINE::RAID_EBS)) &&
+                in_array($behavior, array(ROLE_BEHAVIORS::MYSQL2, ROLE_BEHAVIORS::PERCONA, ROLE_BEHAVIORS::MARIADB, ROLE_BEHAVIORS::REDIS, ROLE_BEHAVIORS::POSTGRESQL));
+        } else {
+            $retval['growSupported'] = in_array($retval['engine'], array(MYSQL_STORAGE_ENGINE::EBS, MYSQL_STORAGE_ENGINE::RAID_EBS)) &&
+            in_array($behavior, array(ROLE_BEHAVIORS::MYSQL2, ROLE_BEHAVIORS::PERCONA, ROLE_BEHAVIORS::MARIADB));
+        }
+
+        if ($retval['growSupported'] && $retval['engine'] == MYSQL_STORAGE_ENGINE::RAID_EBS && in_array($retval['level'], array('0', '10'))) {
+            $retval['growSupported'] = false;
+        }
 
         switch ($retval['engine']) {
             case MYSQL_STORAGE_ENGINE::EBS:
@@ -298,11 +305,8 @@ class Scalr_UI_Controller_Db_Manager extends Scalr_UI_Controller
                 ))
             ),
             'last' => $lastActionTime ? Scalr_Util_DateTime::convertTz((int)$lastActionTime, 'd M Y \a\\t H:i:s') : 'Never',
-            'supported' => !in_array($dbFarmRole->Platform, array(
-                SERVER_PLATFORMS::CLOUDSTACK,
-                SERVER_PLATFORMS::IDCF,
-                SERVER_PLATFORMS::UCLOUD
-            ))
+            'supported' => !PlatformFactory::isCloudstack($dbFarmRole->Platform) &&
+                           (!PlatformFactory::isOpenstack($dbFarmRole->Platform) || PlatformFactory::NewPlatform($dbFarmRole->Platform)->getConfigVariable(OpenstackPlatformModule::EXT_SWIFT_ENABLED, $this->getEnvironment(), false))
         );
         foreach ($data['backups']['history'] as &$h)
             $h['date'] = Scalr_Util_DateTime::convertTz((int)$h['date'], 'd M Y \a\\t H:i:s');
@@ -327,6 +331,8 @@ class Scalr_UI_Controller_Db_Manager extends Scalr_UI_Controller
         }
         */
 
+        $conf = $this->getContainer()->config->get('scalr.load_statistics.connections.plotter');
+
         foreach ($dbFarmRole->GetServersByFilter(array('status' => array(SERVER_STATUS::INIT, SERVER_STATUS::RUNNING, SERVER_STATUS::PENDING))) as $dbServer) {
 
             $isMaster = ($dbServer->GetProperty(Scalr_Db_Msr::REPLICATION_MASTER) == 1);
@@ -343,17 +349,20 @@ class Scalr_UI_Controller_Db_Manager extends Scalr_UI_Controller
                 'index' => $dbServer->index
             );
 
+            $serverInfo['monitoring'] = array(
+                'farmId' => $dbFarmRole->FarmID,
+                'farmRoleId' => $dbFarmRole->ID,
+                'index' => $dbServer->index,
+                'hash' => $dbFarm->Hash,
+                'hostUrl' => "{$conf['scheme']}://{$conf['host']}:{$conf['port']}"
+            );
+
             if ($dbServer->platform == SERVER_PLATFORMS::EC2)
                 $serverInfo['cloudLocation'] = $dbServer->GetProperty(EC2_SERVER_PROPERTIES::AVAIL_ZONE);
 
             if ($dbServer->status == SERVER_STATUS::RUNNING) {
                 try {
-                    $client = Scalr_Net_Scalarizr_Client::getClient(
-                        $dbServer,
-                        $szrApiNamespace,
-                        $dbServer->getPort(DBServer::PORT_API)
-                    );
-                    $rStatus = $client->replicationStatus();
+                    $rStatus = $dbServer->scalarizr->{$szrApiNamespace}->replicationStatus();
 
                     if ($data['dbType'] != ROLE_BEHAVIORS::REDIS) {
                         $rStatus = (array)$rStatus->{$serverRole};
@@ -418,7 +427,8 @@ class Scalr_UI_Controller_Db_Manager extends Scalr_UI_Controller
         $dbFarmRole = DBFarmRole::LoadByID($this->getParam('farmRoleId'));
         $this->user->getPermissions()->validate($dbFarmRole->GetFarmObject());
 
-        $behavior = Scalr_Role_Behavior::loadByName($dbFarmRole->GetRoleObject()->getDbMsrBehavior());
+        $textBehavior = $dbFarmRole->GetRoleObject()->getDbMsrBehavior();
+        $behavior = Scalr_Role_Behavior::loadByName($textBehavior);
         $master = $behavior->getMasterServer($dbFarmRole);
         if ($master) {
             $port = $master->GetProperty(SERVER_PROPERTIES::SZR_API_PORT);
@@ -426,8 +436,6 @@ class Scalr_UI_Controller_Db_Manager extends Scalr_UI_Controller
                 $port = 8010;
 
             try {
-                $client = Scalr_Net_Scalarizr_Client::getClient($master, Scalr_Net_Scalarizr_Client::NAMESPACE_MYSQL, $port);
-
                 $volume = Scalr_Storage_Volume::init()->loadById(
                     $dbFarmRole->GetSetting(Scalr_Db_Msr::VOLUME_ID)
                 );
@@ -441,9 +449,19 @@ class Scalr_UI_Controller_Db_Manager extends Scalr_UI_Controller
                 $volumeConfig = $volume->getConfig();
                 $platformAccessData = PlatformFactory::NewPlatform($dbFarmRole->Platform)->GetPlatformAccessData($this->environment, $master);
 
-                $operationId = $client->growStorage($volumeConfig, $this->getParam('newSize'), $platformAccessData);
+                switch ($textBehavior) {
+                    case ROLE_BEHAVIORS::REDIS:
+                        $operationId = $master->scalarizr->redis->growStorage($volumeConfig, $this->getParam('newSize'), $platformAccessData);
+                        break;
+                    case ROLE_BEHAVIORS::POSTGRESQL:
+                        $operationId = $master->scalarizr->postgresql->growStorage($volumeConfig, $this->getParam('newSize'), $platformAccessData);
+                        break;
+                    default:
+                        $operationId = $master->scalarizr->mysql->growStorage($volumeConfig, $this->getParam('newSize'), $platformAccessData);
+                        break;
+                }
 
-                $master->operations->add($operationId, Operations::MYSQL_GROW_VOLUME);
+                $master->operations->add($operationId, Operations::DBMSR_GROW_VOLUME);
 
                 $this->response->data(array('operationId' => $operationId));
 
@@ -508,9 +526,15 @@ class Scalr_UI_Controller_Db_Manager extends Scalr_UI_Controller
 
         if ($dbFarmRole->GetSetting(Scalr_Db_Msr::DATA_BACKUP_IS_RUNNING) == 1) {
             $bundleServerId = $dbFarmRole->GetSetting(Scalr_Db_Msr::DATA_BACKUP_SERVER_ID);
+            $operationId = $dbFarmRole->GetSetting(Scalr_Db_Msr::DATA_BACKUP_OPERATION_ID);
 
             $dbServer = DBServer::LoadByID($bundleServerId);
-            $dbServer->SendMessage(new Scalr_Messaging_Msg_DbMsr_CancelBackup());
+
+
+            if ($dbServer->IsSupported("0.23.0") && $operationId) {
+                $dbServer->scalarizr->operation->cancel($operationId);
+            } else
+                $dbServer->SendMessage(new Scalr_Messaging_Msg_DbMsr_CancelBackup());
         }
 
         $this->response->success('Backup cancelation successfully initiated');
@@ -533,9 +557,14 @@ class Scalr_UI_Controller_Db_Manager extends Scalr_UI_Controller
 
         if ($dbFarmRole->GetSetting(Scalr_Db_Msr::DATA_BUNDLE_IS_RUNNING) == 1) {
             $bundleServerId = $dbFarmRole->GetSetting(Scalr_Db_Msr::DATA_BUNDLE_SERVER_ID);
+            $operationId = $dbFarmRole->GetSetting(Scalr_Db_Msr::DATA_BUNDLE_OPERATION_ID);
 
             $dbServer = DBServer::LoadByID($bundleServerId);
-            $dbServer->SendMessage(new Scalr_Messaging_Msg_DbMsr_CancelDataBundle());
+
+            if ($dbServer->IsSupported("0.23.0") && $operationId) {
+                $dbServer->scalarizr->operation->cancel($operationId);
+            } else
+                $dbServer->SendMessage(new Scalr_Messaging_Msg_DbMsr_CancelDataBundle());
         }
 
         $this->response->success('Data bundle cancelation successfully initiated');

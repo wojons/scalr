@@ -443,7 +443,7 @@ class Yaml implements \ArrayAccess
         ));
     }
 
-	/**
+    /**
      * {@inheritdoc}
      * @see ArrayAccess::offsetExists()
      */
@@ -452,7 +452,7 @@ class Yaml implements \ArrayAccess
         return isset($this->data[$offset]);
     }
 
-	/**
+    /**
      * {@inheritdoc}
      * @see ArrayAccess::offsetGet()
      */
@@ -461,7 +461,7 @@ class Yaml implements \ArrayAccess
         return isset($this->data[$offset]) ? $this->data[$offset] : null;
     }
 
-	/**
+    /**
      * {@inheritdoc}
      * @see ArrayAccess::offsetSet()
      */
@@ -474,7 +474,7 @@ class Yaml implements \ArrayAccess
         }
     }
 
-	/**
+    /**
      * {@inheritdoc}
      * @see ArrayAccess::offsetUnset()
      */

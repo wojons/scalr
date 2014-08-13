@@ -130,7 +130,7 @@ h3 {margin: 0 0 5px 0;}
                 $this->billing->cancelSubscription();
             }
 
-            $this->response->success("Subscription cancelled: Scalr has STOPPED managing your instances.  You can reactivate your account at any time.");
+            $this->response->success("Your subscription has been cancelled, you will no longer be charged. Since your account was overdue, the cancellation is immediate and you will no longer be able to manage your infrastructure through Scalr, and all Scalr automation will cease.");
             return;
         }
 

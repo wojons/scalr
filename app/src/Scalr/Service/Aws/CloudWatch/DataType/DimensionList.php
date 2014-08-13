@@ -2,7 +2,6 @@
 namespace Scalr\Service\Aws\CloudWatch\DataType;
 
 use Scalr\Service\Aws\CloudWatch\AbstractCloudWatchListDataType;
-use Scalr\Service\Aws\DataType\ListDataType;
 
 /**
  * DimensionList

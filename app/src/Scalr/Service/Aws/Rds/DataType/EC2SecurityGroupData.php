@@ -1,9 +1,7 @@
 <?php
 namespace Scalr\Service\Aws\Rds\DataType;
 
-use Scalr\Service\Aws\RdsException;
 use Scalr\Service\Aws\Rds\AbstractRdsDataType;
-use \DateTime;
 
 /**
  * EC2SecurityGroupData

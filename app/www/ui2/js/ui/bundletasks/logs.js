@@ -6,7 +6,6 @@ Scalr.regPage('Scalr.ui.bundletasks.logs', function (loadParams, moduleParams) {
 		],
 		proxy: {
 			type: 'scalr.paging',
-			extraParams: loadParams,
 			url: '/bundletasks/xListLogs/'
 		},
 		remoteSort: true
@@ -18,7 +17,6 @@ Scalr.regPage('Scalr.ui.bundletasks.logs', function (loadParams, moduleParams) {
 			'reload': false,
 			'maximize': 'all'
 		},
-		scalrReconfigureParams: { bundleTaskId: ''},
 		store: store,
 		stateId: 'grid-bundletasks-logs-view',
 		stateful: true,
@@ -50,8 +48,13 @@ Scalr.regPage('Scalr.ui.bundletasks.logs', function (loadParams, moduleParams) {
 
 		dockedItems: [{
 			xtype: 'scalrpagingtoolbar',
+            ignoredLoadParams: ['bundleTaskId'],
 			store: store,
-			dock: 'top'
+			dock: 'top',
+            items: [{
+                xtype: 'filterfield',
+                store: store
+            }]
 		}]
 	});
 });

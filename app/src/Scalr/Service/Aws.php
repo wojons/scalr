@@ -5,6 +5,8 @@ use Scalr\Service\Aws\Plugin\EventObserver;
 use Scalr\Service\Aws\EntityManager;
 use Scalr\DependencyInjection\Container;
 use Scalr\Service\Aws\ServiceInterface;
+use Scalr\Service\Aws\Client\ClientException;
+use Scalr\Service\Aws\Ec2\DataType\RegionInfoList;
 
 /**
  * Amazon Web Services software development kit
@@ -20,6 +22,7 @@ use Scalr\Service\Aws\ServiceInterface;
  * @property-read  \Scalr\Service\Aws\Ec2        $ec2        Amazon Elastic Compute Cloud (EC2) service interface instance
  * @property-read  \Scalr\Service\Aws\CloudFront $cloudFront Amazon CloudFront service interface instance
  * @property-read  \Scalr\Service\Aws\Rds        $rds        Amazon Relational Database Service (RDS) interface instance
+ * @property-read  \Scalr\Service\Aws\Route53    $route53    Amazon Route53 service interface instance
  */
 class Aws
 {
@@ -69,6 +72,56 @@ class Aws
     const REGION_SA_EAST_1 = 'sa-east-1';
 
     /**
+     * GovCloud (US)
+     */
+    const REGION_US_GOV_WEST_1 = 'us-gov-west-1';
+
+    /**
+     * United States East (Northern Virginia) Region Hosted Zone Id.
+     */
+    const REGION_US_EAST_1_ZONE_ID = 'Z3AQBSTGFYJSTF';
+
+    /**
+     * United States West (Northern California) Region Hosted Zone Id.
+     */
+    const REGION_US_WEST_1_ZONE_ID = 'Z2F56UZL2M1ACD';
+
+    /**
+     * United States West (Oregon) Region Hosted Zone Id.
+     */
+    const REGION_US_WEST_2_ZONE_ID = 'Z3BJ6K6RIION7M';
+
+    /**
+     * Europe West (Ireland) Region Hosted Zone Id.
+     */
+    const REGION_EU_WEST_1_ZONE_ID = 'Z1BKCTXD74EZPE';
+
+    /**
+     * Asia Pacific Southeast (Singapore) Region Hosted Zone Id.
+     */
+    const REGION_AP_SOUTHEAST_1_ZONE_ID = 'Z3O0J2DXBE1FTB';
+
+    /**
+     * Sydney Hosted Zone Id
+     */
+    const REGION_AP_SOUTHEAST_2_ZONE_ID = 'Z1WCIGYICN2BYD';
+
+    /**
+     * Asia Pacific Northeast (Tokyo) Region Hosted Zone Id.
+     */
+    const REGION_AP_NORTHEAST_1_ZONE_ID = 'Z2M4EHUR26P7ZW';
+
+    /**
+     * South America (Sao Paulo) Region Hosted Zone Id.
+     */
+    const REGION_SA_EAST_1_ZONE_ID = 'Z7KQH4QJS55SO';
+
+    /**
+     * GovCloud (US) Hosted Zone Id
+     */
+    const REGION_US_GOV_WEST_1_ZONE_ID = 'Z31GFT0UA1I2HV';
+
+    /**
      * Elastic Load Balancer Web service interface
      */
     const SERVICE_INTERFACE_ELB = 'elb';
@@ -102,6 +155,11 @@ class Aws
      * Amazon CloudFront service interface
      */
     const SERVICE_INTERFACE_CLOUD_FRONT = 'cloudFront';
+
+    /**
+     * Amazon Route53 service interface
+     */
+    const SERVICE_INTERFACE_ROUTE53 = 'route53';
 
     /**
      * Amazon RDS service interface
@@ -192,6 +250,14 @@ class Aws
      */
     private $environment;
 
+    private $awsAccountNumber;
+
+    private $proxyHost;
+    private $proxyPort;
+    private $proxyUser;
+    private $proxyPass;
+    private $proxyType;
+
     /**
      * Constructor
      *
@@ -213,6 +279,34 @@ class Aws
     }
 
     /**
+     * Set proxy configuration to connect to AWS services
+     * @param string $host
+     * @param integer $port
+     * @param string $user
+     * @param string $pass
+     * @param string $type Allowed values 4 - SOCKS4, 5 - SOCKS5, 0 - HTTP
+     */
+    public function setProxy($host, $port = 3128, $user = null, $pass = null, $type = 0)
+    {
+        $this->proxyHost = $host;
+        $this->proxyPort = $port;
+        $this->proxyUser = $user;
+        $this->proxyPass = $pass;
+        $this->proxyType = $type;
+    }
+
+    public function getProxy()
+    {
+        return ($this->proxyHost) ? array(
+            'host' => $this->proxyHost,
+            'port' => $this->proxyPort,
+            'user' => $this->proxyUser,
+            'pass' => $this->proxyPass,
+            'type' => $this->proxyType
+        ) : false;
+    }
+
+    /**
      * Gets container
      *
      * @return Container
@@ -220,6 +314,61 @@ class Aws
     public function getContainer()
     {
         return $this->container;
+    }
+
+    /**
+     * Retrieves AWS Account Number
+     *
+     * @return  string  Returns AWS Account number for current user
+     * @throws  ClientException
+     */
+    public function getAccountNumber()
+    {
+        if ($this->awsAccountNumber === null) {
+            try {
+                $arr = preg_split('/\:/', $this->iam->user->fetch()->arn);
+                $this->awsAccountNumber = $arr[4];
+            } catch (ClientException $e) {
+                if (preg_match('/arn\:aws[\w-]*\:iam\:\:(\d+)\:user/', $e->getMessage(), $matches)) {
+                    $this->awsAccountNumber = $matches[1];
+                } else {
+                    throw $e;
+                }
+            }
+        }
+        return $this->awsAccountNumber;
+    }
+
+    /**
+     * Retrieves AWS username
+     *
+     * @return  string  Returns AWS username
+     * @throws  ClientException
+     */
+    public function getUsername()
+    {
+        try {
+            return $this->iam->user->fetch()->userName;
+        } catch (ClientException $e) {}
+    }
+
+    /**
+     * Retrieves AWS user arn
+     *
+     * @return  string  Returns AWS user arn
+     * @throws  ClientException
+     */
+    public function getUserArn()
+    {
+        try {
+             return $this->iam->user->fetch()->arn;
+        } catch (ClientException $e) {
+            if (preg_match('/arn\:aws[\w-]*\:iam\:\:(\d+)\:user/', $e->getMessage(), $matches)) {
+                return $matches[0];
+            } else {
+                throw $e;
+            }
+        }
     }
 
     /**
@@ -248,6 +397,7 @@ class Aws
             self::SERVICE_INTERFACE_IAM,
             self::SERVICE_INTERFACE_EC2,
             self::SERVICE_INTERFACE_RDS,
+            self::SERVICE_INTERFACE_ROUTE53,
         );
     }
 
@@ -259,6 +409,16 @@ class Aws
      */
     public function getAvailableRegions($ignoreCache = false)
     {
+        return self::getCloudLocations();
+    }
+
+    /**
+     * Gets defined AWS cloud locations
+     *
+     * @return   array
+     */
+    public static function getCloudLocations()
+    {
         return array(
             self::REGION_AP_NORTHEAST_1,
             self::REGION_AP_SOUTHEAST_1,
@@ -267,7 +427,28 @@ class Aws
             self::REGION_SA_EAST_1,
             self::REGION_US_EAST_1,
             self::REGION_US_WEST_1,
-            self::REGION_US_WEST_2
+            self::REGION_US_WEST_2,
+            self::REGION_US_GOV_WEST_1,
+        );
+    }
+
+    /**
+     * Gets defined AWS cloud locations hosted zone ids
+     *
+     * @return   array
+     */
+    public static function getCloudLocationsZoneIds()
+    {
+        return array(
+            self::REGION_AP_NORTHEAST_1 => self::REGION_AP_NORTHEAST_1_ZONE_ID,
+            self::REGION_AP_SOUTHEAST_1 => self::REGION_AP_SOUTHEAST_1_ZONE_ID,
+            self::REGION_AP_SOUTHEAST_2 => self::REGION_AP_SOUTHEAST_2_ZONE_ID,
+            self::REGION_EU_WEST_1      => self::REGION_EU_WEST_1_ZONE_ID,
+            self::REGION_SA_EAST_1      => self::REGION_SA_EAST_1_ZONE_ID,
+            self::REGION_US_EAST_1      => self::REGION_US_EAST_1_ZONE_ID,
+            self::REGION_US_WEST_1      => self::REGION_US_WEST_1_ZONE_ID,
+            self::REGION_US_WEST_2      => self::REGION_US_WEST_2_ZONE_ID,
+            self::REGION_US_GOV_WEST_1  => self::REGION_US_GOV_WEST_1_ZONE_ID,
         );
     }
 
@@ -285,6 +466,18 @@ class Aws
             $ret = true;
         }
         return $ret;
+    }
+
+    /**
+     * DescribeRegions action
+     *
+     * @return  RegionInfoList  Returns the list of the RegionInfoData objects on success
+     * @throws  ClientException
+     * @throws  Ec2Exception
+     */
+    public function describeRegions()
+    {
+        return $this->ec2->describeRegions();
     }
 
     /**
@@ -462,7 +655,7 @@ class Aws
         return $this;
     }
 
-	/**
+    /**
      * Gets an AWS client event observer
      *
      * @return  \Scalr\Service\Aws\Plugin\EventObserver Returns AWS client event observer
@@ -472,7 +665,7 @@ class Aws
         return $this->eventObserver;
     }
 
-	/**
+    /**
      * Sets an AWS client event observer object associated with this instance
      *
      * @param   \Scalr\Service\Aws\Plugin\EventObserver $eventObserver The event observer
@@ -505,4 +698,66 @@ class Aws
     {
         return $this->environment;
     }
+
+    /**
+     * Gets presigned url signed with aws4 version signing algorithm
+     *
+     * @param string $service       Service name (ec2, s3)
+     * @param string $action        Action name (CopySnapshot)
+     * @param string $destRegion    Destination region
+     * @param string $objectId      Id of the snapshot, image , etc
+     */
+    public function getPresignedUrl($service, $action, $destRegion, $objectId)
+    {
+        $canonicalizedQueryString = '';
+        $time = time();
+        $options = [
+            'X-Amz-Algorithm'       => 'AWS4-HMAC-SHA256',
+            'X-Amz-Credential'      => $this->getAccessKeyId() . '/' . gmdate('Ymd', $time) . '/' . $this->getRegion() . '/' . $service . '/aws4_request',
+            'X-Amz-Date'            => gmdate('Ymd\THis\Z', $time),
+            'X-Amz-Expires'         => '86400',
+            'X-Amz-SignedHeaders'   => 'host',
+            'SourceRegion'          => $this->getRegion(),
+            'Action'                => $action,
+            'SourceSnapshotId'      => $objectId,
+            'DestinationRegion'     => $destRegion,
+        ];
+
+        ksort($options);
+
+        foreach ($options as $k => $v) {
+            $canonicalizedQueryString .= '&' . rawurlencode($k) . '=' . rawurlencode($v);
+        }
+
+        if ($canonicalizedQueryString !== '') {
+            $canonicalizedQueryString = substr($canonicalizedQueryString, 1);
+        }
+
+        $canonicalRequest =
+            'GET' . "\n"
+          . "/\n"
+          . $canonicalizedQueryString . "\n"
+          . "host:" . $this->{$service}->getUrl() . "\n"
+          . "\n"
+          . "host" . "\n"
+          . hash('sha256', '')
+        ;
+
+        $stringToSign = "AWS4-HMAC-SHA256" . "\n"
+                      . gmdate('Ymd\THis\Z', $time) . "\n"
+                      . gmdate('Ymd', $time) . "/" .  $this->getRegion() . "/" . $service . "/aws4_request" . "\n"
+                      . hash('sha256', $canonicalRequest);
+
+        $dateKey = hash_hmac('sha256', gmdate('Ymd', $time), "AWS4" . $this->getSecretAccessKey(), true);
+        $dateRegionKey = hash_hmac('sha256', $this->getRegion(), $dateKey, true);
+        $dateRegionServiceKey = hash_hmac('sha256', $service, $dateRegionKey, true);
+        $signingKey = hash_hmac('sha256', 'aws4_request', $dateRegionServiceKey, true);
+        $signature = hash_hmac('sha256', $stringToSign, $signingKey);
+
+    $presignedUrl = "https://" . $this->{$service}->getUrl() . "/?" . $canonicalizedQueryString
+            . "&X-Amz-Signature=" . rawurlencode($signature);
+
+        return $presignedUrl;
+    }
+
 }

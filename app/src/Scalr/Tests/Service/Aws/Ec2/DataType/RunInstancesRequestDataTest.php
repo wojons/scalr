@@ -2,16 +2,12 @@
 namespace Scalr\Tests\Service\Aws\Ec2\DataType;
 
 use Scalr\Service\Aws\Ec2\DataType\PlacementResponseData;
-use Scalr\Service\Aws\Ec2\DataType\PrivateIpAddressesSetRequestList;
-use Scalr\Service\Aws\Ec2\DataType\SecurityGroupIdSetData;
-use Scalr\Service\Aws\Ec2\DataType\SecurityGroupIdSetList;
 use Scalr\Service\Aws\Ec2\DataType\InstanceNetworkInterfaceSetRequestData;
 use Scalr\Service\Aws\Ec2\DataType\MonitoringInstanceData;
 use Scalr\Service\Aws\Ec2\DataType\IamInstanceProfileRequestData;
 use Scalr\Service\Aws\Ec2\DataType\EbsBlockDeviceData;
 use Scalr\Service\Aws\Ec2\DataType\BlockDeviceMappingData;
 use Scalr\Service\Aws\Ec2\DataType\RunInstancesRequestData;
-use Scalr\Service\Aws\Ec2\DataType\InstanceFilterNameType;
 use Scalr\Tests\Service\AwsTestCase;
 
 /**

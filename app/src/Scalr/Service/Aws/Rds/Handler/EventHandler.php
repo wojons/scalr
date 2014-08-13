@@ -3,9 +3,7 @@ namespace Scalr\Service\Aws\Rds\Handler;
 
 use Scalr\Service\Aws\Rds\DataType\DescribeEventRequestData;
 use Scalr\Service\Aws\Rds\DataType\EventList;
-use Scalr\Service\Aws\DataType\ListDataType;
 use Scalr\Service\Aws\Client\ClientException;
-use Scalr\Service\Aws\DataType\ErrorData;
 use Scalr\Service\Aws\RdsException;
 use Scalr\Service\Aws\Rds\AbstractRdsHandler;
 

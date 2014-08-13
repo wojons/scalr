@@ -6,6 +6,8 @@ Ext.define('Scalr.ui.CoreGovernanceLease', {
         var me = this,
             limits = data.settings.limits || {};
 
+        this.down('#enableLease')[data.settings.enabled != 1 ? 'show' : 'hide']();
+
         if (limits['notifications'] == undefined)
             limits['notifications'] = undefined; // add default one
 
@@ -26,6 +28,17 @@ Ext.define('Scalr.ui.CoreGovernanceLease', {
     },
     items: [{
         xtype: 'fieldset',
+        hidden: true,
+        itemId: 'enableLease',
+        padding: '14 0 10',
+        items: [{
+            xtype: 'checkbox',
+            boxLabel: '<b>Enable the default lease duration for all currently running farms</b>',
+            name: 'enableDefaultLeaseDuration'
+        }]
+    }, {
+        xtype: 'fieldset',
+        padding: '14 0 10',
         items: [{
             xtype: 'fieldcontainer',
             layout: 'hbox',
@@ -36,7 +49,8 @@ Ext.define('Scalr.ui.CoreGovernanceLease', {
                 width: 195,
                 name: 'defaultLifePeriod',
                 allowBlank: false,
-                value: 30
+                value: 30,
+                vtype: 'num'
             }, {
                 xtype: 'displayfield',
                 value: 'days',
@@ -115,6 +129,7 @@ Ext.define('Scalr.ui.CoreGovernanceLease', {
                     listeners: {
                         change: function(field, value) {
                             this.next('textfield')[ (value == 'owner') ? 'hide' : 'show']();
+                            this.next('textfield')[ (value == 'owner') ? 'disable' : 'enable']();
                         }
                     }
                 }, {
@@ -125,23 +140,35 @@ Ext.define('Scalr.ui.CoreGovernanceLease', {
                     emptyText: 'Enter one or more emails (comma separated)',
                     value: notif['emails'],
                     submitValue: false,
+                    allowBlank: false,
                     hidden: notif['to'] != 'email',
-                    margin: '0 0 0 8'
-                }, {
-                    xtype: 'displayfield',
-                    value: 'prior',
-                    margin: '0 0 0 8'
+                    disabled: notif['to'] != 'email',
+                    margin: '0 0 0 8',
+                    validator: function(value) {
+                        if (value) {
+                            var ar = value.split(','), i, errors = [];
+                            for (i = 0; i < ar.length; i++) {
+                                if (! Ext.form.field.VTypes.email(ar[i]))
+                                    errors.push(ar[i]);
+                            }
+
+                            if (errors.length)
+                                return 'You\'ve entered not valid emails: ' + errors.join(', ');
+                        }
+                        return true;
+                    }
                 }, {
                     xtype: 'textfield',
                     name: 'period',
                     value: notif['period'] || 1,
                     submitValue: false,
                     width: 50,
-                    margin: '0 0 0 8'
+                    margin: '0 0 0 8',
+                    allowBlank: false,
+                    regex: /^[0-9]+$/
                 }, {
                     xtype: 'displayfield',
-                    value: 'days',
-                    width: 30,
+                    value: 'days prior to termination',
                     margin: '0 0 0 8'
                 }, {
                     xtype: 'button',
@@ -161,8 +188,7 @@ Ext.define('Scalr.ui.CoreGovernanceLease', {
         plugins: {
             ptype: 'addfield',
             targetEl: '.x-fieldset-body span',
-            width: '608px',
-            cls: 'scalr-ui-addfield-light',
+            width: '549px',
             handler: function() {
                 this.addNotification();
             }
@@ -220,7 +246,8 @@ Ext.define('Scalr.ui.CoreGovernanceLease', {
                 width: 50,
                 name: 'leaseExtensionStandardNumber',
                 allowBlank: false,
-                value: 12
+                value: 12,
+                regex: /^[0-9]+$/
             }, {
                 xtype: 'displayinfofield',
                 value: 'Limit on the number of times a farm can have its lifetime extended',
@@ -236,6 +263,7 @@ Ext.define('Scalr.ui.CoreGovernanceLease', {
                 width: 50,
                 name: 'leaseExtensionStandardPeriod',
                 allowBlank: false,
+                regex: /^[0-9]+$/,
                 value: 30
             }, {
                 xtype: 'displayfield',
@@ -273,7 +301,8 @@ Ext.define('Scalr.ui.CoreGovernanceLease', {
             fieldLabel: 'Notify the following users (comma separated, email addresses) about non-standard extension requests',
             labelAlign: 'top',
             height: 100,
-            width: 600,
+            anchor: '100%',
+            maxWidth: 820,
             name: 'leaseExtensionNonStandardNotifyEmails',
             validateOnChange: false,
             validateOnBlur: true,
@@ -305,6 +334,7 @@ Ext.define('Scalr.ui.CoreGovernanceLease', {
 
             viewConfig: {
                 emptyText: 'No requests',
+                deferEmptyText: false,
                 deferInitialRefresh: false
             },
 

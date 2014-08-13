@@ -10,7 +10,10 @@ use Scalr\Service\OpenStack\Services\AbstractServiceHandler;
  *
  * @author   Vitaliy Demidov  <vitaliy@scalr.com>
  * @since    18.12.2012
- * @method   array     list()    list($detailed = true)                      Gets a list of snapshots.
+ * @method   \Scalr\Service\OpenStack\Type\DefaultPaginationList list()
+ *           list($detailed = true)
+ *           Gets a list of snapshots.
+ *
  * @method   object    create()  create($volumeId, $name = null, $description = null, $force = null) Creates snapshot of a volume.
  * @method   object    get()     get($snapshotId)                            Gets detailed information about single snapshot.
  * @method   bool      delete()  delete($snapshotId)                         Removes requested snapshot.

@@ -6,19 +6,17 @@ Scalr.regPage('Scalr.ui.security.groups.view', function (loadParams, moduleParam
 		],
 		proxy: {
 			type: 'scalr.paging',
-			extraParams: loadParams,
 			url: '/security/groups/xListGroups/'
 		},
 		remoteSort: true
 	});
 
 	return Ext.create('Ext.grid.Panel', {
-		title: 'Security &raquo; Groups &raquo; View',
+		title: Scalr.utils.getPlatformName(loadParams['platform']) + ' &raquo; Security groups &raquo; View',
 		scalrOptions: {
 			'reload': true,
 			'maximize': 'all'
 		},
-		scalrReconfigureParams: {},
 		store: store,
 		stateId: 'grid-security-groups-view',
 		stateful: true,
@@ -42,26 +40,20 @@ Scalr.regPage('Scalr.ui.security.groups.view', function (loadParams, moduleParam
 					'<tpl if="farm_roleid">' +
 						'&nbsp;&rarr;&nbsp;<a href="#/farms/{farm_id}/roles/{farm_roleid}/view" title="Role {role_name}">{role_name}</a> ' +
 					'</tpl>' +
-				'<tpl else><img src="/ui2/images/icons/false.png"></tpl>'
+				'<tpl else><img src="' + Ext.BLANK_IMAGE_URL + '" class="x-icon-minus" /></tpl>'
 			},
 			{ header: "Name", flex: 1, dataIndex: 'name', sortable: true },
 			{ header: "Description", flex: 2, dataIndex: 'description', sortable: true },
 			{ header: "VPC ID", width: 180, dataIndex: 'vpcId', sortable: true },
 			{
-				xtype: 'optionscolumn',
-				optionsMenu: [
-					{ itemId: "option.edit", iconCls: 'x-menu-icon-edit', text:'Edit', menuHandler:function(item) {
-						Scalr.event.fireEvent('redirect', '#/security/groups/' + item.record.get('id') + '/edit?platform=' + loadParams['platform'] + '&cloudLocation=' + store.proxy.extraParams.cloudLocation);
-					} }
-				],
-
-				getOptionVisibility: function (item, record) {
-					return true;
-				},
-
-				getVisibility: function (record) {
-					return true;
-				}
+				xtype: 'optionscolumn2',
+				menu: [{
+                    iconCls: 'x-menu-icon-edit',
+                    text:'Edit',
+                    menuHandler: function(data) {
+						Scalr.event.fireEvent('redirect', '#/security/groups/' + data['id'] + '/edit?platform=' + loadParams['platform'] + (Scalr.isCloudstack(loadParams['platform']) ? '' : '&cloudLocation=' + store.proxy.extraParams.cloudLocation));
+					}
+                }]
 			}
 		],
 
@@ -78,13 +70,14 @@ Scalr.regPage('Scalr.ui.security.groups.view', function (loadParams, moduleParam
 
         dockedItems: [{
             xtype: 'scalrpagingtoolbar',
+            ignoredLoadParams: ['platform'],
             store: store,
             dock: 'top',
 			beforeItems: [{
                 text: 'Add group',
                 cls: 'x-btn-green-bg',
                 handler: function() {
-                    Scalr.event.fireEvent('redirect', '#/security/groups/create?platform=' + loadParams['platform'] + '&cloudLocation=' + store.proxy.extraParams.cloudLocation);
+                    Scalr.event.fireEvent('redirect', '#/security/groups/create?platform=' + loadParams['platform'] + (Scalr.isCloudstack(loadParams['platform']) ? '' : '&cloudLocation=' + store.proxy.extraParams.cloudLocation));
                 }
             }],
             afterItems: [{
@@ -129,8 +122,8 @@ Scalr.regPage('Scalr.ui.security.groups.view', function (loadParams, moduleParam
                     data: moduleParams.locations,
                     proxy: 'object'
                 },
-                gridStore: store,
-                cloudLocation: loadParams['cloudLocation'] || ''
+                hidden: Scalr.isCloudstack(loadParams['platform']),
+                gridStore: store
             }]
         }]
 	});

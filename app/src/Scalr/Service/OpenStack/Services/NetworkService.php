@@ -9,9 +9,18 @@ use Scalr\Service\OpenStack\Services\Network\Type\CreateSubnet;
 use Scalr\Service\OpenStack\Services\Network\Type\ListSubnetsFilter;
 use Scalr\Service\OpenStack\Services\Network\Type\ListNetworksFilter;
 use Scalr\Service\OpenStack\OpenStack;
-use Scalr\Service\OpenStack\Exception\OpenStackException;
-use Scalr\Service\OpenStack\Client\RestClientResponse;
-use Scalr\Service\OpenStack\Services\Network\V2\NetworkApi;
+use Scalr\Service\OpenStack\Services\Network\Type\ListLbVipsFilter;
+use Scalr\Service\OpenStack\Services\Network\Type\ListLbPoolsFilter;
+use Scalr\Service\OpenStack\Services\Network\Type\ListLbMembersFilter;
+use Scalr\Service\OpenStack\Services\Network\Type\CreateLbPool;
+use Scalr\Service\OpenStack\Services\Network\Type\CreateLbMember;
+use Scalr\Service\OpenStack\Services\Network\Type\ListLbHealthMonitorsFilter;
+use Scalr\Service\OpenStack\Services\Network\Type\CreateLbHealthMonitor;
+use Scalr\Service\OpenStack\Services\Network\Type\CreateLbVip;
+use Scalr\Service\OpenStack\Type\DefaultPaginationList;
+use Scalr\Service\OpenStack\Services\Network\Type\ListSecurityGroupsFilter;
+use Scalr\Service\OpenStack\Services\Network\Type\ListSecurityGroupRulesFilter;
+use Scalr\Service\OpenStack\Services\Network\Type\CreateSecurityGroupRule;
 
 /**
  * OpenStack Network (OpenStack Quantum API)
@@ -33,6 +42,21 @@ use Scalr\Service\OpenStack\Services\Network\V2\NetworkApi;
  *
  * @property \Scalr\Service\OpenStack\Services\Network\Handler\FloatingIpsHandler $floatingIps
  *           Gets a FloatingIps service interface handler.
+ *
+ * @property \Scalr\Service\OpenStack\Services\Network\Handler\LbVipsHandler $lbVips
+ *           Gets a VIPs LoadBalancing service interface handler.
+ *
+ * @property \Scalr\Service\OpenStack\Services\Network\Handler\LbPoolsHandler $lbPools
+ *           Gets a Pools LoadBalancing service interface handler.
+ *
+ * @property \Scalr\Service\OpenStack\Services\Network\Handler\LbMembersHandler $lbMembers
+ *           Gets a Members LoadBalancing service interface handler.
+ *
+ * @property \Scalr\Service\OpenStack\Services\Network\Handler\LbHealthMonitorsHandler $lbHealthMonitors
+ *           Gets a LBaaS Health Monitors service interface handler.
+ *
+ * @property \Scalr\Service\OpenStack\Services\Network\Handler\SecurityGroupsHandler $securityGroups
+ *           Gets a Security Groups service interface handler.
  *
  * @method   \Scalr\Service\OpenStack\Services\Network\V2\NetworkApi getApiHandler()
  *           getApiHandler()
@@ -91,12 +115,12 @@ class NetworkService extends AbstractService implements ServiceInterface
      *
      * @param   string                   $networkId optional The ID of the network to show detailed info
      * @param   ListNetworksFilter|array $filter    optional The query filter.
-     * @return  array|object Returns the list of the networks or one network
+     * @return  DefaultPaginationList|object Returns the list of the networks or one network
      * @throws  RestClientException
      */
     public function listNetworks($networkId = null, $filter = null)
     {
-        if (!empty($filter) && !($filter instanceof ListNetworksFilter)) {
+        if ($filter !== null && !($filter instanceof ListNetworksFilter)) {
             $filter = ListNetworksFilter::initArray($filter);
         }
         return $this->getApiHandler()->listNetworks($networkId, $filter);
@@ -110,12 +134,12 @@ class NetworkService extends AbstractService implements ServiceInterface
      *
      * @param   string                  $subnetId optional The ID of the subnet to show detailed info
      * @param   ListSubnetsFilter|array $filter   optional The filter.
-     * @return  array|object Returns the list of the subnets or one subnet
+     * @return  DefaultPaginationList|object Returns the list of the subnets or one subnet
      * @throws  RestClientException
      */
     public function listSubnets($subnetId = null, $filter = null)
     {
-        if (!empty($filter) && !($filter instanceof ListSubnetsFilter)) {
+        if ($filter !== null && !($filter instanceof ListSubnetsFilter)) {
             $filter = ListSubnetsFilter::initArray($filter);
         }
         return $this->getApiHandler()->listSubnets($subnetId, $filter);
@@ -128,12 +152,12 @@ class NetworkService extends AbstractService implements ServiceInterface
      *
      * @param   string                $portId optional The ID of the port to show detailed info
      * @param   ListPortsFilter|array $filter The filter options
-     * @return  array|object Returns the list of the ports or the information about one port
+     * @return  DefaultPaginationList|object Returns the list of the ports or the information about one port
      * @throws  RestClientException
      */
     public function listPorts($portId = null, $filter = null)
     {
-        if (!empty($filter) && !($filter instanceof ListPortsFilter)) {
+        if ($filter !== null && !($filter instanceof ListPortsFilter)) {
             $filter = ListPortsFilter::initArray($filter);
         }
         return $this->getApiHandler()->listPorts($portId, $filter);
@@ -352,12 +376,12 @@ class NetworkService extends AbstractService implements ServiceInterface
      * @param   string                  $routerId     optional The ID of the router to show detailed info
      * @param   ListRoutersFilter|array $filter       optional The filter options
      * @param   array                   $fields       optional The list of the fields to show
-     * @return  array|object Returns the list of the routers or the information about one router
+     * @return  DefaultPaginationList|object Returns the list of the routers or the information about one router
      * @throws  RestClientException
      */
     public function listRouters($routerId = null, $filter = null, array $fields = null)
     {
-        if (!empty($filter) && !($filter instanceof ListRoutersFilter)) {
+        if ($filter !== null && !($filter instanceof ListRoutersFilter)) {
             $filter = ListRoutersFilter::initArray($filter);
         }
         return $this->getApiHandler()->listRouters($routerId, $filter, $fields);
@@ -478,7 +502,7 @@ class NetworkService extends AbstractService implements ServiceInterface
     /**
      * List Floating Ips action
      *
-     * @return  array Returns the list floating IP addresses
+     * @return  DefaultPaginationList Returns the list floating IP addresses
      * @throws  RestClientException
      */
     public function listFloatingIps()
@@ -543,5 +567,362 @@ class NetworkService extends AbstractService implements ServiceInterface
     public function updateFloatingIp($floatingIpAddressId, $portId = null)
     {
         return $this->getApiHandler()->updateFloatingIp($floatingIpAddressId, $portId);
+    }
+
+    /**
+     * List LBaaS VIPs action (GET /lb/vips[/vip-id])
+     *
+     * @param   string                 $vipId  optional The ID of the VIP to show detailed info
+     * @param   ListLbVipsFilter|array $filter optional The query filter.
+     * @return  DefaultPaginationList|object Returns the list of the VIPs or the specified VIP
+     * @throws  RestClientException
+     */
+    public function listLbVips($vipId = null, $filter = null)
+    {
+        if ($filter !== null && !($filter instanceof ListLbVipsFilter)) {
+            $filter = ListLbVipsFilter::initArray($filter);
+        }
+        return $this->getApiHandler()->listLbVips($vipId, $filter);
+    }
+
+    /**
+     * Creates LBaaS vip (POST /lb/vips)
+     *
+     * @param   CreateLbVip|array $request The request object
+     * @return  object   Returns detailed info of the created VIP
+     * @throws  RestClientException
+     */
+    public function createLbVip($request)
+    {
+        if (is_array($request)) {
+            $request = CreateLbVip::initArray($request);
+        }
+        return $this->getApiHandler()->createLbVip($request);
+    }
+
+    /**
+     * Deletes LBaaS VIP (DELETE /lb/vips/vip-id)
+     *
+     * @param   string  $vipId    The ID of the VIP to delete
+     * @return  boolean Returns true on success or throws an exception
+     * @throws  RestClientException
+     */
+    public function deleteLbVip($vipId)
+    {
+        return $this->getApiHandler()->deleteLbVip($vipId);
+    }
+
+    /**
+     * Update LBaaS VIP (PUT /lb/vips/vip-id)
+     *
+     * @param   string       $vipId The Id of the LBaaS VIP to update
+     * @param   array|object $options  Raw options object (It will be json_encoded and passed as is.)
+     * @return  object       Returns LBaaS VIP object on success or throws an exception otherwise
+     * @throws  RestClientException
+     */
+    public function updateLbVip($vipId, $options)
+    {
+        return $this->getApiHandler()->updateLbVip($vipId, $options);
+    }
+
+    /**
+     * List LBaaS Pools action (GET /lb/pools[/pool-id])
+     *
+     * @param   string                  $poolId  optional The ID of the Pool to show detailed info
+     * @param   ListLbPoolsFilter|array $filter  optional The query filter.
+     * @return  DefaultPaginationList|object Returns the list of the VIPs or the specified VIP
+     * @throws  RestClientException
+     */
+    public function listLbPools($poolId = null, $filter = null)
+    {
+        if ($filter !== null && !($filter instanceof ListLbPoolsFilter)) {
+            $filter = ListLbPoolsFilter::initArray($filter);
+        }
+        return $this->getApiHandler()->listLbPools($poolId, $filter);
+    }
+
+    /**
+     * Deletes LBaaS pool (DELETE /lb/pools/pool-id)
+     *
+     * @param   string  $poolId The ID of the pool to delete
+     * @return  boolean Returns true on success or throws an exception
+     * @throws  RestClientException
+     */
+    public function deleteLbPool($poolId)
+    {
+        return $this->getApiHandler()->deleteLbPool($poolId);
+    }
+
+    /**
+     * Update LBaaS pool (PUT /lb/pools/pool-id)
+     *
+     * @param   string       $poolId The Id of the LBaaS pool to update
+     * @param   array|object $options  Raw options object (It will be json_encoded and passed as is.)
+     * @return  object       Returns LBaaS pool object on success or throws an exception otherwise
+     * @throws  RestClientException
+     */
+    public function updateLbPool($poolId, $options)
+    {
+        return $this->getApiHandler()->updateLbPool($poolId, $options);
+    }
+
+    /**
+     * Creates LBaaS pool (POST /lb/pools)
+     *
+     * @param   CreateLbPool|array $request The request object or array
+     * @return  array   Returns detailed info of the created pool
+     * @throws  RestClientException
+     */
+    public function createLbPool($request)
+    {
+        if (is_array($request)) {
+            $request = CreateLbPool::initArray($request);
+        }
+        return $this->getApiHandler()->createLbPool($request);
+    }
+
+    /**
+     * Associates health monitor with the pool (POST /lb/pools/pool-id/health_monitors)
+     *
+     * @param   string   $poolId          The identifier of the LBaaS pool
+     * @param   string   $healthMonitorId The identifier of the LBaaS health monitor
+     * @return  object
+     * @throws  RestClientException
+     */
+    public function associateLbHealthMonitorWithPool($poolId, $healthMonitorId)
+    {
+        return $this->getApiHandler()->associateLbHealthMonitorWithPool($poolId, $healthMonitorId);
+    }
+
+    /**
+     * Disassociates health monitor from a pool (DELETE /lb/pools/pool-id/health_monitors/healthmonitor-id)
+     *
+     * @param   string   $poolId          The identifier of the LBaaS pool
+     * @param   string   $healthMonitorId The identifier of the LBaaS health monitor
+     * @return  bool     Returns boolean true on success or throws an exception
+     * @throws  RestClientException
+     */
+    public function disassociateLbHealthMonitorFromPool($poolId, $healthMonitorId)
+    {
+        return $this->getApiHandler()->disassociateLbHealthMonitorFromPool($poolId, $healthMonitorId);
+    }
+
+    /**
+     * List LBaaS Members action (GET /lb/members[/member-id])
+     *
+     * @param   string                  $memberId  optional The ID of the member to show detailed info
+     * @param   ListLbPoolsFilter|array $filter    optional The query filter.
+     * @return  DefaultPaginationList|object Returns the list of the members or the specified member
+     * @throws  RestClientException
+     */
+    public function listLbMembers($memberId = null, $filter = null)
+    {
+        if ($filter !== null && !($filter instanceof ListLbMembersFilter)) {
+            $filter = ListLbMembersFilter::initArray($filter);
+        }
+        return $this->getApiHandler()->listLbMembers($memberId, $filter);
+    }
+
+    /**
+     * Creates LBaaS member (POST /lb/members)
+     *
+     * @param   CreateLbMember|array $request The request object or array
+     * @return  object   Returns LBaaS member object
+     * @throws  RestClientException
+     */
+    public function createLbMember($request)
+    {
+        if (!($request instanceof CreateLbMember)) {
+            $request = CreateLbMember::initArray($request);
+        }
+        return $this->getApiHandler()->createLbMember($request);
+    }
+
+    /**
+     * Deletes LBaaS member (DELETE /lb/members/member-id)
+     *
+     * @param   string  $memberId The ID of the member to delete
+     * @return  boolean Returns true on success or throws an exception
+     * @throws  RestClientException
+     */
+    public function deleteLbMember($memberId)
+    {
+        return $this->getApiHandler()->deleteLbMember($memberId);
+    }
+
+    /**
+     * Update LBaaS member (PUT /lb/members/member-id)
+     *
+     * @param   string       $memberId The Id of the LBaaS member to update
+     * @param   array|object $options  Raw options object (It will be json_encoded and passed as is.)
+     * @return  object       Returns LBaaS member object on success or throws an exception otherwise
+     * @throws  RestClientException
+     */
+    public function updateLbMember($memberId, $options)
+    {
+        return $this->getApiHandler()->updateLbMember($memberId, $options);
+    }
+
+    /**
+     * List LBaaS Health Monitors action (GET /lb/health_monitors[/health-monitors-id])
+     *
+     * @param   string                           $healthMonitorId  optional The ID of the health monitor to show detailed info
+     * @param   ListLbHealthMonitorsFilter|array $filter           optional The query filter.
+     * @return  DefaultPaginationList|object Returns the list of the Health Monitors or the requested pool
+     * @throws  RestClientException
+     */
+    public function listLbHealthMonitors($healthMonitorId = null, $filter = null)
+    {
+        if ($filter !== null && !($filter instanceof ListLbHealthMonitorsFilter)) {
+            $filter = ListLbHealthMonitorsFilter::initArray($filter);
+        }
+        return $this->getApiHandler()->listLbHealthMonitors($healthMonitorId, $filter);
+    }
+
+    /**
+     * Creates LBaaS Health Monitor (POST /lb/health_monitors)
+     *
+     * @param   CreateLbHealthMonitor|array $request The request object or array
+     * @return  object   Returns LBaaS health monitor object
+     * @throws  RestClientException
+     */
+    public function createLbHealthMonitor($request)
+    {
+        if (!($request instanceof CreateLbHealthMonitor)) {
+            $request = CreateLbHealthMonitor::initArray($request);
+        }
+        return $this->getApiHandler()->createLbHealthMonitor($request);
+    }
+
+    /**
+     * Deletes LBaaS health monitor (DELETE /lb/health_monitors/health-monitor-id)
+     *
+     * @param   string  $healthMonitorId The ID of the health monitor to delete
+     * @return  boolean Returns true on success or throws an exception
+     * @throws  RestClientException
+     */
+    public function deleteLbHealthMonitor($healthMonitorId)
+    {
+        return $this->getApiHandler()->deleteLbHealthMonitor($healthMonitorId);
+    }
+
+    /**
+     * Update LBaaS health monitor (PUT /lb/health_monitors/health_monitors-id)
+     *
+     * @param   string       $healthMonitorId The Id of the LBaaS health monitor to update
+     * @param   array|object $options  Raw options object (It will be json_encoded and passed as is.)
+     * @return  object       Returns LBaaS health monitor object on success or throws an exception otherwise
+     * @throws  RestClientException
+     */
+    public function updateLbHealthMonitor($healthMonitorId, $options)
+    {
+        return $this->getApiHandler()->updateLbHealthMonitor($healthMonitorId, $options);
+    }
+
+    /**
+     * Gets the list of the security groups (GET /lb/security-groups[/security-groups-id])
+     *
+     * @param   string $id optional
+     *          The ID of the security group to view
+     *
+     * @param   ListSecurityGroupsFilter|array $filter optional
+     *          The filter options. Filter doesn't apply to detailed info
+     *
+     * @param   array $fields optional
+     *          The list of the fields to show
+     *
+     * @return  DefaultPaginationList|object Returns the list of the security groups or specified security group
+     * @throws  RestClientException
+     */
+    public function listSecurityGroups($id = null, $filter = null, $fields = null)
+    {
+        if ($filter !== null && !($filter instanceof ListSecurityGroupsFilter)) {
+            $filter = ListSecurityGroupsFilter::initArray($filter);
+        }
+        return $this->getApiHandler()->listSecurityGroups($id, $filter, $fields);
+    }
+
+    /**
+     * Deletes Security Group (DELETE /security-groups/security-group-id)
+     *
+     * This operation deletes an OpenStack Networking security group and its associated security group rules,
+     * provided that a port is not associated with the security group
+     *
+     * @param   string  $id The UUID of the security group to delete
+     * @return  boolean Returns true on success or throws an exception
+     * @throws  RestClientException
+     */
+    public function deleteSecurityGroup($id)
+    {
+        return $this->getApiHandler()->deleteSecurityGroup($id);
+    }
+
+    /**
+     * Creates Security group (POST /security-groups)
+     *
+     * @param   string   $name        The name of the security group
+     * @param   string   $description optional The description of the security group
+     * @return  object   Returns security group object
+     * @throws  RestClientException
+     */
+    public function createSecurityGroup($name, $description = null)
+    {
+        return $this->getApiHandler()->createSecurityGroup($name, $description);
+    }
+
+    /**
+     * Gets the list of the security group rules (GET /security-group-rules/[rules-security-groups-id] )
+     *
+     * Lists a summary of all OpenStack Networking security group rules that the specified tenant can access.
+     *
+     * @param   string $id optional
+     *          The ID of the security group rule to view
+     *
+     * @param   ListSecurityGroupRulesFilter|array $filter optional
+     *          The filter options. Filter doesn't apply to detailed info
+     *
+     * @param   array $fields optional
+     *          The list of the fields to show
+     *
+     * @return  DefaultPaginationList|object Returns the list of the security groups or specified security group
+     * @throws  RestClientException
+     */
+    public function listSecurityGroupRules($id = null, $filter = null, array $fields = null)
+    {
+        if ($filter !== null && !($filter instanceof ListSecurityGroupRulesFilter)) {
+            $filter = ListSecurityGroupRulesFilter::initArray($filter);
+        }
+
+        return $this->getApiHandler()->listSecurityGroupRules($id, $filter, $fields);
+    }
+
+    /**
+     * Creates Security Group Rule (POST /security-group-rules)
+     *
+     * @param   CreateSecurityGroupRule|array $request The request object
+     * @return  object                        Returns Security Group Rule object
+     * @throws  RestClientException
+     */
+    public function createSecurityGroupRule($request)
+    {
+        if (!($request instanceof CreateSecurityGroupRule)) {
+            $request = CreateSecurityGroupRule::initArray($request);
+        }
+
+        return $this->getApiHandler()->createSecurityGroupRule($request);
+    }
+
+    /**
+     * Deletes Security Group Rule (DELETE /security-group-rules/​rules-security-groups-id})
+     *
+     * Deletes a specified rule from a OpenStack Networking security group.
+     *
+     * @param   string  $id The UUID of the security group rule to delete
+     * @return  boolean Returns true on success or throws an exception
+     * @throws  RestClientException
+     */
+    public function deleteSecurityGroupRule($id)
+    {
+        return $this->getApiHandler()->deleteSecurityGroupRule($id);
     }
 }

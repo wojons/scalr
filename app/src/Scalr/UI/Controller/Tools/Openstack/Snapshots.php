@@ -1,6 +1,7 @@
 <?php
 
 use Scalr\Acl\Acl;
+use Scalr\Modules\PlatformFactory;
 
 class Scalr_UI_Controller_Tools_Openstack_Snapshots extends Scalr_UI_Controller
 {
@@ -18,6 +19,21 @@ class Scalr_UI_Controller_Tools_Openstack_Snapshots extends Scalr_UI_Controller
     public function defaultAction()
     {
         $this->viewAction();
+    }
+
+    /**
+     * @param string $volumeId
+     * @param string $cloudLocation
+     * @param string $platform
+     * @param string $name
+     * @param string $description
+     */
+    public function xCreateAction($volumeId, $cloudLocation, $platform, $name = '', $description = '')
+    {
+        $client = $this->environment->openstack($platform, $cloudLocation);
+        $snapshot = $client->volume->createSnapshot($volumeId, $name, $description, true);
+
+        $this->response->data(array('data' => array('snapshotId' => $snapshot->id)));
     }
 
     public function viewAction()
@@ -66,24 +82,28 @@ class Scalr_UI_Controller_Tools_Openstack_Snapshots extends Scalr_UI_Controller
 
         $client = $this->environment->openstack($platformName, $this->getParam('cloudLocation'));
 
-        $snapshots = $client->volume->listSnapshots(true);
         $snaps = array();
-        foreach ($snapshots as $pk=>$pv)
-        {
-            if ($this->getParam('snapshotId') && $this->getParam('snapshotId') != $pv->id)
-                continue;
 
-            $item = array(
-                'snapshotId'	=> $pv->id,
-                'size'	        => $pv->size,
-                'volumeId'      => $pv->volume_id,
-                'createdAt'     => $pv->created_at,
-                'status'	    => $pv->status,
-                'progress'      => $pv->{"os-extended-snapshot-attributes:progress"}
-            );
+        $snapshots = $client->volume->listSnapshots(true);
+        do {
+            foreach ($snapshots as $pk => $pv) {
+                if ($this->getParam('snapshotId') && $this->getParam('snapshotId') != $pv->id)
+                    continue;
 
-            $snaps[] = $item;
-        }
+                $item = array(
+                    'name'			=> $pv->name,
+                    'description'   => $pv->description,
+                    'snapshotId'	=> $pv->id,
+                    'size'	        => $pv->size,
+                    'volumeId'      => $pv->volume_id,
+                    'createdAt'     => $pv->created_at,
+                    'status'	    => $pv->status,
+                    'progress'      => $pv->{"os-extended-snapshot-attributes:progress"}
+                );
+
+                $snaps[] = $item;
+            }
+        } while (false !== ($snapshots = $snapshots->getNextPage()));
 
         $response = $this->buildResponseFromData($snaps, array('snapshotId', 'volumeId', 'status'));
 

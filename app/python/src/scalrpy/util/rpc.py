@@ -95,15 +95,13 @@ class Security(object):
         else:
             self.crypto_algo = crypto_algo
 
+    def sign_data(self, data, utc_struct_time=None):
+        return cryptotool.sign(data, self.crypto_key, utc_struct_time, self.DATE_FORMAT)
 
-    def sign_data(self, data, timestamp=None):
-        return cryptotool.sign(data, self.crypto_key, timestamp, self.DATE_FORMAT)
-
-
-    def check_signature(self, signature, data, timestamp):
-        calc_signature = self.sign_data(data, time.strptime(timestamp, self.DATE_FORMAT))[0]
+    def check_signature(self, signature, data, utc_timestamp):
+        utc_struct_time = time.strptime(utc_timestamp, self.DATE_FORMAT)
+        calc_signature = self.sign_data(data, utc_struct_time)[0]
         assert signature == calc_signature, "Signature doesn't match"
-
 
     def decrypt_data(self, data):
         if not self.encrypt:
@@ -112,7 +110,6 @@ class Security(object):
             return cryptotool.decrypt(self.crypto_algo, data, self.crypto_key)
         except:
             raise InvalidRequestError('Failed to decrypt data. Error:%s' % helper.exc_info())
-
 
     def encrypt_data(self, data):
         if not self.encrypt:
@@ -128,14 +125,12 @@ class ServiceProxy(object):
     def __init__(self):
         self.local = local()
 
-
     def __getattr__(self, name):
         try:
             self.__dict__['local'].method.append(name)
         except AttributeError:
             self.__dict__['local'].method = [name]
         return self
-
 
     def __call__(self, timeout=None, **kwds):
         try:
@@ -148,7 +143,6 @@ class ServiceProxy(object):
         finally:
             self.local.method = []
 
-
     def exchange(self, request, timeout=None):
         raise NotImplementedError()
 
@@ -160,7 +154,6 @@ class HttpServiceProxy(ServiceProxy):
         self.endpoint = endpoint
         self.security = security
         self.headers = headers
-
 
     def exchange(self, request, timeout=None):
         if self.security:

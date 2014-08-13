@@ -1,5 +1,8 @@
 <?php
 
+use Scalr\Modules\PlatformFactory;
+use Scalr\Modules\Platforms\Cloudstack\CloudstackPlatformModule;
+
 class BundleTasksManagerProcess implements \Scalr\System\Pcntl\ProcessInterface
 {
 
@@ -59,23 +62,13 @@ class BundleTasksManagerProcess implements \Scalr\System\Pcntl\ProcessInterface
 
         switch ($BundleTask->status) {
             case SERVER_SNAPSHOT_CREATION_STATUS::ESTABLISHING_COMMUNICATION:
-                $ctrlPort = $DBServer->GetProperty(SERVER_PROPERTIES::SZR_CTRL_PORT);
-                if (!$ctrlPort) {
-                    $ctrlPort = 8013;
-                }
-                if (\Scalr::config('scalr.instances_connection_policy') == 'local') {
-                    $requestHost = $DBServer->localIp;
-                } elseif (\Scalr::config('scalr.instances_connection_policy') == 'public') {
-                    $requestHost = $DBServer->remoteIp;
-                } elseif (\Scalr::config('scalr.instances_connection_policy') == 'auto') {
-                    if ($DBServer->remoteIp) {
-                        $requestHost = $DBServer->remoteIp;
-                    } else {
-                        $requestHost = $DBServer->localIp;
-                    }
-                }
-
-                $conn = @fsockopen($requestHost, $ctrlPort, $errno, $errstr, 10);
+                $conn = @fsockopen(
+                    $DBServer->getSzrHost(),
+                    $DBServer->getPort(DBServer::PORT_CTRL),
+                    $errno,
+                    $errstr,
+                    10
+                );
 
                 if ($conn) {
                     $DBServer->SetProperty(SERVER_PROPERTIES::SZR_IMPORTING_OUT_CONNECTION, 1);
@@ -153,53 +146,83 @@ class BundleTasksManagerProcess implements \Scalr\System\Pcntl\ProcessInterface
                         $environment = $DBServer->GetEnvironmentObject();
                         $cloudLocation = $DBServer->GetCloudLocation();
                         $platform = PlatformFactory::NewPlatform($DBServer->platform);
-                        $sharedIpId = $platform->getConfigVariable(Modules_Platforms_Cloudstack::SHARED_IP_ID.".{$cloudLocation}", $environment, false);
-                        $sharedIp = $platform->getConfigVariable(Modules_Platforms_Cloudstack::SHARED_IP.".{$cloudLocation}", $environment, false);
+                        $sharedIpId = $platform->getConfigVariable(CloudstackPlatformModule::SHARED_IP_ID.".{$cloudLocation}", $environment, false);
+                        $sharedIp = $platform->getConfigVariable(CloudstackPlatformModule::SHARED_IP.".{$cloudLocation}", $environment, false);
 
                         $BundleTask->Log("Shared IP: {$sharedIp}");
 
-                        $cs = Scalr_Service_Cloud_Cloudstack::newCloudstack(
-                            $platform->getConfigVariable(Modules_Platforms_Cloudstack::API_URL, $environment),
-                            $platform->getConfigVariable(Modules_Platforms_Cloudstack::API_KEY, $environment),
-                            $platform->getConfigVariable(Modules_Platforms_Cloudstack::SECRET_KEY, $environment),
-                            $DBServer->platform
-                        );
+                        $cs = $environment->cloudstack($DBServer->platform);
 
                         // Create port forwarding rules for scalarizr
-                        $port = $platform->getConfigVariable(Modules_Platforms_Cloudstack::SZR_PORT_COUNTER.".{$cloudLocation}.{$sharedIpId}", $environment, false);
+                        $port = $platform->getConfigVariable(CloudstackPlatformModule::SZR_PORT_COUNTER.".{$cloudLocation}.{$sharedIpId}", $environment, false);
+
                         if (!$port) {
                             $port1 = 30000;
                             $port2 = 30001;
                             $port3 = 30002;
                             $port4 = 30003;
-                        }
-                        else {
+                        } else {
                             $port1 = $port+1;
                             $port2 = $port1+1;
                             $port3 = $port2+1;
                             $port4 = $port3+1;
                         }
 
-                        $result2 = $cs->createPortForwardingRule($sharedIpId, 8014, "udp", $port1, $DBServer->GetProperty(CLOUDSTACK_SERVER_PROPERTIES::SERVER_ID));
-                        $result1 = $cs->createPortForwardingRule($sharedIpId, 8013, "tcp", $port1, $DBServer->GetProperty(CLOUDSTACK_SERVER_PROPERTIES::SERVER_ID));
-                        $result3 = $cs->createPortForwardingRule($sharedIpId, 8010, "tcp", $port3, $DBServer->GetProperty(CLOUDSTACK_SERVER_PROPERTIES::SERVER_ID));
-                        $result4 = $cs->createPortForwardingRule($sharedIpId, 8008, "tcp", $port2, $DBServer->GetProperty(CLOUDSTACK_SERVER_PROPERTIES::SERVER_ID));
+                        $virtualmachineid = $DBServer->GetProperty(CLOUDSTACK_SERVER_PROPERTIES::SERVER_ID);
 
-                        $result5 = $cs->createPortForwardingRule($sharedIpId, 22, "tcp", $port4, $DBServer->GetProperty(CLOUDSTACK_SERVER_PROPERTIES::SERVER_ID));
+                        $result2 = $cs->firewall->createPortForwardingRule(array(
+                            'ipaddressid'      => $sharedIpId,
+                            'privateport'      => 8014,
+                            'protocol'         => "udp",
+                            'publicport'       => $port1,
+                            'virtualmachineid' => $virtualmachineid
+                        ));
+
+                        $result1 = $cs->firewall->createPortForwardingRule(array(
+                            'ipaddressid'      => $sharedIpId,
+                            'privateport'      => 8013,
+                            'protocol'         => "tcp",
+                            'publicport'       => $port1,
+                            'virtualmachineid' => $virtualmachineid
+                        ));
+
+                        $result3 = $cs->firewall->createPortForwardingRule(array(
+                            'ipaddressid'      => $sharedIpId,
+                            'privateport'      => 8010,
+                            'protocol'         => "tcp",
+                            'publicport'       => $port3,
+                            'virtualmachineid' => $virtualmachineid
+                        ));
+
+                        $result4 = $cs->firewall->createPortForwardingRule(array(
+                            'ipaddressid'      => $sharedIpId,
+                            'privateport'      => 8008,
+                            'protocol'         => "tcp",
+                            'publicport'       => $port2,
+                            'virtualmachineid' => $virtualmachineid
+                        ));
+
+                        $result5 = $cs->firewall->createPortForwardingRule(array(
+                            'ipaddressid'      => $sharedIpId,
+                            'privateport'      => 22,
+                            'protocol'         => "tcp",
+                            'publicport'       => $port4,
+                            'virtualmachineid' => $virtualmachineid
+                        ));
 
                         $DBServer->SetProperties(array(
-                            SERVER_PROPERTIES::SZR_CTRL_PORT => $port1,
-                            SERVER_PROPERTIES::SZR_SNMP_PORT => $port1,
+                            SERVER_PROPERTIES::SZR_CTRL_PORT   => $port1,
+                            SERVER_PROPERTIES::SZR_SNMP_PORT   => $port1,
 
-                            SERVER_PROPERTIES::SZR_API_PORT => $port3,
-                            SERVER_PROPERTIES::SZR_UPDC_PORT => $port2,
+                            SERVER_PROPERTIES::SZR_API_PORT    => $port3,
+                            SERVER_PROPERTIES::SZR_UPDC_PORT   => $port2,
                             SERVER_PROPERTIES::CUSTOM_SSH_PORT => $port4
                         ));
 
                         $DBServer->remoteIp = $sharedIp;
                         $DBServer->Save();
 
-                        $platform->setConfigVariable(array(Modules_Platforms_Cloudstack::SZR_PORT_COUNTER.".{$cloudLocation}.{$sharedIpId}" => $port4), $environment, false);
+                        $platform->setConfigVariable(array(CloudstackPlatformModule::SZR_PORT_COUNTER.".{$cloudLocation}.{$sharedIpId}" => $port4), $environment, false);
                     } catch (Exception $e) {
                         $BundleTask->Log("Unable to create port-forwarding rules: {$e->getMessage()}");
                     }
@@ -296,6 +319,8 @@ class BundleTasksManagerProcess implements \Scalr\System\Pcntl\ProcessInterface
                     exit();
                 }
 
+                $BundleTask->Log(sprintf(_("Created SSH session. Username: %s"), $ssh2Client->getLogin()));
+
                 //Prepare script
                 $BundleTask->Log(sprintf(_("Uploading builder scripts...")));
                 $behaviors = $DBServer->GetProperty(SERVER_PROPERTIES::SZR_IMPORTING_BEHAVIOR);
@@ -305,7 +330,7 @@ class BundleTasksManagerProcess implements \Scalr\System\Pcntl\ProcessInterface
                     } else {
                         $platform = $DBServer->platform;
                     }
-                    $baseUrl = \Scalr::config('scalr.endpoint.scheme') . "://" . \Scalr::config('scalr.endpoint.host');
+                    $baseUrl = rtrim(\Scalr::config('scalr.endpoint.scheme') . "://" . \Scalr::config('scalr.endpoint.host'), '/');
                     $options = array(
                         'server-id'                  => $DBServer->serverId,
                         'role-name'                  => $BundleTask->roleName,
@@ -410,10 +435,33 @@ class BundleTasksManagerProcess implements \Scalr\System\Pcntl\ProcessInterface
                     $shell = $ssh2Client->getShell();
 
                     @stream_set_blocking($shell, true);
+                    @stream_set_timeout($shell, 5);
 
                     @fwrite($shell, "sudo touch /var/log/role-builder-output.log 2>&1" . PHP_EOL);
+                    $output = @fgets($shell, 4096);
+                    $BundleTask->Log("Verbose 1: {$output}");
+
                     @fwrite($shell, "sudo chmod 0666 /var/log/role-builder-output.log 2>&1" . PHP_EOL);
+                    $output2 = @fgets($shell, 4096);
+                    $BundleTask->Log("Verbose 2: {$output2}");
+
+
                     @fwrite($shell, "sudo setsid /tmp/scalr-builder.sh > /var/log/role-builder-output.log 2>&1 &" . PHP_EOL);
+                    $output3 = @fgets($shell, 4096);
+                    $BundleTask->Log("Verbose 3: {$output3}");
+
+                    sleep(5);
+
+                    $meta = stream_get_meta_data($shell);
+                    $BundleTask->Log(sprintf("Verbose (Meta): %s", json_encode($meta)));
+                    $i = 4;
+                    if ($meta['eof'] == false && $meta['unread_bytes'] != 0) {
+                        $output4 = @fread($shell, $meta['unread_bytes']);
+                        $BundleTask->Log("Verbose {$i}: {$output4}");
+
+                        $meta = stream_get_meta_data($shell);
+                        $BundleTask->Log(sprintf("Verbose (Meta): %s", json_encode($meta)));
+                    }
 
                     @fclose($shell);
 
@@ -591,19 +639,17 @@ class BundleTasksManagerProcess implements \Scalr\System\Pcntl\ProcessInterface
                                             $DBServer->serverId
                                         ));
                                     }
-                                    if ($DBServer->GetFarmObject()->Status == FARM_STATUS::SYNCHRONIZING) {
-                                        $DBServer->terminate(array('BUNDLE_TASK_FINISHED', 'Synchronizing', $BundleTask->id));
-                                    }
                                 } else {
                                     if (!$db->GetOne("SELECT server_id FROM servers WHERE replace_server_id=? AND status NOT IN (?,?,?) LIMIT 1", array(
                                         $DBServer->serverId,
                                         SERVER_STATUS::TERMINATED,
                                         SERVER_STATUS::PENDING_TERMINATE,
-                                        SERVER_STATUS::TROUBLESHOOTING
+                                        SERVER_STATUS::TROUBLESHOOTING,
+                                        SERVER_STATUS::SUSPENDED
                                     ))) {
                                         $ServerCreateInfo = new ServerCreateInfo($DBFarmRole->Platform, $DBFarmRole, $DBServer->index, $DBFarmRole->NewRoleID);
                                         $nDBServer = Scalr::LaunchServer(
-                                            $ServerCreateInfo, null, false, "Server replacement after snapshotting",
+                                            $ServerCreateInfo, null, false, DBServer::LAUNCH_REASON_REPLACE_SERVER_FROM_SNAPSHOT,
                                             (!empty($BundleTask->createdById) ? $BundleTask->createdById : null)
                                         );
                                         $nDBServer->replaceServerID = $DBServer->serverId;
@@ -628,7 +674,7 @@ class BundleTasksManagerProcess implements \Scalr\System\Pcntl\ProcessInterface
                             $DBServer->Remove();
                         } elseif ($DBServer->status == SERVER_STATUS::TEMPORARY) {
                             $BundleTask->Log("Terminating temporary server");
-                            $DBServer->terminate('TEMPORARY_SERVER_ROLE_BUILDER');
+                            $DBServer->terminate(DBServer::TERMINATE_REASON_TEMPORARY_SERVER_ROLE_BUILDER);
                             $BundleTask->Log("Termination request has been sent");
                         }
                     } catch (Exception $e) {
@@ -638,6 +684,7 @@ class BundleTasksManagerProcess implements \Scalr\System\Pcntl\ProcessInterface
                     $BundleTask->setDate('finished');
                     $BundleTask->status = SERVER_SNAPSHOT_CREATION_STATUS::SUCCESS;
                     $BundleTask->Save();
+                    $BundleTask->createImageEntity();
                 }
 
                 try {
@@ -684,11 +731,17 @@ class BundleTasksManagerProcess implements \Scalr\System\Pcntl\ProcessInterface
                         }
                     }
 
-                    try {
-                        $DBRole = DBRole::createFromBundleTask($BundleTask);
-                    } catch (Exception $e) {
-                        $BundleTask->SnapshotCreationFailed("Role creation failed due to internal error ({$e->getMessage()}). Please try again.");
-                        return;
+                    // TODO: use another property
+                    if ($BundleTask->roleName) {
+                        try {
+                            $DBRole = DBRole::createFromBundleTask($BundleTask);
+                        } catch (Exception $e) {
+                            $BundleTask->SnapshotCreationFailed("Role creation failed due to internal error ({$e->getMessage()}). Please try again.");
+                            return;
+                        }
+                    } else {
+                        // roleName is empty, just create image
+                        $BundleTask->createImageEntity();
                     }
 
                     if ($BundleTask->replaceType == SERVER_REPLACEMENT_TYPE::NO_REPLACE) {
@@ -745,7 +798,7 @@ class BundleTasksManagerProcess implements \Scalr\System\Pcntl\ProcessInterface
                                 $DBServer->Remove();
                             } elseif ($DBServer->status == SERVER_STATUS::TEMPORARY) {
                                 $BundleTask->Log("Terminating temporary server");
-                                $DBServer->terminate('TEMPORARY_SERVER_ROLE_BUILDER');
+                                $DBServer->terminate(DBServer::TERMINATE_REASON_TEMPORARY_SERVER_ROLE_BUILDER);
                                 $BundleTask->Log("Termination request has been sent");
                             }
                         } catch (Exception $e) {
@@ -753,6 +806,8 @@ class BundleTasksManagerProcess implements \Scalr\System\Pcntl\ProcessInterface
                         }
                     }
                     $BundleTask->Save();
+                    $BundleTask->createImageEntity();
+
                 } catch (Exception $e) {
                     $this->Logger->error($e->getMessage());
                 }

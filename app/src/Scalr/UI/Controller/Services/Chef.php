@@ -2,7 +2,7 @@
 
 class Scalr_UI_Controller_Services_Chef extends Scalr_UI_Controller
 {
-    
+
     public function xListRunlistAction()
     {
         $this->request->defineParams(array(
@@ -31,7 +31,7 @@ class Scalr_UI_Controller_Services_Chef extends Scalr_UI_Controller
     public function xListAllRecipesAction()
     {
         $chefClient = $this->getChefClient($this->getParam('servId'));
-        
+
         $this->response->data(array(
             'data' => $this->listRecipes($chefClient, $this->getParam('chefEnv'))
         ));
@@ -43,7 +43,7 @@ class Scalr_UI_Controller_Services_Chef extends Scalr_UI_Controller
 
         $roles = $this->listRoles($chefClient);
         //array_unshift($roles, array('name' => ''));
-        
+
         $this->response->data(array(
             'data' => $roles
         ));
@@ -55,7 +55,7 @@ class Scalr_UI_Controller_Services_Chef extends Scalr_UI_Controller
 
         $roles = $this->listRoles($chefClient);
         $recipes = $this->listRecipes($chefClient, $this->getParam('chefEnv'));
-        
+
         $this->response->data(array(
             'data' => array_merge($roles, $recipes)
         ));
@@ -66,7 +66,7 @@ class Scalr_UI_Controller_Services_Chef extends Scalr_UI_Controller
         $server = $this->db->GetRow('SELECT url, username, auth_key FROM services_chef_servers WHERE id = ?', array($chefServerId));
         return Scalr_Service_Chef_Client::getChef($server['url'], $server['username'], $this->getCrypto()->decrypt($server['auth_key'], $this->cryptoKey));
     }
-    
+
     private function listRecipes(&$chefClient, $chefEnv)
     {
         $recipes = array();

@@ -25,10 +25,10 @@ class RdsListDataType extends ListDataType
     /**
      * Sets Amazon Rds service interface instance
      *
-     * @param   Aws\Rds $rds Rds service instance
+     * @param   \Scalr\Service\Aws\Rds $rds Rds service instance
      * @return  RdsListDataType
      */
-    public function setRds(Aws\Rds $rds = null)
+    public function setRds(\Scalr\Service\Aws\Rds $rds = null)
     {
         $this->_services[Aws::SERVICE_INTERFACE_RDS] = $rds;
         if ($rds !== null) {
@@ -40,7 +40,7 @@ class RdsListDataType extends ListDataType
     /**
      * Gets Rds service interface instance
      *
-     * @return Aws\Rds Returns Rds service interface instance
+     * @return \Scalr\Service\Aws\Rds Returns Rds service interface instance
      */
     public function getRds()
     {

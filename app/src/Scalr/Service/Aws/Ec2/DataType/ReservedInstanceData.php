@@ -51,6 +51,12 @@ class ReservedInstanceData extends AbstractEc2DataType
     public $start;
 
     /**
+     * The time when the Reserved Instance expires.
+     * @var DateTime
+     */
+    public $end;
+
+    /**
      * The duration of the Reserved Instance, in seconds.
      * @var numeric
      */

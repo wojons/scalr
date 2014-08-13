@@ -92,7 +92,7 @@ class Scalr_Cronjob_MessagingQueue extends Scalr_System_Cronjob_MultiProcess_Def
 
                     $DBServer->SendMessage($msg);
                 }
-                elseif (in_array($DBServer->status, array(SERVER_STATUS::TROUBLESHOOTING, SERVER_STATUS::TERMINATED))) {
+                elseif (in_array($DBServer->status, array(SERVER_STATUS::TROUBLESHOOTING, SERVER_STATUS::TERMINATED, SERVER_STATUS::SUSPENDED))) {
                     $this->db->Execute("UPDATE messages SET status=? WHERE id=?", array(MESSAGE_STATUS::FAILED, $message['id']));
                 }
             }

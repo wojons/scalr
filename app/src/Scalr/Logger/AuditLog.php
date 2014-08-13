@@ -7,10 +7,6 @@ use Scalr\Logger\AuditLog\AuditLogTags;
 use Scalr\DependencyInjection\Container;
 use Scalr\Logger\AuditLog\LogRecord;
 use Scalr\Logger\AuditLog\Documents\AbstractAuditLogDocument;
-use \Mongo;
-use \MongoCursor;
-use \MongoCollection;
-use \ReflectionClass;
 
 /**
  * Audit log service.

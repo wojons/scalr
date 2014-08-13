@@ -101,7 +101,7 @@ abstract class AbstractUpgradeEntity extends AbstractEntity
         return 'uuid';
     }
 
-	/**
+    /**
      * Creates failure message to storage
      *
      * @param   string   $log  The log

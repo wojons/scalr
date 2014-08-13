@@ -216,13 +216,13 @@ class Scalr_Cronjob_MetricCheck extends Scalr_System_Cronjob_MultiProcess_Defaul
                 if ($dbFarm->GetSetting(DBFarm::SETTING_EC2_VPC_ID))
                     continue;
 
+                $ip = $dbServer->getSzrHost();
+
                 //Check scalr-upd-client status
                 $check = Alerts::METRIC_SCALARIZR_UPD_CLIENT_CONNECTIVITY;
-                $port = $dbServer->GetProperty(SERVER_PROPERTIES::SZR_UPDC_PORT);
-                if (!$port) {
-                    $port = 8008;
-                }
-                $result = $this->checkPort($dbServer->remoteIp, $port);
+                $port = $dbServer->getPort(DBServer::PORT_UPDC);
+
+                $result = $this->checkPort($ip, $port);
                 $hasActiveAlert = $serverAlerts->hasActiveAlert($check);
                 if (!$result['status'] && !$hasActiveAlert) {
                     Scalr::FireEvent(
@@ -240,11 +240,9 @@ class Scalr_Cronjob_MetricCheck extends Scalr_System_Cronjob_MultiProcess_Defaul
 
                 //Check scalarizr connectivity status
                 $check = Alerts::METRIC_SCALARIZR_CONNECTIVITY;
-                $port = $dbServer->GetProperty(SERVER_PROPERTIES::SZR_CTRL_PORT);
-                if (!$port) {
-                    $port = 8013;
-                }
-                $result = $this->checkPort($dbServer->remoteIp, $port);
+                $port = $dbServer->getPort(DBServer::PORT_CTRL);
+
+                $result = $this->checkPort($ip, $port);
                 $hasActiveAlert = $serverAlerts->hasActiveAlert($check);
                 if (!$result['status'] && !$hasActiveAlert) {
                     Scalr::FireEvent(

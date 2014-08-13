@@ -3,7 +3,6 @@ Scalr.regPage('Scalr.ui.services.apache.vhosts.view', function (loadParams, modu
 		fields: [ 'id','env_id','client_id','name','role_behavior','is_ssl_enabled','last_modified','farm_name','role_name', 'farm_id', 'farm_roleid'],
 		proxy: {
 			type: 'scalr.paging',
-			extraParams: loadParams,
 			url: '/services/apache/vhosts/xListVhosts/'
 		},
 		remoteSort: true
@@ -15,7 +14,6 @@ Scalr.regPage('Scalr.ui.services.apache.vhosts.view', function (loadParams, modu
 			'reload': false,
 			'maximize': 'all'
 		},
-		scalrReconfigureParams: { presetId: '' },
 		store: store,
 		stateId: 'grid-services-apache-vhosts-view',
 		stateful: true,
@@ -53,9 +51,10 @@ Scalr.regPage('Scalr.ui.services.apache.vhosts.view', function (loadParams, modu
 				'<tpl if="is_ssl_enabled == 0"><img src="/ui2/images/icons/false.png" /></tpl>'
 			},
 			{
-				xtype: 'optionscolumn',
-				optionsMenu: [{
+				xtype: 'optionscolumn2',
+				menu: [{
 					text: 'Edit',
+                    iconCls: 'x-menu-icon-edit',
 					href: "#/services/apache/vhosts/{id}/edit"
 				}]
 			}

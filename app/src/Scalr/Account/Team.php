@@ -39,7 +39,9 @@ class Scalr_Account_Team extends Scalr_Model
         if ($id && $this->id != $id)
             throw new Exception('Team with such name already exists');
 
-        return parent::save();
+        $ret = parent::save();
+
+        return $ret;
     }
 
     /**

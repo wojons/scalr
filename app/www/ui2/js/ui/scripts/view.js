@@ -2,12 +2,11 @@ Scalr.regPage('Scalr.ui.scripts.view', function (loadParams, moduleParams) {
 	var store = Ext.create('store.store', {
 		fields: [
 			{ name: 'id', type: 'int' }, { name: 'accountId', type: 'int' },
-			'name', 'description', 'dtUpdated', 'version', 'issync'
+			'name', 'description', 'dtCreated', 'dtChanged', 'version', 'isSync', 'os'
 		],
 		proxy: {
 			type: 'scalr.paging',
-			extraParams: loadParams,
-			url: '/scripts/xListScripts/'
+			url: '/scripts/xList'
 		},
 		remoteSort: true
 	});
@@ -18,7 +17,6 @@ Scalr.regPage('Scalr.ui.scripts.view', function (loadParams, moduleParams) {
 			'reload': false,
 			'maximize': 'all'
 		},
-		scalrReconfigureParams: {scriptId: '' },
 		store: store,
 		stateId: 'grid-scripts-view',
 		stateful: true,
@@ -45,26 +43,16 @@ Scalr.regPage('Scalr.ui.scripts.view', function (loadParams, moduleParams) {
 			{ header: 'ID', width: 60, dataIndex: 'id', sortable: true },
 			{ header: 'Name', flex: 1, dataIndex: 'name', sortable: true },
 			{ header: 'Description', flex: 2, dataIndex: 'description', sortable: true },
-            { header: 'Execution mode', width: 150, dataIndex: 'issync', sortable: true, xtype: 'templatecolumn', tpl: '<tpl if="issync == 1"><span style="color:gray">Blocking</span><tpl else><span style="color:green">Non-blocking</span></tpl>' },
+            { header: 'Execution mode', width: 150, dataIndex: 'isSync', sortable: true, xtype: 'statuscolumn', statustype: 'script'},
 			{ header: 'Latest version', width: 100, dataIndex: 'version', sortable: false, align:'center' },
-			{ header: 'Updated on', width: 160, dataIndex: 'dtUpdated', sortable: true },
-			{ header: 'Origin', width: 80, dataIndex: 'origin', sortable: false, align:'center', xtype: 'templatecolumn', tpl:
-				'<tpl if="accountId == &quot;0&quot;"><img src="/ui2/images/ui/scripts/default.png" height="16" title="Contributed by Scalr"></tpl>' +
-				'<tpl if="accountId != &quot;0&quot;"><img src="/ui2/images/ui/scripts/custom.png" height="16" title="Custom"></tpl>'
-			}, {
-				xtype: 'optionscolumn',
-				getOptionVisibility: function (item, record) {
-					if (item.itemId == 'option.view' || item.itemId == 'option.fork') {
-						return true;
-					} else {
-						if (item.itemId == 'option.execute' || item.itemId == 'option.execSep') {
-							return Scalr.user.type != 'ScalrAdmin';
-						}
-						return (Scalr.user.type == 'ScalrAdmin' || record.get('accountId'));
-					}
-				},
-
-				optionsMenu: [{
+			{ header: 'OS', width: 60, sortable: false, align:'center', xtype: 'templatecolumn', tpl:
+				'<tpl if="os == &quot;linux&quot;"><img src="/ui2/images/ui/scripts/linux.png" height="15" title="Linux"></tpl>' +
+				'<tpl if="os == &quot;windows&quot;"><img src="/ui2/images/ui/scripts/windows.png" height="15" title="Windows"></tpl>'
+            }, { header: 'Added on', width: 160, dataIndex: 'dtCreated', sortable: true },
+            { header: 'Updated on', width: 160, dataIndex: 'dtChanged', sortable: true
+            }, {
+				xtype: 'optionscolumn2',
+				menu: [{
 					itemId: 'option.view',
 					iconCls: 'x-menu-icon-view',
 					text: 'View',
@@ -73,7 +61,10 @@ Scalr.regPage('Scalr.ui.scripts.view', function (loadParams, moduleParams) {
 					itemId: 'option.execute',
 					iconCls: 'x-menu-icon-execute',
 					text: 'Execute',
-					href: '#/scripts/{id}/execute'
+					href: '#/scripts/{id}/execute',
+                    getVisibility: function() {
+                        return Scalr.user.type !== 'ScalrAdmin' && Scalr.isAllowed('ADMINISTRATION_SCRIPTS', 'execute');
+                    }
 				}, {
 					xtype: 'menuseparator',
 					itemId: 'option.execSep'
@@ -81,30 +72,33 @@ Scalr.regPage('Scalr.ui.scripts.view', function (loadParams, moduleParams) {
 					itemId: 'option.fork',
 					text: 'Fork',
 					iconCls: 'x-menu-icon-fork',
-					menuHandler: function(item) {
+                    getVisibility: function() {
+                        return Scalr.user.type == 'ScalrAdmin' || Scalr.isAllowed('ADMINISTRATION_SCRIPTS', 'fork');
+                    },
+					menuHandler: function(data) {
 						Scalr.Request({
 							confirmBox: {
 								formValidate: true,
                                 formSimple: true,
 								form: [{
 									xtype: 'textfield',
-									name: 'newName',
+									name: 'name',
 									labelWidth: 110,
 									fieldLabel: 'New script name',
-									value: 'Custom ' + item.record.get('name'),
+									value: 'Custom ' + data['name'],
 									allowBlank: false
 								}],
 								type: 'action',
-								msg: 'Are you sure want to fork script "' + item.record.get('name') + '" ?'
+								msg: 'Are you sure want to fork script "' + data['name'] + '" ?'
 							},
 							processBox: {
 								type: 'action'
 							},
 							url: '/scripts/xFork',
 							params: {
-								scriptId: item.record.get('id')
+								scriptId: data['id']
 							},
-								success: function () {
+                            success: function () {
 								store.load();
 							}
 						});
@@ -113,7 +107,10 @@ Scalr.regPage('Scalr.ui.scripts.view', function (loadParams, moduleParams) {
 					itemId: 'option.edit',
 					iconCls: 'x-menu-icon-edit',
 					text: 'Edit',
-					href: '#/scripts/{id}/edit'
+					href: '#/scripts/{id}/edit',
+                    getVisibility: function(data) {
+                        return (Scalr.user.type == 'ScalrAdmin') || (Scalr.isAllowed('ADMINISTRATION_SCRIPTS', 'manage') && data['accountId']);
+                    }
 				}]
 			}
 		],
@@ -171,7 +168,7 @@ Scalr.regPage('Scalr.ui.scripts.view', function (loadParams, moduleParams) {
 						data.push(records[i].get('id'));
 						request.confirmBox.objects.push(records[i].get('name'));
 					}
-					request.params = { scripts: Ext.encode(data) };
+					request.params = { scriptId: Ext.encode(data) };
 					Scalr.Request(request);
 				}
 			}],
@@ -184,6 +181,7 @@ Scalr.regPage('Scalr.ui.scripts.view', function (loadParams, moduleParams) {
 				labelWidth: 45,
 				hidden: (Scalr.user.type == 'ScalrAdmin'),
 				value: '',
+                name: 'origin',
 				items: [{
 					xtype: 'button',
 					text: 'All',

@@ -2,7 +2,6 @@
 namespace Scalr\Service\Aws\Sqs\Handler;
 
 use Scalr\Service\Aws\Sqs\DataType\MessageData;
-use Scalr\Service\Aws\DataType\ListDataType;
 use Scalr\Service\Aws\SqsException;
 use Scalr\Service\Aws\Client\ClientException;
 use Scalr\Service\Aws\Sqs\AbstractSqsHandler;

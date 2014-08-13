@@ -1,5 +1,10 @@
 <?php
+
 use Scalr\Acl\Acl;
+use Scalr\Modules\PlatformFactory;
+use Scalr\Modules\Platforms\Ec2\Ec2PlatformModule;
+use Scalr\Modules\Platforms\GoogleCE\GoogleCEPlatformModule;
+use Scalr\Modules\Platforms\Rackspace\RackspacePlatformModule;
 
 class Scalr_UI_Controller_Db_Backups extends Scalr_UI_Controller
 {
@@ -88,6 +93,7 @@ class Scalr_UI_Controller_Db_Backups extends Scalr_UI_Controller
     private function getBackupDetails($backupId)
     {
         $links = array();
+        /** @var Scalr_Db_Backup $backup */
         $backup = Scalr_Db_Backup::init()->loadById($backupId);
 
         $this->user->getPermissions()->validate($backup);
@@ -109,13 +115,15 @@ class Scalr_UI_Controller_Db_Backups extends Scalr_UI_Controller
             if ($part['size'] == 0)
                 $part['size'] = 0.01;
 
-            if ($data['provider'] == 's3')
+            if ($data['provider'] == 's3') {
                 $part['link'] = $this->getS3SignedUrl($part['path']);
-            else if ($data['provider'] == 'cf') {
+            } else if ($data['provider'] == 'cf') {
                 if ($backup->platform == SERVER_PLATFORMS::RACKSPACE)
                     $part['link'] = $this->getCfSignedUrl($part['path'], $data['cloud_location'], $backup->platform);
                 else
-                    $part['link'] = "swift://{$part['path']}";
+                    $part['link'] = $this->getSwiftSignerUrl($part['path'], $backup->platform, $backup->cloudLocation);
+            } else if ($data['provider'] == 'gcs') {
+                $part['link'] = $this->getGcsSignedUrl($part['path']);
             } else
                 continue;
 
@@ -144,8 +152,8 @@ class Scalr_UI_Controller_Db_Backups extends Scalr_UI_Controller
         $resource = substr($path, strpos($path, '/') + 1, strlen($path));
         $expires = time() + 3600;
 
-        $AWSAccessKey = $this->getEnvironment()->getPlatformConfigValue(Modules_Platforms_Ec2::ACCESS_KEY);
-        $AWSSecretKey = $this->getEnvironment()->getPlatformConfigValue(Modules_Platforms_Ec2::SECRET_KEY);
+        $AWSAccessKey = $this->getEnvironment()->getPlatformConfigValue(Ec2PlatformModule::ACCESS_KEY);
+        $AWSSecretKey = $this->getEnvironment()->getPlatformConfigValue(Ec2PlatformModule::SECRET_KEY);
 
         $stringToSign = "GET\n\n\n{$expires}\n/" . str_replace(".s3.amazonaws.com", "", $bucket) . "/{$resource}";
 
@@ -162,8 +170,8 @@ class Scalr_UI_Controller_Db_Backups extends Scalr_UI_Controller
 
         $platform = PlatformFactory::NewPlatform($platform);
 
-        $user = $platform->getConfigVariable(Modules_Platforms_Rackspace::USERNAME, $this->environment, true, $location);
-        $key = $platform->getConfigVariable(Modules_Platforms_Rackspace::API_KEY, $this->environment, true, $location);
+        $user = $platform->getConfigVariable(RackspacePlatformModule::USERNAME, $this->environment, true, $location);
+        $key = $platform->getConfigVariable(RackspacePlatformModule::API_KEY, $this->environment, true, $location);
 
         $cs = Scalr_Service_Cloud_Rackspace::newRackspaceCS($user, $key, $location);
 
@@ -177,5 +185,43 @@ class Scalr_UI_Controller_Db_Backups extends Scalr_UI_Controller
         $link = "{$auth['X-Cdn-Management-Url']}/{$path}?{$authenticationParams}";
 
         return $link;
+    }
+
+    public function getGcsSignedUrl($path)
+    {
+        $expires = time() + 3600;
+        $stringToSign = "GET\n\n\n{$expires}\n/{$path}";
+        $link = "http://storage.googleapis.com/{$path}";
+        $googleAccessId = str_replace('.apps.googleusercontent.com', '@developer.gserviceaccount.com', $this->environment->getPlatformConfigValue(GoogleCEPlatformModule::CLIENT_ID));
+
+        $signer = new Google_Signer_P12(base64_decode($this->environment->getPlatformConfigValue(GoogleCEPlatformModule::KEY)), 'notasecret');
+        $signature = $signer->sign($stringToSign);
+        $signature = urlencode(base64_encode($signature));
+
+        return "{$link}?GoogleAccessId={$googleAccessId}&Expires={$expires}&Signature={$signature}";
+    }
+
+    public function getSwiftSignerUrl($path, $platform, $cloudLocation)
+    {
+        $expires = time() + 3600;
+        $method = 'GET';
+
+        $rs = $this->environment->openstack($platform, $cloudLocation);
+        $basePath = $rs->swift->getEndpointUrl();
+        $objectPath = explode("/v1/", $basePath);
+
+        $stringToSign = "{$method}\n{$expires}\n/v1/{$objectPath[1]}/{$path}";
+
+        $response = $rs->swift->describeService();
+        $key = $response->getHeader('X-Account-Meta-Temp-Url-Key');
+        if (! $key) {
+            $key = Scalr::GenerateRandomKey(32);
+            $rs->swift->updateService(array(
+                '_headers' => array('X-Account-Meta-Temp-URL-Key' => $key)
+            ));
+        }
+
+        $signature = urlencode(hash_hmac("sha1", utf8_encode($stringToSign), $key));
+        return "{$basePath}/{$path}?temp_url_sig={$signature}&temp_url_expires={$expires}";
     }
 }

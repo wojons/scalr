@@ -40,7 +40,7 @@ class Scalr_UI_Controller_Dashboard_Widget_Cloudyn extends Scalr_UI_Controller_D
         $owner = $this->user->getType() == Scalr_Account_User::TYPE_ACCOUNT_OWNER ||
             $this->user->isTeamOwnerInEnvironment($this->getEnvironmentId());
 
-        if ($env->getPlatformConfigValue(ENVIRONMENT_SETTINGS::CLOUDYN_ENABLED)) {
+        if ($env->getPlatformConfigValue(Scalr_Environment::SETTING_CLOUDYN_ENABLED)) {
             //Gets a Cloudyn instance
             $cy = $container->cloudyn;
             //Tries to get cloudyn token which is stored in session
@@ -67,7 +67,7 @@ class Scalr_UI_Controller_Dashboard_Widget_Cloudyn extends Scalr_UI_Controller_D
                 //Stores new Cloudyn Token in Scalr session
                 $session->setCloudynToken($cy->getToken());
             }
-            $metrics = $cy->welcome($env->getPlatformConfigValue(ENVIRONMENT_SETTINGS::CLOUDYN_ACCOUNTID));
+            $metrics = $cy->welcome($env->getPlatformConfigValue(Scalr_Environment::SETTING_CLOUDYN_ACCOUNTID));
             $accountStatistics = isset($metrics->elements[0]->content->compound) ? $metrics->elements[0]->content->compound : null;
             if ($accountStatistics !== null) {
                 foreach ($accountStatistics as $k => $v) {
@@ -109,7 +109,7 @@ class Scalr_UI_Controller_Dashboard_Widget_Cloudyn extends Scalr_UI_Controller_D
             throw new Scalr_Exception_InsufficientPermissions();
 
         $env = $this->getEnvironment();
-        $isCloudynEnvironmentEnabled = $env->getPlatformConfigValue(ENVIRONMENT_SETTINGS::CLOUDYN_ENABLED);
+        $isCloudynEnvironmentEnabled = $env->getPlatformConfigValue(Scalr_Environment::SETTING_CLOUDYN_ENABLED);
         if ($isCloudynEnvironmentEnabled) {
             $cy = $env->cloudyn;
             $cy->login();
@@ -118,9 +118,9 @@ class Scalr_UI_Controller_Dashboard_Widget_Cloudyn extends Scalr_UI_Controller_D
                 $cy->deleteAccount($cyAccount->accountid);
             }
             $env->setPlatformConfig(array(
-                ENVIRONMENT_SETTINGS::CLOUDYN_ENABLED       => 0,
-                ENVIRONMENT_SETTINGS::CLOUDYN_AWS_ACCESSKEY => null,
-                ENVIRONMENT_SETTINGS::CLOUDYN_ACCOUNTID     => null,
+                Scalr_Environment::SETTING_CLOUDYN_ENABLED       => 0,
+                Scalr_Environment::SETTING_CLOUDYN_AWS_ACCESSKEY => null,
+                Scalr_Environment::SETTING_CLOUDYN_ACCOUNTID     => null,
             ));
             $cy->logout();
         }
@@ -151,7 +151,7 @@ class Scalr_UI_Controller_Dashboard_Widget_Cloudyn extends Scalr_UI_Controller_D
         $policyDocument = '{"Statement":[{"Effect":"Allow","Action":["autoscaling:Describe*","aws-portal:View*","cloudformation:DescribeStacks","cloudformation:DescribeStackEvents","cloudformation:DescribeStackResources","cloudformation:GetTemplate","cloudfront:Get*","cloudfront:List*","cloudwatch:Describe*","cloudwatch:Get*","cloudwatch:List*","dynamodb:DescribeTable","dynamodb:ListTables","ec2:Describe*","elasticache:Describe*","elasticbeanstalk:Check*","elasticbeanstalk:Describe*","elasticbeanstalk:List*","elasticbeanstalk:RequestEnvironmentInfo","elasticbeanstalk:RetrieveEnvironmentInfo","elasticloadbalancing:Describe*","elasticmapreduce:DescribeJobFlows","iam:List*","iam:Get*","route53:Get*","route53:List*","rds:Describe*","rds:List*","s3:List*","s3:GetBucketAcl","s3:GetBucketLocation","s3:GetBucketLogging","s3:GetBucketNotification","s3:GetBucketPolicy","s3:GetBucketRequestPayment","s3:GetBucketVersioning","s3:GetBucketWebsite","s3:GetLifecycleConfiguration","s3:GetObjectAcl","s3:GetObjectTorrent","s3:GetObjectVersion","s3:GetObjectVersionAcl","s3:GetObjectVersionTorrent","s3:GetBucketTagging","sdb:DomainMetadata","sdb:GetAttributes","sdb:ListDomains","ses:Get*","ses:List*","sns:Get*","sns:List*","sqs:Get*","sqs:List*","storagegateway:List*","storagegateway:Describe*"],"Resource":"*"}]}';
 
         $isCloudynEnabled = $acc->getSetting(Scalr_Account::SETTING_CLOUDYN_ENABLED);
-        $isCloudynEnvironmentEnabled = $env->getPlatformConfigValue(ENVIRONMENT_SETTINGS::CLOUDYN_ENABLED);
+        $isCloudynEnvironmentEnabled = $env->getPlatformConfigValue(Scalr_Environment::SETTING_CLOUDYN_ENABLED);
 
         if ($isCloudynEnvironmentEnabled) {
             throw new RuntimeException('Cloudyn account for this environment has already been enabled.');
@@ -220,9 +220,9 @@ class Scalr_UI_Controller_Dashboard_Widget_Cloudyn extends Scalr_UI_Controller_D
         $cloudynAccountId = $result->accountid;
 
         $env->setPlatformConfig(array(
-            ENVIRONMENT_SETTINGS::CLOUDYN_ENABLED       => 1,
-            ENVIRONMENT_SETTINGS::CLOUDYN_AWS_ACCESSKEY => $accessKeyData->accessKeyId,
-            ENVIRONMENT_SETTINGS::CLOUDYN_ACCOUNTID     => $cloudynAccountId,
+            Scalr_Environment::SETTING_CLOUDYN_ENABLED       => 1,
+            Scalr_Environment::SETTING_CLOUDYN_AWS_ACCESSKEY => $accessKeyData->accessKeyId,
+            Scalr_Environment::SETTING_CLOUDYN_ACCOUNTID     => $cloudynAccountId,
         ));
 
         //Logout Cloudyn

@@ -1,6 +1,8 @@
 <?php
 
 use Scalr\Acl\Acl;
+use Scalr\Model\Entity\ScriptShortcut;
+use Scalr\UI\Request\JsonData;
 
 class Scalr_UI_Controller_Scripts_Shortcuts extends Scalr_UI_Controller
 {
@@ -11,32 +13,54 @@ class Scalr_UI_Controller_Scripts_Shortcuts extends Scalr_UI_Controller
      */
     public function hasAccess()
     {
-        return parent::hasAccess() && $this->request->isAllowed(Acl::RESOURCE_FARMS_SCRIPTS);
+        return parent::hasAccess() && $this->request->isAllowed(Acl::RESOURCE_ADMINISTRATION_SCRIPTS);
     }
 
-	public function defaultAction()
+    public function defaultAction()
     {
         $this->viewAction();
     }
 
-    public function xRemoveAction()
+    // TODO: move to higher scope, may be model Farm (static method)
+    public function getAllowedFarmId()
     {
-        $this->request->defineParams(array(
-            'shortcuts' => array('type' => 'json')
-        ));
-
-        $allFarms = $this->request->isAllowed(Acl::RESOURCE_FARMS, Acl::PERM_FARMS_NOT_OWNED_FARMS);
-
-        foreach ($this->getParam('shortcuts') as $scId) {
-            $this->db->Execute("
-                DELETE FROM farm_role_scripts
-                WHERE farmid IN (SELECT id FROM farms WHERE env_id=?" . (!$allFarms ? " AND created_by_id = " . $this->db->qstr($this->user->getId()) : "") . ")
-                AND id=? AND ismenuitem='1'",
-                array($this->getEnvironmentId(), $scId)
-            );
+        $sql = 'SELECT id FROM farms WHERE env_id = ?';
+        $args = [$this->getEnvironmentId()];
+        if (! $this->request->isAllowed(Acl::RESOURCE_FARMS, Acl::PERM_FARMS_NOT_OWNED_FARMS)) {
+            $sql .= ' AND created_by_id = ?';
+            $args[] = $this->user->getId();
         }
 
-        $this->response->success();
+        return $this->db->GetCol($sql, $args);
+    }
+
+    /**
+     * @param JsonData $shortcutId
+     */
+    public function xRemoveAction(JsonData $shortcutId)
+    {
+        $errors = [];
+        foreach ($shortcutId as $id) {
+            try {
+                /* @var ScriptShortcut $shortcut */
+                $shortcut = ScriptShortcut::findPk($id);
+                if (! $shortcut)
+                    throw new Scalr_UI_Exception_NotFound();
+
+                if (! in_array($shortcut->farmId, $this->getAllowedFarmId()))
+                    throw new Scalr_Exception_InsufficientPermissions();
+
+                $shortcut->delete();
+
+            } catch (Exception $e) {
+                $errors[] = $e->getMessage();
+            }
+        }
+
+        if (count($errors))
+            $this->response->warning("Shortcut(s) successfully removed, but some errors were occurred:\n" . implode("\n", $errors));
+        else
+            $this->response->success('Shortcut(s) successfully removed');
     }
 
     public function viewAction()
@@ -44,41 +68,32 @@ class Scalr_UI_Controller_Scripts_Shortcuts extends Scalr_UI_Controller
         $this->response->page('ui/scripts/shortcuts/view.js');
     }
 
-    public function xListShortcutsAction()
+    /**
+     * @param JsonData $sort
+     * @param int $start
+     * @param int $limit
+     */
+    public function xListAction(JsonData $sort, $start = 0, $limit = 20)
     {
-        $this->request->defineParams(array(
-            'sort' => array('type' => 'string', 'default' => 'id'),
-            'dir' => array('type' => 'string', 'default' => 'DESC')
-        ));
+        $this->request->restrictAccess(Acl::RESOURCE_ADMINISTRATION_SCRIPTS);
 
-        $allFarms = $this->request->isAllowed(Acl::RESOURCE_FARMS, Acl::PERM_FARMS_NOT_OWNED_FARMS);
-
-        $sql = "
-            SELECT farm_role_scripts.*, scripts.name as scriptname
-            FROM farm_role_scripts
-            JOIN scripts ON scripts.id = farm_role_scripts.scriptid
-            WHERE ismenuitem='1'
-            AND farmid IN (SELECT id FROM farms WHERE env_id='" . intval($this->getEnvironmentId()) . "'
-            " . (!$allFarms ? " AND created_by_id = " . $this->db->qstr($this->user->getId()) : "") . ")
-        ";
-
-        $response = $this->buildResponseFromSql($sql);
-
-        foreach ($response['data'] as &$row) {
-            $row['farmname'] = $this->db->GetOne("
-                SELECT name FROM farms
-                WHERE id=?" . (!$allFarms ? " AND created_by_id = " . $this->db->qstr($this->user->getId()) : "") . "
-                LIMIT 1
-            ", array($row['farmid']));
-            if ($row['farm_roleid']) {
-                try {
-                    $DBFarmRole = DBFarmRole::LoadByID($row['farm_roleid']);
-                    $row['rolename'] = $DBFarmRole->GetRoleObject()->name;
-                } catch (Exception $e) {
-                }
-            }
+        $result = ScriptShortcut::find(['farmId' => ['$in' => $this->getAllowedFarmId()]], Scalr\UI\Utils::convertOrder($sort, ['scriptId' => 'ASC'], ['scriptId', 'farmId', 'farmRoleId']), $limit, $start, true);
+        $data = [];
+        foreach ($result as $shortcut) {
+            /* @var ScriptShortcut $shortcut */
+            $s = get_object_vars($shortcut);
+            $s['farmName'] = DBFarm::LoadByIDOnlyName($shortcut->farmId);
+            $s['scriptName'] = $shortcut->getScriptName();
+            try {
+                $farmRole = DBFarmRole::LoadByID($shortcut->farmRoleId);
+                $s['farmRoleName'] = $farmRole->Alias ? $farmRole->Alias : $farmRole->GetRoleObject()->name;
+            } catch (Exception $e) {}
+            $data[] = $s;
         }
 
-        $this->response->data($response);
+        $this->response->data([
+            'total' => $result->totalNumber,
+            'data' => $data
+        ]);
     }
 }

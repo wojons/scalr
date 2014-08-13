@@ -2,20 +2,7 @@
 namespace Scalr\Tests\Service\Aws;
 
 use Scalr\Tests\Service\AwsTestCase;
-use Scalr\DependencyInjection\Container;
-use Scalr\Service\Aws\Elb\DataType\AppCookieStickinessPolicyList;
-use Scalr\Service\Aws\Elb\DataType\ListenerData;
-use Scalr\Service\Aws\Client\QueryClientException;
-use Scalr\Service\Aws\Repository\ElbLoadBalancerDescriptionRepository;
-use Scalr\Service\Aws\DataType\ListDataType;
-use Scalr\Service\Aws\Client\QueryClientResponse;
-use Scalr\Service\Aws\Elb\Handler\LoadBalancerHandler;
-use Scalr\Service\Aws\Elb\DataType\LoadBalancerDescriptionData;
-use Scalr\Service\Aws\EntityManager;
-use Scalr\Service\Aws\DataType\ErrorData;
-use Scalr\Service\Aws\Elb\DataType\LoadBalancerDescriptionList;
 use Scalr\Service\Aws\Elb;
-use Scalr\Service\Aws;
 
 /**
  * AWS Elb TestCase

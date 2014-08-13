@@ -1,9 +1,7 @@
 <?php
 namespace Scalr\Service\Aws\Sqs\DataType;
 
-use Scalr\Service\Aws\SqsException;
 use Scalr\Service\Aws\Sqs\AbstractSqsDataType;
-use Scalr\Service\Aws\Sqs\DataType\QueueAttributeList;
 
 /**
  * MessageData
@@ -35,5 +33,4 @@ class MessageData extends AbstractSqsDataType
      * @var string
      */
     public $md5OfMessageBody;
-
 }

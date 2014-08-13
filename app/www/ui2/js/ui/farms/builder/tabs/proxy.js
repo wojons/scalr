@@ -200,13 +200,15 @@ Ext.define('Scalr.ui.ProxySettingsField', {
             }],
             columns: [{
                 text: 'Hostname',
+                xtype: 'templatecolumn',
                 sortable: true,
-                dataIndex: 'hostname',
+                tpl: '{hostname:htmlEncode}',
                 flex: 1
             },{
                 text: 'Port',
+                xtype: 'templatecolumn',
                 sortable: true,
-                dataIndex: 'port',
+                tpl: '{port:htmlEncode}',
                 width: 80
             }, {
                 xtype: 'templatecolumn',
@@ -383,7 +385,7 @@ Ext.define('Scalr.ui.ProxySettingsField', {
                         res = false;
                     }
                 } else {
-                    if (Ext.String.trim(hostnameField.getValue()) || Ext.String.trim(portField.getValue())) {
+                    if (Ext.String.trim(hostnameField.getValue()) || Ext.String.trim(portField.getValue()) || this.down('#backends').hasNonEmptyItems()) {
                         res = hostnameField.validate() || {comp: hostnameField};
                         if (res === true) {
                             res = portField.validate() || {comp: portField};
@@ -417,7 +419,7 @@ Ext.define('Scalr.ui.ProxySettingsField', {
                     allowBlank: false,
                     emptyText: 'Hostname',
                     flex: 1,
-                    maxWidth: 700,
+                    maxWidth: 690,
                     listeners: {
                         change: {
                             fn: function(comp, value){
@@ -435,7 +437,7 @@ Ext.define('Scalr.ui.ProxySettingsField', {
                     name: 'proxy.port',
                     submitValue: false,
                     emptyText: 'Port',
-                    width: 50,
+                    width: 60,
                     maskRe: new RegExp('[0123456789]', 'i'),
                     validator: function(value){
                         return value*1>0 || 'Value is invalid.';
@@ -543,7 +545,7 @@ Ext.define('Scalr.ui.ProxySettingsField', {
                                 return backends;
                             },
 
-                            validate: function(){
+                            validate: function(silent){
                                 var result = true,
                                     field;
                                 this.items.each(function(item){
@@ -553,11 +555,28 @@ Ext.define('Scalr.ui.ProxySettingsField', {
                                         result = field.validate() || {comp: field};
                                         if (result === true) {
                                             field = destination.down('[name="proxy.port"]');
-                                            result = field.validate() || {comp: field};
+                                            result = field[silent ? 'isValid' : 'validate']() || {comp: field};
                                         }
                                         return result === true;
 
                                     });
+                                });
+                                return result;
+                            },
+
+                            hasNonEmptyItems: function(){
+                                var result = false;
+                                this.items.each(function(item){
+                                    if (item.down('[name="proxy.location"]').getValue()) {
+                                        result = true;
+                                    } else {
+                                        item.down('#locations').items.each(function(destination){
+                                            result = !!destination.down('[name="proxy.' + destination.down('[name="proxy.type"]').getValue() + '"]').getValue();
+                                            return !result;
+
+                                        });
+                                    }
+                                    return !result;
                                 });
                                 return result;
                             },
@@ -927,7 +946,7 @@ Ext.define('Scalr.ui.ProxySettingsBackend', {
                 labelSeparator: '',
                 labelWidth: 4,
                 margin: '0 4',
-                width: 50,
+                width: 65,
                 value: 80
             },{
                 xtype: 'textfield',

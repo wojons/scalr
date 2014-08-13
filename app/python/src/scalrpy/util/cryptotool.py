@@ -4,14 +4,10 @@ import hashlib
 import binascii
 
 from M2Crypto.EVP import Cipher
-from M2Crypto.Rand import rand_bytes
+from Crypto.Cipher import DES3
 
 
 READ_BUF_SIZE = 1024 * 1024
-
-
-def keygen(length=40):
-    return binascii.b2a_base64(rand_bytes(length))
 
 
 def decrypt_key(key):
@@ -34,7 +30,7 @@ def _init_cipher(crypto_algo, key, op_enc=1):
     return Cipher(crypto_algo["name"], skey, iv, op_enc)
 
 
-def encrypt (crypto_algo, s, key):
+def encrypt(crypto_algo, s, key):
     c = _init_cipher(crypto_algo, key, 1)
     ret = c.update(s)
     ret += c.final()
@@ -42,7 +38,7 @@ def encrypt (crypto_algo, s, key):
     return binascii.b2a_base64(ret)
 
 
-def decrypt (crypto_algo, s, key):
+def decrypt(crypto_algo, s, key):
     c = _init_cipher(crypto_algo, key, 0)
     ret = c.update(binascii.a2b_base64(s))
     ret += c.final()
@@ -68,16 +64,32 @@ def crypt_file(cipher, in_file, out_file):
     out_file.write(cipher.final())
 
 
-def sign(data, crypto_key, timestamp=None, date_format="%a %d %b %Y %H:%M:%S %Z"):
-    date = time.strftime(date_format, timestamp if timestamp else time.gmtime())
+def sign(data, crypto_key, utc_struct_time=None, date_format=None, version=1):
+    if not utc_struct_time:
+        utc_struct_time = time.gmtime()
+    if not date_format:
+        date_format = "%a %d %b %Y %H:%M:%S UTC"
+    date = time.strftime(date_format, utc_struct_time)
     canonical_string = data + date
-    digest = hmac.new(crypto_key, canonical_string, hashlib.sha1).digest()
-    sign_ = binascii.b2a_base64(digest)
-    if sign_.endswith('\n'):
-        sign_ = sign_[:-1]
-    return sign_, date
+    if version == 1:
+        digest = hmac.new(crypto_key, canonical_string, hashlib.sha1).digest()
+        signature = binascii.b2a_base64(digest)
+        if signature.endswith('\n'):
+            signature = signature[:-1]
+    elif version == 2:
+        signature = hmac.new(crypto_key, canonical_string, hashlib.sha1).hexdigest()
+    else:
+        raise Exception('Wrong version for sign function')
+    return signature, date
 
 
-def check_signature(signature, data, timestamp, date_format="%a %d %b %Y %H:%M:%S %Z"):
-    calc_signature = sign(data, time.strptime(timestamp, date_format))[0]
-    assert signature == calc_signature, "Signature doesn't match"
+def decrypt_scalr(crypto_key, data):
+    obj = DES3.new(crypto_key[0:24], DES3.MODE_CFB, crypto_key[-8:])
+    tmp = obj.decrypt(binascii.a2b_base64(data))
+    tmp = ''.join(c for c in tmp if ord(c) in range(32, 127))
+    return tmp
+
+
+def encrypt_scalr(crypto_key, data):
+    obj = DES3.new(crypto_key[0:24], DES3.MODE_CFB, crypto_key[-8:])
+    return binascii.b2a_base64(obj.encrypt(data))

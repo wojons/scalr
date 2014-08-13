@@ -454,7 +454,7 @@ class AclIntegrityTest extends WebTestCase
      *
      * @test
      */
-	public function testIsImposedRestriction()
+    public function testIsImposedRestriction()
     {
         $rm = Acl::getResourcesMnemonic();
         //We have to use provider in this way because of we need to skip test and throw assertion from it

@@ -38,6 +38,7 @@ Ext.define('Scalr.ui.ServerMenu', {
         }
     }, {
         itemId: 'option.windowspassword',
+        iconCls: 'x-menu-icon-key',
         text: 'Get administrator password',
         getVisibility: function(data) {
             return data['os_family'] === 'windows' && (data['status'] === 'Running' || data['status'] === 'Initializing');
@@ -54,10 +55,11 @@ Ext.define('Scalr.ui.ServerMenu', {
                 Scalr.utils.Window({
                     title: 'Administrator password',
                     xtype: 'form',
+                    width: 460,
                     items: [{
                         xtype: 'fieldset',
                         cls: 'x-fieldset-separator-none',
-                        items: [{
+                        items: [data.password ? {
                             xtype: 'textfield',
                             anchor: '100%',
                             readOnly: true,
@@ -68,6 +70,10 @@ Ext.define('Scalr.ui.ServerMenu', {
                                     this.inputEl.dom.select();
                                 }
                             }
+                        } : {
+                            xtype: 'displayfield',
+                			cls: 'x-form-field-warning',
+                            value: data.encodedPassword ? 'Because you are using governance and we don\'t have the private key we can\'t decrypt the password.' : 'Empty password has been returned by AWS'
                         }]
                     }],
                     dockedItems: [{
@@ -80,6 +86,7 @@ Ext.define('Scalr.ui.ServerMenu', {
                         items: [{
                             xtype: 'button',
                             text: 'Close',
+                            margin: '0 0 18 0',
                             handler: function() {
                                 this.up('form').close();
                             }
@@ -92,9 +99,9 @@ Ext.define('Scalr.ui.ServerMenu', {
         itemId: 'option.loadStats',
         iconCls: 'x-menu-icon-statsload',
         text: 'Load statistics',
-        href: '#/monitoring/view?farmId={farm_id}&role={farm_roleid}&server_index={index}',
+        href: '#/monitoring/view?farmId={farm_id}&farmRoleId={farm_roleid}&index={index}',
         getVisibility: function(data) {
-            return !Ext.Array.contains(['Importing', 'Pending launch', 'Temporary', 'Troubleshooting', 'Terminated'], data['status']);
+            return !Ext.Array.contains(['Importing', 'Pending launch', 'Temporary', 'Troubleshooting', 'Terminated', 'Suspended'], data['status']);
         }
     },{
         itemId: 'option.cloudWatch',
@@ -115,7 +122,7 @@ Ext.define('Scalr.ui.ServerMenu', {
         iconCls: 'x-menu-icon-createserversnapshot',
         href: '#/servers/{server_id}/createSnapshot',
         getVisibility: function(data) {
-            return !Ext.Array.contains(['Importing', 'Pending launch', 'Temporary', 'Troubleshooting', 'Terminated'], data['status']);
+            return !Ext.Array.contains(['Importing', 'Pending launch', 'Temporary', 'Troubleshooting', 'Terminated', 'Suspended'], data['status']);
         }
     }, {
         xtype: 'menuseparator'
@@ -123,7 +130,7 @@ Ext.define('Scalr.ui.ServerMenu', {
         itemId: 'option.editRole',
         iconCls: 'x-menu-icon-configure',
         text: 'Configure role in farm',
-        href: '#/farms/{farm_id}/edit?roleId={role_id}',
+        href: '#/farms/{farm_id}/edit?farmRoleId={farm_roleid}',
         getVisibility: function(data) {
             return !Ext.Array.contains(['Importing', 'Pending launch', 'Temporary', 'Troubleshooting', 'Terminated'], data['status']);
         }
@@ -134,7 +141,7 @@ Ext.define('Scalr.ui.ServerMenu', {
         text: 'Exclude from DNS zone',
         iconCls: 'x-menu-icon-excludedns',
         getVisibility: function(data) {
-            return !data['excluded_from_dns'] && !Ext.Array.contains(['Importing', 'Pending launch', 'Temporary', 'Troubleshooting', 'Terminated'], data['status']);
+            return !data['excluded_from_dns'] && !Ext.Array.contains(['Importing', 'Pending launch', 'Temporary', 'Troubleshooting', 'Terminated', 'Suspended'], data['status']);
         },
         request: {
             processBox: {
@@ -150,7 +157,7 @@ Ext.define('Scalr.ui.ServerMenu', {
         text: 'Include in DNS zone',
         iconCls: 'x-menu-icon-includedns',
         getVisibility: function(data) {
-            return data['excluded_from_dns'] && !Ext.Array.contains(['Importing', 'Pending launch', 'Temporary', 'Troubleshooting', 'Terminated'], data['status']);
+            return data['excluded_from_dns'] && !Ext.Array.contains(['Importing', 'Pending launch', 'Temporary', 'Troubleshooting', 'Terminated', 'Suspended'], data['status']);
         },
         request: {
             processBox: {
@@ -169,7 +176,7 @@ Ext.define('Scalr.ui.ServerMenu', {
         iconCls: 'x-menu-icon-console',
         href: '#/servers/{server_id}/consoleoutput',
         getVisibility: function(data) {
-            return (data['platform'] === 'ec2' || data['platform'] === 'gce') && !Ext.Array.contains(['Terminated', 'Pending launch', 'Troubleshooting'], data['status']);
+            return (data['platform'] === 'ec2' || data['platform'] === 'gce') && !Ext.Array.contains(['Terminated', 'Pending launch', 'Troubleshooting', 'Suspended'], data['status']);
         }
     },
     {
@@ -182,6 +189,26 @@ Ext.define('Scalr.ui.ServerMenu', {
         }
     },
     {
+        text: 'Download Private key',
+        iconCls: 'x-menu-icon-downloadprivatekey',
+        menuHandler: function (data) {
+            var cloudLocation = data['cloud_location'];
+            if (data['platform'] == 'ec2') {
+                cloudLocation = cloudLocation.split('/');
+                cloudLocation = cloudLocation[0];
+            }
+
+            Scalr.utils.UserLoadFile('/sshkeys/downloadPrivate?' + Ext.Object.toQueryString({
+                platform: data['platform'],
+                cloudLocation: cloudLocation,
+                farmId: data['farm_id']
+            }));
+        },
+        getVisibility: function(data) {
+            return !Ext.Array.contains(['Terminated', 'Pending launch', 'Troubleshooting', 'Suspended'], data['status']);
+        }
+    },
+    {
         xtype: 'menuseparator'
     }, {
         itemId: 'option.exec',
@@ -189,7 +216,7 @@ Ext.define('Scalr.ui.ServerMenu', {
         text: 'Execute script',
         href: '#/scripts/execute?serverId={server_id}',
         getVisibility: function(data) {
-            return !Ext.Array.contains(['Importing', 'Pending launch', 'Temporary', 'Troubleshooting', 'Terminated'], data['status']);
+            return !Ext.Array.contains(['Importing', 'Pending launch', 'Temporary', 'Troubleshooting', 'Terminated', 'Suspended'], data['status']);
         }
     }, {
         xtype: 'menuseparator'
@@ -219,7 +246,7 @@ Ext.define('Scalr.ui.ServerMenu', {
         text: 'Reboot',
         iconCls: 'x-menu-icon-reboot',
         getVisibility: function(data) {
-            return data['platform'] !== 'gce' && !Ext.Array.contains(['Importing', 'Pending launch', 'Temporary', 'Troubleshooting', 'Terminated'], data['status']);
+            return !Ext.Array.contains(['Importing', 'Pending launch', 'Temporary', 'Troubleshooting', 'Terminated', 'Suspended'], data['status']);
         },
         menuHandler: function(data) {
             var me = this;
@@ -242,6 +269,32 @@ Ext.define('Scalr.ui.ServerMenu', {
             });
         }
     }, {
+        itemId: 'option.resume',
+        text: 'Resume',
+        iconCls: 'x-menu-icon-launch',
+        getVisibility: function(data) {
+            return data['status'] === 'Suspended' && (data['platform'] === 'ec2' || Scalr.isOpenstack(data['platform'], true));
+        },
+        menuHandler: function(data) {
+            var me = this;
+            Scalr.cache['Scalr.ui.servers.resume']([data['server_id']], function() {
+                me.ownerCt.fireEvent('actioncomplete');
+            });
+        }
+    }, {
+        itemId: 'option.suspend',
+        text: 'Suspend',
+        iconCls: 'x-menu-icon-suspend',
+        getVisibility: function(data) {
+            return data['status'] === 'Running' && (data['platform'] === 'ec2' || Scalr.isOpenstack(data['platform'], true));
+        },
+        menuHandler: function(data) {
+            var me = this;
+            Scalr.cache['Scalr.ui.servers.suspend']([data['server_id']], function() {
+                me.ownerCt.fireEvent('actioncomplete');
+            });
+        }
+    }, {
         xtype: 'menuseparator'
     }, {
         itemId: 'option.logs',
@@ -249,7 +302,7 @@ Ext.define('Scalr.ui.ServerMenu', {
         text: 'System logs',
         href: '#/logs/system?serverId={server_id}',
         getVisibility: function(data) {
-            return data['status'] !== 'Troubleshooting';
+            return !Ext.Array.contains(['Troubleshooting', 'Suspended'], data['status']);
         }
     }, {
         itemId: 'option.scripting_logs',
@@ -257,7 +310,7 @@ Ext.define('Scalr.ui.ServerMenu', {
         text: 'Scripting logs',
         href: '#/logs/scripting?serverId={server_id}',
         getVisibility: function(data) {
-            return data['status'] !== 'Troubleshooting';
+            return !Ext.Array.contains(['Troubleshooting', 'Suspended'], data['status']);
         }
     }]
 });
@@ -313,7 +366,29 @@ Scalr.regPage('Scalr.ui.servers.reboot', function (serverIds, callback){
         confirmBox: {
             type: 'reboot',
             msg: 'Reboot server' + (serverIds.length > 1 ? '(s)' : '') + ' %s ?',
-            objects: serverIds
+            objects: serverIds,
+            form: [{
+                xtype: 'container',
+                margin: '0 0 6 76',
+                items: {
+                    xtype: 'buttongroupfield',
+                    fieldLabel: 'Type',
+                    labelWidth: 40,
+                    name: 'type',
+                    value: 'soft',
+                    width: 210,
+                    defaults: {
+                        width: 80
+                    },
+                    items: [{
+                        text: 'Soft',
+                        value: 'soft'
+                    },{
+                        text: 'Hard',
+                        value: 'hard'
+                    }]
+                }
+            }]
         },
         params: { servers: Ext.encode(serverIds) },
         processBox: {
@@ -321,6 +396,69 @@ Scalr.regPage('Scalr.ui.servers.reboot', function (serverIds, callback){
             msg: 'Sending reboot command ...'
         },
         url: '/servers/xServerRebootServers/',
-        success: callback || Ext.emptyFn
+        success: function(result) {
+            var ids = result.data;
+            if (Ext.isArray(ids) && ids.length > 0) {
+                Scalr.Request({
+                    confirmBox: {
+                        type: 'error',
+                        msg: ' Soft reboot not available for the following server' + (ids.length > 1 ? '(s)' : '') + ':<br/> %s <br/>Do you want to perform hard reboot on ' + (ids.length > 1 ? 'those servers' : 'that server') + '?',
+                        objects: ids,
+                        ok: 'Reboot'
+                    },
+                    params: { servers: Ext.encode(ids), type: 'hard' },
+                    processBox: {
+                        type: 'reboot',
+                        msg: 'Sending reboot command ...'
+                    },
+                    url: '/servers/xServerRebootServers/',
+                    success: callback || Ext.emptyFn
+                });
+            } else {
+                (callback || Ext.emptyFn)(result);
+            }
+        }
+    });
+});
+
+Scalr.regPage('Scalr.ui.servers.suspend', function (serverIds, callback){
+    Scalr.Request({
+        confirmBox: {
+            type: 'suspend',
+            msg: 'Suspend server' + (serverIds.length > 1 ? '(s)' : '') + ' %s ?',
+            objects: serverIds,
+            ok: 'Suspend',
+            formWidth: 430
+        },
+        params: { servers: Ext.encode(serverIds) },
+        processBox: {
+            type: 'action',
+            msg: 'Sending suspend command ...'
+        },
+        url: '/servers/xSuspendServers/',
+        success: function(result) {
+            (callback || Ext.emptyFn)(result);
+        }
+    });
+});
+
+Scalr.regPage('Scalr.ui.servers.resume', function (serverIds, callback){
+    Scalr.Request({
+        confirmBox: {
+            type: 'resume',
+            msg: 'Resume server' + (serverIds.length > 1 ? '(s)' : '') + ' %s ?',
+            objects: serverIds,
+            ok: 'Resume',
+            formWidth: 430
+        },
+        params: { servers: Ext.encode(serverIds) },
+        processBox: {
+            type: 'action',
+            msg: 'Sending resume command ...'
+        },
+        url: '/servers/xResumeServers/',
+        success: function(result) {
+            (callback || Ext.emptyFn)(result);
+        }
     });
 });

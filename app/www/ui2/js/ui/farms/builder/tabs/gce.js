@@ -5,36 +5,22 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.gce', function (moduleTabParams) {
         layout: 'anchor',
         
         settings: {
-            'gce.network': 'default'
+            'gce.on-host-maintenance': undefined
         },
         
 		isEnabled: function (record) {
 			return record.get('platform') == 'gce';
 		},
 
-		beforeShowTab: function (record, handler) {
-            Scalr.cachedRequest.load(
-                {
-                    url: '/platforms/gce/xGetOptions',
-                    params: {}
-                },
-                function(data, status){
-                    this.down('[name="gce.network"]').store.load({data: status ? data['networks'] : []});
-                    status ? handler() : this.deactivateTab();
-                },
-                this
-            );
-		},
-
 		showTab: function (record) {
 			var settings = record.get('settings', true);
-			this.down('[name="gce.network"]').setValue(settings['gce.network'] || 'default');
+			this.down('[name="gce.on-host-maintenance"]').setValue(settings['gce.on-host-maintenance'] || 'TERMINATE');
 		},
 
 		hideTab: function (record) {
 			var settings = record.get('settings');
 
-			settings['gce.network'] = this.down('[name="gce.network"]').getValue();
+			settings['gce.on-host-maintenance'] = this.down('[name="gce.on-host-maintenance"]').getValue();
 			
 			record.set('settings', settings);
 		},
@@ -44,20 +30,18 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.gce', function (moduleTabParams) {
             layout: 'anchor',
             defaults: {
                 anchor: '100%',
-                maxWidth: 600
+                maxWidth: 600,
+                labelWidth: 140
             },
 			items: [{
 				xtype: 'combo',
-				store: {
-					fields: [ 'name', 'description' ],
-					proxy: 'object'
-				},
+				store: [['TERMINATE', 'TERMINATE'], ['MIGRATE', 'MIGRATE']],
 				valueField: 'name',
 				displayField: 'description',
-				fieldLabel: 'Network',
+				fieldLabel: 'Maintenance behavior',
 				editable: false,
 				queryMode: 'local',
-				name: 'gce.network'
+				name: 'gce.on-host-maintenance'
 			}]
 		}]
 	});

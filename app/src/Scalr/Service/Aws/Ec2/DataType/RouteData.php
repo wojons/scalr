@@ -98,6 +98,13 @@ class RouteData extends AbstractEc2DataType
     public $origin;
 
     /**
+     * The ID of the VPC peering connection.
+     *
+     * @var string
+     */
+    public $vpcPeeringConnectionId;
+
+    /**
      * DeleteRoute action
      *
      * Deletes a route table from a VPC. The route table must not be associated

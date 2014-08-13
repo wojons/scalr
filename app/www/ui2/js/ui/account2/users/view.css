@@ -61,7 +61,7 @@
     border-radius: 3px;
     color: #212b3d!important;
     text-shadow: 0 1px rgba(255,255,255,0.3);
-    
+
 	font: bold 12px arial, helvetica, sans-serif;
     position: absolute;
     top: 0;
@@ -80,5 +80,5 @@
 .scalr-ui-users-account-admin{
     background: #fefde0;
     border-radius: 3px;
-    padding: 18px;
+    padding: 18px 18px 12px;
 }

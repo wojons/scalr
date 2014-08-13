@@ -1,4 +1,4 @@
-# Scalr\System\Config\Extension class determines the 
+# Scalr\System\Config\Extension class determines the
 # structure of this config and defines default values.
 # If you add/delete values in this config, mentioned class should be updated accordingly.
 scalr:
@@ -9,8 +9,17 @@ scalr:
       name: scalr
       user: scalr
       pass: 'scalr'
-      
-#    # Mongodb may be used as storage for auditlog. This feature is still under development.           
+
+## Proxy settings that can be used with option scalr.aws.use_proxy = yes
+## allowed types: 4 - socks4, 5 - socks5, 0 - http
+#    proxy:
+#      host: 'localhost'
+#      port: 3128
+#      user: ''
+#      pass: ''
+#      type: 0
+
+#    # Mongodb may be used as storage for auditlog. This feature is still under development.
 #    mongodb: &connections_mongo
 #      driver: mongodb
 #      host: 'localhost'
@@ -25,7 +34,7 @@ scalr:
 #
 #      ## Sometimes base_dn_groups can be useful to have different base DN to speed up querying the lits of user's groups.
 #      #base_dn_groups: ~
-# 
+#
 #      ## User and password are preferred parameters but not a mandatory.
 #      ## They are required when Scalr API is going to be accessed by APIKEY.
 #      #user: 'scalradmin@scalr'
@@ -34,7 +43,7 @@ scalr:
 #      ## If group_nesting is enabled, system will take into consideration group nesting that is little bit slower.
 #      #group_nesting: yes
 #
-#      ## The domain name that will be used when user enters an username without the domain. 
+#      ## The domain name that will be used when user enters an username without the domain.
 #      ## If this option is not provided domain will be evaluated using base_dn data set.
 #      #domain: ~
 #
@@ -50,9 +59,15 @@ scalr:
 #      #bind_type: regular
 #
 #      ## The name of the attribute which contains information about user's email address in the LDAP.
-#      ## If this option is not provided the username will be used as email address. 
-#      ## Possible value: mail 
+#      ## If this option is not provided the username will be used as email address.
+#      ## Possible value: mail
 #      #mail_attribute: ~
+#
+#      ## The name of the attribute which contains information about user's full name in the LDAP.
+#      #fullname_attribute: displayName
+#
+#      ## User name attribute, by default is: sAMAccountName
+#      #username_attribute: sAMAccountName
 #
 #      ## Adds additional debug information to HTTP response headers
 #      #debug: no
@@ -61,21 +76,21 @@ scalr:
     # Email From address
     address: ~
     # Email From name, Default: null
-    name: ~   
-      
-#  #Audit feature is under development    
+    name: ~
+
+#  #Audit feature is under development
 #  auditlog:
 #    # Disabled by default. Default: false
 #    enabled: false
 #    # Valid values: mysql | mongodb
 #    storage: mysql
 #    connections:
-#      mysql: 
+#      mysql:
 #        <<: *connections_mysql
 #      mongodb:
 #        <<: *connections_mongo
 #        collection: 'auditlog'
-        
+
 #  cloudyn:
 #    master_email: ''
 #    # Allowed values: DEV | ITG | QA | PROD Default: PROD
@@ -83,7 +98,7 @@ scalr:
 
   system:
     instances_connection_timeout: 4
-#    # server terminate timeout in graceful mode. Default: "+3 minutes" 
+#    # server terminate timeout in graceful mode. Default: "+3 minutes"
 #    server_terminate_timeout: "+3 minutes"
     scripting:
         # Allowed values: instance | scalr
@@ -91,7 +106,7 @@ scalr:
         # How often we should rotate logs on instances by default (3600 seconds) / Can be overwritten in Farm Designer
         default_instance_log_rotation_period: 3600
     global_variables:
-      format: ~ 
+      format: ~
 #        SCALR_INSTANCE_INDEX: '%d'
 
   ui:
@@ -101,19 +116,21 @@ scalr:
       public_key: ''
       private_key: ''
     mindterm_enabled: true
+    # allowed values: public, private, hostname, auto
+    server_display_convention: auto
     pma:
       key: ''
       url: ''
       server_ip: ''
 
-  # Allowed values: scalr | ldap 
+  # Allowed values: scalr | ldap
   auth_mode: scalr
 
-  # Allowed values: public | local | auto. 
+  # Allowed values: public | local | auto.
   instances_connection_policy: public
 
   # By default it's allowed all avalialbe
-  allowed_clouds: 
+  allowed_clouds:
   - ec2
   - gce
   - eucalyptus
@@ -121,8 +138,8 @@ scalr:
   # cloudstack based
   - cloudstack
   - idcf
-  
-  # openstack based	   
+
+  # openstack based
   - openstack
   - ocs
   - ecs
@@ -130,13 +147,41 @@ scalr:
   - rackspacengus
   - nebula
 
+#  analytics:
+#    # Whether it is enabled. Optional, default value: no
+#    enabled: yes
+#    connections:
+#      analytics:
+#        <<: *connections_mysql
+#        name: analytics
+#    #  # You may want to restrict access to the scalr database for analytics scripts
+#    #  scalr:
+#    #    <<: *connections_mysql
+#    ## Polls data from the cloud
+#    #poller:
+#    #  # Number of threads in pool Default: 50
+#    #  pool_size: 50
+#    #  # Connection timeout to the cloud provider. Default: 20 seconds
+#    #  cloud_connection_timeout: 20
+#    #  # Log file
+#    #  log_file: '/var/log/scalr.analytics-poller.log'
+#    #  # Pid file
+#    #  pid_file: '/var/run/scalr.analytics-poller.pid'
+#    ## Processes raw data script
+#    #processing:
+#    #  # Number of threads in pool Default: 50
+#    #  pool_size: 50
+#    #  log_file: '/var/log/scalr.analytics-processing.log'
+#    #  pid_file: '/var/run/scalr.analytics-processing.pid'
+
+
 #  # Default value: 300 seconds
 #  rss_cache_lifetime: 300
 
   endpoint:
 #    # Devault value: http
 #    scheme: http
-    host: 'endpoint url here'    
+    host: 'endpoint url here'
 
 #  openstack:
 #    # How to pass user data to openstack: meta-data | personality | both
@@ -146,16 +191,16 @@ scalr:
     security_group_name: 'scalr.ip-pool'
     # For example ['111.22.33.11/28', '222.22.2.12/28']
     # IP Addresses of servers where scalr installed
-    ip_pool: ['8.8.8.8'] 
+    ip_pool: ['8.8.8.8']
     # Default value: 'scalr.'
     security_group_prefix: 'scalr.'
-    
+#    use_proxy: no
 #    # AWS Client plugins is not mandatory part of the Scalr
 #    plugins:
 #      # List of the enabled plug-ins. All plug-ins are disabled by default.
-#      # Possible values [statistics] 
+#      # Possible values [statistics]
 #      enabled: ~
-#      # Statistics plugin allows to collect information about AWS queries and errors. 
+#      # Statistics plugin allows to collect information about AWS queries and errors.
 #      statistics:
 #        # max_heap_table_size in bytes which is taken into consideration on create table with MEMORY type. Default value: 256Mb
 #        storage_max_size: 268435456
@@ -183,7 +228,7 @@ scalr:
       # base_domain is used for automated generation domain name of the user's servers
       default_domain_name: 'provide.domain.here.in'
 
-#  # ScalrPy msg_sender script configuration 
+#  # ScalrPy msg_sender script configuration
 #  # This section is optional and it is required only when you need non default parameters
 #  msg_sender:
 ##    connections:
@@ -194,12 +239,12 @@ scalr:
 ##        name: ~
 ##        user: ~
 ##        pass: ~
-#    # size of the worker pool for send messages
+#    # size of the worker pool
 #    pool_size: 100
 #    log_file: '/var/log/scalr.msg-sender.log'
 #    pid_file: '/var/run/scalr.msg-sender.pid'
 
-#  # ScalrPy dbqueue_event script configuration 
+#  # ScalrPy dbqueue_event script configuration
 #  # This section is optional and it is required only when you need non default parameters
 #  dbqueue_event:
 #    connections:
@@ -212,45 +257,29 @@ scalr:
 ##        pass: ~
 #        # mysql connection pool size
 #        pool_size: 4
-##    # email from address for email notifications
-##    # if 'email' not present then use scalr:email
-##    email:
-##      address: ~
-#    # size of the worker pool for send emails
+#    # size of the worker pool
 #    pool_size: 100
 #    log_file: '/var/log/scalr.dbqueue-event.log'
 #    pid_file: '/var/run/scalr.dbqueue-event.pid'
 
-#  # this section is deprecated in favor of load_statistics
-#  stats_poller:
-#    connections: 
-#      mysql:
-#        <<: *connections_mysql
-#        driver: 'mysql+pymysql'
-#        pool_recycle: 120
-#        pool_size: 4
-#    metrics: ['cpu', 'la', 'mem', 'net']
-#    farm_procs: 2
-#    serv_thrds: 50
-#    rrd_thrds: 2
-#    rrd_db_dir: '/tmp/rrd_db_dir'
-#    images_path: '/var/www/graphics'
-#    graphics_url: 'http://example.com/graphics'
-#    log_file: '/var/log/scalr.stats-poller.log'
-#    pid_file: '/var/run/scalr.stats-poller.pid'
-    
-  # ScalrPy load_statistics script configuration 
+  # ScalrPy load_statistics script configuration
   # This section is required
   load_statistics:
     connections:
       # required
       plotter:
+#        # scheme: http or https
+#        scheme: 'http'
         # host to connect to load statistics web server. Required
-        # Example: http://example.com or http://127.0.0.1 
+        # Example: example.com or 127.0.0.1
         host: ~
 #        port: 8080
 #        # web server connection pool size
 #        pool_size: 100
+#        # Required for https
+#        ssl_certificate:
+#        # Required for https
+#        ssl_private_key:
 #      # optional, if not present then use scalr:connections:mysql
 #      mysql:
 ##        host: ~
@@ -260,14 +289,24 @@ scalr:
 ##        pass: ~
 #        # mysql connection pool size
 #        pool_size: 10
-    # directory to store rdd files
-    rrd_dir: ~
-    # directory to store images files
-    img_dir: ~
-    # image url
-    img_url: ~
+    rrd:
+      # directory to store rdd files. Required
+      dir: ~
+#      # path to rrdcached sock file
+#      rrdcached_sock_path: '/var/run/rrdcached.sock'
+    img:
+      # directory to store images files. Required
+      dir: ~
+      # scheme: http or https
+      scheme: 'http'
+      # host. Required
+      host: ~
+#      port: false
+#      path: ''
+#    user:
+#    group:
 #    # list of metrics for processing
-#    metrics: ['cpu', 'la', 'mem', 'net', 'io', 'snum'] 
+#    metrics: ['cpu', 'la', 'mem', 'net', 'io', 'snum']
 #    # use snmp if scalarizr api failed
 #    with_snmp: false
 #    # size of worker pool for poller
@@ -276,10 +315,32 @@ scalr:
 #    interval: 120
 #    log_file: '/var/log/scalr.load-statistics.log'
 #    pid_file: '/var/run/scalr.load-statistics.pid'
-                                            
+
 #  monitoring:
 #    # should be provided
 #    server_url: ''
+
+  scalarizr_update:
+    # Allowed values client | solo
+    mode: 'client'
+    default_repo: 'stable'
+    repos:
+      latest:
+        deb_repo_url: 'http://apt.scalr.net/debian scalr/'
+        rpm_repo_url: 'http://rpm.scalr.net/rpm/rhel/$releasever/$basearch'
+        win_repo_url: 'http://win.scalr.net'
+      stable:
+        deb_repo_url: 'http://apt-delayed.scalr.net/debian scalr/'
+        rpm_repo_url: 'http://rpm-delayed.scalr.net/rpm/rhel/$releasever/$basearch'
+        win_repo_url: 'http://win-delayed.scalr.net'
+#    service:
+#      connections:
+#        szr_upd_client:
+#          port: 8008
+#      chunk_size: 100
+#      pool_size: 10
+#      log_file: '/var/log/scalr/szr-upd-service.log'
+#      pid_file: '/var/run/scalr/szr-upd-service.pid'
 
 #  script:
 #    timeout:
@@ -288,8 +349,15 @@ scalr:
 #      # Default value: 1200 seconds
 #      async: 1200
 
-#  # This section is optional. It's used for php unit testing. 
-#  phpunit: 
+#  # This is only for my.scalr.com (hosted scalr)
+#  hosted:
+#    enabled: no
+#    analytics:
+#      # Lits of the account identifiers which should be able to manage Projects
+#      managed_accounts: []
+
+#  # This section is optional. It's used for php unit testing.
+#  phpunit:
 #    # By default all functionl tests are skipped.
 #    skip_functional_tests: true
 #    # Most of the functional tests require user's environment to handle requests.
@@ -300,8 +368,8 @@ scalr:
 #    openstack:
 #      platforms:
 #      #- [platform, region, imageid]
-#      # Enter.It 
-#      - [ecs, RegionOne, e72cc2c4-9285-48d5-8f6e-b3278536367f]
+#      # Enter.It
+#      - [ecs, RegionOne, b54b4117-fd27-4576-9947-a1b03b1209ce]
 #      # Rackspace NewGen US
 #      - [rackspacengus, DFW, 3afe97b2-26dc-49c5-a2cc-a2fc8d80c001]
 #      # Rackspace NewGen UK
@@ -310,3 +378,8 @@ scalr:
 #      - [nebula, RegionOne, 07b26892-9716-453f-9443-9b5e90d2c978]
 #      # Open Cloud System
 #      - [ocs, RegionOne, 7a0d5ff5-efa1-4dae-a18e-0238fe27f287]
+#       cloudstack:
+#           platforms:
+            #- [platform, zoneid, templateid, serviceid]
+            # IDCF
+            #- [idcf, jp-east-t1v, 2530, 24]

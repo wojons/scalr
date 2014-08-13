@@ -1,5 +1,11 @@
 Scalr.regPage('Scalr.ui.account2.roles.view', function (loadParams, moduleParams) {
-	var reconfigurePage = function(roleId) {
+    var firstReconfigure = true;
+	var reconfigurePage = function(params) {
+        var params = params || {},
+            roleId = params.roleId;
+        if (firstReconfigure && !roleId) {
+            roleId = 'first';
+        }
 		if (roleId) {
 			dataview.deselect(form.getForm().getRecord());
 			if (roleId === 'new') {
@@ -12,6 +18,7 @@ Scalr.regPage('Scalr.ui.account2.roles.view', function (loadParams, moduleParams
 				}
 			}
 		}
+        firstReconfigure = false;
 	};
 
     var storeRoles = Scalr.data.get('account.roles'),
@@ -38,9 +45,6 @@ Scalr.regPage('Scalr.ui.account2.roles.view', function (loadParams, moduleParams
 
     var dataview = Ext.create('Ext.view.View', {
 		listeners: {
-			boxready: function(){
-				reconfigurePage(loadParams.roleId || 'first');
-			},
             refresh: function(view){
                 var record = view.getSelectionModel().getLastSelected();
                 if (record) {
@@ -237,7 +241,7 @@ Scalr.regPage('Scalr.ui.account2.roles.view', function (loadParams, moduleParams
                             getGroupName: function(children) {
                                 if (children.length > 0) {
                                     var name = children[0].get('group');
-                                    return name === 'Administration' ? '<span class="x-permission-warn">' + name + '</span>&nbsp;&nbsp;<img title="Be careful assigning administrative permissions" src="/ui2/images/icons/warning_icon_16x16.png" style="vertical-align:top">' : name;
+                                    return name === 'Account management' || name === 'Environment management' ? '<span class="x-permission-warn">' + name + '</span>&nbsp;&nbsp;<img title="Be careful assigning administrative permissions" src="/ui2/images/icons/warning_icon_16x16.png" style="vertical-align:top">' : name;
                                 }
                             }
                         }
@@ -343,7 +347,13 @@ Scalr.regPage('Scalr.ui.account2.roles.view', function (loadParams, moduleParams
                     ui: 'simple',
                     items: [{
                         xtype: 'filterfield',
-                        filterFields: ['name', 'group'],
+                        filterFields: ['name', 'group', function(record){
+                            var permissions = record.get('permissions');
+                            if (permissions) {
+                                permissions = Ext.Object.getKeys(permissions).join(' ');
+                            }
+                            return permissions;
+                        }],
                         store: storeRoleResources,
                         submitValue: false,
                         isFormField: false,
@@ -522,9 +532,9 @@ Scalr.regPage('Scalr.ui.account2.roles.view', function (loadParams, moduleParams
 				itemId: 'roles'
 			}
 		},
-		scalrReconfigure: function(params){
-			reconfigurePage(params.roleId);
-		},
+        listeners: {
+            applyparams: reconfigurePage
+        },
 		layout: {
 			type: 'hbox',
 			align: 'stretch'

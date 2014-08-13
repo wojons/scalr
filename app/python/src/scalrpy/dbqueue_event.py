@@ -1,3 +1,19 @@
+# vim: tabstop=4 shiftwidth=4 softtabstop=4
+#
+# Copyright 2013, 2014 Scalr Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License"); you may
+# not use this file except in compliance with the License. You may obtain
+# a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+# WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
+# License for the specific language governing permissions and limitations
+# under the License.
+
 from gevent import monkey
 monkey.patch_all()
 
@@ -5,245 +21,233 @@ import sys
 import yaml
 import time
 import socket
+import gevent
 import logging
-import smtplib
+import pymysql
 import argparse
 import requests
-import gevent.pool
-import email.charset
 import requests.exceptions
 
-from email.mime.text import MIMEText
+from gevent.pool import Group as Pool
 
+from scalrpy.util import cron
 from scalrpy.util import helper
 from scalrpy.util import dbmanager
-from scalrpy.util import basedaemon
+from scalrpy.util import cryptotool
 
 from scalrpy import __version__
 
-
-email.charset.add_charset('utf-8', email.charset.QP, email.charset.QP)
+helper.patch_gevent()
 
 CONFIG = {
-    'connections':{
-        'mysql':{
-            'user':None,
-            'pass':None,
-            'host':None,
-            'port':3306,
-            'name':None,
-            'pool_size':4,
-            },
+    'connections': {
+        'mysql': {
+            'user': None,
+            'pass': None,
+            'host': None,
+            'port': 3306,
+            'name': None,
+            'pool_size': 10,
         },
-    'email':{
-        'address':None,
-        },
-    'pool_size':100,
-    'no_daemon':False,
-    'instances_connection_timeout':10,
-    'log_file':'/var/log/scalr.dbqueue-event.log',
-    'pid_file':'/var/run/scalr.dbqueue-event.pid',
-    'verbosity':1,
-    }
+    },
+    'pool_size': 100,
+    'no_daemon': False,
+    'instances_connection_timeout': 10,
+    'log_file': '/var/log/scalr.dbqueue-event.log',
+    'pid_file': '/var/run/scalr.dbqueue-event.pid',
+    'verbosity': 1,
+}
 
 LOG = logging.getLogger('ScalrPy')
 
+POOL = Pool()
 
-class DBQueueEvent(basedaemon.BaseDaemon):
+
+class NothingToDoError(Exception):
+    pass
+
+
+class IterationTimeoutError(Exception):
+    pass
+
+
+def wait_pool():
+    while len(POOL) >= CONFIG['pool_size']:
+        gevent.sleep(0.2)
+
+
+class DBQueueEvent(cron.Cron):
 
     def __init__(self):
         super(DBQueueEvent, self).__init__(pid_file=CONFIG['pid_file'])
+        self.iteration_timestamp = None
         self._db = dbmanager.ScalrDB(CONFIG['connections']['mysql'])
-        self._pool = gevent.pool.Pool(CONFIG['pool_size'])
-        self.observers = {
-            'MailEventObserver':self.mail_event_observer,
-            'RESTEventObserver':self.rest_event_observer,
-            }
 
+    def _get_db_webhook_history(self):
+        query = (
+                "SELECT HEX(`history_id`) as history_id, HEX(`webhook_id`) as webhook_id,"
+                "HEX(`endpoint_id`) as endpoint_id,`payload` "
+                "FROM webhook_history "
+                "WHERE `status`=0 "
+                "LIMIT 250"
+        )
+        return self._db.execute(query)
 
-    def _get_db_events(self):
-        query = """SELECT `id`, `type`, `farmid`, `message` """ +\
-                """FROM `events` """ +\
-                """WHERE `ishandled`=0 """ +\
-                """ORDER BY `id` """ +\
-                """LIMIT 500"""
-        return self._db.execute_query(query)
-
-
-    def _get_db_observers(self, farms_id):
-        if not farms_id:
+    def _get_db_webhook_endpoints(self, webhook_history):
+        endpoint_ids = list(set([_['endpoint_id'] for _ in webhook_history]))
+        if not endpoint_ids:
             return tuple()
-        query = """SELECT `id`, `event_observer_name`, `farmid` """ +\
-                """FROM `farm_event_observers`""" +\
-                """WHERE `farmid` IN ( %s )"""
-        query = query % str(farms_id).replace('L', '')[1:-1]
-        return self._db.execute_query(query)
+        query = (
+                "SELECT HEX(`endpoint_id`) as endpoint_id, `url`, `security_key` "
+                "FROM webhook_endpoints "
+                "WHERE HEX(`endpoint_id`) IN ({0})"
+        ).format(str(endpoint_ids)[1:-1])
+        return self._db.execute(query)
 
+    def get_webhooks(self):
+        webhook_history = self._get_db_webhook_history()
+        webhook_endpoints = self._get_db_webhook_endpoints(webhook_history)
+        webhook_endpoints_map = dict((_['endpoint_id'], _) for _ in webhook_endpoints)
+        webhooks = []
+        for webhook in webhook_history:
+            webhook_endpoint = webhook_endpoints_map[webhook['endpoint_id']]
+            webhook['url'] = webhook_endpoint['url']
+            webhook['security_key'] = webhook_endpoint['security_key']
+            webhooks.append(webhook)
+        return webhooks
 
-    def _get_db_observers_config(self, observers_id):
-        if not observers_id:
-            return tuple()
-        query = """SELECT `observerid`, `key`, `value` """ +\
-                """FROM `farm_event_observers_config` """ +\
-                """WHERE `observerid` IN ( %s )"""
-        query = query % str(observers_id).replace('L', '')[1:-1]
-        return self._db.execute_query(query)
-
-
-    def _get_observers(self, events):
-        observers = dict()
-        farms_id = [_['farmid'] for _ in events if _['farmid'] != None]
-        if farms_id:
-            for observer in self._get_db_observers(farms_id):
-                observers.setdefault(observer['farmid'], []).append(observer)
-        return observers
-
-
-    def _get_config(self, observers):
-        config = dict()
-        observers_id = [_['id'] for s in observers.values() for _ in s if _['id'] != None]
-        if observers_id:
-            for cnf in self._get_db_observers_config(observers_id):
-                config.setdefault(cnf['observerid'], {})
-                config[cnf['observerid']].update({cnf['key']: cnf['value']})
-        return config
-
-
-    def get_events_data(self):
-        data = list()
-        events = self._get_db_events()
-        observers = self._get_observers(events)
-        config = self._get_config(observers)
-        for event in events:
-            element = {
-                'event': {
-                    'id': event['id'],
-                    'type': event['type'],
-                    'farmid': event['farmid'],
-                    'message': event['message'],
-                    },
-                'observers': [],
-                }
-            if event['farmid'] in observers:
-                for observer in observers[event['farmid']]:
-                    if observer['id'] in config:
-                        element['observers'].append({
-                            'event_observer_name': observer['event_observer_name'],
-                            'config': config[observer['id']],
-                            })
-            data.append(element)
-        return data
-
-
-    class NothingToDoError(Exception):
+    class PostError(Exception):
         pass
 
+    def post_webhook(self, webhook):
+        signature, date = cryptotool.sign(webhook['payload'], webhook['security_key'], version=2)
+        headers = {
+            'Date': date,
+            'X-Signature': signature,
+            'X-Scalr-Webhook-Id': webhook['history_id'],
+            'Content-type': 'application/json',
+        }
 
-    def do_iteration(self):
-        events_data = self.get_events_data()
-        if not events_data:
-            raise DBQueueEvent.NothingToDoError()
-        for event_data in events_data:
-            event, observers = event_data['event'], event_data['observers']
-            for observer in observers:
-                is_enabled = observer['config']['IsEnabled']
-                if 'IsEnabled' in observer['config'] and is_enabled == '1':
-                    self.observers[observer['event_observer_name']](
-                        event,
-                        observer['config'],
-                        pool = self._pool
-                        )
-        self.db_update([_['event']['id'] for _ in events_data])
-        self._pool.join()
+        if webhook['url'] == 'SCALR_MAIL_SERVICE':
+            url = 'https://my.scalr.com/webhook_mail.php'
+        else:
+            url = webhook['url']
 
-
-    @helper.apply_async
-    def mail_event_observer(self, event, config):
         try:
-            key = 'On%sNotify' % event['type']
-            if key not in config or config[key] != '1':
-                return
-            def get_farm_name(farm_id):
-                query = """SELECT `name` FROM `farms` WHERE `id`=%s""" % farm_id
-                try:
-                    result = self._db.execute_query(query)
-                except:
-                    LOG.error(helper.exc_info())
-                    return None
-                return result[0]['name'] if result else None
-            farm_name = get_farm_name(event['farmid'])
-            if farm_name:
-                subj = '%s event notification (FarmID: %s FarmName: %s)' \
-                        % (event['type'], event['farmid'], farm_name)
-            else:
-                subj = '%s event notification (FarmID: %s)' % (event['type'], event['farmid'])
-            mail = MIMEText(event['message'].encode('utf-8'), _charset='utf-8')
-            mail['From'] = CONFIG['email']['address']
-            mail['To'] = config['EventMailTo']
-            mail['Subject'] = subj
-            LOG.debug("Event:%s. Send mail:'%s'" % (event['id'], mail['Subject']))
-            server = smtplib.SMTP('localhost')
-            server.sendmail(mail['From'], mail['To'], mail.as_string())
-        except:
-            LOG.error(helper.exc_info())
-
-
-    @helper.apply_async
-    def rest_event_observer(self, event, config):
-        try:
-            key = 'On%sNotifyURL' % event['type']
-            if key not in config or not config[key]:
-                return
-            payload = {'event': event['type'], 'message': event['message']}
-            r = requests.post(config[key], params=payload, timeout=10)
-            LOG.debug("Event:%s. Send request:'url:%s' status:'%s'" \
-                    % (event['id'], config[key], r.status_code))
+            r = requests.post(url, data=webhook['payload'], headers=headers, timeout=3)
         except requests.exceptions.RequestException:
-            LOG.warning(helper.exc_info())
-        except:
-            LOG.error(helper.exc_info())
+            msg = '{0}, url: {1}'.format(sys.exc_info()[0].__name__, url)
+            raise DBQueueEvent.PostError(msg)
 
+        if r.status_code <= 205:
+            msg = "Request OK. url: {0}, webhook history_id: {1}, status: {2}"
+            msg = msg.format(url, webhook['history_id'], r.status_code)
+            LOG.debug(msg)
+        else:
+            webhook['error_msg'] = r.text.encode('ascii', 'replace')
+            msg = "Request failed. url: {0}, webhook history_id: {1}, status: {2}, text: {3}"
+            msg = msg.format(url, webhook['history_id'], r.status_code, r.text)
+            LOG.warning(msg)
+        return r.status_code
 
-    def db_update(self, events_id):
+    def update_webhook(self, webhook):
         while True:
             try:
-                query = """UPDATE `events` SET `ishandled`=1 WHERE `id` IN ( %s )""" \
-                        % str(events_id).replace('L', '')[1:-1]
-                self._db.execute_query(query)
+                response_code = webhook['response_code']
+                error_msg = webhook.get('error_msg', '')[0:255]
+                history_id = webhook['history_id']
+
+                if response_code == 'NULL' or response_code > 205:
+                    status = 2
+                else:
+                    status = 1
+                query = (
+                        """UPDATE `webhook_history` """
+                        """SET `status`={0},`response_code`={1}, `error_msg`="{2}" """
+                        """WHERE `history_id`=UNHEX('{3}')"""
+                ).format(status, response_code, pymysql.escape_string(error_msg), history_id)
+                self._db.execute(query)
                 break
             except KeyboardInterrupt:
-                raise KeyboardInterrupt
+                raise
             except:
-                LOG.error(helper.exc_info())
-                time.sleep(10)
-
-
-    def run(self):
-        while True:
-            try:
-                self.do_iteration()
-            except DBQueueEvent.NothingToDoError:
+                msg = "Webhook update failed, history_id: {0}, reason: {1}"
+                msg = msg.format(webhook['history_id'], helper.exc_info())
+                LOG.warning(msg)
                 time.sleep(5)
-            except KeyboardInterrupt:
-                raise KeyboardInterrupt
+
+    @helper.greenlet
+    def do_iteration(self):
+        self.iteration_timestamp = time.time()
+        webhooks = self.get_webhooks()
+        if not webhooks:
+            raise NothingToDoError()
+
+        for webhook in webhooks:
+            try:
+                wait_pool()
+                webhook['async_result'] = POOL.apply_async(self.post_webhook, (webhook,))
             except:
-                LOG.error(helper.exc_info())
-                time.sleep(10)
+                msg = "Unable to process webhook history_id: {0}, reason: {1}"
+                msg = msg.format(webhook['history_id'], helper.exc_info())
+                LOG.warning(msg)
 
+        for webhook in webhooks:
+            try:
+                webhook['response_code'] = webhook['async_result'].get(timeout=60)
+            except DBQueueEvent.PostError:
+                error_msg = str(sys.exc_info()[1])
+                self._handle_error(webhook, error_msg)
+            except:
+                error_msg = 'Internal error'
+                self._handle_error(webhook, error_msg)
+            try:
+                wait_pool()
+                POOL.apply_async(self.update_webhook, (webhook,))
+            except:
+                msg = "Unable to update webhook history_id: {0}, reason: {1}"
+                msg = msg.format(webhook['history_id'], helper.exc_info())
+                LOG.warning(msg)
 
-    def start(self, daemon=False):
-        if daemon:
-            super(DBQueueEvent, self).start()
-        else:
-            self.run()
+        POOL.join()
+
+    def _handle_error(self, webhook, error_msg):
+        webhook['error_msg'] = error_msg
+        webhook['response_code'] = 'NULL'
+        msg = "Unable to process webhook history_id: {0}, reason: {1}"
+        msg = msg.format(webhook['history_id'], helper.exc_info())
+        LOG.warning(msg)
+
+    def _run(self):
+        while True:
+            LOG.debug('Start iteration')
+            try:
+                g = self.do_iteration()
+                try:
+                    g.get(timeout=300)
+                except gevent.Timeout:
+                    raise IterationTimeoutError()
+                finally:
+                    if not g.ready():
+                        g.kill()
+            except KeyboardInterrupt:
+                raise
+            except NothingToDoError:
+                LOG.debug('Nothing to do. Sleep 5 seconds')
+                gevent.sleep(5)
+            except:
+                LOG.error('Iteration failed, reason: {0}'.format(helper.exc_info()))
+                POOL.kill()
+                gevent.sleep(5)
+            finally:
+                LOG.debug('End iteration: {0:.1f}'.format(time.time() - self.iteration_timestamp))
+                gevent.sleep(0.2)
 
 
 def configure(config, args=None):
     global CONFIG
-    helper.update_config(
-        config['connections']['mysql'], CONFIG['connections']['mysql'])
-    if 'email' in config:
-        helper.update_config(config['email'], CONFIG['email'])
+    if 'connections' in config and 'mysql' in config['connections']:
+        helper.update_config(config['connections']['mysql'], CONFIG['connections']['mysql'])
     if 'system' in config and 'instances_connection_timeout' in config['system']:
         timeout = config['system']['instances_connection_timeout']
         CONFIG['instances_connection_timeout'] = timeout
@@ -252,10 +256,11 @@ def configure(config, args=None):
     helper.update_config(config_to=CONFIG, args=args)
     helper.validate_config(CONFIG)
     helper.configure_log(
-            log_level=CONFIG['verbosity'],
-            log_file=CONFIG['log_file'],
-            log_size=1024 * 1000
-            )
+        log_level=CONFIG['verbosity'],
+        log_file=CONFIG['log_file'],
+        log_size=1024 * 1000
+    )
+    socket.setdefaulttimeout(CONFIG['instances_connection_timeout'])
 
 
 def main():
@@ -289,17 +294,18 @@ def main():
             sys.stderr.write('%s\n' % helper.exc_info())
         sys.exit(1)
     try:
-        socket.setdefaulttimeout(CONFIG['instances_connection_timeout'])
-        daemon = DBQueueEvent()
+        app = DBQueueEvent()
         if args.start:
-            LOG.info('Start')
             if helper.check_pid(CONFIG['pid_file']):
-                LOG.critical('Another copy of process already running. Exit')
-                return
-            daemon.start(daemon=not args.no_daemon)
+                msg = "Application with pid file '{0}' already running. Exit"
+                msg = msg.format(CONFIG['pid_file'])
+                LOG.info(msg)
+                sys.exit(0)
+            if not args.no_daemon:
+                helper.daemonize()
+            app.start()
         elif args.stop:
-            LOG.info('Stop')
-            daemon.stop()
+            app.stop()
         else:
             print 'Usage %s -h' % sys.argv[0]
     except SystemExit:

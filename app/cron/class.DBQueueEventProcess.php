@@ -1,5 +1,8 @@
 <?php
 
+use Scalr\Model\Entity\WebhookHistory;
+use Scalr\Model\Entity\WebhookEndpoint;
+
 class DBQueueEventProcess implements \Scalr\System\Pcntl\ProcessInterface
 {
     public $ThreadArgs;
@@ -44,23 +47,56 @@ class DBQueueEventProcess implements \Scalr\System\Pcntl\ProcessInterface
             }
         }
 
-        $rows = $db->Execute("SELECT * FROM events WHERE ishandled = '0' ORDER BY id ASC");
-        while ($dbevent = $rows->FetchRow()) {
-            try {
-                //TODO: Initialize Event classes
-                $Event = unserialize($dbevent['event_object']);
-                if ($Event) {
-                    Logger::getLogger(__CLASS__)->info(sprintf(_("Fire event %s for farm: %s"), $Event->GetName(), $Event->GetFarmID()));
-                    // Fire event
-                    Scalr::FireDeferredEvent($Event);
-                }
+        $rows = $db->Execute("SELECT history_id FROM webhook_history WHERE status='0'");
+        while ($row = $rows->FetchRow()) {
+            $history = WebhookHistory::findPk(bin2hex($row['history_id']));
+            if (!$history)
+                continue;
 
-                //$db->Execute("UPDATE events SET ishandled='1', event_object = '' WHERE id=?", array($dbevent['id']));
-                $db->Execute("UPDATE events SET ishandled='1' WHERE id=?", array($dbevent['id']));
+            $endpoint = WebhookEndpoint::findPk($history->endpointId);
+
+            $request = new HttpRequest();
+            $request->setMethod(HTTP_METH_POST);
+
+
+            if ($endpoint->url == 'SCALR_MAIL_SERVICE')
+                $request->setUrl('https://my.scalr.com/webhook_mail.php');
+            else
+                $request->setUrl($endpoint->url);
+
+            $request->setOptions(array(
+               'timeout'        => 3,
+               'connecttimeout' => 3
+            ));
+
+            $dt = new DateTime('now', new DateTimeZone("UTC"));
+            $timestamp = $dt->format("D, d M Y H:i:s e");
+            $canonical_string = $history->payload . $timestamp;
+            $signature = hash_hmac('SHA1', $canonical_string, $endpoint->securityKey);
+
+            $request->addHeaders(array(
+               'Date'        => $timestamp,
+               'X-Signature' => $signature,
+               'X-Scalr-Webhook-Id' => $history->historyId,
+               'Content-type' => 'application/json'
+            ));
+
+            $request->setBody($history->payload);
+
+            try {
+                $request->send();
+
+                $history->responseCode = $request->getResponseCode();
+
+                if ($request->getResponseCode() <= 205)
+                    $history->status = WebhookHistory::STATUS_COMPLETE;
+                else
+                    $history->status = WebhookHistory::STATUS_FAILED;
+            } catch (Exception $e) {
+                $history->status = WebhookHistory::STATUS_FAILED;
             }
-            catch(Exception $e) {
-                Logger::getLogger(__CLASS__)->fatal(sprintf(_("Cannot fire deferred event: %s"), $e->getMessage()));
-            }
+
+            $history->save();
         }
     }
 
@@ -71,61 +107,7 @@ class DBQueueEventProcess implements \Scalr\System\Pcntl\ProcessInterface
 
     public function StartThread($eventId)
     {
-        /*
-        // Reconfigure observers;
-        Scalr::ReconfigureObservers();
 
-        //
-        // Create pid file
-        //
-        @file_put_contents(CACHEPATH."/".__CLASS__.".Daemon.pid", posix_getpid());
-
-        // Get memory usage on start
-        $memory_usage = $this->GetMemoryUsage();
-        $this->Logger->info("DBQueueEventProcess daemon started. Memory usage: {$memory_usage}M");
-
-        // Get DB instance
-        $db = \Scalr::getDb();
-
-        $FarmObservers = array();
-
-        while(true)
-        {
-            // Process tasks from Deferred event queue
-            while ($Task = TaskQueue::Attach(QUEUE_NAME::DEFERRED_EVENTS)->Poll())
-            {
-                $Task->Run();
-            }
-            // Reset task
-            TaskQueue::Attach(QUEUE_NAME::DEFERRED_EVENTS)->Reset();
-
-            // Cleaning
-            unset($current_memory_usage);
-            unset($event);
-
-            // Check memory usage
-            $current_memory_usage = $this->GetMemoryUsage()-$memory_usage;
-            if ($current_memory_usage > $this->DaemonMemoryLimit)
-            {
-                $this->Logger->warn("DBQueueEventProcess daemon reached memory limit {$this->DaemonMemoryLimit}M, Used:{$current_memory_usage}M");
-                $this->Logger->warn("Restart daemon.");
-                exit();
-            }
-
-            // Sleep for 60 seconds
-            sleep(15);
-
-            // Clear stat file cache
-            clearstatcache();
-
-            // Check daemon file for modifications.
-            if ($this->DaemonMtime && $this->DaemonMtime < @filemtime(__FILE__))
-            {
-                $this->Logger->warn(__FILE__." - updated. Exiting for daemon reload.");
-                exit();
-            }
-        }
-        */
     }
 
     /**

@@ -9,6 +9,10 @@ interface IEventObserver
 
     public function OnHostInit(HostInitEvent $event);
 
+    public function OnHostInitFailed(HostInitFailedEvent $event);
+
+    public function OnInstanceLaunchFailed(InstanceLaunchFailedEvent $event);
+
     public function OnHostUp(HostUpEvent $event);
 
     public function OnHostDown(HostDownEvent $event);

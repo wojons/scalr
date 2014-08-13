@@ -16,12 +16,13 @@ register_shutdown_function(function () {
 
 $path = trim(str_replace("?{$_SERVER['QUERY_STRING']}", "", $_SERVER['REQUEST_URI']), '/');
 
-define('SCALR_NOT_CHECK_SESSION', 1);
-
 try {
     $startTime = microtime(true);
     require __DIR__ . '/src/prepend.inc.php';
     $prependTime = microtime(true);
+
+    // public controller for link like /public/*; don't check CSRF
+    $publicController = !strncmp('public', $path, strlen('public'));
 
     $session = Scalr_Session::getInstance();
     try {
@@ -35,9 +36,13 @@ try {
             exit;
         }
         $message = $e->getMessage();
-        if ($e->getCode() != 1)
-            $message = $message . ' <a href="/guest/logout">Click here to login as another user</a>';
-        throw new Exception($message);
+        if ($e->getCode() != 1) {
+            $message = htmlspecialchars($message) . ' <a href="/guest/logout">Click here to login as another user</a>';
+            Scalr_UI_Response::getInstance()->failure($message, true);
+            throw new Exception();
+        } else {
+            throw new Exception($message);
+        }
     }
 
     $response = Scalr_UI_Response::getInstance();
@@ -50,35 +55,39 @@ try {
     if (isset($mode['sql']) && $mode['sql'])
         $response->debugMysql();
 
-    // check against CSRF
-    $possibleCsrf = false;
-    $header = $request->getHeaderVar('Token');
-    $var = $request->getParam('X-Requested-Token');
-    // check header, otherwise check var
-    if ($header != 'key') {
-        if ($var != $session->getToken())
-            $possibleCsrf = true;
-    }
+    if ($_SERVER['REQUEST_METHOD'] == 'GET' || $_SERVER['REQUEST_METHOD'] == 'POST') {
+        // check against CSRF
+        $possibleCsrf = false;
+        $header = $request->getHeaderVar('Token');
+        $var = $request->getParam('X-Requested-Token');
+        // check header, otherwise check var
+        if ($header != 'key' || $session->isAuthenticated()) {
+            // authenticated users validated by token ONLY
+            if (($var != $session->getToken()) || !$session->getToken())
+                $possibleCsrf = true;
+        }
 
-    /*     if ($header != 'key' || $session->isAuthenticated()) {
-        // authenticated users validated by token ONLY
-        if ($var != $session->getToken())
-            $possibleCsrf = true;
-    }*/
+        if ($path == 'guest/logout' || $path == 'guest/xCreateAccount' || $publicController)
+            $possibleCsrf = false;
 
-    if ($possibleCsrf) {
-        //$response->setHttpResponseCode(403);
-        $response->setHeader('X-Scalr-C', true);
-        //$response->sendResponse();
-    }// else {
-        $initTime = microtime(true);
+        if ($possibleCsrf) {
+            //Scalr_Session::destroy();
+            $response->failure('Your session became invalid. <a href="/guest/logout">Click here to login again</a>', true);
+            $response->sendResponse();
+        } else {
+            $initTime = microtime(true);
 
-        $response->setHeader("X-Scalr-PrependTime", $prependTime-$startTime);
-        $response->setHeader("X-Scalr-InitTime", $initTime-$prependTime);
+            $response->setHeader("X-Scalr-PrependTime", $prependTime-$startTime);
+            $response->setHeader("X-Scalr-InitTime", $initTime-$prependTime);
 
-        Scalr_UI_Controller::handleRequest(explode('/', $path));
+            Scalr_UI_Controller::handleRequest(explode('/', $path));
+            Scalr_UI_Response::getInstance()->sendResponse();
+        }
+    } else {
+        Scalr_UI_Response::getInstance()->setHeader("X-Scalr-Forbiden", "3: {$_SERVER['HTTP_HOST']}");
+        Scalr_UI_Response::getInstance()->setHttpResponseCode(403);
         Scalr_UI_Response::getInstance()->sendResponse();
-    //}
+    }
 
 } catch (ADODB_Exception $e) {
     Scalr_UI_Response::getInstance()->data(array('errorDB' => true));

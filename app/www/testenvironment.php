@@ -15,6 +15,10 @@ if (substr($sapi_type, 0, 3) == 'cli') {
 $err = array();
 $recommend = array();
 
+if (extension_loaded('eaccelerator') || extension_loaded('eAccelerator')) {
+    $err[] = "eAccelerator is not compatible with Scalr. It should be disabled.";
+}
+
 if (!$windows) {
     // Check POSIX
     if (!function_exists('posix_getpid')) {
@@ -112,12 +116,11 @@ if (!class_exists('SoapClient')) {
     $err[] = "Cannot find SoapClient class. Make sure that SoapClient Extension enabled. Look at $PHPSITE/soap.installation.php";
 }
 
-// Checks php sessings
-if (ini_get('safe_mode') == 1)
-    $err[] = "PHP safe mode enabled. Please disable it.";
-
-if (ini_get('register_gloabls') == 1)
-    $err[] = "PHP register globals enabled. Please disable it.";
+// Checks php settings
+if (ini_get('http.persistent.handles.limit') !== "0") {
+    //HttpRequest should not share connection between different API requests
+    $err[] = sprintf("http.persistent.handles.limit must be set to 0. Current value is %s", ini_get('http.persistent.handles.limit'));
+}
 
 if (version_compare($phpBranch, '5.4', '<') ||
     $phpBranch == '5.4' && version_compare(PHP_VERSION, '5.4.19', '<') ||
@@ -126,7 +129,7 @@ if (version_compare($phpBranch, '5.4', '<') ||
     $err[] = "You have " . phpversion() . " PHP version. It must be >= 5.4.19 for 5.4 branch or >= 5.5.4 for 5.5 branch";
 }
 
-// If all extensions installed
+// If all extensions are installed
 if (count($err) == 0) {
     $cryptokeyPath = __DIR__ . "/../etc/.cryptokey";
     if (!file_exists($cryptokeyPath) || filesize($cryptokeyPath) == 0) {
@@ -158,7 +161,7 @@ if (count($err) == 0) {
             $err[] = sprintf(
                 'Could not create %s folder automatically. ' .
                 'Please create this folder manually with read/write access permissions for webserver and crontab actors.',
-                realpath($cachePath)
+                $cachePath
             );
         }
     }
@@ -177,7 +180,7 @@ if (count($err) == 0) {
 }
 
 if (empty($err)) {
-    //Additionally checks conditional packages
+    // Additionally checks conditional packages
     if (!function_exists('ldap_connect')) {
         if ($config('scalr.auth_mode') == 'ldap') {
             $err[] = "LDAP must be enabled if you want to use ldap auth_mode. "
@@ -227,6 +230,3 @@ if (!$cli) {
             print "\033[1;30m- {$e}\033[0m\n";
     }
 }
-
-
-

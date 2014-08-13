@@ -66,6 +66,14 @@ abstract class EventObserver implements IEventObserver
     {
     }
 
+    public function OnHostInitFailed(HostInitFailedEvent $event)
+    {
+    }
+
+    public function OnInstanceLaunchFailed(InstanceLaunchFailedEvent $event)
+    {
+    }
+
     public function OnCheckRecovered(CheckRecoveredEvent $event)
     {
     }

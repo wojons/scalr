@@ -89,13 +89,12 @@ class Scalr_Account extends Scalr_Model
             $this->db->StartTrans();
 
             //TODO: Use models
-            $this->db->Execute("DELETE FROM account_audit WHERE account_id=?", array($this->id));
-
             $this->db->Execute("
                 DELETE account_team_users FROM account_team_users, account_teams
                 WHERE account_teams.account_id = ?
                 AND account_team_users.team_id = account_teams.id
             ", array($this->id));
+
             $this->db->Execute("DELETE FROM account_users WHERE account_id=?", array($this->id));
             $this->db->Execute("DELETE FROM account_teams WHERE account_id=?", array($this->id));
 
@@ -120,7 +119,6 @@ class Scalr_Account extends Scalr_Model
                 $this->db->Execute("DELETE FROM farms WHERE id=?", array($farm["id"]));
                 $this->db->Execute("DELETE FROM farm_roles WHERE farmid=?", array($farm["id"]));
                 $this->db->Execute("DELETE FROM farm_role_options WHERE farmid=?", array($farm["id"]));
-                $this->db->Execute("DELETE FROM farm_role_scripts WHERE farmid=?", array($farm["id"]));
                 $this->db->Execute("DELETE FROM farm_event_observers WHERE farmid=?", array($farm["id"]));
                 $this->db->Execute("DELETE FROM elastic_ips WHERE farmid=?", array($farm["id"]));
             }
@@ -136,6 +134,20 @@ class Scalr_Account extends Scalr_Model
                 $this->db->Execute("DELETE FROM role_security_rules WHERE role_id = ?", array($role['id']));
                 $this->db->Execute("DELETE FROM role_software WHERE role_id = ?", array($role['id']));
             }
+
+            //Removing cost centres and projects which are set up from this account
+            $this->db->Execute("
+                DELETE project_properties FROM project_properties, projects
+                WHERE projects.project_id = project_properties.project_id
+                AND projects.account_id = ?
+            ", [$this->id]);
+            $this->db->Execute("DELETE FROM projects WHERE account_id = ?", [$this->id]);
+            $this->db->Execute("
+                DELETE cc_properties FROM cc_properties, ccs
+                WHERE ccs.cc_id = cc_properties.cc_id
+                AND ccs.account_id = ?
+            ", [$this->id]);
+            $this->db->Execute("DELETE FROM ccs WHERE account_id = ?", [$this->id]);
 
             parent::delete();
 
@@ -211,11 +223,11 @@ class Scalr_Account extends Scalr_Model
 
         $env = Scalr_Environment::init()->create($name, $this->id);
 
-        $config[ENVIRONMENT_SETTINGS::TIMEZONE] = "America/Adak";
+        $config[Scalr_Environment::SETTING_TIMEZONE] = "America/Adak";
 
         /*
-            $config[ENVIRONMENT_SETTINGS::API_LIMIT_ENABLED] = 1;
-            $config[ENVIRONMENT_SETTINGS::API_LIMIT_REQPERHOUR] = 18000;
+            $config[Scalr_Environment::SETTING_API_LIMIT_ENABLED] = 1;
+            $config[Scalr_Environment::SETTING_API_LIMIT_REQPERHOUR] = 18000;
         */
 
         $env->setPlatformConfig($config, false);

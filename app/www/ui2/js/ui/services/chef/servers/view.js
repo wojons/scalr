@@ -39,14 +39,16 @@ Scalr.regPage('Scalr.ui.services.chef.servers.view', function (loadParams, modul
 		},
 
 		columns: [
+            { text: "ID", width: 100, dataIndex: 'id', sortable: true },
 			{ text: "URL", flex: 3, dataIndex: 'url', sortable: true },
 			{ text: "User name", width: 220, dataIndex: 'username', sortable: true },
-			{ xtype: 'optionscolumn',
-				optionsMenu: [{ 
+			{
+                xtype: 'optionscolumn2',
+				menu: [{
 					text:'Edit', 
 					iconCls: 'x-menu-icon-edit',
-					menuHandler: function(item) {
-						Scalr.event.fireEvent('redirect','#/services/chef/servers/edit?servId=' + item.record.get('id'));
+					menuHandler: function(data) {
+						Scalr.event.fireEvent('redirect','#/services/chef/servers/edit?servId=' + data['id']);
 					}
 				},{
 					xtype: 'menuseparator',
@@ -54,28 +56,24 @@ Scalr.regPage('Scalr.ui.services.chef.servers.view', function (loadParams, modul
 				},{ 
 					text:'Delete', 
 					iconCls: 'x-menu-icon-delete',
-					menuHandler: function(item) {
-						Scalr.Request({
-							confirmBox: {
-								msg: 'Remove selected chef server ?',
-								type: 'delete'
-							},
-							processBox: {
-								msg: 'Removing chef server ...',
-								type: 'delete'
-							},
-							scope: this,
-							url: 'services/chef/servers/xDeleteServer',
-							params: {servId: item.record.get('id')},
-							success: function (data, response, options){
-								store.load();
-							}
-						});
-					}
-				}],
-				getVisibility: function (record) {
-					return true;
-				}
+                    request: {
+                        confirmBox: {
+                            msg: 'Remove selected chef server ?',
+                            type: 'delete'
+                        },
+                        processBox: {
+                            msg: 'Removing chef server ...',
+                            type: 'delete'
+                        },
+                        url: 'services/chef/servers/xDeleteServer',
+                        dataHandler: function (data) {
+                            return { servId: data['id'] };
+                        },
+                        success: function (data, response, options){
+                            store.load();
+                        }
+                    }
+				}]
 			}],
 		dockedItems: [{
 			xtype: 'scalrpagingtoolbar',

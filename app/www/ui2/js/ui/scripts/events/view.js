@@ -3,7 +3,6 @@ Scalr.regPage('Scalr.ui.scripts.events.view', function (loadParams, moduleParams
 		fields: [ 'id', 'name','description' ],
 		proxy: {
 			type: 'scalr.paging',
-			extraParams: loadParams,
 			url: '/scripts/events/xListCustomEvents/'
 		},
 		remoteSort: true
@@ -15,7 +14,6 @@ Scalr.regPage('Scalr.ui.scripts.events.view', function (loadParams, moduleParams
 			'reload': false,
 			'maximize': 'all'
 		},
-		scalrReconfigureParams: { metricId: '' },
 		store: store,
 		stateId: 'grid-scripts-events-view',
 		stateful: true,
@@ -43,13 +41,14 @@ Scalr.regPage('Scalr.ui.scripts.events.view', function (loadParams, moduleParams
 			{ header: "Name", flex: 1, dataIndex: 'name', sortable:true },
 			{ header: "Description", flex: 10, dataIndex: 'description', sortable: false },
 			{
-				xtype: 'optionscolumn',
-				optionsMenu: [{
+				xtype: 'optionscolumn2',
+				menu: [{
 					text: 'Edit',
-					href: "#/scripts/events/{id}/edit"
+                    iconCls: 'x-menu-icon-edit',
+					href: '#/scripts/events/{id}/edit',
 				}],
 				getVisibility: function (record) {
-					return (record.get('env_id') != 0);
+					return record.get('env_id') != 0;
 				}
 			}
 		],
@@ -72,6 +71,10 @@ Scalr.regPage('Scalr.ui.scripts.events.view', function (loadParams, moduleParams
 			xtype: 'scalrpagingtoolbar',
 			store: store,
 			dock: 'top',
+            items: [{
+                xtype: 'filterfield',
+                store: store
+            }],
 			beforeItems: [{
                 text: 'Add event',
                 cls: 'x-btn-green-bg',

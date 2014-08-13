@@ -20,7 +20,7 @@ class UpdatesIterator extends RegexIterator
      */
     private $regex;
 
-	/**
+    /**
      * Constructor
      */
     public function __construct($path)
@@ -29,7 +29,7 @@ class UpdatesIterator extends RegexIterator
         parent::__construct(new FilesystemIterator($path), $this->regex);
     }
 
-	/**
+    /**
      * {@inheritdoc}
      * @see RegexIterator::accept()
      */

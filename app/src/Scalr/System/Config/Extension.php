@@ -47,38 +47,37 @@ class Extension implements \IteratorAggregate
                 ->node('allowed_clouds', array('ec2', 'openstack', 'cloudstack', 'idcf', 'gce', 'ocs', 'ecs',
                                                'rackspacenguk', 'rackspacengus', 'nebula'))
 
+                ->sub('analytics', false)
+                    ->node('enabled', false)
+                    ->sub('connections')
+                        ->sub('analytics')
+                            ->node('driver', 'mysqli')
+                            ->node('host')
+                            ->node('port', null)
+                            ->node('name', 'analytics')
+                            ->node('user')
+                            ->node('pass')
+                        ->end()
+                    ->end()
+                ->end()
+
                 ->sub('auditlog', false)
                     ->node('enabled', false)
                 ->end()
 
                 ->node('auth_mode')
 
-                ->sub('system', false)
-                    ->node('instances_connection_timeout', 4)
-                    ->node('server_terminate_timeout', '+3 minutes')
-                    ->sub('scripting', false)
-                        ->node('logs_storage', 'instance')
-                        ->node('default_instance_log_rotation_period', 3600)
-                    ->end()
-                    ->sub('global_variables', false)
-                        ->node('format', array())
-                    ->end()
-                ->end()
-
                 ->sub('aws')
                     ->node('security_group_name', 'scalr.ip-pool')
                     ->node('ip_pool', array())
                     ->node('security_group_prefix', 'scalr.')
+                    ->node('use_proxy', false)
                     ->sub('plugins', false)
                         ->node('enabled', array())
                         ->sub('statistics', false)
                             ->node('storage_max_size', 268435456)
                         ->end()
                     ->end()
-                ->end()
-
-                ->sub('openstack', false)
-                    ->node('user_data_method', 'both')
                 ->end()
 
                 ->sub('billing')
@@ -94,6 +93,13 @@ class Extension implements \IteratorAggregate
                 ->end()
 
                 ->sub('connections')
+                    ->sub('proxy', false)
+                        ->node('host', 'localhost')
+                        ->node('port', 3128)
+                        ->node('user', null)
+                        ->node('pass', null)
+                        ->node('type', 0)
+                    ->end()
                     ->sub('ldap', false)
                         ->node('host', 'localhost')
                         ->node('port', null)
@@ -105,6 +111,11 @@ class Extension implements \IteratorAggregate
                         ->node('domain', null)
                         ->node('bind_type', \Scalr\Net\Ldap\LdapClient::BIND_TYPE_REGULAR)
                         ->node('mail_attribute', null)
+                        ->node('fullname_attribute', 'displayName')
+                        ->node('username_attribute', 'sAMAccountName')
+                        ->node('group_member_attribute', 'member')
+                        ->node('group_member_attribute_type', 'regular')
+                        ->node('groupname_attribute', 'sAMAccountName')
                         ->node('debug', false)
                         ->sub('filter', false)
                             ->node('users', '(&(objectCategory=person)(objectClass=user))')
@@ -136,6 +147,7 @@ class Extension implements \IteratorAggregate
                     ->end()
                     ->sub('static')
                         ->node('enabled')
+                        ->node('extended', false)
                         ->node('nameservers')
                         ->node('domain_name')
                     ->end()
@@ -154,6 +166,7 @@ class Extension implements \IteratorAggregate
                 ->sub('email')
                     ->node('address')
                     ->node('name', null)
+                    ->node('delimiter', 'crlf')
                 ->end()
 
                 ->sub('endpoint')
@@ -161,10 +174,31 @@ class Extension implements \IteratorAggregate
                     ->node('host')
                 ->end()
 
+                ->sub('hosted', false)
+                    ->node('enabled', false)
+                    ->sub('analytics', false)
+                        ->node('managed_accounts', [])
+                    ->end()
+                ->end()
+
                 ->node('instances_connection_policy')
+
+                ->sub('load_statistics', false)
+                    ->sub('connections')
+                        ->sub('plotter')
+                            ->node('scheme', 'http')
+                            ->node('host', null)
+                            ->node('port', 8080)
+                        ->end()
+                    ->end()
+                ->end()
 
                 ->sub('monitoring', false)
                     ->node('server_url', 'http://monitoring.scalr.net')
+                ->end()
+
+                ->sub('openstack', false)
+                    ->node('user_data_method', 'both')
                 ->end()
 
                 ->sub('phpunit', false)
@@ -172,11 +206,27 @@ class Extension implements \IteratorAggregate
                     ->node('userid')
                     ->node('envid')
                     ->sub('openstack', false)
-                        ->node('platforms', array())
+                        ->node('platforms', [])
+                    ->end()
+                    ->sub('cloudstack', false)
+                        ->node('platforms', [])
                     ->end()
                 ->end()
 
                 ->node('rss_cache_lifetime', 300)
+
+                ->sub('scalarizr_update')
+                    ->node('mode', 'solo')
+                    ->node('server_url', 'http://update.scalr.net/')
+                    ->node('api_port', '')
+                    ->node('default_repo', '')
+                    ->sub('devel_repos', false)
+                        ->node('deb_repo_url', '')
+                        ->node('rpm_repo_url', '')
+                        ->node('win_repo_url', '')
+                    ->end()
+                    ->node('repos')
+                ->end()
 
                 ->sub('script', false)
                     ->sub('timeout', false)
@@ -185,20 +235,15 @@ class Extension implements \IteratorAggregate
                     ->end()
                 ->end()
 
-                ->sub('stats_poller', false)
-                    ->node('rrd_db_dir', '')
-                    ->node('images_path', '')
-                    ->node('graphics_url', '')
-                ->end()
-
-                ->sub('load_statistics', false)
-                    ->node('rrd_dir', '')
-                    ->node('img_dir', '')
-                    ->sub('connections')
-                        ->sub('plotter')
-                            ->node('host', null)
-                            ->node('port', 8080)
-                        ->end()
+                ->sub('system', false)
+                    ->node('instances_connection_timeout', 4)
+                    ->node('server_terminate_timeout', '+3 minutes')
+                    ->sub('scripting', false)
+                        ->node('logs_storage', 'instance')
+                        ->node('default_instance_log_rotation_period', 3600)
+                    ->end()
+                    ->sub('global_variables', false)
+                        ->node('format', array())
                     ->end()
                 ->end()
 
@@ -209,7 +254,8 @@ class Extension implements \IteratorAggregate
                         ->node('public_key', '')
                         ->node('private_key', '')
                     ->end()
-                    ->node('mindterm_enabled', true)
+                    ->node('mindterm_enabled', false)
+                    ->node('server_display_convention', 'auto')
                     // Hidden stuff, should not be in config.yml
                     ->sub('pma', false)
                         ->node('key', '')
@@ -218,6 +264,8 @@ class Extension implements \IteratorAggregate
                     ->end()
                     ->node('tender_api_key', '')
                     ->node('tender_site_key', '')
+                    ->node('announcements_rss_url', 'http://www.scalr.com/blog/rss.xml')
+                    ->node('changelog_rss_url', 'https://scalr-wiki.atlassian.net/wiki/createrssfeed.action?types=blogpost&spaces=docs&sort=created&maxResults=100&showContent=true&timeSpan=100')
                 ->end()
             ->end()
         ;
@@ -314,7 +362,7 @@ class Extension implements \IteratorAggregate
         return $obj->getIterator();
     }
 
-	/**
+    /**
      * Checks whether scalar node is defined
      *
      * @param   string   $name  Dot notation key

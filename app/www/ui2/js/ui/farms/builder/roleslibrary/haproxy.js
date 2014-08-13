@@ -11,15 +11,6 @@ Scalr.regPage('Scalr.ui.farms.builder.addrole.haproxy', function () {
             return Ext.Array.contains(record.get('behaviors', true), 'haproxy');
         },
 
-        onSelectImage: function(record) {
-            if (this.isVisibleForRole(record)) {
-                this.setRole(record);
-                this.show();
-            } else {
-                this.hide();
-            }
-        },
-        
         setRole: function(record){
             var me = this,
                 hp = me.down('haproxysettings');
@@ -35,7 +26,7 @@ Scalr.regPage('Scalr.ui.farms.builder.addrole.haproxy', function () {
         },
 
         isValid: function() {
-            return true;
+            return this.down('haproxysettings').down('#form').validateRecord();
         },
 
         getSettings: function() {

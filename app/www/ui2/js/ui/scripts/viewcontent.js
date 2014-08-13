@@ -1,4 +1,5 @@
 Scalr.regPage('Scalr.ui.scripts.viewcontent', function (loadParams, moduleParams) {
+    var script = moduleParams['script'];
 	var form = Ext.create('Ext.form.Panel', {
 		width: 900,
 		scalrOptions: {
@@ -13,30 +14,34 @@ Scalr.regPage('Scalr.ui.scripts.viewcontent', function (loadParams, moduleParams
 		items: [{
             xtype: 'combobox',
             itemId: 'comboVers',
-            fieldLabel: 'Revision versions',
-            labelWidth: 120,
+            fieldLabel: 'Versions',
+            labelWidth: 70,
             maxWidth: 200,
             editable: false,
             queryMode: 'local',
-            displayField: 'revision',
-            hidden: ! (moduleParams['revision'].length > 1),
-            value: moduleParams['latest'],
+            name: 'version',
+            displayField: 'version',
+            hidden: ! (script['versions'].length > 1),
             listConfig: {
                 cls: 'x-boundlist-alt',
                 tpl:
                     '<tpl for="."><div class="x-boundlist-item" style="height: auto; width: auto">' +
-                        '{revision} [{dtCreated}]' +
+                        '{version} [{dtCreated}]' +
                         '</div></tpl>'
             },
             store: {
-                fields: [ 'revision', 'dtCreated' ],
-                data: moduleParams['revision'],
+                fields: [ 'version', 'dtCreated', 'content' ],
+                data: script['versions'],
                 proxy: 'object'
             },
 
             listeners: {
+                afterrender: function() {
+                    this.setValue(this.store.last().get('version'));
+                },
                 change: function (field, newValue) {
-                    form.down('#scriptContents').setValue(moduleParams['content'][newValue]);
+                    var rec = this.findRecordByValue(newValue);
+                    form.down('#scriptContents').setValue(rec.get('content'));
                 }
             }
         }, {
@@ -45,8 +50,7 @@ Scalr.regPage('Scalr.ui.scripts.viewcontent', function (loadParams, moduleParams
 			readOnly: true,
 			hideLabel: true,
 			minHeight: 400,
-            flex: 1,
-			value: moduleParams['content'][moduleParams['latest']]
+            flex: 1
 		}],
 		tools: [{
 			type: 'maximize',

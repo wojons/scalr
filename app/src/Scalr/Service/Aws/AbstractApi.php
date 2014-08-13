@@ -2,7 +2,6 @@
 namespace Scalr\Service\Aws;
 
 use Scalr\Service\Aws\Client\ClientInterface;
-use \SimpleXMLElement;
 
 /**
  * AbstractApi

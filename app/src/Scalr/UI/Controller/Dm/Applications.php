@@ -39,8 +39,8 @@ class Scalr_UI_Controller_Dm_Applications extends Scalr_UI_Controller
         $application->name = $this->getParam('name');
         $application->sourceId = $this->getParam('sourceId');
 
-        $application->setPreDeployScript($this->getParam('pre_deploy_script'));
-        $application->setPostDeployScript($this->getParam('post_deploy_script'));
+        $application->setPreDeployScript($this->getParam('pre_deploy_script', true));
+        $application->setPostDeployScript($this->getParam('post_deploy_script', true));
 
         $application->save();
 

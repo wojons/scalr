@@ -5,9 +5,7 @@ use Scalr\Service\Aws\CloudFront\DataType\DistributionConfigData;
 use Scalr\Service\Aws\CloudFront\DataType\DistributionList;
 use Scalr\Service\Aws\CloudFront\DataType\MarkerType;
 use Scalr\Service\Aws\CloudFront\DataType\DistributionData;
-use Scalr\Service\Aws\DataType\ListDataType;
 use Scalr\Service\Aws\Client\ClientException;
-use Scalr\Service\Aws\DataType\ErrorData;
 use Scalr\Service\Aws\CloudFrontException;
 use Scalr\Service\Aws\CloudFront\AbstractCloudFrontHandler;
 

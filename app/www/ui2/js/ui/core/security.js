@@ -6,6 +6,7 @@ Scalr.regPage('Scalr.ui.core.security', function (loadParams, moduleParams) {
 			anchor: '100%',
 			labelWidth: 130
 		},
+        layout: 'auto',
 		items: [{
 			xtype: 'fieldset',
             title: 'Change password',
@@ -27,21 +28,14 @@ Scalr.regPage('Scalr.ui.core.security', function (loadParams, moduleParams) {
 			}]
 		}, {
 			xtype: 'fieldset',
-			hidden: !moduleParams['security_2fa'],
-			title: 'Two-factor authentication based on <a href="http://code.google.com/p/google-authenticator/" target="_blank">google authenticator</a>',
+			hidden: !moduleParams['security2fa'],
+			title: 'Two-factor authentication based on <a href="http://code.google.com/p/google-authenticator/" target="_blank">google authenticator</a> (TOTP)',
 			items: [{
 				xtype: 'buttongroupfield',
-				name: 'security_2fa_ggl',
+				name: 'security2faGgl',
 				listeners: {
 					beforetoggle: function(field, value) {
 						if (value == '1') {
-							var b32 = ('234567QWERTYUIOPASDFGHJKLZXCVBNM').split(''), barcode = '', qrcode = '';
-
-							for (var i = 0; i < 16; i++)
-								barcode = barcode + b32[Math.floor(Math.random() * (b32.length))];
-
-							qrcode = '<img src="http://chart.apis.google.com/chart?cht=qr&chs=200x200&chld=H|0&chl=otpauth://totp/scalr:' + moduleParams['email']  + '?secret=' + barcode + '">';
-
 							Scalr.utils.Window({
 								xtype: 'form',
 								title: 'Enable two-factor authentication',
@@ -51,28 +45,26 @@ Scalr.regPage('Scalr.ui.core.security', function (loadParams, moduleParams) {
 									xtype: 'fieldset',
                                     cls: 'x-fieldset-separator-none x-fieldset-no-bottom-padding',
 									defaults: {
-										labelWidth: 50,
-										anchor: '100%'
+										labelWidth: 50
 									},
 									items: [{
 										xtype: 'textfield',
 										readOnly: true,
 										name: 'qr',
-										value: barcode,
-										fieldLabel: 'Key'
+										value: moduleParams['security2faCode'],
+										fieldLabel: 'Key',
+                                        anchor: '100%'
 									}, {
-										xtype: 'displayfield',
-										hideLabel: true,
-										padding: '0 0 0 55',
-										name: 'qr',
-										value: qrcode,
-										height: 210
+                                        xtype: 'qrpanel',
+                                        textToEncode: 'otpauth://totp/' + encodeURIComponent(document.location.host) + ':' + encodeURIComponent(Scalr.user['userName'])  + '?secret=' + moduleParams['security2faCode'],
+                                        margin: '0 0 6 55'
 									}, {
 										xtype: 'textfield',
 										name: 'code',
 										fieldLabel: 'Code',
-										allowBlank: false
-									}]
+										allowBlank: false,
+                                        anchor: '100%'
+                                    }]
 								}],
 								dockedItems: [{
 									xtype: 'container',
@@ -95,11 +87,48 @@ Scalr.regPage('Scalr.ui.core.security', function (loadParams, moduleParams) {
 													},
 													form: fm,
 													url: '/core/xSettingsEnable2FaGgl/',
-													success: function () {
-														form.down('[name="security_2fa_ggl"]').setValue('1');
+													success: function (data) {
+														form.down('[name="security2faGgl"]').setValue('1');
 														this.up('#box').close();
 
-													},
+                                                        Scalr.utils.Window({
+                                                            xtype: 'form',
+                                                            width: 500,
+                                                            title: 'Please save this reset code!',
+                                                            titleAlign: 'center',
+                                                            items: {
+                                                                xtype: 'fieldset',
+                                                                cls: 'x-fieldset-separator-none',
+                                                                items: [{
+                                                                    xtype: 'component',
+                                                                    style: 'font-size: 13px',
+                                                                    html:
+                                                                        '<span style="text-align: center; font-size: 20px; display: block">' + data.resetCode + '</span><br>' +
+                                                                            'This code will allow you to reset two-factor authentication if you lose or change your secondary device. ' +
+                                                                            'You MUST SAVE THIS CODE!<br><br>' +
+                                                                            'Scalr will NOT recreate this code, and you may be locked out without it.<br><br>'
+                                                                }, {
+                                                                    xtype: 'checkbox',
+                                                                    boxLabel: 'I confirm that I have saved this code.',
+                                                                    listeners: {
+                                                                        change: function(field, value) {
+                                                                            this.next().setDisabled(!value);
+                                                                        }
+                                                                    }
+                                                                }, {
+                                                                    xtype: 'button',
+                                                                    text: 'Continue',
+                                                                    height: 36,
+                                                                    disabled: true,
+                                                                    width: 150,
+                                                                    margin: '0 0 0 136',
+                                                                    handler: function() {
+                                                                        this.up('form').close();
+                                                                    }
+                                                                }]
+                                                            }
+                                                        });
+                                                    },
 													scope: this
 												});
 										}
@@ -113,21 +142,60 @@ Scalr.regPage('Scalr.ui.core.security', function (loadParams, moduleParams) {
 								}]
 							});
 						} else {
-							Scalr.Request({
-								confirmBox: {
-									type: 'action',
-									msg: 'Disable two-factor authentication',
-									ok: 'Disable'
-								},
-								processBox: {
-									type: 'action'
-								},
-								url: '/core/xSettingsDisable2FaGgl/',
-								success: function () {
-									form.down('[name="security_2fa_ggl"]').setValue('');
-								},
-								scope: this
-							});
+                            Scalr.utils.Window({
+                                xtype: 'form',
+                                title: 'Disable two-factor authentication',
+                                width: 400,
+                                layout: 'auto',
+                                items: [{
+                                    xtype: 'fieldset',
+                                    cls: 'x-fieldset-separator-none x-fieldset-no-bottom-padding',
+                                    items: [{
+                                        xtype: 'textfield',
+                                        fieldLabel: 'Code',
+                                        labelWidth: 60,
+                                        anchor: '100%',
+                                        allowBlank: false,
+                                        name: 'code'
+                                    }]
+                                }],
+                                dockedItems: [{
+                                    xtype: 'container',
+                                    dock: 'bottom',
+                                    cls: 'x-docked-buttons',
+                                    layout: {
+                                        type: 'hbox',
+                                        pack: 'center'
+                                    },
+                                    items: [{
+                                        xtype: 'button',
+                                        text: 'Disable',
+                                        handler: function() {
+                                            var fm = this.up('#box').getForm();
+
+                                            if (fm.isValid())
+                                                Scalr.Request({
+                                                    processBox: {
+                                                        type: 'action'
+                                                    },
+                                                    form: fm,
+                                                    url: '/core/xSettingsDisable2FaGgl/',
+                                                    success: function (data) {
+                                                        form.down('[name="security2faGgl"]').setValue('');
+                                                        this.up('#box').close();
+                                                    },
+                                                    scope: this
+                                                });
+                                        }
+                                    }, {
+                                        xtype: 'button',
+                                        text: 'Cancel',
+                                        handler: function() {
+                                            this.up('#box').close();
+                                        }
+                                    }]
+                                }]
+                            });
 						}
 
 						return false;
@@ -147,13 +215,14 @@ Scalr.regPage('Scalr.ui.core.security', function (loadParams, moduleParams) {
 		}, {
 			xtype: 'fieldset',
 			title: 'IP access whitelist',
+            cls: 'x-fieldset-separator-none',
 			items: [{
 				xtype: 'displayfield',
 				value: 'Example: 67.45.3.7, 67.46.*, 91.*'
 			}, {
 				xtype:'textarea',
 				hideLabel: true,
-				name: 'security_ip_whitelist',
+				name: 'securityIpWhitelist',
 				grow: true,
 				growMax: 200,
 				emptyText: 'Leave blank to disable',

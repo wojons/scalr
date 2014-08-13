@@ -61,6 +61,8 @@ class Scalr_Cronjob_DbMsrMaintenance extends Scalr_System_Cronjob_MultiProcess_D
 
     private function performDbMsrAction($action, DBFarmRole $dbFarmRole, $tz)
     {
+        $timeouted = false;
+
         if ($dbFarmRole->GetSetting(Scalr_Db_Msr::getConstant("DATA_{$action}_ENABLED")) && $dbFarmRole->GetSetting(Scalr_Db_Msr::getConstant("DATA_{$action}_EVERY")) != 0) {
             if ($dbFarmRole->GetSetting(Scalr_Db_Msr::getConstant("DATA_{$action}_IS_RUNNING")) == 1) {
                 // Wait for timeout time * 2 (Example: NIVs problem with big mysql snapshots)
@@ -145,7 +147,7 @@ class Scalr_Cronjob_DbMsrMaintenance extends Scalr_System_Cronjob_MultiProcess_D
             $dbFarm = $dbFarmRole->GetFarmObject();
 
             $env = Scalr_Model::init(Scalr_Model::ENVIRONMENT)->loadById($dbFarm->EnvID);
-            $tz = $env->getPlatformConfigValue(ENVIRONMENT_SETTINGS::TIMEZONE);
+            $tz = $env->getPlatformConfigValue(Scalr_Environment::SETTING_TIMEZONE);
             if (!$tz)
                 $tz = date_default_timezone_get();
 

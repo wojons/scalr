@@ -86,6 +86,16 @@
             if ($indexes['replicaSetIndex'] != 0 && $status != self::STATUS_ACTIVE)
                 return Scalr_Scaling_Decision::NOOP;
 
+            $shardsCount = (int)$dbFarmRole->GetSetting(self::ROLE_SHARDS_COUNT);
+            $replicasCount = (int)$dbFarmRole->GetSetting(self::ROLE_REPLICAS_COUNT);
+            $limit = $shardsCount*$replicasCount;
+            if ($limit == 0)
+                $limit = 1;
+
+            $pendingServers = $dbFarmRole->GetPendingInstancesCount();
+            if ($pendingServers >= $limit)
+                return Scalr_Scaling_Decision::NOOP;
+
             return Scalr_Scaling_Decision::UPSCALE;
         }
 
@@ -225,6 +235,7 @@
                        }
 
                        foreach ($dbFarmRole->GetServersByFilter() as $server) {
+                           /** @var DBServer $server */
                            $shardIndex = $server->GetProperty(self::SERVER_SHARD_INDEX);
                            $replicaSetIndex = $server->GetProperty(self::SERVER_REPLICA_SET_INDEX);
                            $node = $nodes[$shardIndex][$replicaSetIndex];
@@ -233,7 +244,7 @@
                                case SERVER_STATUS::PENDING_LAUNCH:
                                case SERVER_STATUS::PENDING:
                                case SERVER_STATUS::INIT:
-                                   $server->terminate(array('SHUTTING_DOWN_CLUSTER', 'MongoDB'));
+                                   $server->terminate(array(DBServer::TERMINATE_REASON_SHUTTING_DOWN_CLUSTER, 'MongoDB'));
                                    break;
 
                                case SERVER_STATUS::RUNNING:
@@ -246,7 +257,7 @@
                                            $this->log($dbFarmRole, "Node {$shardIndex}-{$replicaSetIndex} successfully terminated. Config server will be terminated with farm.");
                                        } else {
                                            $this->log($dbFarmRole, "Node {$shardIndex}-{$replicaSetIndex} successfully terminated. Terminating instance.");
-                                           $server->terminate(array('SHUTTING_DOWN_CLUSTER', 'MongoDB'));
+                                           $server->terminate(array(DBServer::TERMINATE_REASON_SHUTTING_DOWN_CLUSTER, 'MongoDB'));
                                        }
                                    }
                                    else {
@@ -293,7 +304,7 @@
                            // Terminate instances
                            foreach ($dbFarmRole->GetServersByFilter(array('status' => array(SERVER_STATUS::RUNNING, SERVER_STATUS::INIT, SERVER_STATUS::PENDING, SERVER_STATUS::PENDING_LAUNCH))) as $server) {
                                if ($server->GetProperty(self::SERVER_SHARD_INDEX) == $message->shardIndex) {
-                                   $server->terminate(array('SHUTTING_DOWN_CLUSTER', 'MongoDB'), false);
+                                   $server->terminate(array(DBServer::TERMINATE_REASON_SHUTTING_DOWN_CLUSTER, 'MongoDB'), false);
                                }
                            }
 
@@ -529,10 +540,10 @@
                 if (in_array($volumeConfig->type, array(MYSQL_STORAGE_ENGINE::EBS, MYSQL_STORAGE_ENGINE::CSVOL, MYSQL_STORAGE_ENGINE::CINDER, MYSQL_STORAGE_ENGINE::GCE_PERSISTENT))) {
                     $volumeConfig->size = $dbFarmRole->GetSetting(static::ROLE_DATA_STORAGE_EBS_SIZE);
                     if ($volumeConfig->type == MYSQL_STORAGE_ENGINE::EBS) {
-                        if ($dbFarmRole->GetSetting(static::ROLE_DATA_STORAGE_EBS_TYPE) == 'io1') {
-                            $volumeConfig->volumeType = 'io1';
+
+                        $volumeConfig->volumeType = $dbFarmRole->GetSetting(static::ROLE_DATA_STORAGE_EBS_TYPE);
+                        if ($volumeConfig->volumeType == 'io1')
                             $volumeConfig->iops = $dbFarmRole->GetSetting(static::ROLE_DATA_STORAGE_EBS_IOPS);
-                        }
                     }
                 }
                 elseif ($volumeConfig->type == MYSQL_STORAGE_ENGINE::RAID_EBS) {
@@ -602,6 +613,7 @@
 
             $configuration->shardsTotal = $dbServer->GetFarmRoleObject()->GetSetting(self::ROLE_SHARDS_COUNT);
             $configuration->replicasPerShard = $dbServer->GetFarmRoleObject()->GetSetting(self::ROLE_REPLICAS_COUNT);
+            $configuration->cfgServerStorageSize = 5;
 
             $mmsApiKey = $dbServer->GetFarmRoleObject()->GetSetting(self::ROLE_MMS_API_KEY);
             if ($mmsApiKey) {
@@ -615,9 +627,9 @@
                 $cert->loadById($dbServer->GetFarmRoleObject()->GetSetting(self::ROLE_SSL_CERT_ID));
 
                 $configuration->ssl = new stdClass();
-                $configuration->ssl->privateKey = $cert->sslPkey;
-                $configuration->ssl->certificate = $cert->sslCert;
-                $configuration->ssl->privateKeyPassword = $cert->sslPkeyPassword;
+                $configuration->ssl->privateKey = $cert->privateKey;
+                $configuration->ssl->certificate = $cert->certificate;
+                $configuration->ssl->privateKeyPassword = $cert->privateKeyPassword;
             }
 
             $configServers = $this->db->GetAll("SELECT * FROM services_mongodb_config_servers WHERE

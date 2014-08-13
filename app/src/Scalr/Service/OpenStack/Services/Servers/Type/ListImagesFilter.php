@@ -55,7 +55,7 @@ class ListImagesFilter extends Marker
      * @param   int         $limit        optional Limit.
      */
     public function __construct($name = null, $serverId = null, ImageStatus $status = null,
-                                ImageType $type, \DateTime $changesSince, $marker = null, $limit = null)
+                                ImageType $type = null, \DateTime $changesSince = null, $marker = null, $limit = null)
     {
         parent::__construct($marker, $limit);
     }
@@ -195,19 +195,8 @@ class ListImagesFilter extends Marker
     {
         $options = parent::getQueryData();
         if ($this->getChangesSince() !== null) {
+            unset($options['changes_since']);
             $options['changes-since'] = $this->getChangesSince()->format('c');
-        }
-        if ($this->getServerId() !== null) {
-            $options['server'] = (string) $this->getServerId();
-        }
-        if ($this->getName() !== null) {
-            $options['name'] = (string) $this->getName();
-        }
-        if ($this->getStatus() !== null) {
-            $options['status'] = (string) $this->getStatus();
-        }
-        if ($this->getType() !== null) {
-            $options['type'] = (string) $this->getType();
         }
         return $options;
     }

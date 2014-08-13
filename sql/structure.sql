@@ -11,84 +11,6 @@
 /*!40111 SET @OLD_SQL_NOTES=@@SQL_NOTES, SQL_NOTES=0 */;
 
 --
--- Table structure for table `account_alerts`
---
-
-/*!40101 SET @saved_cs_client     = @@character_set_client */;
-/*!40101 SET character_set_client = utf8 */;
-CREATE TABLE `account_alerts` (
-  `id` int(11) NOT NULL AUTO_INCREMENT,
-  `account_id` int(11) DEFAULT NULL,
-  `type` varchar(20) DEFAULT NULL,
-  `is_critical` tinyint(1) DEFAULT NULL,
-  `is_resolved` tinyint(1) DEFAULT NULL,
-  `message` text,
-  `env_id` int(11) DEFAULT NULL,
-  `dtcreated` datetime DEFAULT NULL,
-  `dtresolved` datetime DEFAULT NULL,
-  `cloud_location` varchar(50) DEFAULT NULL,
-  `platform` varchar(25) DEFAULT NULL,
-  PRIMARY KEY (`id`),
-  KEY `account_id` (`account_id`),
-  CONSTRAINT `account_alerts_ibfk_1` FOREIGN KEY (`account_id`) REFERENCES `clients` (`id`) ON DELETE CASCADE ON UPDATE NO ACTION
-) ENGINE=InnoDB DEFAULT CHARSET=latin1;
-/*!40101 SET character_set_client = @saved_cs_client */;
-
---
--- Table structure for table `account_audit`
---
-
-/*!40101 SET @saved_cs_client     = @@character_set_client */;
-/*!40101 SET character_set_client = utf8 */;
-CREATE TABLE `account_audit` (
-  `id` int(11) NOT NULL AUTO_INCREMENT,
-  `account_id` int(11) DEFAULT NULL,
-  `user_id` int(11) DEFAULT NULL,
-  `user_email` varchar(100) DEFAULT NULL,
-  `date` datetime DEFAULT NULL,
-  `action` varchar(45) DEFAULT NULL,
-  `ipaddress` varchar(15) DEFAULT NULL,
-  `comments` varchar(255) DEFAULT NULL,
-  PRIMARY KEY (`id`),
-  KEY `fk_account_audit_clients1` (`account_id`),
-  KEY `fk_account_audit_account_users1` (`user_id`)
-) ENGINE=MyISAM DEFAULT CHARSET=latin1;
-/*!40101 SET character_set_client = @saved_cs_client */;
-
---
--- Table structure for table `account_group_permissions`
---
-
-/*!40101 SET @saved_cs_client     = @@character_set_client */;
-/*!40101 SET character_set_client = utf8 */;
-CREATE TABLE `account_group_permissions` (
-  `id` int(11) NOT NULL AUTO_INCREMENT,
-  `group_id` int(11) DEFAULT NULL,
-  `controller` varchar(45) DEFAULT NULL,
-  `permissions` varchar(255) DEFAULT NULL,
-  PRIMARY KEY (`id`),
-  KEY `fk_account_group_permissions_account_groups1` (`group_id`)
-) ENGINE=InnoDB DEFAULT CHARSET=latin1;
-/*!40101 SET character_set_client = @saved_cs_client */;
-
---
--- Table structure for table `account_groups`
---
-
-/*!40101 SET @saved_cs_client     = @@character_set_client */;
-/*!40101 SET character_set_client = utf8 */;
-CREATE TABLE `account_groups` (
-  `id` int(11) NOT NULL AUTO_INCREMENT,
-  `team_id` int(11) NOT NULL,
-  `name` varchar(45) DEFAULT NULL,
-  `is_active` tinyint(4) DEFAULT '1',
-  `color` varchar(16) DEFAULT '',
-  PRIMARY KEY (`id`),
-  KEY `fk_account_groups_account_teams1` (`team_id`)
-) ENGINE=InnoDB DEFAULT CHARSET=latin1;
-/*!40101 SET character_set_client = @saved_cs_client */;
-
---
 -- Table structure for table `account_limits`
 --
 
@@ -103,6 +25,33 @@ CREATE TABLE `account_limits` (
   `limit_type_value` int(11) DEFAULT NULL,
   PRIMARY KEY (`id`),
   KEY `fk_account_limits_clients` (`account_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=latin1;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Table structure for table `account_scripts`
+--
+
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
+CREATE TABLE `account_scripts` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `account_id` int(11) DEFAULT NULL,
+  `event_name` varchar(50) DEFAULT NULL,
+  `target` varchar(15) DEFAULT NULL,
+  `script_id` int(11) DEFAULT NULL,
+  `version` varchar(10) DEFAULT NULL,
+  `timeout` int(5) DEFAULT NULL,
+  `issync` tinyint(1) DEFAULT NULL,
+  `params` text,
+  `order_index` int(11) NOT NULL DEFAULT '0',
+  `script_path` varchar(255) DEFAULT NULL,
+  `run_as` varchar(15) DEFAULT NULL,
+  `script_type` enum('local','scalr','chef') DEFAULT 'scalr',
+  PRIMARY KEY (`id`),
+  KEY `role_id` (`account_id`),
+  KEY `script_id` (`script_id`),
+  CONSTRAINT `account_scripts_ibfk_1` FOREIGN KEY (`account_id`) REFERENCES `clients` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
@@ -193,18 +142,15 @@ CREATE TABLE `account_user_dashboard` (
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
--- Table structure for table `account_user_groups`
+-- Table structure for table `account_user_dashboard_backup`
 --
 
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8 */;
-CREATE TABLE `account_user_groups` (
-  `id` int(11) NOT NULL AUTO_INCREMENT,
+CREATE TABLE `account_user_dashboard_backup` (
   `user_id` int(11) NOT NULL,
-  `group_id` int(11) NOT NULL,
-  PRIMARY KEY (`id`),
-  KEY `fk_account_user_groups_account_users1` (`user_id`),
-  KEY `fk_account_user_groups_account_groups1` (`group_id`)
+  `env_id` int(11) NOT NULL,
+  `value` text NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
@@ -260,6 +206,27 @@ CREATE TABLE `account_users` (
   PRIMARY KEY (`id`),
   KEY `fk_account_users_clients1` (`account_id`),
   KEY `email` (`email`)
+) ENGINE=InnoDB DEFAULT CHARSET=latin1;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Table structure for table `account_variables`
+--
+
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
+CREATE TABLE `account_variables` (
+  `account_id` int(11) NOT NULL,
+  `name` varchar(50) NOT NULL,
+  `value` text,
+  `flag_final` tinyint(1) NOT NULL DEFAULT '0',
+  `flag_required` enum('','env','role','farm','farmrole') NOT NULL DEFAULT '',
+  `flag_hidden` tinyint(1) NOT NULL DEFAULT '0',
+  `format` varchar(15) NOT NULL DEFAULT '',
+  `validator` varchar(255) NOT NULL DEFAULT '',
+  PRIMARY KEY (`name`,`account_id`),
+  KEY `fk_account_variables_clients_id` (`account_id`),
+  CONSTRAINT `fk_account_variables_clients_id` FOREIGN KEY (`account_id`) REFERENCES `clients` (`id`) ON DELETE CASCADE ON UPDATE NO ACTION
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
@@ -418,6 +385,66 @@ CREATE TABLE `api_log` (
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
+-- Table structure for table `auditlog`
+--
+
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
+CREATE TABLE `auditlog` (
+  `id` varchar(36) NOT NULL,
+  `sessionid` varchar(36) NOT NULL,
+  `accountid` int(11) DEFAULT NULL,
+  `userid` int(11) DEFAULT NULL,
+  `email` varchar(100) DEFAULT NULL,
+  `envid` int(11) DEFAULT NULL,
+  `ip` int(10) unsigned DEFAULT NULL,
+  `time` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `message` varchar(255) DEFAULT NULL,
+  `datatype` varchar(255) DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `sessionid` (`sessionid`),
+  KEY `accountid` (`accountid`),
+  KEY `userid` (`userid`),
+  KEY `envid` (`envid`),
+  KEY `time` (`time`)
+) ENGINE=InnoDB DEFAULT CHARSET=latin1;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Table structure for table `auditlog_data`
+--
+
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
+CREATE TABLE `auditlog_data` (
+  `logid` varchar(36) NOT NULL,
+  `key` varchar(255) NOT NULL,
+  `old_value` text,
+  `new_value` text,
+  PRIMARY KEY (`logid`,`key`),
+  KEY `key` (`key`),
+  KEY `idx_old_value` (`old_value`(8)),
+  KEY `idx_new_value` (`new_value`(8)),
+  CONSTRAINT `FK_auditlog_data_logid` FOREIGN KEY (`logid`) REFERENCES `auditlog` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=latin1;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Table structure for table `auditlog_tags`
+--
+
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
+CREATE TABLE `auditlog_tags` (
+  `logid` varchar(36) NOT NULL,
+  `tag` varchar(36) NOT NULL,
+  PRIMARY KEY (`logid`,`tag`),
+  KEY `tag` (`tag`),
+  CONSTRAINT `FK_auditlog_tags_logid` FOREIGN KEY (`logid`) REFERENCES `auditlog` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=latin1;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
 -- Table structure for table `autosnap_settings`
 --
 
@@ -439,35 +466,6 @@ CREATE TABLE `autosnap_settings` (
   KEY `idx_dtlastsnapshot` (`dtlastsnapshot`),
   CONSTRAINT `autosnap_settings_ibfk_1` FOREIGN KEY (`env_id`) REFERENCES `client_environments` (`id`) ON DELETE CASCADE ON UPDATE NO ACTION
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1;
-/*!40101 SET character_set_client = @saved_cs_client */;
-
---
--- Table structure for table `aws_errors`
---
-
-/*!40101 SET @saved_cs_client     = @@character_set_client */;
-/*!40101 SET character_set_client = utf8 */;
-CREATE TABLE `aws_errors` (
-  `guid` varchar(85) NOT NULL,
-  `title` text,
-  `pub_date` datetime DEFAULT NULL,
-  `description` text,
-  PRIMARY KEY (`guid`)
-) ENGINE=MyISAM DEFAULT CHARSET=latin1;
-/*!40101 SET character_set_client = @saved_cs_client */;
-
---
--- Table structure for table `aws_regions`
---
-
-/*!40101 SET @saved_cs_client     = @@character_set_client */;
-/*!40101 SET character_set_client = utf8 */;
-CREATE TABLE `aws_regions` (
-  `id` int(11) NOT NULL AUTO_INCREMENT,
-  `name` varchar(255) DEFAULT NULL,
-  `api_url` varchar(255) DEFAULT NULL,
-  PRIMARY KEY (`id`)
-) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -535,6 +533,8 @@ CREATE TABLE `bundle_tasks` (
   `os_version` varchar(10) DEFAULT NULL,
   `created_by_id` int(11) DEFAULT NULL,
   `created_by_email` varchar(100) DEFAULT NULL,
+  `generation` tinyint(1) DEFAULT '1',
+  `object` varchar(20) DEFAULT 'role',
   PRIMARY KEY (`id`),
   KEY `clientid` (`client_id`),
   KEY `env_id` (`env_id`),
@@ -542,6 +542,42 @@ CREATE TABLE `bundle_tasks` (
   KEY `status` (`status`),
   CONSTRAINT `bundle_tasks_ibfk_1` FOREIGN KEY (`env_id`) REFERENCES `client_environments` (`id`) ON DELETE CASCADE ON UPDATE NO ACTION
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1 ROW_FORMAT=DYNAMIC;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Table structure for table `cc_properties`
+--
+
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
+CREATE TABLE `cc_properties` (
+  `cc_id` binary(16) NOT NULL COMMENT 'ccs.cc_id reference',
+  `name` varchar(64) NOT NULL COMMENT 'Name of the property',
+  `value` mediumtext COMMENT 'The value',
+  PRIMARY KEY (`cc_id`,`name`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8 COMMENT='CC properties';
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Table structure for table `ccs`
+--
+
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
+CREATE TABLE `ccs` (
+  `cc_id` binary(16) NOT NULL COMMENT 'ID of the cost centre',
+  `name` varchar(255) NOT NULL COMMENT 'The name',
+  `account_id` int(11) DEFAULT NULL COMMENT 'clients.id reference',
+  `created_by_id` int(11) DEFAULT NULL COMMENT 'Id of the creator',
+  `created_by_email` varchar(255) DEFAULT NULL COMMENT 'Email of the creator',
+  `created` datetime NOT NULL COMMENT 'Creation timestamp (UTC)',
+  `archived` tinyint(1) NOT NULL DEFAULT '0' COMMENT 'Whether it is archived',
+  PRIMARY KEY (`cc_id`),
+  KEY `idx_account_id` (`account_id`),
+  KEY `idx_name` (`name`(3)),
+  KEY `idx_created_by_id` (`created_by_id`),
+  CONSTRAINT `fk_ccs_clients` FOREIGN KEY (`account_id`) REFERENCES `clients` (`id`) ON DELETE CASCADE ON UPDATE NO ACTION
+) ENGINE=InnoDB DEFAULT CHARSET=utf8 COMMENT='Cost Centers';
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -562,6 +598,27 @@ CREATE TABLE `client_environment_properties` (
   KEY `env_id` (`env_id`),
   KEY `name_value` (`name`(100),`value`(100)),
   KEY `name` (`name`(100))
+) ENGINE=InnoDB DEFAULT CHARSET=latin1;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Table structure for table `client_environment_variables`
+--
+
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
+CREATE TABLE `client_environment_variables` (
+  `env_id` int(11) NOT NULL,
+  `name` varchar(50) NOT NULL,
+  `value` text,
+  `flag_final` tinyint(1) NOT NULL DEFAULT '0',
+  `flag_required` enum('','role','farm','farmrole') NOT NULL DEFAULT '',
+  `flag_hidden` tinyint(1) NOT NULL DEFAULT '0',
+  `format` varchar(15) NOT NULL DEFAULT '',
+  `validator` varchar(255) NOT NULL DEFAULT '',
+  PRIMARY KEY (`name`,`env_id`),
+  KEY `fk_client_env_variables_client_env_id` (`env_id`),
+  CONSTRAINT `fk_client_env_variables_client_env_id` FOREIGN KEY (`env_id`) REFERENCES `client_environments` (`id`) ON DELETE CASCADE ON UPDATE NO ACTION
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
@@ -651,21 +708,6 @@ CREATE TABLE `comments` (
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
--- Table structure for table `config`
---
-
-/*!40101 SET @saved_cs_client     = @@character_set_client */;
-/*!40101 SET character_set_client = utf8 */;
-CREATE TABLE `config` (
-  `id` int(10) unsigned NOT NULL AUTO_INCREMENT,
-  `key` varchar(255) DEFAULT NULL,
-  `value` text,
-  PRIMARY KEY (`id`),
-  UNIQUE KEY `key` (`key`)
-) ENGINE=InnoDB DEFAULT CHARSET=latin1;
-/*!40101 SET character_set_client = @saved_cs_client */;
-
---
 -- Table structure for table `countries`
 --
 
@@ -681,33 +723,6 @@ CREATE TABLE `countries` (
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
--- Table structure for table `debug_pm`
---
-
-/*!40101 SET @saved_cs_client     = @@character_set_client */;
-/*!40101 SET character_set_client = utf8 */;
-CREATE TABLE `debug_pm` (
-  `ip` varchar(16) NOT NULL,
-  `cnt` int(11) NOT NULL,
-  UNIQUE KEY `ip` (`ip`)
-) ENGINE=MyISAM DEFAULT CHARSET=latin1;
-/*!40101 SET character_set_client = @saved_cs_client */;
-
---
--- Table structure for table `debug_rackspace`
---
-
-/*!40101 SET @saved_cs_client     = @@character_set_client */;
-/*!40101 SET character_set_client = utf8 */;
-CREATE TABLE `debug_rackspace` (
-  `id` int(11) NOT NULL AUTO_INCREMENT,
-  `server_id` varchar(36) DEFAULT NULL,
-  `info` text NOT NULL,
-  PRIMARY KEY (`id`)
-) ENGINE=MyISAM DEFAULT CHARSET=latin1;
-/*!40101 SET character_set_client = @saved_cs_client */;
-
---
 -- Table structure for table `debug_scripting`
 --
 
@@ -718,25 +733,9 @@ CREATE TABLE `debug_scripting` (
   `request` text,
   `server_id` varchar(36) DEFAULT NULL,
   `params` text,
-  PRIMARY KEY (`id`)
-) ENGINE=MyISAM DEFAULT CHARSET=latin1;
-/*!40101 SET character_set_client = @saved_cs_client */;
-
---
--- Table structure for table `debug_ui`
---
-
-/*!40101 SET @saved_cs_client     = @@character_set_client */;
-/*!40101 SET character_set_client = utf8 */;
-CREATE TABLE `debug_ui` (
-  `id` int(11) NOT NULL AUTO_INCREMENT,
-  `path` varchar(255) DEFAULT NULL,
-  `time` varchar(50) DEFAULT NULL,
-  `ptime` varchar(50) DEFAULT NULL,
-  `t1` varchar(10) DEFAULT NULL,
-  `t2` varchar(10) DEFAULT NULL,
-  `t3` varchar(10) DEFAULT NULL,
-  `dtdate` datetime DEFAULT NULL,
+  `date` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+  `account_id` int(6) DEFAULT NULL,
+  `farm_id` int(6) DEFAULT NULL,
   PRIMARY KEY (`id`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 /*!40101 SET character_set_client = @saved_cs_client */;
@@ -900,6 +899,7 @@ CREATE TABLE `dns_zones` (
   `isonnsserver` tinyint(1) DEFAULT '0',
   `iszoneconfigmodified` tinyint(1) DEFAULT '0',
   `allowed_accounts` text,
+  `private_root_records` tinyint(1) DEFAULT '0',
   PRIMARY KEY (`id`),
   UNIQUE KEY `zones_index3945` (`zone_name`),
   KEY `farmid` (`farm_id`),
@@ -1254,11 +1254,13 @@ CREATE TABLE `farm_role_scripts` (
   `debug` varchar(50) DEFAULT NULL,
   `script_path` varchar(255) DEFAULT NULL,
   `run_as` varchar(15) DEFAULT NULL,
+  `script_type` enum('local','scalr','chef') DEFAULT 'scalr',
   PRIMARY KEY (`id`),
   KEY `farmid` (`farmid`),
   KEY `farm_roleid` (`farm_roleid`),
   KEY `event_name` (`event_name`),
-  KEY `UniqueIndex` (`scriptid`,`farmid`,`event_name`,`farm_roleid`,`script_path`)
+  KEY `UniqueIndex` (`scriptid`,`farmid`,`event_name`,`farm_roleid`,`script_path`),
+  CONSTRAINT `fk_farm_role_scripts_farm_roles_id` FOREIGN KEY (`farm_roleid`) REFERENCES `farm_roles` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
@@ -1360,6 +1362,27 @@ CREATE TABLE `farm_role_storage_settings` (
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
+-- Table structure for table `farm_role_variables`
+--
+
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
+CREATE TABLE `farm_role_variables` (
+  `farm_role_id` int(11) NOT NULL,
+  `name` varchar(50) NOT NULL,
+  `value` text,
+  `flag_final` tinyint(1) NOT NULL DEFAULT '0',
+  `flag_required` enum('') NOT NULL DEFAULT '',
+  `flag_hidden` tinyint(1) NOT NULL DEFAULT '0',
+  `format` varchar(15) NOT NULL DEFAULT '',
+  `validator` varchar(255) NOT NULL DEFAULT '',
+  PRIMARY KEY (`name`,`farm_role_id`),
+  KEY `fk_farm_role_variables_farm_roles_id` (`farm_role_id`),
+  CONSTRAINT `fk_farm_role_variables_farm_roles_id` FOREIGN KEY (`farm_role_id`) REFERENCES `farm_roles` (`id`) ON DELETE CASCADE ON UPDATE NO ACTION
+) ENGINE=InnoDB DEFAULT CHARSET=latin1;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
 -- Table structure for table `farm_roles`
 --
 
@@ -1396,35 +1419,30 @@ CREATE TABLE `farm_settings` (
   `farmid` int(11) NOT NULL DEFAULT '0',
   `name` varchar(50) NOT NULL DEFAULT '',
   `value` text,
-  PRIMARY KEY (`farmid`,`name`)
+  PRIMARY KEY (`farmid`,`name`),
+  CONSTRAINT `fk_farm_settings_farms` FOREIGN KEY (`farmid`) REFERENCES `farms` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
--- Table structure for table `farm_stats`
+-- Table structure for table `farm_variables`
 --
 
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8 */;
-CREATE TABLE `farm_stats` (
-  `id` int(11) NOT NULL AUTO_INCREMENT,
-  `farmid` int(11) DEFAULT NULL,
-  `bw_in` bigint(20) DEFAULT '0',
-  `bw_out` bigint(20) DEFAULT '0',
-  `bw_in_last` int(11) DEFAULT '0',
-  `bw_out_last` int(11) DEFAULT '0',
-  `month` int(2) DEFAULT NULL,
-  `year` int(4) DEFAULT NULL,
-  `dtlastupdate` int(11) DEFAULT NULL,
-  `m1_small` int(11) DEFAULT '0',
-  `m1_large` int(11) DEFAULT '0',
-  `m1_xlarge` int(11) DEFAULT '0',
-  `c1_medium` int(11) DEFAULT '0',
-  `c1_xlarge` int(11) DEFAULT '0',
-  PRIMARY KEY (`id`),
-  KEY `NewIndex1` (`month`,`year`),
-  KEY `NewIndex2` (`farmid`)
-) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+CREATE TABLE `farm_variables` (
+  `farm_id` int(11) NOT NULL,
+  `name` varchar(50) NOT NULL,
+  `value` text,
+  `flag_final` tinyint(1) NOT NULL DEFAULT '0',
+  `flag_required` enum('','farmrole') NOT NULL DEFAULT '',
+  `flag_hidden` tinyint(1) NOT NULL DEFAULT '0',
+  `format` varchar(15) NOT NULL DEFAULT '',
+  `validator` varchar(255) NOT NULL DEFAULT '',
+  PRIMARY KEY (`name`,`farm_id`),
+  KEY `fk_farm_variables_farms_id` (`farm_id`),
+  CONSTRAINT `fk_farm_variables_farms_id` FOREIGN KEY (`farm_id`) REFERENCES `farms` (`id`) ON DELETE CASCADE ON UPDATE NO ACTION
+) ENGINE=InnoDB DEFAULT CHARSET=latin1;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -1461,74 +1479,6 @@ CREATE TABLE `farms` (
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
--- Table structure for table `garbage_queue`
---
-
-/*!40101 SET @saved_cs_client     = @@character_set_client */;
-/*!40101 SET character_set_client = utf8 */;
-CREATE TABLE `garbage_queue` (
-  `id` int(11) NOT NULL AUTO_INCREMENT,
-  `clientid` int(11) DEFAULT NULL,
-  `data` text,
-  PRIMARY KEY (`id`),
-  UNIQUE KEY `NewIndex1` (`clientid`)
-) ENGINE=InnoDB DEFAULT CHARSET=latin1 CHECKSUM=1 DELAY_KEY_WRITE=1 ROW_FORMAT=DYNAMIC;
-/*!40101 SET character_set_client = @saved_cs_client */;
-
---
--- Table structure for table `global_variables`
---
-
-/*!40101 SET @saved_cs_client     = @@character_set_client */;
-/*!40101 SET character_set_client = utf8 */;
-CREATE TABLE `global_variables` (
-  `env_id` int(11) NOT NULL,
-  `role_id` int(11) NOT NULL,
-  `farm_id` int(11) NOT NULL,
-  `farm_role_id` int(11) NOT NULL,
-  `server_id` varchar(36) NOT NULL DEFAULT '',
-  `name` varchar(30) NOT NULL,
-  `value` text,
-  `flag_final` tinyint(1) DEFAULT '0',
-  `flag_required` tinyint(1) DEFAULT '0',
-  `flag_hidden` tinyint(1) DEFAULT '0',
-  `scope` enum('env','role','farm','farmrole','server') DEFAULT NULL,
-  `format` varchar(15) DEFAULT NULL,
-  `validator` varchar(255) DEFAULT NULL,
-  PRIMARY KEY (`env_id`,`role_id`,`farm_id`,`farm_role_id`,`server_id`,`name`),
-  KEY `role_id` (`role_id`),
-  KEY `farm_id` (`farm_id`),
-  KEY `farm_role_id` (`farm_role_id`),
-  KEY `server_id` (`server_id`),
-  CONSTRAINT `fk_global_variables_client_environments_env_id` FOREIGN KEY (`env_id`) REFERENCES `client_environments` (`id`) ON DELETE CASCADE ON UPDATE NO ACTION
-) ENGINE=InnoDB DEFAULT CHARSET=latin1;
-/*!40101 SET character_set_client = @saved_cs_client */;
-
---
--- Table structure for table `global_variables_backup`
---
-
-/*!40101 SET @saved_cs_client     = @@character_set_client */;
-/*!40101 SET character_set_client = utf8 */;
-CREATE TABLE `global_variables_backup` (
-  `env_id` int(11) NOT NULL,
-  `role_id` int(11) NOT NULL,
-  `farm_id` int(11) NOT NULL,
-  `farm_role_id` int(11) NOT NULL,
-  `name` varchar(30) NOT NULL,
-  `value` text,
-  `flag_final` tinyint(1) DEFAULT '0',
-  `flag_required` tinyint(1) DEFAULT '0',
-  `scope` enum('env','role','farm','farmrole') DEFAULT NULL,
-  PRIMARY KEY (`env_id`,`role_id`,`farm_id`,`farm_role_id`,`name`),
-  KEY `name` (`name`),
-  KEY `role_id` (`role_id`),
-  KEY `farm_id` (`farm_id`),
-  KEY `farm_role_id` (`farm_role_id`)
-) ENGINE=InnoDB DEFAULT CHARSET=latin1;
-/*!40101 SET character_set_client = @saved_cs_client */;
-
---
 -- Table structure for table `governance`
 --
 
@@ -1536,10 +1486,11 @@ CREATE TABLE `global_variables_backup` (
 /*!40101 SET character_set_client = utf8 */;
 CREATE TABLE `governance` (
   `env_id` int(11) NOT NULL,
+  `category` varchar(20) NOT NULL,
   `name` varchar(60) NOT NULL,
   `enabled` int(1) NOT NULL,
   `value` text,
-  PRIMARY KEY (`env_id`,`name`),
+  PRIMARY KEY (`env_id`,`category`,`name`),
   CONSTRAINT `governance_ibfk_1` FOREIGN KEY (`env_id`) REFERENCES `client_environments` (`id`) ON DELETE CASCADE ON UPDATE NO ACTION,
   CONSTRAINT `governance_ibfk_2` FOREIGN KEY (`env_id`) REFERENCES `client_environments` (`id`) ON DELETE CASCADE ON UPDATE NO ACTION,
   CONSTRAINT `governance_ibfk_3` FOREIGN KEY (`env_id`) REFERENCES `client_environments` (`id`) ON DELETE CASCADE ON UPDATE NO ACTION
@@ -1547,49 +1498,31 @@ CREATE TABLE `governance` (
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
--- Table structure for table `init_tokens`
+-- Table structure for table `images`
 --
 
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8 */;
-CREATE TABLE `init_tokens` (
-  `id` int(11) NOT NULL AUTO_INCREMENT,
-  `instance_id` varchar(255) DEFAULT NULL,
-  `token` varchar(255) DEFAULT NULL,
-  `dtadded` datetime DEFAULT NULL,
-  PRIMARY KEY (`id`)
-) ENGINE=MyISAM DEFAULT CHARSET=latin1;
-/*!40101 SET character_set_client = @saved_cs_client */;
-
---
--- Table structure for table `instances_history`
---
-
-/*!40101 SET @saved_cs_client     = @@character_set_client */;
-/*!40101 SET character_set_client = utf8 */;
-CREATE TABLE `instances_history` (
-  `id` int(11) NOT NULL AUTO_INCREMENT,
-  `instance_id` varchar(20) DEFAULT NULL,
-  `dtlaunched` int(11) DEFAULT NULL,
-  `dtterminated` int(11) DEFAULT NULL,
-  `uptime` int(11) DEFAULT NULL,
-  `instance_type` varchar(20) DEFAULT NULL,
-  PRIMARY KEY (`id`)
-) ENGINE=MyISAM DEFAULT CHARSET=latin1;
-/*!40101 SET character_set_client = @saved_cs_client */;
-
---
--- Table structure for table `ipaccess`
---
-
-/*!40101 SET @saved_cs_client     = @@character_set_client */;
-/*!40101 SET character_set_client = utf8 */;
-CREATE TABLE `ipaccess` (
-  `id` int(11) NOT NULL AUTO_INCREMENT,
-  `ipaddress` varchar(255) DEFAULT NULL,
-  `comment` varchar(255) DEFAULT NULL,
-  PRIMARY KEY (`id`)
-) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+CREATE TABLE `images` (
+  `id` varchar(128) NOT NULL DEFAULT '',
+  `env_id` int(11) DEFAULT NULL,
+  `bundle_task_id` int(11) DEFAULT NULL,
+  `platform` varchar(25) NOT NULL DEFAULT '',
+  `cloud_location` varchar(255) NOT NULL DEFAULT '',
+  `os_family` varchar(25) DEFAULT NULL,
+  `os_version` varchar(10) DEFAULT NULL,
+  `os_name` varchar(255) DEFAULT NULL,
+  `created_by_id` int(11) DEFAULT NULL,
+  `created_by_email` varchar(100) DEFAULT NULL,
+  `architecture` enum('i386','x86_64') NOT NULL DEFAULT 'x86_64',
+  `is_deprecated` tinyint(1) NOT NULL DEFAULT '0',
+  `source` enum('BundleTask','Manual') NOT NULL DEFAULT 'Manual',
+  `type` varchar(20) DEFAULT NULL,
+  `status` varchar(20) NOT NULL,
+  `agent_version` varchar(20) DEFAULT NULL,
+  UNIQUE KEY `id` (`env_id`,`id`,`platform`,`cloud_location`),
+  CONSTRAINT `fk_images_client_environmnets_id` FOREIGN KEY (`env_id`) REFERENCES `client_environments` (`id`) ON DELETE CASCADE ON UPDATE NO ACTION
+) ENGINE=InnoDB DEFAULT CHARSET=latin1;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -1599,16 +1532,17 @@ CREATE TABLE `ipaccess` (
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8 */;
 CREATE TABLE `logentries` (
-  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `id` binary(16) NOT NULL DEFAULT '\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0',
   `serverid` varchar(36) NOT NULL,
   `message` text NOT NULL,
   `severity` tinyint(1) DEFAULT '0',
   `time` int(11) NOT NULL,
   `source` varchar(255) DEFAULT NULL,
   `farmid` int(11) DEFAULT NULL,
+  `cnt` int(11) NOT NULL DEFAULT '1',
   PRIMARY KEY (`id`),
-  KEY `NewIndex1` (`farmid`),
-  KEY `NewIndex2` (`severity`)
+  KEY `idx_time` (`time`),
+  KEY `idx_farmid_severity` (`farmid`,`severity`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
@@ -1628,6 +1562,7 @@ CREATE TABLE `messages` (
   `dtadded` datetime DEFAULT NULL,
   `message` longtext,
   `server_id` varchar(36) DEFAULT NULL,
+  `event_server_id` varchar(36) DEFAULT NULL,
   `type` enum('in','out') DEFAULT NULL,
   `message_name` varchar(30) DEFAULT NULL,
   `message_version` int(2) DEFAULT NULL,
@@ -1642,7 +1577,8 @@ CREATE TABLE `messages` (
   KEY `message_name` (`message_name`),
   KEY `dt` (`dtlasthandleattempt`),
   KEY `msg_format` (`message_format`),
-  KEY `event_id` (`event_id`)
+  KEY `event_id` (`event_id`),
+  KEY `idx_type_status_dt` (`type`,`status`,`dtlasthandleattempt`)
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
@@ -1669,20 +1605,6 @@ CREATE TABLE `nameservers` (
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
--- Table structure for table `payment_redirects`
---
-
-/*!40101 SET @saved_cs_client     = @@character_set_client */;
-/*!40101 SET character_set_client = utf8 */;
-CREATE TABLE `payment_redirects` (
-  `id` int(11) DEFAULT NULL,
-  `from_clientid` int(11) DEFAULT NULL,
-  `to_clientid` int(11) DEFAULT NULL,
-  `subscription_id` varchar(255) DEFAULT NULL
-) ENGINE=MyISAM DEFAULT CHARSET=latin1;
-/*!40101 SET character_set_client = @saved_cs_client */;
-
---
 -- Table structure for table `payments`
 --
 
@@ -1701,6 +1623,49 @@ CREATE TABLE `payments` (
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
+-- Table structure for table `project_properties`
+--
+
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
+CREATE TABLE `project_properties` (
+  `project_id` binary(16) NOT NULL COMMENT 'projects.project_id reference',
+  `name` varchar(64) NOT NULL COMMENT 'Name of the property',
+  `value` mediumtext COMMENT 'The value',
+  PRIMARY KEY (`project_id`,`name`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8 COMMENT='Project properties';
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Table structure for table `projects`
+--
+
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
+CREATE TABLE `projects` (
+  `project_id` binary(16) NOT NULL COMMENT 'ID of the project',
+  `cc_id` binary(16) NOT NULL COMMENT 'ccs.cc_id reference',
+  `name` varchar(255) NOT NULL COMMENT 'The name',
+  `account_id` int(11) DEFAULT NULL COMMENT 'clients.id reference',
+  `shared` tinyint(1) NOT NULL DEFAULT '1' COMMENT 'Type of the share',
+  `env_id` int(11) DEFAULT NULL COMMENT 'Associated environment',
+  `created_by_id` int(11) DEFAULT NULL COMMENT 'Id of the creator',
+  `created_by_email` varchar(255) DEFAULT NULL COMMENT 'Email of the creator',
+  `created` datetime NOT NULL COMMENT 'Creation timestamp (UTC)',
+  `archived` tinyint(1) NOT NULL DEFAULT '0' COMMENT 'Whether it is archived',
+  PRIMARY KEY (`project_id`),
+  KEY `idx_account_id` (`account_id`),
+  KEY `idx_name` (`name`(3)),
+  KEY `idx_cc_id` (`cc_id`),
+  KEY `idx_env_id` (`env_id`),
+  KEY `idx_created_by_id` (`created_by_id`,`shared`),
+  KEY `idx_shared` (`shared`),
+  CONSTRAINT `fk_projects_ccs` FOREIGN KEY (`cc_id`) REFERENCES `ccs` (`cc_id`),
+  CONSTRAINT `fk_projects_clients` FOREIGN KEY (`account_id`) REFERENCES `clients` (`id`) ON DELETE CASCADE ON UPDATE NO ACTION
+) ENGINE=InnoDB DEFAULT CHARSET=utf8 COMMENT='Projects';
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
 -- Table structure for table `rds_snaps_info`
 --
 
@@ -1715,37 +1680,6 @@ CREATE TABLE `rds_snaps_info` (
   `autosnapshotid` int(11) DEFAULT '0',
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1 CHECKSUM=1 DELAY_KEY_WRITE=1 ROW_FORMAT=DYNAMIC;
-/*!40101 SET character_set_client = @saved_cs_client */;
-
---
--- Table structure for table `real_servers`
---
-
-/*!40101 SET @saved_cs_client     = @@character_set_client */;
-/*!40101 SET character_set_client = utf8 */;
-CREATE TABLE `real_servers` (
-  `id` int(11) NOT NULL AUTO_INCREMENT,
-  `farmid` int(11) DEFAULT NULL,
-  `ami_id` varchar(255) DEFAULT NULL,
-  `ipaddress` varchar(15) DEFAULT NULL,
-  PRIMARY KEY (`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=latin1;
-/*!40101 SET character_set_client = @saved_cs_client */;
-
---
--- Table structure for table `rebundle_log`
---
-
-/*!40101 SET @saved_cs_client     = @@character_set_client */;
-/*!40101 SET character_set_client = utf8 */;
-CREATE TABLE `rebundle_log` (
-  `id` int(11) NOT NULL AUTO_INCREMENT,
-  `roleid` int(11) DEFAULT NULL,
-  `dtadded` datetime DEFAULT NULL,
-  `message` text,
-  `bundle_task_id` int(11) DEFAULT NULL,
-  PRIMARY KEY (`id`)
-) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -1884,6 +1818,9 @@ CREATE TABLE `role_scripts` (
   `params` text,
   `order_index` int(11) NOT NULL DEFAULT '0',
   `hash` varchar(12) DEFAULT NULL,
+  `script_path` varchar(255) DEFAULT NULL,
+  `run_as` varchar(15) DEFAULT NULL,
+  `script_type` enum('local','scalr','chef') DEFAULT 'scalr',
   PRIMARY KEY (`id`),
   KEY `role_id` (`role_id`),
   KEY `script_id` (`script_id`),
@@ -1942,6 +1879,27 @@ CREATE TABLE `role_tags` (
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
+-- Table structure for table `role_variables`
+--
+
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
+CREATE TABLE `role_variables` (
+  `role_id` int(11) NOT NULL,
+  `name` varchar(50) NOT NULL,
+  `value` text,
+  `flag_final` tinyint(1) NOT NULL DEFAULT '0',
+  `flag_required` enum('','farmrole') NOT NULL DEFAULT '',
+  `flag_hidden` tinyint(1) NOT NULL DEFAULT '0',
+  `format` varchar(15) NOT NULL DEFAULT '',
+  `validator` varchar(255) NOT NULL DEFAULT '',
+  PRIMARY KEY (`name`,`role_id`),
+  KEY `fk_role_variables_roles_id` (`role_id`),
+  CONSTRAINT `fk_role_variables_roles_id` FOREIGN KEY (`role_id`) REFERENCES `roles` (`id`) ON DELETE CASCADE ON UPDATE NO ACTION
+) ENGINE=InnoDB DEFAULT CHARSET=latin1;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
 -- Table structure for table `roles`
 --
 
@@ -1957,6 +1915,7 @@ CREATE TABLE `roles` (
   `description` text,
   `behaviors` varchar(90) DEFAULT NULL,
   `is_devel` tinyint(1) NOT NULL DEFAULT '0',
+  `is_deprecated` tinyint(1) DEFAULT '0',
   `history` text,
   `generation` tinyint(4) DEFAULT '1',
   `os` varchar(60) DEFAULT NULL,
@@ -1969,7 +1928,8 @@ CREATE TABLE `roles` (
   PRIMARY KEY (`id`),
   KEY `NewIndex1` (`origin`),
   KEY `NewIndex2` (`client_id`),
-  KEY `NewIndex3` (`env_id`)
+  KEY `NewIndex3` (`env_id`),
+  KEY `idx_os_family` (`os_family`)
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
@@ -2043,21 +2003,47 @@ CREATE TABLE `scheduler` (
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
--- Table structure for table `script_revisions`
+-- Table structure for table `script_shortcuts`
 --
 
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8 */;
-CREATE TABLE `script_revisions` (
+CREATE TABLE `script_shortcuts` (
   `id` int(11) NOT NULL AUTO_INCREMENT,
-  `scriptid` int(11) DEFAULT NULL,
-  `revision` int(11) DEFAULT NULL,
-  `script` longtext,
-  `dtcreated` datetime DEFAULT NULL,
-  `approval_state` varchar(255) DEFAULT NULL,
-  `variables` text,
+  `script_id` int(11) DEFAULT NULL,
+  `script_path` varchar(255) NOT NULL,
+  `farm_id` int(11) NOT NULL,
+  `farm_role_id` int(11) DEFAULT NULL,
+  `is_sync` tinyint(1) NOT NULL DEFAULT '0',
+  `timeout` int(11) NOT NULL DEFAULT '0',
+  `version` int(11) NOT NULL,
+  `params` text NOT NULL,
   PRIMARY KEY (`id`),
-  UNIQUE KEY `scriptid_revision` (`scriptid`,`revision`)
+  KEY `fk_script_shortcuts_scripts_id` (`script_id`),
+  KEY `fk_script_shortcuts_farms_id` (`farm_id`),
+  KEY `fk_script_shortcuts_farm_roles_id` (`farm_role_id`),
+  CONSTRAINT `fk_script_shortcuts_farms_id` FOREIGN KEY (`farm_id`) REFERENCES `farms` (`id`) ON DELETE CASCADE ON UPDATE NO ACTION,
+  CONSTRAINT `fk_script_shortcuts_farm_roles_id` FOREIGN KEY (`farm_role_id`) REFERENCES `farm_roles` (`id`) ON DELETE CASCADE ON UPDATE NO ACTION,
+  CONSTRAINT `fk_script_shortcuts_scripts_id` FOREIGN KEY (`script_id`) REFERENCES `scripts` (`id`) ON DELETE CASCADE ON UPDATE NO ACTION
+) ENGINE=InnoDB DEFAULT CHARSET=latin1;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Table structure for table `script_versions`
+--
+
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
+CREATE TABLE `script_versions` (
+  `script_id` int(11) NOT NULL,
+  `version` int(11) NOT NULL,
+  `content` longtext NOT NULL,
+  `dt_created` datetime NOT NULL,
+  `variables` text,
+  `changed_by_id` int(11) DEFAULT NULL,
+  `changed_by_email` varchar(250) DEFAULT NULL,
+  PRIMARY KEY (`script_id`,`version`),
+  CONSTRAINT `fk_script_versions_scripts_id` FOREIGN KEY (`script_id`) REFERENCES `scripts` (`id`) ON DELETE CASCADE ON UPDATE NO ACTION
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
@@ -2087,7 +2073,9 @@ CREATE TABLE `scripting_log` (
   KEY `event_id` (`event_id`),
   KEY `event_server_id` (`event_server_id`),
   KEY `execution_id` (`execution_id`),
-  KEY `idx_dtadded` (`dtadded`)
+  KEY `idx_dtadded` (`dtadded`),
+  KEY `idx_script_name` (`script_name`),
+  KEY `idx_event` (`event`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
@@ -2101,30 +2089,41 @@ CREATE TABLE `scripts` (
   `id` int(11) NOT NULL AUTO_INCREMENT,
   `name` varchar(255) DEFAULT NULL,
   `description` varchar(255) DEFAULT NULL,
-  `origin` varchar(50) DEFAULT NULL,
-  `dtadded` datetime DEFAULT NULL,
-  `issync` tinyint(1) DEFAULT '0',
-  `clientid` int(11) DEFAULT '0',
-  `approval_state` varchar(50) DEFAULT NULL,
-  PRIMARY KEY (`id`)
+  `dt_created` datetime DEFAULT NULL,
+  `dt_changed` datetime DEFAULT NULL,
+  `os` varchar(16) NOT NULL,
+  `is_sync` tinyint(1) DEFAULT '0',
+  `timeout` int(11) DEFAULT NULL,
+  `account_id` int(11) DEFAULT NULL,
+  `env_id` int(11) DEFAULT NULL,
+  `created_by_id` int(11) DEFAULT NULL,
+  `created_by_email` varchar(250) DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `idx_account_id` (`account_id`),
+  KEY `idx_env_id` (`env_id`),
+  CONSTRAINT `fk_scripts_clients_id` FOREIGN KEY (`account_id`) REFERENCES `clients` (`id`) ON DELETE CASCADE ON UPDATE NO ACTION,
+  CONSTRAINT `fk_scripts_client_environments_id` FOREIGN KEY (`env_id`) REFERENCES `client_environments` (`id`) ON DELETE CASCADE ON UPDATE NO ACTION
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
--- Table structure for table `sensor_data`
+-- Table structure for table `security_group_rules_comments`
 --
 
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8 */;
-CREATE TABLE `sensor_data` (
+CREATE TABLE `security_group_rules_comments` (
   `id` int(11) NOT NULL AUTO_INCREMENT,
-  `farm_roleid` int(11) DEFAULT NULL,
-  `sensor_name` varchar(255) DEFAULT NULL,
-  `sensor_value` varchar(255) DEFAULT NULL,
-  `dtlastupdate` int(11) DEFAULT NULL,
-  `raw_sensor_data` varchar(255) DEFAULT NULL,
+  `env_id` int(11) NOT NULL,
+  `platform` varchar(20) NOT NULL,
+  `cloud_location` varchar(50) NOT NULL,
+  `vpc_id` varchar(20) NOT NULL,
+  `group_name` varchar(255) NOT NULL,
+  `rule` varchar(255) NOT NULL,
+  `comment` varchar(255) NOT NULL,
   PRIMARY KEY (`id`),
-  UNIQUE KEY `unique` (`farm_roleid`,`sensor_name`)
+  UNIQUE KEY `idx_main` (`env_id`,`platform`,`cloud_location`,`vpc_id`,`group_name`,`rule`),
+  CONSTRAINT `FK_security_group_rules_comments_env_id` FOREIGN KEY (`env_id`) REFERENCES `client_environments` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
@@ -2152,9 +2151,9 @@ CREATE TABLE `server_alerts` (
   KEY `env_id` (`env_id`),
   KEY `farm_role` (`farm_id`,`farm_roleid`),
   KEY `farm_roleid` (`farm_roleid`),
-  CONSTRAINT `server_alerts_ibfk_3` FOREIGN KEY (`farm_roleid`) REFERENCES `farm_roles` (`id`) ON DELETE CASCADE ON UPDATE NO ACTION,
   CONSTRAINT `server_alerts_ibfk_1` FOREIGN KEY (`farm_id`) REFERENCES `farms` (`id`) ON DELETE CASCADE ON UPDATE NO ACTION,
-  CONSTRAINT `server_alerts_ibfk_2` FOREIGN KEY (`env_id`) REFERENCES `client_environments` (`id`) ON DELETE CASCADE ON UPDATE NO ACTION
+  CONSTRAINT `server_alerts_ibfk_2` FOREIGN KEY (`env_id`) REFERENCES `client_environments` (`id`) ON DELETE CASCADE ON UPDATE NO ACTION,
+  CONSTRAINT `server_alerts_ibfk_3` FOREIGN KEY (`farm_roleid`) REFERENCES `farm_roles` (`id`) ON DELETE CASCADE ON UPDATE NO ACTION
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
@@ -2218,6 +2217,27 @@ CREATE TABLE `server_properties` (
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
+-- Table structure for table `server_variables`
+--
+
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
+CREATE TABLE `server_variables` (
+  `server_id` varchar(36) NOT NULL,
+  `name` varchar(50) NOT NULL,
+  `value` text,
+  `flag_final` tinyint(1) NOT NULL DEFAULT '0',
+  `flag_required` enum('') NOT NULL DEFAULT '',
+  `flag_hidden` tinyint(1) NOT NULL DEFAULT '0',
+  `format` varchar(15) NOT NULL DEFAULT '',
+  `validator` varchar(255) NOT NULL DEFAULT '',
+  PRIMARY KEY (`name`,`server_id`),
+  KEY `fk_server_variables_servers_server_id` (`server_id`),
+  CONSTRAINT `fk_server_variables_servers_server_id` FOREIGN KEY (`server_id`) REFERENCES `servers` (`server_id`) ON DELETE CASCADE ON UPDATE NO ACTION
+) ENGINE=InnoDB DEFAULT CHARSET=latin1;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
 -- Table structure for table `servers`
 --
 
@@ -2237,6 +2257,8 @@ CREATE TABLE `servers` (
   `local_ip` varchar(15) DEFAULT NULL,
   `dtadded` datetime DEFAULT NULL,
   `index` int(11) DEFAULT NULL,
+  `cloud_location` varchar(255) DEFAULT NULL,
+  `cloud_location_zone` varchar(255) DEFAULT NULL,
   `dtshutdownscheduled` datetime DEFAULT NULL,
   `dtrebootstart` datetime DEFAULT NULL,
   `replace_server_id` varchar(36) DEFAULT NULL,
@@ -2267,7 +2289,9 @@ CREATE TABLE `servers_history` (
   `cloud_server_id` varchar(50) DEFAULT NULL,
   `dtlaunched` datetime DEFAULT NULL,
   `dtterminated` datetime DEFAULT NULL,
+  `launch_reason_id` tinyint(1) DEFAULT NULL,
   `launch_reason` varchar(255) DEFAULT NULL,
+  `terminate_reason_id` tinyint(1) DEFAULT NULL,
   `terminate_reason` varchar(255) DEFAULT NULL,
   `platform` varchar(20) DEFAULT NULL,
   `type` varchar(25) DEFAULT NULL,
@@ -2284,6 +2308,32 @@ CREATE TABLE `servers_history` (
   KEY `server_id` (`server_id`),
   CONSTRAINT `servers_history_ibfk_1` FOREIGN KEY (`client_id`) REFERENCES `clients` (`id`) ON DELETE CASCADE ON UPDATE NO ACTION
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Table structure for table `servers_launch_timelog`
+--
+
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
+CREATE TABLE `servers_launch_timelog` (
+  `server_id` varchar(36) NOT NULL DEFAULT '',
+  `os_family` varchar(15) DEFAULT NULL,
+  `os_version` varchar(10) DEFAULT NULL,
+  `cloud` varchar(10) DEFAULT NULL,
+  `cloud_location` varchar(36) DEFAULT NULL,
+  `server_type` varchar(36) DEFAULT NULL,
+  `behaviors` varchar(255) DEFAULT NULL,
+  `ts_created` int(11) DEFAULT NULL,
+  `ts_launched` int(11) DEFAULT NULL,
+  `ts_hi` int(11) DEFAULT NULL,
+  `ts_bhu` int(11) DEFAULT NULL,
+  `ts_hu` int(11) DEFAULT NULL,
+  `time_to_boot` int(5) DEFAULT NULL,
+  `time_to_hi` int(5) DEFAULT NULL,
+  `last_init_status` varchar(25) DEFAULT NULL,
+  PRIMARY KEY (`server_id`)
+) ENGINE=MyISAM DEFAULT CHARSET=utf8;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -2435,7 +2485,7 @@ CREATE TABLE `services_db_backups_history` (
   `operation` enum('backup','bundle') NOT NULL,
   `date` datetime NOT NULL,
   `status` enum('ok','error') NOT NULL,
-  `error` varchar(255) DEFAULT NULL,
+  `error` text,
   PRIMARY KEY (`id`),
   KEY `main` (`farm_role_id`),
   CONSTRAINT `services_db_backups_history_ibfk_1` FOREIGN KEY (`farm_role_id`) REFERENCES `farm_roles` (`id`) ON DELETE CASCADE ON UPDATE NO ACTION
@@ -2523,8 +2573,22 @@ CREATE TABLE `services_ssl_certs` (
   `ssl_cert` text,
   `ssl_cabundle` text,
   `ssl_pkey_password` text,
+  `ssl_simple_pkey` text,
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Table structure for table `settings`
+--
+
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
+CREATE TABLE `settings` (
+  `id` varchar(64) NOT NULL COMMENT 'setting ID',
+  `value` text COMMENT 'The value',
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8 COMMENT='settings';
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -2535,7 +2599,6 @@ CREATE TABLE `services_ssl_certs` (
 /*!40101 SET character_set_client = utf8 */;
 CREATE TABLE `ssh_keys` (
   `id` int(11) NOT NULL AUTO_INCREMENT,
-  `client_id` int(11) DEFAULT NULL,
   `env_id` int(11) DEFAULT NULL,
   `type` varchar(10) DEFAULT NULL,
   `private_key` text,
@@ -2545,24 +2608,11 @@ CREATE TABLE `ssh_keys` (
   `cloud_key_name` varchar(255) DEFAULT NULL,
   `platform` varchar(20) DEFAULT NULL,
   PRIMARY KEY (`id`),
-  KEY `farmid` (`farm_id`)
-) ENGINE=InnoDB DEFAULT CHARSET=latin1;
-/*!40101 SET character_set_client = @saved_cs_client */;
-
---
--- Table structure for table `storage_backup_configs`
---
-
-/*!40101 SET @saved_cs_client     = @@character_set_client */;
-/*!40101 SET character_set_client = utf8 */;
-CREATE TABLE `storage_backup_configs` (
-  `id` int(11) NOT NULL AUTO_INCREMENT,
-  `type` varchar(25) DEFAULT NULL,
-  `backup_type` varchar(25) DEFAULT NULL,
-  `volume_config` text,
-  `farm_roleid` int(11) DEFAULT NULL,
-  PRIMARY KEY (`id`),
-  UNIQUE KEY `farm_roleid` (`farm_roleid`)
+  KEY `idx_platform` (`platform`,`type`,`env_id`,`farm_id`,`cloud_location`,`cloud_key_name`),
+  KEY `fk_ssh_keys_client_environments_id` (`env_id`),
+  KEY `fk_ssh_keys_farms_id` (`farm_id`),
+  CONSTRAINT `fk_ssh_keys_farms_id` FOREIGN KEY (`farm_id`) REFERENCES `farms` (`id`) ON DELETE CASCADE ON UPDATE NO ACTION,
+  CONSTRAINT `fk_ssh_keys_client_environments_id` FOREIGN KEY (`env_id`) REFERENCES `client_environments` (`id`) ON DELETE CASCADE ON UPDATE NO ACTION
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
@@ -2647,6 +2697,7 @@ CREATE TABLE `subscriptions` (
   `subscriptionid` varchar(255) DEFAULT NULL,
   `dtstart` datetime DEFAULT NULL,
   `status` varchar(255) DEFAULT NULL,
+  `test` int(11) DEFAULT '0',
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1;
 /*!40101 SET character_set_client = @saved_cs_client */;
@@ -2685,6 +2736,61 @@ CREATE TABLE `syslog` (
 --
 
 --
+
+--
+
+--
+
+--
+-- Table structure for table `syslog_metadata`
+--
+
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
+CREATE TABLE `syslog_metadata` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `transactionid` varchar(50) DEFAULT NULL,
+  `errors` int(5) DEFAULT NULL,
+  `warnings` int(5) DEFAULT NULL,
+  `message` varchar(255) DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `transid` (`transactionid`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Table structure for table `tag_link`
+--
+
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
+CREATE TABLE `tag_link` (
+  `tag_id` int(11) NOT NULL,
+  `resource` varchar(32) NOT NULL,
+  `resource_id` int(11) NOT NULL,
+  UNIQUE KEY `idx_id` (`tag_id`,`resource`,`resource_id`),
+  CONSTRAINT `fk_tag_link_tags_id` FOREIGN KEY (`tag_id`) REFERENCES `tags` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Table structure for table `tags`
+--
+
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
+CREATE TABLE `tags` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `name` varchar(255) NOT NULL DEFAULT '',
+  `account_id` int(11) DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `idx_name` (`name`,`account_id`),
+  KEY `fk_tags_clients_id` (`account_id`),
+  CONSTRAINT `fk_tags_clients_id` FOREIGN KEY (`account_id`) REFERENCES `clients` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
 -- Table structure for table `task_queue`
 --
 
@@ -2698,6 +2804,21 @@ CREATE TABLE `task_queue` (
   `failed_attempts` int(3) DEFAULT '0',
   PRIMARY KEY (`id`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Table structure for table `tmp`
+--
+
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
+CREATE TABLE `tmp` (
+  `test1` varchar(36) NOT NULL,
+  `test2` char(36) NOT NULL,
+  `test3` varbinary(18) NOT NULL,
+  `test4` binary(18) NOT NULL,
+  UNIQUE KEY `test1` (`test1`,`test2`,`test3`,`test4`)
+) ENGINE=InnoDB DEFAULT CHARSET=latin1;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -2777,22 +2898,146 @@ CREATE TABLE `upgrades` (
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
--- Table structure for table `wus_info`
+-- Table structure for table `variables`
 --
 
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8 */;
-CREATE TABLE `wus_info` (
-  `id` int(11) NOT NULL AUTO_INCREMENT,
-  `clientid` int(11) DEFAULT NULL,
-  `company` varchar(255) DEFAULT NULL,
-  `about` text,
-  `scalrabout` text,
-  `isapproved` tinyint(1) DEFAULT '0',
-  `url` varchar(255) DEFAULT NULL,
-  PRIMARY KEY (`id`),
-  UNIQUE KEY `NewIndex1` (`clientid`)
-) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+CREATE TABLE `variables` (
+  `name` varchar(50) NOT NULL,
+  `value` text,
+  `flag_final` tinyint(1) NOT NULL DEFAULT '0',
+  `flag_required` enum('','account','env','role','farm','farmrole') NOT NULL DEFAULT '',
+  `flag_hidden` tinyint(1) NOT NULL DEFAULT '0',
+  `format` varchar(15) NOT NULL DEFAULT '',
+  `validator` varchar(255) NOT NULL DEFAULT '',
+  PRIMARY KEY (`name`)
+) ENGINE=InnoDB DEFAULT CHARSET=latin1;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Table structure for table `webhook_config_endpoints`
+--
+
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
+CREATE TABLE `webhook_config_endpoints` (
+  `webhook_id` binary(16) NOT NULL COMMENT 'UUID',
+  `endpoint_id` binary(16) NOT NULL COMMENT 'UUID',
+  PRIMARY KEY (`webhook_id`,`endpoint_id`),
+  KEY `idx_endpoint_id` (`endpoint_id`),
+  CONSTRAINT `fk_4d800abd81968700c` FOREIGN KEY (`webhook_id`) REFERENCES `webhook_configs` (`webhook_id`) ON DELETE CASCADE ON UPDATE NO ACTION,
+  CONSTRAINT `fk_6d8c137f54109dcaa` FOREIGN KEY (`endpoint_id`) REFERENCES `webhook_endpoints` (`endpoint_id`) ON DELETE CASCADE ON UPDATE NO ACTION
+) ENGINE=InnoDB DEFAULT CHARSET=latin1;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Table structure for table `webhook_config_events`
+--
+
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
+CREATE TABLE `webhook_config_events` (
+  `webhook_id` binary(16) NOT NULL COMMENT 'UUID',
+  `event_type` varchar(128) NOT NULL,
+  PRIMARY KEY (`webhook_id`,`event_type`),
+  KEY `idx_event_type` (`event_type`),
+  CONSTRAINT `fk_40db098cb4b5c6797` FOREIGN KEY (`webhook_id`) REFERENCES `webhook_configs` (`webhook_id`) ON DELETE CASCADE ON UPDATE NO ACTION
+) ENGINE=InnoDB DEFAULT CHARSET=latin1;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Table structure for table `webhook_config_farms`
+--
+
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
+CREATE TABLE `webhook_config_farms` (
+  `webhook_id` binary(16) NOT NULL COMMENT 'UUID',
+  `farm_id` int(11) NOT NULL,
+  PRIMARY KEY (`webhook_id`,`farm_id`),
+  KEY `idx_farm_id` (`farm_id`),
+  CONSTRAINT `fk_24503b0f582804419` FOREIGN KEY (`webhook_id`) REFERENCES `webhook_configs` (`webhook_id`) ON DELETE CASCADE ON UPDATE NO ACTION
+) ENGINE=InnoDB DEFAULT CHARSET=latin1;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Table structure for table `webhook_configs`
+--
+
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
+CREATE TABLE `webhook_configs` (
+  `webhook_id` binary(16) NOT NULL COMMENT 'UUID',
+  `level` tinyint(4) NOT NULL COMMENT '1 - Scalr, 2 - Account, 4 - Env, 8 - Farm',
+  `name` varchar(50) NOT NULL,
+  `account_id` int(11) DEFAULT NULL,
+  `env_id` int(11) DEFAULT NULL,
+  `post_data` text,
+  `skip_private_gv` tinyint(1) DEFAULT '0',
+  PRIMARY KEY (`webhook_id`),
+  KEY `idx_level` (`level`),
+  KEY `idx_account_id` (`account_id`),
+  KEY `idx_env_id` (`env_id`),
+  KEY `idx_name` (`name`(3)),
+  CONSTRAINT `fk_4d3039820abc2a41c` FOREIGN KEY (`account_id`) REFERENCES `clients` (`id`) ON DELETE CASCADE ON UPDATE NO ACTION,
+  CONSTRAINT `fk_dbedab24d097d2a71` FOREIGN KEY (`env_id`) REFERENCES `client_environments` (`id`) ON DELETE CASCADE ON UPDATE NO ACTION
+) ENGINE=InnoDB DEFAULT CHARSET=latin1;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Table structure for table `webhook_endpoints`
+--
+
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
+CREATE TABLE `webhook_endpoints` (
+  `endpoint_id` binary(16) NOT NULL COMMENT 'UUID',
+  `level` tinyint(4) NOT NULL COMMENT '1 - Scalr, 2 - Account, 4 - Env',
+  `account_id` int(11) DEFAULT NULL,
+  `env_id` int(11) DEFAULT NULL,
+  `url` text,
+  `validation_token` binary(16) DEFAULT NULL COMMENT 'UUID',
+  `is_valid` tinyint(1) NOT NULL DEFAULT '0',
+  `security_key` varchar(64) NOT NULL DEFAULT '',
+  PRIMARY KEY (`endpoint_id`),
+  KEY `fk_660a12dca2e1dae8a` (`account_id`),
+  KEY `fk_816aef24d6e3f9aac` (`env_id`),
+  CONSTRAINT `fk_660a12dca2e1dae8a` FOREIGN KEY (`account_id`) REFERENCES `clients` (`id`) ON DELETE CASCADE ON UPDATE NO ACTION,
+  CONSTRAINT `fk_816aef24d6e3f9aac` FOREIGN KEY (`env_id`) REFERENCES `client_environments` (`id`) ON DELETE CASCADE ON UPDATE NO ACTION
+) ENGINE=InnoDB DEFAULT CHARSET=latin1;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Table structure for table `webhook_history`
+--
+
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
+CREATE TABLE `webhook_history` (
+  `history_id` binary(16) NOT NULL COMMENT 'UUID',
+  `webhook_id` binary(16) NOT NULL COMMENT 'UUID',
+  `created` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `endpoint_id` binary(16) NOT NULL COMMENT 'UUID',
+  `event_id` char(36) NOT NULL COMMENT 'UUID',
+  `farm_id` int(11) NOT NULL,
+  `event_type` varchar(128) NOT NULL,
+  `status` tinyint(4) NOT NULL DEFAULT '0',
+  `response_code` smallint(6) DEFAULT NULL,
+  `payload` text,
+  `error_msg` text,
+  PRIMARY KEY (`history_id`),
+  KEY `idx_webhook_id` (`webhook_id`),
+  KEY `idx_endpoint_id` (`endpoint_id`),
+  KEY `idx_event_id` (`event_id`),
+  KEY `idx_status` (`status`),
+  KEY `idx_event_type` (`event_type`),
+  KEY `idx_farm_id` (`farm_id`),
+  KEY `idx_created` (`created`),
+  CONSTRAINT `fk_2fa13e63bff387aa2` FOREIGN KEY (`webhook_id`) REFERENCES `webhook_configs` (`webhook_id`) ON DELETE CASCADE ON UPDATE NO ACTION,
+  CONSTRAINT `fk_35d689dd5c9d257f3` FOREIGN KEY (`farm_id`) REFERENCES `farms` (`id`) ON DELETE CASCADE ON UPDATE NO ACTION,
+  CONSTRAINT `fk_4572d5cd4d19cd8c1` FOREIGN KEY (`endpoint_id`) REFERENCES `webhook_endpoints` (`endpoint_id`) ON DELETE CASCADE ON UPDATE NO ACTION
+) ENGINE=InnoDB DEFAULT CHARSET=latin1;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -2805,4 +3050,4 @@ CREATE TABLE `wus_info` (
 /*!40014 SET UNIQUE_CHECKS=@OLD_UNIQUE_CHECKS */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
--- Dump completed on 2013-12-16  8:20:17
+-- Dump completed on 2014-08-13  9:43:04

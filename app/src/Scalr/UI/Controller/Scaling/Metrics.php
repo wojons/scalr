@@ -92,7 +92,7 @@ class Scalr_UI_Controller_Scaling_Metrics extends Scalr_UI_Controller
         if (count($err) == 0)
             $this->response->success('Selected metric(s) successfully removed');
         else
-            $this->response->warning(implode('<br>', $err));
+            $this->response->warning(implode("\n", $err));
     }
 
     public function createAction()

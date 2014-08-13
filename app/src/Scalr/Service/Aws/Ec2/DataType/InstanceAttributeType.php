@@ -2,8 +2,6 @@
 namespace Scalr\Service\Aws\Ec2\DataType;
 
 use Scalr\Service\Aws\DataType\StringType;
-use Scalr\Service\Aws\Ec2Exception;
-use Scalr\Service\Aws\Ec2\AbstractEc2DataType;
 
 /**
  * InstanceAttributeType
@@ -78,6 +76,12 @@ class InstanceAttributeType extends StringType
      * Whether the instance is optimized for EBS I/O
      */
     const TYPE_EBS_OPTIMIZED = 'ebsOptimized';
+
+    /**
+     * Enhanced networking for the instance.
+     * A value of simple means that enhanced networking is enabled.
+     */
+    const TYPE_SRIOV_NET_SUPPORT = 'sriovNetSupport';
 
     public static function getPrefix()
     {

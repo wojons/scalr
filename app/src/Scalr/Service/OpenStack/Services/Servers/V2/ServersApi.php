@@ -10,6 +10,7 @@ use Scalr\Service\OpenStack\Services\Servers\Type\ListServersFilter;
 use Scalr\Service\OpenStack\Exception\RestClientException;
 use Scalr\Service\OpenStack\Client\ClientInterface;
 use Scalr\Service\OpenStack\Services\ServersService;
+use Scalr\Service\OpenStack\Type\DefaultPaginationList;
 
 /**
  * OpenStack Next Generation Cloud Servers™ API API v2 (Nov 7, 2012)
@@ -48,9 +49,9 @@ class ServersApi
     /**
      * List Servers action
      *
-     * @param   bool              $detail optional Should it return detailed info?
-     * @param   ListServersFilter $filter optional Filter options.
-     * @return  array             Returns servers list array
+     * @param   bool                   $detail optional Should it return detailed info?
+     * @param   ListServersFilter      $filter optional Filter options.
+     * @return  AbstractPaginationList Returns servers list array
      * @throws  RestClientException
      */
     public function listServers($detail = true, ListServersFilter $filter = null)
@@ -68,7 +69,10 @@ class ServersApi
         );
         if ($response->hasError() === false) {
             $result = json_decode($response->getContent());
-            $result = $result->servers;
+            $result = new DefaultPaginationList(
+                $this->service, 'servers', $result->servers,
+                (isset($result->servers_links) ? $result->servers_links : null)
+            );
         }
         return $result;
     }
@@ -118,9 +122,14 @@ class ServersApi
             'server' => $server,
         );
 
+        if (!empty($extProperties['block_device_mapping_v2']))
+            $uri = '/os-volumes_boot';
+        else
+            $uri = '/servers';
+
         $response = $this->getClient()->call(
             $this->service,
-            '/servers', $options, 'POST'
+            $uri, $options, 'POST'
         );
         if ($response->hasError() === false) {
             $result = json_decode($response->getContent());
@@ -255,13 +264,59 @@ class ServersApi
     }
 
     /**
+     * Suspends a server
+     *
+     * @param   string     $serverId A server ID to suspend
+     * @return  bool       Returns true on success or false otherwise
+     * @throws  RestClientException
+     */
+    public function suspend($serverId)
+    {
+        $result = null;
+        $options = array(
+            'suspend' => null,
+        );
+        $response = $this->getClient()->call(
+            $this->service,
+            sprintf('/servers/%s/action', $serverId), $options, 'POST'
+        );
+        if ($response->hasError() === false) {
+            $result = true;
+        }
+        return $result;
+    }
+
+    /**
+     * Resumes a server
+     *
+     * @param   string     $serverId A server ID to resume
+     * @return  bool       Returns true on success or false otherwise
+     * @throws  RestClientException
+     */
+    public function resume($serverId)
+    {
+        $result = null;
+        $options = array(
+            'resume' => null,
+        );
+        $response = $this->getClient()->call(
+            $this->service,
+            sprintf('/servers/%s/action', $serverId), $options, 'POST'
+        );
+        if ($response->hasError() === false) {
+            $result = true;
+        }
+        return $result;
+    }
+
+    /**
      * List Images action
      *
      * This operation lists all images visible by the account.
      *
-     * @param   bool             $detailed optional If true it returns detailed description for an every image.
-     * @param   ListImagesFilter $filter   optional Filter options.
-     * @return  array            Returns list of images array
+     * @param   bool                  $detailed optional If true it returns detailed description for an every image.
+     * @param   ListImagesFilter      $filter   optional Filter options.
+     * @return  DefaultPaginationList Returns list of images array
      * @throws  RestClientException
      */
     public function listImages($detailed = true, ListImagesFilter $filter = null)
@@ -279,7 +334,10 @@ class ServersApi
         );
         if ($response->hasError() === false) {
             $result = json_decode($response->getContent());
-            $result = $result->images;
+            $result = new DefaultPaginationList(
+                $this->service, 'images', $result->images,
+                (isset($result->images_links) ? $result->images_links : null)
+            );
         }
         return $result;
     }
@@ -330,8 +388,8 @@ class ServersApi
      *
      * This operation lists information for all available flavors.
      *
-     * @param   bool             $detailed optional If true it returns detailed description for an every image.
-     * @return  array            Returns list of flavors array
+     * @param   bool                  $detailed optional If true it returns detailed description for an every image.
+     * @return  DefaultPaginationList Returns list of flavors array
      * @throws  RestClientException
      */
     public function listFlavors($detailed = true)
@@ -345,7 +403,10 @@ class ServersApi
         );
         if ($response->hasError() === false) {
             $result = json_decode($response->getContent());
-            $result = $result->flavors;
+            $result = new DefaultPaginationList(
+                $this->service, 'flavors', $result->flavors,
+                (isset($result->flavors_links) ? $result->flavors_links : null)
+            );
         }
         return $result;
     }
@@ -543,7 +604,7 @@ class ServersApi
      *
      * View a lists of keypairs associated with the account.
      *
-     * @return  array Returns the list of keypairs
+     * @return  DefaultPaginationList  Returns the list of keypairs
      * @throws  RestClientException
      */
     public function listKeypairs()
@@ -552,7 +613,10 @@ class ServersApi
         $response = $this->getClient()->call($this->service, '/os-keypairs');
         if ($response->hasError() === false) {
             $result = json_decode($response->getContent());
-            $result = $result->keypairs;
+            $result = new DefaultPaginationList(
+                $this->service, 'keypairs', $result->keypairs,
+                (isset($result->keypairs_links) ? $result->keypairs_links : null)
+            );
         }
         return $result;
     }
@@ -629,7 +693,7 @@ class ServersApi
      *
      * Lists floating IP addresses associated with the tenant or account.
      *
-     * @return  array Returns the list floating IP addresses associated with the tenant or account.
+     * @return  DefaultPaginationList Returns the list floating IP addresses associated with the tenant or account.
      * @throws  RestClientException
      */
     public function listFloatingIps()
@@ -638,7 +702,10 @@ class ServersApi
         $response = $this->getClient()->call($this->service, '/os-floating-ips');
         if ($response->hasError() === false) {
             $result = json_decode($response->getContent());
-            $result = $result->floating_ips;
+            $result = new DefaultPaginationList(
+                $this->service, 'floating_ips', $result->floating_ips,
+                (isset($result->floating_ips_links) ? $result->floating_ips_links : null)
+            );
         }
         return $result;
     }
@@ -671,7 +738,7 @@ class ServersApi
      *
      * View a list of Floating IP Pools.
      *
-     * @return  array Returns the list of floating ip pools.
+     * @return  DefaultPaginationList Returns the list of floating ip pools.
      * @throws  RestClientException
      */
     public function listFloatingIpPools()
@@ -680,7 +747,10 @@ class ServersApi
         $response = $this->getClient()->call($this->service, '/os-floating-ip-pools');
         if ($response->hasError() === false) {
             $result = json_decode($response->getContent());
-            $result = $result->floating_ip_pools;
+            $result = new DefaultPaginationList(
+                $this->service, 'floating_ip_pools', $result->floating_ip_pools,
+                (isset($result->floating_ip_pools_links) ? $result->floating_ip_pools_links : null)
+            );
         }
         return $result;
     }
@@ -791,7 +861,7 @@ class ServersApi
      * List security groups.
      *
      * @param   string     $serverId   optional The server ID (UUID) of interest to you.
-     * @return  array Returns the list of the security groups
+     * @return  DefaultPaginationList  Returns the list of the security groups
      * @throws  RestClientException
      */
     public function listSecurityGroups($serverId = null)
@@ -803,7 +873,10 @@ class ServersApi
         );
         if ($response->hasError() === false) {
             $result = json_decode($response->getContent());
-            $result = $result->security_groups;
+            $result = new DefaultPaginationList(
+                $this->service, 'security_groups', $result->security_groups,
+                (isset($result->security_groups_links) ? $result->security_groups_links : null)
+            );
         }
         return $result;
     }
@@ -936,7 +1009,7 @@ class ServersApi
      *
      * @param   string    $serverId  A server ID.
      * @param   string    $networkId A network ID.
-     * @return  object    Returns all networks and addresses associated with a specific server.
+     * @return  object|DefaultPaginationList Returns all networks and addresses associated with a specific server.
      * @throws  RestClientException
      */
     public function listAddresses($serverId, $networkId = null)
@@ -947,7 +1020,14 @@ class ServersApi
         );
         if ($response->hasError() === false) {
             $result = json_decode($response->getContent());
-            $result = $networkId === null ? $result->addresses : $result->network;
+            if ($networkId === null) {
+                $result = new DefaultPaginationList(
+                    $this->service, 'addresses', $result->addresses,
+                    (isset($result->addresses_links) ? $result->addresses_links : null)
+                );
+            } else {
+                $result = $result->network;
+            }
         }
         return $result;
     }

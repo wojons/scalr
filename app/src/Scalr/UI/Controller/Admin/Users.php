@@ -5,7 +5,7 @@ class Scalr_UI_Controller_Admin_Users extends Scalr_UI_Controller
 
     public function hasAccess()
     {
-        return $this->user && ($this->user->getType() == Scalr_Account_User::TYPE_SCALR_ADMIN);
+        return $this->user->isScalrAdmin();
     }
 
     public function defaultAction()
@@ -24,14 +24,15 @@ class Scalr_UI_Controller_Admin_Users extends Scalr_UI_Controller
             'sort' => array('type' => 'json')
         ));
 
-        $sql = 'SELECT id, status, email, fullname, dtcreated, dtlastlogin, comments FROM account_users WHERE type = ? AND :FILTER:';
-        $response = $this->buildResponseFromSql2($sql, array('id', 'status', 'email', 'fullname', 'dtcreated', 'dtlastlogin'), array('email', 'fullname'), array(Scalr_Account_User::TYPE_SCALR_ADMIN));
+        $sql = 'SELECT id, status, email, type, fullname, dtcreated, dtlastlogin, comments FROM account_users WHERE (type = ? OR type = ?) AND :FILTER:';
+        $response = $this->buildResponseFromSql2($sql, array('id', 'status', 'email', 'fullname', 'dtcreated', 'dtlastlogin'), array('email', 'fullname'), array(Scalr_Account_User::TYPE_SCALR_ADMIN, Scalr_Account_User::TYPE_FIN_ADMIN));
         foreach ($response["data"] as &$row) {
             $user = Scalr_Account_User::init();
             $user->loadById($row['id']);
 
             $row['dtcreated'] = Scalr_Util_DateTime::convertTz($row["dtcreated"]);
             $row['dtlastlogin'] = $row['dtlastlogin'] ? Scalr_Util_DateTime::convertTz($row["dtlastlogin"]) : 'Never';
+            $row['is2FaEnabled'] = $user->getSetting(Scalr_Account_User::SETTING_SECURITY_2FA_GGL) == '1' ? true : false;
         }
         $this->response->data($response);
     }
@@ -53,6 +54,7 @@ class Scalr_UI_Controller_Admin_Users extends Scalr_UI_Controller
             'user' => array(
                 'id' => $user->getId(),
                 'email' => $user->getEmail(),
+                'type' => $user->getType(),
                 'fullname' => $user->fullname,
                 'status' => $user->status,
                 'comments' => $user->comments
@@ -60,34 +62,56 @@ class Scalr_UI_Controller_Admin_Users extends Scalr_UI_Controller
         ));
     }
 
-    public function xSaveAction()
+    /**
+     * @param int $id
+     * @param $email
+     * @param $type
+     * @param $password
+     * @param $status
+     * @param $fullname
+     * @param $comments
+     * @throws Scalr_Exception_Core
+     * @throws Scalr_Exception_InsufficientPermissions
+     */
+    public function xSaveAction($id = 0, $email, $type, $password, $status, $fullname, $comments)
     {
         $user = Scalr_Account_User::init();
+        $validator = new Scalr_Validator();
 
-        if (! $this->getParam('email'))
-            throw new Scalr_Exception_Core('Email cannot be null');
+        if (! $email)
+            throw new Scalr_Exception_Core('Email cannot be empty');
 
-        if ($this->getParam('id')) {
-            $user->loadById($this->getParam('id'));
+        if ($type == Scalr_Account_User::TYPE_FIN_ADMIN && $validator->validateEmail($email, null, true) !== true)
+            throw new Scalr_Exception_Core('Email is not valid');
+
+        if (! in_array($type, [Scalr_Account_User::TYPE_SCALR_ADMIN, Scalr_Account_User::TYPE_FIN_ADMIN]))
+            throw new Scalr_Exception_Core('Type is not valid');
+
+        if (! in_array($status, [Scalr_Account_User::STATUS_ACTIVE, Scalr_Account_User::STATUS_INACTIVE]))
+            throw new Scalr_Exception_Core('Status is not valid');
+
+        if ($id) {
+            $user->loadById($id);
 
             if ($user->getEmail() == 'admin' && $user->getId() != $this->user->getId())
                 throw new Scalr_Exception_InsufficientPermissions();
 
             if ($user->getEmail() != 'admin')
-                $user->updateEmail($this->getParam('email'));
+                $user->updateEmail($email);
         } else {
-            $user->create($this->getParam('email'), $this->user->getAccountId());
-            $user->type = Scalr_Account_User::TYPE_SCALR_ADMIN;
+            $user->create($email, $this->user->getAccountId());
+            $user->type = $type;
         }
 
-        if ($this->getParam('password') != '******')
-            $user->updatePassword($this->getParam('password'));
+        if ($password != '******')
+            $user->updatePassword($password);
 
         if ($user->getEmail() != 'admin') {
-            $user->status = $this->getParam('status');
+            $user->status = $status;
+            $user->type = $type;
 
-            $user->fullname = $this->getParam('fullname');
-            $user->comments = $this->getParam('comments');
+            $user->fullname = $fullname;
+            $user->comments = $comments;
         }
 
         $user->save();

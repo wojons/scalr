@@ -15,10 +15,10 @@ use Scalr\Util\PhpTemplate;
 
 set_time_limit(0);
 
-define('SCALR_UPGRADE_VERSION', '1.0');
+define('SCALR_UPGRADE_VERSION', '1.1');
 
-$shortopts  = "hnr:";
-$longopts  = array("help", "new");
+$shortopts  = "hnvr:";
+$longopts  = array("help", "new", "force");
 $opt = getopt($shortopts, $longopts);
 
 $console = new Console();
@@ -32,6 +32,8 @@ $showusage = function() use ($console) {
     $console->out("  -h, --help          Display this help end exit.");
     $console->out("  -n, --new           Generate a new update class to implement.");
     $console->out("  -r uuid             Run only specified update. UUID is unique identifier.");
+    $console->out("  -v                  Turn on verbosity.");
+    $console->out("  --force             Run forcefully ignoring pid.");
     $console->out("");
     exit;
 };
@@ -46,6 +48,12 @@ if (isset($opt['r'])) {
     }
     $options->cmd = UpgradeHandler::CMD_RUN_SPECIFIC;
     $options->uuid = strtolower(str_replace('-', '', $opt['r']));
+}
+
+if (isset($opt['v'])) {
+    $options->verbosity = true;
+} else {
+    $options->verbosity = false;
 }
 
 if (isset($opt['help']) || isset($opt['h'])) {
@@ -73,6 +81,10 @@ if (isset($opt['n']) || isset($opt['new'])) {
         $console->success('Upgrade class "%s" has been successfully created.', realpath($pathname));
     }
     exit();
+}
+
+if (isset($opt['force'])) {
+    UpgradeHandler::removePid();
 }
 
 $upgrade = new UpgradeHandler($options);

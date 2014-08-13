@@ -78,7 +78,7 @@ class VolumeData extends AbstractEc2DataType
 
     /**
      * The volume type
-     * standard | io1
+     * standard | io1 | gp2
      * @var string
      */
     public $volumeType;
@@ -92,6 +92,13 @@ class VolumeData extends AbstractEc2DataType
      * @var int
      */
     public $iops;
+
+    /**
+     * Specifies whether the volume should be encrypted.
+     *
+     * @var bool
+     */
+    public $encrypted;
 
     protected function throwExceptionIfNotInitialized()
     {

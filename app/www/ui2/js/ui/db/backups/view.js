@@ -1,5 +1,12 @@
 Scalr.regPage('Scalr.ui.db.backups.view', function (loadParams, moduleParams) {
 	//TODO back-end part
+
+    var store = Ext.create('store.store', {
+        fields: [ 'id', 'name' ],
+        data: moduleParams['farms'],
+        proxy: 'object'
+    });
+
 	var panel = Ext.create('Ext.panel.Panel', {
 		title: 'DB backups',
 		scalrOptions: {
@@ -7,7 +14,6 @@ Scalr.regPage('Scalr.ui.db.backups.view', function (loadParams, moduleParams) {
 			//reload: false
 		},
 		dataStore: {},
-		scalrReconfigureParams: {},
 
         layout: 'fit',
 		items: {
@@ -28,6 +34,8 @@ Scalr.regPage('Scalr.ui.db.backups.view', function (loadParams, moduleParams) {
 		dockedItems: [{
 			xtype: 'toolbar',
 			dock: 'top',
+            enableParamsCapture: true,
+            store: store,
 			items: [{
                 xtype: 'button',
                 iconCls: 'scalr-ui-dbbackups-button-prev',
@@ -137,11 +145,7 @@ Scalr.regPage('Scalr.ui.db.backups.view', function (loadParams, moduleParams) {
 				listConfig: {
 					minWidth: 150
 				},
-				store: {
-					fields: [ 'id', 'name' ],
-					data: moduleParams['farms'],
-					proxy: 'object'
-				},
+				store: store,
 				editable: false,
 				queryMode: 'local',
 				itemId: 'farmId',

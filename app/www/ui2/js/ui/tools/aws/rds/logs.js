@@ -3,7 +3,6 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.logs', function (loadParams, moduleParams)
 		fields: [ "Date", "SourceIdentifier", "Message", "SourceType" ],
 		proxy: {
 			type: 'scalr.paging',
-			extraParams: loadParams,
 			url: '/tools/aws/rds/xListLogs/'
 		},
 		remoteSort: true

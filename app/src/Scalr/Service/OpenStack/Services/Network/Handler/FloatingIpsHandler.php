@@ -1,7 +1,6 @@
 <?php
 namespace Scalr\Service\OpenStack\Services\Network\Handler;
 
-use Scalr\Service\OpenStack\Services\NetworkService;
 use Scalr\Service\OpenStack\Services\ServiceHandlerInterface;
 use Scalr\Service\OpenStack\Services\AbstractServiceHandler;
 
@@ -11,7 +10,7 @@ use Scalr\Service\OpenStack\Services\AbstractServiceHandler;
  * @author   Vitaliy Demidov  <vitaliy@scalr.com>
  * @since    27.09.2013
  *
- * @method   array    list()
+ * @method   \Scalr\Service\OpenStack\Type\DefaultPaginationList list()
  *           list()
  *           Gets the list of floating ips.
  *

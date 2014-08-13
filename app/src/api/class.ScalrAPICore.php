@@ -116,6 +116,15 @@ abstract class ScalrAPICore
         }
     }
 
+    protected function stripValue($value)
+    {
+        $value = strip_tags($value);
+        $value = str_replace(array('>', '<'), '', $value);
+        $value = trim($value);
+
+        return $value;
+    }
+
     private function AuthenticateRESTv3($request)
     {
         if (!$request['Signature'])
@@ -141,7 +150,7 @@ abstract class ScalrAPICore
         }
 
         if (!$this->user)
-            throw new Exception("API Key #{$request['KeyID']} not found in database");
+            throw new Exception("The specified KeyID does not exist");
 
         $auth_key = $this->user->getSetting(Scalr_Account_User::SETTING_API_SECRET_KEY);
 
@@ -149,12 +158,17 @@ abstract class ScalrAPICore
             if (\Scalr::config('scalr.auth_mode') == 'ldap') {
                 $this->Environment = Scalr_Environment::init()->loadById($request['EnvID']);
 
-                $ldap = \Scalr::getContainer()->ldap($this->user->getEmail(), null);
-                if (! $ldap->isValidUsername()) {
-                    throw new Exception('Incorrect login or password (1)');
-                }
+                try {
+                    $user = strtok($this->user->getEmail(), '@');
+                    $ldap = \Scalr::getContainer()->ldap($user, null);
+                    if (! $ldap->isValidUsername()) {
+                        throw new Exception('Incorrect login or password (1)');
+                    }
 
-                $this->user->applyLdapGroups($ldap->getUserGroups());
+                    $this->user->applyLdapGroups($ldap->getUserGroups());
+                } catch (Exception $e) {
+                    throw new Exception("Incorrect login or password (1)" . "\n" . $ldap->getLog());
+                }
             } else {
                 if (!$request['EnvID']) {
                     $envs = $this->user->getEnvironments();
@@ -167,6 +181,7 @@ abstract class ScalrAPICore
                     $this->Environment = Scalr_Environment::init()->loadById($request['EnvID']);
                 }
             }
+
 
             $this->user->getPermissions()->setEnvironmentId($this->Environment->id)->validate($this->Environment);
             //We must set environment to DI Container.
@@ -340,7 +355,7 @@ abstract class ScalrAPICore
                         $this->AuthenticateREST($request);
 
                     if ($this->user->getSetting(Scalr_Account_User::SETTING_API_ENABLED) != 1)
-                        throw new Exception(_("API disabled for you. You can enable it at 'Settings -> Environments'"));
+                        throw new Exception(_("Your API keys are currently disabled. You can enable access at Settings > API access."));
 
                     //Check IP Addresses
                     if ($this->user->getSetting(Scalr_Account_User::SETTING_API_IP_WHITELIST)) {
@@ -351,10 +366,10 @@ abstract class ScalrAPICore
                 }
 
                 //Check limit
-                if ($this->Environment->getPlatformConfigValue(ENVIRONMENT_SETTINGS::API_LIMIT_ENABLED, false) == 1) {
-                    $hour = $this->Environment->getPlatformConfigValue(ENVIRONMENT_SETTINGS::API_LIMIT_HOUR, false);
-                    $limit = $this->Environment->getPlatformConfigValue(ENVIRONMENT_SETTINGS::API_LIMIT_REQPERHOUR, false);
-                    $usage = $this->Environment->getPlatformConfigValue(ENVIRONMENT_SETTINGS::API_LIMIT_USAGE, false);
+                if ($this->Environment->getPlatformConfigValue(Scalr_Environment::SETTING_API_LIMIT_ENABLED, false) == 1) {
+                    $hour = $this->Environment->getPlatformConfigValue(Scalr_Environment::SETTING_API_LIMIT_HOUR, false);
+                    $limit = $this->Environment->getPlatformConfigValue(Scalr_Environment::SETTING_API_LIMIT_REQPERHOUR, false);
+                    $usage = $this->Environment->getPlatformConfigValue(Scalr_Environment::SETTING_API_LIMIT_USAGE, false);
                     if ($usage >= $limit && $hour == date("YmdH")) {
                         $reset = 60 - (int)date("i");
 
@@ -370,8 +385,8 @@ abstract class ScalrAPICore
                     }
 
                     $this->Environment->setPlatformConfig(array(
-                        ENVIRONMENT_SETTINGS::API_LIMIT_USAGE => $usage+1,
-                        ENVIRONMENT_SETTINGS::API_LIMIT_HOUR => $hour
+                        Scalr_Environment::SETTING_API_LIMIT_USAGE => $usage+1,
+                        Scalr_Environment::SETTING_API_LIMIT_HOUR => $hour
                     ), false);
                 }
 
@@ -390,6 +405,7 @@ abstract class ScalrAPICore
                 }
 
                 $result = $ReflectMethod->invokeArgs($this, $args);
+
 
                 $this->LastTransactionID = $result->TransactionID;
 
@@ -424,6 +440,7 @@ abstract class ScalrAPICore
 
         header("Content-type: text/xml");
         header("Content-length: ".strlen($retval));
+        header("Access-Control-Allow-Origin: *");
 
         print $retval;
     }

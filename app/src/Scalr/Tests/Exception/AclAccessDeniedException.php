@@ -17,7 +17,7 @@ class AclAccessDeniedException extends ScalrException
     //The message is used in the tests.
     const MESSAGE = 'Access denied.';
 
-	/**
+    /**
      * {@inheritdoc}
      * @see Exception::__construct()
      */

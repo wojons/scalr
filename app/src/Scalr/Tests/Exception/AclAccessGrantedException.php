@@ -17,7 +17,7 @@ class AclAccessGrantedException extends ScalrException
     //The message is used in the tests.
     const MESSAGE = 'Access granted.';
 
-	/**
+    /**
      * {@inheritdoc}
      * @see Exception::__construct()
      */

@@ -9,29 +9,29 @@ class Scalr_Service_Ssl_Certificate extends Scalr_Model
         'id'			=> 'id',
         'env_id'		=> array('property' => 'envId', 'is_filter' => false),
         'name'          => 'name',
-        'ssl_pkey'      => array('property' => 'sslPkey', 'is_filter' => false),
-        'ssl_cert'      => array('property' => 'sslCert', 'is_filter' => false),
-        'ssl_cabundle'  => array('property' => 'sslCabundle', 'is_filter' => false),
-        'ssl_pkey_password'  => array('property' => 'sslPkeyPassword', 'is_filter' => false),
+        'ssl_pkey'      => array('property' => 'privateKey', 'type' => 'encrypted', 'is_filter' => false),
+        'ssl_pkey_password'  => array('property' => 'privateKeyPassword', 'type' => 'encrypted', 'is_filter' => false),
+        'ssl_cert'      => array('property' => 'certificate', 'is_filter' => false),
+        'ssl_cabundle'  => array('property' => 'caBundle', 'is_filter' => false)
     );
 
     public $id,
         $envId,
         $name,
-        $sslPkeyPassword,
-        $sslPkey,
-        $sslCert,
-        $sslCabundle;
+        $privateKey,
+        $privateKeyPassword,
+        $certificate,
+        $caBundle;
 
-    public function getSslCertName()
+    public function getCertificateName()
     {
-        $info = openssl_x509_parse($this->sslCert, false);
+        $info = openssl_x509_parse($this->certificate, false);
         return $info['name'] ? $info['name'] : 'uploaded';
     }
 
-    public function getSslCabundleName()
+    public function getCaBundleName()
     {
-        $info = openssl_x509_parse($this->sslCabundle, false);
+        $info = openssl_x509_parse($this->caBundle, false);
         return $info['name'] ? $info['name'] : 'uploaded';
     }
 

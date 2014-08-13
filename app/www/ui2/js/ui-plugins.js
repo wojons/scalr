@@ -78,6 +78,7 @@ Ext.define('Scalr.ui.ComboAddNewPlugin', {
 	url: '',
 	postUrl: '',
     disabled: false,
+    applyNewValue: true,
     
 	init: function(comp) {
 		var me = this;
@@ -119,8 +120,10 @@ Ext.define('Scalr.ui.ComboAddNewPlugin', {
 
 		Scalr.event.on('update', function(type, element) {
 			if (type == me.url) {
-				this.store.add(element);
-				this.setValue(element[this.valueField]);
+                if (me.applyNewValue) {
+                    this.store.add(element);
+                    this.setValue(element[this.valueField]);
+                }
                 this.fireEvent('addnew', element);
 			}
 		}, comp);
@@ -250,6 +253,7 @@ Ext.define('Scalr.ui.GridSelectionModel', {
 	injectCheckbox: 'last',
 	highlightArrow: false,
 	checkOnly: true,
+    preventFocusOnSelect: false,
 
 	bindComponent: function () {
 		this.callParent(arguments);
@@ -407,6 +411,9 @@ Ext.define('Scalr.ui.GridSelectionModel', {
            return;
         }
         if (checker) {
+            if (me.preventFocusOnSelect) {
+                me.preventFocus = true;
+            }
 			e.preventDefault();//prevent text selection
             mode = me.getSelectionMode();
             // dont change the mode if its single otherwise
@@ -1277,7 +1284,9 @@ Ext.define('Scalr.ui.LeftMenu', {
 	
 	currentMenuId: null,
 	currentItemId: null,
+    currentOptions: null,
 	itemIdPrefix: 'leftmenu-',
+    defaultMenuWidth: 112,
 	
 	itemIconClsPrefix: 'x-icon-leftmenu-',
 
@@ -1311,6 +1320,77 @@ Ext.define('Scalr.ui.LeftMenu', {
                     });
                 }
 			    break;
+			case 'webhooks':
+                menus.push({
+                    itemId:'endpoints',
+                    href: '#/webhooks/endpoints',
+                    text: 'Endpoints'
+                });
+
+                menus.push({
+                    itemId:'configs',
+                    href: '#/webhooks/configs',
+                    text: 'Webhooks'
+                });
+
+                menus.push({
+                    itemId:'history',
+                    href: '#/webhooks/history',
+                    text: 'History'
+                });
+                break;
+
+            case 'analytics':
+                menus.push({
+                    itemId: 'dashboard',
+                    href: '#/analytics/dashboard',
+                    text: 'Dashboard'
+                },{
+                    itemId: 'costcenters',
+                    href: '#/analytics/costcenters',
+                    text: 'Cost centers'
+                },{
+                    itemId: 'projects',
+                    href: '#/analytics/projects',
+                    text: 'Projects'
+                },{
+                    itemId: 'budgets',
+                    href: '#/analytics/budgets',
+                    text: 'Budgets'
+                },{
+                    itemId: 'pricing',
+                    href: '#/analytics/pricing',
+                    text: 'Pricing list'
+                },{
+                    itemId: 'notifications',
+                    href: '#/analytics/notifications',
+                    text: 'Notifications'
+                });
+                break;
+
+			case 'settings':
+                menus.push({
+                    itemId:'orchestration',
+                    href: '#/account/orchestration',
+                    text: 'Orchestration',
+                    hidden: !Scalr.isAllowed('ADMINISTRATION_ORCHESTRATION')
+                });
+
+                menus.push({
+                    itemId:'variables',
+                    href: '#/account/variables',
+                    text: 'Global variables',
+                    hidden: !Scalr.isAllowed('ADMINISTRATION_GLOBAL_VARIABLES')
+                });
+
+                menus.push({
+                    itemId:'billing',
+                    href: '#/billing',
+                    text: 'Billing',
+                    hidden: !Scalr.isAllowed('ADMINISTRATION_BILLING') || !Scalr.flags['billingExists']
+                });
+                break;
+
 		}
 		return menus;
 	},
@@ -1321,31 +1401,41 @@ Ext.define('Scalr.ui.LeftMenu', {
 	},
 	
 	create: function() {
-        this.menu = Ext.create('Ext.container.Container', {
+        var me = this;
+        me.menu = Ext.create('Ext.container.Container', {
 			hidden: true,
 			dock: 'left',
             cls: 'x-docked-tabs',
-            width: 112,
+            width: me.defaultMenuWidth,
 			defaults: {
                 xtype: 'button',
                 ui: 'tab',
                 allowDepress: false,
                 iconAlign: 'above',
                 disableMouseDownPressed: true,
-                toggleGroup: 'leftmenu',
-                hrefTarget: null
+                enebleToggle: true,
+                hrefTarget: null,
+                listeners: {
+                    click: Ext.bind(me.onButtonClick, me)
+                }
 			}
 		});
-		this.client.addDocked(this.menu);
+		me.client.addDocked(this.menu);
 	},
 	
 	set: function(options) {
-		var me = this;
+		var me = this, prevBtn;
+        me.currentOptions = options;
 		if (options.menuId !== this.currentMenuId) {
 			this.menu.removeAll();
             var iconClsPrefix = me.itemIconClsPrefix + options.menuId;
+            this.menu.setWidth(options.width || me.defaultMenuWidth);
 			this.menu.add(Ext.Array.map(this.getMenus(options.menuId), function(item){
-                item.iconCls = iconClsPrefix + ' ' + iconClsPrefix + '-' + item.itemId;
+                if (options.icons === false) {
+                    item.textAlign = 'left';
+                } else {
+                    item.iconCls = iconClsPrefix + ' ' + iconClsPrefix + '-' + item.itemId;
+                }
 				item.itemId = me.itemIdPrefix + item.itemId;
 				return item;
 			}));
@@ -1353,6 +1443,10 @@ Ext.define('Scalr.ui.LeftMenu', {
 			this.currentItemId = null;
 		}
 		if (options.itemId !== this.currentItemId) {
+            if (this.currentItemId) {
+                prevBtn = this.menu.getComponent(me.itemIdPrefix + this.currentItemId);
+                if (prevBtn) prevBtn.toggle(false, true);
+            }
 			this.menu.getComponent(me.itemIdPrefix + options.itemId).toggle(true);
 			this.currentItemId = options.itemId;
 		}
@@ -1369,8 +1463,20 @@ Ext.define('Scalr.ui.LeftMenu', {
 	
 	hide: function() {
 		this.menuVisible = false;
-		this.menu.hide();
-	}
+        if (this.menu) {
+            this.menu.hide();
+        }
+	},
+
+    onButtonClick: function(btn, e) {
+        continueCallback = function() {
+            Scalr.event.fireEvent('redirect', btn.href);
+        };
+        if (Ext.isFunction(this.currentOptions.beforeClose) && this.currentOptions.beforeClose(continueCallback) === false) {
+            e.stopEvent();
+            return false;
+        }
+    }
 	
 });
 
@@ -1961,6 +2067,15 @@ Ext.define('Scalr.ui.NotAGridView', {
         }));
         c.resumeLayouts(true);
     },
+
+    showEmptyText: function(text) {
+        this.down('#items').add({
+            xtype: 'component',
+            cls: 'x-empty-text',
+            html: text,
+            flex: 1
+        });
+    },
     
     toggleSelect: function(item) {
         if (item === this.selectedItem) return;
@@ -2119,10 +2234,6 @@ Ext.define('Scalr.ui.StoreProxyCachedRequest', {
                                         });
                                         return res;
                                     }
-                                } else if (me.filterFn !== undefined) {
-                                    filterFn = function(record){
-                                        return me.filterFn(queryString, record);
-                                    };
                                 }
 
                                 if (filterFn !== undefined) {
@@ -2207,6 +2318,7 @@ Ext.define('Scalr.ui.PanelScrollFixPlugin', {
 
 Ext.define('Scalr.ui.ActionsMenu', {
 	extend: 'Ext.menu.Menu',
+    alias: 'widget.actionsmenu',
     cls: 'x-options-menu',
 	constructor: function () {
 		this.callParent(arguments);
@@ -2290,5 +2402,461 @@ Ext.define('Scalr.ui.ActionsMenu', {
                 }
 			}
 		}, this);
+    }
+});
+
+Ext.define('Scalr.ui.ColoredStatus', {
+    singleton: true,
+    config: {
+        server: {
+            'Pending launch': {
+                cls: 'yellow',
+                text:  'Scalr is preparing to launch this server. No API call to your Cloud Platform has been made yet.'
+            },
+            'Pending': {
+                cls: 'yellow',
+                iconCls: 'running',
+                text: 'Scalr has made an API call to your Cloud Platform to request this server. Scalr is waiting for the server to finish booting.'
+            },
+            'Initializing': {
+                cls: 'yellow',
+                iconCls: 'running',
+                text: 'The server has finished booting. Scalarizr has fired the HostInit event and is now configuring the server.'
+            },
+            'Running': {
+                cls: 'green',
+                text: 'The server has finished initializing. Scalarizr has fired the HostUp event, and will continue to process further orchestration events.'
+            },
+            'Pending terminate': {
+                text: 'Scalr has scheduled this server for termination. No API call to your Cloud Platform has been made yet.'
+            },
+            'Terminated': {
+                text: 'Scalr has terminated this server. It cannot be resumed, but may be replaced. You are no longer paying instance hours for it.'
+            },
+            'Pending suspend': {
+                cls: 'blue',
+                text: 'Scalr has scheduled this server for suspension. No API call to your Cloud Platform has been made yet.'
+            },
+            'Suspended': {
+                cls: 'blue',
+                text: 'Scalr has suspended this server to disk. It may be resumed. You are no longer accumulating instance hours for this server.'
+            },
+            'Importing': {
+                cls: 'green',
+                text: 'Scalr is importing this server to create a new Role. Scalr <b>will not</b> automatically terminate this server once it is done.'
+            },
+            'Temporary': {
+                cls: 'green',
+                text: 'Scalr has launched this temporary server. Scalr <b>will</b> automatically terminate this server once task is done.'
+            },
+            'Failed': {
+                cls: 'red',
+                iconCls: 'failed',
+                text: 'An error occurred as this <b>server</b> was launching.'
+            },
+            'Rebooting': {
+                text: 'A reboot operation was requested on this server. It is now rebooting and reinitializing.'
+            }
+        },
+        role: {
+            'In use': {
+                cls: 'green',
+                text: 'This <b>role</b> is currently used by one or more <b>farms</b> to launch instances. '
+            },
+            'Not used': {
+                text: 'This <b>role</b> is currently not used by any <b>farm</b>.'
+            },
+            'Deleting': {
+                cls: 'yellow',
+                text: 'Scalr is currently deleting this <b>role</b>.'
+            }
+        },
+        image: {
+            'In use': {
+                cls: 'green',
+                text: 'This <b>image</b> is currently used by one or more <b>roles</b> to launch instances. '
+            },
+            'Not used': {
+                text: 'This <b>image</b> is currently not used by any <b>role</b>.'
+            }
+        },
+        farm: {
+            'Running': {
+                cls: 'green',
+                text: 'Scalr is actively managing and monitoring this farm. Resources are being provisioned from your Cloud Platform to operate this Farm.'
+            },
+            'Terminated': {
+                text: 'Scalr has terminated all the resources for this Farm.'
+            }
+        },
+        script: {
+            'Non-blocking': {
+                cls: 'green',
+                text: 'Scalarizr <b>will not wait</b> for your script to finish executing before firing and processing further events.'
+            },
+            'Blocking': {
+                text: 'Scalarizr <b>will wait</b> for your script to finish executing before firing and processing further events. Useful to avoid race conditions in time-sensitive workflows.'
+            }
+        },
+        schedulertaskscript: {
+            'Non-blocking': {
+                cls: 'green',
+                text: 'Scalarizr <b>will not wait</b> for your script to finish executing before firing and processing further events.'
+            },
+            'Blocking': {
+                text: 'Scalarizr <b>will wait</b> for your script to finish executing before firing and processing further events. Useful to avoid race conditions in time-sensitive workflows.'
+            }
+        },
+        bundletask: {
+            'starting-server': {
+                cls: 'yellow',
+                title: 'Starting temporary server',
+                text: 'Scalr is launching a temporary server for this bundle task, and is currently waiting for the server to finish booting.'
+            },
+            'preparing-environment': {
+                cls: 'yellow',
+                title: 'Uploading import tools',
+                text: 'The temporary server for this bundle task has finished booting, and Scalr is now uploading import tools to the server.'
+            },
+            'installing-software': {
+                cls: 'yellow',
+                title: 'Installing import tools',
+                text: 'Scalr has finished uploading import tools to the temporary server for this bundle task, and is now installing them.'
+            },
+            'awaiting-user-action': {
+                cls: 'yellow',
+                title: 'Pending user action',
+                text: 'Scalr is ready to start the import process, and is now waiting for user input.'
+            },
+            'establishing-communication': {
+                cls: 'yellow',
+                title: 'Establishing communication',
+                text: 'Scalr is starting the import process, and is currently establishing two-way communication with the Scalarizr agent installed on the server.'
+            },
+            'pending': {
+                cls: 'yellow',
+                title: 'Pending',
+                text: 'Scalr has established two-way communication with the Scalarizr agent installed on the server, and is now initiating the role creation process.'
+            },
+            'preparing': {
+                cls: 'yellow',
+                title: 'Preparing System',
+                text: 'Scalr is making modifications to system configuration files to make the server suitable for image creation.'
+            },
+            'in-progress': {
+                cls: 'yellow',
+                title: '(Image creation) In progress',
+                text: 'Scalr has made an API call to your cloud to create an image from the server, and is now waiting for the process to complete.'
+            },
+            'creating-role': {
+                cls: 'yellow',
+                title: 'Creating role',
+                text: 'Scalr has completed the image creation process, and is now creating a new Scalr role and associating the image with it. '
+            },
+            'replacing-servers': {
+                cls: 'yellow',
+                title: 'Replacing servers',
+                text: 'Scalr has finished creating this Scalr role, and is now replacing existing servers with the updated role.'
+            },
+            'success': {
+                cls: 'green',
+                title: 'Completed',
+                text: 'Scalr has successfully completed this bundle task.'
+            },
+            'failed': {
+                cls: 'red',
+                iconCls: 'failed',
+                title: 'Failed',
+                text: 'Scalr failed to complete this bundle task.'
+            },
+            'cancelled': {
+                title: 'Cancelled',
+                text: 'A Scalr user aborted this bundle task.'
+            }
+        },
+        dnszone: {
+            'Active': {
+                cls: 'green',
+                text: 'Records for this DNS zone are automatically created and managed by Scalr, and are available on Scalr\'s nameservers.'
+            },
+            'Inactive': {
+                text: 'This DNS zone is not managed by Scalr, and is not available on Scalr\'s nameservers.'
+            },
+            'Pending create': {
+                cls: 'yellow',
+                text: 'This DNS zone was recently created in Scalr, but the changes haven\'t been propagated to Scalr\'s nameservers yet.'
+            },
+            'Pending update': {
+                cls: 'yellow',
+                text: 'This DNS zone was recently changed in Scalr, but the changes haven\'t been propagated to Scalr\'s nameservers yet.'
+            },
+            'Pending delete': {
+                cls: 'yellow',
+                text: 'This DNS zone was recently deleted in Scalr, but the deletion hasn\'t been propagated to Scalr\'s nameservers yet.'
+            }
+        },
+        schedulertask: {
+            'Active': {
+                cls: 'green',
+                text: 'The Task Scheduler is currently automating this task, it will be executed according to the schedule you specified.'
+            },
+            'Suspended': {
+                text: 'The Task Scheduler is not automating this task, it will not be executed.'
+            },
+            'Finished': {
+                text: 'The Task Scheduler has finished this task.'
+            }
+        },
+        user: {
+            'Active': {
+                cls: 'green',
+                text: 'This user can access Scalr.'
+            },
+            'Inactive': {
+                title: 'Suspended',
+                text: 'This user account has been suspended, and this user can no longer access Scalr.'
+            }
+        },
+        servermessage: {
+            'Delivered': {
+                cls: 'green',
+                text: 'Scalr successfully delivered this message to the server.'
+            },
+            'Processed': {
+                cls: 'green',
+                text: 'Scalr successfully processed this message from the server.'
+            },
+            'Pending delivery': {
+                cls: 'yellow',
+                text: 'Scalr is preparing to deliver this message to the server. The message hasn\'t been delivered yet.'
+            },
+            'Pending processing': {
+                cls: 'yellow',
+                text: 'Scalr has received this message from the server. The message hasn\'t been processed yet.'
+            },
+            'Delivery failed': {
+                cls: 'red',
+                text: 'Scalr failed to deliver this message to the server. The error may be due to a firewall or misconfiguration issue.'
+            },
+            'Processing failed': {
+                cls: 'red',
+                text: 'Scalr failed to process this message from the server due to an internal error. Check your logs for more details, or contact support.'
+            }
+        },
+        policy: {
+            'Enforced': {
+                cls: 'green',
+                text: 'This policy is currently active, and controls Scalr usage in this environment.'
+            },
+            'Disabled': {
+                cls: 'grey',
+                text: 'This policy is currently inactive, no restriction on Scalr usage is imposed in this environment.'
+            }
+        },
+        webhookendpoint: {
+            'Validated': {
+                cls: 'green',
+                text: 'This endpoint has yet to be validated. Until it is validated, it can\'t be added to a Webhook.'
+            },
+            'Inactive': {
+                title: 'Inactive',
+                text: 'This endpoint has been validated. If this endpoint is added to a webhook, Scalr will deliver webhook messages to it.'
+            }
+        },
+        webhookhistory: {
+            'Complete': {
+                cls: 'green',
+                text: 'Scalr successfully delivered this Webhook Notification to your Webhook Endpoint, and your Webhook Endpoint responded with a HTTP status code indicating success.'
+            },
+            'Pending': {
+                text: 'This Webhook Notification has been scheduled, but Scalr hasn\'t attempted delivery to your Webhook Endpoint yet.'
+            },
+            'Failed': {
+                cls: 'red',
+                text: 'Scalr attempted delivering this Webhook Notification to your Webhook Endpoint, but it failed. Either Scalr was unable to connect to your Webhook Endpoint, or it responded with a HTTP status code indicating failure.'
+            }
+        },
+        notification: {
+            'Enabled': {
+                cls: 'green',
+                text: 'Notifications will be sent to recipients'
+            },
+            'Disabled': {
+                text: 'Notifications will not be sent to recipients'
+            }
+        }
+    },
+
+    getHtml: function(config, qtipConfig) {
+        var status = config.status || 'Unknown',
+            renderData,
+            html,
+            statusConfig,
+            tooltip = {
+                align: 'r-l',
+                anchor: 'right',
+                width: 340
+            };
+        Ext.apply(tooltip, qtipConfig);
+        if (Ext.isFunction(this.handlers[config.type])) {
+            renderData = this.handlers[config.type].call(this, config.data);
+        } else {
+            renderData = {status: status};
+        }
+
+        renderData['title'] = renderData['title'] || renderData['status'];
+        statusConfig = this.config[config.type] ? this.config[config.type][renderData['status']] : undefined;
+        if (statusConfig) {
+            renderData['cls'] = statusConfig['cls'];
+            renderData['iconCls'] = renderData['iconCls'] || statusConfig['iconCls'];
+            if (statusConfig['text']) {
+                renderData['text'] = statusConfig['text'];
+            }
+            if (statusConfig['title']) {
+                renderData['title'] = statusConfig['title'];
+            }
+        }
+        html =
+            '<'+ (renderData['link'] ? 'a href="' + renderData['link'] + '" ' : 'div ') +
+                'class="x-colored-status ' + (renderData['cls'] || '') + '" ' +
+                'data-anchor="' + tooltip.anchor + '" ' +
+                'data-qalign="' + tooltip.align + '" ' +
+                'data-qtitle="' + Ext.String.htmlEncode(renderData['title']) + '" ' +
+                (renderData['text'] || renderData['link'] ? 'data-qtip="' + Ext.String.htmlEncode((renderData['text']||'') + (renderData['link'] ? ' <a class="bottom-link" href="' + renderData['link'] + '">' + renderData['linkText'] + '</a>' : '')) + '" ' : '') +
+                'data-qwidth="' + tooltip.width + '">' +
+                (renderData['iconCls'] ? '<img src="'+Ext.BLANK_IMAGE_URL+'" class="x-icon-colored-status-'+renderData['iconCls']+'" />' : '' ) +
+                renderData['title'] +
+            '</' + (renderData['link'] ? 'a' : 'div') + '>';
+
+        return html;//
+    },
+
+    handlers: {
+        server: function(data) {
+            var result = {status: data['status']},
+                linkOperationStatus = '#/operations/details?serverId=' + data['server_id'] + '&operation=Initialization';
+
+            if (data['initDetailsSupported']) {
+                if (data['isInitFailed']) {
+                    result['link'] = linkOperationStatus;
+                    result['linkText'] = 'Get error details';
+                    result['status'] = 'Failed';
+                } else {
+                    if (result['status'] === 'Pending' || result['status'] === 'Initializing') {
+                        result['link'] = linkOperationStatus;
+                        result['linkText'] = 'View progress';
+                    }
+                    if (data['launch_error'] == 1) {
+                        result['iconCls'] = 'failed';
+                        result['link'] = linkOperationStatus;
+                        result['linkText'] = 'Get error details';
+                    }
+                }
+            }
+
+            if (data['status'] === 'Importing') {
+                result['link'] = '#/roles/import?serverId=' + data['server_id'];
+                result['linkText'] = 'View progress';
+            }
+            return result;
+        },
+        farm: function(data) {
+            var titles = {
+                    1: 'Running',
+                    0: 'Terminated',
+                    2: 'Terminating',
+                    3: 'Synchronizing'
+                };
+            return {status: titles[data['status']] || 'Unknown'};
+        },
+        image: function(data) {
+            var result = {status: data['status']};
+
+            if (data['status'] == 'In use') {
+                result['link'] = '#/roles/manager?platform=' + data['platform'] + '&cloudLocation=' + data['cloudLocation'] + '&imageId=' + data['id'];
+                result['linkText'] = 'Show roles';
+            }
+
+            return result;
+        },
+        script: function(data) {
+            return {status: data['isSync'] == 1 ? 'Blocking' : 'Non-blocking'};
+        },
+        schedulertaskscript: function(data) {
+            return {status: data['config']['scriptIsSync'] == 1 ? 'Blocking' : 'Non-blocking'};
+        },
+        bundletask: function(data) {
+            var result = {status: data['status']};
+
+            if (data['status'] === 'failed') {
+                result['link'] = '#/bundletasks/' + data['id'] + '/failureDetails';
+                result['linkText'] = 'Get error details';
+            }
+            return result;
+        },
+        servermessage: function(data) {
+            var result = {};
+
+            if (data['status'] == 1) {
+                result['status'] = data['type'] == 'out' ? 'Delivered' : 'Processed';
+            } else if (data['status'] == 0) {
+                result['status'] = data['type'] == 'out' ? 'Pending delivery' : 'Pending processing';
+            } else if (data['status'] == 2 || data['status'] == 3) {
+                result['status'] = data['type'] == 'out' ? 'Delivery failed' : 'Processing failed';
+            }
+            return result;
+        },
+        policy: function(data) {
+            return {status: data['settings']['enabled'] == 1 ? 'Enforced' : 'Disabled'};
+        },
+        webhookendpoint: function(data) {
+            return {status: data['isValid'] == 1 ? 'Validated' : 'Inactive'};
+        },
+        webhookhistory: function(data) {
+            var result = {status: 'Pending'};
+            if (data['status'] == 1) {
+                result['status'] = 'Complete';
+            } else if (data['status'] == 2) {
+                if (data['errorMsg']) {
+                    result['status'] = 'Custom';
+                    result['cls'] = 'red';
+                    result['text'] = Ext.String.htmlEncode(data['errorMsg']);
+                    result['title'] = 'Failed';
+                } else {
+                    result['status'] = 'Failed';
+                }
+            }
+            return result;
+        },
+        notification: function(data) {
+            return {status: data['enabled'] == 1 ? 'Enabled' : 'Disabled'};
+        }
+
+    }
+});
+
+Ext.define('Ext.chart.theme.Scalr', {
+    extend: 'Ext.chart.theme.Base',
+    constructor: function(config) {
+        config = Ext.apply(config || {}, {
+            axis: {
+                stroke: '#eaf0f4',
+                'stroke-width': 1
+            }
+        });
+        this.callParent([config]);
+    }
+});
+
+Ext.define('Ext.chart.theme.ScalrDark', {
+    extend: 'Ext.chart.theme.Base',
+    constructor: function(config) {
+        config = Ext.apply(config || {}, {
+            axis: {
+                stroke: '#cad6df',
+                'stroke-width': 1
+            }
+        });
+        this.callParent([config]);
     }
 });

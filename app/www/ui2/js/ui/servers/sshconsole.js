@@ -1,15 +1,27 @@
 Scalr.regPage('Scalr.ui.servers.sshconsole', function (loadParams, moduleParams) {
-	return Ext.create('Ext.form.Panel', {
+    var panel = Ext.create('Ext.form.Panel', {
 		scalrOptions: {
-			'maximize': 'all'
+			maximize: 'all',
+            reload: false
 		},
-		title: 'Servers &raquo; ' + moduleParams['serverId'] + ' &raquo; SSH console',
+		title: 'Servers &raquo; ' + moduleParams['serverId'] + ' &raquo; SSH Launcher',
 		tools: [{
 			type: 'close',
 			handler: function () {
 				Scalr.event.fireEvent('close');
 			}
 		}],
+        listeners: {
+            hide: function() {
+                this.close();
+            },
+            activate: function() {
+                this.down('#sshConsoleWrap').show();
+            },
+            deactivate: function(){
+                this.down('#sshConsoleWrap').hide();
+            }
+        },
 
 		layout: {
 			type: 'vbox',
@@ -17,51 +29,75 @@ Scalr.regPage('Scalr.ui.servers.sshconsole', function (loadParams, moduleParams)
 			pack: 'start'
 		},
 		items: [{
-			height: 30,
-			border: false,
-			bodyStyle: 'background-color: inherit',
-			html:
-				'IP: ' + moduleParams['remoteIp'] + ' &nbsp; Internal IP: ' + moduleParams['localIp'] + '<br />' +
-				'Farm: ' + moduleParams['farmName'] + ' (ID: ' + moduleParams['farmId'] + ') ' + 'Role: ' + moduleParams['roleName'] + ' #'+ moduleParams['serverIndex'] +'<br /><br />'
+            xtype: 'container',
+            margin: '6 0 0 12',
+            defaults: {
+                margin: 0,
+                labelWidth: 70
+            },
+            items: [{
+                xtype: 'displayfield',
+                fieldLabel: 'IP',
+                value: moduleParams['remoteIp']
+            },{
+                xtype: 'displayfield',
+                fieldLabel: 'Internal IP',
+                value: moduleParams['localIp']
+            },{
+                xtype: 'displayfield',
+                fieldLabel: 'Farm',
+                value: '<a href="#/farms/view?farmId='+moduleParams['farmId']+'">' + moduleParams['farmName'] + '</a> (ID: ' + moduleParams['farmId'] + ')'
+            },{
+                xtype: 'displayfield',
+                fieldLabel: 'Role',
+                value: moduleParams['roleName'] + ' #'+ moduleParams['serverIndex']
+            }]
 		}, {
+            xtype: 'component',
+            itemId: 'sshConsoleWrap',
 			flex: 1,
-			border: false,
-			bodyStyle: 'background-color: inherit',
 			layout: 'fit',
-			html: 'Loading, please wait ...',
+            margin: '12 0 0 0',
+			html: '<span style="margin:12px">Loading, please wait ...</span>',
+            refreshApplet: function(params) {
+                this.show();
+                this.el.update(
+                    '<object ' +
+                        'code="com.scalr.ssh.launcher.SSHLauncherApplet" ' +
+                        'archive="/ui2/java/ssh-launcher.jar" ' +
+                        'type="application/x-java-applet" ' +
+                        'width="100%" height="100%">' +
+                            '<param name="cache_archive" VALUE="/ui2/java/ssh-launcher.jar">' +
+                            '<param name="cache_version" VALUE="0.12.0">' +
+                            '<param name="host" value="' + params['remoteIp'] + '">' +
+                            '<param name="port" value="' + params['ssh.console.port'] + '">' +
+                            '<param name="user" value="' + params['ssh.console.username'] + '">' +
+                            '<param name="sshKeyName" value="' + params['ssh.console.key_name'] + '">' +
+                            '<param name="sshPrivateKey" value="' + params['ssh.console.key'] + '">' +
+                            '<param name="puttyPrivateKey" value="' +  params['ssh.console.putty_key'] + '">' +
+                            '<param name="ignoreHostKeys" value="1">' +
+                            '<param name="logLevel" value="' +  params['ssh.console.log_level'] + '">' +
+                            '<param name="disableKeyAuth" value="' +  params['ssh.console.disable_key_auth'] + '">' +
+                            (params['ssh.console.preferred_provider'] ? '<param name="preferredProvider" value="'+params['ssh.console.preferred_provider']+'">' : '')+
+                    '</object>'
+                );
+            },
 			listeners: {
-				boxready: function () {
-					Ext.Function.defer(function() {
-						if (this.body)
-							this.body.update(
-								'<object ' +
-									'code="com.mindbright.application.MindTerm" ' +
-									'archive="/ui2/java/mindterm3.2.jar" ' +
-									'type="application/x-java-applet" ' +
-									'width="' + this.body.getWidth() + '" height="' + this.body.getHeight() + '">' +
-										'<param name="sepframe" value="false">' +
-										'<param name="debug" value="false">' +
-										'<param name="quiet" value="true">' +
-										'<param name="menus" value="no">' +
-										'<param name="exit-on-logout" value="true">' +
-										'<param name="allow-new-server" value="false">' +
-										'<param name="savepasswords" value="false">' +
-										'<param name="verbose" value="false">' +
-										'<param name="useAWT" value="false">' +
-										'<param name="protocol" value="ssh2">' +
-										'<param name="server" value="' + moduleParams['remoteIp'] + '">' +
-										'<param name="port" value="' + moduleParams['port'] + '">' +
-										'<param name="username" value="' + moduleParams['username'] + '">' +
-										'<param name="auth-method" value="publickey">' +
-										'<param name="fg-color" value="white">' +
-										'<param name="bg-color" value="black">' +
-										'<param name="private-key-str" value="' + moduleParams['key'] + '">' +
-										'<param name="geometry" value="125x35">' +
-								'</object>'
-							);
-					}, 3000, this);
+				boxready: function() {
+                    this.el.setVisibilityMode(Ext.Element.OFFSETS);
+                    this.refreshApplet(moduleParams);
 				}
 			}
-		}]
+
+        }],
+		dockedItems: [{
+            dock: 'top',
+			xtype: 'displayfield',
+            hidden: !Ext.isSafari,
+			cls: 'x-form-field-info x-form-field-info-fit',
+			value: 'Safari users need to allow applet to work with filesystem. <a target="_blank" href="https://scalr-wiki.atlassian.net/wiki/x/WYB1">More info</a>'
+        }]
 	});
+
+    return panel;
 });

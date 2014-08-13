@@ -5,11 +5,13 @@ namespace Scalr\Upgrade;
 use Scalr\Upgrade\Entity\MysqlUpgradeEntity;
 use Scalr\Upgrade\Entity\FilesystemUpgradeEntity;
 use Scalr\Upgrade\Entity\AbstractUpgradeEntity;
+use Scalr\Model\Entity\SettingEntity;
+use \DateTime, DateTimeZone;
 use Scalr\Exception;
-use \FilesystemIterator;
-use \RegexIterator;
 
 define('FS_STORAGE_PATH', CACHEPATH . '/upgrades/');
+
+define('UPGRADE_PID_FILEPATH', CACHEPATH . '/upgrade.pid');
 
 /**
  * UpgradeHandler
@@ -127,14 +129,16 @@ class UpgradeHandler
     }
 
     /**
-     * Fetches statuses of the previous updates
+     * Getches statuses of the previous updates for specified database service
+     * from container
+     *
+     * @param   string $service  Service name for database connection in DI container
      */
-    private function fetchStatusBefore()
+    private function fetchMysqlStatusBefore($service = 'adodb')
     {
-        $this->stateBefore = new \ArrayObject();
-
+        $db = \Scalr::getContainer()->{$service};
         //Loads performed updates of MYSQL type
-        $rs = $this->db->Execute("
+        $rs = $db->Execute("
             SELECT LOWER(HEX(u.`uuid`)) `uuid`, u.`released`, u.`appears`, u.`applied`, u.`status`, LOWER(HEX(u.`hash`)) `hash`
             FROM `" . self::DB_TABLE_UPGRADES . "` u
         ");
@@ -144,6 +148,28 @@ class UpgradeHandler
             $this->stateBefore[$rec['uuid']] = $entity;
             if (isset($entity->appears) && $this->maxDate < $entity->appears) {
                 $this->maxDate = $entity->appears;
+            }
+        }
+    }
+
+    /**
+     * Fetches statuses of the previous updates
+     */
+    private function fetchStatusBefore()
+    {
+        $this->stateBefore = new \ArrayObject();
+
+        $this->fetchMysqlStatusBefore('adodb');
+
+        if (\Scalr::getContainer()->analytics->enabled) {
+            try {
+                $this->fetchMysqlStatusBefore('cadb');
+            } catch (\Exception $e) {
+                if (preg_match('~connect|upgrades. doesn.t exist~i', $e->getMessage())) {
+                    //Database may not exist because of creating from some update
+                } else {
+                    throw $e;
+                }
             }
         }
 
@@ -235,15 +261,29 @@ class UpgradeHandler
             ));
         }
 
+        $refuseReason = $upd->isRefused();
+
+        if (false !== $refuseReason) {
+            if ($this->opt->verbosity) {
+                $this->console->notice('%s is ignored. %s', $upd->getName(), (string)$refuseReason);
+            }
+            return true;
+        }
+
         if ($upd->getStatus() == AbstractUpgradeEntity::STATUS_OK) {
             //Upgrade file is updated.
             $upd->updateAppears();
             //Compare checksum
             if ($upd->getEntity()->hash == $upd->getHash()) {
-                if (isset($this->opt->cmd) && $this->opt->cmd == self::CMD_RUN_SPECIFIC &&
-                    $this->opt->uuid == $upd->getUuidHex()) {
-                    $this->console->warning('Nothing to do. %s has complete status.', $upd->getName());
+                if (!empty($this->opt->verbosity) ||
+                    isset($this->opt->cmd) && $this->opt->cmd == self::CMD_RUN_SPECIFIC && $this->opt->uuid == $upd->getUuidHex()) {
+                    $this->console->warning('Ingnoring %s because of having complete status.', $upd->getName());
                 }
+                return true;
+            } if ($upd->getIgnoreChanges()) {
+                //We should ignore changes in the script and update hash
+                $upd->updateHash();
+                $upd->getEntity()->save();
                 return true;
             } else {
                 //Update script has been changed and needs to be re-executed
@@ -363,15 +403,101 @@ class UpgradeHandler
     }
 
     /**
+     * Checks and creates pid file
+     *
+     * @return boolean Returns false if process has already been started or creates a new pid file
+     */
+    public static function checkPid()
+    {
+        $dbScalr = \Scalr::getContainer()->adodb;
+
+        if (file_exists(UPGRADE_PID_FILEPATH) && ($pid = file_get_contents(UPGRADE_PID_FILEPATH)) > 0 && !self::isOutdatedPid(trim($pid))) {
+            return false;
+        }
+
+        foreach ([['adodb', 'Scalr\Model\Entity\SettingEntity'], ['cadb', 'Scalr\Stats\CostAnalytics\Entity\SettingEntity']] as $p) {
+            if ($p[0] == 'cadb' && !\Scalr::getContainer()->analytics->enabled) continue;
+
+            try {
+                $db = \Scalr::getContainer()->{$p[0]};
+                $database = $db->getOne("SELECT DATABASE()");
+            } catch (\Exception $e) {
+                printf("\nCould not check pid file for %s service\n", $p[0]);
+                continue;
+            }
+
+            if ($db->getOne("SHOW TABLES FROM `" . $database . "` LIKE ?", ['settings'])) {
+                if (($pid = call_user_func($p[1] . '::getValue', SettingEntity::ID_UPGRADE_PID)) > 0 && !self::isOutdatedPid($pid)) {
+                    return false;
+                }
+
+                call_user_func($p[1] . '::setValue', SettingEntity::ID_UPGRADE_PID, time());
+            }
+        }
+
+        file_put_contents(UPGRADE_PID_FILEPATH, time());
+        chmod(UPGRADE_PID_FILEPATH, 0666);
+
+        return true;
+    }
+
+    /**
+     * Checks if pid is outdated
+     *
+     * @param   string    $timestamp
+     * @return  boolean   Returns true if current pid is outdated
+     */
+    private static function isOutdatedPid($timestamp)
+    {
+        if (!is_numeric($timestamp)) return true;
+        $date = new DateTime('@' . $timestamp, new DateTimeZone('UTC'));
+        return $date->diff(new DateTime('now', new DateTimeZone('UTC')), true)->days > 0;
+    }
+
+
+    /**
+     * Removes pid
+     */
+    public static function removePid()
+    {
+        if (file_exists(UPGRADE_PID_FILEPATH)) {
+            unlink(UPGRADE_PID_FILEPATH);
+        }
+
+        //!TODO get rid of code duplication
+        foreach ([['adodb', 'Scalr\Model\Entity\SettingEntity'], ['cadb', 'Scalr\Stats\CostAnalytics\Entity\SettingEntity']] as $p) {
+            if ($p[0] == 'cadb' && !\Scalr::getContainer()->analytics->enabled) continue;
+            try {
+                $db = \Scalr::getContainer()->{$p[0]};
+                $database = $db->getOne("SELECT DATABASE()");
+            } catch (\Exception $e) {
+                printf("\nCould not remove pid file for %s service\n", $p[0]);
+                continue;
+            }
+
+            if ($db->getOne("SHOW TABLES FROM `" . $database . "` LIKE ?", ['settings'])) {
+                call_user_func($p[1] . '::setValue', SettingEntity::ID_UPGRADE_PID, null);
+            }
+        }
+    }
+
+    /**
      * Runs upgrade process
      */
     public function run()
     {
+        if (!self::checkPid()) {
+            $this->console->warning("Cannot start a new process because another one has already been started.");
+            return;
+        }
+
+        register_shutdown_function('Scalr\Upgrade\UpgradeHandler::removePid');
+
         //Loads updates
         $this->loadUpdates();
 
         if (isset($this->opt->cmd) && $this->opt->cmd == self::CMD_RUN_SPECIFIC) {
-            $pending = array();
+            $pending = [];
             if (!isset($this->updates[$this->opt->uuid])) {
                 $this->console->warning("Could not find specified update %s", $this->opt->uuid);
                 exit();
@@ -382,9 +508,18 @@ class UpgradeHandler
             $pending = $this->updates->getPendingUpdates($dt->getTimestamp());
         }
 
+        if (count($pending) == 0) {
+            $this->console->out('Anything has been found');
+            return;
+        }
+
+        $this->console->success('Starting scalr upgrade');
+
         //Applies updates
         foreach ($pending as $update) {
             $this->applyUpdate($update);
         }
+
+        $this->console->success('Finishing scalr upgrade');
     }
 }

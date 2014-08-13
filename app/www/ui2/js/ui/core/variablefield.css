@@ -16,6 +16,18 @@
 	margin-bottom: 5px;
 }
 
+.scalr-ui-variablefield-scope-scalr {
+    background: #4567CB;
+    border-radius: 2px;
+    box-shadow: 0 1px rgba(255, 255, 255, 0.6);
+}
+
+.scalr-ui-variablefield-scope-account {
+    background: #DA6BE7;
+    border-radius: 2px;
+    box-shadow: 0 1px rgba(255, 255, 255, 0.6);
+}
+
 .scalr-ui-variablefield-scope-env {
 	background: #FCA503;
 	border-radius: 2px;
@@ -54,3 +66,201 @@
 .scalr-ui-variablefield-btn-autohide:hover .x-btn-action-small {
     visibility: inherit;
 }
+
+.scalr-ui-variablefield-mark .x-form-display-field {
+    font-weight: bold;
+    color: black;
+}
+
+
+
+/*  NEW CLASS */
+.scalr-ui-variablefield-grid {
+    margin-right: 20px;
+}
+
+.scalr-ui-variablefield-grid-expanded {
+    margin-right: 320px;
+}
+
+.scalr-ui-variablefield-grid .x-grid-row .action {
+    display: none;
+}
+
+.scalr-ui-variablefield-grid .x-grid-row-over .action {
+    display: block;
+}
+
+.scalr-ui-variablefield-grid .x-grid-row .selected {
+    display: block;
+}
+
+.scalr-ui-variablefield-flag-final, .scalr-ui-variablefield-flag-required, .scalr-ui-variablefield-flag-hidden, .scalr-ui-variablefield-action-ext, .scalr-ui-variablefield-action-delete {
+    float: left;
+    width: 26px;
+    height: 26px;
+    cursor: pointer;
+}
+
+/* flag final */
+.scalr-ui-variablefield-flag-final {
+    background: url('/ui2/images/widget/variablefield/flags-sprite.png') no-repeat 0 0;
+}
+
+.scalr-ui-variablefield-flag-final.pressed {
+    background-position: -26px 0;
+}
+
+.scalr-ui-variablefield-flag-final.disabled {
+    background-position: -52px 0;
+    cursor: default;
+}
+
+.scalr-ui-variablefield-flag-final.disabled.pressed {
+    background-position: -78px 0;
+}
+
+/* flag hidden */
+.scalr-ui-variablefield-flag-hidden {
+    background: url('/ui2/images/widget/variablefield/flags-sprite.png') no-repeat 0 -26px;
+}
+
+.scalr-ui-variablefield-flag-hidden.pressed {
+    background-position: -26px -26px;
+}
+
+.scalr-ui-variablefield-flag-hidden.disabled {
+    background-position: -52px -26px;
+    cursor: default;
+}
+
+.scalr-ui-variablefield-flag-hidden.disabled.pressed {
+    background-position: -78px -26px;
+}
+
+/* flag required */
+.scalr-ui-variablefield-flag-required {
+    background: url('/ui2/images/widget/variablefield/scope-sprite.png') no-repeat 0 0;
+}
+
+.scalr-ui-variablefield-flag-required.scope-environment {
+    background-position: 0 0;
+}
+
+.scalr-ui-variablefield-flag-required.scope-farm {
+    background-position: 0 -26px;
+}
+
+.scalr-ui-variablefield-flag-required.scope-role {
+    background-position: 0 -52px;
+}
+
+.scalr-ui-variablefield-flag-required.scope-farmrole {
+    background-position: 0 -78px;
+}
+
+.scalr-ui-variablefield-flag-required.scope-account {
+    background-position: 0 -104px;
+}
+
+/* flag required pressed */
+.scalr-ui-variablefield-flag-required.scope-environment.pressed {
+    background-position: -26px 0;
+}
+
+.scalr-ui-variablefield-flag-required.scope-farm.pressed {
+    background-position: -26px -26px;
+}
+
+.scalr-ui-variablefield-flag-required.scope-role.pressed {
+    background-position: -26px -52px;
+}
+
+.scalr-ui-variablefield-flag-required.scope-farmrole.pressed {
+    background-position: -26px -78px;
+}
+
+.scalr-ui-variablefield-flag-required.scope-account.pressed {
+    background-position: -26px -104px;
+}
+
+/* flag required disabled */
+.scalr-ui-variablefield-flag-required.disabled {
+    cursor: default;
+    background-position: -52px 0;
+}
+
+.scalr-ui-variablefield-flag-required.disabled.pressed {
+    background-position: -78px 0;
+}
+
+.scalr-ui-variablefield-action-ext, .scalr-ui-variablefield-action-delete {
+    background: url('/ui2/images/widget/variablefield/actions-sprite.png') no-repeat;
+    width: 15px;
+}
+
+.scalr-ui-variablefield-action-ext:hover {
+    background-position: -15px 0;
+}
+
+.scalr-ui-variablefield-action-ext:active {
+    background-position: -30px 0;
+}
+
+.scalr-ui-variablefield-action-ext.pressed {
+    background-position: -30px 0;
+}
+
+.scalr-ui-variablefield-action-ext.disabled {
+    background-position: -45px 0;
+    cursor: default;
+}
+
+.scalr-ui-variablefield-action-delete {
+    background-position: 0 -26px;
+}
+
+.scalr-ui-variablefield-action-delete:hover {
+    background-position: -15px -26px;
+}
+
+.scalr-ui-variablefield-action-delete:active {
+    background-position: -30px -26px;
+}
+
+.scalr-ui-variablefield-action-delete.disabled {
+    background-position: -45px -26px;
+    cursor: default;
+}
+
+.scalr-ui-variablefield-scopemarker {
+    height: 26px;
+    width: 6px;
+    float: left;
+    margin: 0 4px 0 -10px;
+}
+
+.scalr-ui-variablefield-scopemarker-scalr {
+    background: #4567CB;
+}
+
+.scalr-ui-variablefield-scopemarker-account {
+    background: #DA6BE7;
+}
+
+.scalr-ui-variablefield-scopemarker-env {
+    background: #FCA503;
+}
+
+.scalr-ui-variablefield-scopemarker-role {
+    background: #7CBFE7;
+}
+
+.scalr-ui-variablefield-scopemarker-farm {
+    background: #0F9104;
+}
+
+.scalr-ui-variablefield-scopemarker-farmrole {
+    background: #D90000;
+}
+

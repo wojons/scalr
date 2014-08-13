@@ -11,7 +11,10 @@ use Scalr\Service\OpenStack\Services\AbstractServiceHandler;
  * @author   Vitaliy Demidov  <vitaliy@scalr.com>
  * @since    14.12.2012
  *
- * @method   array  list()       list($serverId = null)        Gets the list of Security Groups.
+ * @method   \Scalr\Service\OpenStack\Type\DefaultPaginationList list()
+ *           list($serverId = null)
+ *           Gets the list of Security Groups.
+ *
  * @method   object create()     create($name, $description)   Creates a new secrurity group.
  * @method   object get()        get($groupId)                 Gets a specific security group.
  * @method   bool   delete()     delete($groupId)              Deletes a specific security group.

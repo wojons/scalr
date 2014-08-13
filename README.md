@@ -1,7 +1,7 @@
 README
 ======
 
-**Version**: 4.5
+**Version**: 5.0
 
 **Compatibility**: php 5.4+
 
@@ -20,6 +20,7 @@ Features
 * Pre-automated software, such as nginx, Apache, MySQL, Redis, MongoDB, and RabbitMQ
 * Blazing fast UI
 * Multi-cloud
+* Cost Analytics (It is possible to track and budget the Costs of Public and Private Cloud Resources)
 * More at [Product][2]
 
 Installation

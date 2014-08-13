@@ -5,7 +5,6 @@ final class SERVER_PLATFORMS
     const EC2		= 'ec2';
     const RACKSPACE = 'rackspace';
     const EUCALYPTUS= 'eucalyptus';
-    const NIMBULA	= 'nimbula';
     const GCE		= 'gce';
 
     // Openstack based
@@ -13,6 +12,7 @@ final class SERVER_PLATFORMS
     const ECS = 'ecs';
     const OCS = 'ocs';
     const NEBULA = 'nebula';
+    const CONTRAIL = 'contrail';
 
 
     const RACKSPACENG_US = 'rackspacengus';
@@ -22,24 +22,28 @@ final class SERVER_PLATFORMS
     // Cloudstack based
     const CLOUDSTACK = 'cloudstack';
     const IDCF		= 'idcf';
+
+    //Deprecated
     const UCLOUD	= 'ucloud';
+    const NIMBULA	= 'nimbula';
 
 
     public static function GetList()
     {
         return array(
             self::EC2 			=> 'Amazon EC2',
-            self::GCE			=> 'Google CE',
+            self::GCE			=> 'Google Compute Engine',
             self::EUCALYPTUS 	=> 'Eucalyptus',
-            self::RACKSPACE		=> 'Rackspace',
+            self::RACKSPACE		=> 'Legacy Rackspace',
             self::NIMBULA		=> 'Nimbula',
             self::CLOUDSTACK	=> 'Cloudstack',
             self::OPENSTACK		=> 'Openstack',
             self::IDCF			=> 'IDC Frontier',
-            self::UCLOUD		=> 'KT uCloud',
-            self::RACKSPACENG_US=> 'Rackspace Open Cloud (US)',
-            self::RACKSPACENG_UK=> 'Rackspace Open Cloud (UK)',
+            ///self::UCLOUD		=> 'KT uCloud',
+            self::RACKSPACENG_US=> 'Rackspace',
+            self::RACKSPACENG_UK=> 'Rackspace UK',
             self::ECS           => 'Enter Cloud Suite',
+            self::CONTRAIL      => 'Contrail',
             self::OCS           => 'CloudScaling',
             self::NEBULA        => 'Nebula',
         );

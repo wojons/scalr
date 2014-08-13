@@ -2,8 +2,6 @@
 
 namespace Scalr\Service\Aws\Ec2\DataType;
 
-use Scalr\Service\Aws\DataType\ListDataType;
-use Scalr\Service\Aws\Ec2Exception;
 use Scalr\Service\Aws\Ec2\AbstractEc2DataType;
 
 /**
@@ -78,6 +76,14 @@ class InstanceNetworkInterfaceSetRequestData extends AbstractEc2DataType
     public $secondaryPrivateIpAddressCount;
 
     /**
+     * Indicates whether to assign a public IP address to an instance in a VPC.
+     * The public IP address is assigned to a specific network interface.
+     *
+     * @var bool
+     */
+    public $associatePublicIpAddress;
+
+    /**
      * Sets SecurityGroupId list
      *
      * @param   SecurityGroupIdSetList|SecurityGroupIdSetData|array $securityGroupId
@@ -90,7 +96,6 @@ class InstanceNetworkInterfaceSetRequestData extends AbstractEc2DataType
         }
         return $this->__call(__FUNCTION__, array($securityGroupId));
     }
-
 
     /**
      * Sets PrivateIpAddresses list

@@ -13,6 +13,17 @@ class BehaviorEventObserver extends EventObserver
         }
     }
 
+    public function OnRebootComplete(RebootCompleteEvent $event) {
+        $dbServer = $event->DBServer;
+        if ($dbServer->IsSupported('0.23.0')) {
+            try {
+                $hostname = $dbServer->scalarizr->system->getHostname();
+            } catch (Exception $e) {}
+            if ($hostname)
+                $dbServer->SetProperty(Scalr_Role_Behavior::SERVER_BASE_HOSTNAME, $hostname);
+        }
+    }
+
     public function OnFarmTerminated(FarmTerminatedEvent $event)
     {
         $dbFarm = DBFarm::LoadByID($this->FarmID);

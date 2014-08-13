@@ -3,7 +3,6 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.snapshots', function (loadParams, modulePa
 		fields: [ 'id','name','storage','idtcreated','avail_zone','engine','status','port','dtcreated' ],
 		proxy: {
 			type: 'scalr.paging',
-			extraParams: loadParams,
 			url: '/tools/aws/rds/snapshots/xListSnapshots/'
 		},
 		remoteSort: true
@@ -15,7 +14,6 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.snapshots', function (loadParams, modulePa
 			'reload': false,
 			'maximize': 'all'
 		},
-		scalrReconfigureParams: {},
 		store: store,
 		stateId: 'grid-tools-aws-rds-snapshots-view',
 		stateful: true,
@@ -41,11 +39,11 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.snapshots', function (loadParams, modulePa
 			{ header: "Placement", width: 150, dataIndex: 'avail_zone', sortable: false },
 			{ header: "Engine", width: 150, dataIndex: 'engine', sortable: false },
 			{
-				xtype: 'optionscolumn',
-				optionsMenu: [{
+				xtype: 'optionscolumn2',
+				menu: [{
 					text: 'Restore DB instance from this snapshot',
-					menuHandler: function (item) {
-						document.location.href = '#/tools/aws/rds/instances/restore?snapshot=' + item.record.get('name') + '&cloudLocation=' + store.proxy.extraParams.cloudLocation;
+					menuHandler: function (data) {
+						document.location.href = '#/tools/aws/rds/instances/restore?snapshot=' + data['name'] + '&cloudLocation=' + store.proxy.extraParams.cloudLocation;
 					}
 				}]
 			}
@@ -112,8 +110,7 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.snapshots', function (loadParams, modulePa
                     data: moduleParams.locations,
                     proxy: 'object'
                 },
-                gridStore: store,
-                cloudLocation: loadParams['cloudLocation'] || ''
+                gridStore: store
             }]
         }]
 	});

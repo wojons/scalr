@@ -1,10 +1,11 @@
 Scalr.regPage('Scalr.ui.core.variables', function (loadParams, moduleParams) {
 	return Ext.create('Ext.form.Panel', {
-		width: 1000,
-		title: 'Global variables',
+		width: 1300,
+		title: 'Environment global variables',
 		fieldDefaults: {
 			labelWidth: 110
 		},
+        layout: 'auto',
 		items: [{
 			xtype: 'fieldset',
             cls: 'x-fieldset-separator-none',

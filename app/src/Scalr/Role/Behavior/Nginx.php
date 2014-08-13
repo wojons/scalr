@@ -30,11 +30,11 @@
 
             switch (get_class($message))
             {
-            	case "Scalr_Messaging_Msg_HostInitResponse":
+                case "Scalr_Messaging_Msg_HostInitResponse":
 
-            	    $message->www = $this->getConfiguration($dbServer);
+                    $message->www = $this->getConfiguration($dbServer);
 
-            	    break;
+                    break;
             }
 
             return $message;

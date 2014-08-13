@@ -238,8 +238,8 @@
                 $volumeConfig->type = $dbFarmRole->GetSetting(static::ROLE_DATA_STORAGE_ENGINE);
 
                 switch ($volumeConfig->type) {
-                	case MYSQL_STORAGE_ENGINE::EPH:
-                	    if ($dbFarmRole->Platform == SERVER_PLATFORMS::RACKSPACE) {
+                    case MYSQL_STORAGE_ENGINE::EPH:
+                        if ($dbFarmRole->Platform == SERVER_PLATFORMS::RACKSPACE) {
                             $storageProvider = 'cf';
 
                             $volumeConfig->disk = new stdClass();
@@ -277,11 +277,11 @@
                             $this->behavior
                         );
                         $volumeConfig->vg = $this->behavior;
-                	    break;
+                        break;
 
-                	default:
-                	    $volumeConfig->size = $dbFarmRole->GetSetting(static::ROLE_DATA_STORAGE_EBS_SIZE);
-                	    break;
+                    default:
+                        $volumeConfig->size = $dbFarmRole->GetSetting(static::ROLE_DATA_STORAGE_EBS_SIZE);
+                        break;
                 }
             }
 

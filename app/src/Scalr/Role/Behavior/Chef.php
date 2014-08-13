@@ -14,6 +14,7 @@ class Scalr_Role_Behavior_Chef extends Scalr_Role_Behavior implements Scalr_Role
     const ROLE_CHEF_COOKBOOK_URL_TYPE   = 'chef.cookbook_url_type';
     const ROLE_CHEF_SSH_PRIVATE_KEY     = 'chef.ssh_private_key';
     const ROLE_CHEF_RELATIVE_PATH       = 'chef.relative_path';
+    const ROLE_CHEF_LOG_LEVEL           = 'chef.log_level';
 
     /**
      * @deprecated
@@ -47,66 +48,68 @@ class Scalr_Role_Behavior_Chef extends Scalr_Role_Behavior implements Scalr_Role
     }
 
     public function onBeforeHostTerminate(DBServer $dbServer) {
+        $nodeName = $dbServer->GetProperty(self::SERVER_CHEF_NODENAME);
         $config = $this->getConfiguration($dbServer);
-        if ($config->nodeName) {
-            $this->removeNodeFromChefServer($dbServer, $config);
+        if (!empty($nodeName) && isset($config->serverUrl)) {
+            $this->removeNodeFromChefServer($dbServer, $config, $nodeName);
             $dbServer->SetProperty(self::SERVER_CHEF_NODENAME, "");
         }
     }
 
     public function onHostDown(DBServer $dbServer) {
+        $nodeName = $dbServer->GetProperty(self::SERVER_CHEF_NODENAME);
         $config = $this->getConfiguration($dbServer);
-        if ($config->nodeName) {
-            $this->removeNodeFromChefServer($dbServer, $config);
+        if (!empty($nodeName) && isset($config->serverUrl)) {
+            $this->removeNodeFromChefServer($dbServer, $config, $nodeName);
             $dbServer->SetProperty(self::SERVER_CHEF_NODENAME, "");
         }
     }
 
-    private function removeNodeFromChefServer(DBServer $dbServer, $config)
+    private function removeNodeFromChefServer(DBServer $dbServer, $config, $nodeName)
     {
-        $chefServerId = $dbServer->GetFarmRoleObject()->GetSetting(self::ROLE_CHEF_SERVER_ID);
-        $chefServerInfo = $this->db->GetRow("SELECT * FROM services_chef_servers WHERE id=?", array($chefServerId));
+        $chefSettings = $dbServer->GetFarmRoleObject()->getChefSettings();
+        $chefServerInfo = $this->db->GetRow("SELECT * FROM services_chef_servers WHERE id=?", array($chefSettings[self::ROLE_CHEF_SERVER_ID]));
         $chefServerInfo['auth_key'] = trim($this->getCrypto()->decrypt($chefServerInfo['auth_key'], $this->cryptoKey));
 
-        $chefClient = Scalr_Service_Chef_Client::getChef($chefServerInfo['url'], $chefServerInfo['username'], trim($chefServerInfo['auth_key']));
+        $chefClient = Scalr_Service_Chef_Client::getChef($config->serverUrl, $chefServerInfo['username'], trim($chefServerInfo['auth_key']));
 
         try {
-            $status = $chefClient->removeNode($config->nodeName);
+            $status = $chefClient->removeNode($nodeName);
             if ($status) {
                 Logger::getLogger(LOG_CATEGORY::FARM)->warn(new FarmLogMessage(
                     $dbServer->farmId,
-                    sprintf("Chef node '%s' removed from chef server", $config->nodeName)
+                    sprintf("Chef node '%s' removed from chef server", $nodeName)
                 ));
             } else {
                 Logger::getLogger(LOG_CATEGORY::FARM)->error(new FarmLogMessage(
                     $dbServer->farmId,
-                    sprintf("Unable to remove chef node '%s' from chef server: %s", $config->nodeName, $status)
+                    sprintf("Unable to remove chef node '%s' from chef server: %s", $nodeName, $status)
                 ));
             }
         } catch (Exception $e) {
             Logger::getLogger(LOG_CATEGORY::FARM)->error(new FarmLogMessage(
                 $dbServer->farmId,
-                sprintf("Unable to remove chef node '%s' from chef server: %s", $config->nodeName, $e->getMessage())
+                sprintf("Unable to remove chef node '%s' from chef server: %s", $nodeName, $e->getMessage())
             ));
         }
 
         try {
-            $status2 = $chefClient->removeClient($config->nodeName);
+            $status2 = $chefClient->removeClient($nodeName);
             if ($status2) {
                 Logger::getLogger(LOG_CATEGORY::FARM)->warn(new FarmLogMessage(
                     $dbServer->farmId,
-                    sprintf("Chef client '%s' removed from chef server", $config->nodeName)
+                    sprintf("Chef client '%s' removed from chef server", $nodeName)
                 ));
             } else {
                 Logger::getLogger(LOG_CATEGORY::FARM)->error(new FarmLogMessage(
                     $dbServer->farmId,
-                    sprintf("Unable to remove chef client '%s' from chef server: %s", $config->nodeName, $status2)
+                    sprintf("Unable to remove chef client '%s' from chef server: %s", $nodeName, $status2)
                 ));
             }
         } catch (Exception $e) {
             Logger::getLogger(LOG_CATEGORY::FARM)->error(new FarmLogMessage(
                 $dbServer->farmId,
-                sprintf("Unable to remove chef node '%s' from chef server: %s", $config->nodeName, $e->getMessage())
+                sprintf("Unable to remove chef node '%s' from chef server: %s", $nodeName, $e->getMessage())
             ));
         }
     }
@@ -128,74 +131,58 @@ class Scalr_Role_Behavior_Chef extends Scalr_Role_Behavior implements Scalr_Role
             case "Scalr_Messaging_Msg_HostUp":
                 $dbServer->SetProperty(self::SERVER_CHEF_NODENAME, $message->chef->nodeName);
                 break;
+
+            case "Scalr_Messaging_Msg_HostUpdate":
+                $dbServer->SetProperty(self::SERVER_CHEF_NODENAME, $message->chef->nodeName);
+                break;
         }
     }
 
     public function getConfiguration(DBServer $dbServer) {
         $configuration = new stdClass();
-        $dbFarmRole = $dbServer->GetFarmRoleObject();
+        $chefSettings = $dbServer->GetFarmRoleObject()->getChefSettings();
 
-        if (!$dbFarmRole->GetSetting(self::ROLE_CHEF_BOOTSTRAP))
+        if (empty($chefSettings[self::ROLE_CHEF_BOOTSTRAP]))
             return $configuration;
 
-        $jsonAttributes = $dbFarmRole->GetSetting(self::ROLE_CHEF_ATTRIBUTES);
-        $chefCookbookUrl = $dbFarmRole->GetSetting(self::ROLE_CHEF_COOKBOOK_URL);
-        if ($chefCookbookUrl) {
-            $configuration->cookbookUrl = $chefCookbookUrl;
-            $configuration->runList = $dbFarmRole->GetSetting(self::ROLE_CHEF_RUNLIST);
-            $configuration->cookbookUrlType = $dbFarmRole->GetSetting(self::ROLE_CHEF_COOKBOOK_URL_TYPE);
-            $configuration->sshPrivateKey = $dbFarmRole->GetSetting(self::ROLE_CHEF_SSH_PRIVATE_KEY);
-            $configuration->relativePath = $dbFarmRole->GetSetting(self::ROLE_CHEF_RELATIVE_PATH);
+        $jsonAttributes = $chefSettings[self::ROLE_CHEF_ATTRIBUTES];
+        if (!empty($chefSettings[self::ROLE_CHEF_COOKBOOK_URL])) {
+            $configuration->cookbookUrl = $chefSettings[self::ROLE_CHEF_COOKBOOK_URL];
+            $configuration->runList = $chefSettings[self::ROLE_CHEF_RUNLIST];
+            $configuration->cookbookUrlType = $chefSettings[self::ROLE_CHEF_COOKBOOK_URL_TYPE];
+            $configuration->sshPrivateKey = isset($chefSettings[self::ROLE_CHEF_SSH_PRIVATE_KEY]) ? $chefSettings[self::ROLE_CHEF_SSH_PRIVATE_KEY] : false;
+            $configuration->relativePath = isset($chefSettings[self::ROLE_CHEF_RELATIVE_PATH]) ? $chefSettings[self::ROLE_CHEF_RELATIVE_PATH] : false;
         } else {
 
             // Get chef server info
-            $chefServerId = $dbFarmRole->GetSetting(self::ROLE_CHEF_SERVER_ID);
-            $chefServerInfo = $this->db->GetRow("SELECT * FROM services_chef_servers WHERE id=?", array($chefServerId));
+            $chefServerInfo = $this->db->GetRow("SELECT * FROM services_chef_servers WHERE id=?", array($chefSettings[self::ROLE_CHEF_SERVER_ID]));
             $chefServerInfo['v_auth_key'] = trim($this->getCrypto()->decrypt($chefServerInfo['v_auth_key'], $this->cryptoKey));
 
             // Prepare node name
-            $configuration->nodeName = $dbServer->GetProperty(self::SERVER_CHEF_NODENAME);
+            $configuration->nodeName = $chefSettings[self::SERVER_CHEF_NODENAME];
             if (!$configuration->nodeName) {
-                $nodeNameTpl = $dbFarmRole->GetSetting(self::ROLE_CHEF_NODENAME_TPL);
-                if ($nodeNameTpl) {
-                    $params = $dbServer->GetScriptingVars();
-                    $keys = array_keys($params);
-                    $f = create_function('$item', 'return "%".$item."%";');
-                    $keys = array_map($f, $keys);
-                    $values = array_values($params);
-
-                    $configuration->nodeName = str_replace($keys, $values, $nodeNameTpl);
-
-                    //TODO: Add support for Global variables
-                }
+                $nodeNameTpl = $chefSettings[self::ROLE_CHEF_NODENAME_TPL];
+                if ($nodeNameTpl)
+                    $configuration->nodeName = $dbServer->applyGlobalVarsToValue($nodeNameTpl);
             }
 
             $configuration->serverUrl = $chefServerInfo['url'];
             $configuration->validatorName = $chefServerInfo['v_username'];
             $configuration->validatorKey = $chefServerInfo['v_auth_key'];
 
-            if ($dbFarmRole->GetSetting(self::ROLE_CHEF_ROLE_NAME))
-                $configuration->role = $dbFarmRole->GetSetting(self::ROLE_CHEF_ROLE_NAME);
+            if (!empty($chefSettings[self::ROLE_CHEF_ROLE_NAME]))
+                $configuration->role = $chefSettings[self::ROLE_CHEF_ROLE_NAME];
             else
-                $configuration->runList = $dbFarmRole->GetSetting(self::ROLE_CHEF_RUNLIST);
+                $configuration->runList = $chefSettings[self::ROLE_CHEF_RUNLIST];
 
-            $configuration->environment = $dbFarmRole->GetSetting(self::ROLE_CHEF_ENVIRONMENT);
-            $configuration->daemonize = $dbFarmRole->GetSetting(self::ROLE_CHEF_DAEMONIZE);
+            $configuration->environment = $chefSettings[self::ROLE_CHEF_ENVIRONMENT];
+            $configuration->daemonize = $chefSettings[self::ROLE_CHEF_DAEMONIZE];
         }
 
-        if ($jsonAttributes) {
-            $params = $dbServer->GetScriptingVars();
-            // Prepare keys array and array with values for replacement in script
-            $keys = array_keys($params);
-            $f = create_function('$item', 'return "%".$item."%";');
-            $keys = array_map($f, $keys);
-            $values = array_values($params);
-            $contents = str_replace($keys, $values, $jsonAttributes);
+        $configuration->logLevel = !$chefSettings[self::ROLE_CHEF_LOG_LEVEL] ? 'auto' : $chefSettings[self::ROLE_CHEF_LOG_LEVEL];
 
-            $configuration->jsonAttributes = str_replace('\%', "%", $contents);
-
-            //TODO: Add support for Global variables
-        }
+        if ($jsonAttributes)
+            $configuration->jsonAttributes = $dbServer->applyGlobalVarsToValue($jsonAttributes);
 
         return $configuration;
     }

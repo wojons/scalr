@@ -4,11 +4,9 @@ namespace Scalr\Service\Aws\Ec2\Handler;
 use Scalr\Service\Aws\Ec2\DataType\RegisterImageData;
 use Scalr\Service\Aws\Ec2\DataType\CreateImageRequestData;
 use Scalr\Service\Aws\Ec2\DataType\ImageFilterList;
-use Scalr\Service\Aws\Ec2\DataType\ImageData;
 use Scalr\Service\Aws\Ec2\DataType\ImageList;
 use Scalr\Service\Aws\DataType\ListDataType;
 use Scalr\Service\Aws\Client\ClientException;
-use Scalr\Service\Aws\DataType\ErrorData;
 use Scalr\Service\Aws\Ec2Exception;
 use Scalr\Service\Aws\Ec2\AbstractEc2Handler;
 

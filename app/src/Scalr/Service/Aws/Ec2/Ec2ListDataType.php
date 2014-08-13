@@ -25,10 +25,10 @@ class Ec2ListDataType extends ListDataType
     /**
      * Sets Amazon Ec2 service interface instance
      *
-     * @param   Aws\Ec2 $ec2 Ec2 service instance
+     * @param   \Scalr\Service\Aws\Ec2 $ec2 Ec2 service instance
      * @return  Ec2ListDataType
      */
-    public function setEc2(Aws\Ec2 $ec2 = null)
+    public function setEc2(\Scalr\Service\Aws\Ec2 $ec2 = null)
     {
         $this->_services[Aws::SERVICE_INTERFACE_EC2] = $ec2;
         if ($ec2 !== null) {
@@ -40,7 +40,7 @@ class Ec2ListDataType extends ListDataType
     /**
      * Gets Ec2 service interface instance
      *
-     * @return Aws\Ec2 Returns Ec2 service interface instance
+     * @return \Scalr\Service\Aws\Ec2 Returns Ec2 service interface instance
      */
     public function getEc2()
     {

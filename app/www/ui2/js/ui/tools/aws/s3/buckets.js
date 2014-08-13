@@ -3,7 +3,6 @@ Scalr.regPage('Scalr.ui.tools.aws.s3.buckets', function (loadParams, moduleParam
 		fields: [ 'name' , 'farmId', 'farmName', 'cfid', 'cfurl', 'cname', 'status', 'enabled'],
 		proxy: {
 			type: 'scalr.paging',
-			extraParams: loadParams,
 			url: '/tools/aws/s3/xListBuckets/'
 		},
 		remoteSort: true
@@ -42,36 +41,24 @@ Scalr.regPage('Scalr.ui.tools.aws.s3.buckets', function (loadParams, moduleParam
 				'<tpl if="enabled == \'true\'"><img src="/ui2/images/icons/true.png"></tpl>' +
 				'<tpl if="enabled == \'false\' || !enabled"><img src="/ui2/images/icons/false.png"></tpl>'
 		}, {
-			xtype: 'optionscolumn',
+			xtype: 'optionscolumn2',
 			width: 120,
-			getOptionVisibility: function (item, record) {
-				switch (item.itemId) {
-					case "option.disable_dist":
-						return ( ( record.data.enabled == "true") && record.data[ 'cfid' ] );
-	
-					case  "option.enable_dist":
-						return ( (record.data.enabled == "false") && record.data[ 'cfid' ] );
-	
-					case "option.delete_dist":
-						return ( record.data[ 'cfid' ] && record.get('status') == 'Deployed' && record.get('enabled') == 'false' );
-	
-					case "option.create_dist":
-							return ( !record.data[ 'cfid' ] );
-	
-					default:
-						return true;
-				}
-			},
-			optionsMenu: [{
+			menu: [{
 				itemId: "option.create_dist",
 				text: 'Create distribution',
 				iconCls: 'x-menu-icon-create',
-				href: "#/tools/aws/s3/manageDistribution?bucketName={name}"
+				href: "#/tools/aws/s3/manageDistribution?bucketName={name}",
+                getVisibility: function(data) {
+                    return !data['cfid'];
+                },
 			}, {
 				itemId: "option.delete_dist",
 				iconCls: 'x-menu-icon-delete',
 				text: 'Remove distribution',
-				menuHandler: function(item) {
+                getVisibility: function(data) {
+                    return data['cfid'] && data['status'] === 'Deployed' && data['enabled'] == 'false';
+                },
+				menuHandler: function(data) {
 					Scalr.Request({
 						confirmBox: {
 							msg: 'Remove distribution ?',
@@ -83,37 +70,45 @@ Scalr.regPage('Scalr.ui.tools.aws.s3.buckets', function (loadParams, moduleParam
 						},
 						scope: this,
 						url: '/tools/aws/s3/xDeleteDistribution',
-						params: {id: item.record.get('cfid'), cfurl: item.record.get('cfurl'), cname: item.record.get('cname')},
+						params: {id: data['cfid'], cfurl: data['cfurl'], cname: data['cname']},
 						success: function (data, response, options){
 							store.load();
 						}
 					});
 				}
-			},
-			{ itemId: "option.disable_dist", text: 'Disable distribution',
-				menuHandler: function(item) {
+			},{ 
+                itemId: "option.disable_dist",
+                text: 'Disable distribution',
+                getVisibility: function(data) {
+                    return data['enabled'] == "true" && data['cfid'];
+                },
+				menuHandler: function(data) {
 					Scalr.Request({
 						processBox: {
 							type: 'action'
 						},
 						scope: this,
 						url: '/tools/aws/s3/xUpdateDistribution',
-						params: {id: item.record.get('cfid'), enabled: false},
+						params: {id: data['cfid'], enabled: false},
 						success: function (data, response, options){
 							store.load();
 						}
 					});
 				}
-			},
-			{ itemId: "option.enable_dist", text: 'Enable distribution',
-				menuHandler: function(item) {
+			},{ 
+                itemId: "option.enable_dist",
+                text: 'Enable distribution',
+                getVisibility: function(data) {
+                    return data['enabled'] == "false" && data['cfid'];
+                },
+				menuHandler: function(data) {
 					Scalr.Request({
 						processBox: {
 							type: 'action'
 						},
 						scope: this,
 						url: '/tools/aws/s3/xUpdateDistribution',
-						params: {id: item.record.get('cfid'), enabled: true},
+						params: {id: data['cfid'], enabled: true},
 						success: function (data, response, options){
 							store.load();
 						}
@@ -121,9 +116,12 @@ Scalr.regPage('Scalr.ui.tools.aws.s3.buckets', function (loadParams, moduleParam
 				}
 			},
 				new Ext.menu.Separator({itemId: "option.editSep"}),
-			{ itemId: "option.delete_backet", iconCls: 'x-menu-icon-delete', text: 'Delete bucket',
-				menuHandler: function(item) {
-					if(item.record.get('cfid')) {
+			{
+                itemId: "option.delete_backet",
+                iconCls: 'x-menu-icon-delete',
+                text: 'Delete bucket',
+				menuHandler: function(data) {
+					if(data['cfid']) {
 						Scalr.message.Warning('Remove distribution before deleting');
 					} else {
 						Scalr.Request({
@@ -137,7 +135,7 @@ Scalr.regPage('Scalr.ui.tools.aws.s3.buckets', function (loadParams, moduleParam
 							},
 							scope: this,
 							url: '/tools/aws/s3/xDeleteBucket',
-							params: { buckets: Ext.encode([ item.record.get('name') ]) },
+							params: { buckets: Ext.encode([ data['name'] ]) },
 							success: function (data, response, options){
 								store.load();
 							}

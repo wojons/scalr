@@ -4,7 +4,6 @@ namespace Scalr\Tests;
 use \Scalr_UI_Request;
 use \Scalr_UI_Response;
 use \Scalr_UI_Controller;
-use \CONFIG;
 
 /**
  * WebTestCase class which is used for functional testing of the interface
@@ -62,9 +61,8 @@ abstract class WebTestCase extends TestCase
     {
         parent::setUp();
         $this->errorLevel = error_reporting();
-        if (\Scalr::config('scalr.phpunit.skip_functional_tests')) {
-            $this->markTestSkipped();
-        }
+
+        $this->markTestSkippedIfFunctionalTestsDisabled();
 
         if (\Scalr::config('scalr.phpunit.userid')) {
             $this->_testUserId = \Scalr::config('scalr.phpunit.userid');
@@ -76,6 +74,16 @@ abstract class WebTestCase extends TestCase
 
         if (!$this->isAdminUserTestClass() && (!empty($this->_testUserId) && $this->getUser()->isScalrAdmin())) {
             $this->markTestSkipped('Current test class cannot be passed with scalr admin session.');
+        }
+    }
+
+    /**
+     * Marks test skipped if functional tests are disabled
+     */
+    protected function markTestSkippedIfFunctionalTestsDisabled()
+    {
+        if (\Scalr::config('scalr.phpunit.skip_functional_tests')) {
+            $this->markTestSkipped('(scalr.phpunit.skip_functional_tests: no) is required to proceed.');
         }
     }
 
@@ -94,7 +102,7 @@ abstract class WebTestCase extends TestCase
     /**
      * Makes a request to site
      *
-     * @param   string    $uri         A request uri
+     * @param   string     $uri         A request uri
      * @param   array      $parameters  optional Request parameters
      * @param   string     $method      optional HTTP Request method
      * @param   array      $server      optional Additional server options
@@ -134,6 +142,7 @@ abstract class WebTestCase extends TestCase
 
         $c = \Scalr_UI_Controller::loadController($subController, $controller, true);
         $c->$method();
+        // TODO: use $c->callActionMethod($method);
 
         $content = Scalr_UI_Response::getInstance()->getResponse();
 
@@ -256,7 +265,7 @@ abstract class WebTestCase extends TestCase
      *
      * @param   string    $platform
      */
-    protected function skipIfPlatformDisabled($platform)
+    protected function markTestSkippedIfPlatformDisabled($platform)
     {
         if (!$this->getEnvironment() || !$this->getEnvironment()->isPlatformEnabled($platform)) {
             $this->markTestSkipped($platform . ' platform is not enabled');

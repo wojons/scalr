@@ -86,7 +86,7 @@ Ext.define('Scalr.ui.db.backup.Calendar', {
                     '</tpl>',
                 '</div>',
             '</tpl>',
-            '<div class="x-tip scalr-ui-dbbackups-show-all-backups-container"></div>',
+            '<div class="x-tip x-tip-light scalr-ui-dbbackups-show-all-backups-container"></div>',
             '<div class="scalr-ui-dbbackups-anchor-left"></div>',
             '<div class="scalr-ui-dbbackups-anchor-right"></div>',
         '</div>'

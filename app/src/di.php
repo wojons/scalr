@@ -1,5 +1,10 @@
 <?php
 
+use Scalr\Modules\Platforms\Ec2\Ec2PlatformModule;
+use Scalr\Modules\Platforms\Eucalyptus\EucalyptusPlatformModule;
+use Scalr\Modules\Platforms\Openstack\OpenstackPlatformModule;
+use Scalr\Modules\Platforms\Cloudstack\CloudstackPlatformModule;
+
 /**
  * Dependency injection container configuration
  *
@@ -10,34 +15,17 @@
 $container = Scalr::getContainer();
 
 /* @var $cont \Scalr\DependencyInjection\Container */
+/* @var $analyticsContainer Scalr\DependencyInjection\AnalyticsContainer */
 
 $container->setShared('config', function ($cont) {
-    if ($cont('config.type') == 'yaml') {
-        $loader = new \Scalr\System\Config\Loader();
-        $cfg = $loader->load();
-    } else {
-        $cfg = @parse_ini_file(APPPATH . '/etc/config.ini', true);
-    }
+    $loader = new \Scalr\System\Config\Loader();
+    $cfg = $loader->load();
     return $cfg;
 });
 
-$container->setShared('config.type', function ($cont) {
-    //TODO [SCALRCORE-375] Use new config.yml. This method and related sections will be completely removed by the first of January 2014.
-    return is_readable(APPPATH . '/etc/config.ini') ? 'ini' : 'yaml';
-});
-
-//ADODB connection
-$container->setShared('adodb', function ($cont) {
-    return new \Scalr\Db\ConnectionPool($cont('adodb.dsn'));
-});
-
-$container->setShared('adodb.dsn', function ($cont) {
-    if ($cont('config.type') == 'yaml') {
-        $my = $cont->config->get('scalr.connections.mysql');
-    } else {
-        $my = $cont->config;
-        $my = $my['db'];
-    }
+//Common dsn getter
+$container->set('dsn.getter', function ($cont, array $arguments = null) {
+    $my = $cont->config->get($arguments[0]);
     $dsn = sprintf(
         "%s://%s:%s@%s/%s",
         (isset($my['driver']) ? $my['driver'] : 'mysqli'),
@@ -45,24 +33,19 @@ $container->setShared('adodb.dsn', function ($cont) {
         (isset($my['host']) ? $my['host'] : 'localhost') . (isset($my['port']) ? ':' . $my['port'] : ''),
         $my['name']
     );
-
     return $dsn;
+});
+
+$container->setShared('adodb', function ($cont) {
+    return new \Scalr\Db\ConnectionPool($cont->{'dsn.getter'}('scalr.connections.mysql'));
 });
 
 $container->setShared('dnsdb', function ($cont) {
-    return new \Scalr\Db\ConnectionPool($cont('dnsdb.dsn'));
+    return new \Scalr\Db\ConnectionPool($cont->{'dsn.getter'}('scalr.dns.mysql'));
 });
 
-$container->setShared('dnsdb.dsn', function ($cont) {
-    $my = $cont->config->get('scalr.dns.mysql');
-    $dsn = sprintf(
-        "%s://%s:%s@%s/%s",
-        (isset($my['driver']) ? $my['driver'] : 'mysqli'),
-        $my['user'], rawurlencode($my['pass']),
-        (isset($my['host']) ? $my['host'] : 'localhost') . (isset($my['port']) ? ':' . $my['port'] : ''),
-        $my['name']
-    );
-    return $dsn;
+$container->setShared('cadb', function ($cont) {
+    return new \Scalr\Db\ConnectionPool($cont->{'dsn.getter'}('scalr.analytics.connections.analytics'));
 });
 
 $container->session = function ($cont) {
@@ -80,33 +63,33 @@ $container->awsRegion = function ($cont) {
 };
 
 $container->awsAccessKeyId = function ($cont) {
-    return $cont->environment->getPlatformConfigValue(Modules_Platforms_Ec2::ACCESS_KEY);
+    return $cont->environment->getPlatformConfigValue(Ec2PlatformModule::ACCESS_KEY);
 };
 
 $container->awsSecretAccessKey = function ($cont) {
-    return $cont->environment->getPlatformConfigValue(Modules_Platforms_Ec2::SECRET_KEY);
+    return $cont->environment->getPlatformConfigValue(Ec2PlatformModule::SECRET_KEY);
 };
 
 $container->awsAccountNumber = function ($cont) {
-    return $cont->environment->getPlatformConfigValue(Modules_Platforms_Ec2::ACCOUNT_ID);
+    return $cont->environment->getPlatformConfigValue(Ec2PlatformModule::ACCOUNT_ID);
 };
 
 $container->awsCertificate = function ($cont) {
-    return $cont->environment->getPlatformConfigValue(Modules_Platforms_Ec2::CERTIFICATE);
+    return $cont->environment->getPlatformConfigValue(Ec2PlatformModule::CERTIFICATE);
 };
 
 $container->awsPrivateKey = function ($cont) {
-    return $cont->environment->getPlatformConfigValue(Modules_Platforms_Ec2::PRIVATE_KEY);
+    return $cont->environment->getPlatformConfigValue(Ec2PlatformModule::PRIVATE_KEY);
 };
 
 $container->aws = function ($cont, array $arguments = null) {
     /* @var $env \Scalr_Environment */
     $params = array();
     $traitFetchEnvProperties = function ($env) use (&$params) {
-        $params['accessKeyId'] = $env->getPlatformConfigValue(Modules_Platforms_Ec2::ACCESS_KEY);
-        $params['secretAccessKey'] = $env->getPlatformConfigValue(Modules_Platforms_Ec2::SECRET_KEY);
-        $params['certificate'] = $env->getPlatformConfigValue(Modules_Platforms_Ec2::CERTIFICATE);
-        $params['privateKey'] = $env->getPlatformConfigValue(Modules_Platforms_Ec2::PRIVATE_KEY);
+        $params['accessKeyId'] = $env->getPlatformConfigValue(Ec2PlatformModule::ACCESS_KEY);
+        $params['secretAccessKey'] = $env->getPlatformConfigValue(Ec2PlatformModule::SECRET_KEY);
+        $params['certificate'] = $env->getPlatformConfigValue(Ec2PlatformModule::CERTIFICATE);
+        $params['privateKey'] = $env->getPlatformConfigValue(Ec2PlatformModule::PRIVATE_KEY);
         $params['environment'] = $env;
     };
     if (!empty($arguments) && is_object($arguments[0])) {
@@ -139,6 +122,12 @@ $container->aws = function ($cont, array $arguments = null) {
         $params['environment'] = !isset($arguments[2]) ? $cont->environment : null;
     }
 
+    $config = $cont->config;
+    $proxySettings = null;
+    if ($config('scalr.aws.use_proxy')) {
+        $proxySettings = $config('scalr.connections.proxy');
+    }
+
     $serviceid = 'aws.' . hash('sha256', sprintf("%s|%s|%s|%s|%s",
         $params['accessKeyId'], $params['secretAccessKey'], $params['region'],
         (!empty($params['certificate']) ? crc32($params['certificate']) : '-'),
@@ -146,11 +135,19 @@ $container->aws = function ($cont, array $arguments = null) {
     ), false);
 
     if (!$cont->initialized($serviceid)) {
-        $cont->setShared($serviceid, function($cont) use ($params) {
+        $cont->setShared($serviceid, function($cont) use ($params, $proxySettings) {
             $aws = new \Scalr\Service\Aws(
                 $params['accessKeyId'], $params['secretAccessKey'], $params['region'],
                 $params['certificate'], $params['privateKey']
             );
+
+            if ($proxySettings !== null) {
+                $aws->setProxy(
+                    $proxySettings['host'], $proxySettings['port'], $proxySettings['user'],
+                    $proxySettings['pass'], $proxySettings['type']
+                );
+            }
+
             $observer = new \Scalr\Service\Aws\Plugin\EventObserver($aws);
             $aws->setEventObserver($observer);
             if (isset($params['environment']) && $params['environment'] instanceof \Scalr_Environment) {
@@ -164,10 +161,9 @@ $container->aws = function ($cont, array $arguments = null) {
 };
 
 $container->setShared('auditLogStorage', function ($cont) {
-    $dsn = $cont->get('adodb.dsn');
     $type = 'Mysql';
     $storageClass = 'Scalr\\Logger\\' . $type . 'LoggerStorage';
-    return new $storageClass (array('dsn' => $dsn));
+    return new $storageClass (array('dsn' => $cont->{'dsn.getter'}('scalr.connections.mysql')));
 });
 
 $container->auditLog = function ($cont) {
@@ -195,7 +191,7 @@ $container->cloudyn = function ($cont) {
         $cont->setShared($serviceid, function ($cont) use ($params) {
             return new \Scalr\Service\Cloudyn(
                 $params['email'], $params['password'],
-                ($cont('config.type') == 'yaml' ? $cont->config->get('scalr.cloudyn.environment') : 'PROD')
+                $cont->config->get('scalr.cloudyn.environment')
             );
         });
     }
@@ -226,32 +222,35 @@ $container->openstack = function ($cont, array $arguments = null) {
             $env = $cont->environment;
         }
 
-        $params['username'] = $env->getPlatformConfigValue($platform . "." . Modules_Platforms_Openstack::USERNAME);
-        $params['identityEndpoint'] = $env->getPlatformConfigValue($platform . "." . Modules_Platforms_Openstack::KEYSTONE_URL);
+        $params['username'] = $env->getPlatformConfigValue($platform . "." . OpenstackPlatformModule::USERNAME);
+        $params['identityEndpoint'] = $env->getPlatformConfigValue($platform . "." . OpenstackPlatformModule::KEYSTONE_URL);
 
-        $params['apiKey'] = $env->getPlatformConfigValue($platform . "." . Modules_Platforms_Openstack::API_KEY);
+        $params['apiKey'] = $env->getPlatformConfigValue($platform . "." . OpenstackPlatformModule::API_KEY);
         if (empty($params['apiKey'])) $params['apiKey'] = null;
 
         $params['updateTokenCallback'] = function ($token) use ($env, $platform) {
             if ($env && $token instanceof \Scalr\Service\OpenStack\Client\AuthToken) {
                 $env->setPlatformConfig(array(
-                    $platform . "." . Modules_Platforms_Openstack::AUTH_TOKEN => serialize($token),
+                    $platform . "." . OpenstackPlatformModule::AUTH_TOKEN => serialize($token),
                 ));
             }
         };
 
-        $params['authToken'] = $env->getPlatformConfigValue($platform . "." . Modules_Platforms_Openstack::AUTH_TOKEN);
-        $params['authToken'] = empty($params['authToken']) ? null : unserialize($params['authToken']);
+        // Some issues with multi-regional openstack deployments and re-using token.
+        // Most likely we will need to make it configurable
+        $params['authToken'] = null;
+        //$params['authToken'] = $env->getPlatformConfigValue($platform . "." . OpenstackPlatformModule::AUTH_TOKEN);
+        //$params['authToken'] = empty($params['authToken']) ? null : unserialize($params['authToken']);
 
-        $params['password'] = $env->getPlatformConfigValue($platform . "." . Modules_Platforms_Openstack::PASSWORD);
+        $params['password'] = $env->getPlatformConfigValue($platform . "." . OpenstackPlatformModule::PASSWORD);
 
-        $params['tenantName'] = $env->getPlatformConfigValue($platform. "." . Modules_Platforms_Openstack::TENANT_NAME);
+        $params['tenantName'] = $env->getPlatformConfigValue($platform. "." . OpenstackPlatformModule::TENANT_NAME);
         if (empty($params['tenantName'])) $params['tenantName'] = null;
     }
 
     //calculates unique identifier of the service
     $serviceid = 'openstack.' . hash('sha256',
-        sprintf('%s|%s|%s', $params['username'], crc32($params['identityEndpoint']), $params['region']),
+        sprintf('%s|%s|%s', $params['username'], $params['identityEndpoint'], $params['region']),
         false
     );
 
@@ -270,12 +269,47 @@ $container->openstack = function ($cont, array $arguments = null) {
     return $cont->get($serviceid);
 };
 
+$container->cloudstack = function($cont, array $arguments = null) {
+    /* @var $env \Scalr_Environment */
+    $params = array();
+    $traitFetchEnvProperties = function ($platform, $env) use (&$params) {
+        $params['apiUrl'] = $env->getPlatformConfigValue($platform . "." . CloudstackPlatformModule::API_URL);
+        $params['apiKey'] = $env->getPlatformConfigValue($platform . "." . CloudstackPlatformModule::API_KEY);
+        $params['secretKey'] = $env->getPlatformConfigValue($platform . "." . CloudstackPlatformModule::SECRET_KEY);
+        $params['platform'] = $platform;
+    };
+    if (!isset($arguments[0])) {
+        throw new \BadFunctionCallException('Platform value must be provided!');
+    } else {
+        $platform = (string) $arguments[0];
+        if (isset($arguments[1]) && $arguments[1] instanceof \Scalr_Environment) {
+            $env = $arguments[1];
+        } else {
+            $env = $cont->environment;
+        }
+        $traitFetchEnvProperties($platform, $env);
+    }
+
+    $serviceid = 'cloudstack.' . hash('sha256', sprintf("%s|%s|%s|%s",
+        $params['apiUrl'], $params['apiKey'], $params['secretKey'], $params['platform']
+    ), false);
+
+    if (!$cont->initialized($serviceid)) {
+        $cont->setShared($serviceid, function($cont) use ($params) {
+            $cloudstack = new \Scalr\Service\CloudStack\CloudStack(
+                $params['apiUrl'], $params['apiKey'], $params['secretKey'], $params['platform']
+            );
+            return $cloudstack;
+        });
+    }
+
+    return $cont->get($serviceid);
+};
+
 $container->mailer = function ($cont) {
     $mailer = new \Scalr\SimpleMailer();
-    if ($cont('config.type') == 'yaml') {
-        if ($cont->config->get('scalr.email.address')) {
-            $mailer->setFrom($cont->config->get('scalr.email.address'), $cont->config->get('scalr.email.name'));
-        }
+    if ($cont->config->get('scalr.email.address')) {
+        $mailer->setFrom($cont->config->get('scalr.email.address'), $cont->config->get('scalr.email.name'));
     }
     return $mailer;
 };
@@ -295,6 +329,11 @@ $container->setShared('ldap.config', function ($cont) {
         isset($my['group_nesting']) ? $my['group_nesting'] : null,
         isset($my['bind_type']) ? $my['bind_type'] : null,
         isset($my['mail_attribute']) ? $my['mail_attribute'] : null,
+        isset($my['fullname_attribute']) ? $my['fullname_attribute'] : null,
+        isset($my['username_attribute']) ? $my['username_attribute'] : null,
+        isset($my['group_member_attribute']) ? $my['group_member_attribute'] : null,
+        isset($my['group_member_attribute_type']) ? $my['group_member_attribute_type'] : null,
+        isset($my['groupname_attribute']) ? $my['groupname_attribute'] : null,
         isset($my['debug']) ? $my['debug'] : false
     );
 });
@@ -308,7 +347,8 @@ $container->set('ldap', function ($cont, array $arguments = null) {
     }
     $user = (string) $arguments[0];
     $pass = (string) $arguments[1];
-    if ($ldapCf->bindType != \Scalr\Net\Ldap\LdapClient::BIND_TYPE_SIMPLE) {
+    $uid = null;
+    if ($ldapCf->bindType == \Scalr\Net\Ldap\LdapClient::BIND_TYPE_REGULAR) {
         //Adjusts username with default domain if it has not been provided.
         if (($pos = strpos($user, '@')) === false) {
             if (stripos($user, 'DC=') === false)
@@ -316,8 +356,11 @@ $container->set('ldap', function ($cont, array $arguments = null) {
         } elseif (stripos($ldapCf->getDomain(), substr($user, $pos + 1)) === 0) {
             $user = substr($user, 0, $pos + 1) . $ldapCf->getDomain();
         }
+    } elseif ($ldapCf->bindType == \Scalr\Net\Ldap\LdapClient::BIND_TYPE_OPENLDAP) {
+        $uid = $user;
+        $user = "{$ldapCf->usernameAttribute}={$user},{$ldapCf->baseDn}";
     }
-    return new \Scalr\Net\Ldap\LdapClient($ldapCf, $user, $pass);
+    return new \Scalr\Net\Ldap\LdapClient($ldapCf, $user, $pass, $uid);
 });
 
 $container->setShared('acl', function ($cont) {
@@ -329,12 +372,12 @@ $container->setShared('acl', function ($cont) {
 $container->set('eucalyptus', function($cont, array $arguments = null) {
     $params = array();
     $traitFetchEnvProperties = function ($env) use (&$params) {
-        $params['accessKeyId'] = $env->getPlatformConfigValue(Modules_Platforms_Eucalyptus::ACCESS_KEY, true, $params['region']);
-        $params['secretAccessKey'] = $env->getPlatformConfigValue(Modules_Platforms_Eucalyptus::SECRET_KEY, true, $params['region']);
-        $params['certificate'] = $env->getPlatformConfigValue(Modules_Platforms_Eucalyptus::CERTIFICATE, true, $params['region']);
-        $params['privateKey'] = $env->getPlatformConfigValue(Modules_Platforms_Eucalyptus::PRIVATE_KEY, true, $params['region']);
-        $params['ec2url'] = $env->getPlatformConfigValue(Modules_Platforms_Eucalyptus::EC2_URL, true, $params['region']);
-        $params['s3url'] = $env->getPlatformConfigValue(Modules_Platforms_Eucalyptus::S3_URL, true, $params['region']);
+        $params['accessKeyId'] = $env->getPlatformConfigValue(EucalyptusPlatformModule::ACCESS_KEY, true, $params['region']);
+        $params['secretAccessKey'] = $env->getPlatformConfigValue(EucalyptusPlatformModule::SECRET_KEY, true, $params['region']);
+        $params['certificate'] = $env->getPlatformConfigValue(EucalyptusPlatformModule::CERTIFICATE, true, $params['region']);
+        $params['privateKey'] = $env->getPlatformConfigValue(EucalyptusPlatformModule::PRIVATE_KEY, true, $params['region']);
+        $params['ec2url'] = $env->getPlatformConfigValue(EucalyptusPlatformModule::EC2_URL, true, $params['region']);
+        $params['s3url'] = $env->getPlatformConfigValue(EucalyptusPlatformModule::S3_URL, true, $params['region']);
         $params['environment'] = $env;
     };
 
@@ -387,4 +430,48 @@ $container->set('eucalyptus', function($cont, array $arguments = null) {
     }
 
     return $cont->get($serviceid);
+
+});
+
+//Analytics sub container
+$container->setShared('analytics', function ($cont) {
+    $analyticsContainer = new \Scalr\DependencyInjection\AnalyticsContainer();
+    $analyticsContainer->setContainer($cont);
+    return $analyticsContainer;
+});
+
+$container->analytics->setShared('enabled', function ($analyticsContainer) {
+	return (bool)$analyticsContainer->getContainer()->config('scalr.analytics.enabled');
+});
+
+$container->analytics->setShared('tags', function ($analyticsContainer) {
+    return new \Scalr\Stats\CostAnalytics\Tags($analyticsContainer->getContainer()->cadb);
+});
+
+$container->analytics->setShared('prices', function ($analyticsContainer) {
+    return new \Scalr\Stats\CostAnalytics\Prices($analyticsContainer->getContainer()->cadb);
+});
+
+$container->analytics->setShared('ccs', function ($analyticsContainer) {
+    return new \Scalr\Stats\CostAnalytics\CostCentres($analyticsContainer->getContainer()->adodb);
+});
+
+$container->analytics->setShared('projects', function ($analyticsContainer) {
+    return new \Scalr\Stats\CostAnalytics\Projects($analyticsContainer->getContainer()->adodb);
+});
+
+$container->analytics->setShared('events', function ($analyticsContainer) {
+    return new \Scalr\Stats\CostAnalytics\Events($analyticsContainer->getContainer()->cadb);
+});
+
+$container->analytics->setShared('usage', function ($analyticsContainer) {
+    return new \Scalr\Stats\CostAnalytics\Usage($analyticsContainer->getContainer()->cadb);
+});
+
+$container->analytics->setShared('notifications', function ($analyticsContainer) {
+    return new \Scalr\Stats\CostAnalytics\Notifications($analyticsContainer->getContainer()->cadb);
+});
+
+$container->setShared('model.loader', function ($cont) {
+    return new \Scalr\Model\Loader\MappingLoader();
 });

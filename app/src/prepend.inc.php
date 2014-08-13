@@ -1,21 +1,13 @@
 <?php
 
 define("TRANSACTION_ID", uniqid("tran"));
-define("DEFAULT_LOCALE", "en_US");
 
 @date_default_timezone_set(@date_default_timezone_get());
 
 @error_reporting(E_ALL);
 
-@ini_set('session.bug_compat_42', '0');
-@ini_set('session.bug_compat_warn', '0');
-
 // Increase execution time limit
 set_time_limit(180);
-
-// Locale init
-$locale = DEFAULT_LOCALE;
-define("LOCALE", $locale);
 
 // Environment stuff
 $base = dirname(__FILE__);
@@ -28,11 +20,12 @@ define("SCALR_VERSION", trim(@file_get_contents(APPPATH . "/etc/version")));
 
 $ADODB_CACHE_DIR = CACHEPATH . "/adodb";
 
-define("SCALR_TEMPLATES_PATH", APPPATH . "/templates/" . LOCALE);
+define("SCALR_TEMPLATES_PATH", APPPATH . "/templates/en_US");
 
 // Require autoload definition
 $classpath[] = $base;
 $classpath[] = $base . "/externals/ZF-1.10.8";
+$classpath[] = $base . "/externals/google-api-php-client-git-03102014/src";
 set_include_path(get_include_path() . PATH_SEPARATOR . join(PATH_SEPARATOR, $classpath));
 
 require_once SRCPATH . "/autoload.inc.php";
@@ -61,12 +54,6 @@ define("SCALR_ID", $id);
 define("LOG4PHP_DIR", SRCPATH . '/externals/apache-log4php-2.0.0-incubating/src/main/php');
 require_once LOG4PHP_DIR . '/Logger.php';
 
-require_once SRCPATH . "/class.TaskQueue.php";
-require_once SRCPATH . "/class.FarmTerminationOptions.php";
-require_once SRCPATH . "/class.DataForm.php";
-require_once SRCPATH . "/class.DataFormField.php";
-require_once SRCPATH . "/queue_tasks/abstract.Task.php";
-require_once SRCPATH . "/queue_tasks/class.FireDeferredEventTask.php";
 require_once SRCPATH . '/externals/adodb5-18/adodb-exceptions.inc.php';
 require_once SRCPATH . '/externals/adodb5-18/adodb.inc.php';
 
@@ -78,56 +65,13 @@ try {
     throw new Exception("Service is temporary not available. Please try again in a minute. [DB]");
 }
 
-//TODO [SCALRCORE-375] Use new config.yml. This section will be completely removed by the first of January 2014.
-//This is needed to ensure operability of migrating script /bin/migrate_config.php
-if (Scalr::getContainer()->get('config.type') == 'ini') {
-    // Select config from db
-    foreach ($db->GetAll("SELECT * FROM config") as $rsk) {
-        $cfg[$rsk["key"]] = $rsk["value"];
-    }
-
-    $ConfigReflection = new ReflectionClass("CONFIG");
-    // Define Constants and paste config into CONFIG struct
-    foreach ($cfg as $k => $v) {
-        if (is_array($v)) {
-            foreach ($v as $kk => $vv) {
-                $key = strtoupper("{$k}_{$kk}");
-                if ($ConfigReflection->hasProperty($key)) {
-                    CONFIG::$$key = $vv;
-                }
-                define("CF_{$key}", $vv);
-            }
-        } else {
-            if (is_array($k)) {
-                $nk = strtoupper("{$k[0]}_{$k[1]}");
-            } else {
-                $nk = strtoupper("{$k}");
-            }
-            if ($ConfigReflection->hasProperty($nk)) {
-                CONFIG::$$nk = $v;
-            }
-            define("CF_{$nk}", $v);
-        }
-    }
-    unset($cfg);
-    unset($ConfigReflection);
-
-    CONFIG::$HTTP_PROTO = (CONFIG::$HTTP_PROTO) ? CONFIG::$HTTP_PROTO : "http";
-    CONFIG::$SYSDNS_SYSTEM = 1;
-}
-
 require_once SRCPATH . '/class.LoggerAppenderScalr.php';
-require_once SRCPATH . '/class.LoggerPatternLayoutScalr.php';
 require_once SRCPATH . '/class.FarmLogMessage.php';
 require_once SRCPATH . '/class.ScriptingLogMessage.php';
-require_once SRCPATH . '/class.LoggerPatternParserScalr.php';
-require_once SRCPATH . '/class.LoggerBasicPatternConverterScalr.php';
 require_once SRCPATH . '/class.LoggerFilterCategoryMatch.php';
 
 Logger::configure(APPPATH.'/etc/log4php.xml', 'LoggerConfiguratorXml');
-$Logger = Logger::getLogger('Application');
 
 // Require observer interfaces
-require_once APPPATH . '/observers/interface.IDeferredEventObserver.php';
 require_once APPPATH . '/observers/interface.IEventObserver.php';
 

@@ -27,6 +27,22 @@ Scalr.regPage('Scalr.ui.operations.details', function (loadParams, moduleParams)
 				hidden: !(moduleParams['message']),
 				value: moduleParams['message'],
                 fieldStyle: 'max-width:620px;word-wrap:break-word;'
+			}, {
+                xtype: 'container',
+                layout: 'hbox',
+                defaults: {
+                    width: 190,
+                    height: 32
+                },
+                margin: '12 0 0 100',
+                items: [{
+	                xtype: 'button',
+	                text: 'Download debug log',
+	                hidden: !(moduleParams['message'] && moduleParams['serverStatus'] != 'Pending launch'),
+	                handler: function() {
+	                	Scalr.utils.UserLoadFile('/servers/downloadScalarizrDebugLog?serverId=' + moduleParams['serverId']);
+	                }
+                }]
 			}]
 		}, {
 			xtype: 'fieldset',

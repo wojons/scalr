@@ -26,6 +26,11 @@ class LdapClient
     const BIND_TYPE_SIMPLE = 'simple';
 
     /**
+     * When openldap binding is used, a user can be authenticated by full dn
+     */
+    const BIND_TYPE_OPENLDAP = 'openldap';
+
+    /**
      * Ldap config object
      *
      * @var LdapConfig
@@ -47,11 +52,25 @@ class LdapClient
     private $email;
 
     /**
+     * User's fullname which is retrieved from LDAP
+     *
+     * @var string
+     */
+    private $fullname;
+
+    /**
      * User's password
      *
      * @var string
      */
     private $password;
+
+    /**
+     * User's uid. Used for openldap support
+     *
+     * @var string
+     */
+    private $uid;
 
     /**
      * Ldap connection link identifier
@@ -96,11 +115,12 @@ class LdapClient
      * @param  string      $password  LDAP password for the specified user
      * @throws Exception\LdapException
      */
-    public function __construct(LdapConfig $config, $username, $password)
+    public function __construct(LdapConfig $config, $username, $password, $uid=null)
     {
         $this->config = $config;
         $this->username = $username;
         $this->password = $password;
+        $this->uid = $uid;
         $this->dn = null;
         $this->isbound = false;
         $this->aLog = array();
@@ -214,6 +234,9 @@ class LdapClient
                 //Admin user is provided in config.
                 $username = $this->config->user;
                 $password = $this->config->password;
+                if ($this->config->bindType == \Scalr\Net\Ldap\LdapClient::BIND_TYPE_OPENLDAP) {
+                    $username = "{$this->config->usernameAttribute}={$username},{$this->config->baseDn}";
+                }
             } else {
                 //Without admin user we use specified rdn
                 $username = $this->username;
@@ -258,7 +281,24 @@ class LdapClient
      */
     public function getEmail()
     {
-        return !empty($this->email) ? $this->email : $this->username;
+        if ($this->email)
+            return $this->email;
+        else {
+            if ($this->uid)
+                return $this->uid;
+            else
+                return $this->username;
+        }
+    }
+
+    /**
+     * Gets the user's full name
+     *
+     * @return  string  Returns user's full name
+     */
+    public function getFullName()
+    {
+        return $this->fullname;
     }
 
     /**
@@ -282,10 +322,15 @@ class LdapClient
 
         if (($ret = $this->bindRdn()) == false) {
             throw new LdapException(sprintf(
-                "Cannot bind to ldap server. Check user and password in the scalr.connections.ldap section of config. %s"
+                "Cannot bind to ldap server. Check user ({$this->username}) and password in the scalr.connections.ldap section of config. %s"
                 , $this->getLdapError()));
         } else {
-            $filter = sprintf('(&%s(sAMAccountName=%s))', $this->config->userFilter, self::realEscape(strtok($this->username, '@')));
+
+
+            if (stristr($this->username, "{$this->getConfig()->usernameAttribute}="))
+                $filter = sprintf('(&%s(' . $this->getConfig()->usernameAttribute . '=%s))', $this->config->userFilter, self::realEscape($this->uid));
+            else
+                $filter = sprintf('(&%s(' . $this->getConfig()->usernameAttribute . '=%s))', $this->config->userFilter, self::realEscape(strtok($this->username, '@')));
 
             $attrs = array('dn', 'memberof');
             if ($this->config->mailAttribute) {
@@ -297,7 +342,7 @@ class LdapClient
                 $this->conn, $this->config->baseDn, $filter, $attrs, 0, 1
             );
 
-            $this->log("Query baseDn:%s filter:%s, attributes: %s - %s",
+            $this->log("Query baseDn (3):%s filter:%s, attributes: %s - %s",
                 $this->config->baseDn, $filter, join(', ', $attrs),
                 ($query !== false ? 'OK' : 'Failed')
             );
@@ -353,19 +398,24 @@ class LdapClient
                 $attrs[] = $mailAttribute;
             }
 
+            if ($this->config->fullNameAttribute) {
+                $fullNameAttribute = strtolower($this->config->fullNameAttribute);
+                $attrs[] = $fullNameAttribute;
+            }
+
             if (($pos = strpos($this->username, "@")) !== false) {
-                $filter = sprintf('(&%s(sAMAccountName=%s))', $this->config->userFilter, self::realEscape(strtok($this->username, '@')));
+                $filter = sprintf('(&%s(' . $this->config->usernameAttribute . '=%s))', $this->config->userFilter, self::realEscape(strtok($this->username, '@')));
                 $query = @ldap_search($this->conn, $this->config->baseDn, $filter, $attrs, 0, 1);
-                $this->log("Query baseDn:%s filter:%s, attributes: %s - %s",
+                $this->log("Query baseDn (1):%s filter:%s, attributes: %s - %s",
                     $this->config->baseDn, $filter, join(', ', $attrs),
                     ($query !== false ? 'OK' : 'Failed')
                 );
-            } elseif (preg_match('/(^|,)cn=/i', $this->username)) {
+            } elseif (preg_match('/(^|,)cn=/i', $this->username) || ($this->config->usernameAttribute && preg_match('/'.$this->config->usernameAttribute.'=/i', $this->username))) {
                 //username is provided as distinguished name.
                 //We need to make additional query to validate user's password
-                $filter = sprintf('(&%s(sAMAccountName=*))', $this->config->userFilter);
+                $filter = sprintf('(&%s(' . $this->config->usernameAttribute . '=*))', $this->config->userFilter);
                 $query = @ldap_search($this->conn, $this->username, $filter, $attrs, 0, 1);
-                $this->log("Query baseDn:%s filter:%s, attributes: %s - %s",
+                $this->log("Query baseDn (2):%s filter:%s, attributes: %s - %s",
                     $this->username, $filter, join(', ', $attrs),
                     ($query !== false ? 'OK' : 'Failed')
                 );
@@ -389,6 +439,13 @@ class LdapClient
                         $this->email = (is_array($results[0][$mailAttribute]) ? $results[0][$mailAttribute][0] : $results[0][$mailAttribute]) . '';
                         $this->log('Email has been retrieved: %s', $this->email);
                     }
+                    if (isset($fullNameAttribute) && isset($results[0][$fullNameAttribute])) {
+                        $this->fullname = (is_array($results[0][$fullNameAttribute]) ? $results[0][$fullNameAttribute][0] : $results[0][$fullNameAttribute]) . '';
+                        $this->log('Full name has been retrieved: %s', $this->fullname);
+                    }
+
+                    $this->log(sprintf("Query result memberofDn: %s", count($this->memberofDn['count'])));
+
                     if (isset($this->memberofDn['count'])) {
                         unset($this->memberofDn['count']);
                     }
@@ -425,7 +482,7 @@ class LdapClient
         $this->getConnection();
 
         //Ldap bind
-        if (!$this->isbound || !empty($this->config->user) && !empty($this->password)) {
+        if (!$this->isbound && (!empty($this->config->user) && !empty($this->password))) {
             if ($this->bindRdn() === false) {
                 throw new Exception\LdapException(sprintf(
                     "Could not bind LDAP. %s",
@@ -435,7 +492,7 @@ class LdapClient
         }
 
         if (empty($this->dn)) {
-            $filter = sprintf('(&%s(sAMAccountName=%s))', $this->config->userFilter, self::realEscape($name));
+            $filter = sprintf('(&%s(' . $this->getConfig()->usernameAttribute . '=%s))', $this->config->userFilter, self::realEscape($name));
             $query = @ldap_search(
                 $this->conn, $this->config->baseDn, $filter, array('dn'), 0, 1
             );
@@ -464,12 +521,30 @@ class LdapClient
             return array();
         }
 
-        $filter = "(&" . $this->config->groupFilter . "(member"
-          . ($this->config->groupNesting ? ":1.2.840.113556.1.4.1941:" : "")
-          . "=" . self::escape($this->dn) . "))";
+        if ($this->getConfig()->bindType == 'openldap') {
+            $uid = ($this->uid) ? $this->uid : $this->username;
+
+            if ($this->getConfig()->groupMemberAttributeType == 'unix_netgroup') {
+                $filter = "(&" . $this->config->groupFilter . "(" . $this->getConfig()->groupMemberAttribute . ""
+                    . ($this->config->groupNesting ? ":1.2.840.113556.1.4.1941:" : "")
+                    . '=\(,' . self::escape($uid) . ',\)))';
+            } elseif ($this->getConfig()->groupMemberAttributeType == 'regular') {
+                $filter = "(&" . $this->config->groupFilter . "(" . $this->getConfig()->groupMemberAttribute . ""
+                    . ($this->config->groupNesting ? ":1.2.840.113556.1.4.1941:" : "")
+                    . '=' . self::escape($uid) . '))';
+            } elseif ($this->getConfig()->groupMemberAttributeType == 'user_dn') {
+                $filter = "(&" . $this->config->groupFilter . "(" . $this->getConfig()->groupMemberAttribute . ""
+                    . ($this->config->groupNesting ? ":1.2.840.113556.1.4.1941:" : "")
+                    . '=' . self::escape($this->username) . '))';
+            }
+        } else {
+            $filter = "(&" . $this->config->groupFilter . "(" . $this->getConfig()->groupMemberAttribute . ""
+                . ($this->config->groupNesting ? ":1.2.840.113556.1.4.1941:" : "")
+                . "=" . self::escape($this->dn) . "))";
+        }
 
         $search = @ldap_search(
-            $this->conn, $baseDn, $filter, array("sAMAccountName")
+            $this->conn, $baseDn, $filter, array($this->getConfig()->groupnameAttribute)
         );
 
         $this->log("Query user's groups baseDn:%s filter:%s - %s",
@@ -487,8 +562,10 @@ class LdapClient
         $results = ldap_get_entries($this->conn, $search);
 
         for ($item = 0; $item < $results['count']; $item++) {
-            $groups[] = $results[$item]['samaccountname'][0];
+            $groups[] = $results[$item][strtolower($this->getConfig()->groupnameAttribute)][0];
         }
+
+        $this->log("Found groups: %s", implode(", ", $groups));
 
         return $groups;
     }

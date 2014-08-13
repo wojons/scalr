@@ -10,10 +10,10 @@ Scalr.regPage('Scalr.ui.account2.environments.clouds.gce', function (loadParams,
 		},
 
 		items: [{
-			xtype: 'displayfield',
-			cls: 'x-form-field-info',
-			value: '<a href="http://wiki.scalr.com/display/docs/Google+Compute+Engine#GoogleComputeEngine-Step1:AddYourGoogleComputeEngine(GCE)Credentials" target="_blank" style="font-weight: bold">Getting started with Scalr and GCE tutorial</a>'
-		}, {
+            xtype: 'component',
+            cls: 'x-fieldset-subheader',
+            html: 'OAuth Service Account'
+        },{
 			xtype: 'hidden',
 			name: 'gce.is_enabled',
 			value: 'on'

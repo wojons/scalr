@@ -1,6 +1,6 @@
 Scalr.regPage('Scalr.ui.services.ssl.certificates.create', function (loadParams, moduleParams) {
 	var form = Ext.create('Ext.form.Panel', {
-		title: moduleParams.cert ? 'Services &raquo; Ssl &raquo; Certificates &raquo; Edit' : 'Services &raquo; Ssl &raquo; Certificates &raquo; Create',
+		title: 'SSL certificates &raquo; ' + (moduleParams.cert ? 'Edit' : 'Create'),
 		fieldDefaults: {
 			anchor: '100%'
 		},
@@ -8,30 +8,115 @@ Scalr.regPage('Scalr.ui.services.ssl.certificates.create', function (loadParams,
 			modal: true
 		},
 		width: 600,
-
+        fieldDefaults: {
+            labelWidth: 140
+        },
 		items: [{
 			xtype: 'fieldset',
+            cls: 'x-fieldset-separator-none x-fieldset-no-bottom-padding',
 			items: [{
                 xtype: 'textfield',
                 fieldLabel: 'Name',
                 name: 'name',
-                allowBlank: false
+                allowBlank: false,
+                width: 489
             }, {
                 xtype: 'hidden',
                 name: 'id'
-            },{
-				xtype: 'filefield',
-				name: 'sslCert',
-				fieldLabel: 'Certificate'
+            }, {
+                xtype: 'container',
+                layout: 'hbox',
+                items: [{
+                    xtype: 'filefield',
+                    name: 'certificate',
+                    flex: 1,
+                    fieldLabel: 'Certificate',
+                    listeners: {
+                        afterrender: function() {
+                            if (! this.getValue())
+                                this.next().disable();
+                        }
+                    }
+                }, {
+                    xtype: 'button',
+                    ui: 'action',
+                    margin: '0 0 0 4',
+                    cls: 'x-btn-action-delete',
+                    tooltip: 'Click here to delete previously uploaded certificate',
+                    handler: function() {
+                        this.prev().setValue();
+                        this.next().setValue(1);
+                        this.disable();
+                    }
+                }, {
+                    xtype: 'hidden',
+                    name: 'certificateClear'
+                }]
+            }, {
+                xtype: 'container',
+                layout: 'hbox',
+                items: [{
+                    xtype: 'filefield',
+                    name: 'caBundle',
+                    flex: 1,
+                    fieldLabel: 'Certificate chain',
+                    listeners: {
+                        afterrender: function() {
+                            if (! this.getValue())
+                                this.next().disable();
+                        }
+                    }
+                }, {
+                    xtype: 'button',
+                    ui: 'action',
+                    margin: '0 0 0 4',
+                    cls: 'x-btn-action-delete',
+                    tooltip: 'Click here to delete previously uploaded certificate chain',
+                    handler: function() {
+                        this.prev().setValue();
+                        this.next().setValue(1);
+                        this.disable();
+                    }
+                }, {
+                    xtype: 'hidden',
+                    name: 'caBundleClear'
+                }]
 			}, {
-				xtype: 'filefield',
-				name: 'sslPkey',
-				fieldLabel: 'Private key'
+                xtype: 'container',
+                layout: 'hbox',
+                items: [{
+                    xtype: 'filefield',
+                    name: 'privateKey',
+                    flex: 1,
+                    fieldLabel: 'Private key',
+                    listeners: {
+                        afterrender: function() {
+                            if (! this.getValue())
+                                this.next().disable();
+                        }
+                    }
+                }, {
+                    xtype: 'button',
+                    ui: 'action',
+                    margin: '0 0 0 4',
+                    cls: 'x-btn-action-delete',
+                    tooltip: 'Click here to delete previously uploaded private key',
+                    handler: function() {
+                        this.prev().setValue();
+                        this.next().setValue(1);
+                        this.disable();
+                    }
+                }, {
+                    xtype: 'hidden',
+                    name: 'privateKeyClear'
+                }]
 			}, {
-				xtype: 'filefield',
-				name: 'sslCabundle',
-				fieldLabel: 'Certificate chain'
-			}]
+                xtype: 'textfield',
+                inputType:'password',
+                width: 489,
+                fieldLabel: 'Private key password',
+                name: 'privateKeyPassword'
+            }]
 		}],
 
 		dockedItems: [{

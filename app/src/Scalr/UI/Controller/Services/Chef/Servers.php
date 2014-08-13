@@ -42,7 +42,7 @@ class Scalr_UI_Controller_Services_Chef_Servers extends Scalr_UI_Controller
 
     public function xListEnvironmentsAction()
     {
-        $servParams = $this->db->GetRow('SELECT url, env_id, auth_key as authKey, username as userName FROM services_chef_servers WHERE id = ?', array($this->getParam('servId')));
+        $servParams = $this->db->GetRow('SELECT id, url, env_id, auth_key as authKey, username as userName FROM services_chef_servers WHERE id = ?', array($this->getParam('servId')));
 
         if(!$this->user->getPermissions()->hasAccessEnvironment($servParams['env_id']))
             throw new Scalr_Exception_InsufficientPermissions();
@@ -81,8 +81,10 @@ class Scalr_UI_Controller_Services_Chef_Servers extends Scalr_UI_Controller
 
         $chef = Scalr_Service_Chef_Client::getChef($this->getParam('url'), $this->getParam('userName'), $key);
         $response = $chef->listCookbooks();
-        $chef = Scalr_Service_Chef_Client::getChef($this->getParam('url'), $this->getParam('userVName'), $vKey);
-        $response = $chef->getClient($this->getParam('userVName'));
+        $chef2 = Scalr_Service_Chef_Client::getChef($this->getParam('url'), $this->getParam('userVName'), $vKey);
+        $response = $chef2->createClient('scalr-temp-client');
+        $response2 = $chef->removeClient('scalr-temp-client');
+
         if ($servId) {
             $this->db->Execute('UPDATE services_chef_servers SET  `url` = ?, `username` = ?, `auth_key` = ?, `v_username` = ?, `v_auth_key` = ? WHERE `id` = ? AND env_id = ?', array(
                 $this->getParam('url'),

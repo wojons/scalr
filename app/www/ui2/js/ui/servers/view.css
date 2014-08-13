@@ -1,33 +1,3 @@
-.scalr-ui-servers-view-actions-console {
-    background: url('/ui2/images/ui/servers/actions_sprite.png') no-repeat 0 0;
-    width: 16px;
-    height: 16px;
-}
-
-.scalr-ui-servers-view-actions-console:hover {
-    background-position: -16px 0;
-}
-
-.scalr-ui-servers-view-actions-statsusage {
-    background: url('/ui2/images/ui/servers/actions_sprite.png') no-repeat 0 -16px;
-    width: 16px;
-    height: 16px;
-}
-
-.scalr-ui-servers-view-actions-statsusage:hover {
-    background-position: -16px -16px;
-}
-
-.scalr-ui-servers-view-actions-execute {
-    background: url('/ui2/images/ui/servers/actions_sprite.png') no-repeat 0 -32px;
-    width: 16px;
-    height: 16px;
-}
-
-.scalr-ui-servers-view-actions-execute:hover {
-    background-position: -16px -32px;
-}
-
 .scalr-ui-servers-view-column-platform div {
     padding-top: 4px;
     padding-bottom: 4px;

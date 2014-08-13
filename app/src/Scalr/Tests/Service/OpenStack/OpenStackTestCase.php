@@ -2,7 +2,6 @@
 namespace Scalr\Tests\Service\OpenStack;
 
 use Scalr\DependencyInjection\Container;
-use Scalr\Service\OpenStack\OpenStackConfig;
 use Scalr\Service\OpenStack\OpenStack;
 use Scalr\Tests\TestCase;
 

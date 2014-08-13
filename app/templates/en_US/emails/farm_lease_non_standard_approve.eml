@@ -1,8 +1,10 @@
-[subject]Farm's non-standard request was approved[/subject]
+[subject][Scalr] Lease extension request approved for Farm: {{farm_name}}[/subject]
 
-{{user_name}} approved your request for farm "{{farm_name}}" with comment "{{comment}}".
+Your non-standard lease extension request for the "{{farm_name}}" Farm was approved by {{user_name}}.
 
-New termination date was set to {{date}}.
+{{user_name}} left the following comment: "{{comment}}".
+
+The "{{farm_name}}" Farm is now scheduled for termination on: {{date}}.
 
 Regards,
 The Scalr Team

@@ -8,6 +8,8 @@ define("NO_SESSIONS", true);
 
 require_once __DIR__ . "/../src/prepend.inc.php";
 
+$Logger = Logger::getLogger('Application');
+
 $fname = basename($argv[0]);
 
 $JobLauncher = new \Scalr\System\Pcntl\JobLauncher(dirname(__FILE__));
@@ -20,7 +22,7 @@ if ($JobLauncher->GetProcessName() != 'DBQueueEvent') {
 
     // Execute command
     $parent_pid = posix_getppid();
-    $ps = $Shell->queryRaw("ps x -o pid,command | grep -v -E '^ *(" . $parent_pid . "|" . posix_getpid() . ") | ps x' | grep '".dirname(__FILE__)."' | grep '\-\-{$JobLauncher->GetProcessName()}'");
+    $ps = $Shell->queryRaw("ps x -o pid,command | grep -v -E '^ *(" . $parent_pid . "|" . posix_getpid() . ") | ps x' | grep '".dirname(__FILE__)."' | egrep '\-\-{$JobLauncher->GetProcessName()}\$'");
 
     if ($ps) {
         $Logger->info("'{$fname} --{$JobLauncher->GetProcessName()}' already running. Exiting.");

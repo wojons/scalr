@@ -5,7 +5,6 @@ Scalr.regPage('Scalr.ui.tools.rackspace.limits', function (loadParams, modulePar
 		],
 		proxy: {
 			type: 'scalr.paging',
-			extraParams: loadParams,
 			url: '/tools/rackspace/xListLimits/'
 		},
 		remoteSort: true
@@ -17,7 +16,6 @@ Scalr.regPage('Scalr.ui.tools.rackspace.limits', function (loadParams, modulePar
 			'reload': false,
 			'maximize': 'all'
 		},
-		scalrReconfigureParams: { volumeId: '' },
 		store: store,
 		stateId: 'grid-tools-rackspace-limits',
 		stateful: true,
@@ -54,15 +52,18 @@ Scalr.regPage('Scalr.ui.tools.rackspace.limits', function (loadParams, modulePar
 			store: store,
 			dock: 'top',
 			items: [{
+                xtype: 'filterfield',
+                store: store
+            }, {
 				xtype: 'fieldcloudlocation',
 				itemId: 'cloudLocation',
+                margin: '0 0 0 12',
 				store: {
 					fields: [ 'id', 'name' ],
 					data: moduleParams.locations,
 					proxy: 'object'
 				},
-				gridStore: store,
-				cloudLocation: loadParams['cloudLocation'] || ''
+				gridStore: store
 			}]
 		}]
 	});

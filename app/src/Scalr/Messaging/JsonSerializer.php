@@ -84,7 +84,11 @@ class Scalr_Messaging_JsonSerializer {
     function unserialize ($jsonString) {
         $msg = @json_decode($jsonString);
 
-        $ref = new ReflectionClass(Scalr_Messaging_Msg::getClassForName($msg->name));
+        $className = Scalr_Messaging_Msg::getClassForName($msg->name);
+        if (!class_exists($className))
+            return null;
+
+        $ref = new ReflectionClass($className);
         $retval = $ref->newInstance();
         $retval->messageId = "{$msg->id}";
         $retval->meta = (array)$msg->meta;

@@ -5,7 +5,7 @@ Scalr.regPage('Scalr.ui.farms.monitoring.view', function (loadParams, modulePara
 				fillStatistic(
 					panelItem.farm, 
 					windowItem.down('#viewMode').type, 
-					windowItem.down('#viewMode').text, 
+					windowItem.down('#viewMode').text,
 					panelItem.role
 				);
 			});
@@ -19,7 +19,7 @@ Scalr.regPage('Scalr.ui.farms.monitoring.view', function (loadParams, modulePara
 			url: '/server/statistics_proxy.php?version=2&task=get_stats_image_url&farmid=' + farm + '&watchername=' + watchername + '&graph_type=' + type + '&role=' + role,
 			success: function (data, response, options) {
 				panel.down('#' + watchername + farm + role).body.update('<img src = "' + data.msg + '">');
-				
+
 			},
 			failure: function(data, response, options){
 				panel.down('#' + watchername + farm + role).removeDocked(panel.down('#' + watchername + farm + role).down('#viewMode'), true);

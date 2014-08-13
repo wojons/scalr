@@ -1,5 +1,9 @@
 <?php
 
+use Scalr\Modules\PlatformFactory;
+use Scalr\Modules\Platforms\Cloudstack\CloudstackPlatformModule;
+use Scalr\Service\CloudStack\DataType\ListIpAddressesData;
+
 class Scalr_UI_Controller_Platforms_Cloudstack extends Scalr_UI_Controller
 {
     public function  buildSorter($key) {
@@ -9,12 +13,9 @@ class Scalr_UI_Controller_Platforms_Cloudstack extends Scalr_UI_Controller
     }
 
     public function getFarmRoleElasticIps($platform, $cloudLocation, $farmRoleId) {
-        $cs = Scalr_Service_Cloud_Cloudstack::newCloudstack(
-            $platform->getConfigVariable(Modules_Platforms_Cloudstack::API_URL, $this->getEnvironment()),
-            $platform->getConfigVariable(Modules_Platforms_Cloudstack::API_KEY, $this->getEnvironment()),
-            $platform->getConfigVariable(Modules_Platforms_Cloudstack::SECRET_KEY, $this->getEnvironment()),
-            $platform
-        );
+        $platformName = $platform;
+        $platform = PlatformFactory::NewPlatform($platform);
+        $cs = $this->getEnvironment()->cloudstack($platformName);
 
         $map = array();
 
@@ -43,22 +44,27 @@ class Scalr_UI_Controller_Platforms_Cloudstack extends Scalr_UI_Controller
             }
         }
 
-        $accountName = $platform->getConfigVariable(Modules_Platforms_Cloudstack::ACCOUNT_NAME, $this->getEnvironment(), false);
-        $domainId = $platform->getConfigVariable(Modules_Platforms_Cloudstack::DOMAIN_ID, $this->getEnvironment(), false);
+        $accountName = $platform->getConfigVariable(CloudstackPlatformModule::ACCOUNT_NAME, $this->getEnvironment(), false);
+        $domainId = $platform->getConfigVariable(CloudstackPlatformModule::DOMAIN_ID, $this->getEnvironment(), false);
 
-        $ipAddresses = $cs->listPublicIpAddresses(null, $accountName, null, $domainId, null, null, null, null, null, null, $cloudLocation);
+        $requestObject = new ListIpAddressesData();
+        $requestObject->account = $accountName;
+        $requestObject->domainid = $domainId;
+        $requestObject->zoneid = $cloudLocation;
+
+        $ipAddresses = $cs->listPublicIpAddresses($requestObject);
 
         $ips = array();
-        if (isset($ipAddresses->publicipaddress) && is_array($ipAddresses->publicipaddress)) {
+        if (count($ipAddresses) > 0) {
             /* @var $ip \Scalr\Service\Aws\Ec2\DataType\AddressData */
-            foreach ($ipAddresses->publicipaddress as $address) {
+            foreach ($ipAddresses as $address) {
 
-                if ($address->purpose != '' && !$address->isstaticnat)
+                if ($address->purpose != '' && !$address->isstaticnat) {
                     continue;
-
-                if ($address->issystem)
+                }
+                if ($address->issystem) {
                     continue;
-
+                }
                 $itm = array(
                     'ipAddress'  => $address->ipaddress,
                     'ipAddressId' => (string)$address->id,
@@ -103,106 +109,58 @@ class Scalr_UI_Controller_Platforms_Cloudstack extends Scalr_UI_Controller
     {
         $platform = PlatformFactory::NewPlatform($this->getParam('platform'));
 
-        $cs = Scalr_Service_Cloud_Cloudstack::newCloudstack(
-            $platform->getConfigVariable(Modules_Platforms_Cloudstack::API_URL, $this->getEnvironment()),
-            $platform->getConfigVariable(Modules_Platforms_Cloudstack::API_KEY, $this->getEnvironment()),
-            $platform->getConfigVariable(Modules_Platforms_Cloudstack::SECRET_KEY, $this->getEnvironment()),
-            $this->getParam('platform')
-        );
+        $cs = $this->getEnvironment()->cloudstack($this->getParam('platform'));
 
         $data = array();
         try {
-            $data['eips'] = $this->getFarmRoleElasticIps($platform, $this->getParam('cloudLocation'), $this->getParam('farmRoleId'));
+            $data['eips'] = $this->getFarmRoleElasticIps($this->getParam('platform'), $this->getParam('cloudLocation'), $this->getParam('farmRoleId'));
         } catch (Exception $e) {
             //DO NOTHING
         }
 
-        if ($this->getParam('platform') == SERVER_PLATFORMS::UCLOUD) {
-            $data = array();
-            $disks = array();
-            $types = array();
+        foreach ($cs->listDiskOfferings() as $offering) {
+            $data['diskOfferings'][] = array(
+                'id' => (string)$offering->id,
+                'name' => $offering->displaytext,
+                'size' => $offering->disksize,
+                'type' => $offering->storagetype,
+                'custom_size' => $offering->iscustomized
+            );
+        }
 
-            foreach ($cs->listAvailableProductTypes()->producttypes as $product) {
-                if (!$types[$product->serviceofferingid]) {
-                    $data['serviceOfferings'][] = array(
-                        'id' => (string)$product->serviceofferingid,
-                        'name' => $product->serviceofferingdesc
-                    );
+        foreach ($cs->listServiceOfferings() as $offering) {
 
-                    $types[$product->serviceofferingid] = true;
-                }
+            $data['serviceOfferings'][] = array(
+                'id' => (string)$offering->id,
+                'name' => $offering->displaytext
+            );
+        }
 
-                usort($data['serviceOfferings'], $this->buildSorter('name'));
-                $data['serviceOfferings'] = array_reverse($data['serviceOfferings']);
+        $accountName = $platform->getConfigVariable(CloudstackPlatformModule::ACCOUNT_NAME, $this->getEnvironment(), false);
+        $domainId = $platform->getConfigVariable(CloudstackPlatformModule::DOMAIN_ID, $this->getEnvironment(), false);
 
-                if (!$disks[$product->diskofferingid]) {
-                    $data['diskOfferings'][] = array(
-                        'id' => (string)$product->diskofferingid,
-                        'name' => $product->diskofferingdesc
-                    );
-                    $disks[$product->diskofferingid] = true;
-                }
-            }
+        $data['networks'] = $this->getNetworks($this->getParam('platform'), $this->getParam('cloudLocation'));
 
-            $ipAddresses = $cs->listPublicIpAddresses();
-            foreach ($ipAddresses->publicipaddress as $address) {
+        $requestObject = new ListIpAddressesData();
+        $requestObject->account = $accountName;
+        $requestObject->domainid = $domainId;
+        $requestObject->zoneid = $this->getParam('cloudLocation');
+
+        $ipAddresses = $cs->listPublicIpAddresses($requestObject);
+        $data['ipAddresses'][] = array(
+            'id' => "",
+            'name' => "Use system defaults"
+        );
+
+        if (count($ipAddresses) > 0) {
+            foreach ($ipAddresses as $address) {
+
+                //TODO: Filter by not used IPs
+
                 $data['ipAddresses'][] = array(
                     'id' => (string)$address->id,
                     'name' => $address->ipaddress
                 );
-            }
-        } else {
-            foreach ($cs->listDiskOfferings() as $offering) {
-                $data['diskOfferings'][] = array(
-                    'id' => (string)$offering->id,
-                    'name' => $offering->displaytext,
-                    'size' => $offering->disksize,
-                    'type' => $offering->storagetype,
-                    'custom_size' => $offering->iscustomized
-                );
-            }
-
-            foreach ($cs->listServiceOfferings() as $offering) {
-
-                $data['serviceOfferings'][] = array(
-                    'id' => (string)$offering->id,
-                    'name' => $offering->displaytext
-                );
-            }
-
-            $accountName = $platform->getConfigVariable(Modules_Platforms_Cloudstack::ACCOUNT_NAME, $this->getEnvironment(), false);
-            $domainId = $platform->getConfigVariable(Modules_Platforms_Cloudstack::DOMAIN_ID, $this->getEnvironment(), false);
-
-            $networks = $cs->listNetworks($this->getParam('cloudLocation'), $accountName, $domainId);
-
-            $data['networks'][] = array(
-                'id' => '',
-                'name' => 'Do not use network offering'
-            );
-
-            foreach ($networks as $network) {
-                $data['networks'][] = array(
-                        'id' => (string)$network->id,
-                        'name' => "{$network->id}: {$network->name} ({$network->networkdomain})"
-                );
-            }
-
-            $ipAddresses = $cs->listPublicIpAddresses(null, $accountName, null, $domainId, null, null, null, null, null, null, $this->getParam('cloudLocation'));
-            $data['ipAddresses'][] = array(
-                'id' => "",
-                'name' => "Use system defaults"
-            );
-
-            if(isset($ipAddresses->publicipaddress) && is_array($ipAddresses->publicipaddress)) {
-                foreach ($ipAddresses->publicipaddress as $address) {
-
-                    //TODO: Filter by not used IPs
-
-                    $data['ipAddresses'][] = array(
-                        'id' => (string)$address->id,
-                        'name' => $address->ipaddress
-                    );
-                }
             }
         }
 
@@ -212,80 +170,72 @@ class Scalr_UI_Controller_Platforms_Cloudstack extends Scalr_UI_Controller
     public function xGetServiceOfferingsAction()
     {
         $data = array();
-        $platform = PlatformFactory::NewPlatform($this->getParam('platform'));
 
-        $cs = Scalr_Service_Cloud_Cloudstack::newCloudstack(
-            $platform->getConfigVariable(Modules_Platforms_Cloudstack::API_URL, $this->getEnvironment()),
-            $platform->getConfigVariable(Modules_Platforms_Cloudstack::API_KEY, $this->getEnvironment()),
-            $platform->getConfigVariable(Modules_Platforms_Cloudstack::SECRET_KEY, $this->getEnvironment()),
-            $this->getParam('platform')
-        );
+        $cs = $this->getEnvironment()->cloudstack($this->getParam('platform'));
 
-        if ($this->getParam('platform') == SERVER_PLATFORMS::UCLOUD) {
-            $types = array();
-            foreach ($cs->listAvailableProductTypes()->producttypes as $product) {
-                if (!$types[$product->serviceofferingid]) {
-                    $data['serviceOfferings'][] = array(
-                        'id' => (string)$product->serviceofferingid,
-                        'name' => $product->serviceofferingdesc
-                    );
+        foreach ($cs->listServiceOfferings() as $offering) {
 
-                    $types[$product->serviceofferingid] = true;
-                }
-
-                usort($data['serviceOfferings'], $this->buildSorter('name'));
-                $data = array_reverse($data['serviceOfferings']);
-            }
-        } else {
-            foreach ($cs->listServiceOfferings() as $offering) {
-
-                $data[] = array(
-                    'id' => (string)$offering->id,
-                    'name' => $offering->displaytext
-                );
-            }
-
+            $data[] = array(
+                'id' => (string)$offering->id,
+                'name' => $offering->displaytext
+            );
         }
+
         $this->response->data(array('data' => $data));
     }
 
-    public function xGetNetworksAction()
+    private function getNetworks($platformName, $cloudLocation = false, $skipScalrOptions = false)
     {
-        $platform = PlatformFactory::NewPlatform($this->getParam('platform'));
+        $platform = PlatformFactory::NewPlatform($platformName);
 
-        $cs = Scalr_Service_Cloud_Cloudstack::newCloudstack(
-            $platform->getConfigVariable(Modules_Platforms_Cloudstack::API_URL, $this->getEnvironment()),
-            $platform->getConfigVariable(Modules_Platforms_Cloudstack::API_KEY, $this->getEnvironment()),
-            $platform->getConfigVariable(Modules_Platforms_Cloudstack::SECRET_KEY, $this->getEnvironment()),
-            $this->getParam('platform')
-        );
+        $cs = $this->getEnvironment()->cloudstack($platformName);
 
         $data = array();
 
-        if (!$this->getParam('cloudLocation')) {
-            $cloudLocations = array_keys(self::loadController('Platforms')->getCloudLocations($this->getParam('platform'), false));
+        if (!$cloudLocation) {
+            $cloudLocations = array_keys(self::loadController('Platforms')->getCloudLocations($platformName, false));
         } else {
-            $cloudLocations = array($this->getParam('cloudLocation'));
+            $cloudLocations = array($cloudLocation);
         }
 
-        $accountName = $platform->getConfigVariable(Modules_Platforms_Cloudstack::ACCOUNT_NAME, $this->getEnvironment(), false);
-        $domainId = $platform->getConfigVariable(Modules_Platforms_Cloudstack::DOMAIN_ID, $this->getEnvironment(), false);
+        $accountName = $platform->getConfigVariable(CloudstackPlatformModule::ACCOUNT_NAME, $this->getEnvironment(), false);
+        $domainId = $platform->getConfigVariable(CloudstackPlatformModule::DOMAIN_ID, $this->getEnvironment(), false);
 
-        foreach ($cloudLocations as $cloudLocation) {
-            $networks = $cs->listNetworks($cloudLocation, $accountName, $domainId);
-            $data[$cloudLocation][] = array(
-                'id' => '',
-                'name' => 'Do not use network offering'
+        foreach ($cloudLocations as $cl) {
+            $networks = $cs->network->describe(
+                array(
+                    'account'   => $accountName,
+                    'domainid'  => $domainId,
+                    'zoneid'    => $cl
+                )
             );
 
+            if (!$skipScalrOptions) {
+                $data[$cl][] = array(
+                    'id' => '',
+                    'name' => 'Do not use network offering'
+                );
+
+                $data[$cl][] = array(
+                    'id' => 'SCALR_MANUAL',
+                    'name' => 'Set servers IP manually'
+                );
+            }
+
             foreach ($networks as $network) {
-                $data[$cloudLocation][] = array(
+                $data[$cl][] = array(
                     'id' => (string)$network->id,
                     'name' => "{$network->id}: {$network->name} ({$network->networkdomain})"
                 );
             }
         }
 
+        return ($cloudLocation) ? $data[$cloudLocation] : $data;
+    }
+
+    public function xGetNetworksAction()
+    {
+        $data = $this->getNetworks($this->getParam('platform'), false, true);
         $this->response->data(array('data' => $data));
     }
 

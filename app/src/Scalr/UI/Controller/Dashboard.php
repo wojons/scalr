@@ -10,6 +10,8 @@ class Scalr_UI_Controller_Dashboard extends Scalr_UI_Controller
     {
         if ($this->user->getType() == Scalr_Account_User::TYPE_SCALR_ADMIN) {
             $this->response->page('ui/dashboard/admin.js');
+        } else if ($this->user->getType() == Scalr_Account_User::TYPE_FIN_ADMIN) {
+            self::loadController('Dashboard', 'Scalr_UI_Controller_Analytics')->defaultAction();
         } else {
             $loadJs = array('ui/dashboard/columns.js');
             $cloudynEnabled = \Scalr::config('scalr.cloudyn.master_email') ? true : false;
@@ -78,12 +80,18 @@ class Scalr_UI_Controller_Dashboard extends Scalr_UI_Controller
 
             $panel = $this->fillDash($panel);
 
+            $conf = $this->getContainer()->config->get('scalr.load_statistics.connections.plotter');
+            $monitoringUrl = "{$conf['scheme']}://{$conf['host']}:{$conf['port']}";
+
             $this->response->page('ui/dashboard/view.js',
                 array(
                     'panel' => $panel,
                     'flags' => array(
                         'cloudynEnabled' => $cloudynEnabled,
                         'billingEnabled' => $billingEnabled
+                    ),
+                    'params' => array(
+                        'monitoringUrl' => $monitoringUrl
                     )
                 ),
                 $loadJs,

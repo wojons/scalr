@@ -1,149 +1,259 @@
 Scalr.regPage('Scalr.ui.scripts.execute', function (loadParams, moduleParams) {
-	var form = Ext.create('Ext.form.Panel', {
-		width: 900,
-		title: 'Execute script',
-		fieldDefaults: {
-			anchor: '100%'
-		},
+    var form = Ext.create('Ext.form.Panel', {
+        width: 900,
+        title: loadParams['edit'] ? 'Edit shortcut' : 'Execute script',
+        fieldDefaults: {
+            anchor: '100%'
+        },
 
-		items: [{
-			xtype: 'farmroles',
-			title: 'Execution target',
-			itemId: 'executionTarget',
-			params: moduleParams['farmWidget']
-		}, {
-			xtype: 'fieldset',
-			title: 'Execution options',
-			labelWidth: 100,
-			fieldDefaults: {
-				width: 150
-			},
-			items: [{
-				xtype: 'combo',
-				fieldLabel: 'Script',
-				name: 'scriptId',
-				store: {
-					fields: [ 'id', 'name', 'description', 'issync', 'timeout', 'revisions' ],
-					data: moduleParams['scripts'],
-					proxy: 'object'
-				},
-				valueField: 'id',
-				displayField: 'name',
-				emptyText: 'Select a script',
-				editable: true,
-				forceSelection: true,
-				queryMode: 'local',
-				listeners: {
-					change: function () {
-						var f = form.down('[name="scriptId"]'), r = f.store.findRecord('id', f.getValue(), 0, false, false, true), fR = form.down('[name="scriptVersion"]');
+        items: [{
+            xtype: 'farmroles',
+            title: 'Execution target',
+            itemId: 'executionTarget',
+            params: moduleParams['farmWidget'],
+            listeners: {
+                boxready: function() {
+                    var el = form.down('#additional');
+                    if (!!loadParams['edit']) {
+                        this.down('[name="farmId"]').setReadOnly(true);
+                        this.down('[name="farmRoleId"]').setReadOnly(true);
+                    }
 
-						fR.setValue('');
+                    this.down('[name="farmId"]').on('change', function(field, value) {
+                        el[value != 0 ? 'show' : 'hide']();
+                    });
 
-						if (r) {
-							fR.store.loadData(r.get('revisions'));
-							fR.store.sort('revision', 'DESC');
-							fR.store.insert(0, { revision: -1, revisionName: 'Latest', fields: fR.store.first().get('fields') });
+                    this.down('[name="serverId"]').on('change', function(field, value) {
+                        el[value != 0 ? 'hide' : 'show']();
+                    });
+                    this.down('[name="serverId"]').on('hide', function() {
+                        el.show();
+                    });
+                }
+            }
+        }, {
+            xtype: 'fieldset',
+            items: [{
+                xtype: 'tabpanel',
+                itemId: 'tabs',
+                cls: 'x-tabs-dark',
+                margin: '0 0 18 0',
+                height: 100,
+                defaults: {
+                    listeners: {
+                        activate: function(tab) {
+                            var scriptParamsWrapper = form.down('#scriptParams');
+                            scriptParamsWrapper.setVisible(tab.itemId === 'scalrscript' ? !!scriptParamsWrapper.scriptHasParams : false);
 
-							if (!moduleParams['eventName']) {
-								fR.setValue(fR.store.first().get('revision'));
+                            form.down('[name="scriptId"]').setDisabled(tab.itemId != 'scalrscript');
+                            form.down('[name="scriptPath"]').setDisabled(tab.itemId != 'localscript');
+                        }
+                    }
+                },
+                items: [{
+                    xtype: 'container',
+                    itemId: 'scalrscript',
+                    tabConfig: {
+                        title: 'Scalr script'
+                    },
+                    items: [{
+                        xtype: 'container',
+                        cls: 'x-container-fieldset',
+                        layout: {
+                            type: 'hbox',
+                            align: 'stretch'
+                        },
+                        items: [{
+                            xtype: 'scriptselectfield',
+                            name: 'scriptId',
+                            emptyText: 'Select a script',
+                            store: {
+                                fields: [ 'id', 'name', 'description', 'os', 'isSync', 'timeout', 'versions', 'accountId', 'createdByEmail' ],
+                                data: moduleParams.scripts,
+                                proxy: 'object'
+                            },
+                            allowBlank: false,
+                            flex: 1,
+                            labelWidth: 50,
+                            listeners: {
+                                change: function (field) {
+                                    var record = field.findRecordByValue(field.getValue());
+                                    var scriptVersionField = form.down('[name="scriptVersion"]');
 
-								form.down('[name="scriptTimeout"]').setValue(r.get('timeout'));
-								form.down('[name="scriptIsSync"]').setValue(r.get('issync'));
-							}
-						}
-					}
-				}
-			}, {
-				xtype: 'combo',
-				store: [ ['1', 'Blocking'], ['0', 'Non-blocking']],
-				editable: false,
-				queryMode: 'local',
-				name: 'scriptIsSync',
-				fieldLabel: 'Execution mode'
-			}, {
-				xtype: 'textfield',
-				fieldLabel: 'Timeout',
-				name: 'scriptTimeout'
-			},{
-				xtype: 'combo',
-				store: {
-					fields: [{ name: 'revision', type: 'int' }, 'revisionName', 'fields' ],
-					proxy: 'object'
-				},
-				valueField: 'revision',
-				displayField: 'revisionName',
-				editable: false,
-				queryMode: 'local',
-				name: 'scriptVersion',
-				fieldLabel: 'Version',
-				listeners: {
-					change: function (field, value) {
-						var fieldset = form.down('#scriptOptions');
-						if (! value) {
-							fieldset.removeAll();
-							fieldset.hide();
-							return;
-						}
-						var r = field.store.findRecord('revision', value, 0, false, false, true);
-						if (!r)
-							return;
+                                    scriptVersionField.setValue('');
 
-						var fields = r.get('fields');
+                                    if (record) {
+                                        scriptVersionField.store.loadData(record.get('versions'));
+                                        scriptVersionField.store.insert(0, { version: -1, versionName: 'Latest', variables: scriptVersionField.store.last().get('variables') });
 
-						fieldset.removeAll();
-						if (Ext.isObject(fields)) {
-							for (var i in fields) {
-								fieldset.add({
-									xtype: 'textfield',
-									fieldLabel: fields[i],
-									name: 'scriptOptions[' + i + ']',
-									value: moduleParams['scriptOptions'] ? moduleParams['scriptOptions'][i] : ''
-								});
-							}
-							fieldset.show();
-						} else {
-							fieldset.hide();
-						}
-					}
-				}
-			}]
-		}, {
-			xtype: 'fieldset',
-			title: 'Script options',
-			itemId: 'scriptOptions',
-			labelWidth: 100,
-			hidden: true,
-			fieldDefaults: {
-				anchor: '100%'
-			}
-		}, {
-			xtype: 'fieldset',
-			title: 'Additional settings',
-			labelWidth: 100,
-			items: [{
-				xtype: 'checkbox',
-				hideLabel: true,
-				boxLabel: 'Add a shortcut in Options menu for roles. It will allow me to execute this script with the above parameters with a single click.',
-				name: 'createMenuLink',
-				inputValue: 1,
-				checked: loadParams['isShortcut'],
-				disabled: loadParams['isShortcut'] || loadParams['eventName']
-			}]
-		}],
+                                        if (!moduleParams.shortcutId) {
+                                            scriptVersionField.setValue(scriptVersionField.store.first().get('version'));
 
-		dockedItems: [{
-			xtype: 'container',
-			dock: 'bottom',
-			cls: 'x-docked-buttons',
-			layout: {
-				type: 'hbox',
-				pack: 'center'
-			},
-			items: [{
-				xtype: 'button',
-				text: 'Save',
-				hidden: !loadParams['isShortcut'],
-				handler: function () {
+                                            form.down('[name="scriptTimeout"]').setValue(record.get('timeout'));
+                                            form.down('[name="scriptIsSync"]').setValue(record.get('isSync'));
+                                        }
+                                    }
+                                }
+                            }
+                        }, {
+                            xtype: 'combo',
+                            store: {
+                                fields: ['version', 'versionName', 'variables' ],
+                                proxy: 'object'
+                            },
+                            valueField: 'version',
+                            displayField: 'versionName',
+                            editable: false,
+                            queryMode: 'local',
+                            width: 140,
+                            labelWidth: 50,
+                            margin: '0 0 0 12',
+                            name: 'scriptVersion',
+                            fieldLabel: 'Version',
+                            listeners: {
+                                change: function (field, value) {
+                                    var fieldset = form.down('#scriptParams');
+                                    if (! value) {
+                                        fieldset.removeAll();
+                                        fieldset.hide();
+                                        field.scriptHasParams = false;
+                                        return;
+                                    }
+                                    var r = field.findRecordByValue(value);
+                                    if (!r)
+                                        return;
+
+                                    var variables = r.get('variables');
+
+                                    fieldset.removeAll();
+                                    if (Ext.isObject(variables)) {
+                                        for (var i in variables) {
+                                            fieldset.add({
+                                                xtype: 'textfield',
+                                                fieldLabel: variables[i],
+                                                name: 'scriptParams[' + i + ']',
+                                                value: moduleParams['scriptParams'] ? moduleParams['scriptParams'][i] : ''
+                                            });
+                                        }
+                                        fieldset.show();
+                                        fieldset.scriptHasParams = true;
+                                    } else {
+                                        fieldset.hide();
+                                        fieldset.scriptHasParams = false;
+                                    }
+                                }
+                            }
+                        }]
+                    }]
+                }, {
+                    xtype: 'container',
+                    itemId: 'localscript',
+                    cls: 'x-container-fieldset',
+                    layout: 'anchor',
+                    defaults: {
+                        anchor: '100%'
+                    },
+                    tabConfig: {
+                        title: 'Local script'
+                    },
+                    items: [{
+                        xtype: 'textfield',
+                        name: 'scriptPath',
+                        disabled: true,
+                        fieldLabel: 'Path',
+                        icons: {
+                            globalvars: true
+                        },
+                        allowBlank: false,
+                        emptyText: '/path/to/the/script',
+                        labelWidth: 50
+                    }]
+                }]
+            }, {
+                xtype: 'buttongroupfield',
+                fieldLabel: 'Execution mode',
+                name: 'scriptIsSync',
+                defaults: {
+                    width: 110
+                },
+                items: [{
+                    text: 'Blocking',
+                    value: 1
+                },{
+                    text: 'Non-blocking',
+                    value: 0
+                }]
+            }, {
+                xtype: 'textfield',
+                fieldLabel: 'Timeout',
+                name: 'scriptTimeout',
+                maxWidth: 170,
+                allowBlank: false
+            }]
+        }, {
+            xtype: 'fieldset',
+            title: 'Script options',
+            itemId: 'scriptParams',
+            labelWidth: 100,
+            hidden: true,
+            fieldDefaults: {
+                anchor: '100%'
+            }
+        }, {
+            xtype: 'fieldset',
+            title: 'Additional settings',
+            itemId: 'additional',
+            labelWidth: 100,
+            layout: 'hbox',
+            items: [{
+                xtype: 'checkbox',
+                hideLabel: true,
+                boxLabel: 'Add a shortcut in Options menu for roles. It will allow me to execute this script with the above parameters with a single click.',
+                name: 'shortcutId',
+                inputValue: moduleParams['shortcutId'] || -1,
+                checked: !!moduleParams['shortcutId'],
+                readOnly: !!loadParams['edit']
+            }, {
+                xtype: 'displayfield',
+                margin: '0 0 0 6',
+                value: '<a href="https://scalr-wiki.atlassian.net/wiki/x/qQIb" target="_blank"><img class="tipHelp" src="/ui2/images/icons/info_icon_16x16.png" /></a>'
+            }]
+        }],
+
+        dockedItems: [{
+            xtype: 'container',
+            dock: 'bottom',
+            cls: 'x-docked-buttons',
+            layout: {
+                type: 'hbox',
+                pack: 'center'
+            },
+            items: [{
+                xtype: 'button',
+                text: 'Save',
+                hidden: !loadParams['edit'],
+                handler: function () {
+                    if (form.getForm().isValid())
+                        Scalr.Request({
+                            processBox: {
+                                type: 'action'
+                            },
+                            url: '/scripts/xExecute/',
+                            params: {
+                                editShortcut: 1
+                            },
+                            form: form.getForm(),
+                            success: function () {
+                                Scalr.event.fireEvent('close');
+                            }
+                        });
+                }
+            }, {
+                xtype: 'splitbutton',
+                text: 'Execute',
+                hidden: !!loadParams['edit'],
+                handler: function () {
+                    Scalr.message.Flush(true);
                     if (form.getForm().isValid())
                         Scalr.Request({
                             processBox: {
@@ -155,28 +265,10 @@ Scalr.regPage('Scalr.ui.scripts.execute', function (loadParams, moduleParams) {
                                 Scalr.event.fireEvent('close');
                             }
                         });
-				}
-			}, {
-				xtype: 'splitbutton',
-				text: 'Execute',
-				hidden: !!loadParams['isShortcut'],
-				handler: function () {
-					Scalr.message.Flush(true);
-                    if (form.getForm().isValid())
-                        Scalr.Request({
-                            processBox: {
-                                type: 'action'
-                            },
-                            url: '/scripts/xExecute/',
-                            form: form.getForm(),
-                            success: function () {
-                                Scalr.event.fireEvent('close');
-                            }
-                        });
-				},
-				menu: [{
-					text: 'Execute script and stay on this page',
-					handler: function () {
+                },
+                menu: [{
+                    text: 'Execute script and stay on this page',
+                    handler: function () {
                         if (form.getForm().isValid())
                             Scalr.Request({
                                 processBox: {
@@ -188,31 +280,29 @@ Scalr.regPage('Scalr.ui.scripts.execute', function (loadParams, moduleParams) {
 
                                 }
                             });
-					}
-				}],
-				listeners: {
-					menushow: function () {
-						Scalr.message.Flush(true);
-					}
-				}
-			}, {
-				xtype: 'button',
-				text: 'Cancel',
-				handler: function() {
-					Scalr.event.fireEvent('close');
-				}
-			}]
-		}]
-	});
+                    }
+                }],
+                listeners: {
+                    menushow: function () {
+                        Scalr.message.Flush(true);
+                    }
+                }
+            }, {
+                xtype: 'button',
+                text: 'Cancel',
+                handler: function() {
+                    Scalr.event.fireEvent('close');
+                }
+            }]
+        }]
+    });
 
-	if (moduleParams) {
-		for (var i in moduleParams) {
-			if (! moduleParams[i])
-				delete moduleParams[i];
-		}
+    if (moduleParams) {
+        if (moduleParams['scriptPath'])
+            form.down('#tabs').setActiveTab('localscript');
 
-		form.getForm().setValues(moduleParams);
-	}
+        form.getForm().setValues(moduleParams);
+    }
 
-	return form;
+    return form;
 });

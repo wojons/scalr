@@ -208,44 +208,43 @@ Scalr.regPage('Scalr.ui.schedulertasks.create', function (loadParams, modulePara
 			itemId: 'executionOptions',
 			hidden: true,
 			items: [{
-				xtype: 'combo',
-				fieldLabel: 'Script',
-				name: 'scriptId',
-				store: {
-					fields: [ 'id', 'name', 'description', 'issync', 'timeout', 'revisions' ],
-					data: moduleParams['scripts'],
-					proxy: 'object'
-				},
-				valueField: 'id',
-				displayField: 'name',
-				emptyText: 'Select a script',
-				editable: true,
-				forceSelection: true,
-				queryMode: 'local',
-				listeners: {
-					change: function (field, value) {
-						var cont = field.up(), r = field.findRecord('id', value), fR = cont.down('[name="scriptVersion"]');
+                xtype: 'scriptselectfield',
+                name: 'scriptId',
+                store: {
+                    fields: [ 'id', 'name', 'description', 'os', 'isSync', 'timeout', 'versions', 'accountId', 'createdByEmail' ],
+                    data: moduleParams['scripts'],
+                    proxy: 'object'
+                },
+                listeners: {
+                    change: function (field, value) {
+                        var cont = field.up(), r = field.findRecord('id', value), fR = cont.down('[name="scriptVersion"]');
 
-						if (!r)
-							return;
+                        if (!r)
+                            return;
 
-						fR.setValue();
-						fR.store.loadData(r.get('revisions'));
-						fR.store.sort('revision', 'DESC');
-						fR.store.insert(0, { revision: -1, revisionName: 'Latest', fields: fR.store.first().get('fields') });
-						fR.setValue(fR.store.first().get('revision'));
+                        fR.setValue();
+                        fR.store.loadData(r.get('versions'));
+                        fR.store.insert(0, { version: -1, versionName: 'Latest', variables: fR.store.last().get('variables') });
+                        fR.setValue(fR.store.first().get('version'));
 
-						cont.down('[name="scriptTimeout"]').setValue(r.get('timeout'));
-						cont.down('[name="scriptIsSync"]').setValue(r.get('issync'));
-					}
-				}
-			}, {
-				xtype: 'combo',
-				store: [ ['1', 'Blocking'], ['0', 'Non-blocking']],
-				editable: false,
-				queryMode: 'local',
-				name: 'scriptIsSync',
-				fieldLabel: 'Execution mode'
+                        cont.down('[name="scriptTimeout"]').setValue(r.get('timeout'));
+                        cont.down('[name="scriptIsSync"]').setValue(r.get('isSync'));
+                    }
+                }
+            }, {
+                xtype: 'buttongroupfield',
+                fieldLabel: 'Execution mode',
+                name: 'scriptIsSync',
+                defaults: {
+                    width: 110
+                },
+                items: [{
+                    text: 'Blocking',
+                    value: 1
+                },{
+                    text: 'Non-blocking',
+                    value: 0
+                }]
 			}, {
 				xtype: 'textfield',
 				fieldLabel: 'Timeout',
@@ -253,11 +252,11 @@ Scalr.regPage('Scalr.ui.schedulertasks.create', function (loadParams, modulePara
 			},{
 				xtype: 'combo',
 				store: {
-					fields: [{ name: 'revision', type: 'int' }, 'revisionName', 'fields' ],
+					fields: ['version', 'versionName', 'variables' ],
 					proxy: 'object'
 				},
-				valueField: 'revision',
-				displayField: 'revisionName',
+				valueField: 'version',
+				displayField: 'versionName',
 				editable: false,
 				queryMode: 'local',
 				name: 'scriptVersion',
@@ -267,7 +266,7 @@ Scalr.regPage('Scalr.ui.schedulertasks.create', function (loadParams, modulePara
 						var r = this.findRecordByValue(value), fieldset = form.down('#scriptOptions');
 
 						if (r) {
-							var fields = r.get('fields');
+							var fields = r.get('variables');
 
 							Ext.each(fieldset.items.getRange(), function(item) {
 								scriptOptionsValue[item.name] = item.getValue();

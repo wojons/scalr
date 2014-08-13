@@ -363,7 +363,7 @@ Ext.define('Scalr.ui.GridDnsRowEditing', {
             record,
             columnHeader;
             
-        if (selModel.lastFocused) {
+        if (selModel.lastFocused && !this.editing) {
             record = selModel.lastFocused;
             columnHeader = grid.columnManager.getHeaderAtIndex(0);
             me.startEdit(record, columnHeader);

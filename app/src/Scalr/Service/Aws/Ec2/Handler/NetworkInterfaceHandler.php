@@ -8,7 +8,6 @@ use Scalr\Service\Aws\Ec2\DataType\NetworkInterfaceFilterList;
 use Scalr\Service\Aws\Ec2\DataType\NetworkInterfaceData;
 use Scalr\Service\Aws\DataType\ListDataType;
 use Scalr\Service\Aws\Client\ClientException;
-use Scalr\Service\Aws\DataType\ErrorData;
 use Scalr\Service\Aws\Ec2Exception;
 use Scalr\Service\Aws\Ec2\AbstractEc2Handler;
 

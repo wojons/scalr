@@ -3,15 +3,16 @@
 class Scalr_UI_Request
 {
     protected
-        $params = array(),
-        $definitions = array(),
-        $requestParams = array(),
-        $requestHeaders = array(),
-        $requestServer = array(),
+        $params = [],
+        $definitions = [],
+        $requestParams = [],
+        $requestHeaders = [],
+        $requestServer = [],
+        $requestFiles = [],
         $user,
         $environment,
         $requestType,
-        $paramErrors = array(),
+        $paramErrors = [],
         $paramsIsValid = true,
         $clientIp = null;
 
@@ -57,7 +58,7 @@ class Scalr_UI_Request
         // TODO: replace $_SERVER usage with class method
         $this->requestServer = $server;
         $this->requestParams = $params;
-        // TODO: create class for file upload abstraction
+        $this->requestFiles = $files;
     }
 
     /**
@@ -92,7 +93,7 @@ class Scalr_UI_Request
             if ($user->status != Scalr_Account_User::STATUS_ACTIVE)
                 throw new Exception('User account has been deactivated. Please contact your account owner.');
 
-            if ($user->getType() != Scalr_Account_User::TYPE_SCALR_ADMIN) {
+            if (! $user->isAdmin()) {
                 $environment = $user->getDefaultEnvironment($envId);
                 $user->getPermissions()->setEnvironmentId($environment->id);
             }
@@ -111,7 +112,7 @@ class Scalr_UI_Request
             if ($ipWhitelist) {
                 $ipWhitelist = unserialize($ipWhitelist);
                 if (! Scalr_Util_Network::isIpInSubnets($instance->getRemoteAddr(), $ipWhitelist))
-                    throw new Exception('The IP address isn\'t authorized');
+                    throw new Exception('The IP address isn\'t authorized.');
             }
 
             // check header's variables
@@ -196,7 +197,7 @@ class Scalr_UI_Request
 
     public function getRemoteAddr()
     {
-        return $_SERVER['REMOTE_ADDR'];
+        return isset($_SERVER['REMOTE_ADDR']) ? $_SERVER['REMOTE_ADDR'] : null;
     }
 
     public function setParam($key, $value)
@@ -210,11 +211,32 @@ class Scalr_UI_Request
         $this->requestParams = array_merge($this->requestParams, $params);
     }
 
-    public function getParam($key)
+    /**
+     * clear string from prohibited symbols
+     *
+     * @param $value string
+     * @return string
+     */
+    public function stripValue($value)
+    {
+        $value = strip_tags($value);
+        $value = str_replace(array('>', '<'), '', $value);
+        $value = trim($value);
+
+        return $value;
+    }
+
+    /**
+     * @deprecated all parameters should be defined in function's arguments
+     * @param $key
+     * @param bool $rawValue if true returns rawValue (not stripped) only once, don't save in cache
+     * @return mixed
+     */
+    public function getParam($key, $rawValue = false)
     {
         $value = null;
 
-        if (isset($this->params[$key]))
+        if (isset($this->params[$key]) && !$rawValue)
             return $this->params[$key];
 
         if (isset($this->definitions[$key])) {
@@ -246,23 +268,27 @@ class Scalr_UI_Request
                     case 'string':
                     default:
                         $value = strval($value);
+
+                        if ($rawValue)
+                            return $value;
+
+                        if (! (isset($rule['rawValue']) && $rule['rawValue']))
+                            $value = $this->stripValue($value);
+
                         break;
                 }
             }
 
             $this->params[$key] = $value;
-        } else
-            $this->params[$key] = $this->getRequestParam($key);
+        } else {
+            $value = $this->getRequestParam($key);
 
-        // If cloudlocation was set incorrectly we're displaying it as is in error messages.
-        // We need to strip_tags to protect from XSS.
-        // This is reported and confirmed XSS. Probably we need to do this for all string values and add exceptions
-        // in places where we need tags (like scripts content).
+            if ($rawValue)
+                return $value;
 
-        if ($key == "cloudLocation") {
-            if (isset($this->params[$key])) {
-                $this->params[$key] = preg_replace("/[^A-Za-z0-9-_\.\\s]+/si", '', $this->params[$key]);
-            }
+            $value = strval($value);
+            $value = $this->stripValue($value);
+            $this->params[$key] = $value;
         }
 
         return $this->params[$key];
@@ -275,6 +301,11 @@ class Scalr_UI_Request
         }
 
         return $this->params;
+    }
+
+    public function getFileName($name)
+    {
+        return (isset($this->requestFiles[$name]) && is_readable($this->requestFiles[$name]['tmp_name'])) ? $this->requestFiles[$name]['tmp_name'] : NULL;
     }
 
     /**
@@ -437,5 +468,15 @@ class Scalr_UI_Request
         if (!$this->isAllowed($resourceId, $permissionId)) {
            throw new Scalr_Exception_InsufficientPermissions();
         }
+    }
+
+    /**
+     * Checks whether either it is beta version of interface or not hosted scalr install
+     *
+     * @return boolean Returns true if it is either a beta version of interface or it isn't hosted scalr install
+     */
+    public function isInterfaceBetaOrNotHostedScalr()
+    {
+        return $this->getHeaderVar('Interface-Beta') || Scalr::isAllowedAnalyticsOnHostedScalrAccount($this->getEnvironment()->clientId);
     }
 }

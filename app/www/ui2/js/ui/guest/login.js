@@ -10,11 +10,11 @@ Scalr.regPage('Scalr.ui.guest.login', function (loadParams, moduleParams) {
 		layout: 'anchor',
 		fieldDefaults: {
 			anchor: '100%',
-			labelWidth: 70
+			labelWidth: 80
 		},
 		items: {
 			xtype: 'fieldset',
-            title: '<img src="/ui2/images/ui/guest/login/logo.png" style="vertical-align: middle"> Welcome',
+            title: '<img src="' + Ext.BLANK_IMAGE_URL + '" class="x-icon-scalr" style="vertical-align: middle">&nbsp;&nbsp;Welcome',
             cls: 'x-fieldset-separator-none x-fieldset-no-bottom-padding',
 			items: [{
 				xtype: 'textfield',
@@ -51,6 +51,7 @@ Scalr.regPage('Scalr.ui.guest.login', function (loadParams, moduleParams) {
                 queryMode: 'local',
                 valueField: 'id',
                 displayField: 'name',
+                itemId: 'accountId',
                 name: 'accountId',
                 hidden: true,
                 disabled: true,
@@ -60,13 +61,38 @@ Scalr.regPage('Scalr.ui.guest.login', function (loadParams, moduleParams) {
                 listConfig: {
                     cls: 'x-boundlist-alt',
                     getInnerTpl: function () {
-                        return '{name}<tpl if="org"> [{org}]</tpl><tpl if="owner"> [owner: {owner}]</tpl> [created at {dtadded}]'
+                        return '{name}<tpl if="org"> [{org}]</tpl><tpl if="owner"> [Owner: {owner}]</tpl> [Created on {dtadded}]'
                     }
                 }
+            }, {
+                xtype: 'container',
+                layout: 'hbox',
+                itemId: 'tfaGglCode',
+                hidden: true,
+                disabled: true,
+                items: [{
+                    xtype: 'textfield',
+                    fieldLabel: '2FA Code',
+                    name: 'tfaGglCode',
+                    allowBlank: false,
+                    flex: 1
+                }, {
+                    xtype: 'buttonfield',
+                    margin: '0 0 0 6',
+                    width: 100,
+                    enableToggle: true,
+                    text: 'Reset 2FA',
+                    name: 'tfaGglReset',
+                    toggleHandler: function(el, state) {
+                        if (state)
+                            Scalr.message.InfoTip('Please enter reset code to disable two-factor authentication', this.prev().el);
+
+                        this.prev().setFieldLabel(state ? 'Reset code' : '2FA Code');
+                    }
+                }]
 			}, {
 				xtype: 'checkbox',
 				name: 'scalrKeepSession',
-				inputType: 'checkbox',
 				checked: true,
                 hidden: Scalr.flags['authMode'] == 'ldap',
 				boxLabel: 'Remember me'
@@ -87,14 +113,16 @@ Scalr.regPage('Scalr.ui.guest.login', function (loadParams, moduleParams) {
 					'</div>',
 				listeners: {
 					afterrender: function() {
-						RecaptchaOptions = {
-							theme: 'custom',
-							custom_theme_widget: 'recaptcha_widget'
-						};
+                        if (moduleParams['recaptchaPublicKey']) {
+                            RecaptchaOptions = {
+                                theme: 'custom',
+                                custom_theme_widget: 'recaptcha_widget'
+                            };
 
-						Ext.Loader.injectScriptElement('https://www.google.com/recaptcha/api/challenge?k=6LcmltwSAAAAAJNs9vxjQeZ2cwhBleap9Dr8wQ7F', function() {
-							Ext.Loader.injectScriptElement(RecaptchaState.server + 'js/recaptcha.js', Ext.emptyFn);
-						});
+                            Ext.Loader.injectScriptElement('https://www.google.com/recaptcha/api/challenge?k=' + moduleParams['recaptchaPublicKey'], function() {
+                                Ext.Loader.injectScriptElement(RecaptchaState.server + 'js/recaptcha.js', Ext.emptyFn);
+                            });
+                        }
 					}
 				}
 			}, {
@@ -112,6 +140,9 @@ Scalr.regPage('Scalr.ui.guest.login', function (loadParams, moduleParams) {
 						this.prev().hide();
 					}
 				}
+            }, {
+                xtype: 'hiddenfield',
+                name: 'scalrCaptchaChallenge'
             }, {
 				xtype: 'hiddenfield',
 				name: 'userTimezone',
@@ -141,7 +172,7 @@ Scalr.regPage('Scalr.ui.guest.login', function (loadParams, moduleParams) {
 					if (this.up('form').getForm().isValid()) {
 						var values = this.up('form').getForm().getValues();
 
-						if (Ext.isChrome || Ext.isGecko || Ext.isSafari) {
+						/*if (Ext.isChrome || Ext.isGecko || Ext.isSafari) {
 							// fake save password feature
 							var iframe = document.getElementById('hiddenChromeLoginForm');
 							var iframedoc = iframe.contentWindow ? iframe.contentWindow.document : iframe.contentDocument;
@@ -150,7 +181,10 @@ Scalr.regPage('Scalr.ui.guest.login', function (loadParams, moduleParams) {
 								iframedoc.getElementById('scalrPass').value = values['scalrPass'];
 								iframedoc.getElementById('loginForm').submit();
 							}
-						}
+						}*/
+
+                        if (window.RecaptchaState)
+                            this.up('form').down('[name="scalrCaptchaChallenge"]').setValue(RecaptchaState.challenge);
 
 						Scalr.Request({
 							processBox: {
@@ -160,41 +194,39 @@ Scalr.regPage('Scalr.ui.guest.login', function (loadParams, moduleParams) {
 							form: this.up('form').getForm(),
 							url: '/guest/xLogin',
 							success: function (data) {
-                                if (data['tfa']) {
-									Scalr.event.fireEvent('redirect', data['tfa'], true, this.up('form').getForm().getValues());
+                                Scalr.event.fireEvent('unlock');
+                                /*if (Ext.isChrome || Ext.isGecko || Ext.isSafari) {
+                                    history.back();
+                                }*/
 
-								} else {
-									Scalr.event.fireEvent('unlock');
-									if (Ext.isChrome || Ext.isGecko || Ext.isSafari) {
-										history.back();
-                                    }
+                                if (data.specialToken) {
+                                    Ext.Ajax.extraParams['X-Requested-Token'] = Scalr.flags.specialToken = data.specialToken;
+                                }
 
-									if (Scalr.user.userId && (data.userId == Scalr.user.userId)) {
-										Scalr.state.userNeedLogin = false;
-										Scalr.event.fireEvent('close');
-									} else {
-										Scalr.application.updateContext(function() {
-											Scalr.event.fireEvent('unlock');
-                                            var counter = 4; //Ext.isChrome || Ext.isGecko || Ext.isSafari ? 4 : 3; // 3 because of fake save password submit, else 2
-                                            // +1 because updateContext execute window.onhashchange();
-                                            // if it was first page, don't redirect backward (blank page or another site)
-                                            if (Scalr.state.pageRedirectCounter < counter)
-                                                Scalr.event.fireEvent('redirect', '#/dashboard');
-                                            else
-                                                Scalr.event.fireEvent('close');
-										});
-									}
-								}
+                                if (Scalr.user.userId && (data.userId == Scalr.user.userId)) {
+                                    Scalr.state.userNeedLogin = false;
+                                    Scalr.event.fireEvent('close');
+                                } else {
+                                    Scalr.application.updateContext(function() {
+                                        Scalr.event.fireEvent('unlock');
+                                        var counter = 4; //Ext.isChrome || Ext.isGecko || Ext.isSafari ? 4 : 3; // 3 because of fake save password submit, else 2
+                                        // +1 because updateContext execute window.onhashchange();
+                                        // if it was first page, don't redirect backward (blank page or another site)
+                                        if (Scalr.state.pageRedirectCounter < counter)
+                                            Scalr.event.fireEvent('redirect', '#/dashboard');
+                                        else
+                                            Scalr.event.fireEvent('close');
+                                    });
+                                }
 
-                                var field = this.up('form').down('[name="accountId"]');
-                                field.reset();
-                                field.hide();
-                                field.disable();
+                                this.up('form').down('#accountId').hide().disable().reset();
+                                this.up('form').down('#tfaGglCode').hide().child('[name="tfaGglCode"]').disable().reset();
+
                             },
 							failure: function (data) {
-								if (Ext.isChrome) {
-									history.back();
-								}
+								//if (Ext.isChrome) {
+								//	history.back();
+								//}
 
                                 if (data) {
                                     if (data['loginattempts'] && data['loginattempts'] > 2) {
@@ -207,11 +239,15 @@ Scalr.regPage('Scalr.ui.guest.login', function (loadParams, moduleParams) {
                                     }
 
                                     if (data['accounts']) {
-                                        var field = this.up('form').down('[name="accountId"]');
+                                        var field = this.up('form').down('#accountId');
                                         field.store.loadData(data['accounts']);
                                         field.reset();
                                         field.show();
                                         field.enable();
+                                    }
+
+                                    if (data['tfaGgl']) {
+                                        this.up('form').down('#tfaGglCode').enable().show().child('[name="tfaGglCode"]').focus();
                                     }
                                 }
                             }

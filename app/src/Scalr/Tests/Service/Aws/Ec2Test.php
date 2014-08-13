@@ -3,7 +3,6 @@ namespace Scalr\Tests\Service\Aws;
 
 use Scalr\Service\Aws\Ec2\DataType\EbsBlockDeviceData;
 use Scalr\Service\Aws\Ec2\DataType\InstanceMonitoringStateData;
-use Scalr\Service\Aws\Ec2\DataType\InstanceStateChangeData;
 use Scalr\Service\Aws\Ec2\DataType\InstanceAttributeType;
 use Scalr\Service\Aws\Ec2\DataType\RouteData;
 use Scalr\Service\Aws\Ec2\DataType\RouteTableAssociationData;
@@ -22,7 +21,6 @@ use Scalr\Service\Aws\Ec2\DataType\ImageFilterNameType;
 use Scalr\Service\Aws\Ec2\DataType\PlacementGroupData;
 use Scalr\Service\Aws\Ec2\DataType\PlacementGroupFilterNameType;
 use Scalr\Service\Aws\Ec2\DataType\PlacementGroupFilterData;
-use Scalr\Service\Aws\Ec2\DataType\GetConsoleOutputResponseData;
 use Scalr\Service\Aws\Ec2\DataType\SubnetData;
 use Scalr\Service\Aws\Ec2\DataType\SnapshotFilterNameType;
 use Scalr\Service\Aws\Ec2\DataType\SnapshotFilterData;
@@ -42,15 +40,12 @@ use Scalr\Service\Aws\Ec2\DataType\CreateVolumeRequestData;
 use Scalr\Service\Aws\Ec2\DataType\AttachmentSetResponseData;
 use Scalr\Service\Aws\Ec2\DataType\VolumeData;
 use Scalr\Service\Aws\Ec2\DataType\RunInstancesRequestData;
-use Scalr\Service\Aws\Ec2\DataType\InstanceStatusEventTypeData;
 use Scalr\Service\Aws\Ec2\DataType\InstanceStatusDetailsSetData;
 use Scalr\Service\Aws\Ec2\DataType\InstanceStatusData;
 use Scalr\Service\Aws\Ec2\DataType\OfferingType;
 use Scalr\Service\Aws\Ec2\DataType\ReservedInstanceData;
 use Scalr\Service\Aws\Ec2\DataType\InstanceNetworkInterfaceSetData;
-use Scalr\Service\Aws\Ec2\DataType\InstanceNetworkInterfaceSetList;
 use Scalr\Service\Aws\Ec2\DataType\InstanceBlockDeviceMappingResponseData;
-use Scalr\Service\Aws\Ec2\AbstractEc2DataType;
 use Scalr\Service\Aws\Ec2\DataType\InstanceData;
 use Scalr\Service\Aws\Ec2\DataType\ReservationData;
 use Scalr\Service\Aws\Ec2\DataType\IpRangeData;
@@ -62,12 +57,16 @@ use Scalr\Service\Aws\Ec2\DataType\SecurityGroupData;
 use Scalr\Service\Aws\Ec2\DataType\SecurityGroupFilterNameType;
 use Scalr\Service\Aws\Ec2\DataType\SecurityGroupFilterData;
 use Scalr\Service\Aws\Ec2\DataType\AvailabilityZoneFilterNameType;
-use Scalr\Service\Aws\Ec2\DataType\AvailabilityZoneList;
-use Scalr\Service\Aws\Client\ClientResponseInterface;
 use Scalr\Service\Aws;
 use Scalr\Service\Aws\Ec2;
 use Scalr\Tests\Service\AwsTestCase;
-use \SplFileInfo;
+use Scalr\Service\Aws\Route53\DataType\ZoneData;
+use Scalr\Service\Aws\Route53\DataType\HealthData;
+use Scalr\Service\Aws\Route53\DataType\HealthConfigData;
+use Scalr\Service\Aws\Route53\DataType\RecordSetData;
+use Scalr\Service\Aws\Route53\DataType\ChangeRecordSetData;
+use Scalr\Service\Aws\Route53\DataType\ChangeRecordSetList;
+use Scalr\Service\Aws\Route53\DataType\ChangeRecordSetsRequestData;
 
 /**
  * Amazon Ec2 Test
@@ -92,7 +91,7 @@ class Ec2Test extends AwsTestCase
 
     const NAME_SECURITY_GROUP_VPC = 'sg-vpc';
 
-    const INSTANCE_TYPE = 'm1.small';
+    const INSTANCE_TYPE = 'm3.medium';
 
     const INSTANCE_IMAGE_ID = 'ami-82fa58eb';
 
@@ -875,6 +874,31 @@ class Ec2Test extends AwsTestCase
         $ec2->getEntityManager()->detachAll();
     }
 
+
+    public function testFunctionalDescribeInstances()
+    {
+        $this->skipIfEc2PlatformDisabled();
+        $aws = $this->getContainer()->aws(AwsTestCase::REGION);
+        $reservationsList = $aws->ec2->instance->describe(
+            null,
+            null,
+            null,
+            5
+        );
+        $this->assertInstanceOf($this->getEc2ClassName('DataType\\ReservationList'), $reservationsList);
+        $this->assertEquals(5, count($reservationsList));
+        $this->assertNotNull($reservationsList->getNextToken());
+
+        $reservationsListNext = $aws->ec2->instance->describe(
+            null,
+            null,
+            $reservationsList->getNextToken(),
+            6
+        );
+        $this->assertInstanceOf($this->getEc2ClassName('DataType\\ReservationList'), $reservationsListNext);
+        $this->assertEquals(6, count($reservationsListNext));
+    }
+
     /**
      * @test
      */
@@ -1091,14 +1115,14 @@ class Ec2Test extends AwsTestCase
         $request = new RunInstancesRequestData(self::INSTANCE_IMAGE_ID, 1, 1);
         $request->instanceType = self::INSTANCE_TYPE;
         //Placement groups may not be used with instances of type 'm1.small'.
-        $request->setPlacement(new PlacementResponseData(AwsTestCase::AVAILABILITY_ZONE_A));
+        $request->setPlacement(new PlacementResponseData(AwsTestCase::AVAILABILITY_ZONE_C));
         $request->setMonitoring(true);
         $request->ebsOptimized = false;
         $request->userData = base64_encode("test=26;");
         $request->appendSecurityGroupId($securityGroupId);
         $request->appendBlockDeviceMapping(new BlockDeviceMappingData(
             "/dev/sdb", 'ephemeral0', null,
-            new EbsBlockDeviceData(1, null, null, null, true)
+            new EbsBlockDeviceData(1, null, null, null, true, true)
         ));
         $request->keyName = $keyname;
 
@@ -1124,6 +1148,117 @@ class Ec2Test extends AwsTestCase
         }
         $this->assertEquals(InstanceStateData::NAME_RUNNING, $ind->instanceState->name);
 
+        // route53 test
+        $dns = self::getTestName('testname') . '.com';
+        // clean up
+        $listZones = $aws->route53->zone->describe();
+        $this->assertInstanceOf($this->getRoute53ClassName('DataType\\ZoneList'), $listZones);
+        /* @var $zone \Scalr\Service\Aws\Route53\DataType\ZoneData */
+        foreach ($listZones as $zone) {
+            $this->assertNotNull($zone->zoneId);
+            if ($dns . '.' == $zone->name) {
+                $rrsRequest = new ChangeRecordSetsRequestData();
+                $rrsCnahgeList = new ChangeRecordSetList();
+                $rrsCnahgeListData = new ChangeRecordSetData('DELETE');
+                $rrsData = new RecordSetData($dns, 'A', 60);
+                $rrsData->setResourceRecord([['value' => $ind->ipAddress]]);
+                $rrsCnahgeListData->setRecordSet($rrsData);
+                $rrsCnahgeList->append($rrsCnahgeListData);
+                $rrsRequest->setChange($rrsCnahgeList);
+
+                $changeRequest = $aws->route53->record->update($zone->zoneId, $rrsRequest);
+                $this->assertInstanceOf($this->getRoute53ClassName('DataType\\ChangeData'), $changeRequest);
+
+                $zone->delete($zone->zoneId);
+            }
+            unset($zone);
+        }
+        unset($listZones);
+
+        $list = $aws->route53->health->describe();
+        $this->assertInstanceOf($this->getRoute53ClassName('DataType\\HealthList'), $list);
+        foreach ($list as $check) {
+            /* @var $check \Scalr\Service\Aws\Route53\DataType\HealthData */
+            $this->assertInstanceOf($this->getRoute53ClassName('DataType\\HealthConfigData'), $check->healthConfig);
+            $this->assertNotNull($check->healthId);
+            $this->assertNotNull($check->healthConfig->domainName);
+            if ($dns . '.' == $check->healthConfig->domainName) {
+                $check->delete($check->healthId);
+            }
+            unset($check);
+        }
+        unset($list);
+
+        // create hosted zone
+        $config = new ZoneData($dns);
+        $hostedZone = $aws->route53->zone->create($config);
+        $this->assertInstanceOf($this->getRoute53ClassName('DataType\\ZoneData'), $hostedZone);
+        $this->assertNotNull($hostedZone->zoneId);
+        $zoneId = (string)$hostedZone->zoneId;
+
+        // create record set for hosted zone
+        $rrsRequest = new ChangeRecordSetsRequestData();
+        $rrsCnahgeList = new ChangeRecordSetList();
+        $rrsCnahgeListData = new ChangeRecordSetData('CREATE');
+        $rrsData = new RecordSetData($dns, 'A', 60);
+        $rrsData->setResourceRecord([['value' => $ind->ipAddress]]);
+        $rrsCnahgeListData->setRecordSet($rrsData);
+        $rrsCnahgeList->append($rrsCnahgeListData);
+        $rrsRequest->setChange($rrsCnahgeList);
+
+        $changeRequest = $aws->route53->record->update($zoneId, $rrsRequest);
+        $this->assertInstanceOf($this->getRoute53ClassName('DataType\\ChangeData'), $changeRequest);
+        $this->assertNotNull($changeRequest->changeId);
+        $getChange = $aws->route53->record->fetch($changeRequest->changeId);
+        $this->assertEquals($changeRequest->changeId, $getChange->changeId);
+        // create health check using record set's idAddress
+        $healthData = new HealthData();
+        $healthConfig = new HealthConfigData($ind->ipAddress, 80, 'HTTP', '/index.html', $dns);
+        $healthData->setHealthConfig($healthConfig);
+        $healthCheck = $aws->route53->health->create($healthData);
+        $this->assertNotNull($healthCheck->healthId);
+
+        $list = $aws->route53->health->describe();
+        $this->assertInstanceOf($this->getRoute53ClassName('DataType\\HealthList'), $list);
+        foreach ($list as $check) {
+            $this->assertInstanceOf($this->getRoute53ClassName('DataType\\HealthConfigData'), $check->healthConfig);
+            $this->assertNotNull($check->healthId);
+            $this->assertNotNull($check->healthConfig->domainName);
+            if ($dns == $check->healthConfig->domainName) {
+                $getCheck = $aws->route53->health->fetch($check->healthId);
+                $this->assertEquals($check->healthId, $getCheck->healthId);
+                $check->delete($check->healthId);
+            }
+            unset($check);
+        }
+        unset($list);
+
+        // clean up
+        $listZones = $aws->route53->zone->describe();
+        $this->assertInstanceOf($this->getRoute53ClassName('DataType\\ZoneList'), $listZones);
+        foreach ($listZones as $zone) {
+            /* @var $zone \Scalr\Service\Aws\Route53\DataType\ZoneData */
+            $this->assertNotNull($zone->zoneId);
+            if ($dns . '.' == $zone->name) {
+                $rrsRequest = new ChangeRecordSetsRequestData();
+                $rrsCnahgeList = new ChangeRecordSetList();
+                $rrsCnahgeListData = new ChangeRecordSetData('DELETE');
+                $rrsData = new RecordSetData($dns, 'A', 60);
+                $rrsData->setResourceRecord([['value' => $ind->ipAddress]]);
+                $rrsCnahgeListData->setRecordSet($rrsData);
+                $rrsCnahgeList->append($rrsCnahgeListData);
+                $rrsRequest->setChange($rrsCnahgeList);
+
+                $changeRequest = $aws->route53->record->update($zone->zoneId, $rrsRequest);
+                $this->assertInstanceOf($this->getRoute53ClassName('DataType\\ChangeData'), $changeRequest);
+                $getZone = $aws->route53->zone->fetch($zone->zoneId);
+                $this->assertEquals($zone->zoneId, $getZone->zoneId);
+                $zone->delete($zone->zoneId);
+            }
+            unset($zone);
+        }
+        unset($listZones);
+
         //Creates the tag for the instance
         $res = $ind->createTags(array($nameTag, array('key' => 'Extratag', 'value' => 'extravalue')));
         $this->assertTrue($res);
@@ -1138,7 +1273,7 @@ class Ec2Test extends AwsTestCase
         $this->assertEquals(self::INSTANCE_IMAGE_ID, $ind->imageId);
         $this->assertEquals(false, $ind->ebsOptimized);
         $this->assertContains($ind->monitoring->state, array('enabled', 'pending'));
-        $this->assertEquals(AwsTestCase::AVAILABILITY_ZONE_A, $ind->placement->availabilityZone);
+        $this->assertEquals(AwsTestCase::AVAILABILITY_ZONE_C, $ind->placement->availabilityZone);
         $this->assertEquals($keyname, $ind->keyName);
 
         $this->assertContains($securityGroupId, array_map(function($arr){
@@ -1208,11 +1343,13 @@ class Ec2Test extends AwsTestCase
         unset($address);
 
         //Creates the volume
-        $cvRequest = new CreateVolumeRequestData(AwsTestCase::AVAILABILITY_ZONE_A);
+        $cvRequest = new CreateVolumeRequestData(AwsTestCase::AVAILABILITY_ZONE_C);
+        $cvRequest->encrypted = true;
         $cvRequest->setSize(2)->setVolumeType(CreateVolumeRequestData::VOLUME_TYPE_STANDARD);
         $vd = $aws->ec2->volume->create($cvRequest);
         $this->assertInstanceOf($this->getEc2ClassName('DataType\\VolumeData'), $vd);
         $volumeid = $vd->volumeId;
+        $this->assertTrue($vd->encrypted);
         unset($cvRequest);
 
         $res = $vd->createTags($nameTag);
@@ -1231,6 +1368,7 @@ class Ec2Test extends AwsTestCase
 
         //Creates snapshot
         $sn = $vd->createSnapshot(self::getTestName(self::NAME_SNAPSHOT));
+        $this->assertTrue($sn->encrypted);
         $this->assertInstanceOf($this->getEc2ClassName('DataType\\SnapshotData'), $sn);
         $this->assertNotEmpty($sn->snapshotId);
         $sn->createTags($nameTag);
@@ -1242,19 +1380,29 @@ class Ec2Test extends AwsTestCase
         $this->assertTrue(in_array($sn->status, array(SnapshotData::STATUS_COMPLETED, SnapshotData::STATUS_ERROR)));
 
         //Copies snapshot to different region
-        //We should provide the same region where snapshot was created.
-        $copySnapshotId = $sn->copy(substr(AwsTestCase::AVAILABILITY_ZONE_A, 0, -1), 'phpunit copied snapshot', Aws::REGION_US_WEST_2);
+
+        $copySnapshotId = $sn->copy(
+            $aws->getRegion(),
+            'phpunit copied encrypted snapshot',
+            Aws::REGION_US_WEST_2,
+            $aws->getPresignedUrl('ec2', 'CopySnapshot', Aws::REGION_US_WEST_2, $sn->snapshotId)
+        );
+
         $this->assertNotNull($copySnapshotId);
 
         $aws2->ec2->tag->create($copySnapshotId, $nameTag);
+
         $csn = $aws2->ec2->snapshot->describe($copySnapshotId)->get(0);
+
         $this->assertInstanceOf($this->getEc2ClassName('DataType\\SnapshotData'), $csn);
+
         //Waits while snapshot is created.
         for ($t = time(), $s = 2; time() - $t < 600 && $csn->status === SnapshotData::STATUS_PENDING; $s += 5) {
             sleep($s);
             $csn = $csn->refresh();
         }
-        $this->assertTrue(in_array($csn->status, array(SnapshotData::STATUS_COMPLETED, SnapshotData::STATUS_ERROR)));
+        $this->assertTrue($csn->status == SnapshotData::STATUS_COMPLETED);
+        $this->assertTrue($csn->encrypted);
 
         //Removes snapshot
         $ret = $sn->delete();
@@ -1687,6 +1835,42 @@ class Ec2Test extends AwsTestCase
                 $ret = $rtassoc->disassociate();
                 $this->assertTrue($ret);
             }
+        }
+
+        //RunInstance test
+        $request = new RunInstancesRequestData(self::INSTANCE_IMAGE_ID, 1, 1);
+        $request->instanceType = self::INSTANCE_TYPE;
+        //Placement groups may not be used with instances of type 'm1.small'.
+        $request->setPlacement(new PlacementResponseData($subnet->availabilityZone));
+        $request->setMonitoring(true);
+        // test Assosiate Public Ip
+        $instanceList = new Ec2\DataType\InstanceNetworkInterfaceSetRequestList();
+        $instanceData = new Ec2\DataType\InstanceNetworkInterfaceSetRequestData();
+        $instanceData->deviceIndex = 0;
+        $instanceData->associatePublicIpAddress = true;
+        $instanceData->subnetId = $subnet->subnetId;
+        $instanceList->append($instanceData);
+        $request->setNetworkInterface($instanceList);
+
+        $request->userData = base64_encode("test=26;");
+
+        $rd = $aws->ec2->instance->run($request);
+        $this->assertInstanceOf($this->getEc2ClassName('DataType\\ReservationData'), $rd);
+        sleep(60);
+
+        //Terminates the instance
+        $ind = $rd->instancesSet[0];
+        $st = $ind->terminate();
+        $this->assertInstanceOf($this->getEc2ClassName('DataType\\InstanceStateChangeList'), $st);
+        $this->assertEquals(1, count($st));
+        $this->assertEquals($rd->instancesSet[0]->instanceId, $st[0]->getInstanceId());
+
+        for ($t = time(); time() - $t < 200 && $ind && $ind->instanceState->name != InstanceStateData::NAME_TERMINATED; sleep(5)) {
+            $ind = $ind->refresh();
+        }
+        $this->assertTrue(!$ind || $ind->instanceState->name == InstanceStateData::NAME_TERMINATED);
+        if (isset($ind)) {
+            unset($ind);
         }
 
         //Removes Route Table

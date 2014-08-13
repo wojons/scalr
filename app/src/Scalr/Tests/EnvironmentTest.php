@@ -2,6 +2,7 @@
 namespace Scalr\Tests;
 
 use Scalr\Tests\Fixtures\DbMock1;
+use Scalr\Modules\Platforms\Ec2\Ec2PlatformModule;
 
 /**
  * Scalr_Environment test
@@ -12,7 +13,7 @@ use Scalr\Tests\Fixtures\DbMock1;
 class EnvironmentTest extends TestCase
 {
 
-    const KEY1 = \Modules_Platforms_Ec2::ACCESS_KEY;
+    const KEY1 = Ec2PlatformModule::ACCESS_KEY;
 
     /**
      * Gets storage mock

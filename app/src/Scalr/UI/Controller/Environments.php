@@ -111,7 +111,7 @@ class Scalr_UI_Controller_Environments extends Scalr_UI_Controller
 
         $params = array();
 
-        $params[ENVIRONMENT_SETTINGS::TIMEZONE] = $env->getPlatformConfigValue(ENVIRONMENT_SETTINGS::TIMEZONE);
+        $params[Scalr_Environment::SETTING_TIMEZONE] = $env->getPlatformConfigValue(Scalr_Environment::SETTING_TIMEZONE);
 
         return array(
             'id'               => $env->id,
@@ -185,7 +185,7 @@ class Scalr_UI_Controller_Environments extends Scalr_UI_Controller
         $pars = array();
 
         // check for settings
-        $pars[ENVIRONMENT_SETTINGS::TIMEZONE] = $this->checkVar(ENVIRONMENT_SETTINGS::TIMEZONE, 'string', $env, "Timezone required");
+        $pars[Scalr_Environment::SETTING_TIMEZONE] = $this->checkVar(Scalr_Environment::SETTING_TIMEZONE, 'string', $env, "Timezone required");
 
         $env->setPlatformConfig($pars);
 

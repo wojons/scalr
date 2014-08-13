@@ -2,7 +2,6 @@
 namespace Scalr\Service\Aws\Client\QueryClient;
 
 use Scalr\Service\Aws;
-use Scalr\Service\Aws\Client\QueryClientResponse;
 use Scalr\Service\Aws\Client\QueryClient;
 use Scalr\Service\Aws\Event\EventType;
 
@@ -170,10 +169,6 @@ class S3QueryClient extends QueryClient
 
         $httpRequest->setUrl($scheme . '://' . $options['Host'] . $path);
         $httpRequest->setMethod(constant('HTTP_METH_' . $httpMethod));
-        $httpRequest->setOptions(array(
-            'redirect'  => 10,
-            'useragent' => 'Scalr AWS Client (http://scalr.com)'
-        ));
         $httpRequest->addHeaders($options);
 
         $response = $this->tryCall($httpRequest);

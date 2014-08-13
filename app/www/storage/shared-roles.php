@@ -3,7 +3,7 @@ require(dirname(__FILE__)."/../../src/prepend.inc.php");
 
 $setupInfo = $db->GetRow("SELECT * FROM upd.scalr_setups WHERE scalr_id = ? LIMIT 1", array($_GET['scalr_id']));
 if (!$setupInfo)
-    die("Unrecognized setup: update denied. Please use this form https://scalr.wufoo.com/forms/update-server-whitelist/ to be whitelisted.");
+    die("Unrecognized setup: update denied. Please use this form http://hub.am/1fDAc2B to be whitelisted.");
 
 $rs20 = $db->Execute("SELECT * FROM roles WHERE env_id = '0' AND client_id = '0' AND generation='2'");
 $result = array();

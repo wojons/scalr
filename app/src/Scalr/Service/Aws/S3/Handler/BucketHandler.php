@@ -7,7 +7,6 @@ use Scalr\Service\Aws\Client\ClientResponseInterface;
 use Scalr\Service\Aws\S3\DataType\ObjectList;
 use Scalr\Service\Aws\S3\DataType\BucketList;
 use Scalr\Service\Aws\S3\DataType\BucketData;
-use Scalr\Service\Aws\DataType\ListDataType;
 use Scalr\Service\Aws\S3Exception;
 use Scalr\Service\Aws\Client\ClientException;
 use Scalr\Service\Aws\S3\AbstractS3Handler;
@@ -262,6 +261,22 @@ class BucketHandler extends AbstractS3Handler
             $bucketName = $bucketName->bucketName;
         }
         return $this->getS3()->getApiHandler()->deleteBucketWebsite($bucketName);
+    }
+
+    /**
+     * Returns the web configuration information for the bucket.
+     *
+     * @param   BucketData|string      $bucketName A bucket name.
+     * @return  string                 Returns CORSConfiguration XML Document
+     * @throws  ClientException
+     * @throws  S3Exception
+     */
+    public function getWebsite($bucketName)
+    {
+        if ($bucketName instanceof BucketData) {
+            $bucketName = $bucketName->bucketName;
+        }
+        return $this->getS3()->getApiHandler()->getBucketWebsite($bucketName);
     }
 
     /**

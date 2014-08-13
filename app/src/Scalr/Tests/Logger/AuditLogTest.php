@@ -1,12 +1,10 @@
 <?php
 namespace Scalr\Tests\Logger;
 
-use Scalr\Logger\AuditLog\KeyValueRecord;
 use Scalr\Logger\AuditLog\Documents\FarmSettingsDocument;
 use Scalr\Tests\WebTestCase;
 use Scalr\Logger\AuditLog\AuditLogTags;
 use Scalr\Logger\AuditLog;
-use Scalr\DependencyInjection\Container;
 use Scalr\Logger\AuditLog\Documents\FarmDocument;
 
 /**
@@ -32,7 +30,7 @@ class AuditLogTest extends WebTestCase
     {
         parent::setUp();
         $container = \Scalr::getContainer();
-        if ($container->user === null) {
+        if (!$container->initialized('user') || !($container->user instanceof \Scalr_Account_User)) {
             $this->setTestUserToContainer();
         } else {
             try {
@@ -59,7 +57,9 @@ class AuditLogTest extends WebTestCase
      */
     public function tearDown()
     {
-        \Scalr::getContainer()->user = null;
+        if (\Scalr::getContainer()->initialized('user')) {
+            \Scalr::getContainer()->release('user');
+        }
         unset($this->logger);
         parent::tearDown();
     }
@@ -120,7 +120,6 @@ class AuditLogTest extends WebTestCase
      */
     public function testKeyValueRecord()
     {
-
         $objectBefore = new FarmSettingsDocument(array(
             'farmid'     => 114,
             'crypto.key' => 'was-crypto-key',

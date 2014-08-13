@@ -63,6 +63,11 @@ class FarmRoleService
         return $this->farmRole;
     }
 
+    public function getEnvId()
+    {
+        return $this->envId;
+    }
+
     public function getServiceId()
     {
         return $this->serviceId;

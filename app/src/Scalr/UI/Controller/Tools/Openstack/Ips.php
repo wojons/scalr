@@ -1,5 +1,8 @@
 <?php
+
 use Scalr\Acl\Acl;
+use Scalr\Modules\PlatformFactory;
+use Scalr\Modules\Platforms\Openstack\OpenstackPlatformModule;
 
 class Scalr_UI_Controller_Tools_Openstack_Ips extends Scalr_UI_Controller
 {
@@ -44,11 +47,11 @@ class Scalr_UI_Controller_Tools_Openstack_Ips extends Scalr_UI_Controller
             throw new Exception("Cloud should be specified");
 
         $platform = PlatformFactory::NewPlatform($platformName);
-        $networkType = $platform->getConfigVariable(Modules_Platforms_Openstack::NETWORK_TYPE, $this->environment, false);
+        $networkType = $platform->getConfigVariable(OpenstackPlatformModule::NETWORK_TYPE, $this->environment, false);
         $openstack = $this->environment->openstack($platformName, $this->getParam('cloudLocation'));
 
         foreach ($this->getParam('ipId') as $ipId) {
-            if ($networkType == Modules_Platforms_Openstack::NETWORK_TYPE_QUANTUM) {
+            if ($networkType == OpenstackPlatformModule::NETWORK_TYPE_QUANTUM) {
                 $openstack->network->floatingIps->delete($ipId);
             } else {
                 $openstack->servers->floatingIps->delete($ipId);
@@ -70,66 +73,10 @@ class Scalr_UI_Controller_Tools_Openstack_Ips extends Scalr_UI_Controller
             throw new Exception("Cloud should be specified");
 
         //$platform = PlatformFactory::NewPlatform($platformName);
-        //$networkType = $platform->getConfigVariable(Modules_Platforms_Openstack::NETWORK_TYPE, $this->environment, false);
+        //$networkType = $platform->getConfigVariable(OpenstackPlatformModule::NETWORK_TYPE, $this->environment, false);
         $openstack = $this->environment->openstack($platformName, $this->getParam('cloudLocation'));
 
-        //!FIXME dicsydel remove debug
-        var_dump($openstack->network->floatingIps->list());
-
-        var_dump($openstack->servers->floatingIps->list());
-
-        var_dump($openstack->servers->listFloatingIpPools());
-
-        var_dump($openstack->network->listNetworks());
-
-        exit();
-
-        $ips = array();
-        foreach ($ipAddresses->publicipaddress as $pk=>$pv)
-        {
-            if ($this->getParam('ipId') && $this->getParam('ipId') != $pv->id)
-                continue;
-
-            if ($pv->ipaddress == $systemIp)
-                $pv->purpose = 'ScalrShared';
-
-            if ($pv->isstaticnat && !$pv->issystem)
-                $pv->purpose = 'ElasticIP';
-
-            if ($pv->isstaticnat && $pv->issystem)
-                $pv->purpose = 'PublicIP';
-
-            $item = array(
-                'ipId'	=> $pv->id,
-                'dtAllocated' => $pv->allocated,
-                'networkName' => $pv->associatednetworkname,
-                'purpose' => $pv->purpose ? $pv->purpose : "Not used",
-                'ip' => $pv->ipaddress,
-                'state' => $pv->state,
-                'instanceId' => $pv->virtualmachineid,
-                'fullinfo' => $pv,
-                'farmId' => false
-            );
-
-            if ($item['instanceId']) {
-                try {
-                    $dbServer = DBServer::LoadByPropertyValue(CLOUDSTACK_SERVER_PROPERTIES::SERVER_ID, $item['instanceId']);
-
-                    $item['farmId'] = $dbServer->farmId;
-                    $item['farmRoleId'] = $dbServer->farmRoleId;
-                    $item['serverIndex'] = $dbServer->index;
-                    $item['serverId'] = $dbServer->serverId;
-                    $item['farmName'] = $dbServer->GetFarmObject()->Name;
-                    $item['roleName'] = $dbServer->GetFarmRoleObject()->GetRoleObject()->name;
-
-                } catch (Exception $e) {}
-            }
-
-            $ips[] = $item;
-        }
-
-        $response = $this->buildResponseFromData($ips, array('serverId', 'ipId', 'ip', 'farmId', 'farmRoleId'));
-
-        $this->response->data($response);
+        //TODO incomplete
+        throw new Exception("This action is under development yet");
     }
 }

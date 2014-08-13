@@ -226,6 +226,12 @@ class InstanceData extends AbstractEc2DataType
     public $ebsOptimized;
 
     /**
+     * Specifies whether enhanced networking is enabled.
+     * @var string
+     */
+    public $sriovNetSupport;
+
+    /**
      * {@inheritdoc}
      * @see Scalr\Service\Aws\Ec2.AbstractEc2DataType::throwExceptionIfNotInitialized()
      */

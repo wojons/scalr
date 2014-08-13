@@ -3,13 +3,11 @@ namespace Scalr\Service\Aws\Ec2\Handler;
 
 use Scalr\Service\Aws\Ec2\DataType\AttachmentSetResponseData;
 use Scalr\Service\Aws\Ec2\DataType\CreateVolumeRequestData;
-use Scalr\Service\Aws\Ec2\DataType\VolumeFilterData;
 use Scalr\Service\Aws\Ec2\DataType\VolumeFilterList;
 use Scalr\Service\Aws\Ec2\DataType\VolumeList;
 use Scalr\Service\Aws\Ec2\DataType\VolumeData;
 use Scalr\Service\Aws\DataType\ListDataType;
 use Scalr\Service\Aws\Client\ClientException;
-use Scalr\Service\Aws\DataType\ErrorData;
 use Scalr\Service\Aws\Ec2Exception;
 use Scalr\Service\Aws\Ec2\AbstractEc2Handler;
 

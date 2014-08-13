@@ -1,7 +1,7 @@
 Scalr.regPage('Scalr.ui.logs.system', function (loadParams, moduleParams) {
 	Ext.applyIf(moduleParams['params'], loadParams);
 	var store = Ext.create('store.store', {
-		fields: [ 'id','serverid','message','severity','time','source','farmid','servername','farm_name', 's_severity' ],
+		fields: [ 'serverid','message','severity','time','source','farmid','servername','farm_name', 's_severity', 'cnt' ],
 		proxy: {
 			type: 'scalr.paging',
 			extraParams: moduleParams['params'],
@@ -21,7 +21,6 @@ Scalr.regPage('Scalr.ui.logs.system', function (loadParams, moduleParams) {
 			'reload': false,
 			'maximize': 'all'
 		},
-		scalrReconfigureParams: { serverId: '' },
 		store: store,
 		stateId: 'grid-logs-system-view',
 		stateful: true,
@@ -59,11 +58,7 @@ Scalr.regPage('Scalr.ui.logs.system', function (loadParams, moduleParams) {
 
 		columns: [
 			{ header: '', width: 40, dataIndex: 'severity', sortable: false, resizable: false, hideable: false, align:'center', xtype: 'templatecolumn', tpl:
-				'<tpl if="severity == 1"><img src="/ui2/images/ui/logs/system/debug.png"></tpl>' +
-				'<tpl if="severity == 2"><img src="/ui2/images/ui/logs/system/info.png"></tpl>' +
-				'<tpl if="severity == 3"><img src="/ui2/images/ui/logs/system/warning.png"></tpl>' +
-				'<tpl if="severity == 4"><img src="/ui2/images/ui/logs/system/error.png"></tpl>' +
-				'<tpl if="severity == 5"><img src="/ui2/images/ui/logs/system/fatal_error.png"></tpl>'
+				'<img src="' + Ext.BLANK_IMAGE_URL + '" class="x-icon-severity x-icon-severity-{severity}" />'
 			},
 			{ header: 'Time', width: 156, dataIndex: 'time', sortable: true },
 			{ header: 'Farm', width: 120, dataIndex: 'farm_name', itemId: 'farm_name', sortable: false, xtype: 'templatecolumn', tpl:
@@ -73,7 +68,8 @@ Scalr.regPage('Scalr.ui.logs.system', function (loadParams, moduleParams) {
 				'<a href="#/servers/{servername}/view">{servername}</a>/{source}'
 			},
 			{ header: 'Message', flex: 2, dataIndex: 'message', sortable: false, xtype: 'templatecolumn', tpl:
-				'{[values.message.replace(/<br.*?>/g, "")]}' }
+				'{[values.message.replace(/<br.*?>/g, "")]}' },
+            { header: 'Count', width: 80, dataIndex: 'cnt', sortable: false, align: 'center' }
 		],
 
 		dockedItems: [{
@@ -197,9 +193,8 @@ Scalr.regPage('Scalr.ui.logs.system', function (loadParams, moduleParams) {
 					}]
 				}
 			}, ' ', {
-				text: 'Download Log',
+				text: '<img src="' + Ext.BLANK_IMAGE_URL + '" class="x-icon-download" />&nbsp;Download Log',
 				width: 160,
-				iconCls: 'scalr-ui-btn-icon-download',
 				handler: function () {
 					var params = Scalr.utils.CloneObject(store.proxy.extraParams);
 					params['action'] = 'download';

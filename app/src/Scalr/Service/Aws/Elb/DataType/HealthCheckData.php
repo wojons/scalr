@@ -1,7 +1,6 @@
 <?php
 namespace Scalr\Service\Aws\Elb\DataType;
 
-use Scalr\Service\Aws\Elb\Handler\LoadBalancerHandler;
 use Scalr\Service\Aws\ElbException;
 use Scalr\Service\Aws\Elb\AbstractElbDataType;
 

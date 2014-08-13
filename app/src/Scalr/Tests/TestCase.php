@@ -45,7 +45,7 @@ abstract class TestCase extends \PHPUnit_Framework_TestCase
     /**
      * Returns fixtures directory
      *
-     * @return string Returns fixtures directory
+     * @return string Returns fixtures directory without trailing slash
      */
     public function getFixturesDirectory()
     {

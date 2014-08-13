@@ -29,27 +29,25 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.vpcrouter', function (moduleTabParams
 		items: [{
             xtype: 'fieldset',
             cls: 'x-fieldset-separator-none',
+            defaults: {
+                labelWidth: 180,
+                maxWidth: 500
+            },
             items: [{
                 xtype: 'displayfield',
                 name: 'router.vpc.networkInterfaceId',
-                fieldLabel: 'Network Interface ID',
-                value: '',
-                width: 500,
-                labelWidth: 150
+                fieldLabel: 'Elastic Network Interface ID',
+                value: ''
             }, {
                 xtype: 'displayfield',
                 name: 'router.vpc.ip',
                 fieldLabel: 'Proxy IP address',
-                value: '',
-                width: 500,
-                labelWidth: 150
+                value: ''
             }, {
                 xtype: 'displayfield',
                 name: 'router.vpc.ipAllocationId',
                 fieldLabel: 'IP Allocation ID',
-                value: '',
-                width: 500,
-                labelWidth: 150
+                value: ''
             }]
         }]
 	});

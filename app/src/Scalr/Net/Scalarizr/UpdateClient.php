@@ -29,9 +29,12 @@
             return $this->request("configure", $params)->result;
         }
 
-        public function getStatus()
+        public function getStatus($cached = false)
         {
             $r = new stdClass();
+            if ($this->dbServer->IsSupported('2.7.7'))
+                $r->cached = $cached;
+
             return $this->request("status", $r)->result;
         }
 
@@ -72,31 +75,40 @@
             $requestObj->params = $params;
 
             $jsonRequest = json_encode($requestObj);
+            $newEncryptionProtocol = false;
+            //TODO:
+            if ($this->dbServer->farmRoleId) {
+                if ($this->dbServer->IsSupported('2.7.7'))
+                    $newEncryptionProtocol = true;
+            }
 
             $dt = new DateTime('now', new DateTimeZone("UTC"));
             $timestamp = $dt->format("D d M Y H:i:s e");
 
-            $canonical_string = $jsonRequest . $timestamp;
-            $signature = base64_encode(hash_hmac('SHA1', $canonical_string, $this->dbServer->GetProperty(SERVER_PROPERTIES::SZR_KEY), 1));
+            if ($newEncryptionProtocol) {
+                $jsonRequest = $this->cryptoTool->encrypt($jsonRequest, $this->dbServer->GetKey(true));
+
+                $canonical_string = $jsonRequest . $timestamp;
+                $signature = base64_encode(hash_hmac('SHA1', $canonical_string, $this->dbServer->GetKey(true), 1));
+            } else {
+                $canonical_string = $jsonRequest . $timestamp;
+                $signature = base64_encode(hash_hmac('SHA1', $canonical_string, $this->dbServer->GetProperty(SERVER_PROPERTIES::SZR_KEY), 1));
+            }
 
             $request = new HttpRequest();
             $request->setMethod(HTTP_METH_POST);
 
-            if (\Scalr::config('scalr.instances_connection_policy') == 'local')
-                $requestHost = "{$this->dbServer->localIp}:{$this->port}";
-            elseif (\Scalr::config('scalr.instances_connection_policy') == 'public')
-                $requestHost = "{$this->dbServer->remoteIp}:{$this->port}";
-            elseif (\Scalr::config('scalr.instances_connection_policy') == 'auto') {
-                if ($this->dbServer->remoteIp)
-                    $requestHost = "{$this->dbServer->remoteIp}:{$this->port}";
-                else
-                    $requestHost = "{$this->dbServer->localIp}:{$this->port}";
-            }
+            $requestHost = $this->dbServer->getSzrHost() . ":{$this->port}";
 
             if ($this->isVPC) {
-                $routerRole = $this->dbServer->GetFarmObject()->GetFarmRoleByBehavior(ROLE_BEHAVIORS::VPC_ROUTER);
+                $routerFarmRoleId = $this->dbServer->GetFarmRoleObject()->GetSetting(Scalr_Role_Behavior_Router::ROLE_VPC_SCALR_ROUTER_ID);
+                if ($routerFarmRoleId) {
+                    $routerRole = DBFarmRole::LoadByID($routerFarmRoleId);
+                } else {
+                    $routerRole = $this->dbServer->GetFarmObject()->GetFarmRoleByBehavior(ROLE_BEHAVIORS::VPC_ROUTER);
+                }
                 if ($routerRole) {
-                    // No remote IP need to use proxy
+                    // No public IP need to use proxy
                     if (!$this->dbServer->remoteIp) {
                         $requestHost = $routerRole->GetSetting(Scalr_Role_Behavior_Router::ROLE_VPC_IP) . ":80";
                         $request->addHeaders(array(
@@ -130,7 +142,11 @@
                 if ($request->getResponseCode() == 200) {
 
                     $response = $request->getResponseData();
-                    $jResponse = @json_decode($response['body']);
+                    $body = $response['body'];
+                    if ($newEncryptionProtocol)
+                        $body = $this->cryptoTool->decrypt($body, $this->dbServer->GetKey(true));
+
+                    $jResponse = @json_decode($body);
 
                     if ($jResponse->error)
                         throw new Exception("{$jResponse->error->message} ({$jResponse->error->code}): {$jResponse->error->data} ({$response['body']})");

@@ -3,8 +3,6 @@ namespace Scalr\Tests\Service\OpenStack;
 
 use Scalr\Service\OpenStack\Services\Network\Type\CreateRouter;
 use Scalr\Service\OpenStack\Services\Network\Type\NetworkExtension;
-use Scalr\Service\OpenStack\Services\Network\Type\CreatePort;
-use Scalr\Service\OpenStack\Services\Network\Type\AllocationPool;
 use Scalr\Service\OpenStack\Services\Servers\Type\Personality;
 use Scalr\Service\OpenStack\Services\Servers\Type\PersonalityList;
 use Scalr\Service\OpenStack\Services\Volume\Type\VolumeStatus;
@@ -12,7 +10,7 @@ use Scalr\Service\OpenStack\Exception\OpenStackException;
 use Scalr\Service\OpenStack\Services\Servers\Type\ServersExtension;
 use Scalr\Service\OpenStack\Exception\RestClientException;
 use Scalr\Service\OpenStack\OpenStack;
-use SERVER_PLATFORMS;
+use Scalr\Service\OpenStack\Type\DefaultPaginationList;
 
 /**
  * OpenStack TestCase
@@ -33,6 +31,32 @@ class OpenStackTest extends OpenStackTestCase
 
     const NAME_ROUTER = 'router';
 
+    const NAME_LB_POOL = 'lbpool';
+
+    const NAME_LB_VIP = 'vip';
+
+    const NAME_FQ = 'fq';
+
+    const NAME_SECURITY_GROUP = 'sg';
+
+    const NAME_FQ_NETWORK = 'net';
+
+    const NAME_DOMAIN = 'd';
+
+    const NAME_NETWORK_POLICY = 'np';
+
+    const DNS_SERVER_ADDRESS = '7.7.7.7';
+
+    const NEXT_VIRTUAL_DNS_ADDRESS = '5.6.7.8';
+
+    const SUBNET_CIDR = '10.0.3.0/24';
+
+    const LB_MEMBER_ADDRESS = '10.0.3.5';
+
+    const EMPTY_CONFIG = -1;
+
+    const ABSTRACT_PAGINATION_CLASS = 'Scalr\\Service\\OpenStack\\Type\\AbstractPaginationList';
+
     /**
      * Provider of the instances for the functional tests
      */
@@ -42,7 +66,7 @@ class OpenStackTest extends OpenStackTestCase
 
         if (empty($data) || !is_array($data)) {
             return array(
-                array(SERVER_PLATFORMS::RACKSPACENG_US, 'DFW', '3afe97b2-26dc-49c5-a2cc-a2fc8d80c001')
+                array(self::EMPTY_CONFIG, 'DFW', '3afe97b2-26dc-49c5-a2cc-a2fc8d80c001')
             );
         }
 
@@ -118,7 +142,7 @@ class OpenStackTest extends OpenStackTestCase
      */
     public function testFunctionalOpenStack($platform, $region, $imageId)
     {
-        if ($this->isSkipFunctionalTests()) {
+        if ($this->isSkipFunctionalTests() || $platform === self::EMPTY_CONFIG) {
             $this->markTestSkipped();
         }
         /* @var $rs OpenStack */
@@ -141,7 +165,15 @@ class OpenStackTest extends OpenStackTestCase
         }
         unset($os);
 
-        //Activates rest client debug output
+        //Pagination test
+        $list = $rs->servers->listImages(true, array('limit' => 10));
+        $this->assertInstanceOf(self::ABSTRACT_PAGINATION_CLASS, $list);
+        do {
+            foreach ($list as $image) {
+                $this->assertNotEmpty($image->id);
+            }
+        } while (false !== ($list = $list->getNextPage()));
+
         $one = $rs->servers;
         $this->assertInstanceOf($this->getOpenStackClassName('Services\\ServersService'), $one);
         $two = $rs->servers;
@@ -158,6 +190,230 @@ class OpenStackTest extends OpenStackTestCase
         $this->assertTrue(is_array($tenants));
         unset($tenants);
 
+        //Contrail related tests
+        if ($rs->hasService(OpenStack::SERVICE_CONTRAIL)) {
+            //Look at SCALRCORE-726 for more info about Contrail responses
+            $testFqName = self::getTestName(self::NAME_FQ);
+            $testDomainName = self::getTestName(self::NAME_DOMAIN) . '.com';
+            $testFqNetworkName = self::getTestName(self::NAME_FQ_NETWORK);
+            $testNetworkPolicyName = self::getTestName(self::NAME_NETWORK_POLICY);
+            $tenant = $rs->getConfig()->getTenantName();
+
+            //Lists virtual networks
+            $listVirtualNetworks = $rs->contrail->listVirtualNetworks();
+
+            $this->assertTrue(
+                $listVirtualNetworks instanceof DefaultPaginationList,
+                'The list of virtual networks is expected to be DefaultPaginationList instance.'
+            );
+
+            //Removes previously created test virtual networks
+            foreach ($listVirtualNetworks as $v) {
+                if (isset($v->fq_name) && is_array($v->fq_name) && in_array($testFqNetworkName, $v->fq_name)) {
+                    $ret = $rs->contrail->deleteVirtualNetwork($v->uuid);
+                    $this->assertTrue($ret);
+                }
+            }
+            unset($listVirtualNetworks);
+
+            //Describes network policies
+            $listNetworkPolicies = $rs->contrail->listNetworkPolicies();
+
+            $this->assertTrue(
+                $listNetworkPolicies instanceof DefaultPaginationList,
+                'The list of network policies is expected to be DefaultPaginationList instance.'
+            );
+
+            foreach ($listNetworkPolicies as $v) {
+                if (isset($v->fq_name) && is_array($v->fq_name) && in_array($testNetworkPolicyName, $v->fq_name)) {
+                    $ret = $rs->contrail->deleteNetworkPolicy($v->uuid);
+                    $this->assertTrue($ret);
+                }
+            }
+            unset($listNetworkPolicies);
+
+            //Select IPAMs
+            $listIpams = $rs->contrail->listIpam();
+
+            $this->assertTrue(
+                $listIpams instanceof DefaultPaginationList,
+                'The list of IPAMs is expected to be DefaultPaginationList instance.'
+            );
+
+            //Removes previously created IPAM if it does exist
+            foreach ($listIpams as $ipam) {
+                if (isset($ipam->fq_name) && is_array($ipam->fq_name) && in_array($testFqName, $ipam->fq_name)) {
+                    $ret = $rs->contrail->deleteIpam($ipam->uuid);
+                    $this->assertTrue($ret);
+                }
+            }
+            unset($listIpams);
+
+            //Lists virtual DNSs
+            $dnsList = $rs->contrail->listVirtualDns();
+
+            $this->assertTrue(
+                $dnsList instanceof DefaultPaginationList,
+                'The list of virtual DNSs is expected to be DefaultPaginationList instance.'
+            );
+
+            //Removes previously created virtual dns
+            foreach ($dnsList as $v) {
+                if (!empty($v->fq_name) && is_array($v->fq_name) && in_array($testFqName, $v->fq_name)) {
+                    $ret = $rs->contrail->deleteVirtualDns($v->uuid);
+                    $this->assertTrue($ret);
+                }
+            }
+            unset($dnsList);
+
+            //Creates a virtual DNS
+            $virtualDns = $rs->contrail->createVirtualDns(array(
+                'parent_type' => 'domain',
+                'fq_name' => array(
+                    'default-domain',
+                    $testFqName
+                ),
+                'virtual_DNS_data' => array(
+                    "default_ttl_seconds"         => 8144,
+                    "domain_name"                 => $testDomainName,
+                    "dynamic_records_from_client" => true,
+                    "next_virtual_DNS"            => self::NEXT_VIRTUAL_DNS_ADDRESS,
+                    "record_order"                => "random"
+                ),
+            ));
+            $this->assertInternalType('object', $virtualDns);
+            foreach (array('fq_name', 'parent_uuid', 'parent_href', 'uuid', 'href', 'name') as $attr) {
+                $this->assertObjectHasAttribute('href', $virtualDns);
+            }
+            $this->assertNotEmpty($virtualDns->uuid);
+            $this->assertEquals($testFqName, $virtualDns->name);
+
+
+            //List of the specified virtual DNS
+            $vdns = $rs->contrail->listVirtualDns($virtualDns->uuid);
+            $this->assertInternalType('object', $vdns);
+            foreach (array('fq_name', 'parent_uuid', 'parent_href', 'uuid', 'href', 'name', 'virtual_DNS_data', 'id_perms') as $attr) {
+                $this->assertObjectHasAttribute('href', $virtualDns);
+            }
+            $this->assertEquals($virtualDns->name, $vdns->name);
+            $this->assertEquals($virtualDns->uuid, $vdns->uuid);
+            unset($virtualDns);
+
+            //Creates IPAM
+            $ipam = $rs->contrail->createIpam(array(
+                "parent_type"       => "project",
+                "fq_name"           => array("default-domain", $tenant, $testFqName),
+                "network_ipam_mgmt" => array(
+                    "dhcp_option_list" => array(
+                        "dhcp_option"    => array(array(
+                            "dhcp_option_name"  => "15",
+                            "dhcp_option_value" => $testDomainName,
+                        ))
+                    ),
+                    "ipam_dns_method"  => "tenant-dns-server",
+                    "ipam_dns_server"  => array(
+                        "tenant_dns_server_address" => array(
+                            "ip_address"  => array(self::DNS_SERVER_ADDRESS),
+                        ),
+                        "virtual_dns_server_name"   => null,
+                    ),
+                ),
+            ));
+
+            $this->assertInternalType('object', $ipam);
+
+
+            //Show specified IPAM
+            $ipam2 = $rs->contrail->listIpam($ipam->uuid);
+            $this->assertInternalType('object', $ipam2);
+            $this->assertEquals($ipam2->uuid, $ipam->uuid);
+            unset($ipam2);
+
+
+            //Creates virtual network
+            $virtualNetwork = $rs->contrail->createVirtualNetwork(array(
+                "parent_type" => "project",
+                "fq_name"     => array("default-domain", $tenant, $testFqNetworkName)
+            ));
+            $this->assertInternalType('object', $virtualNetwork);
+            $this->assertNotEmpty($virtualNetwork->uuid);
+
+
+            //Show specified virtual network
+            $vn2 = $rs->contrail->listVirtualNetworks($virtualNetwork->uuid);
+            $this->assertInternalType('object', $vn2);
+            $this->assertEquals($virtualNetwork->uuid, $vn2->uuid);
+            unset($vn2);
+
+            //Creating network policy
+            $networkPolicy = $rs->contrail->createNetworkPolicy([
+                "parent_type"            => "project",
+                "fq_name"                => ["default-domain", $tenant, $testNetworkPolicyName],
+                "network_policy_entries" => [
+                    "policy_rule" => [[
+                        "direction"     => "<>",
+                        "protocol"      => "any",
+                        "src_addresses" => [["virtual_network" => "default-domain:" . $tenant . ":" . $testFqNetworkName]],
+                        "dst_ports"     => [["start_port" => -1, "end_port" => -1]],
+                        "action_list"   => ["apply_service" => null],
+                        "dst_addresses" => [["virtual_network" => "default-domain:" . $tenant . ":" . $testFqNetworkName]],
+                        "src_ports"     => [["end_port" => -1, "start_port" => -1]],
+                    ]],
+                ],
+            ]);
+            $this->assertInternalType('object', $networkPolicy);
+            $this->assertNotEmpty($networkPolicy->uuid);
+
+            //Show detailed info of the specified network policy
+            $np2 = $rs->contrail->listNetworkPolicies($networkPolicy->uuid);
+            $this->assertInternalType('object', $np2);
+            $this->assertEquals($networkPolicy->uuid, $np2->uuid);
+            unset($np2);
+
+            //Associates IPAM and Network Policy to virtual network
+            $rs->contrail->updateVirtualNetwork($virtualNetwork->uuid, [
+                "fq_name"           => $virtualNetwork->fq_name,
+                "network_ipam_refs" => [[
+                    "attr" => [
+                        "ipam_subnets" => [[
+                            "default_gateway" => "192.168.80.6",
+                            "subnet"          => [
+                                "ip_prefix"     => "192.168.80.1",
+                                "ip_prefix_len" => 29
+                            ],
+                        ]],
+                    ],
+                    "to"   => ["default-domain", $tenant, $testFqName],
+                ]],
+                "network_policy_refs" => [[
+                    "to"   => ["default-domain", $tenant, $testNetworkPolicyName],
+                    "attr" => [
+                        "sequence" => ["major" => 0, "minor" => 0],
+                        "timer"    => null,
+                    ],
+                ]],
+            ]);
+
+            //Removing Virtual Network
+            $ret = $rs->contrail->deleteVirtualNetwork($virtualNetwork->uuid);
+            $this->assertTrue($ret);
+
+            //Removing network policy
+            $ret = $rs->contrail->deleteNetworkPolicy($networkPolicy->uuid);
+            $this->assertTrue($ret);
+
+            //Removing IPAM
+            $ret = $rs->contrail->deleteIpam($ipam->uuid);
+            $this->assertTrue($ret);
+
+            //Removing virtual DNS
+            $ret = $rs->contrail->deleteVirtualDns($vdns->uuid);
+            $this->assertTrue($ret);
+
+            $this->markTestSkipped('For Contrail to check only its API and nothing more.');
+            return;
+        }
+
         //Get Limits test
         $limits = $rs->servers->getLimits();
         $this->assertTrue(is_object($limits));
@@ -172,8 +428,7 @@ class OpenStackTest extends OpenStackTestCase
         unset($aExtensions);
 
         $hasNetwork = $rs->hasService(OpenStack::SERVICE_NETWORK);
-
-        if ($platform != SERVER_PLATFORMS::ECS && $hasNetwork) {
+        if ($hasNetwork) {
             $aExtensions = $rs->network->listExtensions();
             $this->assertTrue(is_array($aExtensions));
             unset($aExtensions);
@@ -183,13 +438,15 @@ class OpenStackTest extends OpenStackTestCase
             $testSubnetName = self::getTestName(self::NAME_SUBNET);
             $testPortName = self::getTestName(self::NAME_PORT);
             $testRouterName = self::getTestName(self::NAME_ROUTER);
+            $testLbPoolName = self::getTestName(self::NAME_LB_POOL);
+            $testLbVipName = self::getTestName(self::NAME_LB_VIP);
 
             //ListNetworks test
             $networks = $rs->network->networks->list(null, array(
                 'status' => 'ACTIVE',
                 'shared' => false
             ));
-            $this->assertInternalType('array', $networks);
+            $this->assertTrue($networks instanceof \ArrayIterator);
             if (isset($networks[0])) {
                 $this->assertInternalType('object', $networks[0]);
                 $this->assertNotEmpty($networks[0]->id);
@@ -199,11 +456,19 @@ class OpenStackTest extends OpenStackTestCase
                 $this->assertEquals($networks[0], $network);
                 unset($network);
             }
+            $publicNetworkId = null;
+            foreach ($networks as $network) {
+                if ($network->{"router:external"} == true) {
+                    $publicNetworkId = $network->id;
+                }
+            }
             unset($networks);
+
+            $this->assertNotEmpty($publicNetworkId, 'Could not find public network to continue.');
 
             //ListSubnets test
             $subnets = $rs->network->subnets->list();
-            $this->assertInternalType('array', $subnets);
+            $this->assertTrue($subnets instanceof \ArrayIterator);
             if (isset($subnets[0])) {
                 $this->assertInternalType('object', $subnets[0]);
                 $this->assertNotEmpty($subnets[0]->id);
@@ -217,7 +482,7 @@ class OpenStackTest extends OpenStackTestCase
 
             //ListPorts test
             $ports = $rs->network->ports->list();
-            $this->assertInternalType('array', $ports);
+            $this->assertTrue($ports instanceof \ArrayIterator);
             if (isset($ports[0])) {
                 $this->assertInternalType('object', $ports[0]);
                 $this->assertNotEmpty($ports[0]->id);
@@ -229,8 +494,47 @@ class OpenStackTest extends OpenStackTestCase
             }
             unset($ports);
 
-            //Tries to find the ports that were created recently by this test
-            //but hadn't been removed at any reason.
+            if ($rs->network->isExtensionSupported(NetworkExtension::loadbalancingService())) {
+                //Removes previously created LBaaS VIP if it exists
+                $lbVips = $rs->network->lbVips->list(null, array(
+                    'name' => $testLbVipName,
+                ));
+                foreach ($lbVips as $lbVip) {
+                    $ret = $rs->network->lbVips->delete($lbVip->id);
+                    $this->assertTrue($ret, 'Could not remove previously created Load balancer VIP (id:' . $lbVip->id . ').');
+                }
+                $this->assertTrue($lbVips instanceof \ArrayIterator);
+                unset($lbVips);
+
+                //Removes previously created pools if they exist.
+                $lbPools = $rs->network->lbPools->list(null, array(
+                    'name' => $testLbPoolName,
+                ));
+                $this->assertTrue($lbPools instanceof \ArrayIterator);
+                foreach ($lbPools as $lbPool) {
+                    if (!empty($lbPool->health_monitors)) {
+                        foreach ($lbPool->health_monitors as $healthMonitorId) {
+                            //Removes previously associated health monitors with test pools
+                            $ret = $rs->network->lbPools->disassociateHealthMonitor($lbPool->id, $healthMonitorId);
+                            $this->assertTrue($ret);
+                            $ret = $rs->network->lbHealthMonitors->delete($healthMonitorId);
+                            $this->assertTrue($ret);
+                        }
+                    }
+                    if (!empty($lbPool->members)) {
+                        foreach ($lbPool->members as $memberId) {
+                            //Remove previously created members
+                            $ret = $rs->network->lbMembers->delete($memberId);
+                            $this->assertTrue($ret, 'Could not remove previously created LBaas member (id:' . $memberId . ').');
+                        }
+                    }
+                    $ret = $rs->network->lbPools->delete($lbPool->id);
+                    $this->assertTrue($ret, 'Could not remove previously created LBaaS pool.');
+                }
+                unset($lbPools);
+            }
+
+            //Tries to find the ports which have been created recently by this test
             $ports = $rs->network->ports->list(null, array(
                 'name' => array($testPortName, $testPortName . '1')
             ));
@@ -240,8 +544,7 @@ class OpenStackTest extends OpenStackTestCase
             }
             unset($ports);
 
-            //Tries to find the networks that were created recently by this test
-            //but hadn't been removed at any reason.
+            //Tries to find the networks that have been created recently by this test
             $networks = $rs->network->networks->list(null, array(
                 'name' => $testNetworkName
             ));
@@ -264,7 +567,7 @@ class OpenStackTest extends OpenStackTestCase
             $subnets = $rs->network->subnets->list(null, array(
                 'name' => array($testSubnetName, $testSubnetName . '1')
             ));
-            $this->assertInternalType('array', $subnets);
+            $this->assertTrue($subnets instanceof \ArrayIterator);
             foreach ($subnets as $subnet) {
                 //Removes previously created subnets
                 $rs->network->subnets->delete($subnet->id);
@@ -286,16 +589,12 @@ class OpenStackTest extends OpenStackTestCase
             $subnet = $rs->network->subnets->create(array(
                 'network_id'       => $network->id,
                 //ip_version is set internally with 4, but you can provide it explicitly
-                'cidr'             => '10.0.3.0/24',
+                'cidr'             => self::SUBNET_CIDR,
                 'name'             => $testSubnetName,
-                'allocation_pools' => array(new AllocationPool('10.0.3.20', '10.0.3.22')),
             ));
             $this->assertInternalType('object', $subnet);
             $this->assertEquals($testSubnetName, $subnet->name);
             $this->assertNotEmpty($subnet->id);
-            $this->assertInternalType('array', $subnet->allocation_pools);
-            $this->assertNotEmpty($subnet->allocation_pools);
-            $this->assertEquals('10.0.3.22', $subnet->allocation_pools[0]->end);
 
             //Updates the subnet
             $subnet = $rs->network->subnets->update($subnet->id, array(
@@ -305,31 +604,11 @@ class OpenStackTest extends OpenStackTestCase
             $this->assertNotEmpty($subnet->name);
             $this->assertEquals($testSubnetName . '1', $subnet->name);
 
-            //Creates port
-            //Let's use object here
-            $req = new CreatePort($network->id);
-            $req->name = $testPortName;
-
-            //You may pass object aw well as array
-            $port = $rs->network->ports->create($req);
-            $this->assertInternalType('object', $port);
-            $this->assertEquals($network->id, $port->network_id);
-            $this->assertEquals($testPortName, $port->name);
-            $this->assertNotEmpty($port->id);
-
-            //Updates port
-            $port = $rs->network->ports->update($port->id, array(
-                'name' => $testPortName . '1'
-            ));
-            $this->assertInternalType('object', $port);
-            $this->assertEquals($testPortName . '1', $port->name);
-
-
             //Quantum L3 Router related tests
-            if ($rs->network->isExtensionSupported(NetworkExtension::quantumL3Router())) {
+            if ($platform !== \SERVER_PLATFORMS::ECS && $rs->network->isExtensionSupported(NetworkExtension::quantumL3Router())) {
                 //ListRouters test
                 $routers = $rs->network->routers->list(null, array('status' => array('ACTIVE', 'PENDING')), array('id', 'name'));
-                $this->assertInternalType('array', $routers);
+                $this->assertTrue($routers instanceof \ArrayIterator);
                 foreach ($routers as $r) {
                     $router = $rs->network->routers->list($r->id);
                     $this->assertInternalType('object', $router);
@@ -343,7 +622,7 @@ class OpenStackTest extends OpenStackTestCase
                 unset($routers);
 
                 //Creates router
-                $router = $rs->network->routers->create(new CreateRouter($testRouterName));
+                $router = $rs->network->routers->create(new CreateRouter($testRouterName, true, $publicNetworkId));
                 $this->assertInternalType('object', $router);
                 $this->assertObjectHasAttribute('name', $router);
                 $this->assertNotEmpty($router->name);
@@ -368,12 +647,6 @@ class OpenStackTest extends OpenStackTestCase
 
                 //Removes interface from router
                 $obj = $rs->network->routers->removeInterface($router->id, $subnet->id);
-//                 It returns nothing NULL
-//                 $this->assertInternalType('object', $obj);
-//                 $this->assertObjectHasAttribute('subnet_id', $obj);
-//                 $this->assertEquals($subnet->id, $obj->subnet_id);
-//                 $this->assertObjectHasAttribute('port_id', $obj);
-//                 unset($obj);
 
                 //Removes router
                 $ret = $rs->network->routers->delete($router->id);
@@ -381,9 +654,145 @@ class OpenStackTest extends OpenStackTestCase
                 unset($router);
             }
 
-            //Removes port
-            $ret = $rs->network->ports->delete($port->id);
-            $this->assertTrue($ret);
+            //Load Balancing Service (LBaaS) tests
+            if ($rs->network->isExtensionSupported(NetworkExtension::loadbalancingService())) {
+                $this->assertNotEmpty($subnet->id, 'Subnet is needed to proceed.');
+
+                //The tenant creates a pool, which is initially empty
+                $lbPool = $rs->network->lbPools->create(array(
+                    'subnet_id' => $subnet->id,
+                    'lb_method' => 'ROUND_ROBIN',
+                    'protocol'  => 'TCP',
+                    'name'      => $testLbPoolName,
+                    //Current tenant will be used by default
+                    //'tenant_id' => $rs->getConfig()->getAuthToken()->getTenantId(),
+                ));
+                $this->assertNotEmpty($lbPool);
+                $this->assertInstanceOf('stdClass', $lbPool);
+                $this->assertEquals($testLbPoolName, $lbPool->name);
+                $this->assertNotEmpty($lbPool->id);
+
+                //Tests update pool method
+                $lbPool = $rs->network->lbPools->update($lbPool->id, array(
+                    'name' => $testLbPoolName,
+                ));
+                $this->assertNotEmpty($lbPool);
+                $this->assertInstanceOf('stdClass', $lbPool);
+                $this->assertEquals($testLbPoolName, $lbPool->name);
+
+                //The tenant creates one or several members in the pool
+                $lbMember = $rs->network->lbMembers->create(array(
+                    'pool_id' => $lbPool->id,
+                    'protocol_port' => 8080,
+                    'address' => self::LB_MEMBER_ADDRESS,
+                    'weight' => 2
+                ));
+                $this->assertNotEmpty($lbMember);
+                $this->assertInternalType('object', $lbMember);
+                $this->assertEquals($lbPool->id, $lbMember->pool_id);
+                $this->assertTrue($lbMember->admin_state_up);
+
+                //Tests update member method
+                $lbMember = $rs->network->lbMembers->update($lbMember->id, array(
+                    'weight' => 3,
+                ));
+                $this->assertNotEmpty($lbMember);
+                $this->assertInternalType('object', $lbMember);
+                $this->assertEquals(3, $lbMember->weight);
+
+                //The tenant create one or several health monitors
+                $lbHealthMonitor = $rs->network->lbHealthMonitors->create(array(
+                    'delay'       => 4,
+                    'max_retries' => 3,
+                    'type'        => 'TCP',
+                    'timeout'     => 1,
+                ));
+                $this->assertNotEmpty($lbHealthMonitor);
+                $this->assertInternalType('object', $lbHealthMonitor);
+                $this->assertNotEmpty($lbHealthMonitor->id);
+                $this->assertTrue($lbHealthMonitor->admin_state_up);
+                $this->assertEquals(4, $lbHealthMonitor->delay);
+                $this->assertEquals(3, $lbHealthMonitor->max_retries);
+                $this->assertEquals('TCP', $lbHealthMonitor->type);
+                $this->assertEquals(1, $lbHealthMonitor->timeout);
+
+                //Tests update health monitor
+                $lbHealthMonitor = $rs->network->lbHealthMonitors->update($lbHealthMonitor->id, array(
+                    'max_retries' => 4,
+                ));
+                $this->assertNotEmpty($lbHealthMonitor);
+                $this->assertInternalType('object', $lbHealthMonitor);
+                $this->assertNotEmpty($lbHealthMonitor->id);
+                $this->assertEquals(4, $lbHealthMonitor->max_retries);
+
+                //The tenant associates the Health Monitors with the Pool
+                $ret = $rs->network->lbPools->associateHealthMonitor($lbPool->id, $lbHealthMonitor->id);
+                $this->assertInternalType('object', $ret);
+
+                //Checks if health monitor is successfully associated
+                $tmpPool = $rs->network->lbPools->list($lbPool->id);
+                $this->assertNotEmpty($tmpPool);
+                $this->assertInternalType('object',$tmpPool);
+                $this->assertEquals($lbPool->id, $tmpPool->id);
+                $this->assertNotEmpty($tmpPool->health_monitors);
+                $this->assertContains($lbHealthMonitor->id, $tmpPool->health_monitors);
+                $lbPool = $tmpPool;
+                unset($tmpPool);
+
+                //The tenant finally creates a VIP associated with the Pool
+                $lbVip = $rs->network->lbVips->create(array(
+                    'protocol'      => 'TCP',
+                    'protocol_port' => 8080,
+                    'name'          => $testLbVipName,
+                    'subnet_id'     => $subnet->id,
+                    'pool_id'       => $lbPool->id,
+                ));
+                $this->assertNotEmpty($lbVip);
+                $this->assertInternalType('object', $lbVip);
+                $this->assertEquals('TCP', $lbVip->protocol);
+                $this->assertEquals(8080, $lbVip->protocol_port);
+                $this->assertEquals($testLbVipName, $lbVip->name);
+                $this->assertEquals($subnet->id, $lbVip->subnet_id);
+                $this->assertEquals($lbPool->id, $lbVip->pool_id);
+
+                //Tests update method
+                $lbVip = $rs->network->lbVips->update($lbVip->id, array(
+                    'name' => $testLbVipName,
+                ));
+                $this->assertNotEmpty($lbVip);
+                $this->assertInternalType('object', $lbVip);
+
+                sleep(1);
+
+                //Deletes VIP
+                $ret = $rs->network->lbVips->delete($lbVip->id);
+                $this->assertTrue($ret);
+
+                //Disassotiates the Health Monitors with the pool
+                $ret = $rs->network->lbPools->disassociateHealthMonitor($lbPool->id, $lbHealthMonitor->id);
+                $this->assertTrue($ret);
+
+                //Checks if health monitor is successfully disassociated
+                $tmpPool = $rs->network->lbPools->list($lbPool->id);
+                $this->assertNotEmpty($tmpPool);
+                $this->assertInternalType('object',$tmpPool);
+                $this->assertEquals($lbPool->id, $tmpPool->id);
+                $this->assertNotContains($lbHealthMonitor->id, $tmpPool->health_monitors);
+                $lbPool = $tmpPool;
+                unset($tmpPool);
+
+                //Deletes LBaaS health monitor
+                $ret = $rs->network->lbHealthMonitors->delete($lbHealthMonitor->id);
+                $this->assertTrue($ret);
+
+                //Delete LBaaS member
+                $ret = $rs->network->lbMembers->delete($lbMember->id);
+                $this->assertTrue($ret);
+
+                //Delete LBaaS pool
+                $ret = $rs->network->lbPools->delete($lbPool->id);
+                $this->assertTrue($ret);
+            }
 
             //Removes subnet
             $ret = $rs->network->subnets->delete($subnet->id);
@@ -395,11 +804,91 @@ class OpenStackTest extends OpenStackTestCase
             $this->assertTrue($ret);
             unset($network);
 
+            //Security group extension test
+            if ($rs->network->isExtensionSupported(NetworkExtension::securityGroup())) {
+                $sgTestName = self::getTestName(self::NAME_SECURITY_GROUP);
+
+                //Removes previously created test security group if it actually exists
+                $sgList = $rs->network->securityGroups->list(null, ['name' => $sgTestName]);
+                $this->assertInstanceOf(self::ABSTRACT_PAGINATION_CLASS, $sgList);
+
+                foreach ($sgList as $sg) {
+                    $this->assertNotEmpty($sg->name);
+                    $this->assertNotEmpty($sg->id);
+
+                    if ($sg->name === $sgTestName) {
+                        //Removes previously created test security group
+                        $res = $rs->network->securityGroups->delete($sg->id);
+                        $this->assertTrue($res);
+                    }
+                }
+                unset($sgList);
+
+                //List Security groups test
+                $sgList = $rs->network->securityGroups->list();
+                $this->assertInstanceOf(self::ABSTRACT_PAGINATION_CLASS, $sgList);
+                unset($sgList);
+
+                //Create security group test
+                $sg = $rs->network->securityGroups->create($sgTestName, 'phpunit test security group');
+                $this->assertNotEmpty($sg);
+                $this->assertInternalType('object', $sg);
+                $this->assertNotEmpty($sg->id);
+                $this->assertEquals($sgTestName, $sg->name);
+                $this->assertNotEmpty($sg->description);
+
+                //Update security group test
+                //ListRules test
+                //Gets the rules set for the created security group
+                $rulesList = $rs->network->securityGroups->listRules(null, ['securityGroupId' => $sg->id]);
+                $this->assertInstanceOf(self::ABSTRACT_PAGINATION_CLASS, $rulesList);
+                $this->assertEquals(0, count($rulesList), 'New security group is expected to have empty set of the rules.');
+
+                $ruleToAdd = [
+                    "security_group_id" => $sg->id,
+                    "remote_group_id"   => null,
+                    "direction"         => "ingress",
+                    "remote_ip_prefix"  => "0.0.0.0/0",
+                    "port_range_max"    => null,
+                    "port_range_min"    => null,
+                ];
+
+                //Add a new rule to security group
+                $rule = $rs->network->securityGroups->addRule($ruleToAdd);
+                $this->assertNotEmpty($rule);
+                $this->assertNotEmpty($rule->id);
+                $this->assertInternalType('object', $rule);
+
+                //Verifies that all properties are set properly
+                foreach ($ruleToAdd as $property => $value) {
+                    $this->assertObjectHasAttribute($property, $rule);
+                    $this->assertEquals($value, $rule->$property);
+                }
+
+                //Checks that new rule does exist
+                $rulesList = $rs->network->securityGroups->listRules(null, ['securityGroupId' => $sg->id]);
+                $this->assertEquals(1, count($rulesList));
+                unset($rulesList);
+
+                //Removes rule
+                $ret = $rs->network->securityGroups->deleteRule($rule->id);
+                $this->assertTrue($ret);
+
+                //Checks whether rule is removed properly
+                $rulesList = $rs->network->securityGroups->listRules(null, ['securityGroupId' => $sg->id]);
+                $this->assertEquals(0, count($rulesList));
+                unset($rulesList);
+
+                //Delete security group test
+                $ret = $rs->network->securityGroups->delete($sg->id);
+                $this->assertTrue($ret);
+                unset($sg);
+            }
         }
 
         //List snapshots test
         $snList = $rs->volume->snapshots->list();
-        $this->assertTrue(is_array($snList));
+        $this->assertTrue($snList instanceof \ArrayIterator);
         foreach ($snList as $v) {
             if ($v->display_name == self::getTestSnapshotName()) {
                 $rs->volume->snapshots->delete($v->id);
@@ -409,7 +898,7 @@ class OpenStackTest extends OpenStackTestCase
 
         //List Volume Types test
         $volumeTypes = $rs->volume->listVolumeTypes();
-        $this->assertTrue(is_array($volumeTypes));
+        $this->assertTrue($volumeTypes instanceof \ArrayIterator);
         foreach ($volumeTypes as $v) {
             $volumeTypeDesc = $rs->volume->getVolumeType($v->id);
             $this->assertTrue(is_object($volumeTypeDesc));
@@ -419,7 +908,7 @@ class OpenStackTest extends OpenStackTestCase
 
         //List Volumes test
         $aVolumes = $rs->volume->listVolumes();
-        $this->assertTrue(is_array($aVolumes));
+        $this->assertTrue($aVolumes instanceof \ArrayIterator);
         foreach ($aVolumes as $v) {
             if ($v->display_name == self::getTestVolumeName()) {
                 if (in_array($v->status, array(VolumeStatus::STATUS_AVAILABLE, VolumeStatus::STATUS_ERROR))) {
@@ -471,7 +960,7 @@ class OpenStackTest extends OpenStackTestCase
         $pool = null;
         if ($rs->servers->isExtensionSupported(ServersExtension::floatingIpPools())) {
             $aFloatingIpPools = $rs->servers->listFloatingIpPools();
-            $this->assertTrue(is_array($aFloatingIpPools));
+            $this->assertTrue($aFloatingIpPools instanceof \ArrayIterator);
             foreach ($aFloatingIpPools as $v) {
                 $pool = $v->name;
                 break;
@@ -482,7 +971,7 @@ class OpenStackTest extends OpenStackTestCase
         if ($rs->servers->isExtensionSupported(ServersExtension::floatingIps())) {
             $this->assertNotNull($pool);
             $aFloatingIps = $rs->servers->floatingIps->list();
-            $this->assertTrue(is_array($aFloatingIps));
+            $this->assertTrue($aFloatingIps instanceof \ArrayIterator);
             foreach ($aFloatingIps as $v) {
                 $r = $rs->servers->floatingIps->get($v->id);
                 $this->assertTrue(is_object($r));
@@ -512,7 +1001,7 @@ class OpenStackTest extends OpenStackTestCase
 
         //List flavors test
         $flavorsList = $listFlavors = $rs->servers->listFlavors();
-        $this->assertTrue(is_array($flavorsList));
+        $this->assertTrue($flavorsList instanceof \ArrayIterator);
         $flavorId = null;
         foreach ($flavorsList as $v) {
             $flavorId = $v->id;
@@ -523,8 +1012,7 @@ class OpenStackTest extends OpenStackTestCase
 
         //List servers test
         $ret = $rs->servers->list();
-        $this->assertTrue(is_array($ret));
-        if (!empty($ret)) {
+        if (!empty($ret) && $ret->count()) {
             foreach ($ret as $v) {
                 if ($v->name == self::getTestServerName() || $v->name == self::getTestServerName('renamed')) {
                     //Removes servers
@@ -574,7 +1062,7 @@ class OpenStackTest extends OpenStackTestCase
 
         //Images List test
         $imagesList = $rs->servers->images->list();
-        $this->assertTrue(is_array($imagesList));
+        $this->assertTrue($imagesList instanceof DefaultPaginationList);
         foreach ($imagesList as $img) {
             if ($img->name == self::getTestName('image')) {
                 $rs->servers->images->delete($img->id);
@@ -589,7 +1077,7 @@ class OpenStackTest extends OpenStackTestCase
         //Keypairs extension test
         if ($rs->servers->isExtensionSupported(ServersExtension::keypairs())) {
             $aKeypairs = $rs->servers->keypairs->list();
-            $this->assertTrue(is_array($aKeypairs));
+            $this->assertTrue($aKeypairs instanceof \ArrayIterator);
             foreach ($aKeypairs as $v) {
                 if ($v->keypair->name == self::getTestName('key')) {
                     $rs->servers->keypairs->delete($v->keypair->name);
@@ -613,7 +1101,7 @@ class OpenStackTest extends OpenStackTestCase
         //Security Groups extension test
         if ($rs->servers->isExtensionSupported(ServersExtension::securityGroups())) {
             $listSecurityGroups = $rs->servers->securityGroups->list();
-            $this->assertTrue(is_array($listSecurityGroups));
+            $this->assertTrue($listSecurityGroups instanceof \ArrayIterator);
             foreach ($listSecurityGroups as $v) {
                 if ($v->name == self::getTestName('security-group')) {
                     $rs->servers->securityGroups->delete($v->id);
@@ -622,7 +1110,8 @@ class OpenStackTest extends OpenStackTestCase
             unset($listSecurityGroups);
 
             $listForSpecificServer = $rs->servers->securityGroups->list($srv->id);
-            $this->assertTrue(is_array($listForSpecificServer));
+            $this->assertTrue(is_array($listForSpecificServer) || $listForSpecificServer instanceof \ArrayIterator);
+
             unset($listForSpecificServer);
 
             $sg = $rs->servers->securityGroups->create(self::getTestName('security-group'), 'This is phpunit security group test.');

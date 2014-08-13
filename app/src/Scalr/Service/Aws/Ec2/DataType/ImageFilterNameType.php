@@ -2,8 +2,6 @@
 namespace Scalr\Service\Aws\Ec2\DataType;
 
 use Scalr\Service\Aws\DataType\StringType;
-use Scalr\Service\Aws\Ec2Exception;
-use Scalr\Service\Aws\Ec2\AbstractEc2DataType;
 
 /**
  * ImageFilterNameType
@@ -51,7 +49,7 @@ class ImageFilterNameType extends StringType
 
     /**
      * The volume type of the Amazon EBS volume.
-     * Valid values: standard | io1
+     * Valid values: standard | io1 | gp2
      */
     const TYPE_BLOCK_DEVICE_MAPPING_VOLUME_TYPE = 'block-device-mapping.volume-type';
 

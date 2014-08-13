@@ -1,5 +1,6 @@
 <?php
 use Scalr\Acl\Acl;
+use Scalr\Model\Entity;
 
 class Scalr_UI_Controller_Schedulertasks extends Scalr_UI_Controller
 {
@@ -25,7 +26,7 @@ class Scalr_UI_Controller_Schedulertasks extends Scalr_UI_Controller
         $this->response->page('ui/schedulertasks/create.js', array(
             'farmWidget' => self::loadController('Farms')->getFarmWidget(array(), 'addAll'),
             'timezones' => Scalr_Util_DateTime::getTimezones(),
-            'scripts' => self::loadController('Scripts')->getList(),
+            'scripts' => \Scalr\Model\Entity\Script::getList($this->user->getAccountId(), $this->getEnvironmentId()),
             'defaultTimezone' => $this->user->getSetting(Scalr_Account_User::SETTING_UI_TIMEZONE)
         ));
     }
@@ -47,13 +48,15 @@ class Scalr_UI_Controller_Schedulertasks extends Scalr_UI_Controller
             'id' => $task->id,
             'name' => $task->name,
             'type' => $task->type,
-            'comments' => htmlspecialchars_decode($task->comments),
+            'comments' => $task->comments,
             'config' => $task->config,
             'startTime' => $task->startTime ? Scalr_Util_DateTime::convertTimeZone(new DateTime($task->startTime), $task->timezone)->format('Y-m-d H:i') : '',
             'endTime' => $task->endTime ? Scalr_Util_DateTime::convertTimeZone(new DateTime($task->endTime), $task->timezone)->format('Y-m-d H:i') : '',
             'restartEvery' => $task->restartEvery,
             'timezone' => $task->timezone
         );
+        $taskValues['config']['scriptId'] = (int) $taskValues['config']['scriptId'];
+        $taskValues['config']['scriptIsSync'] = (int) $taskValues['config']['scriptIsSync'];
 
         $farmWidget = array();
 
@@ -89,7 +92,7 @@ class Scalr_UI_Controller_Schedulertasks extends Scalr_UI_Controller
         $this->response->page('ui/schedulertasks/create.js', array(
             'farmWidget' => $farmWidget,
             'timezones' => Scalr_Util_DateTime::getTimezones(),
-            'scripts' => self::loadController('Scripts')->getList(),
+            'scripts' => \Scalr\Model\Entity\Script::getList($this->user->getAccountId(), $this->getEnvironmentId()),
             'defaultTimezone' => $this->user->getSetting(Scalr_Account_User::SETTING_UI_TIMEZONE),
             'task' => $taskValues
         ));
@@ -146,17 +149,14 @@ class Scalr_UI_Controller_Schedulertasks extends Scalr_UI_Controller
             }
 
             $row['type'] = Scalr_SchedulerTask::getTypeByName($row['type']);
-            $row['startTime'] = $row['startTime'] ? Scalr_Util_DateTime::convertTz($row['startTime']) : 'Now';
-            $row['endTime'] = $row['endTime'] ? Scalr_Util_DateTime::convertTz($row['endTime']) : 'Never';
-            $row['lastStartTime'] = $row['lastStartTime'] ? Scalr_Util_DateTime::convertTz($row['lastStartTime']) : '';
+            $row['startTime'] = $row['startTime'] ? Scalr_Util_DateTime::convertDateTime($row['startTime'], $row['timezone']) : 'Now';
+            $row['endTime'] = $row['endTime'] ? Scalr_Util_DateTime::convertDateTime($row['endTime'], $row['timezone']) : 'Never';
+            $row['lastStartTime'] = $row['lastStartTime'] ? Scalr_Util_DateTime::convertDateTime($row['lastStartTime'], $row['timezone']) : '';
 
             $row['config'] = unserialize($row['config']);
-            $row['config']['scriptName'] = $this->db->GetOne("
-                SELECT name FROM scripts WHERE id = ? and clientid = ? LIMIT 1
-            ", array(
-                $row['config']['scriptId'],
-                $this->user->getAccountId()
-            ));
+            $script = Entity\Script::findPk($row['config']['scriptId']);
+            if ($script)
+                $row['config']['scriptName'] = $script->name;
         }
 
         $this->response->data($response);
@@ -184,7 +184,8 @@ class Scalr_UI_Controller_Schedulertasks extends Scalr_UI_Controller
             )),
             'farmId' => array('type' => 'integer'),
             'farmRoleId' => array('type' => 'integer'),
-            'serverId' => array('type' => 'string')
+            'serverId' => array('type' => 'string'),
+            'scriptOptions' => array('type' => 'array')
         ));
 
         $task = Scalr_SchedulerTask::init();
@@ -292,7 +293,7 @@ class Scalr_UI_Controller_Schedulertasks extends Scalr_UI_Controller
 
         $task->name = $this->getParam('name');
         $task->type = $this->getParam('type');
-        $task->comments = htmlspecialchars($this->getParam('comments'));
+        $task->comments = $this->getParam('comments');
         $task->timezone = $this->getParam('timezone');
         $task->startTime = $startTm ? $startTm->format('Y-m-d H:i:s') : NULL;
         $task->endTime = $endTm ? $endTm->format('Y-m-d H:i:s') : NULL;
@@ -355,7 +356,7 @@ class Scalr_UI_Controller_Schedulertasks extends Scalr_UI_Controller
             $task->loadById($taskId);
             $this->user->getPermissions()->validate($task);
 
-            if ($task->status != Scalr_SchedulerTask::STATUS_ACTIVE)
+            if ($task->status == Scalr_SchedulerTask::STATUS_FINISHED)
                 continue;
 
             if ($task->execute(true))

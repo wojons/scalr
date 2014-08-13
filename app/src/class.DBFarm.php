@@ -1,5 +1,9 @@
 <?php
 
+use Scalr\Modules\Platforms\Cloudstack\Helpers\CloudstackHelper;
+use Scalr\Stats\CostAnalytics\Entity\ProjectEntity;
+use Scalr\Exception\AnalyticsException;
+
 class DBFarm
 {
     const SETTING_CRYPTO_KEY				= 'crypto.key';
@@ -22,6 +26,10 @@ class DBFarm
     const SETTING_LEASE_NOTIFICATION_SEND   = 'lease.notification.send';
 
     const SETTING_TIMEZONE                  = 'timezone';
+
+    const SETTING_PROJECT_ID                = 'project_id';
+
+    const SETTING_OWNER_HISTORY             = 'owner.history';
 
     public
         $ID,
@@ -85,13 +93,20 @@ class DBFarm
         $this->DB = \Scalr::getDb();
     }
 
-    //TODO: Rewrite this terrible code.
+    /**
+     * Initializes a new farm
+     *
+     * TODO: Rewrite this terrible code.
+     *
+     * @param   string             $name  The name of the farm
+     * @param   Scalr_Account_User $user  The user
+     * @param   int                $envId The identifier of the environment
+     * @return  DBFarm
+     */
     public static function create($name, Scalr_Account_User $user, $envId)
     {
         $account = $user->getAccount();
         $account->validateLimit(Scalr_Limits::ACCOUNT_FARMS, 1);
-
-        $db = \Scalr::getDb();
 
         $dbFarm = new self();
         $dbFarm->Status = FARM_STATUS::TERMINATED;
@@ -114,6 +129,14 @@ class DBFarm
         return $dbFarm;
     }
 
+    /**
+     * Creates clone for the farm
+     *
+     * @param   string             $name   The name of the farm
+     * @param   Scalr_Account_User $user   The user object
+     * @param   int                $envId  The identifier of the environment
+     * @return  DBFarm             Returns clone
+     */
     public function cloneFarm($name = false, Scalr_Account_User $user, $envId)
     {
         $account = $user->getAccount();
@@ -126,8 +149,7 @@ class DBFarm
             if (!stristr($definition->name, "clone")) {
                 $template = $definition->name . ' (clone #%s)';
                 $i = 1;
-            }
-            else {
+            } else {
                 preg_match("/^(.*?)\(clone \#([0-9]*)\)$/si", $definition->name, $matches);
                 $template = trim($matches[1])." (clone #%s)";
                 $i = $matches[2]+1;
@@ -148,17 +170,19 @@ class DBFarm
 
         $dbFarm->createdByUserId = $user->id;
         $dbFarm->createdByUserEmail = $user->getEmail();
+        $dbFarm->RolesLaunchOrder = $definition->rolesLaunchOrder;
 
         $dbFarm->SetSetting(DBFarm::SETTING_TIMEZONE, $definition->settings[DBFarm::SETTING_TIMEZONE]);
         $dbFarm->SetSetting(DBFarm::SETTING_EC2_VPC_ID, $definition->settings[DBFarm::SETTING_EC2_VPC_ID]);
         $dbFarm->SetSetting(DBFarm::SETTING_EC2_VPC_REGION, $definition->settings[DBFarm::SETTING_EC2_VPC_REGION]);
         $dbFarm->SetSetting(DBFarm::SETTING_SZR_UPD_REPOSITORY, $definition->settings[DBFarm::SETTING_SZR_UPD_REPOSITORY]);
         $dbFarm->SetSetting(DBFarm::SETTING_SZR_UPD_SCHEDULE, $definition->settings[DBFarm::SETTING_SZR_UPD_SCHEDULE]);
+        $dbFarm->SetSetting(DBFarm::SETTING_LEASE_STATUS, $definition->settings[DBFarm::SETTING_LEASE_STATUS]);
 
-        $variables = new Scalr_Scripting_GlobalVariables($envId, Scalr_Scripting_GlobalVariables::SCOPE_FARM);
+        $variables = new Scalr_Scripting_GlobalVariables($dbFarm->ClientID, $envId, Scalr_Scripting_GlobalVariables::SCOPE_FARM);
         $variables->setValues($definition->globalVariables, 0, $dbFarm->ID, 0);
 
-        foreach($definition->roles as $index => $role) {
+        foreach ($definition->roles as $index => $role) {
             $dbFarmRole = $dbFarm->AddRole(DBRole::loadById($role->roleId), $role->platform, $role->cloudLocation, $index+1, $role->alias);
             $oldRoleSettings = $dbFarmRole->GetAllSettings();
             $dbFarmRole->applyDefinition($role, true);
@@ -166,17 +190,15 @@ class DBFarm
 
             Scalr_Helpers_Dns::farmUpdateRoleSettings($dbFarmRole, $oldRoleSettings, $newSettings);
 
-            /**
-             * Platfrom specified updates
-             */
+            // Platfrom specified updates
             if ($dbFarmRole->Platform == SERVER_PLATFORMS::EC2) {
-                Modules_Platforms_Ec2_Helpers_Ebs::farmUpdateRoleSettings($dbFarmRole, $oldRoleSettings, $newSettings);
-                Modules_Platforms_Ec2_Helpers_Eip::farmUpdateRoleSettings($dbFarmRole, $oldRoleSettings, $newSettings);
-                Modules_Platforms_Ec2_Helpers_Elb::farmUpdateRoleSettings($dbFarmRole, $oldRoleSettings, $newSettings);
+                \Scalr\Modules\Platforms\Ec2\Helpers\EbsHelper::farmUpdateRoleSettings($dbFarmRole, $oldRoleSettings, $newSettings);
+                \Scalr\Modules\Platforms\Ec2\Helpers\EipHelper::farmUpdateRoleSettings($dbFarmRole, $oldRoleSettings, $newSettings);
+                \Scalr\Modules\Platforms\Ec2\Helpers\ElbHelper::farmUpdateRoleSettings($dbFarmRole, $oldRoleSettings, $newSettings);
             }
 
             if (in_array($dbFarmRole->Platform, array(SERVER_PLATFORMS::IDCF, SERVER_PLATFORMS::CLOUDSTACK))) {
-                Modules_Platforms_Cloudstack_Helpers_Cloudstack::farmUpdateRoleSettings($dbFarmRole, $oldRoleSettings, $newSettings);
+                CloudstackHelper::farmUpdateRoleSettings($dbFarmRole, $oldRoleSettings, $newSettings);
             }
 
             $dbFarmRolesList[] = $dbFarmRole;
@@ -184,13 +206,13 @@ class DBFarm
         }
 
         if ($usedPlatforms[SERVER_PLATFORMS::EC2])
-            Modules_Platforms_Ec2_Helpers_Ec2::farmSave($dbFarm, $dbFarmRolesList);
+            \Scalr\Modules\Platforms\Ec2\Helpers\Ec2Helper::farmSave($dbFarm, $dbFarmRolesList);
 
         if ($usedPlatforms[SERVER_PLATFORMS::EUCALYPTUS])
-            Modules_Platforms_Eucalyptus_Helpers_Eucalyptus::farmSave($dbFarm, $dbFarmRolesList);
+            \Scalr\Modules\Platforms\Eucalyptus\Helpers\EucalyptusHelper::farmSave($dbFarm, $dbFarmRolesList);
 
         if ($usedPlatforms[SERVER_PLATFORMS::CLOUDSTACK])
-            Modules_Platforms_Cloudstack_Helpers_Cloudstack::farmSave($dbFarm, $dbFarmRolesList);
+            CloudstackHelper::farmSave($dbFarm, $dbFarmRolesList);
 
         $dbFarm->save();
 
@@ -201,6 +223,7 @@ class DBFarm
     {
         $farmDefinition = new stdClass();
         $farmDefinition->name = $this->Name;
+        $farmDefinition->rolesLaunchOrder = $this->RolesLaunchOrder;
 
         // Farm Roles
         $farmDefinition->roles = array();
@@ -209,7 +232,7 @@ class DBFarm
         }
 
         //Farm Global Variables
-        $variables = new Scalr_Scripting_GlobalVariables($this->EnvID, Scalr_Scripting_GlobalVariables::SCOPE_FARM);
+        $variables = new Scalr_Scripting_GlobalVariables($this->ClientID, $this->EnvID, Scalr_Scripting_GlobalVariables::SCOPE_FARM);
         $farmDefinition->globalVariables = $variables->getValues(0, $this->ID, 0);
 
         //Farm Settings
@@ -362,17 +385,32 @@ class DBFarm
     }
 
     /**
-     * @return DBFarmRole
-     * @param DBRole $DBRole
+     * Adds a role to farm
+     *
+     * @param   DBRole     $DBRole        The role object
+     * @param   string     $platform      The cloud platform
+     * @param   string     $cloudLocation The cloud location
+     * @param   int        $launchIndex   Launch index
+     * @param   string     $alias         optional
+     * @return  DBFarmRole
      */
     public function AddRole(DBRole $DBRole, $platform, $cloudLocation, $launchIndex, $alias = "")
     {
         if (empty($alias))
             $alias = $DBRole->name;
 
-        $this->DB->Execute("INSERT INTO farm_roles SET
-            farmid=?, role_id=?, reboot_timeout=?, launch_timeout=?, status_timeout = ?,
-            launch_index = ?, platform = ?, cloud_location=?, `alias` = ?", array(
+        $this->DB->Execute("
+            INSERT INTO farm_roles
+            SET farmid=?,
+                role_id=?,
+                reboot_timeout=?,
+                launch_timeout=?,
+                status_timeout = ?,
+                launch_index = ?,
+                platform = ?,
+                cloud_location=?,
+                `alias` = ?
+        ", [
             $this->ID,
             $DBRole->id,
             300,
@@ -382,7 +420,7 @@ class DBFarm
             $platform,
             $cloudLocation,
             $alias
-        ));
+        ]);
 
         $farm_role_id = $this->DB->Insert_ID();
 
@@ -393,13 +431,21 @@ class DBFarm
         $DBFarmRole->CloudLocation = $cloudLocation;
         $DBFarmRole->Alias = $alias;
 
-        $default_settings = array(
+        $default_settings = [
             DBFarmRole::SETTING_SCALING_MIN_INSTANCES => 1,
             DBFarmRole::SETTING_SCALING_MAX_INSTANCES => 1
-        );
+        ];
 
-        foreach ($default_settings as $k => $v)
+        foreach ($default_settings as $k => $v) {
             $DBFarmRole->SetSetting($k, $v);
+        }
+
+        if ($farm_role_id && \Scalr::getContainer()->analytics->enabled) {
+            \Scalr::getContainer()->analytics->tags->syncValue(
+                $this->ClientID, \Scalr\Stats\CostAnalytics\Entity\TagEntity::TAG_ID_FARM_ROLE, $farm_role_id,
+                sprintf('%s > %s', $this->Name, $DBRole->name)
+            );
+        }
 
         return $DBFarmRole;
     }
@@ -434,6 +480,104 @@ class DBFarm
         }
 
         return true;
+    }
+
+    /**
+     * Associates cost analytics project with the farm
+     *
+     * It does not perform any actions if cost analytics is disabled
+     *
+     * @param   ProjectEntity|string  $project         The project entity or its identifier
+     * @param   bool                  $ignoreAutomatic optional Should it ignore auto assignment of the default project
+     * @return  string                Returns identifier of the associated project
+     * @throws  InvalidArgumentException
+     * @throws  AnalyticsException
+     */
+    public function setProject($project, $ignoreAutomatic = false)
+    {
+        if (Scalr::getContainer()->analytics->enabled) {
+            if ($project instanceof ProjectEntity) {
+                $projectId = $project->projectId;
+            } else {
+                $projectId = $project;
+                unset($project);
+            }
+
+            $analytics = Scalr::getContainer()->analytics;
+
+            if (!$ignoreAutomatic && Scalr::isHostedScalr() && !Scalr::isAllowedAnalyticsOnHostedScalrAccount($this->ClientID)) {
+                //Overrides project with automatic one
+                $projectId = $analytics->usage->autoProject($this->EnvID, $this->ID);
+            } else if (!empty($projectId)) {
+                //Validates specified project's identifier
+                if (!preg_match('/^[[:xdigit:]-]{36}$/', $projectId)) {
+                    throw new InvalidArgumentException(sprintf(
+                        "Identifier of the cost analytics Project must have valid UUID format. '%s' given.",
+                        strip_tags($projectId)
+                    ));
+                }
+
+                $project = isset($project) ? $project : $analytics->projects->get($projectId);
+
+                if (!$project) {
+                    throw new AnalyticsException(sprintf(
+                        "Could not find Project with specified identifier %s.", strip_tags($projectId)
+                    ));
+                } else if ($project->ccId !== $this->GetEnvironmentObject()->getPlatformConfigValue(Scalr_Environment::SETTING_CC_ID)) {
+                    throw new AnalyticsException(sprintf(
+                        "Invalid project identifier. Parent Cost center of the Project should correspond to the Environment's cost center."
+                    ));
+                }
+            } else {
+                $projectId = null;
+            }
+
+            //Sets project to the farm object only if it has been provided
+            if (isset($projectId)) {
+                $project = isset($project) ? $project : $analytics->projects->get($projectId);
+
+                $oldProjectId = $this->GetSetting(DBFarm::SETTING_PROJECT_ID);
+
+                $this->SetSetting(DBFarm::SETTING_PROJECT_ID, $project->projectId);
+
+                //Server property SERVER_PROPERTIES::FARM_PROJECT_ID should be updated
+                //for all running servers associated with the farm.
+                $this->DB->Execute("
+                    INSERT `server_properties` (`server_id`, `name`, `value`)
+                    SELECT s.`server_id`, ? AS `name`, ? AS `value`
+                    FROM `servers` s
+                    WHERE s.`farm_id` = ?
+                    ON DUPLICATE KEY UPDATE `value` = ?
+                ", [
+                    SERVER_PROPERTIES::FARM_PROJECT_ID,
+                    $project->projectId,
+                    $this->ID,
+                    $project->projectId
+                ]);
+
+                //Cost centre should correspond to Project's CC
+                $this->DB->Execute("
+                    INSERT `server_properties` (`server_id`, `name`, `value`)
+                    SELECT s.`server_id`, ? AS `name`, ? AS `value`
+                    FROM `servers` s
+                    WHERE s.`farm_id` = ?
+                    ON DUPLICATE KEY UPDATE `value` = ?
+                ", [
+                    SERVER_PROPERTIES::ENV_CC_ID,
+                    $project->ccId,
+                    $this->ID,
+                    $project->ccId
+                ]);
+
+                if (empty($oldProjectId)) {
+                    $analytics->events->fireAssignProjectEvent($this, $project->projectId);
+                } elseif ($oldProjectId !== $projectId) {
+                    $analytics->events->fireReplaceProjectEvent($this, $project->projectId, $oldProjectId);
+                }
+            }
+        }
+
+        return $projectId;
     }
 
     /**
@@ -523,15 +667,17 @@ class DBFarm
         $db = \Scalr::getDb();
 
         $farm_info = $db->GetRow("SELECT * FROM farms WHERE id=?", array($id));
-        if (!$farm_info)
+
+        if (!$farm_info) {
             throw new Exception(sprintf(_("Farm ID#%s not found in database"), $id));
+        }
 
         $DBFarm = new DBFarm($id);
 
-        foreach(self::$FieldPropertyMap as $k=>$v)
-        {
-            if (isset($farm_info[$k]))
+        foreach (self::$FieldPropertyMap as $k => $v) {
+            if (isset($farm_info[$k])) {
                 $DBFarm->{$v} = $farm_info[$k];
+            }
         }
 
         return $DBFarm;
@@ -548,36 +694,47 @@ class DBFarm
 
     public function save()
     {
+        $container = \Scalr::getContainer();
         if (!$this->ID) {
             $this->ID = 0;
             $this->Hash = substr(Scalr_Util_CryptoTool::hash(uniqid(rand(), true)),0, 14);
 
-            //FIXME This is F*CKINK BULLSHIT! REMOVE Scalr_UI_Request From here.
-            if (!$this->ClientID)
-                $this->ClientID = Scalr_UI_Request::getInstance()->getUser()->getAccountId();
+            if (!$this->ClientID && $container->initialized('environment')) {
+                $this->ClientID = $container->environment->clientId;
+            }
 
-            if (!$this->EnvID)
-                $this->EnvID = Scalr_UI_Request::getInstance()->getEnvironment()->id;
+            if (!$this->EnvID && $container->initialized('environment')) {
+                $this->EnvID = $container->environment->id;
+            }
         }
 
-        if ($this->DB->GetOne('SELECT id FROM farms WHERE name = ? AND env_id = ? AND id != ? LIMIT 1', array($this->Name, $this->EnvID, $this->ID)))
-            throw new Exception('This name already used');
+        if ($this->DB->GetOne("
+                SELECT id FROM farms
+                WHERE name = ?
+                AND env_id = ?
+                AND id != ?
+                LIMIT 1
+            ", array(
+                $this->Name, $this->EnvID, $this->ID
+            ))) {
+            throw new Exception(sprintf('The name "%s" is already used.', $this->Name));
+        }
 
-        if (!$this->ID)
-        {
-            $this->DB->Execute("INSERT INTO farms SET
-                status		= ?,
-                name		= ?,
-                clientid	= ?,
-                env_id		= ?,
-                hash		= ?,
-                created_by_id = ?,
-                created_by_email = ?,
-                changed_by_id = ?,
-                changed_time = ?,
-                dtadded		= NOW(),
-                farm_roles_launch_order = ?,
-                comments = ?
+        if (!$this->ID) {
+            $this->DB->Execute("
+                INSERT INTO farms
+                SET status = ?,
+                    name = ?,
+                    clientid = ?,
+                    env_id = ?,
+                    hash = ?,
+                    created_by_id = ?,
+                    created_by_email = ?,
+                    changed_by_id = ?,
+                    changed_time = ?,
+                    dtadded = NOW(),
+                    farm_roles_launch_order = ?,
+                    comments = ?
             ", array(
                 FARM_STATUS::TERMINATED,
                 $this->Name,
@@ -593,28 +750,38 @@ class DBFarm
             ));
 
             $this->ID = $this->DB->Insert_ID();
-        }
-        else
-        {
-            $this->DB->Execute("UPDATE farms SET
-                name		= ?,
-                status		= ?,
-                farm_roles_launch_order = ?,
-                term_on_sync_fail = ?,
-                comments = ?,
-                changed_by_id = ?,
-                changed_time = ?
-            WHERE id = ?
+        } else {
+            $this->DB->Execute("
+                UPDATE farms
+                SET name = ?,
+                    status = ?,
+                    farm_roles_launch_order = ?,
+                    term_on_sync_fail = ?,
+                    comments = ?,
+                    created_by_id = ?,
+                    created_by_email = ?,
+                    changed_by_id = ?,
+                    changed_time = ?
+                WHERE id = ?
+                LIMIT 1
             ", array(
                 $this->Name,
                 $this->Status,
                 $this->RolesLaunchOrder,
                 $this->TermOnSyncFail,
                 $this->Comments,
+                $this->createdByUserId,
+                $this->createdByUserEmail,
                 $this->changedByUserId,
                 $this->changedTime,
                 $this->ID
             ));
+        }
+
+        if (Scalr::getContainer()->analytics->enabled) {
+            Scalr::getContainer()->analytics->tags->syncValue(
+                $this->ClientID, \Scalr\Stats\CostAnalytics\Entity\TagEntity::TAG_ID_FARM, $this->ID, $this->Name
+            );
         }
     }
 }

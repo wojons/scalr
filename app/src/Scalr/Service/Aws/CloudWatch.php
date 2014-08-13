@@ -1,14 +1,6 @@
 <?php
 namespace Scalr\Service\Aws;
 
-use Scalr\Service\Aws\CloudWatch\Handler\MetricHandler;
-use Scalr\Service\Aws\CloudWatch\V20100801\CloudWatchApi;
-use Scalr\Service\Aws\Client\ClientException;
-use Scalr\Service\Aws\DataType\ErrorData;
-use Scalr\Service\Aws\DataType\ListDataType;
-use Scalr\Service\Aws\Client\QueryClient;
-use Scalr\Service\Aws;
-
 /**
  * Amazon CloudWatch web service interface
  *
@@ -68,15 +60,3 @@ class CloudWatch extends AbstractService implements ServiceInterface
         return array('metric', 'alarm');
     }
 }
-
-/* TODO [postponed] Implement folowing API methods:
-    - DeleteAlarms
-    - DescribeAlarmHistory
-    - DescribeAlarms
-    - DescribeAlarmsForMetric
-    - DisableAlarmActions
-    - EnableAlarmActions
-    - PutMetricAlarm
-    - PutMetricData
-    - SetAlarmState
-*/

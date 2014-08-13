@@ -24,26 +24,26 @@ from scalrpy import __version__
 
 
 CONFIG = {
-    'connections':{
-        'mysql':{
-            'user':None,
-            'pass':None,
-            'host':None,
-            'port':3306,
-            'name':None,
-            'pool_size':4,
-            'driver':'mysql+pymysql',
-            },
+    'connections': {
+        'mysql': {
+            'user': None,
+            'pass': None,
+            'host': None,
+            'port': 3306,
+            'name': None,
+            'pool_size': 4,
+            'driver': 'mysql+pymysql',
         },
-    'pool_size':100,
-    'no_daemon':False,
-    'cratio':120,
-    'instances_connection_timeout':10,
-    'instances_connection_policy':'public',
-    'pid_file':'/var/run/scalr.messaging.pid',
-    'log_file':'/var/log/scalr.messaging.log',
-    'verbosity':1,
-    }
+    },
+    'pool_size': 100,
+    'no_daemon': False,
+    'cratio': 120,
+    'instances_connection_timeout': 10,
+    'instances_connection_policy': 'public',
+    'pid_file': '/var/run/scalr.messaging.pid',
+    'log_file': '/var/log/scalr.messaging.log',
+    'verbosity': 1,
+}
 
 
 LOG = logging.getLogger('ScalrPy')
@@ -104,6 +104,7 @@ class Messaging(basedaemon.BaseDaemon):
                 db.servers.server_id,
                 db.servers.farm_id,
                 db.servers.farm_roleid,
+                db.servers.platform,
                 db.servers.remote_ip,
                 db.servers.local_ip).filter(
                 and_(db.servers.server_id.in_(servers_id), db.servers.status.in_(status)))
@@ -145,7 +146,8 @@ class Messaging(basedaemon.BaseDaemon):
         where = and_(
                 db.farm_settings.farmid.in_(farms_id),
                 db.farm_settings.name == 'ec2.vpc.id',
-                db.farm_settings.value != 'NULL')
+                db.farm_settings.value != 'NULL',
+                db.farm_settings.value != '')
         return [farm.farmid for farm in
                 db.session.query(db.farm_settings.farmid).filter(where)]
 
@@ -211,10 +213,11 @@ Reason: server dosn\'t exist' % (message.messageid, message.server_id))
                         port = ctrl_ports[message.server_id]
                     else:
                         port = 8013
-                    ip = {'public': server.remote_ip,
-                            'local': server.local_ip,
-                            'auto': server.remote_ip if server.remote_ip else server.local_ip
-                            }[CONFIG['instances_connection_policy']]
+                    ip = {
+                        'public': server.remote_ip,
+                        'local': server.local_ip,
+                        'auto': server.remote_ip if server.remote_ip else server.local_ip
+                    }[CONFIG['instances_connection_policy']]
                     try:
                         data, headers = self._encrypt(message.server_id, key, message.message)
                     except:
@@ -224,7 +227,9 @@ Reason: unable to encrypt message, error %s' \
                         msg['handle_attempts'] = 2
                         self._db_update(False, msg)
                         continue
-                    if server.farm_id in vpc_farms_id and server.farm_id in vpc_router_roles:
+                    if server.platform == 'ec2' \
+                            and server.farm_id in vpc_farms_id \
+                            and server.farm_id in vpc_router_roles:
                         if server.remote_ip:
                             ip = server.remote_ip
                         else:
@@ -317,7 +322,7 @@ Reason: can\'t determine ip' % (message.messageid, message.server_id))
                 try:
                     self._db_update(True, msg)
                 except:
-                    LOG.error('Unable to update database %s' %helper.exc_info())
+                    LOG.error('Unable to update database %s' % helper.exc_info())
             except:
                 e = sys.exc_info()[1]
                 if type(e) in (urllib2.URLError, socket.timeout) and\
@@ -375,10 +380,10 @@ def configure(config, args=None):
     helper.update_config(config_to=CONFIG, args=args)
     helper.validate_config(CONFIG)
     helper.configure_log(
-            log_level=CONFIG['verbosity'],
-            log_file=CONFIG['log_file'],
-            log_size=1024*1000
-            )
+        log_level=CONFIG['verbosity'],
+        log_file=CONFIG['log_file'],
+        log_size=1024 * 1000
+    )
 
 
 def main():

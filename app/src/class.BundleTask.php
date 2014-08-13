@@ -1,5 +1,7 @@
 <?php
 
+use Scalr\Model\Entity\Image;
+
 class ServerSnapshotDetails
 {
     public function getOsName()
@@ -191,6 +193,36 @@ class BundleTask
     }
 
     /**
+     * @return Image
+     */
+    public function createImageEntity()
+    {
+        $os = $this->getOsDetails();
+        $snapshot = $this->getSnapshotDetails();
+
+        $image = new Image();
+        $image->id = $this->snapshotId;
+        $image->envId = $this->envId;
+        $image->bundleTaskId = $this->id;
+        $image->platform = $this->platform;
+        $image->cloudLocation = $this->cloudLocation;
+        $image->osFamily = $os->family;
+        $image->osVersion = $os->version;
+        $image->osName = $os->name;
+        $image->createdById = $this->createdById;
+        $image->createdByEmail = $this->createdByEmail;
+        $image->architecture = is_null($snapshot['os']->arch) ? 'x86_64' : $snapshot['os']->arch;
+        $image->isDeprecated = 0;
+        $image->source = Image::SOURCE_BUNDLE_TASK;
+        $image->type = '';
+        $image->status = Image::STATUS_ACTIVE;
+        $image->agentVersion = $snapshot['szr_version'];
+
+        $image->save();
+        return $image;
+    }
+
+    /**
      * @return ServerSnapshotDetails
      */
     public function getSnapshotDetails()
@@ -345,7 +377,7 @@ class BundleTask
                 try {
                     if (!$dbServer->GetProperty(SERVER_PROPERTIES::SZR_IMPORTING_LEAVE_ON_FAIL) && $dbServer->GetCloudServerID()) {
                         $this->Log(sprintf(_("Terminating temporary server...")));
-                        $dbServer->terminate('TEMPORARY_SERVER_ROLE_BUILDER');
+                        $dbServer->terminate(DBServer::TERMINATE_REASON_TEMPORARY_SERVER_ROLE_BUILDER);
                         $this->Log("Termination request has been sent");
                     }
                 } catch (Exception $e) {}

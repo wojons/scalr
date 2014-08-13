@@ -1,6 +1,6 @@
 Scalr.regPage('Scalr.ui.services.ssl.certificates.view', function () {
 	var store = Ext.create('store.store', {
-		fields: [ 'id', 'name', 'sslPkey', 'sslCert', 'sslCabundle' ],
+		fields: [ 'id', 'name', 'privateKey', 'privateKeyPassword', 'certificate', 'caBundle' ],
 		proxy: {
 			type: 'scalr.paging',
 			url: '/services/ssl/certificates/xListCertificates/'
@@ -9,7 +9,7 @@ Scalr.regPage('Scalr.ui.services.ssl.certificates.view', function () {
 	});
 
 	return Ext.create('Ext.grid.Panel', {
-		title: 'Services &raquo; SSL &raquo; Certificates',
+		title: 'SSL certificates',
 		scalrOptions: {
 			'reload': false,
 			'maximize': 'all'
@@ -22,8 +22,8 @@ Scalr.regPage('Scalr.ui.services.ssl.certificates.view', function () {
 		}, {
 			ptype: 'rowexpander',
 			rowBodyTpl: [
-				'<p><b>Certificate:</b> <tpl if="sslCert">{sslCert}<tpl else>empty</tpl></p>',
-				'<p><b>Certificate chain:</b> <tpl if="sslCabundle">{sslCabundle}<tpl else>empty</tpl></p>'
+				'<p><b>Certificate:</b> <tpl if="certificate">{certificate}<tpl else>empty</tpl></p>',
+				'<p><b>Certificate chain:</b> <tpl if="caBundle">{caBundle}<tpl else>empty</tpl></p>'
 			]
 		}],
 
@@ -46,18 +46,22 @@ Scalr.regPage('Scalr.ui.services.ssl.certificates.view', function () {
 			{ header: "ID", width: 60, dataIndex: 'id', sortable: true },
 			{ header: "Name", flex: 1, dataIndex: 'name', sortable: true },
 			{
-				header: 'Private key', width: 120, dataIndex: 'sslPkey', sortable: false, xtype: 'templatecolumn', align: 'center',
-				tpl: '<tpl if="sslPkey"><img src="/ui2/images/icons/true.png"><tpl else><img src="/ui2/images/icons/false.png"></tpl>'
+				header: 'Private key', width: 150, dataIndex: 'privateKey', sortable: false, xtype: 'templatecolumn', align: 'center',
+				tpl: '<tpl if="privateKey"><img src="/ui2/images/icons/true.png"><tpl else><img src="/ui2/images/icons/false.png"></tpl>'
 			}, {
-				header: 'Certificate', width: 120, dataIndex: 'sslCert', sortable: false, xtype: 'templatecolumn', align: 'center',
-				tpl: '<tpl if="!!sslCert"><img src="/ui2/images/icons/true.png"><tpl else><img src="/ui2/images/icons/false.png"></tpl>'
+                header: 'Private key password', width: 150, dataIndex: 'privateKeyPassword', sortable: false, xtype: 'templatecolumn', align: 'center',
+                tpl: '<tpl if="privateKeyPassword"><img src="/ui2/images/icons/true.png"><tpl else><img src="/ui2/images/icons/false.png"></tpl>'
+            }, {
+				header: 'Certificate', width: 150, dataIndex: 'certificate', sortable: false, xtype: 'templatecolumn', align: 'center',
+				tpl: '<tpl if="!!certificate"><img src="/ui2/images/icons/true.png"><tpl else><img src="/ui2/images/icons/false.png"></tpl>'
 			}, {
-				header: 'Certificate chain', width: 120, dataIndex: 'sslCabundle', sortable: false, xtype: 'templatecolumn', align: 'center',
-				tpl: '<tpl if="!!sslCabundle"><img src="/ui2/images/icons/true.png"><tpl else><img src="/ui2/images/icons/false.png"></tpl>'
+				header: 'Certificate chain', width: 150, dataIndex: 'caBundle', sortable: false, xtype: 'templatecolumn', align: 'center',
+				tpl: '<tpl if="!!caBundle"><img src="/ui2/images/icons/true.png"><tpl else><img src="/ui2/images/icons/false.png"></tpl>'
 			}, {
-				xtype: 'optionscolumn',
-				optionsMenu: [{
+				xtype: 'optionscolumn2',
+				menu: [{
 					text: 'Edit',
+                    iconCls: 'x-menu-icon-edit',
 					href: "#/services/ssl/certificates/{id}/edit"
 				}]
 			}
@@ -65,10 +69,7 @@ Scalr.regPage('Scalr.ui.services.ssl.certificates.view', function () {
 
 		multiSelect: true,
 		selModel: {
-			selType: 'selectedmodel',
-			getVisibility: function(record) {
-				return true; //(record.get('status') == 'Running' || record.get('status') == 'Initializing');
-			}
+			selType: 'selectedmodel'
 		},
 
 		listeners: {

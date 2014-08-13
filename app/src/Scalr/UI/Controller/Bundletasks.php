@@ -56,15 +56,14 @@ class Scalr_UI_Controller_Bundletasks extends Scalr_UI_Controller
     {
         $this->request->defineParams(array(
             'bundleTaskId' => array('type' => 'int'),
-            'sort' => array('type' => 'string', 'default' => 'id'),
-            'dir' => array('type' => 'string', 'default' => 'DESC')
+            'sort' => array('type' => 'json', 'default' => array('property' => 'dtadded', 'direction' => 'DESC'))
         ));
 
         $task = BundleTask::LoadById($this->getParam('bundleTaskId'));
         $this->user->getPermissions()->validate($task);
 
-        $sql = "SELECT * FROM bundle_task_log WHERE bundle_task_id = " . $this->db->qstr($this->getParam('bundleTaskId'));
-        $response = $this->buildResponseFromSql($sql, array("message"));
+        $sql = "SELECT * FROM bundle_task_log WHERE bundle_task_id = ?";
+        $response = $this->buildResponseFromSql2($sql, array('dtadded', 'message'), array(), array($this->getParam('bundleTaskId')));
         foreach ($response["data"] as &$row) {
             $row['dtadded'] = Scalr_Util_DateTime::convertTz($row['dtadded']);
         }
@@ -90,17 +89,18 @@ class Scalr_UI_Controller_Bundletasks extends Scalr_UI_Controller
     {
         $this->request->defineParams(array(
             'bundleTaskId' => array('type' => 'int'),
-            'sort' => array('type' => 'string', 'default' => 'id'),
-            'dir' => array('type' => 'string', 'default' => 'DESC')
+            'sort' => array('type' => 'json', 'default' => array('property' => 'id', 'direction' => 'DESC'))
         ));
 
-        $sql = "SELECT * FROM bundle_tasks WHERE env_id = '" . $this->getEnvironmentId() . "'";
+        $sql = "SELECT * FROM bundle_tasks WHERE env_id = ?";
+        $args = array($this->getEnvironmentId());
 
         if ($this->getParam('id') > 0) {
-            $sql .= " AND id = " . $this->db->qstr($this->getParam('bundleTaskId'));
+            $sql .= " AND id = ?";
+            $args[] = $this->getParam('bundleTaskId');
         }
-        
-        $response = $this->buildResponseFromSql($sql, array("server_id", "rolename", "failure_reason", "snapshot_id", "id"));
+
+        $response = $this->buildResponseFromSql2($sql, array('id', 'server_id', 'rolename', 'status', 'os_family', 'dtadded', 'dtstarted', 'created_by_email'), array(), $args);
 
         foreach ($response["data"] as &$row) {
             $row['server_exists'] = DBServer::IsExists($row['server_id']);
@@ -118,11 +118,10 @@ class Scalr_UI_Controller_Bundletasks extends Scalr_UI_Controller
             if ($row['dtfinished']) {
                 $row['dtfinished'] = Scalr_Util_DateTime::convertTz($row['dtfinished']);
             }
-            
+
             if ($row['dtstarted']) {
                 $row['dtstarted'] = Scalr_Util_DateTime::convertTz($row['dtstarted']);
             }
-
         }
 
         $this->response->data($response);

@@ -375,7 +375,8 @@ class StatsPoller(basedaemon.BaseDaemon):
             if p.is_alive():
                 LOG.error('Timeout. Terminating ...')
                 try:
-                    helper.kill_ps(p.pid, child=True)
+                    helper.kill_child(p.pid)
+                    helper.kill(p.pid)
                 except:
                     LOG.exception('Exception')
                 p.terminate()
@@ -814,7 +815,7 @@ class RRDWriter(object):
 
     def _create_db(self, rrd_db_path):
         if not os.path.exists(os.path.dirname(rrd_db_path)):
-            os.makedirs(os.path.dirname(rrd_db_path))
+            os.makedirs(os.path.dirname(rrd_db_path), 0755)
         rrdtool.create(rrd_db_path, self.source, self.archive)
 
 
@@ -1018,7 +1019,7 @@ def main():
 
     except KeyboardInterrupt:
         LOG.critical(helper.exc_info())
-        helper.kill_ps(mp.current_process().pid, child=True)
+        helper.kill_child(mp.current_process().pid)
         sys.exit(0)
     except SystemExit:
         pass

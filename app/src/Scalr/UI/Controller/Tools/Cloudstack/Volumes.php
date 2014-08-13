@@ -1,5 +1,7 @@
 <?php
+
 use Scalr\Acl\Acl;
+use Scalr\Service\CloudStack\Services\Volume\DataType\ListVolumesData;
 
 class Scalr_UI_Controller_Tools_Cloudstack_Volumes extends Scalr_UI_Controller
 {
@@ -36,20 +38,15 @@ class Scalr_UI_Controller_Tools_Cloudstack_Volumes extends Scalr_UI_Controller
         ));
 
         $platformName = $this->getParam('platform');
-        if (!$platformName)
+
+        if (!$platformName) {
             throw new Exception("Cloud should be specified");
+        }
 
-        $platform = PlatformFactory::NewPlatform($platformName);
-
-        $cs = Scalr_Service_Cloud_Cloudstack::newCloudstack(
-            $platform->getConfigVariable(Modules_Platforms_Cloudstack::API_URL, $this->environment),
-            $platform->getConfigVariable(Modules_Platforms_Cloudstack::API_KEY, $this->environment),
-            $platform->getConfigVariable(Modules_Platforms_Cloudstack::SECRET_KEY, $this->environment),
-            $platformName
-        );
+        $cs = $this->environment->cloudstack($platformName);
 
         foreach ($this->getParam('volumeId') as $volumeId) {
-            $cs->deleteVolume($volumeId);
+            $cs->volume->delete($volumeId);
         }
 
         $this->response->success('Volume(s) successfully removed');
@@ -63,59 +60,57 @@ class Scalr_UI_Controller_Tools_Cloudstack_Volumes extends Scalr_UI_Controller
         ));
 
         $platformName = $this->getParam('platform');
-        if (!$platformName)
+        if (!$platformName) {
             throw new Exception("Cloud should be specified");
-
-        $platform = PlatformFactory::NewPlatform($platformName);
-
-        $cs = Scalr_Service_Cloud_Cloudstack::newCloudstack(
-            $platform->getConfigVariable(Modules_Platforms_Cloudstack::API_URL, $this->environment),
-            $platform->getConfigVariable(Modules_Platforms_Cloudstack::API_KEY, $this->environment),
-            $platform->getConfigVariable(Modules_Platforms_Cloudstack::SECRET_KEY, $this->environment),
-            $platformName
-        );
-
-        $volumes = $cs->listVolumes($this->getParam('cloudLocation'), 1);
-
-        $vols = array();
-        foreach ($volumes as $pk=>$pv)
-        {
-            if ($this->getParam('volumeId') && $this->getParam('volumeId') != $pv->id)
-                continue;
-
-            $item = array(
-                'volumeId'	=> $pv->id,
-                'size'	=> round($pv->size / 1024 / 1024 / 1024, 2),
-                'status' => $pv->state,
-                'attachmentStatus' => ($pv->virtualmachineid) ? 'attached' : 'available',
-                'device'	=> $pv->deviceid,
-                'instanceId' => $pv->virtualmachineid,
-                'type' 			=> $pv->type ." ({$pv->storagetype})",
-                'storage'		=> $pv->storage
-            );
-
-            $item['autoSnaps'] = ($this->db->GetOne("SELECT id FROM autosnap_settings WHERE objectid=? AND object_type=? LIMIT 1",
-                 array($pv->id, AUTOSNAPSHOT_TYPE::CSVOL))) ? true : false;
-
-
-            if ($item['instanceId']) {
-                try {
-                    $dbServer = DBServer::LoadByPropertyValue(CLOUDSTACK_SERVER_PROPERTIES::SERVER_ID, $item['instanceId']);
-
-                    $item['farmId'] = $dbServer->farmId;
-                    $item['farmRoleId'] = $dbServer->farmRoleId;
-                    $item['serverIndex'] = $dbServer->index;
-                    $item['serverId'] = $dbServer->serverId;
-                    $item['farmName'] = $dbServer->GetFarmObject()->Name;
-                    $item['mountStatus'] = false;
-                    $item['roleName'] = $dbServer->GetFarmRoleObject()->GetRoleObject()->name;
-
-                } catch (Exception $e) {}
-            }
-
-            $vols[] = $item;
         }
 
+        $cs = $this->environment->cloudstack($platformName);
+        $requestData = new ListVolumesData();
+        $requestData->zoneid = $this->getParam('cloudLocation');
+        $requestData->listall = true;
+        $volumes = $cs->volume->describe($requestData);
+
+        $vols = array();
+        if (!empty($volumes)) {
+            foreach ($volumes as $pk=>$pv)
+            {
+                if ($this->getParam('volumeId') && $this->getParam('volumeId') != $pv->id) {
+                    continue;
+                }
+
+                $item = array(
+                    'volumeId'	=> $pv->id,
+                    'size'	=> round($pv->size / 1024 / 1024 / 1024, 2),
+                    'status' => $pv->state,
+                    'attachmentStatus' => ($pv->virtualmachineid) ? 'attached' : 'available',
+                    'device'	=> $pv->deviceid,
+                    'instanceId' => $pv->virtualmachineid,
+                    'type' 			=> $pv->type ." ({$pv->storagetype})",
+                    'storage'		=> $pv->storage
+                );
+
+                $item['autoSnaps'] = ($this->db->GetOne("SELECT id FROM autosnap_settings WHERE objectid=? AND object_type=? LIMIT 1",
+                     array($pv->id, AUTOSNAPSHOT_TYPE::CSVOL))) ? true : false;
+
+
+                if ($item['instanceId']) {
+                    try {
+                        $dbServer = DBServer::LoadByPropertyValue(CLOUDSTACK_SERVER_PROPERTIES::SERVER_ID, $item['instanceId']);
+
+                        $item['farmId'] = $dbServer->farmId;
+                        $item['farmRoleId'] = $dbServer->farmRoleId;
+                        $item['serverIndex'] = $dbServer->index;
+                        $item['serverId'] = $dbServer->serverId;
+                        $item['farmName'] = $dbServer->GetFarmObject()->Name;
+                        $item['mountStatus'] = false;
+                        $item['roleName'] = $dbServer->GetFarmRoleObject()->GetRoleObject()->name;
+
+                    } catch (Exception $e) {}
+                }
+
+                $vols[] = $item;
+            }
+        }
         $response = $this->buildResponseFromData($vols, array('serverId', 'volumeId','farmId', 'farmRoleId', 'storage'));
 
         $this->response->data($response);

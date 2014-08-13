@@ -142,6 +142,10 @@ abstract class Scalr_Model
                         case 'serialize':
                             $val = unserialize($val);
                             break;
+                        case 'encrypted':
+                            if ($val)
+                                $val = $this->getCrypto()->decrypt($val, $this->cryptoKey);
+                            break;
                     }
                 }
 
@@ -247,6 +251,10 @@ abstract class Scalr_Model
                         break;
                     case 'serialize':
                         $val = serialize($val);
+                        break;
+                    case 'encrypted':
+                        if ($val)
+                            $val = $this->getCrypto()->encrypt($val, $this->cryptoKey);
                         break;
                 }
             }

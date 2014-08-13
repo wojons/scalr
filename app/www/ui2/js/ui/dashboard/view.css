@@ -285,3 +285,23 @@ ul.scalr-ui-dashboard-farms li a.count {
 	font-weight: normal;
 	font-style: normal;
 }
+
+@media only screen and (-webkit-min-device-pixel-ratio: 1.5),
+    only screen and (-o-min-device-pixel-ratio: 3/2),
+    only screen and (min--moz-device-pixel-ratio: 1.5),
+    only screen and (min-device-pixel-ratio: 1.5) {
+
+
+    .scalr-ui-dashboard-container .x-mask-msg-text {
+        background-size: 50px 50px;
+        background-image: url('/ui2/images/ui/dashboard/load_widget_retina.gif');
+    }
+
+    .scalr-ui-dashboard-icon-add-widget,
+    .scalr-ui-dashboard-icon-remove-column{
+        background-image: url('/ui2/images/ui/dashboard/widgets_control_sprite_retina.png');
+        background-size: 24px 48px;
+    }
+
+    
+}

@@ -265,7 +265,7 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.mongodb', function (moduleParams) {
                     margin: '0 0 6',
                     items: [{
                         xtype: 'combo',
-                        store: [['standard', 'Standard'],['io1', 'Provisioned IOPS (' + iopsMin + ' - ' + iopsMax + '): ']],
+                        store: [['standard', 'Standard EBS (Magnetic)'],['gp2', 'General Purpose (SSD)'],['io1', 'Provisioned IOPS (' + iopsMin + ' - ' + iopsMax + '): ']],
                         fieldLabel: 'EBS type',
                         labelWidth:160,
                         valueField: 'id',

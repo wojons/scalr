@@ -2,7 +2,6 @@
 namespace Scalr\Service\OpenStack\Services;
 
 use Scalr\Service\OpenStack\Exception\ServiceHandlerException;
-use Scalr\Service\OpenStack\Exception\OpenStackException;
 
 /**
  * OpenStack AbstractServiceHandler

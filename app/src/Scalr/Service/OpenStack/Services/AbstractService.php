@@ -1,7 +1,6 @@
 <?php
 namespace Scalr\Service\OpenStack\Services;
 
-use Scalr\Service\OpenStack\Type\StringType;
 use Scalr\Service\OpenStack\OpenStack;
 use Scalr\Service\OpenStack\Exception\ServiceException;
 use Scalr\Service\OpenStack\Exception\RestClientException;
@@ -226,5 +225,15 @@ abstract class AbstractService
     {
         $list = $this->listExtensions();
         return isset($list[(string)$extensionName]);
+    }
+
+    /**
+     * Gets an identifier of the tenant for current authenticated token
+     *
+     * @return   string  Gets an identifier of the tenant
+     */
+    public function getTenantId()
+    {
+        $this->getOpenStack()->getConfig()->getAuthToken()->getTenantId();
     }
 }

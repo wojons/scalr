@@ -1,5 +1,7 @@
 <?php
 
+use Scalr\Modules\PlatformFactory;
+
 class DBRole
 {
     public
@@ -95,11 +97,34 @@ class DBRole
         ));
     }
 
+    public function setProperties($properties)
+    {
+        foreach ($properties as $name => $value) {
+            $this->setProperty($name, $value);
+        }
+    }
+
     public function getProperty($name)
     {
-        return $this->db->GetOne("SELECT value FROM role_properties WHERE `role_id` = ? AND `name` = ? LIMIT 1", array(
+        return $this->db->GetOne("SELECT value FROM `role_properties` WHERE `role_id` = ? AND `name` = ? LIMIT 1", array(
             $this->id, $name
         ));
+    }
+
+    public function getProperties($filter = '')
+    {
+        $properties = $this->db->Execute("SELECT * FROM `role_properties` WHERE `role_id` = ?" . ($filter ? " AND name LIKE " . $this->db->qstr('%' . $filter . '%') : ''), array($this->id));
+        $retval = array();
+        while ($property = $properties->FetchRow()) {
+            $retval[$property['name']] = $property['value'];
+        }
+
+        return $retval;
+    }
+
+    public function clearProperties($filter = '')
+    {
+        $this->db->Execute("DELETE FROM `role_properties` WHERE `role_id`= ?" . ($filter ? " AND name LIKE " . $this->db->qstr('%' . $filter . '%') : ''), array($this->id));
     }
 
     public function getSecurityRules()
@@ -208,13 +233,12 @@ class DBRole
 
         $retval = array();
 
-        if (!$platform)
-        {
+        if (!$platform) {
             foreach ($this->getPlatforms() as $platform)
                 $retval = array_merge($this->images[$platform], $retval);
         }
         else
-            $retval = $this->images[$platform];
+            $retval = (array)$this->images[$platform];
 
         return array_keys($retval);
     }
@@ -257,6 +281,10 @@ class DBRole
 
     public function getImageDetails($platform, $cloudLocation) {
         $this->loadImagesCache();
+
+        if (in_array($platform, array(SERVER_PLATFORMS::GCE, SERVER_PLATFORMS::ECS)))
+            $cloudLocation = '';
+
         return $this->imagesDetails[$platform][$cloudLocation];
     }
 
@@ -418,7 +446,6 @@ class DBRole
 
         $this->db->Execute("DELETE FROM roles WHERE id = ?", array($this->id));
         $this->db->Execute("DELETE FROM roles_queue WHERE role_id = ?", array($this->id));
-        $this->db->Execute("DELETE FROM global_variables WHERE env_id = ? AND role_id = ? AND farm_role_id = 0", array($this->envId, $this->id));
     }
 
     public function isUsed()
@@ -530,21 +557,25 @@ class DBRole
 
     public function getScripts()
     {
-        $dbParams = $this->db->Execute("SELECT role_scripts.*, scripts.name AS script_name FROM role_scripts JOIN scripts ON role_scripts.script_id = scripts.id WHERE role_id = ?", array($this->id));
+        $dbParams = $this->db->Execute("SELECT role_scripts.*, scripts.name AS script_name FROM role_scripts LEFT JOIN scripts ON role_scripts.script_id = scripts.id WHERE role_id = ?", array($this->id));
         $retval = array();
         while ($script = $dbParams->FetchRow()) {
             $retval[] = array(
-                'role_script_id' => $script['id'],
+                'role_script_id' => (int) $script['id'],
                 'event_name' => $script['event_name'],
                 'target' => $script['target'],
-                'script_id' => $script['script_id'],
+                'script_id' => (int) $script['script_id'],
                 'script_name' => $script['script_name'],
                 'version' => (int) $script['version'],
                 'timeout' => $script['timeout'],
-                'issync' => $script['issync'],
+                'isSync' => (int) $script['issync'],
                 'params' => unserialize($script['params']),
                 'order_index' => $script['order_index'],
-                'hash' => $script['hash']
+                'hash' => $script['hash'],
+                'script_path' => $script['script_path'],
+                'run_as' => $script['run_as'],
+                'script_type' => $script['script_type'],
+                'os' => $script['os']
             );
         }
 
@@ -573,18 +604,24 @@ class DBRole
                     `issync` = ?,
                     `params` = ?,
                     `order_index` = ?,
-                    `hash` = ?
+                    `hash` = ?,
+                    `script_path` = ?,
+                    `run_as` = ?,
+                    `script_type` = ?
                 ', array(
                     $this->id,
                     $script['event_name'],
                     $script['target'],
-                    $script['script_id'],
+                    $script['script_id'] != 0 ? $script['script_id'] : NULL,
                     $script['version'],
                     $script['timeout'],
-                    $script['issync'],
+                    $script['isSync'],
                     serialize($script['params']),
                     $script['order_index'],
-                    (!$script['hash']) ? Scalr_Util_CryptoTool::sault(12) : $script['hash']
+                    (!$script['hash']) ? Scalr_Util_CryptoTool::sault(12) : $script['hash'],
+                    $script['script_path'],
+                    $script['run_as'],
+                    $script['script_type']
                 ));
                 $ids[] = $this->db->Insert_ID();
             } else {
@@ -596,17 +633,23 @@ class DBRole
                     `timeout` = ?,
                     `issync` = ?,
                     `params` = ?,
-                    `order_index` = ?
+                    `order_index` = ?,
+                    `script_path` = ?,
+                    `run_as` = ?,
+                    `script_type` = ?
                     WHERE id = ? AND role_id = ?
                 ', array(
                     $script['event_name'],
                     $script['target'],
-                    $script['script_id'],
+                    $script['script_id'] != 0 ? $script['script_id'] : NULL,
                     $script['version'],
                     $script['timeout'],
-                    $script['issync'],
+                    $script['isSync'],
                     serialize($script['params']),
                     $script['order_index'],
+                    $script['script_path'],
+                    $script['run_as'],
+                    $script['script_type'],
 
                     $script['role_script_id'],
                     $this->id
@@ -689,6 +732,23 @@ class DBRole
                 ", array($newRoleId, $r1['tag']));
             }
 
+            $props = $this->db->Execute("SELECT * FROM role_properties WHERE role_id=?", array($this->id));
+            while ($p1 = $props->FetchRow()) {
+                $this->db->Execute("
+                    INSERT INTO role_properties
+                    SET `role_id` = ?,
+                        `name`	= ?,
+                        `value`	= ?
+                    ON DUPLICATE KEY UPDATE
+                        `value` = ?
+                ", array(
+                    $newRoleId,
+                    $p1['name'],
+                    $p1['value'],
+                    $p1['value']
+                ));
+            }
+
             //Set software
             $rsr2 = $this->db->Execute("SELECT * FROM role_software WHERE role_id = ?", array($this->id));
             while ($r2 = $rsr2->FetchRow()) {
@@ -701,7 +761,7 @@ class DBRole
             }
 
             //Set global variables
-            $variables = new Scalr_Scripting_GlobalVariables($this->envId, Scalr_Scripting_GlobalVariables::SCOPE_ROLE);
+            $variables = new Scalr_Scripting_GlobalVariables($this->clientId, $this->envId, Scalr_Scripting_GlobalVariables::SCOPE_ROLE);
             $variables->setValues($variables->getValues($this->id), $newRoleId);
 
             //Set scripts
@@ -717,10 +777,12 @@ class DBRole
                     issync = ?,
                     params = ?,
                     order_index = ?,
+                    script_type = ?,
+                    script_path = ?,
                     hash = ?
                 ", array(
                     $newRoleId, $r8['event_name'], $r8['target'], $r8['script_id'], $r8['version'],
-                    $r8['timeout'], $r8['issync'], $r8['params'], $r8['order_index'], Scalr_Util_CryptoTool::sault(12)
+                    $r8['timeout'], $r8['issync'], $r8['params'], $r8['order_index'], $r8['script_type'], $r8['script_path'], Scalr_Util_CryptoTool::sault(12)
                 ));
             }
         } catch (Exception $e) {
@@ -851,7 +913,7 @@ class DBRole
         $role->setImage(
             $BundleTask->snapshotId,
             $BundleTask->platform,
-            ($BundleTask->platform != SERVER_PLATFORMS::GCE) ? $BundleTask->cloudLocation : "",
+            (!in_array($BundleTask->platform, array(SERVER_PLATFORMS::GCE, SERVER_PLATFORMS::ECS))) ? $BundleTask->cloudLocation : "",
             $meta['szr_version'],
             $proto_role['architecture']
         );
@@ -882,7 +944,7 @@ class DBRole
 
             $role->setScripts($scripts);
 
-            $variables = new Scalr_Scripting_GlobalVariables($proto_role['env_id'], Scalr_Scripting_GlobalVariables::SCOPE_ROLE);
+            $variables = new Scalr_Scripting_GlobalVariables($BundleTask->clientId, $proto_role['env_id'], Scalr_Scripting_GlobalVariables::SCOPE_ROLE);
             $variables->setValues($variables->getValues($proto_role['id']), $role->id);
         }
 

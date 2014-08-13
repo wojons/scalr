@@ -2,12 +2,10 @@
 namespace Scalr\Service\Aws\Ec2\Handler;
 
 use Scalr\Service\Aws\Ec2\DataType\SnapshotList;
-use Scalr\Service\Aws\Ec2\DataType\SnapshotFilterData;
 use Scalr\Service\Aws\Ec2\DataType\SnapshotFilterList;
 use Scalr\Service\Aws\Ec2\DataType\SnapshotData;
 use Scalr\Service\Aws\DataType\ListDataType;
 use Scalr\Service\Aws\Client\ClientException;
-use Scalr\Service\Aws\DataType\ErrorData;
 use Scalr\Service\Aws\Ec2Exception;
 use Scalr\Service\Aws\Ec2\AbstractEc2Handler;
 
@@ -118,12 +116,15 @@ class SnapshotHandler extends AbstractEc2Handler
      * @param   string     $srcSnapshotId The ID of the Amazon EBS snapshot to copy.
      * @param   string     $description   optional A description of the new Amazon EBS snapshot.
      * @param   string     $destRegion    optional The ID of the destination region.
+     * @param   string     $presignedUrl  optional The pre-signed URL that facilitates copying an encrypted snapshot.
+     *                                    The PresignedUrl should use the snapshot source endpoint, the CopySnapshot action, and include the SourceRegion,
+                                          SourceSnapshotId, and DestinationRegion parameters.
      * @return  string     Returns ID of the created snapshot on success.
      * @throws  ClientException
      * @throws  Ec2Exception
      */
-    public function copy($srcRegion, $srcSnapshotId, $description = null, $destRegion = null)
+    public function copy($srcRegion, $srcSnapshotId, $description = null, $destRegion = null, $presignedUrl = null)
     {
-        return $this->getEc2()->getApiHandler()->copySnapshot($srcRegion, $srcSnapshotId, $description, $destRegion);
+        return $this->getEc2()->getApiHandler()->copySnapshot($srcRegion, $srcSnapshotId, $description, $destRegion, $presignedUrl);
     }
 }

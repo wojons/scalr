@@ -4,19 +4,15 @@ function install_rrd() {
     apt-get install -y libpango1.0-dev
     apt-get install -y libcairo2-dev
     apt-get install -y libxml2-dev
+    # make /var/lib/rrdcached/journal directory for rrdcached
+    mkdir -p /var/lib/rrdcached/journal
     cd /tmp
-    echo "DOWNLOADING rrdtool"
     wget http://oss.oetiker.ch/rrdtool/pub/rrdtool-1.4.8.tar.gz --no-check-certificate
-    echo "UNTARING rrdtool"
     tar -xvf rrdtool-1.4.8.tar.gz 1>/dev/null
     cd rrdtool-1.4.8
-    echo "CONFIGURING"
     ./configure --prefix=/usr
-    echo "MAKING"
     make 1>/dev/null
-    echo "INSTALLING"
     make install 1>/dev/null
-    echo "SETUP.PY INSTALL"
     cd bindings/python
     python setup.py install
     cd /tmp
@@ -43,7 +39,6 @@ apt-get install -y libevent-dev
 # check netsnmp bindings
 python -c "import netsnmp" 1>/dev/null 2>/dev/null
 if [ $? -ne 0 ]; then
-    echo "Python netsnmp bindings not install, installing"
     apt-get install -y snmp
     apt-get install -y libsnmp-python
 fi
@@ -51,68 +46,57 @@ fi
 # check rrdtool
 rrdtool --version 1>/dev/null 2>/dev/null
 if [ $? -ne 0 ]; then
-    echo "Command rrdtool not found, installing rrdtool"
     install_rrd
 fi
 
 # check rrdcached
 which rrdcached 1>/dev/null 2>/dev/null
 if [ $? -ne 0 ]; then
-    echo "Command rrdcached not found, installing rrdtool"
     install_rrd
 fi
 
 # check rrdtool bindings
 python -c "import rrdtool" 1>/dev/null 2>/dev/null
 if [ $? -ne 0 ]; then
-    echo "Python rrdtool bindings not install, installing"
     install_rrd
 fi
 
-
 # finally check installation
-
-echo "[REPORT]"
 
 python -c "import setuptools" 1>/dev/null 2>/dev/null
 if [ $? -ne 0 ]; then
     echo "[ERROR] 'import setuptools' failed"
-else
-    echo "[OK] python setuptools"
+    exit 1
 fi
 
 python -c "import M2Crypto" 1>/dev/null 2>/dev/null
 if [ $? -ne 0 ]; then
     echo "[ERROR] 'import M2Crypto' failed"
-else
-    echo "[OK] m2crypto python bindings"
+    exit 1
 fi
 
 python -c "import netsnmp" 1>/dev/null 2>/dev/null
 if [ $? -ne 0 ]; then
     echo "[ERROR] 'import netsnmp' failed"
-else
-    echo "[OK] netsnmp python bindings"
+    exit 1
 fi
 
 rrdtool --version 1>/dev/null 2>/dev/null
 if [ $? -ne 0 ]; then
     echo "[ERROR] command rrdtool not found"
-else
-    echo "[OK] rrdtool"
+    exit 1
 fi
 
 which rrdcached 1>/dev/null 2>/dev/null
 if [ $? -ne 0 ]; then
     echo "[ERROR] command rrdcached not found"
-else
-    echo "[OK] rrdcahced"
+    exit 1
 fi
 
 python -c "import rrdtool" 1>/dev/null 2>/dev/null
 if [ $? -ne 0 ]; then
     echo "[ERROR] 'import rrdtool' failed"
-else
-    echo "[OK] rrdtool python bindings"
+    exit 1
 fi
 
+echo "Done"

@@ -1,13 +1,13 @@
 <?php
-use Scalr\Acl\Acl;
 
+use Scalr\Acl\Acl;
 use Scalr\Service\Aws\Ec2\DataType\SnapshotFilterNameType;
 use Scalr\Service\Aws\Ec2\DataType\AddressFilterNameType;
 use Scalr\Service\Aws\Ec2\DataType\SnapshotData;
 use Scalr\Service\Aws\Ec2\DataType\SubnetFilterNameType;
-
 use Scalr\Farm\Role\FarmRoleService;
 use Scalr\Service\Aws\Ec2\DataType\RouteTableFilterNameType;
+use Scalr\Modules\Platforms\Ec2\Ec2PlatformModule;
 
 
 class Scalr_UI_Controller_Platforms_Ec2 extends Scalr_UI_Controller
@@ -87,7 +87,7 @@ class Scalr_UI_Controller_Platforms_Ec2 extends Scalr_UI_Controller
 
     public function xGetFarmRoleElasicIpsAction()
     {
-        $vpcId = $this->environment->getPlatformConfigValue(Modules_Platforms_Ec2::DEFAULT_VPC_ID.".{$this->getParam('cloudLocation')}");
+        $vpcId = $this->environment->getPlatformConfigValue(Ec2PlatformModule::DEFAULT_VPC_ID.".{$this->getParam('cloudLocation')}");
 
         $retval = $this->getFarmRoleElasticIps($this->getParam('cloudLocation'), $this->getParam('farmRoleId'), $vpcId);
 
@@ -100,7 +100,7 @@ class Scalr_UI_Controller_Platforms_Ec2 extends Scalr_UI_Controller
 
         $response = $aws->ec2->snapshot->describe(null, null, array(array(
             'name'  => SnapshotFilterNameType::ownerId(),
-            'value' => $this->getEnvironment()->getPlatformConfigValue(Modules_Platforms_Ec2::ACCOUNT_ID),
+            'value' => $this->getEnvironment()->getPlatformConfigValue(Ec2PlatformModule::ACCOUNT_ID),
         ), array(
             'name'  => SnapshotFilterNameType::status(),
             'value' => SnapshotData::STATUS_COMPLETED,
@@ -121,6 +121,7 @@ class Scalr_UI_Controller_Platforms_Ec2 extends Scalr_UI_Controller
                     'size'          => $pv->volumeSize,
                     'volumeId'      => $pv->volumeId,
                     'description'   => (string)$pv->description,
+                    'encrypted'     => $pv->encrypted
                 );
             }
         }
@@ -189,13 +190,15 @@ class Scalr_UI_Controller_Platforms_Ec2 extends Scalr_UI_Controller
         $cloudLocation = $this->getParam('cloudLocation');
         $farmRoleId = $this->getParam('farmRoleId');
 
-        $vpcId = $this->environment->getPlatformConfigValue(Modules_Platforms_Ec2::DEFAULT_VPC_ID.".{$cloudLocation}");
+        $vpcId = $this->environment->getPlatformConfigValue(Ec2PlatformModule::DEFAULT_VPC_ID.".{$cloudLocation}");
         if ($this->getParam('vpcId') != '')
             $vpcId = $this->getParam('vpcId');
 
         $retval = array();
         $retval['eips'] = $this->getFarmRoleElasticIps($cloudLocation, $farmRoleId, $vpcId);
         $retval['subnets'] = $this->getSubnetsList($cloudLocation, $vpcId);
+        $retval['iamProfiles'] = $this->getInstanceProfilesList();
+
         $this->response->data(array('data' => $retval));
     }
 
@@ -311,6 +314,23 @@ class Scalr_UI_Controller_Platforms_Ec2 extends Scalr_UI_Controller
         }
 
         return $rows;
+    }
+
+    public function getInstanceProfilesList()
+    {
+        $list = array();
+
+        try {
+            /* @var $instanceProfileData \Scalr\Service\Aws\Iam\DataType\InstanceProfileData */
+            foreach ($this->getEnvironment()->aws()->iam->instanceProfile->describe() as $instanceProfileData) {
+                $list[] = array(
+                    'arn' => $instanceProfileData->arn,
+                    'name' => $instanceProfileData->instanceProfileName
+                );
+            }
+        } catch (Exception $e) {}
+
+        return $list;
     }
 
 }

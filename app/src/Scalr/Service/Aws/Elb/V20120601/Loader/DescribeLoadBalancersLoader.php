@@ -182,9 +182,8 @@ class DescribeLoadBalancersLoader implements LoaderInterface
                         $loadBalancer->subnets[] = (string) $v;
                     }
                 }
-                //Fixme ID or Id ?
-                if (isset($lb->VpcId)) {
-                    $loadBalancer->vpcId = (string) $lb->VpcId;
+                if (isset($lb->VPCId)) {
+                    $loadBalancer->vpcId = (string) $lb->VPCId;
                 }
                 $loadBalancer->policies = new PoliciesData();
                 $loadBalancer->policies->setElb($this->elb);

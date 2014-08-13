@@ -15,7 +15,7 @@
 .x-btn-collapse .x-btn-inner {
 	width: 21px;
 	height: 21px;
-	background: url('/ui2/images/icons/btn/collapse_sprite.png') no-repeat 0 0;
+	background: url('/ui2/js/extjs-4.2/theme/images/icon/collapse-sprite.png') no-repeat 0 0;
 	cursor: pointer;
 }
 
@@ -55,4 +55,21 @@
     text-overflow:ellipsis;
     white-space:nowrap;
     line-height:20px
+}
+
+@media only screen and (-webkit-min-device-pixel-ratio: 1.5),
+    only screen and (-o-min-device-pixel-ratio: 3/2),
+    only screen and (min--moz-device-pixel-ratio: 1.5),
+    only screen and (min-device-pixel-ratio: 1.5) {
+        
+    .scalr-ui-farmbuilder-roleedit .x-icon-replace{
+        background-size: 30px 20px;
+        background-image: url('/ui2/images/ui/farms/roleedit/replace-retina.png');
+    }
+
+    .x-btn-collapse .x-btn-inner {
+        background-size: 21px 42px;
+        background-image: url('/ui2/js/extjs-4.2/theme/images/icon/collapse-sprite-retina.png');
+    }
+
 }

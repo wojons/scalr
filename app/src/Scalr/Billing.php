@@ -136,8 +136,6 @@ class Scalr_Billing
     {
         $retval = $this->chargify->reactivateSubscription($this->subscriptionId);
 
-        var_dump($retval);
-
         $this->account->status = Scalr_Account::STATUS_ACTIVE;
         $this->account->save();
 
@@ -187,14 +185,16 @@ class Scalr_Billing
 
     public function applyCoupon($code)
     {
+        /*
         $customCoupon = $this->db->GetOne("SELECT chargify_coupon_id FROM billing.coupons WHERE id = ? AND scalr_account_id IS NULL LIMIT 1", array($code));
         if ($customCoupon) {
             $origCode = $code;
             $code = $customCoupon;
         }
+        */
 
         $retval = $this->chargify->applyCoupon($this->subscriptionId, $code);
-        $this->db->Execute("UPDATE billing.coupons SET scalr_account_id = ? WHERE id = ?", array($this->account->id, $origCode));
+        //$this->db->Execute("UPDATE billing.coupons SET scalr_account_id = ? WHERE id = ?", array($this->account->id, $origCode));
 
         return $retval;
     }
@@ -230,37 +230,24 @@ class Scalr_Billing
         $retval = 0;
         foreach ($servers as $s) {
             $dbServer = DBServer::LoadByID($s['server_id']);
-            $serverType = $dbServer->GetFlavor();
-            $retval += self::getSCUByInstanceType($serverType);
+            $retval += self::getSCUByInstanceType($dbServer->GetFlavor(), $dbServer->platform);
         }
 
         return $retval;
     }
 
-    public static function getSCUByInstanceType($serverType)
+    public static function getSCUByInstanceType($serverType, $platform)
     {
-        $scu = array(
+        $scu[SERVER_PLATFORMS::EC2] = array(
             // EC2
-            'm1.small'	=> 0.75,
-            'm1.medium'	=> 1.5,
-            'm1.large'	=> 3.25,
-            'm1.xlarge' => 6.5,
-            'm3.xlarge' => 6.5,
-            'm3.2xlarge' => 13.75,
             't1.micro'	=> 0.25,
-            'm2.xlarge'	=> 5.5,
-            'm2.2xlarge'=> 11,
-            'm2.4xlarge'=> 20,
-            'c1.medium' => 1.75,
-            'c1.xlarge'	=> 7,
-            'cc1.4xlarge' => 16,
-            'cc2.8xlarge' => 30,
-            'cr1.8xlarge' => 45,
-            'cg1.4xlarge' => 26,
-            'hi1.4xlarge' => 38,
-            'hs1.8xlarge' => 60,
 
-            'g2.2xlarge' => 20,
+            't2.micro'  => 0.25,
+            't2.small'  => 0.5,
+            't2.medium'  => 0.75,
+
+            'c1.medium' => 1.75,
+            'c1.xlarge'	=> 7.25,
 
             'c3.large' => 2,
             'c3.xlarge' => 4,
@@ -268,12 +255,42 @@ class Scalr_Billing
             'c3.4xlarge' => 16,
             'c3.8xlarge' => 32,
 
-            'i2.large' => 2,
+            'r3.large' => 2,
+            'r3.xlarge' => 4,
+            'r3.2xlarge' => 8,
+            'r3.4xlarge' => 16,
+            'r3.8xlarge' => 32,
+
+            'm1.small'	=> 0.75,
+            'm1.medium'	=> 1.5,
+            'm1.large'	=> 3.25,
+            'm1.xlarge' => 6.25,
+
+            'm2.xlarge'	=> 5.5,
+            'm2.2xlarge'=> 11,
+            'm2.4xlarge'=> 20,
+
+            'm3.medium' => 1.5,
+            'm3.large'  => 3,
+            'm3.xlarge' => 6,
+            'm3.2xlarge' => 12,
+
+            'cc1.4xlarge' => 16,
+            'cc2.8xlarge' => 30,
+            'cr1.8xlarge' => 44,
+            'cg1.4xlarge' => 26,
+            'hi1.4xlarge' => 38,
+            'hs1.8xlarge' => 58,
+
+            'g2.2xlarge' => 8,
+
             'i2.xlarge' => 4,
             'i2.2xlarge' => 8,
             'i2.4xlarge' => 16,
-            'i2.8xlarge' => 32,
+            'i2.8xlarge' => 32
+        );
 
+        $scu[SERVER_PLATFORMS::RACKSPACENG_US] = array(
             // Rackspace
             '1'	=> 0.25,
             '2'	=> 0.75,
@@ -281,17 +298,30 @@ class Scalr_Billing
             '4'	=> 3,
             '5'	=> 6,
             '6'	=> 12,
-            '7'	=> 15,
+            '7'	=> 15
+          );
 
-            // GCE
+        $scu[SERVER_PLATFORMS::RACKSPACENG_UK] = array(
+               // Rackspace
+               '1'	=> 0.25,
+               '2'	=> 0.75,
+               '3'	=> 1.5,
+               '4'	=> 3,
+               '5'	=> 6,
+            '6'	=> 12,
+            '7'	=> 15
+        );
+
+        $scu[SERVER_PLATFORMS::GCE] = array(
             'n1-standard-1-d' => 1.75,
             'n1-standard-2-d' => 3.5,
             'n1-standard-4-d' => 7,
             'n1-standard-8-d' => 14,
-            'n1-standard-1'	=> 1.5,
-            'n1-standard-2'	=> 3,
-            'n1-standard-4'	=> 6,
-            'n1-standard-8'	=> 12,
+            'n1-standard-1'	 => 1.5,
+            'n1-standard-2'	 => 3,
+            'n1-standard-4'	 => 6,
+            'n1-standard-8'	 => 12,
+            'n1-standard-16' => 24,
 
             'n1-highmem-2-d' => 4,
             'n1-highmem-4-d' => 8,
@@ -299,20 +329,21 @@ class Scalr_Billing
             'n1-highmem-2' => 3.25,
             'n1-highmem-4' => 6.5,
             'n1-highmem-8' => 13,
+            'n1-highmem-16' => 26,
 
             'n1-highcpu-2-d' => 2,
             'n1-highcpu-4-d' => 4,
             'n1-highcpu-8-d' => 8,
             'n1-highcpu-2' => 1.75,
             'n1-highcpu-4' => 3.5,
-            'n1-highcpu-8' => 7
+            'n1-highcpu-8' => 7,
+            'n1-highcpu-16' => 14,
 
-            // ADD ICFF
-
-            //ADD RACKSPACE NG
+            'f1-micro' => 0.25,
+            'g1-small' => 0.5
         );
 
-        return $scu[$serverType] ? $scu[$serverType] : 0;
+        return $scu[$platform][$serverType] ? $scu[$platform][$serverType] : 0;
     }
 
     public function getInfo()
@@ -342,7 +373,8 @@ class Scalr_Billing
                 'productPrice' => (int)$subscription['subscription']['product']['price_in_cents']/100,
                 'balance' => -1*(int)$subscription['subscription']['balance_in_cents']/100,
                 'couponCode' => $subscription['subscription']['coupon_code'],
-                'id' => (int)$subscription['subscription']['id']
+                'id' => (int)$subscription['subscription']['id'],
+                'delayedCancelAt' => $subscription['subscription']['delayed_cancel_at']
             );
 
             if ($retval['couponCode'])
@@ -366,11 +398,13 @@ class Scalr_Billing
                     }
                 } catch (Exception $e) {}
 
+                /*
                 $customCoupon = $this->db->GetOne("SELECT id FROM billing.coupons WHERE chargify_coupon_id = ? AND scalr_account_id=? LIMIT 1", array(
                     $retval['couponCode'], $this->account->id
                 ));
                 if ($customCoupon)
                     $retval['couponCode'] = $customCoupon;
+                */
             }
 
             try {
@@ -443,7 +477,13 @@ class Scalr_Billing
 
         switch ($retval['realState']) {
             case "Active":
-                $retval['state'] = 'Subscribed';
+                if (!$retval['delayedCancelAt'])
+                    $retval['state'] = 'Subscribed';
+                else {
+                    $retval['nextAssessmentAt'] = false;
+                    $retval['state'] = 'Unsubscribed';
+                }
+
                 break;
 
             case "Trialing":

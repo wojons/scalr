@@ -19,7 +19,7 @@
             $config = new stdClass();
             $config->virtualHosts = array();
             $vhosts = $this->db->Execute("SELECT * FROM `apache_vhosts` WHERE farm_id = ? AND farm_roleid = ?", array(
-            	$dbServer->farmId, $dbServer->farmRoleId
+                $dbServer->farmId, $dbServer->farmRoleId
             ));
             while ($vhost = $vhosts->FetchRow()) {
 
@@ -40,7 +40,8 @@
                     $vValues = array_values($vars);
 
                     $itm->template = str_replace($keys, $vValues, $itm->template);
-                    $itm->template = str_replace(array("{literal}", "{/literal}"), array("", ""), $itm->template);
+
+                    $dbServer->applyGlobalVarsToValue($itm->template);
 
                     array_push($config->virtualHosts, $itm);
                 }
@@ -61,7 +62,8 @@
                 $vValues = array_values($vars);
 
                 $itm->template = str_replace($keys, $vValues, $itm->template);
-                $itm->template = str_replace(array("{literal}", "{/literal}"), array("", ""), $itm->template);
+
+                $dbServer->applyGlobalVarsToValue($itm->template);
 
                 array_push($config->virtualHosts, $itm);
             }
@@ -75,9 +77,9 @@
 
             switch (get_class($message))
             {
-            	case "Scalr_Messaging_Msg_HostInitResponse":
-            	    $message->apache = $this->getConfiguration($dbServer);
-            	    break;
+                case "Scalr_Messaging_Msg_HostInitResponse":
+                    $message->apache = $this->getConfiguration($dbServer);
+                    break;
             }
 
             return $message;

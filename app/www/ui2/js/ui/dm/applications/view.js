@@ -5,7 +5,6 @@ Scalr.regPage('Scalr.ui.dm.applications.view', function (loadParams, moduleParam
 		],
 		proxy: {
 			type: 'scalr.paging',
-			extraParams: loadParams,
 			url: '/dm/applications/xListApplications/'
 		},
 		remoteSort: true
@@ -17,7 +16,6 @@ Scalr.regPage('Scalr.ui.dm.applications.view', function (loadParams, moduleParam
 			'reload': false,
 			'maximize': 'all'
 		},
-		scalrReconfigureParams: { applicationId: '' },
 		store: store,
 		stateId: 'grid-dm-applications-view',
 		stateful: true,
@@ -49,8 +47,8 @@ Scalr.regPage('Scalr.ui.dm.applications.view', function (loadParams, moduleParam
 			{ header: 'Status', width: 120, dataIndex: 'status', sortable: false, xtype: 'templatecolumn',
 				tpl: '<tpl if="used_on != 0"><span style="color:green;">In use</span></tpl><tpl if="used_on == 0"><span style="color:gray;">Not used</span></tpl>'
 			}, {
-				xtype: 'optionscolumn',
-				optionsMenu: [{
+				xtype: 'optionscolumn2',
+				menu: [{
 					text: 'Deploy',
 					iconCls: 'x-menu-icon-launch',
 					href: '#/dm/applications/{id}/deploy'
@@ -75,9 +73,9 @@ Scalr.regPage('Scalr.ui.dm.applications.view', function (loadParams, moduleParam
 							msg: 'Removing demployment ...'
 						},
 						url: '/dm/applications/xRemoveApplications',
-						dataHandler: function (record) {
+						dataHandler: function (data) {
 							return {
-								applicationId: record.get('id')
+								applicationId: data['id']
 							};
 						},
 						success: function(data) {
@@ -103,7 +101,11 @@ Scalr.regPage('Scalr.ui.dm.applications.view', function (loadParams, moduleParam
 				handler: function() {
 					Scalr.event.fireEvent('redirect','#/dm/applications/create');
 				}
-			}]
+			}],
+            items: [{
+                xtype: 'filterfield',
+                store: store
+            }]
 		}]
 	});
 });

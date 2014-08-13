@@ -1,6 +1,6 @@
 Scalr.regPage('Scalr.ui.farms.builder.tabs.haproxy', function (moduleTabParams) {
 	return Ext.create('Scalr.ui.FarmsBuilderTab', {
-		tabTitle: 'HAProxy settings',
+		tabTitle: 'HAProxy',
 		itemId: 'haproxy',
 
         layout: 'fit',
@@ -280,13 +280,22 @@ Ext.define('Scalr.ui.HaproxySettingsField', {
             validateRecord: function(){
                 var portField = this.down('[name="haproxy.port"]'),
                     res = true;
-                if (portField.validate()) {
-                    var r = this.up('haproxysettings').store.query('port', portField.getValue(), false, false, true);
-                    if (r.length > 0 && r.first() !== this._record) {
-                        res = 'Port ' + portField.getValue() + ' is already used by another proxy.';
+                if (this.up('haproxysettings').mode === 'edit') {
+                    if (portField.validate()) {
+                        var r = this.up('haproxysettings').store.query('port', portField.getValue(), false, false, true);
+                        if (r.length > 0 && r.first() !== this._record) {
+                            res = 'Port ' + portField.getValue() + ' is already used by another proxy.';
+                        }
+                    } else {
+                        res = false;
                     }
                 } else {
-                    res = false;
+                    if (Ext.String.trim(portField.getValue()) || this.down('#backends').hasNonEmptyItems()) {
+                        res = portField.validate() || {comp: portField};
+                        if (res === true) {
+                            res = this.down('#backends').validate();
+                        }
+                    }
                 }
                 return res;
             },
@@ -314,7 +323,7 @@ Ext.define('Scalr.ui.HaproxySettingsField', {
                         return value*1>0 || 'Value is invalid.';
                     },
                     labelWidth: 35,
-                    width: 85,
+                    width: 95,
                     listeners: {
                         change: {
                             fn: function(comp, value){
@@ -329,7 +338,7 @@ Ext.define('Scalr.ui.HaproxySettingsField', {
                     emptyText: 'Description (optional)',
                     flex: 1,
                     margin: '0 0 0 10',
-                    maxWidth: 670,
+                    maxWidth: 660,
                     listeners: {
                         change: function(comp, value){
                             this.up('#form').updateRecord('description', value);
@@ -404,6 +413,31 @@ Ext.define('Scalr.ui.HaproxySettingsField', {
                                     }
                                 });
                                 return value;
+                            },
+
+                            validate: function(silent){
+                                var result = true,
+                                    field;
+                                this.items.each(function(item){
+                                    var type = item.down('[name="haproxy.type"]').getValue();
+                                    field = item.down('[name="haproxy.' + type + '"]');
+                                    result = field.validate() || {comp: field};
+                                    if (result === true) {
+                                        field = item.down('[name="haproxy.port"]');
+                                        result = field[silent ? 'isValid' : 'validate']() || {comp: field};
+                                    }
+                                    return result === true;
+                                });
+                                return result;
+                            },
+
+                            hasNonEmptyItems: function(){
+                                var result = false;
+                                this.items.each(function(item){
+                                    result = !!item.down('[name="haproxy.' + item.down('[name="haproxy.type"]').getValue() + '"]').getValue();
+                                    return !result;
+                                });
+                                return result;
                             },
 
                             addItem: function(data) {

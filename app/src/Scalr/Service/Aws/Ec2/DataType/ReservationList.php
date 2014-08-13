@@ -2,13 +2,18 @@
 namespace Scalr\Service\Aws\Ec2\DataType;
 
 use Scalr\Service\Aws\Ec2\Ec2ListDataType;
-use Scalr\Service\Aws\Ec2Exception;
 
 /**
  * ReservationList
  *
  * @author   Vitaliy Demidov   <vitaliy@scalr.com>
  * @since    10.01.2013
+ *
+ * @method   string getNextToken() getNextToken()
+ *           Gets a next token.
+ *
+ * @method   string getRequestId() getRequestId()
+ *           Gets an ID of the request.
  *
  * @method   \Scalr\Service\Aws\Ec2\DataType\ReservationData get()
  *           get($index)
@@ -23,7 +28,7 @@ class ReservationList extends Ec2ListDataType
      *
      * @var  array
      */
-    protected $_properties = array('requestId');
+    protected $_properties = array('nextToken', 'requestId');
 
     /**
      * Constructor

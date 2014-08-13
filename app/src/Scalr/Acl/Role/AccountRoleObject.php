@@ -81,7 +81,7 @@ class AccountRoleObject extends RoleObject
         return $this->isAutomatic;
     }
 
-	/**
+    /**
      * Gets the ID of related account
      *
      * @return  int     Returns ID of the related account
@@ -135,7 +135,7 @@ class AccountRoleObject extends RoleObject
         return $this;
     }
 
-	/**
+    /**
      * Gets the role which this account role is based on.
      *
      * @return  RoleObject Returns the role which this account role is based on
@@ -145,7 +145,7 @@ class AccountRoleObject extends RoleObject
         return $this->baseRole;
     }
 
-	/**
+    /**
      * Sets the ID of related account
      *
      * @param   int    $accountId The ID of the related account
@@ -157,7 +157,7 @@ class AccountRoleObject extends RoleObject
         return $this;
     }
 
-	/**
+    /**
      * Sets the role which this account role is based on
      *
      * @param   RoleObject $baseRole The base role.
@@ -201,7 +201,7 @@ class AccountRoleObject extends RoleObject
         return $overridden;
     }
 
-	/**
+    /**
      * Check whether current ACL role comes from default Team role
      *
      * @return  bool|null Returns true if it comes from default Team role.
@@ -211,7 +211,7 @@ class AccountRoleObject extends RoleObject
         return $this->teamRole;
     }
 
-	/**
+    /**
      * Set isTeamRole property
      *
      * @param   bool  $isTeamRole Whether this role comes from default Team role

@@ -64,8 +64,6 @@ def prepare(step):
     step.given("Alice has 'dbqueue_event' test config")
     step.given("Alice stops 'mysql' service")
     step.given("Alice starts 'mysql' service")
-    step.given("Alice stops 'sendmail' service")
-    step.given("Alice starts 'sendmail' service")
     step.given("Alice drops test database")
     step.given("Alice creates test database")
     step.given("Alice creates table 'farms'")
@@ -260,7 +258,7 @@ def check_rest(step, count):
     assert REST.value == int(count)
 
 
-@step(u"Alice update events status as handled")
+@step(u"Alice updates events status as handled")
 def check_update_db(step):
     db_manager = dbmanager.DBManager(world.config['connections']['mysql'], autoflush=False)
     db = db_manager.get_db()

@@ -5,7 +5,6 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.sg.view', function (loadParams, modulePara
 		],
 		proxy: {
 			type: 'scalr.paging',
-			extraParams: loadParams,
 			url: '/tools/aws/rds/sg/xList/'
 		},
 		remoteSort: true
@@ -16,7 +15,6 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.sg.view', function (loadParams, modulePara
 			'reload': false,
 			'maximize': 'all'
 		},
-		scalrReconfigureParams: {},
 		store: store,
 		plugins: {
 			ptype: 'gridstore'
@@ -29,25 +27,25 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.sg.view', function (loadParams, modulePara
 			{ flex: 2, text: "Name", dataIndex: 'DBSecurityGroupName', sortable: true },
 			{ flex: 2, text: "Description", dataIndex: 'DBSecurityGroupDescription', sortable: true },
 			{
-				xtype: 'optionscolumn',
-				optionsMenu: [{
+				xtype: 'optionscolumn2',
+				menu: [{
 					text: 'Edit',
 					iconCls: 'x-menu-icon-edit',
-					menuHandler: function(item) {
-						Scalr.event.fireEvent('redirect', '#/tools/aws/rds/sg/edit?dbSgName=' + item.record.get('DBSecurityGroupName') + '&cloudLocation=' + store.proxy.extraParams.cloudLocation);
+					menuHandler: function(data) {
+						Scalr.event.fireEvent('redirect', '#/tools/aws/rds/sg/edit?dbSgName=' + data['DBSecurityGroupName'] + '&cloudLocation=' + store.proxy.extraParams.cloudLocation);
 					}
 				},{
 					text: 'Events log',
 					iconCls: 'x-menu-icon-logs',
-					menuHandler: function(item) {
-						Scalr.event.fireEvent('redirect', '#/tools/aws/rds/logs?name=' + item.record.get('DBSecurityGroupName') + '&type=db-security-group&cloudLocation=' + store.proxy.extraParams.cloudLocation);
+					menuHandler: function(data) {
+						Scalr.event.fireEvent('redirect', '#/tools/aws/rds/logs?name=' + data['DBSecurityGroupName'] + '&type=db-security-group&cloudLocation=' + store.proxy.extraParams.cloudLocation);
 					}
 				},{
 					xtype: 'menuseparator'
 				},{
 					text: 'Delete',
 					iconCls: 'x-menu-icon-delete',
-					menuHandler: function(item) {
+					menuHandler: function(data) {
 						Scalr.Request({
 							confirmBox: {
 								msg: 'Remove selected security group?',
@@ -59,9 +57,9 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.sg.view', function (loadParams, modulePara
 							},
 							scope: this,
 							url: '/tools/aws/rds/sg/xDelete',
-							params: {cloudLocation: panel.down('#cloudLocation').value, dbSgName: item.record.get('DBSecurityGroupName')},
+							params: {cloudLocation: panel.down('#cloudLocation').value, dbSgName: data['DBSecurityGroupName']},
 							success: function (data, response, options){
-								store.remove(item.record);
+								store.load();
 							}
 						});
 					}
@@ -134,8 +132,7 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.sg.view', function (loadParams, modulePara
 					data: moduleParams.locations,
 					proxy: 'object'
 				},
-				gridStore: store,
-				cloudLocation: loadParams['cloudLocation'] || ''
+				gridStore: store
 			}]
 		}]
 	});

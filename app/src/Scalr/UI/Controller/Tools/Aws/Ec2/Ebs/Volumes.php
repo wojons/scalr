@@ -3,6 +3,7 @@ use Scalr\Acl\Acl;
 use Scalr\Service\Aws\Ec2\DataType\VolumeFilterNameType;
 use Scalr\Service\Aws\Ec2\DataType\AttachmentSetResponseData;
 use Scalr\Service\Aws\Ec2\DataType\VolumeData;
+use Scalr\Service\Aws\Ec2\DataType\ResourceTagSetData;
 use Scalr\Service\Aws\Ec2\DataType\CreateVolumeRequestData;
 
 class Scalr_UI_Controller_Tools_Aws_Ec2_Ebs_Volumes extends Scalr_UI_Controller
@@ -230,6 +231,17 @@ class Scalr_UI_Controller_Tools_Aws_Ec2_Ebs_Volumes extends Scalr_UI_Controller
             } else {
                 $att = null;
             }
+
+            $tags = array();
+            foreach ($pv->tagSet as $tag) {
+                /* @var $tag ResourceTagSetData */
+                $tg = "{$tag->key}";
+                if ($tag->value)
+                    $tg .= "={$tag->value}";
+
+                $tags[] = $tg;
+            }
+
             $item = array(
                 'volumeId'         => $pv->volumeId,
                 'size'             => (int)$pv->size,
@@ -240,37 +252,33 @@ class Scalr_UI_Controller_Tools_Aws_Ec2_Ebs_Volumes extends Scalr_UI_Controller
                 'attachmentStatus' => ($att !== null ? $att->status : null),
                 'device'           => ($att !== null ? $att->device : null),
                 'instanceId'       => ($att !== null ? $att->instanceId : null),
+                'tags'             => implode(',', $tags)
             );
 
             $item['autoSnaps'] = ($this->db->GetOne("SELECT id FROM autosnap_settings WHERE objectid=? AND object_type=? LIMIT 1",
                 array($pv->volumeId, AUTOSNAPSHOT_TYPE::EBSSnap))) ? true : false;
 
-            $dbEbsVolume = false;
-            try {
-                $dbEbsVolume = DBEBSVolume::loadByVolumeId($pv->volumeId);
-                $item['farmId'] = $dbEbsVolume->farmId;
-                $item['farmRoleId'] = $dbEbsVolume->farmRoleId;
-                $item['serverIndex'] = $dbEbsVolume->serverIndex;
-                $item['serverId'] = $dbEbsVolume->serverId;
-                $item['mountStatus'] = $dbEbsVolume->mountStatus;
-                $item['farmName'] = DBFarm::LoadByID($dbEbsVolume->farmId)->Name;
-                $item['roleName'] = DBFarmRole::LoadByID($dbEbsVolume->farmRoleId)->GetRoleObject()->name;
-                $item['autoAttach'] = true;
-            } catch (\Exception $e) {
-            }
 
-            if (!$dbEbsVolume && !empty($item['instanceId'])) {
+            if (!empty($item['instanceId'])) {
                 try {
                     $dbServer = DBServer::LoadByPropertyValue(EC2_SERVER_PROPERTIES::INSTANCE_ID, $item['instanceId']);
-                    $item['farmId'] = $dbServer->farmId;
-                    $item['farmRoleId'] = $dbServer->farmRoleId;
-                    $item['serverIndex'] = $dbServer->index;
-                    $item['serverId'] = $dbServer->serverId;
-                    $item['farmName'] = $dbServer->GetFarmObject()->Name;
-                    $item['mountStatus'] = false;
-                    $item['roleName'] = $dbServer->GetFarmRoleObject()->GetRoleObject()->name;
-                } catch (\Exception $e) {
-                }
+                    if ($dbServer) {
+                        $item['farmId'] = $dbServer->farmId;
+                        $item['farmRoleId'] = $dbServer->farmRoleId;
+                        $item['serverIndex'] = $dbServer->index;
+                        $item['serverId'] = $dbServer->serverId;
+                        $item['farmName'] = $dbServer->GetFarmObject()->Name;
+                        $item['mountStatus'] = false;
+                        $item['roleName'] = $dbServer->GetFarmRoleObject()->GetRoleObject()->name;
+
+                        /* Waiting for bugfix on scalarizr side
+                        if ($dbServer->IsSupported('2.5.4')) {
+                            $item['mounts'] = $dbServer->scalarizr->system->mounts();
+                        }
+                        */
+                    }
+
+                } catch (\Exception $e) {}
             }
 
             $vols[] = $item;

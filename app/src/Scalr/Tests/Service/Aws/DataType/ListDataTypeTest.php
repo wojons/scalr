@@ -5,7 +5,6 @@ use Scalr\Service\Aws\Ec2\DataType\IpPermissionList;
 use Scalr\Service\Aws\Ec2\DataType\BlockDeviceMappingData;
 use Scalr\Service\Aws\Ec2\DataType\ResourceTagSetData;
 use Scalr\Service\Aws\Ec2\DataType\ResourceTagSetList;
-use Scalr\Service\Aws\Ec2\DataType\GroupList;
 use Scalr\Service\Aws\Elb\DataType\LoadBalancerDescriptionData;
 use Scalr\Service\Aws\Elb\DataType\ListenerDescriptionList;
 use Scalr\Service\Aws\Elb\DataType\ListenerDescriptionData;

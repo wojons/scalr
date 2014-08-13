@@ -64,7 +64,7 @@ class Scalr_UI_Controller_Dashboard_Widget_Status extends Scalr_UI_Controller_Da
         } else {
             $html = @file_get_contents('http://status.aws.amazon.com');
             if ($html) {
-                $dom = new domDocument;
+                $dom = new DOMDocument();
                 $dom->validateOnParse = false;
                 @$dom->loadHTML($html);
                 $dom->preserveWhiteSpace = false;
@@ -103,16 +103,38 @@ class Scalr_UI_Controller_Dashboard_Widget_Status extends Scalr_UI_Controller_Da
                 }
 
                 file_put_contents($awsCachePath, json_encode($data));
+            } else {
+                return [];
             }
         }
+
         $retval = array('locations' => json_encode($neededLocations));
         foreach ($neededLocations as $value) {
+            if ($value == 'us-gov-west-1') {
+                $data[$value]['EC2'] = array(
+                    'img' => 'normal.png',
+                    'status' => "Service is operating normally.",
+                    'message'=> ""
+                );
+
+                $data[$value]['RDS'] = array(
+                    'img' => 'normal.png',
+                    'status' => "Service is operating normally.",
+                    'message'=> ""
+                );
+
+                $data[$value]['S3'] = array(
+                    'img' => 'normal.png',
+                    'status' => "Service is operating normally.",
+                    'message'=> ""
+                );
+            }
             $retval['data'][] = $data[$value];
         }
         return $retval;
     }
 
-    public function xGetContentAction ()
+    public function xGetContentAction()
     {
         $this->request->defineParams(array(
             'locations' => array('type' => 'json')
@@ -126,14 +148,15 @@ class Scalr_UI_Controller_Dashboard_Widget_Status extends Scalr_UI_Controller_Da
         );
     }
 
-    public function xGetLocationsAction ()
+    public function xGetLocationsAction()
     {
         $this->response->data(array(
             'locations' => self::loadController('Platforms')->getCloudLocations(SERVER_PLATFORMS::EC2, false)
         ));
     }
 
-    public function getUsedLocations() {
+    public function getUsedLocations()
+    {
         $locationResults = $this->db->Execute('SELECT DISTINCT(value) FROM server_properties WHERE server_id IN (SELECT server_id FROM servers WHERE env_id=?) AND `name`= ?', array($this->getEnvironmentId(), EC2_SERVER_PROPERTIES::REGION));
         $neededLocations = array();
         while ($location = $locationResults->fetchRow()) {

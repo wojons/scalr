@@ -59,6 +59,15 @@ Scalr.regPage('Scalr.ui.servers.dashboard', function (loadParams, moduleParams) 
                         name: 'server_id',
                         fieldLabel: 'Server ID'
                     },{
+                        name: 'hostname',
+                        fieldLabel: 'Hostname'
+                    },{
+                        name: 'farm_name',
+                        fieldLabel: 'Farm',
+                        renderer: function (value) {
+                            return '<a href="#/farms/view?farmId=' + moduleParams.general['farm_id'] + '">' + value + '</a>';
+                        }
+                    },{
                         name: 'role',
                         fieldLabel: 'Role name',
                         renderer: function(value, comp) {
@@ -89,15 +98,20 @@ Scalr.regPage('Scalr.ui.servers.dashboard', function (loadParams, moduleParams) 
                     items: [{
                         name: 'status',
                         fieldLabel: 'Status',
+                        width: 280,
                         renderer: function(value) {
-                            return '<span style="font-weight:bold;' + (value === 'Running' ? 'color:#008000' : '') + '">' + value + '</span>'
+                            return Scalr.ui.ColoredStatus.getHtml({
+                                type: 'server',
+                                status: moduleParams['general']['status'],
+                                data: moduleParams['general']
+                            });
                         }
                     },{
                         name: 'remote_ip',
-                        fieldLabel: 'Remote IP'
+                        fieldLabel: 'Public IP'
                     },{
                         name: 'local_ip',
-                        fieldLabel: 'Local IP'
+                        fieldLabel: 'Private IP'
                     },{
                         name: 'cloud_location',
                         fieldLabel: 'Location'
@@ -139,19 +153,19 @@ Scalr.regPage('Scalr.ui.servers.dashboard', function (loadParams, moduleParams) 
                             if (!me.isDestroyed && data.data) {
                                 var items = [];
                                 Ext.Object.each(data.data, function(key, value){
-                                    items[key==='/'?'unshift':'push']({
+                                    items[ key === '/' ? 'unshift' : 'push' ]({
                                         xtype: 'progressfield',
-                                        fieldLabel: key,
+                                        fieldLabel: key + (value && value.fstype ? ' (' + value.fstype + ')' : ''),
                                         labelWidth: 200,
                                         anchor: '100%',
                                         labelSeparator: '',
                                         units: 'Gb',
                                         emptyText: 'Loading...',
                                         fieldCls: 'x-form-progress-field',
-                                        value: {
+                                        value: value ? {
                                             total: Ext.util.Format.round(value.total*1/1024/1024, 1),
                                             value: Ext.util.Format.round((value.total*1 - value.free)/1024/1024, 1)
-                                        }
+                                        } : 'Unknown size'
                                     });
                                 });
                                 me.add(items);
@@ -160,11 +174,76 @@ Scalr.regPage('Scalr.ui.servers.dashboard', function (loadParams, moduleParams) 
                     });
                 }
             },{
-                xtype: 'fieldset',
+                xtype: 'toolfieldset',
                 title: 'Scalr agent',
                 itemId: 'scalarizr',
                 cls: 'x-fieldset-separator-left',
                 hidden: true,
+                tools: [{
+                    type: 'refresh',
+                    tooltip: 'Refresh scalr agent status',
+                    style: 'margin-left:12px',
+                    handler: function () {
+                        this.refreshStatus();
+                    }
+                }],
+                abortRequest: function() {
+                    if (this.request) {
+                        Ext.Ajax.abort(this.request);
+                        delete this.request;
+                    }
+                },
+                requestTimeout: 30, //seconds
+                refreshStatus: function() {
+                    var me = this;
+                    fn = function() {
+                        me.mask('Refreshing agent status...');
+                        me.request = Scalr.Request({
+                            url: '/servers/xGetServerRealStatus/',
+                            params: {serverId: loadParams['serverId'], timeout: me.requestTimeout},
+                            success: function(data){
+                                me.unmask();
+                                me.showStatus(data['scalarizr']);
+                                if (Ext.isString(me.error) && me.error.indexOf('Unable to perform request to update client: Timeout was reached') !== -1) {
+                                    me.requestTimeout += 15;
+                                }
+                                delete me.request;
+                            }
+                        });
+                    };
+                    if (me.rendered) {
+                        fn();
+                    } else {
+                        me.on('boxready', fn, me, {single: true});
+                    }
+                },
+                showStatus: function(data) {
+                    switch (data['status']) {
+                        case 'upgradeUpdClient':
+                            this.down('#status').hide();
+                            this.down('[name="statusNotAvailable"]').hide();
+                            this.down('#upgradeUpdClientBtn').show();
+                        break;
+                        case 'statusNotAvailable':
+                            this.down('#upgradeUpdClientBtn').hide();
+                            this.down('#status').hide();
+                            this.down('[name="statusNotAvailable"]').show().setValue(data['error']);
+                        break;
+                        case 'statusNoCache':
+                            this.down('#upgradeUpdClientBtn').hide();
+                            this.down('#status').hide();
+                            this.down('[name="statusNotAvailable"]').show().setValue('&nbsp;');
+                        break;
+                        break;
+                        default:
+                            this.down('#upgradeUpdClientBtn').hide();
+                            this.down('[name="statusNotAvailable"]').hide();
+                            this.down('#status').show();
+                            this.setFieldValues(data);
+                            this.down('#btnUpdateScalarizr').setDisabled(data === undefined || data['version'] == data['candidate']);
+                        break;
+                    }
+                },
                 items: [{
                     xtype: 'container',
                     itemId: 'status',
@@ -193,7 +272,7 @@ Scalr.regPage('Scalr.ui.servers.dashboard', function (loadParams, moduleParams) 
                             var html = value.date ? (value.date + '&nbsp;&nbsp;&nbsp;') : '';
                             if (value.error) {
                                 html += '<span style="font-weight:bold;color:#C00000">Failed';
-                                html += ' <img data-qtip="'+Ext.String.htmlEncode(value.error)+'" src="/ui2/images/icons/question.png" style="cursor: help; height: 16px;position:relative;top:2px">';
+                                html += ' <img data-qtip="'+Ext.String.htmlEncode(value.error)+'" src="' + Ext.BLANK_IMAGE_URL + '" class="x-icon-question" style="cursor: help; height: 16px;position:relative;top:2px">';
                                 html += '</span>';
                             } else if(!value.date) {
                                 html += '<span style="font-weight:bold;">Never</span>';
@@ -215,8 +294,8 @@ Scalr.regPage('Scalr.ui.servers.dashboard', function (loadParams, moduleParams) 
                         margin: '12 0 0 0',
                         items: [{
                             xtype: 'button',
+                            itemId: 'btnUpdateScalarizr',
                             text: 'Update scalarizr now',
-                            disabled: (moduleParams['scalarizr'] === undefined || moduleParams['scalarizr']['version'] == moduleParams['scalarizr']['candidate']),
                             handler: function() {
                                 Scalr.Request({
                                     confirmBox: {
@@ -332,57 +411,8 @@ Scalr.regPage('Scalr.ui.servers.dashboard', function (loadParams, moduleParams) 
             },{
                 margin: '0 0 0 32',
                 items: [{
-                    xtype: 'container',
-                    layout: 'column',
-                    defaults: {
-                        width: 220
-                    },
-                    items: [{
-                        xtype: 'label',
-                        text: 'Memory:'
-                    },{
-                        xtype: 'label',
-                        text: 'CPU:'
-                    }]
-                },{
-                    xtype: 'container',
-                    layout: 'column',
-                    defaults: {
-                        margin: '12 20 10 0'
-                    },
-                    items: [{
-                        xtype: 'chartpreview',
-                        itemId: 'memoryChart'
-                    },{
-                        xtype: 'chartpreview',
-                        itemId: 'cpuChart'
-                    }]
-                },{
-                    xtype: 'container',
-                    layout: 'column',
-                    defaults: {
-                        width: 220
-                    },
-                    items: [{
-                        xtype: 'label',
-                        text: 'Load averages:'
-                    },{
-                        xtype: 'label',
-                        text: 'Network:'
-                    }]
-                },{
-                    xtype: 'container',
-                    layout: 'column',
-                    defaults: {
-                        margin: '12 20 0 0'
-                    },
-                    items: [{
-                        xtype: 'chartpreview',
-                        itemId: 'laChart'
-                    },{
-                        xtype: 'chartpreview',
-                        itemId: 'netChart'
-                    }]
+                    xtype: 'chartpreview',
+                    itemId: 'chartPreview'
                 }]
             }]
         },{
@@ -469,20 +499,23 @@ Scalr.regPage('Scalr.ui.servers.dashboard', function (loadParams, moduleParams) 
 		}],
 
 		loadChartsData: function() {
-			var me = this,
-                farmId = moduleParams['general']['farm_id'],
-                farmRoleId = moduleParams['general']['farm_role_id'],
-                serverInfo = {index: moduleParams['general']['index'], title: moduleParams['general']['server_id']},
-                counter = 0;
+            var me = this;
+
+            var hostUrl = moduleParams['general']['monitoring_host_url'];
+            var farmId = moduleParams['general']['farm_id'];
+            var farmRoleId = moduleParams['general']['farm_roleid'];
+            var index = moduleParams['general']['index'];
+            var farmHash = moduleParams['general']['farm_hash'];
+            var metrics = 'mem,cpu,la,net';
+            var period = 'daily';
+            var params = {farmId: farmId, farmRoleId: farmRoleId, index: index, hash: farmHash, period: period, metrics: metrics};
+            var chartPreview = me.down('#chartPreview');
+
             var callback = function() {
-                if (++counter === 4) {
-                    me.lcdDelayed = Ext.Function.defer(me.loadChartsData, 60000, me);
-                }
+                me.lcdDelayed = Ext.Function.defer(me.loadChartsData, 60000, me);
             };
-            me.down('#memoryChart').loadStatistics(farmId, 'MEMSNMP', 'daily', farmRoleId, serverInfo, callback);
-            me.down('#cpuChart').loadStatistics(farmId, 'CPUSNMP', 'daily', farmRoleId, serverInfo, callback);
-            me.down('#laChart').loadStatistics(farmId, 'LASNMP', 'daily', farmRoleId, serverInfo, callback);
-            me.down('#netChart').loadStatistics(farmId, 'NETSNMP', 'daily', farmRoleId, serverInfo, callback);
+
+            chartPreview.loadStatistics(hostUrl, params, callback);
 		},
         
 		loadGeneralMetrics: function() {
@@ -554,26 +587,19 @@ Scalr.regPage('Scalr.ui.servers.dashboard', function (loadParams, moduleParams) 
                 if (this.lcdDelayed) {
                     clearTimeout(this.lcdDelayed);
                 }
+                this.down('#scalarizr').abortRequest();
             }
         }
     });
-    panel.down('#general').setFieldValues(moduleParams['general']);
+    var generalCt = panel.down('#general');
+    generalCt.setFieldValues(moduleParams['general']);
+    generalCt.down('[name="hostname"]').setVisible(!!moduleParams['general']['hostname']);
+    
     var scalarizrCt = panel.down('#scalarizr');
     if (moduleParams['scalarizr'] !== undefined) {
         scalarizrCt.show();
-        switch (moduleParams['scalarizr']['status']) {
-            case 'upgradeUpdClient':
-                scalarizrCt.down('#upgradeUpdClientBtn').show();
-            break;
-            case 'statusNotAvailable':
-                scalarizrCt.down('[name="statusNotAvailable"]').show().setValue(moduleParams['scalarizr']['error']);
-            break;
-            default:
-                scalarizrCt.down('#status').show();
-                scalarizrCt.setFieldValues(moduleParams['scalarizr']);
-            break;
-        }
-        
+        scalarizrCt.showStatus(moduleParams['scalarizr']);//show cached status
+        scalarizrCt.refreshStatus();//load real status
     }
 
     var storageCt = panel.down('#storage');

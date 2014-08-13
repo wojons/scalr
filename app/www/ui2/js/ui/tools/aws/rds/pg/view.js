@@ -5,7 +5,6 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.pg.view', function (loadParams, modulePara
 		],
 		proxy: {
 			type: 'scalr.paging',
-			extraParams: loadParams,
 			url: '/tools/aws/rds/pg/xList'
 		},
 		remoteSort: true
@@ -16,7 +15,6 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.pg.view', function (loadParams, modulePara
 			'reload': false,
 			'maximize': 'all'
 		},
-		scalrReconfigureParams: {},
 		store: store,
 		plugins: {
 			ptype: 'gridstore'
@@ -29,25 +27,25 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.pg.view', function (loadParams, modulePara
 			{ flex: 2, text: "Name", dataIndex: 'DBParameterGroupName', sortable: true },
 			{ flex: 2, text: "Description", dataIndex: 'Description', sortable: true },
 			{
-				xtype: 'optionscolumn',
-				optionsMenu: [{
+				xtype: 'optionscolumn2',
+				menu: [{
 					text: 'Edit',
 					iconCls: 'x-menu-icon-edit',
-					menuHandler: function(item) {
-						Scalr.event.fireEvent('redirect', '#/tools/aws/rds/pg/edit?name=' + item.record.get('DBParameterGroupName') + '&cloudLocation=' + store.proxy.extraParams.cloudLocation);
+					menuHandler: function(data) {
+						Scalr.event.fireEvent('redirect', '#/tools/aws/rds/pg/edit?name=' + data['DBParameterGroupName'] + '&cloudLocation=' + store.proxy.extraParams.cloudLocation);
 					}
 				},{
 					text: 'Events log',
 					iconCls: 'x-menu-icon-logs',
-					menuHandler: function(item) {
-						Scalr.event.fireEvent('redirect', '#/tools/aws/rds/logs?name=' + item.record.get('DBParameterGroupName') + '&type=db-instance&cloudLocation=' + store.proxy.extraParams.cloudLocation);
+					menuHandler: function(data) {
+						Scalr.event.fireEvent('redirect', '#/tools/aws/rds/logs?name=' + data['DBParameterGroupName'] + '&type=db-instance&cloudLocation=' + store.proxy.extraParams.cloudLocation);
 					}
 				},{
 					xtype: 'menuseparator'
 				},{
 					text: 'Delete',
 					iconCls: 'x-menu-icon-delete',
-					menuHandler: function(item) {
+					menuHandler: function(data) {
 						Scalr.Request({
 							confirmBox: {
 								msg: 'Remove selected parameter group?',
@@ -59,9 +57,9 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.pg.view', function (loadParams, modulePara
 							},
 							scope: this,
 							url: '/tools/aws/rds/pg/xDelete',
-							params: {cloudLocation: panel.down('#cloudLocation').value, name: item.record.get('DBParameterGroupName')},
+							params: {cloudLocation: panel.down('#cloudLocation').value, name: data['DBParameterGroupName']},
 							success: function (data, response, options){
-								store.remove(item.record);
+								store.load();
 							}
 						});
 					}
@@ -153,8 +151,7 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.pg.view', function (loadParams, modulePara
 					data: moduleParams.locations,
 					proxy: 'object'
 				},
-				gridStore: store,
-				cloudLocation: loadParams['cloudLocation'] || ''
+				gridStore: store
 			}]
 		}]
 	});

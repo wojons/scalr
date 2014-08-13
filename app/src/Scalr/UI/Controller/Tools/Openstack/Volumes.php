@@ -1,6 +1,7 @@
 <?php
 
 use Scalr\Acl\Acl;
+use Scalr\Modules\PlatformFactory;
 
 class Scalr_UI_Controller_Tools_Openstack_Volumes extends Scalr_UI_Controller
 {
@@ -15,7 +16,7 @@ class Scalr_UI_Controller_Tools_Openstack_Volumes extends Scalr_UI_Controller
         return parent::hasAccess() && $this->request->isAllowed(Acl::RESOURCE_OPENSTACK_VOLUMES);
     }
 
-	public function defaultAction()
+    public function defaultAction()
     {
         $this->viewAction();
     }
@@ -66,42 +67,44 @@ class Scalr_UI_Controller_Tools_Openstack_Volumes extends Scalr_UI_Controller
 
         $client = $this->environment->openstack($platformName, $this->getParam('cloudLocation'));
 
+        $vols = array();
+
         $volumes = $client->volume->listVolumes(true);
 
-        $vols = array();
-        foreach ($volumes as $pk=>$pv)
-        {
-            if ($this->getParam('volumeId') && $this->getParam('volumeId') != $pv->id)
-                continue;
+        do {
+            foreach ($volumes as $pk => $pv) {
+                if ($this->getParam('volumeId') && $this->getParam('volumeId') != $pv->id)
+                    continue;
 
-            $item = array(
-                'volumeId'	=> $pv->id,
-                'size'	=> $pv->size,
-                'status' => $pv->status,
-                'attachmentStatus' => isset($pv->attachments[0]) ? 'attached' : 'available',
-                'device'	=> isset($pv->attachments[0]) ? $pv->attachments[0]->device : "",
-                'instanceId' => isset($pv->attachments[0]) ? $pv->attachments[0]->server_id : "",
-                'type' 			=> $pv->volume_type,
-                'availability_zone'		=> $pv->availability_zone
-            );
+                $item = array(
+                    'volumeId'	=> $pv->id,
+                    'size'	=> $pv->size,
+                    'status' => $pv->status,
+                    'attachmentStatus' => isset($pv->attachments[0]) ? 'attached' : 'available',
+                    'device'	=> isset($pv->attachments[0]) ? $pv->attachments[0]->device : "",
+                    'instanceId' => isset($pv->attachments[0]) ? $pv->attachments[0]->server_id : "",
+                    'type' 			=> $pv->volume_type,
+                    'availability_zone'		=> $pv->availability_zone
+                );
 
-            if ($item['instanceId']) {
-                try {
-                    $dbServer = DBServer::LoadByPropertyValue(OPENSTACK_SERVER_PROPERTIES::SERVER_ID, $item['instanceId']);
+                if ($item['instanceId']) {
+                    try {
+                        $dbServer = DBServer::LoadByPropertyValue(OPENSTACK_SERVER_PROPERTIES::SERVER_ID, $item['instanceId']);
 
-                    $item['farmId'] = $dbServer->farmId;
-                    $item['farmRoleId'] = $dbServer->farmRoleId;
-                    $item['serverIndex'] = $dbServer->index;
-                    $item['serverId'] = $dbServer->serverId;
-                    $item['farmName'] = $dbServer->GetFarmObject()->Name;
-                    $item['mountStatus'] = false;
-                    $item['roleName'] = $dbServer->GetFarmRoleObject()->GetRoleObject()->name;
+                        $item['farmId'] = $dbServer->farmId;
+                        $item['farmRoleId'] = $dbServer->farmRoleId;
+                        $item['serverIndex'] = $dbServer->index;
+                        $item['serverId'] = $dbServer->serverId;
+                        $item['farmName'] = $dbServer->GetFarmObject()->Name;
+                        $item['mountStatus'] = false;
+                        $item['roleName'] = $dbServer->GetFarmRoleObject()->GetRoleObject()->name;
 
-                } catch (Exception $e) {}
+                    } catch (Exception $e) {}
+                }
+
+                $vols[] = $item;
             }
-
-            $vols[] = $item;
-        }
+        } while (false !== ($volumes = $volumes->getNextPage()));
 
         $response = $this->buildResponseFromData($vols, array('serverId', 'volumeId','farmId', 'farmRoleId'));
 

@@ -53,7 +53,7 @@ class Eucalyptus extends Aws
                 SELECT DISTINCT `group` FROM `client_environment_properties`
                 WHERE env_id = ? AND `name` LIKE 'eucalyptus.%' AND `group` != ''
             ", array(
-            	$env->id
+                $env->id
             ));
             while ($rec = $res->FetchRow()) {
                 $this->availableCloudLocations[] = $rec['group'];
@@ -61,6 +61,33 @@ class Eucalyptus extends Aws
         }
 
         return $this->availableCloudLocations;
+    }
+
+    /**
+     * Describes the list of the available instance types
+     *
+     * @return   array Returns the list looks like array(\SimpleXMLElement, ...)
+     */
+    public function describeInstanceTypes()
+    {
+        $result = array();
+        $response = $this->ec2->getApiClient()->call('DescribeInstanceTypes', array());
+        if ($response->getError() === false) {
+            $responseBody = $response->getRawContent();
+
+            if (preg_match('/xmlns="(.+)"/iU', $responseBody, $m)) {
+                $ns = $m[1];
+            } else {
+                $ns = 'http://ec2.amazonaws.com/doc/2013-02-01/';
+            }
+
+            $sxml = simplexml_load_string($responseBody, 'SimpleXMLElement', 0, $ns);
+
+            foreach ($sxml->instanceTypeDetails->item as $v) {
+                $result[] = $v;
+            }
+        }
+        return $result;
     }
 
     /**

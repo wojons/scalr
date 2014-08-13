@@ -1,8 +1,10 @@
-[subject]Farm's non-standard request was submitted[/subject]
+[subject][Scalr] A lease extension request has been submitted for Farm: {{farm_name}}[/subject]
 
-{{user_name}} has requested {{desc}} for farm "{{farm_name}}".
+{{user_name}} has submitted a non-standard lease extension request for the "{{farm_name}}" Farm.
 
-You can accept or discard this request on governance page.
+{{user_name}} left the following comment: "{{comment}}".
+
+You can approve or deny this request through the lease management menu, in the governance panel.
 
 Regards,
 The Scalr Team

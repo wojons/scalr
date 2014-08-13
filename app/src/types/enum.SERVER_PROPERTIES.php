@@ -18,14 +18,11 @@ class SERVER_PROPERTIES
     const SZR_VESION		= 'scalarizr.version';
     const SZR_UPD_CLIENT_VERSION = 'scalarizr.update_client.version';
 
-    // Import properties
-
     // New Importing process
     const SZR_IMPORTING_VERSION = 'scalarizr.import.version';
     const SZR_IMPORTING_STEP    = 'scalarizr.import.step';
     const SZR_IMPORTING_OUT_CONNECTION       = 'scalarizr.import.outbound_connection';
     const SZR_IMPORTING_OUT_CONNECTION_ERROR = 'scalarizr.import.outbound_connection.error';
-
 
     const SZR_IMPORTING_IMAGE_ID = 'scalarizr.import.image_id';
     const SZR_IMPORTING_ROLE_NAME = 'scalarizr.import.role_name';
@@ -40,11 +37,11 @@ class SERVER_PROPERTIES
     const SZR_IMPORTING_CHEF_ENVIRONMENT = 'scalarizr.import.chef.environment';
     const SZR_IMPORTING_CHEF_ROLE_NAME = 'scalarizr.import.chef.role_name';
 
-
     const SZR_IS_INIT_FAILED = 'scalarizr.is_init_failed';
     const SZR_IS_INIT_ERROR_MSG = 'scalarizr.init_error_msg';
     const LAUNCH_ERROR = 'system.launch.error';
     const LAUNCH_REASON = 'system.launch.reason';
+    const LAUNCH_REASON_ID = 'system.launch.reason_id';
     const SUB_STATUS 		= 'system.sub-status';
 
     const SZR_IMPORTING_MYSQL_SERVER_TYPE = 'scalarizr.import.mysql_server_type';
@@ -59,14 +56,15 @@ class SERVER_PROPERTIES
     const DB_MYSQL_MASTER	= 'db.mysql.master';
     const DB_MYSQL_REPLICATION_STATUS = 'db.mysql.replication_status';
 
-
     /* DNS PROPERTIES */
     const EXCLUDE_FROM_DNS	= 'dns.exclude_instance';
-
 
     /* System PROPERTIES */
     const ARCHITECTURE = "system.architecture";
     const REBOOTING = "system.rebooting";
+    const RESUMING = "system.resuming";
+    const MISSING = "system.missing";
+    const CRASHED = "system.crashed";
     const INITIALIZED_TIME = "system.date.initialized";
 
     /* Healthcheck PROPERTIES */
@@ -78,10 +76,20 @@ class SERVER_PROPERTIES
     const STATISTICS_BW_OUT	= "statistics.bw.out";
     const STATISTICS_LAST_CHECK_TS	= "statistics.lastcheck_ts";
 
+    // Farm derived properties
+    const FARM_CREATED_BY_ID = 'farm.created_by_id';
+    const FARM_CREATED_BY_EMAIL = 'farm.created_by_email';
+    const FARM_PROJECT_ID = 'farm.project_id';
+
+    // Environment derived properties
+    const ENV_CC_ID = 'env.cc_id';
+
     /* Audit properties */
     const LAUNCHED_BY_ID = 'audit.launched_by_id';
     const LAUNCHED_BY_EMAIL = 'audit.launched_by_email';
     const TERMINATED_BY_ID = 'audit.terminated_by_id';
     const TERMINATED_BY_EMAIL = 'audit.terminated_by_email';
+
+    const SCALR_INBOUND_REQ_RATE = 'scalr.inbound.req.rate';
 }
 

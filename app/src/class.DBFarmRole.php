@@ -1,5 +1,8 @@
 <?php
 
+use Scalr\Modules\PlatformFactory;
+use Scalr\Model\Entity\Script;
+
 class DBFarmRole
 {
     const SETTING_EXCLUDE_FROM_DNS					= 	'dns.exclude_role';
@@ -50,6 +53,8 @@ class DBFarmRole
     /** OPENSTACK Settings **/
     const SETTING_OPENSTACK_FLAVOR_ID		= 		'openstack.flavor-id';
     const SETTING_OPENSTACK_IP_POOL         =       'openstack.ip-pool';
+    const SETTING_OPENSTACK_NETWORKS        =       'openstack.networks';
+    const SETTING_OPENSTACK_SECURITY_GROUPS_LIST =  'openstack.security_groups.list';
 
     /** NIMBULA Settings **/
     const SETTING_NIMBULA_SHAPE				=		'nimbula.shape';
@@ -58,6 +63,7 @@ class DBFarmRole
     const SETTING_GCE_MACHINE_TYPE			=		'gce.machine-type';
     const SETTING_GCE_NETWORK				=		'gce.network';
     const SETTING_GCE_CLOUD_LOCATION        =       'gce.cloud-location';
+    const SETTING_GCE_ON_HOST_MAINTENANCE   =		'gce.on-host-maintenance';
 
     /** Cloudstack Settings **/
     const SETTING_CLOUDSTACK_SERVICE_OFFERING_ID		=		'cloudstack.service_offering_id';
@@ -70,6 +76,7 @@ class DBFarmRole
 
     const SETIING_CLOUDSTACK_USE_STATIC_NAT             =       'cloudstack.use_static_nat';
     const SETIING_CLOUDSTACK_STATIC_NAT_MAP             =       'cloudstack.static_nat.map';
+    const SETIING_CLOUDSTACK_STATIC_NAT_PRIVATE_MAP     =       'cloudstack.static_nat.private_map';
 
     /** EUCA Settings **/
     const SETTING_EUCA_INSTANCE_TYPE 		= 		'euca.instance_type';
@@ -83,6 +90,8 @@ class DBFarmRole
     const SETTING_AWS_AVAIL_ZONE			= 		'aws.availability_zone';
     const SETTING_AWS_USE_ELASIC_IPS		= 		'aws.use_elastic_ips';
     const SETTING_AWS_ELASIC_IPS_MAP		= 		'aws.elastic_ips.map';
+
+    const SETTING_AWS_IAM_INSTANCE_PROFILE_ARN =    'aws.iam_instance_profile_arn';
 
     const SETTING_AWS_EBS_OPTIMIZED			= 		'aws.ebs_optimized';
 
@@ -113,6 +122,7 @@ class DBFarmRole
     const SETTING_AWS_VPC_INTERNET_ACCESS	=		'aws.vpc_internet_access';
     const SETTING_AWS_VPC_SUBNET_ID	        =		'aws.vpc_subnet_id';
     const SETTING_AWS_VPC_ROUTING_TABLE_ID  =       'aws.vpc_routing_table_id';
+    const SETTING_AWS_VPC_ASSOCIATE_PUBLIC_IP   =       'aws.vpc_associate_public_ip';
 
     /** MySQL options **/
     const SETTING_MYSQL_PMA_USER			=		'mysql.pma.username';
@@ -170,7 +180,6 @@ class DBFarmRole
     const SETTING_SYSTEM_REBOOT_TIMEOUT		=		'system.timeouts.reboot';
     const SETTING_SYSTEM_LAUNCH_TIMEOUT		= 		'system.timeouts.launch';
     const SETTING_SYSTEM_NEW_PRESETS_USED   =       'system.new_presets_used';
-
 
     const TYPE_CFG = 1; // For configuration
     const TYPE_LCL = 2; // For lifecycle
@@ -306,7 +315,7 @@ class DBFarmRole
         }
 
         //Farm Global Variables
-        $variables = new Scalr_Scripting_GlobalVariables($this->GetFarmObject()->EnvID, Scalr_Scripting_GlobalVariables::SCOPE_FARMROLE);
+        $variables = new Scalr_Scripting_GlobalVariables($this->GetFarmObject()->ClientID, $this->GetFarmObject()->EnvID, Scalr_Scripting_GlobalVariables::SCOPE_FARMROLE);
         $variables->setValues($definition->globalVariables, $this->RoleID, $this->FarmID, $this->ID);
 
         //Storage
@@ -319,11 +328,11 @@ class DBFarmRole
                 'params' => $script->params,
                 'target' => $script->target,
                 'order_index' => $script->orderIndex,
-                'version' => $script->version,
-                'issync' => $script->isSync,
+                'version' => (int) $script->version,
+                'isSync' => (int) $script->isSync,
                 'timeout' => $script->timeout,
                 'event' => $script->event,
-                'script_id' => $script->scriptId,
+                'script_id' => (int) $script->scriptId,
                 'script_path' => $script->scriptPath,
                 'run_as' => $script->runAs
             );
@@ -377,7 +386,7 @@ class DBFarmRole
         }
 
         //Farm Global Variables
-        $variables = new Scalr_Scripting_GlobalVariables($this->GetFarmObject()->EnvID, Scalr_Scripting_GlobalVariables::SCOPE_FARMROLE);
+        $variables = new Scalr_Scripting_GlobalVariables($this->GetFarmObject()->ClientID, $this->GetFarmObject()->EnvID, Scalr_Scripting_GlobalVariables::SCOPE_FARMROLE);
         $roleDefinition->globalVariables = $variables->getValues($this->RoleID, $this->FarmID, $this->ID);
 
         //Storage
@@ -398,10 +407,10 @@ class DBFarmRole
         foreach ($scripts as $script) {
             $itm = new stdClass();
             $itm->event = $script['event_name'];
-            $itm->scriptId = $script['scriptid'];
+            $itm->scriptId = (int) $script['scriptid'];
             $itm->params = unserialize($script['params']);
             $itm->target = $script['target'];
-            $itm->version = $script['version'];
+            $itm->version = (int) $script['version'];
             $itm->timeout = $script['timeout'];
             $itm->isSync = $script['issync'];
             $itm->isMenuItem = $script['ismenuitem'];
@@ -520,9 +529,10 @@ class DBFarmRole
     public function Delete()
     {
         foreach ($this->GetServersByFilter() as $DBServer) {
+            /** @var DBServer $DBServer */
             if ($DBServer->status != SERVER_STATUS::TERMINATED) {
                 try {
-                    $DBServer->terminate('ROLE_REMOVED');
+                    $DBServer->terminate(DBServer::TERMINATE_REASON_ROLE_REMOVED);
                 } catch (Exception $e){}
 
                 $event = new HostDownEvent($DBServer);
@@ -535,7 +545,6 @@ class DBFarmRole
 
         // Clear farm role options & scripts
         $this->DB->Execute("DELETE FROM farm_role_options WHERE farm_roleid=?", array($this->ID));
-        $this->DB->Execute("DELETE FROM farm_role_scripts WHERE farm_roleid=?", array($this->ID));
         $this->DB->Execute("DELETE FROM farm_role_service_config_presets WHERE farm_roleid=?", array($this->ID));
         $this->DB->Execute("DELETE FROM farm_role_scaling_metrics WHERE farm_roleid=?", array($this->ID));
         $this->DB->Execute("DELETE FROM farm_role_scaling_times WHERE farm_roleid=?", array($this->ID));
@@ -547,7 +556,6 @@ class DBFarmRole
         $this->DB->Execute("DELETE FROM elastic_ips WHERE farm_roleid=?", array($this->ID));
 
         $this->DB->Execute("DELETE FROM storage_volumes WHERE farm_roleid=?", array($this->ID));
-        $this->DB->Execute("DELETE FROM global_variables WHERE farm_role_id = ?", array($this->ID));
 
         // Clear apache vhosts and update DNS zones
         $this->DB->Execute("UPDATE apache_vhosts SET farm_roleid='0', farm_id='0' WHERE farm_roleid=?", array($this->ID));
@@ -581,11 +589,25 @@ class DBFarmRole
         );
     }
 
+    public function GetSuspendedInstancesCount()
+    {
+        return $this->DB->GetOne("SELECT COUNT(*) FROM servers WHERE status IN(?,?) AND farm_roleid=? LIMIT 1",
+                array(SERVER_STATUS::SUSPENDED, SERVER_STATUS::PENDING_SUSPEND, $this->ID)
+        );
+    }
+
     public function GetRunningInstancesCount()
     {
-        return $this->DB->GetOne("SELECT COUNT(*) FROM servers WHERE status = ? AND farm_roleid=? LIMIT 1",
-            array(SERVER_STATUS::RUNNING, $this->ID)
-        );
+        $considerSuspendedServers = $this->GetSetting(Scalr_Role_Behavior::ROLE_BASE_CONSIDER_SUSPENDED);
+
+        if (!$considerSuspendedServers || $considerSuspendedServers == 'running')
+            return $this->DB->GetOne("SELECT COUNT(*) FROM servers WHERE status IN (?,?,?) AND farm_roleid=? LIMIT 1",
+                    array(SERVER_STATUS::RUNNING, SERVER_STATUS::PENDING_SUSPEND, SERVER_STATUS::SUSPENDED, $this->ID)
+            );
+        else
+            return $this->DB->GetOne("SELECT COUNT(*) FROM servers WHERE status = ? AND farm_roleid=? LIMIT 1",
+                array(SERVER_STATUS::RUNNING, $this->ID)
+            );
     }
 
     public function GetServersByFilter($filter_args = array(), $ufilter_args = array())
@@ -749,10 +771,9 @@ class DBFarmRole
 
         if (count($params) > 0) {
             foreach ($params as $param) {
-                $hash = $param['hash'];
-                if ($hash) {
+                if (isset($param['hash']) && count($param['params']) > 0) {
                     $roleId = ($this->NewRoleID) ? $this->NewRoleID : $this->RoleID;
-                    $roleParams = $this->DB->GetOne("SELECT params FROM role_scripts WHERE role_id = ? AND `hash` = ? LIMIT 1", array($roleId, $hash));
+                    $roleParams = $this->DB->GetOne("SELECT params FROM role_scripts WHERE role_id = ? AND `hash` = ? LIMIT 1", array($roleId, $param['hash']));
                     $newParams = serialize($param['params']);
                     if ($newParams != $roleParams) {
                         //UNIQUE KEY `uniq` (`farm_role_id`,`hash`,`farm_role_script_id`),
@@ -768,11 +789,9 @@ class DBFarmRole
                                 params = ?
                         ", array(
                             $this->ID,
-                            $hash,
+                            $param['hash'],
                             0,
-
                             0, $newParams,
-
                             0, $newParams,
                         ));
                     }
@@ -785,15 +804,21 @@ class DBFarmRole
         if (count($scripts) > 0) {
             foreach ($scripts as $script) {
 
-                $timeout = (int)$script['timeout'];
+                $timeout = empty($script['timeout']) ? 0 : intval($script['timeout']);
+
                 if (!$timeout)
                     $timeout = \Scalr::config('scalr.script.timeout.sync');
 
-                $event_name = $script['event'];
+                $event_name = isset($script['event']) ? $script['event'] : null;
+
                 if ($event_name == 'AllEvents')
                     $event_name = '*';
 
-                if ($event_name && ($script['script_id'] || $script['script_path'])) {
+                if ($event_name && (
+                    !empty($script['script_id']) && $script['script_type'] == Scalr_Scripting_Manager::ORCHESTRATION_SCRIPT_TYPE_SCALR ||
+                    !empty($script['script_path']) && $script['script_type'] == Scalr_Scripting_Manager::ORCHESTRATION_SCRIPT_TYPE_LOCAL ||
+                    !empty($script['params']) && $script['script_type'] == Scalr_Scripting_Manager::ORCHESTRATION_SCRIPT_TYPE_CHEF))
+                {
                     $this->DB->Execute("INSERT INTO farm_role_scripts SET
                         scriptid	= ?,
                         farmid		= ?,
@@ -807,7 +832,8 @@ class DBFarmRole
                         order_index = ?,
                         issystem	= '1',
                         script_path = ?,
-                        run_as = ?
+                        run_as = ?,
+                        script_type = ?
                     ", array(
                         $script['script_id'],
                         $this->FarmID,
@@ -817,32 +843,35 @@ class DBFarmRole
                         $script['target'],
                         $script['version'],
                         $timeout,
-                        $script['issync'],
+                        $script['isSync'],
                         (int)$script['order_index'],
                         $script['script_path'],
-                        $script['run_as']
+                        $script['run_as'],
+                        $script['script_type']
                     ));
 
                     $farmRoleScriptId = $this->DB->Insert_ID();
 
-                    if ($script['target'] == Scalr_Script::TARGET_ROLES || $script['target'] == Scalr_Script::TARGET_BEHAVIORS) {
+                    if ($script['target'] == Script::TARGET_ROLES || $script['target'] == Script::TARGET_BEHAVIORS) {
 
-                        $targetType = ($script['target'] == Scalr_Script::TARGET_ROLES) ? 'farmrole' : 'behavior';
-                        $varName = ($script['target'] == Scalr_Script::TARGET_ROLES) ? 'target_roles' : 'target_behaviors';
+                        $targetType = ($script['target'] == Script::TARGET_ROLES) ? 'farmrole' : 'behavior';
+                        $varName = ($script['target'] == Script::TARGET_ROLES) ? 'target_roles' : 'target_behaviors';
 
-                        foreach ($script[$varName] as $t) {
+                        if (is_array($script[$varName])) {
+                            foreach ($script[$varName] as $t) {
 
-                            // Workaround to be able to specify self role when it's not yet saved in farm.
-                            if ($t == '*self*')
-                                $t = $this->ID;
+                                // Workaround to be able to specify self role when it's not yet saved in farm.
+                                if ($t == '*self*')
+                                    $t = $this->ID;
 
-                            $this->DB->Execute("INSERT INTO farm_role_scripting_targets SET
-                                `farm_role_script_id` = ?,
-                                `target_type` = ?,
-                                `target` =?
-                            ", array(
-                                $farmRoleScriptId, $targetType, $t
-                            ));
+                                $this->DB->Execute("INSERT INTO farm_role_scripting_targets SET
+                                    `farm_role_script_id` = ?,
+                                    `target_type` = ?,
+                                    `target` =?
+                                ", array(
+                                    $farmRoleScriptId, $targetType, $t
+                                ));
+                            }
                         }
                     }
                 }
@@ -1025,7 +1054,8 @@ class DBFarmRole
         $this->SettingsCache = array();
     }
 
-    private function Unbind () {
+    private function Unbind()
+    {
         $row = array();
         foreach (self::$FieldPropertyMap as $field => $property) {
             $row[$field] = $this->{$property};
@@ -1034,9 +1064,10 @@ class DBFarmRole
         return $row;
     }
 
-    function Save () {
-
+    function Save ()
+    {
         $row = $this->Unbind();
+
         unset($row['id']);
 
         // Prepare SQL statement
@@ -1052,9 +1083,8 @@ class DBFarmRole
             // Perform Update
             $bind[] = $this->ID;
             $this->DB->Execute("UPDATE farm_roles SET $set WHERE id = ?", $bind);
-
         } catch (Exception $e) {
-            throw new Exception ("Cannot save farm role. Error: " . $e->getMessage(), $e->getCode());
+            throw new Exception("Cannot save farm role. Error: " . $e->getMessage(), $e->getCode());
         }
     }
 
@@ -1070,19 +1100,21 @@ class DBFarmRole
             WHERE generation = \'2\' AND env_id IN(0, ?)
             AND q.id IS NULL
             AND ri.platform = ?' .
-            ($this->Platform === SERVER_PLATFORMS::GCE ? '' : 'AND ri.cloud_location = ?') .
+            (in_array($this->Platform, array(SERVER_PLATFORMS::GCE, SERVER_PLATFORMS::ECS)) ? '' : 'AND ri.cloud_location = ?') .
             'AND r.os_family = ?' .
             ($includeSelf ? '' : 'AND r.id != ?') .
             'GROUP BY r.id
         ';
-        $args = array($dbRole->envId, $this->Platform);
-        if ($this->Platform !== SERVER_PLATFORMS::GCE) {
+        $args = array($this->GetFarmObject()->EnvID, $this->Platform);
+
+        if (!in_array($this->Platform, array(SERVER_PLATFORMS::GCE, SERVER_PLATFORMS::ECS)))
             $args[] = $this->CloudLocation;
-        }
+
         $args[] = $dbRole->osFamily;
-        if ($includeSelf) {
+
+        if ($includeSelf)
             $args[] = $dbRole->id;
-        }
+
 
         $behaviors = $dbRole->getBehaviors();
         sort($behaviors);
@@ -1092,10 +1124,12 @@ class DBFarmRole
             $role = DBRole::loadById($roleId);
             $behaviors2 = $role->getBehaviors();
             sort($behaviors2);
+
             if ($behaviors == $behaviors2) {
                 $imageInfo = $role->getImageDetails($this->Platform, $this->CloudLocation);
                 $result[] = array(
                     'id'            => $role->id,
+                    'debug'         => array($imageInfo),
                     'name'          => $role->name,
                     'os_name'       => $role->os,
                     'os_family'     => $role->osFamily,
@@ -1104,9 +1138,25 @@ class DBFarmRole
                     'shared'        => $role->envId == 0,
                     'behaviors'     => $role->getBehaviors(),
                     'image_id'      => $imageInfo['image_id'],
-                    'arch'          => !$imageInfo['architecture'] || $role->envId == 0 ? (stristr($role->name, '64-') ? 'x86_64' : 'i386') : $imageInfo['architecture']
+                    'arch'          => !$imageInfo['architecture'] ? (stristr($role->name, '64-') ? 'x86_64' : 'i386') : $imageInfo['architecture']
                 );
+            } else {
+                //var_dump($behaviors2);
             }
+        }
+
+        return $result;
+    }
+
+    public function getChefSettings()
+    {
+        if ($this->GetRoleObject()->getProperty(Scalr_Role_Behavior_Chef::ROLE_CHEF_BOOTSTRAP)) {
+            $result = $this->GetRoleObject()->getProperties('chef.');
+            if ($this->GetSetting(Scalr_Role_Behavior_Chef::ROLE_CHEF_ATTRIBUTES)) {
+                $result[Scalr_Role_Behavior_Chef::ROLE_CHEF_ATTRIBUTES] = $this->GetSetting(Scalr_Role_Behavior_Chef::ROLE_CHEF_ATTRIBUTES);
+            }
+        } else {
+            $result = $this->GetSettingsByFilter('chef.');
         }
 
         return $result;

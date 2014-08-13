@@ -13,14 +13,16 @@ class Scalr_UI_Controller_Monitoring extends Scalr_UI_Controller
         return parent::hasAccess() && $this->request->isAllowed(Acl::RESOURCE_FARMS_STATISTICS);
     }
 
-	public function viewAction()
+    public function viewAction()
     {
         $farms = self::loadController('Farms')->getList(array('status' => FARM_STATUS::RUNNING));
+        $conf = $this->getContainer()->config->get('scalr.load_statistics.connections.plotter');
 
         $children = array();
         $hasServers = false;
         $hasRoles = false;
         foreach ($farms as $farm) {
+            $hash = $this->db->GetOne('SELECT hash FROM farms WHERE id = ?', array($farm['id']));
 
             $this->request->setParam('farmId', $farm['id']);
             $farm['roles'] = self::loadController('Roles', 'Scalr_UI_Controller_Farms')->getList();
@@ -48,17 +50,26 @@ class Scalr_UI_Controller_Monitoring extends Scalr_UI_Controller
                         'text' => '#'.$serv['index']. ' ('.$ip.')',
                         'leaf' => true,
                         'checked' => false,
-                        'itemId' => 'INSTANCE_'.$serv['farm_roleid'].'_'.$serv['index'],
+                        'params' => array(
+                            'farmId' => $farm['id'],
+                            'farmRoleId' => $role['id'],
+                            'index' => $serv['index'],
+                            'hash' => $hash
+                        ),
                         'value' => '#'.$serv['index'],
                         'icon' => '/ui2/images/space.gif'
                     );
                 }
 
                 $ritem = array(
-                    'text' => 'role: '.$role['name'],
+                    'text' => $role['name'],
                     'leaf' => true,
                     'checked' => false,
-                    'itemId' => $role['id'],
+                    'params' => array(
+                        'farmId' => $farm['id'],
+                        'farmRoleId' => $role['id'],
+                        'hash' => $hash
+                    ),
                     'value' => $role['name'],
                     'icon' => '/ui2/images/space.gif'
                 );
@@ -75,8 +86,11 @@ class Scalr_UI_Controller_Monitoring extends Scalr_UI_Controller
             }
 
             $item = array(
-                'text' => 'Farm: '.$farm['name'],
-                'itemId' => $farm['id'],
+                'text' => $farm['name'],
+                'params' => array(
+                    'farmId' => $farm['id'],
+                    'hash' => $hash
+                ),
                 'value' => $farm['name'],
                 'checked' => false,
                 'leaf' => true,
@@ -92,7 +106,7 @@ class Scalr_UI_Controller_Monitoring extends Scalr_UI_Controller
             $children[] = $item;
             $hasRoles = false;
         }
-        $this->response->page('ui/monitoring/view.js', array('children' => $children), array('ui/monitoring/window.js'));
+        $this->response->page('ui/monitoring/view.js', array('children' => $children, 'hostUrl' => "{$conf['scheme']}://{$conf['host']}:{$conf['port']}"), array('ui/monitoring/window.js'), array('ui/monitoring/view.css'));
     }
 }
 

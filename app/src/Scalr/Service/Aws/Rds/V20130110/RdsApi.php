@@ -36,7 +36,6 @@ use Scalr\Service\Aws\AbstractApi;
 use Scalr\Service\Aws\Rds;
 use Scalr\Service\Aws\RdsException;
 use Scalr\Service\Aws\EntityManager;
-use Scalr\Service\Aws\DataType\ErrorData;
 use Scalr\Service\Aws\Client\ClientInterface;
 use Scalr\Service\Aws\Client\ClientException;
 use \DateTimeZone;

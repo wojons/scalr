@@ -3,7 +3,6 @@ Scalr.regPage('Scalr.ui.scaling.metrics.view', function (loadParams, moduleParam
 		fields: [ 'id','env_id','client_id','name','file_path','retrieve_method','calc_function' ],
 		proxy: {
 			type: 'scalr.paging',
-			extraParams: loadParams,
 			url: '/scaling/metrics/xListMetrics/'
 		},
 		remoteSort: true
@@ -15,7 +14,6 @@ Scalr.regPage('Scalr.ui.scaling.metrics.view', function (loadParams, moduleParam
 			'reload': false,
 			'maximize': 'all'
 		},
-		scalrReconfigureParams: { metricId: '' },
 		store: store,
 		stateId: 'grid-scaling-metrics-view',
 		stateful: true,
@@ -50,13 +48,14 @@ Scalr.regPage('Scalr.ui.scaling.metrics.view', function (loadParams, moduleParam
 				'<tpl if="calc_function == \'avg\'">Average</tpl>' +
 				'<tpl if="calc_function == \'sum\'">Sum</tpl>'
 			}, {
-				xtype: 'optionscolumn',
-				optionsMenu: [{
+				xtype: 'optionscolumn2',
+				menu: [{
 					text: 'Edit',
+                    iconCls: 'x-menu-icon-edit',
 					href: "#/scaling/metrics/{id}/edit"
 				}],
 				getVisibility: function (record) {
-					return (record.get('env_id') != 0);
+					return record.get('env_id') != 0;
 				}
 			}
 		],
@@ -87,6 +86,10 @@ Scalr.regPage('Scalr.ui.scaling.metrics.view', function (loadParams, moduleParam
 					Scalr.event.fireEvent('redirect', '#/scaling/metrics/create');
 				}
 			}],
+            items: [{
+                xtype: 'filterfield',
+                store: store
+            }],
 			afterItems: [{
 				ui: 'paging',
 				itemId: 'delete',

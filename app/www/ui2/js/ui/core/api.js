@@ -10,7 +10,7 @@ Scalr.regPage('Scalr.ui.core.api', function (loadParams, moduleParams) {
         layout: 'auto',
 		items: [{
 			xtype: 'fieldset',
-			title: 'Enable API access for environment &laquo;' + params['envName'] + '&raquo;',
+			title: 'Enable API access for &laquo;' + Scalr.user['userName'] + '&raquo;',
 			checkboxToggle:  true,
             toggleOnTitleClick: true,
             collapsible: true,

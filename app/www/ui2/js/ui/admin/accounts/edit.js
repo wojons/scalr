@@ -28,6 +28,7 @@ Scalr.regPage('Scalr.ui.admin.accounts.edit', function (loadParams, moduleParams
 				fieldLabel: Scalr.flags['authMode'] == 'ldap' ? 'LDAP login' : 'Email'
 			}, {
 				xtype: 'textfield',
+				inputType: 'password',
 				name: 'ownerPassword',
                 hidden: Scalr.flags['authMode'] == 'ldap',
                 disabled: Scalr.flags['authMode'] == 'ldap',

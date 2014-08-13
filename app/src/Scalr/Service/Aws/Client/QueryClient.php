@@ -217,14 +217,11 @@ class QueryClient extends AbstractClient implements ClientInterface
         $httpRequest = $this->createRequest();
         $httpRequest->addHeaders(array(
             'Content-Type' => 'application/x-www-form-urlencoded; charset=UTF-8',
+            'Cache-Control' => 'no-cache',
             'Date'         => gmdate('r', $time),
         ));
         $httpRequest->setUrl($scheme . '://' . $host . $path);
         $httpRequest->setMethod(constant('HTTP_METH_' . $httpMethod));
-        $httpRequest->setOptions(array(
-            'redirect'  => 10,
-            'useragent' => $this->useragent,
-        ));
         $httpRequest->addPostFields($options);
 
         $response = $this->tryCall($httpRequest);
@@ -248,6 +245,30 @@ class QueryClient extends AbstractClient implements ClientInterface
         //HttpRequest has a pitfall which persists cookies between different requests.
         //IMPORTANT! This line causes error with old version of curl
         //$q->resetCookies();
+        $q->setOptions(array(
+            'redirect'       => 10,
+            'useragent'      => $this->useragent,
+            'verifypeer'     => false,
+            'verifyhost'     => false,
+            'timeout'        => 30,
+            'connecttimeout' => 30,
+        ));
+
+        $proxySettings = $this->getAws()->getProxy();
+        if ($proxySettings !== false) {
+            $q->setOptions(array(
+                'proxyhost' => $proxySettings['host'],
+                'proxyport' => $proxySettings['port'],
+                'proxytype' => $proxySettings['type']
+            ));
+            if ($proxySettings['user']) {
+                $q->setOptions(array(
+                    'proxyauth' => "{$proxySettings['user']}:{$proxySettings['pass']}",
+                    'proxyauthtype' => HTTP_AUTH_BASIC
+                ));
+            }
+        }
+
         return $q;
     }
 
@@ -260,7 +281,7 @@ class QueryClient extends AbstractClient implements ClientInterface
      * @returns  QueryClientResponse  Returns response on success
      * @throws   QueryClientException
      */
-    protected function tryCall($httpRequest, $attempts = 3, $interval = 200)
+    protected function tryCall($httpRequest, $attempts = 1, $interval = 200)
     {
         try {
             $message = $httpRequest->send();
@@ -304,7 +325,7 @@ class QueryClient extends AbstractClient implements ClientInterface
                 return $this->tryCall($httpRequest, $attempts, $interval * 2);
             } else {
                 $error = new ErrorData();
-                $error->message = 'Cannot establish connection to AWS server. ' . $e->getMessage();
+                $error->message = 'Cannot establish connection to AWS server. ' . (isset($e->innerException) ? preg_replace('/(\(.*\))/', '', $e->innerException->getMessage()) : $e->getMessage());
                 throw new ClientException($error);
             }
         }

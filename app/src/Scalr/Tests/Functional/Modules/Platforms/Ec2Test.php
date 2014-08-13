@@ -2,16 +2,15 @@
 
 namespace Scalr\Tests\Functional\Modules\Platforms;
 
-use Scalr\Service\Aws\Ec2\DataType\InstanceStateData;
 use Scalr\Service\Aws;
 use Scalr\Tests\WebTestCase;
-use \Modules_Platforms_Ec2;
+use Scalr\Modules\Platforms\Ec2\Ec2PlatformModule;
 use \SERVER_PLATFORMS;
 use \ReflectionClass;
 
 
 /**
- * Functional test for the Modules_Platforms_Ec2 class.
+ * Functional test for the Ec2PlatformModule class.
  *
  * @author   Vitaliy Demidov   <vitaliy@scalr.com>
  * @since    18.04.2013
@@ -22,7 +21,7 @@ class Ec2Test extends WebTestCase
     const REGION = Aws::REGION_US_EAST_1;
 
     /**
-     * @var \Modules_Platforms_Ec2
+     * @var Ec2PlatformModule
      */
     private $module;
 
@@ -33,8 +32,8 @@ class Ec2Test extends WebTestCase
     protected function setUp()
     {
         parent::setUp();
-        $this->skipIfPlatformDisabled(SERVER_PLATFORMS::EC2);
-        $this->module = new Modules_Platforms_Ec2();
+        $this->markTestSkippedIfPlatformDisabled(SERVER_PLATFORMS::EC2);
+        $this->module = new Ec2PlatformModule();
     }
 
     /**
@@ -64,5 +63,4 @@ class Ec2Test extends WebTestCase
             }
         }
     }
-
 }

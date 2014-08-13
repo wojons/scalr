@@ -19,7 +19,6 @@ use Scalr\Service\Aws\Client\QueryClientException;
 use Scalr\Service\Aws\Elb\DataType\LoadBalancerDescriptionData;
 use Scalr\Service\Aws\DataType\ErrorData;
 use Scalr\Service\Aws\Elb;
-use Scalr\Service\Aws;
 
 /**
  * AWS Elb Test

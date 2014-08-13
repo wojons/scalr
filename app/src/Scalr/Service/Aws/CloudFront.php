@@ -1,22 +1,18 @@
 <?php
 namespace Scalr\Service\Aws;
 
-use Scalr\Service\Aws\Client\ClientException;
-use Scalr\Service\Aws\DataType\ErrorData;
-use Scalr\Service\Aws\DataType\ListDataType;
-use Scalr\Service\Aws\Client\QueryClient;
-use Scalr\Service\Aws;
-use Scalr\Service\Aws\CloudFront\V20120701\CloudFrontApi;
-
 /**
  * Amazon CloudFront interface
  *
  * @author    Vitaliy Demidov   <vitaliy@scalr.com>
  * @since     01.02.2013
  *
- * @property  \Scalr\Service\Aws\CloudFront\Handler\DistributionHandler $distribution  A CloudFront Distribution service interface handler.
+ * @property  \Scalr\Service\Aws\CloudFront\Handler\DistributionHandler $distribution
+ *            A CloudFront Distribution service interface handler.
  *
- * @method    \Scalr\Service\Aws\CloudFront\V20120701\CloudFrontApi getApiHandler() getApiHandler() Gets a CloudFrontApi handler.
+ * @method    \Scalr\Service\Aws\CloudFront\V20120701\CloudFrontApi getApiHandler()
+ *            getApiHandler()
+ *            Gets a CloudFrontApi handler.
  */
 class CloudFront extends AbstractService implements ServiceInterface
 {

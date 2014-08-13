@@ -47,7 +47,7 @@ abstract class AbstractEntity extends AbstractGetter implements IteratorAggregat
         return $this->iterator;
     }
 
-	/**
+    /**
      * Returns actual state of the entity
      *
      * @return  stdClass

@@ -18,7 +18,7 @@ class Scalr_Scaling_Algorithms_DateTime
         $dbFarm = $dbFarmRole->GetFarmObject();
 
         //$env = $dbFarm->GetEnvironmentObject();
-        //$tz = $env->getPlatformConfigValue(ENVIRONMENT_SETTINGS::TIMEZONE);
+        //$tz = $env->getPlatformConfigValue(Scalr_Environment::SETTING_TIMEZONE);
 
         $tz = $dbFarm->GetSetting(DBFarm::SETTING_TIMEZONE);
         $date = new DateTime();
@@ -40,7 +40,7 @@ class Scalr_Scaling_Algorithms_DateTime
         {
             $this->logger->info("TimeScalingAlgo({$dbFarmRole->FarmID}, {$dbFarmRole->AMIID}) Found scaling period. Total {$scaling_period['instances_count']} instances should be running.");
             $this->instancesNumber = $scaling_period['instances_count'];
-            $this->lastValue = "{$scaling_period['start_time']} - {$scaling_period['end_time']} = {$scaling_period['instances_count']}";
+            $this->lastValue = "(" . implode(' / ', $currentDate) . ") {$scaling_period['start_time']} - {$scaling_period['end_time']} = {$scaling_period['instances_count']}";
 
             if (($dbFarmRole->GetRunningInstancesCount()+$dbFarmRole->GetPendingInstancesCount()) < $this->instancesNumber)
                 return Scalr_Scaling_Decision::UPSCALE;

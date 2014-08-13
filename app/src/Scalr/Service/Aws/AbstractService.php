@@ -3,8 +3,6 @@ namespace Scalr\Service\Aws;
 
 use Scalr\Service\Aws\Client\ClientInterface;
 use Scalr\Service\AwsException;
-use Scalr\Service\Aws\Client\QueryClient;
-use Scalr\Service\Aws\Client\QueryClient\S3QueryClient;
 
 /**
  * AbstractService

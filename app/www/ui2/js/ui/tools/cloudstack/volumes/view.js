@@ -6,19 +6,17 @@ Scalr.regPage('Scalr.ui.tools.cloudstack.volumes.view', function (loadParams, mo
 		],
 		proxy: {
 			type: 'scalr.paging',
-			extraParams: loadParams,
 			url: '/tools/cloudstack/volumes/xListVolumes/'
 		},
 		remoteSort: true
 	});
 
 	return Ext.create('Ext.grid.Panel', {
-		title: 'Tools &raquo; Cloudstack &raquo; Volumes',
+		title: Scalr.utils.getPlatformName(loadParams['platform']) + ' &raquo; Volumes',
 		scalrOptions: {
-			'reload': false,
+			'reload': true,
 			'maximize': 'all'
 		},
-		scalrReconfigureParams: { volumeId: '' },
 		store: store,
 		stateId: 'grid-tools-cloudstack-volumes-view',
 		stateful: true,
@@ -75,23 +73,8 @@ Scalr.regPage('Scalr.ui.tools.cloudstack.volumes.view', function (loadParams, mo
 				'<tpl if="autoAttach"><img src="/ui2/images/icons/true.png" /></tpl>' +
 				'<tpl if="!autoAttach"><img src="/ui2/images/icons/false.png" /></tpl>'
 			}, {
-				xtype: 'optionscolumn',
-				getOptionVisibility: function (item, record) {
-					if (item.itemId == 'option.attach' || item.itemId == 'option.detach' || item.itemId == 'option.attachSep') {
-						if (!record.get('mysqMasterVolume')) {
-							if (item.itemId == 'option.attachSep')
-								return true;
-							if (item.itemId == 'option.detach' && record.get('instanceId'))
-								return true;
-							if (item.itemId == 'option.attach' && !record.get('instanceId'))
-								return true;
-						}
-						return false;
-					}
-					return true;
-				},
-
-				optionsMenu: [{
+				xtype: 'optionscolumn2',
+				menu: [{
 					itemId: 'option.delete',
 					text: 'Delete',
 					iconCls: 'x-menu-icon-delete',
@@ -105,8 +88,8 @@ Scalr.regPage('Scalr.ui.tools.cloudstack.volumes.view', function (loadParams, mo
 							msg: 'Deleting volume(s) ...'
 						},
 						url: '/tools/cloudstack/volumes/xRemove/',
-						dataHandler: function (record) {
-							return { volumeId: Ext.encode([record.get('volumeId')]), cloudLocation: store.proxy.extraParams.cloudLocation };
+						dataHandler: function (data) {
+							return { volumeId: Ext.encode([data['volumeId']]), cloudLocation: store.proxy.extraParams.cloudLocation, platform: store.proxy.extraParams.platform };
 						},
 						success: function () {
 							store.load();
@@ -129,6 +112,7 @@ Scalr.regPage('Scalr.ui.tools.cloudstack.volumes.view', function (loadParams, mo
 
         dockedItems: [{
             xtype: 'scalrpagingtoolbar',
+            ignoredLoadParams: ['platform'],
             store: store,
             dock: 'top',
             afterItems: [{
@@ -158,20 +142,23 @@ Scalr.regPage('Scalr.ui.tools.cloudstack.volumes.view', function (loadParams, mo
                         data.push(records[i].get('volumeId'));
                         request.confirmBox.objects.push(records[i].get('volumeId'));
                     }
-                    request.params = { volumeId: Ext.encode(data), cloudLocation: store.proxy.extraParams.cloudLocation };
+                    request.params = { volumeId: Ext.encode(data), cloudLocation: store.proxy.extraParams.cloudLocation, platform: store.proxy.extraParams.platform };
                     Scalr.Request(request);
                 }
             }],
             items: [{
+                xtype: 'filterfield',
+                store: store
+            }, {
                 xtype: 'fieldcloudlocation',
                 itemId: 'cloudLocation',
+                margin: '0 0 0 12',
                 store: {
                     fields: [ 'id', 'name' ],
                     data: moduleParams.locations,
                     proxy: 'object'
                 },
-                gridStore: store,
-                cloudLocation: loadParams['cloudLocation'] || ''
+                gridStore: store
             }]
         }]
 	});

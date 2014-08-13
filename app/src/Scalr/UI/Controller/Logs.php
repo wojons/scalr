@@ -1,5 +1,6 @@
 <?php
 use Scalr\Acl\Acl;
+use Scalr\Model\Entity\Script;
 
 class Scalr_UI_Controller_Logs extends Scalr_UI_Controller
 {
@@ -40,7 +41,7 @@ class Scalr_UI_Controller_Logs extends Scalr_UI_Controller
                 throw new Exception();
 
         } catch (Exception $e) {
-            throw new Exception('Server was terminated and logs no longer available');
+            throw new Exception('This server has been terminated and its logs are no longer available');
         }
 
         //Note! We should not check not-owned-farms permission here. It's approved by Igor.
@@ -48,14 +49,8 @@ class Scalr_UI_Controller_Logs extends Scalr_UI_Controller
             throw new \Scalr_Exception_InsufficientPermissions();
         }
 
-        $client = Scalr_Net_Scalarizr_Client::getClient(
-            $dbServer,
-            Scalr_Net_Scalarizr_Client::NAMESPACE_SYSTEM,
-            $dbServer->getPort(DBServer::PORT_API)
-        );
-
-        $logs = $client->getScriptLogs($this->getParam('executionId'));
-        $msg = sprintf("STDERR: %s \n\n STDOUT: %s", base64_decode($logs->stderr), base64_decode($logs->stdout));
+        $logs = $dbServer->scalarizr->system->getScriptLogs($this->getParam('executionId'));
+        $msg = sprintf("STDERR:\n%s \n\n STDOUT:\n%s", base64_decode($logs->stderr), base64_decode($logs->stdout));
         $msg = nl2br(htmlspecialchars($msg));
 
         $this->response->data(array('message' => $msg));
@@ -68,15 +63,30 @@ class Scalr_UI_Controller_Logs extends Scalr_UI_Controller
         $farms = self::loadController('Farms')->getList();
         array_unshift($farms, array('id' => '0', 'name' => 'All farms'));
 
+        $scripts = array_map(function($s) { return ['id' => $s['id'], 'name' => $s['name']]; }, Script::getList($this->user->getAccountId(), $this->getEnvironmentId()));
+        array_unshift($scripts, array('id' => 0, 'name' => ''));
+
+        $glEvents = array_keys(EVENT_TYPE::getScriptingEvents());
+        sort($glEvents);
+        array_unshift($glEvents, '');
+        $events = array_merge($glEvents,
+            $this->db->GetCol('SELECT name FROM event_definitions WHERE env_id = ? ORDER BY name ASC', array($this->getEnvironmentId()))
+        );
+
+        $tasks = $this->db->GetAll('SELECT id, name FROM scheduler WHERE env_id = ? ORDER BY name ASC', array($this->getEnvironmentId()));
+        array_unshift($tasks, array('id' => 0, 'name' => ''));
+
         $this->response->page('ui/logs/scripting.js', array(
-            'farms' => $farms
+            'farms' => $farms,
+            'scripts' => $scripts,
+            'events' => $events,
+            'tasks' => $tasks
         ));
     }
 
     public function apiAction()
     {
         $this->request->restrictAccess(Acl::RESOURCE_LOGS_API_LOGS);
-
         $this->response->page('ui/logs/api.js');
     }
 
@@ -89,7 +99,7 @@ class Scalr_UI_Controller_Logs extends Scalr_UI_Controller
             'farmId' => array('type' => 'int'),
             'severity' => array('type' => 'array'),
             'query' => array('type' => 'string'),
-            'sort' => array('type' => 'json', 'default' => array('property' => 'id', 'direction' => 'DESC'))
+            'sort' => array('type' => 'json', 'default' => array('property' => 'time', 'direction' => 'DESC'))
         ));
 
         $sql = "SELECT * FROM logentries WHERE :FILTER:";
@@ -156,7 +166,7 @@ class Scalr_UI_Controller_Logs extends Scalr_UI_Controller
             $farmNames = array();
             $fileContent[] = "Type;Time;Farm;Caller;Message\r\n";
 
-            $response = $this->buildResponseFromSql2($sql, array('id', 'time'), array('message', 'serverid', 'source'), $args, true);
+            $response = $this->buildResponseFromSql2($sql, array('time'), array('message', 'serverid', 'source'), $args, true);
 
             foreach($response["data"] as &$data) {
                 $data["time"] = Scalr_Util_DateTime::convertTz((int)$data["time"]);
@@ -183,8 +193,9 @@ class Scalr_UI_Controller_Logs extends Scalr_UI_Controller
             $this->response->setResponse(implode("\n", $fileContent));
         } else {
             $farmNames = array();
-            $response = $this->buildResponseFromSql2($sql, array('id', 'time'), array('message', 'serverid', 'source'), $args);
+            $response = $this->buildResponseFromSql2($sql, array('time'), array('message', 'serverid', 'source'), $args);
             foreach ($response["data"] as &$row) {
+                $row['id'] = bin2hex($row['id']);
                 $row["time"] = Scalr_Util_DateTime::convertTz((int)$row["time"]);
 
                 $row["servername"] = $row["serverid"];
@@ -208,7 +219,8 @@ class Scalr_UI_Controller_Logs extends Scalr_UI_Controller
 
         $this->request->defineParams(array(
             'farmId' => array('type' => 'int'),
-            'serverId' => array('type' => 'string'),
+            'serverId', 'eventId', 'script',
+            'scheduler' => array('type' => 'int'),
             'query' => array('type' => 'string'),
             'sort' => array('type' => 'json', 'default' => array('property' => 'id', 'direction' => 'DESC'))
         ));
@@ -233,9 +245,32 @@ class Scalr_UI_Controller_Logs extends Scalr_UI_Controller
             $args[] = $this->getParam('serverId');
         }
 
+        if ($this->getParam('eventServerId')) {
+            $sql .= ' AND event_server_id = ?';
+            $args[] = $this->getParam('eventServerId');
+        }
+
         if ($this->getParam('eventId')) {
             $sql .= ' AND event_id = ?';
             $args[] = $this->getParam('eventId');
+        }
+
+        if ($this->getParam('script')) {
+            /* @var Script $script */
+            $script = Script::findPk($this->getParam('script'));
+            if ($script && (!$script->accountId || $script->accountId == $this->user->getAccountId())) {
+                $scriptName = substr(preg_replace("/[^A-Za-z0-9]+/", "_", $script->name), 0, 50); // because of column's length
+                $sql .= ' AND script_name = ?';
+                $args[] = $scriptName;
+            }
+        }
+
+        if ($this->getParam('scheduler')) {
+            $sql .= ' AND event = ?';
+            $args[] = 'Scheduler (TaskID: ' . $this->getParam('scheduler') . ')';
+        } else if ($this->getParam('event')) {
+            $sql .= ' AND event = ?';
+            $args[] = $this->getParam('event');
         }
 
         if ($this->getParam('byDate')) {
@@ -265,7 +300,7 @@ class Scalr_UI_Controller_Logs extends Scalr_UI_Controller
             } catch (Exception $e) {}
         }
 
-        $response = $this->buildResponseFromSql2($sql, array('id', 'dtadded'), array('script_name', 'server_id', 'event_server_id', 'event'), $args);
+        $response = $this->buildResponseFromSql2($sql, array('id', 'dtadded'), array('event', 'script_name'), $args);
         $cache = array();
         foreach ($response["data"] as &$row) {
             //
@@ -279,9 +314,9 @@ class Scalr_UI_Controller_Logs extends Scalr_UI_Controller
             $sInfo = $this->db->GetRow("SELECT role_id, farm_roleid, `index` FROM servers WHERE server_id = ? LIMIT 1", array($row['server_id']));
             $row['target_farm_roleid'] = $sInfo['farm_roleid'];
 
-            if (!$cache['role_names'][$sInfo['role_id']])
-                $cache['role_names'][$sInfo['role_id']] = $this->db->GetOne("SELECT name FROM roles WHERE id=?", array($sInfo['role_id']));
-            $row['target_role_name'] = $cache['role_names'][$sInfo['role_id']];
+            if (!$cache['role_names'][$sInfo['farm_roleid']])
+                $cache['role_names'][$sInfo['farm_roleid']] = $this->db->GetOne("SELECT alias FROM farm_roles WHERE id=?", array($sInfo['farm_roleid']));
+            $row['target_role_name'] = $cache['role_names'][$sInfo['farm_roleid']];
 
             $row['target_server_index'] = $sInfo['index'];
             $row['target_server_id'] = $row['server_id'];
@@ -299,9 +334,9 @@ class Scalr_UI_Controller_Logs extends Scalr_UI_Controller
 
                 $row['event_farm_roleid'] = $esInfo['farm_roleid'];
 
-                if (!$cache['role_names'][$esInfo['role_id']])
-                    $cache['role_names'][$esInfo['role_id']] = $this->db->GetOne("SELECT name FROM roles WHERE id=? LIMIT 1", array($esInfo['role_id']));
-                $row['event_role_name'] = $cache['role_names'][$esInfo['role_id']];
+                if (!$cache['role_names'][$esInfo['farm_roleid']])
+                    $cache['role_names'][$esInfo['farm_roleid']] = $this->db->GetOne("SELECT alias FROM farm_roles WHERE id=? LIMIT 1", array($esInfo['farm_roleid']));
+                $row['event_role_name'] = $cache['role_names'][$esInfo['farm_roleid']];
 
                 $row['event_server_index'] = $esInfo['index'];
             }

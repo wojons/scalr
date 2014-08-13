@@ -6,7 +6,6 @@ Scalr.regPage('Scalr.ui.dm.tasks.view', function (loadParams, moduleParams) {
 		],
 		proxy: {
 			type: 'scalr.paging',
-			extraParams: loadParams,
 			url: '/dm/tasks/xListTasks/'
 		},
 		remoteSort: true
@@ -18,7 +17,6 @@ Scalr.regPage('Scalr.ui.dm.tasks.view', function (loadParams, moduleParams) {
 			'reload': false,
 			'maximize': 'all'
 		},
-		scalrReconfigureParams: { deploymentTaskId: ''},
 		store: store,
 		stateId: 'grid-dm-tasks-view',
 		stateful: true,
@@ -75,8 +73,8 @@ Scalr.regPage('Scalr.ui.dm.tasks.view', function (loadParams, moduleParams) {
 			{ header: "Created", width: 170, dataIndex: 'dtadded', sortable: true },
 			{ header: "Deployed", width: 170, dataIndex: 'dtdeployed', sortable: true },
 			{
-				xtype: 'optionscolumn',
-				optionsMenu: [{
+				xtype: 'optionscolumn2',
+				menu: [{
 					text: 'Logs',
 					iconCls: 'x-menu-icon-logs',
 					href: '#/dm/tasks/{id}/logs'
@@ -93,9 +91,9 @@ Scalr.regPage('Scalr.ui.dm.tasks.view', function (loadParams, moduleParams) {
 							msg: 'Re-deploying task ...'
 						},
 						url: '/dm/tasks/deploy',
-						dataHandler: function (record) {
+						dataHandler: function (data) {
 							return {
-								deploymentTaskId: record.get('id')
+								deploymentTaskId: data['id']
 							};
 						},
 						success: function(data) {
@@ -117,9 +115,9 @@ Scalr.regPage('Scalr.ui.dm.tasks.view', function (loadParams, moduleParams) {
 							msg: 'Removing demployment task ...'
 						},
 						url: '/dm/tasks/xRemoveTasks',
-						dataHandler: function (record) {
+						dataHandler: function (data) {
 							return {
-								deploymentTaskId: record.get('id')
+								deploymentTaskId: data['id']
 							};
 						},
 						success: function(data) {
@@ -138,7 +136,11 @@ Scalr.regPage('Scalr.ui.dm.tasks.view', function (loadParams, moduleParams) {
         },{
 			xtype: 'scalrpagingtoolbar',
 			store: store,
-			dock: 'top'
+			dock: 'top',
+            items: [{
+                xtype: 'filterfield',
+                store: store
+            }]
 		}]
 	});
 });

@@ -47,7 +47,7 @@ class EntityChangesIterator extends FilterIterator
         }
     }
 
-	/**
+    /**
      * {@inheritdoc}
      * @see FilterIterator::accept()
      */

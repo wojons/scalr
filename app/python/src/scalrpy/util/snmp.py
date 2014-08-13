@@ -10,12 +10,12 @@ OIDS = {
         'nice': '.1.3.6.1.4.1.2021.11.51.0',
         'system': '.1.3.6.1.4.1.2021.11.52.0',
         'idle': '.1.3.6.1.4.1.2021.11.53.0',
-        },
+    },
     'la': {
         'la1': '.1.3.6.1.4.1.2021.10.1.3.1',
         'la5': '.1.3.6.1.4.1.2021.10.1.3.2',
         'la15': '.1.3.6.1.4.1.2021.10.1.3.3',
-        },
+    },
     'mem': {
         'swap': '.1.3.6.1.4.1.2021.4.3.0',
         'swapavail': '.1.3.6.1.4.1.2021.4.4.0',
@@ -25,12 +25,12 @@ OIDS = {
         'shared': '.1.3.6.1.4.1.2021.4.13.0',
         'buffer': '.1.3.6.1.4.1.2021.4.14.0',
         'cached': '.1.3.6.1.4.1.2021.4.15.0',
-        },
+    },
     'net': {
         'in': '.1.3.6.1.2.1.2.2.1.10.2',
         'out': '.1.3.6.1.2.1.2.2.1.16.2',
-        },
-    }
+    },
+}
 
 
 def get_metrics(host, port, community, metrics):
@@ -50,7 +50,7 @@ def get_metrics(host, port, community, metrics):
             DestHost='%s:%s' % (host, port),
             Version=1,
             Community=community,
-            Timeout=2500000)
+            Timeout=2000000)
     Vars = netsnmp.VarList(*oids)
     snmp_data = dict((o, v) for o, v in zip(oids, session.get(Vars)))
     data = dict()

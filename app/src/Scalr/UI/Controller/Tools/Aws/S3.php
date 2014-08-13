@@ -4,15 +4,20 @@ use Scalr\Service\Aws\S3\DataType\BucketData;
 use Scalr\Service\Aws\CloudFront\DataType\DistributionData;
 use Scalr\Service\Aws\CloudFront\DataType\DistributionConfigData;
 use Scalr\Service\Aws\CloudFront\DataType\DistributionConfigOriginData;
-use Scalr\Service\Aws\CloudFront\DataType\DistributionConfigAliasList;
-use Scalr\Service\Aws\CloudFront\DataType\DistributionConfigOriginList;
 use Scalr\Service\Aws\CloudFront\DataType\CacheBehaviorData;
 use Scalr\Service\Aws\CloudFront\DataType\DistributionS3OriginConfigData;
+use Scalr\Acl\Acl;
 
 class Scalr_UI_Controller_Tools_Aws_S3 extends Scalr_UI_Controller
 {
+    /**
+     * {@inheritdoc}
+     * @see Scalr_UI_Controller::hasAccess()
+     */
     public function hasAccess()
     {
+        if (!parent::hasAccess() || !$this->request->isAllowed(Acl::RESOURCE_AWS_S3)) return false;
+
         $enabledPlatforms = $this->getEnvironment()->getEnabledPlatforms();
         if (!in_array(SERVER_PLATFORMS::EC2, $enabledPlatforms))
             throw new Exception("You need to enable EC2 platform for current environment");

@@ -1,7 +1,6 @@
 <?php
 namespace Scalr\Tests\Service\Aws\Ec2\DataType;
 
-use Scalr\Service\Aws\Ec2\DataType\InstanceFilterNameType;
 use Scalr\Tests\Service\AwsTestCase;
 
 /**

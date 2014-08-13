@@ -17,27 +17,50 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.storage', function (moduleTabParams) 
         cls: 'scalr-ui-farmbuilder-roleedit-tab',
 
         isEnabled: function (record) {
-			return true;//record.get('os_family') !== 'windows' || record.get('platform') === 'ec2';
+			return true;
 		},
+
+        onRoleUpdate: function(record, name, value, oldValue) {
+            if (!this.isActive(record)) return;
+            var me = this;
+            if (Scalr.flags['betaMode'] && name.join('.') === 'settings.aws.instance_type') {
+                record.loadEBSEncryptionSupport(function(encryptionSupported){
+                    var field = me.down('[name="ebs.encrypted"]');
+                    if (field) {
+                        field.encryptionSupported = encryptionSupported;
+                        field.setReadOnly(!encryptionSupported);
+                    }
+                });
+            }
+        },
 		
         beforeShowTab: function (record, handler) {
-            var platform = record.get('platform');
+            var me = this,
+                platform = record.get('platform'),
+                cloudLocation = record.get('cloud_location');
             if (Ext.Array.contains(['cloudstack', 'idcf', 'ucloud'], platform)) {
                 Scalr.cachedRequest.load(
                     {
                         url: '/platforms/cloudstack/xGetOfferingsList/',
                         params: {
-                            cloudLocation: record.get('cloud_location'),
+                            cloudLocation: cloudLocation,
                             platform: platform,
                             farmRoleId: record.get('new') ? '' : record.get('farm_role_id')
                         }
                     },
                     function(data, status){
-                        this.tabData = data;
-                        status ? handler() : this.deactivateTab();
+                        me.tabData = data;
+                        status ? handler() : me.deactivateTab();
                     },
-                    this
+                    me
                 );
+            } else if (platform === 'ec2' && Scalr.flags['betaMode']) {
+                record.loadEBSEncryptionSupport(function(encryptionSupported){
+                    var field = me.down('[name="ebs.encrypted"]');
+                    field.encryptionSupported = encryptionSupported;
+                    field.setReadOnly(!encryptionSupported);
+                    handler();
+                });
             } else {
                 handler();
             }
@@ -58,13 +81,13 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.storage', function (moduleTabParams) 
 			this.down('[name="ebs.snapshot"]').store.getProxy().params = {cloudLocation: record.get('cloud_location')};
 
 			// Storage engine
-			if (platform == 'ec2') {
+			if (platform == 'ec2' || platform == 'eucalyptus') {
 				data = [{
 					name: 'ebs', description: 'Single EBS volume'
 				}, {
 					name: 'raid.ebs', description: 'RAID array (on EBS)'
 				}];
-			} else if (Ext.Array.contains(['cloudstack', 'idcf', 'ucloud'], platform)) {
+			} else if (Scalr.isCloudstack(platform)) {
 				data = [{
 					name: 'csvol', description: 'Single CS volume'
 				}, {
@@ -75,11 +98,9 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.storage', function (moduleTabParams) 
                     platform: record.get('platform'),
                     cloudLocation: record.get('cloud_location')
                 };
-			} else if (Ext.Array.contains(['gce'], platform)) {
+			} else if (platform === 'gce') {
                 data = [{
                     name: 'gce_persistent', description: 'Persistent disk'
-                }, {
-                    name: 'raid.gce_pd', description: 'RAID array (on PDs)'
                 }];
             } else if (Scalr.isOpenstack(platform)) {
                 data = [{
@@ -100,7 +121,7 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.storage', function (moduleTabParams) 
             if (osFamily !== 'windows') {
                 data.push({ fs: 'ext3', description: 'Ext3' });
                 if ((osFamily == 'centos' && record.get('arch') == 'x86_64') ||
-                    (osFamily == 'ubuntu' && Ext.Array.contains(['10.04', '12.04'], record.get('os_generation')))
+                    (osFamily == 'ubuntu' && Ext.Array.contains(['10.04', '12.04', '14.04'], record.get('os_generation')))
                     ) {
                     if (moduleTabParams['featureMFS']) {
                         data.push({ fs: 'ext4', description: 'Ext4'});
@@ -122,21 +143,25 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.storage', function (moduleTabParams) 
 		},
 		
 		hideTab: function (record) {
-			var storages = [],
-                grid = this.down('#configuration'),
+			var grid = this.down('#configuration'),
                 selModel = grid.getSelectionModel();
 
             selModel.setLastFocused(null);
             selModel.deselectAll();
-			grid.store.each(function(record) {
-				storages.push(record.getData());
-			});
 
 			var c = record.get('storages') || {};
-			c['configs'] = storages;
+			c['configs'] = this.getStorages();
 			record.set('storages', c);
 		},
 
+        getStorages: function() {
+            var storages = [],
+                grid = this.down('#configuration');
+			grid.store.each(function(record) {
+				storages.push(record.getData());
+			});
+            return storages;
+        },
 		
 		items: [{
             xtype: 'container',
@@ -168,7 +193,7 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.storage', function (moduleTabParams) 
                             storageDefaults = { reUse: 1 };
 
                             if (currentRole.get('os_family') === 'windows') {
-								if (currentRole.get('platform') === 'ec2')
+								if (currentRole.get('platform') === 'ec2' || currentRole.get('platform') === 'eucalyptus')
                                     storageDefaults['type'] = 'ebs';
 						        else if (Scalr.isOpenstack(currentRole.get('platform')))
 								    storageDefaults['type'] = 'cinder';
@@ -205,8 +230,7 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.storage', function (moduleTabParams) 
 									'gce_persistent': 'Persistent disk',
                                     'raid.ebs': 'RAID array (on EBS)',
                                     'raid.csvol': 'RAID array (on CS volumes)',
-									'raid.cinder': 'RAID array (on PDs)',
-									'raid.gce_pd': 'RAID array (on PDs)'
+									'raid.cinder': 'RAID array (on PDs)'
                                 };
 
                                 return l[type] || type;
@@ -238,7 +262,7 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.storage', function (moduleTabParams) 
                             getDescription: function(v) {
                                 var result = [],
                                     s;
-                                if (Ext.Array.contains(['raid.ebs', 'raid.csvol', 'raid.cinder', 'raid.gce_pd'], v.type)) {
+                                if (Ext.Array.contains(['raid.ebs', 'raid.csvol', 'raid.cinder'], v.type)) {
                                     result.push('RAID ' + v['settings']['raid.level'] + ' on ' + v['settings']['raid.volumes_count'] + ' x');
                                 }
 
@@ -247,16 +271,23 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.storage', function (moduleTabParams) 
                                     if (v['settings']['ebs.type'] == 'io1') {
                                         s += ' (' + v['settings']['ebs.iops'] + ' iops)';
                                     }
+                                    
+                                    if (v['settings']['ebs.type'] == 'gp2') {
+                                        s += ' (SSD)';
+                                    }
+                                    if (v['settings']['ebs.encrypted'] == '1') {
+                                        s += ' encrypted';
+                                    }
                                 } else if (Ext.Array.contains(['raid.csvol', 'csvol'], v.type)) {
                                     s = v['settings']['csvol.size'] + 'GB CS volume';
                                 } else if (Ext.Array.contains(['raid.cinder', 'cinder'], v.type)) {
                                     s = v['settings']['cinder.size'] + 'GB Persistent disk';
-                                } else if (Ext.Array.contains(['raid.gce_pd', 'gce_persistent'], v.type)) {
+                                } else if (v.type === 'gce_persistent') {
                                     s = v['settings']['gce_persistent.size'] + 'GB Persistent disk';
                                 }
 
                                 result.push(s);
-                                return result.join(' ');
+                                return Ext.String.htmlEncode(result.join(' '));
                             }
                         })
                     },
@@ -332,6 +363,17 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.storage', function (moduleTabParams) 
                     { header: 'Placement', width: 110, sortable: true, dataIndex: 'placement' },
                     { header: 'Config', width: 80, sortable: false, dataIndex: 'config', xtype: 'templatecolumn', tpl:
                         '<a href="#" class="view">View</a>'
+                    }, {
+                        xtype: 'templatecolumn', width: 42, sortable: false, resizable: false, dataIndex: 'id', align: 'center', tpl: [
+                            '<tpl if="serverId==\'\'">',
+                                '<img style="cursor:pointer" width="15" height="15" class="x-icon-action x-icon-action-delete" ',
+                                'data-qtip="Delete volume" src="'+Ext.BLANK_IMAGE_URL+'" />',
+                            '<tpl else>',
+                                '<img width="15" height="15" class="x-icon-action x-icon-action-delete-disabled" ',
+                                'data-qtip="You can delete volume only if server is not running" src="'+Ext.BLANK_IMAGE_URL+'" />',
+                            '</tpl>'
+                        ],
+                        hidden: !Scalr.flags['betaMode']
                     }
                 ],
 
@@ -366,6 +408,7 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.storage', function (moduleTabParams) 
                                         dockedItems: [{
                                             xtype: 'container',
                                             dock: 'bottom',
+                                            cls: 'x-docked-buttons',
                                             layout: {
                                                 type: 'hbox',
                                                 pack: 'center'
@@ -379,6 +422,27 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.storage', function (moduleTabParams) 
                                             }]
                                         }]
                                     });
+                                }
+                            });
+                            e.preventDefault();
+
+                        } else if (e.getTarget('img.x-icon-action-delete')) {
+                            Scalr.Request({
+                                confirmBox: {
+                                    type: 'delete',
+                                    msg: 'Are you sure want to remove volume ?'
+                                },
+                                processBox: {
+                                    type: 'delete',
+                                    msg: 'Loading volume ...'
+                                },
+                                url: '/farms/builder/xRemoveStorageVolume',
+                                params: {
+                                    farmRoleId: record.get('farmRoleId'),
+                                    storageId: record.get('storageId')
+                                },
+                                success: function() {
+
                                 }
                             });
                             e.preventDefault();
@@ -513,18 +577,22 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.storage', function (moduleTabParams) 
                                 var editor = this.up('#editor'),
                                     ebs = editor.down('#ebs_settings'),
                                     ebsSnapshots = editor.down('[name="ebs.snapshot"]'),
+                                    ebsEncrypted = editor.down('[name="ebs.encrypted"]'),
                                     raid = editor.down('#raid_settings'),
                                     csvol = editor.down('#csvol_settings'),
 									cinder = editor.down('#cinder_settings'),
 									gce = editor.down('#gce_settings'),
+                                    platform = editor.up('#storage').currentRole.get('platform'),
                                     field;
-
+                                
                                 ebs[ value == 'ebs' || value == 'raid.ebs' ? 'show' : 'hide' ]();
                                 ebs[ value == 'ebs' || value == 'raid.ebs' ? 'enable' : 'disable' ]();
-                                ebsSnapshots[ value == 'ebs' ? 'show' : 'hide' ]();
+                                ebsSnapshots[ value == 'ebs' && platform == 'ec2' ? 'show' : 'hide' ]();
+                                ebsEncrypted[ value == 'ebs' && platform == 'ec2' && Scalr.flags['betaMode'] ? 'show' : 'hide' ]();
+                                editor.down('[name="ebs.type"]').setReadOnly(platform !== 'ec2', false);
                                 
-								raid[ value == 'raid.ebs' || value == 'raid.csvol' || value == 'raid.cinder' || value == 'raid.gce_pd' ? 'show' : 'hide' ]();
-                                raid[ value == 'raid.ebs' || value == 'raid.csvol' || value == 'raid.cinder' || value == 'raid.gce_pd' ? 'enable' : 'disable' ]();
+								raid[ value == 'raid.ebs' || value == 'raid.csvol' || value == 'raid.cinder' ? 'show' : 'hide' ]();
+                                raid[ value == 'raid.ebs' || value == 'raid.csvol' || value == 'raid.cinder' ? 'enable' : 'disable' ]();
                                 
 								csvol[ value == 'csvol' || value == 'raid.csvol' ? 'show' : 'hide' ]();
                                 csvol[ value == 'csvol' || value == 'raid.csvol' ? 'enable' : 'disable' ]();
@@ -532,12 +600,13 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.storage', function (moduleTabParams) 
 								cinder[ value == 'cinder' || value == 'raid.cinder' ? 'show' : 'hide' ]();
                                 cinder[ value == 'cinder' || value == 'raid.cinder' ? 'enable' : 'disable' ]();
 								
-								gce[ value == 'gce_persistent' || value == 'raid.gce_pd' ? 'show' : 'hide' ]();
-                                gce[ value == 'gce_persistent' || value == 'raid.gce_pd' ? 'enable' : 'disable' ]();
+								gce[ value == 'gce_persistent' ? 'show' : 'hide' ]();
+                                gce[ value == 'gce_persistent' ? 'enable' : 'disable' ]();
 
-                                if (value == 'raid.ebs' || value == 'raid.csvol' || value == 'raid.cinder' || value == 'raid.gce_pd') {
+                                if (value == 'raid.ebs' || value == 'raid.csvol' || value == 'raid.cinder') {
                                     // set default values for raid configuration
                                     raid.down('[name="raid.level"]').setValue('10');
+                                    editor.down('[name="fs"]').setValue('ext3');
                                 }
                                 
                                 if ( value === 'csvol' || value === 'raid.csvol') {
@@ -561,7 +630,17 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.storage', function (moduleTabParams) 
                         displayField: 'description',
                         queryMode: 'local',
                         emptyText: 'Please select filesystem',
-                        allowBlank: false
+                        allowBlank: false,
+                        listeners: {
+                            beforeselect: function(comp, record) {
+                                var typeField = this.prev('[name="type"]'),
+                                    type = typeField.getValue();
+                                if (!Scalr.flags['betaMode'] && type.indexOf('raid') !== -1 && record.get('fs') === 'xfs') {
+                                    Scalr.message.InfoTip('Xfs is not available on raid.', this.inputEl, {anchor: 'bottom'});
+                                    return false;
+                                }
+                            }
+                        }
                     }, {
                         xtype: 'container',
                         layout: {
@@ -751,7 +830,7 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.storage', function (moduleTabParams) 
                         fieldLabel: 'EBS type',
                         items: [{
                             xtype: 'combo',
-                            store: [['standard', 'Standard'], ['io1', 'Provisioned IOPS (' + iopsMin + ' - ' + iopsMax + '): ']],
+                            store: [['standard', 'Standard EBS (Magnetic)'],['gp2', 'General Purpose (SSD)'], ['io1', 'Provisioned IOPS (' + iopsMin + ' - ' + iopsMax + '): ']],
                             valueField: 'id',
                             displayField: 'name',
                             editable: false,
@@ -805,8 +884,20 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.storage', function (moduleTabParams) 
                         queryCaching: false,
                         minChars: 0,
                         queryDelay: 10,
+                        autoSearch: false,
+                        ebsEncryptionMessage: 'Encrypted EBS storages are not supported by current instance type.',
+                        validator: function(value) {
+                            var record;
+                            if (Scalr.flags['betaMode']) {
+                                record = this.findRecordByValue(value);
+                                if (record && record.get('encrypted') && !this.next('[name="ebs.encrypted"]').encryptionSupported) {
+                                    return this.ebsEncryptionMessage;
+                                }
+                            }
+                            return true;
+                        },
                         store: {
-                            fields: [ 'snapshotId', 'createdDate', 'size', 'volumeId', 'description' ],
+                            fields: [ 'snapshotId', 'createdDate', 'size', 'volumeId', 'description', 'encrypted' ],
                             proxy: {
                                 type: 'cachedrequest',
                                 crscope: 'farmbuilder',
@@ -820,11 +911,57 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.storage', function (moduleTabParams) 
                             tpl:
                                 '<tpl for="."><div class="x-boundlist-item" style="height: auto; width: auto">' +
                                     '<tpl if="snapshotId">' +
-                                        '<div style="font-weight: bold">{snapshotId} ({size}GB)</div>' +
+                                        '<div><span style="font-weight: bold">{snapshotId} ({size}GB)</span> {[values.encrypted?\'<i>encrypted</i>\':\'\']}</div>' +
                                         '<div>created <span style="font-weight: bold">{createdDate}</span> on <span style="font-weight: bold">{volumeId}</span></div>' +
                                         '<div style="font-style: italic; font-size: 11px;">{description}</div>' +
                                     '<tpl else><div style="line-height: 26px;">Create an empty volume</div></tpl>' +
                                 '</div></tpl>'
+                        },
+                        listeners: {
+                            beforeselect: function(comp, record) {
+                                if (Scalr.flags['betaMode'] && record.get('encrypted')) {
+                                    if (!comp.next('[name="ebs.encrypted"]').encryptionSupported) {
+                                        Scalr.message.InfoTip(this.ebsEncryptionMessage, comp.inputEl, {anchor: 'bottom'});
+                                        return false;
+                                    }
+                                }
+                            },
+                            change: function(comp, value){
+                                var encryptionField, record, encrypted;
+                                if (Scalr.flags['betaMode']) {
+                                    encryptionField = comp.next('[name="ebs.encrypted"]');
+                                    if (encryptionField.encryptionSupported) {
+                                        record = comp.findRecordByValue(value);
+                                        if (record && record.get('snapshotId')) {
+                                            encryptionField.setValue(record.get('encrypted') ? 1 : 0);
+                                            encryptionField.setReadOnly(true);
+                                        } else {
+                                            encryptionField.setReadOnly(false);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }, {
+                        xtype: 'checkbox',
+                        name: 'ebs.encrypted',
+                        boxLabel: 'Enable EBS encryption',
+                        encryptionSupported: false,
+                        hidden: !Scalr.flags['betaMode'],
+                        defaults: {
+                            width: 90
+                        },
+                        value: '0',
+                        icons: {
+                            question: true
+                        },
+                        listeners: {
+                            writeablechange: function(comp, readOnly) {
+                                this.toggleIcon('question', readOnly);
+                                if (readOnly) {
+                                    this.updateIconTooltip('question', this.encryptionSupported ? 'EBS encryption is set according to snapshot settings' : 'EBS encryption is not supported by selected instance type')
+                                }
+                            }
                         }
                     }]
                 }, {

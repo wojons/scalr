@@ -30,7 +30,7 @@ class AccountRoleFilterIterator extends \FilterIterator
         $this->exclude = $filter;
     }
 
-	/**
+    /**
      * {@inheritdoc}
      * @see FilterIterator::accept()
      */

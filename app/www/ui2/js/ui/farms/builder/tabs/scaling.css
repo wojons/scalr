@@ -7,3 +7,12 @@
 .x-grid-scaling-schedule-rules .x-grid-cell-special .x-grid-cell-inner{
     padding-left: 8px;
 }
+
+.x-fieldset-scaling-settings{
+    padding: 0;
+}
+
+.x-fieldset-scaling-settings .x-fieldset-subheader{
+    margin-top: 0;
+    margin-bottom: 0;
+}

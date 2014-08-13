@@ -6,12 +6,12 @@ Scalr.regPage('Scalr.ui.admin.logs.view', function (loadParams, moduleParams) {
 		proxy: {
 			type: 'scalr.paging',
 			url: '/admin/logs/xListLogs/',
-			extraParams: {toDate: new Date(), farmId: '0', "severity['FATAL']": '1', "severity['ERROR']": '1', "severity['WARN']": '1', "severity['INFO']": '1'}
+			extraParams: {toDate: new Date(), farmId: '0', "severity[FATAL]": '1', "severity[ERROR]": '1', "severity[WARN]": '1', "severity[INFO]": '1'}
 		},
 		remoteSort: true
 	});
 	var filterSeverity = function (combo, checked) {
-		store.proxy.extraParams["severity['" + combo.severityLevel + "']"] = checked ? 1 : 0;
+		store.proxy.extraParams["severity[" + combo.severityLevel + "]"] = checked ? 1 : 0;
 		store.load();
 	};
 	return Ext.create('Ext.grid.Panel', {
@@ -20,7 +20,6 @@ Scalr.regPage('Scalr.ui.admin.logs.view', function (loadParams, moduleParams) {
 			'reload': false,
 			'maximize': 'all'
 		},
-		scalrReconfigureParams: {},
 		store: store,
 		stateId: 'grid-admin-logs-view',
 		stateful: true,
@@ -32,13 +31,14 @@ Scalr.regPage('Scalr.ui.admin.logs.view', function (loadParams, moduleParams) {
 		}],
 		viewConfig: {
 			deferEmptyText: false,
+            disableSelection: true,
 			emptyText: 'No logs found',
 			loadingText: 'Loading logs ...'
 		},
 
 		columns: [
 			{ text: "Date", width: 220, dataIndex: 'dtadded', sortable: true },
-			{ text: "First log entry", flex:3, dataIndex: 'message', sortable: true },
+			{ text: "First log entry", flex:3, dataIndex: 'message', sortable: false },
 			{ text: "Warnings", flex: 1, dataIndex: 'warn', sortable: false },
 			{ text: "Errors", flex: 1, dataIndex: 'err', sortable: false},
 			{ text: "Details", width: 200, dataIndex: 'transactionid', sortable: false, xtype: 'templatecolumn', tpl: "<a href='#/admin/logs/details?trnId={transactionid}'>Show log entry details</a>"}
@@ -53,7 +53,7 @@ Scalr.regPage('Scalr.ui.admin.logs.view', function (loadParams, moduleParams) {
 			}, ' ', {
 				xtype: 'combo',
 				fieldLabel: 'Farms',
-				labelWidth: 34,
+				labelWidth: 38,
 				store: {
 					fields: ['id','name'],
 					data: moduleParams['farms'],
@@ -74,6 +74,7 @@ Scalr.regPage('Scalr.ui.admin.logs.view', function (loadParams, moduleParams) {
 				}
 			}, ' ', {
 				text: 'Severity',
+                width: 100,
 				menu: {
 					items: [{
 						text: 'Fatal error',

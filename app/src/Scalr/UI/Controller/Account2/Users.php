@@ -78,7 +78,7 @@ class Scalr_UI_Controller_Account2_Users extends Scalr_UI_Controller
             $this->response->success('All users processed');
         } else {
             array_walk($errors, function(&$item) { $item = '- ' . $item; });
-            $this->response->warning(sprintf('Successfully processed only %d from %d users. <br>Following errors occurred:<br>%s', count($processed), $num, join($errors, '')));
+            $this->response->warning(sprintf("Successfully processed only %d from %d users. \nFollowing errors occurred:\n%s", count($processed), $num, join($errors, '')));
         }
 
         $this->response->data(array('processed' => $processed));
@@ -87,7 +87,8 @@ class Scalr_UI_Controller_Account2_Users extends Scalr_UI_Controller
     public function xSaveAction()
     {
         $this->request->defineParams(array(
-            'teams' => array('type' => 'json'), 'action'
+            'teams' => array('type' => 'json'), 'action',
+            'password' => array('type' => 'string', 'rawValue' => true)
         ));
 
         $user = Scalr_Account_User::init();
@@ -116,7 +117,7 @@ class Scalr_UI_Controller_Account2_Users extends Scalr_UI_Controller
         }
 
         $password = $this->getParam('password');
-        if ($password === '' || $newUser && !$password) {
+        if (!$password && ($this->request->hasParam('password') || $newUser)) {
             $password = $this->getCrypto()->sault(10);
             $sendResetLink = true;
         }
@@ -130,7 +131,15 @@ class Scalr_UI_Controller_Account2_Users extends Scalr_UI_Controller
         }
 
         if (!$user->isAccountOwner()) {
-            $user->type = $this->getParam('isAccountAdmin') ? Scalr_Account_User::TYPE_ACCOUNT_ADMIN : Scalr_Account_User::TYPE_TEAM_USER;
+            if ($this->getParam('isAccountAdmin')) {
+                if ($this->user->isAccountOwner() && $this->getParam('isAccountSuperAdmin')) {
+                    $user->type = Scalr_Account_User::TYPE_ACCOUNT_SUPER_ADMIN;
+                } else if ($user->type != Scalr_Account_User::TYPE_ACCOUNT_SUPER_ADMIN) {
+                    $user->type = Scalr_Account_User::TYPE_ACCOUNT_ADMIN;
+                }
+            } else {
+                $user->type = Scalr_Account_User::TYPE_TEAM_USER;
+            }
         }
 
         $user->fullname = $this->getParam('fullname');
@@ -162,7 +171,7 @@ class Scalr_UI_Controller_Account2_Users extends Scalr_UI_Controller
                 );
 
                 $res = $this->getContainer()->mailer->sendTemplate(
-                    SCALR_TEMPLATES_PATH . '/emails/welcome.eml.php',
+                    SCALR_TEMPLATES_PATH . '/emails/referral.eml.php',
                     array(
                         "creatorName"     => $creatorName,
                         "clientFirstname" => $clientinfo['firstname'],

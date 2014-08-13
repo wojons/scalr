@@ -27,9 +27,11 @@ abstract class AbstractList extends \ArrayIterator
     public function __construct($array = array())
     {
         $strictClass = $this->getClass();
-        foreach ($array as $v) {
-            if (!(is_a($v, $strictClass))) {
-                throw new \InvalidArgumentException(sprintf('Only Array of ' . $strictClass . ' objects is allowed!'));
+        if ($strictClass !== null) {
+            foreach ($array as $v) {
+                if (!(is_a($v, $strictClass))) {
+                    throw new \InvalidArgumentException(sprintf('Only Array of ' . $strictClass . ' objects is allowed!'));
+                }
             }
         }
         parent::__construct($array);
@@ -41,8 +43,9 @@ abstract class AbstractList extends \ArrayIterator
      */
     public function append($value)
     {
-        if (!(is_a($value, $this->getClass()))) {
-            throw new \InvalidArgumentException(sprintf('Only ' . $this->getClass() . ' object is allowed!'));
+        $strictClass = $this->getClass();
+        if ($strictClass !== null && !(is_a($value, $strictClass))) {
+            throw new \InvalidArgumentException(sprintf('Only %s object is allowed to append!', $strictClass));
         }
         parent::append($value);
     }

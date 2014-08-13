@@ -4,11 +4,6 @@ namespace Scalr\Upgrade\Entity;
 
 use Scalr\Exception\UpgradeException;
 use Scalr\Upgrade\UpgradeHandler;
-use \ReflectionClass;
-use \ReflectionProperty;
-use \Scalr;
-use \DateTime;
-use \DateTimeZone;
 
 /**
  * MysqlUpgradeEntity
@@ -18,13 +13,20 @@ use \DateTimeZone;
  */
 class MysqlUpgradeEntity extends AbstractUpgradeEntity
 {
-	/**
+
+    /**
+     * Database instance
+     *
+     * @var \ADODB_mysqli
+     */
+    private $db;
+
+    /**
      * {@inheritdoc}
      * @see Scalr\Upgrade.AbstractEntity::save()
      */
     public function save()
     {
-        $db = Scalr::getDb();
         $pk = $this->getPrimaryKey();
         $actual = $this->getActual();
 
@@ -36,9 +38,9 @@ class MysqlUpgradeEntity extends AbstractUpgradeEntity
         $set = "";
         foreach ($this->getChanges() as $prop => $value) {
             if ($prop == 'hash' || $prop == 'uuid') {
-                $qstr = "UNHEX(" . $db->qstr($value) . ")";
+                $qstr = "UNHEX(" . $this->db->qstr($value) . ")";
             } else {
-                $qstr = $db->qstr($value);
+                $qstr = $this->db->qstr($value);
             }
             $set .= ",`" . $prop . "` = " . $qstr;
         }
@@ -46,23 +48,22 @@ class MysqlUpgradeEntity extends AbstractUpgradeEntity
         if (!empty($set)) {
             $stmt = ($new ? "INSERT" : "UPDATE") . " `" . UpgradeHandler::DB_TABLE_UPGRADES . "`
                 SET " . ltrim($set, ',') . "
-                " . (!$new ? "WHERE `" . $pk . "` = UNHEX(" . $db->qstr($this->$pk) . ")" : "");
+                " . (!$new ? "WHERE `" . $pk . "` = UNHEX(" . $this->db->qstr($this->$pk) . ")" : "");
 
-            $db->Execute($stmt);
+            $this->db->Execute($stmt);
 
             //Synchronizes actual state of the entity
             $this->getChanges()->synchronize();
         }
     }
 
-	/**
+    /**
      * {@inheritdoc}
      * @see Scalr\Upgrade\Entity.AbstractUpgradeEntity::createFailureMessage()
      */
     public function createFailureMessage($log)
     {
-        $db = Scalr::getDb();
-        $db->Execute("
+        $this->db->Execute("
             INSERT `" . UpgradeHandler::DB_TABLE_UPGRADE_MESSAGES . "`
             SET `created` = ?,
                 `uuid` = UNHEX(?),
@@ -72,5 +73,17 @@ class MysqlUpgradeEntity extends AbstractUpgradeEntity
             $this->uuid,
             $log
         ));
+    }
+
+    /**
+     * Sets database instance
+     *
+     * @param  \ADODB_mysqli $db  DB instance
+     * @return MysqlUpgradeEntity
+     */
+    public function setDb($db = null)
+    {
+        $this->db = $db;
+        return $this;
     }
 }

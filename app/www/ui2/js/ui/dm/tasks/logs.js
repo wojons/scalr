@@ -5,7 +5,6 @@ Scalr.regPage('Scalr.ui.dm.tasks.logs', function (loadParams, moduleParams) {
 		],
 		proxy: {
 			type: 'scalr.paging',
-			extraParams: loadParams,
 			url: '/dm/tasks/xListLogs/'
 		},
 		remoteSort: true
@@ -17,7 +16,6 @@ Scalr.regPage('Scalr.ui.dm.tasks.logs', function (loadParams, moduleParams) {
 			'reload': false,
 			'maximize': 'all'
 		},
-		scalrReconfigureParams: { deploymentTaskId: ''},
 		store: store,
 		stateId: 'grid-dm-tasks-logs-view',
 		stateful: true,
@@ -45,7 +43,11 @@ Scalr.regPage('Scalr.ui.dm.tasks.logs', function (loadParams, moduleParams) {
 		dockedItems: [{
 			xtype: 'scalrpagingtoolbar',
 			store: store,
-			dock: 'top'
+			dock: 'top',
+            items: [{
+                xtype: 'filterfield',
+                store: store
+            }]
 		}]
 	});
 });

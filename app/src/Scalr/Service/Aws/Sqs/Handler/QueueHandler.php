@@ -4,7 +4,6 @@ namespace Scalr\Service\Aws\Sqs\Handler;
 use Scalr\Service\Aws\Sqs\DataType\QueueList;
 use Scalr\Service\Aws\Sqs\DataType\QueueData;
 use Scalr\Service\Aws\Sqs\DataType\QueueAttributeList;
-use Scalr\Service\Aws\Sqs\DataType\QueueAttributeData;
 use Scalr\Service\Aws\DataType\ListDataType;
 use Scalr\Service\Aws\SqsException;
 use Scalr\Service\Aws\Client\ClientException;

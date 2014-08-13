@@ -6,7 +6,6 @@ Scalr.regPage('Scalr.ui.alerts.view', function (loadParams, moduleParams) {
 		],
 		proxy: {
 			type: 'scalr.paging',
-			extraParams: loadParams,
 			url: '/alerts/xListAlerts/'
 		},
 		remoteSort: true
@@ -18,7 +17,6 @@ Scalr.regPage('Scalr.ui.alerts.view', function (loadParams, moduleParams) {
 			'reload': false,
 			'maximize': 'all'
 		},
-		scalrReconfigureParams: { metricId: '' },
 		store: store,
 		stateId: 'grid-scripts-alerts-view',
 		stateful: true,
@@ -72,7 +70,11 @@ Scalr.regPage('Scalr.ui.alerts.view', function (loadParams, moduleParams) {
 		dockedItems: [{
 			xtype: 'scalrpagingtoolbar',
 			store: store,
-			dock: 'top'
+			dock: 'top',
+            items: [{
+                xtype: 'filterfield',
+                store: store
+            }]
 		}]
 	});
 });

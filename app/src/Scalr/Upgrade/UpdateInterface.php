@@ -106,12 +106,45 @@ interface UpdateInterface
     public function hasTableColumn($table, $column);
 
     /**
+     * Checks whether the database table has specified column with given type
+     *
+     * @param   string    $table  The name of the database table
+     * @param   string    $column The name of the column
+     * @param   string    $type   A column type ("varchar(24)" for example or "datetime")
+     * @param   string    $schema optional The name of the database. If it's omitted will be used schema
+     *                                     that is specified in the config.
+     * @return  bool      Returns true if specified column is defined with the given type
+     */
+    public function hasTableColumnType($table, $column, $type, $schema = null);
+
+    /**
+     * Checks whether the table column has specified default value
+     *
+     * @param   string    $table   The name of the database table
+     * @param   string    $column  The name of the column
+     * @param   string    $default Default value for the column definition
+     * @param   string    $schema  optional The name of the database. If it's omitted will be used schema
+     *                             that is specified in the config.
+     * @return  bool      Returns  true if specified column is defined with the given type
+     */
+    public function hasTableColumnDefault($table, $column, $default, $schema = null);
+
+    /**
      * Verifies whether database has specified table
      *
-     * @param   string    $table A database table name
-     * @return  bool      Returns true if table does exist.
+     * @param   string    $table     A database table name
+     * @param   string    $database  optional The specified database or default
+     * @return  bool      Returns true if table exists.
      */
-    public function hasTable($table);
+    public function hasTable($table, $database = null);
+
+    /**
+     * Verifies whether specified database exists
+     *
+     * @param   string    $database
+     * @return  bool      Returns true if databse exists
+     */
+    public function hasDatabase($database);
 
     /**
      * Check whether the database table has specified constraint
@@ -125,6 +158,17 @@ interface UpdateInterface
     public function hasTableForeignKey($constraintName, $table, $schema = null);
 
     /**
+     * Gest specified referential constraint
+     *
+     * @param   string    $constraintName The name of the constraint
+     * @param   string    $table          The name of the table
+     * @param   string    $schema         optional The name of the database. If it's omitted will be used schema
+     *                                    that is specified in the config.
+     * @return  array     Returns referential constraint record
+     */
+    public function getTableConstraint($constraintName, $table, $schema = null);
+
+    /**
      * Checks whether specified table column is referenced by foreign key
      *
      * @param   string     $referencedTable  The table name
@@ -133,4 +177,23 @@ interface UpdateInterface
      *                                       schema that is specified in the config.
      */
     public function hasTableReferencedColumn($referencedTable, $referencedColumn, $referencedSchema = null);
+
+    /**
+     * This method returns true if upgrade process should ignore changes in the update script.
+     *
+     * This will prevent re-execution of the update if its content is changed.
+     *
+     * @return  bool      Returns false by default.
+     */
+    public function getIgnoreChanges();
+
+    /**
+     * Returns not false if this upgrade should be silently refused to excecute
+     * without saving a status to database
+     *
+     * Upgrade will be performed only when it passes all conditions.
+     *
+     * @return   string|bool     Returns the reason
+     */
+    public function isRefused();
 }

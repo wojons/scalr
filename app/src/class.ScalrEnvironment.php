@@ -1,11 +1,12 @@
 <?php
 
+use Scalr\Exception\Http\BadRequestException;
+
 abstract class ScalrEnvironment extends ScalrRESTService
 {
     const LATEST_VERSION = '2012-07-01';
 
     /**
-     *
      * @var DBServer
      */
     protected $DBServer;
@@ -21,34 +22,31 @@ abstract class ScalrEnvironment extends ScalrRESTService
         $method_name = str_replace(" ", "", ucwords(str_replace("-", " ", $operation)));
 
         // Check method
-        if (method_exists($this, $method_name))
-        {
+        if (method_exists($this, $method_name)) {
             // Call method
-            try
-            {
+            try {
                 $this->DBServer = $this->GetCallingInstance();
 
                 $result = call_user_func(array($this, $method_name));
-                if ($result instanceof DOMDocument)
-                {
+                if ($result instanceof DOMDocument) {
                     return $result->saveXML();
-                }
-                else
+                } else {
                     throw new Exception(sprintf("%s:%s() returns invalid response. DOMDocument expected.",
                         get_class($this),
                         $method_name
                     ));
-            }
-            catch(Exception $e)
-            {
+                }
+            } catch (\Scalr\Exception\Http\HttpException $e) {
+                throw $e;
+            } catch (Exception $e) {
                 throw new Exception(sprintf(_("Cannot retrieve environment by operation '%s': %s"),
                     $operation,
                     $e->getMessage()
                 ));
             }
+        } else {
+            throw new BadRequestException(sprintf("Operation '%s' is not supported", $operation));
         }
-        else
-            throw new Exception(sprintf(_("Operation '%s' not supported"), $operation));
     }
 
     /**

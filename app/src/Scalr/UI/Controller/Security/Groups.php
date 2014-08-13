@@ -1,4 +1,5 @@
 <?php
+
 use Scalr\Acl\Acl;
 use Scalr\Service\Aws\Ec2\DataType\SecurityGroupFilterNameType;
 use Scalr\Service\Aws\Ec2\DataType\SecurityGroupData;
@@ -8,6 +9,11 @@ use Scalr\Service\Aws\Ec2\DataType\IpRangeList;
 use Scalr\Service\Aws\Ec2\DataType\IpRangeData;
 use Scalr\Service\Aws\Ec2\DataType\UserIdGroupPairList;
 use Scalr\Service\Aws\Ec2\DataType\UserIdGroupPairData;
+use Scalr\Modules\PlatformFactory;
+use Scalr\Modules\Platforms\Ec2\Ec2PlatformModule;
+use Scalr\Service\Aws\Client\QueryClientException;
+use Scalr\Service\OpenStack\OpenStack;
+use Scalr\Service\OpenStack\Services\Network\Type\NetworkExtension;
 
 class Scalr_UI_Controller_Security_Groups extends Scalr_UI_Controller
 {
@@ -15,18 +21,15 @@ class Scalr_UI_Controller_Security_Groups extends Scalr_UI_Controller
 
     public function hasAccess()
     {
-        return parent::hasAccess() && $this->request->isAllowed(Acl::RESOURCE_SECURITY_AWS_SECURITY_GROUPS);
+        return parent::hasAccess() && $this->request->isAllowed(Acl::RESOURCE_SECURITY_SECURITY_GROUPS);
     }
 
-    /**
-    * View roles listView with filters
-    */
     public function viewAction()
     {
         if (!$this->getParam('platform')) {
             throw new Exception ('Platform should be specified');
         }
-        
+
         $this->response->page('ui/security/groups/view.js', array(
             'locations' => self::loadController('Platforms')->getCloudLocations(array($this->getParam('platform')), false)
         ));
@@ -34,84 +37,95 @@ class Scalr_UI_Controller_Security_Groups extends Scalr_UI_Controller
 
     public function createAction()
     {
+        $governance = new Scalr_Governance($this->getEnvironmentId());
+
         $this->response->page('ui/security/groups/edit.js', array(
             'platform'          => $this->getParam('platform'),
             'cloudLocation'     => $this->getParam('cloudLocation'),
             'cloudLocationName' => $this->getCloudLocationName($this->getParam('platform'), $this->getParam('cloudLocation')),
-            'accountId'         => $this->environment->getPlatformConfigValue(Modules_Platforms_Ec2::ACCOUNT_ID)
+            'accountId'         => $this->environment->getPlatformConfigValue(Ec2PlatformModule::ACCOUNT_ID),
+            'vpcLimits'         => $governance->getValue(SERVER_PLATFORMS::EC2, Scalr_Governance::AWS_VPC, null),
+            'remoteAddress'     => $this->request->getRemoteAddr()
         ),array('ui/security/groups/sgeditor.js'));
     }
 
     public function editAction()
     {
-        $data = $this->getGroupData($this->getParam('platform'), $this->getParam('cloudLocation'), $this->getParam('securityGroupId'));
+        $data = $this->getGroup($this->getParam('platform'), $this->getParam('cloudLocation'), $this->getParam('securityGroupId'));
 
         $data['cloudLocationName'] = $this->getCloudLocationName($this->getParam('platform'), $this->getParam('cloudLocation'));
-        $data['accountId'] = $this->environment->getPlatformConfigValue(Modules_Platforms_Ec2::ACCOUNT_ID);
+        $data['accountId'] = $this->environment->getPlatformConfigValue(Ec2PlatformModule::ACCOUNT_ID);
+        $data['remoteAddress'] = $this->request->getRemoteAddr();
 
         $this->response->page('ui/security/groups/edit.js', $data, array('ui/security/groups/sgeditor.js'));
     }
 
     public function xSaveAction()
     {
+        $platform = $this->getParam('platform');
+        $cloudLocation = $this->getParam('cloudLocation');
+
         $this->request->defineParams(array(
             'rules' => array('type' => 'json'),
             'sgRules' => array('type' => 'json')
         ));
 
-        $securityGroupId = $this->getParam('securityGroupId');
-        $securityGroupName = trim($this->getParam('name'));
-        $vpcId = $this->getParam('vpcId');
-        $vpcId = !empty($vpcId) ? $vpcId : null;
+        $groupData = array(
+            'id'            => $this->getParam('securityGroupId'),
+            'name'          => trim($this->getParam('name')),
+            'description'   => trim($this->getParam('description')),
+            'rules'         => $this->getParam('rules'),
+            'sgRules'       => $this->getParam('sgRules'),
+            'vpcId'         => $this->getParam('vpcId') ? $this->getParam('vpcId') : null
+        );
 
-        $newRules = $this->getParam('rules');
-        $notValid = array();
-        foreach ($newRules as $r) {
-            if (! Scalr_Util_Network::isValidCidr($r['cidrIp']))
-                $notValid[] = strip_tags($r['cidrIp']);
+        $invalidRules = array();
+        foreach ($groupData['rules'] as $r) {
+            if (! Scalr_Util_Network::isValidCidr($r['cidrIp'])) {
+                $invalidRules[] = $this->request->stripValue($r['cidrIp']);
+            }
         }
 
-        if (count($notValid)) {
-            throw new Scalr_Exception_Core(sprintf('Not valid CIDR(s): "%s"', join(', ', $notValid)));
+        if (count($invalidRules)) {
+            throw new Scalr_Exception_Core(sprintf('Not valid CIDR(s): "%s"', join(', ', $invalidRules)));
         }
 
-        if (!$securityGroupId) {
-            $securityGroupId = $this->getCloudInstance($this->getParam('platform'), $this->getParam('cloudLocation'))->ec2->securityGroup->create($securityGroupName, $this->getParam('description'), $vpcId);
+        if (!$groupData['id']) {
+            $groupData['id'] = $this->callPlatformMethod($platform, 'createGroup', array($platform, $cloudLocation, $groupData));
+            sleep(2);
+        }
 
-            sleep(5);
+        $currentGroupData = $this->getGroup($platform, $cloudLocation, $groupData['id']);
 
-            $groupData = array(
-                'id'            => $securityGroupId,
-                'platform'      => $this->getParam('platform'),
-                'cloudLocation' => $this->getParam('cloudLocation'),
-                'name'          => $securityGroupName,
-                'rules'         => array(),
-                'sgRules'       => array()
-            );
+        $warning = null;
+        try {
+            $this->saveGroupRules($platform, $cloudLocation, $currentGroupData, array('rules' => $groupData['rules'], 'sgRules' => $groupData['sgRules']));
+        } catch (QueryClientException $e) {
+            $warning = $e->getErrorData()->getMessage();
+        }
+
+        if ($this->getParam('returnData') && $groupData['id']) {
+            $this->response->data(array('group' => $this->getGroup($this->getParam('platform'), $this->getParam('cloudLocation'), $groupData['id'])));
+        }
+
+        if ($warning) {
+            $this->response->warning('Security group saved with warning: ' . $warning);
         } else {
-            $groupData = $this->getGroupData($this->getParam('platform'), $this->getParam('cloudLocation'), $securityGroupId);
+            $this->response->success("Security group successfully saved");
         }
-
-        $this->saveRules($groupData, array('rules' => $this->getParam('rules'), 'sgRules' => $this->getParam('sgRules')));
-        
-        if ($this->getParam('returnData')) {
-            $this->response->data(array('group' => $this->getGroupData($this->getParam('platform'), $this->getParam('cloudLocation'), $securityGroupId)));
-        }
-        
-        $this->response->success("Security group successfully saved");
     }
 
     public function xRemoveAction()
     {
-        $cloudInstance = $this->getCloudInstance($this->getParam('platform'), $this->getParam('cloudLocation'));
         $this->request->defineParams(array(
             'groups' => array('type' => 'json')
         ));
 
         $cnt = 0;
-        foreach ($this->getParam('groups') as $groupId) {
+        foreach ($this->getParam('groups') as $securityGroupId) {
+            if (empty($securityGroupId)) continue;
             $cnt++;
-            $cloudInstance->ec2->securityGroup->delete($groupId);
+            $this->deleteGroup($this->getParam('platform'), $this->getParam('cloudLocation'), $securityGroupId);
         }
 
         $this->response->success('Selected security group' . ($cnt > 1 ? 's have' : ' has') . ' been successfully removed');
@@ -121,60 +135,564 @@ class Scalr_UI_Controller_Security_Groups extends Scalr_UI_Controller
     {
         $data = array();
 
+        $vpcId = $this->environment->getPlatformConfigValue(Ec2PlatformModule::DEFAULT_VPC_ID . "." . $this->getParam('cloudLocation'));
+        if ($this->getParam('vpcId') != '')
+            $vpcId = $this->getParam('vpcId');
+
         if ($this->getParam('securityGroupId')) {
             $securityGroupId = $this->getParam('securityGroupId');
         } elseif ($this->getParam('securityGroupName')) {
-            $securityGroupId = $this->getGroupIdByName($this->getParam('platform'), $this->getParam('cloudLocation'), $this->getParam('securityGroupName'), $this->getParam('vpcId'));
+            $securityGroupId = $this->callPlatformMethod($this->getParam('platform'), 'getGroupIdByName',  array($this->getParam('platform'), $this->getParam('cloudLocation'), $this->getParam('securityGroupName'), $vpcId));
         }
-        
+
         if ($securityGroupId) {
-            $data = $this->getGroupData($this->getParam('platform'), $this->getParam('cloudLocation'), $securityGroupId);
+            $data = $this->getGroup($this->getParam('platform'), $this->getParam('cloudLocation'), $securityGroupId);
             $data['cloudLocationName'] = $this->getCloudLocationName($this->getParam('platform'), $this->getParam('cloudLocation'));
-            $data['accountId'] = $this->environment->getPlatformConfigValue(Modules_Platforms_Ec2::ACCOUNT_ID);
+            $data['accountId'] = $this->environment->getPlatformConfigValue(Ec2PlatformModule::ACCOUNT_ID);
+            $data['remoteAddress'] = $this->request->getRemoteAddr();
         }
-        
+
         $this->response->data($data);
     }
 
     public function xListGroupsAction()
     {
-        $sgFilter = null;
-
         $this->request->defineParams(array(
             'filters' => array('type' => 'json')
         ));
 
-        $filters = $this->getParam('filters');
-        if (!empty($filters['sgIds'])) {
-            $sgFilter = is_null($sgFilter) ? array() : $sgFilter;
-            $sgFilter[] = array(
-                'name' => SecurityGroupFilterNameType::groupId(),
-                'value' => $filters['sgIds']
+        $result = $this->listGroups($this->getParam('platform'), $this->getParam('cloudLocation'), $this->getParam('filters'));
+        $this->response->data($result);
+    }
+
+    private function getCloudLocationName($platform, $cloudLocation)
+    {
+        $cloudLocationName = $cloudLocation;
+        $locations = PlatformFactory::NewPlatform($platform)->getLocations($this->environment);
+        if (isset($locations[$cloudLocation])) {
+            $cloudLocationName = $locations[$cloudLocation];
+        }
+
+        return $cloudLocationName;
+    }
+
+    private function getGroup($platform, $cloudLocation, $securityGroupId)
+    {
+        if (!$securityGroupId) throw new Exception ('Security group ID is required');
+        return $this->callPlatformMethod($platform, __FUNCTION__, func_get_args());
+    }
+
+    private function getGroupEc2($platform, $cloudLocation, $securityGroupId)
+    {
+        $rules = array();
+        $sgRules = array();
+
+        /* @var $sgInfo SecurityGroupData */
+        $sgInfo = $this->getPlatformService($platform, $cloudLocation)->describe(null, $securityGroupId)->get(0);
+
+        /* @var $rule IpPermissionData */
+        foreach ($sgInfo->ipPermissions as $rule) {
+            /* @var $ipRange IpRangeData */
+            foreach ($rule->ipRanges as $ipRange) {
+                $r = array(
+                    'ipProtocol' => $rule->ipProtocol,
+                    'fromPort'   => $rule->fromPort,
+                    'toPort'     => $rule->toPort,
+                );
+                $r['cidrIp'] = $ipRange->cidrIp;
+                $r['rule'] = "{$r['ipProtocol']}:{$r['fromPort']}:{$r['toPort']}:{$r['cidrIp']}";
+                $r['id'] = Scalr_Util_CryptoTool::hash($r['rule']);
+                $r['comment'] = $this->getRuleComment($platform, $cloudLocation, $sgInfo->vpcId, $sgInfo->groupName, $r['rule']);
+
+                if (!isset($rules[$r['id']])) {
+                    $rules[$r['id']] = $r;
+                }
+            }
+            /* @var $group UserIdGroupPairData */
+            foreach ($rule->groups as $group) {
+                $r = array(
+                    'ipProtocol' => $rule->ipProtocol,
+                    'fromPort'   => $rule->fromPort,
+                    'toPort'     => $rule->toPort
+                );
+                $name = $group->groupName ? $group->groupName : $group->groupId;
+
+                $r['sg'] =  $group->userId . '/' . $name;
+                $r['rule'] = "{$r['ipProtocol']}:{$r['fromPort']}:{$r['toPort']}:{$r['sg']}";
+                $r['id'] = Scalr_Util_CryptoTool::hash($r['rule']);
+                $r['comment'] = $this->getRuleComment($platform, $cloudLocation, $sgInfo->vpcId, $sgInfo->groupName, $r['rule']);
+
+                if (!isset($sgRules[$r['id']])) {
+                    $sgRules[$r['id']] = $r;
+                }
+            }
+        }
+
+        return array(
+            'platform'        => $platform,
+            'cloudLocation'   => $cloudLocation,
+            'id'              => $sgInfo->groupId,
+            'vpcId'           => $sgInfo->vpcId,
+            'name'            => $sgInfo->groupName,
+            'description'     => $sgInfo->groupDescription,
+            'rules'           => $rules,
+            'sgRules'         => $sgRules,
+            'raw_data'        => $sgInfo->toArray()
+        );
+    }
+
+    /**
+     * Checks whether openstack has network service as well as security group extension
+     *
+     * @param   OpenStack   $openstack  OpenStack instance
+     */
+    private function hasOpenStackNetworkSecurityGroupExtension(OpenStack $openstack)
+    {
+        return $openstack->hasService(OpenStack::SERVICE_NETWORK) &&
+               $openstack->network->isExtensionSupported(NetworkExtension::securityGroup());
+    }
+
+    private function getGroupOpenstack($platform, $cloudLocation, $securityGroupId)
+    {
+        $rules = array();
+        $sgRules = array();
+
+        $openstack = $this->getPlatformService($platform, $cloudLocation);
+        /* @var $openstack \Scalr\Service\OpenStack\OpenStack */
+
+        // Neutron security groups implementation
+        if ($this->hasOpenStackNetworkSecurityGroupExtension($openstack)) {
+            $sgInfo = $openstack->network->securityGroups->list($securityGroupId);
+            $allGroups = $this->listGroupsOpenstack($platform, $cloudLocation, array());
+            $list = array();
+            foreach ($allGroups as $s)
+                $list[$s['id']] = $s['name'];
+
+            foreach ($sgInfo->security_group_rules as $rule) {
+                $r = array(
+                    'id'         => $rule->id,
+                    'direction'  => $rule->direction,
+                    'type'  	 => $rule->ethertype,
+                    'ipProtocol' => $rule->protocol,
+                    'fromPort'   => $rule->port_range_min,
+                    'toPort'     => $rule->port_range_max
+                );
+
+                $key = "{$r['ipProtocol']}:{$r['fromPort']}:{$r['toPort']}:" . ($rule->ip_range->cidr ? $rule->remote_ip_prefix : $rule->remote_group_id);
+                $key .= ":{$r['direction']}:{$r['type']}";
+
+                $r['comment'] = $this->getRuleComment($platform, $cloudLocation, '', $sgInfo->name, $key);
+
+                if ($rule->remote_ip_prefix) {
+                    $r['cidrIp'] = $rule->remote_ip_prefix;
+                    $rules[$r['id']] = $r;
+                } else {
+                    $r['sg'] = $list[$rule->remote_group_id];
+                    $sgRules[$r['id']] = $r;
+                }
+            }
+            $advanced = true;
+        } else {
+               // NOVA os-security-group extension
+            $sgInfo = $openstack->servers->getSecurityGroup($securityGroupId);
+
+            foreach ($sgInfo->rules as $rule) {
+                $r = array(
+                    'id'         => $rule->id,
+                    'ipProtocol' => $rule->ip_protocol,
+                    'fromPort'   => $rule->from_port,
+                    'toPort'     => $rule->to_port
+                );
+
+                $key = "{$r['ipProtocol']}:{$r['fromPort']}:{$r['toPort']}:" . ($rule->ip_range->cidr ? $rule->ip_range->cidr : $rule->group->name);
+                $r['comment'] = $this->getRuleComment($platform, $cloudLocation, '', $sgInfo->name, $key);
+
+                if ($rule->ip_range->cidr) {
+                    $r['cidrIp'] = $rule->ip_range->cidr;
+                    $rules[$r['id']] = $r;
+                } else {
+                    $r['sg'] = $rule->group->name;
+                    $sgRules[$r['id']] = $r;
+                }
+            }
+            $advanced = false;
+        }
+
+        return array(
+            'advanced'		  => $advanced,
+            'platform'        => $platform,
+            'cloudLocation'   => $cloudLocation,
+            'id'              => $sgInfo->id,
+            'name'            => $sgInfo->name,
+            'description'     => $sgInfo->description,
+            'rules'           => $rules,
+            'sgRules'         => $sgRules
+        );
+    }
+
+    private function getGroupCloudstack($platform, $cloudLocation, $securityGroupId)
+    {
+        $rules = array();
+
+        /* @var $sgInfo SecurityGroupData */
+        $sgInfo = $this->getPlatformService($platform, $cloudLocation)->describe(array('id' => $securityGroupId))[0];
+
+        if ($sgInfo->ingressrule) {
+            foreach ($sgInfo->ingressrule as $rule) {
+                $r = array(
+                    'id'         => $rule->ruleid,
+                    'ipProtocol' => $rule->protocol,
+                    'fromPort'   => $rule->startport,
+                    'toPort'     => $rule->endport,
+                    'cidrIp'     => $rule->cidr
+                );
+
+                $key = "{$r['ipProtocol']}:{$r['fromPort']}:{$r['toPort']}:{$r['cidrIp']}";
+                $r['comment'] = $this->getRuleComment($platform, '', '', $sgInfo->name, $key);
+                $rules[$r['id']] = $r;
+            }
+        }
+
+        return array(
+            'platform'        => $platform,
+            'id'              => $sgInfo->id,
+            'name'            => $sgInfo->name,
+            'description'     => $sgInfo->description,
+            'rules'           => $rules,
+        );
+    }
+
+
+    private function getRuleComment($platform, $cloudLocation, $vpcId, $groupName, $rule)
+    {
+        if ($this->db->GetRow("SHOW TABLES LIKE 'security_group_rules_comments'")) {
+            $comment = $this->db->GetOne("
+                SELECT `comment`
+                FROM `security_group_rules_comments`
+                WHERE `env_id` = ?
+                AND `platform` = ?
+                AND `cloud_location` = ?
+                AND `vpc_id` = ?
+                AND `group_name` = ?
+                AND `rule` = ?
+                LIMIT 1",
+                array(
+                    $this->getEnvironmentId(),
+                    $platform,
+                    $cloudLocation,
+                    $vpcId ? $vpcId : '',
+                    $groupName,
+                    $rule
+                )
+            );
+        } else {
+            $comment = $this->db->GetOne("SELECT `comment` FROM `comments` WHERE `env_id` = ? AND `rule` = ? AND `sg_name` = ? LIMIT 1", array(
+                $this->getEnvironmentId(), $rule, $groupName
+            ));
+        }
+        return !empty($comment) ? $comment : '';
+    }
+
+    private function saveGroupRules($platform, $cloudLocation, $groupData, $newRules)
+    {
+        $ruleTypes = array('rules', 'sgRules');
+        $addRulesSet = array();
+        $rmRulesSet = array();
+
+        foreach ($ruleTypes as $ruleType) {
+            $addRulesSet[$ruleType] = array();
+            $rmRulesSet[$ruleType] = array();
+
+            foreach ($newRules[$ruleType] as $r) {
+                if (!$r['id']) {
+                    if ($ruleType == 'rules') {
+                        $rule = "{$r['ipProtocol']}:{$r['fromPort']}:{$r['toPort']}:{$r['cidrIp']}";
+                    } elseif ($ruleType == 'sgRules') {
+                        $rule = "{$r['ipProtocol']}:{$r['fromPort']}:{$r['toPort']}:{$r['sg']}";
+                    }
+
+                    $id = Scalr_Util_CryptoTool::hash($rule);
+                    if (!$groupData[$ruleType][$id]) {
+                        $addRulesSet[$ruleType][] = $r;
+                        if ($r['comment']) {
+                            if ($this->db->GetRow("SHOW TABLES LIKE 'security_group_rules_comments'")) {
+                                $this->db->Execute("
+                                    INSERT `security_group_rules_comments`
+                                    SET `env_id` = ?,
+                                        `platform` = ?,
+                                        `cloud_location` = ?,
+                                        `vpc_id` = ?,
+                                        `group_name` = ?,
+                                        `rule` = ?,
+                                        `comment` = ?
+                                    ON DUPLICATE KEY UPDATE
+                                        `comment` = ?
+                                    ", array(
+                                        $this->getEnvironmentId(),
+                                        $platform,
+                                        PlatformFactory::isCloudstack($platform) ? '' : $cloudLocation,
+                                        $groupData['vpcId'] ? $groupData['vpcId'] : '',
+                                        $groupData['name'],
+                                        $rule,
+                                        $r['comment'],
+                                        $r['comment']
+                                ));
+                            } else {
+                                $this->db->Execute("
+                                    INSERT `comments`
+                                    SET `env_id` = ?,
+                                        `sg_name` = ?,
+                                        `rule` = ?,
+                                        `comment` = ?
+                                    ON DUPLICATE KEY UPDATE
+                                        `comment` = ?
+                                    ", array(
+                                    $this->getEnvironmentId(), $groupData['name'], $rule, $r['comment'], $r['comment']
+                                ));
+                            }
+                        }
+                    }
+                }
+            }
+
+            foreach ($groupData[$ruleType] as $r) {
+                $found = false;
+                foreach ($newRules[$ruleType] as $nR) {
+                    if ($nR['id'] == $r['id']) {
+                        $found = true;
+                        break;
+                    }
+                }
+                if (!$found) {
+                    $rmRulesSet[$ruleType][] = $r;
+                }
+            }
+
+        }
+
+        if (count($addRulesSet['rules']) > 0 || count($addRulesSet['sgRules']) > 0) {
+            $this->callPlatformMethod($platform, __FUNCTION__, array($platform, $cloudLocation, $groupData['id'], $addRulesSet, 'add'));
+        }
+
+        if (count($rmRulesSet['rules']) > 0 || count($rmRulesSet['sgRules']) > 0) {
+            $this->callPlatformMethod($platform, __FUNCTION__, array($platform, $cloudLocation, $groupData['id'], $rmRulesSet, 'remove'));
+        }
+
+    }
+
+    private function saveGroupRulesEc2($platform, $cloudLocation, $securityGroupId, $rules, $action)
+    {
+        $sgService = $this->getPlatformService($platform, $cloudLocation);
+        $ipPermissionList = new IpPermissionList();
+        foreach ($rules['rules'] as $rule) {
+            $ipPermissionList->append(new IpPermissionData(
+                $rule['ipProtocol'],
+                $rule['fromPort'],
+                $rule['toPort'],
+                new IpRangeList(new IpRangeData($rule['cidrIp'])),
+                null
+            ));
+        }
+        foreach ($rules['sgRules'] as $rule) {
+            $chunks = explode("/", $rule['sg']);
+            $userId = $chunks[0];
+            $name = $chunks[1];
+            $sgId = null;
+
+            if (substr($name, 0, 3) == 'sg-') {
+                $sgId = $name;
+                $name = null;
+            }
+
+            $ipPermissionList->append(new IpPermissionData(
+                $rule['ipProtocol'],
+                $rule['fromPort'],
+                $rule['toPort'],
+                null,
+                new UserIdGroupPairList(new UserIdGroupPairData($userId, $sgId, $name))
+            ));
+        }
+        if ($action == 'add') {
+            $sgService->authorizeIngress($ipPermissionList, $securityGroupId);
+        } else {
+            $sgService->revokeIngress($ipPermissionList, $securityGroupId);
+        }
+    }
+
+    private function saveGroupRulesOpenstack($platform, $cloudLocation, $securityGroupId, $rules, $action)
+    {
+        $openstack = $this->getPlatformService($platform, $cloudLocation);
+
+        // Neutron security groups implementation
+        if ($this->hasOpenStackNetworkSecurityGroupExtension($openstack)) {
+            $sgService = $openstack->network;
+
+            $allGroups = $this->listGroupsOpenstack($platform, $cloudLocation, array());
+            $list = array();
+            foreach ($allGroups as $s)
+                $list[$s['name']] = $s['id'];
+
+            foreach ($rules['rules'] as $rule) {
+                if ($action == 'add') {
+                    $sgService->securityGroups->addRule(array(
+                        'security_group_id'  => $securityGroupId,
+                        'protocol'           => $rule['ipProtocol'],
+                        "direction"          => $rule['direction'] ? $rule['direction'] : "ingress",
+                        'port_range_min'     => $rule['fromPort'] ? $rule['fromPort'] : null,
+                        'port_range_max'     => $rule['toPort'] ? $rule['toPort'] : null,
+                        'remote_ip_prefix'  => $rule['cidrIp'],
+                        'remote_group_id'	 => null
+                    ));
+                } else {
+                    $sgService->securityGroups->deleteRule($rule['id']);
+                }
+            }
+
+            foreach ($rules['sgRules'] as $rule) {
+                if ($action == 'add') {
+                    $sgService->securityGroups->addRule(array(
+                        'security_group_id'   => $securityGroupId,
+                        'protocol'      	=> $rule['ipProtocol'],
+                        "direction"          => $rule['direction'] ? $rule['direction'] : "ingress",
+                        'port_range_min'    => $rule['fromPort'],
+                        'port_range_max'    => $rule['toPort'],
+                        'remote_group_id'   => $list[$rule['sg']],
+                        'remote_ip_prefix'	 => null
+                    ));
+                } else {
+                    $sgService->securityGroups->deleteRule($rule['id']);
+                }
+            }
+        } else {
+            $sgService = $openstack->servers;
+
+            foreach ($rules['rules'] as $rule) {
+                if ($action == 'add') {
+                    $sgService->addSecurityGroupRule(array(
+                        'parent_group_id'  => $securityGroupId,
+                        'ip_protocol'      => $rule['ipProtocol'],
+                        'from_port'        => $rule['fromPort'],
+                        'to_port'          => $rule['toPort'],
+                        'cidr'             => $rule['cidrIp']
+                    ));
+                } else {
+                    $sgService->deleteSecurityGroupRule($rule['id']);
+                }
+            }
+
+            foreach ($rules['sgRules'] as $rule) {
+                if ($action == 'add') {
+                    $sgService->addSecurityGroupRule(array(
+                        'parent_group_id'  => $securityGroupId,
+                        'ip_protocol'      => $rule['ipProtocol'],
+                        'from_port'        => $rule['fromPort'],
+                        'to_port'          => $rule['toPort'],
+                        'group_id'         => $rule['sg']
+                    ));
+                } else {
+                    $sgService->deleteSecurityGroupRule($rule['id']);
+                }
+            }
+        }
+    }
+
+    private function saveGroupRulesCloudstack($platform, $cloudLocation, $securityGroupId, $rules, $action)
+    {
+        $sgService = $this->getPlatformService($platform, $cloudLocation);
+
+        foreach ($rules['rules'] as $rule) {
+            if ($action == 'add') {
+                $sgService->authorizeIngress(array(
+                    'securitygroupid'  => $securityGroupId,
+                    'protocol'         => $rule['ipProtocol'],
+                    'startport'        => $rule['fromPort'],
+                    'endport'          => $rule['toPort'],
+                    'cidrlist'         => $rule['cidrIp']
+                ));
+            } else {
+                $sgService->revokeIngress($rule['id']);
+            }
+        }
+    }
+
+
+    private function getGroupIdByNameEc2($platform, $cloudLocation, $securityGroupName, $vpcId = null)
+    {
+        $result = null;
+        $filter = array(
+            array(
+                'name'  => SecurityGroupFilterNameType::groupName(),
+                'value' => $securityGroupName
+            )
+        );
+        if ($vpcId) {
+            $filter[] = array(
+                'name'  => SecurityGroupFilterNameType::vpcId(),
+                'value' => $vpcId
             );
         }
 
-        if (!empty($filters['vpcId'])) {
-            $sgFilter = is_null($sgFilter) ? array() : $sgFilter;
-            $sgFilter[] = array(
-                'name' => SecurityGroupFilterNameType::vpcId(),
-                'value' => $filters['vpcId']
-            );
+        /* @var $sgInfo SecurityGroupData */
+        $list = $this->getPlatformService($platform, $cloudLocation)->describe(null, null, $filter);
+
+        if (count($list) > 0) {
+            foreach ($list as $v) {
+                if (!empty($vpcId) && $v->vpcId == $vpcId || empty($vpcId) && empty($v->vpcId)) {
+                    $result = $v->groupId;
+                    break;
+                }
+            }
         }
 
-        $sgList = $this->getCloudInstance($this->getParam('platform'), $this->getParam('cloudLocation'))->ec2->securityGroup->describe(null, null, $sgFilter);
-        $rowz = array();
-        /* @var $sg SecurityGroupData */
-        foreach ($sgList as $sg) {
-            $rowz[] = array(
-                'id'          => $sg->groupId,
-                'name'        => $sg->groupName,
-                'description' => $sg->groupDescription,
-                'vpcId'       => $sg->vpcId,
-                'owner'       => $sg->ownerId
-            );
+        return $result;
+    }
+
+    private function getGroupIdByNameOpenstack($platform, $cloudLocation, $securityGroupName, $vpcId = null)
+    {
+        $result = null;
+
+        $openstack = $this->getPlatformService($platform, $cloudLocation);
+
+        // Neutron security groups implementation
+        if ($this->hasOpenStackNetworkSecurityGroupExtension($openstack)) {
+            $list = $openstack->network->securityGroups->list();
+            foreach ($list as $v) {
+                if ($v->name === $securityGroupName) {
+                    $result = $v->id;
+                    break;
+                }
+            }
+        } else {
+            $list = $openstack->servers->securityGroups->list();
+            foreach ($list as $v) {
+                if ($v->name === $securityGroupName) {
+                    $result = $v->id;
+                    break;
+                }
+            }
         }
 
-        $response = $this->buildResponseFromData($rowz, array('id', 'name', 'description', 'vpcId'));
+        return $result;
+    }
+
+    private function getGroupIdByNameCloudstack($platform, $cloudLocation, $securityGroupName, $vpcId = null)
+    {
+        $result = null;
+        $list = $this->getPlatformService($platform, $cloudLocation)->describe();
+        foreach ($list as $v) {
+            if ($v->name === $securityGroupName) {
+                $result = $v->id;
+                break;
+            }
+        }
+
+        return $result;
+    }
+
+    private function listGroups($platform, $cloudLocation, $filters)
+    {
+        $rows = $this->callPlatformMethod($platform, __FUNCTION__, func_get_args());
+        $response = $this->buildResponseFromData($rows, array('id', 'name', 'description', 'vpcId'));
 
         if (!empty($response['data'])) {
             $cache = array();
@@ -216,222 +734,194 @@ class Scalr_UI_Controller_Security_Groups extends Scalr_UI_Controller
                 }
             }
         }
-
-        $this->response->data($response);
+        return $response;
     }
 
-    private function getCloudLocationName($platform, $cloudLocation)
+    private function listGroupsEc2($platform, $cloudLocation, $filters)
     {
-        $cloudLocationName = $cloudLocation;
-        $locations = PlatformFactory::NewPlatform($platform)->getLocations();
-        if (isset($locations[$cloudLocation])) {
-            $cloudLocationName = $locations[$cloudLocation];
-        }
+        $sgFilter = null;
+        $result = array();
 
-        return $cloudLocationName;
-    }
-
-    private function getGroupData($platform, $cloudLocation, $securityGroupId)
-    {
-        $rules = array();
-        $sgRules = array();
-
-        /* @var $sgInfo SecurityGroupData */
-        $sgInfo = $this->getCloudInstance($platform, $cloudLocation)->ec2->securityGroup->describe(null, $securityGroupId)->get(0);
-
-        /* @var $rule IpPermissionData */
-        foreach ($sgInfo->ipPermissions as $rule) {
-            /* @var $ipRange IpRangeData */
-            foreach ($rule->ipRanges as $ipRange) {
-                $r = array(
-                    'ipProtocol' => $rule->ipProtocol,
-                    'fromPort'   => $rule->fromPort,
-                    'toPort'     => $rule->toPort,
-                );
-                $r['cidrIp'] = $ipRange->cidrIp;
-                $r['rule'] = "{$r['ipProtocol']}:{$r['fromPort']}:{$r['toPort']}:{$r['cidrIp']}";
-                $r['id'] = Scalr_Util_CryptoTool::hash($r['rule']);
-                $r['comment'] = $this->getRuleComment($sgInfo->groupName, $r['rule']);
-                
-                if (!isset($rules[$r['id']])) {
-                    $rules[$r['id']] = $r;
-                }
-            }
-            /* @var $group UserIdGroupPairData */
-            foreach ($rule->groups as $group) {
-                $r = array(
-                    'ipProtocol' => $rule->ipProtocol,
-                    'fromPort'   => $rule->fromPort,
-                    'toPort'     => $rule->toPort
-                );
-                $r['sg'] =  $group->userId . '/' . $group->groupName;
-                $r['rule'] = "{$r['ipProtocol']}:{$r['fromPort']}:{$r['toPort']}:{$r['sg']}";
-                $r['id'] = Scalr_Util_CryptoTool::hash($r['rule']);
-                $r['comment'] = $this->getRuleComment($sgInfo->groupName, $r['rule']);
-
-                if (!isset($sgRules[$r['id']])) {
-                    $sgRules[$r['id']] = $r;
-                }
-            }
-        }
-
-        return array(
-            'platform'        => $platform,
-            'cloudLocation'   => $cloudLocation,
-            'id'              => $sgInfo->groupId,
-            'name'            => $sgInfo->groupName,
-            'description'     => $sgInfo->groupDescription,
-            'rules'           => $rules,
-            'sgRules'         => $sgRules
-        );
-    }
-
-    private function getRuleComment($groupName, $rule)
-    {
-        $comment = $this->db->GetOne("SELECT `comment` FROM `comments` WHERE `env_id` = ? AND `rule` = ? AND `sg_name` = ? LIMIT 1", array(
-            $this->getEnvironmentId(), $rule, $groupName
-        ));
-        return !empty($comment) ? $comment : '';
-    }
-
-    private function saveRules($groupData, $newRules) {
-        $ruleTypes = array('rules', 'sgRules');
-        $addRulesSet = array();
-        $rmRulesSet = array();
-        
-        foreach ($ruleTypes as $ruleType) {
-            $addRulesSet[$ruleType] = array();
-            $rmRulesSet[$ruleType] = array();
-            
-            foreach ($newRules[$ruleType] as $r) {
-                if (!$r['id']) {
-                    if ($ruleType == 'rules') {
-                        $rule = "{$r['ipProtocol']}:{$r['fromPort']}:{$r['toPort']}:{$r['cidrIp']}";
-                    } elseif ($ruleType == 'sgRules') {
-                        $rule = "{$r['ipProtocol']}:{$r['fromPort']}:{$r['toPort']}:{$r['sg']}";
-                    }
-
-                    $id = Scalr_Util_CryptoTool::hash($rule);
-                    if (!$groupData[$ruleType][$id]) {
-                        $addRulesSet[$ruleType][] = $r;
-                        if ($r['comment']) {
-                            //UNIQUE KEY `main` (`env_id`,`sg_name`,`rule`)
-                            $this->db->Execute("
-                                INSERT `comments`
-                                SET `env_id` = ?,
-                                    `sg_name` = ?,
-                                    `rule` = ?,
-                                    `comment` = ?
-                                ON DUPLICATE KEY UPDATE
-                                    `comment` = ?
-                                ", array(
-                                $this->getEnvironmentId(), $groupData['name'], $rule, $r['comment'], $r['comment']
-                            ));
-                        }
-                    }
-                }
-            }
-
-            foreach ($groupData[$ruleType] as $r) {
-                $found = false;
-                foreach ($newRules[$ruleType] as $nR) {
-                    if ($nR['id'] == $r['id']) {
-                        $found = true;
-                        break;
-                    }
-                }
-                if (!$found) {
-                    $rmRulesSet[$ruleType][] = $r;
-                }
-            }
-
-        }
-
-        if (count($addRulesSet['rules']) > 0 || count($addRulesSet['sgRules']) > 0) {
-            $this->updateRules($groupData['platform'], $groupData['cloudLocation'], $groupData['id'], $addRulesSet, 'add');
-        }
-
-        if (count($rmRulesSet['rules']) > 0 || count($rmRulesSet['sgRules']) > 0) {
-            $this->updateRules($groupData['platform'], $groupData['cloudLocation'], $groupData['id'], $rmRulesSet, 'remove');
-        }
-
-    }
-
-    private function updateRules($platform, $cloudLocation, $securityGroupId, $rules, $method)
-    {
-        $cloudInstance = $this->getCloudInstance($platform, $cloudLocation);
-
-        $ipPermissionList = new IpPermissionList();
-        foreach ($rules['rules'] as $rule) {
-            $ipPermissionList->append(new IpPermissionData(
-                $rule['ipProtocol'],
-                $rule['fromPort'],
-                $rule['toPort'],
-                new IpRangeList(new IpRangeData($rule['cidrIp'])),
-                null
-            ));
-        }
-        foreach ($rules['sgRules'] as $rule) {
-            $chunks = explode("/", $rule['sg']);
-            $userId = $chunks[0];
-            $name = $chunks[1];
-            $ipPermissionList->append(new IpPermissionData(
-                $rule['ipProtocol'],
-                $rule['fromPort'],
-                $rule['toPort'],
-                null,
-                new UserIdGroupPairList(new UserIdGroupPairData($userId, null, $name))
-            ));
-        }
-        if ($method == 'add') {
-            $cloudInstance->ec2->securityGroup->authorizeIngress($ipPermissionList, $securityGroupId);
-        } else {
-            $cloudInstance->ec2->securityGroup->revokeIngress($ipPermissionList, $securityGroupId);
-        }
-    }
-
-    private function getGroupIdByName($platform, $cloudLocation, $securityGroupName, $vpcId = null)
-    {
-        $result = null;
-        
-        $filter = array(
-            array(
-                'name'  => SecurityGroupFilterNameType::groupName(),
-                'value' => $securityGroupName
-            )
-        );
-        if ($vpcId) {
-            $filter[] = array(
-                'name'  => SecurityGroupFilterNameType::vpcId(),
-                'value' => $vpcId
+        if (!empty($filters['sgIds'])) {
+            $sgFilter = is_null($sgFilter) ? array() : $sgFilter;
+            $sgFilter[] = array(
+                'name' => SecurityGroupFilterNameType::groupId(),
+                'value' => $filters['sgIds']
             );
         }
-        
-        /* @var $sgInfo SecurityGroupData */
-        $list = $this->getCloudInstance($platform, $cloudLocation)->ec2->securityGroup->describe(null, null, $filter);
-        
-        if (count($list) > 0) {
-            foreach ($list as $v) {
-                if (!empty($vpcId) && $v->vpcId == $vpcId || empty($vpcId) && empty($v->vpcId)) {
-                    $result = $v->groupId;
-                    break;
+
+        if (!empty($filters['vpcId'])) {
+            $sgFilter = is_null($sgFilter) ? array() : $sgFilter;
+            $sgFilter[] = array(
+                'name' => SecurityGroupFilterNameType::vpcId(),
+                'value' => $filters['vpcId']
+            );
+        }
+
+        $sgList = $this->getPlatformService($platform, $cloudLocation)->describe(null, null, $sgFilter);
+        /* @var $sg SecurityGroupData */
+        foreach ($sgList as $sg) {
+            $result[] = array(
+                'id'          => $sg->groupId,
+                'name'        => $sg->groupName,
+                'description' => $sg->groupDescription,
+                'vpcId'       => $sg->vpcId,
+                'owner'       => $sg->ownerId
+            );
+        }
+
+        return $result;
+
+    }
+
+    private function listGroupsOpenstack($platform, $cloudLocation, $filters)
+    {
+        $result = array();
+
+        $openstack = $this->getPlatformService($platform, $cloudLocation);
+        /* @var $openstack \Scalr\Service\OpenStack\OpenStack */
+
+        // Neutron security groups implementation
+        if ($this->hasOpenStackNetworkSecurityGroupExtension($openstack)) {
+            $sgList = $openstack->network->securityGroups->list()->toArray();
+
+            foreach ($sgList as $sg) {
+                if (!empty($filters['sgIds']) && !in_array($sg->id, $filters['sgIds'])) {
+                    continue;
                 }
+
+                if ($sg->tenant_id != $openstack->getConfig()->getAuthToken()->getTenantId())
+                    continue;
+
+                $result[] = array(
+                    'id'          => $sg->id,
+                    'name'        => $sg->name,
+                    'description' => $sg->description
+                );
+            }
+        } else {
+            $sgList = $openstack->servers->securityGroups->list()->toArray();
+
+            foreach ($sgList as $sg) {
+                if (!empty($filters['sgIds']) && !in_array($sg->id, $filters['sgIds'])) {
+                    continue;
+                }
+
+                $result[] = array(
+                    'id'          => $sg->id,
+                    'name'        => $sg->name,
+                    'description' => $sg->description
+                );
             }
         }
 
         return $result;
     }
 
-    private function getCloudInstance($platform, $cloudLocation)
+    private function listGroupsCloudstack($platform, $cloudLocation, $filters)
     {
-        if ($platform == 'ec2') {
-            $method = 'aws';
-        } elseif ($platform == 'eucalyptus') {
-            $method = 'eucalyptus';
+        $result = array();
+        $sgList = $this->getPlatformService($platform, $cloudLocation)->describe();
+        foreach ($sgList as $sg) {
+            if (!empty($filters['sgIds']) && !in_array($sg->id, $filters['sgIds'])) {
+                continue;
+            }
+            $result[] = array(
+                'id'          => $sg->id,
+                'name'        => $sg->name,
+                'description' => $sg->description
+            );
+        }
+        return $result;
+    }
+
+    private function createGroupEc2($platform, $cloudLocation, $groupData)
+    {
+        $securityGroupId = $this->getPlatformService($platform, $cloudLocation)->create($groupData['name'], $groupData['description'], $groupData['vpcId']);
+        sleep(5);
+        return $securityGroupId;
+    }
+
+    private function createGroupOpenstack($platform, $cloudLocation, $groupData)
+    {
+        $openstack = $this->getPlatformService($platform, $cloudLocation);
+
+        // Neutron security groups implementation
+        if ($this->hasOpenStackNetworkSecurityGroupExtension($openstack)) {
+            $securityGroup = $openstack->network->securityGroups->create($groupData['name'], $groupData['description']);
+        } else {
+            $securityGroup = $openstack->servers->createSecurityGroup($groupData['name'], $groupData['description']);
+        }
+
+        return $securityGroup->id;
+    }
+
+    private function createGroupCloudstack($platform, $cloudLocation, $groupData)
+    {
+        $securityGroup = $this->getPlatformService($platform, $cloudLocation)->create(array('name' => $groupData['name'], 'description' => $groupData['description']));
+        return $securityGroup->id;
+    }
+
+    private function deleteGroup($platform, $cloudLocation, $securityGroupId)
+    {
+        return $this->callPlatformMethod($platform, __FUNCTION__, func_get_args());
+    }
+
+    private function deleteGroupEc2($platform, $cloudLocation, $securityGroupId)
+    {
+        return $this->getPlatformService($platform, $cloudLocation)->delete($securityGroupId);
+    }
+
+    private function deleteGroupOpenstack($platform, $cloudLocation, $securityGroupId)
+    {
+        $openstack = $this->getPlatformService($platform, $cloudLocation);
+
+        // Neutron security groups implementation
+        if ($this->hasOpenStackNetworkSecurityGroupExtension($openstack)) {
+            $result = $openstack->network->securityGroups->delete($securityGroupId);
+        } else {
+            $result = $openstack->servers->deleteSecurityGroup($securityGroupId);
+        }
+
+        return $result;
+    }
+
+    private function deleteGroupCloudstack($platform, $cloudLocation, $securityGroupId)
+    {
+        return $this->getPlatformService($platform, $cloudLocation)->delete(array('id' => $securityGroupId));
+    }
+
+    private function callPlatformMethod($platform, $method, $arguments)
+    {
+        if ($platform === SERVER_PLATFORMS::EC2 || $platform === SERVER_PLATFORMS::EUCALYPTUS) {
+            $method .= ucfirst(SERVER_PLATFORMS::EC2);
+        } elseif (PlatformFactory::isOpenstack($platform)) {
+            $method .= ucfirst(SERVER_PLATFORMS::OPENSTACK);
+        } elseif (PlatformFactory::isCloudstack($platform)) {
+            $method .= ucfirst(SERVER_PLATFORMS::CLOUDSTACK);
+        } else {
+            throw new Exception('Security groups are not supported for this cloud.');
+        }
+
+        if (method_exists($this, $method)) {
+            return call_user_func_array(array($this, $method), $arguments);
+        } else {
+            throw new Exception('Under construction...');
+        }
+    }
+
+    private function getPlatformService($platform, $cloudLocation)
+    {
+        if ($platform == SERVER_PLATFORMS::EC2 || $platform == SERVER_PLATFORMS::EUCALYPTUS) {
+            $method = $platform == SERVER_PLATFORMS::EC2 ? 'aws' : 'eucalyptus';
+            return $this->getEnvironment()->$method($cloudLocation)->ec2->securityGroup;
+        } elseif (PlatformFactory::isOpenstack($platform)) {
+            $openstack = $this->getEnvironment()->openstack($platform, $cloudLocation);
+            return $openstack;
+        } elseif (PlatformFactory::isCloudstack($platform)) {
+            return $this->getEnvironment()->cloudstack($platform)->securityGroup;
         } else {
             throw new Exception ('Platform is not supported');
         }
-
-        return $this->getEnvironment()->$method($cloudLocation);
     }
 }

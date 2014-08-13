@@ -52,9 +52,19 @@ class Scalr_Net_Scalarizr_Services_System extends Scalr_Net_Scalarizr_Client
         return $this->request("cpu_stat")->result;
     }
 
+    public function reboot()
+    {
+        return $this->request("reboot")->result;
+    }
+
     public function dist()
     {
         return $this->request("dist")->result;
+    }
+
+    public function mounts()
+    {
+        return $this->request("mounts")->result;
     }
 
     public function getScriptLogs($executionId)
@@ -63,5 +73,27 @@ class Scalr_Net_Scalarizr_Services_System extends Scalr_Net_Scalarizr_Client
         $params->execScriptId = $executionId;
 
         return $this->request("get_script_logs", $params)->result;
+    }
+
+    public function getLog()
+    {
+        return $this->request("get_log")->result;
+    }
+
+    public function getDebugLog()
+    {
+        return $this->request("get_debug_log")->result;
+    }
+
+    public function executeScripts(array $scripts, array $globalVariables, $eventName, $roleName, $async = true)
+    {
+        $params = new stdClass();
+        $params->scripts = $scripts;
+        $params->global_variables = $globalVariables;
+        $params->eventName = $eventName;
+        //$params->roleName = $roleName;
+        $params->async = $async;
+
+        return $this->request("execute_scripts", $params)->result;
     }
 }

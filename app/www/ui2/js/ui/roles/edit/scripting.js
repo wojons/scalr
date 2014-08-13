@@ -3,7 +3,7 @@ Ext.define('Scalr.ui.RoleDesignerTabScripting', {
     alias: 'widget.roleeditscripting',
     layout: 'fit',
     items: [{
-        xtype: 'scriptfield2',
+        xtype: 'scriptfield',
         itemId: 'rolescripting',
         mode: 'role'
     }],
@@ -24,10 +24,23 @@ Ext.define('Scalr.ui.RoleDesignerTabScripting', {
                     scripting = [];
 
                 scripts.each(function(item) {
-                    scripting.push(item.data);
+                    scripting.push(item.getData());
                 });
 
                 params['role']['scripts'] = scripting;
+            }
+        });
+        this.addListener({
+            showtab: {
+                fn: function(params){
+                    var rolescripting = this.down('#rolescripting');
+                    rolescripting.chefSettings = params['role']['chef'] || {};
+                    rolescripting.setCurrentRoleOptions({
+                        osFamily: params['role']['osFamily'],
+                        chefAvailable: Ext.Array.contains(params['role']['behaviors'], 'chef')
+                    });
+                    rolescripting.roleOs = params['role']['osFamily'];
+                }
             }
         });
     },
@@ -41,7 +54,7 @@ Ext.define('Scalr.ui.RoleDesignerTabScripting', {
             scripting.push(script);
         });
 
-        return {scripts: Ext.encode(scripting)};
+        return {scripts: scripting};
     }
 
 });

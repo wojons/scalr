@@ -1,7 +1,6 @@
 <?php
 namespace Scalr\Tests\Service\Aws;
 
-use Scalr\Service\Aws\Sqs\DataType\QueueList;
 use Scalr\Service\Aws\Sqs;
 use Scalr\Tests\Service\AwsTestCase;
 

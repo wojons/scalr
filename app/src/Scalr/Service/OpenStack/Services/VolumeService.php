@@ -2,10 +2,8 @@
 namespace Scalr\Service\OpenStack\Services;
 
 use Scalr\Service\OpenStack\OpenStack;
-use Scalr\Service\OpenStack\Services\Volume\Handler\SnapshotsHandler;
-use Scalr\Service\OpenStack\Exception\OpenStackException;
-use Scalr\Service\OpenStack\Client\RestClientResponse;
-use Scalr\Service\OpenStack\Services\Volume\V1\VolumeApi;
+use Scalr\Service\OpenStack\Type\DefaultPaginationList;
+
 /**
  * OpenStack Volumes (Rackspace Cloud Block Storage)
  *
@@ -56,7 +54,7 @@ class VolumeService extends AbstractService implements ServiceInterface
      * View a list of Volume entities.
      *
      * @param   bool  $detailed  optional Detailed info
-     * @return  array Returns the list of volumes
+     * @return  DefaultPaginationList Returns the list of volumes
      * @throws  RestClientException
      */
     public function listVolumes($detailed = true)
@@ -110,7 +108,7 @@ class VolumeService extends AbstractService implements ServiceInterface
     /**
      * List Volume Types action
      *
-     * @return  array  Returns the list of volume types.
+     * @return  DefaultPaginationList  Returns the list of volume types.
      * @throws  RestClientException
      */
     public function listVolumeTypes()
@@ -134,7 +132,7 @@ class VolumeService extends AbstractService implements ServiceInterface
      * List Snapshots action
      *
      * @param   bool      $detailed  optional  Detailed list by default.
-     * @return  array     Returns the list of snapshots.
+     * @return  DefaultPaginationList Returns the list of snapshots.
      * @throws  RestClientException
      */
     public function listSnapshots($detailed = true)

@@ -2,9 +2,6 @@
 namespace Scalr\Tests\Service\Aws;
 
 use Scalr\Service\Aws\Sqs\DataType\QueueAttributeData;
-use Scalr\Service\Aws;
-use Scalr\Tests\Service\AwsTestCase;
-use Scalr\Service\Aws\Client\QueryClientException;
 use Scalr\Service\Aws\Sqs;
 
 /**

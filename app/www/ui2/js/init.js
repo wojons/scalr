@@ -3,7 +3,8 @@ Ext.Ajax.on('requestexception', function(conn, response, options) {
 	if (options.hideErrorMessage == true)
 		return;
 
-	if (response.status == 403) {
+	// this messages are used in window.onhashchange at ui.js
+    if (response.status == 403) {
 		Scalr.state.userNeedLogin = true;
 		Scalr.event.fireEvent('redirect', '#/guest/login', true);
 	} else if (response.status == 404) {
@@ -11,7 +12,7 @@ Ext.Ajax.on('requestexception', function(conn, response, options) {
 	} else if (response.timedout == true) {
 		Scalr.message.Error('Server didn\'t respond in time. Please try again in a few minutes.');
 	} else if (response.aborted == true) {
-		Scalr.message.Error('Request was aborted by user.');
+		//Scalr.message.Error('Request was aborted by user.');
 	} else {
 		if (Scalr.timeoutHandler.enabled) {
 			Scalr.timeoutHandler.undoSchedule();
@@ -63,8 +64,9 @@ Scalr.storage = {
 	set: function (name, value, session) {
 		var storage = this.getStorage(session);
 		try {
-			if (storage)
-				storage.setItem(this.getName(name), this.encodeValue(value));
+			if (storage) {
+                storage.setItem(this.getName(name), this.encodeValue(value));
+            }
 		} catch (e) {
 			if (e == QUOTA_EXCEEDED_ERR) {
 				Scalr.message.Error('LocalStorage overcrowded');
@@ -73,23 +75,43 @@ Scalr.storage = {
 	},
 	clear: function (name, session) {
 		var storage = this.getStorage(session);
-		if (storage)
-			storage.removeItem(this.getName(name));
+		if (storage) {
+            storage.removeItem(this.getName(name));
+        }
 	},
-	dump: function(encoded) {
-		var storage = Scalr.storage.getStorage(), data = {};
+    // encoded = true | false | 'decode'
+	dump: function(encoded, ignoreHash) {
+		var storage = Scalr.storage.getStorage(), data = {}, decoded = false;
+        if (encoded == 'decoded') {
+            decoded = true;
+            encoded = false;
+        }
+
 		for (var i = 0, len = storage.length; i < len; i++) {
 			var key = storage.key(i);
-			data[key] = storage.getItem(key);
+            if (ignoreHash && (key == 'scalr-system-time' || key == 'scalr-system-hash')) {
+                continue;
+            }
+
+            if (key.substring(0, 6) == 'scalr-') {
+                data[key] = storage.getItem(key);
+                if (decoded) {
+                    data[key] = this.decodeValue(data[key]);
+                }
+            }
 		}
 
 		return encoded ? Ext.encode(data) : data;
 	},
 	hash: function() {
-		return CryptoJS.SHA1(this.dump(true)).toString();
+		return CryptoJS.SHA1(this.dump(true, true)).toString();
 	}
 };
 
+Ext.state.Manager.setProvider(new Ext.state.LocalStorageProvider({ prefix: 'scalr-' }));
+Ext.Ajax.extraParams = Ext.Ajax.extraParams || {};
+
+// this event triggers only when it was fired from another tabs
 window.addEventListener('storage', function (e) {
 	if (e && e.key) {
 		var name = e.key.replace(Scalr.storage.prefix, '');
@@ -99,6 +121,9 @@ window.addEventListener('storage', function (e) {
 	}
 }, false);
 
+Ext.tip.QuickTipManager.init();
+
+Ext.getBody().setStyle('overflow', 'hidden');
 
 Scalr.event = new Ext.util.Observable();
 /*
@@ -248,21 +273,6 @@ Scalr.data = {
 	}
 };
 
-// fix, remove old storage data, it isn't compatible with 4.2
-if (!localStorage.getItem('scalr-grid-ui-fix42')) {
-    for (var i in localStorage) {
-        if (/^scalr-grid-.*/.test(i) && i != 'scalr-grid-ui-page-size')
-            localStorage.removeItem(i);
-    }
-    localStorage.removeItem('scalr-system-link-statistic');
-    localStorage.setItem('scalr-grid-ui-fix42', 'commit');
-}
-
-Ext.getBody().setStyle('overflow', 'hidden');
-Ext.tip.QuickTipManager.init();
-
-Ext.state.Manager.setProvider(new Ext.state.LocalStorageProvider({ prefix: 'scalr-' }));
-
 Scalr.event.on('close', function(force) {
 	Scalr.state.pageSuspendForce = Ext.isBoolean(force) ? force : false;
 
@@ -353,6 +363,7 @@ Scalr.message = {
         this.Flush(false, message);
 
         var tip = new Ext.tip.ToolTip({
+            zIndexPriority: 5,
             autoShow: true,
             autoHide: false,
             closable: true,
@@ -363,7 +374,9 @@ Scalr.message = {
             },
             minWidth: 200,
             maxWidth: 700,
+            maxHeight: Scalr.application.getHeight() - 30,
             dt: Ext.Date.add(new Date(), Ext.Date.SECOND, 2),
+            autoScroll: true,
             type: type,
             cls: 'x-tip-message x-tip-message-' + type,
             items: [{
@@ -404,6 +417,7 @@ Scalr.message = {
             anchor: 'top',
             html: message,
             autoShow: true,
+            dismissDelay: 10000,
             listeners: {
                 hide: function() {
                     this.destroy();
@@ -414,6 +428,12 @@ Scalr.message = {
             Ext.apply(config, params);
         }
         new Ext.tip.ToolTip(config);
+    },
+    ErrorTip: function(message, el, params) {
+        this.InfoTip(message, el, Ext.apply({cls: 'x-tip-message x-tip-message-error'}, params));
+    },
+    WarningTip: function(message, el, params) {
+        this.InfoTip(message, el, Ext.apply({cls: 'x-tip-message x-tip-message-warning'}, params));
     },
     Flush: function(force, message) {
         var i = this.queue.length - 1, dt = new Date();

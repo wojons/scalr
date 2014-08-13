@@ -41,8 +41,8 @@ class Definition
      *
      * This method describes all available resources
      *
-     * @return  \ArrayObject Returns array looks like array(
-     *                resource_id => array(name, description, resourceGroup, [array(permission_id => description)]))
+     * @return  \ArrayObject Returns array looks like [
+     *                resource_id => [name, description, resourceGroup, [[permission_id => description)]]]
      *                Third value of array is optional and determines unique permissions for specified
      *                resource which can be allowed or forbidden separately.
      */
@@ -51,299 +51,362 @@ class Definition
         $allows = 'Allows ';
 
         if (!isset(self::$list)) {
-            self::$rawList = array(
-                //resource_id => array(name, description, resourceGroup, [array(pemission_id => description)])
-                Acl::RESOURCE_FARMS => array(
+            self::$rawList = [
+                //resource_id => [name, description, resourceGroup, [[pemission_id => description)])
+                Acl::RESOURCE_FARMS => [
                     'Farms',
                     $allows . 'access to farm designer.',
                     Acl::GROUP_FARMS,
-                    array(
+                    [
                         //permission_id must be in the lowercase and less than 64 characters.
                         Acl::PERM_FARMS_MANAGE    => $allows . 'to manage (create/configure/delete) farms.',
                         Acl::PERM_FARMS_CLONE     => $allows . 'to clone farms.',
                         Acl::PERM_FARMS_LAUNCH    => $allows . 'to launch farms.',
                         Acl::PERM_FARMS_TERMINATE => $allows . 'to terminate farms.',
                         Acl::PERM_FARMS_NOT_OWNED_FARMS => $allows . 'to manage not owned farms.'
-                    )
-                ),
+                    ]
+                ],
 
-                Acl::RESOURCE_FARMS_ALERTS => array(
+                Acl::RESOURCE_FARMS_ALERTS => [
                     'Alerts',
                     $allows . 'access to alerts.',
                     Acl::GROUP_FARMS
-                ),
+                ],
 
-                Acl::RESOURCE_FARMS_SERVERS => array(
+                Acl::RESOURCE_FARMS_SERVERS => [
                     'Servers',
                     $allows . 'access to servers.',
-                    Acl::GROUP_FARMS
-                ),
+                    Acl::GROUP_FARMS,
+                    [
+                        Acl::PERM_FARMS_SERVERS_SSH_CONSOLE => $allows . 'to use server ssh console.'
+                    ]
+                ],
 
-                Acl::RESOURCE_FARMS_EVENTS_AND_NOTIFICATIONS => array(
+                Acl::RESOURCE_FARMS_EVENTS_AND_NOTIFICATIONS => [
                     'Events and notifications',
                     $allows . 'access to events and notifications.',
                     Acl::GROUP_FARMS
-                ),
+                ],
 
-                Acl::RESOURCE_FARMS_STATISTICS => array(
+                Acl::RESOURCE_FARMS_STATISTICS => [
                     'Statistics',
                     $allows . 'access to statistics.',
                     Acl::GROUP_FARMS
-                ),
+                ],
 
-                Acl::RESOURCE_FARMS_ROLES => array(
+                Acl::RESOURCE_FARMS_ROLES => [
                     'Roles',
                     $allows . 'access to roles.',
                     Acl::GROUP_FARMS,
-                    array(
+                    [
                         Acl::PERM_FARMS_ROLES_CREATE      => $allows . 'to create (build/import) roles.',
                         Acl::PERM_FARMS_ROLES_MANAGE      => $allows . 'to manage (edit/delete) roles.',
                         Acl::PERM_FARMS_ROLES_CLONE       => $allows . 'to clone roles.',
                         Acl::PERM_FARMS_ROLES_BUNDLETASKS => $allows . 'to bundle tasks (role creation process logs).',
-                    )
-                ),
+                    ]
+                ],
 
-                Acl::RESOURCE_FARMS_SCRIPTS => array(
-                    'Scripts',
-                    $allows . 'access to scripts.',
-                    Acl::GROUP_FARMS,
-                    array(
-                        Acl::PERM_FARMS_SCRIPTS_MANAGE    => $allows . 'to manage (create/edit/delete) scripts.',
-                        Acl::PERM_FARMS_SCRIPTS_EXECUTE   => $allows . 'to execute scripts.',
-                        Acl::PERM_FARMS_SCRIPTS_FORK      => $allows . 'to fork scripts.',
-                    )
-                ),
+                Acl::RESOURCE_GCE_STATIC_IPS => [
+                    'Static IPs',
+                    $allows . 'access to GCE static IPs.',
+                    Acl::GROUP_GCE
+                ],
 
-                Acl::RESOURCE_CLOUDSTACK_VOLUMES => array(
+                Acl::RESOURCE_GCE_PERSISTENT_DISKS => [
+                    'Persistent disks',
+                    $allows . 'access to GCE persistent disks.',
+                    Acl::GROUP_GCE
+                ],
+
+                Acl::RESOURCE_GCE_SNAPSHOTS => [
+                    'Snapshots',
+                    $allows . 'access to GCE snapshots.',
+                    Acl::GROUP_GCE
+                ],
+
+                Acl::RESOURCE_CLOUDSTACK_VOLUMES => [
                     'Volumes',
                     $allows . 'access to CloudStack volumes.',
                     Acl::GROUP_CLOUDSTACK
-                ),
+                ],
 
-                Acl::RESOURCE_CLOUDSTACK_SNAPSHOTS => array(
+                Acl::RESOURCE_CLOUDSTACK_SNAPSHOTS => [
                     'Snapshots',
                     $allows . 'access to CloudStack snapshots.',
                     Acl::GROUP_CLOUDSTACK
-                ),
+                ],
 
-                Acl::RESOURCE_CLOUDSTACK_PUBLIC_IPS => array(
+                Acl::RESOURCE_CLOUDSTACK_PUBLIC_IPS => [
                     'Public IPs',
                     $allows . 'access to CloudStack public IPs.',
                     Acl::GROUP_CLOUDSTACK
-                ),
+                ],
 
-                Acl::RESOURCE_OPENSTACK_VOLUMES => array(
+                Acl::RESOURCE_OPENSTACK_VOLUMES => [
                     'Volumes',
                     $allows . 'access to OpenStack volumes.',
                     Acl::GROUP_OPENSTACK
-                ),
+                ],
 
-                Acl::RESOURCE_OPENSTACK_SNAPSHOTS => array(
+                Acl::RESOURCE_OPENSTACK_SNAPSHOTS => [
                     'Snapshots',
                     $allows . 'access to OpenStack snapshots.',
                     Acl::GROUP_OPENSTACK
-                ),
+                ],
 
-                Acl::RESOURCE_OPENSTACK_PUBLIC_IPS => array(
+                Acl::RESOURCE_OPENSTACK_PUBLIC_IPS => [
                     'Public IPs',
                     $allows . 'access to OpenStack public IPs.',
                     Acl::GROUP_OPENSTACK
-                ),
+                ],
 
-                Acl::RESOURCE_AWS_CLOUDWATCH => array(
+                Acl::RESOURCE_OPENSTACK_ELB => [
+                    'Load Balancing (LBaaS)',
+                    $allows . 'access to load balancing service.',
+                    Acl::GROUP_OPENSTACK
+                ],
+
+                Acl::RESOURCE_AWS_S3 => [
+                    'S3 and Cloudfront',
+                    $allows . 'access to AWS S3 and Cloudfront.',
+                    Acl::GROUP_AWS
+                ],
+
+                Acl::RESOURCE_AWS_CLOUDWATCH => [
                     'CloudWatch',
                     $allows . 'access to AWS CloudWatch.',
                     Acl::GROUP_AWS
-                ),
+                ],
 
-                Acl::RESOURCE_AWS_ELASTIC_IPS => array(
+                Acl::RESOURCE_AWS_ELASTIC_IPS => [
                     'Elastic IPs',
                     $allows . 'access to AWS Elastic IPs.',
                     Acl::GROUP_AWS
-                ),
+                ],
 
-                Acl::RESOURCE_AWS_ELB => array(
+                Acl::RESOURCE_AWS_ELB => [
                     'Elastic Load Balancing (ELB)',
                     $allows . 'access to AWS Elastic Load Balancing.',
                     Acl::GROUP_AWS
-                ),
+                ],
 
-                Acl::RESOURCE_AWS_IAM => array(
+                Acl::RESOURCE_AWS_IAM => [
                     'Identity and Access Management (IAM)',
                     $allows . 'access to AWS Identity and Access Management.',
                     Acl::GROUP_AWS
-                ),
+                ],
 
-                Acl::RESOURCE_AWS_RDS => array(
+                Acl::RESOURCE_AWS_RDS => [
                     'Relational Database Service (RDS)',
                     $allows . 'access to Amazon Relational Database Service.',
                     Acl::GROUP_AWS
-                ),
+                ],
 
-                Acl::RESOURCE_AWS_SNAPSHOTS => array(
+                Acl::RESOURCE_AWS_SNAPSHOTS => [
                     'Snapshots',
                     $allows . 'access to AWS snapshots.',
                     Acl::GROUP_AWS
-                ),
+                ],
 
-                Acl::RESOURCE_AWS_VOLUMES => array(
+                Acl::RESOURCE_AWS_VOLUMES => [
                     'Volumes',
                     $allows . 'access to AWS Volumes.',
                     Acl::GROUP_AWS
-                ),
+                ],
 
-                Acl::RESOURCE_SECURITY_AWS_SECURITY_GROUPS => array(
-                    'AWS security groups',
-                    $allows . 'access to AWS security groups.',
+                Acl::RESOURCE_AWS_ROUTE53 => [
+                    'Route53',
+                    $allows . 'access to AWS Route53.',
+                    Acl::GROUP_AWS
+                ],
+
+                Acl::RESOURCE_SECURITY_SECURITY_GROUPS => [
+                    'Security groups',
+                    $allows . 'access to security groups.',
                     Acl::GROUP_SECURITY
-                ),
+                ],
 
-                Acl::RESOURCE_SECURITY_RETRIEVE_WINDOWS_PASSWORDS => array(
+                Acl::RESOURCE_SECURITY_RETRIEVE_WINDOWS_PASSWORDS => [
                     'Retrieve Windows passwords',
                     $allows . 'access to retrieve passwords for windows.',
                     Acl::GROUP_SECURITY
-                ),
+                ],
 
-                Acl::RESOURCE_SECURITY_SSH_KEYS => array(
+                Acl::RESOURCE_SECURITY_SSH_KEYS => [
                     'SSH keys',
                     $allows . 'access to SSH keys.',
                     Acl::GROUP_SECURITY
-                ),
+                ],
 
-                Acl::RESOURCE_LOGS_API_LOGS => array(
+                Acl::RESOURCE_LOGS_API_LOGS => [
                     'API logs',
                     $allows . 'access to API logs.',
                     Acl::GROUP_LOGS
-                ),
+                ],
 
-                Acl::RESOURCE_LOGS_SCRIPTING_LOGS => array(
+                Acl::RESOURCE_LOGS_SCRIPTING_LOGS => [
                     'Scripting logs',
                     $allows . 'access to scripting logs.',
                     Acl::GROUP_LOGS
-                ),
+                ],
 
-                Acl::RESOURCE_LOGS_SYSTEM_LOGS => array(
+                Acl::RESOURCE_LOGS_SYSTEM_LOGS => [
                     'System logs',
                     $allows . 'access to system logs.',
                     Acl::GROUP_LOGS
-                ),
+                ],
 
-                Acl::RESOURCE_SERVICES_APACHE => array(
+                Acl::RESOURCE_SERVICES_APACHE => [
                     'Apache',
                     $allows . 'access to apache.',
                     Acl::GROUP_SERVICES
-                ),
+                ],
 
-                Acl::RESOURCE_SERVICES_CHEF => array(
+                Acl::RESOURCE_SERVICES_CHEF => [
                     'Chef',
                     $allows . 'access to chef.',
                     Acl::GROUP_SERVICES
-                ),
+                ],
 
-                Acl::RESOURCE_SERVICES_SSL => array(
+                Acl::RESOURCE_SERVICES_SSL => [
                     'SSL',
                     $allows . 'access to SSL.',
                     Acl::GROUP_SERVICES
-                ),
+                ],
 
-                Acl::RESOURCE_SERVICES_RABBITMQ => array(
+                Acl::RESOURCE_SERVICES_RABBITMQ => [
                     'RabbitMQ',
                     $allows . 'access to RabbitMQ.',
                     Acl::GROUP_SERVICES
-                ),
+                ],
 
-                Acl::RESOURCE_GENERAL_CUSTOM_EVENTS => array(
+                Acl::RESOURCE_GENERAL_CUSTOM_EVENTS => [
                     'Custom events',
                     $allows . 'access to custom events.',
                     Acl::GROUP_GENERAL
-                ),
+                ],
 
-                Acl::RESOURCE_GENERAL_CUSTOM_SCALING_METRICS => array(
+                Acl::RESOURCE_GENERAL_CUSTOM_SCALING_METRICS => [
                     'Custom scaling metrics',
                     $allows . 'access to custom scaling metrics.',
                     Acl::GROUP_GENERAL
-                ),
+                ],
 
-                Acl::RESOURCE_GENERAL_GLOBAL_VARIABLES => array(
-                    'Global variables (environment level)',
-                    $allows . 'access to global variables of environment level.',
-                    Acl::GROUP_GENERAL
-                ),
-
-                Acl::RESOURCE_GENERAL_SCHEDULERTASKS => array(
+                Acl::RESOURCE_GENERAL_SCHEDULERTASKS => [
                     'Tasks scheduler',
                     $allows . 'access to tasks scheduler.',
                     Acl::GROUP_GENERAL
-                ),
+                ],
 
-                Acl::RESOURCE_DB_BACKUPS => array(
+                Acl::RESOURCE_GENERAL_WEBHOOKS => [
+                    'Webhooks',
+                    $allows . 'to manage webhooks.',
+                    Acl::GROUP_GENERAL
+                ],
+
+                Acl::RESOURCE_DB_BACKUPS => [
                     'Backups',
                     $allows . 'access to backups.',
                     Acl::GROUP_DATABASES,
-                    array(
+                    [
                         Acl::PERM_DB_BACKUPS_REMOVE => $allows . 'to remove database backups.',
-                    )
-                ),
+                    ]
+                ],
 
-                Acl::RESOURCE_DB_DATABASE_STATUS => array(
+                Acl::RESOURCE_DB_DATABASE_STATUS => [
                     'Database status',
                     $allows . 'access to database status.',
                     Acl::GROUP_DATABASES,
-                    array(
+                    [
                         Acl::PERM_DB_DATABASE_STATUS_PMA => $allows . 'access to PMA.',
-                    )
-                ),
+                    ]
+                ],
 
-                Acl::RESOURCE_DB_SERVICE_CONFIGURATION => array(
+                Acl::RESOURCE_DB_SERVICE_CONFIGURATION => [
                     'Service configuration',
                     $allows . 'access to service configuration.',
                     Acl::GROUP_DATABASES
-                ),
+                ],
 
-                Acl::RESOURCE_DEPLOYMENTS_APPLICATIONS => array(
+                Acl::RESOURCE_DEPLOYMENTS_APPLICATIONS => [
                     'Applications',
                     $allows . 'access to applications.',
                     Acl::GROUP_DEPLOYMENTS
-                ),
+                ],
 
-                Acl::RESOURCE_DEPLOYMENTS_SOURCES => array(
+                Acl::RESOURCE_DEPLOYMENTS_SOURCES => [
                     'Sources',
                     $allows . 'access to sources.',
                     Acl::GROUP_DEPLOYMENTS
-                ),
+                ],
 
-                Acl::RESOURCE_DEPLOYMENTS_TASKS => array(
+                Acl::RESOURCE_DEPLOYMENTS_TASKS => [
                     'Tasks',
                     $allows . 'access to tasks.',
                     Acl::GROUP_DEPLOYMENTS
-                ),
+                ],
 
-                Acl::RESOURCE_DNS_ZONES => array(
+                Acl::RESOURCE_DNS_ZONES => [
                     'Zones',
                     $allows . 'access to DNS zones.',
                     Acl::GROUP_DNS
-                ),
+                ],
 
-                Acl::RESOURCE_ADMINISTRATION_BILLING => array(
+                Acl::RESOURCE_ADMINISTRATION_BILLING => [
                     'Billing',
                     $allows . 'access to billing.',
                     Acl::GROUP_ADMINISTRATION
-                ),
+                ],
 
-                Acl::RESOURCE_ADMINISTRATION_GOVERNANCE => array(
-                    'Governance',
-                    $allows . 'access to governance.',
+                Acl::RESOURCE_ADMINISTRATION_ORCHESTRATION => [
+                    'Orchestration (account level)',
+                    $allows . 'access to orchestration of account level.',
                     Acl::GROUP_ADMINISTRATION
-                ),
+                ],
 
-                Acl::RESOURCE_ADMINISTRATION_ENV_CLOUDS => array(
+                Acl::RESOURCE_ADMINISTRATION_GLOBAL_VARIABLES => [
+                    'Global variables (account level)',
+                    $allows . 'access to global variables of account level.',
+                    Acl::GROUP_ADMINISTRATION
+                ],
+
+                Acl::RESOURCE_ADMINISTRATION_SCRIPTS => [
+                    'Scripts (account level)',
+                    $allows . 'access to scripts.',
+                    Acl::GROUP_ADMINISTRATION,
+                    [
+                        Acl::PERM_ADMINISTRATION_SCRIPTS_MANAGE    => $allows . 'to manage (create/edit/delete) scripts.',
+                        Acl::PERM_ADMINISTRATION_SCRIPTS_EXECUTE   => $allows . 'to execute scripts.',
+                        Acl::PERM_ADMINISTRATION_SCRIPTS_FORK      => $allows . 'to fork scripts.',
+                    ]
+                ],
+
+                Acl::RESOURCE_ENVADMINISTRATION_ENV_CLOUDS => [
                     'Setup clouds',
                     $allows . 'to manage cloud credentials for environments in which this user is a team member',
-                    Acl::GROUP_ADMINISTRATION
-                ),
+                    Acl::GROUP_ENVADMINISTRATION
+                ],
+
+                Acl::RESOURCE_ENVADMINISTRATION_GOVERNANCE => [
+                    'Governance',
+                    $allows . 'access to governance.',
+                    Acl::GROUP_ENVADMINISTRATION
+                ],
+
+                Acl::RESOURCE_ENVADMINISTRATION_GLOBAL_VARIABLES => [
+                    'Global variables (environment level)',
+                    $allows . 'access to global variables of environment level.',
+                    Acl::GROUP_ENVADMINISTRATION
+                ],
+
+                Acl::RESOURCE_ANALYTICS_PROJECTS => [
+                    'Cost Analytics Projects',
+                    $allows . ' account users to create a new projects for cost analytics',
+                    Acl::GROUP_ANALYTICS
+                ],
 
                 // ... add more resources here
-            );
+            ];
 
             //Removes disabled resources
             foreach (Acl::getDisabledResources() as $resourceId) {
@@ -353,13 +416,13 @@ class Definition
             }
 
             //Initializes set of the resources
-            self::$list = new \ArrayObject(array());
-            self::$idx = array();
+            self::$list = new \ArrayObject([]);
+            self::$idx = [];
             foreach (self::$rawList as $resourceId => $optionsArray) {
                 $resourceDefinition = new ResourceObject($resourceId, $optionsArray);
                 self::$list[$resourceId] = $resourceDefinition;
                 if (!isset(self::$idx[$resourceDefinition->getGroup()])) {
-                    self::$idx[$resourceDefinition->getGroup()] = array();
+                    self::$idx[$resourceDefinition->getGroup()] = [];
                 }
                 self::$idx[$resourceDefinition->getGroup()][] = $resourceId;
             }
@@ -404,7 +467,7 @@ class Definition
     public static function getByGroup($group)
     {
         $list = self::getAll();
-        $ret = new \ArrayObject(array());
+        $ret = new \ArrayObject([]);
         if (isset(self::$idx[$group])) {
             foreach (self::$idx[$group] as $resourceId) {
                 $ret[$resourceId] = $list[$resourceId];

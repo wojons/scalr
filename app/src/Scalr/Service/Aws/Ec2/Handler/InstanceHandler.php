@@ -10,13 +10,10 @@ use Scalr\Service\Aws\Ec2\DataType\ReservationData;
 use Scalr\Service\Aws\Ec2\DataType\RunInstancesRequestData;
 use Scalr\Service\Aws\Ec2\DataType\ReservationList;
 use Scalr\Service\Aws\Ec2\DataType\InstanceStatusList;
-use Scalr\Service\Aws\Ec2\DataType\InstanceFilterData;
 use Scalr\Service\Aws\Ec2\DataType\InstanceFilterList;
 use Scalr\Service\Aws\Ec2\DataType\InstanceStatusFilterList;
-use Scalr\Service\Aws\Ec2\DataType\InstanceData;
 use Scalr\Service\Aws\DataType\ListDataType;
 use Scalr\Service\Aws\Client\ClientException;
-use Scalr\Service\Aws\DataType\ErrorData;
 use Scalr\Service\Aws\Ec2Exception;
 use Scalr\Service\Aws\Ec2\AbstractEc2Handler;
 
@@ -54,11 +51,13 @@ class InstanceHandler extends AbstractEc2Handler
      *
      * @param   ListDataType|array|string                    $instanceIdList optional One or more instance IDs
      * @param   InstanceFilterList|InstanceFilterData|array  $filter         optional A Filter list
+     * @param   string             $nextToken      The next paginated set of results to return
+     * @param   int                $maxResults     The maximum number of paginated instance items per response.
      * @return  ReservationList                              Returns List of the reservations on success
      * @throws  ClientException
      * @throws  Ec2Exception
      */
-    public function describe($instanceIdList = null, $filter = null)
+    public function describe($instanceIdList = null, $filter = null, $nextToken = null, $maxResults = null)
     {
         if ($instanceIdList !== null && !($instanceIdList instanceof ListDataType)) {
             $instanceIdList = new ListDataType($instanceIdList);
@@ -66,7 +65,7 @@ class InstanceHandler extends AbstractEc2Handler
         if ($filter !== null && !($filter instanceof InstanceFilterList)) {
             $filter = new InstanceFilterList($filter);
         }
-        return $this->getEc2()->getApiHandler()->describeInstances($instanceIdList, $filter);
+        return $this->getEc2()->getApiHandler()->describeInstances($instanceIdList, $filter, $nextToken, $maxResults);
     }
 
     /**

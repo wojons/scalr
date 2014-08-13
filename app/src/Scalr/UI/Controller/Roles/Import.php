@@ -1,5 +1,9 @@
 <?php
+
 use Scalr\Acl\Acl;
+use Scalr\Modules\PlatformFactory;
+use Scalr\Modules\Platforms\Cloudstack\CloudstackPlatformModule;
+use Scalr\Modules\Platforms\GoogleCE\GoogleCEPlatformModule;
 
 class Scalr_UI_Controller_Roles_Import extends Scalr_UI_Controller
 {
@@ -87,40 +91,44 @@ class Scalr_UI_Controller_Roles_Import extends Scalr_UI_Controller
         ));
     }
 
-    public function xInitiateImportAction()
+    /**
+     * @param $platform
+     * @param $cloudLocation
+     * @param $cloudServerId
+     * @param $roleName
+     * @param bool $roleImage
+     * @throws Exception
+     */
+    public function xInitiateImportAction($platform, $cloudLocation, $cloudServerId, $roleName, $roleImage)
     {
-        $this->request->defineParams(array(
-            'platform',
-            'cloudLocation',
-            'cloudServerId',
-            'roleName'
-        ));
-
         $validator = new Scalr_Validator();
 
-        if ($validator->validateNotEmpty($this->getParam('roleName')) !== true)
-            $err['roleName'] = 'Role name cannot be empty';
+        if ($roleImage) {
+            $roleName = '';
+        } else {
+            if ($validator->validateNotEmpty($roleName) !== true)
+                throw new Exception('Role name cannot be empty');
 
-        if (strlen($this->getParam('roleName')) < 3)
-            $err['roleName'] = _("Role name should be greater than 3 chars");
+            if (strlen($roleName) < 3)
+                throw new Exception(_("Role name should be greater than 3 chars"));
 
-        if (! preg_match("/^[A-Za-z0-9-]+$/si", $this->getParam('roleName')))
-            $err['roleName'] = _("Role name is incorrect");
+            if (! preg_match("/^[A-Za-z0-9-]+$/si", $roleName))
+                throw new Exception(_("Role name is incorrect"));
 
-        if ($this->db->GetOne("SELECT id FROM roles WHERE name=? AND (env_id = '0' OR env_id = ?) LIMIT 1",
-            array($this->getParam('roleName'), $this->getEnvironmentId()))
-        )
-            $err['roleName'] = 'Selected role name is already used. Please select another one.';
-
+            if ($this->db->GetOne("SELECT id FROM roles WHERE name=? AND (env_id = '0' OR env_id = ?) LIMIT 1",
+                array($roleName, $this->getEnvironmentId()))
+            )
+                throw new Exception('Selected role name is already used. Please select another one.');
+        }
 
         $cryptoKey = Scalr::GenerateRandomKey(40);
 
-        $creInfo = new ServerCreateInfo($this->getParam('platform'), null, 0, 0);
+        $creInfo = new ServerCreateInfo($platform, null, 0, 0);
         $creInfo->clientId = $this->user->getAccountId();
         $creInfo->envId = $this->getEnvironmentId();
         $creInfo->farmId = 0;
         $creInfo->SetProperties(array(
-            SERVER_PROPERTIES::SZR_IMPORTING_ROLE_NAME => $this->getParam('roleName'),
+            SERVER_PROPERTIES::SZR_IMPORTING_ROLE_NAME => $roleName,
             SERVER_PROPERTIES::SZR_KEY => $cryptoKey,
             SERVER_PROPERTIES::SZR_KEY_TYPE => SZR_KEY_TYPE::PERMANENT,
             SERVER_PROPERTIES::SZR_VESION => "0.14.0",
@@ -131,51 +139,60 @@ class Scalr_UI_Controller_Roles_Import extends Scalr_UI_Controller
             SERVER_PROPERTIES::LAUNCHED_BY_EMAIL => $this->user->getEmail()
         ));
 
-        $platform = PlatformFactory::NewPlatform($this->getParam('platform'));
+        $platformObj = PlatformFactory::NewPlatform($platform);
 
-        if ($this->getParam('platform') == SERVER_PLATFORMS::EC2) {
-
-            $client = $this->environment->aws($this->getParam('cloudLocation'))->ec2;
-            $r = $client->instance->describe($this->getParam('cloudServerId'));
+        if ($platform == SERVER_PLATFORMS::EC2) {
+            $client = $this->environment->aws($cloudLocation)->ec2;
+            $r = $client->instance->describe($cloudServerId);
             $instance = $r->get(0)->instancesSet->get(0);
 
             $creInfo->SetProperties(array(
-                EC2_SERVER_PROPERTIES::REGION => $this->getParam('cloudLocation'),
-                EC2_SERVER_PROPERTIES::INSTANCE_ID => $this->getParam('cloudServerId'),
+                EC2_SERVER_PROPERTIES::REGION => $cloudLocation,
+                EC2_SERVER_PROPERTIES::INSTANCE_ID => $cloudServerId,
                 EC2_SERVER_PROPERTIES::AMIID => $instance->imageId,
                 EC2_SERVER_PROPERTIES::AVAIL_ZONE => $instance->placement->availabilityZone
             ));
-        } else if ($this->getParam('platform') == SERVER_PLATFORMS::GCE) {
+        } else if ($platform == SERVER_PLATFORMS::EUCALYPTUS) {
 
-            $gce = $platform->getClient($this->environment, $this->getParam('cloudLocation'));
+            $client = $this->environment->eucalyptus($cloudLocation)->ec2;
+            $r = $client->instance->describe($cloudServerId);
+            $instance = $r->get(0)->instancesSet->get(0);
+
+            $creInfo->SetProperties(array(
+                EUCA_SERVER_PROPERTIES::REGION => $cloudLocation,
+                EUCA_SERVER_PROPERTIES::INSTANCE_ID => $cloudServerId,
+                EUCA_SERVER_PROPERTIES::EMIID => $instance->imageId,
+                EUCA_SERVER_PROPERTIES::AVAIL_ZONE => $instance->placement->availabilityZone
+            ));
+        } else if ($platform == SERVER_PLATFORMS::GCE) {
+
+            $gce = $platformObj->getClient($this->environment, $cloudLocation);
 
             $result = $gce->instances->get(
-                $this->environment->getPlatformConfigValue(Modules_Platforms_GoogleCE::PROJECT_ID),
-                $this->getParam('cloudLocation'),
-                $this->getParam('cloudServerId')
+                $this->environment->getPlatformConfigValue(GoogleCEPlatformModule::PROJECT_ID),
+                $cloudLocation,
+                $cloudServerId
             );
 
             $creInfo->SetProperties(array(
-                GCE_SERVER_PROPERTIES::SERVER_ID => $result->id,
-                GCE_SERVER_PROPERTIES::SERVER_NAME => $this->getParam('cloudServerId'),
-                GCE_SERVER_PROPERTIES::CLOUD_LOCATION => $this->getParam('cloudLocation')
+                GCE_SERVER_PROPERTIES::SERVER_NAME => $cloudServerId,
+                GCE_SERVER_PROPERTIES::CLOUD_LOCATION => $cloudLocation
             ));
-        } else if (PlatformFactory::isOpenstack($this->getParam('platform'))) {
+        } else if (PlatformFactory::isOpenstack($platform)) {
             $creInfo->SetProperties(array(
-                OPENSTACK_SERVER_PROPERTIES::CLOUD_LOCATION => $this->getParam('cloudLocation'),
-                OPENSTACK_SERVER_PROPERTIES::SERVER_ID => $this->getParam('cloudServerId')
+                OPENSTACK_SERVER_PROPERTIES::CLOUD_LOCATION => $cloudLocation,
+                OPENSTACK_SERVER_PROPERTIES::SERVER_ID => $cloudServerId
             ));
-        } else if (PlatformFactory::isCloudstack($this->getParam('platform'))) {
+        } else if (PlatformFactory::isCloudstack($platform)) {
             $creInfo->SetProperties(array(
-                CLOUDSTACK_SERVER_PROPERTIES::CLOUD_LOCATION => $this->getParam('cloudLocation'),
-                CLOUDSTACK_SERVER_PROPERTIES::SERVER_ID => $this->getParam('cloudServerId')
+                CLOUDSTACK_SERVER_PROPERTIES::CLOUD_LOCATION => $cloudLocation,
+                CLOUDSTACK_SERVER_PROPERTIES::SERVER_ID => $cloudServerId
             ));
         }
 
         $dbServer = DBServer::Create($creInfo, true);
 
-        $platform = PlatformFactory::NewPlatform($this->getParam('platform'));
-        $ips = $platform->GetServerIPAddresses($dbServer);
+        $ips = $platformObj->GetServerIPAddresses($dbServer);
         $dbServer->localIp = $ips['localIp'];
         $dbServer->remoteIp = $ips['remoteIp'];
         $dbServer->Save();
@@ -231,7 +248,7 @@ class Scalr_UI_Controller_Roles_Import extends Scalr_UI_Controller
             $gce = $platform->getClient($this->environment, $this->getParam('cloudLocation'));
 
             $result = $gce->instances->listInstances($this->environment->getPlatformConfigValue(
-                Modules_Platforms_GoogleCE::PROJECT_ID),
+                GoogleCEPlatformModule::PROJECT_ID),
                 $this->getParam('cloudLocation'),
                 array()
             );
@@ -253,7 +270,7 @@ class Scalr_UI_Controller_Roles_Import extends Scalr_UI_Controller
 
                     //Check is instance already importing
                     try {
-                        $dbServer = DBServer::LoadByPropertyValue(GCE_SERVER_PROPERTIES::SERVER_ID, $server->id);
+                        $dbServer = DBServer::LoadByPropertyValue(GCE_SERVER_PROPERTIES::SERVER_NAME, $server->name);
                         if ($dbServer && $dbServer->status != SERVER_STATUS::TERMINATED) {
                             if ($dbServer->status == SERVER_STATUS::IMPORTING) {
                                 $itm['isImporting'] = true;
@@ -272,78 +289,122 @@ class Scalr_UI_Controller_Roles_Import extends Scalr_UI_Controller
         } elseif (PlatformFactory::isOpenstack($this->getParam('platform'))) {
             $client = $this->environment->openstack($this->getParam('platform'), $this->getParam('cloudLocation'));
             $r = $client->servers->list(true);
+            do {
+                foreach ($r as $server) {
+                    if ($server->status != 'ACTIVE')
+                        continue;
 
-            foreach ($r as $server) {
-                if ($server->status != 'ACTIVE')
-                    continue;
+                    $ips = $platform->determineServerIps($client, $server);
 
-                $ips = $platform->determineServerIps($client, $server);
+                    $itm = array(
+                        'id' => $server->id,
+                        'localIp' => $ips['localIp'],
+                        'publicIp' => $ips['remoteIp'],
+                        'zone' => $this->getParam('cloudLocation'),
+                        'isImporting' => false,
+                        'isManaged' => false
+                    );
 
-                $itm = array(
-                    'id' => $server->id,
-                    'localIp' => $ips['localIp'],
-                    'publicIp' => $ips['remoteIp'],
-                    'zone' => $this->getParam('cloudLocation'),
-                    'isImporting' => false,
-                    'isManaged' => false
-                );
-
-                //Check is instance already importing
-                try {
-                    $dbServer = DBServer::LoadByPropertyValue(OPENSTACK_SERVER_PROPERTIES::SERVER_ID, $server->id);
-                    if ($dbServer && $dbServer->status != SERVER_STATUS::TERMINATED) {
-                        if ($dbServer->status == SERVER_STATUS::IMPORTING) {
-                            $itm['isImporting'] = true;
-                        } else {
-                            $itm['isManaged'] = true;
+                    //Check is instance already importing
+                    try {
+                        $dbServer = DBServer::LoadByPropertyValue(OPENSTACK_SERVER_PROPERTIES::SERVER_ID, $server->id);
+                        if ($dbServer && $dbServer->status != SERVER_STATUS::TERMINATED) {
+                            if ($dbServer->status == SERVER_STATUS::IMPORTING) {
+                                $itm['isImporting'] = true;
+                            } else {
+                                $itm['isManaged'] = true;
+                            }
+                            $itm['serverId'] = $dbServer->serverId;
                         }
-                        $itm['serverId'] = $dbServer->serverId;
+                    } catch (Exception $e) {
                     }
-                } catch (Exception $e) {}
 
-                $results[] = $itm;
-            }
+                    $results[] = $itm;
+                }
+            } while (false !== ($r = $r->getNextPage()));
         } elseif (PlatformFactory::isCloudstack($this->getParam('platform'))) {
-            $client = Scalr_Service_Cloud_Cloudstack::newCloudstack(
-                $platform->getConfigVariable(Modules_Platforms_Cloudstack::API_URL, $this->environment),
-                $platform->getConfigVariable(Modules_Platforms_Cloudstack::API_KEY, $this->environment),
-                $platform->getConfigVariable(Modules_Platforms_Cloudstack::SECRET_KEY, $this->environment),
-                $this->getParam('platform')
-            );
+            $client = $this->environment->cloudstack($this->getParam('platform'));
 
             $platform = PlatformFactory::NewPlatform($this->getParam('platform'));
 
-            $r = $client->listVirtualMachines(null, $this->getParam('cloudLocation'));
-            foreach ($r as $server) {
-                $ips = $platform->determineServerIps($client, $server);
+            $r = $client->instance->describe(array('zoneid' => $this->getParam('cloudLocation')));
+            if (count($r) > 0) {
+                foreach ($r as $server) {
+                    $ips = $platform->determineServerIps($client, $server);
 
-                $itm = array(
-                    'id' => $server->id,
-                    'localIp' => $ips['localIp'],
-                    'publicIp' => $ips['remoteIp'],
-                    'zone' => $this->getParam('cloudLocation'),
-                    'isImporting' => false,
-                    'isManaged' => false
-                );
+                    $itm = array(
+                        'id' => $server->id,
+                        'localIp' => $ips['localIp'],
+                        'publicIp' => $ips['remoteIp'],
+                        'zone' => $this->getParam('cloudLocation'),
+                        'isImporting' => false,
+                        'isManaged' => false
+                    );
 
-                //Check is instance already importing
-                try {
-                    $dbServer = DBServer::LoadByPropertyValue(CLOUDSTACK_SERVER_PROPERTIES::SERVER_ID, $server->id);
-                    if ($dbServer && $dbServer->status != SERVER_STATUS::TERMINATED) {
-                        if ($dbServer->status == SERVER_STATUS::IMPORTING) {
-                            $itm['isImporting'] = true;
-                        } else {
-                            $itm['isManaged'] = true;
+                    //Check is instance already importing
+                    try {
+                        $dbServer = DBServer::LoadByPropertyValue(CLOUDSTACK_SERVER_PROPERTIES::SERVER_ID, $server->id);
+                        if ($dbServer && $dbServer->status != SERVER_STATUS::TERMINATED) {
+                            if ($dbServer->status == SERVER_STATUS::IMPORTING) {
+                                $itm['isImporting'] = true;
+                            } else {
+                                $itm['isManaged'] = true;
+                            }
+                            $itm['serverId'] = $dbServer->serverId;
                         }
-                        $itm['serverId'] = $dbServer->serverId;
-                    }
-                } catch (Exception $e) {}
+                    } catch (Exception $e) {}
 
-                $results[] = $itm;
+                    $results[] = $itm;
+                }
             }
         } elseif ($this->getParam('platform') == SERVER_PLATFORMS::EC2) {
             $client = $this->environment->aws($this->getParam('cloudLocation'))->ec2;
-            $r = $client->instance->describe();
+            $nextToken = null;
+
+            do {
+                if (isset($r)) {
+                    $nextToken = $r->getNextToken();
+                }
+                $r = $client->instance->describe(null, null, $nextToken);
+                if (count($r)) {
+                    foreach ($r as $reservation) {
+                        /* @var $reservation Scalr\Service\Aws\Ec2\DataType\ReservationData */
+                        foreach ($reservation->instancesSet as $instance) {
+                            /* @var $instance Scalr\Service\Aws\Ec2\DataType\InstanceData */
+
+                            if ($instance->instanceState->name != 'running')
+                                continue;
+
+                            $itm = array(
+                                'id' => $instance->instanceId,
+                                'localIp' => $instance->privateIpAddress,
+                                'publicIp' => $instance->ipAddress,
+                                'zone' => $instance->placement->availabilityZone,
+                                'isImporting' => false,
+                                'isManaged' => false
+                            );
+
+                            //Check is instance already importing
+                            try {
+                                $dbServer = DBServer::LoadByPropertyValue(EC2_SERVER_PROPERTIES::INSTANCE_ID, $instance->instanceId);
+                                if ($dbServer && $dbServer->status != SERVER_STATUS::TERMINATED) {
+                                    if ($dbServer->status == SERVER_STATUS::IMPORTING) {
+                                        $itm['isImporting'] = true;
+                                    } else {
+                                        $itm['isManaged'] = true;
+                                    }
+                                    $itm['serverId'] = $dbServer->serverId;
+                                }
+                            } catch (Exception $e) {}
+
+                            $results[] = $itm;
+                        }
+                    }
+                }
+            } while ($r->getNextToken());
+        } elseif ($this->getParam('platform') == SERVER_PLATFORMS::EUCALYPTUS) {
+            $client = $this->environment->eucalyptus($this->getParam('cloudLocation'))->ec2;
+            $r = $client->instance->describe(null, null, $nextToken);
             if (count($r)) {
                 foreach ($r as $reservation) {
                     /* @var $reservation Scalr\Service\Aws\Ec2\DataType\ReservationData */
@@ -364,7 +425,7 @@ class Scalr_UI_Controller_Roles_Import extends Scalr_UI_Controller
 
                         //Check is instance already importing
                         try {
-                            $dbServer = DBServer::LoadByPropertyValue(EC2_SERVER_PROPERTIES::INSTANCE_ID, $instance->instanceId);
+                            $dbServer = DBServer::LoadByPropertyValue(EUCA_SERVER_PROPERTIES::INSTANCE_ID, $instance->instanceId);
                             if ($dbServer && $dbServer->status != SERVER_STATUS::TERMINATED) {
                                 if ($dbServer->status == SERVER_STATUS::IMPORTING) {
                                     $itm['isImporting'] = true;
@@ -388,14 +449,14 @@ class Scalr_UI_Controller_Roles_Import extends Scalr_UI_Controller
 
     public function importAction()
     {
-        $unsupportedPlatforms = array('rds', SERVER_PLATFORMS::RACKSPACE, SERVER_PLATFORMS::EUCALYPTUS, SERVER_PLATFORMS::NIMBULA);
+        $unsupportedPlatforms = array('rds', SERVER_PLATFORMS::RACKSPACE, SERVER_PLATFORMS::NIMBULA);
         $platforms = array();
         $env = Scalr_Environment::init()->loadById($this->getEnvironmentId());
         foreach ($env->getEnabledPlatforms() as $platform) {
             if (!in_array($platform, $unsupportedPlatforms)) {
                 $platforms[$platform] = array('locations' => array());
                 if ($platform !== SERVER_PLATFORMS::GCE) {
-                    foreach (PlatformFactory::NewPlatform($platform)->getLocations() as $lk=>$lv) {
+                    foreach (PlatformFactory::NewPlatform($platform)->getLocations($this->environment) as $lk=>$lv) {
                         $platforms[$platform]['locations'][$lk] = $lv;
                     }
                 }

@@ -5,7 +5,6 @@ use Scalr\Service\Aws\S3\DataType\CopyObjectResponseData;
 use Scalr\Service\Aws\S3\DataType\BucketData;
 use Scalr\Service\Aws\Client\ClientResponseInterface;
 use Scalr\Service\Aws\S3\DataType\ObjectData;
-use Scalr\Service\Aws\DataType\ListDataType;
 use Scalr\Service\Aws\S3Exception;
 use Scalr\Service\Aws\Client\ClientException;
 use Scalr\Service\Aws\S3\AbstractS3Handler;

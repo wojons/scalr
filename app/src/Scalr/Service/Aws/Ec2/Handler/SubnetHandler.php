@@ -2,12 +2,10 @@
 namespace Scalr\Service\Aws\Ec2\Handler;
 
 use Scalr\Service\Aws\Ec2\DataType\SubnetList;
-use Scalr\Service\Aws\Ec2\DataType\SubnetFilterData;
 use Scalr\Service\Aws\Ec2\DataType\SubnetFilterList;
 use Scalr\Service\Aws\Ec2\DataType\SubnetData;
 use Scalr\Service\Aws\DataType\ListDataType;
 use Scalr\Service\Aws\Client\ClientException;
-use Scalr\Service\Aws\DataType\ErrorData;
 use Scalr\Service\Aws\Ec2Exception;
 use Scalr\Service\Aws\Ec2\AbstractEc2Handler;
 

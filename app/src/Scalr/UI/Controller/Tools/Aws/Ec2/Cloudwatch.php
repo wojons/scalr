@@ -97,7 +97,7 @@ class Scalr_UI_Controller_Tools_Aws_Ec2_Cloudwatch extends Scalr_UI_Controller
             );
         }
 
-        $this->response->page('ui/tools/aws/ec2/cloudwatch/view.js', array('metric' => $aMetric), array('extjs-4.1/ext-chart.js'));
+        $this->response->page('ui/tools/aws/ec2/cloudwatch/view.js', array('metric' => $aMetric));
     }
 
     public function xGetMetricAction()

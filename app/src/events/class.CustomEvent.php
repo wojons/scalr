@@ -29,6 +29,10 @@ class CustomEvent extends Event
     }
 
     protected function underScope ($name) {
+        if (preg_match("/^[A-Z]+$/", $name))
+            return $name;
+
+
         $parts = preg_split("/[A-Z]/", $name, -1, PREG_SPLIT_OFFSET_CAPTURE | PREG_SPLIT_NO_EMPTY);
         $ret = "";
         foreach ($parts as $part) {

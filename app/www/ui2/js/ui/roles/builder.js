@@ -18,9 +18,10 @@ Scalr.regPage('Scalr.ui.roles.builder', function (loadParams, moduleParams) {
 	}
 
 	behaviors = [
-		{name: 'mysql2', disable: {behavior: ['postgresql', 'redis', 'mongodb', 'percona']}},
+		{name: 'mysql2', disable: {behavior: ['postgresql', 'redis', 'mongodb', 'percona','mariadb']}},
+		{name: 'mariadb', disable: {behavior: ['postgresql', 'redis', 'mongodb', 'percona','mysql2']}},
 		{name: 'postgresql', disable: {platform: ['gce'], behavior: ['redis', 'mongodb', 'percona', 'mysql2']}},
-		{name: 'percona', disable: {behavior: ['postgresql', 'redis', 'mongodb', 'mysql2']}},
+		{name: 'percona', disable: Ext.apply({behavior: ['postgresql', 'redis', 'mongodb', 'mysql2']})},
 		{name: 'app', disable: {behavior:['www', 'tomcat']}},
         {name: 'tomcat', disable: {behavior:['app'], os:['oel', {family: 'ubuntu', version: ['10.04']}]}},
         {name: 'haproxy', disable: {behavior:['www']}},
@@ -61,8 +62,10 @@ Scalr.regPage('Scalr.ui.roles.builder', function (loadParams, moduleParams) {
 			this.setTooltip(enable?'':'Please select operating system.');
 		});
 		panel.down('#settings-addons').items.each(function(){
-			this[enable?'enable':'disable']();
-			this.setTooltip(enable?'':'Please select operating system.');
+            if (this.xtype === 'button') {
+                this[enable?'enable':'disable']();
+                this.setTooltip(enable?'':'Please select operating system.');
+            }
 		});
 	}
 	
@@ -137,21 +140,21 @@ Scalr.regPage('Scalr.ui.roles.builder', function (loadParams, moduleParams) {
 					items: {
 						xtype: 'cloudlocationmap',
 						itemId: 'locationmap',
-						platforms: moduleParams['platforms'],
+						platforms: Scalr.platforms,
 						size: 'large',
 						listeners: {
                             beforeselectlocation: function() {
                                 return !panel.serverId;
                             },
 							selectlocation: function(location){
-								panel.down('#cloud_location').setValue(location);
+								panel.down('#cloudLocation').setValue(location);
 							}
 						}
 					}
 				},{
 					xtype: 'combo',
 					margin: '0 0 10 0',
-					itemId: 'cloud_location',
+					itemId: 'cloudLocation',
 					editable: false,
 					valueField: 'id',
 					displayField: 'name',
@@ -161,12 +164,14 @@ Scalr.regPage('Scalr.ui.roles.builder', function (loadParams, moduleParams) {
 					},
 					listeners: {
 						change: function(comp, value) {
-							panel.fireEvent('selectlocation', value);
-							var locations = [];
-							this.store.data.each(function(rec){
-								locations.push(rec.get('id'));
-							});
-							panel.down('#locationmap').selectLocation(result.platform, result.cloud_location, locations, 'world');
+                            if (value) {
+                                panel.fireEvent('selectlocation', value);
+                                var locations = [];
+                                this.store.data.each(function(rec){
+                                    locations.push(rec.get('id'));
+                                });
+                                panel.down('#locationmap').selectLocation(result.platform, result.cloudLocation, locations, 'world');
+                            }
 						}
 					}
 				},{
@@ -268,13 +273,17 @@ Scalr.regPage('Scalr.ui.roles.builder', function (loadParams, moduleParams) {
                     maxWidth: 536,
                     itemId: 'rolename',
                     submitValue: false,
-                    //validateOnChange: false,
-                    validator: function (value) {
-                        var r = /^[A-z0-9-]+$/, r1 = /^-/, r2 = /-$/;
-                        if (r.test(value) && !r1.test(value) && !r2.test(value) && value.length > 2)
-                            return true;
-                        else
-                            return 'Illegal name';
+                    allowBlank: false,
+                    vtype: 'rolename'
+                },{
+                    xtype: 'checkbox',
+                    boxLabel: 'Create only Image for future use and do not create role',
+                    itemId: 'roleimage',
+                    hidden: !Scalr.flags['betaMode'],
+                    listeners: {
+                        change: function(field, value) {
+                            this.prev().setValue().setDisabled(value);
+                        }
                     }
                 },{
                     xtype: 'label',
@@ -304,18 +313,19 @@ Scalr.regPage('Scalr.ui.roles.builder', function (loadParams, moduleParams) {
                     xtype: 'container',
                     margin: '10 0 10 -10',
                     itemId: 'settings-addons',
+                    cls: 'x-rolebuilder-addons',
                     defaults: {
                         xtype: 'button',
                         ui: 'simple',
                         enableToggle: true,
                         cls: 'x-btn-simple-large',
                         iconAlign: 'above',
-                        margin: '0 0 10 10',
+                        margin: '-10 10 0 0',
                         listeners: {
                             toggle: onSelectAddon
                         }
                     },
-                    items: buttons['addons']
+                    items: Ext.Array.merge(buttons['addons'], [{xtype: 'component', html: '<br/><br/>Chef client will be included in this image', margin: 0, cls: '', style: 'vertical-align:top;display:inline-block;'}])
                 },{
                     xtype: 'displayfield',
                     itemId: 'softwarewarning',
@@ -543,6 +553,7 @@ Scalr.regPage('Scalr.ui.roles.builder', function (loadParams, moduleParams) {
 							
 							//role name
 							r['roleName'] = panel.down('#rolename').getValue();
+                            r['roleImage'] = panel.down('#roleimage').getValue();
 
 							//collect behaviors
 							if (! r.behaviors.length) {
@@ -587,7 +598,7 @@ Scalr.regPage('Scalr.ui.roles.builder', function (loadParams, moduleParams) {
 							
 							//backward compatibility
 							r['mysqlServerType'] = 'mysql';
-							r['location'] = r['cloud_location'];
+							r['location'] = r['cloudLocation'];
 							
 							r.advanced = Ext.encode(r.advanced);
 							r.chef = Ext.encode(r.chef);
@@ -850,7 +861,7 @@ Scalr.regPage('Scalr.ui.roles.builder', function (loadParams, moduleParams) {
 
                                         }
                                     });
-                                    Scalr.event.fireEvent('redirect', '#/roles/view');
+                                    Scalr.event.fireEvent('redirect', '#/roles/manager');
                                 }
                             });
                         }
@@ -901,7 +912,8 @@ Scalr.regPage('Scalr.ui.roles.builder', function (loadParams, moduleParams) {
             itemId: 'platforms',
 			dock: 'left',
 			cls: 'x-docked-tabs',
-            width: 112,
+            width: 112 + Ext.getScrollbarSize().width,
+            overflowY: 'auto',
 			defaults: {
                 xtype: 'button',
                 ui: 'tab',
@@ -924,13 +936,14 @@ Scalr.regPage('Scalr.ui.roles.builder', function (loadParams, moduleParams) {
 		
 		onSelectPlatform: function(platformId) {
 			var platform = platforms[platformId],
+                platformLocations = Scalr.platforms[platformId] ? Scalr.platforms[platformId].locations : null,
 				images = platform.images,
 				compImages = panel.down('#images'),
 				added = {},	
 				locations = {},	
 				compLocationData = [],
 				archs = {};
-			
+        
             panel.toggleRightColumn(images.length == 0);
 			if (result) {
 				this.platformsState[result.platform] = Ext.apply({}, result);
@@ -984,14 +997,16 @@ Scalr.regPage('Scalr.ui.roles.builder', function (loadParams, moduleParams) {
 						added[imageOS] = true;
 					}
 
-					if (platform.locations && platform.locations[image.cloud_location]) {
-						locations[image.cloud_location] = platform.locations[image.cloud_location];
-					}
+					if (platformLocations && platformLocations[image.cloud_location]) {
+						locations[image.cloud_location] = Scalr.platforms[platformId].locations[image.cloud_location];
+					} else {
+                        locations[image.cloud_location] = image.cloud_location;
+                    }
 					archs[image.architecture] = true;
 
 				}
 			} else {
-				locations = Ext.clone(platform.locations);
+				locations = platformLocations ? Ext.clone(platformLocations) : {};
 			}
 
 			var c = panel.down('#leftcol').query('component[cls~=hideoncustomimage]');
@@ -1005,9 +1020,14 @@ Scalr.regPage('Scalr.ui.roles.builder', function (loadParams, moduleParams) {
 			}
 
 			//location combobox setup
-			var compLocation = panel.down('#cloud_location')
+			var compLocation = panel.down('#cloudLocation');
+            compLocation.reset();
 			if (result.platform == 'gce') {
 				compLocation.store.loadData([{id: 'all', name: 'GCE roles are automatically available in all regions.'}]);
+				compLocation.setValue('all');
+				compLocation.setDisabled(true);
+			} else if (result.platform == 'ecs') {
+				compLocation.store.loadData([{id: 'all', name: 'ECS roles are automatically available in all regions.'}]);
 				compLocation.setValue('all');
 				compLocation.setDisabled(true);
 			} else {
@@ -1017,7 +1037,7 @@ Scalr.regPage('Scalr.ui.roles.builder', function (loadParams, moduleParams) {
 				compLocation.store.loadData(compLocationData);
 				compLocation.setDisabled(false);
 				compLocation.store.sort('name', 'desc');
-				compLocation.setValue(result.cloud_location ? result.cloud_location : (result.platform == 'ec2' && locations['us-east-1'] ? 'us-east-1' : compLocationData[0].id));
+				compLocation.setValue(result.cloudLocation ? result.cloudLocation : (result.platform == 'ec2' && locations['us-east-1'] ? 'us-east-1' : compLocationData[0].id));
 			}
 			
 			panel.down('#rootdevicetypewrap')[result.platform == 'ec2' && rootDeviceTypeFilterEnabled ? 'show' : 'hide']();
@@ -1059,7 +1079,7 @@ Scalr.regPage('Scalr.ui.roles.builder', function (loadParams, moduleParams) {
 				
 			for (var j=0, len=images.length; j<len; j++) {
 				var image = images[j],
-					match = result.cloud_location == 'all' || image.cloud_location == result.cloud_location;
+					match = result.cloudLocation == 'all' || image.cloud_location == result.cloudLocation;
 				if (match) {
 					for (var i=0, len1=me.filters.length; i<len1; i++) {
 						match = result[me.filters[i]] ? image[me.filters[i]] == result[me.filters[i]] : true;
@@ -1101,7 +1121,7 @@ Scalr.regPage('Scalr.ui.roles.builder', function (loadParams, moduleParams) {
 			for (var j=0, len=images.length; j<len; j++) {
 				var image = images[j],
 					matchHvm = true,
-					match = result.cloud_location == 'all' || image.cloud_location == result.cloud_location;
+					match = result.cloudLocation == 'all' || image.cloud_location == result.cloudLocation;
 				if (match) {
 					for (var i=0, len1=me.filters.length; i<len1; i++) {
 						match = result[me.filters[i]] ? image[me.filters[i]] == result[me.filters[i]] : true;
@@ -1125,7 +1145,7 @@ Scalr.regPage('Scalr.ui.roles.builder', function (loadParams, moduleParams) {
 			for (var i=0, len=me.filters.length; i<len; i++) {
 				for (var k=0, len1=images.length; k<len1; k++) {
 					var image = images[k],
-						match = result.cloud_location == 'all' || image.cloud_location == result.cloud_location;
+						match = result.cloudLocation == 'all' || image.cloud_location == result.cloudLocation;
 					if (match) {
 						for (var j=0, len2=me.filters.length; j<len2; j++) {
 							match = result[me.filters[j]] == result[me.filters[i]] || (result[me.filters[j]] ? image[me.filters[j]] == result[me.filters[j]] : true);
@@ -1265,8 +1285,8 @@ Scalr.regPage('Scalr.ui.roles.builder', function (loadParams, moduleParams) {
         loadServer: function(server, image) {
             image = image || {};
             panel.suspendLayouts();
-            if (server['platform'] !== 'gce') {
-                panel.down('#cloud_location').setValue(image['cloud_location']).disable();
+            if (server['platform'] !== 'gce' && server['platform'] !== 'ecs') {
+                panel.down('#cloudLocation').setValue(image['cloudLocation']).disable();
             }
             panel.down('#architecture').setValue(image['architecture']).disable();
             panel.down('#root_device_type').setValue(image['root_device_type']).disable();
@@ -1326,25 +1346,35 @@ Scalr.regPage('Scalr.ui.roles.builder', function (loadParams, moduleParams) {
                         return false;
                     }
                 });
+                if (server) {
+                    this.on('afterselectplatform', function(){
+                        this.loadServer(server, image);
+                    }, this, {single: true});
+                }
+
+                if ('image' in loadParams) {
+                    this.down('#roleimage').setValue(true);
+                }
+
                 defaultItem = defaultItem || items.first();
                 defaultItem.toggle(true);
-
-                if (server) {
-                    this.loadServer(server, image);
-                }
 			},
 			selectplatform: function(value) {
-				this.suspendState++;
-				panel.onSelectPlatform(value);
-				panel.initFilters();
-				this.suspendState--;
-				panel.updateFiltersState();
-				panel.down('#availzone')[value=='ec2'?'show':'hide']();
-				panel.down('#region')[value=='gce'?'show':'hide']();
-				panel.down('#overrideImageId')[platforms[value].images.length && Scalr.flags['betaMode']?'show':'hide']();
+                var me = this;
+                Scalr.loadCloudLocations(value, function(){
+                    me.suspendState++;
+                    me.onSelectPlatform(value);
+                    me.initFilters();
+                    me.suspendState--;
+                    me.updateFiltersState();
+                    me.down('#availzone')[value=='ec2'?'show':'hide']();
+                    me.down('#region')[value=='gce' || value=='ecs'?'show':'hide']();
+                    me.down('#overrideImageId')[platforms[value].images.length && Scalr.flags['betaMode']?'show':'hide']();
+                    me.fireEvent('afterselectplatform');
+                });
 			},
 			selectlocation: function(value) {
-				result.cloud_location = value;
+				result.cloudLocation = value;
 				if (!this.suspendState) {
 					panel.updateFiltersState();
 				}

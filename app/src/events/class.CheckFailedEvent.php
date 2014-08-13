@@ -3,15 +3,15 @@
 class CheckFailedEvent extends Event
 {
 
-    public $dBServer;
+    public $DBServer;
     public $check;
     public $details;
 
 
-    public function __construct(DBServer $dBServer, $check, $details)
+    public function __construct(DBServer $DBServer, $check, $details)
     {
         parent::__construct();
-        $this->dBServer = $dBServer;
+        $this->DBServer = $DBServer;
         $this->check = $check;
         $this->details = $details;
     }

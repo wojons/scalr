@@ -3,6 +3,7 @@ namespace Scalr\Service\Aws\Iam\DataType;
 
 use DateTime;
 use Scalr\Service\Aws\Iam\AbstractIamDataType;
+use Scalr\Service\Aws\IamException;
 
 /**
  * RoleData
@@ -71,4 +72,52 @@ class RoleData extends AbstractIamDataType
      * @var string
      */
     public $path;
+
+    /**
+     * {@inheritdoc}
+     * @see Scalr\Service\Aws\Iam.AbstractIamDataType::throwExceptionIfNotInitialized()
+     */
+    protected function throwExceptionIfNotInitialized()
+    {
+        parent::throwExceptionIfNotInitialized();
+        if ($this->roleName === null) {
+            throw new IamException(sprintf(
+                'roleName has not been initialized for the object %s yet.', get_class($this)
+            ));
+        }
+        if ($this->roleId === null) {
+            throw new IamException(sprintf(
+                'roleId has not been initialized for the object %s yet.', get_class($this)
+            ));
+        }
+    }
+
+    /**
+     * Deletes role.
+     *
+     * The role must not have any policies attached.
+     *
+     * @return  boolean    Returns true on success or throws an exception
+     * @throws  IamException
+     * @throws  ClientException
+     */
+    public function delete()
+    {
+        $this->throwExceptionIfNotInitialized();
+        return $this->getIam()->role->delete($this->roleName);
+    }
+
+    /**
+     * Updates the policy that grants an entity permission to assume a role
+     *
+     * @param   string   $policyDocument The policy that grants an entity permission to assume the role.
+     * @return  boolean  Returns true on success or throws an exception
+     * @throws  IamException
+     * @throws  ClientException
+     */
+    public function updateAssumePolicy($policyDocument)
+    {
+        $this->throwExceptionIfNotInitialized();
+        return $this->getIam()->role->updateAssumePolicy($this->roleName, $policyDocument);
+    }
 }

@@ -13,7 +13,7 @@ use Scalr\Exception\UpgradeException;
  */
 class FilesystemUpgradeEntity extends AbstractUpgradeEntity
 {
-	/**
+    /**
      * {@inheritdoc}
      * @see Scalr\Upgrade.AbstractEntity::save()
      */
@@ -41,7 +41,7 @@ class FilesystemUpgradeEntity extends AbstractUpgradeEntity
         }
     }
 
-	/**
+    /**
      * {@inheritdoc}
      * @see Scalr\Upgrade\Entity.AbstractUpgradeEntity::createFailureMessage()
      */

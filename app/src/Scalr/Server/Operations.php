@@ -3,7 +3,7 @@ namespace Scalr\Server;
 
 class Operations
 {
-    const MYSQL_GROW_VOLUME = 'mysql.grow-volume';
+    const DBMSR_GROW_VOLUME = 'dbmsr.grow-volume';
 
     private $dbServer;
 

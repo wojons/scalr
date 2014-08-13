@@ -7,7 +7,6 @@ use Scalr\Service\Aws\Ec2\DataType\MonitorInstancesResponseSetData;
 use Scalr\Service\Aws\Ec2\DataType\InstanceAttributeType;
 use Scalr\Service\Aws\Ec2\DataType\PropagatingVgwData;
 use Scalr\Service\Aws\Ec2\DataType\RouteTableAssociationData;
-use Scalr\Service\Aws\Ec2\DataType\RouteTableAssociationList;
 use Scalr\Service\Aws\Ec2\DataType\RouteData;
 use Scalr\Service\Aws\Ec2\DataType\RouteList;
 use Scalr\Service\Aws\Ec2\DataType\RouteTableData;
@@ -21,7 +20,6 @@ use Scalr\Service\Aws\Ec2\DataType\InternetGatewayFilterList;
 use Scalr\Service\Aws\Ec2\DataType\NetworkInterfaceAttributeType;
 use Scalr\Service\Aws\Ec2\DataType\CreateNetworkInterfaceRequestData;
 use Scalr\Service\Aws\Ec2\DataType\NetworkInterfacePrivateIpAddressesSetData;
-use Scalr\Service\Aws\Ec2\DataType\NetworkInterfacePrivateIpAddressesSetList;
 use Scalr\Service\Aws\Ec2\DataType\NetworkInterfaceAttachmentData;
 use Scalr\Service\Aws\Ec2\DataType\NetworkInterfaceAssociationData;
 use Scalr\Service\Aws\Ec2\DataType\NetworkInterfaceList;
@@ -37,7 +35,6 @@ use Scalr\Service\Aws\Ec2\DataType\AccountAttributeValueList;
 use Scalr\Service\Aws\Ec2\DataType\RegisterImageData;
 use Scalr\Service\Aws\Ec2\DataType\KeyPairFilterNameType;
 use Scalr\Service\Aws\Ec2\DataType\KeyPairFilterList;
-use Scalr\Service\Aws\Ec2\DataType\ImageFilterNameType;
 use Scalr\Service\Aws\Ec2\DataType\PlacementGroupData;
 use Scalr\Service\Aws\Ec2\DataType\PlacementGroupList;
 use Scalr\Service\Aws\Ec2\DataType\PlacementGroupFilterList;
@@ -45,7 +42,6 @@ use Scalr\Service\Aws\Ec2\DataType\GetConsoleOutputResponseData;
 use Scalr\Service\Aws\Ec2\DataType\SubnetList;
 use Scalr\Service\Aws\Ec2\DataType\SubnetData;
 use Scalr\Service\Aws\Ec2\DataType\SubnetFilterList;
-use Scalr\Service\Aws\Ec2\DataType\SnapshotFilterData;
 use Scalr\Service\Aws\Ec2\DataType\SnapshotData;
 use Scalr\Service\Aws\Ec2\DataType\SnapshotList;
 use Scalr\Service\Aws\Ec2\DataType\SnapshotFilterList;
@@ -126,18 +122,15 @@ use Scalr\Service\Aws\DataType\ListDataType;
 use Scalr\Service\Aws\Ec2\Ec2ListDataType;
 use Scalr\Service\Aws\Ec2\DataType\AvailabilityZoneFilterList;
 use Scalr\Service\Aws\AbstractApi;
-use Scalr\Service\Aws\Client\ClientResponseInterface;
 use Scalr\Service\Aws;
-use Scalr\Service\Aws\Client\QueryClientException;
 use Scalr\Service\Aws\Ec2;
 use Scalr\Service\Aws\Ec2Exception;
 use Scalr\Service\Aws\Client\ClientException;
 use Scalr\Service\Aws\EntityManager;
-use Scalr\Service\Aws\DataType\ErrorData;
-use Scalr\Service\Aws\Client\QueryClientResponse;
 use Scalr\Service\Aws\Client\ClientInterface;
 use \DateTimeZone;
 use \DateTime;
+use Scalr\Service\Aws\Ec2\DataType\RegionInfoList;
 
 /**
  * Ec2 Api messaging.
@@ -3970,6 +3963,28 @@ class Ec2Api extends AbstractApi
             $sxml = simplexml_load_string($response->getRawContent());
             $response = null;
             $result = $this->_loadListByName('RouteTable', $sxml->routeTableSet);
+            $result->setRequestId((string)$sxml->requestId);
+        }
+        return $result;
+    }
+
+    /**
+     * DescribeRegions action
+     *
+     * @return  RegionInfoList  Returns the list of the RegionInfoData objects on success
+     * @throws  ClientException
+     * @throws  Ec2Exception
+     */
+    public function describeRegions()
+    {
+        $result = null;
+        $options = array();
+        $action = ucfirst(__FUNCTION__);
+        $response = $this->client->call($action, $options);
+        if ($response->getError() === false) {
+            $sxml = simplexml_load_string($response->getRawContent());
+            $response = null;
+            $result = $this->_loadListByName('RegionInfo', $sxml->regionInfo);
             $result->setRequestId((string)$sxml->requestId);
         }
         return $result;

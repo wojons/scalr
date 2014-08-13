@@ -53,6 +53,12 @@ Scalr.regPage('Scalr.ui.services.configurations.manage', function (loadParams, m
                 margin: '0 0 24',
                 cls: 'x-form-field-warning',
                 value: 'No configuration found. Please launch at least one server to start managing configuration.'
+            },{
+                xtype: 'displayfield',
+                anchor: '100%',
+                margin: '0 0 24',
+                cls: 'x-form-field-warning',
+                value: 'Any changes made to your configuration through this interface will result in ' + moduleParams['behaviorName'] + ' being restarted after your changes are saved.'
             }]
 		}],
 

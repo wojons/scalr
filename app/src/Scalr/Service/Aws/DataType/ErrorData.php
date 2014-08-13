@@ -10,6 +10,8 @@ namespace Scalr\Service\Aws\DataType;
 class ErrorData
 {
 
+    const ERR_ACCESS_DENIED = 'AccessDenied';
+
     /**
      * The request signature does not conform to AWS standards.
      */

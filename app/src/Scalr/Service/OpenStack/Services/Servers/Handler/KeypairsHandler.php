@@ -11,7 +11,10 @@ use Scalr\Service\OpenStack\Services\AbstractServiceHandler;
  * @author   Vitaliy Demidov  <vitaliy@scalr.com>
  * @since    17.12.2012
  *
- * @method   array  list()       list()                        Gets a lists of keypairs associated with the account.
+ * @method   \Scalr\Service\OpenStack\Type\DefaultPaginationList list()
+ *           list()
+ *           Gets a lists of keypairs associated with the account.
+ *
  * @method   object get()        get($keypairName)             Gets a keypair by his name.
  * @method   object create()     create($name, $apiKey = null) Creates or imports keypair.
  * @method   bool   delete()     delete($name)                 Removes keypair by its name.

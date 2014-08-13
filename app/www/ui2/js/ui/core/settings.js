@@ -112,7 +112,7 @@ Scalr.regPage('Scalr.ui.core.settings', function (loadParams, moduleParams) {
 				store: moduleParams['timezones_list'],
 				allowBlank: false,
 				forceSelection: true,
-				editable: true,
+				editable: false,
 				name: 'timezone',
 				queryMode: 'local',
 				width: 336,
@@ -193,6 +193,106 @@ Scalr.regPage('Scalr.ui.core.settings', function (loadParams, moduleParams) {
                     }
 				}]
 			}]
+		}, {
+			xtype: 'fieldset',
+			title: 'SSH Launcher settings',
+            hidden: !Scalr.isAllowed('FARMS_SERVERS', 'ssh-console'),
+            collapsed: true,
+            collapsible: true,
+            defaults: {
+                anchor: '100%',
+                labelWidth: 120,
+                emptyText: 'Use default'
+            },
+            items: [{
+                xtype: 'textfield',
+                name: 'ssh.console.username',
+                fieldLabel: 'User name',
+                emptyText: 'root (scalr on GCE)'
+            },{
+                xtype: 'textfield',
+                name: 'ssh.console.port',
+                fieldLabel: 'Port',
+                emptyText: '22'
+            },{
+                xtype: 'buttongroupfield',
+                hidden: !Scalr.isAllowed('SECURITY_SSH_KEYS'),
+                name: 'ssh.console.disable_key_auth',
+                fieldLabel: 'SSH Key Auth',
+                value: '0',
+                defaults: {
+                    width: 90
+                },
+                items: [{
+                    text: 'Disabled',
+                    value: '1'
+                },{
+                    text: 'Enabled',
+                    value: '0'
+                }]
+            },{
+                xtype: 'container',
+                hidden: !Scalr.isAllowed('SECURITY_SSH_KEYS'),
+                layout: 'hbox',
+                items: [{
+                    xtype: 'textfield',
+                    name: 'ssh.console.key_name',
+                    labelWidth: 120,
+                    flex: 1,
+                    fieldLabel: 'SSH key name',
+                    emptyText: 'FARM-{SCALR_FARM_ID}-{SCALR_CLOUD_LOCATION}-' + moduleParams['scalr.id']
+                },{
+                    xtype: 'displayinfofield',
+                    margin: '0 0 0 5',
+                    width: 16,
+                    info: Ext.String.htmlEncode('Scalr will automatically provide the SSH keys it generates to use with your hosts to the SSH Launcher Applet. '+
+                          'If you\'re using Scalr keys, we suggest keeping this default unchanged. <br/>However, if you\'d like to use a custom SSH Key '+
+                          '(perhaps because you have configured SSH Key Governance), then you can simply add the key in ~/.ssh/scalr-ssh-keys. ' +
+                          'Scalr will not override it. <br/>View <a href="http:/scalr-wiki.atlassian.net" target="_blank">this Wiki page for important information</a>.')
+                }]
+            },{
+                xtype: 'container',
+                layout: 'hbox',
+                items: [{
+                    xtype: 'combobox',
+                    labelWidth: 120,
+                    flex: 1,
+                    store: [
+                        ['', 'Auto detect'],
+                        ['com.scalr.ssh.provider.mac.', 'Mac AppleScript + OpenSSH'],
+                        ['com.scalr.ssh.provider.linux.LinuxGnomeTerminalSSHProvider', 'Linux + Gnome Terminal + OpenSSH'],
+                        ['com.scalr.ssh.provider.linux.LinuxXTermSSHProvider', 'Linux + XTerm + OpenSSH'],
+                        ['com.scalr.ssh.provider.mac.MacAppleScriptSSHProvider', 'Mac OS + AppleScript + OpenSSH'],
+                        ['com.scalr.ssh.provider.mac.MacNativeSSHProvider', 'Mac OS + Terminal Configuration + OpenSSH'],
+                        ['com.scalr.ssh.provider.mac.MacSSHProvider', 'Mac OS + Terminal bash Script + OpenSSH'],
+                        ['com.scalr.ssh.provider.windows.WindowsPuTTYProvider', 'Windows + PuTTY'],
+                        ['com.scalr.ssh.provider.windows.WindowsOpenSSHProvider', 'Windows + OpenSSH']
+                    ],
+                    emptyText: 'Auto detect',
+                    name: 'ssh.console.preferred_provider',
+                    editable: false,
+                    fieldLabel: 'Preferred provider'
+                },{
+                    xtype: 'displayinfofield',
+                    margin: '0 0 0 5',
+                    width: 16,
+                    info: Ext.String.htmlEncode('The applet automatically tries all providers available for your '+
+                                                'platform, you should not have to override this parameter. Only change this ' +
+                                                'parameter if you understand precisely what you are doing.')
+                }]
+            },{
+                xtype: 'combobox',
+                store: ['ALL', 'SEVERE', 'WARNING', 'INFO', 'CONFIG', 'FINE', 'FINER', 'FINEST', 'OFF'],
+                emptyText: 'CONFIG',
+                name: 'ssh.console.log_level',
+                editable: false,
+                fieldLabel: 'Log level'
+            },{
+                xtype: 'component',
+                style: 'color:#999',
+                margin: '12 0 0',
+                html: '<img src="'+Ext.BLANK_IMAGE_URL+'" class="x-icon-globalvars" style="vertical-align:top" />&nbsp;&nbsp;All text fields in SSH applet settings support Global Variable Interpolation'
+            }]
 		}],
 
 		dockedItems: [{
@@ -236,6 +336,7 @@ Scalr.regPage('Scalr.ui.core.settings', function (loadParams, moduleParams) {
 		}]
 	});
 
+    moduleParams['ssh.console.disable_key_auth'] = moduleParams['ssh.console.disable_key_auth'] || '0';
 	form.getForm().setValues(moduleParams);
 	return form;
 });

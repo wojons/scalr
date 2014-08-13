@@ -1,5 +1,7 @@
 <?php
+
 use Scalr\Acl\Acl;
+use Scalr\Service\CloudStack\Services\Snapshot\DataType\ListSnapshotData;
 
 class Scalr_UI_Controller_Tools_Cloudstack_Snapshots extends Scalr_UI_Controller
 {
@@ -36,57 +38,51 @@ class Scalr_UI_Controller_Tools_Cloudstack_Snapshots extends Scalr_UI_Controller
         ));
 
         $platformName = $this->getParam('platform');
-        if (!$platformName)
+        if (!$platformName) {
             throw new Exception("Cloud should be specified");
+        }
 
-        $platform = PlatformFactory::NewPlatform($platformName);
-
-        $cs = Scalr_Service_Cloud_Cloudstack::newCloudstack(
-            $platform->getConfigVariable(Modules_Platforms_Cloudstack::API_URL, $this->environment),
-            $platform->getConfigVariable(Modules_Platforms_Cloudstack::API_KEY, $this->environment),
-            $platform->getConfigVariable(Modules_Platforms_Cloudstack::SECRET_KEY, $this->environment),
-            $platformName
-        );
+        $cs = $this->environment->cloudstack($platformName);
 
         foreach ($this->getParam('snapshotId') as $snapshotId) {
-            $cs->deleteSnapshot($snapshotId);
+            $cs->snapshot->delete($snapshotId);
         }
 
         $this->response->success('Snapshot(s) successfully removed');
     }
 
-    public function getSnapshots($platformName, $snapshotId = null)
+    public function getSnapshots($platformName, $snapshotId = null, $cloudLocation = null)
     {
-        if (!$platformName)
+        if (!$platformName) {
             throw new Exception("Cloud should be specified");
+        }
 
-        $platform = PlatformFactory::NewPlatform($platformName);
+        $cs = $this->environment->cloudstack($platformName);
 
-        $cs = Scalr_Service_Cloud_Cloudstack::newCloudstack(
-            $platform->getConfigVariable(Modules_Platforms_Cloudstack::API_URL, $this->environment),
-            $platform->getConfigVariable(Modules_Platforms_Cloudstack::API_KEY, $this->environment),
-            $platform->getConfigVariable(Modules_Platforms_Cloudstack::SECRET_KEY, $this->environment),
-            $platformName
-        );
+        $r = new ListSnapshotData();
+        $r->zoneid = $cloudLocation;
 
-        $snapshots = $cs->listSnapshots();
+        $snapshots = $cs->snapshot->describe($r);
 
         $snaps = array();
-        foreach ($snapshots as $pk => $pv) {
-            if ($snapshotId && $snapshotId != $pv->id)
-                continue;
+        if (!empty($snapshots)) {
+            foreach ($snapshots as $pk => $pv) {
+                if ($snapshotId && $snapshotId != $pv->id) {
+                    continue;
+                }
+                $item = array(
+                    'snapshotId' => (string) $pv->id,
+                    'type'	=> $pv->snapshottype,
+                    'volumeId' => $pv->volumeid,
+                    'volumeType' => $pv->volumetype,
+                    'createdAt' => $pv->created->format('c'),
+                    'intervalType' => $pv->intervaltype,
+                    'state'	=> $pv->state,
+                    'zone' => $pv->zoneid
+                );
 
-            $item = array(
-                'snapshotId' => (string) $pv->id,
-                'type'	=> $pv->snapshottype,
-                'volumeId' => $pv->volumeid,
-                'volumeType' => $pv->volumetype,
-                'createdAt' => $pv->created,
-                'intervalType' => $pv->intervaltype,
-                'state'	=> $pv->state
-            );
-
-            $snaps[] = $item;
+                $snaps[] = $item;
+            }
         }
 
         return $snaps;
@@ -94,7 +90,7 @@ class Scalr_UI_Controller_Tools_Cloudstack_Snapshots extends Scalr_UI_Controller
 
     public function xGetSnapshotsAction()
     {
-        $snaps = $this->getSnapshots($this->getParam('platform'));
+        $snaps = $this->getSnapshots($this->getParam('platform'), null, $this->getParam('cloudLocation'));
         $this->response->data(array('data' => $snaps));
     }
 
@@ -105,7 +101,7 @@ class Scalr_UI_Controller_Tools_Cloudstack_Snapshots extends Scalr_UI_Controller
             'volumeId'
         ));
 
-        $snaps = $this->getSnapshots($this->getParam('platform'), $this->getParam('snapshotId'));
+        $snaps = $this->getSnapshots($this->getParam('platform'), $this->getParam('snapshotId'), $this->getParam('cloudLocation'));
         $response = $this->buildResponseFromData($snaps, array('snapshotId', 'volumeId', 'state'));
         $this->response->data($response);
     }

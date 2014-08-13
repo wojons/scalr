@@ -1,7 +1,6 @@
 <?php
 namespace Scalr\Tests\Service\Aws;
 
-use Scalr\Service\Aws\CloudFront\DataType as CloudFrontDataType;
 use Scalr\Tests\Service\AwsTestCase;
 use Scalr\Service\Aws\CloudFront;
 

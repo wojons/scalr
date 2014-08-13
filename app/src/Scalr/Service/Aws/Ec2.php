@@ -5,6 +5,7 @@ use Scalr\Service\Aws\Ec2\DataType\AccountAttributeSetList;
 use Scalr\Service\Aws\Client\ClientException;
 use Scalr\Service\Aws\DataType\ListDataType;
 use Scalr\Service\Eucalyptus;
+use Scalr\Service\Aws\Ec2\DataType\RegionInfoList;
 
 /**
  * Amazon EC2 interface
@@ -29,7 +30,7 @@ use Scalr\Service\Eucalyptus;
  * @property  \Scalr\Service\Aws\Ec2\Handler\InternetGatewayHandler  $internetGateway  Gets an InternetGateway service interface handler.
  * @property  \Scalr\Service\Aws\Ec2\Handler\RouteTableHandler       $routeTable       Gets an RouteTable service interface handler.
  *
- * @method    \Scalr\Service\Aws\Ec2\V20130201\Ec2Api getApiHandler() getApiHandler()  Gets an Ec2Api handler
+ * @method    \Scalr\Service\Aws\Ec2\V20140615\Ec2Api getApiHandler() getApiHandler()  Gets an Ec2Api handler
  */
 class Ec2 extends AbstractService implements ServiceInterface
 {
@@ -45,9 +46,19 @@ class Ec2 extends AbstractService implements ServiceInterface
     const API_VERSION_20130201 = '20130201';
 
     /**
+     * API Version 20140201
+     */
+    const API_VERSION_20140201 = '20140201';
+
+    /**
+     * API Version 20140615
+     */
+    const API_VERSION_20140615 = '20140615';
+
+    /**
      * Current version of the API
      */
-    const API_VERSION_CURRENT = self::API_VERSION_20130201;
+    const API_VERSION_CURRENT = self::API_VERSION_20140615;
 
     /**
      * {@inheritdoc}
@@ -72,6 +83,8 @@ class Ec2 extends AbstractService implements ServiceInterface
         return array(
             self::API_VERSION_20121201,
             self::API_VERSION_20130201,
+            self::API_VERSION_20140201,
+            self::API_VERSION_20140615,
         );
     }
 
@@ -81,7 +94,7 @@ class Ec2 extends AbstractService implements ServiceInterface
      */
     public function getCurrentApiVersion()
     {
-        return self::API_VERSION_CURRENT;
+        return $this->getAws() instanceof Eucalyptus ? self::API_VERSION_20130201 : self::API_VERSION_CURRENT;
     }
 
     /**
@@ -102,7 +115,7 @@ class Ec2 extends AbstractService implements ServiceInterface
                 $region = $aws->getRegion();
             }
         }
-        return 'ec2.' . $region . '.amazonaws.com';
+        return 'ec2' . (empty($region) ? '' : '.' . $region) . '.amazonaws.com';
     }
 
     /**
@@ -121,5 +134,17 @@ class Ec2 extends AbstractService implements ServiceInterface
             $attributeNameList = new ListDataType($attributeNameList);
         }
         return $this->getApiHandler()->describeAccountAttributes($attributeNameList);
+    }
+
+    /**
+     * DescribeRegions action
+     *
+     * @return  RegionInfoList  Returns the list of the RegionInfoData objects on success
+     * @throws  ClientException
+     * @throws  Ec2Exception
+     */
+    public function describeRegions()
+    {
+        return $this->getApiHandler()->describeRegions();
     }
 }

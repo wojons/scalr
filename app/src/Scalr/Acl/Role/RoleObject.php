@@ -2,6 +2,7 @@
 
 namespace Scalr\Acl\Role;
 
+use Scalr\Acl\Acl;
 use Scalr\Acl\Resource;
 use Scalr\Acl\Exception;
 
@@ -61,7 +62,7 @@ class RoleObject
         return $this;
     }
 
-	/**
+    /**
      * Gets the Id of the ACL role
      *
      * @return  int   Returns the ID of the ACL role
@@ -71,7 +72,7 @@ class RoleObject
         return $this->roleId;
     }
 
-	/**
+    /**
      * Gets the name of the ACL role
      *
      * @return  string Returns the name of the ACL role
@@ -81,7 +82,7 @@ class RoleObject
         return $this->name;
     }
 
-	/**
+    /**
      * Gets the list of access rules to resources associated with the role.
      *
      * @return  \ArrayObject    Returns the list of the access rules.
@@ -102,7 +103,7 @@ class RoleObject
         return isset($this->resources[$resourceId]) ? $this->resources[$resourceId] : null;
     }
 
-	/**
+    /**
      * Sets the ID of the Role
      *
      * @param   int    $roleId The ID of the role
@@ -114,7 +115,7 @@ class RoleObject
         return $this;
     }
 
-	/**
+    /**
      * Sets the name of the role
      *
      * @param   string   $name  The name of the role
@@ -142,7 +143,8 @@ class RoleObject
         $resourceDefinition = Resource\Definition::get($resourceId);
         if ($resourceDefinition === null) {
             throw new Exception\RoleObjectException(sprintf(
-                "Unknown resource (0x%x).",
+                "%s ACL resource (0x%x).",
+                in_array($resourceId, Acl::getDisabledResources()) ? 'Disabled' : 'Unknown',
                 intval($resourceId)
             ));
         }

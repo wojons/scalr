@@ -20,7 +20,7 @@ class VpcTest extends WebTestCase
     protected function setUp()
     {
         parent::setUp();
-        $this->skipIfPlatformDisabled(\SERVER_PLATFORMS::EC2);
+        $this->markTestSkippedIfPlatformDisabled(\SERVER_PLATFORMS::EC2);
     }
 
     /**
@@ -28,7 +28,7 @@ class VpcTest extends WebTestCase
      */
     public function testXListViewSubnetsAction()
     {
-        $content = $this->request('/tools/aws/vpc/xListViewSubnets?cloudLocation=us-east-1');
+        $content = $this->request('/tools/aws/vpc/xListSubnets?cloudLocation=us-east-1');
         $this->assertResponseDataHasKeys(array('id', 'description'), $content);
     }
 }

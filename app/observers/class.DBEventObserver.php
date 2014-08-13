@@ -13,7 +13,7 @@ class DBEventObserver extends EventObserver
 
     public function OnCheckFailed(CheckFailedEvent $event) {
 
-        $serverAlerts = new Alerts($event->dBServer);
+        $serverAlerts = new Alerts($event->DBServer);
         $hasActiveAlert = $serverAlerts->hasActiveAlert($event->check);
         if (!$hasActiveAlert) {
             $serverAlerts->createAlert($event->check, $event->details);
@@ -22,7 +22,7 @@ class DBEventObserver extends EventObserver
 
     public function OnCheckRecovered(CheckRecoveredEvent $event) {
 
-        $serverAlerts = new Alerts($event->dBServer);
+        $serverAlerts = new Alerts($event->DBServer);
         $hasActiveAlert = $serverAlerts->hasActiveAlert($event->check);
         if ($hasActiveAlert) {
             $serverAlerts->solveAlert($event->check);
@@ -244,6 +244,7 @@ class DBEventObserver extends EventObserver
 
         try {
             $key = Scalr_Model::init(Scalr_Model::SSH_KEY)->loadGlobalByFarmId(
+                $event->DBServer->envId,
                 $event->DBServer->farmId,
                 $event->DBServer->GetFarmRoleObject()->CloudLocation,
                 $event->DBServer->platform
@@ -322,9 +323,9 @@ class DBEventObserver extends EventObserver
         );
 
         $governance = new Scalr_Governance($DBFarm->EnvID);
-        if ($governance->isEnabled(Scalr_Governance::GENERAL_LEASE) && $DBFarm->GetSetting(DBFarm::SETTING_LEASE_STATUS)) {
+        if ($governance->isEnabled(Scalr_Governance::CATEGORY_GENERAL, Scalr_Governance::GENERAL_LEASE) && $DBFarm->GetSetting(DBFarm::SETTING_LEASE_STATUS)) {
             $dt = new DateTime();
-            $dt->add(new DateInterval('P' . intval($governance->getValue(Scalr_Governance::GENERAL_LEASE, 'defaultLifePeriod')) . 'D'));
+            $dt->add(new DateInterval('P' . intval($governance->getValue(Scalr_Governance::CATEGORY_GENERAL, Scalr_Governance::GENERAL_LEASE, 'defaultLifePeriod')) . 'D'));
             $DBFarm->SetSetting(DBFarm::SETTING_LEASE_EXTEND_CNT, 0);
             $DBFarm->SetSetting(DBFarm::SETTING_LEASE_TERMINATE_DATE, $dt->format('Y-m-d H:i:s'));
             $DBFarm->SetSetting(DBFarm::SETTING_LEASE_NOTIFICATION_SEND, '');
@@ -339,7 +340,7 @@ class DBEventObserver extends EventObserver
                     $ServerCreateInfo = new ServerCreateInfo($dbFarmRole->Platform, $dbFarmRole);
                     try {
                         $DBServer = Scalr::LaunchServer(
-                            $ServerCreateInfo, null, true, "Farm launched",
+                            $ServerCreateInfo, null, true, DBServer::LAUNCH_REASON_FARM_LAUNCHED,
                             (isset($event->userId) ? $event->userId : null)
                         );
 
@@ -371,6 +372,7 @@ class DBEventObserver extends EventObserver
         $dbFarm->save();
 
         $dbFarm->SetSetting(DBFarm::SETTING_LEASE_NOTIFICATION_SEND, '');
+        $dbFarm->SetSetting(DBFarm::SETTING_LEASE_TERMINATE_DATE, '');
 
         $servers = $dbFarm->GetServersByFilter(array(), array());
 
@@ -379,6 +381,7 @@ class DBEventObserver extends EventObserver
 
         //TERMINATE RUNNING INSTANCES
         foreach ($servers as $dbServer) {
+            /** @var DBServer $dbServer */
             if ($this->DB->GetOne("
                     SELECT id
                     FROM bundle_tasks
@@ -396,7 +399,7 @@ class DBEventObserver extends EventObserver
                     SERVER_STATUS::TERMINATED,
                     SERVER_STATUS::TROUBLESHOOTING
                 ))) {
-                    $dbServer->terminate('FARM_TERMINATED', true, (!empty($event->userId) ? $event->userId : null));
+                    $dbServer->terminate(DBServer::TERMINATE_REASON_FARM_TERMINATED, true, (!empty($event->userId) ? $event->userId : null));
                 }
             } catch (Exception $e) {
                 $this->Logger->error($e->getMessage());
@@ -412,6 +415,7 @@ class DBEventObserver extends EventObserver
     public function OnHostUp(HostUpEvent $event)
     {
         $event->DBServer->status = SERVER_STATUS::RUNNING;
+        $event->DBServer->SetProperty(SERVER_PROPERTIES::RESUMING, 0);
 
         $this->DB->Execute("UPDATE servers_history SET scu_collecting = '1' WHERE server_id = ?", array($event->DBServer->serverId));
 
@@ -445,7 +449,7 @@ class DBEventObserver extends EventObserver
                 Logger::getLogger(LOG_CATEGORY::FARM)->info(new FarmLogMessage($this->FarmID, "OLD Server found: {$oldDBServer->serverId})."));
 
                 if ($oldDBServer) {
-                    $oldDBServer->terminate('REPLACE_SERVER_FROM_SNAPSHOT');
+                    $oldDBServer->terminate(DBServer::TERMINATE_REASON_REPLACE_SERVER_FROM_SNAPSHOT);
                 }
             }
         } catch (Exception $e) {
@@ -461,6 +465,7 @@ class DBEventObserver extends EventObserver
     public function OnRebootComplete(RebootCompleteEvent $event)
     {
         $event->DBServer->SetProperty(SERVER_PROPERTIES::REBOOTING, 0);
+        $event->DBServer->SetProperty(SERVER_PROPERTIES::RESUMING, 0);
 
         try {
             $DBFarmRole = $event->DBServer->GetFarmRoleObject();
@@ -500,10 +505,11 @@ class DBEventObserver extends EventObserver
         if ($event->DBServer->IsRebooting())
             return;
 
-//         if ($event->DBServer->status != SERVER_STATUS::TROUBLESHOOTING) {
-//             $event->DBServer->status = SERVER_STATUS::TERMINATED;
-//             $event->DBServer->dateShutdownScheduled = date("Y-m-d H:i:s");
-//         }
+         if (in_array($event->DBServer->status, array(SERVER_STATUS::SUSPENDED, SERVER_STATUS::PENDING_SUSPEND))) {
+             $event->DBServer->remoteIp = "";
+             $event->DBServer->localIp = "";
+             $event->DBServer->Save();
+         }
 
         $this->DB->Execute("UPDATE servers_history SET scu_collecting = '0' WHERE server_id = ?", array($event->DBServer->serverId));
 
@@ -547,7 +553,7 @@ class DBEventObserver extends EventObserver
 
     public function OnIPAddressChanged(IPAddressChangedEvent $event)
     {
-        Logger::getLogger(LOG_CATEGORY::FARM)->warn(new FarmLogMessage($this->FarmID, "IP changed for server {$event->DBServer->serverId}. New IP address: {$event->NewIPAddress} New local IP address: {$event->NewLocalIPAddress}"));
+        Logger::getLogger(LOG_CATEGORY::FARM)->warn(new FarmLogMessage($this->FarmID, "IP changed for server {$event->DBServer->serverId}. New public IP: {$event->NewIPAddress} New private IP: {$event->NewLocalIPAddress}"));
 
         if ($event->NewIPAddress)
             $event->DBServer->remoteIp = $event->NewIPAddress;

@@ -1,6 +1,8 @@
 <?php
 
 use Scalr\Service\Aws\Ec2\DataType\InstanceAttributeType;
+use Scalr\Modules\PlatformFactory;
+use Scalr\Modules\Platforms\Cloudstack\CloudstackPlatformModule;
 
 class Scalr_Cronjob_Poller extends Scalr_System_Cronjob_MultiProcess_DefaultWorker
 {
@@ -44,7 +46,11 @@ class Scalr_Cronjob_Poller extends Scalr_System_Cronjob_MultiProcess_DefaultWork
         );
     }
 
-    function startForking ($workQueue)
+    /**
+     * {@inheritdoc}
+     * @see Scalr_System_Cronjob_MultiProcess_DefaultWorker::startForking()
+     */
+    function startForking($workQueue)
     {
         // Reopen DB connection after daemonizing
         $this->db = $this->getContainer()->adodb;
@@ -78,7 +84,7 @@ class Scalr_Cronjob_Poller extends Scalr_System_Cronjob_MultiProcess_DefaultWork
                     $dbServer = DBServer::LoadByID($ts['server_id']);
                     if ($dbServer->status == SERVER_STATUS::TEMPORARY) {
                         try {
-                            $dbServer->terminate('TEMPORARY_SERVER');
+                            $dbServer->terminate(DBServer::TERMINATE_REASON_TEMPORARY_SERVER_ROLE_BUILDER);
                         } catch (Exception $e) {}
                     } else if ($dbServer->status == SERVER_STATUS::IMPORTING) {
                         $dbServer->Remove();
@@ -98,8 +104,8 @@ class Scalr_Cronjob_Poller extends Scalr_System_Cronjob_MultiProcess_DefaultWork
                     }
                 } catch(Exception $e) {
                     Logger::getLogger(LOG_CATEGORY::FARM)->error(sprintf("Can't load server with ID #'%s'",
-                    $ts['server_id'],
-                    $e->getMessage()
+                        $ts['server_id'],
+                        $e->getMessage()
                     ));
                 }
             } catch (Exception $e) {
@@ -108,12 +114,21 @@ class Scalr_Cronjob_Poller extends Scalr_System_Cronjob_MultiProcess_DefaultWork
         }
     }
 
-    function endForking () {
+    /**
+     * {@inheritdoc}
+     * @see Scalr_System_Cronjob_MultiProcess_DefaultWorker::endForking()
+     */
+    function endForking()
+    {
         $this->lastCleanup->delete();
         sem_remove($this->cleanupSem);
     }
 
-    function startChild ()
+    /**
+     * {@inheritdoc}
+     * @see Scalr_System_Cronjob_MultiProcess_DefaultWorker::startChild()
+     */
+    function startChild()
     {
         // Reopen DB connection in child
         $this->db = $this->getContainer()->adodb;
@@ -121,14 +136,21 @@ class Scalr_Cronjob_Poller extends Scalr_System_Cronjob_MultiProcess_DefaultWork
         Scalr::ReconfigureObservers();
     }
 
-    function enqueueWork ($workQueue)
+    /**
+     * {@inheritdoc}
+     * @see Scalr_System_Cronjob_MultiProcess_DefaultWorker::enqueueWork()
+     */
+    function enqueueWork($workQueue)
     {
         $this->logger->info("Fetching completed farms...");
 
-        $rows = $this->db->GetAll("SELECT farms.id, farms.status FROM farms
-            INNER JOIN clients ON clients.id = farms.clientid
-            INNER JOIN client_environments ON client_environments.id = farms.env_id
-            WHERE clients.status='Active' AND client_environments.status = 'Active'
+        $rows = $this->db->GetAll("
+            SELECT farms.id, farms.status
+            FROM farms
+            JOIN clients ON clients.id = farms.clientid
+            JOIN client_environments ON client_environments.id = farms.env_id
+            WHERE clients.status='Active'
+            AND client_environments.status = 'Active'
         ");
         foreach ($rows as $row) {
             if ($this->db->GetOne("SELECT COUNT(*) FROM servers WHERE farm_id=?", array($row['id'])) != 0)
@@ -142,7 +164,144 @@ class Scalr_Cronjob_Poller extends Scalr_System_Cronjob_MultiProcess_DefaultWork
         $this->logger->info(sprintf("Found %d farms.", count($rows)));
     }
 
-    function handleWork ($farmId) {
+    private function openstackSetFloatingIp(DBServer $DBServer) {
+        $ipPool = $DBServer->GetFarmRoleObject()->GetSetting(DBFarmRole::SETTING_OPENSTACK_IP_POOL);
+        if (!$DBServer->remoteIp && (in_array($DBServer->status, array(SERVER_STATUS::PENDING, SERVER_STATUS::INIT, SERVER_STATUS::SUSPENDED))) && $ipPool) {
+            //$ipAddress = \Scalr\Modules\Platforms\Openstack\Helpers\OpenstackHelper::setFloatingIpForServer($DBServer);
+
+            $osClient = $DBServer->GetEnvironmentObject()->openstack(
+                    $DBServer->platform, $DBServer->GetProperty(OPENSTACK_SERVER_PROPERTIES::CLOUD_LOCATION)
+            );
+            if ($osClient->hasService('network')) {
+
+                $platform = PlatformFactory::NewPlatform($DBServer->platform);
+                $serverIps = $platform->GetServerIPAddresses($DBServer);
+
+                /********* USE Quantum (Neuron) NETWORK *******/
+                $ips = $osClient->network->floatingIps->list();
+                //Check free existing IP
+                $ipAssigned = false;
+                $ipAddress = false;
+                $ipInfo = false;
+                foreach ($ips as $ip) {
+                    if ($ip->fixed_ip_address == $serverIps['localIp'] && $ip->port_id) {
+                        $ipAssigned = true;
+                        $ipInfo = $ip;
+                        break;
+                    }
+
+                    if (!$ip->fixed_ip_address && $ipInfo->floating_ip_address && !$ip->port_id)
+                        $ipInfo = $ip;
+                }
+
+                if ($ipInfo) {
+                    Logger::getLogger("Openstack")->warn(new FarmLogMessage($DBServer->farmId,
+                    "Found free floating IP: {$ipInfo->floating_ip_address} for use (". json_encode($ipInfo) .")"
+                            ));
+                }
+
+                if (!$ipInfo || !$ipAssigned) {
+                    // Get instance port
+                    $ports = $osClient->network->ports->list();
+                    foreach ($ports as $port) {
+                        /* */
+                        if ($port->device_id == $DBServer->GetProperty(OPENSTACK_SERVER_PROPERTIES::SERVER_ID))
+                            $serverNetworkPort[] = $port;
+                    }
+
+                    if (count($serverNetworkPort) == 0) {
+                        Logger::getLogger("Openstack")->error(new FarmLogMessage($DBServer->farmId,
+                        "Unable to identify network port of instance"
+                                ));
+                    } else {
+                        $publicNetworkId = $ipPool;
+                        while (count($serverNetworkPort) > 0) {
+                            try {
+                                $port = array_shift($serverNetworkPort);
+
+                                if (!$ipInfo) {
+                                    $ipInfo = $osClient->network->floatingIps->create($publicNetworkId, $port->id);
+
+                                    Logger::getLogger("Openstack")->warn(new FarmLogMessage($DBServer->farmId,
+                                    "Allocated new IP {$ipInfo->floating_ip_address} for port: {$port->id}"
+                                    ));
+
+                                } else {
+                                    $osClient->network->floatingIps->update($ipInfo->id, $port->id);
+
+                                    Logger::getLogger("Openstack")->warn(new FarmLogMessage($DBServer->farmId,
+                                    "Existing floating IP {$ipInfo->floating_ip_address} was used for port: {$port->id}"
+                                    ));
+                                }
+
+                                $DBServer->SetProperties(array(
+                                    OPENSTACK_SERVER_PROPERTIES::FLOATING_IP => $ipInfo->floating_ip_address,
+                                    OPENSTACK_SERVER_PROPERTIES::FLOATING_IP_ID => $ipInfo->id,
+                                ));
+
+                                $ipAddress = $ipInfo->floating_ip_address;
+
+                                break;
+                            } catch (Exception $e) {
+                                //LOG?
+                            }
+                        }
+                    }
+                } else {
+                    Logger::getLogger("Openstack")->warn(new FarmLogMessage($DBServer->farmId,
+                    "IP: {$ipInfo->floating_ip_address} already assigned"
+                    ));
+                }
+            } else {
+                /********* USE NOVA NETWORK *******/
+                //Check free existing IP
+                $ipAssigned = false;
+                $ipAddress = false;
+
+                $ips = $osClient->servers->floatingIps->list($ipPool);
+                foreach ($ips as $ip) {
+                    //if (!$ip->instance_id) {
+                    //	$ipAddress = $ip->ip;
+                    //}
+
+
+                    if ($ip->instance_id == $DBServer->GetProperty(OPENSTACK_SERVER_PROPERTIES::SERVER_ID)) {
+                        $ipAddress = $ip->ip;
+                        $ipAssigned = true;
+                    }
+                }
+
+                //If no free IP allocate new from pool
+                if (!$ipAddress) {
+                    $ip = $osClient->servers->floatingIps->create($ipPool);
+                    $ipAddress = $ip->ip;
+
+                    $DBServer->SetProperties(array(
+                        OPENSTACK_SERVER_PROPERTIES::FLOATING_IP => $ip->ip,
+                        OPENSTACK_SERVER_PROPERTIES::FLOATING_IP_ID => $ip->id,
+                    ));
+                }
+
+                if (!$ipAssigned) {
+                    //Associate floating IP with Instance
+                    $osClient->servers->addFloatingIp($DBServer->GetCloudServerID(), $ipAddress);
+                }
+            }
+
+            if ($ipAddress) {
+                $DBServer->remoteIp = $ipAddress;
+                $DBServer->Save();
+                $DBServer->SetProperty(SERVER_PROPERTIES::SYSTEM_IGNORE_INBOUND_MESSAGES, null);
+            }
+        }
+    }
+
+    /**
+     * {@inheritdoc}
+     * @see Scalr_System_Cronjob_MultiProcess_DefaultWorker::handleWork()
+     */
+    function handleWork($farmId)
+    {
         $this->cleanup();
 
         $DBFarm = DBFarm::LoadByID($farmId);
@@ -155,65 +314,88 @@ class Scalr_Cronjob_Poller extends Scalr_System_Cronjob_MultiProcess_DefaultWork
 
         $this->logger->info("[". $GLOBALS["SUB_TRANSACTIONID"]."] Begin polling farm (ID: {$DBFarm->ID}, Name: {$DBFarm->Name}, Status: {$DBFarm->Status})");
 
-        //
         // Collect information from database
-        //
-        $servers_count = $this->db->GetOne("SELECT COUNT(*) FROM servers WHERE farm_id = ? AND status != ?",
-            array($DBFarm->ID, SERVER_STATUS::TERMINATED)
-        );
+        $servers_count = $this->db->GetOne("
+            SELECT COUNT(*) FROM servers WHERE farm_id = ? AND status NOT IN (?,?)
+        ", array(
+            $DBFarm->ID, SERVER_STATUS::TERMINATED, SERVER_STATUS::SUSPENDED
+        ));
         $this->logger->info("[FarmID: {$DBFarm->ID}] Found {$servers_count} farm instances in database");
 
         if ($DBFarm->Status == FARM_STATUS::TERMINATED && $servers_count == 0)
             return;
 
-        foreach ($DBFarm->GetServersByFilter(array(), array('status' => SERVER_STATUS::PENDING_LAUNCH)) as $DBServer)
-        {
+        foreach ($DBFarm->GetServersByFilter(array(), array('status' => SERVER_STATUS::PENDING_LAUNCH)) as $DBServer) {
+            /** @var DBServer $DBServer */
             try {
+                if ($DBServer->cloudLocation) {
+                    try {
+                        Logger::getLogger(LOG_CATEGORY::FARM)->info(sprintf(
+                            "Initializing cloud cache: {$DBServer->cloudLocation} ({$DBServer->serverId})"
+                        ));
+                        $p = PlatformFactory::NewPlatform($DBServer->platform);
+                        $list = $p->GetServersList($DBServer->GetEnvironmentObject(), $DBServer->cloudLocation);
+                    } catch (Exception $e) {
+                        Logger::getLogger(LOG_CATEGORY::FARM)->info(sprintf(
+                            "Initializing cloud cache: FAILED"
+                        ));
+                    }
+                }
+
                 if ($DBServer->status != SERVER_STATUS::PENDING && $DBServer->status != SERVER_STATUS::PENDING_TERMINATE) {
-                    $p = PlatformFactory::NewPlatform($DBServer->platform);
-                    if (!$p->IsServerExists($DBServer))
-                    {
+                    if (!$p->IsServerExists($DBServer)) {
                         try {
                             $serverInfo = $p->GetServerExtendedInformation($DBServer);
                         } catch (Exception $e) {
-                            Logger::getLogger(LOG_CATEGORY::FARM)->error(
-                                sprintf("[CRASH][FarmID: {$DBFarm->ID}] Crash check for server '{$DBServer->serverId}' failed: {$e->getMessage()}")
-                            );
+                            Logger::getLogger(LOG_CATEGORY::FARM)->error(sprintf(
+                                "[CRASH][FarmID: %d] Crash check for server '%s' failed: %s",
+                                $DBFarm->ID,
+                                $DBServer->serverId,
+                                $e->getMessage()
+                            ));
                         }
 
                         if (!$serverInfo) {
-                            if ($DBServer->status != SERVER_STATUS::PENDING_TERMINATE && $DBServer->status != SERVER_STATUS::TERMINATED) {
-                                if ($DBServer->GetProperty("system.crashed") == 1) {
-                                    $DBServer->terminate(DBServer::TERMINATE_REASON_CRASHED);
-                                    Scalr::FireEvent($DBFarm->ID, new HostCrashEvent($DBServer));
+                        	if ($p->debugLog)
+                        		Logger::getLogger('Openstack')->fatal($p->debugLog);
+                        	
+                            if (!in_array($DBServer->status, array(SERVER_STATUS::PENDING_TERMINATE, SERVER_STATUS::TERMINATED, SERVER_STATUS::SUSPENDED))) {
+                                if ($DBServer->GetProperty(SERVER_PROPERTIES::CRASHED) == 1) {
+                                	if (PlatformFactory::isOpenstack($DBServer->platform)) {
+                                		$DBServer->SetProperty(SERVER_PROPERTIES::MISSING, 1);
+                                	} else {
+	                                    $DBServer->terminate(DBServer::TERMINATE_REASON_CRASHED);
+	                                    Scalr::FireEvent($DBFarm->ID, new HostCrashEvent($DBServer));
+                                	}
                                 } else {
-                                    $DBServer->SetProperty(SERVER_PROPERTIES::REBOOTING, 0);
-                                    Logger::getLogger(LOG_CATEGORY::FARM)->warn(new FarmLogMessage($DBFarm->ID,
-                                       sprintf("Server '%s' found in database but not found on {$DBServer->platform}. Crashed.", $DBServer->serverId)
-                                    ));
-                                    $DBServer->SetProperty("system.crashed", "1");
+                                    $DBServer->SetProperties([
+                                        SERVER_PROPERTIES::REBOOTING => 0,
+                                        SERVER_PROPERTIES::CRASHED   => 1,
+                                    	SERVER_PROPERTIES::MISSING   => 1
+                                    ]);
+                                    Logger::getLogger(LOG_CATEGORY::FARM)->warn(new FarmLogMessage($DBFarm->ID, sprintf(
+                                        "Server '%s' found in database but not found on %s. Crashed.",
+                                        $DBServer->serverId,
+                                        $DBServer->platform
+                                    )));
                                 }
 
                                 continue;
                             }
                         } else {
-                            Logger::getLogger(LOG_CATEGORY::FARM)->error(
-                                sprintf("[CRASH][FarmID: {$DBFarm->ID}] False-positive crash check: {$DBServer->serverId}")
-                            );
-
-                            if ($DBServer->platform == SERVER_PLATFORMS::EC2) {
-                                Logger::getLogger(LOG_CATEGORY::FARM)->fatal(sprintf(
-                                    "[CRASH][FarmID: {$DBFarm->ID}] InstanceID: %s, List: %s", $DBServer->GetCloudServerID(), json_encode($p->instancesListCache)
-                                ));
-                            }
+                            Logger::getLogger(LOG_CATEGORY::FARM)->error(sprintf(
+                                "[CRASH][FarmID: %d] False-positive crash check: %s (EnvID: %d)",
+                                $DBFarm->ID,
+                                $DBServer->serverId,
+                                $DBServer->envId
+                            ));
                         }
                     } else {
-                        $DBServer->SetProperty("system.crashed", "0");
+                        $DBServer->SetProperty(SERVER_PROPERTIES::CRASHED, "0");
+                        $DBServer->SetProperty(SERVER_PROPERTIES::MISSING, "0");
                     }
                 }
-            }
-            catch(Exception $e)
-            {
+            } catch (Exception $e) {
                 if (stristr($e->getMessage(), "AWS was not able to validate the provided access credentials") ||
                     stristr($e->getMessage(), "Unable to sign AWS API request. Please, check your X.509")
                 ) {
@@ -234,6 +416,7 @@ class Scalr_Cronjob_Poller extends Scalr_System_Cronjob_MultiProcess_DefaultWork
                 continue;
             }
 
+            /*
             try {
                 $realStatus = $DBServer->GetRealStatus()->getName();
                 if ($realStatus == 'stopped') {
@@ -244,65 +427,94 @@ class Scalr_Cronjob_Poller extends Scalr_System_Cronjob_MultiProcess_DefaultWork
                         $DBServer->SetProperty(SERVER_PROPERTIES::SUB_STATUS, "");
                 }
             } catch (Exception $e) {}
+            */
 
             try {
-                if (!in_array($DBServer->status, array(SERVER_STATUS::TERMINATED, SERVER_STATUS::PENDING_TERMINATE)) && $DBServer->GetRealStatus()->isTerminated())
-                {
-                    Logger::getLogger(LOG_CATEGORY::FARM)->warn(new FarmLogMessage($DBFarm->ID,
-                        sprintf("Server '%s' (Platform: %s) not running (Real state: %s, Scalr status: %s).",
-                            $DBServer->serverId, $DBServer->platform, $DBServer->GetRealStatus()->getName(), $DBServer->status
-                        )
-                    ));
+                if (!in_array($DBServer->status, array(
+                        SERVER_STATUS::SUSPENDED,
+                        SERVER_STATUS::TERMINATED,
+                        SERVER_STATUS::PENDING_TERMINATE,
+                        SERVER_STATUS::PENDING_SUSPEND))) {
 
-                    $DBServer->terminate(DBServer::TERMINATE_REASON_CRASHED);
+                    $openstackErrorState = false;
+                    if (PlatformFactory::isOpenstack($DBServer->platform)) {
+                        if ($DBServer->GetRealStatus()->getName() === 'ERROR')
+                            $openstackErrorState = true;
+                    }
 
-                    $DBServer->SetProperty(SERVER_PROPERTIES::REBOOTING, 0);
+                    if ($DBServer->GetRealStatus()->isTerminated() || $openstackErrorState) {
+                        Logger::getLogger(LOG_CATEGORY::FARM)->warn(new FarmLogMessage($DBFarm->ID,
+                            sprintf("Server '%s' (Platform: %s) not running (Real state: %s, Scalr status: %s).",
+                                $DBServer->serverId, $DBServer->platform, $DBServer->GetRealStatus()->getName(), $DBServer->status
+                            )
+                        ));
 
-                    Scalr::FireEvent($DBFarm->ID, new HostDownEvent($DBServer));
-                    continue;
+                        $DBServer->terminate(DBServer::TERMINATE_REASON_CRASHED);
+
+                        $DBServer->SetProperties([
+                            SERVER_PROPERTIES::REBOOTING => 0,
+                            SERVER_PROPERTIES::RESUMING  => 0,
+                        ]);
+
+                        Scalr::FireEvent($DBFarm->ID, new HostDownEvent($DBServer));
+                        continue;
+                    } elseif ($DBServer->GetRealStatus()->isSuspended()) {
+
+                        // if server was suspended when it was running
+                        if ($DBServer->status == SERVER_STATUS::RUNNING) {
+                            Logger::getLogger(LOG_CATEGORY::FARM)->warn(new FarmLogMessage($DBFarm->ID,
+                                sprintf("Server '%s' (Platform: %s) not running (Real state: %s, Scalr status: %s).",
+                                    $DBServer->serverId, $DBServer->platform, $DBServer->GetRealStatus()->getName(), $DBServer->status
+                                )
+                            ));
+
+                            $DBServer->SetProperties([
+                                SERVER_PROPERTIES::REBOOTING  => 0,
+                                SERVER_PROPERTIES::RESUMING   => 0,
+                                SERVER_PROPERTIES::SUB_STATUS => "",
+                            ]);
+
+                            $DBServer->remoteIp = "";
+                            $DBServer->localIp = "";
+
+                            $DBServer->status = SERVER_STATUS::SUSPENDED;
+                            $DBServer->Save();
+
+                            Scalr::FireEvent($DBFarm->ID, new HostDownEvent($DBServer));
+                            continue;
+                        } else {
+                        // If server was suspended during initialization - we do not support this and need to terminate this instance
+                            $DBServer->terminate(DBServer::TERMINATE_REASON_CRASHED);
+                            continue;
+                        }
+                    }
                 }
-                elseif ($DBServer->status != SERVER_STATUS::RUNNING && $DBServer->GetRealStatus()->IsRunning()) {
-                    if ($DBServer->status != SERVER_STATUS::TERMINATED && $DBServer->status != SERVER_STATUS::TROUBLESHOOTING) {
-                        /*
-                        if ($DBServer->platform == SERVER_PLATFORMS::NIMBULA)
-                        {
-                            if (!$DBServer->GetProperty(NIMBULA_SERVER_PROPERTIES::USER_DATA_INJECTED))
-                            {
-                                $dbRole = $DBServer->GetFarmRoleObject()->GetRoleObject();
 
-                                $ssh2Client = new Scalr_Net_Ssh2_Client();
-                                $ssh2Client->addPassword(
-                                    $dbRole->getProperty(DBRole::PROPERTY_NIMBULA_INIT_ROOT_USER),
-                                    $dbRole->getProperty(DBRole::PROPERTY_NIMBULA_INIT_ROOT_PASS)
-                                );
-
-                                $info = PlatformFactory::NewPlatform($DBServer->platform)->GetServerIPAddresses($DBServer);
-
-                                $port = $dbRole->getProperty(DBRole::PROPERTY_SSH_PORT);
-                                if (!$port) $port = 22;
-
-                                try {
-                                    $ssh2Client->connect($info['remoteIp'], $port);
-
-                                    foreach ($DBServer->GetCloudUserData() as $k=>$v)
-                                        $u_data .= "{$k}={$v};";
-
-                                    $u_data = trim($u_data, ";");
-                                    $ssh2Client->sendFile('/etc/scalr/private.d/.user-data', $u_data, "w+", false);
-
-                                    $DBServer->SetProperty(NIMBULA_SERVER_PROPERTIES::USER_DATA_INJECTED, 1);
-                                }
-                                catch(Exception $e) {
-                                    Logger::getLogger(LOG_CATEGORY::FARM)->error(new FarmLogMessage($DBFarm->ID, $e->getMessage()));
-                                }
+                if ($DBServer->status != SERVER_STATUS::RUNNING && $DBServer->GetRealStatus()->IsRunning()) {
+                    if ($DBServer->status == SERVER_STATUS::SUSPENDED) {
+                        //TODO: Depends on resume strategy need to set server status
+                        // For Openstack we need to re-accociate IPs
+                        $DBServer->SetProperty(\SERVER_PROPERTIES::RESUMING, 0);
+                        try {
+                            if ($DBServer->isOpenstack())
+                                $this->openstackSetFloatingIp($DBServer);
+                        } catch (Exception $e) {
+                            if (!$DBServer->GetProperty(SERVER_PROPERTIES::SZR_IS_INIT_FAILED)) {
+                                $DBServer->SetProperties([
+                                    SERVER_PROPERTIES::SZR_IS_INIT_FAILED    => 1,
+                                    SERVER_PROPERTIES::SZR_IS_INIT_ERROR_MSG => $e->getMessage(),
+                                ]);
                             }
                         }
-                        */
 
+                        Scalr::FireEvent($DBFarm->ID, new HostUpEvent($DBServer, ""));
+                        continue;
+
+                    } elseif (!in_array($DBServer->status, array(SERVER_STATUS::TERMINATED, SERVER_STATUS::TROUBLESHOOTING))) {
                         if ($DBServer->platform == SERVER_PLATFORMS::EC2) {
                             if ($DBServer->status == SERVER_STATUS::PENDING && $DBFarm->GetSetting(DBFarm::SETTING_EC2_VPC_ID)) {
                                 if ($DBServer->GetFarmRoleObject()->GetSetting(DBFarmRole::SETTING_AWS_VPC_INTERNET_ACCESS) != 'outbound-only') {
-                                    $ipAddress = Modules_Platforms_Ec2_Helpers_Eip::setEipForServer($DBServer);
+                                    $ipAddress = \Scalr\Modules\Platforms\Ec2\Helpers\EipHelper::setEipForServer($DBServer);
                                     if ($ipAddress) {
                                         $DBServer->remoteIp = $ipAddress;
                                         $DBServer->Save();
@@ -311,147 +523,16 @@ class Scalr_Cronjob_Poller extends Scalr_System_Cronjob_MultiProcess_DefaultWork
                             }
                         }
 
-                        if ($DBServer->isOpenstack()) {
-                        	$ipPool = $DBServer->GetFarmRoleObject()->GetSetting(DBFarmRole::SETTING_OPENSTACK_IP_POOL);
-                        	if (!$DBServer->remoteIp && ($DBServer->status == SERVER_STATUS::PENDING || $DBServer->status == SERVER_STATUS::INIT) && $ipPool) {
-								$osClient = $DBServer->GetEnvironmentObject()->openstack(
-									$DBServer->platform, $DBServer->GetProperty(OPENSTACK_SERVER_PROPERTIES::CLOUD_LOCATION)
-								);
-
-								if ($osClient->hasService('network')) {
-								    $platform = PlatformFactory::NewPlatform($DBServer->platform);
-								    $serverIps = $platform->GetServerIPAddresses($DBServer);
-
-								    /********* USE Quantum (Neuron) NETWORK *******/
-                                    $ips = $osClient->network->floatingIps->list();
-                                    //Check free existing IP
-                                    $ipAssigned = false;
-                                    $ipAddress = false;
-                                    $ipId = false;
-                                    $ipInfo = false;
-								    foreach ($ips as $ip) {
-    									if ($ip->fixed_ip_address == $serverIps['localIp'] && $ip->port_id) {
-    										$ipAddress = $ip->floating_ip_address;
-    										$ipId = $ip->id;
-    										$ipAssigned = true;
-    										$ipInfo = $ip;
-    										break;
-                            			}
-
-                            			/*
-                            			if (!$ip->fixed_ip_address && !$ipAddress) {
-                            			    $ipAddress = $ip->floating_ip_address;
-                            			    $ipId = $ip->id;
-                            			    $ipInfo = $ip;
-                            			}
-                            			*/
-                            		}
-
-                            		if ($ipInfo) {
-                                		Logger::getLogger("Openstack")->warn(new FarmLogMessage($DBServer->farmId,
-                                            "Found free floating IP: {$ipAddress} for use (". json_encode($ipInfo) .")"
-                                		));
-                            		}
-
-                            		if (!$ipAssigned) {
-                                        // Get instance port
-                            		    $ports = $osClient->network->ports->list();
-                            		    foreach ($ports as $port) {
-                                            if ($port->device_id == $DBServer->GetProperty(OPENSTACK_SERVER_PROPERTIES::SERVER_ID)) {
-                                                $serverNetworkPort = $port->id;
-                                                break;
-                                            }
-                            		    }
-
-                            		    if (!$serverNetworkPort) {
-                            		        Logger::getLogger("Openstack")->error(new FarmLogMessage($DBServer->farmId,
-                                                "Unable to identify network port of instance"
-                                            ));
-                            		    } else {
-                            		        if (!$ipAddress) {
-                            		            $publicNetworkId = $ipPool;
-                            		            /*
-                            		            $networks = $osClient->network->listNetworks();
-                            		            foreach ($networks as $network) {
-                            		                if ($network->{"router:external"} == true) {
-                            		                    $publicNetworkId = $network->id;
-                            		                }
-                            		            }
-
-                            		            if (!$publicNetworkId) {
-                            		                Logger::getLogger("Openstack")->error(new FarmLogMessage($DBServer->farmId,
-                                                        "Unable to identify public network to allocate"
-                                                    ));
-                            		            } else {
-                            		            */
-                                		            $ip = $osClient->network->floatingIps->create($publicNetworkId, $serverNetworkPort);
-                                		            $ipAddress = $ip->floating_ip_address;
-
-                                		            $DBServer->SetProperties(array(
-                                		            	OPENSTACK_SERVER_PROPERTIES::FLOATING_IP => $ip->floating_ip_address,
-                                		                OPENSTACK_SERVER_PROPERTIES::FLOATING_IP_ID => $ip->id,
-                                		            ));
-
-                                		            Logger::getLogger("Openstack")->warn(new FarmLogMessage($DBServer->farmId,
-                                		              "Allocated new IP {$ipAddress} for port: {$serverNetworkPort}"
-                                		            ));
-                            		            //}
-                            		        } else {
-                            		            /*
-                            		            Logger::getLogger("Openstack")->warn(new FarmLogMessage($DBServer->farmId,
-                            		              "Updating IP {$ipAddress} ({$ipId}) with port: {$serverNetworkPort}"
-                            		            ));
-                            		            $osClient->network->floatingIps->update($ipId, $serverNetworkPort);
-                            		            */
-                            		        }
-                            		    }
-                            		} else {
-                            		    Logger::getLogger("Openstack")->warn(new FarmLogMessage($DBServer->farmId,
-                            		      "IP: {$ipAddress} already assigned"
-                            		    ));
-                            		}
-								} else {
-								    /********* USE NOVA NETWORK *******/
-    								//Check free existing IP
-    								$ipAssigned = false;
-    								$ipAddress = false;
-
-    								$ips = $osClient->servers->floatingIps->list($ipPool);
-    								foreach ($ips as $ip) {
-    									//if (!$ip->instance_id) {
-    									//	$ipAddress = $ip->ip;
-    									//}
-
-
-    									if ($ip->instance_id == $DBServer->GetProperty(OPENSTACK_SERVER_PROPERTIES::SERVER_ID)) {
-    										$ipAddress = $ip->ip;
-    										$ipAssigned = true;
-                            			}
-                            		}
-
-    								//If no free IP allocate new from pool
-    								if (!$ipAddress) {
-    									$ip = $osClient->servers->floatingIps->create($ipPool);
-    									$ipAddress = $ip->ip;
-
-    									$DBServer->SetProperties(array(
-    									    OPENSTACK_SERVER_PROPERTIES::FLOATING_IP => $ip->ip,
-    									    OPENSTACK_SERVER_PROPERTIES::FLOATING_IP_ID => $ip->id,
-    									));
-    								}
-
-    								if (!$ipAssigned) {
-    									//Associate floating IP with Instance
-    									$osClient->servers->addFloatingIp($DBServer->GetCloudServerID(), $ipAddress);
-                            		}
-								}
-
-								if ($ipAddress) {
-								    $DBServer->remoteIp = $ipAddress;
-								    $DBServer->Save();
-								    $DBServer->SetProperty(SERVER_PROPERTIES::SYSTEM_IGNORE_INBOUND_MESSAGES, null);
-								}
-                      		}
+                        try {
+                            if ($DBServer->isOpenstack())
+                                $this->openstackSetFloatingIp($DBServer);
+                        } catch (Exception $e) {
+                            if (!$DBServer->GetProperty(SERVER_PROPERTIES::SZR_IS_INIT_FAILED)) {
+                                $DBServer->SetProperties([
+                                    SERVER_PROPERTIES::SZR_IS_INIT_FAILED    => 1,
+                                    SERVER_PROPERTIES::SZR_IS_INIT_ERROR_MSG => $e->getMessage(),
+                                ]);
+                            }
                         }
 
                         if ($DBServer->isCloudstack()) {
@@ -459,23 +540,21 @@ class Scalr_Cronjob_Poller extends Scalr_System_Cronjob_MultiProcess_DefaultWork
                                 $jobId = $DBServer->GetProperty(CLOUDSTACK_SERVER_PROPERTIES::LAUNCH_JOB_ID);
 
                                 try {
-                                    $platform = PlatformFactory::NewPlatform($DBServer->platform);
-                                    $cs = Scalr_Service_Cloud_Cloudstack::newCloudstack(
-                                        $platform->getConfigVariable(Modules_Platforms_Cloudstack::API_URL, $DBServer->GetEnvironmentObject()),
-                                        $platform->getConfigVariable(Modules_Platforms_Cloudstack::API_KEY, $DBServer->GetEnvironmentObject()),
-                                        $platform->getConfigVariable(Modules_Platforms_Cloudstack::SECRET_KEY, $DBServer->GetEnvironmentObject()),
-                                        $DBServer->platform
-                                    );
+                                    $cs = $DBServer->GetEnvironmentObject()->cloudstack($DBServer->platform);
 
                                     $res = $cs->queryAsyncJobResult($jobId);
-                                    if ($res->jobresult->jobstatus == 1) {
-                                        $DBServer->SetProperty(CLOUDSTACK_SERVER_PROPERTIES::TMP_PASSWORD, $res->jobresult->virtualmachine->password);
-                                        $DBServer->SetProperty(CLOUDSTACK_SERVER_PROPERTIES::SERVER_NAME, $res->jobresult->virtualmachine->name);
+
+                                    if ($res->jobstatus == 1) {
+                                        $DBServer->SetProperties([
+                                            CLOUDSTACK_SERVER_PROPERTIES::TMP_PASSWORD => $res->virtualmachine->password,
+                                            CLOUDSTACK_SERVER_PROPERTIES::SERVER_NAME => $res->virtualmachine->name,
+                                        ]);
                                     }
                                     //TODO: handle failed job: $res->jobresult->jobstatus == 2
                                 } catch (Exception $e) {
-                                    if ($DBServer->farmId)
+                                    if ($DBServer->farmId) {
                                         Logger::getLogger("CloudStack")->error(new FarmLogMessage($DBServer->farmId, $e->getMessage()));
+                                    }
                                 }
                             }
                         }
@@ -487,7 +566,7 @@ class Scalr_Cronjob_Poller extends Scalr_System_Cronjob_MultiProcess_DefaultWork
                                               $DBFarmRole->GetSetting(DBFarmRole::SETTING_SYSTEM_LAUNCH_TIMEOUT) : 900;
                         } catch (Exception $e) {
                             if (stristr($e->getMessage(), "not found")) {
-                                $DBServer->terminate('FARM_ROLE_NOT_FOUND');
+                                $DBServer->terminate(DBServer::TERMINATE_REASON_ROLE_REMOVED);
                             }
                         }
 
@@ -525,7 +604,7 @@ class Scalr_Cronjob_Poller extends Scalr_System_Cronjob_MultiProcess_DefaultWork
                                 )));
 
                                 try {
-                                    $DBServer->terminate(array('SERVER_DID_NOT_SEND_EVENT', $event, $launch_timeout), false);
+                                    $DBServer->terminate(array(DBServer::TERMINATE_REASON_SERVER_DID_NOT_SEND_EVENT, $event, $launch_timeout), false);
                                 } catch (Exception $err) {
                                     $this->logger->fatal($err->getMessage());
                                 }
@@ -558,18 +637,13 @@ class Scalr_Cronjob_Poller extends Scalr_System_Cronjob_MultiProcess_DefaultWork
                             //TODO: Check health:
                         }
                     }
-                }
-                elseif ($DBServer->status == SERVER_STATUS::RUNNING && $DBServer->GetRealStatus()->isRunning())
-                {
+                } elseif ($DBServer->status == SERVER_STATUS::RUNNING && $DBServer->GetRealStatus()->isRunning()) {
                     // Is IP address changed?
-                    if (!$DBServer->IsRebooting())
-                    {
+                    if (!$DBServer->IsRebooting()) {
                         $ipaddresses = PlatformFactory::NewPlatform($DBServer->platform)->GetServerIPAddresses($DBServer);
 
-                        if (
-                            ($ipaddresses['remoteIp'] && $DBServer->remoteIp && $DBServer->remoteIp != $ipaddresses['remoteIp']) ||
-                            ($ipaddresses['localIp'] && $DBServer->localIp && $DBServer->localIp != $ipaddresses['localIp']))
-                        {
+                        if (($ipaddresses['remoteIp'] && $DBServer->remoteIp != $ipaddresses['remoteIp']) ||
+                            ($ipaddresses['localIp']  && $DBServer->localIp != $ipaddresses['localIp'])) {
                             Scalr::FireEvent(
                                 $DBServer->farmId,
                                 new IPAddressChangedEvent($DBServer, $ipaddresses['remoteIp'], $ipaddresses['localIp'])
@@ -582,18 +656,9 @@ class Scalr_Cronjob_Poller extends Scalr_System_Cronjob_MultiProcess_DefaultWork
                                 $initTime = $payAsYouGoTime;
 
                             $runningHours = ceil((time() - $initTime) / 3600);
-                            $scuUsed = $runningHours * Scalr_Billing::getSCUByInstanceType($DBServer->GetFlavor());
+                            $scuUsed = $runningHours * Scalr_Billing::getSCUByInstanceType($DBServer->GetFlavor(), $DBServer->platform);
 
                             $this->db->Execute("UPDATE servers_history SET scu_used = ?, scu_updated = 0 WHERE server_id = ?", array($scuUsed, $DBServer->serverId));
-                        }
-
-
-                        //Update GCE ServerID
-                        if ($DBServer->platform == SERVER_PLATFORMS::GCE) {
-                            if ($DBServer->GetProperty(GCE_SERVER_PROPERTIES::SERVER_ID) == $DBServer->serverId) {
-                                $info = PlatformFactory::NewPlatform($DBServer->platform)->GetServerExtendedInformation($DBServer);
-                                $DBServer->SetProperty(GCE_SERVER_PROPERTIES::SERVER_ID, $info['Cloud Server ID']);
-                            }
                         }
 
                         if ($DBServer->platform == SERVER_PLATFORMS::EC2) {
@@ -601,8 +666,14 @@ class Scalr_Cronjob_Poller extends Scalr_System_Cronjob_MultiProcess_DefaultWork
                             $ec2 = $env->aws($DBServer->GetCloudLocation())->ec2;
 
                             //TODO:
-                            $isEnabled = $ec2->instance->describeAttribute($DBServer->GetCloudServerID(), InstanceAttributeType::disableApiTermination());
-                            $DBServer->SetProperty(EC2_SERVER_PROPERTIES::IS_LOCKED, $isEnabled);
+                            $time = $DBServer->GetProperty(EC2_SERVER_PROPERTIES::IS_LOCKED_LAST_CHECK_TIME);
+                            if (!$time || time() < $time+1200) {
+                                $isEnabled = $ec2->instance->describeAttribute($DBServer->GetCloudServerID(), InstanceAttributeType::disableApiTermination());
+                                $DBServer->SetProperties([
+                                    EC2_SERVER_PROPERTIES::IS_LOCKED                 => $isEnabled,
+                                    EC2_SERVER_PROPERTIES::IS_LOCKED_LAST_CHECK_TIME => time(),
+                                ]);
+                            }
                         }
                     } else {
                         //TODO: Check reboot timeout
@@ -611,14 +682,17 @@ class Scalr_Cronjob_Poller extends Scalr_System_Cronjob_MultiProcess_DefaultWork
             } catch (Exception $e) {
                 if (stristr($e->getMessage(), "not found"))
                     print $e->getTraceAsString() . "\n";
+                elseif (stristr($e->getMessage(), "Request limit exceeded")) {
+                    sleep(10);
+                    print "[1:SLEEP][Farm: {$farmId}] {$e->getMessage()} at {$e->getFile()}:{$e->getLine()}\n\n";
+                }
                 else
                     print "[1][Farm: {$farmId}] {$e->getMessage()} at {$e->getFile()}:{$e->getLine()}\n\n";
             }
         }
     }
 
-
-    private function cleanup () {
-
+    private function cleanup ()
+    {
     }
 }

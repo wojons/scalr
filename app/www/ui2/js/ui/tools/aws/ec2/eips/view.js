@@ -3,7 +3,6 @@ Scalr.regPage('Scalr.ui.tools.aws.ec2.eips.view', function (loadParams, modulePa
 		fields: [ 'ipaddress','instance_id', 'domain', 'allocation_id', 'farm_id', 'farm_name', 'role_name', 'indb', 'farm_roleid', 'server_id', 'server_index' ],
 		proxy: {
 			type: 'scalr.paging',
-			extraParams: loadParams,
 			url: '/tools/aws/ec2/eips/xListEips/'
 		},
 		remoteSort: true
@@ -15,7 +14,6 @@ Scalr.regPage('Scalr.ui.tools.aws.ec2.eips.view', function (loadParams, modulePa
 			'reload': false,
 			'maximize': 'all'
 		},
-		scalrReconfigureParams: {},
 		store: store,
 		stateId: 'grid-tools-aws-ec2-eips-view',
 		stateful: true,
@@ -86,8 +84,7 @@ Scalr.regPage('Scalr.ui.tools.aws.ec2.eips.view', function (loadParams, modulePa
 					data: moduleParams.locations,
 					proxy: 'object'
 				},
-				gridStore: store,
-				cloudLocation: loadParams['cloudLocation'] || ''
+				gridStore: store
 			}],
             afterItems: [{
                 ui: 'paging',

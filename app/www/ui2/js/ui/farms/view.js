@@ -1,15 +1,35 @@
 Scalr.regPage('Scalr.ui.farms.view', function (loadParams, moduleParams) {
+    var filterFieldForm = [];
+
+    if (moduleParams['leaseEnabled']) {
+        filterFieldForm.push({
+            xtype: 'textfield',
+            fieldLabel: 'Show farms that will expire in N days',
+            labelAlign: 'top',
+            name: 'expirePeriod'
+        });
+    }
+    if ((Scalr.flags['betaMode'] || Scalr.flags['allowManageAnalytics']) && Scalr['flags']['analyticsEnabled']) {
+        filterFieldForm.push({
+            xtype: 'textfield',
+            fieldLabel: 'Project ID',
+            labelAlign: 'top',
+            name: 'projectId'
+        });
+    }
+
+    filterFieldForm = filterFieldForm.length ? {items: filterFieldForm} : null;
+
 	var store = Ext.create('store.store', {
 		fields: [
 			{name: 'id', type: 'int'},
 			{name: 'clientid', type: 'int'},
-			'name', 'status', 'dtadded', 'running_servers', 'non_running_servers', 'roles', 'zones','client_email',
+			'name', 'status', 'dtadded', 'running_servers', 'suspended_servers', 'non_running_servers', 'roles', 'zones','client_email',
 			'havemysqlrole','shortcuts', 'havepgrole', 'haveredisrole', 'haverabbitmqrole', 'havemongodbrole', 'havemysql2role', 'havemariadbrole', 
-			'haveperconarole', 'lock', 'lock_comment', 'created_by_id', 'created_by_email', 'alerts', 'lease'
+			'haveperconarole', 'lock', 'lock_comment', 'created_by_id', 'created_by_email', 'alerts', 'lease', 'leaseMessage'
 		],
 		proxy: {
 			type: 'scalr.paging',
-			extraParams: loadParams,
 			url: '/farms/xListFarms'
 		},
 		remoteSort: true
@@ -25,7 +45,6 @@ Scalr.regPage('Scalr.ui.farms.view', function (loadParams, moduleParams) {
 			'reload': false,
 			'maximize': 'all'
 		},
-		scalrReconfigureParams: { farmId: '', clientId: '', status: '' },
 		store: store,
 		stateId: 'grid-farms-view',
 		stateful: true,
@@ -51,13 +70,35 @@ Scalr.regPage('Scalr.ui.farms.view', function (loadParams, moduleParams) {
 
 		columns: [
 			{ text: "ID", width: 80, dataIndex: 'id', sortable: true },
-			{ text: "Farm Name", flex: 1, dataIndex: 'name', sortable: true, xtype: 'templatecolumn', tpl:
-                '{name}<tpl if="lease"> <a href="#/farms/{id}/extendedInfo"><img src="/ui2/images/ui/farms/view/<tpl if="lease == &quot;Expire&quot;">leased_expire<tpl else>leased</tpl>.png" style="vertical-align: top"></a></tpl>'
+			{ text: "Farm name", flex: 1, dataIndex: 'name', sortable: true, xtype: 'templatecolumn', tpl:
+                '{name}<tpl if="lease && status == 1"> <a href="#/farms/{id}/extendedInfo">' +
+                    '<tpl if="lease == &quot;Expire&quot;">' +
+                        '<div class="" style="display: inline" data-anchor="left" data-qalign="l-r" data-qtip="{leaseMessage}" data-qwidth="340">' +
+                    '</tpl>' +
+                    '<img src="' + Ext.BLANK_IMAGE_URL + '" class="x-icon-leased<tpl if="lease == &quot;Expire&quot;"> x-icon-leased-expire</tpl>">' +
+                    '<tpl if="lease == &quot;Expire&quot;"></div></tpl>' +
+                '</a></tpl>'
             },
 			{ text: "Added", flex: 1, dataIndex: 'dtadded', sortable: true },
 			{ text: "Owner", flex: 1, dataIndex: 'created_by_email', sortable: true },
 			{ text: "Servers", width: 100, dataIndex: 'servers', sortable: false, xtype: 'templatecolumn',
-				tpl: '<span style="color:green;">{running_servers}</span>/<span style="color:gray;">{non_running_servers}</span> [<a href="#/servers/view?farmId={id}">View</a>]'
+				tpl: new Ext.XTemplate(
+                    '<span data-anchor="right" data-qalign="r-l" data-qtip="{[this.getTooltipHtml(values)]}" data-qwidth="230">' +
+                        '<span style="color:#28AE1E;">{running_servers}</span>' +
+                        '/<span style="color:#329FE9;">{suspended_servers}</span>' +
+                        '/<span style="color:#bbb;">{non_running_servers}</span>' +
+                    '</span>'+
+                    ' [<a href="#/servers/view?farmId={id}">View</a>]',
+                    {
+                        getTooltipHtml: function(values) {
+                            return Ext.String.htmlEncode(
+                                '<span style="color:#00CC00;">' + values.running_servers + '</span> &ndash; Initializing & Running servers<br/>' +
+                                '<span style="color:#4DA6FF;">' + values.suspended_servers + '</span> &ndash; Suspended servers<br/>' +
+                                '<span style="color:#bbb;">' + values.non_running_servers + '</span> &ndash; Terminated servers'
+                            );
+                        }
+                    }
+                )
 			},
 			{ text: "Roles", width: 70, dataIndex: 'roles', sortable: false, align:'center', xtype: 'templatecolumn',
 				tpl: '<a href="#/farms/{id}/roles">{roles}</a>'
@@ -65,484 +106,374 @@ Scalr.regPage('Scalr.ui.farms.view', function (loadParams, moduleParams) {
 			{ text: "DNS zones", width: 100, dataIndex: 'zones', sortable: false, align:'center', xtype: 'templatecolumn',
 				tpl: '<a href="#/dnszones/view?farmId={id}">{zones}</a>'
 			},
-			{ text: "Status", width: 100, dataIndex: 'status', sortable: true, xtype: 'templatecolumn', tpl:
-				new Ext.XTemplate('<span style="color: {[this.getClass(values.status)]}">{[this.getName(values.status)]}</span>', {
-					getClass: function (value) {
-						if (value == 1)
-							return "green";
-						else if (value == 3)
-							return "#666633";
-						else
-							return "red";
-					},
-					getName: function (value) {
-						var titles = {
-							1: "Running",
-							0: "Terminated",
-							2: "Terminating",
-							3: "Synchronizing"
-						};
-						return titles[value] || value;
-					}
-				})
-			}, { text: "Alerts", width: 90, dataIndex: 'alerts', align:'center', sortable: false, xtype: 'templatecolumn',
-				tpl: '<tpl if="status == 1">'+
-					'<tpl if="alerts &gt; 0"><span style="color:red;">{alerts}</span> [<a href="#/alerts/view?farmId={id}&status=failed">View</a>]<tpl else><span style="color:green;">0</span></tpl>'+
-				'<tpl else><img src="/ui2/images/icons/false.png" /></tpl>'
+			{ text: "Status", width: 120, minWidth: 120, dataIndex: 'status', sortable: true, xtype: 'statuscolumn', statustype: 'farm'},
+            { text: "Alerts", width: 90, dataIndex: 'alerts', align:'center', sortable: false, xtype: 'templatecolumn',	tpl: 
+                '<tpl if="status == 1">' +
+					'<tpl if="alerts &gt; 0">' + 
+                        '<span style="color:red;">{alerts}</span> [<a href="#/alerts/view?farmId={id}&status=failed">View</a>]' +
+                    '<tpl else>' +
+                        '<span style="color:green;">0</span>' +
+                    '</tpl>'+
+				'<tpl else>' + 
+                    '<img src="' + Ext.BLANK_IMAGE_URL + '" class="x-icon-minus" />' +
+                '</tpl>'
 			}, {
 				text: 'Lock', width: 60, dataIndex: 'lock', fixed: true, resizable: false, sortable: false, tdCls: 'scalr-ui-farms-view-td-lock', xtype: 'templatecolumn', tpl:
 					'<tpl if="lock"><div class="scalr-ui-farms-view-lock" title="{lock_comment}"></div><tpl else><div class="scalr-ui-farms-view-unlock" title="Lock farm"></div></tpl>'
 			}, {
-				xtype: 'optionscolumn',
-				getOptionVisibility: function (item, record) {
-					var data = record.data;
+				xtype: 'optionscolumn2',
+				menu: {
+                    xtype: 'actionsmenu',
+                    listeners: {
+                        beforeshow: function () {
+                            var me = this;
+                            me.items.each(function (item) {
+                                if (item.isshortcut) {
+                                    me.remove(item);
+                                }
+                            });
 
-                    if (item.itemId == 'option.clone')
-                        return Scalr.isAllowed('FARMS', 'clone');
+                            if (me.data['shortcuts'].length) {
+                                me.add({
+                                    xtype: 'menuseparator',
+                                    isshortcut: true
+                                });
 
-                    if (item.itemId == 'option.alerts')
-                        return Scalr.isAllowed('FARMS_ALERTS');
-
-                    if (item.itemId == 'option.events')
-                        return Scalr.isAllowed('FARMS_EVENTS_AND_NOTIFICATIONS');
-
-                    if (item.itemId == 'option.usageStats')
-                        return Scalr.isAllowed('FARMS_STATISTICS');
-
-					if (item.itemId == 'option.launchFarm')
-						return (data.status == 0 && Scalr.isAllowed('FARMS', 'launch'));
-
-					if (item.itemId == 'option.terminateFarm')
-						return (data.status == 1 && Scalr.isAllowed('FARMS', 'terminate'));
-
-					if (item.itemId == 'option.controlSep')
-						return (data.status == 1 || data.status == 0);
-
-					if (item.itemId == 'option.scSep')
-						return (data.shortcuts.length > 0);
-
-					if (item.itemId == 'option.viewMap' ||
-						item.itemId == 'option.viewMapSep' ||
-						item.itemId == 'option.loadStats' ||
-						item.itemId == 'option.mysqlSep' ||
-						item.itemId == 'option.mysql' ||
-						item.itemId == 'option.mysql2' ||
-						item.itemId == 'option.postgresql' ||
-						item.itemId == 'option.mariadb' ||
-						item.itemId == 'option.percona' ||
-						item.itemId == 'option.redis' ||
-						item.itemId == 'option.rabbitmq' ||
-						item.itemId == 'option.mongodb' ||
-						item.itemId == 'option.script'
-						) {
-
-						if (data.status == 0)
-							return false;
-						else
-						{
-							if (item.itemId == 'option.postgresql')
-								return data.havepgrole;
-							else if (item.itemId == 'option.redis')
-								return data.haveredisrole;
-							else if (item.itemId == 'option.mysql')
-								return data.havemysqlrole;
-							else if (item.itemId == 'option.mysql2')
-								return data.havemysql2role;
-							else if (item.itemId == 'option.rabbitmq')
-								return data.haverabbitmqrole;
-							else if (item.itemId == 'option.mongodb')
-								return data.havemongodbrole;
-							else if (item.itemId == 'option.percona')
-								return data.haveperconarole;
-						    else if (item.itemId == 'option.mariadb')
-                                return data.havemariadbrole;
-							else
-								return true;
-						}
-					}
-
-					return true;
-				},
-
-				beforeShowOptions: function (record, menu) {
-					menu.items.each(function (item) {
-						if (item.isshortcut) {
-							menu.remove(item);
-						}
-					});
-
-					if (record.get('shortcuts').length) {
-						menu.add({
-							xtype: 'menuseparator',
-							isshortcut: true
-						});
-
-						Ext.Array.each(record.get('shortcuts'), function (shortcut) {
-							if (typeof(shortcut) != 'function') {
-								menu.add({
-									isshortcut: true,
-									text: 'Execute ' + shortcut.name,
-									href: '#/scripts/execute?eventName=' + shortcut.event_name
-								});
-							}
-						});
-					}
-				},
-
-				optionsMenu: [{
-					itemId: 'option.addToDash',
-					text: 'Add to dashboard',
-					iconCls: 'x-menu-icon-dashboard',
-					request: {
-						processBox: {
-							type: 'action',
-							msg: 'Adding new widget to dashboard ...'
-						},
-						url: '/dashboard/xUpdatePanel',
-						dataHandler: function (record) {
-							var data = Ext.encode({params: {farmId: record.get('id')}, name: 'dashboard.farm', url: '' });
-							return {widget: data};
-						},
-						success: function (data, response, options) {
-							Scalr.event.fireEvent('update', '/dashboard', data.panel);
-							Scalr.storage.set('dashboard', Ext.Date.now());
-						}
-					}
-				}, {
-					xtype: 'menuseparator',
-					itemId: 'option.dashSep'
-				}, {
-					itemId: 'option.launchFarm',
-					text: 'Launch',
-					iconCls: 'x-menu-icon-launch',
-					request: {
-						confirmBox: {
-							type: 'launch',
-							msg: 'Are you sure want to launch farm "{name}" ?'
-						},
-						processBox: {
-							type: 'launch',
-							msg: 'Launching farm ...'
-						},
-						url: '/farms/xLaunch/',
-						dataHandler: function (record) {
-							return { farmId: record.get('id') };
-						},
-						success: function () {
-							store.load();
-						}
-					}
-				}, {
-					itemId: 'option.terminateFarm',
-					iconCls: 'x-menu-icon-terminate',
-					text: 'Terminate',
-					request: {
-						processBox: {
-							type:'action'
-						},
-						url: '/farms/xGetTerminationDetails/',
-						dataHandler: function (record) {
-							return { farmId: record.get('id') };
-						},
-						success: function (data) {
-							/*var items = [];
-							for (var i = 0; i < data.roles.length; i++) {
-								var t = {
-									xtype: 'checkbox',
-									cci: i,
-									name: 'sync[]',
-									fName: 'sync',
-									inputValue: data.roles[i].id,
-									boxLabel: '<b>' + data.roles[i].name + '</b> (Last synchronization: ' + data.roles[i].dtLastSync + ')',
-									handler: function (checkbox, checked) {
-										var c = this.ownerCt.query('[ci="' + checkbox.cci + '"]');
-										for (var k = 0; k < c.length; k++) {
-											if (checked)
-												c[k].show();
-											else
-												c[k].hide();
-										}
-
-										var c = this.ownerCt.query('[fName="sync"]'), flag = false;
-										for (var k = 0; k < c.length; k++) {
-											if (c[k].checked) {
-												flag = true;
-												break;
-											}
-										}
-
-										if (flag)
-											this.up('fieldset').ownerCt.down('[name="unTermOnFail"]').show();
-										else
-											this.up('fieldset').ownerCt.down('[name="unTermOnFail"]').hide();
-									}
-								};
-
-								if (data.roles[i].isBundleRunning) {
-									t.disabled = true;
-									items.push(t);
-									items.push({
-										xtype: 'displayfield',
-										anchor: '100%',
-										margin: '0 0 0 20',
-										value: 'Synchronization for this role already running ...'
-									});
-								} else if (! Ext.isArray(data.roles[i].servers)) {
-									t.disabled = true;
-									items.push(t);
-									items.push({
-										xtype: 'displayfield',
-										anchor: '100%',
-										style: 'margin-left: 20px',
-										value: 'No running servers found on this role'
-									});
-								} else {
-									var s = [];
-									for (var j = 0; j < data.roles[i].servers.length; j++) {
-										s[s.length] = {
-											boxLabel: data.roles[i].servers[j].remoteIp + ' (' + data.roles[i].servers[j].server_id + ')',
-											name: 'syncInstances[' + data.roles[i].id + ']',
-											checked: j == 0 ? true : false, // select first
-											inputValue: data.roles[i].servers[j].server_id
-										};
-									}
-
-									items.push(t);
-
-									items.push({
-										xtype: 'radiogroup',
-										hideLabel: true,
-										columns: 1,
-										hidden: true,
-										ci: i,
-										anchor: '100%',
-										margin: '0 0 0 10',
-										items: s
-									});
-								}
-							}*/
-
-							Scalr.Request({
-								confirmBox: {
-									type: 'terminate',
-									disabled: data.isMongoDbClusterRunning || false,
-									msg: 'If you have made any modifications to your instances in <b>' + data['farmName'] + '</b> after launching, you may wish to save them as a machine image by creating a server snapshot.',
-									multiline: true,
-									formWidth: 740,
-									form: [{
-										hidden: !data.isMongoDbClusterRunning,
-										xtype: 'displayfield',
-										cls: 'x-form-field-warning',
-										value: 'You currently have some Mongo instances in this farm. <br> Terminating it will result in <b>TOTAL DATA LOSS</b> (yeah, we\'re serious).<br/> Please <a href=\'#/services/mongodb/status?farmId='+data.farmId+'\'>shut down the mongo cluster</a>, then wait, then you\'ll be able to terminate the farm or just use force termination option (that will remove all mongodb data).'
-									}, {
-										hidden: !data.isMysqlRunning,
-										xtype: 'displayfield',
-										cls: 'x-form-field-warning',
-										value: 'Server snapshot will not include database data. You can create db data bundle on database manager page.'
-									}, {
-										xtype: 'fieldset',
-										title: 'Synchronization settings',
-                                        hidden: true
-										//hidden: items.length ? false : true,
-										//items: items
-									}, {
-										xtype: 'fieldset',
-										title: 'Termination options',
-                                        defaults: {
-                                            anchor: '100%'
-                                        },
-										items: [{
-											xtype: 'checkbox',
-											boxLabel: 'Forcefully terminate mongodb cluster (<b>ALL YOUR MONGODB DATA ON THIS FARM WILL BE REMOVED</b>)',
-											name: 'forceMongoTerminate',
-											hidden: !data.isMongoDbClusterRunning,
-											listeners: {
-												change: function () {
-													if (this.checked)
-														this.up().up().up().down('#buttonOk').enable();
-													else
-														this.up().up().up().down('#buttonOk').disable();
-												}
-											}
-										}, {
-											xtype: 'checkbox',
-											boxLabel: 'Do not terminate a farm if synchronization fail on any role',
-											name: 'unTermOnFail',
-											hidden: true
-										}, {
-											xtype: 'checkbox',
-											boxLabel: 'Delete DNS zone from nameservers. It will be recreated when the farm is launched.',
-											name: 'deleteDNSZones'
-										}, {
-											xtype: 'checkbox',
-											boxLabel: 'Delete cloud objects (EBS, Elastic IPs, etc)',
-											name: 'deleteCloudObjects'
-										}, {
-											xtype: 'checkbox',
-											checked: false,
-                                            disabled: !!data.isRabbitMQ,
-											boxLabel: 'Skip all shutdown routines (Do not process the BeforeHostTerminate event)',
-											name: 'forceTerminate'
-										},{
+                                Ext.Array.each(me.data['shortcuts'], function (shortcut) {
+                                    if (typeof(shortcut) != 'function') {
+                                        me.add({
+                                            isshortcut: true,
+                                            text: 'Execute ' + shortcut.name,
+                                            href: '#/scripts/execute?shortcutId=' + shortcut.id
+                                        });
+                                    }
+                                });
+                            }
+                        }
+                    },
+                    items: [{
+                        itemId: 'option.addToDash',
+                        text: 'Add to dashboard',
+                        iconCls: 'x-menu-icon-dashboard',
+                        request: {
+                            processBox: {
+                                type: 'action',
+                                msg: 'Adding new widget to dashboard ...'
+                            },
+                            url: '/dashboard/xUpdatePanel',
+                            dataHandler: function (data) {
+                                return {widget: Ext.encode({params: {farmId: data['id']}, name: 'dashboard.farm', url: '' })};
+                            },
+                            success: function (data, response, options) {
+                                Scalr.event.fireEvent('update', '/dashboard', data.panel);
+                                Scalr.storage.set('dashboard', Ext.Date.now());
+                            }
+                        }
+                    }, {
+                        xtype: 'menuseparator',
+                        itemId: 'option.dashSep'
+                    }, {
+                        itemId: 'option.launchFarm',
+                        text: 'Launch',
+                        iconCls: 'x-menu-icon-launch',
+                        getVisibility: function(data) {
+                            return data.status == 0 && Scalr.isAllowed('FARMS', 'launch');
+                        },
+                        request: {
+                            confirmBox: {
+                                type: 'launch',
+                                msg: 'Are you sure want to launch farm "{name}" ?'
+                            },
+                            processBox: {
+                                type: 'launch',
+                                msg: 'Launching farm ...'
+                            },
+                            url: '/farms/xLaunch/',
+                            dataHandler: function (data) {
+                                return { farmId: data['id'] };
+                            },
+                            success: function () {
+                                store.load();
+                            }
+                        }
+                    }, {
+                        itemId: 'option.terminateFarm',
+                        iconCls: 'x-menu-icon-terminate',
+                        text: 'Terminate',
+                        getVisibility: function(data) {
+                            return data.status == 1 && Scalr.isAllowed('FARMS', 'terminate');
+                        },
+                        request: {
+                            processBox: {
+                                type:'action'
+                            },
+                            url: '/farms/xGetTerminationDetails/',
+                            dataHandler: function (data) {
+                                return { farmId: data['id'] };
+                            },
+                            success: function (data) {
+                                Scalr.Request({
+                                    confirmBox: {
+                                        type: 'terminate',
+                                        disabled: data.isMongoDbClusterRunning || false,
+                                        msg: 'If you have made any modifications to your instances in <b>' + data['farmName'] + '</b> after launching, you may wish to save them as a machine image by creating a server snapshot.',
+                                        multiline: true,
+                                        formWidth: 740,
+                                        form: [{
+                                            hidden: !data.isMongoDbClusterRunning,
                                             xtype: 'displayfield',
-                                            cls: 'x-form-field-info',
-                                            margin: '12 0 0',
-                                            hidden: !data.isRabbitMQ,
-                                            value: '<b>Skiping all shutdown routines</b> is not allowed for farms with RabbitMQ role'
+                                            cls: 'x-form-field-warning',
+                                            value: 'You currently have some Mongo instances in this farm. <br> Terminating it will result in <b>TOTAL DATA LOSS</b> (yeah, we\'re serious).<br/> Please <a href=\'#/services/mongodb/status?farmId='+data.farmId+'\'>shut down the mongo cluster</a>, then wait, then you\'ll be able to terminate the farm or just use force termination option (that will remove all mongodb data).'
+                                        }, {
+                                            hidden: !data.isMysqlRunning,
+                                            xtype: 'displayfield',
+                                            cls: 'x-form-field-warning',
+                                            value: 'Server snapshot will not include database data. You can create db data bundle on database manager page.'
+                                        }, {
+                                            xtype: 'fieldset',
+                                            title: 'Synchronization settings',
+                                            hidden: true
+                                        }, {
+                                            xtype: 'fieldset',
+                                            title: 'Termination options',
+                                            defaults: {
+                                                anchor: '100%'
+                                            },
+                                            items: [{
+                                                xtype: 'checkbox',
+                                                boxLabel: 'Forcefully terminate mongodb cluster (<b>ALL YOUR MONGODB DATA ON THIS FARM WILL BE REMOVED</b>)',
+                                                name: 'forceMongoTerminate',
+                                                hidden: !data.isMongoDbClusterRunning,
+                                                listeners: {
+                                                    change: function () {
+                                                        if (this.checked)
+                                                            this.up().up().up().down('#buttonOk').enable();
+                                                        else
+                                                            this.up().up().up().down('#buttonOk').disable();
+                                                    }
+                                                }
+                                            }, {
+                                                xtype: 'checkbox',
+                                                boxLabel: 'Do not terminate a farm if synchronization fail on any role',
+                                                name: 'unTermOnFail',
+                                                hidden: true
+                                            }, {
+                                                xtype: 'checkbox',
+                                                boxLabel: 'Delete DNS zone from nameservers. It will be recreated when the farm is launched.',
+                                                name: 'deleteDNSZones'
+                                            },/* {
+                                                xtype: 'checkbox',
+                                                boxLabel: 'Delete cloud objects (EBS, Elastic IPs, etc)',
+                                                name: 'deleteCloudObjects'
+                                            }, */{
+                                                xtype: 'checkbox',
+                                                checked: false,
+                                                disabled: !!data.isRabbitMQ,
+                                                boxLabel: 'Skip all shutdown routines (Do not process the BeforeHostTerminate event)',
+                                                name: 'forceTerminate'
+                                            },{
+                                                xtype: 'displayfield',
+                                                cls: 'x-form-field-info',
+                                                margin: '12 0 0',
+                                                hidden: !data.isRabbitMQ,
+                                                value: '<b>Skiping all shutdown routines</b> is not allowed for farms with RabbitMQ role'
+                                            }]
                                         }]
-									}]
-								},
-								processBox: {
-									type: 'terminate'
-								},
-								url: '/farms/xTerminate',
-								params: {farmId: data.farmId},
-								success: function () {
-									store.load();
-								}
-							});
-						}
-					}
-				}, {
-					xtype: 'menuseparator',
-					itemId: 'option.controlSep'
-				}, {
-					itemId: 'option.info',
-					iconCls: 'x-menu-icon-info',
-					text: 'Extended information',
-					href: "#/farms/{id}/extendedInfo"
-				}, {
-					itemId: 'option.usageStats',
-					text: 'Usage statistics',
-					iconCls: 'x-menu-icon-statsusage',
-					href: '#/statistics/serversusage?farmId={id}'
-				}, {
-					itemId: 'option.loadStats',
-					iconCls: 'x-menu-icon-statsload',
-					text: 'Load statistics',
-					href: '#/monitoring/view?farmId={id}'
-				}, {
-					itemId: 'option.events',
-					text: 'Events & notifications',
-					iconCls: 'x-menu-icon-events',
-					href: '#/farms/{id}/events'
-				}, {
-					xtype: 'menuseparator',
-					itemId: 'option.mysqlSep'
-				}, {
-					itemId: 'option.mysql',
-					iconCls: 'x-menu-icon-mysql',
-					text: 'MySQL status',
-					href: "#/dbmsr/status?farmId={id}&type=mysql"
-				}, {
-					itemId: 'option.mysql2',
-					iconCls: 'x-menu-icon-mysql',
-					text: 'MySQL status',
-					href: "#/db/manager/dashboard?farmId={id}&type=mysql2"
-				}, {
-					itemId: 'option.percona',
-					iconCls: 'x-menu-icon-percona',
-					text: 'Percona server status',
-					href: "#/db/manager/dashboard?farmId={id}&type=percona"
-				}, {
-					itemId: 'option.postgresql',
-					iconCls: 'x-menu-icon-postgresql',
-					text: 'PostgreSQL status',
-					href: "#/db/manager/dashboard?farmId={id}&type=postgresql"
-				}, {
-					itemId: 'option.redis',
-					iconCls: 'x-menu-icon-redis',
-					text: 'Redis status',
-					href: "#/db/manager/dashboard?farmId={id}&type=redis"
-				}, {
-                    itemId: 'option.mariadb',
-                    iconCls: 'x-menu-icon-mariadb',
-                    text: 'MariaDB status',
-                    href: "#/db/manager/dashboard?farmId={id}&type=mariadb"
-                }, {
-					itemId: 'option.rabbitmq',
-					iconCls: 'x-menu-icon-rabbitmq',
-					text: 'RabbitMQ status',
-					href: "#/services/rabbitmq/status?farmId={id}"
-				}, {
-					itemId: 'option.mongodb',
-					iconCls: 'x-menu-icon-mongodb',
-					text: 'MongoDB status',
-					href: "#/services/mongodb/status?farmId={id}"
-				}, {
-					itemId: 'option.script',
-					iconCls: 'x-menu-icon-execute',
-					text: 'Execute script',
-					href: '#/scripts/execute?farmId={id}'
-				}, {
-					xtype: 'menuseparator',
-					itemId: 'option.logsSep'
-				}, {
-                    itemId: 'option.ssh_key',
-                    text: 'Download SSH private key',
-                    iconCls: 'x-menu-icon-downloadprivatekey',
-                    href: '#/sshkeys/view?farmId={id}'
-                }, {
-					itemId: 'option.logs',
-					iconCls: 'x-menu-icon-logs',
-					text: 'View log',
-					href: "#/logs/system?farmId={id}"
-				}, {
-					itemId: 'option.alerts',
-					iconCls: 'x-menu-icon-alerts',
-					text: 'Alerts',
-					href: "#/alerts/view?farmId={id}"
-				},{
-					xtype: 'menuseparator',
-					itemId: 'option.editSep'
-				}, {
-					itemId: 'option.edit',
-					iconCls: 'x-menu-icon-configure',
-					text: 'Configure',
-					href: '#/farms/{id}/edit'
-				}, {
-					itemId: 'option.clone',
-					iconCls: 'x-menu-icon-clone',
-					text: 'Clone',
-					request: {
-						confirmBox: {
-							type: 'action',
-							msg: 'Are you sure want to clone farm "{name}" ?'
-						},
-						processBox: {
-							type: 'action',
-							msg: 'Cloning farm ...'
-						},
-						url: '/farms/xClone/',
-						dataHandler: function (record) {
-							return { farmId: record.get('id') };
-						},
-						success: function () {
-							store.load();
-						}
-					}
-				}, {
-					itemId: 'option.delete',
-					iconCls: 'x-menu-icon-delete',
-					text: 'Delete',
-					request: {
-						confirmBox: {
-							type: 'delete',
-							msg: 'Are you sure want to remove farm "{name}" ?'
-						},
-						processBox: {
-							type: 'delete',
-							msg: 'Removing farm ...'
-						},
-						url: '/farms/xRemove/',
-						dataHandler: function (record) {
-							return { farmId: record.get('id') };
-						},
-						success: function () {
-							store.load();
-						}
-					}
-				}]
+                                    },
+                                    processBox: {
+                                        type: 'terminate'
+                                    },
+                                    url: '/farms/xTerminate',
+                                    params: {farmId: data.farmId},
+                                    success: function () {
+                                        store.load();
+                                    }
+                                });
+                            }
+                        }
+                    }, {
+                        xtype: 'menuseparator',
+                        itemId: 'option.controlSep'
+                    }, {
+                        itemId: 'option.info',
+                        iconCls: 'x-menu-icon-info',
+                        text: 'Extended information',
+                        href: "#/farms/{id}/extendedInfo"
+                    }, {
+                        itemId: 'option.usageStats',
+                        text: 'Usage statistics',
+                        iconCls: 'x-menu-icon-statsusage',
+                        href: '#/statistics/serversusage?farmId={id}',
+                        getVisibility: function() {
+                            return Scalr.isAllowed('FARMS_STATISTICS');
+                        }
+                    }, {
+                        itemId: 'option.loadStats',
+                        iconCls: 'x-menu-icon-statsload',
+                        text: 'Load statistics',
+                        href: '#/monitoring/view?farmId={id}',
+                        getVisibility: function(data) {
+                            return data.status != 0;
+                        }
+                    }, {
+                        itemId: 'option.events',
+                        text: 'Events & notifications',
+                        iconCls: 'x-menu-icon-events',
+                        href: '#/farms/{id}/events',
+                        getVisibility: function() {
+                            return Scalr.isAllowed('FARMS_EVENTS_AND_NOTIFICATIONS');
+                        }
+                    }, {
+                        xtype: 'menuseparator',
+                        itemId: 'option.mysqlSep'
+                    }, {
+                        itemId: 'option.mysql',
+                        iconCls: 'x-menu-icon-mysql',
+                        text: 'MySQL status',
+                        href: "#/dbmsr/status?farmId={id}&type=mysql",
+                        getVisibility: function(data) {
+                            return data.status != 0 && data.havemysqlrole;
+                        }
+                    }, {
+                        itemId: 'option.mysql2',
+                        iconCls: 'x-menu-icon-mysql',
+                        text: 'MySQL status',
+                        href: "#/db/manager/dashboard?farmId={id}&type=mysql2",
+                        getVisibility: function(data) {
+                            return data.status != 0 && data.havemysql2role;
+                        }
+                    }, {
+                        itemId: 'option.percona',
+                        iconCls: 'x-menu-icon-percona',
+                        text: 'Percona server status',
+                        href: "#/db/manager/dashboard?farmId={id}&type=percona",
+                        getVisibility: function(data) {
+                            return data.status != 0 && data.haveperconarole;
+                        }
+                    }, {
+                        itemId: 'option.postgresql',
+                        iconCls: 'x-menu-icon-postgresql',
+                        text: 'PostgreSQL status',
+                        href: "#/db/manager/dashboard?farmId={id}&type=postgresql",
+                        getVisibility: function(data) {
+                            return data.status != 0 && data.havepgrole;
+                        }
+                    }, {
+                        itemId: 'option.redis',
+                        iconCls: 'x-menu-icon-redis',
+                        text: 'Redis status',
+                        href: "#/db/manager/dashboard?farmId={id}&type=redis",
+                        getVisibility: function(data) {
+                            return data.status != 0 && data.haveredisrole;
+                        }
+                    }, {
+                        itemId: 'option.mariadb',
+                        iconCls: 'x-menu-icon-mariadb',
+                        text: 'MariaDB status',
+                        href: "#/db/manager/dashboard?farmId={id}&type=mariadb",
+                        getVisibility: function(data) {
+                            return data.status != 0 && data.havemariadbrole;
+                        }
+                    }, {
+                        itemId: 'option.rabbitmq',
+                        iconCls: 'x-menu-icon-rabbitmq',
+                        text: 'RabbitMQ status',
+                        href: "#/services/rabbitmq/status?farmId={id}",
+                        getVisibility: function(data) {
+                            return data.status != 0 && data.haverabbitmqrole;
+                        }
+                    }, {
+                        itemId: 'option.mongodb',
+                        iconCls: 'x-menu-icon-mongodb',
+                        text: 'MongoDB status',
+                        href: "#/services/mongodb/status?farmId={id}",
+                        getVisibility: function(data) {
+                            return data.status != 0 && data.havemongodbrole;
+                        }
+                    }, {
+                        itemId: 'option.script',
+                        iconCls: 'x-menu-icon-execute',
+                        text: 'Execute script',
+                        href: '#/scripts/execute?farmId={id}',
+                        getVisibility: function(data) {
+                            return data.status != 0;
+                        }
+                    }, {
+                        xtype: 'menuseparator',
+                        itemId: 'option.logsSep'
+                    }, {
+                        itemId: 'option.ssh_key',
+                        text: 'Download SSH private key',
+                        iconCls: 'x-menu-icon-downloadprivatekey',
+                        href: '#/sshkeys/view?farmId={id}'
+                    }, {
+                        itemId: 'option.logs',
+                        iconCls: 'x-menu-icon-logs',
+                        text: 'View log',
+                        href: "#/logs/system?farmId={id}"
+                    }, {
+                        itemId: 'option.alerts',
+                        iconCls: 'x-menu-icon-alerts',
+                        text: 'Alerts',
+                        href: "#/alerts/view?farmId={id}",
+                        getVisibility: function() {
+                            return Scalr.isAllowed('FARMS_ALERTS');
+                        }
+                    },{
+                        xtype: 'menuseparator',
+                        itemId: 'option.editSep'
+                    }, {
+                        itemId: 'option.edit',
+                        iconCls: 'x-menu-icon-configure',
+                        text: 'Configure',
+                        href: '#/farms/{id}/edit'
+                    }, {
+                        itemId: 'option.clone',
+                        iconCls: 'x-menu-icon-clone',
+                        text: 'Clone',
+                        getVisibility: function() {
+                            return Scalr.isAllowed('FARMS', 'clone');
+                        },
+                        request: {
+                            confirmBox: {
+                                type: 'clone',
+                                msg: 'Are you sure want to clone farm "{name}" ?'
+                            },
+                            processBox: {
+                                type: 'action',
+                                msg: 'Cloning farm ...'
+                            },
+                            url: '/farms/xClone/',
+                            dataHandler: function (data) {
+                                return { farmId: data['id'] };
+                            },
+                            success: function () {
+                                store.load();
+                            }
+                        }
+                    }, {
+                        itemId: 'option.delete',
+                        iconCls: 'x-menu-icon-delete',
+                        text: 'Delete',
+                        request: {
+                            confirmBox: {
+                                type: 'delete',
+                                msg: 'Are you sure want to remove farm "{name}" ?'
+                            },
+                            processBox: {
+                                type: 'delete',
+                                msg: 'Removing farm ...'
+                            },
+                            url: '/farms/xRemove/',
+                            dataHandler: function (data) {
+                                return { farmId: data['id'] };
+                            },
+                            success: function () {
+                                store.load();
+                            }
+                        }
+	    			}]
+                }
 			}
 		],
 		listeners: {
@@ -624,16 +555,9 @@ Scalr.regPage('Scalr.ui.farms.view', function (loadParams, moduleParams) {
 			}],
 			items: [{
 				xtype: 'filterfield',
-				store: store,
                 width: 300,
-                form: moduleParams['leaseEnabled'] ? {
-                    items: [{
-                        xtype: 'textfield',
-                        fieldLabel: 'Show farms that will expire in N days',
-                        labelAlign: 'top',
-                        name: 'expirePeriod'
-                    }]
-                } : null
+				store: store,
+                form: filterFieldForm
             }, ' ', {
 				xtype: 'button',
 				text: 'Show only my farms',
@@ -653,16 +577,5 @@ Scalr.regPage('Scalr.ui.farms.view', function (loadParams, moduleParams) {
 			}]
 		}]
 	});
-
-	/*grid.getView().on('viewready', function () {
-		this.getView().on('refresh', function() {
-			if (this.getStore().getAt(0)) {
-				this.down('optionscolumn').showOptionsMenu(this.getView(), this.getStore().getAt(0));
-			}
-		}, grid, {
-			single: true
-		});
-	}, grid);*/
-
 	return grid;
 });

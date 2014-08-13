@@ -148,8 +148,8 @@ class Scalr_SchedulerTask extends Scalr_Model
                     $eventName .= ' (manual)';
 
                 try {
-                    $scr = new Scalr_Script();
-                    $scr->loadById($this->config['scriptId']);
+                    if (! \Scalr\Model\Entity\Script::findPk($this->config['scriptId']))
+                        throw new Exception('Script not found');
 
                     // get executing object by target_type variable
                     switch($this->targetType) {
@@ -183,7 +183,8 @@ class Scalr_SchedulerTask extends Scalr_Model
                             'scriptid' => $this->config['scriptId'],
                             'timeout' => $this->config['scriptTimeout'],
                             'issync' => $this->config['scriptIsSync'],
-                            'params' => serialize($this->config['scriptOptions'])
+                            'params' => serialize($this->config['scriptOptions']),
+                            'type' => Scalr_Scripting_Manager::ORCHESTRATION_SCRIPT_TYPE_SCALR
                         );
 
                         // send message to start executing task (starts script)
@@ -209,17 +210,22 @@ class Scalr_SchedulerTask extends Scalr_Model
                             $itm->executionId = $script['execution_id'];
 
                             $msg->scripts = array($itm);
+                            $msg->setGlobalVariables($DBServer, true);
 
-                            try {
-                                $msg->globalVariables = array();
-                                $globalVariables = new Scalr_Scripting_GlobalVariables($DBServer->envId);
-                                $vars = $globalVariables->listVariables($DBServer->roleId, $DBServer->farmId, $DBServer->farmRoleId);
-                                foreach ($vars as $k => $v)
-                                    $msg->globalVariables[] = (object)array('name' => $k, 'value' => $v);
+                            /*
+                            if ($DBServer->IsSupported('2.5.12')) {
+                                $api = $DBServer->scalarizr->system;
+                                $api->timeout = 5;
 
-                            } catch (Exception $e) {}
-
-                            $DBServer->SendMessage($msg);
+                                $api->executeScripts(
+                                    $msg->scripts,
+                                    $msg->globalVariables,
+                                    $msg->eventName,
+                                    $msg->roleName
+                                );
+                            } else
+                            */
+                            $DBServer->SendMessage($msg, false, true);
                         }
                     } else {
                         $farmRoleNotFound = true;

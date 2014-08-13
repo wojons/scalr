@@ -3,7 +3,6 @@ namespace Scalr\Tests\Service\Aws;
 
 use Scalr\Service\Aws\Client\ClientException;
 use Scalr\Service\Aws\Client\ClientResponseInterface;
-use Scalr\Service\Aws\S3\DataType\AccessControlPolicyData;
 use Scalr\Service\Aws;
 use Scalr\Service\Aws\S3\DataType\ObjectData;
 use Scalr\Service\Aws\S3;

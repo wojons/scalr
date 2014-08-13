@@ -24,7 +24,7 @@ class Scalr_UI_Controller_Tools_Aws_Ec2_Elb extends Scalr_UI_Controller
     {
         $roleid = $this->db->GetOne("SELECT farm_roleid FROM farm_role_settings WHERE name=? AND value=? LIMIT 1",
         array(
-            DBFarmRole::SETTING_BALANCING_NAME,
+            DBFarmRole::SETTING_AWS_ELB_ID,
             $this->getParam('elbName')
         ));
 
@@ -39,7 +39,7 @@ class Scalr_UI_Controller_Tools_Aws_Ec2_Elb extends Scalr_UI_Controller
     {
         $roleid = $this->db->GetOne("SELECT farm_roleid FROM farm_role_settings WHERE name=? AND value=? LIMIT 1",
         array(
-            DBFarmRole::SETTING_BALANCING_NAME,
+            DBFarmRole::SETTING_AWS_ELB_ID,
             $this->getParam('elbName')
         ));
 
@@ -52,9 +52,12 @@ class Scalr_UI_Controller_Tools_Aws_Ec2_Elb extends Scalr_UI_Controller
         $elb->loadBalancer->delete($this->getParam('elbName'));
 
         if ($DBFarmRole instanceof \DBFarmRole) {
-            $DBFarmRole->SetSetting(DBFarmRole::SETTING_BALANCING_USE_ELB, 0, DBFarmRole::TYPE_LCL);
-            $DBFarmRole->SetSetting(DBFarmRole::SETTING_BALANCING_HOSTNAME, "", DBFarmRole::TYPE_LCL);
-            $DBFarmRole->SetSetting(DBFarmRole::SETTING_BALANCING_NAME, "", DBFarmRole::TYPE_LCL);
+            $DBFarmRole->SetSetting(DBFarmRole::SETTING_AWS_ELB_ENABLED, false);
+            $DBFarmRole->SetSetting(DBFarmRole::SETTING_AWS_ELB_ID, false);
+
+            $service = FarmRoleService::findFarmRoleService($this->getEnvironmentId(), $this->getParam('elbName'));
+            if ($service)
+                $service->remove();
         }
         $this->response->success("Selected Elastic Load Balancers successfully removed");
     }
@@ -68,16 +71,21 @@ class Scalr_UI_Controller_Tools_Aws_Ec2_Elb extends Scalr_UI_Controller
 
     public function createAction()
     {
+        $governance = new Scalr_Governance($this->getEnvironmentId());
         $this->response->page('ui/tools/aws/ec2/elb/create.js', array(
+            'vpcLimits' => $governance->getValue(SERVER_PLATFORMS::EC2, Scalr_Governance::AWS_VPC, null),
             'zones' => self::loadController('Ec2', 'Scalr_UI_Controller_Platforms')->getAvailZones($this->getParam('cloudLocation'))
-        ));
+        ), array('ux-boxselect.js'));
     }
 
     public function xCreateAction()
     {
         $this->request->defineParams(array(
             'listeners' => array('type' => 'json'),
-            'healthcheck' => array('type' => 'json')
+            'healthcheck' => array('type' => 'json'),
+            'zones' => array('type' => 'array'),
+            'subnets' => array('type' => 'array'),
+            'scheme' => array('type' => 'string'),
         ));
 
         $healthCheck = $this->getParam('healthcheck');
@@ -96,12 +104,9 @@ class Scalr_UI_Controller_Tools_Aws_Ec2_Elb extends Scalr_UI_Controller
             ));
         }
 
-        $availZones = array();
-        foreach ($this->getParam('zones') as $zone => $enabled) {
-            if ($enabled == 'on') {
-                array_push($availZones, $zone);
-            }
-        }
+        $availZones = $this->getParam('zones');
+        $subnets = $this->getParam('subnets');
+        $scheme = $this->getParam('scheme');
 
         $elb_name = sprintf("scalr-%s-%s", Scalr_Util_CryptoTool::sault(10), rand(100,999));
 
@@ -113,7 +118,7 @@ class Scalr_UI_Controller_Tools_Aws_Ec2_Elb extends Scalr_UI_Controller
         $healthCheckType->unhealthyThreshold = $healthCheck['unhealthyThreshold'];
 
         //Creates a new ELB
-        $dnsName = $elb->loadBalancer->create($elb_name, $listenersList, $availZones);
+        $dnsName = $elb->loadBalancer->create($elb_name, $listenersList, !empty($availZones) ? $availZones : null, !empty($subnets) ? $subnets : null, null, !empty($scheme) ? $scheme : null);
 
         try {
             $elb->loadBalancer->configureHealthCheck($elb_name, $healthCheckType);
@@ -126,7 +131,7 @@ class Scalr_UI_Controller_Tools_Aws_Ec2_Elb extends Scalr_UI_Controller
         $this->response->data(array(
             'elb' => array(
                 'name'     => $elb_name,
-                'hostname' => $dnsName,
+                'dnsName' => $dnsName,
             )
         ));
     }
@@ -240,10 +245,20 @@ class Scalr_UI_Controller_Tools_Aws_Ec2_Elb extends Scalr_UI_Controller
         $rowz1 = array();
         /* @var $lb LoadBalancerDescriptionData */
         foreach ($elb->loadBalancer->describe() as $lb) {
-            if (!$lb->dnsName) continue;
+
+            if ($this->getParam('vpcId') && $this->getParam('vpcId') != $lb->vpcId)
+                continue;
+
+            if ($this->getParam('placement')) {
+                if ($this->getParam('placement') == 'ec2' && $lb->vpcId != null)
+                    continue;
+
+                if ($this->getParam('placement') != 'ec2' && $lb->vpcId != $this->getParam('placement'))
+                    continue;
+            }
 
             $roleid = $this->db->GetOne("SELECT farm_roleid FROM farm_role_settings WHERE name=? AND value=? LIMIT 1",
-                array(DBFarmRole::SETTING_BALANCING_HOSTNAME, $lb->dnsName)
+                array(DBFarmRole::SETTING_AWS_ELB_ID, $lb->dnsName)
             );
 
             $farmId = false;
@@ -266,34 +281,45 @@ class Scalr_UI_Controller_Tools_Aws_Ec2_Elb extends Scalr_UI_Controller
                 }
             }
 
-            try {
-                $farmRoleService = FarmRoleService::findFarmRoleService($this->environment->id, $lb->loadBalancerName);
-                if ($farmRoleService) {
-                    if (!$this->user->getPermissions()->check($farmRoleService->getFarmRole()))
-                        continue;
-
-                    $farmRoleId = $farmRoleService->getFarmRole()->ID;
-                    $farmId = $farmRoleService->getFarmRole()->FarmID;
-                    $roleName = $farmRoleService->getFarmRole()->GetRoleObject()->name;
-                    $farmName = $farmRoleService->getFarmRole()->GetFarmObject()->Name;
-                }
-            } catch (Exception $e) {
-            }
-
-            $rowz1[] = array(
+            $info = array(
                 "name"		 => $lb->loadBalancerName,
                 "dtcreated"	 => $lb->createdTime->format('c'),
                 "dnsName"	 => $lb->dnsName,
-                "farmId"	 => $farmId,
-                "farmRoleId" => $farmRoleId,
-                "farmName"	 => $farmName,
-                "roleName"	 => $roleName
+                "availZones" => $lb->availabilityZones,
+                "subnets"    => $lb->subnets,
+                "vpcId"      => $lb->vpcId
             );
+
+            $farmRoleService = FarmRoleService::findFarmRoleService($this->environment->id, $lb->loadBalancerName);
+            if ($farmRoleService) {
+                $info['used'] = true;
+                $info['farmRoleId'] = $farmRoleService->getFarmRole()->ID;
+                $info['farmId'] = $farmRoleService->getFarmRole()->FarmID;
+                $info['roleName'] = $farmRoleService->getFarmRole()->GetRoleObject()->name;
+                $info['farmName'] = $farmRoleService->getFarmRole()->GetFarmObject()->Name;
+            }
+
+            //OLD notation
+            try {
+                $farmRoleId = $this->db->GetOne("SELECT farm_roleid FROM farm_role_settings WHERE name='lb.name' AND value=? LIMIT 1", array(
+                    $lb->loadBalancerName
+                ));
+                if ($farmRoleId) {
+                    $dbFarmRole = DBFarmRole::LoadByID($farmRoleId);
+                    $info['used'] = true;
+                    $info['farmRoleId'] = $dbFarmRole->ID;
+                    $info['farmId'] = $dbFarmRole->FarmID;
+                    $info['roleName'] = $dbFarmRole->GetRoleObject()->name;
+                    $info['farmName'] = $dbFarmRole->GetFarmObject()->Name;
+                }
+            } catch (Exception $e) {}
+
+            $rowz1[] = $info;
         }
 
         $response = $this->buildResponseFromData($rowz1, array('name', 'dnsname', 'farmName', 'roleName'));
-        foreach($response['data'] as &$row) {
-            $row['dtcreated'] = Scalr_Util_DateTime::convertTz($row['dtcreated']);
+        foreach($response['data'] as $k => $row) {
+            $response['data'][$k]['dtcreated'] = Scalr_Util_DateTime::convertTz($row['dtcreated']);
         }
 
         $this->response->data($response);

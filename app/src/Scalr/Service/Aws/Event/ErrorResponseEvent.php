@@ -3,7 +3,6 @@
 namespace Scalr\Service\Aws\Event;
 
 use Scalr\Service\Aws\Client\ClientException;
-use Scalr\Service\Aws\DataType\ErrorData;
 
 /**
  * ErrorResponseEvent

@@ -1,5 +1,9 @@
 <?php
+
 use Scalr\Acl\Acl;
+use Scalr\Modules\PlatformFactory;
+use Scalr\Modules\Platforms\Cloudstack\CloudstackPlatformModule;
+use Scalr\Service\CloudStack\DataType\ListIpAddressesData;
 
 class Scalr_UI_Controller_Tools_Cloudstack_Ips extends Scalr_UI_Controller
 {
@@ -36,17 +40,11 @@ class Scalr_UI_Controller_Tools_Cloudstack_Ips extends Scalr_UI_Controller
         ));
 
         $platformName = $this->getParam('platform');
-        if (!$platformName)
+        if (!$platformName) {
             throw new Exception("Cloud should be specified");
+        }
 
-        $platform = PlatformFactory::NewPlatform($platformName);
-
-        $cs = Scalr_Service_Cloud_Cloudstack::newCloudstack(
-            $platform->getConfigVariable(Modules_Platforms_Cloudstack::API_URL, $this->environment),
-            $platform->getConfigVariable(Modules_Platforms_Cloudstack::API_KEY, $this->environment),
-            $platform->getConfigVariable(Modules_Platforms_Cloudstack::SECRET_KEY, $this->environment),
-            $platformName
-        );
+        $cs = $this->environment->cloudstack($platformName);
 
         foreach ($this->getParam('ipId') as $ipId) {
             $cs->disassociateIpAddress($ipId);
@@ -63,69 +61,69 @@ class Scalr_UI_Controller_Tools_Cloudstack_Ips extends Scalr_UI_Controller
         ));
 
         $platformName = $this->getParam('platform');
-        if (!$platformName)
+        if (!$platformName) {
             throw new Exception("Cloud should be specified");
-
+        }
         $platform = PlatformFactory::NewPlatform($platformName);
 
-        $cs = Scalr_Service_Cloud_Cloudstack::newCloudstack(
-            $platform->getConfigVariable(Modules_Platforms_Cloudstack::API_URL, $this->environment),
-            $platform->getConfigVariable(Modules_Platforms_Cloudstack::API_KEY, $this->environment),
-            $platform->getConfigVariable(Modules_Platforms_Cloudstack::SECRET_KEY, $this->environment),
-            $platformName
-        );
+        $cs = $this->environment->cloudstack($platformName);
 
-        $accountName = $platform->getConfigVariable(Modules_Platforms_Cloudstack::ACCOUNT_NAME, $this->getEnvironment(), false);
-        $domainId = $platform->getConfigVariable(Modules_Platforms_Cloudstack::DOMAIN_ID, $this->getEnvironment(), false);
+        $accountName = $platform->getConfigVariable(CloudstackPlatformModule::ACCOUNT_NAME, $this->getEnvironment(), false);
+        $domainId = $platform->getConfigVariable(CloudstackPlatformModule::DOMAIN_ID, $this->getEnvironment(), false);
 
-        $ipAddresses = $cs->listPublicIpAddresses(null, $accountName, null, $domainId, null, null, null, null, null, null, $this->getParam('cloudLocation'));
+        $requestData = new ListIpAddressesData();
+        $requestData->account = $accountName;
+        $requestData->domainid = $domainId;
+        $requestData->zoneid = $this->getParam('cloudLocation');
+        $ipAddresses = $cs->listPublicIpAddresses($requestData);
 
-        $systemIp = $platform->getConfigVariable(Modules_Platforms_Cloudstack::SHARED_IP.".".$this->getParam('cloudLocation'), $this->environment);
+        $systemIp = $platform->getConfigVariable(CloudstackPlatformModule::SHARED_IP.".".$this->getParam('cloudLocation'), $this->environment);
 
         $ips = array();
-        foreach ($ipAddresses->publicipaddress as $pk=>$pv)
-        {
-            if ($this->getParam('ipId') && $this->getParam('ipId') != $pv->id)
-                continue;
+        if (!empty($ipAddresses)) {
+            foreach ($ipAddresses as $pk=>$pv)
+            {
+                if ($this->getParam('ipId') && $this->getParam('ipId') != $pv->id) {
+                    continue;
+                }
+                if ($pv->ipaddress == $systemIp) {
+                    $pv->purpose = 'ScalrShared';
+                }
+                if ($pv->isstaticnat && !$pv->issystem) {
+                    $pv->purpose = 'ElasticIP';
+                }
+                if ($pv->isstaticnat && $pv->issystem) {
+                    $pv->purpose = 'PublicIP';
+                }
+                $item = array(
+                    'ipId'	=> $pv->id,
+                    'dtAllocated' => $pv->allocated,
+                    'networkName' => $pv->associatednetworkname,
+                    'purpose' => $pv->purpose ? $pv->purpose : "Not used",
+                    'ip' => $pv->ipaddress,
+                    'state' => $pv->state,
+                    'instanceId' => $pv->virtualmachineid,
+                    'fullinfo' => $pv,
+                    'farmId' => false
+                );
 
-            if ($pv->ipaddress == $systemIp)
-                $pv->purpose = 'ScalrShared';
+                if ($item['instanceId']) {
+                    try {
+                        $dbServer = DBServer::LoadByPropertyValue(CLOUDSTACK_SERVER_PROPERTIES::SERVER_ID, $item['instanceId']);
 
-            if ($pv->isstaticnat && !$pv->issystem)
-                $pv->purpose = 'ElasticIP';
+                        $item['farmId'] = $dbServer->farmId;
+                        $item['farmRoleId'] = $dbServer->farmRoleId;
+                        $item['serverIndex'] = $dbServer->index;
+                        $item['serverId'] = $dbServer->serverId;
+                        $item['farmName'] = $dbServer->GetFarmObject()->Name;
+                        $item['roleName'] = $dbServer->GetFarmRoleObject()->GetRoleObject()->name;
 
-            if ($pv->isstaticnat && $pv->issystem)
-                $pv->purpose = 'PublicIP';
+                    } catch (Exception $e) {}
+                }
 
-            $item = array(
-                'ipId'	=> $pv->id,
-                'dtAllocated' => $pv->allocated,
-                'networkName' => $pv->associatednetworkname,
-                'purpose' => $pv->purpose ? $pv->purpose : "Not used",
-                'ip' => $pv->ipaddress,
-                'state' => $pv->state,
-                'instanceId' => $pv->virtualmachineid,
-                'fullinfo' => $pv,
-                'farmId' => false
-            );
-
-            if ($item['instanceId']) {
-                try {
-                    $dbServer = DBServer::LoadByPropertyValue(CLOUDSTACK_SERVER_PROPERTIES::SERVER_ID, $item['instanceId']);
-
-                    $item['farmId'] = $dbServer->farmId;
-                    $item['farmRoleId'] = $dbServer->farmRoleId;
-                    $item['serverIndex'] = $dbServer->index;
-                    $item['serverId'] = $dbServer->serverId;
-                    $item['farmName'] = $dbServer->GetFarmObject()->Name;
-                    $item['roleName'] = $dbServer->GetFarmRoleObject()->GetRoleObject()->name;
-
-                } catch (Exception $e) {}
+                $ips[] = $item;
             }
-
-            $ips[] = $item;
         }
-
         $response = $this->buildResponseFromData($ips, array('serverId', 'ipId', 'ip', 'farmId', 'farmRoleId'));
 
         $this->response->data($response);

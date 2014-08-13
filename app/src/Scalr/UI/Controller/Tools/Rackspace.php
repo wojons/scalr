@@ -1,5 +1,8 @@
 <?php
 
+use Scalr\Modules\PlatformFactory;
+use Scalr\Modules\Platforms\Rackspace\RackspacePlatformModule;
+
 class Scalr_UI_Controller_Tools_Rackspace extends Scalr_UI_Controller
 {
     public function xListLimitsAction()
@@ -7,8 +10,8 @@ class Scalr_UI_Controller_Tools_Rackspace extends Scalr_UI_Controller
         $cloudLocation = $this->getParam('cloudLocation');
 
         $cs = Scalr_Service_Cloud_Rackspace::newRackspaceCS(
-            $this->environment->getPlatformConfigValue(Modules_Platforms_Rackspace::USERNAME, true, $cloudLocation),
-            $this->environment->getPlatformConfigValue(Modules_Platforms_Rackspace::API_KEY, true, $cloudLocation),
+            $this->environment->getPlatformConfigValue(RackspacePlatformModule::USERNAME, true, $cloudLocation),
+            $this->environment->getPlatformConfigValue(RackspacePlatformModule::API_KEY, true, $cloudLocation),
             $cloudLocation
         );
 
@@ -28,7 +31,7 @@ class Scalr_UI_Controller_Tools_Rackspace extends Scalr_UI_Controller
 
     public function limitsAction()
     {
-        $locations = $p = PlatformFactory::NewPlatform(SERVER_PLATFORMS::RACKSPACE)->getLocations();
+        $locations = $p = PlatformFactory::NewPlatform(SERVER_PLATFORMS::RACKSPACE)->getLocations($this->environment);
 
         $this->response->page('ui/tools/rackspace/limits.js', array(
                 'locations'	=> self::loadController('Platforms')->getCloudLocations(SERVER_PLATFORMS::RACKSPACE, false)

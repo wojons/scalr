@@ -63,7 +63,7 @@ class AccountRoleSuperposition extends \ArrayObject
         return $this->user;
     }
 
-	/**
+    /**
      * {@inheritdoc}
      * @see ArrayObject::append()
      */
@@ -97,7 +97,7 @@ class AccountRoleSuperposition extends \ArrayObject
             if ($this->user->isAccountOwner() || $this->user->isScalrAdmin()) {
                 //Scalr Admin and Account Owner is allowed for everything, without any ACL defined for them.
                 return true;
-            } else if ($resourceId === Acl::RESOURCE_ADMINISTRATION_ENV_CLOUDS && $permissionId === null &&
+            } else if ($resourceId === Acl::RESOURCE_ENVADMINISTRATION_ENV_CLOUDS && $permissionId === null &&
                        $this->user->canManageAcl()) {
                 //Account Admin should be able to manage all relatings between environments and teams
                 return true;

@@ -1,13 +1,14 @@
 <?php
 
 namespace Scalr\Tests\Functional\Api\V1;
-use Scalr\Tests\Functional\Api\V1;
+
+use Scalr\Modules\Platforms\Ec2\Ec2PlatformModule;
 
 class EnvironmentTest extends ApiTestCase
 {
     const ENV_NAME = 'env';
 
-	public function testListEnvironments()
+    public function testListEnvironments()
     {
         if (!$this->getUser()->canManageAcl() && !$this->getUser()->isTeamOwner()) {
             $this->markTestSkipped('Specified test user cannot view environments list.');
@@ -98,9 +99,9 @@ class EnvironmentTest extends ApiTestCase
         // enable EC2
         $content = $this->request('/environments/' . $envId . '/platform/xSaveEc2', array(
             'ec2.is_enabled' => '1',
-            'ec2.account_id' => $env->getPlatformConfigValue(\Modules_Platforms_Ec2::ACCOUNT_ID),
-            'ec2.access_key' => $env->getPlatformConfigValue(\Modules_Platforms_Ec2::ACCESS_KEY),
-            'ec2.secret_key' => $env->getPlatformConfigValue(\Modules_Platforms_Ec2::SECRET_KEY)
+            'ec2.account_id' => $env->getPlatformConfigValue(Ec2PlatformModule::ACCOUNT_ID),
+            'ec2.access_key' => $env->getPlatformConfigValue(Ec2PlatformModule::ACCESS_KEY),
+            'ec2.secret_key' => $env->getPlatformConfigValue(Ec2PlatformModule::SECRET_KEY)
         ), 'POST', array(), array());
 
         $this->assertFalse($content['success']);

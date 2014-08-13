@@ -7,8 +7,14 @@ Scalr.regPage('Scalr.ui.account2.teams.view', function (loadParams, moduleParams
 		storeUsers = Scalr.data.get('account.users'),
 		storeRoles = Scalr.data.get('account.roles'),
 		storeEnvironments = Scalr.data.get('account.environments');
-		
-	var reconfigurePage = function(teamId) {
+
+    var firstReconfigure = true;
+	var reconfigurePage = function(params) {
+        var params = params || {},
+            teamId = params.teamId;
+        if (firstReconfigure && !teamId) {
+            teamId = 'first';
+        }
 		if (teamId) {
 			dataview.deselect(form.getForm().getRecord());
 			if (teamId === 'new') {
@@ -21,6 +27,7 @@ Scalr.regPage('Scalr.ui.account2.teams.view', function (loadParams, moduleParams
 				}
 			}
 		}
+        firstReconfigure = false;
 	};
 	
 	var store = Ext.create('Scalr.ui.ChildStore', {
@@ -103,9 +110,6 @@ Scalr.regPage('Scalr.ui.account2.teams.view', function (loadParams, moduleParams
         deferInitialRefresh: false,
         store: store,
 		listeners: {
-			boxready: function(){
-				reconfigurePage(loadParams.teamId || 'first');
-			},
             refresh: function(view){
                 var record = view.getSelectionModel().getLastSelected();
                 if (record) {
@@ -156,10 +160,18 @@ Scalr.regPage('Scalr.ui.account2.teams.view', function (loadParams, moduleParams
         ),
 		plugins: {
 			ptype: 'dynemptytext',
-			emptyText: '<div class="title">No teams were found to match your search.</div> Try modifying your search criteria' + ' or <a class="add-link" href="#">creating a new team</a>.',
-			emptyTextNoItems:	'<div class="title">You have no teams under your account.</div>'+
+            showArrow: Scalr.flags['authMode'] == 'ldap',
+			emptyText: Scalr.flags['authMode'] == 'ldap' ?
+                '<div class="title">No teams were found to match your search.</div> Try modifying your search criteria.':
+                '<div class="title">No teams were found to match your search.</div> Try modifying your search criteria' + ' or <a class="add-link" href="#">creating a new team</a>.',
+
+			emptyTextNoItems: Scalr.flags['authMode'] == 'ldap' ?
+                '<div class="title">You have no teams under your account yet.</div>' +
+                'Teams are based on LDAP groups, and let you organize your co-workers\' access to different parts of your infrastructure.<br/>' +
+                'Please specify which LDAP groups have access to your Scalr environments on the Environments tab.</div>' :
+                '<div class="title">You have no teams under your account.</div>'+
 								'Teams let you organize your co-workers\' access<br/> to different parts of your infrastructure.<br/>' +
-								'Click "+" button to create one.',
+								'Click "Add team" button to create one.',
 			onAddItemClick: function() {
 				panel.down('#add').handler();
 			}
@@ -311,7 +323,7 @@ Scalr.regPage('Scalr.ui.account2.teams.view', function (loadParams, moduleParams
             focusedItemCls: '',
 			plugins: {
 				ptype: 'dynemptytext',
-				emptyText: '<div class="title">No users were found to match your search.</div>Try modifying your search criteria ' + (readOnlyAccess ? '' : 'or <a href="#/account/users?userId=new">creating a new user</a>')
+				emptyText: '<div class="title">No users were found to match your search.</div>Try modifying your search criteria ' + (readOnlyAccess || Scalr.flags['authMode'] == 'ldap' ? '' : 'or <a href="#/account/users?userId=new">creating a new user</a>')
 			},
 			loadingText: 'Loading users ...',
 			deferEmptyText: false,
@@ -583,9 +595,9 @@ Scalr.regPage('Scalr.ui.account2.teams.view', function (loadParams, moduleParams
 				itemId: 'teams'
 			}
 		},
-		scalrReconfigure: function(params){
-			reconfigurePage(params.teamId);
-		},
+        listeners: {
+            applyparams: reconfigurePage
+        },
 		items: [{
 			cls: 'x-panel-column-left',
 			width: 440,

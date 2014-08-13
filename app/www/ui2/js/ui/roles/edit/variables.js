@@ -9,6 +9,7 @@ Ext.define('Scalr.ui.RoleDesignerTabVariables', {
         name: 'variables',
         currentScope: 'role',
         addFieldCls: 'scalr-ui-addfield-light',
+        encodeParams: false,
         maxWidth: 1200
     }],
     initComponent: function(){
@@ -24,5 +25,9 @@ Ext.define('Scalr.ui.RoleDesignerTabVariables', {
     },
     getSubmitValues: function() {
         return {variables: this.down('variablefield').getValue()};
+    },
+    isValid: function() {
+        return true;
     }
+
 });

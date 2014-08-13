@@ -31,8 +31,8 @@ Scalr.regPage('Scalr.ui.billing.invoices', function (loadParams, moduleParams) {
 
 			columns: [
 				{ header: '', flex: 200, sortable: true, dataIndex: '', xtype: 'templatecolumn',
-					tpl: '<a href="/billing/{id}/showInvoice" target="_blank">{createdAt}</a>' 
-				},
+					tpl: '<a href="/billing/{id}/showInvoice?X-Requested-Token=' + Scalr.flags['specialToken'] + '" target="_blank">{createdAt}</a>'
+				}
 			]				
 		}],
 		tools: [{

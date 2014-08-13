@@ -2,7 +2,6 @@
 namespace Scalr\Service\Aws\Client\QueryClient;
 
 use Scalr\Service\Aws\Event\EventType;
-use Scalr\Service\Aws\Client\QueryClientResponse;
 
 /**
  * Amazon CloudFront Query API client.
@@ -85,10 +84,6 @@ class CloudFrontQueryClient extends S3QueryClient
 
         $httpRequest->setUrl('https://' . $options['Host'] . $path);
         $httpRequest->setMethod(constant('HTTP_METH_' . $httpMethod));
-        $httpRequest->setOptions(array(
-            'redirect'  => 10,
-            'useragent' => 'Scalr AWS Client (http://scalr.com)'
-        ));
         $httpRequest->addHeaders($options);
 
         $response = $this->tryCall($httpRequest);

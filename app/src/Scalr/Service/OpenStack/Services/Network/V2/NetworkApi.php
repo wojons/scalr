@@ -10,10 +10,20 @@ use Scalr\Service\OpenStack\Services\Network\Type\ListSubnetsFilter;
 use Scalr\Service\OpenStack\Type\BooleanType;
 use Scalr\Service\OpenStack\Services\Network\Type\ListNetworksFilter;
 use Scalr\Service\OpenStack\Exception\RestClientException;
-use Scalr\Service\OpenStack\Type\AppFormat;
-use Scalr\Service\OpenStack\Client\RestClientResponse;
 use Scalr\Service\OpenStack\Client\ClientInterface;
 use Scalr\Service\OpenStack\Services\NetworkService;
+use Scalr\Service\OpenStack\Services\Network\Type\ListLbVipsFilter;
+use Scalr\Service\OpenStack\Services\Network\Type\ListLbPoolsFilter;
+use Scalr\Service\OpenStack\Services\Network\Type\ListLbMembersFilter;
+use Scalr\Service\OpenStack\Services\Network\Type\CreateLbPool;
+use Scalr\Service\OpenStack\Services\Network\Type\CreateLbMember;
+use Scalr\Service\OpenStack\Services\Network\Type\ListLbHealthMonitorsFilter;
+use Scalr\Service\OpenStack\Services\Network\Type\CreateLbHealthMonitor;
+use Scalr\Service\OpenStack\Services\Network\Type\CreateLbVip;
+use Scalr\Service\OpenStack\Type\DefaultPaginationList;
+use Scalr\Service\OpenStack\Services\Network\Type\ListSecurityGroupsFilter;
+use Scalr\Service\OpenStack\Services\Network\Type\ListSecurityGroupRulesFilter;
+use Scalr\Service\OpenStack\Services\Network\Type\CreateSecurityGroupRule;
 
 /**
  * OpenStack Quantum API v2.0 (May 7, 2013)
@@ -103,7 +113,14 @@ class NetworkApi
         );
         if ($response->hasError() === false) {
             $result = json_decode($response->getContent());
-            $result = empty($detailed) ? $result->networks : $result->network;
+            if (empty($detailed)) {
+                $result = new DefaultPaginationList(
+                    $this->service, 'networks', $result->networks,
+                    (isset($result->networks_links) ? $result->networks_links : null)
+                );
+            } else {
+                $result = $result->network;
+            }
         }
         return $result;
     }
@@ -116,7 +133,7 @@ class NetworkApi
      *
      * @param   string            $subnetId optional The ID of the subnet to show detailed info
      * @param   ListSubnetsFilter $filter   optional The filter.
-     * @return  array|object Returns the list of the subnets or one subnet
+     * @return  DefaultPaginationList|object Returns the list of the subnets or one subnet
      * @throws  RestClientException
      */
     public function listSubnets($subnetId = null, ListSubnetsFilter $filter = null)
@@ -129,7 +146,14 @@ class NetworkApi
         );
         if ($response->hasError() === false) {
             $result = json_decode($response->getContent());
-            $result = empty($detailed) ? $result->subnets : $result->subnet;
+            if (empty($detailed)) {
+                $result = new DefaultPaginationList(
+                    $this->service, 'subnets', $result->subnets,
+                    (isset($result->subnets_links) ? $result->subnets_links : null)
+                );
+            } else {
+                $result = $result->subnet;
+            }
         }
         return $result;
     }
@@ -141,7 +165,7 @@ class NetworkApi
      *
      * @param   string          $portId optional The ID of the port to show detailed info
      * @param   ListPortsFilter $filter The filter options
-     * @return  array|object Returns the list of the ports or the information about one port
+     * @return  DefaultPaginationList|object Returns the list of the ports or the information about one port
      * @throws  RestClientException
      */
     public function listPorts($portId = null, ListPortsFilter $filter = null)
@@ -154,7 +178,14 @@ class NetworkApi
         );
         if ($response->hasError() === false) {
             $result = json_decode($response->getContent());
-            $result = empty($detailed) ? $result->ports : $result->port;
+            if (empty($detailed)) {
+                $result = new DefaultPaginationList(
+                    $this->service, 'ports', $result->ports,
+                    (isset($result->ports_links) ? $result->ports_links : null)
+                );
+            } else {
+                $result = $result->port;
+            }
         }
         return $result;
     }
@@ -313,7 +344,7 @@ class NetworkApi
         $result = null;
 
         $options = array('subnet' => array_filter(
-            (array)$request,
+            get_object_vars($request),
             create_function('$v', 'return $v !== null;')
         ));
 
@@ -425,7 +456,7 @@ class NetworkApi
         $result = null;
 
         $options = array('port' => array_filter(
-            (array)$request,
+            get_object_vars($request),
             create_function('$v', 'return $v !== null;')
         ));
 
@@ -515,7 +546,7 @@ class NetworkApi
      * @param   string            $routerId     optional The ID of the router to show detailed info
      * @param   ListRoutersFilter $filter       optional The filter options. Filter doesn't apply to detailed info
      * @param   array             $fields       optional The list of the fields to show
-     * @return  array|object Returns the list of the router or the information about one router
+     * @return  DefaultPaginationList|object Returns the list of the router or the information about one router
      * @throws  RestClientException
      */
     public function listRouters($routerId = null, ListRoutersFilter $filter = null, array $fields = null)
@@ -537,7 +568,14 @@ class NetworkApi
 
         if ($response->hasError() === false) {
             $result = json_decode($response->getContent());
-            $result = empty($detailed) ? $result->routers : $result->router;
+            if (empty($detailed)) {
+                $result = new DefaultPaginationList(
+                    $this->service, 'routers', $result->routers,
+                    (isset($result->routers_links) ? $result->routers_links : null)
+                );
+            } else {
+                $result = $result->router;
+            }
         }
 
         return $result;
@@ -562,7 +600,7 @@ class NetworkApi
         $result = null;
 
         $options = array('router' => array_filter(
-            (array)$request,
+            get_object_vars($request),
             create_function('$v', 'return $v !== null;')
         ));
 
@@ -746,7 +784,7 @@ class NetworkApi
      *
      * Lists floating IP addresses associated with the tenant or account.
      *
-     * @return  array Returns the list floating IP addresses associated with the tenant or account.
+     * @return  DefaultPaginationList Returns the list floating IP addresses associated with the tenant or account.
      * @throws  RestClientException
      */
     public function listFloatingIps()
@@ -755,7 +793,10 @@ class NetworkApi
         $response = $this->getClient()->call($this->service, '/floatingips');
         if ($response->hasError() === false) {
             $result = json_decode($response->getContent());
-            $result = $result->floatingips;
+            $result = new DefaultPaginationList(
+                $this->service, 'floatingips', $result->floatingips,
+                (isset($result->floatingips_links) ? $result->floatingips_links : null)
+            );
         }
         return $result;
     }
@@ -882,6 +923,735 @@ class NetworkApi
         if ($response->hasError() === false) {
             $result = true;
         }
+        return $result;
+    }
+
+    /**
+     * List VIPs action (GET /lb/vips[/vip-id])
+     *
+     * @param   string               $vipId  optional The ID of the VIP to show detailed info
+     * @param   ListLbVipsFilter     $filter optional The query filter.
+     * @return  DefaultPaginationList|object Returns the list of the VIPs or the requested VIP
+     * @throws  RestClientException
+     */
+    public function listLbVips($vipId = null, ListLbVipsFilter $filter = null)
+    {
+        $result = null;
+        $detailed = ($vipId !== null ? sprintf("/%s", $this->escape($vipId)) : '');
+        $response = $this->getClient()->call(
+            $this->service,
+            '/lb/vips' . $detailed . ($filter !== null ? '?' . $filter->getQueryString() : '')
+        );
+        if ($response->hasError() === false) {
+            $result = json_decode($response->getContent());
+            if (empty($detailed)) {
+                $result = new DefaultPaginationList(
+                    $this->service, 'vips', $result->vips,
+                    (isset($result->vips_links) ? $result->vips_links : null)
+                );
+            } else {
+                $result = $result->vip;
+            }
+        }
+        return $result;
+    }
+
+    /**
+     * Creates LBaaS vip (POST /lb/vips)
+     *
+     * @param   CreateLbVip $request The request object
+     * @return  object   Returns detailed info of the created VIP
+     * @throws  RestClientException
+     */
+    public function createLbVip(CreateLbVip $request)
+    {
+        $result = null;
+
+        if (empty($request->tenant_id)) {
+            $request->tenant_id = $this->service->getTenantId();
+        }
+
+        $options = array('vip' => array_filter(
+            get_object_vars($request),
+            create_function('$v', 'return $v !== null;')
+        ));
+
+        $response = $this->getClient()->call(
+            $this->service, '/lb/vips',
+            $options, 'POST'
+        );
+
+        if ($response->hasError() === false) {
+            $result = json_decode($response->getContent());
+            $result = $result->vip;
+        }
+
+        return $result;
+    }
+
+    /**
+     * Deletes LBaaS VIP (DELETE /lb/vips/vip-id)
+     *
+     * @param   string  $vipId    The ID of the VIP to delete
+     * @return  boolean Returns true on success or throws an exception
+     * @throws  RestClientException
+     */
+    public function deleteLbVip($vipId)
+    {
+        $result = false;
+
+        $response = $this->getClient()->call(
+            $this->service, sprintf('/lb/vips/%s', $this->escape($vipId)),
+            null, 'DELETE'
+        );
+
+        if ($response->hasError() === false) {
+            $result = json_decode($response->getContent());
+            $result = true;
+        }
+
+        return $result;
+    }
+
+    /**
+     * Update LBaaS VIP (PUT /lb/vips/vip-id)
+     *
+     * @param   string       $vipId The Id of the LBaaS VIP to update
+     * @param   array|object $options  Raw options object (It will be json_encoded and passed as is.)
+     * @return  object       Returns LBaaS VIP object on success or throws an exception otherwise
+     * @throws  RestClientException
+     */
+    public function updateLbVip($vipId, $options)
+    {
+        $result = null;
+
+        $response = $this->getClient()->call(
+            $this->service, sprintf('/lb/vips/%s', $this->escape($vipId)),
+            array('_putData' => json_encode(array('vip' => $options))), 'PUT'
+        );
+
+        if ($response->hasError() === false) {
+            $result = json_decode($response->getContent());
+            $result = $result->vip;
+        }
+
+        return $result;
+    }
+
+    /**
+     * List Pools action (GET /lb/pools[/pool-id])
+     *
+     * @param   string                $poolId  optional The ID of the Pool to show detailed info
+     * @param   ListLbPoolsFilter     $filter  optional The query filter.
+     * @return  DefaultPaginationList|object Returns the list of the Pools or the requested pool
+     * @throws  RestClientException
+     */
+    public function listLbPools($poolId = null, ListLbPoolsFilter $filter = null)
+    {
+        $result = null;
+        $detailed = ($poolId !== null ? sprintf("/%s", $this->escape($poolId)) : '');
+        $response = $this->getClient()->call(
+            $this->service,
+            '/lb/pools' . $detailed . ($filter !== null ? '?' . $filter->getQueryString() : '')
+        );
+        if ($response->hasError() === false) {
+            $result = json_decode($response->getContent());
+            if (empty($detailed)) {
+                $result = new DefaultPaginationList(
+                    $this->service, 'pools', $result->pools,
+                    (isset($result->pools_links) ? $result->pools_links : null)
+                );
+            } else {
+                $result = $result->pool;
+            }
+        }
+        return $result;
+    }
+
+    /**
+     * Creates LBaaS pool (POST /lb/pools)
+     *
+     * @param   CreateLbPool $request The request object
+     * @return  object   Returns detailed info of the created pool
+     * @throws  RestClientException
+     */
+    public function createLbPool(CreateLbPool $request)
+    {
+        $result = null;
+
+        if (empty($request->tenant_id)) {
+            $request->tenant_id = $this->service->getTenantId();
+        }
+
+        $options = array('pool' => array_filter(
+            get_object_vars($request),
+            create_function('$v', 'return $v !== null;')
+        ));
+
+        $response = $this->getClient()->call(
+            $this->service, '/lb/pools',
+            $options, 'POST'
+        );
+
+        if ($response->hasError() === false) {
+            $result = json_decode($response->getContent());
+            $result = $result->pool;
+        }
+
+        return $result;
+    }
+
+    /**
+     * Deletes LBaaS pool (DELETE /lb/pools/pool-id)
+     *
+     * @param   string  $poolId The ID of the pool to delete
+     * @return  boolean Returns true on success or throws an exception
+     * @throws  RestClientException
+     */
+    public function deleteLbPool($poolId)
+    {
+        $result = false;
+
+        $response = $this->getClient()->call(
+            $this->service, sprintf('/lb/pools/%s', $this->escape($poolId)),
+            null, 'DELETE'
+        );
+
+        if ($response->hasError() === false) {
+            $result = json_decode($response->getContent());
+            $result = true;
+        }
+
+        return $result;
+    }
+
+    /**
+     * Update LBaaS pool (PUT /lb/pools/pool-id)
+     *
+     * @param   string       $poolId The Id of the LBaaS pool to update
+     * @param   array|object $options  Raw options object (It will be json_encoded and passed as is.)
+     * @return  object       Returns LBaaS pool object on success or throws an exception otherwise
+     * @throws  RestClientException
+     */
+    public function updateLbPool($poolId, $options)
+    {
+        $result = null;
+
+        $response = $this->getClient()->call(
+            $this->service, sprintf('/lb/pools/%s', $this->escape($poolId)),
+            array('_putData' => json_encode(array('pool' => $options))), 'PUT'
+        );
+
+        if ($response->hasError() === false) {
+            $result = json_decode($response->getContent());
+            $result = $result->pool;
+        }
+
+        return $result;
+    }
+
+    /**
+     * Associate health monitor with the pool (POST /lb/pools/pool-id/health_monitors)
+     *
+     * @param   string   $poolId          The identifier of the LBaaS pool
+     * @param   string   $healthMonitorId The identifier of the LBaaS health monitor
+     * @return  object
+     * @throws  RestClientException
+     */
+    public function associateLbHealthMonitorWithPool($poolId, $healthMonitorId)
+    {
+        $result = null;
+
+        $options = array(
+            'health_monitor' => array(
+               'id' => (string) $healthMonitorId,
+            ),
+        );
+
+        $response = $this->getClient()->call(
+            $this->service, sprintf('/lb/pools/%s/health_monitors', $this->escape($poolId)),
+            $options, 'POST'
+        );
+
+        if ($response->hasError() === false) {
+            $result = json_decode($response->getContent());
+            $result = $result->health_monitor;
+        }
+
+        return $result;
+    }
+
+    /**
+     * Disassociates health monitor from a pool (DELETE /lb/pools/pool-id/health_monitors/healthmonitor-id)
+     *
+     * @param   string   $poolId          The identifier of the LBaaS pool
+     * @param   string   $healthMonitorId The identifier of the LBaaS health monitor
+     * @return  bool     Returns boolean true on success or throws an exception
+     * @throws  RestClientException
+     */
+    public function disassociateLbHealthMonitorFromPool($poolId, $healthMonitorId)
+    {
+        $result = false;
+
+        $options = array(
+            'health_monitor' => array(
+               'id' => (string) $healthMonitorId,
+            ),
+        );
+
+        $response = $this->getClient()->call(
+            $this->service,
+            sprintf('/lb/pools/%s/health_monitors/%s', $this->escape($poolId), $this->escape($healthMonitorId)),
+            null, 'DELETE'
+        );
+
+        if ($response->hasError() === false) {
+            $result = json_decode($response->getContent());
+            $result = true;
+        }
+
+        return $result;
+    }
+
+    /**
+     * List Members action (GET /lb/members[/member-id])
+     *
+     * @param   string                $memberId  optional The ID of the member to show detailed info
+     * @param   ListLbPoolsFilter     $filter    optional The query filter.
+     * @return  DefaultPaginationList|object Returns the list of the Members or the requested pool
+     * @throws  RestClientException
+     */
+    public function listLbMembers($memberId = null, ListLbMembersFilter $filter = null)
+    {
+        $result = null;
+        $detailed = ($memberId !== null ? sprintf("/%s", $this->escape($memberId)) : '');
+        $response = $this->getClient()->call(
+            $this->service,
+            '/lb/members' . $detailed . ($filter !== null ? '?' . $filter->getQueryString() : '')
+        );
+        if ($response->hasError() === false) {
+            $result = json_decode($response->getContent());
+            if (empty($detailed)) {
+                $result = new DefaultPaginationList(
+                    $this->service, 'members', $result->members,
+                    (isset($result->members_links) ? $result->members_links : null)
+                );
+            } else {
+                $result = $result->member;
+            }
+        }
+        return $result;
+    }
+
+    /**
+     * Creates LBaaS member (POST /lb/members)
+     *
+     * @param   CreateLbMember $request The request object
+     * @return  object   Returns LBaaS member object
+     * @throws  RestClientException
+     */
+    public function createLbMember(CreateLbMember $request)
+    {
+        $result = null;
+
+        if (empty($request->tenant_id)) {
+            $request->tenant_id = $this->service->getTenantId();
+        }
+
+        $options = array('member' => array_filter(
+            get_object_vars($request),
+            create_function('$v', 'return $v !== null;')
+        ));
+
+        $response = $this->getClient()->call(
+            $this->service, '/lb/members',
+            $options, 'POST'
+        );
+
+        if ($response->hasError() === false) {
+            $result = json_decode($response->getContent());
+            $result = $result->member;
+        }
+
+        return $result;
+    }
+
+    /**
+     * Deletes LBaaS member (DELETE /lb/members/member-id)
+     *
+     * @param   string  $memberId The ID of the member to delete
+     * @return  boolean Returns true on success or throws an exception
+     * @throws  RestClientException
+     */
+    public function deleteLbMember($memberId)
+    {
+        $result = false;
+
+        $response = $this->getClient()->call(
+            $this->service, sprintf('/lb/members/%s', $this->escape($memberId)),
+            null, 'DELETE'
+        );
+
+        if ($response->hasError() === false) {
+            $result = json_decode($response->getContent());
+            $result = true;
+        }
+
+        return $result;
+    }
+
+    /**
+     * Update LBaaS member (PUT /lb/members/member-id)
+     *
+     * @param   string       $memberId The Id of the LBaaS member to update
+     * @param   array|object $options  Raw options object (It will be json_encoded and passed as is.)
+     * @return  object       Returns LBaaS member object on success or throws an exception otherwise
+     * @throws  RestClientException
+     */
+    public function updateLbMember($memberId, $options)
+    {
+        $result = null;
+
+        $response = $this->getClient()->call(
+            $this->service, sprintf('/lb/members/%s', $this->escape($memberId)),
+            array('_putData' => json_encode(array('member' => $options))), 'PUT'
+        );
+
+        if ($response->hasError() === false) {
+            $result = json_decode($response->getContent());
+            $result = $result->member;
+        }
+
+        return $result;
+    }
+
+    /**
+     * List LBaaS Health Monitors action (GET /lb/health_monitors[/health-monitors-id])
+     *
+     * @param   string                     $healthMonitorId  optional The ID of the health monitor to show detailed info
+     * @param   ListLbHealthMonitorsFilter $filter           optional The query filter.
+     * @return  DefaultPaginationList|object Returns the list of the Health Monitors or the requested pool
+     * @throws  RestClientException
+     */
+    public function listLbHealthMonitors($healthMonitorId = null, ListLbHealthMonitorsFilter $filter = null)
+    {
+        $result = null;
+        $detailed = ($healthMonitorId !== null ? sprintf("/%s", $this->escape($healthMonitorId)) : '');
+        $response = $this->getClient()->call(
+            $this->service,
+            '/lb/health_monitors' . $detailed . ($filter !== null ? '?' . $filter->getQueryString() : '')
+        );
+        if ($response->hasError() === false) {
+            $result = json_decode($response->getContent());
+            if (empty($detailed)) {
+                $result = new DefaultPaginationList(
+                    $this->service, 'health_monitors', $result->health_monitors,
+                    (isset($result->health_monitors_links) ? $result->health_monitors_links : null)
+                );
+            } else {
+                $result = $result->health_monitor;
+            }
+        }
+        return $result;
+    }
+
+    /**
+     * Creates LBaaS Health Monitor (POST /lb/health_monitors)
+     *
+     * @param   CreateLbHealthMonitor $request The request object
+     * @return  object   Returns LBaaS health monitor object
+     * @throws  RestClientException
+     */
+    public function createLbHealthMonitor(CreateLbHealthMonitor $request)
+    {
+        $result = null;
+
+        if (empty($request->tenant_id)) {
+            $request->tenant_id = $this->service->getTenantId();
+        }
+
+        $options = array('health_monitor' => array_filter(
+            get_object_vars($request),
+            create_function('$v', 'return $v !== null;')
+        ));
+
+        $response = $this->getClient()->call(
+            $this->service, '/lb/health_monitors',
+            $options, 'POST'
+        );
+
+        if ($response->hasError() === false) {
+            $result = json_decode($response->getContent());
+            $result = $result->health_monitor;
+        }
+
+        return $result;
+    }
+
+    /**
+     * Deletes LBaaS health monitor (DELETE /lb/health_monitors/health_monitor-id)
+     *
+     * @param   string  $healthMonitorId The ID of the health monitor to delete
+     * @return  boolean Returns true on success or throws an exception
+     * @throws  RestClientException
+     */
+    public function deleteLbHealthMonitor($healthMonitorId)
+    {
+        $result = false;
+
+        $response = $this->getClient()->call(
+            $this->service, sprintf('/lb/health_monitors/%s', $this->escape($healthMonitorId)),
+            null, 'DELETE'
+        );
+
+        if ($response->hasError() === false) {
+            $result = json_decode($response->getContent());
+            $result = true;
+        }
+
+        return $result;
+    }
+
+    /**
+     * Update LBaaS health monitor (PUT /lb/health_monitors/health_monitors-id)
+     *
+     * @param   string       $healthMonitorId The Id of the LBaaS health monitor to update
+     * @param   array|object $options  Raw options object (It will be json_encoded and passed as is.)
+     * @return  object       Returns LBaaS health monitor object on success or throws an exception otherwise
+     * @throws  RestClientException
+     */
+    public function updateLbHealthMonitor($healthMonitorId, $options)
+    {
+        $result = null;
+
+        $response = $this->getClient()->call(
+            $this->service, sprintf('/lb/health_monitors/%s', $this->escape($healthMonitorId)),
+            array('_putData' => json_encode(array('health_monitor' => $options))), 'PUT'
+        );
+
+        if ($response->hasError() === false) {
+            $result = json_decode($response->getContent());
+            $result = $result->health_monitor;
+        }
+
+        return $result;
+    }
+
+    /**
+     * Gets the list of the security groups
+     *
+     * @param   string $id optional
+     *          The ID of the security group to view
+     *
+     * @param   ListSecurityGroupsFilter $filter optional
+     *          The filter options. Filter doesn't apply to detailed info
+     *
+     * @param   array $fields optional
+     *          The list of the fields to show
+     *
+     * @return  DefaultPaginationList|object Returns the list of the security groups or specified security group
+     * @throws  RestClientException
+     */
+    public function listSecurityGroups($id = null, ListSecurityGroupsFilter $filter = null, array $fields = null)
+    {
+        $result = null;
+
+        $detailed = ($id !== null ? sprintf("/%s", $this->escape($id)) : '');
+
+        if (!empty($fields)) {
+            $acceptedFields = ['name', 'description', 'id', 'tenant_id', 'security_group_rules'];
+
+            $fields = join('&fields=', array_map("rawurlencode", array_intersect(array_values($fields), $acceptedFields)));
+        }
+
+        $querystr = ($filter !== null && $detailed == '' ? $filter->getQueryString() : '')
+                  . ($fields ? '&fields=' . $fields : '');
+
+        $querystr = (!empty($querystr) ? '?' . ltrim($querystr, '&') : '');
+
+        $response = $this->getClient()->call(
+            $this->service,
+            '/security-groups' . $detailed . $querystr
+        );
+
+        if ($response->hasError() === false) {
+            $result = json_decode($response->getContent());
+
+            if (empty($detailed)) {
+                $result = new DefaultPaginationList(
+                    $this->service, 'security_groups', $result->security_groups,
+                    (isset($result->security_groups_links) ? $result->security_groups_links : null)
+                );
+            } else {
+                $result = $result->security_group;
+            }
+        }
+
+        return $result;
+    }
+
+    /**
+     * Creates Security group (POST /security-groups)
+     *
+     * @param   string   $name        The name of the security group
+     * @param   string   $description optional The description of the security group
+     * @return  object   Returns security group object
+     * @throws  RestClientException
+     */
+    public function createSecurityGroup($name, $description = null)
+    {
+        $result = null;
+
+        $request = ['name' => $name];
+
+        if (!empty($description)) {
+            $request['description'] = $description;
+        }
+
+        $response = $this->getClient()->call($this->service, '/security-groups', ['security_group' => $request], 'POST');
+
+        if ($response->hasError() === false) {
+            $result = json_decode($response->getContent());
+            $result = $result->security_group;
+        }
+
+        return $result;
+    }
+
+    /**
+     * Deletes Security Group (DELETE /security-groups/security-group-id)
+     *
+     * This operation deletes an OpenStack Networking security group and its associated security group rules,
+     * provided that a port is not associated with the security group
+     *
+     * @param   string  $id The UUID of the security group to delete
+     * @return  boolean Returns true on success or throws an exception
+     * @throws  RestClientException
+     */
+    public function deleteSecurityGroup($id)
+    {
+        $result = false;
+
+        $response = $this->getClient()->call(
+            $this->service, sprintf('/security-groups/%s', $this->escape($id)),
+            null, 'DELETE'
+        );
+
+        if ($response->hasError() === false) {
+            $result = json_decode($response->getContent());
+            $result = true;
+        }
+
+        return $result;
+    }
+
+    /**
+     * Gets the list of the security group rules (GET /security-group-rules/[rules-security-groups-id] )
+     *
+     * Lists a summary of all OpenStack Networking security group rules that the specified tenant can access.
+     *
+     * @param   string $id optional
+     *          The ID of the security group rule to view
+     *
+     * @param   ListSecurityGroupRulesFilter $filter optional
+     *          The filter options. Filter doesn't apply to detailed info
+     *
+     * @param   array $fields optional
+     *          The list of the fields to show
+     *
+     * @return  DefaultPaginationList|object Returns the list of the security groups or specified security group
+     * @throws  RestClientException
+     */
+    public function listSecurityGroupRules($id = null, ListSecurityGroupRulesFilter $filter = null, array $fields = null)
+    {
+        $result = null;
+
+        $detailed = ($id !== null ? sprintf("/%s", $this->escape($id)) : '');
+
+        if (!empty($fields)) {
+            $acceptedFields = [
+                'id', 'security_group_id', 'tenant_id', 'direction' , 'ethertype', 'port_range_max', 'port_range_min',
+                'protocol', 'remote_group_id', 'remote_ip_prefix',
+            ];
+
+            $fields = join('&fields=', array_map("rawurlencode", array_intersect(array_values($fields), $acceptedFields)));
+        }
+
+        $querystr = ($filter !== null && $detailed == '' ? $filter->getQueryString() : '')
+                  . ($fields ? '&fields=' . $fields : '');
+
+        $querystr = (!empty($querystr) ? '?' . ltrim($querystr, '&') : '');
+
+        $response = $this->getClient()->call(
+            $this->service,
+            '/security-group-rules' . $detailed . $querystr
+        );
+
+        if ($response->hasError() === false) {
+            $result = json_decode($response->getContent());
+
+            if (empty($detailed)) {
+                $result = new DefaultPaginationList(
+                    $this->service, 'security_group_rules', $result->security_group_rules,
+                    (isset($result->security_group_rules_links) ? $result->security_group_rules_links : null)
+                );
+            } else {
+                $result = $result->security_group_rule;
+            }
+        }
+
+        return $result;
+    }
+
+    /**
+     * Creates Security Group Rule (POST /security-group-rules)
+     *
+     * @param   CreateSecurityGroupRule  $request The request object
+     * @return  object                   Returns Security Group Rule object
+     * @throws  RestClientException
+     */
+    public function createSecurityGroupRule(CreateSecurityGroupRule $request)
+    {
+        $result = null;
+
+        $options = ['security_group_rule' => array_filter(
+            get_object_vars($request),
+            create_function('$v', 'return $v !== null;')
+        )];
+
+        $response = $this->getClient()->call($this->service, '/security-group-rules', $options, 'POST');
+
+        if ($response->hasError() === false) {
+            $result = json_decode($response->getContent());
+            $result = $result->security_group_rule;
+        }
+
+        return $result;
+    }
+
+    /**
+     * Deletes Security Group Rule (DELETE /security-group-rules/​rules-security-groups-id})
+     *
+     * Deletes a specified rule from a OpenStack Networking security group.
+     *
+     * @param   string  $id The UUID of the security group rule to delete
+     * @return  boolean Returns true on success or throws an exception
+     * @throws  RestClientException
+     */
+    public function deleteSecurityGroupRule($id)
+    {
+        $result = false;
+
+        $response = $this->getClient()->call(
+            $this->service, sprintf('/security-group-rules/%s', $this->escape($id)),
+            null, 'DELETE'
+        );
+
+        if ($response->hasError() === false) {
+            $result = json_decode($response->getContent());
+            $result = true;
+        }
+
         return $result;
     }
 }

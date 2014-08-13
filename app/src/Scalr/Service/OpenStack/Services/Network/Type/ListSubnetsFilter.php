@@ -1,9 +1,7 @@
 <?php
 namespace Scalr\Service\OpenStack\Services\Network\Type;
 
-use Scalr\Service\OpenStack\Type\BooleanType;
 use Scalr\Service\OpenStack\Type\Marker;
-use \DateTime;
 
 /**
  * ListSubnetsFilter
@@ -28,7 +26,7 @@ class ListSubnetsFilter extends Marker
      */
     private $id;
 
-    //TODO Additional filters can be added.
+    //Additional filters can be added.
 
     /**
      * Convenient constructor
@@ -122,36 +120,5 @@ class ListSubnetsFilter extends Marker
     public function addId($id)
     {
         return $this->_addPropertyValue('id', $id);
-    }
-
-    /**
-     * {@inheritdoc}
-     * @see Scalr\Service\OpenStack\Type.Marker::getQueryData()
-     */
-    public function getQueryData()
-    {
-        $options = parent::getQueryData();
-
-        if (!empty($this->name)) {
-            $options['name'] = $this->getName();
-        }
-        if (!empty($this->id)) {
-            $options['id'] = $this->getId();
-        }
-
-        return $options;
-    }
-
-    /**
-     * {@inheritdoc}
-     * @see Scalr\Service\OpenStack\Type.Marker::getQueryString()
-     */
-    public function getQueryString()
-    {
-        $str = parent::getQueryString();
-
-        $str .= $this->_getQueryStringForFields(array('name', 'id'), __CLASS__);
-
-        return ltrim($str, '&');
     }
 }

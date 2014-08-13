@@ -2,8 +2,6 @@
 namespace Scalr\Service\Aws\Ec2\DataType;
 
 use Scalr\Service\Aws\DataType\StringType;
-use Scalr\Service\Aws\Ec2Exception;
-use Scalr\Service\Aws\Ec2\AbstractEc2DataType;
 
 /**
  * NetworkInterfaceFilterNameType
@@ -126,6 +124,11 @@ class NetworkInterfaceFilterNameType extends StringType
      * The name of a security group associated with the network interface.
      */
     const TYPE_GROUP_NAME = 'group-name';
+
+    /**
+     * The ID of the subnet for the network interface.
+     */
+    const TYPE_SUBNET_ID = 'subnet-id';
 
     /**
      * The MAC address of the network interface

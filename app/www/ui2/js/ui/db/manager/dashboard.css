@@ -2,6 +2,14 @@
     overflow-x: hidden!important;/*there is horizontal scrollbar in firefox only for unknown reason*/
 }
 
+/*phpmyadmin*/
+.scalr-ui-dbmsr-phpmyadmin{
+    background: url('/ui2/images/ui/db/phpmyadmin_logo.png') 0 0 no-repeat;
+    width: 146px;
+    height: 88px;
+    margin: 20px 0 21px 50px;
+}
+
 /*inprogress indicator*/
 .scalr-ui-dbmsr-status-inprogress{
 	background:transparent url("/ui2/images/ui/db/backup_progress.gif") 0 0 no-repeat;
@@ -144,4 +152,15 @@
 
 .x-dbmsclustermapfield-add:hover{
     background: #F2F7F0;
+}
+
+@media only screen and (-webkit-min-device-pixel-ratio: 1.5),
+    only screen and (-o-min-device-pixel-ratio: 3/2),
+    only screen and (min--moz-device-pixel-ratio: 1.5),
+    only screen and (min-device-pixel-ratio: 1.5) {
+
+    .scalr-ui-dbmsr-phpmyadmin{
+        background-size: 146px 88px;
+        background-image: url('/ui2/images/ui/db/phpmyadmin_logo_retina.png');
+    }
 }

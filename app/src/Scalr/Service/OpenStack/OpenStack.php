@@ -1,13 +1,11 @@
 <?php
 namespace Scalr\Service\OpenStack;
 
-use Scalr\Service\OpenStack\Services\VolumeService;
 use Scalr\Service\OpenStack\Type\Marker;
 use Scalr\Service\OpenStack\Exception\RestClientException;
 use Scalr\Service\OpenStack\Client\AuthToken;
 use Scalr\Service\OpenStack\Client\RestClient;
 use Scalr\Service\OpenStack\Client\ClientInterface;
-use Scalr\Service\OpenStack\Services\ServersService;
 use Scalr\Service\OpenStack\Exception\OpenStackException;
 use GlobIterator;
 use FilesystemIterator;
@@ -26,6 +24,12 @@ use FilesystemIterator;
  *
  * @property \Scalr\Service\OpenStack\Services\NetworkService $network
  *           A Quantum API (Network) service interface.
+ *
+ * @property \Scalr\Service\OpenStack\Services\ContrailService $contrail
+ *           Contrail service interface.
+ *
+ * @property \Scalr\Service\OpenStack\Services\SwiftService $swift
+ *           Object Storage (SWIFT) service interface.
  */
 class OpenStack
 {
@@ -45,6 +49,8 @@ class OpenStack
     const SERVICE_OBJECT_STORE = 'object-store';
 
     const SERVICE_IDENTITY = 'identity';
+
+    const SERVICE_CONTRAIL = 'contrail';
 
     /**
      * Available services
@@ -85,6 +91,7 @@ class OpenStack
     public function __construct(OpenStackConfig $config)
     {
         $this->config = $config;
+        $this->cache = array();
     }
 
     /**
@@ -248,6 +255,42 @@ class OpenStack
         if (!isset($this->cache['services'])) {
             $this->listServices();
         }
+
+        if ($serviceName == self::SERVICE_CONTRAIL) {
+            return $this->hasContrailService();
+        }
+
         return array_key_exists((isset($ns) ? $ns . ':' : '') . $serviceName, $this->cache['services']);
+    }
+
+    /**
+     * Checks whether Contrail is available on this openstack
+     *
+     * @return   boolean
+     */
+    private function hasContrailService()
+    {
+        if (!array_key_exists('contrail-service-resources', $this->cache)) {
+            try {
+                $ret = $this->contrail->getApiHandler()->discoverApiServerResources();
+                $this->cache['contrail-service-resources'] = $ret;
+            } catch (\Exception $e) {
+                $this->cache['contrail-service-resources'] = false;
+            }
+        }
+        return !empty($this->cache['contrail-service-resources']) ? true : false;
+    }
+
+    /**
+     * Decamelizes a string
+     *
+     * @param   string    $str A string "FooName"
+     * @return  string    Returns decamelized string "foo_name"
+     */
+    public static function decamelize($str)
+    {
+        return strtolower(preg_replace_callback('/([a-z])([A-Z]+)/', function ($m) {
+            return $m[1] . '_' . $m[2];
+        }, $str));
     }
 }

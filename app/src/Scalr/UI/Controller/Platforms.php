@@ -1,5 +1,8 @@
 <?php
 
+use Scalr\Modules\PlatformFactory;
+use Scalr\UI\Request\JsonData;
+
 class Scalr_UI_Controller_Platforms extends Scalr_UI_Controller
 {
     public function hasAccess()
@@ -27,7 +30,7 @@ class Scalr_UI_Controller_Platforms extends Scalr_UI_Controller
             $ePlatforms = array_intersect($ePlatforms, $platforms);
 
         foreach ($ePlatforms as $platform) {
-            foreach (PlatformFactory::NewPlatform($platform)->getLocations() as $key => $loc)
+            foreach (PlatformFactory::NewPlatform($platform)->getLocations($this->environment) as $key => $loc)
                 $locations[$key] = $loc;
         }
 
@@ -45,10 +48,56 @@ class Scalr_UI_Controller_Platforms extends Scalr_UI_Controller
                 array(
                     'id' => $platform,
                     'name' => $lPlatforms[$platform],
-                    'locations' => $platform !== SERVER_PLATFORMS::GCE || $includeGCELocations ? PlatformFactory::NewPlatform($platform)->getLocations() : array()
+                    'locations' => (!in_array($platform, array(SERVER_PLATFORMS::GCE, SERVER_PLATFORMS::ECS))) || $includeGCELocations ? PlatformFactory::NewPlatform($platform)->getLocations($this->environment) : array()
                 ) :
                 $lPlatforms[$platform];
 
         return $platforms;
     }
+
+    /**
+     * @param string $platform
+     * @param string $cloudLocation
+     * @throws Exception
+     */
+    public function xGetInstanceTypesAction($platform, $cloudLocation = null)
+    {
+        if (! in_array($platform, $this->getEnvironment()->getEnabledPlatforms())) {
+            throw new Exception(sprintf('Platform "%s" is not enabled', $platform));
+        }
+
+        $p = PlatformFactory::NewPlatform($platform);
+
+        if (PlatformFactory::isOpenstack($platform) && !$cloudLocation) {
+            $locations = $p->getLocations($this->getEnvironment());
+            $cloudLocation = @array_pop(@array_keys($locations));
+        }
+
+        $data = [];
+        foreach ($p->getInstanceTypes($this->getEnvironment(), $cloudLocation, true) as $id => $value) {
+            $data[] = array_merge(['id' => (string)$id], $value);
+        }
+
+        $this->response->data(array('data' => $data));
+    }
+
+    /**
+     * @param jsonData $platforms
+     * @throws Exception
+     */
+    public function xGetLocationsAction(JsonData $platforms)
+    {
+        $allPlatforms = $this->user->isScalrAdmin() ? array_keys(SERVER_PLATFORMS::GetList()) : $this->getEnvironment()->getEnabledPlatforms();
+        $result = array();
+
+        foreach ($platforms as $platform) {
+            if (in_array($platform, $allPlatforms)) {
+                $result[$platform] = (!in_array($platform, array(SERVER_PLATFORMS::GCE, SERVER_PLATFORMS::ECS))) ? PlatformFactory::NewPlatform($platform)->getLocations($this->environment) : array();
+            }
+        }
+
+        $this->response->data(array('locations' => $result));
+
+    }
+
 }

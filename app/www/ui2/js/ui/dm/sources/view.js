@@ -5,7 +5,6 @@ Scalr.regPage('Scalr.ui.dm.sources.view', function (loadParams, moduleParams) {
 		],
 		proxy: {
 			type: 'scalr.paging',
-			extraParams: loadParams,
 			url: '/dm/sources/xListSources'
 		},
 		remoteSort: true
@@ -17,7 +16,6 @@ Scalr.regPage('Scalr.ui.dm.sources.view', function (loadParams, moduleParams) {
 			'reload': false,
 			'maximize': 'all'
 		},
-		scalrReconfigureParams: { sourceId: ''},
 		store: store,
 		stateId: 'grid-dm-sources-view',
 		stateful: true,
@@ -46,8 +44,8 @@ Scalr.regPage('Scalr.ui.dm.sources.view', function (loadParams, moduleParams) {
 			{ header: "Type", width: 120, dataIndex: 'type', sortable: true },
 			{ header: "Auth type", width: 120, dataIndex: 'auth_type', sortable: false },
 			{
-				xtype: 'optionscolumn',
-				optionsMenu: [{
+				xtype: 'optionscolumn2',
+				menu: [{
 					text: 'Edit',
 					iconCls: 'x-menu-icon-edit',
 					href: '#/dm/sources/{id}/edit'
@@ -66,9 +64,9 @@ Scalr.regPage('Scalr.ui.dm.sources.view', function (loadParams, moduleParams) {
 							msg: 'Removing demployment source ...'
 						},
 						url: '/dm/sources/xRemoveSources',
-						dataHandler: function (record) {
+						dataHandler: function (data) {
 							return {
-								sourceId: record.get('id')
+								sourceId: data['id']
 							};
 						},
 						success: function(data) {
@@ -94,7 +92,11 @@ Scalr.regPage('Scalr.ui.dm.sources.view', function (loadParams, moduleParams) {
 				handler: function() {
 					Scalr.event.fireEvent('redirect', '#/dm/sources/create');
 				}
-			}]
+			}],
+            items: [{
+                xtype: 'filterfield',
+                store: store
+            }]
 		}]
 	});
 });

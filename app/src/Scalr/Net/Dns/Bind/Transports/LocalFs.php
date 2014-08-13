@@ -46,7 +46,7 @@
 
         public function removeZoneDbFile($zone_name)
         {
-            return unlink("{$this->zonesPath}/{$zone_name}.db");
+            return @unlink("{$this->zonesPath}/{$zone_name}.db");
         }
 
         public function rndcReload($zone_name = "")

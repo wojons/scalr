@@ -15,23 +15,37 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.chef', function (tabParams) {
             'chef.runlist': '',
             'chef.attributes': undefined,
             'chef.node_name_tpl' : undefined,
-            'chef.daemonize': undefined
+            'chef.daemonize': undefined,
+            'chef.log_level': undefined
         },
 
         isEnabled: function (record) {
-            return record.get('behaviors').match('chef');
+            return record.hasBehavior('chef');
         },
 
         beforeShowTab: function(record, handler) {
             var me = this,
-                settings = record.get('settings', true),
-                chefSettings = {},
-                field = this.down('chefsettings');
-            Ext.Object.each(me.settings, function(key, value){
-                chefSettings[key] = settings[key];
-            });
-            field.setValue(chefSettings, function(success){
-                success ? handler() : me.deactivateTab();
+                field = me.down('chefsettings');
+
+            record.loadRoleChefSettings(function(data, status){
+                if (status) {
+                    if (!data.roleChefEnabled && Scalr.flags['betaMode']) {
+                        field.disableDaemonize = false;
+                        Ext.each(record.get('scripting', true) || [], function(script){
+                            if (script['script_type'] === 'chef' && script['params'] && !script['params']['chef.cookbook_url']) {
+                                field.disableDaemonize = true;
+                                return false;
+                            }
+                        });
+                    }
+                    field.setReadOnly(data.roleChefEnabled);
+                    field.setValue(data.chefSettings, function(success){
+                        success ? handler() : me.deactivateTab();
+                    });
+
+                } else {
+                    me.deactivateTab();
+                }
             });
             field.clearInvalid();
         },

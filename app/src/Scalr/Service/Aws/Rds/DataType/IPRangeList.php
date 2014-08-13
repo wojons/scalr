@@ -2,7 +2,6 @@
 namespace Scalr\Service\Aws\Rds\DataType;
 
 use Scalr\Service\Aws\Rds\RdsListDataType;
-use Scalr\Service\Aws\RdsException;
 
 /**
  * IPRangeList

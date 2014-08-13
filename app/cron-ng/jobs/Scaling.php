@@ -1,5 +1,6 @@
 <?php
 
+use Scalr\Modules\PlatformFactory;
 class Scalr_Cronjob_Scaling extends Scalr_System_Cronjob_MultiProcess_DefaultWorker
 {
     static function getConfig () {
@@ -88,8 +89,7 @@ class Scalr_Cronjob_Scaling extends Scalr_System_Cronjob_MultiProcess_DefaultWor
         {
             for ($i = 0; $i < 10; $i++) {
 
-                if ($DBFarmRole->NewRoleID != '')
-                {
+                if ($DBFarmRole->NewRoleID != '') {
                     $this->logger->warn("[FarmID: {$DBFarm->ID}] Role '{$DBFarmRole->GetRoleObject()->name}' being synchronized. This role will not be scalled.");
                     continue 2;
                 }
@@ -106,8 +106,7 @@ class Scalr_Cronjob_Scaling extends Scalr_System_Cronjob_MultiProcess_DefaultWor
                 // Get polling interval in seconds
                 $polling_interval = $DBFarmRole->GetSetting(DBFarmRole::SETTING_SCALING_POLLING_INTERVAL)*60;
                 $dt_last_polling = $DBFarmRole->GetSetting(DBFarmRole::SETTING_SCALING_LAST_POLLING_TIME);
-                if ($dt_last_polling && $dt_last_polling+$polling_interval > time() && $i == 0)
-                {
+                if ($dt_last_polling && $dt_last_polling+$polling_interval > time() && $i == 0) {
                     $this->logger->info("Polling interval: every {$polling_interval} seconds");
                     continue;
                 }
@@ -121,17 +120,18 @@ class Scalr_Cronjob_Scaling extends Scalr_System_Cronjob_MultiProcess_DefaultWor
 
                 $scalingManager = new Scalr_Scaling_Manager($DBFarmRole);
                 $scalingDecision = $scalingManager->makeScalingDecition();
+                $scalingDecisionAlgorithm = $scalingManager->decisonInfo;
+
+                if ($DBFarm->ID == 5440)
+                    $this->logger->fatal("{$scalingDecision} ({$scalingDecisionAlgorithm})");
 
                 if ($scalingDecision == Scalr_Scaling_Decision::STOP_SCALING)
-                {
                     return;
-                }
+
                 if ($scalingDecision == Scalr_Scaling_Decision::NOOP)
-                {
                     continue 2;
-                }
-                elseif ($scalingDecision == Scalr_Scaling_Decision::DOWNSCALE)
-                {
+
+                elseif ($scalingDecision == Scalr_Scaling_Decision::DOWNSCALE) {
                     /*
                      Timeout instance's count decrease. Decreases instance�s count after scaling
                      resolution the spare instances are running�g for selected timeout interval
@@ -177,7 +177,7 @@ class Scalr_Cronjob_Scaling extends Scalr_System_Cronjob_MultiProcess_DefaultWor
                         $DBServer = DBServer::LoadByID($item['server_id']);
 
                         if ($DBServer->GetFarmRoleObject()->GetRoleObject()->hasBehavior(ROLE_BEHAVIORS::RABBITMQ)) {
-                            $serversCount = count($DBServer->GetFarmRoleObject()->GetServersByFilter(array(), array('status' => array(SERVER_STATUS::TERMINATED, SERVER_STATUS::TROUBLESHOOTING))));
+                            $serversCount = count($DBServer->GetFarmRoleObject()->GetServersByFilter(array(), array('status' => array(SERVER_STATUS::TERMINATED, SERVER_STATUS::SUSPENDED, SERVER_STATUS::TROUBLESHOOTING))));
                             if ($DBServer->index == 1 && $serversCount > 1)
                                 continue;
                         }
@@ -194,7 +194,7 @@ class Scalr_Cronjob_Scaling extends Scalr_System_Cronjob_MultiProcess_DefaultWor
                                     SELECT server_id FROM servers
                                     WHERE dtlastsync > {$DBServer->dateLastSync}
                                     AND farm_roleid='{$DBServer->farmRoleId}'
-                                    AND status NOT IN('".SERVER_STATUS::TERMINATED."', '".SERVER_STATUS::TROUBLESHOOTING."')
+                                    AND status NOT IN('".SERVER_STATUS::TERMINATED."', '".SERVER_STATUS::TROUBLESHOOTING."', '".SERVER_STATUS::SUSPENDED."')
                                     LIMIT 1
                                 ");
                                 if ($chk_sync_time) {
@@ -226,7 +226,7 @@ class Scalr_Cronjob_Scaling extends Scalr_System_Cronjob_MultiProcess_DefaultWor
 
                                         Logger::getLogger(LOG_CATEGORY::FARM)->info(new FarmLogMessage(
                                             $DBFarm->ID,
-                                            sprintf("Farm %s, role %s scaling down. Server '%s' will be terminated in %s minutes. Launch time: %s",
+                                            sprintf("Farm %s, role %s scaling down ({$scalingDecisionAlgorithm}). Server '%s' will be terminated in %s minutes. Launch time: %s",
                                                 $DBFarm->Name,
                                                 $DBServer->GetFarmRoleObject()->GetRoleObject()->name,
                                                 $DBServer->serverId,
@@ -251,11 +251,7 @@ class Scalr_Cronjob_Scaling extends Scalr_System_Cronjob_MultiProcess_DefaultWor
                             if ($DBServer->GetFarmRoleObject()->GetSetting(DBFarmRole::SETTING_SCALING_SAFE_SHUTDOWN) == 1) {
                                 if ($DBServer->IsSupported('0.11.3')) {
                                     try {
-                                        $port = $DBServer->GetProperty(SERVER_PROPERTIES::SZR_API_PORT);
-                                        if (!$port)
-                                            $port = 8010;
-                                        $szrClient = Scalr_Net_Scalarizr_Client::getClient($DBServer, Scalr_Net_Scalarizr_Client::NAMESPACE_SYSTEM, $port);
-                                        $res  = $szrClient->callAuthShutdownHook();
+                                        $res  = $DBServer->scalarizr->system->callAuthShutdownHook();
                                     } catch (Exception $e) {
                                         $res = $e->getMessage();
                                     }
@@ -274,19 +270,37 @@ class Scalr_Cronjob_Scaling extends Scalr_System_Cronjob_MultiProcess_DefaultWor
                                 }
                             }
 
+                            $terminateStrategy = $DBFarmRole->GetSetting(Scalr_Role_Behavior::ROLE_BASE_TERMINATE_STRATEGY);
+                            if (!$terminateStrategy)
+                                $terminateStrategy = 'terminate';
+
                             try {
-                                $DBServer->terminate('SCALING_DOWN', false);
+                                if ($terminateStrategy == 'terminate') {
+                                    $DBServer->terminate(DBServer::TERMINATE_REASON_SCALING_DOWN, false);
 
-                                $DBFarmRole->SetSetting(DBFarmRole::SETTING_SCALING_DOWNSCALE_DATETIME, time(), DBFarmRole::TYPE_LCL);
+                                    $DBFarmRole->SetSetting(DBFarmRole::SETTING_SCALING_DOWNSCALE_DATETIME, time(), DBFarmRole::TYPE_LCL);
 
-                                Logger::getLogger(LOG_CATEGORY::FARM)->info(new FarmLogMessage($DBFarm->ID, sprintf(
-                                    "Farm %s, role %s scaling down. Server '%s' marked as 'Pending terminate' and will be fully terminated in 3 minutes.",
-                                    $DBFarm->Name,
-                                    $DBServer->GetFarmRoleObject()->GetRoleObject()->name,
-                                    $DBServer->serverId
-                                )));
+                                    Logger::getLogger(LOG_CATEGORY::FARM)->info(new FarmLogMessage($DBFarm->ID, sprintf(
+                                        "Farm %s, role %s scaling down ({$scalingDecisionAlgorithm}). Server '%s' marked as 'Pending terminate' and will be fully terminated in 3 minutes.",
+                                        $DBFarm->Name,
+                                        $DBServer->GetFarmRoleObject()->GetRoleObject()->name,
+                                        $DBServer->serverId
+                                    )));
+                                } else {
+                                    $DBServer->suspend('SCALING_DOWN', false);
+
+                                    $DBFarmRole->SetSetting(DBFarmRole::SETTING_SCALING_DOWNSCALE_DATETIME, time(), DBFarmRole::TYPE_LCL);
+
+                                    Logger::getLogger(LOG_CATEGORY::FARM)->info(new FarmLogMessage($DBFarm->ID, sprintf(
+                                        "Farm %s, role %s scaling down ({$scalingDecisionAlgorithm}). Server '%s' marked as 'Pending suspend' and will be fully suspended in 3 minutes.",
+                                        $DBFarm->Name,
+                                        $DBServer->GetFarmRoleObject()->GetRoleObject()->name,
+                                        $DBServer->serverId
+                                    )));
+                                }
                             } catch (Exception $e) {
-                                $this->logger->fatal(sprintf("Cannot terminate %s: %s",
+                                $this->logger->fatal(sprintf("Cannot %s %s: %s",
+                                    $terminateStrategy,
                                     $DBFarm->ID,
                                     $DBServer->serverId,
                                     $e->getMessage()
@@ -366,20 +380,54 @@ class Scalr_Cronjob_Scaling extends Scalr_System_Cronjob_MultiProcess_DefaultWor
                         return;
                     }
 
-                    $ServerCreateInfo = new ServerCreateInfo($DBFarmRole->Platform, $DBFarmRole);
-                    try {
-                        $DBServer = Scalr::LaunchServer($ServerCreateInfo, null, false, "Scaling up");
+                    $terminateStrategy = $DBFarmRole->GetSetting(Scalr_Role_Behavior::ROLE_BASE_TERMINATE_STRATEGY);
+                    if (!$terminateStrategy)
+                        $terminateStrategy = 'terminate';
 
-                        $DBFarmRole->SetSetting(DBFarmRole::SETTING_SCALING_UPSCALE_DATETIME, time(), DBFarmRole::TYPE_LCL);
+                    if ($DBFarmRole->FarmID == 5440)
+                        $this->logger->fatal("Strategy: {$terminateStrategy}");
 
-                        Logger::getLogger(LOG_CATEGORY::FARM)->info(new FarmLogMessage($DBFarm->ID, sprintf("Farm %s, role %s scaling up. Starting new instance. ServerID = %s.",
+                    $suspendedServer = null;
+                    if ($terminateStrategy == 'suspend') {
+                        $suspendedServers = $DBFarmRole->GetServersByFilter(array('status' => SERVER_STATUS::SUSPENDED));
+
+                        if ($DBFarmRole->FarmID == 5440)
+                            $this->logger->fatal("SuspendedServers: " . count($suspendedServers));
+
+                        if (count($suspendedServers) > 0)
+                            $suspendedServer = array_shift($suspendedServers);
+                    }
+
+                    if ($terminateStrategy == 'suspend' && $suspendedServer) {
+                        Logger::getLogger(LOG_CATEGORY::FARM)->warn(new FarmLogMessage($DBFarm->ID, sprintf("Farm %s, role %s scaling up ($scalingDecisionAlgorithm). Found server to resume. ServerID = %s.",
                             $DBFarm->Name,
-                            $DBServer->GetFarmRoleObject()->GetRoleObject()->name,
-                            $DBServer->serverId
+                            $suspendedServer->GetFarmRoleObject()->GetRoleObject()->name,
+                            $suspendedServer->serverId
                         )));
                     }
-                    catch(Exception $e){
-                        Logger::getLogger(LOG_CATEGORY::SCALING)->error($e->getMessage());
+
+                    if ($terminateStrategy == 'terminate' || !$suspendedServer ||
+                    (!PlatformFactory::isOpenstack($suspendedServer->platform) &&
+                    $suspendedServer->platform != SERVER_PLATFORMS::EC2)) {
+                        $ServerCreateInfo = new ServerCreateInfo($DBFarmRole->Platform, $DBFarmRole);
+                        try {
+                            $DBServer = Scalr::LaunchServer($ServerCreateInfo, null, false, DBServer::LAUNCH_REASON_SCALING_UP);
+
+                            $DBFarmRole->SetSetting(DBFarmRole::SETTING_SCALING_UPSCALE_DATETIME, time(), DBFarmRole::TYPE_LCL);
+
+                            Logger::getLogger(LOG_CATEGORY::FARM)->info(new FarmLogMessage($DBFarm->ID, sprintf("Farm %s, role %s scaling up ($scalingDecisionAlgorithm). Starting new instance. ServerID = %s.",
+                                $DBFarm->Name,
+                                $DBServer->GetFarmRoleObject()->GetRoleObject()->name,
+                                $DBServer->serverId
+                            )));
+                        }
+                        catch(Exception $e){
+                            Logger::getLogger(LOG_CATEGORY::SCALING)->error($e->getMessage());
+                        }
+                    } else {
+                        //TODO: Check if server already resuming
+                        $platform = PlatformFactory::NewPlatform($suspendedServer->platform);
+                        $platform->ResumeServer($suspendedServer);
                     }
                 }
             }

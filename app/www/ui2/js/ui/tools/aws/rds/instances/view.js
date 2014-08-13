@@ -3,7 +3,6 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.instances.view', function (loadParams, mod
 		fields: [ "engine", "status", "hostname", "port", "name", "username", "type", "storage", "dtadded", "avail_zone" ],
 		proxy: {
 			type: 'scalr.paging',
-			extraParams: loadParams,
 			url: '/tools/aws/rds/instances/xListInstances/'
 		},
 		remoteSort: true
@@ -14,7 +13,6 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.instances.view', function (loadParams, mod
 			'reload': false,
 			'maximize': 'all'
 		},
-		scalrReconfigureParams: {},
 		store: store,
 		stateId: 'grid-tools-aws-rds-instances-view',
 		stateful: true,
@@ -46,18 +44,18 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.instances.view', function (loadParams, mod
 			{ text: "Placement", width: 130, dataIndex: 'avail_zone', sortable: false },
 			{ text: "Created at", width: 160, dataIndex: 'dtadded', sortable: true },
 			{
-				xtype: 'optionscolumn',
-				optionsMenu: [{
+				xtype: 'optionscolumn2',
+				menu: [{
 					text: 'Details',
 					iconCls: 'x-menu-icon-info',
-					menuHandler: function (item) {
-						document.location.href = '#/tools/aws/rds/instances/' + item.record.get('name') + '/details?cloudLocation=' + store.proxy.extraParams.cloudLocation;
+					menuHandler: function (data) {
+						document.location.href = '#/tools/aws/rds/instances/' + data['name'] + '/details?cloudLocation=' + store.proxy.extraParams.cloudLocation;
 					}
 				}, {
 					iconCls: 'x-menu-icon-edit',
 					text: 'Modify',
-					menuHandler: function (item) {
-						document.location.href = '#/tools/aws/rds/instances/' + item.record.get('name') + '/edit?cloudLocation=' + store.proxy.extraParams.cloudLocation;
+					menuHandler: function (data) {
+						document.location.href = '#/tools/aws/rds/instances/' + data['name'] + '/edit?cloudLocation=' + store.proxy.extraParams.cloudLocation;
 					}
 				}, {
 					xtype: 'menuseparator'
@@ -68,9 +66,9 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.instances.view', function (loadParams, mod
 							type: 'action'
 						},
 						url: '/tools/aws/rds/snapshots/xCreateSnapshot/',
-						dataHandler: function (record) {
+						dataHandler: function (data) {
 							return {
-								dbinstance: record.get('name'),
+								dbinstance: data['name'],
 								cloudLocation: store.proxy.extraParams.cloudLocation
 							}
 						},
@@ -80,29 +78,29 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.instances.view', function (loadParams, mod
 					}
 				}, {
 					text: 'Auto snapshot settings',
-					menuHandler: function (item) {
-						document.location.href = '#/tools/aws/autoSnapshotSettings?type=rds&objectId=' + item.record.get('name') + '&cloudLocation=' + store.proxy.extraParams.cloudLocation;
+					menuHandler: function (data) {
+						document.location.href = '#/tools/aws/autoSnapshotSettings?type=rds&objectId=' + data['name'] + '&cloudLocation=' + store.proxy.extraParams.cloudLocation;
 					}
 				}, {
 					text: 'Manage snapshots',
-					menuHandler: function (item) {
-						document.location.href = '#/tools/aws/rds/snapshots?dbinstance=' + item.record.get('name') + '&cloudLocation=' + store.proxy.extraParams.cloudLocation;
+					menuHandler: function (data) {
+						document.location.href = '#/tools/aws/rds/snapshots?dbinstance=' + data['name'] + '&cloudLocation=' + store.proxy.extraParams.cloudLocation;
 					}
 				}, {
 					xtype: 'menuseparator'
 				}, {
 					text: 'CloudWatch statistics',
 					iconCls: 'x-menu-icon-statsload',
-					menuHandler: function (item) {
-						document.location.href = '#/tools/aws/ec2/cloudwatch/view?objectId=' + item.record.get('name') + '&object=DBInstanceIdentifier&namespace=AWS/RDS&region=' + store.proxy.extraParams.cloudLocation;
+					menuHandler: function (data) {
+						document.location.href = '#/tools/aws/ec2/cloudwatch/view?objectId=' + data['name'] + '&object=DBInstanceIdentifier&namespace=AWS/RDS&region=' + store.proxy.extraParams.cloudLocation;
 					}
 				}, {
 					xtype: 'menuseparator'
 				}, {
 					text: 'Events log',
 					iconCls: 'x-menu-icon-logs',
-					menuHandler: function (item) {
-						document.location.href = '#/tools/aws/rds/logs?name=' + item.record.get('name') + '&type=db-instance&cloudLocation=' + store.proxy.extraParams.cloudLocation;
+					menuHandler: function (data) {
+						document.location.href = '#/tools/aws/rds/logs?name=' + data['name'] + '&type=db-instance&cloudLocation=' + store.proxy.extraParams.cloudLocation;
 					}
 				}, {
 					xtype: 'menuseparator'
@@ -119,9 +117,9 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.instances.view', function (loadParams, mod
 							msg: 'Sending reboot command ...'
 						},
 						url: '/tools/aws/rds/instances/xReboot/',
-						dataHandler: function (record) {
+						dataHandler: function (data) {
 							return {
-								instanceId: record.get('name'),
+								instanceId: data['name'],
 								cloudLocation: store.proxy.extraParams.cloudLocation
 							};
 						},
@@ -142,9 +140,9 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.instances.view', function (loadParams, mod
 							msg: 'Sending terminate command ...'
 						},
 						url: '/tools/aws/rds/instances/xTerminate/',
-						dataHandler: function (record) {
+						dataHandler: function (data) {
 							return {
-								instanceId: record.get('name'),
+								instanceId: data['name'],
 								cloudLocation: store.proxy.extraParams.cloudLocation
 							};
 						},
@@ -175,8 +173,7 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.instances.view', function (loadParams, mod
 					data: moduleParams.locations,
 					proxy: 'object'
 				},
-				gridStore: store,
-				cloudLocation: loadParams['cloudLocation'] || ''
+				gridStore: store
 			}]
 		}]
 	});

@@ -1,11 +1,10 @@
 <?php
 namespace Scalr\Service\OpenStack\Services\Volume\V1;
 
-use Scalr\Service\OpenStack\Services\Volume\Type\VolumeType;
 use Scalr\Service\OpenStack\Exception\RestClientException;
-use Scalr\Service\OpenStack\Client\RestClientResponse;
 use Scalr\Service\OpenStack\Client\ClientInterface;
 use Scalr\Service\OpenStack\Services\VolumeService;
+use Scalr\Service\OpenStack\Type\DefaultPaginationList;
 
 /**
  * Volume API
@@ -68,7 +67,7 @@ class VolumeApi
      * View a list of Volume entities.
      *
      * @param   bool  $detailed  optional Detailed info
-     * @return  array Returns the list of volumes
+     * @return  DefaultPaginationList Returns the list of volumes
      * @throws  RestClientException
      */
     public function listVolumes($detailed = true)
@@ -80,7 +79,10 @@ class VolumeApi
         );
         if ($response->hasError() === false) {
             $result = json_decode($response->getContent());
-            $result = $result->volumes;
+            $result = new DefaultPaginationList(
+                $this->service, 'volumes', $result->volumes,
+                (isset($result->volumes_links) ? $result->volumes_links : null)
+            );
         }
         return $result;
     }
@@ -178,7 +180,7 @@ class VolumeApi
     /**
      * List Volume Types action
      *
-     * @return  array  Returns the list of volume types.
+     * @return  DefaultPaginationList Returns the list of volume types.
      * @throws  RestClientException
      */
     public function listVolumeTypes()
@@ -189,7 +191,10 @@ class VolumeApi
         );
         if ($response->hasError() === false) {
             $result = json_decode($response->getContent());
-            $result = $result->volume_types;
+            $result = new DefaultPaginationList(
+                $this->service, 'volume_types', $result->volume_types,
+                (isset($result->volume_types_links) ? $result->volume_types_links : null)
+            );
         }
         return $result;
     }
@@ -218,7 +223,7 @@ class VolumeApi
      * List Snapshots action
      *
      * @param   bool      $detailed  optional  Detailed list by default.
-     * @return  array     Returns the list of snapshots.
+     * @return  DefaultPaginationList Returns the list of snapshots.
      * @throws  RestClientException
      */
     public function listSnapshots($detailed = true)
@@ -229,7 +234,10 @@ class VolumeApi
         );
         if ($response->hasError() === false) {
             $result = json_decode($response->getContent());
-            $result = $result->snapshots;
+            $result = new DefaultPaginationList(
+                $this->service, 'snapshots', $result->snapshots,
+                (isset($result->snapshots_links) ? $result->snapshots_links : null)
+            );
         }
         return $result;
     }

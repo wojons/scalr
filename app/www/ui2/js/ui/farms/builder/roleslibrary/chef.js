@@ -10,22 +10,24 @@ Scalr.regPage('Scalr.ui.farms.builder.addrole.chef', function () {
             return this.up('form').currentRole['data']['name'] === 'chef';
         },
 
-        onSelectImage: function(record) {
-            if (this.isVisibleForRole(record)) {
-                this.setRole(record);
-                this.show();
-            } else {
-                this.hide();
-            }
-        },
-
         onSettingsUpdate: function(record, name, value) {
         },
 
         setRole: function(record) {
-            var field = this.down('chefsettings');
+            var field = this.down('chefsettings'),
+                defaultSettings = {'chef.bootstrap': 1};
             this.currentRole = record;
-            field.setValue({'chef.bootstrap': 1});
+            if (record.get('origin') !== 'SHARED') {
+                record.loadRoleChefSettings(function(data, status){
+                    if (status) {
+                        field.setReadOnly(data.roleChefEnabled);
+                        field.setValue(data.roleChefEnabled ? data.chefSettings : defaultSettings);
+                    }
+                });
+            } else {
+                field.setReadOnly(false);
+                field.setValue(defaultSettings);
+            }
             field.clearInvalid();
         },
 

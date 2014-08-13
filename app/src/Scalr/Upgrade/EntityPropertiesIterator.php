@@ -55,7 +55,7 @@ class EntityPropertiesIterator implements Iterator
         $this->refProps = $this->refl->getProperties(ReflectionProperty::IS_PROTECTED | ReflectionProperty::IS_PUBLIC);
     }
 
-	/**
+    /**
      * {@inheritdoc}
      * @see Iterator::key()
      */
@@ -64,7 +64,7 @@ class EntityPropertiesIterator implements Iterator
         return $this->refProps[$this->position]->getName();
     }
 
-	/**
+    /**
      * {@inheritdoc}
      * @see Iterator::next()
      */
@@ -73,7 +73,7 @@ class EntityPropertiesIterator implements Iterator
         ++$this->position;
     }
 
-	/**
+    /**
      * {@inheritdoc}
      * @see Iterator::rewind()
      */
@@ -82,7 +82,7 @@ class EntityPropertiesIterator implements Iterator
         $this->position = 0;
     }
 
-	/**
+    /**
      * {@inheritdoc}
      * @see Iterator::valid()
      */

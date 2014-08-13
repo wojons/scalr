@@ -1,5 +1,20 @@
 <?php
 
+/**
+ * Scalrizr API Client
+ *
+ * @author   Igor Savhenko  <igor@scalr.com>
+ * @since    18.09.2012
+ *
+ * @property-read  Scalr_Net_Scalarizr_Services_Service        $service        Service namespace
+ * @property-read  Scalr_Net_Scalarizr_Services_Mysql          $mysql          Mysql namespace
+ * @property-read  Scalr_Net_Scalarizr_Services_Postgresql     $postgresql     PostgreSQL namespace
+ * @property-read  Scalr_Net_Scalarizr_Services_Redis          $redis          Redis namespace
+ * @property-read  Scalr_Net_Scalarizr_Services_Sysinfo        $sysinfo        SysInfo namespace
+ * @property-read  Scalr_Net_Scalarizr_Services_System         $system         System namespace
+ * @property-read  Scalr_Net_Scalarizr_Services_Operation      $operation      Operation namespace
+ * @property-read  Scalr_Net_Scalarizr_Services_Image      	   $image          Image namespace
+ */
 class Scalr_Net_Scalarizr_Client
 {
     const NAMESPACE_SERVICE = 'service';
@@ -9,6 +24,7 @@ class Scalr_Net_Scalarizr_Client
     const NAMESPACE_SYSINFO = 'sysinfo';
     const NAMESPACE_SYSTEM = 'system';
     const NAMESPACE_OPERATION = 'operation';
+    const NAMESPACE_IMAGE = 'image';
 
     private $dbServer,
         $port,
@@ -16,6 +32,9 @@ class Scalr_Net_Scalarizr_Client
         $isVPC = false;
 
     protected $namespace;
+
+    public $timeout = 15;
+    public $debug;
 
     public static function getClient($dbServer, $namespace = null, $port = 8010)
     {
@@ -48,6 +67,10 @@ class Scalr_Net_Scalarizr_Client
                 return new Scalr_Net_Scalarizr_Services_Operation($dbServer, $port);
                 break;
 
+            case "image":
+                  return new Scalr_Net_Scalarizr_Services_Image($dbServer, $port);
+                   break;
+
             default:
                 return new Scalr_Net_Scalarizr_Client($dbServer, $port);
                 break;
@@ -64,6 +87,13 @@ class Scalr_Net_Scalarizr_Client
                 $this->isVPC = true;
 
         $this->cryptoTool = Scalr_Messaging_CryptoTool::getInstance();
+    }
+
+    public function __get($name) {
+        $className = "Scalr_Net_Scalarizr_Services_".ucfirst($name);
+        if (class_exists($className)) {
+            $this->{$name} = new $className($this->dbServer, $this->port);
+        }
     }
 
     public function request($method, stdClass $params = null, $namespace = null)
@@ -91,22 +121,17 @@ class Scalr_Net_Scalarizr_Client
         $request->setMethod(HTTP_METH_POST);
 
         // If no VPC router communicating via local inteface (Scalr should be setup within the esame network)
-        if (\Scalr::config('scalr.instances_connection_policy') == 'local')
-            $requestHost = "{$this->dbServer->localIp}:{$this->port}";
-        elseif (\Scalr::config('scalr.instances_connection_policy') == 'public')
-            $requestHost = "{$this->dbServer->remoteIp}:{$this->port}";
-        elseif (\Scalr::config('scalr.instances_connection_policy') == 'auto') {
-            if ($this->dbServer->remoteIp) {
-                $requestHost = "{$this->dbServer->remoteIp}:{$this->port}";
-            } else {
-                $requestHost = "{$this->dbServer->localIp}:{$this->port}";
-            }
-        }
+        $requestHost = $this->dbServer->getSzrHost() . ":{$this->port}";
 
         if ($this->isVPC) {
-            $routerRole = $this->dbServer->GetFarmObject()->GetFarmRoleByBehavior(ROLE_BEHAVIORS::VPC_ROUTER);
+            $routerFarmRoleId = $this->dbServer->GetFarmRoleObject()->GetSetting(Scalr_Role_Behavior_Router::ROLE_VPC_SCALR_ROUTER_ID);
+            if ($routerFarmRoleId) {
+                $routerRole = DBFarmRole::LoadByID($routerFarmRoleId);
+            } else {
+                $routerRole = $this->dbServer->GetFarmObject()->GetFarmRoleByBehavior(ROLE_BEHAVIORS::VPC_ROUTER);
+            }
             if ($routerRole) {
-                // No remote IP need to use proxy
+                // No public IP need to use proxy
                 if (!$this->dbServer->remoteIp) {
                     $requestHost = $routerRole->GetSetting(Scalr_Role_Behavior_Router::ROLE_VPC_IP) . ":80";
                     $request->addHeaders(array(
@@ -123,12 +148,12 @@ class Scalr_Net_Scalarizr_Client
         $request->setUrl("http://{$requestHost}/{$namespace}");
 
         $request->setOptions(array(
-            'timeout'        => 30,
+            'timeout'        => $this->timeout,
             'connecttimeout' => 10
         ));
 
         $request->addHeaders(array(
-            "Date"        =>  $timestamp,
+            "Date"        => $timestamp,
             "X-Signature" => $signature,
             "X-Server-Id" => $this->dbServer->serverId
         ));
@@ -137,6 +162,9 @@ class Scalr_Net_Scalarizr_Client
         try {
             // Send request
             $request->send();
+
+            $this->debug['responseCode'] = $request->getResponseCode();
+            $this->debug['fullResponse'] = $request->getRawResponseMessage();
 
             if ($request->getResponseCode() == 200) {
 

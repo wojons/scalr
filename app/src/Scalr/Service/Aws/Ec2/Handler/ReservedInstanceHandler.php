@@ -4,10 +4,8 @@ namespace Scalr\Service\Aws\Ec2\Handler;
 use Scalr\Service\Aws\Ec2\DataType\ReservedInstanceList;
 use Scalr\Service\Aws\Ec2\DataType\OfferingType;
 use Scalr\Service\Aws\Ec2\DataType\ReservedInstanceFilterList;
-use Scalr\Service\Aws\Ec2\DataType\ReservedInstanceData;
 use Scalr\Service\Aws\DataType\ListDataType;
 use Scalr\Service\Aws\Client\ClientException;
-use Scalr\Service\Aws\DataType\ErrorData;
 use Scalr\Service\Aws\Ec2Exception;
 use Scalr\Service\Aws\Ec2\AbstractEc2Handler;
 

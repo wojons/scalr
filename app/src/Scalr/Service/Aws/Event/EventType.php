@@ -22,7 +22,7 @@ class EventType extends StringType
      */
     const EVENT_SEND_REQUEST  = 'SendRequest';
 
-	/**
+    /**
      * {@inheritdoc}
      * @see Scalr\Service\Aws\DataType.StringType::getPrefix()
      */

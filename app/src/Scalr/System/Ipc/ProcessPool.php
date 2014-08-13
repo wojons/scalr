@@ -158,7 +158,7 @@ class Scalr_System_Ipc_ProcessPool extends Scalr_Util_Observable
         register_shutdown_function(array($this, "_cleanup"));
     }
 
-    function start () {
+    function start ($multiProcess) {
         $t1 = microtime(true);
         $msg = "Starting process pool (size: {$this->size}";
         if ($this->daemonize) $msg .= ", daemonize: true";
@@ -188,6 +188,9 @@ class Scalr_System_Ipc_ProcessPool extends Scalr_Util_Observable
 
 
         $this->poolPid = posix_getpid();
+
+        $multiProcess->onReady($this);
+
         $this->initSignalHandler();
 
         /*
@@ -290,6 +293,9 @@ class Scalr_System_Ipc_ProcessPool extends Scalr_Util_Observable
     }
 
     function _cleanup () {
+
+        $this->logger->info("cleanup: start");
+
         if (!$this->cleanupComplete && posix_getpid() == $this->poolPid) {
             try {
                 $this->shm->delete();
@@ -313,11 +319,21 @@ class Scalr_System_Ipc_ProcessPool extends Scalr_Util_Observable
             $this->cleanupComplete = true;
 
         }
+
+        $this->logger->info("cleanup: end");
     }
 
     protected function postShutdown () {
+
+        $this->logger->info("postShutdown");
+
         $this->_cleanup();
+
+        $this->logger->info("endForking: start");
+
         $this->worker->endForking();
+
+        $this->logger->info("endForking: end");
     }
 
     protected function wait () {
@@ -548,11 +564,13 @@ class Scalr_System_Ipc_ProcessPool extends Scalr_Util_Observable
     }
 
     protected function fireChildEvent ($evName, $evData=array()) {
-        //$t1 = microtime(true);
+        $this->logger->info("[fireChildEvent] START");
+        $t1 = microtime(true);
         $evData["type"] = $evName;
         $evData["pid"] = posix_getpid();
         $this->childEventQueue->put($evData);
-        //$this->logger->info("TIME put '$evName' event: " . (round(microtime(true) - $t1, 4)) . " sec");
+        $this->logger->info("[fireChildEvent] PID: {$evData['pid']}");
+        $this->logger->info("TIME put '$evName' event: " . (round(microtime(true) - $t1, 4)) . " sec");
         /*
         if (!$this->kill($this->poolPid, SIGUSR1, "[".posix_getpid()."] ")) {
             $this->logger->fatal("Cannot send signal to parent process");
@@ -600,7 +618,7 @@ class Scalr_System_Ipc_ProcessPool extends Scalr_Util_Observable
 
     protected function initSignalHandler () {
         $fn = array($this, "signalHandler");
-        $signals = array(SIGCHLD, SIGTERM, SIGABRT, SIGALRM, SIGUSR1, SIGUSR2);
+        $signals = array(SIGCHLD, SIGTERM, SIGABRT, SIGALRM, SIGUSR1, SIGUSR2, SIGINT);
         if ($this->daemonize) {
             $signals[] = SIGHUP;
         }
@@ -611,12 +629,22 @@ class Scalr_System_Ipc_ProcessPool extends Scalr_Util_Observable
                         self::$signames[$sig], posix_getpid()));
             }
         }
+
+        $this->logger->info(sprintf("Signal handler initialized for PID: %s", posix_getpid()));
     }
 
     function signalHandler ($sig) {
         $mypid = posix_getpid();
 
         switch ($sig) {
+            case SIGINT:
+                $this->logger->error(sprintf("SIGINT FROM {$mypid}, {$this->getPid()}"));
+                break;
+
+            case SIGHUP:
+                $this->logger->error(sprintf("SIGHUP FROM {$mypid}, {$this->getPid()}"));
+                break;
+
             // Child terminated
             case SIGCHLD:
                 // In parent
@@ -798,6 +826,9 @@ class Scalr_System_Ipc_ProcessPool extends Scalr_Util_Observable
     }
 
     function getPid () {
+        if (!$this->poolPid)
+            $this->poolPid = posix_getpid();
+
         return $this->poolPid;
     }
 }

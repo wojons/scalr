@@ -38,6 +38,10 @@ class ScalrEnvironment20081216 extends ScalrEnvironment20081125
 
         $DBFarmRole = $this->DBServer->GetFarmRoleObject();
 
+        if ($DBFarmRole->GetSetting(DBFarmRole::SETTING_AWS_USE_EBS) == 0)
+            $volumes = array();
+
+
         foreach ($volumes as $volume)
         {
             $DBEBSVolume = DBEBSVolume::loadById($volume['id']);

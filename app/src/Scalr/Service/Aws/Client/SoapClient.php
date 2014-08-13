@@ -4,7 +4,6 @@ namespace Scalr\Service\Aws\Client;
 use Scalr\Service\Aws\Event\SendRequestEvent;
 use Scalr\Service\Aws\Event\EventType;
 use Scalr\Service\Aws;
-use Scalr\Service\Aws\DataType\ErrorData;
 use \stdClass;
 
 /**
@@ -751,7 +750,7 @@ class SoapClient extends \SoapClient implements ClientInterface
         return null;
     }
 
-	/**
+    /**
      * {@inheritdoc}
      * @see Scalr\Service\Aws\Client.ClientInterface::getQueriesQuantity()
      */

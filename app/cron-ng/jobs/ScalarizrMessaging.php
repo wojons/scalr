@@ -1,6 +1,9 @@
 <?php
+
 use Scalr\Service\Aws\Ec2\DataType\VolumeFilterNameType;
-use Scalr\Service\Aws\Ec2\DataType\ImageFilterNameType;
+use Scalr\Modules\PlatformFactory;
+use Scalr\Modules\Platforms\Cloudstack\CloudstackPlatformModule;
+use Scalr\Modules\Platforms\Rackspace\RackspacePlatformModule;
 
 class Scalr_Cronjob_ScalarizrMessaging extends Scalr_System_Cronjob_MultiProcess_DefaultWorker
 {
@@ -13,7 +16,7 @@ class Scalr_Cronjob_ScalarizrMessaging extends Scalr_System_Cronjob_MultiProcess
                 "daemonize"         => false,
                 "workerMemoryLimit" => 40000,  // 40Mb
                 "startupTimeout"    => 10000,  // 10 seconds
-                "size"              => 3 // 3 workers
+                "size"              => 5 // 3 workers
             ),
             "waitPrevComplete" => true,
             "fileName"         => __FILE__,
@@ -71,11 +74,14 @@ class Scalr_Cronjob_ScalarizrMessaging extends Scalr_System_Cronjob_MultiProcess
             ));
         } else {
             $rows = $this->db->GetAll("
-                SELECT distinct(server_id) FROM messages
-                WHERE type = ? AND status = ?
+                SELECT distinct(m.server_id)
+                FROM messages m
+                WHERE m.type = ? AND m.status = ?
+                AND m.message_name NOT IN (?, ?, ?)
             ", array(
                 "in",
-                MESSAGE_STATUS::PENDING
+                MESSAGE_STATUS::PENDING,
+                EVENT_TYPE::BEFORE_HOST_UP, EVENT_TYPE::HOST_INIT, EVENT_TYPE::HOST_UP
             ));
         }
         $this->logger->info("Found " . count($rows) . " servers");
@@ -95,21 +101,26 @@ class Scalr_Cronjob_ScalarizrMessaging extends Scalr_System_Cronjob_MultiProcess
             }
         } catch (Exception $e) {
             $this->db->Execute("
-                DELETE FROM messages WHERE server_id=? AND `type`='in'
+                DELETE m FROM messages m
+                WHERE m.server_id=? AND m.`type`='in'
+                AND m.message_name NOT IN (?, ?, ?)
             ", array(
-                $serverId
+                $serverId,
+                EVENT_TYPE::BEFORE_HOST_UP, EVENT_TYPE::HOST_INIT, EVENT_TYPE::HOST_UP
             ));
             return;
         }
 
         $rs = $this->db->Execute("
-            SELECT * FROM messages
-            WHERE server_id = ? AND type = ? AND status = ?
-            ORDER BY id ASC
+            SELECT m.* FROM messages m
+            WHERE m.server_id = ? AND m.type = ? AND m.status = ?
+            AND m.message_name NOT IN (?, ?, ?)
+            ORDER BY m.id ASC
         ", array(
             $serverId,
             "in",
-            MESSAGE_STATUS::PENDING
+            MESSAGE_STATUS::PENDING,
+            EVENT_TYPE::BEFORE_HOST_UP, EVENT_TYPE::HOST_INIT, EVENT_TYPE::HOST_UP
         ));
 
         while ($row = $rs->FetchRow()) {
@@ -125,9 +136,7 @@ class Scalr_Cronjob_ScalarizrMessaging extends Scalr_System_Cronjob_MultiProcess
                 $startTime = microtime(true);
                 // Update scalarizr package version
                 if ($message->meta[Scalr_Messaging_MsgMeta::SZR_VERSION]) {
-                    $dbserver->SetProperty(
-                        SERVER_PROPERTIES::SZR_VESION,
-                        $message->meta[Scalr_Messaging_MsgMeta::SZR_VERSION]);
+                    $dbserver->setScalarizrVersion($message->meta[Scalr_Messaging_MsgMeta::SZR_VERSION]);
                 }
                 if ($message->meta[Scalr_Messaging_MsgMeta::SZR_UPD_CLIENT_VERSION]) {
                     $dbserver->SetProperty(
@@ -209,13 +218,27 @@ class Scalr_Cronjob_ScalarizrMessaging extends Scalr_System_Cronjob_MultiProcess
                             } else {
                                 if ($message->name == 'Initialization' || $message->name == 'system.init') {
                                     $dbserver->SetProperty(SERVER_PROPERTIES::SZR_IS_INIT_FAILED, 1);
+                                    if (is_object($message->error))
+                                    	$errorText = $message->error->message;
+                                    elseif ($message->error)
+                                    	$errorText = $message->error;
+
+                                    $dbserver->SetProperty(SERVER_PROPERTIES::SZR_IS_INIT_ERROR_MSG, $errorText);
+
+                                    $event = new HostInitFailedEvent($dbserver, $errorText);
                                 }
-                                if (is_object($message->error))
-                                    $dbserver->SetProperty(SERVER_PROPERTIES::SZR_IS_INIT_ERROR_MSG, $message->error->message);
-                                elseif ($message->error)
-                                    $dbserver->SetProperty(SERVER_PROPERTIES::SZR_IS_INIT_ERROR_MSG, $message->error);
                             }
                         }
+                    } elseif ($message instanceof Scalr_Messaging_Msg_InitFailed) {
+
+                    	$errorText = $message->reason;
+
+                    	$dbserver->SetProperty(SERVER_PROPERTIES::SZR_IS_INIT_ERROR_MSG, $errorText);
+                    	$event = new HostInitFailedEvent($dbserver, $errorText);
+
+                    /**
+                     * @deprecated
+                     */
                     } elseif ($message instanceof Scalr_Messaging_Msg_UpdateControlPorts) {
                         $apiPort = $message->api;
                         $ctrlPort = $message->messaging;
@@ -313,6 +336,14 @@ class Scalr_Cronjob_ScalarizrMessaging extends Scalr_System_Cronjob_MultiProcess
                         if ($isEventExist) {
                             $event = new CustomEvent($dbserver, $message->eventName, (array)$message->params);
                         }
+                    } elseif ($message instanceof Scalr_Messaging_Msg_HostUpdate) {
+                        try {
+                            $dbFarmRole = $dbserver->GetFarmRoleObject();
+                        } catch (Exception $e) { }
+                        if ($dbFarmRole instanceof DBFarmRole) {
+                            foreach (Scalr_Role_Behavior::getListForFarmRole($dbFarmRole) as $behavior)
+                                $behavior->handleMessage($message, $dbserver);
+                        }
                     } elseif ($message instanceof Scalr_Messaging_Msg_MongoDb) {
                         /********* MONGODB *********/
                         try {
@@ -335,10 +366,20 @@ class Scalr_Cronjob_ScalarizrMessaging extends Scalr_System_Cronjob_MultiProcess
                         }
                     } elseif ($message instanceof Scalr_Messaging_Msg_HostInit) {
                         $event = $this->onHostInit($message, $dbserver);
+
+                        try {
+                            $dbserver->updateTimelog('ts_hi', $message->secondsSinceBoot, $message->secondsSinceStart);
+                        } catch (Exception $e) {}
+
                         if (!$event)
                             continue;
                     } elseif ($message instanceof Scalr_Messaging_Msg_HostUp) {
                         $event = $this->onHostUp($message, $dbserver);
+
+                        try {
+                            $dbserver->updateTimelog('ts_hu');
+                        } catch (Exception $e) {}
+
                     } elseif ($message instanceof Scalr_Messaging_Msg_HostDown) {
                         $isMoving = false;
                         if ($dbserver->platform == SERVER_PLATFORMS::RACKSPACE) {
@@ -392,6 +433,11 @@ class Scalr_Cronjob_ScalarizrMessaging extends Scalr_System_Cronjob_MultiProcess
                         $event = new RebootCompleteEvent($dbserver);
                     } elseif ($message instanceof Scalr_Messaging_Msg_BeforeHostUp) {
                         $event = new BeforeHostUpEvent($dbserver);
+
+                        try {
+                            $dbserver->updateTimelog('ts_bhu');
+                        } catch (Exception $e) {}
+
                     } elseif ($message instanceof Scalr_Messaging_Msg_BlockDeviceAttached) {
                         if ($dbserver->platform == SERVER_PLATFORMS::EC2) {
                             $aws = $dbserver->GetEnvironmentObject()->aws($dbserver->GetProperty(EC2_SERVER_PROPERTIES::REGION));
@@ -531,8 +577,8 @@ class Scalr_Cronjob_ScalarizrMessaging extends Scalr_System_Cronjob_MultiProcess
                     } elseif ($message instanceof Scalr_Messaging_Msg_Mysql_CreatePmaUserResult) {
                         $farmRole = DBFarmRole::LoadByID($message->farmRoleId);
                         if ($message->status == "ok") {
-                            $farmRole->SetSetting(DbFarmRole::SETTING_MYSQL_PMA_USER, $message->pmaUser, DBFarmRole::TYPE_LCL);
-                            $farmRole->SetSetting(DbFarmRole::SETTING_MYSQL_PMA_PASS, $message->pmaPassword, DBFarmRole::TYPE_LCL);
+                            $farmRole->SetSetting(DBFarmRole::SETTING_MYSQL_PMA_USER, $message->pmaUser, DBFarmRole::TYPE_LCL);
+                            $farmRole->SetSetting(DBFarmRole::SETTING_MYSQL_PMA_PASS, $message->pmaPassword, DBFarmRole::TYPE_LCL);
                         } else {
                             $farmRole->SetSetting(DBFarmRole::SETTING_MYSQL_PMA_REQUEST_TIME, "", DBFarmRole::TYPE_LCL);
                             $farmRole->SetSetting(DBFarmRole::SETTING_MYSQL_PMA_REQUEST_ERROR, $message->lastError, DBFarmRole::TYPE_LCL);
@@ -540,8 +586,17 @@ class Scalr_Cronjob_ScalarizrMessaging extends Scalr_System_Cronjob_MultiProcess
                     } elseif ($message instanceof Scalr_Messaging_Msg_RabbitMq_SetupControlPanelResult) {
                         $farmRole = $dbserver->GetFarmRoleObject();
                         if ($message->status == "ok") {
+                            $mgmtHost = $dbserver->getSzrHost();
+
+                            if ($message->port) {
+                                $mgmtURL = "http://{$mgmtHost}:{$message->port}/mgmt";
+                            } elseif ($message->cpanelUrl) {
+                                $info = parse_url($message->cpanelUrl);
+                                $mgmtURL = "http://{$mgmtHost}:{$info['port']}/mgmt";
+                            }
+
                             $farmRole->SetSetting(Scalr_Role_Behavior_RabbitMQ::ROLE_CP_SERVER_ID, $dbserver->serverId, DBFarmRole::TYPE_LCL);
-                            $farmRole->SetSetting(Scalr_Role_Behavior_RabbitMQ::ROLE_CP_URL, $message->cpanelUrl, DBFarmRole::TYPE_LCL);
+                            $farmRole->SetSetting(Scalr_Role_Behavior_RabbitMQ::ROLE_CP_URL, $mgmtURL, DBFarmRole::TYPE_LCL);
                             $farmRole->SetSetting(Scalr_Role_Behavior_RabbitMQ::ROLE_CP_REQUEST_TIME, "", DBFarmRole::TYPE_LCL);
                         } else {
                             $farmRole->SetSetting(Scalr_Role_Behavior_RabbitMQ::ROLE_CP_SERVER_ID, "", DBFarmRole::TYPE_LCL);
@@ -672,7 +727,7 @@ class Scalr_Cronjob_ScalarizrMessaging extends Scalr_System_Cronjob_MultiProcess
 
                     $csServer = null;
                     $list = $os->servers->list(true);
-                    if ($list) {
+                    do {
                         foreach ($list as $_tmp) {
                             $ipaddresses = array();
                             if (!is_array($_tmp->addresses)) {
@@ -690,11 +745,12 @@ class Scalr_Cronjob_ScalarizrMessaging extends Scalr_System_Cronjob_MultiProcess
                                 array_push($ipaddresses, $_tmp->accessIPv4);
 
                             if (in_array($dbserver->localIp, $ipaddresses) ||
-                            in_array($dbserver->remoteIp, $ipaddresses)) {
+                                in_array($dbserver->remoteIp, $ipaddresses)) {
                                 $osServer = $_tmp;
                             }
                         }
-                    }
+                    } while (false !== ($list = $list->getNextPage()));
+
                     if (!$osServer) {
                         $this->logger->error(sprintf(
                             "Server not found on Openstack (server_id: %s, remote_ip: %s, local_ip: %s)",
@@ -702,6 +758,7 @@ class Scalr_Cronjob_ScalarizrMessaging extends Scalr_System_Cronjob_MultiProcess
                         ));
                         return;
                     }
+
                     $dbserver->SetProperties(array(
                         OPENSTACK_SERVER_PROPERTIES::SERVER_ID => $osServer->id,
                         OPENSTACK_SERVER_PROPERTIES::NAME      => $osServer->name,
@@ -760,11 +817,11 @@ class Scalr_Cronjob_ScalarizrMessaging extends Scalr_System_Cronjob_MultiProcess
                             $env = $dbserver->GetEnvironmentObject();
                             $cs = Scalr_Service_Cloud_Rackspace::newRackspaceCS(
                                 $env->getPlatformConfigValue(
-                                    Modules_Platforms_Rackspace::USERNAME, true,
+                                    RackspacePlatformModule::USERNAME, true,
                                     $dbserver->GetProperty(RACKSPACE_SERVER_PROPERTIES::DATACENTER)
                                 ),
                                 $env->getPlatformConfigValue(
-                                    Modules_Platforms_Rackspace::API_KEY, true,
+                                    RackspacePlatformModule::API_KEY, true,
                                     $dbserver->GetProperty(RACKSPACE_SERVER_PROPERTIES::DATACENTER)
                                 ),
                                 $dbserver->GetProperty(RACKSPACE_SERVER_PROPERTIES::DATACENTER)
@@ -797,6 +854,8 @@ class Scalr_Cronjob_ScalarizrMessaging extends Scalr_System_Cronjob_MultiProcess
                     }
                 }
             }
+
+            //TODO: search for existing bundle task
 
             // Bundle image
             $creInfo = new ServerSnapshotCreateInfo(
@@ -850,14 +909,17 @@ class Scalr_Cronjob_ScalarizrMessaging extends Scalr_System_Cronjob_MultiProcess
                         if ($networkType == 'Direct') {
                             $remoteIp = $message->localIp;
                         } else {
-                            $sharedIp = $dbFarmRole->GetSetting(DBFarmRole::SETTING_CLOUDSTACK_SHARED_IP_ADDRESS);
-                            if (!$sharedIp) {
-                                $env = $dbserver->GetEnvironmentObject();
-                                $remoteIp = $platform->getConfigVariable(
-                                    Modules_Platforms_Cloudstack::SHARED_IP . "." . $dbserver->GetProperty(CLOUDSTACK_SERVER_PROPERTIES::CLOUD_LOCATION), $env, false
-                                );
-                            } else {
-                                $remoteIp = $sharedIp;
+                            $useStaticNat = $dbFarmRole->GetSetting(DBFarmRole::SETIING_CLOUDSTACK_USE_STATIC_NAT);
+                            if (!$useStaticNat) {
+                                $sharedIp = $dbFarmRole->GetSetting(DBFarmRole::SETTING_CLOUDSTACK_SHARED_IP_ADDRESS);
+                                if (!$sharedIp) {
+                                    $env = $dbserver->GetEnvironmentObject();
+                                    $remoteIp = $platform->getConfigVariable(
+                                        CloudstackPlatformModule::SHARED_IP . "." . $dbserver->GetProperty(CLOUDSTACK_SERVER_PROPERTIES::CLOUD_LOCATION), $env, false
+                                    );
+                                } else {
+                                    $remoteIp = $sharedIp;
+                                }
                             }
                         }
                     }
@@ -885,10 +947,12 @@ class Scalr_Cronjob_ScalarizrMessaging extends Scalr_System_Cronjob_MultiProcess
 
             //Update auto-update settings
             //TODO: Check auto-update client version
-            if ($dbserver->IsSupported('0.7.225')) {
+            if ($dbserver->IsSupported('0.7.225') && !$dbserver->IsSupported('2.7.10')) {
                 $dbserver->SetProperties($srv_props);
                 try {
-                    $repo = $dbserver->GetFarmObject()->GetSetting(DBFarm::SETTING_SZR_UPD_REPOSITORY);
+                    $repo = $dbserver->GetFarmRoleObject()->GetSetting(Scalr_Role_Behavior::ROLE_BASE_SZR_UPD_REPOSITORY);
+                    if (!$repo)
+                        $repo = $dbserver->GetFarmObject()->GetSetting(DBFarm::SETTING_SZR_UPD_REPOSITORY);
                     $schedule = $dbserver->GetFarmObject()->GetSetting(DBFarm::SETTING_SZR_UPD_SCHEDULE);
                     if ($repo && $schedule) {
                         $updateClient = new Scalr_Net_Scalarizr_UpdateClient($dbserver);
@@ -901,7 +965,7 @@ class Scalr_Cronjob_ScalarizrMessaging extends Scalr_System_Cronjob_MultiProcess
             if ($dbFarmRole->GetRoleObject()->hasBehavior(ROLE_BEHAVIORS::MYSQL)) {
                 $master = $dbFarmRole->GetFarmObject()->GetMySQLInstances(true);
                 // If no masters in role this server becomes it
-                if (!$master[0] && !(int) $dbFarmRole->GetSetting(DbFarmRole::SETTING_MYSQL_SLAVE_TO_MASTER)) {
+                if (!$master[0] && !(int) $dbFarmRole->GetSetting(DBFarmRole::SETTING_MYSQL_SLAVE_TO_MASTER)) {
                     $srv_props[SERVER_PROPERTIES::DB_MYSQL_MASTER] = 1;
                 }
             }

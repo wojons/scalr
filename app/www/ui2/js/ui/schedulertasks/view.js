@@ -16,7 +16,6 @@ Scalr.regPage('Scalr.ui.schedulertasks.view', function (loadParams, moduleParams
 			'reload': false,
 			'maximize': 'all'
 		},
-		scalrReconfigureParams: {},
 		store: store,
 		stateId: 'grid-schedulertasks-view',
 		stateful: true,
@@ -84,45 +83,30 @@ Scalr.regPage('Scalr.ui.schedulertasks.view', function (loadParams, moduleParams
 			},
 			{ text: 'End date', width: 150, dataIndex: 'endTime', sortable: true },
 			{ text: 'Last time executed', width: 170, dataIndex: 'lastStartTime', sortable: true },
-			{ text: 'Time zone', width: 120, dataIndex: 'timezone', sortable: true },
 			{ text: 'Priority', width: 60, dataIndex: 'order_index', sortable: true, hidden: true },
-			{ text: 'Status', width: 100, dataIndex: 'status', sortable: true, xtype: 'templatecolumn', tpl:
-				'<tpl if="status == &quot;Active&quot;"><span style="color: green;">{status}</span></tpl>' +
-				'<tpl if="status == &quot;Suspended&quot;"><span style="color: blue;">{status}</span></tpl>' +
-				'<tpl if="status == &quot;Finished&quot;"><span style="color: gray;">{status}</span></tpl>'
-			}, {
-				xtype: 'optionscolumn',
+            { text: 'Execution mode', width: 110, dataIndex: 'config', sortable: false, xtype: 'statuscolumn', statustype: 'schedulertaskscript'},
+			{ text: 'Status', minWidth: 110, width: 110, dataIndex: 'status', sortable: true, xtype: 'statuscolumn', statustype: 'schedulertask'},
+            { text: 'Time zone', width: 120, dataIndex: 'timezone', sortable: true },
+            {
+				xtype: 'optionscolumn2',
 				getVisibility: function (record) {
 					var reg =/Finished/i;
 					return !reg.test(record.get('status'));
 				},
-				getOptionVisibility: function (item, record) {
-					if (item.itemId == "option.activate" || item.itemId == "option.suspend" || item.itemId == "option.editSep") {
-						var reg =/Finished/i
-						if(reg.test(record.data.status))
-							return false;
-					}
-					var reg =/Active/i
-					if (item.itemId == "option.activate" && reg.test(record.get('status')))
-						return false;
-
-					var reg =/Suspended/i
-					if (item.itemId == "option.suspend"  && reg.test(record.get('status')))
-						return false;
-
-					return true;
-				},
-				optionsMenu: [{
+				menu: [{
 					itemId: 'option.activate',
 					text: 'Activate',
 					iconCls: 'x-menu-icon-activate',
+                    getVisibility: function(data) {
+                        return !(/Active/i).test(data['status']);
+                    },
 					request: {
 						processBox: {
 							type: 'action'
 						},
 						url: '/schedulertasks/xActivate',
-						dataHandler: function (record) {
-							return { tasks: Ext.encode([record.get('id')]) };
+						dataHandler: function (data) {
+							return { tasks: Ext.encode([data['id']]) };
 						},
 						success: function(data) {
 							store.load();
@@ -132,13 +116,16 @@ Scalr.regPage('Scalr.ui.schedulertasks.view', function (loadParams, moduleParams
 					itemId: 'option.suspend',
 					text: 'Suspend',
 					iconCls: 'x-menu-icon-suspend',
+                    getVisibility: function(data) {
+                        return !(/Suspended/i).test(data['status']);
+                    },
 					request: {
 						processBox: {
 							type: 'action'
 						},
 						url: '/schedulertasks/xSuspend',
-						dataHandler: function (record) {
-							return { tasks: Ext.encode([record.get('id')]) };
+						dataHandler: function (data) {
+							return { tasks: Ext.encode([data['id']]) };
 						},
 						success: function(data) {
 							store.load();
@@ -153,8 +140,8 @@ Scalr.regPage('Scalr.ui.schedulertasks.view', function (loadParams, moduleParams
 							type: 'action'
 						},
 						url: '/schedulertasks/xExecute',
-						dataHandler: function (record) {
-							return { tasks: Ext.encode([record.get('id')]) };
+						dataHandler: function (data) {
+							return { tasks: Ext.encode([data['id']]) };
 						},
 						success: function(data) {
 							store.load();

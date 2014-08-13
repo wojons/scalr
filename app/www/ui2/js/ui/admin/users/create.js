@@ -1,7 +1,7 @@
 Scalr.regPage('Scalr.ui.admin.users.create', function (loadParams, moduleParams) {
 	var form = Ext.create('Ext.form.Panel', {
 		width: 700,
-		title: (moduleParams['user']) ? 'Account &raquo; Users &raquo; Edit' : 'Account &raquo; Users &raquo; Create',
+		title: (moduleParams['user']) ? 'Admin &raquo; Users &raquo; Edit' : 'Admin &raquo; Users &raquo; Create',
 		fieldDefaults: {
 			anchor: '100%'
 		},
@@ -9,6 +9,7 @@ Scalr.regPage('Scalr.ui.admin.users.create', function (loadParams, moduleParams)
 		items: [{
 			xtype: 'fieldset',
 			title: 'General information',
+            cls: 'x-fieldset-separator-none x-fieldset-no-bottom-padding',
 			items: [{
 				xtype: 'textfield',
 				name: 'email',
@@ -22,22 +23,39 @@ Scalr.regPage('Scalr.ui.admin.users.create', function (loadParams, moduleParams)
 				value: moduleParams['user'] ? '******': '',
 				allowBlank: false
 			}, {
-				xtype: 'radiogroup',
-				fieldLabel: 'Status',
-				allowBlank: false,
-				columns: 7,
-				itemId: 'status',
-				items: [{
-					name: 'status',
-					inputValue: 'Active',
-					boxLabel: 'Active',
-					checked: true
-				}, {
-					name: 'status',
-					inputValue: 'Inactive',
-					boxLabel: 'Inactive'
-				}]
+                xtype: 'buttongroupfield',
+                name: 'status',
+                value: 'Active',
+                fieldLabel: 'Status',
+                items: [{
+                    text: 'Active',
+                    value: 'Active',
+                    width: 130
+                }, {
+                    text: 'Inactive',
+                    value: 'Inactive',
+                    width: 130
+                }]
 			}, {
+                xtype: 'buttongroupfield',
+                name: 'type',
+                value: 'ScalrAdmin',
+                fieldLabel: 'Type',
+                items: [{
+                    text: 'Global admin',
+                    value: 'ScalrAdmin',
+                    width: 130
+                }, {
+                    text: 'Financial admin',
+                    value: 'FinAdmin',
+                    width: 130
+                }],
+                listeners: {
+                    change: function(comp, value) {
+                        comp.prev('[name="email"]').vtype = value === 'FinAdmin' ? 'email' : null;
+                    }
+                }
+            }, {
 				xtype: 'textfield',
 				name: 'fullname',
 				fieldLabel: 'Full name'
@@ -90,7 +108,8 @@ Scalr.regPage('Scalr.ui.admin.users.create', function (loadParams, moduleParams)
 		form.getForm().setValues(moduleParams['user']);
 		if (moduleParams['user']['email'] == 'admin') {
 			form.down('[name="email"]').setReadOnly(true);
-			form.down('#status').setReadOnly(true);
+			form.down('[name="status"]').setReadOnly(true);
+            form.down('[name="type"]').setReadOnly(true);
 			form.down('[name="fullname"]').setReadOnly(true);
 			form.down('[name="comments"]').setReadOnly(true);
 		}

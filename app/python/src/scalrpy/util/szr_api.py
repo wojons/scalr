@@ -1,6 +1,13 @@
 import re
+import socket
+import urllib2
+import logging
 
 from scalrpy.util import rpc
+from scalrpy.util import helper
+
+
+LOG = logging.getLogger('ScalrPy')
 
 
 def get_cpu_stat(hsp, api_type='linux', timeout=5):
@@ -21,6 +28,10 @@ def get_la_stat(hsp, api_type='linux', timeout=5):
             }
 
 
+class APIError(Exception):
+    pass
+
+
 def get_mem_info(hsp, api_type='linux', timeout=5):
     mem = hsp.sysinfo.mem_info(timeout=timeout)
     if api_type == 'linux':
@@ -33,7 +44,7 @@ def get_mem_info(hsp, api_type='linux', timeout=5):
             'shared': float(mem['shared']),
             'buffer': float(mem['buffer']),
             'cached': float(mem['cached']),
-            }
+        }
     elif api_type == 'windows':
         ret = {
             'swap': float(mem['total_swap']),
@@ -41,9 +52,9 @@ def get_mem_info(hsp, api_type='linux', timeout=5):
             'total': float(mem['total_real']),
             'avail': None,  # FIXME
             'free': float(mem['total_free']),
-            }
+        }
     else:
-        raise Exception("Unsupported API type '%s' for MEM info" % api_type)
+        raise APIError("Unsupported API type '%s' for MEM info" % api_type)
     return ret
 
 
@@ -53,20 +64,20 @@ def get_net_stat(hsp, api_type='linux', timeout=5):
         ret = {
             'in': float(net['eth0']['receive']['bytes']),
             'out': float(net['eth0']['transmit']['bytes']),
-            }
+        }
     elif api_type == 'windows':
         for key in net:
-            if re.match(r'^.* Ethernet Adapter _0$', key):
+            if re.match(r'^.* Ethernet Adapter.*$', key):
                 ret = {
                     'in': float(net[key]['receive']['bytes']),
                     'out': float(net[key]['transmit']['bytes']),
-                    }
+                }
                 break
         else:
-            msg = "Can't find '* Ethernet Adapter _0' pattern in api response"
-            raise Exception(msg)
+            msg = "Can't find '^.* Ethernet Adapter.*$' pattern in api response"
+            raise APIError(msg)
     else:
-        raise Exception("Unsupported API type '%s' for NET stat" % api_type)
+        raise APIError("Unsupported API type '%s' for NET stat" % api_type)
     return ret
 
 
@@ -74,19 +85,20 @@ def get_io_stat(hsp, api_type='linux', timeout=5):
     assert_msg = "Unsupported API type '%s' for IO stat" % api_type
     assert api_type == 'linux', assert_msg
     io = hsp.sysinfo.disk_stats(timeout=timeout)
-    ret = dict((
+    ret = dict(
+        (
             str(dev),
             {
                 'read': float(io[dev]['read']['num']),
                 'write': float(io[dev]['write']['num']),
                 'rbyte': float(io[dev]['read']['bytes']),
                 'wbyte': float(io[dev]['write']['bytes']),
-                }
-            ) for dev in io if
-            re.match(r'^sd[a-z]{1}[0-9]{1,2}$', dev) or
-            re.match(r'^hd[a-z]{1}[0-9]{1,2}$', dev) or
-            re.match(r'^xvd[a-z]{1}[0-9]{1,2}$', dev)
-            )
+            }
+        ) for dev in io if
+        re.match(r'^sd[a-z]{1}[0-9]{1,2}$', dev) or
+        re.match(r'^hd[a-z]{1}[0-9]{1,2}$', dev) or
+        re.match(r'^xvd[a-z]{1}[0-9]{1,2}$', dev)
+    )
     return ret
 
 
@@ -107,7 +119,15 @@ def get_metrics(host, port, key, api_type, metrics, headers=None, timeout=5):
         'mem': get_mem_info,
         'net': get_net_stat,
         'io': get_io_stat,
-        }
+    }
     for metric in metrics:
-        data.update({metric:getters[metric](hsp, api_type, timeout=timeout)})
+        try:
+            data.update({metric: getters[metric](hsp, api_type, timeout=timeout)})
+        except (urllib2.URLError, urllib2.HTTPError, socket.timeout):
+            raise
+        except:
+            msg = "Endpoint: %s, metric '%s' failed: %s" % (endpoint, metric, helper.exc_info())
+            LOG.warning(msg)
+            continue
+
     return data

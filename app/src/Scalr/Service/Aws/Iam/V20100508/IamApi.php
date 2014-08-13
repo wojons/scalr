@@ -15,6 +15,11 @@ use Scalr\Service\Aws\Iam\DataType\RoleData;
 use SimpleXMLElement;
 use DateTime;
 use DateTimeZone;
+use Scalr\Service\Aws\Iam\DataType\RoleList;
+use Scalr\Service\Aws\Iam\DataType\InstanceProfileList;
+use Scalr\Service\Aws\DataType\ListDataType;
+use Scalr\Service\Aws\Iam\DataType\InstanceProfileData;
+use Scalr\Service\Aws\Iam\AbstractIamDataType;
 
 /**
  * Iam Api messaging.
@@ -171,7 +176,9 @@ class IamApi extends AbstractApi
                 throw new IamException('Unexpected response! ' . $response->getRawContent());
             }
             $result = $this->_loadUserData($sxml->CreateUserResult->User);
-            $this->getEntityManager()->attach($result);
+            if ($this->iam->getEntityManagerEnabled()) {
+                $this->getEntityManager()->attach($result);
+            }
         }
         return $result;
     }
@@ -182,7 +189,7 @@ class IamApi extends AbstractApi
      * @param   \SimpleXMLElement $sxml
      * @return  UserData Returns new user data object
      */
-    private function _loadUserData(\SimpleXMLElement &$sxml)
+    protected function _loadUserData(\SimpleXMLElement &$sxml)
     {
         $userData = new UserData();
         $userData->setIam($this->iam);
@@ -227,7 +234,9 @@ class IamApi extends AbstractApi
                 throw new IamException('Unexpected response! ' . $response->getRawContent());
             }
             $result = $this->_loadUserData($sxml->GetUserResult->User);
-            $this->getEntityManager()->attach($result);
+            if ($this->iam->getEntityManagerEnabled()) {
+                $this->getEntityManager()->attach($result);
+            }
         }
         return $result;
     }
@@ -408,23 +417,10 @@ class IamApi extends AbstractApi
      */
     public function deleteAccessKey($accessKeyId, $userName = null)
     {
-        $result = false;
-        $options = array(
+        return $this->_makeBooleanCall(ucfirst(__FUNCTION__), array(
             'AccessKeyId' => (string) $accessKeyId,
-        );
-        if ($userName !== null) {
-            $options['UserName'] = (string) $userName;
-        }
-        $response = $this->client->call('DeleteAccessKey', $options);
-        if ($response->getError() === false) {
-            //Success
-            $sxml = simplexml_load_string($response->getRawContent());
-            if (!isset($sxml->ResponseMetadata)) {
-                throw new IamException('Unexpected response! ' . $response->getRawContent());
-            }
-            $result = true;
-        }
-        return $result;
+            'UserName'    => ($userName !== null ? (string) $userName : null),
+        ));
     }
 
     /**
@@ -443,24 +439,11 @@ class IamApi extends AbstractApi
      */
     public function createRole($roleName, $assumeRolePolicyDocument, $path = null)
     {
-        $result = null;
-        $options = array(
+        return $this->_makeDataCall(ucfirst(__FUNCTION__), 'Role', array(
             'RoleName'                 => (string) $roleName,
             'AssumeRolePolicyDocument' => (string) $assumeRolePolicyDocument,
-        );
-        if ($path !== null) {
-            $options['Path'] = (string) $path;
-        }
-        $response = $this->client->call(ucfirst(__FUNCTION__), $options);
-        if ($response->getError() === false) {
-            //Success
-            $sxml = simplexml_load_string($response->getRawContent());
-            if (!isset($sxml->CreateRoleResult->Role)) {
-                throw new IamException('Unexpected response! ' . $response->getRawContent());
-            }
-            $result = $this->_loadRoleData($sxml->CreateRoleResult->Role);
-        }
-        return $result;
+            'Path'                     => $path,
+        ));
     }
 
     /**
@@ -475,16 +458,9 @@ class IamApi extends AbstractApi
      */
     public function deleteRole($roleName)
     {
-        $result = false;
-        $options = array(
+        return $this->_makeBooleanCall(ucfirst(__FUNCTION__), array(
             'RoleName' => (string) $roleName,
-        );
-        $response = $this->client->call(ucfirst(__FUNCTION__), $options);
-        if ($response->getError() === false) {
-            $sxml = simplexml_load_string($response->getRawContent());
-            $result = true;
-        }
-        return $result;
+        ));
     }
 
     /**
@@ -507,6 +483,307 @@ class IamApi extends AbstractApi
             $item->path = $this->exist($sxml->Path) ? (string)$sxml->Path : null;
         }
         return $item;
+    }
+
+    /**
+     * Loads RoleList from simple xml object
+     *
+     * @param   \SimpleXMLElement $sxml
+     * @return  RoleList  Returns RoleList
+     */
+    protected function _loadRoleList(\SimpleXMLElement $sxml)
+    {
+        $list = new RoleList();
+        $list->setIam($this->iam);
+        if (!empty($sxml->member)) {
+            foreach ($sxml->member as $v) {
+                $list->append($this->_loadRoleData($v));
+            }
+        }
+        return $list;
+    }
+
+    /**
+     * Loads InstanceProfileData from simple xml object
+     *
+     * @param   \SimpleXMLElement $sxml
+     * @return  InstanceProfileData Returns InstanceProfileData
+     */
+    protected function _loadInstanceProfileData(\SimpleXMLElement $sxml)
+    {
+        $item = null;
+        if ($this->exist($sxml)) {
+            $item = new InstanceProfileData();
+            $item->setIam($this->iam);
+            $item->instanceProfileId = (string) $sxml->InstanceProfileId;
+            $item->instanceProfileName = (string) $sxml->InstanceProfileName;
+            $item->arn = $this->exist($sxml->Arn) ? (string)$sxml->Arn : null;
+            $item->createDate = $this->exist($sxml->CreateDate) ? new DateTime((string)$sxml->CreateDate, new DateTimeZone('UTC')) : null;
+            $item->path = $this->exist($sxml->Path) ? (string)$sxml->Path : null;
+            $item->setRoles($this->_loadRoleList($sxml->Roles));
+        }
+        return $item;
+    }
+
+    /**
+     * Loads InstanceProfileList from simple xml object
+     *
+     * @param   \SimpleXMLElement $sxml
+     * @return  InstanceProfileList  Returns InstanceProfileList
+     */
+    protected function _loadInstanceProfileList(\SimpleXMLElement $sxml)
+    {
+        $list = new InstanceProfileList();
+        $list->setIam($this->iam);
+        if (!empty($sxml->member)) {
+            foreach ($sxml->member as $v) {
+                $list->append($this->_loadInstanceProfileData($v));
+            }
+        }
+        return $list;
+    }
+
+    /**
+     * Makes list call
+     *
+     * This method is used internally for making list calls
+     *
+     * @param   string    $action    Action
+     * @param   string    $listname  The class name for the list
+     * @param   array     $opt       options list
+     * @return  ListDataType Returns the list
+     */
+    protected function _makeListCall($action, $listname, array $opt)
+    {
+        $result = null;
+        $options = array();
+        foreach ($opt as $key => $value) {
+            if ($value !== null) {
+                $options[$key] = $value;
+            }
+        }
+        $response = $this->client->call($action, $options);
+        if ($response->getError() === false) {
+            $sxml = simplexml_load_string($response->getRawContent());
+            $result = $this->{'_load' . $listname . 'List'}($sxml->{$action . 'Result'}->{$listname . 's'});
+            $result->setIsTruncated(((string)$sxml->{$action . 'Result'}->IsTruncated) !== 'false');
+            if ($result->getIsTruncated()) {
+                $result->setMarker((string)$sxml->{$action . 'Result'}->Marker);
+            }
+        }
+        return $result;
+    }
+
+    /**
+     * Makes data call
+     *
+     * This method is used internally for making list calls
+     *
+     * @param   string    $action    Action
+     * @param   string    $dataname  The class name for the data
+     * @param   array     $opt       options list
+     * @return  AbstractIamDataType Returns the list
+     */
+    protected function _makeDataCall($action, $dataname, array $opt)
+    {
+        $result = null;
+        $options = array();
+        foreach ($opt as $key => $value) {
+            if ($value !== null) {
+                $options[$key] = $value;
+            }
+        }
+        $response = $this->client->call($action, $options);
+        if ($response->getError() === false) {
+            $sxml = simplexml_load_string($response->getRawContent());
+            $result = $this->{'_load' . $dataname . 'Data'}($sxml->{$action . 'Result'}->$dataname);
+        }
+        return $result;
+    }
+
+    /**
+     * Makes boolean call
+     *
+     * This method is used internally for making list calls
+     *
+     * @param   string    $action    Action
+     * @param   array     $opt       options list
+     * @return  AbstractIamDataType Returns the list
+     */
+    protected function _makeBooleanCall($action, array $opt)
+    {
+        $result = false;
+        $options = array();
+        foreach ($opt as $key => $value) {
+            if ($value !== null) {
+                $options[$key] = $value;
+            }
+        }
+        $response = $this->client->call($action, $options);
+        if ($response->getError() === false) {
+            $sxml = simplexml_load_string($response->getRawContent());
+            if (!$this->exist($sxml->ResponseMetadata)) {
+                throw new IamException('Unexpected response! ' . $response->getRawContent());
+            }
+            $result = true;
+        }
+        return $result;
+    }
+
+    /**
+     * Lists the roles that have the specified path prefix
+     *
+     * @param   string   $pathPrefix optional The path prefix for filtering the results
+     * @param   string   $marker     optional Set this parameter to the value of the Marker element in the response you just received.
+     * @param   string   $maxItems   optional Maximum number of the records you want in the response
+     * @return  RoleList Returns RoleList object on success or throws an exception
+     * @throws  IamException
+     * @throws  ClientException
+     */
+    public function listRoles($pathPrefix = null, $marker = null, $maxItems = null)
+    {
+        return $this->_makeListCall(ucfirst(__FUNCTION__), 'Role', array(
+            'PathPrefix' => $pathPrefix,
+            'Marker'     => $marker,
+            'MaxItems'   => $maxItems,
+        ));
+    }
+
+    /**
+     * Lists the instance profiles that have the specified path prefix
+     *
+     * @param   string   $pathPrefix optional The path prefix for filtering the results
+     * @param   string   $marker     optional Set this parameter to the value of the Marker element in the response you just received.
+     * @param   string   $maxItems   optional Maximum number of the records you want in the response
+     * @return  InstanceProfileList  Returns InstanceProfileList object on success or throws an exception
+     * @throws  IamException
+     * @throws  ClientException
+     */
+    public function listInstanceProfiles($pathPrefix = null, $marker = null, $maxItems = null)
+    {
+        return $this->_makeListCall(ucfirst(__FUNCTION__), 'InstanceProfile', array(
+            'PathPrefix' => $pathPrefix,
+            'Marker'     => $marker,
+            'MaxItems'   => $maxItems,
+        ));
+    }
+
+    /**
+     * Lists the instance profiles that have the specified associated role
+     *
+     * @param   string   $roleName   The name of the role to list instance profiles for. (1-64 characters)
+     * @param   string   $marker     optional Set this parameter to the value of the Marker element in the response you just received.
+     * @param   string   $maxItems   optional Maximum number of the records you want in the response
+     * @return  InstanceProfileList  Returns InstanceProfileList object on success or throws an exception
+     * @throws  IamException
+     * @throws  ClientException
+     */
+    public function listInstanceProfilesForRole($roleName, $marker = null, $maxItems = null)
+    {
+        return $this->_makeListCall(ucfirst(__FUNCTION__), 'InstanceProfile', array(
+            'RoleName' => $roleName,
+            'Marker'   => $marker,
+            'MaxItems' => $maxItems,
+        ));
+    }
+
+    /**
+     * Retrieves information about the specified instance profile,
+     * including the instance profile's path, GUID, ARN, and role
+     *
+     * @param   string   $instanceProfileName Name of the instance profile to get information about.
+     * @return  InstanceProfileData Returns InstanceProfileData object on success or throws an exception
+     * @throws  IamException
+     * @throws  ClientException
+     */
+    public function getInstanceProfile($instanceProfileName)
+    {
+        return $this->_makeDataCall(ucfirst(__FUNCTION__), 'InstanceProfile', array(
+            'InstanceProfileName' => (string) $instanceProfileName,
+        ));
+    }
+
+    /**
+     * Creates a new instance profile
+     *
+     * @param   string   $instanceProfileName Name of the instance profile.
+     * @param   stirng   $path                optional The path to the instance profile.
+     * @return  InstanceProfileData Returns InstanceProfileData object on success or throws an exception
+     * @throws  IamException
+     * @throws  ClientException
+     */
+    public function createInstanceProfile($instanceProfileName, $path = null)
+    {
+        return $this->_makeDataCall(ucfirst(__FUNCTION__), 'InstanceProfile', array(
+            'InstanceProfileName' => (string) $instanceProfileName,
+            'Path' => $path,
+        ));
+    }
+
+    /**
+     * Deletes an instance profile
+     *
+     * @param   string   $instanceProfileName Name of the instance profile.
+     * @return  boolean Returns true on success or throws an exception
+     * @throws  IamException
+     * @throws  ClientException
+     */
+    public function deleteInstanceProfile($instanceProfileName)
+    {
+        return $this->_makeBooleanCall(ucfirst(__FUNCTION__), array(
+            'InstanceProfileName' => (string) $instanceProfileName,
+        ));
+    }
+
+    /**
+     * Adds the specified role to the specified instance profile
+     *
+     * @param   string   $instanceProfileName The name of the instance profile to update
+     * @param   string   $roleName            The name of the role to add
+     * @return  boolean  Returns true on success or throws an exception
+     * @throws  IamException
+     * @throws  ClientException
+     */
+    public function addRoleToInstanceProfile($instanceProfileName, $roleName)
+    {
+        return $this->_makeBooleanCall(ucfirst(__FUNCTION__), array(
+            'InstanceProfileName' => (string) $instanceProfileName,
+            'RoleName' => (string) $roleName,
+        ));
+    }
+
+    /**
+     * Removes the specified role from the specified instance profile
+     *
+     * @param   string   $instanceProfileName The name of the instance profile to update
+     * @param   string   $roleName            The name of the role to remove
+     * @return  boolean  Returns true on success or throws an exception
+     * @throws  IamException
+     * @throws  ClientException
+     */
+    public function removeRoleFromInstanceProfile($instanceProfileName, $roleName)
+    {
+        return $this->_makeBooleanCall(ucfirst(__FUNCTION__), array(
+            'InstanceProfileName' => (string) $instanceProfileName,
+            'RoleName' => (string) $roleName,
+        ));
+    }
+
+    /**
+     * Updates the policy that grants an entity permission to assume a role
+     *
+     * @param   string   $roleName       The name of the role to update
+     * @param   string   $policyDocument The policy that grants an entity permission to assume the role.
+     * @return  boolean  Returns true on success or throws an exception
+     * @throws  IamException
+     * @throws  ClientException
+     */
+    public function updateAssumeRolePolicy($roleName, $policyDocument)
+    {
+        return $this->_makeBooleanCall(ucfirst(__FUNCTION__), array(
+            'PolicyDocument' => (string) $policyDocument,
+            'RoleName' => (string) $roleName,
+        ));
     }
 
     /**

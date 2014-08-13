@@ -6,19 +6,17 @@ Scalr.regPage('Scalr.ui.tools.cloudstack.ips.view', function (loadParams, module
         ],
         proxy: {
             type: 'scalr.paging',
-            extraParams: loadParams,
             url: '/tools/cloudstack/ips/xListIps'
         },
         remoteSort: true
     });
 
     return Ext.create('Ext.grid.Panel', {
-        title: 'Tools &raquo; Cloudstack &raquo; Public IPs',
+        title: Scalr.utils.getPlatformName(loadParams['platform']) + ' &raquo; Public IPs',
         scalrOptions: {
-            'reload': false,
+            'reload': true,
             'maximize': 'all'
         },
-        scalrReconfigureParams: { volumeId: '' },
         store: store,
         stateId: 'grid-tools-cloudstack-ips-view',
         stateful: true,
@@ -59,12 +57,8 @@ Scalr.regPage('Scalr.ui.tools.cloudstack.ips.view', function (loadParams, module
             { header: "Purpose", width: 150, dataIndex: 'purpose', sortable: true},
             { header: "State", width: 120, dataIndex: 'state', sortable: true },
             {
-                xtype: 'optionscolumn',
-                getOptionVisibility: function (item, record) {
-                    return true;
-                },
-
-                optionsMenu: [{
+                xtype: 'optionscolumn2',
+                menu: [{
                     itemId: 'option.delete',
                     text: 'Delete',
                     iconCls: 'x-menu-icon-delete',
@@ -78,8 +72,8 @@ Scalr.regPage('Scalr.ui.tools.cloudstack.ips.view', function (loadParams, module
                             msg: 'Deleting IP(s) ...'
                         },
                         url: '/tools/cloudstack/ips/xRemove/',
-                        dataHandler: function (record) {
-                            return { ipId: Ext.encode([record.get('ipId')]), cloudLocation: store.proxy.extraParams.cloudLocation };
+                        dataHandler: function (data) {
+                            return { ipId: Ext.encode([data['ipId']]), cloudLocation: store.proxy.extraParams.cloudLocation };
                         },
                         success: function () {
                             store.load();
@@ -102,6 +96,7 @@ Scalr.regPage('Scalr.ui.tools.cloudstack.ips.view', function (loadParams, module
 
         dockedItems: [{
             xtype: 'scalrpagingtoolbar',
+            ignoredLoadParams: ['platform'],
             store: store,
             dock: 'top',
             afterItems: [{
@@ -136,15 +131,18 @@ Scalr.regPage('Scalr.ui.tools.cloudstack.ips.view', function (loadParams, module
                 }
             }],
             items: [{
+                xtype: 'filterfield',
+                store: store
+            }, {
                 xtype: 'fieldcloudlocation',
                 itemId: 'cloudLocation',
+                margin: '0 0 0 12',
                 store: {
                     fields: [ 'id', 'name' ],
                     data: moduleParams.locations,
                     proxy: 'object'
                 },
-                gridStore: store,
-                cloudLocation: loadParams['cloudLocation'] || ''
+                gridStore: store
             }]
         }]
     });

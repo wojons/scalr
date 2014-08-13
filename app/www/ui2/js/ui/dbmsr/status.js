@@ -438,12 +438,12 @@ Scalr.regPage('Scalr.ui.dbmsr.status', function (loadParams, moduleParams) {
 	Ext.each(moduleParams['replicationStatus'], function(item){
 		var items = [{
 				xtype: 'displayfield',
-				fieldLabel: 'Remote IP',
+				fieldLabel: 'Public IP',
 				labelWidth: 200,
 				value: item['remoteIp']
 			}, {
 				xtype: 'displayfield',
-				fieldLabel: 'Local IP',
+				fieldLabel: 'Private IP',
 				labelWidth: 200,
 				value: item['localIp']
 			}];

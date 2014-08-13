@@ -22,6 +22,7 @@ class DBDNSZone
         $axfrAllowedHosts,
         $allowedAccounts,
         $allowManageSystemRecords,
+        $privateRootRecords,
         $isOnNsServer,
         $isZoneConfigModified;
 
@@ -59,7 +60,8 @@ class DBDNSZone
         'allow_manage_system_records'	=> 'allowManageSystemRecords',
         'isonnsserver'	=> 'isOnNsServer',
         'iszoneconfigmodified'	=> 'isZoneConfigModified',
-        'allowed_accounts' => 'allowedAccounts'
+        'allowed_accounts' => 'allowedAccounts',
+        'private_root_records' => 'privateRootRecords'
     );
 
     function __construct($id = null)
@@ -303,16 +305,18 @@ class DBDNSZone
         if ($DBFarmRole->GetSetting(DBFarmRole::SETTING_EXCLUDE_FROM_DNS))
             return $records;
 
-        if ($DBFarmRole->ID == $this->farmRoleId)
-        {
-            array_push($records, array(
-                "name" 		=> "@",
-                "value"		=> $DBServer->remoteIp,
-                "type"		=> "A",
-                "ttl"		=> 90,
-                "server_id"	=> $DBServer->serverId,
-                "issystem"	=> '1'
-            ));
+        if ($DBFarmRole->ID == $this->farmRoleId) {
+            $ip = $this->privateRootRecords == 1 ? $DBServer->localIp : $DBServer->remoteIp;
+            if ($ip) {
+                array_push($records, array(
+                    "name" 		=> "@",
+                    "value"		=> $ip,
+                    "type"		=> "A",
+                    "ttl"		=> 90,
+                    "server_id"	=> $DBServer->serverId,
+                    "issystem"	=> '1'
+                ));
+            }
         }
 
         if (!$DBFarmRole->GetSetting(DBFarmRole::SETTING_DNS_CREATE_RECORDS))
@@ -324,19 +328,13 @@ class DBDNSZone
         $ext_record_alias = $DBFarmRole->GetSetting(DBFarmRole::SETTING_DNS_EXT_RECORD_ALIAS);
         $ext_record = "ext-{$DBFarmRole->GetRoleObject()->name}";
 
-        if ($int_record_alias || $ext_record_alias) {
-            $params = $DBServer->GetScriptingVars();
-            $keys = array_keys($params);
-            $f = create_function('$item', 'return "%".$item."%";');
-            $keys = array_map($f, $keys);
-            $values = array_values($params);
-        }
+
 
         if ($int_record_alias)
-            $int_record = str_replace($keys, $values, $int_record_alias);
+            $int_record = $DBServer->applyGlobalVarsToValue($int_record_alias);
 
         if ($ext_record_alias)
-            $ext_record = str_replace($keys, $values, $ext_record_alias);
+            $ext_record = $DBServer->applyGlobalVarsToValue($ext_record_alias);
 
         array_push($records, array(
                 "name" 		=> $int_record,

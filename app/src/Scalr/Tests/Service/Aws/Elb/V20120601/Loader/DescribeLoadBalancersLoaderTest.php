@@ -2,10 +2,6 @@
 namespace Scalr\Tests\Service\Aws\Elb\V20120601\Loader;
 
 use Scalr\Tests\Service\Aws\ElbTestCase;
-use Scalr\Service\Aws\Elb\DataType\PoliciesData;
-use Scalr\Service\Aws\Elb\DataType\SourceSecurityGroupData;
-use Scalr\Service\Aws\Elb\DataType\ListenerDescriptionData;
-use Scalr\Service\Aws\DataType\ListDataType;
 use Scalr\Service\Aws\Elb\DataType\LoadBalancerDescriptionData;
 use Scalr\Service\Aws\Elb\V20120601\Loader\DescribeLoadBalancersLoader;
 

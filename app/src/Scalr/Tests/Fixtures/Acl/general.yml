@@ -1,10 +1,6 @@
 GENERAL_CUSTOM_EVENTS:
 - [/scripts/events, null, all]
 
-GENERAL_GLOBAL_VARIABLES:
-- /core/variables
-- /core/xSaveVariables
-
 GENERAL_CUSTOM_SCALING_METRICS:
 - /scaling/metrics/xSave
 - /scaling/metrics/xRemove
@@ -17,3 +13,6 @@ GENERAL_CUSTOM_SCALING_METRICS:
 
 GENERAL_SCHEDULERTASKS:
 - [/schedulertasks, null, all]
+
+GENERAL_WEBHOOKS:
+- [/webhooks, null, all]

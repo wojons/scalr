@@ -53,7 +53,6 @@ Scalr.regPage('Scalr.ui.statistics.serversusage', function (loadParams, modulePa
 		scalrOptions: {
 			maximize: 'all'
 		},
-		scalrReconfigureParams: { farmId: '' },
 
 		pricing: moduleParams['price'] ? moduleParams['price'] : [],
 
@@ -169,8 +168,7 @@ Scalr.regPage('Scalr.ui.statistics.serversusage', function (loadParams, modulePa
 			},'->', {
 				xtype: 'button',
 				width: 180,
-				text: 'Download statistics',
-				iconCls: 'scalr-ui-btn-icon-download',
+				text: '<img src="' + Ext.BLANK_IMAGE_URL + '" class="x-icon-download" />&nbsp;Download statistics',
 				handler: function () {
 					var params = Scalr.utils.CloneObject(panel.store.proxy.extraParams);
 					params['action'] = 'download';

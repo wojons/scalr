@@ -27,7 +27,7 @@ class EnvironmentsTest extends WebTestCase
         }
     }
 
-	/**
+    /**
      * @test
      */
     public function testXListEnvironmentsAction()
@@ -105,7 +105,7 @@ class EnvironmentsTest extends WebTestCase
         $this->assertNotEmpty($createdEnvId);
 
         //Test saving
-        $par = \ENVIRONMENT_SETTINGS::TIMEZONE;
+        $par = \Scalr_Environment::SETTING_TIMEZONE;
         $res2 = $this->internalRequest('/environments/xSave', array(
             'envId' => $createdEnvId,
             $par    => 'Europe/Simferopol',

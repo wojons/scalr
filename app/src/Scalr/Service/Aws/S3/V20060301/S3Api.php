@@ -16,15 +16,10 @@ use Scalr\Service\Aws\S3\DataType\OwnerData;
 use Scalr\Service\Aws\S3\DataType\BucketData;
 use Scalr\Service\Aws\S3\DataType\BucketList;
 use Scalr\Service\Aws\Client\QueryClient\S3QueryClient;
-use Scalr\Service\Aws\Client\QueryClientException;
 use Scalr\Service\Aws\S3Exception;
 use Scalr\Service\Aws\S3;
 use Scalr\Service\Aws\Client\ClientException;
 use Scalr\Service\Aws\EntityManager;
-use Scalr\Service\Aws\DataType\ErrorData;
-use Scalr\Service\Aws\Client\QueryClientResponse;
-use Scalr\Service\Aws\DataType\ListDataType;
-use Scalr\Service\Aws\Client\ClientInterface;
 use \DateTimeZone;
 use \DateTime;
 
@@ -519,6 +514,38 @@ class S3Api extends AbstractApi
             $putData = null;
         }
         return $putData;
+    }
+
+    /**
+     * Returns the web configuration information for the bucket.
+     *
+     * This implementation of the GET operation returns the website configuration associated with a bucket.
+     * To host website on Amazon S3, you can configure a bucket as website by adding a website configuration.
+     *
+     * @param   BucketData|string      $bucketName A bucket name.
+     * @return  string                 Returns CORSConfiguration XML Document
+     * @throws  ClientException
+     * @throws  S3Exception
+     */
+    public function getBucketWebsite($bucketName)
+    {
+        $result = false;
+        $subresource = 'website';
+        $options = array(
+            '_subdomain' => (string)$bucketName,
+        );
+        $allowed = S3QueryClient::getAllowedSubResources();
+        if (!in_array($subresource, $allowed)) {
+            throw new \InvalidArgumentException(sprintf(
+                'Invalid subresource "%s" for the bucket. Allowed list are "%s"',
+                $subresource, join('", "', $allowed)
+            ));
+        }
+        $response = $this->client->call('GET', $options, '/?' . $subresource);
+        if ($response->hasError() === false) {
+            $result = true;
+        }
+        return $result;
     }
 
     /**

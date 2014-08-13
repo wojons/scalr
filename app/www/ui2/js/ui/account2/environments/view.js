@@ -1,9 +1,10 @@
 Scalr.regPage('Scalr.ui.account2.environments.view', function (loadParams, moduleParams) {
 	var isAccountOwner = Scalr.user['type'] === 'AccountOwner',
+        isAccountSuperAdmin = Scalr.user['type'] === 'AccountSuperAdmin',
 		storeTeams = Scalr.data.get('account.teams'),
 		storeEnvironments = Scalr.data.get('account.environments'),
-        readOnlyAccess = !Scalr.utils.canManageAcl() && !Scalr.isAllowed('ADMINISTRATION_ENV_CLOUDS');
-		
+        readOnlyAccess = !Scalr.utils.canManageAcl() && !Scalr.isAllowed('ENVADMINISTRATION_ENV_CLOUDS');
+
 	var getTeamNames = function(teams, links) {
 		var list = [];
 		if (teams) {
@@ -38,7 +39,7 @@ Scalr.regPage('Scalr.ui.account2.environments.view', function (loadParams, modul
 			}
 		}]
 	});
-	
+
 	var envTeamsStore = Ext.create('Scalr.ui.ChildStore', {
 		parentStore: storeTeams,
 		sortOnLoad: true,
@@ -49,11 +50,18 @@ Scalr.regPage('Scalr.ui.account2.environments.view', function (loadParams, modul
 			}
 		}]
 	});
-	var reconfigurePage = function(envId) {
+
+    var firstReconfigure = true;
+	var reconfigurePage = function(params) {
+        var params = params || {},
+            envId = params.envId;
+        if (firstReconfigure && !envId) {
+            envId = Scalr.user.envId;
+        }
 		if (envId) {
 			dataview.deselect(form.getForm().getRecord());
 			if (envId === 'new') {
-				if (isAccountOwner) {
+				if (isAccountOwner || isAccountSuperAdmin) {
 					panel.down('#add').handler();
 				}
 			} else {
@@ -64,15 +72,13 @@ Scalr.regPage('Scalr.ui.account2.environments.view', function (loadParams, modul
 				}
 			}
 		}
+        firstReconfigure = false;
 	};
-	
+
     var dataview = Ext.create('Ext.view.View', {
         deferInitialRefresh: false,
         store: store,
 		listeners: {
-			boxready: function(){
-				reconfigurePage(loadParams.envId || Scalr.user.envId);
-			},
             refresh: function(view){
                 var record = view.getSelectionModel().getLastSelected();
                 if (record) {
@@ -137,12 +143,12 @@ Scalr.regPage('Scalr.ui.account2.environments.view', function (loadParams, modul
 				getTeamNames: function(teams){
 					return getTeamNames(teams);
 				}
-			}			
-			
+			}
+
         ),
 		plugins: {
 			ptype: 'dynemptytext',
-			emptyText: '<div class="title">No environments were found<br/> to match your search.</div>Try modifying your search criteria'+ (!isAccountOwner ? '.' : '<br/>or <a class="add-link" href="#">creating a new environment</a>.'),
+			emptyText: '<div class="title">No environments were found<br/> to match your search.</div>Try modifying your search criteria'+ (!isAccountOwner && !isAccountSuperAdmin ? '.' : '<br/>or <a class="add-link" href="#">creating a new environment</a>.'),
 			onAddItemClick: function() {
 				panel.down('#add').handler();
 			}
@@ -162,7 +168,7 @@ Scalr.regPage('Scalr.ui.account2.environments.view', function (loadParams, modul
         overflowY: 'auto',
 		listeners: {
 			hide: function() {
-				if (isAccountOwner) {
+				if (isAccountOwner || isAccountSuperAdmin) {
 					dataview.up('panel').down('#add').setDisabled(false);
 				}
 			},
@@ -182,11 +188,11 @@ Scalr.regPage('Scalr.ui.account2.environments.view', function (loadParams, modul
 
 				frm.reset(true);
                 this.down('#formtitle').setTitle(isNewRecord ? 'New environment' : '');
-				var c = this.query('component[cls~=hideoncreate], #delete');
+				var c = this.query('component[cls~=hideoncreate], #delete, #clone');
 				for (var i=0, len=c.length; i<len; i++) {
 					c[i].setVisible(!isNewRecord);
 				}
-				if (isAccountOwner) {
+				if (isAccountOwner || isAccountSuperAdmin) {
 					dataview.up('panel').down('#add').setDisabled(isNewRecord);
                     this.down('#delete').setDisabled(storeEnvironments.getCount()>1?false:true);
                 }
@@ -205,13 +211,15 @@ Scalr.regPage('Scalr.ui.account2.environments.view', function (loadParams, modul
 			},
 			loadrecord: function(record) {
 				envTeamsStore.loadData(storeTeams.getRange());
-				if (record.get('id')) {
-					var platforms = record.get('platforms');
-					Ext.Array.each(form.down('#platforms').query('[xtype="button"]'), function(btn){
-						var platformEnabled = Ext.Array.contains(platforms, btn.platform);
-						this[(platformEnabled ? 'removeCls' : 'addCls')]('scalr-ui-environment-cloud-disabled');
-					});
-				}
+
+                var platforms = record.get('platforms') || [],
+                    platformCt = form.down('#platforms');
+                Ext.Array.each(platformCt.query('[xtype="button"]'), function(btn){
+                    var platformEnabled = Ext.Array.contains(platforms, btn.platform);
+                    this[(platformEnabled ? 'removeCls' : 'addCls')]('scalr-ui-environment-cloud-disabled');
+                });
+                platformCt.setDisabled(platforms.length === 0);
+
 				if (!this.isVisible()) {
 					this.setVisible(true);
 				}
@@ -220,44 +228,68 @@ Scalr.regPage('Scalr.ui.account2.environments.view', function (loadParams, modul
 		items: [{
 			xtype: 'fieldset',
             itemId: 'formtitle',
+            cls: 'x-fieldset-separator-none',
             title: '&nbsp;',
-			defaults: {
-				flex: 1,
-				maxWidth: 370
-			},
-			layout: 'hbox',
 			items: [{
-				xtype: 'textfield',
-                readOnly: !isAccountOwner,
-				name: 'name',
-				fieldLabel: 'Environment',
-                labelWidth: 80,
-				allowBlank: false
-			}, {
-				xtype: 'buttongroupfield',
-				fieldLabel: 'Scalr management',
-                readOnly: !Scalr.utils.canManageAcl(),
-				margin: '0 0 0 40',
-				labelWidth: 120,
-				name: 'status',
-				value: 'Active',
-                layout: 'hbox',
+                xtype: 'container',
                 defaults: {
-                    maxWidth: 100,
-                    flex: 1
+                    flex: 1,
+                    maxWidth: 370
                 },
-				items: [{
-					text: 'Active',
-					value: 'Active'
-				}, {
-					text: 'Suspended',
-					value: 'Inactive'
-				}]
-			}]
+                layout: 'hbox',
+                items: [{
+                    xtype: 'textfield',
+                    readOnly: !isAccountOwner && !isAccountSuperAdmin,
+                    name: 'name',
+                    fieldLabel: 'Environment',
+                    labelWidth: 80,
+                    allowBlank: false
+                }, {
+                    xtype: 'buttongroupfield',
+                    fieldLabel: 'Scalr management',
+                    readOnly: !Scalr.utils.canManageAcl(),
+                    margin: '0 0 0 40',
+                    labelWidth: 120,
+                    name: 'status',
+                    value: 'Active',
+                    layout: 'hbox',
+                    defaults: {
+                        maxWidth: 100,
+                        flex: 1
+                    },
+                    items: [{
+                        text: 'Active',
+                        value: 'Active'
+                    }, {
+                        text: 'Suspended',
+                        value: 'Inactive'
+                    }]
+                }]
+            },{
+                xtype: 'combo',
+                store: {
+                    fields: [ 'ccId', 'name' ],
+                    data: moduleParams['ccs']
+                },
+                anchor: '50%',
+                maxWidth: 370,
+                margin: '0 20 0 0',
+                editable: false,
+                autoSetSingleValue: false,
+                hidden: !moduleParams['ccs'] || (!Scalr.flags['betaMode'] && !Scalr.flags['allowManageAnalytics']),
+                allowBlank: !moduleParams['ccs'] || (!Scalr.flags['betaMode'] && !Scalr.flags['allowManageAnalytics']),
+                valueField: 'ccId',
+                displayField: 'name',
+                fieldLabel: 'Cost center',
+                labelWidth: 80,
+                name: 'ccId',
+                readOnly: !isAccountOwner && !isAccountSuperAdmin
+
+            }]
 		}, {
 			xtype: 'container',
 			itemId: 'platforms',
-			cls: 'hideoncreate x-fieldset-separator-bottom',
+			cls: 'x-fieldset-separator-top',
             maxWidth: 1100,
             layout: {
                 type: 'hbox',
@@ -303,10 +335,39 @@ Scalr.regPage('Scalr.ui.account2.environments.view', function (loadParams, modul
                         sigle: true
                     }
                 }
-            }]
+            }],
+            listeners: {
+                disable: function() {
+                    var el = this.getMaskTarget();
+                    if (this.credEl) {
+                        this.credEl.remove();
+                    }
+                    if (el) {
+                        var envId = this.up('form').getForm().getRecord().get('id');
+                        this.credEl = Ext.DomHelper.append(el.dom,
+                            '<div class="scalr-add-credentials-wrap">' +
+                                (envId ?
+                                    '<div class="scalr-add-credentials-info">' +
+                                        'Start building cloud infrastructure in this environment, by adding all of your cloud credentials.' +
+                                    '</div>' +
+                                    '<a href="#/account/environments/' + envId + '/clouds" class="scalr-add-credentials-button">Add cloud credentials</a>'
+                                :   '<div class="scalr-add-credentials-info" style="width:450px">' +
+                                        'Please save your environment to start adding cloud credentials.' +
+                                    '</div>'
+                                ) +
+                            '</div>',
+                        true);
+                    }
+                },
+                enable: function() {
+                    if (this.credEl) {
+                        this.credEl.remove();
+                    }
+                }
+            }
 		},{
 			xtype: 'fieldset',
-            cls: 'x-fieldset-separator-none',
+            cls: 'x-fieldset-separator-top',
             itemId: 'teamstitle',
 			items: [
                 Scalr.utils.canManageAcl() ? Scalr.flags['authMode'] == 'ldap' ? {
@@ -327,7 +388,7 @@ Scalr.regPage('Scalr.ui.account2.environments.view', function (loadParams, modul
 					focusedItemCls: '',
 					plugins: {
 						ptype: 'dynemptytext',
-						emptyText: 'No teams were found.'+ (!isAccountOwner ? '' : ' Click <a href="#/account/teams?teamId=new">here</a> to create new team.')
+						emptyText: 'No teams were found.'+ (!isAccountOwner && !isAccountSuperAdmin ? '' : ' Click <a href="#/account/teams?teamId=new">here</a> to create new team.')
 					}
 				},
 				columns: [
@@ -374,6 +435,7 @@ Scalr.regPage('Scalr.ui.account2.environments.view', function (loadParams, modul
 				type: 'hbox',
 				pack: 'center'
 			},
+            maxWidth: 1100,
             hidden: !Scalr.utils.canManageAcl(),
 			items: [{
 				itemId: 'save',
@@ -400,6 +462,9 @@ Scalr.regPage('Scalr.ui.account2.environments.view', function (loadParams, modul
 									form.loadRecord(record);
 									Scalr.event.fireEvent('update', '/account/environments/rename', data.env);
 								}
+
+                                if (Scalr.flags['authMode'] == 'ldap')
+                                    Scalr.data.reload(['account.environments', 'account.teams']);
 							}
 						});
 					}
@@ -412,13 +477,76 @@ Scalr.regPage('Scalr.ui.account2.environments.view', function (loadParams, modul
 					dataview.deselect(form.getForm().getRecord());
 					form.setVisible(false);
 				}
+			},{
+				itemId: 'clone',
+				xtype: 'button',
+				text: 'Clone',
+				handler: function() {
+                    var record = form.getForm().getRecord();
+                    Scalr.Confirm({
+                        msg: 'Clone "' + record.get('name') + '" environment?',
+                        ok: 'Confirm & clone',
+                        formWidth: 680,
+                        form: {
+                            xtype: 'fieldset',
+                            title: 'Clone "' + record.get('name') + '" environment',
+                            cls: 'x-fieldset-separator-none x-fieldset-no-bottom-padding',
+                            defaults: {
+                                anchor: '100%'
+                            },
+                            items: [{
+                                xtype: 'textfield',
+                                margin: '12 0 24',
+                                fieldLabel: 'New environment name',
+                                value: '',
+                                name: 'name',
+                                labelWidth: 150,
+                                allowBlank: false,
+                                anchor: '100%'
+                            },{
+                                xtype: 'displayfield',
+                                cls: 'x-form-field-info',
+                                value: ' - What will be cloned: Cloud settings, Governance, Environment level global variables, ACLs<br/>' +
+                                       ' - What will NOT be cloned: Farms, Roles, Scripts and all other user objects'
+                            }]
+                        },
+                        closeOnSuccess: true,
+                        success: function (formValues, form) {
+                            var confirmBox = this;
+                            if (form.isValid()) {
+                                Scalr.Request({
+                                    processBox: {
+                                        type: 'action',
+                                        msg: 'Cloning environment ...'
+                                    },
+                                    url: '/account/environments/xClone',
+                                    params: {
+                                        envId: record.get('id'),
+                                        name: formValues['name']
+                                    },
+                                    success: function (data) {
+                                        record = store.add(data.env)[0];
+                                        dataview.getSelectionModel().select(record);
+                                        Scalr.event.fireEvent('update', '/account/environments/create', data.env);
+
+                                        if (Scalr.flags['authMode'] == 'ldap')
+                                            Scalr.data.reload(['account.environments', 'account.teams']);
+
+                                        confirmBox.close();
+                                    }
+                                });
+                            }
+                        }
+
+                    });
+				}
 			}, {
 				itemId: 'delete',
 				xtype: 'button',
 				cls: 'x-btn-default-small-red',
 				text: 'Delete',
-				disabled: !isAccountOwner,
-                tooltip: isAccountOwner ? '' : 'Only <b>Account owner</b> can delete environments',
+				disabled: !isAccountOwner && !isAccountSuperAdmin,
+                tooltip: isAccountOwner || isAccountSuperAdmin ? '' : 'Only <b>Account owner</b> can delete environments',
 				handler: function() {
 					var record = form.getForm().getRecord();
 					Scalr.Request({
@@ -441,15 +569,14 @@ Scalr.regPage('Scalr.ui.account2.environments.view', function (loadParams, modul
 						}
 					});
 				}
-			}]
+            }]
 		}]
 	});
 
-    var publicPlatformsList = ['ec2', 'idcf', 'gce', 'rackspace', 'rackspacengus', 'rackspacenguk', 'ecs'],
-        publicPlatformsCt = form.down('#publicPlatforms'),
+    var publicPlatformsCt = form.down('#publicPlatforms'),
         privatePlatformsCt = form.down('#privatePlatforms');
 	Ext.Object.each(Scalr.platforms, function(key, value) {
-		(Ext.Array.contains(publicPlatformsList, key) ? publicPlatformsCt : privatePlatformsCt).add({
+		(value.public ? publicPlatformsCt : privatePlatformsCt).add({
             xtype: 'button',
             ui: 'simple',
 			cls: 'x-btn-simple-large',
@@ -463,7 +590,7 @@ Scalr.regPage('Scalr.ui.account2.environments.view', function (loadParams, modul
                 if (readOnlyAccess) {
                     Scalr.message.InfoTip('Insufficient permissions to configure cloud.', this.el);
                 } else {
-                    Scalr.event.fireEvent('redirect', '#/account/environments/' + form.getForm().getRecord().get('id') + '/platform/' + this.platform, true);
+                    Scalr.event.fireEvent('redirect', '#/account/environments/' + form.getForm().getRecord().get('id') + '/clouds?platform=' + this.platform, true);
                 }
 			}
 		});
@@ -479,8 +606,8 @@ Scalr.regPage('Scalr.ui.account2.environments.view', function (loadParams, modul
         publicPlatformsCt.flex = 1;
     }
 
-	
-	Scalr.event.on('update', function (type, envId, platform, enabled) {
+
+	Scalr.event.on('update', function (type, envId, envAutoEnabled, platform, enabled) {
 		if (type == '/account/environments/edit') {
 			if (form.isVisible()) {
 				if (envId == form.getForm().getRecord().get('id')) {
@@ -499,12 +626,15 @@ Scalr.regPage('Scalr.ui.account2.environments.view', function (loadParams, modul
 					platforms.push(platform);
 				}
 				record.set('platforms', platforms);
+                if (envAutoEnabled) {
+                    record.set('status', 'Active');
+                }
 				store.fireEvent('refresh');
 			}
 		}
 	}, form);
-	
-	
+
+
 	var panel = Ext.create('Ext.panel.Panel', {
 		cls: 'scalr-ui-panel-account-env',
 		layout: {
@@ -520,9 +650,9 @@ Scalr.regPage('Scalr.ui.account2.environments.view', function (loadParams, modul
 				itemId: 'environments'
 			}
 		},
-		scalrReconfigure: function(params){
-			reconfigurePage(params.envId);
-		},
+        listeners: {
+            applyparams: reconfigurePage
+        },
 		items: [
 			Ext.create('Ext.panel.Panel', {
 				cls: 'x-panel-column-left',
@@ -543,13 +673,13 @@ Scalr.regPage('Scalr.ui.account2.environments.view', function (loadParams, modul
 						filterFields: ['name'],
 						store: store
 					},{
-						xtype: 'tbfill' 
+						xtype: 'tbfill'
 					},{
 						itemId: 'add',
                         text: 'Add environment',
                         cls: 'x-btn-green-bg',
-						tooltip: isAccountOwner ? '' : 'Only <b>Account owner</b> can create environments',
-						disabled: !isAccountOwner,
+						tooltip: isAccountOwner || isAccountSuperAdmin ? '' : 'Only <b>Account owner</b> can create environments',
+						disabled: !isAccountOwner && !isAccountSuperAdmin,
                         hidden: readOnlyAccess,
 						handler: function(){
 							dataview.deselect(form.getForm().getRecord());
@@ -564,15 +694,15 @@ Scalr.regPage('Scalr.ui.account2.environments.view', function (loadParams, modul
 							Scalr.data.reload('account.*');
 						}
 					}]
-				}]				
-			})			
+				}]
+			})
 		,{
 			xtype: 'container',
             flex: 1,
             layout: 'fit',
 			minWidth: 600,
 			items: form
-		}]	
+		}]
 	});
 	return panel;
 });

@@ -2,9 +2,7 @@
 
 namespace Scalr\Service\Aws\Ec2\DataType;
 
-use Scalr\Service\Aws\Ec2Exception;
 use Scalr\Service\Aws\Ec2\AbstractEc2DataType;
-use \DateTime;
 
 /**
  * AWS Ec2 CreateVolumeRequestData
@@ -25,6 +23,8 @@ class CreateVolumeRequestData extends AbstractEc2DataType
     const VOLUME_TYPE_STANDARD = 'standard';
 
     const VOLUME_TYPE_IO1 = 'io1';
+
+    const VOLUME_TYPE_GP2 = 'gp2';
 
     /**
      * The size of the volume, in GiBs.
@@ -49,7 +49,7 @@ class CreateVolumeRequestData extends AbstractEc2DataType
 
     /**
      * The volume type
-     * standard | io1
+     * standard | io1 | gp2
      *
      * @var string
      */
@@ -66,12 +66,20 @@ class CreateVolumeRequestData extends AbstractEc2DataType
     public $iops;
 
     /**
+     * Specifies whether the volume should be encrypted.
+     *
+     * @var bool
+     */
+    public $encrypted;
+
+    /**
      * Convenient constructor
      *
      * @param   string|AvailabilityZoneData $availabilityZone The Availability Zone in which the volume was created.
      * @param   string                      $size             optional Size of the volume, in GiBs.
+     * @param   bool                        $encrypted        optional Specifies whether the volume should be encrypted.
      */
-    public function __construct($availabilityZone, $size = null)
+    public function __construct($availabilityZone, $size = null, $encrypted = null)
     {
         parent::__construct();
         if ($availabilityZone instanceof AvailabilityZoneData) {
@@ -82,5 +90,6 @@ class CreateVolumeRequestData extends AbstractEc2DataType
         $this->availabilityZone = $zoneName;
         $this->size = $size;
         $this->volumeType = self::VOLUME_TYPE_STANDARD;
+        $this->encrypted = $encrypted;
     }
 }

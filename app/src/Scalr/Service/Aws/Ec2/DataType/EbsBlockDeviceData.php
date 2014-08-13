@@ -2,9 +2,7 @@
 
 namespace Scalr\Service\Aws\Ec2\DataType;
 
-use Scalr\Service\Aws\Ec2Exception;
 use Scalr\Service\Aws\Ec2\AbstractEc2DataType;
-use \DateTime;
 
 /**
  * EbsBlockDeviceData
@@ -43,7 +41,7 @@ class EbsBlockDeviceData extends AbstractEc2DataType
 
     /**
      * The volume type.
-     * Valid values: standard | io1
+     * Valid values: standard | io1 | gp2
      * @var string
      */
     public $volumeType;
@@ -56,6 +54,13 @@ class EbsBlockDeviceData extends AbstractEc2DataType
      * @var int
      */
     public $iops;
+
+    /**
+     * Indicates whether or not the Amazon EBS volume is encrypted.
+     *
+     * @var bool
+     */
+    public $encrypted;
 
     /**
      * Constructor
@@ -72,7 +77,7 @@ class EbsBlockDeviceData extends AbstractEc2DataType
      *          The ID of the snapshot.
      *
      * @param   string     $volumeType          optional
-     *          The volume type. Valid values: standard | io1
+     *          The volume type. Valid values: standard | io1 | gp2
      *
      * @param   int        $iops                optional
      *          The number of I/O operations per second (IOPS) that the volume supports.
@@ -81,17 +86,21 @@ class EbsBlockDeviceData extends AbstractEc2DataType
      *
      * @param   bool       $deleteOnTermination optional
      *          Whether the Amazon EBS volume is deleted on instance termination
+     *
+     * @param   bool       $encrypted
+     *          Indicates whether or not the Amazon EBS volume is encrypted.
      */
     public function __construct($volumeSize = null, $snapshotId = null, $volumeType = null, $iops = null,
-                                $deleteOnTermination = null)
+                                $deleteOnTermination = null, $encrypted = null)
     {
         parent::__construct();
         $this->volumeSize = $volumeSize;
         $this->snapshotId = $snapshotId;
         $this->volumeType = $volumeType;
         $this->deleteOnTermination = $deleteOnTermination !== null ? (bool) $deleteOnTermination : null;
-        if ($this->volumeType !== 'standard') {
+        if ($this->volumeType === 'io1') {
             $this->iops = $iops;
         }
+        $this->encrypted = $encrypted;
     }
 }

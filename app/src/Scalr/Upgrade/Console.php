@@ -109,7 +109,7 @@ class Console
      */
     public function notice($fmt, $args = null)
     {
-        printf("\033[1;30m%s\033[0m\n", $this->registerMessage(func_get_args()));
+        printf("\033[0;36m%s\033[0m\n", $this->registerMessage(func_get_args()));
     }
 
     /**

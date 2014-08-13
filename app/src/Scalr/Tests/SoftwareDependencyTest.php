@@ -27,6 +27,30 @@ class SoftwareDependencyTest extends TestCase
         parent::tearDown();
     }
 
+    public function testGetScalrzrVersion()
+    {
+        $dbserver = new \DBServer('fake');
+        $rf = new \ReflectionClass('DBServer');
+        $rm = $rf->getMethod('GetVersionInfo');
+        $rm->setAccessible(true);
+
+        $ret = $rm->invoke($dbserver, '0.7.230');
+        $this->assertEquals([0, 7, 230], $ret);
+
+        $ret2 = $rm->invoke($dbserver, '0.9');
+        $this->assertEquals([0, 9, 0], $ret2);
+
+        $this->assertTrue($ret2 >= $ret);
+
+        $ret = $rm->invoke($dbserver, '2.5.b3671.2c1d4d2');
+        $this->assertEquals([2, 5, 3671], $ret);
+
+        $ret2 = $rm->invoke($dbserver, '2.5.12');
+        $this->assertEquals([2, 5, 12], $ret2);
+
+        $this->assertTrue($ret >= $ret2);
+    }
+
     /**
      * Here we should add assertions for all php dependencies which is usded by Scalr.
      *

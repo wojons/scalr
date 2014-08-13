@@ -20,7 +20,7 @@ class Ec2Test extends WebTestCase
     protected function setUp()
     {
         parent::setUp();
-        $this->skipIfPlatformDisabled(\SERVER_PLATFORMS::EC2);
+        $this->markTestSkippedIfPlatformDisabled(\SERVER_PLATFORMS::EC2);
     }
 
     /**

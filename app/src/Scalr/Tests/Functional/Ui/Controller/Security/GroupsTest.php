@@ -20,7 +20,7 @@ class GroupsTest extends WebTestCase
     protected function setUp()
     {
         parent::setUp();
-        $this->skipIfPlatformDisabled(\SERVER_PLATFORMS::EC2);
+        $this->markTestSkippedIfPlatformDisabled(\SERVER_PLATFORMS::EC2);
     }
 
     /**
@@ -35,7 +35,7 @@ class GroupsTest extends WebTestCase
         );
         $uri = '/security/groups/xListGroups/';
         $content = $this->request($uri, $pars);
-        $this->assertResponseDataHasKeys(array('id', 'name', 'description'), $content);
+        $this->assertResponseDataHasKeys(array('id', 'name', 'description', 'vpcId', 'owner'), $content);
         if (!empty($content['data'])) {
             $obj = reset($content['data']);
             //Performs edit action call

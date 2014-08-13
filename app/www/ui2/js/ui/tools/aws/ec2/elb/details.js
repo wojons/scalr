@@ -4,12 +4,20 @@ Scalr.regPage('Scalr.ui.tools.aws.ec2.elb.details', function( loadParams, module
 	var listenerDescription = elb['listenerDescriptions'];
 	var instanceString = '';
 	var availableZones = '';
+	var sgString = '';
+	var subnets = '';
 	var policyFlag = true;
 
 	if (elb['availabilityZones']) {
 		availableZones = elb['availabilityZones'].join(', ');
 	} else {
 		availableZones = "There are no availability zones registered on this load balancer";
+	}
+	
+	if (elb['subnets']) {
+		subnets = elb['subnets'].join(', ');
+	} else {
+		subnets = "There are no subnets registered on this load balancer";
 	}
 
 	if (elb['instances']) {
@@ -21,6 +29,16 @@ Scalr.regPage('Scalr.ui.tools.aws.ec2.elb.details', function( loadParams, module
 		});
 	} else {
 	    instanceString = "There are no instances registered on this load balancer";
+	}
+	
+	if (elb['securityGroups']) {
+		Ext.each(elb['securityGroups'], function(item){
+			sgString += " <a href='#/security/groups/"+item+"/edit?cloudLocation=us-east-1&platform=ec2"
+					+ "&cloudLocation="+ loadParams[ 'cloudLocation' ] +"' "
+					+ "style = 'cursor: pointer; text-decoration: none;'>" + item + "</a>";
+		});
+	} else {
+		sgString = "There are no security groups associated with this load balancer";
 	}
 
 	var policyStore = Ext.create('Ext.data.JsonStore', {
@@ -71,6 +89,9 @@ Scalr.regPage('Scalr.ui.tools.aws.ec2.elb.details', function( loadParams, module
 				fieldLabel: 'Name',
 				value: elb['loadBalancerName']
 			}, {
+				fieldLabel: 'Placement',
+				value: elb['vpcId'] ? elb['vpcId'] : 'EC2'
+			}, {
 				fieldLabel: 'DNS name',
 				value: elb['dnsName']
 			}, {
@@ -80,8 +101,15 @@ Scalr.regPage('Scalr.ui.tools.aws.ec2.elb.details', function( loadParams, module
 				fieldLabel: 'Availability Zones',
 				value: availableZones
 			},{
+				fieldLabel: 'Subnets',
+				hidden: elb['vpcId'] ? false : true,
+				value: subnets
+			},{
 				fieldLabel: 'Instances',
 				value: instanceString
+			},{
+				fieldLabel: 'Security groups',
+				value: sgString
 			}]
 		},{
 			xtype: 'fieldset',
@@ -146,10 +174,15 @@ Scalr.regPage('Scalr.ui.tools.aws.ec2.elb.details', function( loadParams, module
 					sortable: false,
 					dataIndex: 'policyNames'
 				},{
-					xtype: 'optionscolumn',
-					optionsMenu: [{
-						itemId: "option.edit", iconCls: 'x-menu-icon-edit', text:'Settings',
-						menuHandler: function (item) {
+					xtype: 'optionscolumn2',
+					menu: [{
+						itemId: "option.edit", 
+                        iconCls: 'x-menu-icon-edit',
+                        text:'Settings',
+                        getVisibility: function(data) {
+                            return data['protocol'] !== 'TCP' && data['protocol'] !== 'SSL';
+                        },
+						menuHandler: function (data) {
 							Scalr.Request({
 								confirmBox: {
 									title: 'Create new parameter group',
@@ -174,7 +207,7 @@ Scalr.regPage('Scalr.ui.tools.aws.ec2.elb.details', function( loadParams, module
 								url: '/tools/aws/ec2/elb/'+ elb['loadBalancerName'] +'/xAssociateSp/',
 								params: {
 									cloudLocation: loadParams['cloudLocation'],
-									elbPort: item.record.get('loadBalancerPort')
+									elbPort: data['loadBalancerPort']
 								},
 								success: function (data, response, options){
 									var rowIndex = listenerStore.find('loadBalancerPort', options.params.elbPort);
@@ -183,7 +216,9 @@ Scalr.regPage('Scalr.ui.tools.aws.ec2.elb.details', function( loadParams, module
 							});
 						}
 					},{
-						itemId: "option.delete", iconCls: 'x-menu-icon-delete', text:'Delete',
+						itemId: "option.delete", 
+                        iconCls: 'x-menu-icon-delete',
+                        text:'Delete',
 						request: {
 							confirmBox: {
 								msg: 'Remove Listener?',
@@ -193,20 +228,18 @@ Scalr.regPage('Scalr.ui.tools.aws.ec2.elb.details', function( loadParams, module
 								type: 'delete',
 								msg: 'Removing Listener ...'
 							},
-							dataHandler: function (record) {
-								this.currentRecord = record;
-								var data = {
-									lbPort: record.get('loadBalancerPort'),
+							dataHandler: function (data) {
+								this.url = '/tools/aws/ec2/elb/'+ elb['loadBalancerName'] +'/xDeleteListeners/';
+								return {
+									lbPort: data['loadBalancerPort'],
 									cloudLocation: loadParams['cloudLocation']
 								};
-								this.url = '/tools/aws/ec2/elb/'+ elb['loadBalancerName'] +'/xDeleteListeners/';
-								return data;
 							},
 							success: function (data, response, options) {
-								listenerStore.remove(options.currentRecord);
+								listenerStore.remove(panel.down('#listenerGrid').getSelectionModel().getLastFocused());
 								if (! policyFlag) {
 									var flag = true;
-									for(i = 0; i < listenerStore.data.length; i++){
+									for(var i = 0; i < listenerStore.data.length; i++){
 										if(listenerStore.getAt(i).get('protocol') == "HTTP" || listenerStore.getAt(i).get('protocol') == "HTTPS") {
 											flag = false;
 											break;
@@ -219,17 +252,7 @@ Scalr.regPage('Scalr.ui.tools.aws.ec2.elb.details', function( loadParams, module
 								}
 							}
 						}
-					}],
-					getOptionVisibility: function (item, record) {
-						if (item.itemId == 'option.delete')
-							return true;
-						if (item.itemId == 'option.edit') {
-							if(record.get('protocol') == 'TCP' || record.get('protocol') == 'SSL'){
-								return false;
-							}
-							else return true;
-						}
-					}
+					}]
 				}],
 				dockedItems: [{
 					xtype: 'toolbar',
@@ -371,9 +394,11 @@ Scalr.regPage('Scalr.ui.tools.aws.ec2.elb.details', function( loadParams, module
 					sortable: false,
 					dataIndex: 'cookieSettings'
 				},{
-					xtype: 'optionscolumn',
-					optionsMenu: [{
-						itemId: "option.delete", iconCls: 'x-menu-icon-delete', text:'Delete',
+					xtype: 'optionscolumn2',
+					menu: [{
+						itemId: "option.delete", 
+                        iconCls: 'x-menu-icon-delete',
+                        text:'Delete',
 						request: {
 							confirmBox: {
 								msg: 'Remove Stickiness Policy?',
@@ -383,19 +408,17 @@ Scalr.regPage('Scalr.ui.tools.aws.ec2.elb.details', function( loadParams, module
 								type: 'delete',
 								msg: 'Removing Stickiness Policy ...'
 							},
-							dataHandler: function (record) {
-								this.currentRecord = record;
-								var data = {
-									policyName: record.get('policyName'),
+							dataHandler: function (data) {
+								this.url = '/tools/aws/ec2/elb/'+ elb['loadBalancerName'] +'/xDeleteSp/';
+								return {
+									policyName: data['policyName'],
 									cloudLocation: loadParams['cloudLocation'],
 									elbName: elb['loadBalancerName']
 								};
-								this.url = '/tools/aws/ec2/elb/'+ elb['loadBalancerName'] +'/xDeleteSp/';
-								return data;
 							},
 							success: function (data, response, options ) {
-								policyStore.remove(options.currentRecord);
-								comboStore.remove(comboStore.getAt(comboStore.find('policyName', options.currentRecord.get('policyName'))));
+                                policyStore.remove(panel.down('#policyGrid').getSelectionModel().getLastFocused());
+								comboStore.remove(comboStore.getAt(comboStore.find('policyName', options.params['policyName'])));
 							}
 						}
 					}]

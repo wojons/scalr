@@ -31,3 +31,57 @@
     padding-right: 22px;
     padding-bottom: 10px;
 }
+
+.scalr-ui-panel-account-env .scalr-add-credentials-wrap {
+    position: absolute;
+    z-index: 101;
+    width: 100%;
+    height: 100%;
+    max-width: 1100px;
+    text-align: center;
+    top: 0;
+    left: 0;
+}
+
+.scalr-ui-panel-account-env .scalr-add-credentials-info {
+    background: #fefde0 url(/ui2/js/extjs-4.2/theme/images/form/info.png) no-repeat 21px 17px;
+    border-radius: 3px;
+    color: #333;
+    padding: 17px 0 17px 50px;
+    font: 13px/20px arial,helvetica,tahoma,sans-serif;
+    width: 610px;
+    margin: 20px auto 0;
+    text-align: left;
+    box-shadow: 0 1px rgba(255,255,255,0.5) inset,0 1px rgba(65,92,120,0.2),0 1px 1px rgba(65,92,120,0.3);
+    -webkit-box-shadow: 0 1px rgba(255,255,255,0.5) inset,0 1px 1px rgba(65,92,120,0.4),0 1px 2px rgba(65,92,120,0.2);
+}
+
+.scalr-ui-panel-account-env .scalr-add-credentials-button {
+    display: block;
+    margin: 24px auto 0;
+    background: #92be81 url(/ui2/images/ui/account/key.png) no-repeat 50%  74%;
+    border-radius: 3px;
+    font: 18px/20px arial,helvetica,tahoma,sans-serif;
+    color: #fff;
+    padding: 12px 0 48px;
+    width: 240px;
+    box-shadow: 0 1px rgba(255,255,255,0.5) inset,0 1px rgba(65,92,120,0.2),0 1px 1px rgba(65,92,120,0.3);
+    -webkit-box-shadow: 0 1px rgba(255,255,255,0.5) inset,0 1px 1px rgba(65,92,120,0.4),0 1px 2px rgba(65,92,120,0.2);
+    cursor: pointer;
+    text-decoration: none;
+}
+
+.scalr-ui-panel-account-env .scalr-add-credentials-button:hover {
+    background-color: #a2c893;
+}
+
+@media only screen and (-webkit-min-device-pixel-ratio: 1.5),
+    only screen and (-o-min-device-pixel-ratio: 3/2),
+    only screen and (min--moz-device-pixel-ratio: 1.5),
+    only screen and (min-device-pixel-ratio: 1.5) {
+
+    .scalr-ui-panel-account-env .scalr-add-credentials-button {
+        background-size: 24px 24px;
+        background-image: url(/ui2/images/ui/account/key-retina.png);
+    }
+}

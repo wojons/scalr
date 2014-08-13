@@ -3,6 +3,14 @@
 use Scalr\Service\OpenStack\OpenStack;
 use Scalr\Service\OpenStack\OpenStackConfig;
 use Scalr\Acl\Acl;
+use Scalr\Modules\Platforms\Cloudstack\CloudstackPlatformModule;
+use Scalr\Modules\Platforms\Ec2\Ec2PlatformModule;
+use Scalr\Modules\Platforms\Eucalyptus\EucalyptusPlatformModule;
+use Scalr\Modules\Platforms\GoogleCE\GoogleCEPlatformModule;
+use Scalr\Modules\Platforms\Nimbula\NimbulaPlatformModule;
+use Scalr\Modules\Platforms\Openstack\OpenstackPlatformModule;
+use Scalr\Modules\Platforms\Rackspace\RackspacePlatformModule;
+use Scalr\Service\CloudStack\CloudStack;
 
 class Scalr_UI_Controller_Environments_Platform extends Scalr_UI_Controller
 {
@@ -23,7 +31,7 @@ class Scalr_UI_Controller_Environments_Platform extends Scalr_UI_Controller
         $this->user->getPermissions()->validate($this->env);
 
         if (!($this->user->isAccountOwner() || $this->user->isTeamOwnerInEnvironment($this->env->id) ||
-            $this->request->isAllowed(Acl::RESOURCE_ADMINISTRATION_ENV_CLOUDS)))
+            $this->request->isAllowed(Acl::RESOURCE_ENVADMINISTRATION_ENV_CLOUDS)))
             throw new Scalr_Exception_InsufficientPermissions();
     }
 
@@ -99,36 +107,36 @@ class Scalr_UI_Controller_Environments_Platform extends Scalr_UI_Controller
         if ($this->getParam('gce_is_enabled')) {
             $enabled = true;
 
-            $pars[Modules_Platforms_GoogleCE::CLIENT_ID] = trim($this->checkVar(Modules_Platforms_GoogleCE::CLIENT_ID, 'string', "GCE Cient ID required"));
-            $pars[Modules_Platforms_GoogleCE::SERVICE_ACCOUNT_NAME] = trim($this->checkVar(Modules_Platforms_GoogleCE::SERVICE_ACCOUNT_NAME, 'string', "GCE email (service account name) required"));
-            $pars[Modules_Platforms_GoogleCE::PROJECT_ID] = trim($this->checkVar(Modules_Platforms_GoogleCE::PROJECT_ID, 'password', "GCE Project ID required"));
-            $pars[Modules_Platforms_GoogleCE::KEY] = base64_encode($this->checkVar(Modules_Platforms_GoogleCE::KEY, 'file', "GCE Private Key required", null, true));
+            $pars[GoogleCEPlatformModule::CLIENT_ID] = trim($this->checkVar(GoogleCEPlatformModule::CLIENT_ID, 'string', "GCE Cient ID required"));
+            $pars[GoogleCEPlatformModule::SERVICE_ACCOUNT_NAME] = trim($this->checkVar(GoogleCEPlatformModule::SERVICE_ACCOUNT_NAME, 'string', "GCE email (service account name) required"));
+            $pars[GoogleCEPlatformModule::PROJECT_ID] = trim($this->checkVar(GoogleCEPlatformModule::PROJECT_ID, 'password', "GCE Project ID required"));
+            $pars[GoogleCEPlatformModule::KEY] = base64_encode($this->checkVar(GoogleCEPlatformModule::KEY, 'file', "GCE Private Key required", null, true));
 
             if (! count($this->checkVarError)) {
                 if (
-                    $pars[Modules_Platforms_GoogleCE::CLIENT_ID] != $this->env->getPlatformConfigValue(Modules_Platforms_GoogleCE::CLIENT_ID) or
-                    $pars[Modules_Platforms_GoogleCE::SERVICE_ACCOUNT_NAME] != $this->env->getPlatformConfigValue(Modules_Platforms_GoogleCE::SERVICE_ACCOUNT_NAME) or
-                    $pars[Modules_Platforms_GoogleCE::PROJECT_ID] != $this->env->getPlatformConfigValue(Modules_Platforms_GoogleCE::PROJECT_ID) or
-                    $pars[Modules_Platforms_GoogleCE::KEY] != $this->env->getPlatformConfigValue(Modules_Platforms_GoogleCE::KEY)
+                    $pars[GoogleCEPlatformModule::CLIENT_ID] != $this->env->getPlatformConfigValue(GoogleCEPlatformModule::CLIENT_ID) or
+                    $pars[GoogleCEPlatformModule::SERVICE_ACCOUNT_NAME] != $this->env->getPlatformConfigValue(GoogleCEPlatformModule::SERVICE_ACCOUNT_NAME) or
+                    $pars[GoogleCEPlatformModule::PROJECT_ID] != $this->env->getPlatformConfigValue(GoogleCEPlatformModule::PROJECT_ID) or
+                    $pars[GoogleCEPlatformModule::KEY] != $this->env->getPlatformConfigValue(GoogleCEPlatformModule::KEY)
                 ) {
                     try {
                         $client = new Google_Client();
                         $client->setApplicationName("Scalr GCE");
                         $client->setScopes(array('https://www.googleapis.com/auth/compute'));
 
-                        $key = base64_decode($pars[Modules_Platforms_GoogleCE::KEY]);
-                        $client->setAssertionCredentials(new Google_AssertionCredentials(
-                            $pars[Modules_Platforms_GoogleCE::SERVICE_ACCOUNT_NAME],
+                        $key = base64_decode($pars[GoogleCEPlatformModule::KEY]);
+                        $client->setAssertionCredentials(new Google_Auth_AssertionCredentials(
+                            $pars[GoogleCEPlatformModule::SERVICE_ACCOUNT_NAME],
                             array('https://www.googleapis.com/auth/compute'),
                             $key
                         ));
 
-                        $client->setUseObjects(true);
-                        $client->setClientId($pars[Modules_Platforms_GoogleCE::CLIENT_ID]);
+                        //$client->setUseObjects(true);
+                        $client->setClientId($pars[GoogleCEPlatformModule::CLIENT_ID]);
 
-                        $gce = new Google_ComputeService($client);
+                        $gce = new Google_Service_Compute($client);
 
-                        $gce->zones->listZones($pars[Modules_Platforms_GoogleCE::PROJECT_ID]);
+                        $gce->zones->listZones($pars[GoogleCEPlatformModule::PROJECT_ID]);
                     } catch (Exception $e) {
                         throw new Exception(_("Provided GCE credentials are incorrect: ({$e->getMessage()})"));
                     }
@@ -167,43 +175,43 @@ class Scalr_UI_Controller_Environments_Platform extends Scalr_UI_Controller
         if ($this->getParam('ec2_is_enabled')) {
             $enabled = true;
 
-            $pars[Modules_Platforms_Ec2::ACCOUNT_ID] = $this->checkVar(Modules_Platforms_Ec2::ACCOUNT_ID, 'string', "AWS Account Number required");
+            $pars[Ec2PlatformModule::ACCOUNT_ID] = $this->checkVar(Ec2PlatformModule::ACCOUNT_ID, 'string', "AWS Account Number required");
 
-            if (! is_numeric($pars[Modules_Platforms_Ec2::ACCOUNT_ID]) || strlen($pars[Modules_Platforms_Ec2::ACCOUNT_ID]) != 12)
-                //$err[Modules_Platforms_Ec2::ACCOUNT_ID] = _("AWS numeric account ID required (See <a href='/faq.html'>FAQ</a> for info on where to get it).");
-                $this->checkVarError[Modules_Platforms_Ec2::ACCOUNT_ID] = _("AWS Account Number should be numeric");
+            if (! is_numeric($pars[Ec2PlatformModule::ACCOUNT_ID]) || strlen($pars[Ec2PlatformModule::ACCOUNT_ID]) != 12)
+                //$err[Ec2PlatformModule::ACCOUNT_ID] = _("AWS numeric account ID required (See <a href='/faq.html'>FAQ</a> for info on where to get it).");
+                $this->checkVarError[Ec2PlatformModule::ACCOUNT_ID] = _("AWS Account Number should be numeric");
             else
-                $pars[Modules_Platforms_Ec2::ACCOUNT_ID] = preg_replace("/[^0-9]+/", "", $pars[Modules_Platforms_Ec2::ACCOUNT_ID]);
+                $pars[Ec2PlatformModule::ACCOUNT_ID] = preg_replace("/[^0-9]+/", "", $pars[Ec2PlatformModule::ACCOUNT_ID]);
 
-            $pars[Modules_Platforms_Ec2::ACCESS_KEY] = $this->checkVar(Modules_Platforms_Ec2::ACCESS_KEY, 'string', "AWS Access Key required");
-            $pars[Modules_Platforms_Ec2::SECRET_KEY] = $this->checkVar(Modules_Platforms_Ec2::SECRET_KEY, 'password', "AWS Access Key required");
-            $pars[Modules_Platforms_Ec2::PRIVATE_KEY] = trim($this->checkVar(Modules_Platforms_Ec2::PRIVATE_KEY, 'file', "AWS x.509 Private Key required"));
-            $pars[Modules_Platforms_Ec2::CERTIFICATE] = trim($this->checkVar(Modules_Platforms_Ec2::CERTIFICATE, 'file', "AWS x.509 Certificate required"));
+            $pars[Ec2PlatformModule::ACCESS_KEY] = $this->checkVar(Ec2PlatformModule::ACCESS_KEY, 'string', "AWS Access Key required");
+            $pars[Ec2PlatformModule::SECRET_KEY] = $this->checkVar(Ec2PlatformModule::SECRET_KEY, 'password', "AWS Access Key required");
+            $pars[Ec2PlatformModule::PRIVATE_KEY] = trim($this->checkVar(Ec2PlatformModule::PRIVATE_KEY, 'file', "AWS x.509 Private Key required"));
+            $pars[Ec2PlatformModule::CERTIFICATE] = trim($this->checkVar(Ec2PlatformModule::CERTIFICATE, 'file', "AWS x.509 Certificate required"));
 
             // user can mull certificate and private key, check it
-            if (strpos($pars[Modules_Platforms_Ec2::PRIVATE_KEY], 'BEGIN CERTIFICATE') !== FALSE &&
-                strpos($pars[Modules_Platforms_Ec2::CERTIFICATE], 'BEGIN PRIVATE KEY') !== FALSE) {
+            if (strpos($pars[Ec2PlatformModule::PRIVATE_KEY], 'BEGIN CERTIFICATE') !== FALSE &&
+                strpos($pars[Ec2PlatformModule::CERTIFICATE], 'BEGIN PRIVATE KEY') !== FALSE) {
                 // swap it
-                $key = $pars[Modules_Platforms_Ec2::PRIVATE_KEY];
-                $pars[Modules_Platforms_Ec2::PRIVATE_KEY] = $pars[Modules_Platforms_Ec2::CERTIFICATE];
-                $pars[Modules_Platforms_Ec2::CERTIFICATE] = $key;
+                $key = $pars[Ec2PlatformModule::PRIVATE_KEY];
+                $pars[Ec2PlatformModule::PRIVATE_KEY] = $pars[Ec2PlatformModule::CERTIFICATE];
+                $pars[Ec2PlatformModule::CERTIFICATE] = $key;
             }
 
             if (!count($this->checkVarError)) {
                 if (
-                    $pars[Modules_Platforms_Ec2::ACCOUNT_ID] != $this->env->getPlatformConfigValue(Modules_Platforms_Ec2::ACCOUNT_ID) or
-                    $pars[Modules_Platforms_Ec2::ACCESS_KEY] != $this->env->getPlatformConfigValue(Modules_Platforms_Ec2::ACCESS_KEY) or
-                    $pars[Modules_Platforms_Ec2::SECRET_KEY] != $this->env->getPlatformConfigValue(Modules_Platforms_Ec2::SECRET_KEY) or
-                    $pars[Modules_Platforms_Ec2::PRIVATE_KEY] != $this->env->getPlatformConfigValue(Modules_Platforms_Ec2::PRIVATE_KEY) or
-                    $pars[Modules_Platforms_Ec2::CERTIFICATE] != $this->env->getPlatformConfigValue(Modules_Platforms_Ec2::CERTIFICATE)
+                    $pars[Ec2PlatformModule::ACCOUNT_ID] != $this->env->getPlatformConfigValue(Ec2PlatformModule::ACCOUNT_ID) or
+                    $pars[Ec2PlatformModule::ACCESS_KEY] != $this->env->getPlatformConfigValue(Ec2PlatformModule::ACCESS_KEY) or
+                    $pars[Ec2PlatformModule::SECRET_KEY] != $this->env->getPlatformConfigValue(Ec2PlatformModule::SECRET_KEY) or
+                    $pars[Ec2PlatformModule::PRIVATE_KEY] != $this->env->getPlatformConfigValue(Ec2PlatformModule::PRIVATE_KEY) or
+                    $pars[Ec2PlatformModule::CERTIFICATE] != $this->env->getPlatformConfigValue(Ec2PlatformModule::CERTIFICATE)
                 ) {
                     try {
                         $aws = $this->env->aws(
                             \Scalr\Service\Aws::REGION_US_EAST_1,
-                            $pars[Modules_Platforms_Ec2::ACCESS_KEY],
-                            $pars[Modules_Platforms_Ec2::SECRET_KEY],
-                            $pars[Modules_Platforms_Ec2::CERTIFICATE],
-                            $pars[Modules_Platforms_Ec2::PRIVATE_KEY]
+                            $pars[Ec2PlatformModule::ACCESS_KEY],
+                            $pars[Ec2PlatformModule::SECRET_KEY],
+                            $pars[Ec2PlatformModule::CERTIFICATE],
+                            $pars[Ec2PlatformModule::PRIVATE_KEY]
                         );
                         $aws->validateCertificateAndPrivateKey();
                     } catch (Exception $e) {
@@ -245,20 +253,8 @@ class Scalr_UI_Controller_Environments_Platform extends Scalr_UI_Controller
         }
 
         $demoFarm = false;
-        try {
-            if ($this->user->getAccount()->getSetting(Scalr_Account::SETTING_IS_TRIAL) == 1) {
-                if ($this->db->GetOne("SELECT COUNT(*) FROM farms WHERE clientid = ?", array($this->user->getAccountId())) == 0) {
-                    //Create demo farm
-                    try {
-                        $dbFarm = DBFarm::LoadByID(9670); // LAMP-PROTOTYPE
-                        $dbFarm->cloneFarm('My First LAMP Farm', $this->user, $this->getEnvironmentId());
-                        $demoFarm = true;
-                    } catch (Exception $e) {
-                        throw new Exception("Demo farm creation failed: {$e->getMessage()}");
-                    }
-                }
-            }
-        } catch (Exception $e) {}
+
+        
 
         $this->response->success('Environment saved');
         $this->response->data(array('enabled' => $enabled, 'demoFarm' => $demoFarm));
@@ -274,14 +270,14 @@ class Scalr_UI_Controller_Environments_Platform extends Scalr_UI_Controller
             if ($this->getParam("rackspace_is_enabled_{$location}")) {
                 $enabled = true;
 
-                $pars[$location][Modules_Platforms_Rackspace::USERNAME] = $this->checkVar(Modules_Platforms_Rackspace::USERNAME, 'string', "Username required", $location);
-                $pars[$location][Modules_Platforms_Rackspace::API_KEY] = $this->checkVar(Modules_Platforms_Rackspace::API_KEY, 'string', "API Key required", $location);
-                $pars[$location][Modules_Platforms_Rackspace::IS_MANAGED] = $this->checkVar(Modules_Platforms_Rackspace::IS_MANAGED, 'bool', "", $location);
+                $pars[$location][RackspacePlatformModule::USERNAME] = $this->checkVar(RackspacePlatformModule::USERNAME, 'string', "Username required", $location);
+                $pars[$location][RackspacePlatformModule::API_KEY] = $this->checkVar(RackspacePlatformModule::API_KEY, 'string', "API Key required", $location);
+                $pars[$location][RackspacePlatformModule::IS_MANAGED] = $this->checkVar(RackspacePlatformModule::IS_MANAGED, 'bool', "", $location);
             }
             else {
-                $pars[$location][Modules_Platforms_Rackspace::USERNAME] = false;
-                $pars[$location][Modules_Platforms_Rackspace::API_KEY] = false;
-                $pars[$location][Modules_Platforms_Rackspace::IS_MANAGED] = false;
+                $pars[$location][RackspacePlatformModule::USERNAME] = false;
+                $pars[$location][RackspacePlatformModule::API_KEY] = false;
+                $pars[$location][RackspacePlatformModule::IS_MANAGED] = false;
             }
         }
 
@@ -317,9 +313,9 @@ class Scalr_UI_Controller_Environments_Platform extends Scalr_UI_Controller
         if ($this->getParam('nimbula_is_enabled')) {
             $enabled = true;
 
-            $pars[Modules_Platforms_Nimbula::API_URL] = $this->checkVar(Modules_Platforms_Nimbula::API_URL, 'string', 'API URL required');
-            $pars[Modules_Platforms_Nimbula::USERNAME] = $this->checkVar(Modules_Platforms_Nimbula::USERNAME, 'string', 'Username required');
-            $pars[Modules_Platforms_Nimbula::PASSWORD] = $this->checkVar(Modules_Platforms_Nimbula::PASSWORD, 'string', 'Password required');
+            $pars[NimbulaPlatformModule::API_URL] = $this->checkVar(NimbulaPlatformModule::API_URL, 'string', 'API URL required');
+            $pars[NimbulaPlatformModule::USERNAME] = $this->checkVar(NimbulaPlatformModule::USERNAME, 'string', 'Username required');
+            $pars[NimbulaPlatformModule::PASSWORD] = $this->checkVar(NimbulaPlatformModule::PASSWORD, 'string', 'Password required');
         }
 
         if (count($this->checkVarError)) {
@@ -349,11 +345,12 @@ class Scalr_UI_Controller_Environments_Platform extends Scalr_UI_Controller
     private function getOpenStackDetails($platform)
     {
         $params["{$platform}.is_enabled"] = true;
-        $params[Modules_Platforms_Openstack::KEYSTONE_URL] = $this->env->getPlatformConfigValue("{$platform}." . Modules_Platforms_Openstack::KEYSTONE_URL);
-        $params[Modules_Platforms_Openstack::USERNAME] = $this->env->getPlatformConfigValue("{$platform}." . Modules_Platforms_Openstack::USERNAME);
-        $params[Modules_Platforms_Openstack::PASSWORD] = $this->env->getPlatformConfigValue("{$platform}." . Modules_Platforms_Openstack::PASSWORD);
-        $params[Modules_Platforms_Openstack::API_KEY] = $this->env->getPlatformConfigValue("{$platform}." . Modules_Platforms_Openstack::API_KEY);
-        $params[Modules_Platforms_Openstack::TENANT_NAME] = $this->env->getPlatformConfigValue("{$platform}." . Modules_Platforms_Openstack::TENANT_NAME);
+        $params[OpenstackPlatformModule::KEYSTONE_URL] = $this->env->getPlatformConfigValue("{$platform}." . OpenstackPlatformModule::KEYSTONE_URL);
+        $params[OpenstackPlatformModule::USERNAME] = $this->env->getPlatformConfigValue("{$platform}." . OpenstackPlatformModule::USERNAME);
+        $params[OpenstackPlatformModule::PASSWORD] = $this->env->getPlatformConfigValue("{$platform}." . OpenstackPlatformModule::PASSWORD);
+        $params[OpenstackPlatformModule::API_KEY] = $this->env->getPlatformConfigValue("{$platform}." . OpenstackPlatformModule::API_KEY);
+        $params[OpenstackPlatformModule::TENANT_NAME] = $this->env->getPlatformConfigValue("{$platform}." . OpenstackPlatformModule::TENANT_NAME);
+        $params[OpenstackPlatformModule::SSL_VERIFYPEER] = $this->env->getPlatformConfigValue("{$platform}." . OpenstackPlatformModule::SSL_VERIFYPEER);
 
         return $params;
     }
@@ -366,7 +363,7 @@ class Scalr_UI_Controller_Environments_Platform extends Scalr_UI_Controller
      */
     private function getOpenStackOption($name)
     {
-        return $this->getParam('platform') . "." . constant("Modules_Platforms_Openstack::" . $name);
+        return $this->getParam('platform') . "." . constant("Scalr\\Modules\\Platforms\\Openstack\\OpenstackPlatformModule::" . $name);
     }
 
     public function xSaveOpenstackAction()
@@ -378,11 +375,12 @@ class Scalr_UI_Controller_Environments_Platform extends Scalr_UI_Controller
         if ($this->getParam("{$platform}_is_enabled")) {
             $enabled = true;
 
-            $pars[$this->getOpenStackOption('KEYSTONE_URL')] = $this->checkVar(Modules_Platforms_Openstack::KEYSTONE_URL, 'string', 'KeyStone URL required');
-            $pars[$this->getOpenStackOption('USERNAME')] = $this->checkVar(Modules_Platforms_Openstack::USERNAME, 'string', 'Username required');
-            $pars[$this->getOpenStackOption('PASSWORD')] = $this->checkVar(Modules_Platforms_Openstack::PASSWORD, 'string');
-            $pars[$this->getOpenStackOption('API_KEY')] = $this->checkVar(Modules_Platforms_Openstack::API_KEY, 'string');
-            $pars[$this->getOpenStackOption('TENANT_NAME')] = $this->checkVar(Modules_Platforms_Openstack::TENANT_NAME, 'string');
+            $pars[$this->getOpenStackOption('KEYSTONE_URL')] = $this->checkVar(OpenstackPlatformModule::KEYSTONE_URL, 'string', 'KeyStone URL required');
+            $pars[$this->getOpenStackOption('USERNAME')] = $this->checkVar(OpenstackPlatformModule::USERNAME, 'string', 'Username required');
+            $pars[$this->getOpenStackOption('PASSWORD')] = $this->checkVar(OpenstackPlatformModule::PASSWORD, 'string');
+            $pars[$this->getOpenStackOption('API_KEY')] = $this->checkVar(OpenstackPlatformModule::API_KEY, 'string');
+            $pars[$this->getOpenStackOption('TENANT_NAME')] = $this->checkVar(OpenstackPlatformModule::TENANT_NAME, 'string');
+            $pars[$this->getOpenStackOption('SSL_VERIFYPEER')] = $this->checkVar(OpenstackPlatformModule::SSL_VERIFYPEER, 'string');
             if (empty($this->checkVarError) &&
                 empty($pars[$this->getOpenStackOption('PASSWORD')]) &&
                 empty($pars[$this->getOpenStackOption('API_KEY')])) {
@@ -396,7 +394,7 @@ class Scalr_UI_Controller_Environments_Platform extends Scalr_UI_Controller
         } else {
 
             $this->env->setPlatformConfig(array(
-                "{$platform}." . Modules_Platforms_Openstack::AUTH_TOKEN => false
+                "{$platform}." . OpenstackPlatformModule::AUTH_TOKEN => false
             ));
 
             if ($this->getParam($platform . "_is_enabled")) {
@@ -439,9 +437,9 @@ class Scalr_UI_Controller_Environments_Platform extends Scalr_UI_Controller
     private function getCloudStackDetails($platform)
     {
         $params["{$platform}.is_enabled"] = true;
-        $params[Modules_Platforms_Cloudstack::API_URL] = $this->env->getPlatformConfigValue("{$platform}." . Modules_Platforms_Cloudstack::API_URL);
-        $params[Modules_Platforms_Cloudstack::API_KEY] = $this->env->getPlatformConfigValue("{$platform}." . Modules_Platforms_Cloudstack::API_KEY);
-        $params[Modules_Platforms_Cloudstack::SECRET_KEY] = $this->env->getPlatformConfigValue("{$platform}." . Modules_Platforms_Cloudstack::SECRET_KEY);
+        $params[CloudstackPlatformModule::API_URL] = $this->env->getPlatformConfigValue("{$platform}." . CloudstackPlatformModule::API_URL);
+        $params[CloudstackPlatformModule::API_KEY] = $this->env->getPlatformConfigValue("{$platform}." . CloudstackPlatformModule::API_KEY);
+        $params[CloudstackPlatformModule::SECRET_KEY] = $this->env->getPlatformConfigValue("{$platform}." . CloudstackPlatformModule::SECRET_KEY);
 
         return $params;
     }
@@ -455,9 +453,9 @@ class Scalr_UI_Controller_Environments_Platform extends Scalr_UI_Controller
         if ($this->getParam("{$platform}_is_enabled")) {
             $enabled = true;
 
-            $pars["{$platform}." . Modules_Platforms_Cloudstack::API_URL] = $this->checkVar(Modules_Platforms_Cloudstack::API_URL, 'string', 'API URL required');
-            $pars["{$platform}." . Modules_Platforms_Cloudstack::API_KEY] = $this->checkVar(Modules_Platforms_Cloudstack::API_KEY, 'string', 'API key required');
-            $pars["{$platform}." . Modules_Platforms_Cloudstack::SECRET_KEY] = $this->checkVar(Modules_Platforms_Cloudstack::SECRET_KEY, 'string', 'Secret key required');
+            $pars["{$platform}." . CloudstackPlatformModule::API_URL] = $this->checkVar(CloudstackPlatformModule::API_URL, 'string', 'API URL required');
+            $pars["{$platform}." . CloudstackPlatformModule::API_KEY] = $this->checkVar(CloudstackPlatformModule::API_KEY, 'string', 'API key required');
+            $pars["{$platform}." . CloudstackPlatformModule::SECRET_KEY] = $this->checkVar(CloudstackPlatformModule::SECRET_KEY, 'string', 'Secret key required');
         }
 
         if (count($this->checkVarError)) {
@@ -466,25 +464,27 @@ class Scalr_UI_Controller_Environments_Platform extends Scalr_UI_Controller
         } else {
 
             if ($this->getParam("{$platform}_is_enabled")) {
-                $cs = Scalr_Service_Cloud_Cloudstack::newCloudstack(
-                    $pars["{$platform}." . Modules_Platforms_Cloudstack::API_URL],
-                    $pars["{$platform}." . Modules_Platforms_Cloudstack::API_KEY],
-                    $pars["{$platform}." . Modules_Platforms_Cloudstack::SECRET_KEY],
-                    $platform
-                );
+                $cs = new CloudStack(
+                        $pars["{$platform}." . CloudstackPlatformModule::API_URL],
+                        $pars["{$platform}." . CloudstackPlatformModule::API_KEY],
+                        $pars["{$platform}." . CloudstackPlatformModule::SECRET_KEY],
+                        $platform
+                    );
+
                 $accounts = $cs->listAccounts();
                 foreach ($accounts as $account) {
                     foreach ($account->user as $user) {
-                        if ($user->apikey == $pars["{$platform}." . Modules_Platforms_Cloudstack::API_KEY]) {
-                            $dPars["{$platform}." . Modules_Platforms_Cloudstack::ACCOUNT_NAME] = $user->account;
-                            $dPars["{$platform}." . Modules_Platforms_Cloudstack::DOMAIN_NAME] = $user->domain;
-                            $dPars["{$platform}." . Modules_Platforms_Cloudstack::DOMAIN_ID] = $user->domainid;
+                        if ($user->apikey == $pars["{$platform}." . CloudstackPlatformModule::API_KEY]) {
+                            $dPars["{$platform}." . CloudstackPlatformModule::ACCOUNT_NAME] = $user->account;
+                            $dPars["{$platform}." . CloudstackPlatformModule::DOMAIN_NAME] = $user->domain;
+                            $dPars["{$platform}." . CloudstackPlatformModule::DOMAIN_ID] = $user->domainid;
                         }
                     }
                 }
 
-                if (!$dPars["{$platform}." . Modules_Platforms_Cloudstack::ACCOUNT_NAME])
+                if (!$dPars["{$platform}." . CloudstackPlatformModule::ACCOUNT_NAME]) {
                     throw new Exception("Cannot determine account name for provided keys");
+                }
             }
 
             $this->db->BeginTrans();
@@ -496,16 +496,16 @@ class Scalr_UI_Controller_Environments_Platform extends Scalr_UI_Controller
                     $this->env->setPlatformConfig($dPars, false);
                 } else {
                     $this->env->setPlatformConfig(array(
-                        "{$platform}." . Modules_Platforms_Cloudstack::ACCOUNT_NAME => false,
-                        "{$platform}." . Modules_Platforms_Cloudstack::API_KEY => false,
-                        "{$platform}." . Modules_Platforms_Cloudstack::API_URL => false,
-                        "{$platform}." . Modules_Platforms_Cloudstack::DOMAIN_ID => false,
-                        "{$platform}." . Modules_Platforms_Cloudstack::DOMAIN_NAME => false,
-                        "{$platform}." . Modules_Platforms_Cloudstack::SECRET_KEY => false,
-                        "{$platform}." . Modules_Platforms_Cloudstack::SHARED_IP => false,
-                        "{$platform}." . Modules_Platforms_Cloudstack::SHARED_IP_ID => false,
-                        "{$platform}." . Modules_Platforms_Cloudstack::SHARED_IP_INFO => false,
-                        "{$platform}." . Modules_Platforms_Cloudstack::SZR_PORT_COUNTER => false
+                        "{$platform}." . CloudstackPlatformModule::ACCOUNT_NAME => false,
+                        "{$platform}." . CloudstackPlatformModule::API_KEY => false,
+                        "{$platform}." . CloudstackPlatformModule::API_URL => false,
+                        "{$platform}." . CloudstackPlatformModule::DOMAIN_ID => false,
+                        "{$platform}." . CloudstackPlatformModule::DOMAIN_NAME => false,
+                        "{$platform}." . CloudstackPlatformModule::SECRET_KEY => false,
+                        "{$platform}." . CloudstackPlatformModule::SHARED_IP => false,
+                        "{$platform}." . CloudstackPlatformModule::SHARED_IP_ID => false,
+                        "{$platform}." . CloudstackPlatformModule::SHARED_IP_INFO => false,
+                        "{$platform}." . CloudstackPlatformModule::SZR_PORT_COUNTER => false
                     ));
                 }
 
@@ -537,14 +537,14 @@ class Scalr_UI_Controller_Environments_Platform extends Scalr_UI_Controller
             $enabled = true;
 
             foreach ($clouds as $cloud) {
-                $pars[$cloud][Modules_Platforms_Eucalyptus::ACCOUNT_ID] = $this->checkVar(Modules_Platforms_Eucalyptus::ACCOUNT_ID, 'string', "Account ID required", $cloud);
-                $pars[$cloud][Modules_Platforms_Eucalyptus::ACCESS_KEY] = $this->checkVar(Modules_Platforms_Eucalyptus::ACCESS_KEY, 'string', "Access Key required", $cloud);
-                $pars[$cloud][Modules_Platforms_Eucalyptus::EC2_URL] = $this->checkVar(Modules_Platforms_Eucalyptus::EC2_URL, 'string', "EC2 URL required", $cloud);
-                $pars[$cloud][Modules_Platforms_Eucalyptus::S3_URL] = $this->checkVar(Modules_Platforms_Eucalyptus::S3_URL, 'string', "S3 URL required", $cloud);
-                $pars[$cloud][Modules_Platforms_Eucalyptus::SECRET_KEY] = $this->checkVar(Modules_Platforms_Eucalyptus::SECRET_KEY, 'password', "Secret Key required", $cloud);
-                $pars[$cloud][Modules_Platforms_Eucalyptus::PRIVATE_KEY] = $this->checkVar(Modules_Platforms_Eucalyptus::PRIVATE_KEY, 'file', "x.509 Private Key required", $cloud);
-                $pars[$cloud][Modules_Platforms_Eucalyptus::CERTIFICATE] = $this->checkVar(Modules_Platforms_Eucalyptus::CERTIFICATE, 'file', "x.509 Certificate required", $cloud);
-                $pars[$cloud][Modules_Platforms_Eucalyptus::CLOUD_CERTIFICATE] = $this->checkVar(Modules_Platforms_Eucalyptus::CLOUD_CERTIFICATE, 'file', "x.509 Cloud Certificate required", $cloud);
+                $pars[$cloud][EucalyptusPlatformModule::ACCOUNT_ID] = $this->checkVar(EucalyptusPlatformModule::ACCOUNT_ID, 'string', "Account ID required", $cloud);
+                $pars[$cloud][EucalyptusPlatformModule::ACCESS_KEY] = $this->checkVar(EucalyptusPlatformModule::ACCESS_KEY, 'string', "Access Key required", $cloud);
+                $pars[$cloud][EucalyptusPlatformModule::EC2_URL] = $this->checkVar(EucalyptusPlatformModule::EC2_URL, 'string', "EC2 URL required", $cloud);
+                $pars[$cloud][EucalyptusPlatformModule::S3_URL] = $this->checkVar(EucalyptusPlatformModule::S3_URL, 'string', "S3 URL required", $cloud);
+                $pars[$cloud][EucalyptusPlatformModule::SECRET_KEY] = $this->checkVar(EucalyptusPlatformModule::SECRET_KEY, 'password', "Secret Key required", $cloud);
+                $pars[$cloud][EucalyptusPlatformModule::PRIVATE_KEY] = $this->checkVar(EucalyptusPlatformModule::PRIVATE_KEY, 'file', "x.509 Private Key required", $cloud);
+                $pars[$cloud][EucalyptusPlatformModule::CERTIFICATE] = $this->checkVar(EucalyptusPlatformModule::CERTIFICATE, 'file', "x.509 Certificate required", $cloud);
+                $pars[$cloud][EucalyptusPlatformModule::CLOUD_CERTIFICATE] = $this->checkVar(EucalyptusPlatformModule::CLOUD_CERTIFICATE, 'file', "x.509 Cloud Certificate required", $cloud);
             }
         }
 

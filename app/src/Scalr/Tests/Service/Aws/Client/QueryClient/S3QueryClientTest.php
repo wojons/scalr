@@ -2,7 +2,6 @@
 namespace Scalr\Tests\Service\Aws\Client\QueryClient;
 
 use Scalr\Tests\Constraint\ArrayHas;
-use Scalr\Service\Aws\Client\QueryClient\S3QueryClient;
 use Scalr\Tests\Service\AwsTestCase;
 
 /**

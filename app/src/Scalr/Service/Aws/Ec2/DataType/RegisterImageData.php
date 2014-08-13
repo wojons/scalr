@@ -2,9 +2,7 @@
 
 namespace Scalr\Service\Aws\Ec2\DataType;
 
-use Scalr\Service\Aws\Ec2Exception;
 use Scalr\Service\Aws\Ec2\AbstractEc2DataType;
-use \DateTime;
 
 /**
  * RegisterImageData
@@ -73,6 +71,19 @@ class RegisterImageData extends AbstractEc2DataType
      * @var string
      */
     public $rootDeviceName;
+
+    /**
+     * The type of virtualization.
+     * paravirtual | hvm
+     * @var string
+     */
+    public $virtualizationType;
+
+    /**
+     * Set to simple to enable enhanced networking for the AMI and any instances that you launch from the AMI.
+     * @var string
+     */
+    public $sriovNetSupport;
 
     /**
      * Convenient constructor

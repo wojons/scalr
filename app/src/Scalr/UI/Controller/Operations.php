@@ -12,18 +12,10 @@ class Scalr_UI_Controller_Operations extends Scalr_UI_Controller
     public function progressAction()
     {
         $opId = $this->getParam('operationId');
-        if ($opId) {
-            $operation = $this->db->GetRow("SELECT * FROM server_operations WHERE id = ? LIMIT 1", array($opId));
-            $dbServer = DBServer::LoadByID($operation['server_id']);
-            $this->user->getPermissions()->validate($dbServer);
-        }
+        $dbServer = DBServer::LoadByID($this->getParam('serverId'));
+        $this->user->getPermissions()->validate($dbServer);
 
-        $client2 = Scalr_Net_Scalarizr_Client::getClient(
-            $dbServer,
-            Scalr_Net_Scalarizr_Client::NAMESPACE_OPERATION,
-            $dbServer->getPort(DBServer::PORT_API)
-        );
-        $info = $client2->getStatus($opId);
+        $info = $dbServer->scalarizr->operation->getStatus($opId);
         var_dump($info);
     }
 
@@ -182,14 +174,22 @@ class Scalr_UI_Controller_Operations extends Scalr_UI_Controller
         }
         $content .= '</div>';
 
+        try {
+            if ($dbServer->serverId == 'c0990a95-1a65-480c-8cd0-59d56938c714') {
+                $info = $dbServer->scalarizr->operation->getStatus('d611b2a9-042d-410b-908c-c20d511f517f');
+            }
+        } catch (Exception $e) {}
+
         $this->response->page('ui/operations/details.js', array(
             'serverId' => $dbServer->serverId,
             'initStatus' => $initStatus,
             'status'	=> $operation['status'],
+            'serverStatus' => $dbServer->status,
             'name'		=> $operation['name'],
             'date'		=> Scalr_Util_DateTime::convertTz((int)$operation['timestamp']),
             'content' => $content,
-            'message' => nl2br($message)
+            'message' => nl2br($message),
+            'debug' => $info
         ));
     }
 }

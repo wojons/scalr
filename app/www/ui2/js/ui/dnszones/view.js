@@ -7,7 +7,6 @@ Scalr.regPage('Scalr.ui.dnszones.view', function (loadParams, moduleParams) {
 		],
 		proxy: {
 			type: 'scalr.paging',
-			extraParams: loadParams,
 			url: '/dnszones/xListZones/'
 		},
 		remoteSort: true
@@ -19,7 +18,6 @@ Scalr.regPage('Scalr.ui.dnszones.view', function (loadParams, moduleParams) {
 			'reload': false,
 			'maximize': 'all'
 		},
-		scalrReconfigureParams: { dnsZoneId: '', clientId: '', farmId: '', farmRoleId: ''},
 		store: store,
 		stateId: 'grid-dnszones-view',
 		stateful: true,
@@ -61,20 +59,10 @@ Scalr.regPage('Scalr.ui.dnszones.view', function (loadParams, moduleParams) {
 			{ text: "Last modified", width: 200, dataIndex: 'dtlastmodified', sortable: true, xtype: 'templatecolumn',
 				tpl: '<tpl if="dtlastmodified">{dtlastmodified}</tpl><tpl if="! dtlastmodified">Never</tpl>'
 			},
-			{ text: "Status", width: 150, dataIndex: 'status', sortable: true, xtype: 'templatecolumn', tpl:
-				new Ext.XTemplate('<span style="{[this.getClass(values.status)]}">{status}</span>', {
-					getClass: function (value) {
-						if (value == 'Active')
-							return "color: green";
-						else if (value == 'Pending create' || value == 'Pending update')
-							return "color: #666633";
-						else
-							return "color: red";
-					}
-				})
-			}, {
-				xtype: 'optionscolumn',
-				optionsMenu: [{
+			{ text: "Status", minWidth: 130, width: 130, dataIndex: 'status', sortable: true, xtype: 'statuscolumn', statustype: 'dnszone'},
+            {
+				xtype: 'optionscolumn2',
+				menu: [{
 					text: 'Edit DNS Zone',
 					iconCls: 'x-menu-icon-edit',
 					href: '#/dnszones/{id}/edit'

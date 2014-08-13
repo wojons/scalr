@@ -23,7 +23,7 @@ class FarmRoleStorageConfig
     const TYPE_RAID_EBS = 'raid.ebs';
     const TYPE_RAID_CSVOL = 'raid.csvol';
     const TYPE_RAID_CINDER = 'raid.cinder';
-    const TYPE_RAID_GCE_PD = 'raid.gce_pd';
+    const TYPE_RAID_GCE_PD = 'raid.gce_persistent';
 
     const TYPE_EBS = 'ebs';
     const TYPE_CSVOL = 'csvol';
@@ -48,6 +48,7 @@ class FarmRoleStorageConfig
     const SETTING_EBS_TYPE = 'ebs.type';
     const SETTING_EBS_IOPS = 'ebs.iops';
     const SETTING_EBS_SNAPSHOT = 'ebs.snapshot';
+    const SETTING_EBS_ENCRYPTED = 'ebs.encrypted';
 
     const STATE_PENDING_DELETE = 'Pending delete';
     const STATE_PENDING_CREATE = 'Pending create';
@@ -137,8 +138,8 @@ class FarmRoleStorageConfig
             $ebsIops = intval($config['settings'][self::SETTING_EBS_IOPS]);
             $ebsSnapshot = $config['settings'][self::SETTING_EBS_SNAPSHOT];
 
-            if (! in_array($ebsType, array('standard', 'io1')))
-                throw new FarmRoleStorageException('EBS type should be standard or iops');
+            if (! in_array($ebsType, array('standard', 'io1', 'gp2')))
+                throw new FarmRoleStorageException('EBS type should be standard, gp2 or io1');
 
             if ($ebsSize < 1 || $ebsSize > 1024)
                 throw new FarmRoleStorageException('EBS size should be from 1 to 1024 GB');
@@ -157,6 +158,10 @@ class FarmRoleStorageConfig
             }
 
             $settings[self::SETTING_EBS_SNAPSHOT] = $ebsSnapshot;
+
+            if ($type == self::TYPE_EBS) {
+                $settings[self::SETTING_EBS_ENCRYPTED] = !empty($config['settings'][self::SETTING_EBS_ENCRYPTED]) ? 1 : 0;
+            }
         }
 
         // TODO: validate raid, cvsol

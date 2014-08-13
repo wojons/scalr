@@ -7,7 +7,7 @@ class Scalr_UI_Controller_Core_Governance_Lease extends Scalr_UI_Controller
 {
     public function hasAccess()
     {
-        return parent::hasAccess() && $this->request->isAllowed(Acl::RESOURCE_ADMINISTRATION_GOVERNANCE);
+        return parent::hasAccess() && $this->request->isAllowed(Acl::RESOURCE_ENVADMINISTRATION_GOVERNANCE);
     }
 
     public function historyAction()
@@ -42,8 +42,8 @@ class Scalr_UI_Controller_Core_Governance_Lease extends Scalr_UI_Controller
             SELECT fl.*, farms.name, fs.value AS terminate_date FROM farm_lease_requests fl
             LEFT JOIN farms ON farms.id = fl.farm_id
             LEFT JOIN farm_settings fs ON fl.farm_id = fs.farmid
-            WHERE fl.status = ? AND fs.name = "lease.terminate.date" AND farms.env_id = ? ORDER BY fs.value',
-            array(FarmLease::STATUS_PENDING, $this->getEnvironmentId()));
+            WHERE fl.status = ? AND fs.name = ? AND farms.env_id = ? ORDER BY fs.value',
+            array(FarmLease::STATUS_PENDING, DBFarm::SETTING_LEASE_TERMINATE_DATE, $this->getEnvironmentId()));
 
         $this->response->data(array('data' => $data));
     }
@@ -98,11 +98,15 @@ class Scalr_UI_Controller_Core_Governance_Lease extends Scalr_UI_Controller
                                     '{{farm_name}}' => $dbFarm->Name,
                                     '{{user_name}}' => $this->user->getEmail(),
                                     '{{comment}}' => $this->getParam('comment'),
-                                    '{{date}}' => $dt->format('M j, Y')
+                                    '{{date}}' => $dt->format('M j, Y'),
+                                    '{{envName}}' => $dbFarm->GetEnvironmentObject()->name,
+                                    '{{envId}}' => $dbFarm->GetEnvironmentObject()->id
                                 )
                             );
                     } else {
                         $dbFarm->SetSetting(DBFarm::SETTING_LEASE_STATUS, '');
+                        $dbFarm->SetSetting(DBFarm::SETTING_LEASE_TERMINATE_DATE, '');
+                        $dbFarm->SetSetting(DBFarm::SETTING_LEASE_NOTIFICATION_SEND, '');
 
                         if ($mailer)
                             $mailer->sendTemplate(
@@ -110,7 +114,9 @@ class Scalr_UI_Controller_Core_Governance_Lease extends Scalr_UI_Controller
                                 array(
                                     '{{farm_name}}' => $dbFarm->Name,
                                     '{{user_name}}' => $this->user->getEmail(),
-                                    '{{comment}}' => $this->getParam('comment')
+                                    '{{comment}}' => $this->getParam('comment'),
+                                    '{{envName}}' => $dbFarm->GetEnvironmentObject()->name,
+                                    '{{envId}}' => $dbFarm->GetEnvironmentObject()->id
                                 )
                             );
                     }
@@ -123,7 +129,9 @@ class Scalr_UI_Controller_Core_Governance_Lease extends Scalr_UI_Controller
                                 '{{farm_name}}' => $dbFarm->Name,
                                 '{{user_name}}' => $this->user->getEmail(),
                                 '{{date}}' => $dt->format('M j, Y'),
-                                '{{comment}}' => $this->getParam('comment')
+                                '{{comment}}' => $this->getParam('comment'),
+                                '{{envName}}' => $dbFarm->GetEnvironmentObject()->name,
+                                '{{envId}}' => $dbFarm->GetEnvironmentObject()->id
                             )
                         );
                 }

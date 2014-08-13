@@ -1,11 +1,9 @@
 <?php
 namespace Scalr\Service\Aws\Elb\DataType;
 
-use Scalr\Service\Aws\Elb;
 use Scalr\Service\Aws\ElbException;
 use Scalr\Service\Aws\Elb\AbstractElbDataType;
 use Scalr\Service\Aws\Elb\DataType\ListenerData;
-use Scalr\Service\Aws\Elb\DataType\ListenerDescriptionData;
 
 /**
  * ListenerDescriptionData

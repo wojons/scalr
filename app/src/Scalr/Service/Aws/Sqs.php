@@ -1,15 +1,6 @@
 <?php
 namespace Scalr\Service\Aws;
 
-use Scalr\Service\Aws\Client\ClientException;
-use Scalr\Service\Aws\DataType\ErrorData;
-use Scalr\Service\Aws\DataType\ListDataType;
-use Scalr\Service\Aws\Client\QueryClient;
-use Scalr\Service\Aws;
-use Scalr\Service\Aws\Sqs\V20111001\SqsApi;
-use Scalr\Service\Aws\Sqs\Handler\QueueHandler;
-use Scalr\Service\Aws\Sqs\Handler\MessageHandler;
-
 /**
  * Amazon Simple Queue Service (SQS) interface
  *
@@ -68,23 +59,3 @@ class Sqs extends AbstractService implements ServiceInterface
         return 'sqs.' . $this->getAws()->getRegion() . '.amazonaws.com';
     }
 }
-
-/*
- TODO [postponed] Following SQS API actions need to be implemented:
-
-     Actions for Queues
-    • SetQueueAttributes
-
-    Actions for Access Control on Queues
-    • AddPermission
-    • RemovePermission
-
-    Actions for Messages
-    • SendMessageBatch
-    • ReceiveMessage
-    • DeleteMessage
-    • DeleteMessageBatch
-    • ChangeMessageVisibility
-    • ChangeMessageVisibilityBatch
-
- */

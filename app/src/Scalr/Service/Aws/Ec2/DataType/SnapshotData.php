@@ -96,6 +96,13 @@ class SnapshotData extends AbstractEc2DataType
     public $ownerAlias;
 
     /**
+     * Indicates whether the snapshot is encrypted.
+     *
+     * @var bool
+     */
+    public $encrypted;
+
+    /**
      * {@inheritdoc}
      * @see Scalr\Service\Aws\Ec2.AbstractEc2DataType::throwExceptionIfNotInitialized()
      */
@@ -191,13 +198,16 @@ class SnapshotData extends AbstractEc2DataType
      * @param   string     $srcRegion     The ID of the AWS region that contains the snapshot to be copied.
      * @param   string     $description   optional A description of the new Amazon EBS snapshot.
      * @param   string     $destRegion    optional The ID of the destination region.
+     * @param   string     $presignedUrl  optional The pre-signed URL that facilitates copying an encrypted snapshot.
+     *                                    The PresignedUrl should use the snapshot source endpoint, the CopySnapshot action, and include the SourceRegion,
+                                          SourceSnapshotId, and DestinationRegion parameters.
      * @return  string     Returns ID of the created snapshot on success.
      * @throws  ClientException
      * @throws  Ec2Exception
      */
-    public function copy($srcRegion, $description = null, $destRegion = null)
+    public function copy($srcRegion, $description = null, $destRegion = null, $presignedUrl = null)
     {
         $this->throwExceptionIfNotInitialized();
-        return $this->getEc2()->snapshot->copy($srcRegion, $this->snapshotId, $description, $destRegion);
+        return $this->getEc2()->snapshot->copy($srcRegion, $this->snapshotId, $description, $destRegion, $presignedUrl);
     }
 }

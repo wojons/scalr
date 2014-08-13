@@ -3,7 +3,6 @@ namespace Scalr\Logger;
 
 use Scalr\Logger\AuditLog\KeyValueRecord;
 use Scalr\Logger\AuditLog\AuditLogTags;
-use Scalr\Logger\AuditLog\Documents\AbstractAuditLogDocument;
 use Scalr\Logger\AuditLog\LogRecord;
 use \Mongo;
 use \MongoCursor;

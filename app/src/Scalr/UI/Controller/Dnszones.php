@@ -147,9 +147,7 @@ class Scalr_UI_Controller_Dnszones extends Scalr_UI_Controller
 
     public function createAction()
     {
-
-        $farms = self::loadController('Farms')->getList();
-        array_unshift($farms, array('id'=>0, 'name'=>''));
+        $farms = self::loadController('Farms')->getFarmWidgetFarms(array('addEmpty'));
 
         $records = array();
         $nss = $this->db->GetAll("SELECT * FROM nameservers WHERE isbackup='0'");
@@ -191,16 +189,11 @@ class Scalr_UI_Controller_Dnszones extends Scalr_UI_Controller
         $DBDNSZone = DBDNSZone::loadById($this->getParam('dnsZoneId'));
         $this->user->getPermissions()->validate($DBDNSZone);
 
-        $farms = self::loadController('Farms')->getList();
-        array_unshift($farms, array('id'=>0, 'name'=>''));
+        $farms = self::loadController('Farms')->getFarmWidgetFarms(array('addEmpty'));
         $farmRoles = array();
 
         if ($DBDNSZone->farmId) {
-            $this->request->setParams(array('farmId' => $DBDNSZone->farmId));
-
-            $farmRoles = self::loadController('Roles', 'Scalr_UI_Controller_Farms')->getList();
-            if (count($farmRoles))
-                array_unshift($farmRoles, array('id' => 0, 'name' => ''));
+            $farmRoles = self::loadController('Farms')->getFarmWidgetRoles($DBDNSZone->farmId, array('addEmpty'));
         }
 
         $this->response->page('ui/dnszones/create.js', array(
@@ -216,7 +209,8 @@ class Scalr_UI_Controller_Dnszones extends Scalr_UI_Controller
                 'soaRefresh' => $DBDNSZone->soaRefresh,
                 'soaExpire' => $DBDNSZone->soaExpire,
                 'domainFarm' => $DBDNSZone->farmId,
-                'domainFarmRole' => $DBDNSZone->farmRoleId
+                'domainFarmRole' => $DBDNSZone->farmRoleId,
+                'privateRootRecords' => $DBDNSZone->privateRootRecords
             ),
             'records' => $DBDNSZone->getRecords()
         ), array('ui/dnszones/dnsfield.js'), array('ui/dnszones/create.css'));
@@ -365,6 +359,7 @@ class Scalr_UI_Controller_Dnszones extends Scalr_UI_Controller
 
             $DBDNSZone->farmRoleId = $farmRoleId;
             $DBDNSZone->farmId = $farmId;
+            $DBDNSZone->privateRootRecords = $this->getParam('privateRootRecords') == 'on' ? 1 : 0;
 
             $DBDNSZone->setRecords($records);
             $DBDNSZone->save(true);
@@ -373,16 +368,6 @@ class Scalr_UI_Controller_Dnszones extends Scalr_UI_Controller
             $this->response->data(array('errors' => $errors));
         }
     }
-
-    public function xGetFarmRolesAction()
-    {
-        $farmRoles = self::loadController('Roles', 'Scalr_UI_Controller_Farms')->getList();
-        if (count($farmRoles))
-            $farmRoles[0] = array('id' => 0, 'name' => '');
-
-        $this->response->data(array('farmRoles' => $farmRoles));
-    }
-
 
     public function xRemoveZonesAction()
     {
@@ -442,7 +427,7 @@ class Scalr_UI_Controller_Dnszones extends Scalr_UI_Controller
                 try {
                     $DBFarmRole = DBFarmRole::LoadByID($row['farm_roleid']);
 
-                    $row['role_name'] = $DBFarmRole->GetRoleObject()->name;
+                    $row['role_name'] = $DBFarmRole->Alias;
                     $row['farm_name'] = $DBFarmRole->GetFarmObject()->Name;
                     $row['farm_id'] = $DBFarmRole->FarmID;
                 } catch(Exception $e) {

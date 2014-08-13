@@ -265,6 +265,25 @@ class Scalr_Util_DateTime
         }
 
         return $diff;
-        
+
+    }
+
+    /**
+     * Gets the week of the year in the same way as MYSQL's YEARWEEK(date, 0) MODE 0
+     *
+     * @param   string    $date  The date YYYY-MM-DD
+     * @return  number    Returns yearweek, for example: 201402
+     */
+    public static function yearweek($date)
+    {
+        $year = substr($date, 0, 4);
+
+        $week = strftime('%U', strtotime($date));
+
+        if ($week == 0) {
+            return self::yearweek((--$year) . '-12-31');
+        }
+
+        return sprintf('%d%02d', $year, $week);
     }
 }

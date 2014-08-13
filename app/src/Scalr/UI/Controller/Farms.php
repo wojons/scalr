@@ -2,6 +2,9 @@
 
 use Scalr\Acl\Acl;
 use Scalr\Farm\FarmLease;
+use Scalr\Modules\Platforms\Ec2\Ec2PlatformModule;
+use Scalr\Stats\CostAnalytics\Entity\CostCentreEntity;
+use Scalr\Stats\CostAnalytics\Iterator\SharedProjectsFilterIterator;
 
 class Scalr_UI_Controller_Farms extends Scalr_UI_Controller
 {
@@ -20,28 +23,41 @@ class Scalr_UI_Controller_Farms extends Scalr_UI_Controller
         $schedule = implode(" ", array($this->getParam("hh"), $this->getParam("dd"), $this->getParam("dw")));
         $repo = $this->getParam("szrRepository");
 
+        $oldRepo = $dbFarm->GetSetting(DBFarm::SETTING_SZR_UPD_REPOSITORY);
+        if ($oldRepo == 'latest' && $repo == 'stable' && $dbFarm->Status == FARM_STATUS::RUNNING)
+            throw new Exception("Switching from 'latest' repository to 'stable' is not supported for running farms");
+
         $dbFarm->SetSetting(DBFarm::SETTING_SZR_UPD_REPOSITORY, $repo);
         $dbFarm->SetSetting(DBFarm::SETTING_SZR_UPD_SCHEDULE, $schedule);
 
+        $extendedMsg = false;
         $servers = $dbFarm->GetServersByFilter(array('status' => array(SERVER_STATUS::INIT, SERVER_STATUS::RUNNING)));
         foreach ($servers as $dbServer) {
-            try {
-                $port = $dbServer->GetProperty(SERVER_PROPERTIES::SZR_UPDC_PORT);
-                if (!$port)
-                    $port = 8008;
+            if (!$dbServer->IsSupported('2.8.0')) {
+                try {
+                    $port = $dbServer->GetProperty(SERVER_PROPERTIES::SZR_UPDC_PORT);
+                    if (!$port)
+                        $port = 8008;
 
-                $updClient = new Scalr_Net_Scalarizr_UpdateClient($dbServer, $port);
-                $updClient->configure($repo, $schedule);
-            } catch (Exception $e) {
-                Logger::getLogger('Farm')->error(new FarmLogMessage($dbFarm->ID, sprintf("Unable to update scalarizr update settings on server %s: %s",
-                    $dbServer->serverId, $e->getMessage()
-                )));
-                $err = true;
+                    $updClient = new Scalr_Net_Scalarizr_UpdateClient($dbServer, $port);
+                    $updClient->configure($repo, $schedule);
+                } catch (Exception $e) {
+                    Logger::getLogger('Farm')->error(new FarmLogMessage($dbFarm->ID, sprintf("Unable to update scalarizr update settings on server %s: %s",
+                        $dbServer->serverId, $e->getMessage()
+                    )));
+                    $err = true;
+                }
+            } else {
+                $extendedMsg = true;
             }
         }
 
-        if (!$err)
-            $this->response->success('Scalarizr auto-update settings successfully saved');
+        if (!$err) {
+            if ($extendedMsg)
+                $this->response->success('Scalarizr auto-update settings successfully saved. Running servers will be updated according to schedule.');
+            else
+                $this->response->success('Scalarizr auto-update settings successfully saved');
+        }
         else
             $this->response->warning('Scalarizr auto-update settings successfully saved, but some servers were not updated. Please check "Logs -> System log" for more details.');
     }
@@ -89,9 +105,11 @@ class Scalr_UI_Controller_Farms extends Scalr_UI_Controller
         );
 
         ///Update settings
+        $scalarizrRepos = array_keys(Scalr::config('scalr.scalarizr_update.repos'));
+
         $repo = $dbFarm->GetSetting(DBFarm::SETTING_SZR_UPD_REPOSITORY);
         if (!$repo)
-            $repo = 'stable';
+            $repo = Scalr::config('scalr.scalarizr_update.default_repo');
 
         $schedule = $dbFarm->GetSetting(DBFarm::SETTING_SZR_UPD_SCHEDULE);
         if (!$schedule)
@@ -118,7 +136,7 @@ class Scalr_UI_Controller_Farms extends Scalr_UI_Controller
                     'store' => $store,
                     'value' => $repo,
                     'valueField' => 'name',
-                    'displayField' => 'description'
+                    'displayField' => 'name'
                 ),
                 array(
                     'xtype' => 'fieldcontainer',
@@ -222,22 +240,22 @@ class Scalr_UI_Controller_Farms extends Scalr_UI_Controller
                 array(
                     'xtype' => 'displayfield',
                     'fieldLabel' => 'Writes endpoint (Public)',
-                    'value' => "ext.master.{$dbMsr}.{$dbFarm->Hash}.scalr-dns.net"
+                    'value' => "ext.master.{$dbMsr}.{$dbFarm->Hash}." . \Scalr::config('scalr.dns.static.domain_name')
                 ),
                 array(
                     'xtype' => 'displayfield',
                     'fieldLabel' => 'Reads endpoint (Public)',
-                    'value' => "ext.slave.{$dbMsr}.{$dbFarm->Hash}.scalr-dns.net"
+                    'value' => "ext.slave.{$dbMsr}.{$dbFarm->Hash}." . \Scalr::config('scalr.dns.static.domain_name')
                 ),
                 array(
                     'xtype' => 'displayfield',
                     'fieldLabel' => 'Writes endpoint (Private)',
-                    'value' => "int.master.{$dbMsr}.{$dbFarm->Hash}.scalr-dns.net"
+                    'value' => "int.master.{$dbMsr}.{$dbFarm->Hash}." . \Scalr::config('scalr.dns.static.domain_name')
                 ),
                 array(
                     'xtype' => 'displayfield',
                     'fieldLabel' => 'Reads endpoint (Private)',
-                    'value' => "int.slave.{$dbMsr}.{$dbFarm->Hash}.scalr-dns.net"
+                    'value' => "int.slave.{$dbMsr}.{$dbFarm->Hash}." . \Scalr::config('scalr.dns.static.domain_name')
                 )
             );
 
@@ -254,7 +272,7 @@ class Scalr_UI_Controller_Farms extends Scalr_UI_Controller
                 array(
                     'xtype' => 'displayfield',
                     'fieldLabel' => 'VMC target endpoint',
-                    'value' => "api.ext.cloudfoundry.{$dbFarm->Hash}.scalr-dns.net"
+                    'value' => "api.ext.cloudfoundry.{$dbFarm->Hash}." . \Scalr::config('scalr.dns.static.domain_name')
                 )
             );
 
@@ -267,10 +285,10 @@ class Scalr_UI_Controller_Farms extends Scalr_UI_Controller
         }
 
         $governance = new Scalr_Governance($this->getEnvironmentId());
-        if ($governance->isEnabled(Scalr_Governance::GENERAL_LEASE) && $dbFarm->GetSetting(DBFarm::SETTING_LEASE_STATUS) && $dbFarm->Status == FARM_STATUS::RUNNING) {
+        if ($governance->isEnabled(Scalr_Governance::CATEGORY_GENERAL, Scalr_Governance::GENERAL_LEASE) && $dbFarm->GetSetting(DBFarm::SETTING_LEASE_STATUS) && $dbFarm->Status == FARM_STATUS::RUNNING) {
             $terminateDate = new DateTime($dbFarm->GetSetting(DBFarm::SETTING_LEASE_TERMINATE_DATE));
             $localeTerminateDate = Scalr_Util_DateTime::convertDateTime($terminateDate, $tz, 'M j, Y');
-            $config = $governance->getValue(Scalr_Governance::GENERAL_LEASE, null);
+            $config = $governance->getValue(Scalr_Governance::CATEGORY_GENERAL, Scalr_Governance::GENERAL_LEASE, null);
 
             $standardExtend = $config['leaseExtension'] == 'allow' &&
                 ($terminateDate->diff(new DateTime())->days < $config['defaultLifePeriod']) &&
@@ -327,7 +345,7 @@ class Scalr_UI_Controller_Farms extends Scalr_UI_Controller
             );
         }
 
-        $this->response->page('ui/farms/extendedinfo.js', array('id' => $dbFarm->ID, 'name' => $dbFarm->Name, 'info' => $form));
+        $this->response->page('ui/farms/extendedinfo.js', array('scalarizr_repos' => $scalarizrRepos, 'id' => $dbFarm->ID, 'name' => $dbFarm->Name, 'info' => $form));
     }
 
     public function xLeaseExtendAction()
@@ -341,10 +359,10 @@ class Scalr_UI_Controller_Farms extends Scalr_UI_Controller
         $this->user->getPermissions()->validate($dbFarm);
 
         $governance = new Scalr_Governance($this->getEnvironmentId());
-        if (! ($governance->isEnabled(Scalr_Governance::GENERAL_LEASE) && $dbFarm->GetSetting(DBFarm::SETTING_LEASE_STATUS) && $dbFarm->Status == FARM_STATUS::RUNNING))
+        if (! ($governance->isEnabled(Scalr_Governance::CATEGORY_GENERAL, Scalr_Governance::GENERAL_LEASE) && $dbFarm->GetSetting(DBFarm::SETTING_LEASE_STATUS) && $dbFarm->Status == FARM_STATUS::RUNNING))
             throw new Scalr_Exception_Core('You can\'t manage lease for this farm');
 
-        $config = $governance->getValue(Scalr_Governance::GENERAL_LEASE, null);
+        $config = $governance->getValue(Scalr_Governance::CATEGORY_GENERAL, Scalr_Governance::GENERAL_LEASE, null);
         $terminateDate = new DateTime($dbFarm->GetSetting(DBFarm::SETTING_LEASE_TERMINATE_DATE));
 
         if ($config['leaseExtension'] != 'allow')
@@ -367,7 +385,7 @@ class Scalr_UI_Controller_Farms extends Scalr_UI_Controller
             }
         } else if ($this->getParam('extend') == 'non-standard') {
             $lease = new FarmLease($dbFarm);
-            $comment = htmlspecialchars($this->getParam('comment'));
+            $comment = $this->getParam('comment');
             $last = $lease->getLastRequest();
 
             if ($last && $last['status'] == FarmLease::STATUS_PENDING) {
@@ -375,16 +393,13 @@ class Scalr_UI_Controller_Farms extends Scalr_UI_Controller
             } else {
                 if ($this->getParam('by') == 'days' && intval($this->getParam('byDays')) > 0) {
                     $lease->addRequest(intval($this->getParam('byDays')), $comment, $this->user->getId());
-                    $desc = sprintf('extend by %d days with comment: "%s"', intval($this->getParam('byDays')), $comment);
 
                 } else if ($this->getParam('by') == 'date' && strtotime($this->getParam('byDate'))) {
                     $dt = new DateTime($this->getParam('byDate'));
                     $lease->addRequest($terminateDate->diff($dt)->days, $comment, $this->user->getId());
-                    $desc = sprintf('extend by date %s with comment: "%s"', $dt->format('M j, Y'), $comment);
 
                 } else if ($this->getParam('by') == 'forever') {
                     $lease->addRequest(0, $comment, $this->user->getId());
-                    $desc = sprintf('disable expiration with comment: "%s"', $comment, $this->user->getId());
 
                 } else {
                     throw new Scalr_Exception_Core('Invalid period format');
@@ -415,9 +430,11 @@ class Scalr_UI_Controller_Farms extends Scalr_UI_Controller
                 $mailer->sendTemplate(
                     SCALR_TEMPLATES_PATH . '/emails/farm_lease_non_standard_request.eml',
                     array(
-                        '{{farm_name}}' => htmlspecialchars($dbFarm->Name),
-                        '{{user_name}}' => htmlspecialchars($this->user->getEmail()),
-                        '{{desc}}' => $desc
+                        '{{farm_name}}' => $dbFarm->Name,
+                        '{{user_name}}' => $this->user->getEmail(),
+                        '{{comment}}' => $comment,
+                        '{{envName}}' => $dbFarm->GetEnvironmentObject()->name,
+                        '{{envId}}' => $dbFarm->GetEnvironmentObject()->id
                     )
                 );
 
@@ -549,8 +566,6 @@ class Scalr_UI_Controller_Farms extends Scalr_UI_Controller
         foreach($this->db->GetAll("SELECT id, platform, role_id, alias AS name FROM farm_roles WHERE farmid = ?", array($dbFarm->ID)) as $farmRole) {
             try {
                 $dbRole = DBRole::loadById($farmRole['role_id']);
-                if (! $farmRole['name'])
-                    $farmRole['name'] = $dbRole->name;
 
                 if (!empty($behaviors)) {
                     $bFilter = false;
@@ -597,8 +612,21 @@ class Scalr_UI_Controller_Farms extends Scalr_UI_Controller
         $dbFarmRole = DBFarmRole::LoadByID($farmRoleId);
         $this->user->getPermissions()->validate($dbFarmRole);
 
-        foreach ($dbFarmRole->GetServersByFilter(array('status' => SERVER_STATUS::RUNNING)) as $value)
-            array_push($servers, array('id' => $value->serverId, 'name' => $value->remoteIp));
+        $displayConvention = Scalr::config('scalr.ui.server_display_convention');
+
+        foreach ($dbFarmRole->GetServersByFilter(array('status' => SERVER_STATUS::RUNNING)) as $value) {
+            $hostname = $value->GetProperty(Scalr_Role_Behavior::SERVER_BASE_HOSTNAME);
+            $name = "#{$value->index}: ";
+
+            if ($displayConvention == 'hostname')
+                $name .= $hostname;
+            elseif (($displayConvention == 'auto' && $value->remoteIp) || $displayConvention == 'public')
+                $name .= $value->remoteIp;
+            elseif ($value->localIp)
+                $name .= $value->localIp;
+
+            array_push($servers, array('id' => $value->serverId, 'name' => $name));
+        }
 
         if (count($servers) && in_array('addAll', $options)) {
             array_unshift($servers, array('id' => 0, 'name' => 'On all instances of a role in this farm'));
@@ -625,7 +653,7 @@ class Scalr_UI_Controller_Farms extends Scalr_UI_Controller
         $this->request->restrictAccess(Acl::RESOURCE_FARMS);
         $governance = new Scalr_Governance($this->getEnvironmentId());
 
-        $this->response->page('ui/farms/view.js', array('leaseEnabled' => $governance->isEnabled(Scalr_Governance::GENERAL_LEASE)));
+        $this->response->page('ui/farms/view.js', array('leaseEnabled' => $governance->isEnabled(Scalr_Governance::CATEGORY_GENERAL, Scalr_Governance::GENERAL_LEASE)));
     }
 
     public function dnszonesAction()
@@ -842,7 +870,7 @@ class Scalr_UI_Controller_Farms extends Scalr_UI_Controller
 
         $servers = $this->db->GetOne("SELECT COUNT(*) FROM servers WHERE farm_id=? AND status!=?", array($dbFarm->ID, SERVER_STATUS::TERMINATED));
         if ($servers != 0)
-            throw new Exception(sprintf(_("Cannot delete a running farm. %s server are still running on this farm."), $servers));
+            throw new Exception(sprintf(_("Cannot delete a running farm. %s server%s still running on this farm."), $servers, $servers > 1 ? 's are' : ' is'));
 
         $this->db->BeginTrans();
 
@@ -861,6 +889,8 @@ class Scalr_UI_Controller_Farms extends Scalr_UI_Controller
                 Scalr_SchedulerTask::TARGET_FARM
             ));
 
+            //We should not remove farm_settings because it is used in stats!
+
             $this->db->Execute("DELETE FROM farms WHERE id=?", array($dbFarm->ID));
             $this->db->Execute("DELETE FROM farm_roles WHERE farmid=?", array($dbFarm->ID));
             $this->db->Execute("DELETE FROM logentries WHERE farmid=?", array($dbFarm->ID));
@@ -870,9 +900,7 @@ class Scalr_UI_Controller_Farms extends Scalr_UI_Controller
 
             $this->db->Execute("DELETE FROM farm_role_options WHERE farmid=?", array($dbFarm->ID));
             $this->db->Execute("DELETE FROM farm_role_scripts WHERE farmid=?", array($dbFarm->ID));
-            $this->db->Execute("DELETE FROM ssh_keys WHERE farm_id=?", array($dbFarm->ID));
             $this->db->Execute("DELETE FROM farm_lease_requests WHERE farm_id=?", array($dbFarm->ID));
-            $this->db->Execute("DELETE FROM global_variables WHERE farm_id = ?", array($dbFarm->ID));
 
 
             //TODO: Remove servers
@@ -880,13 +908,6 @@ class Scalr_UI_Controller_Farms extends Scalr_UI_Controller
             while ($server = $servers->FetchRow()) {
                 $dbServer = DBServer::LoadByID($server['server_id']);
                 $dbServer->Remove();
-            }
-
-            // Clean observers
-            $observers = $this->db->Execute("SELECT * FROM farm_event_observers WHERE farmid=?", array($dbFarm->ID));
-            while ($observer = $observers->FetchRow()) {
-                $this->db->Execute("DELETE FROM farm_event_observers WHERE id=?", array($observer['id']));
-                $this->db->Execute("DELETE FROM farm_event_observers_config WHERE observerid=?", array($observer['id']));
             }
 
             $this->db->Execute("UPDATE dns_zones SET farm_id='0', farm_roleid='0' WHERE farm_id=?", array($dbFarm->ID));
@@ -915,7 +936,7 @@ class Scalr_UI_Controller_Farms extends Scalr_UI_Controller
         ));
 
         $governance = new Scalr_Governance($this->getEnvironmentId());
-        $leaseStatus = $governance->isEnabled(Scalr_Governance::GENERAL_LEASE);
+        $leaseStatus = $governance->isEnabled(Scalr_Governance::CATEGORY_GENERAL, Scalr_Governance::GENERAL_LEASE);
 
         $sql = 'SELECT f.clientid, f.id, f.name, f.status, f.dtadded, f.created_by_id, f.created_by_email FROM farms f WHERE env_id = ? AND :FILTER:';
         $args = array($this->getEnvironmentId());
@@ -951,8 +972,9 @@ class Scalr_UI_Controller_Farms extends Scalr_UI_Controller
         $response = $this->buildResponseFromSql2($sql, array('id', 'name', 'dtadded', 'created_by_email', 'status'), array('name', 'id', 'comments'), $args);
 
         foreach ($response["data"] as &$row) {
-            $row["running_servers"] = $this->db->GetOne("SELECT COUNT(*) FROM servers WHERE farm_id='{$row['id']}' AND status IN ('Pending', 'Initializing', 'Running', 'Temporary')");
-            $row["non_running_servers"] = $this->db->GetOne("SELECT COUNT(*) FROM servers WHERE farm_id='{$row['id']}' AND status NOT IN ('Pending', 'Initializing', 'Running', 'Temporary', 'Pending launch')");
+            $row["running_servers"] = $this->db->GetOne("SELECT COUNT(*) FROM servers WHERE farm_id='{$row['id']}' AND status IN ('Pending', 'Initializing', 'Running', 'Temporary','Resuming')");
+            $row["suspended_servers"] = $this->db->GetOne("SELECT COUNT(*) FROM servers WHERE farm_id='{$row['id']}' AND status IN ('Suspended', 'Pending suspend')");
+            $row["non_running_servers"] = $this->db->GetOne("SELECT COUNT(*) FROM servers WHERE farm_id='{$row['id']}' AND status NOT IN ('Suspended', 'Pending suspend', 'Resuming', 'Pending', 'Initializing', 'Running', 'Temporary', 'Pending launch')");
 
             $row["roles"] = $this->db->GetOne("SELECT COUNT(*) FROM farm_roles WHERE farmid='{$row['id']}'");
             $row["zones"] = $this->db->GetOne("SELECT COUNT(*) FROM dns_zones WHERE farm_id='{$row['id']}'");
@@ -968,6 +990,19 @@ class Scalr_UI_Controller_Farms extends Scalr_UI_Controller
 
             if ($leaseStatus && $dbFarm->GetSetting(DBFarm::SETTING_LEASE_STATUS)) {
                 $row['lease'] = $dbFarm->GetSetting(DBFarm::SETTING_LEASE_NOTIFICATION_SEND) ? 'Expire' : $dbFarm->GetSetting(DBFarm::SETTING_LEASE_STATUS);
+                if ($row['lease'] == 'Expire') {
+                    $dt = new DateTime();
+                    $td = new DateTime($dbFarm->GetSetting(DBFarm::SETTING_LEASE_TERMINATE_DATE));
+                    $days = 0;
+                    $hours = 1;
+                    $interval = $dt->diff($td);
+                    if ($interval) {
+                        $days = $interval->days;
+                        $hours = $interval->h ? $interval->h : 1;
+                    }
+
+                    $row['leaseMessage'] = sprintf('Your farm lease is about to expire in %d %s, after which this farm will be terminated', $days ? $days : $hours, $days ? ($days > 1 ? 'days' : 'day') : ($hours > 1 ? 'hours' : 'hour'));
+                }
             }
 
             $b = (array)$this->db->GetAll("SELECT DISTINCT(behavior) FROM farm_roles
@@ -992,11 +1027,17 @@ class Scalr_UI_Controller_Farms extends Scalr_UI_Controller
 
             if ($row['status'] == FARM_STATUS::RUNNING)
             {
-                $row['shortcuts'] = $this->db->GetAll("SELECT * FROM farm_role_scripts WHERE farmid=? AND (farm_roleid IS NULL OR farm_roleid='0') AND ismenuitem='1'",
-                    array($row['id'])
-                );
-                foreach ($row['shortcuts'] as &$shortcut)
-                    $shortcut['name'] = $this->db->GetOne("SELECT name FROM scripts WHERE id=? LIMIT 1", array($shortcut['scriptid']));
+                $row['shortcuts'] = [];
+                foreach (\Scalr\Model\Entity\ScriptShortcut::find(array(
+                    array('farmId' => $row['id']),
+                    array('farmRoleId' => NULL)
+                )) as $shortcut) {
+                    /* @var \Scalr\Model\Entity\ScriptShortcut $shortcut */
+                    $row['shortcuts'][] = array(
+                        'id' => $shortcut->id,
+                        'name' => $shortcut->getScriptName()
+                    );
+                }
             }
         }
 
@@ -1048,10 +1089,6 @@ class Scalr_UI_Controller_Farms extends Scalr_UI_Controller
             throw new Exception('Before building new farm you need to configure environment and setup cloud credentials');
 
 
-        $moduleParams['platforms'] = array();
-        foreach ($platforms as $k => $v)
-            $moduleParams['platforms'][$k] = array('id' => $k, 'name' => $v);
-
         //categories list
         $categories = $this->db->GetAll(
             "SELECT c.id, c.name, COUNT(DISTINCT r.id) AS total
@@ -1083,14 +1120,14 @@ class Scalr_UI_Controller_Farms extends Scalr_UI_Controller
             $moduleParams['farm'] = $c->getFarm2($farmId);
         } else {
             // TODO: remove hack, do better
-            $vars = new Scalr_Scripting_GlobalVariables($this->getEnvironmentId(), Scalr_Scripting_GlobalVariables::SCOPE_FARM);
+            $vars = new Scalr_Scripting_GlobalVariables($this->user->getAccountId(), $this->getEnvironmentId(), Scalr_Scripting_GlobalVariables::SCOPE_FARM);
             $moduleParams['farmVariables'] = $vars->getValues();
         }
 
         $moduleParams['tabs'] = array(
-            'vpcrouter', 'dbmsr', 'mongodb', 'mysql', 'scaling', 'cloudstack', 'gce', 'cloudfoundry', 'rabbitmq', 'haproxy', 'proxy',
+            'vpcrouter', 'dbmsr', 'mongodb', 'mysql', 'scaling', 'network', 'gce', 'cloudfoundry', 'rabbitmq', 'haproxy', 'proxy',
             'rds',   'scripting',
-            'nimbula', 'ec2', 'security', 'elb', 'devel', 'storage', 'variables', 'advanced'
+            'nimbula', 'ec2', 'security', 'devel', 'storage', 'variables', 'advanced'
         );
 
         if ($this->user->getAccount()->isFeatureEnabled(Scalr_Limits::FEATURE_CHEF)) {
@@ -1102,10 +1139,14 @@ class Scalr_UI_Controller_Farms extends Scalr_UI_Controller
         $moduleParams['tabs'][] = 'params';
         $moduleParams['tabs'][] = 'servicesconfig';
 
+        $conf = $this->getContainer()->config->get('scalr.load_statistics.connections.plotter');
         $moduleParams['tabParams'] = array(
-            'farmId'    => $farmId,
-            'accountId' => $this->environment->getPlatformConfigValue(Modules_Platforms_Ec2::ACCOUNT_ID),
-            'nginx'     => array(
+            'farmId'        => $farmId,
+            'farmHash'      => $moduleParams['farm'] ? $moduleParams['farm']['farm']['hash'] : '',
+            'accountId'     => $this->environment->getPlatformConfigValue(Ec2PlatformModule::ACCOUNT_ID),
+            'remoteAddress' => $this->request->getRemoteAddr(),
+            'monitoringHostUrl' => "{$conf['scheme']}://{$conf['host']}:{$conf['port']}",
+            'nginx'         => array(
                 'server_section' => @file_get_contents("../templates/services/nginx/server_section.tpl"),
                 'server_section_ssl' => @file_get_contents("../templates/services/nginx/server_section_ssl.tpl")
             )
@@ -1114,10 +1155,18 @@ class Scalr_UI_Controller_Farms extends Scalr_UI_Controller
         // TODO: Features
         $moduleParams['tabParams']['featureRAID'] = $this->user->getAccount()->isFeatureEnabled(Scalr_Limits::FEATURE_RAID);
         $moduleParams['tabParams']['featureMFS'] = $this->user->getAccount()->isFeatureEnabled(Scalr_Limits::FEATURE_MFS);
+        $moduleParams['tabParams']['scalr.dns.global.enabled'] = \Scalr::config('scalr.dns.global.enabled');
+        $moduleParams['tabParams']['scalr.instances_connection_policy'] = \Scalr::config('scalr.instances_connection_policy');
+        $moduleParams['tabParams']['scalr.scalarizr_update.repos'] = array_keys(\Scalr::config('scalr.scalarizr_update.repos'));
+        $moduleParams['tabParams']['scalr.scalarizr_update.default_repo'] = \Scalr::config('scalr.scalarizr_update.default_repo');
 
         $moduleParams['metrics'] = self::loadController('Metrics', 'Scalr_UI_Controller_Scaling')->getList();
         $moduleParams['timezones_list'] = Scalr_Util_DateTime::getTimezones();
         $moduleParams['timezone_default'] = $this->user->getSetting(Scalr_Account_User::SETTING_UI_TIMEZONE);
+
+        if ($moduleParams['farm']['farm']['ownerEditable']) {
+            $moduleParams['usersList'] = Scalr_Account_User::getList($this->user->getAccountId());
+        }
 
         $governance = new Scalr_Governance($this->getEnvironmentId());
         $moduleParams['governance'] = $governance->getValues(true);
@@ -1129,9 +1178,40 @@ class Scalr_UI_Controller_Farms extends Scalr_UI_Controller
 
         $moduleParams['roleDefaultSettings'] = array(
             'base.keep_scripting_logs_time' => \Scalr::config('scalr.system.scripting.default_instance_log_rotation_period'),
-            'aws.security_groups.list' => json_encode($defaultFarmRoleSecurityGroups)
+            'security_groups.list' => json_encode($defaultFarmRoleSecurityGroups)
         );
 
+        //cost analytics
+        if ($this->getContainer()->analytics->enabled && $this->getEnvironment()->getPlatformConfigValue(Scalr_Environment::SETTING_CC_ID)) {
+            $costCenter = $this->getContainer()->analytics->ccs->get($this->getEnvironment()->getPlatformConfigValue(Scalr_Environment::SETTING_CC_ID));
+
+            $projects = [];
+
+            if ($costCenter instanceof CostCentreEntity) {
+                $projectsIterator = new SharedProjectsFilterIterator($costCenter->getProjects(), $costCenter->ccId, $this->user, $this->getEnvironment());
+                foreach ($projectsIterator as $item) {
+                    /* @var $item ProjectEntity */
+                    $projects[] = array(
+                        'projectId' => $item->projectId,
+                        'name'      => $item->name
+                    );
+                }
+                $costCentreName = $costCenter->name;
+            } else {
+                $costCentreName = '';
+            }
+
+            $moduleParams['analytics'] = array(
+                'costCenterName' => $costCentreName,
+                'projects'       => $projects
+            );
+
+            if ($farmId) {
+                $dbFarm = DBFarm::LoadByID($farmId);
+                $moduleParams['farm']['farm']['projectId'] = $dbFarm->GetSetting(DBFarm::SETTING_PROJECT_ID);
+            }
+
+        }
         $this->response->page('ui/farms/builder.js', $moduleParams, array(
             'ui/farms/builder/selroles.js',
             'ui/farms/builder/roleedit.js',
@@ -1145,7 +1225,6 @@ class Scalr_UI_Controller_Farms extends Scalr_UI_Controller
             'ui/farms/builder/tabs/proxy.js',
             'ui/farms/builder/tabs/mysql.js',
             'ui/farms/builder/tabs/nimbula.js',
-            'ui/farms/builder/tabs/cloudstack.js',
             'ui/farms/builder/tabs/rds.js',
             'ui/farms/builder/tabs/gce.js',
             'ui/farms/builder/tabs/scaling.js',
@@ -1155,12 +1234,12 @@ class Scalr_UI_Controller_Farms extends Scalr_UI_Controller
             'ui/farms/builder/tabs/security.js',
             'ui/farms/builder/tabs/storage.js',
             'ui/farms/builder/tabs/variables.js',
-            'ui/farms/builder/tabs/deployments.js',
             'ui/farms/builder/tabs/devel.js',
             'ui/farms/builder/tabs/chef.js',
-            'ui/farms/builder/tabs/elb.js',
             'ui/farms/builder/tabs/vpcrouter.js',
+            'ui/farms/builder/tabs/network.js',
             //deprecated tabs
+            'ui/farms/builder/tabs/deployments.js',
             'ui/farms/builder/tabs/ebs.js',
             'ui/farms/builder/tabs/params.js',
             'ui/farms/builder/tabs/servicesconfig.js',
@@ -1178,10 +1257,9 @@ class Scalr_UI_Controller_Farms extends Scalr_UI_Controller
             'ui/farms/builder/roleslibrary/haproxy.js',
             'ui/farms/builder/roleslibrary/chef.js',
             //other
-            'ui/scripts/scriptfield.js',
             'codemirror/codemirror.js',
             'ui/core/variablefield.js',
-            'ui/scripts/scriptfield2.js',
+            'ui/scripts/scriptfield.js',
             'ux-boxselect.js',
             'ui/monitoring/window.js',
             'ui/services/chef/chefsettings.js',
@@ -1192,9 +1270,38 @@ class Scalr_UI_Controller_Farms extends Scalr_UI_Controller
             'ui/farms/builder/roleslibrary.css',
             'codemirror/codemirror.css',
             'ui/core/variablefield.css',
-            'ui/scripts/scriptfield2.css',
+            'ui/scripts/scriptfield.css',
             'ui/farms/builder/tabs/scaling.css',
         ));
     }
 
+    /**
+     * @param $farmId
+     * @throws Scalr_Exception_InsufficientPermissions
+     */
+    public function xGetOwnerHistoryAction($farmId)
+    {
+        $this->request->restrictAccess(Acl::RESOURCE_FARMS, Acl::PERM_FARMS_MANAGE);
+
+        $dbFarm = DBFarm::LoadByID($farmId);
+        $this->user->getPermissions()->validate($dbFarm);
+
+        if ($dbFarm->createdByUserId == $this->user->getId() || $this->user->isAccountOwner()) {
+            $history = $dbFarm->GetSetting(DBFarm::SETTING_OWNER_HISTORY);
+            if ($history)
+                $history = unserialize($history);
+
+            if (! $history)
+                $history = [];
+
+            $history = array_map(function($item) {
+                $item['dt'] = Scalr_Util_DateTime::convertTz($item['dt']);
+                return $item;
+            }, $history);
+
+            $this->response->data(['history' => $history]);
+        } else {
+            throw new Scalr_Exception_InsufficientPermissions();
+        }
+    }
 }

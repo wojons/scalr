@@ -122,7 +122,7 @@ class RoleResourcePermissionObject
         return $this->granted;
     }
 
-	/**
+    /**
      * Gets the ID of the permission
      *
      * @return  string Returns the ID of the permission
@@ -132,7 +132,7 @@ class RoleResourcePermissionObject
         return $this->permissionId;
     }
 
-	/**
+    /**
      * Sets the ID of the permission
      *
      * @param   string $permissionId The Id of the permission

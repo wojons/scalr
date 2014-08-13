@@ -5,7 +5,7 @@ namespace Scalr\Acl;
 use Scalr\Acl\Exception;
 use Scalr\Acl\Resource;
 use Scalr\Acl\Role;
-use PlatformFactory;
+use Scalr\Modules\PlatformFactory;
 
 /**
  * Scalr ACL class
@@ -18,7 +18,8 @@ class Acl
 
     // Associative groups of the ACL resources.
     // This group is needed just to visually separate resources by belonging to group.
-    const GROUP_ADMINISTRATION = 'Administration';
+    const GROUP_ADMINISTRATION = 'Account management';
+    const GROUP_ENVADMINISTRATION = 'Environment management';
     const GROUP_GENERAL = 'General';
     const GROUP_SECURITY = 'Security';
     const GROUP_FARMS = 'Farms';
@@ -30,6 +31,8 @@ class Acl
     const GROUP_AWS = 'AWS';
     const GROUP_CLOUDSTACK = 'CloudStack';
     const GROUP_OPENSTACK = 'OpenStack';
+    const GROUP_GCE = 'GCE';
+    const GROUP_ANALYTICS = 'Analytics';
     // .. add more associative groups here
     // const GROUP_FOOGROUP = 'Fooname';
 
@@ -43,7 +46,6 @@ class Acl
     const RESOURCE_FARMS_STATISTICS = 0x103;
     const RESOURCE_FARMS_ROLES = 0x104;
     const RESOURCE_FARMS_SERVERS = 0x105;
-    const RESOURCE_FARMS_SCRIPTS = 0x106;
 
     const RESOURCE_CLOUDSTACK_VOLUMES = 0x110;
     const RESOURCE_CLOUDSTACK_SNAPSHOTS = 0x111;
@@ -52,6 +54,11 @@ class Acl
     const RESOURCE_OPENSTACK_VOLUMES = 0x210;
     const RESOURCE_OPENSTACK_SNAPSHOTS = 0x211;
     const RESOURCE_OPENSTACK_PUBLIC_IPS = 0x212;
+    const RESOURCE_OPENSTACK_ELB = 0x213;
+
+    const RESOURCE_GCE_STATIC_IPS = 0x230;
+    const RESOURCE_GCE_PERSISTENT_DISKS = 0x231;
+    const RESOURCE_GCE_SNAPSHOTS = 0x232;
 
     const RESOURCE_AWS_VOLUMES = 0x120;
     const RESOURCE_AWS_SNAPSHOTS = 0x121;
@@ -60,10 +67,12 @@ class Acl
     const RESOURCE_AWS_IAM = 0x124;
     const RESOURCE_AWS_RDS = 0x125;
     const RESOURCE_AWS_ELASTIC_IPS = 0x126;
+    const RESOURCE_AWS_S3 = 0x127;
+    const RESOURCE_AWS_ROUTE53 = 0x128;
 
     const RESOURCE_SECURITY_SSH_KEYS = 0x130;
     const RESOURCE_SECURITY_RETRIEVE_WINDOWS_PASSWORDS = 0x131;
-    const RESOURCE_SECURITY_AWS_SECURITY_GROUPS = 0x132;
+    const RESOURCE_SECURITY_SECURITY_GROUPS = 0x132;
 
     const RESOURCE_LOGS_API_LOGS = 0x140;
     const RESOURCE_LOGS_SCRIPTING_LOGS = 0x141;
@@ -74,10 +83,12 @@ class Acl
     const RESOURCE_SERVICES_SSL = 0x152;
     const RESOURCE_SERVICES_RABBITMQ = 0x153;
 
-    const RESOURCE_GENERAL_GLOBAL_VARIABLES = 0x160;
+    const RESOURCE_ENVADMINISTRATION_GLOBAL_VARIABLES = 0x160;
     const RESOURCE_GENERAL_CUSTOM_SCALING_METRICS = 0x163;
     const RESOURCE_GENERAL_CUSTOM_EVENTS = 0x164;
     const RESOURCE_GENERAL_SCHEDULERTASKS = 0x165;
+    const RESOURCE_GENERAL_WEBHOOKS = 0x166;
+    const RESOURCE_ADMINISTRATION_GLOBAL_VARIABLES = 0x167;
 
     const RESOURCE_DB_BACKUPS = 0x170;
     const RESOURCE_DB_DATABASE_STATUS = 0x171;
@@ -89,9 +100,14 @@ class Acl
 
     const RESOURCE_DNS_ZONES = 0x190;
 
-    const RESOURCE_ADMINISTRATION_GOVERNANCE = 0x161;
+    const RESOURCE_ENVADMINISTRATION_GOVERNANCE = 0x161;
     const RESOURCE_ADMINISTRATION_BILLING = 0x162;
-    const RESOURCE_ADMINISTRATION_ENV_CLOUDS = 0x202;
+    const RESOURCE_ENVADMINISTRATION_ENV_CLOUDS = 0x202;
+
+    const RESOURCE_ANALYTICS_PROJECTS = 0x240;
+
+    const RESOURCE_ADMINISTRATION_ORCHESTRATION = 0x250;
+    const RESOURCE_ADMINISTRATION_SCRIPTS = 0x106;
 
     // ... add more resource_id here
     // const RESOURCE_FOO = 0x101;
@@ -111,9 +127,11 @@ class Acl
     const PERM_FARMS_ROLES_BUNDLETASKS = 'bundletasks';
     const PERM_FARMS_ROLES_CREATE = 'create';
 
-    const PERM_FARMS_SCRIPTS_MANAGE = 'manage';
-    const PERM_FARMS_SCRIPTS_EXECUTE = 'execute';
-    const PERM_FARMS_SCRIPTS_FORK = 'fork';
+    const PERM_FARMS_SERVERS_SSH_CONSOLE = 'ssh-console';
+
+    const PERM_ADMINISTRATION_SCRIPTS_MANAGE = 'manage';
+    const PERM_ADMINISTRATION_SCRIPTS_EXECUTE = 'execute';
+    const PERM_ADMINISTRATION_SCRIPTS_FORK = 'fork';
 
     const PERM_DB_BACKUPS_REMOVE = 'remove';
 
@@ -574,7 +592,7 @@ class Acl
         ));
 
         //Disables administration section in Full access ACL
-        foreach (array(self::RESOURCE_ADMINISTRATION_BILLING, self::RESOURCE_ADMINISTRATION_ENV_CLOUDS, self::RESOURCE_ADMINISTRATION_GOVERNANCE) as $resourceId) {
+        foreach (array(self::RESOURCE_ADMINISTRATION_BILLING, self::RESOURCE_ENVADMINISTRATION_ENV_CLOUDS, self::RESOURCE_ENVADMINISTRATION_GOVERNANCE, self::RESOURCE_ADMINISTRATION_ORCHESTRATION) as $resourceId) {
             $this->db->Execute("
                 INSERT IGNORE `acl_account_role_resources` (account_role_id, resource_id, granted)
                 VALUES (?, ?, 0)
@@ -1455,7 +1473,12 @@ class Acl
     public function isUserAllowedByEnvironment(\Scalr_Account_User $user, $environment, $resourceId, $permissionId = null)
     {
         //Checks wheter environment and user are from the same account.
-        if ($user->isScalrAdmin()) {
+        if (!($user instanceof \Scalr_Account_User)) {
+            throw new \InvalidArgumentException(sprintf(
+                'Argument 1 of the method %s should be Scalr_Account_User object, %s given.',
+                __METHOD__, gettype($user)
+            ));
+        } elseif ($user->isScalrAdmin()) {
             return true;
         } else if (!($environment instanceof \Scalr_Environment)) {
             //If environment is not defined it will return false.

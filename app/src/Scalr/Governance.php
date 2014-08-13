@@ -8,10 +8,16 @@ class Scalr_Governance
 
     const AWS_KEYPAIR = 'aws.ssh_key_pair';
     const AWS_SECURITY_GROUPS = 'aws.additional_security_groups';
+    const AWS_IAM = 'aws.iam';
+    const AWS_VPC = 'aws.vpc';
+    const AWS_TAGS = 'aws.tags';
+
+    const OPENSTACK_SECURITY_GROUPS = 'openstack.additional_security_groups';
 
     const EUCALYPTUS_KEYPAIR = 'euca.ssh_key_pair';
     const EUCALYPTUS_SECURITY_GROUPS = 'euca.additional_security_groups';
 
+    const CATEGORY_GENERAL = 'general';
     const GENERAL_LEASE = 'general.lease';
     const GENERAL_HOSTNAME_FORMAT = 'general.hostname_format';
 
@@ -21,16 +27,18 @@ class Scalr_Governance
         $this->db = \Scalr::getDb();
     }
 
-    public function setValue($name, $data)
+    public function setValue($category, $name, $data)
     {
         $value = json_encode($data['limits']);
         $this->db->Execute("INSERT INTO `governance` SET
             `env_id` = ?,
+            `category` = ?,
             `name` = ?,
             `value` = ?,
             `enabled` = ?
             ON DUPLICATE KEY UPDATE `value` = ?, `enabled` = ?", array(
             $this->envId,
+            $category,
             $name,
             $value,
             $data['enabled'],
@@ -44,16 +52,16 @@ class Scalr_Governance
     {
         $result = array();
         $list = $this->db->GetAll(
-            'SELECT name, value, enabled FROM `governance` WHERE env_id = ?' . ($enabledOnly ? ' AND enabled = 1' : ''),
+            'SELECT category, name, value, enabled FROM `governance` WHERE env_id = ?' . ($enabledOnly ? ' AND enabled = 1' : ''),
             array(
                 $this->envId
             )
         );
         foreach ($list as $var) {
             if ($enabledOnly) {
-                $result[$var['name']] = json_decode($var['value']);
+                $result[$var['category']][$var['name']] = json_decode($var['value']);
             } else {
-                $result[$var['name']] = array(
+                $result[$var['category']][$var['name']] = array(
                     'enabled' => $var['enabled'],
                     'limits' => json_decode($var['value'])
                 );
@@ -62,12 +70,13 @@ class Scalr_Governance
         return $result;
     }
 
-    public function isEnabled($name)
+    public function isEnabled($category, $name)
     {
         $value = $this->db->GetOne(
-            "SELECT enabled FROM `governance` WHERE env_id = ? AND name = ? LIMIT 1",
+            "SELECT enabled FROM `governance` WHERE env_id = ? AND category = ? AND name = ? LIMIT 1",
             array(
                 $this->envId,
+                $category,
                 $name
             )
         );
@@ -76,15 +85,16 @@ class Scalr_Governance
     }
 
     //$governance = new Scalr_Governance($this->getEnvironmentId());
-    //$governance->getValue('aws.ssh_key_pair')
-    public function getValue($name, $option = 'value')
+    //$governance->getValue('ec2', 'aws.ssh_key_pair')
+    public function getValue($category, $name, $option = 'value')
     {
         $result = null;
 
         $value = $this->db->GetOne(
-            "SELECT value FROM `governance` WHERE env_id = ? AND name = ? AND enabled = 1",
+            "SELECT value FROM `governance` WHERE env_id = ? AND category = ? AND name = ? AND enabled = 1",
             array(
                 $this->envId,
+                $category,
                 $name
             )
         );

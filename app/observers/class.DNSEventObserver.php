@@ -50,7 +50,7 @@ class DNSEventObserver extends EventObserver
             try {
                 $hash = DBFarm::LoadByID($event->GetFarmID())->Hash;
                 $pdnsDb = \Scalr::getContainer()->dnsdb;
-                $pdnsDb->Execute("INSERT INTO `domains` SET `name`=?, `type`=?, `scalr_farm_id`=?", array("{$hash}.scalr-dns.net",'NATIVE', $event->GetFarmID()));
+                $pdnsDb->Execute("INSERT INTO `domains` SET `name`=?, `type`=?, `scalr_farm_id`=?", array("{$hash}." . \Scalr::config('scalr.dns.static.domain_name'),'NATIVE', $event->GetFarmID()));
             } catch (Exception $e) {}
         }
 
@@ -193,6 +193,11 @@ class DNSEventObserver extends EventObserver
                 $records[] = array("int.{$server->index}.{$server->farmRoleId}", $server->localIp, $server->serverId);
                 $records[] = array("ext.{$server->index}.{$server->farmRoleId}", $server->remoteIp, $server->serverId);
 
+                if (Scalr::config('scalr.dns.static.extended')) {
+                    $records[] = array("int.{$server->farmRoleId}", $server->localIp, $server->serverId);
+                    $records[] = array("ext.{$server->farmRoleId}", $server->remoteIp, $server->serverId);
+                }
+
                 if ($server->GetProperty(Scalr_Role_Behavior_MongoDB::SERVER_IS_ROUTER)) {
                     $records[] = array("int.mongo", $server->localIp, $server->serverId, 'mongodb');
                     $records[] = array("ext.mongo", $server->remoteIp, $server->serverId, 'mongodb');
@@ -207,63 +212,65 @@ class DNSEventObserver extends EventObserver
                 }
             }
 
-            $isMysql = $dbRole->hasBehavior(ROLE_BEHAVIORS::MYSQL);
-            if ($isMysql) {
-                // Clear records
-                $deleteMySQL = true;
-                $mysqlMasterServer = null;
-                $mysqlSlaves = 0;
+            if ($dbRole) {
+                $isMysql = $dbRole->hasBehavior(ROLE_BEHAVIORS::MYSQL);
+                if ($isMysql) {
+                    // Clear records
+                    $deleteMySQL = true;
+                    $mysqlMasterServer = null;
+                    $mysqlSlaves = 0;
 
-                $servers = $this->DB->Execute("SELECT server_id, local_ip, remote_ip FROM servers WHERE `farm_roleid` = ? and `status`=?", array($server->farmRoleId, SERVER_STATUS::RUNNING));
-                while ($s = $servers->FetchRow()) {
-                    if ($this->DB->GetOne("SELECT value FROM server_properties WHERE server_id = ? AND name = ? LIMIT 1", array($s['server_id'], SERVER_PROPERTIES::DB_MYSQL_MASTER)) == 1) {
-                        $records[] = array("int.master.mysql", $s['local_ip'], $s['server_id'], 'mysql');
-                        $records[] = array("ext.master.mysql", $s['remote_ip'], $s['server_id'], 'mysql');
-                        $mysqlMasterServer = $s;
-                    } else {
-                        $records[] = array("int.slave.mysql", $s['local_ip'], $s['server_id'], 'mysql');
-                        $records[] = array("ext.slave.mysql", $s['remote_ip'], $s['server_id'], 'mysql');
-                        $mysqlSlaves++;
+                    $servers = $this->DB->Execute("SELECT server_id, local_ip, remote_ip FROM servers WHERE `farm_roleid` = ? and `status`=?", array($server->farmRoleId, SERVER_STATUS::RUNNING));
+                    while ($s = $servers->FetchRow()) {
+                        if ($this->DB->GetOne("SELECT value FROM server_properties WHERE server_id = ? AND name = ? LIMIT 1", array($s['server_id'], SERVER_PROPERTIES::DB_MYSQL_MASTER)) == 1) {
+                            $records[] = array("int.master.mysql", $s['local_ip'], $s['server_id'], 'mysql');
+                            $records[] = array("ext.master.mysql", $s['remote_ip'], $s['server_id'], 'mysql');
+                            $mysqlMasterServer = $s;
+                        } else {
+                            $records[] = array("int.slave.mysql", $s['local_ip'], $s['server_id'], 'mysql');
+                            $records[] = array("ext.slave.mysql", $s['remote_ip'], $s['server_id'], 'mysql');
+                            $mysqlSlaves++;
+                        }
+
+                        $records[] = array("int.mysql", $s['local_ip'], $s['server_id'], 'mysql');
+                        $records[] = array("ext.mysql", $s['remote_ip'], $s['server_id'], 'mysql');
                     }
 
-                    $records[] = array("int.mysql", $s['local_ip'], $s['server_id'], 'mysql');
-                    $records[] = array("ext.mysql", $s['remote_ip'], $s['server_id'], 'mysql');
+                    if ($mysqlSlaves == 0 && $mysqlMasterServer) {
+                        $records[] = array("int.slave.mysql", $mysqlMasterServer['local_ip'], $mysqlMasterServer['server_id'], 'mysql');
+                        $records[] = array("ext.slave.mysql", $mysqlMasterServer['remote_ip'], $mysqlMasterServer['server_id'], 'mysql');
+                    }
                 }
 
-                if ($mysqlSlaves == 0 && $mysqlMasterServer) {
-                    $records[] = array("int.slave.mysql", $mysqlMasterServer['local_ip'], $mysqlMasterServer['server_id'], 'mysql');
-                    $records[] = array("ext.slave.mysql", $mysqlMasterServer['remote_ip'], $mysqlMasterServer['server_id'], 'mysql');
-                }
-            }
+                $dbmsr = $dbRole->getDbMsrBehavior();
+                if ($dbmsr) {
+                    $recordPrefix = $dbmsr;
 
-            $dbmsr = $dbRole->getDbMsrBehavior();
-            if ($dbmsr) {
-                $recordPrefix = $dbmsr;
+                    // Clear records
+                    $deleteDbMsr = true;
+                    $mysqlMasterServer = null;
+                    $mysqlSlaves = 0;
 
-                // Clear records
-                $deleteDbMsr = true;
-                $mysqlMasterServer = null;
-                $mysqlSlaves = 0;
+                    $servers = $this->DB->Execute("SELECT server_id, local_ip, remote_ip FROM servers WHERE `farm_roleid` = ? and `status`=?", array($server->farmRoleId, SERVER_STATUS::RUNNING));
+                    while ($s = $servers->FetchRow()) {
+                        if ($this->DB->GetOne("SELECT value FROM server_properties WHERE server_id = ? AND name = ? LIMIT 1", array($s['server_id'], Scalr_Db_Msr::REPLICATION_MASTER)) == 1) {
+                            $records[] = array("int.master.{$recordPrefix}", $s['local_ip'], $s['server_id'], $dbmsr);
+                            $records[] = array("ext.master.{$recordPrefix}", $s['remote_ip'], $s['server_id'], $dbmsr);
+                            $mysqlMasterServer = $s;
+                        } else {
+                            $records[] = array("int.slave.{$recordPrefix}", $s['local_ip'], $s['server_id'], $dbmsr);
+                            $records[] = array("ext.slave.{$recordPrefix}", $s['remote_ip'], $s['server_id'], $dbmsr);
+                            $mysqlSlaves++;
+                        }
 
-                $servers = $this->DB->Execute("SELECT server_id, local_ip, remote_ip FROM servers WHERE `farm_roleid` = ? and `status`=?", array($server->farmRoleId, SERVER_STATUS::RUNNING));
-                while ($s = $servers->FetchRow()) {
-                    if ($this->DB->GetOne("SELECT value FROM server_properties WHERE server_id = ? AND name = ? LIMIT 1", array($s['server_id'], Scalr_Db_Msr::REPLICATION_MASTER)) == 1) {
-                        $records[] = array("int.master.{$recordPrefix}", $s['local_ip'], $s['server_id'], $dbmsr);
-                        $records[] = array("ext.master.{$recordPrefix}", $s['remote_ip'], $s['server_id'], $dbmsr);
-                        $mysqlMasterServer = $s;
-                    } else {
-                        $records[] = array("int.slave.{$recordPrefix}", $s['local_ip'], $s['server_id'], $dbmsr);
-                        $records[] = array("ext.slave.{$recordPrefix}", $s['remote_ip'], $s['server_id'], $dbmsr);
-                        $mysqlSlaves++;
+                        $records[] = array("int.{$recordPrefix}", $s['local_ip'], $s['server_id'], $dbmsr);
+                        $records[] = array("ext.{$recordPrefix}", $s['remote_ip'], $s['server_id'], $dbmsr);
                     }
 
-                    $records[] = array("int.{$recordPrefix}", $s['local_ip'], $s['server_id'], $dbmsr);
-                    $records[] = array("ext.{$recordPrefix}", $s['remote_ip'], $s['server_id'], $dbmsr);
-                }
-
-                if ($mysqlSlaves == 0 && $mysqlMasterServer) {
-                    $records[] = array("int.slave.{$recordPrefix}", $mysqlMasterServer['local_ip'], $mysqlMasterServer['server_id'], $dbmsr);
-                    $records[] = array("ext.slave.{$recordPrefix}", $mysqlMasterServer['remote_ip'], $mysqlMasterServer['server_id'], $dbmsr);
+                    if ($mysqlSlaves == 0 && $mysqlMasterServer) {
+                        $records[] = array("int.slave.{$recordPrefix}", $mysqlMasterServer['local_ip'], $mysqlMasterServer['server_id'], $dbmsr);
+                        $records[] = array("ext.slave.{$recordPrefix}", $mysqlMasterServer['remote_ip'], $mysqlMasterServer['server_id'], $dbmsr);
+                    }
                 }
             }
 

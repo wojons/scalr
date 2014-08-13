@@ -7,6 +7,7 @@ class Scalr_Validator
     const RANGE = 'range';
     const REQUIRED = 'required';
     const NOHTML = 'nohtml';
+    const ALPHANUM = 'alphanum';
     const EMAIL = 'email';
     const IP = 'ip';
     const DOMAIN = 'domain';
@@ -100,6 +101,14 @@ class Scalr_Validator
 
         return filter_var($value, FILTER_VALIDATE_IP, $flag) !== false ?:
                array('This is not a valid IP address.');
+    }
+
+    public function validateAlphanum($value, $type, $options)
+    {
+        if ($options === true && preg_match('/^[A-Za-z0-9-_]+$/si', $value))
+            return true;
+        else
+            return array('Value should contain only letters and numbers');
     }
 
     public function validateNohtml($value, $type, $options)

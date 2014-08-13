@@ -55,7 +55,6 @@ class Scalr_Permissions
                 return ($object->getAccountId() == $this->user->getAccountId());
 
             case 'Scalr_Account_Team':
-            case 'Scalr_Script':
                 return ($object->accountId == $this->user->getAccountId());
 
             case 'DBServer':

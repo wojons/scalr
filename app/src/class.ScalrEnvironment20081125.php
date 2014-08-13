@@ -13,20 +13,7 @@ class ScalrEnvironment20081125 extends ScalrEnvironment
         } elseif (!$this->DBServer->IsSupported(0.9) && $this->DBServer->IsSupported(0.8)) {
             throw new Exception("Windows scalarizr doesn't support script executions");
         } else {
-            if (SCALR_ID == 'ab6d8171') {
-                $this->DB->Execute("INSERT INTO debug_scripting SET
-                    server_id = ?,
-                    request = ?,
-                    params = ?
-                ", array(
-                    $this->DBServer->serverId,
-                    json_encode($_REQUEST),
-                    json_encode(array(
-                        $this->DBServer->GetProperty(SERVER_PROPERTIES::SZR_VESION),
-                        $_SERVER['REQUEST_URI']
-                    ))
-                ));
-            }
+            
         }
 
         $ResponseDOMDocument->documentElement->appendChild($ScriptsDOMNode);
@@ -52,6 +39,8 @@ class ScalrEnvironment20081125 extends ScalrEnvironment
 
         if ($DBFarmRole->GetRoleObject()->hasBehavior(ROLE_BEHAVIORS::NGINX))
         {
+            //Still used for compatibility mode.
+
             $vhost_info = $this->DB->GetRow("SELECT * FROM apache_vhosts WHERE farm_id=? AND is_ssl_enabled='1' LIMIT 1",
                 array($this->DBServer->farmId)
             );
@@ -74,7 +63,8 @@ class ScalrEnvironment20081125 extends ScalrEnvironment
                     $vValues = array_values($vars);
 
                     $contents = str_replace($keys, $vValues, $template);
-                    $contents = str_replace(array("{literal}", "{/literal}"), array("", ""), $contents);
+
+                    $this->DBServer->applyGlobalVarsToValue($contents);
 
                     $VhostDOMNode =  $ResponseDOMDocument->createElement("vhost");
                     $VhostDOMNode->setAttribute("hostname", $vhost_info['name']);
@@ -131,7 +121,8 @@ class ScalrEnvironment20081125 extends ScalrEnvironment
                     $template = $virtualhost['httpd_conf_ssl'];
 
                 $contents = str_replace($keys, $vValues, $template);
-                $contents = str_replace(array("{literal}", "{/literal}"), array("", ""), $contents);
+
+                $this->DBServer->applyGlobalVarsToValue($contents);
 
                 $RawDOMNode = $ResponseDOMDocument->createElement("raw");
                 $RawDOMNode->appendChild($ResponseDOMDocument->createCDATASection($contents));
@@ -150,6 +141,25 @@ class ScalrEnvironment20081125 extends ScalrEnvironment
     {
         $ResponseDOMDocument = $this->CreateResponse();
         $ParamsDOMNode = $ResponseDOMDocument->createElement("params");
+
+        if (SCALR_ID == 'ab6d8171') {
+            $this->DB->Execute("INSERT INTO debug_scripting SET
+                server_id = ?,
+                request = ?,
+                params = ?,
+                account_id = ?,
+                farm_id = ?
+            ", array(
+                $this->DBServer->serverId,
+                json_encode($_REQUEST),
+                json_encode(array(
+                    $this->DBServer->GetProperty(SERVER_PROPERTIES::SZR_VESION),
+                    $_SERVER['REQUEST_URI']
+                )),
+                $this->DBServer->clientId,
+                $this->DBServer->farmId
+            ));
+        }
 
 
         $DBFarmRole = $this->DBServer->GetFarmRoleObject();
@@ -188,16 +198,16 @@ class ScalrEnvironment20081125 extends ScalrEnvironment
     {
         $ResponseDOMDocument = $this->CreateResponse();
 
-        if ($this->DBServer->status == SERVER_STATUS::PENDING_TERMINATE || $this->DBServer->status == SERVER_STATUS::TERMINATED  || $this->DBServer->status == SERVER_STATUS::TROUBLESHOOTING)
+        if (in_array($this->DBServer->status, array(SERVER_STATUS::PENDING_TERMINATE, SERVER_STATUS::TERMINATED, SERVER_STATUS::TROUBLESHOOTING, SERVER_STATUS::SUSPENDED)))
             return $ResponseDOMDocument;
 
         $hostName = $this->GetArg("hostname") ? " AND name=".$this->qstr($this->GetArg("hostname")) : "";
 
         if ($this->GetArg("id")) {
-            $sslInfo = $this->DB->GetRow("SELECT * FROM services_ssl_certs WHERE id = ? AND env_id = ? LIMIT 1", array(
-                $this->GetArg("id"),
-                $this->DBServer->envId
-            ));
+            $sslInfo = new Scalr_Service_Ssl_Certificate();
+            $sslInfo->loadById($this->GetArg("id"));
+            if ($sslInfo->envId != $this->DBServer->envId)
+                $sslInfo = null;
         } else {
             if ($this->DBServer->GetFarmRoleObject()->GetRoleObject()->hasBehavior(ROLE_BEHAVIORS::NGINX)) {
                 $vhost_info = $this->DB->GetRow("SELECT * FROM apache_vhosts WHERE farm_id=? AND is_ssl_enabled='1' {$hostName} LIMIT 1",
@@ -210,26 +220,27 @@ class ScalrEnvironment20081125 extends ScalrEnvironment
                 );
             }
 
-            if ($vhost_info)
-                $sslInfo = $this->DB->GetRow("SELECT * FROM services_ssl_certs WHERE id = ? AND env_id = ? LIMIT 1", array(
-                    $vhost_info['ssl_cert_id'],
-                    $this->DBServer->envId
-                ));
+            if ($vhost_info) {
+                $sslInfo = new Scalr_Service_Ssl_Certificate();
+                $sslInfo->loadById($vhost_info['ssl_cert_id']);
+                if ($sslInfo->envId != $this->DBServer->envId)
+                    $sslInfo = null;
+            }
         }
 
         if ($sslInfo) {
 
             $vhost = $ResponseDOMDocument->createElement("virtualhost");
-            $vhost->setAttribute("name", $sslInfo['name']);
+            $vhost->setAttribute("name", $sslInfo->name);
 
             $vhost->appendChild(
-                $ResponseDOMDocument->createElement("cert", $sslInfo['ssl_cert'])
+                $ResponseDOMDocument->createElement("cert", $sslInfo->certificate)
             );
             $vhost->appendChild(
-                $ResponseDOMDocument->createElement("pkey", $sslInfo['ssl_pkey'])
+                $ResponseDOMDocument->createElement("pkey", $sslInfo->privateKey)
             );
             $vhost->appendChild(
-                $ResponseDOMDocument->createElement("ca_cert", $sslInfo['ssl_cabundle'])
+                $ResponseDOMDocument->createElement("ca_cert", $sslInfo->caBundle)
             );
 
             $ResponseDOMDocument->documentElement->appendChild(
@@ -292,6 +303,7 @@ class ScalrEnvironment20081125 extends ScalrEnvironment
             $RoleDOMNode = $ResponseDOMDocument->createElement('role');
             $RoleDOMNode->setAttribute('behaviour', implode(",", $DBFarmRole->GetRoleObject()->getBehaviors()));
             $RoleDOMNode->setAttribute('name', DBRole::loadById($roleId)->name);
+            $RoleDOMNode->setAttribute('alias', $DBFarmRole->Alias);
             $RoleDOMNode->setAttribute('id', $DBFarmRole->ID);
             $RoleDOMNode->setAttribute('role-id', $roleId);
 
@@ -324,6 +336,7 @@ class ScalrEnvironment20081125 extends ScalrEnvironment
                     $HostDOMNode->setAttribute('index', $DBServer->index);
                     $HostDOMNode->setAttribute('status', $DBServer->status);
                     $HostDOMNode->setAttribute('cloud-location', $DBServer->GetCloudLocation());
+                    $HostDOMNode->setAttribute('cloud-location-zone', $DBServer->cloudLocationZone);
 
                     if ($DBFarmRole->GetRoleObject()->hasBehavior(ROLE_BEHAVIORS::MONGODB))
                     {

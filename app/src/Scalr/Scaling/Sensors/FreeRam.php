@@ -35,13 +35,7 @@
                 }
 
                 if ($DBServer->IsSupported('0.13.0')) {
-                    $szrClient = Scalr_Net_Scalarizr_Client::getClient(
-                        $DBServer,
-                        Scalr_Net_Scalarizr_Client::NAMESPACE_SYSTEM,
-                        $DBServer->getPort(DBServer::PORT_API)
-                    );
-
-                    $ramUsage = $szrClient->memInfo();
+                    $ramUsage = $DBServer->scalarizr->system->memInfo();
                     $ram = (float)$ramUsage->total_free;
 
                     if ($farmRoleMetric->getSetting(self::SETTING_USE_CACHED))

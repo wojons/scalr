@@ -79,8 +79,9 @@ class AccessKeyData extends AbstractIamDataType
      * @throws  IamException
      * @throws  QueryClientException
      */
-    public function delete ()
+    public function delete()
     {
+        $this->throwExceptionIfNotInitialized();
         return $this->getIam()->user->deleteAccessKey($this->accessKeyId, $this->userName);
     }
 }

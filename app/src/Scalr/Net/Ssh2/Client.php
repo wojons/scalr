@@ -107,6 +107,11 @@
             $this->logger = Logger::getLogger('SSH2');
         }
 
+        public function getLogin()
+        {
+            return $this->login;
+        }
+
         /**
          * Set stream timeout
          *

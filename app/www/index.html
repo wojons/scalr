@@ -58,7 +58,7 @@
         .scalr-main-loader #loading-div{position: absolute; left: 0; bottom: 0; width: 120px; height: 0px; -webkit-transition: all 0.2s ease; -moz-transition: all 0.2s ease; overflow: hidden;}
         .scalr-main-loader #loading-div-child{position: absolute; bottom: 0; width: 120px; height: 106px; background: url(/ui2/images/main_logo.png?2.0) no-repeat;}
         .scalr-main-loader #loading-text{position:absolute; top: 50%; left: 50%; width: 600px; margin-left: -300px; height: auto; margin-top: 30px; font: bold 18px arial, helvetica, sans-serif; color: #C93301; line-height: 28px; text-shadow: 0 1px #F8F9FA; text-align: center; display: none;}
-
+        .scalr-main-loader #loading-bg.error{background-image: url(/ui2/images/main_logo_error.png?1.1);}
         @media only screen and (-webkit-min-device-pixel-ratio: 1.5),
             only screen and (-o-min-device-pixel-ratio: 3/2),
             only screen and (min--moz-device-pixel-ratio: 1.5),
@@ -66,6 +66,7 @@
 
             .scalr-main-loader #loading-bg{background-image: url(/ui2/images/main_logo_bg_retina.png);background-size:120px 106px;}
             .scalr-main-loader #loading-div-child{background-image: url(/ui2/images/main_logo_retina.png);background-size:120px 106px;}
+            .scalr-main-loader #loading-bg.error{background-image: url(/ui2/images/main_logo_error_retina.png);background-size:120px 106px;}
         }
     </style>
 </head>
@@ -85,7 +86,7 @@
 	<div id="body-login-container" style="display: none">
 		<form method="post" action="/guest/xLogin/">
             <input id="textfield-user-login-inputEl" type="text" size="1" name="scalrLogin" style="width:100%;" class="x-form-field x-form-text " autocomplete="on" aria-invalid="false" data-errorqtip="" />
-            <input id="textfield-user-password-inputEl" type="password" size="1" name="scalrPass" style="width:100%;" class="x-form-field x-form-text " autocomplete="on" aria-invalid="false" data-errorqtip="">
+            <input id="textfield-user-password-inputEl" type="password" size="1" name="scalrPass" style="width:100%;" class="x-form-field x-form-text " autocomplete="on" aria-invalid="false" data-errorqtip="" />
 			<input type="submit" />
         </form>
 	</div>
@@ -96,7 +97,7 @@
         var head = document.head || document.getElementsByTagName('head')[0];
         var script = document.createElement('script');
         var debugMode = document.location.search.indexOf('debug') != -1;
-        debugMode = debugMode || sessionStorage.getItem('scalr-enable-debug');
+        debugMode = debugMode || sessionStorage.getItem('scalr-debug-enable');
 
         var errorMessage = 'The browser you are currently using is not supported by <a href="https://my.scalr.net/">my.scalr.net</a>. Please use one of the following ones: Safari, Firefox or Chrome.';
 
@@ -111,8 +112,51 @@
             text.innerHTML = message;
 
             div.parentNode.removeChild(div);
-            document.getElementById('loading-bg').style.backgroundImage = 'url(/ui2/images/main_logo_error.png)';
+            document.getElementById('loading-bg').className += ' error';
         }
+        
+        var _hsqTrackEvent;
+        var _trackEvent;
+        var _trackingUserEmail = '';
+        
+        var setUpTracking = function () {
+	        // You probably want to set a variable to disable this on-demand
+	        
+	        try {
+	        	var hsTrackingURL = "https://track.hubspot.com/v1/event/",
+	            trackedEventsMap = {
+	                    "clouds/xSaveCloudParams": "000000133172",
+	                    "farms/builder/xBuild": "000000133128",
+	                    "farms/xLaunch": "000000133129",
+	                    "account/users/xSave": "000000133173",
+	                    "webhooks/endpoints/xSave": "000000134493",
+	                    "webhooks/endpoints/xValidate": "000000134494",
+	                    "webhooks/configs/xSave": "000000134495"
+	            };
+	            
+	            _trackEvent = function (eventId) {
+	            	if (_trackingUserEmail == '' || typeof hsHubId == 'undefined') return;
+	            	
+	                var params = {"_a": hsHubId, "_n": eventId, "email": _trackingUserEmail};
+	                var queryString = Ext.Object.toQueryString(params),
+	                fullUrl = hsTrackingURL + "?" + queryString;
+	    
+	                // Load the image for tracking (because we don't want CORS)
+	                Ext.DomHelper.append(document.body, {"tag": "img", "src": fullUrl}).remove();
+	            }
+	            
+	            _hsqTrackEvent = function(link) {
+	                if (typeof hsHubId == 'undefined') return;
+	                
+	                Ext.iterate(trackedEventsMap, function(path, eventId) {
+	                    if (link.indexOf(path) != -1)
+	                        _trackEvent(eventId);
+	                });
+	            };
+	        } catch (e) {
+	        	var _er = e;
+	        }
+        };
 
         updateProgress(5);
 
@@ -135,14 +179,19 @@
                 Ext.onReady(function() {
                     try {
                         updateProgress(30);
+                        setUpTracking();
 
                         if (! (Ext.isChrome || Ext.isGecko || Ext.isSafari)) {
                             showError(errorMessage);
                         } else {
+                            var tm = 0;
+                            if (localStorage)
+                                tm = localStorage.getItem('scalr-system-time');
+
                             Ext.Ajax.defaultHeaders = { 'X-Scalr-Interface': 'v2', 'X-Scalr-Token': 'key' };
                             Ext.Ajax.request({
                                 url: '/guest/xInit',
-                                params: { locationHash: document.location.hash },
+                                params: { locationHash: document.location.hash, uiStorageTime: tm, 'X-Requested-Token': Ext.util.Cookies.get('scalr_token') },
                                 success: function (response) {
                                     try {
                                         var obj = Ext.decode(response.responseText);
@@ -152,6 +201,11 @@
                                             Scalr.InitParams = obj.initParams;
                                             Scalr.Init = Ext.emptyFn;
 
+                                            if (Scalr.InitParams && Scalr.InitParams.context && Scalr.InitParams.context.user) {
+                                            	_trackingUserEmail = Scalr.InitParams.context.user.userName;
+                                            	_trackEvent("000000132973");
+                                            }
+                                            
                                             // loading css
                                             (function () {
                                                 var onloadCss = function () {
@@ -241,15 +295,5 @@
             head.appendChild(script);
         }
     </script>
-    <script>
-	  (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
-	  (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
-	  m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
-	  })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
-	
-	  ga('create', 'UA-9229929-13', 'scalr.net');
-	  ga('send', 'pageview');
-	
-	</script>
 </body>
 </html>

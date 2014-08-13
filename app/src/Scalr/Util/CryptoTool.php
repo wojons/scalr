@@ -5,7 +5,8 @@ class Scalr_Util_CryptoTool
     private $cryptoAlgo,
             $cipherMode,
             $keySize,
-            $blockSize;
+            $blockSize,
+            $cryptoKey;
 
     public function __construct($cryptoAlgo = MCRYPT_TRIPLEDES, $cipherMode = MCRYPT_MODE_CFB,
                                 $keySize = 24, $blockSize = 8)
@@ -14,6 +15,16 @@ class Scalr_Util_CryptoTool
         $this->cipherMode = $cipherMode;
         $this->keySize = $keySize;
         $this->blockSize = $blockSize;
+    }
+
+    /**
+     * @param $cryptoKey
+     * @return $this
+     */
+    public function setCryptoKey($cryptoKey)
+    {
+        $this->cryptoKey = $cryptoKey;
+        return $this;
     }
 
     public static function opensslDecrypt($data, $privateKey, $privateKeyPassword = false) {
@@ -37,15 +48,19 @@ class Scalr_Util_CryptoTool
         return $text . str_repeat(chr($pad), $pad);
     }
 
-    public function encrypt($string, $cryptoKey)
+    public function encrypt($string, $cryptoKey = '')
     {
+        $cryptoKey = $cryptoKey ? $cryptoKey : $this->cryptoKey;
+
         list ($key, $iv) = $this->splitKeyIv($cryptoKey);
         $string = $this->pkcs5Padding($string, $this->blockSize);
         return base64_encode(mcrypt_encrypt($this->cryptoAlgo, $key, $string, $this->cipherMode, $iv));
     }
 
-    public function decrypt($string, $cryptoKey)
+    public function decrypt($string, $cryptoKey = '')
     {
+        $cryptoKey = $cryptoKey ? $cryptoKey : $this->cryptoKey;
+
         list ($key, $iv) = $this->splitKeyIv($cryptoKey);
         $ret = mcrypt_decrypt($this->cryptoAlgo, $key, base64_decode($string), $this->cipherMode, $iv);
 
@@ -55,8 +70,10 @@ class Scalr_Util_CryptoTool
         return trim($ret, "\x00..\x20");
     }
 
-    public function decrypt2($string, $cryptoKey)
+    public function decrypt2($string, $cryptoKey = '')
     {
+        $cryptoKey = $cryptoKey ? $cryptoKey : $this->cryptoKey;
+
         list ($key, $iv) = $this->splitKeyIv($cryptoKey);
         $ret = mcrypt_decrypt($this->cryptoAlgo, $key, base64_decode($string), $this->cipherMode, $iv);
 

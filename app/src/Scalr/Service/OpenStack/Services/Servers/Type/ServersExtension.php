@@ -41,6 +41,7 @@ class ServersExtension extends StringType
     const EXT_HOSTS = 'Hosts';
     const EXT_HYPERVISORS = 'Hypervisors';
     const EXT_OS_INSTANCE_USAGE_AUDIT_LOG = 'OSInstanceUsageAuditLog';
+    const EXT_OS_SERVER_PASSWORD = 'OSServerPassword';
     const EXT_KEYPAIRS = 'Keypairs';
     const EXT_MULTIPLE_CREATE = 'MultipleCreate';
     const EXT_NETWORKS = 'Networks';
@@ -56,6 +57,7 @@ class ServersExtension extends StringType
     const EXT_VIRTUAL_INTERFACES = 'VirtualInterfaces';
     const EXT_VOLUME_TYPES = 'VolumeTypes';
     const EXT_VOLUMES = 'Volumes';
+    const EXT_BLOCK_DEVICE_MAPPING_V2_BOOT = 'BlockDeviceMappingV2Boot';
 
     public static function getPrefix()
     {
