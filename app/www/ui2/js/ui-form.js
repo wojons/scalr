@@ -332,7 +332,7 @@ Ext.define('Scalr.ui.FormFilterField', {
         if (this.store.buffered) {
             this.store.removeAll();
         }
-		this.store.load();
+		this.store.loadPage(1);
 	},
 
     bindStore: function(store) {

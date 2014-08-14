@@ -576,6 +576,15 @@ Ext.override(Ext.form.field.ComboBox, {
         });
 	},
 
+    setValue: function(value, doSelect) {
+        var me = this;
+        if (!value && me.autoSetSingleValue && me.store.getCount() == 1) {
+            value = me.store.first().get(me.valueField);
+        }
+
+        me.callParent([value, doSelect]);
+    },
+
 	alignPicker: function() {
 		var me = this,
 			picker = me.getPicker();
@@ -2605,7 +2614,7 @@ Ext.define(null,{
             res = '<span class="' + cls + '"><img src="'+Ext.BLANK_IMAGE_URL+'" class="x-costanalytics-icon-' + (growth > 0 ? 'increase' : 'decrease') + '-small" />&nbsp;' + (growthPct !== null ? growthPctHR + '% (' + cost + ')' : cost) + '</span>';
         } else {
             cost = (growth > 0 ? '+ ': '') + cost;
-            res = '<span class="' + cls + '" data-qtip="Growth: ' + cost + '"><img src="'+Ext.BLANK_IMAGE_URL+'" class="x-costanalytics-icon-' + (growth > 0 ? 'increase' : 'decrease') + '-small" />&nbsp;' + ((mode === true) ? cost : (growthPct !== null ? growthPctHR + '%' : '')) + '</span>';
+            res = '<span class="' + cls + '" data-qtip="Growth: ' + cost + '"><img src="'+Ext.BLANK_IMAGE_URL+'" class="x-costanalytics-icon-' + (growth > 0 ? 'increase' : 'decrease') + '-small" />&nbsp;' + (growthPct !== null ? growthPctHR + '%' : '') + '</span>';
         }
         return res;
     },

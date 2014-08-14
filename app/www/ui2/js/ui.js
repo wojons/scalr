@@ -716,9 +716,11 @@ Scalr.application.createMenu = function(context) {
                 iconCls: 'x-topmenu-icon-roles'
             }, {
                 text: 'New Role',
+                iconCls: 'x-topmenu-icon-new',
                 href: '#/roles/edit'
             }, {
                 text: 'Role Builder',
+                iconCls: 'x-topmenu-icon-builder',
                 href: '#/roles/builder'
             }, {
                 text: 'Create Role from non-Scalr Server',
@@ -730,15 +732,17 @@ Scalr.application.createMenu = function(context) {
             xtype: 'menuitemtop',
             text: 'Images',
             href: '#/images/view',
+            iconCls: 'x-topmenu-icon-images',
             //hidden: !Scalr.isAllowed('FARMS_ROLES'),
             hidden: !Scalr.flags['betaMode'],
             //addLinkHref: '#//create',
             menu: [{
                 text: 'Images Library',
-                href: '#/images/view'
-                //iconCls: 'x-topmenu-icon-roles'
+                href: '#/images/view',
+                iconCls: 'x-topmenu-icon-library'
             }, {
                 text: 'Image Builder',
+                iconCls: 'x-topmenu-icon-builder',
                 href: '#/roles/builder?image'
             }, {
                 text: 'Create Image from non-Scalr Server',

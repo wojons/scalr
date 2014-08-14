@@ -133,7 +133,7 @@ abstract class AbstractUpdate extends AbstractGetter implements UpdateInterface
      *
      * @var  Console
      */
-    protected $console;
+    public $console;
 
     /**
      * File info of the update class

@@ -211,19 +211,47 @@ class Script extends AbstractEntity
 
     public function delete()
     {
-        // Check template usage
-        $rolesCount = $this->db()->GetOne("SELECT COUNT(*) FROM farm_role_scripts WHERE scriptid=?",
+        // Check script usage
+        $usage = [];
+
+        $farmRolesCount = $this->db()->GetOne("SELECT COUNT(DISTINCT farm_roleid) FROM farm_role_scripts WHERE scriptid=?",
             array($this->id)
         );
-
-        if ($rolesCount > 0) {
+        if ($farmRolesCount > 0) {
             $message = [];
-            foreach ($this->db()->GetAll("SELECT * FROM farm_role_scripts WHERE scriptid = ? LIMIT 3", array($this->id)) as $us) {
-                $dbFarmRole = \DBFarmRole::LoadByID($us['farm_roleid']);
+            foreach ($this->db()->GetCol("SELECT DISTINCT farm_roleid FROM farm_role_scripts WHERE scriptid = ? LIMIT 3", array($this->id)) as $id) {
+                $dbFarmRole = \DBFarmRole::LoadByID($id);
                 $message[] = $dbFarmRole->GetFarmObject()->Name . ' (' . $dbFarmRole->Alias . ')';
             }
 
-            throw new \Scalr_Exception_Core(sprintf('Script "%s" being used by %d farm roles: %s%s, and can\'t be deleted', $this->name, $rolesCount, join(', ', $message), $rolesCount > 1 ? ' and others' : ''));
+            $usage[] = sprintf("%d farm roles: %s%s", $farmRolesCount, join(', ', $message), $farmRolesCount > 3 ? ' and others' : '');
+        }
+
+        $rolesCount = $this->db()->GetOne("SELECT COUNT(DISTINCT role_id) FROM role_scripts WHERE script_id=?",
+            array($this->id)
+        );
+        if ($rolesCount > 0) {
+            $message = [];
+            foreach ($this->db()->GetCol("SELECT DISTINCT role_id FROM role_scripts WHERE script_id = ? LIMIT 3", array($this->id)) as $id) {
+                $dbRole = \DBRole::LoadByID($id);
+                $message[] = $dbRole->name;
+            }
+
+            $usage[] = sprintf("%d roles: %s%s", $rolesCount, join(', ', $message), $rolesCount > 3 ? ' and others' : '');
+        }
+
+        $accountCount = $this->db()->GetOne("SELECT COUNT(*) FROM account_scripts WHERE script_id=?",
+            array($this->id)
+        );
+        if ($accountCount > 0) {
+            $usage[] = sprintf("%d orchestration rule(s) on account level", $accountCount);
+        }
+
+        if (count($usage)) {
+            throw new \Scalr_Exception_Core(sprintf('Script "%s" being used by %s, and can\'t be deleted',
+                $this->name,
+                join(', ', $usage)
+            ));
         }
 
         Tag::deleteTags(Tag::RESOURCE_SCRIPT, $this->id);

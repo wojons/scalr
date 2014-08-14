@@ -703,7 +703,7 @@ Ext.define('Scalr.ui.DashboardTopBoxes', {
                         maxCost;
                     
                     mode = mode || this.up().down('#mode').getValue();
-                    this.tpl.pctLabelMode = mode === '$';
+                    this.tpl.pctLabelMode = mode === '$' ? 'invert' : 'default';
 
                     if (mode === '$') {
                         sorters = {

@@ -17,7 +17,7 @@ set_time_limit(0);
 
 define('SCALR_UPGRADE_VERSION', '1.1');
 
-$shortopts  = "hnvr:";
+$shortopts  = "hinvr:";
 $longopts  = array("help", "new", "force");
 $opt = getopt($shortopts, $longopts);
 
@@ -33,6 +33,7 @@ $showusage = function() use ($console) {
     $console->out("  -n, --new           Generate a new update class to implement.");
     $console->out("  -r uuid             Run only specified update. UUID is unique identifier.");
     $console->out("  -v                  Turn on verbosity.");
+    $console->out("  -i                  Turn on interactive mode for upgrades which rely on it.");
     $console->out("  --force             Run forcefully ignoring pid.");
     $console->out("");
     exit;
@@ -50,11 +51,9 @@ if (isset($opt['r'])) {
     $options->uuid = strtolower(str_replace('-', '', $opt['r']));
 }
 
-if (isset($opt['v'])) {
-    $options->verbosity = true;
-} else {
-    $options->verbosity = false;
-}
+$options->verbosity = isset($opt['v']);
+
+$options->interactive = isset($opt['i']);
 
 if (isset($opt['help']) || isset($opt['h'])) {
     $showusage();

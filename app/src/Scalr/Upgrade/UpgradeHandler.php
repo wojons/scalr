@@ -104,6 +104,7 @@ class UpgradeHandler
         $this->opt = $opt;
         $this->db = \Scalr::getDb();
         $this->console = new Console();
+        $this->console->interactive = !empty($opt->interactive);
         $this->updates = new UpdateCollection();
         $this->maxDate = '2013-01-01 00:00:00';
     }
@@ -517,6 +518,7 @@ class UpgradeHandler
 
         //Applies updates
         foreach ($pending as $update) {
+            $update->console->interactive = $this->console->interactive;
             $this->applyUpdate($update);
         }
 

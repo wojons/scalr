@@ -275,7 +275,7 @@ Scalr.regPage('Scalr.ui.account2.environments.view', function (loadParams, modul
                 maxWidth: 370,
                 margin: '0 20 0 0',
                 editable: false,
-                autoSetSingleValue: false,
+                autoSetSingleValue: true,
                 hidden: !moduleParams['ccs'] || (!Scalr.flags['betaMode'] && !Scalr.flags['allowManageAnalytics']),
                 allowBlank: !moduleParams['ccs'] || (!Scalr.flags['betaMode'] && !Scalr.flags['allowManageAnalytics']),
                 valueField: 'ccId',

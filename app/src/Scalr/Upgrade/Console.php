@@ -14,6 +14,7 @@ class Console
 {
     public $timeformat = 'i:s';
     public $keeplog = true;
+    public $interactive = true;
 
     /**
      * The log
@@ -190,7 +191,14 @@ class Console
      */
     public function confirm($message, $default = false)
     {
-        $y = strtolower(trim($this->input($message . " (Default: " . ($default ? "yes" : "no") . ") ")));
+        $msg = $message . " (Default: " . ($default ? "yes" : "no") . ") ";
+        if ($this->interactive) {
+            $y = strtolower(trim($this->input($msg)));
+        } else {
+            $this->out("%s", $msg);
+            return $default;
+        }
+
         switch (true) {
             case ($y == 'y') :
             case ($y == 'yes') :
