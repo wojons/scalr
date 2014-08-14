@@ -46,7 +46,7 @@ To get the diff between two versions, go to https://github.com/Scalr/scalr/compa
  * Updated tracking code by Thomas request (dicsydel)
  * UI-329 Minor changes in role import (igrkio)
  * UI-328 Refactor cluster placement group (igrkio)
- * SCALARIZR-1453 Execute chef-solo in orchestration (igrkio@scalr.com)
+ * SCALARIZR-1453 Execute chef-solo in orchestration (igrkio)
  * SCALRCORE-870 Switch AWS EC2 library version to the latest (recipe)
  * Removed obsolete ZohoCrm code (recipe)
  * SCALRCORE-668 * Fixed transmission of tags. Added validation. (bytekot)
