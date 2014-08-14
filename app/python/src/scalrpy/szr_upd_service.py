@@ -71,7 +71,7 @@ CONFIG = {
         },
     },
     'chunk_size': 100,
-    'pool_size': 10,
+    'pool_size': 100,
     'no_daemon': False,
     'interval': False,
     'instances_connection_timeout': 5,
@@ -145,7 +145,6 @@ class SzrUpdService(cron.Cron):
                         'scalarizr *scalarizr_(.*).x86_64.exe*\n',
                         r.text,
                         re.DOTALL)[0].split('-')[0]
-
         return out
 
     def _get_db_servers(self):
@@ -155,9 +154,27 @@ class SzrUpdService(cron.Cron):
                 "FROM servers "
                 "WHERE status IN ('Running') "
                 "ORDER BY server_id")
-        return self._db.execute_with_limit(query, 200, max_limit=CONFIG['chunk_size'], retries=1)
+        return self._db.execute_with_limit(query, 200, retries=1)
+
+    def _get_szr_upd_client(self, server):
+        key = cryptotool.decrypt_key(server['scalarizr.key'])
+        headers = {'X-Server-Id': server['server_id']}
+        instances_connection_policy = SCALR_CONFIG.get(server['platform'], {}).get(
+                'instances_connection_policy', SCALR_CONFIG['instances_connection_policy'])
+        ip, port, proxy_headers = helper.get_szr_updc_conn_info(server, instances_connection_policy)
+        headers.update(proxy_headers)
+        szr_upd_client = SzrUpdClient(ip, port, key, headers=headers)
+        return szr_upd_client
+
+    def _get_status(self, server):
+        szr_upd_client = self._get_szr_upd_client(server)
+        timeout = CONFIG['instances_connection_timeout']
+        status = szr_upd_client.status(cached=True, timeout=timeout)
+        return status
 
     def get_servers_for_update(self):
+        counter = 0
+
         for servers in self._get_db_servers():
             props = ['scalarizr.key', 'scalarizr.updc_port', 'scalarizr.version']
             self._db.load_server_properties(servers, props)
@@ -168,22 +185,17 @@ class SzrUpdService(cron.Cron):
             farms_map = dict((_['id'], _) for _ in farms)
 
             farms_roles = [{'id': __} for __ in set(_['farm_roleid'] for _ in servers)]
-            props = ['base.upd.schedule', 'user-data.scm_branch']
+            props = ['base.upd.schedule', 'scheduled_on']
             self._db.load_farm_role_settings(farms_roles, props)
             farms_roles_map = dict((_['id'], _) for _ in farms_roles)
 
-            servers_for_update = []
+            servers_scheduled_for_update = []
             for server in servers:
-                if 'scalarizr.key' not in server:
-                    msg = "Server: {0}, reason: Missing scalarizr key".format(server['server_id'])
-                    LOG.warning(msg)
-                    continue
-                if 'scalarizr.updc_port' not in server:
-                    server['scalarizr.updc_port'] = CONFIG['connections']['szr_upd_client']['port']
                 try:
                     version = server['scalarizr.version']
                     if not version or parse_version(version) < parse_version('2.7.7'):
                         continue
+
                     schedule = farms_roles_map.get(
                             server['farm_roleid'], {}).get('base.upd.schedule', None)
                     if not schedule:
@@ -191,25 +203,64 @@ class SzrUpdService(cron.Cron):
                                 server['farm_id'], {}).get('szr.upd.schedule', '* * *')
 
                     next_update_dt = time.strftime('%Y-%m-%d %H:%M:%S', self._scheduled_on(schedule))
-                    query = (
-                            """INSERT INTO farm_role_settings """
-                            """(farm_roleid, name, value) """
-                            """VALUES ({0}, 'scheduled_on', '{1}') """
-                            """ON DUPLICATE KEY UPDATE value='{1}'"""
-                    ).format(server['farm_roleid'], next_update_dt)
-                    msg = "Set next update datetime for server: {0} to: {1}"
-                    msg = msg.format(server['server_id'], next_update_dt)
-                    LOG.debug(msg)
-                    try:
-                        self._db.execute(query, retries=1)
-                    except:
-                        msg = 'Unable to set next update datetime for server: {0}, reason: {1}'
-                        msg = msg.format(server['server_id'], helper.exc_info())
-                        LOG.warning(msg)
+                    current_next_update_dt = farms_roles_map.get(
+                            server['farm_roleid'], {}).get('scheduled_on', None)
+                    if next_update_dt != current_next_update_dt:
+                        query = (
+                                """INSERT INTO farm_role_settings """
+                                """(farm_roleid, name, value) """
+                                """VALUES ({0}, 'scheduled_on', '{1}') """
+                                """ON DUPLICATE KEY UPDATE value='{1}'"""
+                        ).format(server['farm_roleid'], next_update_dt)
+                        msg = "Set next update datetime for server: {0} to: {1}"
+                        msg = msg.format(server['server_id'], next_update_dt)
+                        LOG.debug(msg)
+                        try:
+                            self._db.execute(query, retries=1)
+                        except:
+                            msg = 'Unable to set next update datetime for server: {0}, reason: {1}'
+                            msg = msg.format(server['server_id'], helper.exc_info())
+                            LOG.warning(msg)
 
                     if not schedule_parser.Schedule(schedule).intime():
                         continue
+                    servers_scheduled_for_update.append(server)
+                except:
+                    msg = "Server: {0}, reason: {1}".format(server['server_id'], helper.exc_info())
+                    LOG.warning(msg)
+                    continue
+
+            statuses = {}
+            for server in servers_scheduled_for_update:
+                if 'scalarizr.key' not in server:
+                    msg = "Server: {0}, reason: Missing scalarizr key".format(server['server_id'])
+                    LOG.warning(msg)
+                    continue
+                if 'scalarizr.updc_port' not in server:
+                    server['scalarizr.updc_port'] = CONFIG['connections']['szr_upd_client']['port']
+
+                while len(POOL) >= CONFIG['pool_size']:
+                    gevent.sleep(0.2)
+                statuses[server['server_id']] = POOL.apply_async(self._get_status, (server,))
+                gevent.sleep(0)  # force switch
+
+            servers_for_update = []
+            for server in servers_scheduled_for_update:
+                try:
+                    timeout = CONFIG['instances_connection_timeout']
+                    try:
+                        status = statuses[server['server_id']].get(timeout=timeout)
+                    except:
+                        msg = 'Unable to get update client status, reason: {0}'.format(helper.exc_info())
+                        raise Exception(msg)
+                    szr_ver_repo = self.szr_ver_repo[status['repository']][status['repo_url']]
+                    if parse_version(server['scalarizr.version']) >= parse_version(szr_ver_repo):
+                        continue
+
                     servers_for_update.append(server)
+                    counter += 1
+                    if counter >= CONFIG['chunk_size']:
+                        break
                 except:
                     msg = "Server: {0}, reason: {1}".format(server['server_id'], helper.exc_info())
                     LOG.warning(msg)
@@ -220,32 +271,20 @@ class SzrUpdService(cron.Cron):
 
             self._db.load_vpc_settings(servers_for_update)
             yield servers_for_update
+            if counter >= CONFIG['chunk_size']:
+                break
 
     def update_server(self, server):
         try:
-            key = cryptotool.decrypt_key(server['scalarizr.key'])
-            headers = {'X-Server-Id': server['server_id']}
-            instances_connection_policy = SCALR_CONFIG.get(server['platform'], {}).get(
-                    'instances_connection_policy', SCALR_CONFIG['instances_connection_policy'])
-            ip, port, proxy_headers = helper.get_szr_updc_conn_info(server, instances_connection_policy)
-            headers.update(proxy_headers)
-            szr_upd_client = SzrUpdClient(ip, port, key, headers=headers)
+            szr_upd_client = self._get_szr_upd_client(server)
             timeout = CONFIG['instances_connection_timeout']
-            try:
-                status = szr_upd_client.status(cached=True, timeout=timeout)
-            except:
-                msg = 'Unable to get update client status, reason: {0}'.format(helper.exc_info())
-                raise Exception(msg)
-            szr_ver_repo = self.szr_ver_repo[status['repository']][status['repo_url']]
-            if parse_version(server['scalarizr.version']) >= parse_version(szr_ver_repo):
-                return
             msg = "Trying to update server: {0}, version: {1}".format(
                     server['server_id'], server['scalarizr.version'])
             LOG.debug(msg)
             try:
                 result_id = szr_upd_client.update(async=True, timeout=timeout)
             except:
-                msg = 'Unable to update, reason: {0}'.format(helper_exc_info())
+                msg = 'Unable to update, reason: {0}'.format(helper.exc_info())
                 raise Exception(msg)
             LOG.debug("Server: {0}, result: {1}".format(server['server_id'], result_id))
         except:

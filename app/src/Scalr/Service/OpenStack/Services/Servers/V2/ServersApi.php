@@ -122,9 +122,10 @@ class ServersApi
             'server' => $server,
         );
 
-        if (!empty($extProperties['block_device_mapping_v2']))
+        if (!empty($extProperties['block_device_mapping_v2'])) {
             $uri = '/os-volumes_boot';
-        else
+            $options['server']['imageRef'] = null;
+        } else
             $uri = '/servers';
 
         $response = $this->getClient()->call(

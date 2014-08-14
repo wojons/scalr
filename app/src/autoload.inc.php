@@ -129,7 +129,8 @@ function __autoload($class_name)
     // Load packaged classes
     if (strpos($class_name, "_") !== false) {
         $filename =  str_replace("_", DIRECTORY_SEPARATOR, $class_name) . ".php";
-        require $filename;
+        //FIXME @require $filename TEMPORARY SOLUTION
+        @require $filename;
     } else if (strpos($class_name, 'Scalr\\') === 0) {
         //Loads Scalr namespaces
         $filename = __DIR__ . DIRECTORY_SEPARATOR . str_replace('\\', DIRECTORY_SEPARATOR, $class_name) . ".php";

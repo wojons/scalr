@@ -44,7 +44,7 @@ UNLOCK TABLES;
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
--- Dump completed on 2014-08-13  9:43:15
+-- Dump completed on 2014-08-14  5:25:47
 
 INSERT INTO `settings` VALUES ('budget_days','[\"01-01\",\"04-01\",\"07-01\",\"10-01\"]');
 

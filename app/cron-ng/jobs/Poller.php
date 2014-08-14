@@ -165,18 +165,17 @@ class Scalr_Cronjob_Poller extends Scalr_System_Cronjob_MultiProcess_DefaultWork
     }
 
     private function openstackSetFloatingIp(DBServer $DBServer) {
-        $ipPool = $DBServer->GetFarmRoleObject()->GetSetting(DBFarmRole::SETTING_OPENSTACK_IP_POOL);
+        $ipPool = $DBServer->GetFarmRoleObject()->GetSetting(DBFarmRole::SETTING_OPENSTACK_IP_POOL);        
         if (!$DBServer->remoteIp && (in_array($DBServer->status, array(SERVER_STATUS::PENDING, SERVER_STATUS::INIT, SERVER_STATUS::SUSPENDED))) && $ipPool) {
             //$ipAddress = \Scalr\Modules\Platforms\Openstack\Helpers\OpenstackHelper::setFloatingIpForServer($DBServer);
 
-            $osClient = $DBServer->GetEnvironmentObject()->openstack(
-                    $DBServer->platform, $DBServer->GetProperty(OPENSTACK_SERVER_PROPERTIES::CLOUD_LOCATION)
+        	$osClient = $DBServer->GetEnvironmentObject()->openstack(
+				$DBServer->platform, $DBServer->GetProperty(OPENSTACK_SERVER_PROPERTIES::CLOUD_LOCATION)
             );
             if ($osClient->hasService('network')) {
-
                 $platform = PlatformFactory::NewPlatform($DBServer->platform);
                 $serverIps = $platform->GetServerIPAddresses($DBServer);
-
+                
                 /********* USE Quantum (Neuron) NETWORK *******/
                 $ips = $osClient->network->floatingIps->list();
                 //Check free existing IP
@@ -184,24 +183,24 @@ class Scalr_Cronjob_Poller extends Scalr_System_Cronjob_MultiProcess_DefaultWork
                 $ipAddress = false;
                 $ipInfo = false;
                 foreach ($ips as $ip) {
-                    if ($ip->fixed_ip_address == $serverIps['localIp'] && $ip->port_id) {
+                	if ($ip->fixed_ip_address == $serverIps['localIp'] && $ip->port_id) {
                         $ipAssigned = true;
                         $ipInfo = $ip;
                         break;
                     }
 
-                    if (!$ip->fixed_ip_address && $ipInfo->floating_ip_address && !$ip->port_id)
+                    if (!$ip->fixed_ip_address && $ip->floating_ip_address && !$ip->port_id)
                         $ipInfo = $ip;
                 }
 
                 if ($ipInfo) {
                     Logger::getLogger("Openstack")->warn(new FarmLogMessage($DBServer->farmId,
-                    "Found free floating IP: {$ipInfo->floating_ip_address} for use (". json_encode($ipInfo) .")"
-                            ));
+                    	"Found free floating IP: {$ipInfo->floating_ip_address} for use (". json_encode($ipInfo) .")"
+					));
                 }
 
                 if (!$ipInfo || !$ipAssigned) {
-                    // Get instance port
+                	// Get instance port
                     $ports = $osClient->network->ports->list();
                     foreach ($ports as $port) {
                         /* */
@@ -211,8 +210,8 @@ class Scalr_Cronjob_Poller extends Scalr_System_Cronjob_MultiProcess_DefaultWork
 
                     if (count($serverNetworkPort) == 0) {
                         Logger::getLogger("Openstack")->error(new FarmLogMessage($DBServer->farmId,
-                        "Unable to identify network port of instance"
-                                ));
+                        	"Unable to identify network port of instance"
+						));
                     } else {
                         $publicNetworkId = $ipPool;
                         while (count($serverNetworkPort) > 0) {
@@ -230,7 +229,7 @@ class Scalr_Cronjob_Poller extends Scalr_System_Cronjob_MultiProcess_DefaultWork
                                     $osClient->network->floatingIps->update($ipInfo->id, $port->id);
 
                                     Logger::getLogger("Openstack")->warn(new FarmLogMessage($DBServer->farmId,
-                                    "Existing floating IP {$ipInfo->floating_ip_address} was used for port: {$port->id}"
+                                    	"Existing floating IP {$ipInfo->floating_ip_address} was used for port: {$port->id}"
                                     ));
                                 }
 
@@ -243,14 +242,15 @@ class Scalr_Cronjob_Poller extends Scalr_System_Cronjob_MultiProcess_DefaultWork
 
                                 break;
                             } catch (Exception $e) {
-                                //LOG?
+                            	$this->logger->error("Scalr unable to allocate new floating IP from pool: ". $e->getMessage());
                             }
                         }
                     }
                 } else {
                     Logger::getLogger("Openstack")->warn(new FarmLogMessage($DBServer->farmId,
-                    "IP: {$ipInfo->floating_ip_address} already assigned"
+                    	"IP: {$ipInfo->floating_ip_address} already assigned"
                     ));
+                    $ipAddress = $ipInfo->floating_ip_address;
                 }
             } else {
                 /********* USE NOVA NETWORK *******/

@@ -338,7 +338,7 @@ scalr:
 #        szr_upd_client:
 #          port: 8008
 #      chunk_size: 100
-#      pool_size: 10
+#      pool_size: 100
 #      log_file: '/var/log/scalr/szr-upd-service.log'
 #      pid_file: '/var/run/scalr/szr-upd-service.pid'
 

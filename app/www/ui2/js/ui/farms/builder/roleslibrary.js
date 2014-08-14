@@ -1327,6 +1327,7 @@ Ext.define('Scalr.ui.RolesLibrary', {
                             fieldLocation.setReadOnly(locations.length < 2, false);
 
                             fieldLocation.store.loadData(locations);
+                            fieldLocation.reset();
                             fieldLocation.setValue(defaultLocation);
                         };
                         

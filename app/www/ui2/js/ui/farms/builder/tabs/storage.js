@@ -38,7 +38,7 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.storage', function (moduleTabParams) 
             var me = this,
                 platform = record.get('platform'),
                 cloudLocation = record.get('cloud_location');
-            if (Ext.Array.contains(['cloudstack', 'idcf', 'ucloud'], platform)) {
+            if (Scalr.isCloudstack(platform)) {
                 Scalr.cachedRequest.load(
                     {
                         url: '/platforms/cloudstack/xGetOfferingsList/',
@@ -46,6 +46,21 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.storage', function (moduleTabParams) 
                             cloudLocation: cloudLocation,
                             platform: platform,
                             farmRoleId: record.get('new') ? '' : record.get('farm_role_id')
+                        }
+                    },
+                    function(data, status){
+                        me.tabData = data;
+                        status ? handler() : me.deactivateTab();
+                    },
+                    me
+                );
+            } else if (Scalr.isOpenstack(platform)) {
+                Scalr.cachedRequest.load(
+                    {
+                        url: '/platforms/openstack/xGetOpenstackResources',
+                        params: {
+                            cloudLocation: cloudLocation,
+                            platform: platform
                         }
                     },
                     function(data, status){
@@ -72,6 +87,7 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.storage', function (moduleTabParams) 
                 storages = record.get('storages', true),
                 osFamily = record.get('os_family'),
                 field,
+                volumeTypes,
                 data = [];
 
             field = this.down('#configuration');
@@ -108,6 +124,10 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.storage', function (moduleTabParams) 
                 }, {
                     name: 'raid.cinder', description: 'RAID array (on Persistent disks)'
                 }];
+                field = this.down('[name="cinder.volume_type"]');
+                volumeTypes = this.tabData['volume_types'] || [];
+                field.setVisible(volumeTypes.length > 0).setDisabled(!volumeTypes.length);
+                field.store.load({data: volumeTypes});
             }
 
             //storage engine
@@ -614,6 +634,11 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.storage', function (moduleTabParams) 
                                     if (!field.getValue()) {
                                         field.setValue(field.store.first());
                                     }
+                                } else if (value == 'cinder' || value == 'raid.cinder') {
+                                    field = editor.down('[name="cinder.volume_type"]');
+                                    if (!field.getValue()) {
+                                        field.setValue(field.store.first());
+                                    }
                                 }
                             }
                         }
@@ -1078,6 +1103,28 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.storage', function (moduleTabParams) 
                         width: 300
                     },
                     items: [{
+                        xtype: 'combo',
+                        anchor: '100%',
+                        maxWidth: 300,
+                        name: 'cinder.volume_type',
+                        fieldLabel: 'Type',
+                        editable: false,
+                        store: {
+                            fields: [ 'id', 'name'],
+                            proxy: 'object',
+                            sortOnFilter: true,
+                            sortOnLoad: true,
+                            sorters: [{
+                                property: 'name',
+                                direction: 'ASC'
+                            }]
+                        },
+                        queryMode: 'local',
+                        valueField: 'id',
+                        displayField: 'name',
+                        allowBlank: false,
+                        labelWidth: 50
+                    },{
                         xtype: 'container',
                         layout: {
                             type: 'hbox',
@@ -1087,7 +1134,7 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.storage', function (moduleTabParams) 
                             xtype: 'textfield',
                             fieldLabel: 'Size',
                             labelWidth: 50,
-                            maxWidth: 110,
+                            maxWidth: 100,
                             name: 'cinder.size',
                             allowBlank: false
                         },{

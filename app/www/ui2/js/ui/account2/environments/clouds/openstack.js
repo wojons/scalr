@@ -15,7 +15,7 @@ Scalr.regPage('Scalr.ui.account2.environments.clouds.openstack', function (loadP
                 name: 'keystone_url',
                 store: keyStoneUrls,
                 editable: false,
-                value: params['keystone_url'] || keyStoneUrls[1]
+                value: params['keystone_url'] || keyStoneUrls[2]
             };
         break;
         default:

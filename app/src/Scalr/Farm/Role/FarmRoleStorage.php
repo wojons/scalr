@@ -127,6 +127,9 @@ class FarmRoleStorage
                 switch ($config->type) {
                     case FarmRoleStorageConfig::TYPE_CINDER:
                         $volumeConfigTemplate->size = $config->settings[FarmRoleStorageConfig::SETTING_CINDER_SIZE];
+                        
+                        if ($config->settings[FarmRoleStorageConfig::SETTING_CINDER_VOLUME_TYPE])
+                        	$volumeConfigTemplate->volumeType = $config->settings[FarmRoleStorageConfig::SETTING_CINDER_VOLUME_TYPE];
 
                         // SNAPSHOT
                         if ($config->settings[FarmRoleStorageConfig::SETTING_CINDER_SNAPSHOT] != '') {
@@ -209,6 +212,8 @@ class FarmRoleStorage
                             } elseif ($config->type == FarmRoleStorageConfig::TYPE_RAID_CINDER) {
                                 $disk->size = $config->settings[FarmRoleStorageConfig::SETTING_CINDER_SIZE];
                                 $disk->type = FarmRoleStorageConfig::TYPE_CINDER;
+                                if ($config->settings[FarmRoleStorageConfig::SETTING_CINDER_VOLUME_TYPE])
+                                	$disk->volumeType = $config->settings[FarmRoleStorageConfig::SETTING_CINDER_VOLUME_TYPE];
                             }
 
                             $volumeConfigTemplate->disks[] = $disk;

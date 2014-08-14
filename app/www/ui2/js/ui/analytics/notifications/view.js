@@ -269,9 +269,9 @@ Scalr.regPage('Scalr.ui.analytics.notifications.view', function (loadParams, mod
                             store: {
                                 fields: ['id', 'name', 'description'],
                                 data: [{
-                                    id: 1, name: 'Usage', description: 'Usage notification description'
+                                    id: 1, name: 'Usage', description: 'Receive an email when a certain percentage of your budget has been consumed'
                                 },{
-                                    id: 2, name: 'Projected overspend', description: 'Projected overspend notification description'
+                                    id: 2, name: 'Projected overspend', description: 'Receive an email when a Scalr expects overspend of a certain percentage'
                                 }]
                             },
                             emptyText: 'Select notification type',
@@ -503,11 +503,11 @@ Scalr.regPage('Scalr.ui.analytics.notifications.view', function (loadParams, mod
                             store: {
                                 fields: ['id', 'name', 'description'],
                                 data: [{
-                                    id: -1, name: 'Total summary', description: 'Report summorizes spend for ALL cost centers'
+                                    id: -1, name: 'Total summary', description: 'Report summurizes spend for ALL cost centers'
                                 },{
-                                    id: 1, name: 'Cost center', description: 'Report summorizes the spend/budget for individual cost centers'
+                                    id: 1, name: 'Cost center', description: 'Report summurizes the spend/budget for individual cost centers'
                                 },{
-                                    id: 2, name: 'Project', description: 'Report summorizes the spend/budget for individual projects'
+                                    id: 2, name: 'Project', description: 'Report summurizes the spend/budget for individual projects'
                                 }]
                             },
                             emptyText: 'Please select report',

@@ -43,6 +43,7 @@ class FarmRoleStorageConfig
 
     const SETTING_CINDER_SIZE = 'cinder.size';
     const SETTING_CINDER_SNAPSHOT = 'cinder.snapshot';
+    const SETTING_CINDER_VOLUME_TYPE = 'cinder.volume_type';
 
     const SETTING_EBS_SIZE = 'ebs.size';
     const SETTING_EBS_TYPE = 'ebs.type';
@@ -126,6 +127,7 @@ class FarmRoleStorageConfig
                 throw new FarmRoleStorageException('Volume size should be from 1 to 1024 GB');
 
             $settings[self::SETTING_CINDER_SNAPSHOT] = $config['settings'][self::SETTING_CINDER_SNAPSHOT];
+            $settings[self::SETTING_CINDER_VOLUME_TYPE] = $config['settings'][self::SETTING_CINDER_VOLUME_TYPE];
             $settings[self::SETTING_CINDER_SIZE] = $volSize;
         } elseif ($type == self::TYPE_GCE_PD || $type == self::TYPE_RAID_GCE_PD) {
             $volSize = intval($config['settings'][self::SETTING_GCE_PD_SIZE]);

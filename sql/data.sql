@@ -64,7 +64,7 @@ UNLOCK TABLES;
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
--- Dump completed on 2014-08-13  9:43:11
+-- Dump completed on 2014-08-14  5:25:44
 
 INSERT INTO `role_categories` (`id`, `env_id`, `name`) VALUES
 (1, 0, 'Base'),

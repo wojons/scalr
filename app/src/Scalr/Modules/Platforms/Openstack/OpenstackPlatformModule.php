@@ -16,6 +16,8 @@ use Scalr\Modules\PlatformFactory;
 use Scalr\Modules\Platforms\Openstack\Adapters\StatusAdapter;
 use Scalr\Modules\Platforms\AbstractOpenstackPlatformModule;
 use Scalr\Service\OpenStack\Client\AuthToken;
+use Scalr\Service\OpenStack\OpenStack;
+use Scalr\Service\OpenStack\Services\Network\Type\NetworkExtension;
 
 class OpenstackPlatformModule extends AbstractOpenstackPlatformModule implements \Scalr\Modules\PlatformModuleInterface
 {
@@ -615,24 +617,13 @@ class OpenstackPlatformModule extends AbstractOpenstackPlatformModule implements
             $isWindows = ($DBServer->osType == 'windows' || $DBRole->osFamily == 'windows');
 
             if ($DBServer->GetFarmRoleObject()->GetSetting('openstack.boot_from_volume') == 1) {
-
-                /*
-                "block_device_mapping_v2": [{
-                    "boot_index": "0",
-                    "uuid": "aa677241-2333-446c-901b-2296b143a8f8",
-                    "volume_size": "10",
-                    "source_type": "image",
-                    "destination_type": "volume",
-                    "delete_on_termination": false
-                }]
-                */
-
                 $deviceMapping = new \stdClass();
                 $deviceMapping->device_name = 'vda';
                 $deviceMapping->source_type = 'image';
                 $deviceMapping->destination_type = 'volume';
                 $deviceMapping->delete_on_termination = true;
                 $deviceMapping->guest_format = null;
+                $deviceMapping->volume_size = 10;
                 $deviceMapping->uuid = $launchOptions->imageId;
                 $deviceMapping->boot_index = 0;
             }
@@ -857,6 +848,12 @@ class OpenstackPlatformModule extends AbstractOpenstackPlatformModule implements
     {
         $this->instancesListCache = array();
     }
+    
+    private function hasOpenStackNetworkSecurityGroupExtension(OpenStack $openstack)
+    {
+    	return $openstack->hasService(OpenStack::SERVICE_NETWORK) &&
+    	$openstack->network->isExtensionSupported(NetworkExtension::securityGroup());
+    }
 
     private function GetServerSecurityGroupsList(DBServer $DBServer, \Scalr\Service\OpenStack\OpenStack $osClient, \Scalr_Governance $governance = null)
     {
@@ -902,7 +899,11 @@ class OpenstackPlatformModule extends AbstractOpenstackPlatformModule implements
         }
 
         try {
-            $list = $osClient->servers->securityGroups->list();
+        	if ($this->hasOpenStackNetworkSecurityGroupExtension($osClient)) {
+        		$list = $osClient->network->securityGroups->list();
+        	} else {
+        		$list = $osClient->servers->securityGroups->list();
+        	}
             do {
                 foreach ($list as $sg) {
                     $sgroups[strtolower($sg->name)] = $sg;
@@ -934,35 +935,68 @@ class OpenstackPlatformModule extends AbstractOpenstackPlatformModule implements
                 // Check Roles builder SG
             } elseif ($groupName == 'scalr-rb-system' || $groupName == \Scalr::config('scalr.aws.security_group_name')) {
                 if (!isset($sgroups[$groupName])) {
-                    try {
-                        $group = $osClient->servers->securityGroups->create($groupName, _("Scalr system security group"));
-                        $groupId = $group->id;
-                    }
-                    catch(\Exception $e) {
-                        throw new \Exception("GetServerSecurityGroupsList failed on scalr.ip-pool: {$e->getMessage()}");
-                    }
-
-
-                    //Temporary solution because of API requests rate limit
-                    $rule = new \stdClass();
-
-                    $rule->ip_protocol = "tcp";
-                    $rule->from_port = 1;
-                    $rule->to_port = 65535;
-                    $rule->cidr = "0.0.0.0/0";
-                    $rule->parent_group_id = $groupId;
-
-                    $res = $osClient->servers->securityGroups->addRule($rule);
-
-                    $rule = new \stdClass();
-
-                    $rule->ip_protocol = "udp";
-                    $rule->from_port = 1;
-                    $rule->to_port = 65535;
-                    $rule->cidr = "0.0.0.0/0";
-                    $rule->parent_group_id = $groupId;
-
-                    $res = $osClient->servers->securityGroups->addRule($rule);
+                	if ($this->hasOpenStackNetworkSecurityGroupExtension($osClient)) {
+                		try {
+                		
+                			$group = $osClient->network->securityGroups->create($groupName, _("Scalr system security group"));
+                			$groupId = $group->id;
+                		}
+                		catch(\Exception $e) {
+                			throw new \Exception("GetServerSecurityGroupsList failed on scalr.ip-pool: {$e->getMessage()}");
+                		}
+                		
+                		
+                		//Temporary solution because of API requests rate limit
+                		$rule = new \stdClass();
+                		
+                		$rule->protocol = "tcp";
+                		$rule->port_range_min = 1;
+                		$rule->port_range_max = 65535;
+                		$rule->remote_ip_prefix = "0.0.0.0/0";
+                		$rule->security_group_id = $groupId;
+                		
+                		$res = $osClient->servers->securityGroups->addRule($rule);
+                		
+                		$rule = new \stdClass();
+                		
+                		$rule->protocol = "udp";
+                		$rule->port_range_min = 1;
+                		$rule->port_range_max = 65535;
+                		$rule->remote_ip_prefix = "0.0.0.0/0";
+                		$rule->security_group_id = $groupId;
+                		
+                		$res = $osClient->servers->securityGroups->addRule($rule);
+                	} else {
+	                    try {
+	                    	
+	                        $group = $osClient->servers->securityGroups->create($groupName, _("Scalr system security group"));
+	                        $groupId = $group->id;
+	                    }
+	                    catch(\Exception $e) {
+	                        throw new \Exception("GetServerSecurityGroupsList failed on scalr.ip-pool: {$e->getMessage()}");
+	                    }
+	
+	                    //Temporary solution because of API requests rate limit
+	                    $rule = new \stdClass();
+	
+	                    $rule->ip_protocol = "tcp";
+	                    $rule->from_port = 1;
+	                    $rule->to_port = 65535;
+	                    $rule->cidr = "0.0.0.0/0";
+	                    $rule->parent_group_id = $groupId;
+	
+	                    $res = $osClient->servers->securityGroups->addRule($rule);
+	
+	                    $rule = new \stdClass();
+	
+	                    $rule->ip_protocol = "udp";
+	                    $rule->from_port = 1;
+	                    $rule->to_port = 65535;
+	                    $rule->cidr = "0.0.0.0/0";
+	                    $rule->parent_group_id = $groupId;
+	
+	                    $res = $osClient->servers->securityGroups->addRule($rule);
+                	}
                 }
                 array_push($retval, $groupName);
             } else {
