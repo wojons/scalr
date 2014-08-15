@@ -64,7 +64,7 @@
 <tr>
 <td class="budget" style="border-collapse:collapse;border-right: 1px solid #e9f0f6;padding-top: 10px">
             <div class="title3" style="font-size: 13px;color: #5997BF;text-transform: uppercase;font-weight: bold;line-height: 40px">
-                <?php if (round($estimateOverspend)!=0):?><?=(round($estimateOverspend) >= 0 ? 'Over' : 'Under')?>spend estimate   <span style="color:<?=($estimateOverspend >= 0 ? '#f5411b' : '#57a831')?>"><?=round($estimateOverspend) >= 0 ? '+' : '–'?>$<?=number_format(round(abs($estimateOverspend)), 0, '.', ',')?> (<?=abs(round($estimateOverspendPct))?>%)</span>
+                <?php if (round($estimateOverspend)!=0):?><?=(round($estimateOverspend) >= 0 ? 'Over' : 'Under')?>spend estimate   <span style="color:<?=($estimateOverspend >= 0 ? '#f5411b' : '#57a831')?>">$<?=number_format(round(abs($estimateOverspend)), 0, '.', ',')?> (<?=abs(round($estimateOverspendPct))?>%)</span>
 </div>
                 <?php else: ?>
                     Overspend estimate   $0

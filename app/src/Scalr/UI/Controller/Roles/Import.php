@@ -99,7 +99,7 @@ class Scalr_UI_Controller_Roles_Import extends Scalr_UI_Controller
      * @param bool $roleImage
      * @throws Exception
      */
-    public function xInitiateImportAction($platform, $cloudLocation, $cloudServerId, $roleName, $roleImage)
+    public function xInitiateImportAction($platform, $cloudLocation, $cloudServerId, $roleName, $roleImage = false)
     {
         $validator = new Scalr_Validator();
 

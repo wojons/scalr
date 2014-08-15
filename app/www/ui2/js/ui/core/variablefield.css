@@ -75,27 +75,27 @@
 
 
 /*  NEW CLASS */
-.scalr-ui-variablefield-grid {
+.scalr-ui-variablefield2-grid {
     margin-right: 20px;
 }
 
-.scalr-ui-variablefield-grid-expanded {
+.scalr-ui-variablefield2-grid-expanded {
     margin-right: 320px;
 }
 
-.scalr-ui-variablefield-grid .x-grid-row .action {
+.scalr-ui-variablefield2-grid .x-grid-row .action {
     display: none;
 }
 
-.scalr-ui-variablefield-grid .x-grid-row-over .action {
+.scalr-ui-variablefield2-grid .x-grid-row-over .action {
     display: block;
 }
 
-.scalr-ui-variablefield-grid .x-grid-row .selected {
+.scalr-ui-variablefield2-grid .x-grid-row .selected {
     display: block;
 }
 
-.scalr-ui-variablefield-flag-final, .scalr-ui-variablefield-flag-required, .scalr-ui-variablefield-flag-hidden, .scalr-ui-variablefield-action-ext, .scalr-ui-variablefield-action-delete {
+.scalr-ui-variablefield2-flag-final, .scalr-ui-variablefield2-flag-required, .scalr-ui-variablefield2-flag-hidden, .scalr-ui-variablefield2-action-ext, .scalr-ui-variablefield2-action-delete {
     float: left;
     width: 26px;
     height: 26px;
@@ -103,164 +103,164 @@
 }
 
 /* flag final */
-.scalr-ui-variablefield-flag-final {
+.scalr-ui-variablefield2-flag-final {
     background: url('/ui2/images/widget/variablefield/flags-sprite.png') no-repeat 0 0;
 }
 
-.scalr-ui-variablefield-flag-final.pressed {
+.scalr-ui-variablefield2-flag-final.pressed {
     background-position: -26px 0;
 }
 
-.scalr-ui-variablefield-flag-final.disabled {
+.scalr-ui-variablefield2-flag-final.disabled {
     background-position: -52px 0;
     cursor: default;
 }
 
-.scalr-ui-variablefield-flag-final.disabled.pressed {
+.scalr-ui-variablefield2-flag-final.disabled.pressed {
     background-position: -78px 0;
 }
 
 /* flag hidden */
-.scalr-ui-variablefield-flag-hidden {
+.scalr-ui-variablefield2-flag-hidden {
     background: url('/ui2/images/widget/variablefield/flags-sprite.png') no-repeat 0 -26px;
 }
 
-.scalr-ui-variablefield-flag-hidden.pressed {
+.scalr-ui-variablefield2-flag-hidden.pressed {
     background-position: -26px -26px;
 }
 
-.scalr-ui-variablefield-flag-hidden.disabled {
+.scalr-ui-variablefield2-flag-hidden.disabled {
     background-position: -52px -26px;
     cursor: default;
 }
 
-.scalr-ui-variablefield-flag-hidden.disabled.pressed {
+.scalr-ui-variablefield2-flag-hidden.disabled.pressed {
     background-position: -78px -26px;
 }
 
 /* flag required */
-.scalr-ui-variablefield-flag-required {
+.scalr-ui-variablefield2-flag-required {
     background: url('/ui2/images/widget/variablefield/scope-sprite.png') no-repeat 0 0;
 }
 
-.scalr-ui-variablefield-flag-required.scope-environment {
+.scalr-ui-variablefield2-flag-required.scope-environment {
     background-position: 0 0;
 }
 
-.scalr-ui-variablefield-flag-required.scope-farm {
+.scalr-ui-variablefield2-flag-required.scope-farm {
     background-position: 0 -26px;
 }
 
-.scalr-ui-variablefield-flag-required.scope-role {
+.scalr-ui-variablefield2-flag-required.scope-role {
     background-position: 0 -52px;
 }
 
-.scalr-ui-variablefield-flag-required.scope-farmrole {
+.scalr-ui-variablefield2-flag-required.scope-farmrole {
     background-position: 0 -78px;
 }
 
-.scalr-ui-variablefield-flag-required.scope-account {
+.scalr-ui-variablefield2-flag-required.scope-account {
     background-position: 0 -104px;
 }
 
 /* flag required pressed */
-.scalr-ui-variablefield-flag-required.scope-environment.pressed {
+.scalr-ui-variablefield2-flag-required.scope-environment.pressed {
     background-position: -26px 0;
 }
 
-.scalr-ui-variablefield-flag-required.scope-farm.pressed {
+.scalr-ui-variablefield2-flag-required.scope-farm.pressed {
     background-position: -26px -26px;
 }
 
-.scalr-ui-variablefield-flag-required.scope-role.pressed {
+.scalr-ui-variablefield2-flag-required.scope-role.pressed {
     background-position: -26px -52px;
 }
 
-.scalr-ui-variablefield-flag-required.scope-farmrole.pressed {
+.scalr-ui-variablefield2-flag-required.scope-farmrole.pressed {
     background-position: -26px -78px;
 }
 
-.scalr-ui-variablefield-flag-required.scope-account.pressed {
+.scalr-ui-variablefield2-flag-required.scope-account.pressed {
     background-position: -26px -104px;
 }
 
 /* flag required disabled */
-.scalr-ui-variablefield-flag-required.disabled {
+.scalr-ui-variablefield2-flag-required.disabled {
     cursor: default;
     background-position: -52px 0;
 }
 
-.scalr-ui-variablefield-flag-required.disabled.pressed {
+.scalr-ui-variablefield2-flag-required.disabled.pressed {
     background-position: -78px 0;
 }
 
-.scalr-ui-variablefield-action-ext, .scalr-ui-variablefield-action-delete {
+.scalr-ui-variablefield2-action-ext, .scalr-ui-variablefield2-action-delete {
     background: url('/ui2/images/widget/variablefield/actions-sprite.png') no-repeat;
     width: 15px;
 }
 
-.scalr-ui-variablefield-action-ext:hover {
+.scalr-ui-variablefield2-action-ext:hover {
     background-position: -15px 0;
 }
 
-.scalr-ui-variablefield-action-ext:active {
+.scalr-ui-variablefield2-action-ext:active {
     background-position: -30px 0;
 }
 
-.scalr-ui-variablefield-action-ext.pressed {
+.scalr-ui-variablefield2-action-ext.pressed {
     background-position: -30px 0;
 }
 
-.scalr-ui-variablefield-action-ext.disabled {
+.scalr-ui-variablefield2-action-ext.disabled {
     background-position: -45px 0;
     cursor: default;
 }
 
-.scalr-ui-variablefield-action-delete {
+.scalr-ui-variablefield2-action-delete {
     background-position: 0 -26px;
 }
 
-.scalr-ui-variablefield-action-delete:hover {
+.scalr-ui-variablefield2-action-delete:hover {
     background-position: -15px -26px;
 }
 
-.scalr-ui-variablefield-action-delete:active {
+.scalr-ui-variablefield2-action-delete:active {
     background-position: -30px -26px;
 }
 
-.scalr-ui-variablefield-action-delete.disabled {
+.scalr-ui-variablefield2-action-delete.disabled {
     background-position: -45px -26px;
     cursor: default;
 }
 
-.scalr-ui-variablefield-scopemarker {
+.scalr-ui-variablefield2-scopemarker {
     height: 26px;
     width: 6px;
     float: left;
     margin: 0 4px 0 -10px;
 }
 
-.scalr-ui-variablefield-scopemarker-scalr {
+.scalr-ui-variablefield2-scopemarker-scalr {
     background: #4567CB;
 }
 
-.scalr-ui-variablefield-scopemarker-account {
+.scalr-ui-variablefield2-scopemarker-account {
     background: #DA6BE7;
 }
 
-.scalr-ui-variablefield-scopemarker-env {
+.scalr-ui-variablefield2-scopemarker-env {
     background: #FCA503;
 }
 
-.scalr-ui-variablefield-scopemarker-role {
+.scalr-ui-variablefield2-scopemarker-role {
     background: #7CBFE7;
 }
 
-.scalr-ui-variablefield-scopemarker-farm {
+.scalr-ui-variablefield2-scopemarker-farm {
     background: #0F9104;
 }
 
-.scalr-ui-variablefield-scopemarker-farmrole {
+.scalr-ui-variablefield2-scopemarker-farmrole {
     background: #D90000;
 }
 

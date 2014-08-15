@@ -1205,7 +1205,7 @@ Ext.define('Scalr.ui.VariableField2', {
         items: [{
             xtype: 'grid',
             flex: 1,
-            cls: 'x-grid-shadow x-grid-no-highlighting x-grid-with-formfields scalr-ui-variablefield-grid',
+            cls: 'x-grid-shadow x-grid-no-highlighting x-grid-with-formfields scalr-ui-variablefield2-grid',
             store: {
                 fields: [ 'name', 'newValue', 'value', 'current', 'default', 'locked', 'flagDelete' ],
                 reader: 'object',
@@ -1303,7 +1303,7 @@ Ext.define('Scalr.ui.VariableField2', {
 
                     var scope = current && (current.value || !def) ? current.scope : def.scope;
 
-                    return '<div class="scalr-ui-variablefield-scopemarker scalr-ui-variablefield-scopemarker-' +
+                    return '<div class="scalr-ui-variablefield2-scopemarker scalr-ui-variablefield2-scopemarker-' +
                         scope + '"></div><span>' + record.get('name') + '</span>';
                 },
                 editor: {
@@ -1376,9 +1376,9 @@ Ext.define('Scalr.ui.VariableField2', {
                         flagFinal = current['flagFinal'] == 1 || locked['flagFinal'] == 1,
                         flagHidden = current['flagHidden'] == 1 || locked['flagHidden'] == 1;
 
-                    output += '<div class="scalr-ui-variablefield-flag-final' + (!flagRequired ? (disabled ? ' disabled' : '') + (flagFinal ? ' pressed' : '') : ' disabled') + '" title="Final variable"></div>';
-                    output += '<div class="scalr-ui-variablefield-flag-required' + (!flagFinal ? (disabled ? ' disabled' : '') + (flagRequired ? (' pressed scope-' + flagRequired) : '') : ' disabled') + '" title="Required variable"></div>';
-                    output += '<div class="scalr-ui-variablefield-flag-hidden' + (disabled ? ' disabled' : '') + (flagHidden ? ' pressed' : '') + '" title="Hidden variable"></div>';
+                    output += '<div class="scalr-ui-variablefield2-flag-final' + (!flagRequired ? (disabled ? ' disabled' : '') + (flagFinal ? ' pressed' : '') : ' disabled') + '" title="Final variable"></div>';
+                    output += '<div class="scalr-ui-variablefield2-flag-required' + (!flagFinal ? (disabled ? ' disabled' : '') + (flagRequired ? (' pressed scope-' + flagRequired) : '') : ' disabled') + '" title="Required variable"></div>';
+                    output += '<div class="scalr-ui-variablefield2-flag-hidden' + (disabled ? ' disabled' : '') + (flagHidden ? ' pressed' : '') + '" title="Hidden variable"></div>';
 
                     return output + '</div>';
                 }
@@ -1394,8 +1394,8 @@ Ext.define('Scalr.ui.VariableField2', {
                         output = '<div class="action' + (selected ? 'selected' : '') + '">',
                         disabled = !Ext.Object.isEmpty(def) || !Ext.Object.isEmpty(locked);
 
-                    output += '<div class="scalr-ui-variablefield-action-ext' + (selected ? ' pressed' : '') + '" title="Extended properties"></div>';
-                    output += '<div class="scalr-ui-variablefield-action-delete' + (disabled ? ' disabled' : '') + '" title="Delete variable" style="margin-left: 12px"></div>';
+                    output += '<div class="scalr-ui-variablefield2-action-ext' + (selected ? ' pressed' : '') + '" title="Extended properties"></div>';
+                    output += '<div class="scalr-ui-variablefield2-action-delete' + (disabled ? ' disabled' : '') + '" title="Delete variable" style="margin-left: 12px"></div>';
 
                     return output + '</div>';
                 }
@@ -1418,7 +1418,7 @@ Ext.define('Scalr.ui.VariableField2', {
                         locked = record.get('locked'),
                         disabled = !Ext.Object.isEmpty(def) || !Ext.Object.isEmpty(locked);
 
-                    var flagFinal = e.getTarget('div.scalr-ui-variablefield-flag-final');
+                    var flagFinal = e.getTarget('div.scalr-ui-variablefield2-flag-final');
 
                     if (flagFinal && !disabled && !Ext.get(flagFinal).hasCls('disabled')) {
                         current['flagFinal'] = current['flagFinal'] == '1' ? '' : '1';
@@ -1429,7 +1429,7 @@ Ext.define('Scalr.ui.VariableField2', {
                         me.extendProperties(record);
                     }
 
-                    if (e.getTarget('div.scalr-ui-variablefield-flag-hidden') && !disabled) {
+                    if (e.getTarget('div.scalr-ui-variablefield2-flag-hidden') && !disabled) {
                         current['flagHidden'] = current['flagHidden'] == '1' ? '' : '1';
                         record.set('current', current);
                         record.commit();
@@ -1437,7 +1437,7 @@ Ext.define('Scalr.ui.VariableField2', {
                         me.extendProperties(record);
                     }
 
-                    var flagRequired = e.getTarget('div.scalr-ui-variablefield-flag-required');
+                    var flagRequired = e.getTarget('div.scalr-ui-variablefield2-flag-required');
 
                     if (flagRequired && !disabled && !Ext.get(flagRequired).hasCls('disabled')) {
                         current['flagRequired'] = current['flagRequired'] ? '' : 'farmrole';
@@ -1448,7 +1448,7 @@ Ext.define('Scalr.ui.VariableField2', {
                         me.extendProperties(record);
                     }
 
-                    if (e.getTarget('div.scalr-ui-variablefield-action-ext')) {
+                    if (e.getTarget('div.scalr-ui-variablefield2-action-ext')) {
                         var selectedRecord = me.getStore().findRecord('selected', true);
 
                         if (selectedRecord && selectedRecord !== record) {
@@ -1460,7 +1460,7 @@ Ext.define('Scalr.ui.VariableField2', {
                         me.extendProperties(record);
                     }
 
-                    if (e.getTarget('div.scalr-ui-variablefield-action-delete') && !disabled) {
+                    if (e.getTarget('div.scalr-ui-variablefield2-action-delete') && !disabled) {
                         record.set('flagDelete', 1);
                         record.commit();
                     }
