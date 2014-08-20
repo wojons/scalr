@@ -76,63 +76,8 @@ class Scalr_UI_Controller_Tools_Openstack_Ips extends Scalr_UI_Controller
         //$networkType = $platform->getConfigVariable(OpenstackPlatformModule::NETWORK_TYPE, $this->environment, false);
         $openstack = $this->environment->openstack($platformName, $this->getParam('cloudLocation'));
 
-        //!FIXME dicsydel remove debug
-        var_dump($openstack->network->floatingIps->list()->toArray());
+        //TODO implement ....
 
-        var_dump($openstack->servers->floatingIps->list()->toArray());
-
-        var_dump($openstack->servers->listFloatingIpPools()->toArray());
-
-        var_dump($openstack->network->listNetworks()->toArray());
-
-        exit();
-
-        $ips = array();
-        foreach ($ipAddresses->publicipaddress as $pk => $pv) {
-            if ($this->getParam('ipId') && $this->getParam('ipId') != $pv->id)
-                continue;
-
-            //!FIXME $systemIp variable has not been defined
-            if ($pv->ipaddress == $systemIp)
-                $pv->purpose = 'ScalrShared';
-
-            if ($pv->isstaticnat && !$pv->issystem)
-                $pv->purpose = 'ElasticIP';
-
-            if ($pv->isstaticnat && $pv->issystem)
-                $pv->purpose = 'PublicIP';
-
-            $item = array(
-                'ipId'	=> $pv->id,
-                'dtAllocated' => $pv->allocated,
-                'networkName' => $pv->associatednetworkname,
-                'purpose' => $pv->purpose ? $pv->purpose : "Not used",
-                'ip' => $pv->ipaddress,
-                'state' => $pv->state,
-                'instanceId' => $pv->virtualmachineid,
-                'fullinfo' => $pv,
-                'farmId' => false
-            );
-
-            if ($item['instanceId']) {
-                try {
-                    $dbServer = DBServer::LoadByPropertyValue(CLOUDSTACK_SERVER_PROPERTIES::SERVER_ID, $item['instanceId']);
-
-                    $item['farmId'] = $dbServer->farmId;
-                    $item['farmRoleId'] = $dbServer->farmRoleId;
-                    $item['serverIndex'] = $dbServer->index;
-                    $item['serverId'] = $dbServer->serverId;
-                    $item['farmName'] = $dbServer->GetFarmObject()->Name;
-                    $item['roleName'] = $dbServer->GetFarmRoleObject()->GetRoleObject()->name;
-
-                } catch (Exception $e) {}
-            }
-
-            $ips[] = $item;
-        }
-
-        $response = $this->buildResponseFromData($ips, array('serverId', 'ipId', 'ip', 'farmId', 'farmRoleId'));
-
-        $this->response->data($response);
+        throw new Exception("This is under development.");
     }
 }

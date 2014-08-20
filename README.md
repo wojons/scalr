@@ -8,47 +8,33 @@ README
 What is Scalr?
 --------------
 
-Scalr is a pretty darn good open source cloud management tool.
-It provides both an automation framework (do Foo when Bar) 
-and a web interface (where is this volume mounted) for managing 
-infrastructure on the cloud, like EC2 and GCE.
+Scalr is an open-source Cloud Management Platform (CMP). It leverages the
+APIs exposed by compatible Cloud Platforms (including AWS, GCE,
+OpenStack, CloudStack, and more) to provide users with a high-level
+and productive interface to their organization's cloud resources.
 
-Features
---------
+Key Features
+------------
 
-* Integrated into Opscode Chef, for configuration management.
-* Pre-automated software, such as nginx, Apache, MySQL, Redis, MongoDB, and RabbitMQ
-* Blazing fast UI
-* Multi-cloud
-* Cost Analytics (It is possible to track and budget the Costs of Public and Private Cloud Resources)
-* More at [Product][2]
+Visit the [Scalr Website][10] for more information.
 
 Installation
 ------------
 
-[Open-Source Installation][1]
-* [System Requirements][4]
-* [Installation][5]
-* [Troubleshooting][6]
+[Installation instructions for Scalr][20] can be found on the Scalr Wiki.
+[Instructions to upgrade from an earlier Scalr version][21] can be found there
+too.
 
-We hope you enjoy using the result of many years of hard labor, it's certainly saved our *ss many times.
 
-The Scalr Team
+-- The Scalr Team
 
-Roadmap
--------
-
-* [Roadmap][3]
-
+----
 
 *In memory of Alexey Kovalyov.
 Brilliant engineer, caring brother, and most excellent friend.
 This project is dedicated to you.*
 
-[1]: https://scalr-wiki.atlassian.net/wiki/display/docs/Open-Source+Installation "Open-Source Installation"
-[2]: http://www.scalr.com/product/ "Product"
-[3]: https://scalr-wiki.atlassian.net/wiki/display/docs/Roadmap "Roadmap"
-[4]: https://scalr-wiki.atlassian.net/wiki/display/docs/System+Requirements "System Requirements"
-[5]: https://scalr-wiki.atlassian.net/wiki/display/docs/Installation+instructions "Installation"
-[6]: https://scalr-wiki.atlassian.net/wiki/display/docs/Troubleshooting "Troubleshooting"
+[10]: http://www.scalr.com/product/overview "Scalr Product Overview"
+[20]: https://scalr-wiki.atlassian.net/wiki/x/XgQb "Installation Instructions"
+[21]: https://scalr-wiki.atlassian.net/wiki/x/FoAs "Upgrade Instructions"
 
