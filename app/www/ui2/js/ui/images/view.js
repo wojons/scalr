@@ -1,6 +1,6 @@
 Scalr.regPage('Scalr.ui.images.view', function (loadParams, moduleParams) {
 	var store = Ext.create('store.store', {
-        fields: ['id', 'platform', 'cloudLocation', 'osName', 'osFamily', 'architecture', 'source', 'createdByEmail', 'status'],
+        fields: ['id', 'platform', 'cloudLocation', 'osName', 'osFamily', 'architecture', 'source', 'createdByEmail', 'status', 'dtAdded'],
 		proxy: {
 			type: 'scalr.paging',
 			url: '/images/xList'
@@ -60,10 +60,11 @@ Scalr.regPage('Scalr.ui.images.view', function (loadParams, moduleParams) {
             },
             { header: "Cloud location", flex: 1, dataIndex: 'cloudLocation', sortable: true },
             { header: 'Image ID', dataIndex: 'id', flex: 1 },
-            { header: 'OS', flex: 1, dataIndex: 'osName', sortable: true, xtype: 'templatecolumn', tpl: '<img style="margin:0 3px"  class="x-icon-osfamily-small x-icon-osfamily-small-{osFamily}" src="' + Ext.BLANK_IMAGE_URL + '"/> {osName}' },
+            { header: 'OS', flex: 1, dataIndex: 'osName', sortable: false, xtype: 'templatecolumn', tpl: '<img style="margin:0 3px"  class="x-icon-osfamily-small x-icon-osfamily-small-{osFamily}" src="' + Ext.BLANK_IMAGE_URL + '"/> {osName}' },
             { header: 'Architecture', dataIndex: 'architecture', flex: 1 },
             { header: 'Source', dataIndex: 'source', flex: 1 },
-            { header: 'Created by', dataIndex: 'createdByEmail', flex: 1 },
+            { header: 'Created by', dataIndex: 'createdByEmail', flex: 1, sortable: false },
+            { header: 'Created at', dataIndex: 'dtAdded', flex: 1, sortable: true },
             { header: "Status", maxWidth: 100, dataIndex: 'status', sortable: false, xtype: 'statuscolumn', statustype: 'image', resizable: false },
             {
 				xtype: 'optionscolumn2',

@@ -247,6 +247,13 @@ class Script extends AbstractEntity
             $usage[] = sprintf("%d orchestration rule(s) on account level", $accountCount);
         }
 
+        $taskCount = $this->db()->GetOne("SELECT COUNT(*) FROM scheduler WHERE script_id = ?",
+            array($this->id)
+        );
+        if ($taskCount > 0) {
+            $usage[] = sprintf("%d scheduler task(s)", $taskCount);
+        }
+
         if (count($usage)) {
             throw new \Scalr_Exception_Core(sprintf('Script "%s" being used by %s, and can\'t be deleted',
                 $this->name,

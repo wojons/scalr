@@ -157,6 +157,7 @@ Scalr.regPage('Scalr.ui.servers.dashboard', function (loadParams, moduleParams) 
                                         xtype: 'progressfield',
                                         fieldLabel: key + (value && value.fstype ? ' (' + value.fstype + ')' : ''),
                                         labelWidth: 200,
+                                        labelStyle: 'word-wrap: break-word',
                                         anchor: '100%',
                                         labelSeparator: '',
                                         units: 'Gb',
@@ -283,7 +284,17 @@ Scalr.regPage('Scalr.ui.servers.dashboard', function (loadParams, moduleParams) 
                         }
                     },{
                         name: 'nextUpdate',
-                        fieldLabel: 'Next update'
+                        fieldLabel: 'Next update',
+                        renderer: function(value) {
+                            var html;
+                            if (!value) {
+                                html = 'Scalarizr is up to date';
+                            } else {
+                                html = 'Update to <b>' + value['candidate'] + '</b>';
+                                html += value['scheduledOn'] ? ' scheduled on <b>' + value['scheduledOn'] + '</b>' : ' is not yet scheduled';
+                            }
+                            return html;
+                        }
                     },{
                         xtype: 'container',
                         layout: 'hbox',

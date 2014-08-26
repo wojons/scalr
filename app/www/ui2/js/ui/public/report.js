@@ -116,6 +116,14 @@ Scalr.regPage('Scalr.ui.public.report', function (loadParams, moduleParams) {
                    })
                }),
 
+                axes: [{
+                    type: 'Numeric',
+                    position: 'left',
+                    fields: ['cost'],
+                    minimum: 0,
+                    hidden: true
+                }],
+
                series: [{
                    type: 'line',
                    shadowAttributes: [],
@@ -131,7 +139,6 @@ Scalr.regPage('Scalr.ui.public.report', function (loadParams, moduleParams) {
                        radius: 1,
                        fill: '#327ac2'
                    }
-
                }]
            },{
                xtype: 'component',

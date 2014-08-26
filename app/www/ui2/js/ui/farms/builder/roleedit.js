@@ -773,26 +773,24 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.main', function (tabParams) {
                     beforeselect: function(comp, record) {
                         //todo: quick solution - do better
                         var currentRole, storages, storageTab, allowChange;
-                        if (Scalr.flags['betaMode']) {
-                            currentRole = comp.up('#maintab').currentRole;
-                            if (!record.get('ebsencryption') && currentRole.get('platform') === 'ec2') {
-                                storageTab = this.up('farmroleedit').down('#tabspanel').getComponent('storage');
-                                if (storageTab && storageTab.isVisible()) {
-                                    storages = storageTab.getStorages();
-                                } else {
-                                    storages = (currentRole.get('storages', true)||{})['configs'];
-                                }
-                                if (storages) {
-                                    allowChange = true;
-                                    Ext.each(storages, function(storage){
-                                        if (storage.settings['ebs.encrypted']) {
-                                            allowChange = false;
-                                            return false;
-                                        }
-                                    });
-                                    if (!allowChange) Scalr.message.InfoTip('Please remove EBS encrypted storages before changing instance type to '+record.get('name'), comp.inputEl, {anchor: 'bottom'});
-                                    return allowChange;
-                                }
+                        currentRole = comp.up('#maintab').currentRole;
+                        if (!record.get('ebsencryption') && currentRole.get('platform') === 'ec2') {
+                            storageTab = this.up('farmroleedit').down('#tabspanel').getComponent('storage');
+                            if (storageTab && storageTab.isVisible()) {
+                                storages = storageTab.getStorages();
+                            } else {
+                                storages = (currentRole.get('storages', true)||{})['configs'];
+                            }
+                            if (storages) {
+                                allowChange = true;
+                                Ext.each(storages, function(storage){
+                                    if (storage.settings['ebs.encrypted']) {
+                                        allowChange = false;
+                                        return false;
+                                    }
+                                });
+                                if (!allowChange) Scalr.message.InfoTip('Please remove EBS encrypted storages before changing instance type to '+record.get('name'), comp.inputEl, {anchor: 'bottom'});
+                                return allowChange;
                             }
                         }
                     },

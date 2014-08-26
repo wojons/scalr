@@ -264,3 +264,35 @@
     background: #D90000;
 }
 
+.scalr-ui-variablefield2-editor-scopemarker {
+    border-left: 4px solid #fff;
+}
+
+.scalr-ui-variablefield2-editor-scopemarker-scalr {
+    box-shadow: -6px 0 0 0 #4567CB;
+}
+
+.scalr-ui-variablefield2-editor-scopemarker-account {
+    box-shadow: -6px 0 0 0 #DA6BE7;
+}
+
+.scalr-ui-variablefield2-editor-scopemarker-env {
+    box-shadow: -6px 0 0 0 #FCA503;
+}
+
+.scalr-ui-variablefield2-editor-scopemarker-role {
+    box-shadow: -6px 0 0 0 #7CBFE7;
+}
+
+.scalr-ui-variablefield2-editor-scopemarker-farm {
+    box-shadow: -6px 0 0 0 #0F9104;
+}
+
+.scalr-ui-variablefield2-editor-scopemarker-farmrole {
+    box-shadow: -6px 0 0 0 #D90000;
+}
+
+.scalr-ui-variablefield2-editor-extended-properties {
+    background-color: #f9fafb;
+    padding: 6px 12px;
+}

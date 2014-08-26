@@ -78,6 +78,59 @@ class ServersApi
     }
 
     /**
+     * Detach volume to the server
+     *
+     * @param   string          $serverId    Server ID
+     * @param   string          $attachmentId    Attachment ID
+     * @return  object          Returns bool
+     * @throws  RestClientException
+     */
+    public function detachVolume($serverId, $attachmentId) {
+    	
+    	$result = false;
+    	
+    	$response = $this->getClient()->call(
+    		$this->service,
+    		sprintf('/servers/%s/os-volume_attachments/%s', $serverId, $attachmentId), null, 'DELETE'
+    	);
+    	if ($response->hasError() === false)
+    		$result = true;
+    	
+    	return $result;
+    }
+    
+	/**
+     * Attach volume to the server
+     *
+     * @param   string          $serverId    Server ID
+     * @param   string          $volumeId    Volume ID
+     * @param   string          $deviceName  Device name. eg. vda
+     * @return  object          Returns volumeAttachment object
+     * @throws  RestClientException
+     */
+    public function attachVolume($serverId, $volumeId, $deviceName) {
+    	/*
+    	 * http://developer.openstack.org/api-ref-compute-v2-ext.html#ext-os-volume_attachments
+    	 */
+    	$result = null;
+    	
+    	$options['volumeAttachment'] = array(
+    		'volumeId' => $volumeId,
+    		'device' => $deviceName
+    	);
+    	
+    	$response = $this->getClient()->call(
+    		$this->service,
+    		sprintf('/servers/%s/os-volume_attachments', $serverId), $options, 'POST'
+    	);
+    	if ($response->hasError() === false) {
+    		$result = json_decode($response->getContent());
+    		$result = $result->volumeAttachment;
+    	}
+    	return $result;
+    }
+    
+    /**
      * Create Server action
      *
      * @param   string          $name        A server name to create.
@@ -862,7 +915,7 @@ class ServersApi
      * List security groups.
      *
      * @param   string     $serverId   optional The server ID (UUID) of interest to you.
-     * @return  DefaultPaginationList  Returns the list of the security groups
+     * @return  DefaultPaginationList|object  Returns the list of the security groups
      * @throws  RestClientException
      */
     public function listSecurityGroups($serverId = null)
@@ -870,15 +923,25 @@ class ServersApi
         $result = null;
         $response = $this->getClient()->call(
             $this->service,
-            ($serverId === null ? '/os-security-groups' : sprintf('/servers/%s/os-security-groups', (string)$serverId))
+            ($serverId === null ? '/os-security-groups' : sprintf('/os-security-groups/%s', (string)$serverId))
         );
+
         if ($response->hasError() === false) {
             $result = json_decode($response->getContent());
-            $result = new DefaultPaginationList(
-                $this->service, 'security_groups', $result->security_groups,
-                (isset($result->security_groups_links) ? $result->security_groups_links : null)
-            );
+
+            if (property_exists($result, 'security_groups')) {
+                foreach ($result->security_groups as $data) {
+                    $securityGroupsArr[] = $this->changeSecurityGroupProperties($data);
+                }
+                $result = new DefaultPaginationList(
+                    $this->service, 'security_groups', $securityGroupsArr,
+                    (isset($result->security_groups_links) ? $result->security_groups_links : null)
+                );
+            } else {
+                $result = $this->changeSecurityGroupProperties($result->security_group);
+            }
         }
+
         return $result;
     }
 
@@ -1066,4 +1129,44 @@ class ServersApi
         }
         return $result;
     }
+
+    /**
+     * Changes properties of the security group object
+     *
+     * @param object $data   Security group object
+     * @return object Return modified security group object
+     */
+    private function changeSecurityGroupProperties($data)
+    {
+        $securityGroup = new \stdClass();
+        $vars = get_object_vars($data);
+
+        foreach ($vars as $name => $value) {
+            if ($name === 'rules') {
+                $rulesArr = array();
+
+                foreach ($data->rules as $rule) {
+                    $ruleVars = get_object_vars($rule);
+                    $ruleObj = new \stdClass();
+
+                    foreach ($ruleVars as $ruleName => $ruleVar) {
+                        $ruleObj->{$ruleName} = $ruleVar;
+                    }
+
+                    $ruleObj->id = $rule->id;
+                    $ruleObj->protocol = $rule->ip_protocol;
+                    $ruleObj->port_range_min = $rule->from_port;
+                    $ruleObj->port_range_max = $rule->to_port;
+                    $rulesArr[] = $ruleObj;
+                }
+
+                $securityGroup->security_group_rules = $rulesArr;
+            } else {
+                $securityGroup->{$name} = $value;
+            }
+        }
+
+        return $securityGroup;
+    }
+
 }

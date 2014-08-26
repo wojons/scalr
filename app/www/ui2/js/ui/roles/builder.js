@@ -1286,7 +1286,7 @@ Scalr.regPage('Scalr.ui.roles.builder', function (loadParams, moduleParams) {
             image = image || {};
             panel.suspendLayouts();
             if (server['platform'] !== 'gce' && server['platform'] !== 'ecs') {
-                panel.down('#cloudLocation').setValue(image['cloudLocation']).disable();
+                panel.down('#cloudLocation').setValue(image['cloud_location']).disable();
             }
             panel.down('#architecture').setValue(image['architecture']).disable();
             panel.down('#root_device_type').setValue(image['root_device_type']).disable();

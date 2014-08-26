@@ -70,8 +70,6 @@ class MessagingEventObserver extends EventObserver
 
             $msg->{$dbType} = new stdClass();
             $msg->{$dbType}->snapshotConfig = $props->snapshotConfig;
-            
-            $msg = Scalr_Scripting_Manager::extendMessage($msg, $event, $event->DBServer, $dbServer);
 
             foreach (Scalr_Role_Behavior::getListForFarmRole($dbFarmRole) as $behavior)
                 $msg = $behavior->extendMessage($msg, $dbServer);

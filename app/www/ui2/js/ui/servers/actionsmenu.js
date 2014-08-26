@@ -122,7 +122,17 @@ Ext.define('Scalr.ui.ServerMenu', {
         iconCls: 'x-menu-icon-createserversnapshot',
         href: '#/servers/{server_id}/createSnapshot',
         getVisibility: function(data) {
-            return !Ext.Array.contains(['Importing', 'Pending launch', 'Temporary', 'Troubleshooting', 'Terminated', 'Suspended'], data['status']);
+        	if (Ext.Array.contains(['Importing', 'Pending launch', 'Temporary', 'Troubleshooting', 'Terminated'], data['status']))
+        		return false;
+        	else {
+        		if (data['status'] == 'Suspended') {
+        			return (data['os_family'] === 'windows');
+        		} else {
+        			return true;
+        		}
+        	}
+        	
+            return true;
         }
     }, {
         xtype: 'menuseparator'

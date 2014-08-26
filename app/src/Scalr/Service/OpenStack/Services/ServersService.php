@@ -69,6 +69,35 @@ class ServersService extends AbstractService implements ServiceInterface
     }
 
     /**
+     * Detach volume to the server
+     *
+     * @param   string          $serverId    Server ID
+     * @param   string          $attachmentId    Attachment ID
+     * @return  object          Returns bool
+     * @throws  RestClientException
+     */
+    public function detachVolume($serverId, $attachmentId) {
+    	return $this->getApiHandler()->detachVolume(
+    			$serverId, $attachmentId
+    	);
+    }
+    
+    /**
+     * Attach volume to the server
+     *
+     * @param   string          $serverId    Server ID
+     * @param   string          $volumeId    Volume ID
+     * @param   string          $deviceName  Device name. eg. vda
+     * @return  object          Returns volumeAttachment object
+     * @throws  RestClientException
+     */
+    public function attachVolume($serverId, $volumeId, $deviceName) {
+    	return $this->getApiHandler()->attachVolume(
+    		$serverId, $volumeId, $deviceName
+    	);
+    }
+    
+    /**
      * Create Server action
      *
      * @param   string          $name        A server name to create.
@@ -452,7 +481,7 @@ class ServersService extends AbstractService implements ServiceInterface
      */
     public function listSecurityGroups($serverId = null)
     {
-        return $this->getApiHandler()->listSecurityGroups();
+        return $this->getApiHandler()->listSecurityGroups($serverId);
     }
 
     /**

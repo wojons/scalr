@@ -413,6 +413,8 @@ class OpenstackPlatformModule extends AbstractOpenstackPlatformModule implements
         $DBServer = DBServer::LoadByID($BundleTask->serverId);
 
         if ($BundleTask->osFamily == 'windows' || $DBServer->osType == 'windows') {
+        	$BundleTask->bundleType = \SERVER_SNAPSHOT_CREATION_TYPE::OSTACK_WINDOWS;
+        	/*
             if ($BundleTask->status == \SERVER_SNAPSHOT_CREATION_STATUS::PENDING) {
                 $BundleTask->bundleType = \SERVER_SNAPSHOT_CREATION_TYPE::OSTACK_WINDOWS;
                 $BundleTask->Log(sprintf(_("Selected platfrom snapshoting type: %s"), $BundleTask->bundleType));
@@ -434,9 +436,10 @@ class OpenstackPlatformModule extends AbstractOpenstackPlatformModule implements
                     return false;
                 }
             } elseif ($BundleTask->status == \SERVER_SNAPSHOT_CREATION_STATUS::PREPARING) {
-                $BundleTask->Log(sprintf(_("Selected platform snapshot type: %s"), $BundleTask->bundleType));
-                $createImage = true;
-            }
+            */
+            $BundleTask->Log(sprintf(_("Selected platform snapshot type: %s"), $BundleTask->bundleType));
+            $createImage = true;
+            /*}*/
         } else {
             $BundleTask->bundleType = \SERVER_SNAPSHOT_CREATION_TYPE::OSTACK_LINUX;
             $createImage = false;

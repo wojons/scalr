@@ -1,22 +1,23 @@
 <?php
 
 use Scalr\Modules\PlatformFactory;
+
 class Scalr_Cronjob_Scaling extends Scalr_System_Cronjob_MultiProcess_DefaultWorker
 {
     static function getConfig () {
         return array(
-            "description" => "Roles scaling",
-            "processPool" => array(
-                "daemonize" => false,
-                "workerMemoryLimit" => 40000,   // 40Mb
-                "startupTimeout" => 10000, 		// 10 seconds
-                "workTimeout" => 120000,		// 120 seconds
-                "size" => 14						// 7 workers
+            "description"      => "Roles scaling",
+            "processPool"      => array(
+                "daemonize"         => false,
+                "workerMemoryLimit" => 40000,  // 40Mb
+                "startupTimeout"    => 10000,  // 10 seconds
+                "workTimeout"       => 120000, // 120 seconds
+                "size"              => 14      // 14 workers
             ),
             "waitPrevComplete" => true,
-            "fileName" => __FILE__,
-            "getoptRules" => array(
-                'farm-id-s' => 'Affect only this farm'
+            "fileName"         => __FILE__,
+            "getoptRules"      => array(
+                'farm-id-s'        => 'Affect only this farm'
             )
         );
     }
@@ -51,21 +52,25 @@ class Scalr_Cronjob_Scaling extends Scalr_System_Cronjob_MultiProcess_DefaultWor
     function enqueueWork ($workQueue)
     {
         $this->logger->info("Fetching completed farms...");
+
         $farmid = $this->runOptions['getopt']->getOption('farm-id');
 
         if ($farmid) {
-            $rows = $this->db->GetAll("SELECT farms.id FROM farms
+            $rows = $this->db->GetAll("
+                SELECT farms.id FROM farms
                 INNER JOIN clients ON clients.id = farms.clientid
                 WHERE clients.status='Active' AND farms.status=? AND farms.id=?",
                 array(FARM_STATUS::RUNNING, $farmid)
             );
         } else {
-            $rows = $this->db->GetAll("SELECT farms.id FROM farms
+            $rows = $this->db->GetAll("
+                SELECT farms.id FROM farms
                 INNER JOIN clients ON clients.id = farms.clientid
                 WHERE clients.status='Active' AND farms.status=?",
                 array(FARM_STATUS::RUNNING)
             );
         }
+
         foreach ($rows as $row) {
             $workQueue->put($row['id']);
         }
@@ -73,22 +78,20 @@ class Scalr_Cronjob_Scaling extends Scalr_System_Cronjob_MultiProcess_DefaultWor
         $this->logger->info(sprintf("Found %d farms.", count($rows)));
     }
 
-    function handleWork ($farmId) {
+    function handleWork ($farmId)
+    {
         $DBFarm = DBFarm::LoadByID($farmId);
 
         $GLOBALS["SUB_TRANSACTIONID"] = abs(crc32(posix_getpid().$farmId));
         $GLOBALS["LOGGER_FARMID"] = $farmId;
 
-        if ($DBFarm->Status != FARM_STATUS::RUNNING)
-        {
+        if ($DBFarm->Status != FARM_STATUS::RUNNING) {
             $this->logger->warn("[FarmID: {$DBFarm->ID}] Farm terminated. There is no need to scale it.");
             return;
         }
 
-        foreach ($DBFarm->GetFarmRoles() as $DBFarmRole)
-        {
+        foreach ($DBFarm->GetFarmRoles() as $DBFarmRole) {
             for ($i = 0; $i < 10; $i++) {
-
                 if ($DBFarmRole->NewRoleID != '') {
                     $this->logger->warn("[FarmID: {$DBFarm->ID}] Role '{$DBFarmRole->GetRoleObject()->name}' being synchronized. This role will not be scalled.");
                     continue 2;
@@ -97,8 +100,7 @@ class Scalr_Cronjob_Scaling extends Scalr_System_Cronjob_MultiProcess_DefaultWor
                 if ($DBFarmRole->GetSetting(DBFarmRole::SETTING_SCALING_ENABLED) != '1' &&
                     !$DBFarmRole->GetRoleObject()->hasBehavior(ROLE_BEHAVIORS::MONGODB) &&
                     !$DBFarmRole->GetRoleObject()->hasBehavior(ROLE_BEHAVIORS::RABBITMQ) &&
-                    !$DBFarmRole->GetRoleObject()->hasBehavior(ROLE_BEHAVIORS::VPC_ROUTER))
-                {
+                    !$DBFarmRole->GetRoleObject()->hasBehavior(ROLE_BEHAVIORS::VPC_ROUTER)) {
                     $this->logger->info("[FarmID: {$DBFarm->ID}] Scaling disabled for role '{$DBFarmRole->GetRoleObject()->name}'. Skipping...");
                     continue 2;
                 }
@@ -117,13 +119,9 @@ class Scalr_Cronjob_Scaling extends Scalr_System_Cronjob_MultiProcess_DefaultWor
                 // Get current count of running and pending instances.
                 $this->logger->info(sprintf("Processing role '%s'", $DBFarmRole->GetRoleObject()->name));
 
-
                 $scalingManager = new Scalr_Scaling_Manager($DBFarmRole);
                 $scalingDecision = $scalingManager->makeScalingDecition();
                 $scalingDecisionAlgorithm = $scalingManager->decisonInfo;
-
-                if ($DBFarm->ID == 5440)
-                    $this->logger->fatal("{$scalingDecision} ({$scalingDecisionAlgorithm})");
 
                 if ($scalingDecision == Scalr_Scaling_Decision::STOP_SCALING)
                     return;
@@ -133,22 +131,21 @@ class Scalr_Cronjob_Scaling extends Scalr_System_Cronjob_MultiProcess_DefaultWor
 
                 elseif ($scalingDecision == Scalr_Scaling_Decision::DOWNSCALE) {
                     /*
-                     Timeout instance's count decrease. Decreases instance�s count after scaling
-                     resolution the spare instances are running�g for selected timeout interval
+                     Timeout instance's count decrease. Decreases instances count after scaling
+                     resolution the spare instances are running for selected timeout interval
                      from scaling EditOptions
                     */
 
                     // We have to check timeout limits before new scaling (downscaling) process will be initiated
-                    if($DBFarmRole->GetSetting(DBFarmRole::SETTING_SCALING_DOWNSCALE_TIMEOUT_ENABLED))
-                    {   // if the farm timeout is exceeded
+                    if ($DBFarmRole->GetSetting(DBFarmRole::SETTING_SCALING_DOWNSCALE_TIMEOUT_ENABLED)) {
+                        // if the farm timeout is exceeded
                         // checking timeout interval.
 
                         $last_down_scale_data_time =  $DBFarmRole->GetSetting(DBFarmRole::SETTING_SCALING_DOWNSCALE_DATETIME);
                         $timeout_interval = $DBFarmRole->GetSetting(DBFarmRole::SETTING_SCALING_DOWNSCALE_TIMEOUT);
 
                         // check the time interval to continue scaling or cancel it...
-                        if(time() - $last_down_scale_data_time < $timeout_interval*60)
-                        {
+                        if (time() - $last_down_scale_data_time < $timeout_interval * 60) {
                             // if the launch time is too small to terminate smth in this role -> go to the next role in foreach()
                             Logger::getLogger(LOG_CATEGORY::FARM)->info(new FarmLogMessage($DBFarm->ID,
                                 sprintf("Waiting for downscaling timeout on farm %s, role %s",
@@ -159,6 +156,7 @@ class Scalr_Cronjob_Scaling extends Scalr_System_Cronjob_MultiProcess_DefaultWor
                             continue 2;
                         }
                     } // end Timeout instance's count decrease
+
                     $sort = ($DBFarmRole->GetSetting(DBFarmRole::SETTING_SCALING_KEEP_OLDEST) == 1) ? 'DESC' : 'ASC';
 
                     $servers = $this->db->GetAll("SELECT server_id FROM servers WHERE status = ? AND farm_roleid=? ORDER BY dtadded {$sort}",
@@ -319,7 +317,7 @@ class Scalr_Cronjob_Scaling extends Scalr_System_Cronjob_MultiProcess_DefaultWor
                 } elseif ($scalingDecision == Scalr_Scaling_Decision::UPSCALE) {
                     /*
                     Timeout instance's count increase. Increases  instance's count after
-                    scaling resolution �need more instances� for selected timeout interval
+                    scaling resolution 'need more instances' for selected timeout interval
                     from scaling EditOptions
                     */
                     if ($DBFarmRole->GetSetting(DBFarmRole::SETTING_SCALING_UPSCALE_TIMEOUT_ENABLED)) {
@@ -329,7 +327,7 @@ class Scalr_Cronjob_Scaling extends Scalr_System_Cronjob_MultiProcess_DefaultWor
                         $timeout_interval = $DBFarmRole->GetSetting(DBFarmRole::SETTING_SCALING_UPSCALE_TIMEOUT);
 
                         // check the time interval to continue scaling or cancel it...
-                        if(time() - $last_up_scale_data_time < $timeout_interval * 60) {
+                        if (time() - $last_up_scale_data_time < $timeout_interval * 60) {
                             // if the launch time is too small to terminate smth in this role -> go to the next role in foreach()
                             Logger::getLogger(LOG_CATEGORY::FARM)->info(new FarmLogMessage($DBFarm->ID,
                                 sprintf("Waiting for upscaling timeout on farm %s, role %s",
@@ -358,8 +356,7 @@ class Scalr_Cronjob_Scaling extends Scalr_System_Cronjob_MultiProcess_DefaultWor
                         }
                     }
 
-                    if ($DBFarmRole->GetSetting(DBFarmRole::SETTING_SCALING_ONE_BY_ONE) == 1)
-                    {
+                    if ($DBFarmRole->GetSetting(DBFarmRole::SETTING_SCALING_ONE_BY_ONE) == 1) {
                         $pendingInstances = $DBFarmRole->GetPendingInstancesCount();
                         if ($pendingInstances > 0) {
                             Logger::getLogger(LOG_CATEGORY::FARM)->info(new FarmLogMessage($DBFarm->ID,
@@ -374,25 +371,20 @@ class Scalr_Cronjob_Scaling extends Scalr_System_Cronjob_MultiProcess_DefaultWor
                     }
 
                     $fstatus = $this->db->GetOne("SELECT status FROM farms WHERE id=? LIMIT 1", array($DBFarm->ID));
-                    if ($fstatus != FARM_STATUS::RUNNING)
-                    {
+                    if ($fstatus != FARM_STATUS::RUNNING) {
                         $this->logger->warn("[FarmID: {$DBFarm->ID}] Farm terminated. There is no need to scale it.");
                         return;
                     }
 
                     $terminateStrategy = $DBFarmRole->GetSetting(Scalr_Role_Behavior::ROLE_BASE_TERMINATE_STRATEGY);
+
                     if (!$terminateStrategy)
                         $terminateStrategy = 'terminate';
 
-                    if ($DBFarmRole->FarmID == 5440)
-                        $this->logger->fatal("Strategy: {$terminateStrategy}");
-
                     $suspendedServer = null;
+
                     if ($terminateStrategy == 'suspend') {
                         $suspendedServers = $DBFarmRole->GetServersByFilter(array('status' => SERVER_STATUS::SUSPENDED));
-
-                        if ($DBFarmRole->FarmID == 5440)
-                            $this->logger->fatal("SuspendedServers: " . count($suspendedServers));
 
                         if (count($suspendedServers) > 0)
                             $suspendedServer = array_shift($suspendedServers);
@@ -407,9 +399,10 @@ class Scalr_Cronjob_Scaling extends Scalr_System_Cronjob_MultiProcess_DefaultWor
                     }
 
                     if ($terminateStrategy == 'terminate' || !$suspendedServer ||
-                    (!PlatformFactory::isOpenstack($suspendedServer->platform) &&
-                    $suspendedServer->platform != SERVER_PLATFORMS::EC2)) {
+                        (!PlatformFactory::isOpenstack($suspendedServer->platform) &&
+                        $suspendedServer->platform != SERVER_PLATFORMS::EC2)) {
                         $ServerCreateInfo = new ServerCreateInfo($DBFarmRole->Platform, $DBFarmRole);
+
                         try {
                             $DBServer = Scalr::LaunchServer($ServerCreateInfo, null, false, DBServer::LAUNCH_REASON_SCALING_UP);
 
@@ -420,8 +413,7 @@ class Scalr_Cronjob_Scaling extends Scalr_System_Cronjob_MultiProcess_DefaultWor
                                 $DBServer->GetFarmRoleObject()->GetRoleObject()->name,
                                 $DBServer->serverId
                             )));
-                        }
-                        catch(Exception $e){
+                        } catch (Exception $e) {
                             Logger::getLogger(LOG_CATEGORY::SCALING)->error($e->getMessage());
                         }
                     } else {

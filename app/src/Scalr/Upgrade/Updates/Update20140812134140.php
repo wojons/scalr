@@ -19,7 +19,7 @@ class Update20140812134140 extends AbstractUpdate implements SequenceInterface
 
     public function getNumberStages()
     {
-        return 4;
+        return 6;
     }
 
     protected function isApplied1($stage)
@@ -103,5 +103,48 @@ class Update20140812134140 extends AbstractUpdate implements SequenceInterface
     protected function run4()
     {
         $this->db->Execute('ALTER TABLE tag_link ADD INDEX `idx_resource` (`resource`, `resource_id`)');
+    }
+
+    protected function isApplied5()
+    {
+        return $this->hasTableColumn('images', 'dt_added');
+    }
+
+    protected function validateBefore5()
+    {
+        return $this->hasTable('images');
+    }
+
+    protected function run5()
+    {
+        $this->db->Execute('ALTER TABLE images ADD `dt_added` DATETIME NULL DEFAULT NULL AFTER `os_name`');
+        $this->db->Execute('UPDATE images i JOIN bundle_tasks b ON b.id = i.bundle_task_id SET i.dt_added = b.dtadded');
+    }
+
+    protected function isApplied6()
+    {
+        return $this->hasTableColumn('scheduler', 'script_id');
+    }
+
+    protected function validateBefore6()
+    {
+        return $this->hasTable('scheduler');
+    }
+
+    protected function run6()
+    {
+        $cnt = 0;
+        $this->db->Execute('ALTER TABLE scheduler ADD `script_id` INT(11) NULL DEFAULT NULL AFTER `target_type`');
+        foreach ($this->db->GetAll('SELECT id, config FROM scheduler WHERE type = ?', ['script_exec']) as $task) {
+            $config = unserialize($task['config']);
+            if ($config && $config['scriptId']) {
+                $this->db->Execute('UPDATE scheduler SET script_id = ? WHERE id = ?', [$config['scriptId'], $task['id']]);
+                $cnt++;
+            } else {
+                $this->console->warning('Invalid config for task #%d: %s', $task['id'], print_r($config, true));
+            }
+        }
+
+        $this->console->notice('Updated %d tasks', $cnt);
     }
 }

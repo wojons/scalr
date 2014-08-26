@@ -1405,6 +1405,7 @@ CREATE TABLE `farm_roles` (
   KEY `role_id` (`role_id`),
   KEY `farmid` (`farmid`),
   KEY `platform` (`platform`),
+  KEY `idx_new_role_id` (`new_role_id`),
   CONSTRAINT `farm_roles_ibfk_1` FOREIGN KEY (`farmid`) REFERENCES `farms` (`id`) ON DELETE CASCADE ON UPDATE NO ACTION
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1;
 /*!40101 SET character_set_client = @saved_cs_client */;
@@ -1512,6 +1513,7 @@ CREATE TABLE `images` (
   `os_family` varchar(25) DEFAULT NULL,
   `os_version` varchar(10) DEFAULT NULL,
   `os_name` varchar(255) DEFAULT NULL,
+  `dt_added` datetime DEFAULT NULL,
   `created_by_id` int(11) DEFAULT NULL,
   `created_by_email` varchar(100) DEFAULT NULL,
   `architecture` enum('i386','x86_64') NOT NULL DEFAULT 'x86_64',
@@ -1986,6 +1988,7 @@ CREATE TABLE `scheduler` (
   `target_id` int(11) DEFAULT NULL COMMENT 'id of farm, farm_role from other tables',
   `target_server_index` int(11) DEFAULT NULL,
   `target_type` enum('farm','role','instance') DEFAULT NULL,
+  `script_id` int(11) DEFAULT NULL,
   `start_time` datetime DEFAULT NULL COMMENT 'start task''s time',
   `end_time` datetime DEFAULT NULL COMMENT 'end task by this time',
   `last_start_time` datetime DEFAULT NULL COMMENT 'the last time task was started',
@@ -2769,6 +2772,7 @@ CREATE TABLE `tag_link` (
   `resource` varchar(32) NOT NULL,
   `resource_id` int(11) NOT NULL,
   UNIQUE KEY `idx_id` (`tag_id`,`resource`,`resource_id`),
+  KEY `idx_resource` (`resource`,`resource_id`),
   CONSTRAINT `fk_tag_link_tags_id` FOREIGN KEY (`tag_id`) REFERENCES `tags` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
 /*!40101 SET character_set_client = @saved_cs_client */;
@@ -3050,4 +3054,4 @@ CREATE TABLE `webhook_history` (
 /*!40014 SET UNIQUE_CHECKS=@OLD_UNIQUE_CHECKS */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
--- Dump completed on 2014-08-15 12:04:05
+-- Dump completed on 2014-08-26  4:11:10

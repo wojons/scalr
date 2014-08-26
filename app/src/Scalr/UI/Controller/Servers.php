@@ -925,6 +925,19 @@ class Scalr_UI_Controller_Servers extends Scalr_UI_Controller
                 $updateClient = new Scalr_Net_Scalarizr_UpdateClient($dbServer, $port, $timeout);
                 $scalarizr = $updateClient->getStatus($cached);
 
+                try {
+                    if ($dbServer->farmRoleId != 0) {
+                        $scheduledOn = $dbServer->GetFarmRoleObject()->GetSetting('scheduled_on');
+                    }
+                } catch (Exception $e) {}
+
+                $nextUpdate = null;
+                if ($scalarizr->candidate && $scalarizr->installed != $scalarizr->candidate) {
+                    $nextUpdate = [
+                        'candidate'   => htmlspecialchars($scalarizr->candidate),
+                        'scheduledOn' => $scheduledOn ? Scalr_Util_DateTime::convertTz($scheduledOn) : null
+                    ];
+                }
                 return [
                     'status'      => htmlspecialchars($scalarizr->service_status),
                     'version'     => htmlspecialchars($scalarizr->installed),
@@ -934,7 +947,7 @@ class Scalr_UI_Controller_Servers extends Scalr_UI_Controller
                         'date'        => ($scalarizr->executed_at) ? Scalr_Util_DateTime::convertTz($scalarizr->executed_at) : "",
                         'error'       => nl2br(htmlspecialchars($scalarizr->error))
                     ],
-                    'nextUpdate'  => ($scalarizr->installed != $scalarizr->candidate) ? "Update to <b>" . htmlspecialchars($scalarizr->candidate) . "</b> scheduled on <b>".Scalr_Util_DateTime::convertTz($scalarizr->scheduled_on)."</b>" : "Scalarizr is up to date",
+                    'nextUpdate'  => $nextUpdate,
                     'fullInfo'    => $scalarizr
                 ];
             } catch (Exception $e) {

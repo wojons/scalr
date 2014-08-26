@@ -91,24 +91,36 @@ class Scalr_Role_Behavior_Router extends Scalr_Role_Behavior implements Scalr_Ro
         $dbFarmRole->SetSetting(self::ROLE_VPC_ROUTER_CONFIGURED, 1, DBFarmRole::TYPE_LCL);
     }
 
+
+    /**
+     * {@inheritdoc}
+     * @see Scalr_Role_Behavior::getConfiguration()
+     */
+    public function getConfiguration(DBServer $dbServer)
+    {
+        $router = new stdClass();
+
+        // Set scalr address
+        $router->scalrAddr =
+            \Scalr::config('scalr.endpoint.scheme') . "://" .
+            \Scalr::config('scalr.endpoint.host');
+
+        // Set scalr IPs whitelist
+        $router->whitelist = \Scalr::config('scalr.aws.ip_pool');
+
+        // Set CIDR
+        $router->cidr = '10.0.0.0/8';
+
+        return $router;
+    }
+
     public function extendMessage(Scalr_Messaging_Msg $message, DBServer $dbServer)
     {
         $message = parent::extendMessage($message, $dbServer);
 
         switch (get_class($message)) {
             case "Scalr_Messaging_Msg_HostInitResponse":
-                $message->router = new stdClass();
-
-                // Set scalr address
-                $message->router->scalrAddr =
-                    \Scalr::config('scalr.endpoint.scheme') . "://" .
-                    \Scalr::config('scalr.endpoint.host');
-
-                // Set scalr IPs whitelist
-                $message->router->whitelist = \Scalr::config('scalr.aws.ip_pool');
-
-                // Set CIDR
-                $message->router->cidr = '10.0.0.0/8';
+                $message->router = $this->getConfiguration($dbServer);
         }
 
         return $message;

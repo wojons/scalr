@@ -931,10 +931,14 @@ Ext.define('Scalr.ui.VariableField2', {
         return valid;
     },
 
-    getValue: function() {
-        var store = this.down('grid').getStore(), variables = [];
+    getValue: function () {
+        var me = this;
 
-        store.each(function(record) {
+        var store = me.down('grid').getStore();
+        var records = store.snapshot || store.data;
+        var variables = [];
+
+        Ext.Array.each(records.items, function (record) {
             variables.push({
                 name: record.get('name'),
                 current: record.get('current'),
@@ -944,7 +948,7 @@ Ext.define('Scalr.ui.VariableField2', {
             });
         });
 
-        return this.encodeParams ? Ext.encode(variables) : variables;
+        return me.encodeParams ? Ext.encode(variables) : variables;
     },
 
     setValue: function(value) {
@@ -952,200 +956,6 @@ Ext.define('Scalr.ui.VariableField2', {
         var grid = this.down('grid'), me = this, currentScope = this.currentScope, i, f, names = [], isLockedVars = false;
 
         grid.store.loadData(value);
-
-        /*
-        this.down('#showLockedVars').resetLockedVars();
-        ct.suspendLayouts();
-        ct.removeAll();
-
-        this.suspendEvent('addvar', 'editvar', 'removevar');
-        */
-
-        // for flagRequiredScope
-        var allowedScopes = [], allowedAllScopes = [], sc = { 'scalr': 'Scalr', 'account': 'Account', 'env': 'Environment', 'role': 'Role', 'farm': 'Farm', 'farmrole': 'FarmRole' }, sca = Ext.Object.getKeys(sc);
-        sca = sca.slice(sca.indexOf(currentScope) + 1 + (currentScope == 'role' ? 1 : 0)); // if currentScope == role, exclude farm
-        for (i = 0; i < sca.length; i++) {
-            allowedScopes.push([ sca[i], sc[sca[i]]]);
-        }
-        for (i in sc) {
-            allowedAllScopes.push([ i, sc[i] ]);
-        }
-
-        for (i = 0; i < value.length; i++) {
-            var current = { name: value[i]['name'] };
-        }
-
-        return;
-
-        for (i = 0; i < value.length; i++) {
-            f = ct.add({
-                currentScope: currentScope,
-                xtype: 'variablevaluefield',
-                originalValues: value[i]
-            });
-            var current = { name: value[i]['name'] };
-
-            if (value[i]['current']) {
-                if (value[i]['current']['flagRequired'])
-                    current['flagRequiredScope'] = value[i]['current']['flagRequired']; // it should be set at first, because of flagRequired field
-                else
-                    current['flagRequiredScope'] = 'farmrole';
-
-                Ext.apply(current, value[i]['current']);
-                f['scope'] = value[i]['current']['scope'];
-            }
-
-            if (value[i]['default']) {
-                f['scope'] = f['scope'] || value[i]['default']['scope'];
-                f['defaultScope'] = value[i]['default']['scope'];
-                // set up-level value
-                f.down('[name="value"]').emptyText = value[i]['default']['value'];
-            } else {
-                f['defaultScope'] = currentScope;
-            }
-
-            names.push(current['name']);
-            current['newValue'] = false;
-
-            f.down('[name="flagRequiredScope"]').store.loadData((value[i]['locked'] || value[i]['default']) ? allowedAllScopes : allowedScopes);
-            f.setFieldValues(current);
-
-            if (value[i]['locked'] || value[i]['default']) {
-                // variable has upper value, block flags
-                var locked = value[i]['locked'] || {};
-                if (locked['flagRequired'])
-                    f.down('[name="flagRequiredScope"]').setValue(locked['flagRequired']).setReadOnly(true);
-
-                f.down('[name="flagRequired"]').setValue(locked['flagRequired']).disable();
-                f.down('[name="flagFinal"]').setValue(locked['flagFinal']).disable();
-                f.down('[name="flagHidden"]').setValue(locked['flagHidden']).disable();
-
-                if (locked['flagFinal'] == 1) {
-                    f.down('[name="value"]').setReadOnly(true);
-                    f.down('[name="value"]').reset(); // fix issue, when variable was redefined on upper level and lock interface
-                    f.down('#reset').disable();
-                    f.down('#delete').disable();
-                    f.lockedVar = true;
-                    isLockedVars = true;
-                    f.hide();
-                }
-
-                f.down('[name="validator"]').setValue(locked['validator']).setReadOnly(true);
-                f.down('[name="validator"]').emptyText = '';
-                f.down('[name="format"]').setValue(locked['format']).setReadOnly(true);
-                f.down('[name="format"]').emptyText = '';
-
-                if (locked['flagRequired'] || locked['format'] || locked['validator']) {
-                    f.down('#configure').toggle(true);
-                }
-
-                var valueField = f.down('[name="value"]');
-                if (locked['flagRequired'] == currentScope && !valueField.emptyText) {
-                    valueField.allowBlank = false;
-                    valueField.isValid();
-                }
-
-            }
-
-            // not to remove variables from higher scopes
-            if (value[i]['default'])
-                f.down('#delete').disable();
-
-            if (value[i]['flagDelete'] == 1)
-                f.hide();
-
-            if (currentScope == 'farmrole') {
-                // or required and hidden for last scope (farmrole)
-                f.down('[name="flagRequired"]').disable();
-                f.down('[name="flagHidden"]').disable();
-            }
-
-            if (f.down('[name="validator"]').getValue()) {
-                try {
-                    f.down('[name="value"]').regex = new RegExp(f.down('[name="validator"]').getValue());
-                    f.down('[name="value"]').isValid();
-                } catch (e) {}
-            }
-        }
-
-        var handler = function() {
-            // check, if last new variable was filled
-            var items = ct.items.items, names = [], added = null;
-            for (var i = 0; i < items.length; i++) {
-                if (items[i].xtype == 'variablevaluefield') {
-                    if (items[i].down('[name="newValue"]').getValue() == 'true') {
-                        added = items[i];
-                        var field = added.down('[name="newName"]');
-                        if (field.isValid()) {
-                            if (! field.getValue()) {
-                                field.markInvalid('Name is required');
-                                return;
-                            }
-
-                            items[i].down('[name="newValue"]').setValue(false);
-                        } else {
-                            return;
-                        }
-                        added.originalValues = {
-                            name: added.down('[name="name"]').getValue()
-                        };
-                    }
-                    names.push(items[i].down('[name="name"]').getValue());
-                }
-            }
-
-            this.getPlugin('addfield').hide();
-            ct.suspendLayouts();
-            var f = ct.add({
-                xtype: 'variablevaluefield',
-                currentScope: currentScope,
-                defaultScope: currentScope,
-                scope: currentScope,
-                plugins: {
-                    ptype: 'addfield',
-                    cls: me.addFieldCls,
-                    handler: handler
-                }
-            });
-            f.down('[name="flagRequiredScope"]').store.loadData(allowedScopes);
-            f.setFieldValues({
-                flagRequiredScope: 'farmrole',
-                newValue: true
-            });
-            f.down('[name="newName"]').validatorNames = names;
-            if (currentScope == 'farmrole') {
-                f.down('[name="flagRequired"]').disable();
-                f.down('[name="flagHidden"]').disable();
-            }
-            ct.resumeLayouts(true);
-
-            if (added)
-                me.fireEvent('addvar', added.getFieldValues());
-        };
-
-        f = ct.add({
-            xtype: 'variablevaluefield',
-            currentScope: currentScope,
-            defaultScope: currentScope,
-            scope: currentScope,
-            plugins: {
-                ptype: 'addfield',
-                cls: me.addFieldCls,
-                handler: handler
-            }
-        });
-        f.down('[name="flagRequiredScope"]').store.loadData(allowedScopes);
-        f.setFieldValues({
-            newValue: true,
-            flagRequiredScope: 'farmrole'
-        });
-        f.down('[name="newName"]').validatorNames = names;
-        if (currentScope == 'farmrole') {
-            f.down('[name="flagRequired"]').disable();
-            f.down('[name="flagHidden"]').disable();
-        }
-
-        ct.resumeLayouts(true);
     },
 
     items: [{
@@ -1175,32 +985,37 @@ Ext.define('Scalr.ui.VariableField2', {
             width: 200,
             enableToggle: true,
             text: 'Show locked variables',
-            applyFilter: function(status) {
-                var store = this.up().next().child('grid').getStore();
+            applyFilter: function (status) {
+                var me = this;
+
+                var store = me.up().next().child('grid').getStore();
+
                 if (status) {
                     store.removeFilter('finalVariableFilter');
-                } else {
-                    store.addFilter({
-                        id: 'finalVariableFilter',
-                        filterFn: function(record) {
-                            return !(record.get('default') && record.get('default').flagFinal == 1);
-                        }
-                    });
+                    return;
                 }
+
+                store.addFilter({
+                    id: 'finalVariableFilter',
+                    filterFn: function(record) {
+                        return !(record.get('default') && record.get('locked').flagFinal == 1);
+                    }
+                });
             },
             listeners: {
-                afterrender: function() {
-                    this.applyFilter(false);
+                afterrender: function (me) {
+                    me.applyFilter(false);
                 },
-                toggle: function(button, status) {
-                    this.applyFilter(status);
+                toggle: function (me, status) {
+                    me.applyFilter(status);
                 }
             }
         }]
     }, {
         xtype: 'container',
         layout: {
-            type: 'hbox'
+            type: 'hbox',
+            align: 'stretch'
         },
         items: [{
             xtype: 'grid',
@@ -1209,83 +1024,140 @@ Ext.define('Scalr.ui.VariableField2', {
             store: {
                 fields: [ 'name', 'newValue', 'value', 'current', 'default', 'locked', 'flagDelete' ],
                 reader: 'object',
+                filterOnLoad: true,
                 filters: [{
                     id: 'deletedVariableFilter',
-                    property: 'flagDelete',
-                    value: ''
+                    filterFn: function (record) {
+                        return !record.get('flagDelete');
+                    }
                 }]
             },
+
+            viewConfig: {
+                preserveScrollOnRefresh: true
+            },
+
             features: {
                 ftype: 'addbutton',
                 text: 'Add variable',
                 handler: function(view) {
-                    var grid = view.up('grid'), r;
+                    var grid = view.up('grid');
+                    var store = grid.getStore();
 
-                    r = grid.getStore().add({
+                    //grid.getView().saveScrollState();
+
+                    store.add({
                         newValue: true,
                         current: { scope: grid.up('variablefield').currentScope }
                     });
 
-                    setTimeout(function() {
-                        grid.getPlugin('cellediting').startEdit(r[0], 0);
+
+                    setTimeout(function () {
+                        grid.getPlugin('cellediting').startEdit(store.findRecord('newValue', true), 0);
                     }, 50);
+
+                    //grid.getView().restoreScrollState();
+
+                    grid.getView().focusRow(store.findRecord('newValue', true));
                 }
             },
+
             plugins: [
                 Ext.create('Ext.grid.plugin.CellEditing', {
                     pluginId: 'cellediting',
                     clicksToEdit: 1,
                     listeners: {
-                        beforeedit: function(plugin, o) {
-                            var current = o.record.get('current'), def = o.record.get('default'), locked = o.record.get('locked');
+                        beforeedit: function (plugin, context) {
+                            var record = context.record;
+                            var column = context.column;
+                            var current = record.get('current');
+                            var def = record.get('default');
+                            var locked = record.get('locked');
 
-                            if (o.field == 'value') {
-                                if (locked['flagFinal'] == 1) {
+                            if (context.field === 'value') {
+                                var valueEditor = context.grid.down('[name=value]').getEditor();
+                                var validator = current.validator || locked.validator;
+
+                                valueEditor.regex = validator ? new RegExp(validator) : '';
+
+                                if (locked.flagFinal == 1) {
                                     return false;
                                 }
 
-                                var ed = o.column.getEditor(o.record);
-                                ed.emptyText = def['value'] || ' ';
-                                ed.applyEmptyText();
+                                var editor = context.column.getEditor(record);
+                                editor.emptyText = def['value'] || ' ';
+                                editor.applyEmptyText();
 
-                                if (current['value']) {
-                                    o.record.set('value', current['value']);
+                                if (current.value) {
+                                    record.set('value', current['value']);
                                 }
                             }
 
-
-                            if (o.column.isEditable) {
-                                return o.column.isEditable(o.record);
+                            if (column.isEditable) {
+                                return column.isEditable(record);
                             }
 
                             return true;
                         },
-                        canceledit: function(editor, o) {
-                            if (o.field == 'name') {
-                                o.grid.getStore().remove(o.record);
-                            }
-                        },
-                        edit: function(editor, o) {
-                            if (o.field == 'name') {
-                                o.record.set('newValue', null);
-                            }
-                            if (o.field == 'value') {
-                                var current = o.record.get('current');
+                        canceledit: function (plugin, context) {
+                            var grid = context.grid;
+                            var field = context.field;
+                            var store = context.store;
+                            var record = context.record;
+                            var value = context.value;
 
-                                if (!Ext.isObject(current)) {
-                                    current = {};
+                            if (field === 'name') {
+
+                                if (value) {
+                                    record.set('name', value);
+                                    return;
                                 }
 
-                                current['value'] = o.value;
-                                current['scope'] = editor.grid.up('variablefield').currentScope;
-                                o.record.set('current', current);
-                                o.record.commit();
+                                grid.getStore().remove(record);
+                                grid.getView().focusRow(store.getCount() - 1);
+                            }
+                        },
+                        edit: function (plugin, context) {
+                            var grid = context.grid;
+                            var field = context.field;
+                            var store = context.store;
+                            var record = context.record;
+                            var current = record.get('current');
+                            var value = context.value;
 
-                                var name = o.record.get('name');
-                                var extendedProperties = editor.grid.next();
+                            if (!Ext.isObject(current)) {
+                                current = {};
+                            }
+
+                            if (field === 'name') {
+
+                                if (!value) {
+                                    store.remove(record);
+                                    context.view.focusRow(store.getCount() - 1);
+
+                                    return;
+                                }
+
+                                current.name = value;
+
+                                record.set('current', current);
+                                record.set('newValue', null);
+
+                                return;
+                            }
+
+                            if (field === 'value') {
+                                current.value = value;
+                                current.scope = grid.up('variablefield').currentScope;
+
+                                record.set('current', current);
+                                record.commit();
+
+                                var name = record.get('name');
+                                var extendedProperties = grid.next();
 
                                 if (extendedProperties.isVisible() && name === extendedProperties.down('[name=name]').getValue()) {
-                                    extendedProperties.fireEvent('updateform', extendedProperties, o.record);
+                                    extendedProperties.fireEvent('updateform', extendedProperties, record);
                                 }
                             }
                         }
@@ -1302,63 +1174,103 @@ Ext.define('Scalr.ui.VariableField2', {
                         locked = record.get('locked');
 
                     var scope = current && (current.value || !def) ? current.scope : def.scope;
+                    var output = '<div class="scalr-ui-variablefield2-scopemarker scalr-ui-variablefield2-scopemarker-' +
+                        scope + '"></div>';
 
-                    return '<div class="scalr-ui-variablefield2-scopemarker scalr-ui-variablefield2-scopemarker-' +
-                        scope + '"></div><span>' + record.get('name') + '</span>';
+                    if (record.get('newValue')) {
+                        return output + '<div class="x-form-text" style="background:#ffb2a3;padding:3px 12px 3px 13px;text-overflow: ellipsis;overflow:hidden;cursor:text" >'+
+                            record.get('name') + '</div>';
+                    }
+
+                    return output + '<span>' + record.get('name') + '</span>';
                 },
                 editor: {
                     xtype: 'textfield',
+                    cls: 'scalr-ui-variablefield2-editor-scopemarker',
                     editable: false,
-                    margin: '0 12 0 12',
+                    margin: '0 12 0 9',
                     fixWidth: -25,
-                    allowBlank: false,
                     allowChangeable: false,
                     allowChangeableMsg: 'Variable name, cannot be changed',
+                    vtype: 'alphanum',
+                    minLength: 2,
+                    maxLength: 50,
 
-                    validator: function(value) {
-                        if (! value)
-                            return false;
+                    validator: function (value) {
+                        var me = this;
 
-                        if (/^[A-Za-z]{1,1}[A-Za-z0-9_]{1,49}$/.test(value)) {
-                            if (this.validatorNames.indexOf(value) == -1) {
-                                return true;
-                            } else {
-                                return 'Such name already defined';
-                            }
-                        } else {
-                            return 'Name should contain only alpha and numbers. Length should be from 2 chars to 50.';
+                        if (!/^[A-Za-z]/.test(value[0])) {
+                            return 'First character of name must be a letter';
                         }
+
+                        if (me.variableNames.indexOf(value) !== -1) {
+                            return 'Such name already defined';
+                        }
+
+                        return true;
                     },
+
                     listeners: {
-                        focus: function() {
-                            this.validatorNames = this.up('grid').getStore().collect('name', false, true);
+                        beforerender: function (me) {
+                            me.addCls('scalr-ui-variablefield2-editor-scopemarker-' + me.up('variablefield').currentScope);
+                        },
+                        focus: function (me) {
+                            me.variableNames = me.up('grid').getStore().collect('name', false, true);
+                        },
+                        specialkey: function (me, e) {
+                            if (e.getKey() === e.TAB && !me.getValue()) {
+                                return false;
+                            }
                         }
                     }
                 },
+
                 isEditable: function(record) {
                     return !!record.get('newValue');
                 }
-
-
             }, {
                 header: 'Value',
+                name: 'value',
                 dataIndex: 'value',
                 flex: 1,
                 editor: {
                     xtype: 'textfield',
                     margin: '0 12 0 13',
-                    fixWidth: -25
-                },
-                renderer: function(value, meta, record, rowIndex, colIndex, store, grid) {
-                    var current = record.get('current'), def = record.get('default'), locked = record.get('locked');
+                    fixWidth: -25,
+                    listeners: {
+                        specialkey: function (me, e) {
+                            var grid = me.ownerCt.grid;
+                            var selection = grid.getSelectionModel().getLastSelected();
+                            var view = grid.getView();
 
-                    if (locked['flagFinal'] == 1) {
-                        return '<span style="color:#999; padding:3px 12px 3px 13px;text-overflow: ellipsis;overflow:hidden;">' + def['value'] + '</span>';
+                            if (e.getKey() === e.TAB && selection === grid.getStore().last()) {
+                                view.getFeature(0).handler(view);
+                                return false;
+                            }
+                        }
+                    }
+                },
+                renderer: function (value, meta, record) {
+                    var current = record.get('current');
+                    var def = record.get('default');
+                    var locked = record.get('locked');
+
+                    if (locked.flagFinal == 1) {
+                        return '<span style="color:#999; padding:3px 12px 3px 13px;text-overflow: ellipsis;overflow:hidden;">' + def.value + '</span>';
                     }
 
-                    return  '<div class="x-form-text" style="background:#fff;padding:3px 12px 3px 13px;text-overflow: ellipsis;overflow:hidden;cursor:text" >'+
-                        (current['value'] || '<span style="color:#999">' + (def['value'] || '') + '</span>') +
-                        '</div>';
+                    var variableValue = current.value || '<span style="color:#999">' + (def.value || '') + '</span>';
+
+                    var getBackground = function (value, validator) {
+                        return new RegExp(validator).test(value) ? '#fff' : '#ffb2a3';
+                    };
+
+                    var background = current.value ?
+                        getBackground(current.value, current.validator) : getBackground(def.value, locked.validator);
+
+                    return  '<div class="x-form-text" style="background:' + background +
+                        ';padding:3px 12px 3px 13px;text-overflow: ellipsis;overflow:hidden;cursor:text" >' +
+                        variableValue + '</div>';
                 }
 
             }, {
@@ -1410,59 +1322,114 @@ Ext.define('Scalr.ui.VariableField2', {
                 return me;
             },
 
+            setFlagFinal: function (record) {
+                var me = this;
+
+                var current = record.get('current');
+                current.flagFinal = current.flagFinal == '1' ? '' : '1';
+
+                record.set('current', current);
+                record.commit();
+
+                return me;
+            },
+
+            setFlagHidden: function (record) {
+                var me = this;
+
+                var current = record.get('current');
+                current.flagHidden = current.flagHidden == '1' ? '' : '1';
+
+                record.set('current', current);
+                record.commit();
+
+                return me;
+            },
+
+            setFlagRequired: function (record) {
+                var me = this;
+
+                var current = record.get('current');
+                current.flagRequired = current.flagRequired ? '' : 'farmrole';
+
+                record.set('current', current);
+                record.commit();
+
+                return me;
+            },
+
+            setSelected: function (record, selectedRecord) {
+                var me = this;
+
+                if (selectedRecord && selectedRecord !== record) {
+                    selectedRecord.set('selected', false);
+                }
+
+                record.set('selected', !record.get('selected'));
+
+                return me;
+            },
+
+            setDeleted: function (record) {
+                var me = this;
+
+                record.set('flagDelete', 1);
+                record.commit();
+                record.store.filter();
+
+                return me;
+            },
+
             listeners: {
                 itemclick: function (view, record, item, index, e) {
-                    var me = this,
-                        current = record.get('current'),
-                        def = record.get('default'),
-                        locked = record.get('locked'),
-                        disabled = !Ext.Object.isEmpty(def) || !Ext.Object.isEmpty(locked);
+                    var me = this;
 
+                    var def = record.get('default');
+                    var locked = record.get('locked');
+                    var disabled = !Ext.Object.isEmpty(def) || !Ext.Object.isEmpty(locked);
+                    var selectedRecord = me.getStore().findRecord('selected', true);
+                    var isRecordSelected = selectedRecord === record;
                     var flagFinal = e.getTarget('div.scalr-ui-variablefield2-flag-final');
+                    var flagHidden = e.getTarget('div.scalr-ui-variablefield2-flag-hidden');
+                    var flagRequired = e.getTarget('div.scalr-ui-variablefield2-flag-required');
+                    var extendButton = e.getTarget('div.scalr-ui-variablefield2-action-ext');
+                    var deleteButton = e.getTarget('div.scalr-ui-variablefield2-action-delete');
 
                     if (flagFinal && !disabled && !Ext.get(flagFinal).hasCls('disabled')) {
-                        current['flagFinal'] = current['flagFinal'] == '1' ? '' : '1';
-                        record.set('current', current);
-                        record.commit();
+                        me.setFlagFinal(record).update();
 
-                        me.update();
-                        me.extendProperties(record);
+                        if (selectedRecord === record) {
+                            me.extendProperties(record);
+                        }
                     }
 
-                    if (e.getTarget('div.scalr-ui-variablefield2-flag-hidden') && !disabled) {
-                        current['flagHidden'] = current['flagHidden'] == '1' ? '' : '1';
-                        record.set('current', current);
-                        record.commit();
+                    if (flagHidden && !disabled) {
+                        me.setFlagHidden(record);
 
-                        me.extendProperties(record);
+                        if (isRecordSelected) {
+                            me.extendProperties(record);
+                        }
                     }
-
-                    var flagRequired = e.getTarget('div.scalr-ui-variablefield2-flag-required');
 
                     if (flagRequired && !disabled && !Ext.get(flagRequired).hasCls('disabled')) {
-                        current['flagRequired'] = current['flagRequired'] ? '' : 'farmrole';
-                        record.set('current', current);
-                        record.commit();
+                        me.setFlagRequired(record).update();
 
-                        me.update();
-                        me.extendProperties(record);
-                    }
-
-                    if (e.getTarget('div.scalr-ui-variablefield2-action-ext')) {
-                        var selectedRecord = me.getStore().findRecord('selected', true);
-
-                        if (selectedRecord && selectedRecord !== record) {
-                            selectedRecord.set('selected', false);
+                        if (isRecordSelected) {
+                            me.extendProperties(record);
                         }
-
-                        record.set('selected', !record.get('selected'));
-
-                        me.extendProperties(record);
                     }
 
-                    if (e.getTarget('div.scalr-ui-variablefield2-action-delete') && !disabled) {
-                        record.set('flagDelete', 1);
-                        record.commit();
+                    if (extendButton) {
+                        me.setSelected(record, selectedRecord).extendProperties(record);
+                    }
+
+                    if (deleteButton && !disabled) {
+                        me.setDeleted(record);
+
+                        if (isRecordSelected) {
+                            record.set('selected', false);
+                            me.extendProperties(record);
+                        }
                     }
                 }
             }
@@ -1470,6 +1437,7 @@ Ext.define('Scalr.ui.VariableField2', {
         }, {
             xtype: 'container',
             name: 'extendedProperties',
+            cls: 'scalr-ui-variablefield2-editor-extended-properties',
             layout: 'anchor',
             hidden: true,
             hideMode: 'visibility',
@@ -1532,7 +1500,19 @@ Ext.define('Scalr.ui.VariableField2', {
                 xtype: 'textfield',
                 name: 'format',
                 fieldLabel: 'Format',
-                isFormField: false
+                isFormField: false,
+                listeners: {
+                    blur: function (me) {
+                        var value = me.getValue();
+                        var record = me.up().variable;
+                        var current = record.get('current');
+
+                        current.format = value;
+
+                        record.set('current', current);
+                        record.commit();
+                    }
+                }
             }, {
                 xtype: 'textfield',
                 name: 'validator',
@@ -1551,9 +1531,20 @@ Ext.define('Scalr.ui.VariableField2', {
                         return true;
                 },
                 listeners: {
-                    change: function (me, value) {
+                    blur: function (me) {
+                        var value = me.getValue();
+                        var record = me.up().variable;
+                        var current = record.get('current');
+
+                        current.validator = value;
+
+                        record.set('current', current);
+                        record.commit();
+
                         if (me.isValid()) {
-                            me.up().down('[name=value]').regex = new RegExp(value);
+                            var valueField = me.up().down('[name=value]');
+                            valueField.regex = new RegExp(value);
+                            valueField.validate();
                         }
                     }
                 }

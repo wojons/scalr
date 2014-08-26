@@ -972,4 +972,64 @@ class DBRole
 
         return $role;
     }
+
+    /**
+     * Gets farm role's count
+     *
+     * @param  int  $envId optional Current enviroment id
+     * @return int  Returns farm role's count which uses current role
+     */
+    public function getFarmRolesCount($envId = null)
+    {
+        if ($envId !== null) {
+            $join = sprintf(" JOIN farms f ON fr.farmid = f.id AND f.env_id = %d ", $envId);
+        } else {
+            $join = '';
+        }
+
+        $usedBy = $this->db->GetOne("
+            SELECT SUM(number) FROM
+                (SELECT COUNT(*) AS number
+                FROM farm_roles fr
+                " . $join . "
+                WHERE fr.role_id=?
+            UNION ALL
+                SELECT COUNT(*) AS number
+                FROM farm_roles fr
+                " . $join . "
+                WHERE fr.new_role_id=?)
+            AS result",
+            array($this->id, $this->id));
+
+        return $usedBy;
+    }
+
+    /**
+     * Gets an array of farms' ids
+     *
+     * @param  int    $envId optional Current enviroment id
+     * @return array  Returns array of farms' ids which uses current role
+     */
+    public function getFarms($envId = null)
+    {
+        if ($envId !== null) {
+            $join = sprintf(" JOIN farms f ON fr.farmid = f.id AND f.env_id = %d ", $envId);
+        } else {
+            $join = '';
+        }
+
+        $usedBy = $this->db->GetCol("
+            SELECT fr.farmid
+            FROM farm_roles fr
+            " . $join . "
+            WHERE fr.role_id=?
+            UNION
+            SELECT fr.farmid
+            FROM farm_roles fr
+            " . $join . "
+            WHERE fr.new_role_id=?", array($this->id, $this->id));
+
+        return $usedBy;
+    }
+
 }

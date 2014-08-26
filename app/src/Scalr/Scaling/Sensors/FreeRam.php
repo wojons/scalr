@@ -1,72 +1,73 @@
 <?php
-    class Scalr_Scaling_Sensors_FreeRam extends Scalr_Scaling_Sensor
+class Scalr_Scaling_Sensors_FreeRam extends Scalr_Scaling_Sensor
+{
+    private $snmpOids = array(
+        'memswap' => ".1.3.6.1.4.1.2021.4.11.0",
+        'cachedram' => ".1.3.6.1.4.1.2021.4.15.0",
+        'mem'	  => ".1.3.6.1.4.1.2021.4.6.0"
+    );
+
+    const SETTING_USE_CACHED = 'use_cached';
+
+    public $isInvert = true;
+
+    public function __construct()
     {
-        private $snmpOids = array(
-            'memswap' => ".1.3.6.1.4.1.2021.4.11.0",
-            'cachedram' => ".1.3.6.1.4.1.2021.4.15.0",
-            'mem'	  => ".1.3.6.1.4.1.2021.4.6.0"
-        );
+        $this->snmpClient = new Scalr_Net_Snmp_Client();
+    }
 
-        const SETTING_USE_CACHED = 'use_cached';
+    public function getValue(DBFarmRole $dbFarmRole, Scalr_Scaling_FarmRoleMetric $farmRoleMetric)
+    {
+        $servers = $dbFarmRole->GetServersByFilter(array('status' => SERVER_STATUS::RUNNING));
+        $dbFarm = $dbFarmRole->GetFarmObject();
 
-        public $isInvert = true;
+        if (count($servers) == 0)
+            return false;
 
-        public function __construct()
-        {
-            $this->snmpClient = new Scalr_Net_Snmp_Client();
-        }
+        $retval = array();
 
-        public function getValue(DBFarmRole $dbFarmRole, Scalr_Scaling_FarmRoleMetric $farmRoleMetric)
-        {
-            $servers = $dbFarmRole->GetServersByFilter(array('status' => SERVER_STATUS::RUNNING));
-            $dbFarm = $dbFarmRole->GetFarmObject();
+        foreach ($servers as $DBServer) {
+            if ($dbFarmRole->GetSetting(DBFarmRole::SETTING_SCALING_EXCLUDE_DBMSR_MASTER) == 1) {
+                $isMaster = ($DBServer->GetProperty(SERVER_PROPERTIES::DB_MYSQL_MASTER) == 1 ||
+                             $DBServer->GetProperty(Scalr_Db_Msr::REPLICATION_MASTER) == 1);
 
-            if (count($servers) == 0)
-                return false;
+                if ($isMaster)
+                    continue;
+            }
 
-            $retval = array();
+            if ($DBServer->IsSupported('0.13.0')) {
+                $ramUsage = $DBServer->scalarizr->system->memInfo();
+                $ram = (float)$ramUsage->total_free;
 
-            foreach ($servers as $DBServer)
-            {
-                if ($dbFarmRole->GetSetting(DBFarmRole::SETTING_SCALING_EXCLUDE_DBMSR_MASTER) == 1) {
-                    $isMaster = ($DBServer->GetProperty(SERVER_PROPERTIES::DB_MYSQL_MASTER) == 1 || $DBServer->GetProperty(Scalr_Db_Msr::REPLICATION_MASTER) == 1);
-                    if ($isMaster)
-                        continue;
-                }
+                if ($farmRoleMetric->getSetting(self::SETTING_USE_CACHED))
+                    $ram = $ram+(float)$ramUsage->cached;
 
-                if ($DBServer->IsSupported('0.13.0')) {
-                    $ramUsage = $DBServer->scalarizr->system->memInfo();
-                    $ram = (float)$ramUsage->total_free;
+            } else {
+                $port = $DBServer->GetProperty(SERVER_PROPERTIES::SZR_SNMP_PORT);
 
-                    if ($farmRoleMetric->getSetting(self::SETTING_USE_CACHED))
-                        $ram = $ram+(float)$ramUsage->cached;
+                $this->snmpClient->connect($DBServer->remoteIp, $port ? $port : 161, $dbFarm->Hash, null, null, false);
+                $res = $this->snmpClient->get(
+                    $this->snmpOids['memswap']
+                );
 
-                } else {
-                    $port = $DBServer->GetProperty(SERVER_PROPERTIES::SZR_SNMP_PORT);
+                preg_match_all("/[0-9]+/si", $res, $matches);
+                $ram = (float)$matches[0][0];
 
-                    $this->snmpClient->connect($DBServer->remoteIp, $port ? $port : 161, $dbFarm->Hash, null, null, false);
+                if ($farmRoleMetric->getSetting(self::SETTING_USE_CACHED)) {
                     $res = $this->snmpClient->get(
-                        $this->snmpOids['memswap']
+                        $this->snmpOids['cachedram']
                     );
 
                     preg_match_all("/[0-9]+/si", $res, $matches);
-                    $ram = (float)$matches[0][0];
+                    $cram = (float)$matches[0][0];
 
-                    if ($farmRoleMetric->getSetting(self::SETTING_USE_CACHED)) {
-                        $res = $this->snmpClient->get(
-                            $this->snmpOids['cachedram']
-                        );
-
-                        preg_match_all("/[0-9]+/si", $res, $matches);
-                        $cram = (float)$matches[0][0];
-
-                        $ram = $ram+$cram;
-                    }
+                    $ram = $ram+$cram;
                 }
-
-                $retval[] = round($ram/1024, 2);
             }
 
-            return $retval;
+            $retval[] = round($ram/1024, 2);
         }
+
+        return $retval;
     }
+}

@@ -36,6 +36,8 @@ INSERT INTO `tags` VALUES (1,'Environment'),(2,'Platform'),(4,'Farm'),(5,'Farm R
 UNLOCK TABLES;
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
 
+INSERT INTO `settings` VALUES ('budget_days','[\"01-01\",\"04-01\",\"07-01\",\"10-01\"]');
+
 /*!40101 SET SQL_MODE=@OLD_SQL_MODE */;
 /*!40014 SET FOREIGN_KEY_CHECKS=@OLD_FOREIGN_KEY_CHECKS */;
 /*!40014 SET UNIQUE_CHECKS=@OLD_UNIQUE_CHECKS */;
@@ -44,7 +46,5 @@ UNLOCK TABLES;
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
--- Dump completed on 2014-08-15 12:04:16
-
-INSERT INTO `settings` VALUES ('budget_days','[\"01-01\",\"04-01\",\"07-01\",\"10-01\"]');
+-- Dump completed on 2014-08-26  4:11:25
 

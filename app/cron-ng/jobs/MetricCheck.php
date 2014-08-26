@@ -266,7 +266,7 @@ class Scalr_Cronjob_MetricCheck extends Scalr_System_Cronjob_MultiProcess_Defaul
     {
         $ret = null;
         try {
-            $chk = @fsockopen($host, $port, $errno, $errstr, 5);
+            $chk = @fsockopen($host, $port, $errno, $errstr, 15);
             if (!$chk) {
                 $ret = array(
                     'status' => false,

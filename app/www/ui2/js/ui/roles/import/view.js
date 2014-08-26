@@ -922,7 +922,7 @@ Scalr.regPage('Scalr.ui.roles.import.view', function (loadParams, moduleParams) 
                     serverId = leftcol.down('[name="cloudServerId"]'),
                     locationIds = Ext.Object.getKeys(moduleParams['platforms'][platform]['locations']) || [],
                     locations = moduleParams['platforms'][platform]['locations'] || [],
-                    defaultLocations = {/*ec2: 'us-east-1',*/ gce: 'us-central1-a', ecs:'it-mil1'},
+                    defaultLocations = {/*ec2: 'us-east-1',*/ gce: 'us-central1-a'},
                     callback = function(){
                         var cloudLocationField = leftcol.down('[name="cloudLocation"]'),
                             location = defaultLocations[platform] || (locationIds.length ? locationIds[0] : '');

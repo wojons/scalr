@@ -30,15 +30,6 @@ class Scalr_Scaling_FarmRoleMetric extends Scalr_Model
 
     function __construct($id = null)
     {
-        //TODO:
-        /*
-        if (!$id)
-        {
-            if (substr($sapi_type, 0, 3) == 'cli')
-                debug_print_backtrace();
-        }
-        */
-
         parent::__construct($id);
         $this->logger = Logger::getLogger(__CLASS__);
     }
@@ -81,17 +72,15 @@ class Scalr_Scaling_FarmRoleMetric extends Scalr_Model
 
         $dbFarmRole = DBFarmRole::LoadByID($this->farmRoleId);
 
-        if ($sensor)
-        {
+        if ($sensor) {
             try {
                 $sensorValue = $sensor->getValue($dbFarmRole, $this);
                 if ($sensorValue === false)
                     return Scalr_Scaling_Decision::NOOP;
-            }
-            catch(Exception $e)
-            {
+            } catch (Exception $e) {
                 $this->logger->warn(new FarmLogMessage($dbFarmRole->FarmID,
-                    sprintf("Unable to read Scaling Metric (%s) on farmrole %s value: %s", $this->getMetric()->alias, $dbFarmRole->ID, $e->getMessage())
+                    sprintf("Unable to read Scaling Metric (%s) on farmrole %s value: %s",
+                    $this->getMetric()->alias, $dbFarmRole->ID, $e->getMessage())
                 ));
 
                 return Scalr_Scaling_Decision::NOOP;
@@ -104,14 +93,15 @@ class Scalr_Scaling_FarmRoleMetric extends Scalr_Model
                 serialize($sensorValue)
             ));
 
-            switch($this->getMetric()->calcFunction)
-            {
+            switch($this->getMetric()->calcFunction) {
                 default:
                     $value = $sensorValue[0];
                     break;
+
                 case "avg":
                     $value = (is_array($sensorValue) && count($sensorValue) != 0) ? @array_sum($sensorValue) / count($sensorValue) : 0;
                     break;
+
                 case "sum":
                     $value = @array_sum($sensorValue);
                     break;
@@ -121,9 +111,9 @@ class Scalr_Scaling_FarmRoleMetric extends Scalr_Model
             $this->save();
 
             $invert = $sensor->isInvert;
-        }
-        else
+        } else {
             $invert = false;
+        }
 
         if ($this->getMetric()->name == 'DateAndTime') {
             $decision = $algo->makeDecision($dbFarmRole, $this, $invert);

@@ -1,6 +1,5 @@
 <?php
 
-
 class ScalrEnvironment20120701 extends ScalrEnvironment20120417
 {
     public function GetGlobalConfig()
@@ -34,7 +33,7 @@ class ScalrEnvironment20120701 extends ScalrEnvironment20120417
 
         if ($scope != Scalr_Scripting_GlobalVariables::SCOPE_SERVER && $scope != Scalr_Scripting_GlobalVariables::SCOPE_FARMROLE)
         	throw new Exception("query-env allows you to set global variables only on server/farmrole scopes");
-        
+
         $globalVariables = new Scalr_Scripting_GlobalVariables($this->DBServer->clientId, $this->DBServer->envId, $scope);
         $globalVariables->setValues(
             array(array(
@@ -132,23 +131,11 @@ class ScalrEnvironment20120701 extends ScalrEnvironment20120417
         foreach ($behaviors as $behavior) {
             $data = null;
 
-            if ($behavior == ROLE_BEHAVIORS::MONGODB)
+            if ($behavior == ROLE_BEHAVIORS::MONGODB || $behavior == ROLE_BEHAVIORS::CHEF || $behavior == ROLE_BEHAVIORS::HAPROXY ||
+                $behavior == ROLE_BEHAVIORS::NGINX || $behavior == ROLE_BEHAVIORS::RABBITMQ || $behavior == ROLE_BEHAVIORS::APACHE ||
+                $behavior == ROLE_BEHAVIORS::VPC_ROUTER) {
                 $data = Scalr_Role_Behavior::loadByName($behavior)->getConfiguration($this->DBServer);
-
-            if ($behavior == ROLE_BEHAVIORS::CHEF)
-                $data = Scalr_Role_Behavior::loadByName($behavior)->getConfiguration($this->DBServer);
-
-            if ($behavior == ROLE_BEHAVIORS::HAPROXY)
-                $data = Scalr_Role_Behavior::loadByName($behavior)->getConfiguration($this->DBServer);
-
-            if ($behavior == ROLE_BEHAVIORS::NGINX)
-                $data = Scalr_Role_Behavior::loadByName($behavior)->getConfiguration($this->DBServer);
-
-            if ($behavior == ROLE_BEHAVIORS::RABBITMQ)
-                $data = Scalr_Role_Behavior::loadByName($behavior)->getConfiguration($this->DBServer);
-
-            if ($behavior == ROLE_BEHAVIORS::APACHE)
-                $data = Scalr_Role_Behavior::loadByName($behavior)->getConfiguration($this->DBServer);
+            }
 
             if ($data === null) {
                 if ($behavior == ROLE_BEHAVIORS::CF_CLOUD_CONTROLLER) {
@@ -169,7 +156,8 @@ class ScalrEnvironment20120701 extends ScalrEnvironment20120417
                     try {
                         $dbMsrInfo = Scalr_Db_Msr_Info::init($dbFarmRole, $this->DBServer, $behavior);
                         $data = $dbMsrInfo->getMessageProperties();
-                    } catch (Exception $e) {}
+                    } catch (Exception $e) {
+                    }
                 }
             }
 
@@ -182,8 +170,8 @@ class ScalrEnvironment20120701 extends ScalrEnvironment20120417
         return $ResponseDOMDocument;
     }
 
-    private function serialize ($object, $behavior, $doc) {
-
+    private function serialize($object, $behavior, $doc)
+    {
         $bodyEl = $doc->createElement($behavior);
         $body = array();
         if (is_object($object)) {
@@ -199,7 +187,8 @@ class ScalrEnvironment20120701 extends ScalrEnvironment20120417
         return $bodyEl;
     }
 
-    private function walkSerialize ($value, $el, $doc) {
+    private function walkSerialize($value, $el, $doc)
+    {
         if (is_array($value) || is_object($value)) {
             if (is_array($value) && array_keys($value) === range(0, count($value)-1)) {
                 // Numeric indexes array
@@ -226,7 +215,8 @@ class ScalrEnvironment20120701 extends ScalrEnvironment20120417
         }
     }
 
-    private function under_scope ($name) {
+    private function under_scope ($name)
+    {
         $parts = preg_split("/[A-Z]/", $name, -1, PREG_SPLIT_OFFSET_CAPTURE | PREG_SPLIT_NO_EMPTY);
         $ret = "";
         foreach ($parts as $part) {

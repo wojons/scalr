@@ -38,23 +38,23 @@ Scalr.regPage('Scalr.ui.schedulertasks.create', function (loadParams, modulePara
 						if (newValue == 'script_exec') {
 							farmRoles.optionChange('remove', 'disabledFarmRole');
 
-							form.down('#executionOptions').show();
-							form.down('#terminationOptions').hide();
+							form.down('#executionOptions').show().enable();
+							form.down('#terminationOptions').hide().disable();
 							farmRoles.show();
 						} else if (newValue == 'terminate_farm') {
 							farmRoles.optionChange('add', 'disabledFarmRole');
 
-							form.down('#executionOptions').hide();
-							form.down('#scriptOptions').hide();
-							form.down('#terminationOptions').show();
+							form.down('#executionOptions').hide().disable();
+							form.down('#scriptOptions').hide().disable();
+							form.down('#terminationOptions').show().enable();
 							farmRoles.show();
 
 						} else if (newValue == 'launch_farm') {
 							farmRoles.optionChange('add', 'disabledFarmRole');
 
-							form.down('#executionOptions').hide();
-							form.down('#scriptOptions').hide();
-							form.down('#terminationOptions').hide();
+							form.down('#executionOptions').hide().disable();
+							form.down('#scriptOptions').hide().disable();
+							form.down('#terminationOptions').hide().disable();
 							farmRoles.show();
 						}
 					}
@@ -210,6 +210,7 @@ Scalr.regPage('Scalr.ui.schedulertasks.create', function (loadParams, modulePara
 			items: [{
                 xtype: 'scriptselectfield',
                 name: 'scriptId',
+                allowBlank: false,
                 store: {
                     fields: [ 'id', 'name', 'description', 'os', 'isSync', 'timeout', 'versions', 'accountId', 'createdByEmail' ],
                     data: moduleParams['scripts'],
@@ -248,8 +249,13 @@ Scalr.regPage('Scalr.ui.schedulertasks.create', function (loadParams, modulePara
 			}, {
 				xtype: 'textfield',
 				fieldLabel: 'Timeout',
-				name: 'scriptTimeout'
-			},{
+				name: 'scriptTimeout',
+                vtype: 'num',
+                validator: function (value) {
+                    return value > 0 ? true : 'Timeout should be greater than 0';
+                },
+                allowBlank: false
+            },{
 				xtype: 'combo',
 				store: {
 					fields: ['version', 'versionName', 'variables' ],

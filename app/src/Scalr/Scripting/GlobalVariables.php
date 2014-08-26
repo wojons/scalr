@@ -177,7 +177,7 @@ class Scalr_Scripting_GlobalVariables
                 $variable = $variable['current'];
 
             $variable['value'] = trim($variable['value']);
-            if (!$variable['value'] && isset($currentValues[$name]['default']))
+            if ($variable['value'] == '' && isset($currentValues[$name]['default']))
                 $deleteFlag = true;
 
             if ($deleteFlag)
@@ -227,7 +227,7 @@ class Scalr_Scripting_GlobalVariables
                     $errors[$name]['flagFinal'] = $errors[$name]['flagRequired'] = 'You can\'t set final and required flags both';
                 }
 
-                if ($variable['validator'] && $variable['value']) {
+                if ($variable['validator'] && $variable['value'] != '') {
                     $validator = $variable['validator'];
                     if ($validator[0] != '/')
                         $validator = '/' . $validator . '/';
@@ -313,7 +313,7 @@ class Scalr_Scripting_GlobalVariables
             }
 
             $variable['value'] = trim($variable['value']);
-            if ($variable['value']) {
+            if ($variable['value'] != '') {
                 $variable['value'] = $this->crypto->encrypt($variable['value'], $this->cryptoKey);
             } else {
                 if (isset($currentValues[$name]['default']))

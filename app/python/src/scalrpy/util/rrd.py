@@ -25,14 +25,14 @@ SOURCE = {
         'DS:la15:GAUGE:600:U:U',
     ],
     'mem': [
-        'DS:swap:GAUGE:600:U:U',
-        'DS:swapavail:GAUGE:600:U:U',
-        'DS:total:GAUGE:600:U:U',
-        'DS:avail:GAUGE:600:U:U',
-        'DS:free:GAUGE:600:U:U',
-        'DS:shared:GAUGE:600:U:U',
-        'DS:buffer:GAUGE:600:U:U',
-        'DS:cached:GAUGE:600:U:U',
+        'DS:swap:GAUGE:600:U:U',      # SwapTotal
+        'DS:swapavail:GAUGE:600:U:U', # SwapFree
+        'DS:total:GAUGE:600:U:U',     # MemTotal
+        'DS:avail:GAUGE:600:U:U',     # Unknown
+        'DS:free:GAUGE:600:U:U',      # MemFree
+        'DS:shared:GAUGE:600:U:U',    # Shmem
+        'DS:buffer:GAUGE:600:U:U',    # Buffers
+        'DS:cached:GAUGE:600:U:U',    # Cached
     ],
     'net': [
         'DS:in:COUNTER:600:U:21474836480',
@@ -218,28 +218,20 @@ def write(base_dir, data):
         LOG.error(helper.exc_info())
 
 
-def plot_cpu(img_path, rrd_path, opt, tz=None):
-    color_cpu_user_line = '#00DF00FF'
-    color_cpu_user_area = '#00DF0044'
-    color_cpu_syst_line = '#DF0000FF'
-    color_cpu_syst_area = '#DF000044'
-    color_cpu_nice_line = '#DFDF00FF'
-    color_cpu_nice_area = '#DFDF0044'
-    color_cpu_idle_line = '#0051AAFF'
-    color_cpu_idle_area = '#0051AA11'
+def _base(img_path, title, label, opt, tz=None):
     if tz:
         utc = datetime.datetime.utcnow()
         time_string = pytz.timezone(tz).fromutc(utc).strftime('%b %d, %Y %H:%M:%S %z')
     else:
         time_string = time.strftime('%b %d, %Y %H:%M:%S %z')
-    rrdtool.graph(
+
+    base = (
         img_path,
         '--imgformat', 'PNG',
         '--step', opt['step'],
         '--pango-markup',
-        '--vertical-label', 'Percent CPU Utilization',
-        '--title', 'CPU Utilization (%s)' % time_string,
-        '--upper-limit', '100',
+        '--vertical-label', label,
+        '--title', '%s (%s)' % (title, time_string),
         '--alt-autoscale-max',
         '--alt-autoscale-min',
         '--rigid',
@@ -254,54 +246,81 @@ def plot_cpu(img_path, rrd_path, opt, tz=None):
         '--font-render-mode', 'normal',
         '--border', '0',
         '--color', 'BACK#FFFFFF',
-        'DEF:a=%s:user:AVERAGE' % rrd_path,
-        'DEF:b=%s:system:AVERAGE' % rrd_path,
-        'DEF:c=%s:nice:AVERAGE' % rrd_path,
-        'DEF:d=%s:idle:AVERAGE' % rrd_path,
-        'CDEF:total=a,b,c,d,+,+,+',
-        'CDEF:a_perc=a,total,/,100,*',
-        'VDEF:a_perc_last=a_perc,LAST',
-        'VDEF:a_perc_avg=a_perc,AVERAGE',
-        'VDEF:a_perc_max=a_perc,MAXIMUM',
-        'CDEF:b_perc=b,total,/,100,*',
-        'VDEF:b_perc_last=b_perc,LAST',
-        'VDEF:b_perc_avg=b_perc,AVERAGE',
-        'VDEF:b_perc_max=b_perc,MAXIMUM',
-        'CDEF:c_perc=c,total,/,100,*',
-        'VDEF:c_perc_last=c_perc,LAST',
-        'VDEF:c_perc_avg=c_perc,AVERAGE',
-        'VDEF:c_perc_max=c_perc,MAXIMUM',
-        'CDEF:d_perc=d,total,/,100,*',
-        'VDEF:d_perc_last=d_perc,LAST',
-        'VDEF:d_perc_avg=d_perc,AVERAGE',
-        'VDEF:d_perc_max=d_perc,MAXIMUM',
+    )
+    return base
+
+def plot_cpu(img_path, rrd_path, opt, tz=None):
+    color_cpu_user_line = '#00EF00FF'
+    color_cpu_user_area = '#00EF0077'
+    color_cpu_syst_line = '#DF0000FF'
+    color_cpu_syst_area = '#DF000044'
+    color_cpu_nice_line = '#DFDF00FF'
+    color_cpu_nice_area = '#DFDF0044'
+    color_cpu_idle_line = '#0051AAFF'
+    color_cpu_idle_area = '#0051AA44'
+
+    title = 'CPU utilization'
+    label = 'Percent CPU utilization'
+
+    base = _base(img_path, title, label, opt, tz)
+    base += ('--upper-limit', '100', '--lower-limit', '0')
+
+    addition = (
+        'DEF:user=%s:user:AVERAGE' % rrd_path,
+        'DEF:syst=%s:system:AVERAGE' % rrd_path,
+        'DEF:nice=%s:nice:AVERAGE' % rrd_path,
+        'DEF:idle=%s:idle:AVERAGE' % rrd_path,
+
+        'CDEF:total=user,syst,nice,idle,+,+,+',
+
+        'CDEF:user_perc=user,total,/,100,*',
+        'VDEF:user_perc_last=user_perc,LAST',
+        'VDEF:user_perc_avg=user_perc,AVERAGE',
+        'VDEF:user_perc_max=user_perc,MAXIMUM',
+
+        'CDEF:syst_perc=syst,total,/,100,*',
+        'VDEF:syst_perc_last=syst_perc,LAST',
+        'VDEF:syst_perc_avg=syst_perc,AVERAGE',
+        'VDEF:syst_perc_max=syst_perc,MAXIMUM',
+
+        'CDEF:nice_perc=nice,total,/,100,*',
+        'VDEF:nice_perc_last=nice_perc,LAST',
+        'VDEF:nice_perc_avg=nice_perc,AVERAGE',
+        'VDEF:nice_perc_max=nice_perc,MAXIMUM',
+
+        'CDEF:idle_perc=idle,total,/,100,*',
+        'VDEF:idle_perc_last=idle_perc,LAST',
+        'VDEF:idle_perc_avg=idle_perc,AVERAGE',
+        'VDEF:idle_perc_max=idle_perc,MAXIMUM',
+
 
         'COMMENT:<b><tt>                 Current   Average   Maximum</tt></b>\l',
 
-        'LINE1:a_perc%s:<tt>user  </tt>\\t' % color_cpu_user_line,
-        'AREA:a_perc%s:' % color_cpu_user_area,
-        'GPRINT:a_perc_last:<tt>%3.0lf%% </tt>\\t',
-        'GPRINT:a_perc_avg:<tt>%3.0lf%% </tt>\\t',
-        'GPRINT:a_perc_max:<tt>%3.0lf%% </tt>\l',
+        'LINE1:user_perc%s:<tt>user   </tt>\\t' % color_cpu_user_line,
+        'AREA:user_perc%s:' % color_cpu_user_area,
+        'GPRINT:user_perc_last:<tt>%3.0lf%% </tt>\\t',
+        'GPRINT:user_perc_avg:<tt>%3.0lf%% </tt>\\t',
+        'GPRINT:user_perc_max:<tt>%3.0lf%% </tt>\l',
 
-        'LINE1:b_perc%s:<tt>system</tt>\\t' % color_cpu_syst_line,
-        'AREA:b_perc%s:' % color_cpu_syst_area,
-        'GPRINT:b_perc_last:<tt>%3.0lf%% </tt>\\t',
-        'GPRINT:b_perc_avg:<tt>%3.0lf%% </tt>\\t',
-        'GPRINT:b_perc_max:<tt>%3.0lf%% </tt>\l',
+        'LINE1:syst_perc%s:<tt>system </tt>\\t' % color_cpu_syst_line,
+        'AREA:syst_perc%s:' % color_cpu_syst_area,
+        'GPRINT:syst_perc_last:<tt>%3.0lf%% </tt>\\t',
+        'GPRINT:syst_perc_avg:<tt>%3.0lf%% </tt>\\t',
+        'GPRINT:syst_perc_max:<tt>%3.0lf%% </tt>\l',
 
-        'LINE1:c_perc%s:<tt>nice  </tt>\\t' % color_cpu_nice_line,
-        'AREA:c_perc%s:' % color_cpu_nice_area,
-        'GPRINT:c_perc_last:<tt>%3.0lf%% </tt>\\t',
-        'GPRINT:c_perc_avg:<tt>%3.0lf%% </tt>\\t',
-        'GPRINT:c_perc_max:<tt>%3.0lf%% </tt>\l',
+        'LINE1:nice_perc%s:<tt>nice   </tt>\\t' % color_cpu_nice_line,
+        'AREA:nice_perc%s:' % color_cpu_nice_area,
+        'GPRINT:nice_perc_last:<tt>%3.0lf%% </tt>\\t',
+        'GPRINT:nice_perc_avg:<tt>%3.0lf%% </tt>\\t',
+        'GPRINT:nice_perc_max:<tt>%3.0lf%% </tt>\l',
 
-        'LINE1:d_perc%s:<tt>idle  </tt>\\t' % color_cpu_idle_line,
-        'AREA:d_perc%s:' % color_cpu_idle_area,
-        'GPRINT:d_perc_last:<tt>%3.0lf%% </tt>\\t',
-        'GPRINT:d_perc_avg:<tt>%3.0lf%% </tt>\\t',
-        'GPRINT:d_perc_max:<tt>%3.0lf%% </tt>\l'
+        'LINE1:idle_perc%s:<tt>idle   </tt>\\t' % color_cpu_idle_line,
+        'AREA:idle_perc%s:' % color_cpu_idle_area,
+        'GPRINT:idle_perc_last:<tt>%3.0lf%% </tt>\\t',
+        'GPRINT:idle_perc_avg:<tt>%3.0lf%% </tt>\\t',
+        'GPRINT:idle_perc_max:<tt>%3.0lf%% </tt>\l'
     )
+    rrdtool.graph(*(base + addition))
 
 
 def plot_la(img_path, rrd_path, opt, tz=None):
@@ -311,51 +330,33 @@ def plot_la(img_path, rrd_path, opt, tz=None):
     color_la5_area = '#0000CF30'
     color_la15_line = '#00CF00FF'
     color_la15_area = '#00CF0030'
-    if tz:
-        utc = datetime.datetime.utcnow()
-        time_string = pytz.timezone(tz).fromutc(utc).strftime('%b %d, %Y %H:%M:%S %z')
-    else:
-        time_string = time.strftime('%b %d, %Y %H:%M:%S %z')
-    rrdtool.graph(
-        img_path,
-        '--imgformat', 'PNG',
-        '--step', opt['step'],
-        '--pango-markup',
-        '--vertical-label', 'Load averages',
-        '--title', 'Load averages (%s)' % time_string,
-        '--lower-limit', '0',
-        '--alt-autoscale-max',
-        '--alt-autoscale-min',
-        '--rigid',
-        '--no-gridfit',
-        '--slope-mode',
-        '--alt-y-grid',
-        '--units-exponent', '0',
-        '--x-grid', opt['x_grid'],
-        '--end', opt['end'],
-        '--start', opt['start'],
-        '--width', '530',
-        '--height', '300',
-        '--full-size-mode',
-        '--font-render-mode', 'normal',
-        '--border', '0',
-        '--color', 'BACK#FFFFFF',
 
+    title = 'Load averages'
+    label = 'Load averages'
+
+    base = _base(img_path, title, label, opt, tz)
+    base += ('--lower-limit', '0', '--alt-y-grid', '--units-exponent', '0')
+
+    addition = (
         'DEF:la1=%s:la1:AVERAGE' % rrd_path,
         'DEF:la5=%s:la5:AVERAGE' % rrd_path,
         'DEF:la15=%s:la15:AVERAGE' % rrd_path,
+
         'VDEF:la1_min=la1,MINIMUM',
         'VDEF:la1_last=la1,LAST',
         'VDEF:la1_avg=la1,AVERAGE',
         'VDEF:la1_max=la1,MAXIMUM',
+
         'VDEF:la5_min=la5,MINIMUM',
         'VDEF:la5_last=la5,LAST',
         'VDEF:la5_avg=la5,AVERAGE',
         'VDEF:la5_max=la5,MAXIMUM',
+
         'VDEF:la15_min=la15,MINIMUM',
         'VDEF:la15_last=la15,LAST',
         'VDEF:la15_avg=la15,AVERAGE',
         'VDEF:la15_max=la15,MAXIMUM',
+
 
         'COMMENT:<b><tt>                            Minimum   Current    Average   Maximum</tt></b>\l',
 
@@ -380,108 +381,126 @@ def plot_la(img_path, rrd_path, opt, tz=None):
         'GPRINT:la1_avg:<tt>%3.2lf</tt>\\t',
         'GPRINT:la1_max:<tt>%3.2lf</tt>\l'
     )
+    rrdtool.graph(*(base + addition))
 
 
 def plot_mem(img_path, rrd_path, opt, tz=None):
-    color_mem_shrd = '#00FFFF'
-    color_mem_buff_line = '#FF0000FF'
-    color_mem_buff_area = '#FF000055'
-    color_mem_cach_line = '#0000FFFF'
-    color_mem_cach_area = '#0000FF30'
-    color_mem_free_line = '#00CF00FF'
-    color_mem_free_area = '#00CF0030'
-    color_mem_swap_line = '#EFEF00FF'
-    color_mem_swap_area = '#EFEF0030'
-    if tz:
-        utc = datetime.datetime.utcnow()
-        time_string = pytz.timezone(tz).fromutc(utc).strftime('%b %d, %Y %H:%M:%S %z')
-    else:
-        time_string = time.strftime('%b %d, %Y %H:%M:%S %z')
-    rrdtool.graph(
-        img_path,
-        '--imgformat', 'PNG',
-        '--step', opt['step'],
-        '--pango-markup',
-        '--vertical-label', 'Memory Usage',
-        '--title', 'Memory Usage (%s)' % time_string,
-        '--lower-limit', '0',
-        '--base', '1024',
-        '--alt-autoscale-max',
-        '--alt-autoscale-min',
-        '--rigid',
-        '--no-gridfit',
-        '--slope-mode',
-        '--x-grid', opt['x_grid'],
-        '--end', opt['end'],
-        '--start', opt['start'],
-        '--width', '530',
-        '--height', '300',
-        '--full-size-mode',
-        '--font-render-mode', 'normal',
-        '--border', '0',
-        '--color', 'BACK#FFFFFF',
+    color_mem_totl_line = '#FFAA00FF'
+    color_mem_totl_area = '#FFAA0020'
+    color_mem_free_line = '#00FF00FF'
+    color_mem_free_area = '#00FF0020'
 
+    color_mem_shrd_line = '#00FFFFFF'
+    color_mem_shrd_area = '#00FFFF20'
+
+    color_swap_shrd_line = '#EFEF00FF'
+    color_swap_shrd_area = '#EFEF0020'
+    color_swap_use_line = '#02EF9AFF'
+    color_swap_use_area = '#02EF9A20'
+
+    color_mem_buff_line = '#FF0000FF'
+    color_mem_buff_area = '#FF000020'
+    color_mem_cach_line = '#0000FFFF'
+    color_mem_cach_area = '#0000FF20'
+
+    title = 'Memory usage'
+    label = 'Memory usage'
+
+    base = _base(img_path, title, label, opt, tz)
+    base += ('--lower-limit', '0', '--base', '1024')
+
+    addition = (
         'DEF:mem1=%s:swap:AVERAGE' % rrd_path,
         'DEF:mem2=%s:swapavail:AVERAGE' % rrd_path,
         'DEF:mem3=%s:total:AVERAGE' % rrd_path,
-        'DEF:mem4=%s:avail:AVERAGE' % rrd_path,
         'DEF:mem5=%s:free:AVERAGE' % rrd_path,
         'DEF:mem6=%s:shared:AVERAGE' % rrd_path,
         'DEF:mem7=%s:buffer:AVERAGE' % rrd_path,
         'DEF:mem8=%s:cached:AVERAGE' % rrd_path,
+
         'CDEF:swap_total=mem1,1024,*',
         'VDEF:swap_total_min=swap_total,MINIMUM',
         'VDEF:swap_total_last=swap_total,LAST',
         'VDEF:swap_total_avg=swap_total,AVERAGE',
         'VDEF:swap_total_max=swap_total,MAXIMUM',
-        'CDEF:swap_avail=mem2,1024,*',
-        'VDEF:swap_avail_min=swap_avail,MINIMUM',
-        'VDEF:swap_avail_last=swap_avail,LAST',
-        'VDEF:swap_avail_avg=swap_avail,AVERAGE',
-        'VDEF:swap_avail_max=swap_avail,MAXIMUM',
-        'CDEF:swap_used=swap_total,swap_avail,-',
+
+        'CDEF:swap_free=mem2,1024,*',
+        'VDEF:swap_free_min=swap_free,MINIMUM',
+        'VDEF:swap_free_last=swap_free,LAST',
+        'VDEF:swap_free_avg=swap_free,AVERAGE',
+        'VDEF:swap_free_max=swap_free,MAXIMUM',
+
+        'CDEF:swap_used=swap_total,swap_free,-',
         'VDEF:swap_used_min=swap_used,MINIMUM',
         'VDEF:swap_used_last=swap_used,LAST',
         'VDEF:swap_used_avg=swap_used,AVERAGE',
         'VDEF:swap_used_max=swap_used,MAXIMUM',
+
         'CDEF:mem_total=mem3,1024,*',
         'VDEF:mem_total_min=mem_total,MINIMUM',
         'VDEF:mem_total_last=mem_total,LAST',
         'VDEF:mem_total_avg=mem_total,AVERAGE',
         'VDEF:mem_total_max=mem_total,MAXIMUM',
-        'CDEF:mem_avail=mem4,1024,*',
-        'VDEF:mem_avail_min=mem_avail,MINIMUM',
-        'VDEF:mem_avail_last=mem_avail,LAST',
-        'VDEF:mem_avail_avg=mem_avail,AVERAGE',
-        'VDEF:mem_avail_max=mem_avail,MAXIMUM',
+
         'CDEF:mem_free=mem5,1024,*',
         'VDEF:mem_free_min=mem_free,MINIMUM',
         'VDEF:mem_free_last=mem_free,LAST',
         'VDEF:mem_free_avg=mem_free,AVERAGE',
         'VDEF:mem_free_max=mem_free,MAXIMUM',
+
         'CDEF:mem_shared=mem6,1024,*',
         'VDEF:mem_shared_min=mem_shared,MINIMUM',
         'VDEF:mem_shared_last=mem_shared,LAST',
         'VDEF:mem_shared_avg=mem_shared,AVERAGE',
         'VDEF:mem_shared_max=mem_shared,MAXIMUM',
+
         'CDEF:mem_buffer=mem7,1024,*',
         'VDEF:mem_buffer_min=mem_buffer,MINIMUM',
         'VDEF:mem_buffer_last=mem_buffer,LAST',
         'VDEF:mem_buffer_avg=mem_buffer,AVERAGE',
         'VDEF:mem_buffer_max=mem_buffer,MAXIMUM',
+
         'CDEF:mem_cached=mem8,1024,*',
         'VDEF:mem_cached_min=mem_cached,MINIMUM',
         'VDEF:mem_cached_last=mem_cached,LAST',
         'VDEF:mem_cached_avg=mem_cached,AVERAGE',
         'VDEF:mem_cached_max=mem_cached,MAXIMUM',
 
+
         'COMMENT:<b><tt>                  Minimum   Current    Average   Maximum</tt></b>\l',
 
-        'LINE1:mem_shared%s:<tt>Shared        </tt>' % color_mem_shrd,
+        'LINE1:mem_total%s:<tt>Total         </tt>' % color_mem_totl_line,
+        'AREA:mem_total%s:' % color_mem_totl_area,
+        'GPRINT:mem_total_min:<tt>%4.1lf%s</tt>\\t',
+        'GPRINT:mem_total_last:<tt>%4.1lf%s</tt>\\t',
+        'GPRINT:mem_total_avg:<tt>%4.1lf%s</tt>\\t',
+        'GPRINT:mem_total_max:<tt>%4.1lf%s</tt>\l',
+
+        'LINE1:mem_free%s:<tt>Free          </tt>' % color_mem_free_line,
+        'AREA:mem_free%s:' % color_mem_free_area,
+        'GPRINT:mem_free_min:<tt>%4.1lf%s</tt>\\t',
+        'GPRINT:mem_free_last:<tt>%4.1lf%s</tt>\\t',
+        'GPRINT:mem_free_avg:<tt>%4.1lf%s</tt>\\t',
+        'GPRINT:mem_free_max:<tt>%4.1lf%s</tt>\l',
+
+        'LINE1:mem_shared%s:<tt>Shared        </tt>' % color_mem_shrd_line,
+        'GPRINT:mem_shared_min:<tt>%4.1lf%s</tt>\\t',
+        'GPRINT:mem_shared_last:<tt>%4.1lf%s</tt>\\t',
+        'GPRINT:mem_shared_avg:<tt>%4.1lf%s</tt>\\t',
+        'GPRINT:mem_shared_max:<tt>%4.1lf%s</tt>\l',
+
+        'LINE1:swap_total%s:<tt>Swap total    </tt>' % color_swap_shrd_line,
         'GPRINT:swap_total_min:<tt>%4.1lf%s</tt>\\t',
         'GPRINT:swap_total_last:<tt>%4.1lf%s</tt>\\t',
         'GPRINT:swap_total_avg:<tt>%4.1lf%s</tt>\\t',
         'GPRINT:swap_total_max:<tt>%4.1lf%s</tt>\l',
+
+        'LINE1:swap_used%s:<tt>Swap in use   </tt>' % color_swap_use_line,
+        'AREA:swap_used%s:' % color_swap_use_area,
+        'GPRINT:swap_used_min:<tt>%4.1lf%s</tt>\\t',
+        'GPRINT:swap_used_last:<tt>%4.1lf%s</tt>\\t',
+        'GPRINT:swap_used_avg:<tt>%4.1lf%s</tt>\\t',
+        'GPRINT:swap_used_max:<tt>%4.1lf%s</tt>\l',
 
         'LINE1:mem_buffer%s:<tt>Buffer        </tt>' % color_mem_buff_line,
         'AREA:mem_buffer%s:' % color_mem_buff_area,
@@ -496,21 +515,8 @@ def plot_mem(img_path, rrd_path, opt, tz=None):
         'GPRINT:mem_cached_last:<tt>%4.1lf%s</tt>\\t',
         'GPRINT:mem_cached_avg:<tt>%4.1lf%s</tt>\\t',
         'GPRINT:mem_cached_max:<tt>%4.1lf%s</tt>\l',
-
-        'LINE1:mem_free%s:<tt>Free          </tt>' % color_mem_free_line,
-        'AREA:mem_free%s:' % color_mem_free_area,
-        'GPRINT:mem_free_min:<tt>%4.1lf%s</tt>\\t',
-        'GPRINT:mem_free_last:<tt>%4.1lf%s</tt>\\t',
-        'GPRINT:mem_free_avg:<tt>%4.1lf%s</tt>\\t',
-        'GPRINT:mem_free_max:<tt>%4.1lf%s</tt>\l',
-
-        'LINE1:swap_used%s:<tt>Swap In Use   </tt>' % color_mem_swap_line,
-        'AREA:swap_used%s:' % color_mem_swap_area,
-        'GPRINT:swap_used_min:<tt>%4.1lf%s</tt>\\t',
-        'GPRINT:swap_used_last:<tt>%4.1lf%s</tt>\\t',
-        'GPRINT:swap_used_avg:<tt>%4.1lf%s</tt>\\t',
-        'GPRINT:swap_used_max:<tt>%4.1lf%s</tt>\l'
     )
+    rrdtool.graph(*(base + addition))
 
 
 def plot_net(img_path, rrd_path, opt, tz=None):
@@ -518,34 +524,14 @@ def plot_net(img_path, rrd_path, opt, tz=None):
     color_ibound_area = '#CF000030'
     color_obound_line = '#0000CFFF'
     color_obound_area = '#0000CF30'
-    if tz:
-        utc = datetime.datetime.utcnow()
-        time_string = pytz.timezone(tz).fromutc(utc).strftime('%b %d, %Y %H:%M:%S %z')
-    else:
-        time_string = time.strftime('%b %d, %Y %H:%M:%S %z')
-    rrdtool.graph(
-        img_path,
-        '--imgformat', 'PNG',
-        '--step', opt['step'],
-        '--pango-markup',
-        '--vertical-label', 'Bits per second',
-        '--title', 'Network usage (%s)' % time_string,
-        '--lower-limit', '0',
-        '--alt-autoscale-max',
-        '--alt-autoscale-min',
-        '--rigid',
-        '--no-gridfit',
-        '--slope-mode',
-        '--x-grid', opt['x_grid'],
-        '--end', opt['end'],
-        '--start', opt['start'],
-        '--width', '530',
-        '--height', '300',
-        '--full-size-mode',
-        '--font-render-mode', 'normal',
-        '--border', '0',
-        '--color', 'BACK#FFFFFF',
 
+    title = 'Network usage'
+    label = 'Bits per sercond'
+
+    base = _base(img_path, title, label, opt, tz)
+    base += ('--lower-limit', '0')
+
+    addition = (
         'DEF:in=%s:in:AVERAGE' % rrd_path,
         'DEF:out=%s:out:AVERAGE' % rrd_path,
         'CDEF:in_bits=in,8,*',
@@ -556,6 +542,7 @@ def plot_net(img_path, rrd_path, opt, tz=None):
         'VDEF:out_last=out_bits,LAST',
         'VDEF:out_avg=out_bits,AVERAGE',
         'VDEF:out_max=out_bits,MAXIMUM',
+
 
         'COMMENT:<b><tt>          Current   Average   Maximum</tt></b>\\l',
 
@@ -571,41 +558,20 @@ def plot_net(img_path, rrd_path, opt, tz=None):
         'GPRINT:out_avg:<tt>%4.1lf%s</tt>\\t',
         'GPRINT:out_max:<tt>%4.1lf%s</tt>\l'
     )
+    rrdtool.graph(*(base + addition))
 
 
 def plot_snum(img_path, rrd_path, opt, tz=None):
     color_running_servers_line = '#00CF00FF'
     color_running_servers_area = '#00CF0044'
-    if tz:
-        utc = datetime.datetime.utcnow()
-        time_string = pytz.timezone(tz).fromutc(utc).strftime('%b %d, %Y %H:%M:%S %z')
-    else:
-        time_string = time.strftime('%b %d, %Y %H:%M:%S %z')
-    rrdtool.graph(
-        img_path,
-        '--imgformat', 'PNG',
-        '--step', opt['step'],
-        '--pango-markup',
-        '--vertical-label', 'Servers',
-        '--title', 'Servers count (%s)' % time_string,
-        '--alt-autoscale-max',
-        '--alt-autoscale-min',
-        '--lower-limit', '0',
-        '--y-grid', '1:1',
-        '--units-exponent', '0',
-        '--rigid',
-        '--no-gridfit',
-        '--slope-mode',
-        '--x-grid', opt['x_grid'],
-        '--end', opt['end'],
-        '--start', opt['start'],
-        '--width', '530',
-        '--height', '300',
-        '--full-size-mode',
-        '--font-render-mode', 'normal',
-        '--border', '0',
-        '--color', 'BACK#FFFFFF',
 
+    title = 'Servers count'
+    label = 'Servers'
+
+    base = _base(img_path, title, label, opt, tz)
+    base += ('--lower-limit', '0', '--y-grid', '1:1', '--units-exponent', '0')
+
+    addition = (
         'DEF:s_running=%s:s_running:AVERAGE' % rrd_path,
         'VDEF:s_running_last=s_running,LAST',
         'VDEF:s_running_avg=s_running,AVERAGE',
@@ -621,16 +587,19 @@ def plot_snum(img_path, rrd_path, opt, tz=None):
         'GPRINT:s_running_max:<tt>%3.0lf</tt>\\t',
         'GPRINT:s_running_min:<tt>%3.0lf</tt>\l'
     )
+    rrdtool.graph(*(base + addition))
 
 
 def plot_io_bits(img_path, rrd_path, opt, tz=None):
     color_r = '#ff0000'
     color_w = '#0000ff'
+
     if tz:
         utc = datetime.datetime.utcnow()
         time_string = pytz.timezone(tz).fromutc(utc).strftime('%b %d, %Y %H:%M:%S %z')
     else:
         time_string = time.strftime('%b %d, %Y %H:%M:%S %z')
+
     rrdtool.graph(
         img_path,
         '--imgformat', 'PNG',
@@ -682,11 +651,13 @@ def plot_io_bits(img_path, rrd_path, opt, tz=None):
 def plot_io_ops(img_path, rrd_path, opt, tz=None):
     color_r = '#ff0000'
     color_w = '#0000ff'
+
     if tz:
         utc = datetime.datetime.utcnow()
         time_string = pytz.timezone(tz).fromutc(utc).strftime('%b %d, %Y %H:%M:%S %z')
     else:
         time_string = time.strftime('%b %d, %Y %H:%M:%S %z')
+
     rrdtool.graph(
         img_path,
         '--imgformat', 'PNG',

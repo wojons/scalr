@@ -526,6 +526,10 @@ class Scalr_UI_Controller_Scripts extends Scalr_UI_Controller
             throw new Scalr_Exception_Core('scriptId or scriptPath should be set');
         }
 
+        if (! $scriptTimeout) {
+            $scriptTimeout = $scriptIsSync == 1 ? Scalr::config('scalr.script.timeout.sync') : Scalr::config('scalr.script.timeout.async');
+        }
+
         $executeScript = true;
 
         if ($shortcutId && ($target != Script::TARGET_INSTANCE || $target != Script::TARGET_ALL)) {

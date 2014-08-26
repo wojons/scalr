@@ -21,6 +21,67 @@ class Scalr_UI_Controller_Tools_Openstack_Volumes extends Scalr_UI_Controller
         $this->viewAction();
     }
 
+    public function xDetachAction()
+    {
+    	$client = $this->environment->openstack($this->getParam('platform'), $this->getParam('cloudLocation'));
+    	 
+    	$result = $client->servers->detachVolume(
+    		$this->getParam('serverId'),
+    		$this->getParam('attachmentId')
+    	);
+    
+    	$this->response->success('Cinder volume has been successfully detached');
+    }
+    
+    public function xAttachAction()
+    {    
+    	$client = $this->environment->openstack($this->getParam('platform'), $this->getParam('cloudLocation'));
+    
+    	$dbServer = DBServer::LoadByID($this->getParam('serverId'));
+    
+    	$deviceName = $dbServer->GetFreeDeviceName();
+    	
+    	$result = $client->servers->attachVolume(
+    		$dbServer->GetCloudServerID(), 
+    		$this->getParam('volumeId'), 
+    		$deviceName
+		);
+    
+    	$this->response->success('Cinder volume has been successfully attached');
+    }
+    
+    public function attachAction()
+    {
+    	$platformName = $this->getParam('platform');
+        if (!$platformName)
+            throw new Exception("Cloud should be specified");
+
+        if (!$this->environment->isPlatformEnabled($platformName))
+        	throw new Exception("Cloud is not configured in current environment");
+    
+    	$dbServers = $this->db->GetAll("SELECT server_id FROM servers WHERE platform=? AND status=? AND env_id=?", array(
+    		$this->getParam('platform'),
+    		SERVER_STATUS::RUNNING,
+    		$this->getEnvironmentId()
+    	));
+    
+    	if (count($dbServers) == 0)
+    		throw new Exception("You have no running servers on {$platformName} platform");
+        
+    	$servers = array();
+    	foreach ($dbServers as $dbServer) {
+    		$dbServer = DBServer::LoadByID($dbServer['server_id']);
+    		$servers[$dbServer->serverId] = $dbServer->getNameByConvention();
+    	}
+    
+    	if (count($servers) == 0)
+    		throw new Exception("You have no running servers on the availablity zone of this volume");
+    
+    	$this->response->page('ui/tools/openstack/volumes/attach.js', array(
+    		'servers' => $servers
+    	));
+    }
+    
     public function viewAction()
     {
         if ($this->getParam('platform')) {
@@ -83,8 +144,10 @@ class Scalr_UI_Controller_Tools_Openstack_Volumes extends Scalr_UI_Controller
                     'attachmentStatus' => isset($pv->attachments[0]) ? 'attached' : 'available',
                     'device'	=> isset($pv->attachments[0]) ? $pv->attachments[0]->device : "",
                     'instanceId' => isset($pv->attachments[0]) ? $pv->attachments[0]->server_id : "",
+                	'attachmentId' => isset($pv->attachments[0]) ? $pv->attachments[0]->id : "",
                     'type' 			=> $pv->volume_type,
-                    'availability_zone'		=> $pv->availability_zone
+                    'availability_zone'		=> $pv->availability_zone,
+                	'debug' => $pv
                 );
 
                 if ($item['instanceId']) {

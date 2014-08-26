@@ -37,6 +37,7 @@ class BundleTask
     public $roleId;
     public $farmId;
     public $cloudLocation;
+    public $object;
 
     public $createdById;
     public $createdByEmail;
@@ -52,6 +53,9 @@ class BundleTask
 
     private $tz;
     private $metaData;
+
+    const BUNDLETASK_OBJECT_ROLE = 'role';
+    const BUNDLETASK_OBJECT_IMAGE = 'image';
 
     /**
      * @var \DBFarm
@@ -80,6 +84,7 @@ class BundleTask
         'farm_id'		=> 'farmId',
         'cloud_location'=> 'cloudLocation',
         'meta_data'		=> 'metaData',
+        'object'        => 'object',
         'os_family'		=> 'osFamily',
         'os_name'		=> 'osName',
         'os_version'	=> 'osVersion',

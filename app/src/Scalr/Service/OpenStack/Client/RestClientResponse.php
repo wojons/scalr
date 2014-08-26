@@ -112,7 +112,7 @@ class RestClientResponse implements ClientResponseInterface
                     } else {
                         list(, $v) = each($d);
                         if (is_object($v)) {
-                            $this->errorData->code = $v->code;
+                            $this->errorData->code = isset($v->code) ? $v->code : 0;
                             $this->errorData->message = $v->message;
                             $this->errorData->details = isset($v->details) ? (string)$v->details : '';
                         } else {

@@ -74,6 +74,12 @@ class Image extends AbstractEntity
     public $osName;
 
     /**
+     * @Column(type="datetime",nullable=true)
+     * @var \DateTime
+     */
+    public $dtAdded;
+
+    /**
      * @Column(type="integer",nullable=true)
      * @var integer
      */
@@ -120,6 +126,12 @@ class Image extends AbstractEntity
      * @var string
      */
     public $agentVersion;
+
+    public function __construct()
+    {
+        // first records don't have dtAdded, we keep it null
+        $this->dtAdded = new \DateTime();
+    }
 
     public function save()
     {

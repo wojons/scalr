@@ -559,7 +559,7 @@ class NetworkService extends AbstractService implements ServiceInterface
      * The association process is exactly the same as the one discussed
      * for the create floating IP operation.
      *
-     * @param   string   $floatingIpId      The identifier of the floating IP
+     * @param   string   $floatingIpAddressId      The identifier of the floating IP
      * @param   string   $portId            optional Internal port
      * @return  object   Returns allocated floating ip details
      * @throws  RestClientException

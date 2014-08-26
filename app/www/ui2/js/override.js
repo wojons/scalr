@@ -582,7 +582,7 @@ Ext.override(Ext.form.field.ComboBox, {
             value = me.store.first().get(me.valueField);
         }
 
-        me.callParent([value, doSelect]);
+        return me.callParent([value, doSelect]);
     },
 
 	alignPicker: function() {

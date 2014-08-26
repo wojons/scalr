@@ -4,6 +4,7 @@ use Scalr\Acl\Acl;
 use Scalr\Modules\PlatformFactory;
 use Scalr\Model\Entity\Image;
 use Scalr\UI\Request\JsonData;
+use Scalr\Role\Role;
 
 class Scalr_UI_Controller_Roles extends Scalr_UI_Controller
 {
@@ -446,17 +447,17 @@ class Scalr_UI_Controller_Roles extends Scalr_UI_Controller
      * @param string $imageId
      * @param string $cloudLocation
      * @param string $osfamily
-     * @param string $hvm
+     * @param integer $hvm
      * @param JsonData $advanced
      * @param JsonData $chef
      * @throws Exception
      */
-    public function xBuildAction($platform, $architecture, JsonData $behaviors, $roleName, $roleImage, $imageId, $cloudLocation, $osfamily, $hvm, JsonData $advanced, JsonData $chef)
+    public function xBuildAction($platform, $architecture, JsonData $behaviors, $roleName, $roleImage = false, $imageId, $cloudLocation, $osfamily, $hvm = 0, JsonData $advanced, JsonData $chef)
     {
         $this->request->restrictAccess(Acl::RESOURCE_FARMS_ROLES, Acl::PERM_FARMS_ROLES_CREATE);
 
         if ($roleImage) {
-            $roleName = '';
+            $roleName = Role::generateName('builder');
         } else {
             if (strlen($roleName) < 3)
                 throw new Exception(_("Role name should be greater than 3 chars"));
@@ -607,6 +608,7 @@ class Scalr_UI_Controller_Roles extends Scalr_UI_Controller
         $bundleTask->createdByEmail = $this->user->getEmail();
 
         $bundleTask->osFamily = $osfamily;
+        $bundleTask->object = $roleImage ? BundleTask::BUNDLETASK_OBJECT_IMAGE : BundleTask::BUNDLETASK_OBJECT_ROLE;
 
         $bundleTask->cloudLocation = $launchOptions->cloudLocation;
         $bundleTask->save();
@@ -803,9 +805,9 @@ class Scalr_UI_Controller_Roles extends Scalr_UI_Controller
         }
 
         if ($this->user->getAccountId() != 0) {
-            $usedBy =$this->db->GetOne("SELECT COUNT(*) FROM farm_roles WHERE (role_id=? OR new_role_id=?) AND farmid IN (SELECT id FROM farms WHERE env_id=?)", array($dbRole->id, $dbRole->id, $this->getEnvironmentId()));
+            $usedBy = $dbRole->getFarmRolesCount($this->getEnvironmentId());
         } else {
-            $usedBy =$this->db->GetOne("SELECT COUNT(*) FROM farm_roles WHERE role_id=? OR new_role_id=?", array($dbRole->id, $dbRole->id));
+            $usedBy = $dbRole->getFarmRolesCount();
         }
 
         $status = 'Not used';
@@ -866,7 +868,7 @@ class Scalr_UI_Controller_Roles extends Scalr_UI_Controller
             }
 
             if ($role['status'] == 'In use' && $this->user->getAccountId() != 0) {
-                $usedBy = $this->db->GetCol("SELECT DISTINCT farmid FROM farm_roles WHERE (role_id=? OR new_role_id=?) AND farmid IN (SELECT id FROM farms WHERE env_id=?)", array($dbRole->id, $dbRole->id, $this->getEnvironmentId()));
+                $usedBy = $dbRole->getFarms($this->getEnvironmentId());
                 $farms = $this->db->GetAll('SELECT id, name FROM farms WHERE env_id = ? AND id IN(' . implode(',', $usedBy) . ')', [$this->getEnvironmentId()]);
                 $role['usedBy'] = [ 'farms' => $farms, 'cnt' => count($usedBy)];
             }
@@ -935,12 +937,12 @@ class Scalr_UI_Controller_Roles extends Scalr_UI_Controller
 
             if ($this->user->isScalrAdmin()) {
                 $params['roleUsage'] = array (
-                    'farms'     => $this->db->GetOne("SELECT COUNT(*) FROM farm_roles WHERE role_id=? OR new_role_id=?", array($dbRole->id, $dbRole->id)),
+                    'farms'     => $dbRole->getFarmRolesCount(),
                     'instances' => $this->db->GetOne("SELECT COUNT(*) FROM servers WHERE role_id=?", array($dbRole->id))
                 );
             } else {
                 $params['roleUsage'] = array (
-                    'farms'     => $this->db->GetOne("SELECT COUNT(*) FROM farm_roles WHERE (role_id=? OR new_role_id=?) AND farmid IN (SELECT id FROM farms WHERE env_id=?)", array($dbRole->id, $dbRole->id, $this->getEnvironmentId())),
+                    'farms'     => $dbRole->getFarmRolesCount($this->getEnvironmentId()),
                     'instances' => $this->db->GetOne("SELECT COUNT(*) FROM servers WHERE role_id=? AND env_id=?", array($dbRole->id, $this->getEnvironmentId()))
                 );
             }

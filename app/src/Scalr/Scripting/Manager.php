@@ -156,6 +156,9 @@ class Scalr_Scripting_Manager
             if (! $script)
                 return false;
             // TODO: validate permission to access script ?
+            
+            if ($script->os && $targetServer->osType && $script->os != $targetServer->osType)
+            	return false;
 
             if ($scriptSettings['version'] == 'latest' || (int)$scriptSettings['version'] == -1) {
                 $version = $script->getLatestVersion();

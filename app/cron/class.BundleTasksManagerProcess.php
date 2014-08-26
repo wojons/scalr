@@ -731,8 +731,7 @@ class BundleTasksManagerProcess implements \Scalr\System\Pcntl\ProcessInterface
                         }
                     }
 
-                    // TODO: use another property
-                    if ($BundleTask->roleName) {
+                    if ($BundleTask->object == BundleTask::BUNDLETASK_OBJECT_ROLE) {
                         try {
                             $DBRole = DBRole::createFromBundleTask($BundleTask);
                         } catch (Exception $e) {

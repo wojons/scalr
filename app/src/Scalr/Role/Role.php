@@ -66,4 +66,9 @@ class Role extends AbstractEntity
     {
         return !!preg_match("/^[A-Za-z0-9]+[A-Za-z0-9-]*[A-Za-z0-9]+$/si", $name);
     }
+
+    public static function generateName($type)
+    {
+        return sprintf("scalr-role-%s-%d", $type, time());
+    }
 }

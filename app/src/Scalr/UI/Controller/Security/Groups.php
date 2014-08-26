@@ -241,17 +241,6 @@ class Scalr_UI_Controller_Security_Groups extends Scalr_UI_Controller
         );
     }
 
-    /**
-     * Checks whether openstack has network service as well as security group extension
-     *
-     * @param   OpenStack   $openstack  OpenStack instance
-     */
-    private function hasOpenStackNetworkSecurityGroupExtension(OpenStack $openstack)
-    {
-        return $openstack->hasService(OpenStack::SERVICE_NETWORK) &&
-               $openstack->network->isExtensionSupported(NetworkExtension::securityGroup());
-    }
-
     private function getGroupOpenstack($platform, $cloudLocation, $securityGroupId)
     {
         $rules = array();
@@ -260,29 +249,39 @@ class Scalr_UI_Controller_Security_Groups extends Scalr_UI_Controller
         $openstack = $this->getPlatformService($platform, $cloudLocation);
         /* @var $openstack \Scalr\Service\OpenStack\OpenStack */
 
-        // Neutron security groups implementation
-        if ($this->hasOpenStackNetworkSecurityGroupExtension($openstack)) {
-            $sgInfo = $openstack->network->securityGroups->list($securityGroupId);
-            $allGroups = $this->listGroupsOpenstack($platform, $cloudLocation, array());
-            $list = array();
-            foreach ($allGroups as $s)
-                $list[$s['id']] = $s['name'];
+        $sgInfo = $openstack->listSecurityGroups($securityGroupId);
+        $allGroups = $this->listGroupsOpenstack($platform, $cloudLocation, array());
 
-            foreach ($sgInfo->security_group_rules as $rule) {
-                $r = array(
-                    'id'         => $rule->id,
-                    'direction'  => $rule->direction,
-                    'type'  	 => $rule->ethertype,
-                    'ipProtocol' => $rule->protocol,
-                    'fromPort'   => $rule->port_range_min,
-                    'toPort'     => $rule->port_range_max
-                );
+        $list = array();
 
-                $key = "{$r['ipProtocol']}:{$r['fromPort']}:{$r['toPort']}:" . ($rule->ip_range->cidr ? $rule->remote_ip_prefix : $rule->remote_group_id);
+        foreach ($allGroups as $s) {
+            $list[$s['id']] = $s['name'];
+        }
+
+        foreach ($sgInfo->security_group_rules as $rule) {
+            $r = array(
+                'id'         => $rule->id,
+                'ipProtocol' => $rule->protocol,
+                'fromPort'   => $rule->port_range_min,
+                'toPort'     => $rule->port_range_max
+            );
+
+            if (property_exists($rule, 'remote_ip_prefix') || property_exists($rule, 'remote_group_id')) {
+                $key = "{$r['ipProtocol']}:{$r['fromPort']}:{$r['toPort']}:" . (!empty($rule->remote_ip_prefix) ? $rule->remote_ip_prefix : $rule->remote_group_id);
+
+            } else {
+                $key = "{$r['ipProtocol']}:{$r['fromPort']}:{$r['toPort']}:" . ($rule->ip_range->cidr ? $rule->ip_range->cidr : $rule->group->name);
+            }
+
+            if (property_exists($rule, 'direction') && property_exists($rule, 'ethertype')) {
+                $r['direction'] = $rule->direction;
+                $r['type'] = $rule->ethertype;
                 $key .= ":{$r['direction']}:{$r['type']}";
+            }
 
-                $r['comment'] = $this->getRuleComment($platform, $cloudLocation, '', $sgInfo->name, $key);
+            $r['comment'] = $this->getRuleComment($platform, $cloudLocation, '', $sgInfo->name, $key);
 
+            if (property_exists($rule, 'remote_ip_prefix')) {
                 if ($rule->remote_ip_prefix) {
                     $r['cidrIp'] = $rule->remote_ip_prefix;
                     $rules[$r['id']] = $r;
@@ -290,23 +289,8 @@ class Scalr_UI_Controller_Security_Groups extends Scalr_UI_Controller
                     $r['sg'] = $list[$rule->remote_group_id];
                     $sgRules[$r['id']] = $r;
                 }
-            }
-            $advanced = true;
-        } else {
-               // NOVA os-security-group extension
-            $sgInfo = $openstack->servers->getSecurityGroup($securityGroupId);
-
-            foreach ($sgInfo->rules as $rule) {
-                $r = array(
-                    'id'         => $rule->id,
-                    'ipProtocol' => $rule->ip_protocol,
-                    'fromPort'   => $rule->from_port,
-                    'toPort'     => $rule->to_port
-                );
-
-                $key = "{$r['ipProtocol']}:{$r['fromPort']}:{$r['toPort']}:" . ($rule->ip_range->cidr ? $rule->ip_range->cidr : $rule->group->name);
-                $r['comment'] = $this->getRuleComment($platform, $cloudLocation, '', $sgInfo->name, $key);
-
+                $advanced = true;
+            } else if (property_exists($rule, 'ip_range')) {
                 if ($rule->ip_range->cidr) {
                     $r['cidrIp'] = $rule->ip_range->cidr;
                     $rules[$r['id']] = $r;
@@ -314,12 +298,12 @@ class Scalr_UI_Controller_Security_Groups extends Scalr_UI_Controller
                     $r['sg'] = $rule->group->name;
                     $sgRules[$r['id']] = $r;
                 }
+                $advanced = false;
             }
-            $advanced = false;
         }
 
         return array(
-            'advanced'		  => $advanced,
+            'advanced'        => $advanced,
             'platform'        => $platform,
             'cloudLocation'   => $cloudLocation,
             'id'              => $sgInfo->id,
@@ -359,6 +343,7 @@ class Scalr_UI_Controller_Security_Groups extends Scalr_UI_Controller
             'name'            => $sgInfo->name,
             'description'     => $sgInfo->description,
             'rules'           => $rules,
+            'sgRules'         => array()
         );
     }
 
@@ -522,78 +507,48 @@ class Scalr_UI_Controller_Security_Groups extends Scalr_UI_Controller
     private function saveGroupRulesOpenstack($platform, $cloudLocation, $securityGroupId, $rules, $action)
     {
         $openstack = $this->getPlatformService($platform, $cloudLocation);
+        $allGroups = $this->listGroupsOpenstack($platform, $cloudLocation, array());
 
-        // Neutron security groups implementation
-        if ($this->hasOpenStackNetworkSecurityGroupExtension($openstack)) {
-            $sgService = $openstack->network;
+        $list = array();
 
-            $allGroups = $this->listGroupsOpenstack($platform, $cloudLocation, array());
-            $list = array();
-            foreach ($allGroups as $s)
-                $list[$s['name']] = $s['id'];
+        foreach ($allGroups as $s) {
+            $list[$s['name']] = $s['id'];
+        }
 
-            foreach ($rules['rules'] as $rule) {
-                if ($action == 'add') {
-                    $sgService->securityGroups->addRule(array(
-                        'security_group_id'  => $securityGroupId,
-                        'protocol'           => $rule['ipProtocol'],
-                        "direction"          => $rule['direction'] ? $rule['direction'] : "ingress",
-                        'port_range_min'     => $rule['fromPort'] ? $rule['fromPort'] : null,
-                        'port_range_max'     => $rule['toPort'] ? $rule['toPort'] : null,
-                        'remote_ip_prefix'  => $rule['cidrIp'],
-                        'remote_group_id'	 => null
-                    ));
-                } else {
-                    $sgService->securityGroups->deleteRule($rule['id']);
-                }
-            }
-
-            foreach ($rules['sgRules'] as $rule) {
-                if ($action == 'add') {
-                    $sgService->securityGroups->addRule(array(
-                        'security_group_id'   => $securityGroupId,
-                        'protocol'      	=> $rule['ipProtocol'],
-                        "direction"          => $rule['direction'] ? $rule['direction'] : "ingress",
-                        'port_range_min'    => $rule['fromPort'],
-                        'port_range_max'    => $rule['toPort'],
-                        'remote_group_id'   => $list[$rule['sg']],
-                        'remote_ip_prefix'	 => null
-                    ));
-                } else {
-                    $sgService->securityGroups->deleteRule($rule['id']);
-                }
-            }
-        } else {
-            $sgService = $openstack->servers;
-
-            foreach ($rules['rules'] as $rule) {
-                if ($action == 'add') {
-                    $sgService->addSecurityGroupRule(array(
-                        'parent_group_id'  => $securityGroupId,
-                        'ip_protocol'      => $rule['ipProtocol'],
-                        'from_port'        => $rule['fromPort'],
-                        'to_port'          => $rule['toPort'],
-                        'cidr'             => $rule['cidrIp']
-                    ));
-                } else {
-                    $sgService->deleteSecurityGroupRule($rule['id']);
-                }
-            }
-
-            foreach ($rules['sgRules'] as $rule) {
-                if ($action == 'add') {
-                    $sgService->addSecurityGroupRule(array(
-                        'parent_group_id'  => $securityGroupId,
-                        'ip_protocol'      => $rule['ipProtocol'],
-                        'from_port'        => $rule['fromPort'],
-                        'to_port'          => $rule['toPort'],
-                        'group_id'         => $rule['sg']
-                    ));
-                } else {
-                    $sgService->deleteSecurityGroupRule($rule['id']);
-                }
+        foreach ($rules['rules'] as $rule) {
+            if ($action == 'add') {
+                $request = array(
+                    'security_group_id'  => $securityGroupId,
+                    'protocol'           => $rule['ipProtocol'],
+                    "direction"          => $rule['direction'] ? $rule['direction'] : "ingress",
+                    'port_range_min'     => $rule['fromPort'] ? $rule['fromPort'] : null,
+                    'port_range_max'     => $rule['toPort'] ? $rule['toPort'] : null,
+                    'remote_ip_prefix'   => $rule['cidrIp'],
+                    'remote_group_id'    => null
+                );
+                $openstack->createSecurityGroupRule($request);
+            } else {
+                $openstack->deleteSecurityGroupRule($rule['id']);
             }
         }
+
+        foreach ($rules['sgRules'] as $rule) {
+            if ($action == 'add') {
+                $request = array(
+                    'security_group_id' => $securityGroupId,
+                    'protocol'          => $rule['ipProtocol'],
+                    "direction"         => $rule['direction'] ? $rule['direction'] : "ingress",
+                    'port_range_min'    => $rule['fromPort'],
+                    'port_range_max'    => $rule['toPort'],
+                    'remote_group_id'   => !empty($list[$rule['sg']]) ? $list[$rule['sg']] : $rule['sg'],
+                    'remote_ip_prefix'  => null
+                );
+                $openstack->createSecurityGroupRule($request);
+            } else {
+                $openstack->deleteSecurityGroupRule($rule['id']);
+            }
+        }
+
     }
 
     private function saveGroupRulesCloudstack($platform, $cloudLocation, $securityGroupId, $rules, $action)
@@ -652,23 +607,12 @@ class Scalr_UI_Controller_Security_Groups extends Scalr_UI_Controller
         $result = null;
 
         $openstack = $this->getPlatformService($platform, $cloudLocation);
+        $list = $openstack->listSecurityGroups();
 
-        // Neutron security groups implementation
-        if ($this->hasOpenStackNetworkSecurityGroupExtension($openstack)) {
-            $list = $openstack->network->securityGroups->list();
-            foreach ($list as $v) {
-                if ($v->name === $securityGroupName) {
-                    $result = $v->id;
-                    break;
-                }
-            }
-        } else {
-            $list = $openstack->servers->securityGroups->list();
-            foreach ($list as $v) {
-                if ($v->name === $securityGroupName) {
-                    $result = $v->id;
-                    break;
-                }
+        foreach ($list as $v) {
+            if ($v->name === $securityGroupName) {
+                $result = $v->id;
+                break;
             }
         }
 
@@ -781,38 +725,22 @@ class Scalr_UI_Controller_Security_Groups extends Scalr_UI_Controller
         $openstack = $this->getPlatformService($platform, $cloudLocation);
         /* @var $openstack \Scalr\Service\OpenStack\OpenStack */
 
-        // Neutron security groups implementation
-        if ($this->hasOpenStackNetworkSecurityGroupExtension($openstack)) {
-            $sgList = $openstack->network->securityGroups->list()->toArray();
+        $sgList = $openstack->listSecurityGroups()->toArray();
 
-            foreach ($sgList as $sg) {
-                if (!empty($filters['sgIds']) && !in_array($sg->id, $filters['sgIds'])) {
-                    continue;
-                }
-
-                if ($sg->tenant_id != $openstack->getConfig()->getAuthToken()->getTenantId())
-                    continue;
-
-                $result[] = array(
-                    'id'          => $sg->id,
-                    'name'        => $sg->name,
-                    'description' => $sg->description
-                );
+        foreach ($sgList as $sg) {
+            if (!empty($filters['sgIds']) && !in_array($sg->id, $filters['sgIds'])) {
+                continue;
             }
-        } else {
-            $sgList = $openstack->servers->securityGroups->list()->toArray();
 
-            foreach ($sgList as $sg) {
-                if (!empty($filters['sgIds']) && !in_array($sg->id, $filters['sgIds'])) {
-                    continue;
-                }
-
-                $result[] = array(
-                    'id'          => $sg->id,
-                    'name'        => $sg->name,
-                    'description' => $sg->description
-                );
+            if ($openstack->hasNetworkSecurityGroupExtension() && $sg->tenant_id != $openstack->getConfig()->getAuthToken()->getTenantId()) {
+                continue;
             }
+
+            $result[] = array(
+                'id'          => $sg->id,
+                'name'        => $sg->name,
+                'description' => $sg->description
+            );
         }
 
         return $result;
@@ -845,13 +773,7 @@ class Scalr_UI_Controller_Security_Groups extends Scalr_UI_Controller
     private function createGroupOpenstack($platform, $cloudLocation, $groupData)
     {
         $openstack = $this->getPlatformService($platform, $cloudLocation);
-
-        // Neutron security groups implementation
-        if ($this->hasOpenStackNetworkSecurityGroupExtension($openstack)) {
-            $securityGroup = $openstack->network->securityGroups->create($groupData['name'], $groupData['description']);
-        } else {
-            $securityGroup = $openstack->servers->createSecurityGroup($groupData['name'], $groupData['description']);
-        }
+        $securityGroup = $openstack->createSecurityGroup($groupData['name'], $groupData['description']);
 
         return $securityGroup->id;
     }
@@ -875,13 +797,7 @@ class Scalr_UI_Controller_Security_Groups extends Scalr_UI_Controller
     private function deleteGroupOpenstack($platform, $cloudLocation, $securityGroupId)
     {
         $openstack = $this->getPlatformService($platform, $cloudLocation);
-
-        // Neutron security groups implementation
-        if ($this->hasOpenStackNetworkSecurityGroupExtension($openstack)) {
-            $result = $openstack->network->securityGroups->delete($securityGroupId);
-        } else {
-            $result = $openstack->servers->deleteSecurityGroup($securityGroupId);
-        }
+        $result = $openstack->deleteSecurityGroup($securityGroupId);
 
         return $result;
     }

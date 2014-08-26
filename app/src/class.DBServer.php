@@ -157,6 +157,21 @@ class DBServer
                 @unlink($file);
     }
 
+    public function getNameByConvention() 
+    {
+    	$displayConvention = Scalr::config('scalr.ui.server_display_convention');
+    	$name = "#{$this->index}: ";
+    	
+    	if ($displayConvention == 'hostname')
+    		$name .= $this->GetProperty(Scalr_Role_Behavior::SERVER_BASE_HOSTNAME);
+    	elseif (($displayConvention == 'auto' && $this->remoteIp) || $displayConvention == 'public')
+    		$name .= $this->remoteIp;
+    	elseif ($this->localIp)
+    		$name .= $this->localIp;
+    	
+    	return $name;
+    }
+    
     public function getSzrHost()
     {
         $config = \Scalr::getContainer()->config;
@@ -1156,6 +1171,7 @@ class DBServer
         // To avoid message flood if server cannot respond
         // Protection from DDOS
         // Log only right now
+        /*
         $pendingMessagesCount = $this->Db->GetOne("SELECT COUNT(*) FROM messages WHERE status = '0' OR server_id = ?", array(
         	$this->serverId
         ));
@@ -1164,6 +1180,7 @@ class DBServer
                 $this->SetProperty('tmp.flood-alert', 1);
             }
         }
+        */
 
 
         // Ignore OLD messages (ami-scripts)

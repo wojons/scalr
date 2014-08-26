@@ -253,7 +253,7 @@ Ext.define('Scalr.ui.FarmRolesFlyingButton', {
 				this.width += Ext.getScrollbarSize().width;
 			},
 			afterrender: function(){
-				me.button = Ext.DomHelper.append(this.up('panel').el.dom, '<div class="'+me.cls+'" title="Add role to farm"><div class="x-item-inner"><span>Add <br/>new role</span></div></div>', true);
+				me.button = Ext.DomHelper.append(this.up('panel').el.dom, '<div class="'+me.cls+'" title="Add role to farm"><div class="x-item-inner"><span>Add <br/>farm role</span></div></div>', true);
 				me.button.on('click', function(){
 					me.handler.apply(me.client);
 				});

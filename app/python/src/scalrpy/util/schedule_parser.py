@@ -78,7 +78,7 @@ class Schedule(object):
 
 
     def intime(self, now=None):
-        now = now or time.localtime()
+        now = now or time.gmtime()
         return now.tm_wday in self.schedule[2] and \
                 now.tm_mday in self.schedule[1] and \
                 now.tm_hour in self.schedule[0]

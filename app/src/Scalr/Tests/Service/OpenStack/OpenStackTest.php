@@ -165,6 +165,50 @@ class OpenStackTest extends OpenStackTestCase
         }
         unset($os);
 
+        // security groups test
+        $sgTestName = self::getTestName(self::NAME_SECURITY_GROUP);
+
+        $listSecurityGroups = $rs->listSecurityGroups();
+        $this->assertTrue($listSecurityGroups instanceof \ArrayIterator);
+        foreach ($listSecurityGroups as $v) {
+            if ($v->name == self::getTestName('security-group')) {
+                $rs->deleteSecurityGroup($v->id);
+            }
+        }
+        unset($listSecurityGroups);
+
+        //Create security group test
+        $sg = $rs->createSecurityGroup($sgTestName, 'phpunit test security group');
+        $this->assertNotEmpty($sg);
+        $this->assertInternalType('object', $sg);
+        $this->assertNotEmpty($sg->id);
+        $this->assertEquals($sgTestName, $sg->name);
+        $this->assertNotEmpty($sg->description);
+
+        $ruleToAdd = [
+            "security_group_id" => $sg->id,
+            "protocol"          => 'tcp',
+            "remote_group_id"   => $sg->id,
+            "direction"         => "ingress",
+            "port_range_max"    => null,
+            "port_range_min"    => null,
+        ];
+
+        //Add a new rule to security group
+        $rule = $rs->createSecurityGroupRule($ruleToAdd);
+        $this->assertNotEmpty($rule);
+        $this->assertNotEmpty($rule->id);
+        $this->assertInternalType('object', $rule);
+
+        //Removes rule
+        $ret = $rs->deleteSecurityGroupRule($rule->id);
+        $this->assertTrue($ret);
+
+        //Delete security group test
+        $ret = $rs->deleteSecurityGroup($sg->id);
+        $this->assertTrue($ret);
+        unset($sg);
+
         //Pagination test
         $list = $rs->servers->listImages(true, array('limit' => 10));
         $this->assertInstanceOf(self::ABSTRACT_PAGINATION_CLASS, $list);

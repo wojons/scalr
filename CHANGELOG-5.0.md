@@ -4,7 +4,7 @@ CHANGELOG for 5.0.x
 This changelog references the relevant changes (bug and security fixes) done
 in 5.0 minor versions.
 
-To get the diff between two versions, go to https://github.com/Scalr/scalr/compare/v4.5.1...5.0
+To get the diff between two versions, go to https://github.com/Scalr/scalr/compare/v4.5.1...5.0.0-rc.1
 
 * 5.0.0-rc.1 
  * update sql folder (recipe)
@@ -409,10 +409,10 @@ To get the diff between two versions, go to https://github.com/Scalr/scalr/compa
  * del dbqueue_event_alert.py, msg_sender_alert.py (levsh)
  * SCALARIZR-1405 Improve database initialization in HIR (igrkio)
  * fix net metric on windows (levsh)
- * SCALARIZR-1531 Support encrypted EBS volumes in scalarizr.storage2.volumes.ebs (igrkio)
  * SCALRCORE-903 Add Networking Security Groups & Block Device mapping format support to OpenStack library (recipe)
  * SCALRCORE-906 Analytics 2 feedback (vlad)
  * SCALRCORE-911 OpenStack Security Groups do not work on Nebula / CloudScaling (recipe)
+ * SCALRCORE-910 Check all tests to pass with green flare (vlad)
  * add szr_upd_service section (levsh)
  * add max_limit option (levsh)
  * add chunk_size config option to szr_upd_service (levsh)
@@ -424,3 +424,19 @@ To get the diff between two versions, go to https://github.com/Scalr/scalr/compa
  * SCALARIZR-1538 add check before insert 'scheduled_on' (levsh)
  * SCALRCORE-912 UI-345 (invar)
  * upgrade script with non-interactive mode by default (recipe)
+ * UI-347 add validation for script timeout (invar)
+ * Update .gitignore (levsh)
+ * Merge origin/master (vlad)
+ * SCALARIZR-1563 Add VPC router section into list-farm-role-params (recipe)
+ * Updated RaxNG-US images (maratkomarov)
+ * Update sql structure (recipe)
+ * Fix 22451 HostUp Scripts running twice (recipe)
+ * SCALRCORE-916 E_ALL Invalid argument supplied for foreach() in UI_Security_Group class. (vlad)
+ * SCALRCORE-905 sql query optimizing. (vlad)
+ * Merge pull request #3 from Scalr/scalrcore905 (recipe)
+ * SCALARIZR-1538 Update scheduler doesn't works on farm 13330 (igrkio)
+ * fix intime(), gmtime intead of localtime (levsh)
+ * SCALRCORE-914 Openstack Details page. (recipe)
+ * add AWS PV Network Device for windows net metric (levsh)
+ * SCALARIZR-1531 Support encrypted EBS volumes in scalarizr.storage2.volumes.ebs (igrkio)
+ * SCALRCORE-800 bug fix (igrkio)

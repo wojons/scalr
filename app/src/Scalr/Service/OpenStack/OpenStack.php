@@ -7,6 +7,10 @@ use Scalr\Service\OpenStack\Client\AuthToken;
 use Scalr\Service\OpenStack\Client\RestClient;
 use Scalr\Service\OpenStack\Client\ClientInterface;
 use Scalr\Service\OpenStack\Exception\OpenStackException;
+use Scalr\Service\OpenStack\Services\Network\Type\NetworkExtension;
+use Scalr\Service\OpenStack\Services\Network\Type\ListSecurityGroupsFilter;
+use Scalr\Service\OpenStack\Services\Network\Type\CreateSecurityGroupRule;
+use Scalr\Service\OpenStack\Type\DefaultPaginationList;
 use GlobIterator;
 use FilesystemIterator;
 
@@ -293,4 +297,147 @@ class OpenStack
             return $m[1] . '_' . $m[2];
         }, $str));
     }
+
+    /**
+     * Gets list of security groups
+     *
+     * @param   string $serverId optional
+     *          The ID of the security group to view
+     *
+     * @param   ListSecurityGroupsFilter|array $filter optional
+     *          The filter options. Filter doesn't apply to detailed info
+     *
+     * @param   array $fields optional
+     *          The list of the fields to show
+     *
+     * @return  DefaultPaginationList|object  Returns the list of the security groups
+     */
+    public function listSecurityGroups($serverId = null, $filter = null, array $fields = null)
+    {
+        if ($this->hasNetworkSecurityGroupExtension()) {
+            $securityGroup = $this->network->securityGroups->list($serverId, $filter, $fields);
+        } else {
+            $securityGroup = $this->servers->securityGroups->list($serverId);
+
+        }
+
+        return $securityGroup;
+    }
+
+    /**
+     * Create Security Group action
+     *
+     * @param   string     $name        A security group name.
+     * @param   string     $description A description.
+     * @return  object     Returns created secrurity group.
+     */
+    public function createSecurityGroup($name, $description)
+    {
+        if ($this->hasNetworkSecurityGroupExtension()) {
+            $securityGroup = $this->network->securityGroups->create($name, $description);
+        } else {
+            $securityGroup = $this->servers->securityGroups->create($name, $description);
+        }
+
+        return $securityGroup;
+    }
+
+    /**
+     * Removes a specific security group
+     *
+     * @param   int      $securityGroupId  Security group unique identifier.
+     * @return  bool     Returns true on success or throws an exception
+     */
+    public function deleteSecurityGroup($securityGroupId)
+    {
+        if ($this->hasNetworkSecurityGroupExtension()) {
+            $result = $this->network->securityGroups->delete($securityGroupId);
+        } else {
+            $result = $this->servers->securityGroups->delete($securityGroupId);
+        }
+
+        return $result;
+    }
+
+    /**
+     * Gets the list of the security group rules (GET /security-group-rules/[rules-security-groups-id] )
+     *
+     * Lists a summary of all OpenStack Networking security group rules that the specified tenant can access.
+     *
+     * @param   string $id optional
+     *          The ID of the security group rule to view
+     *
+     * @param   ListSecurityGroupRulesFilter|array $filter optional
+     *          The filter options. Filter doesn't apply to detailed info
+     *
+     * @param   array $fields optional
+     *          The list of the fields to show
+     *
+     * @return  DefaultPaginationList|object|null Returns the list of the security groups, specified security group or null
+     */
+    public function listSecurityGroupRules($id = null, $filter = null, array $fields = null)
+    {
+        if ($this->hasNetworkSecurityGroupExtension()) {
+            return $this->network->securityGroups->listRules($id, $filter, $fields);
+        }
+
+        return null;
+    }
+
+    /**
+     * Creates Security Group Rule (POST /security-group-rules)
+     *
+     * @param   CreateSecurityGroupRule|object|array $request The request object
+     * @return  object                               Returns Security Group Rule object
+     */
+    public function createSecurityGroupRule($request)
+    {
+        if ($this->hasNetworkSecurityGroupExtension()) {
+            $result = $this->network->securityGroups->addRule($request);
+        } else {
+            if (!is_array($request)) {
+                $request = get_object_vars($request);
+            }
+            $requestData = array(
+                'parent_group_id'  => $request['security_group_id'],
+                'ip_protocol'      => !empty($request['protocol']) ? $request['protocol'] : null,
+                'from_port'        => $request['port_range_min'],
+                'to_port'          => $request['port_range_max'],
+                'cidr'             => !empty($request['remote_ip_prefix']) ? $request['remote_ip_prefix'] : null,
+                'group_id'         => !empty($request['remote_group_id']) ? $request['remote_group_id'] : null
+            );
+            $result = $this->servers->securityGroups->addRule($requestData);
+        }
+
+        return $result;
+    }
+
+    /**
+     * Deletes Security Group Rule (DELETE /security-group-rules/​rules-security-groups-id})
+     *
+     * @param   string  $securityGroupRuleId The UUID of the security group rule to delete
+     * @return  bool    Returns true on success or throws an exception
+     */
+    public function deleteSecurityGroupRule($securityGroupRuleId)
+    {
+        if ($this->hasNetworkSecurityGroupExtension()) {
+            $result = $this->network->securityGroups->deleteRule($securityGroupRuleId);
+        } else {
+            $result = $this->servers->securityGroups->deleteRule($securityGroupRuleId);
+        }
+
+        return $result;
+    }
+
+    /**
+     * Checks whether openstack has network service as well as security group extension
+     *
+     * @return bool Returns true if network service exists and has security group extension
+     */
+    public function hasNetworkSecurityGroupExtension()
+    {
+        return $this->hasService(OpenStack::SERVICE_NETWORK) &&
+               $this->network->isExtensionSupported(NetworkExtension::securityGroup());
+    }
+
 }

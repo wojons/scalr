@@ -1,6 +1,6 @@
 <?php
 use Scalr\Acl\Acl;
-use Scalr\Model\Entity;
+use Scalr\Model\Entity\Script;
 
 class Scalr_UI_Controller_Schedulertasks extends Scalr_UI_Controller
 {
@@ -26,7 +26,7 @@ class Scalr_UI_Controller_Schedulertasks extends Scalr_UI_Controller
         $this->response->page('ui/schedulertasks/create.js', array(
             'farmWidget' => self::loadController('Farms')->getFarmWidget(array(), 'addAll'),
             'timezones' => Scalr_Util_DateTime::getTimezones(),
-            'scripts' => \Scalr\Model\Entity\Script::getList($this->user->getAccountId(), $this->getEnvironmentId()),
+            'scripts' => Script::getList($this->user->getAccountId(), $this->getEnvironmentId()),
             'defaultTimezone' => $this->user->getSetting(Scalr_Account_User::SETTING_UI_TIMEZONE)
         ));
     }
@@ -92,7 +92,7 @@ class Scalr_UI_Controller_Schedulertasks extends Scalr_UI_Controller
         $this->response->page('ui/schedulertasks/create.js', array(
             'farmWidget' => $farmWidget,
             'timezones' => Scalr_Util_DateTime::getTimezones(),
-            'scripts' => \Scalr\Model\Entity\Script::getList($this->user->getAccountId(), $this->getEnvironmentId()),
+            'scripts' => Script::getList($this->user->getAccountId(), $this->getEnvironmentId()),
             'defaultTimezone' => $this->user->getSetting(Scalr_Account_User::SETTING_UI_TIMEZONE),
             'task' => $taskValues
         ));
@@ -154,7 +154,7 @@ class Scalr_UI_Controller_Schedulertasks extends Scalr_UI_Controller
             $row['lastStartTime'] = $row['lastStartTime'] ? Scalr_Util_DateTime::convertDateTime($row['lastStartTime'], $row['timezone']) : '';
 
             $row['config'] = unserialize($row['config']);
-            $script = Entity\Script::findPk($row['config']['scriptId']);
+            $script = Script::findPk($row['config']['scriptId']);
             if ($script)
                 $row['config']['scriptName'] = $script->name;
         }
@@ -247,17 +247,25 @@ class Scalr_UI_Controller_Schedulertasks extends Scalr_UI_Controller
                         }
                     }
                 }
-                if ($this->getParam('scriptId')) {
-                    // TODO: check scriptId and other vars
-                    $params['scriptId'] = $this->getParam('scriptId');
-                    $params['scriptIsSync'] = $this->getParam('scriptIsSync');
-                    $params['scriptTimeout'] = $this->getParam('scriptTimeout');
-                    $params['scriptVersion'] = $this->getParam('scriptVersion');
-                    $params['scriptOptions'] = $this->getParam('scriptOptions');
-                } else {
+
+                /** @var Script $script */
+                $script = Script::findPk($this->getParam('scriptId'));
+                try {
+                    if ($script) {
+                        $script->checkPermission($this->user, $this->getEnvironmentId());
+
+                        $task->scriptId = $this->getParam('scriptId');
+                        $params['scriptId'] = $this->getParam('scriptId');
+                        $params['scriptIsSync'] = $this->getParam('scriptIsSync');
+                        $params['scriptTimeout'] = $this->getParam('scriptTimeout');
+                        $params['scriptVersion'] = $this->getParam('scriptVersion');
+                        $params['scriptOptions'] = $this->getParam('scriptOptions');
+                    } else {
+                        throw new Exception();
+                    }
+                } catch (Exception $e) {
                     $this->request->addValidationErrors('scriptId', array('Script ID is required'));
                 }
-
                 break;
 
             case Scalr_SchedulerTask::LAUNCH_FARM:

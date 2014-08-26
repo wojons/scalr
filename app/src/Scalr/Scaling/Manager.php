@@ -2,9 +2,9 @@
 
 class Scalr_Scaling_Manager
 {
-    private $db,
-        $farmRoleMetrics,
-        $dbFarmRole;
+    private $db;
+    private $farmRoleMetrics;
+    private $dbFarmRole;
 
     public $decisonInfo;
 

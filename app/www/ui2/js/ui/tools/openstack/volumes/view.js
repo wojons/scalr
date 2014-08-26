@@ -2,7 +2,7 @@ Scalr.regPage('Scalr.ui.tools.openstack.volumes.view', function (loadParams, mod
 	var store = Ext.create('store.store', {
 		fields: [
 			'farmId', 'farmRoleId', 'farmName', 'roleName', 'mysql_master_volume', 'mountStatus', 'serverIndex', 'serverId',
-			'volumeId', 'size', 'type', 'availability_zone', 'status', 'attachmentStatus', 'device', 'instanceId', 'autoSnaps', 'autoAttach'
+			'volumeId', 'size', 'type', 'availability_zone', 'status', 'attachmentStatus', 'device', 'instanceId', 'autoSnaps', 'autoAttach', 'attachmentId'
 		],
 		proxy: {
 			type: 'scalr.paging',
@@ -87,6 +87,46 @@ Scalr.regPage('Scalr.ui.tools.openstack.volumes.view', function (loadParams, mod
 							document.location.href = '#/tools/openstack/snapshots/' + data.data.snapshotId + '/view?cloudLocation=' + store.proxy.extraParams.cloudLocation + '&platform=' + loadParams['platform'];
 						}
 					}
+				}, {
+					itemId: 'option.attach',
+					iconCls: 'x-menu-icon-attach',
+					text: 'Attach',
+					menuHandler: function(data) {
+						document.location.href = "#/tools/openstack/volumes/" + data['volumeId'] + "/attach?cloudLocation=" + store.proxy.extraParams.cloudLocation + '&platform=' + loadParams['platform'];
+					},
+                    getVisibility: function(data) {
+                        return !data['instanceId'];
+                    }
+				}, {
+					itemId: 'option.detach',
+					iconCls: 'x-menu-icon-detach',
+					text: 'Detach',
+					request: {
+						confirmBox: {
+							type: 'action',
+							//TODO: Add form: checkbox: forceDetach
+							msg: 'Are you sure want to detach "{volumeId}" volume?'
+						},
+						processBox: {
+							type: 'action',
+							msg: 'Detaching cinder volume ...'
+						},
+						url: '/tools/openstack/volumes/xDetach/',
+						dataHandler: function (data) {
+							return { 
+								serverId: data['instanceId'],
+								attachmentId: data['attachmentId'],
+								platform: store.proxy.extraParams.platform,
+								cloudLocation: store.proxy.extraParams.cloudLocation 
+							};
+						},
+						success: function (data) {
+							store.load();
+						}
+					},
+                    getVisibility: function(data) {
+                        return data['instanceId'];
+                    }
 				}, {
 					itemId: 'option.delete',
 					text: 'Delete',

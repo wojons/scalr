@@ -188,6 +188,10 @@ Scalr.regPage('Scalr.ui.scripts.execute', function (loadParams, moduleParams) {
                 fieldLabel: 'Timeout',
                 name: 'scriptTimeout',
                 maxWidth: 170,
+                vtype: 'num',
+                validator: function (value) {
+                    return value > 0 ? true : 'Timeout should be greater than 0';
+                },
                 allowBlank: false
             }]
         }, {

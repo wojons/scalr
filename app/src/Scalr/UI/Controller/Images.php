@@ -49,11 +49,12 @@ class Scalr_UI_Controller_Images extends Scalr_UI_Controller
             $criteria[] = ['cloudLocation' => $cloudLocation];
         }
 
-        $result = Image::find($criteria, \Scalr\UI\Utils::convertOrder($sort, ['id' => 'ASC'], ['id', 'platform', 'cloudLocation', 'os']), $limit, $start, true);
+        $result = Image::find($criteria, \Scalr\UI\Utils::convertOrder($sort, ['id' => 'ASC'], ['id', 'platform', 'cloudLocation', 'os', 'dtAdded', 'architecture', 'source']), $limit, $start, true);
         $data = [];
         foreach ($result as $image) {
             /* @var Image $image */
             $s = get_object_vars($image);
+            $s['dtAdded'] = Scalr_Util_DateTime::convertTz($image->dtAdded);
             $s['status'] = $image->isUsed() ? 'In use' : 'Not used';
             $data[] = $s;
         }

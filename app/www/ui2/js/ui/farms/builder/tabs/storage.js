@@ -23,7 +23,7 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.storage', function (moduleTabParams) 
         onRoleUpdate: function(record, name, value, oldValue) {
             if (!this.isActive(record)) return;
             var me = this;
-            if (Scalr.flags['betaMode'] && name.join('.') === 'settings.aws.instance_type') {
+            if (name.join('.') === 'settings.aws.instance_type') {
                 record.loadEBSEncryptionSupport(function(encryptionSupported){
                     var field = me.down('[name="ebs.encrypted"]');
                     if (field) {
@@ -69,7 +69,7 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.storage', function (moduleTabParams) 
                     },
                     me
                 );
-            } else if (platform === 'ec2' && Scalr.flags['betaMode']) {
+            } else if (platform === 'ec2') {
                 record.loadEBSEncryptionSupport(function(encryptionSupported){
                     var field = me.down('[name="ebs.encrypted"]');
                     field.encryptionSupported = encryptionSupported;
@@ -608,7 +608,7 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.storage', function (moduleTabParams) 
                                 ebs[ value == 'ebs' || value == 'raid.ebs' ? 'show' : 'hide' ]();
                                 ebs[ value == 'ebs' || value == 'raid.ebs' ? 'enable' : 'disable' ]();
                                 ebsSnapshots[ value == 'ebs' && platform == 'ec2' ? 'show' : 'hide' ]();
-                                ebsEncrypted[ value == 'ebs' && platform == 'ec2' && Scalr.flags['betaMode'] ? 'show' : 'hide' ]();
+                                ebsEncrypted[ value == 'ebs' && platform == 'ec2' ? 'show' : 'hide' ]();
                                 editor.down('[name="ebs.type"]').setReadOnly(platform !== 'ec2', false);
                                 
 								raid[ value == 'raid.ebs' || value == 'raid.csvol' || value == 'raid.cinder' ? 'show' : 'hide' ]();
@@ -913,11 +913,9 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.storage', function (moduleTabParams) 
                         ebsEncryptionMessage: 'Encrypted EBS storages are not supported by current instance type.',
                         validator: function(value) {
                             var record;
-                            if (Scalr.flags['betaMode']) {
-                                record = this.findRecordByValue(value);
-                                if (record && record.get('encrypted') && !this.next('[name="ebs.encrypted"]').encryptionSupported) {
-                                    return this.ebsEncryptionMessage;
-                                }
+                            record = this.findRecordByValue(value);
+                            if (record && record.get('encrypted') && !this.next('[name="ebs.encrypted"]').encryptionSupported) {
+                                return this.ebsEncryptionMessage;
                             }
                             return true;
                         },
@@ -944,7 +942,7 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.storage', function (moduleTabParams) 
                         },
                         listeners: {
                             beforeselect: function(comp, record) {
-                                if (Scalr.flags['betaMode'] && record.get('encrypted')) {
+                                if (record.get('encrypted')) {
                                     if (!comp.next('[name="ebs.encrypted"]').encryptionSupported) {
                                         Scalr.message.InfoTip(this.ebsEncryptionMessage, comp.inputEl, {anchor: 'bottom'});
                                         return false;
@@ -953,16 +951,14 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.storage', function (moduleTabParams) 
                             },
                             change: function(comp, value){
                                 var encryptionField, record, encrypted;
-                                if (Scalr.flags['betaMode']) {
-                                    encryptionField = comp.next('[name="ebs.encrypted"]');
-                                    if (encryptionField.encryptionSupported) {
-                                        record = comp.findRecordByValue(value);
-                                        if (record && record.get('snapshotId')) {
-                                            encryptionField.setValue(record.get('encrypted') ? 1 : 0);
-                                            encryptionField.setReadOnly(true);
-                                        } else {
-                                            encryptionField.setReadOnly(false);
-                                        }
+                                encryptionField = comp.next('[name="ebs.encrypted"]');
+                                if (encryptionField.encryptionSupported) {
+                                    record = comp.findRecordByValue(value);
+                                    if (record && record.get('snapshotId')) {
+                                        encryptionField.setValue(record.get('encrypted') ? 1 : 0);
+                                        encryptionField.setReadOnly(true);
+                                    } else {
+                                        encryptionField.setReadOnly(false);
                                     }
                                 }
                             }
@@ -972,7 +968,6 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.storage', function (moduleTabParams) 
                         name: 'ebs.encrypted',
                         boxLabel: 'Enable EBS encryption',
                         encryptionSupported: false,
-                        hidden: !Scalr.flags['betaMode'],
                         defaults: {
                             width: 90
                         },

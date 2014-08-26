@@ -13,7 +13,10 @@ LOG = logging.getLogger('ScalrPy')
 def get_cpu_stat(hsp, api_type='linux', timeout=5):
     cpu = hsp.sysinfo.cpu_stat(timeout=timeout)
     for k, v in cpu.iteritems():
-        cpu[k] = float(v)
+        try:
+            cpu[k] = float(v)
+        except:
+            cpu[k] = None
     return cpu
 
 
@@ -22,10 +25,10 @@ def get_la_stat(hsp, api_type='linux', timeout=5):
     assert api_type == 'linux', assert_msg
     la = hsp.sysinfo.load_average(timeout=timeout)
     return {
-            'la1': float(la[0]),
-            'la5': float(la[1]),
-            'la15': float(la[2]),
-            }
+        'la1': float(la[0]),
+        'la5': float(la[1]),
+        'la15': float(la[2]),
+    }
 
 
 class APIError(Exception):
@@ -67,15 +70,24 @@ def get_net_stat(hsp, api_type='linux', timeout=5):
         }
     elif api_type == 'windows':
         for key in net:
-            if re.match(r'^.* Ethernet Adapter.*$', key):
+            if re.match(r'^.*Ethernet Adapter.*$', key) \
+                    or re.match(r'^.*AWS PV Network Device.*$', key):
                 ret = {
                     'in': float(net[key]['receive']['bytes']),
                     'out': float(net[key]['transmit']['bytes']),
                 }
                 break
         else:
-            msg = "Can't find '^.* Ethernet Adapter.*$' pattern in api response"
-            raise APIError(msg)
+            msg = (
+                    "Can't find ['^.* Ethernet Adapter.*$', '^.*AWS PV Network Device.*$'] "
+                    "pattern in api response for endpoint: {0}, available: {1}, use {2}"
+            ).format(hsp.endpoint, net.keys(), net.keys()[0])
+            LOG.warning(msg)
+            first_key = net.keys()[0]
+            ret = {
+                'in': float(net[first_key]['receive']['bytes']),
+                'out': float(net[firts_key]['transmit']['bytes']),
+            }
     else:
         raise APIError("Unsupported API type '%s' for NET stat" % api_type)
     return ret

@@ -612,20 +612,8 @@ class Scalr_UI_Controller_Farms extends Scalr_UI_Controller
         $dbFarmRole = DBFarmRole::LoadByID($farmRoleId);
         $this->user->getPermissions()->validate($dbFarmRole);
 
-        $displayConvention = Scalr::config('scalr.ui.server_display_convention');
-
         foreach ($dbFarmRole->GetServersByFilter(array('status' => SERVER_STATUS::RUNNING)) as $value) {
-            $hostname = $value->GetProperty(Scalr_Role_Behavior::SERVER_BASE_HOSTNAME);
-            $name = "#{$value->index}: ";
-
-            if ($displayConvention == 'hostname')
-                $name .= $hostname;
-            elseif (($displayConvention == 'auto' && $value->remoteIp) || $displayConvention == 'public')
-                $name .= $value->remoteIp;
-            elseif ($value->localIp)
-                $name .= $value->localIp;
-
-            array_push($servers, array('id' => $value->serverId, 'name' => $name));
+            array_push($servers, array('id' => $value->serverId, 'name' => $value->getNameByConvention()));
         }
 
         if (count($servers) && in_array('addAll', $options)) {

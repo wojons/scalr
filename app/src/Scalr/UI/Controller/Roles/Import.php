@@ -4,6 +4,7 @@ use Scalr\Acl\Acl;
 use Scalr\Modules\PlatformFactory;
 use Scalr\Modules\Platforms\Cloudstack\CloudstackPlatformModule;
 use Scalr\Modules\Platforms\GoogleCE\GoogleCEPlatformModule;
+use Scalr\Role\Role;
 
 class Scalr_UI_Controller_Roles_Import extends Scalr_UI_Controller
 {
@@ -104,7 +105,7 @@ class Scalr_UI_Controller_Roles_Import extends Scalr_UI_Controller
         $validator = new Scalr_Validator();
 
         if ($roleImage) {
-            $roleName = '';
+            $roleName = Role::generateName('import');
         } else {
             if ($validator->validateNotEmpty($roleName) !== true)
                 throw new Exception('Role name cannot be empty');

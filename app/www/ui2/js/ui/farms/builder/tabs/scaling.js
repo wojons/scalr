@@ -526,7 +526,8 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.scaling', function (moduleTabParams) 
                             change: function(comp, value) {
                                 var comp2 = comp.next('[name="base.consider_suspended"]');
                                 if (value === 'suspend') {
-                                    comp2.setValue('terminated').setDisabled(true);
+                                    comp2.setValue('terminated');
+                                    comp2.setDisabled(true);
                                 } else {
                                     comp2.setDisabled(false);
                                 }
