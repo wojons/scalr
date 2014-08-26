@@ -70,6 +70,7 @@ class Scalr_UI_Controller_Tools_Openstack_Details extends Scalr_UI_Controller
             if (!empty($extensions)) {
                 foreach ($extensions as $extension) {
                     $extension->service = $service;
+                    $extension->count = count($extensions);
                     $details[] = $extension;
                 }
             } else {

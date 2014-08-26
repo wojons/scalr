@@ -1,7 +1,7 @@
 Scalr.regPage('Scalr.ui.tools.openstack.details.view', function (loadParams, moduleParams) {
 	var store = Ext.create('store.store', {
 		fields: [
-			'service', 'alias', 'description', 'links', 'name', 'namespace', 'updated'
+			'service', 'alias', 'description', 'links', 'name', 'namespace', 'updated', 'count'
 		],
         groupField: 'service',
 		sorters: [{
@@ -23,7 +23,7 @@ Scalr.regPage('Scalr.ui.tools.openstack.details.view', function (loadParams, mod
         plugins: {
             ptype: 'localcachedrequest',
             crscope: 'farmbuilder'
-        },
+		},
 		scalrOptions: {
 			'reload': true,
 			'maximize': 'all'
@@ -34,13 +34,15 @@ Scalr.regPage('Scalr.ui.tools.openstack.details.view', function (loadParams, mod
         features: [{
             id: 'grouping',
             ftype: 'grouping',
+            startCollapsed: true,
             groupHeaderTpl: Ext.create('Ext.XTemplate',
                 '{children:this.getGroupName}',
                 {
                     getGroupName: function(children) {
                         if (children.length > 0) {
-                            var name = children[0].get('service');
-                            return Ext.String.capitalize(name);
+                            var name = children[0].get('service'),
+                                count = children[0].get('count');
+                            return Ext.String.capitalize(name) + (count ? ' (' + count + ')' : '');
                         }
                     }
                 }
@@ -59,12 +61,17 @@ Scalr.regPage('Scalr.ui.tools.openstack.details.view', function (loadParams, mod
 		viewConfig: {
 			emptyText: 'No details loaded',
 			loadingText: 'Loading details ...',
-            loadMask: false
+            loadMask: false,
+            plugins: {
+                ptype: 'dynemptytext',
+                emptyText: 'No records found to match your search',
+                emptyTextNoItems: 'No details loaded'
+            }
 		},
         cls: 'x-grid-with-formfields x-grid-no-highlighting',
         hideHeaders: true,
 		columns: [
-			{header: 'Name', width: 290, dataIndex: 'name'},
+			{header: 'Name', width: 360, dataIndex: 'name'},
             {header: 'Description', flex: 1, dataIndex: 'description'},
 		],
 
@@ -72,7 +79,21 @@ Scalr.regPage('Scalr.ui.tools.openstack.details.view', function (loadParams, mod
             xtype: 'toolbar',
 			items: [{
                 xtype: 'filterfield',
-                //store: store
+                store: store,
+                filterFields: ['name', 'service'],
+                listeners: {
+                    afterfilter1: function(){
+                        //workaround of the extjs grouped store/grid bug
+                        var grid = this.up('grid'),
+                            grouping = grid.getView().getFeature('grouping');
+                        if (grid.headerCt.rendered) {
+                            grid.suspendLayouts();
+                            grouping.disable();
+                            grouping.enable();
+                            grid.resumeLayouts(true);
+                        }
+                    }
+                }
             }, {
 				xtype: 'combo',
                 margin: '0 0 0 12',

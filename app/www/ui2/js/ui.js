@@ -980,19 +980,19 @@ Scalr.application.createMenu = function(context) {
                 if (Scalr.isAllowed('OPENSTACK_VOLUMES')) {
                     menuItems.push({
                         text: 'Volumes',
-                        href: '#/tools/openstack/volumes?platform=' + platform,
+                        href: '#/tools/openstack/volumes?platform=' + platform
                     });
                 }
                 if (Scalr.isAllowed('OPENSTACK_SNAPSHOTS')) {
                     menuItems.push({
                         text: 'Snapshots',
-                        href: '#/tools/openstack/snapshots?platform=' + platform,
+                        href: '#/tools/openstack/snapshots?platform=' + platform
                     });
                 }
                 if (Scalr.isAllowed('SECURITY_SECURITY_GROUPS') && Scalr.getPlatformConfigValue(platform, 'ext.securitygroups_enabled') == 1) {
                     menuItems.push({
                         text: 'Security groups',
-                        href: '#/security/groups/view?platform=' + platform,
+                        href: '#/security/groups/view?platform=' + platform
                     });
                 }
                 if (Scalr.isAllowed('OPENSTACK_ELB') && Scalr.getPlatformConfigValue(platform, 'ext.lbaas_enabled') == 1) {
@@ -1028,6 +1028,12 @@ Scalr.application.createMenu = function(context) {
                         }]
                     });
                 }
+                
+                menuItems.push({
+                    text: 'Details',
+                    href: '#/tools/openstack/details?platform=' + platform
+                });
+
                 if (menuItems.length > 0) {
                     mainMenu.push({
                         xtype: 'menuseparator'
