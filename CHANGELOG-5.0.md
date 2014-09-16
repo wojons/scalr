@@ -4,9 +4,9 @@ CHANGELOG for 5.0.x
 This changelog references the relevant changes (bug and security fixes) done
 in 5.0 minor versions.
 
-To get the diff between two versions, go to https://github.com/Scalr/scalr/compare/v4.5.1...5.0.0-rc.1
+To get the diff between two versions, go to https://github.com/Scalr/scalr/compare/v4.5.1...v5.0.0
 
-* 5.0.0-rc.1 
+* 5.0.0 
  * update sql folder (recipe)
  * SCALRCORE-623 Error E_WARNING Division by zero, in /var/www/my.scalr.net-production/src/Scalr/UI/Controller/Servers.php:189 (igrkio)
  * UI-265 Mask Global Variable is not greyed out at Farm Role Scope (invar)
