@@ -48,7 +48,7 @@ import libcloud.security
 libcloud.security.VERIFY_SSL_CERT = False
 
 import httplib2
-from apiclient.discovery import build
+from googleapiclient.discovery import build
 from oauth2client.client import SignedJwtAssertionCredentials
 
 from gevent.pool import Group as Pool

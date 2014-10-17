@@ -18,7 +18,7 @@ requires = [
     'pycrypto',
     'sqlalchemy',
     'apache-libcloud',
-    'google-api-python-client',
+    'google-api-python-client==1.3',
 ]
 
 if sys.version_info < (2, 7):
