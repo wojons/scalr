@@ -68,7 +68,7 @@ Scalr.regPage('Scalr.ui.servers.sshconsole', function (loadParams, moduleParams)
                         'type="application/x-java-applet" ' +
                         'width="100%" height="100%">' +
                             '<param name="cache_archive" VALUE="/ui2/java/ssh-launcher.jar">' +
-                            '<param name="cache_version" VALUE="0.12.0">' +
+                            '<param name="cache_version" VALUE="0.13.1">' +
                             '<param name="host" value="' + params['remoteIp'] + '">' +
                             '<param name="port" value="' + params['ssh.console.port'] + '">' +
                             '<param name="user" value="' + params['ssh.console.username'] + '">' +
