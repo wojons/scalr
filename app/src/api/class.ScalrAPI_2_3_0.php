@@ -211,6 +211,10 @@ class ScalrAPI_2_3_0 extends ScalrAPI_2_2_0
             'chef.role_name',
             'chef.attributes',
 
+            'dns.create_records',
+            'dns.ext_record_alias',
+            'dns.int_record_alias',
+
             'aws.availability_zone',
             'aws.instance_type',
             'aws.security_groups.list',
