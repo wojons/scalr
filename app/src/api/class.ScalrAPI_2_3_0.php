@@ -211,14 +211,14 @@ class ScalrAPI_2_3_0 extends ScalrAPI_2_2_0
             'chef.role_name',
             'chef.attributes',
 
-            'cloudstack.service_offering_id',
-            'cloudstack.network_id',
-            'cloudstack.network_type',
-
             'aws.availability_zone',
             'aws.instance_type',
             'aws.security_groups.list',
-            'aws.iam_instance_profile_arn'
+            'aws.iam_instance_profile_arn',
+
+            'cloudstack.service_offering_id',
+            'cloudstack.network_id',
+            'cloudstack.network_type'
         );
 
         foreach ($config as $key => $value) {
