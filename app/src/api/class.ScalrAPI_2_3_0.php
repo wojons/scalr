@@ -218,7 +218,11 @@ class ScalrAPI_2_3_0 extends ScalrAPI_2_2_0
             'aws.availability_zone',
             'aws.instance_type',
             'aws.security_groups.list',
-            'aws.iam_instance_profile_arn'
+            'aws.iam_instance_profile_arn',
+
+            'cloudstack.service_offering_id',
+            'cloudstack.network_id',
+            'cloudstack.network_type'
         );
 
         foreach ($config as $key => $value) {
@@ -284,8 +288,8 @@ class ScalrAPI_2_3_0 extends ScalrAPI_2_2_0
         if (preg_match("/^[^A-Za-z0-9_-]+$/", $Alias))
             throw new Exception("Role Alias should has only 'A-Za-z0-9-_' characters");
 
-        if (!PlatformFactory::isOpenstack($Platform) && $Platform != SERVER_PLATFORMS::EC2)
-            throw new Exception("Only EC2 and Openstack roles are supported by this method");
+        if (!PlatformFactory::isOpenstack($Platform) && $Platform != SERVER_PLATFORMS::EC2 && $Platform != SERVER_PLATFORMS::CLOUDSTACK)
+            throw new Exception("Only EC2, Openstack, and CloudStack roles are supported by this method");
 
         if (!$this->Environment->isPlatformEnabled($Platform))
             throw new Exception("'{$Platform}' cloud is not configured in your environment");
