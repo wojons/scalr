@@ -37,16 +37,24 @@ class CloudPricingProcess implements \Scalr\System\Pcntl\ProcessInterface
         	'https://a0.awsstatic.com/pricing/1/ec2/mswin-od.min.js',
         );
 
-        $mapping = array(
-            'us-east' => 'us-east-1',
-            'us-west' => 'us-west-1',
-            'us-west-2' => 'us-west-2',
-            'eu-ireland' => 'eu-west-1',
-            'sa-east-1' => 'sa-east-1',
-            'apac-sin' => 'ap-southeast-1',
-            'apac-tokyo' => 'ap-northeast-1',
-            'apac-syd' => 'ap-southeast-2'
-        );
+        $mapping = [
++            'us-east'        => 'us-east-1',
++            'us-west'        => 'us-west-1',
++            'us-east-1'      => 'us-east-1',
++            'us-west-1'      => 'us-west-1',
++            'us-west-2'      => 'us-west-2',
++            'eu-ireland'     => 'eu-west-1',
++            'eu-west-1'      => 'eu-west-1',
++            'eu-central-1'   => 'eu-central-1',
++            'sa-east-1'      => 'sa-east-1',
++            'apac-sin'       => 'ap-southeast-1',
++            'ap-southeast-1' => 'ap-southeast-1',
++            'apac-tokyo'     => 'ap-northeast-1',
++            'ap-northeast-1' => 'ap-northeast-1',
++            'apac-syd'       => 'ap-southeast-2',
++            'ap-southeast-2' => 'ap-southeast-2',
++            'us-gov-west-1'  => 'us-gov-west-1',
++        ];
 
         $availableLocations = Aws::getCloudLocations();
 
