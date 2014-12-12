@@ -17,7 +17,7 @@ requires = [
     #'pyopenssl', # uncomment this line if you need https
     'pycrypto',
     'sqlalchemy',
-    'apache-libcloud',
+    'apache-libcloud==0.15.1',
     'google-api-python-client==1.3',
 ]
 
