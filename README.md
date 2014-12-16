@@ -1,4 +1,4 @@
-**Version**: 5.0
+**Version**: 5.1
 
 What is Scalr?
 ==============
