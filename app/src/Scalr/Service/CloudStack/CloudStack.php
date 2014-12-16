@@ -9,7 +9,6 @@ use Scalr\Service\CloudStack\Client\ClientInterface;
 use Scalr\Service\CloudStack\Client\QueryClient;
 use Scalr\Service\CloudStack\DataType\AssociateIpAddressData;
 use Scalr\Service\CloudStack\DataType\CapabilityData;
-use Scalr\Service\CloudStack\DataType\CapabilityList;
 use Scalr\Service\CloudStack\DataType\CloudIdentifierData;
 use Scalr\Service\CloudStack\DataType\DiskOfferingData;
 use Scalr\Service\CloudStack\DataType\DiskOfferingList;
@@ -157,7 +156,7 @@ class CloudStack
      * @param string    $endpoint   Api url
      * @param string    $apiKey     Api key
      * @param string    $secretKey  Api secret key
-     * @param string    $platform   Platform name (cloudstack, idcf, ucloud)
+     * @param string    $platform   Platform name (cloudstack, idcf)
      */
     public function __construct($endpoint, $apiKey, $secretKey, $platform = 'cloudstack')
     {
@@ -450,7 +449,7 @@ class CloudStack
      * Lists capabilities
      *
      * @param string $pagination Pagination
-     * @return CapabilityList|null
+     * @return CapabilityData|null
      */
     public function listCapabilities(PaginationType $pagination = null)
     {
@@ -465,8 +464,9 @@ class CloudStack
 
         if ($response->hasError() === false) {
             $resultObject = $response->getResult();
-            if (property_exists($resultObject, 'count') && $resultObject->count > 0) {
-                $result = $this->_loadCapabilityList($resultObject->capability);
+
+            if (isset($resultObject->capability)) {
+                $result = $this->_loadCapabilityData($resultObject->capability);
             }
         }
 
@@ -855,7 +855,7 @@ class CloudStack
     }
 
     /**
-     * It is a command used in checking the list of products provided as those of ucloud server and by
+     * It is a command used in checking the list of products provided as those of server and by
      * selecting one of resulted lists, users can check combination of templateid, serviceofferingid,
      * diskofferingid and zoneid which can be created with VM
      *
@@ -912,8 +912,7 @@ class CloudStack
         foreach($properties as $property => $value) {
             if (property_exists($resultObject, "$property")) {
                 if (is_object($resultObject->{$property})) {
-                    // Fix me. Temporary fix.
-                    trigger_error('Cloudstack error. Unexpected sdt object class received in property: ' . $property . ', value: ' . json_encode($resultObject->{$property}), E_USER_WARNING);
+                    trigger_error('Cloudstack error. Unexpected stdObject class received in property: ' . $property . ', value: ' . json_encode($resultObject->{$property}), E_USER_WARNING);
                     $item->{$property} = json_encode($resultObject->{$property});
                 }
                 else {
@@ -939,8 +938,7 @@ class CloudStack
         foreach($properties as $property => $value) {
             if (property_exists($resultObject, "$property")) {
                 if (is_object($resultObject->{$property})) {
-                    // Fix me. Temporary fix.
-                    trigger_error('Cloudstack error. Unexpected sdt object class received in property: ' . $property . ', value: ' . json_encode($resultObject->{$property}), E_USER_WARNING);
+                    trigger_error('Cloudstack error. Unexpected stdObject class received in property: ' . $property . ', value: ' . json_encode($resultObject->{$property}), E_USER_WARNING);
                     $item->{$property} = json_encode($resultObject->{$property});
                 }
                 else {
@@ -966,8 +964,7 @@ class CloudStack
         foreach($properties as $property => $value) {
             if (property_exists($resultObject, "$property")) {
                 if (is_object($resultObject->{$property})) {
-                    // Fix me. Temporary fix.
-                    trigger_error('Cloudstack error. Unexpected sdt object class received in property: ' . $property . ', value: ' . json_encode($resultObject->{$property}), E_USER_WARNING);
+                    trigger_error('Cloudstack error. Unexpected stdObject class received in property: ' . $property . ', value: ' . json_encode($resultObject->{$property}), E_USER_WARNING);
                     $item->{$property} = json_encode($resultObject->{$property});
                 }
                 else {
@@ -1033,27 +1030,6 @@ class CloudStack
     }
 
     /**
-     * Loads CapabilityList from json object
-     *
-     * @param   object $capabilityList
-     * @return  CapabilityList Returns CapabilityList
-     */
-    protected function _loadCapabilityList($capabilityList)
-    {
-        $result = new CapabilityList();
-
-        if (!empty($capabilityList)) {
-            foreach ($capabilityList as $capability) {
-                $item = $this->_loadCapabilityData($capability);
-                $result->append($item);
-                unset($item);
-            }
-        }
-
-        return $result;
-    }
-
-    /**
      * Loads CapabilityData from json object
      *
      * @param   object $resultObject
@@ -1067,11 +1043,10 @@ class CloudStack
         foreach($properties as $property => $value) {
             if (property_exists($resultObject, "$property")) {
                 if (is_object($resultObject->{$property})) {
-                    // Fix me. Temporary fix.
-                    trigger_error('Cloudstack error. Unexpected sdt object class received in property: ' . $property . ', value: ' . json_encode($resultObject->{$property}), E_USER_WARNING);
+                    trigger_error('Cloudstack error. Unexpected stdObject class received in property: ' . $property . ', value: ' . json_encode($resultObject->{$property}), E_USER_WARNING);
                     $item->{$property} = json_encode($resultObject->{$property});
                 } else {
-                    $item->{$property} = (string) $resultObject->{$property};
+                    $item->{$property} = $resultObject->{$property};
                 }
             }
         }
@@ -1114,8 +1089,7 @@ class CloudStack
         foreach($properties as $property => $value) {
             if (property_exists($resultObject, "$property")) {
                 if (is_object($resultObject->{$property})) {
-                    // Fix me. Temporary fix.
-                    trigger_error('Cloudstack error. Unexpected sdt object class received in property: ' . $property . ', value: ' . json_encode($resultObject->{$property}), E_USER_WARNING);
+                    trigger_error('Cloudstack error. Unexpected stdObject class received in property: ' . $property . ', value: ' . json_encode($resultObject->{$property}), E_USER_WARNING);
                     $item->{$property} = json_encode($resultObject->{$property});
                 } else {
                     $item->{$property} = (string) $resultObject->{$property};
@@ -1166,8 +1140,7 @@ class CloudStack
                     if ('allocated' == $property) {
                         $item->{$property} = new DateTime((string)$resultObject->{$property}, new DateTimeZone('UTC'));
                     } else if (is_object($resultObject->{$property})) {
-                        // Fix me. Temporary fix.
-                        trigger_error('Cloudstack error. Unexpected sdt object class received in property: ' . $property . ', value: ' . json_encode($resultObject->{$property}), E_USER_WARNING);
+                        trigger_error('Cloudstack error. Unexpected stdObject class received in property: ' . $property . ', value: ' . json_encode($resultObject->{$property}), E_USER_WARNING);
                         $item->{$property} = json_encode($resultObject->{$property});
                     } else {
                         $item->{$property} = (string) $resultObject->{$property};
@@ -1219,8 +1192,7 @@ class CloudStack
                 if ('created' == $property) {
                     $item->created = new DateTime((string)$resultObject->created, new DateTimeZone('UTC'));
                 } else if (is_object($resultObject->{$property})) {
-                    // Fix me. Temporary fix.
-                    trigger_error('Cloudstack error. Unexpected sdt object class received in property: ' . $property . ', value: ' . json_encode($resultObject->{$property}), E_USER_WARNING);
+                    trigger_error('Cloudstack error. Unexpected stdObject class received in property: ' . $property . ', value: ' . json_encode($resultObject->{$property}), E_USER_WARNING);
                     $item->{$property} = json_encode($resultObject->{$property});
                 } else {
                     $item->{$property} = (string) $resultObject->{$property};
@@ -1277,8 +1249,7 @@ class CloudStack
                     if ('created' == $property) {
                         $item->created = new DateTime((string)$resultObject->created, new DateTimeZone('UTC'));
                     } else if (is_object($resultObject->{$property})) {
-                        // Fix me. Temporary fix.
-                        trigger_error('Cloudstack error. Unexpected sdt object class received in property: ' . $property . ', value: ' . json_encode($resultObject->{$property}), E_USER_WARNING);
+                        trigger_error('Cloudstack error. Unexpected stdObject class received in property: ' . $property . ', value: ' . json_encode($resultObject->{$property}), E_USER_WARNING);
                         $item->{$property} = json_encode($resultObject->{$property});
                     } else {
                         $item->{$property} = (string) $resultObject->{$property};
@@ -1328,8 +1299,7 @@ class CloudStack
             foreach($properties as $property => $value) {
                 if (property_exists($resultObject, "$property")) {
                     if (is_object($resultObject->{$property})) {
-                        // Fix me. Temporary fix.
-                        trigger_error('Cloudstack error. Unexpected sdt object class received in property: ' . $property . ', value: ' . json_encode($resultObject->{$property}), E_USER_WARNING);
+                        trigger_error('Cloudstack error. Unexpected stdObject class received in property: ' . $property . ', value: ' . json_encode($resultObject->{$property}), E_USER_WARNING);
                         $item->{$property} = json_encode($resultObject->{$property});
                     } else {
                         $item->{$property} = (string) $resultObject->{$property};
@@ -1379,8 +1349,7 @@ class CloudStack
             foreach($properties as $property => $value) {
                 if (property_exists($resultObject, "$property")) {
                     if (is_object($resultObject->{$property})) {
-                        // Fix me. Temporary fix.
-                        trigger_error('Cloudstack error. Unexpected sdt object class received in property: ' . $property . ', value: ' . json_encode($resultObject->{$property}), E_USER_WARNING);
+                        trigger_error('Cloudstack error. Unexpected stdObject class received in property: ' . $property . ', value: ' . json_encode($resultObject->{$property}), E_USER_WARNING);
                         $item->{$property} = json_encode($resultObject->{$property});
                     } else {
                         $item->{$property} = (string) $resultObject->{$property};
@@ -1432,8 +1401,7 @@ class CloudStack
                     if ('created' == $property) {
                         $item->created = new DateTime((string)$resultObject->created, new DateTimeZone('UTC'));
                     } else if (is_object($resultObject->{$property})) {
-                        // Fix me. Temporary fix.
-                        trigger_error('Cloudstack error. Unexpected sdt object class received in property: ' . $property . ', value: ' . json_encode($resultObject->{$property}), E_USER_WARNING);
+                        trigger_error('Cloudstack error. Unexpected stdObject class received in property: ' . $property . ', value: ' . json_encode($resultObject->{$property}), E_USER_WARNING);
                         $item->{$property} = json_encode($resultObject->{$property});
                     } else {
                         $item->{$property} = (string) $resultObject->{$property};
@@ -1485,8 +1453,7 @@ class CloudStack
                     if ('created' == $property) {
                         $item->created = new DateTime((string)$resultObject->created, new DateTimeZone('UTC'));
                     } else if (is_object($resultObject->{$property})) {
-                        // Fix me. Temporary fix.
-                        trigger_error('Cloudstack error. Unexpected sdt object class received in property: ' . $property . ', value: ' . json_encode($resultObject->{$property}), E_USER_WARNING);
+                        trigger_error('Cloudstack error. Unexpected stdObject class received in property: ' . $property . ', value: ' . json_encode($resultObject->{$property}), E_USER_WARNING);
                         $item->{$property} = json_encode($resultObject->{$property});
                     } else {
                         $item->{$property} = (string) $resultObject->{$property};
@@ -1536,8 +1503,7 @@ class CloudStack
             foreach($properties as $property => $value) {
                 if (property_exists($resultObject, "$property")) {
                     if (is_object($resultObject->{$property})) {
-                        // Fix me. Temporary fix.
-                        trigger_error('Cloudstack error. Unexpected sdt object class received in property: ' . $property . ', value: ' . json_encode($resultObject->{$property}), E_USER_WARNING);
+                        trigger_error('Cloudstack error. Unexpected stdObject class received in property: ' . $property . ', value: ' . json_encode($resultObject->{$property}), E_USER_WARNING);
                         $item->{$property} = json_encode($resultObject->{$property});
                     } else {
                         $item->{$property} = (string) $resultObject->{$property};
@@ -1590,8 +1556,7 @@ class CloudStack
             foreach($properties as $property => $value) {
                 if (property_exists($resultObject, "$property")) {
                     if (is_object($resultObject->{$property})) {
-                        // Fix me. Temporary fix.
-                        trigger_error('Cloudstack error. Unexpected sdt object class received in property: ' . $property . ', value: ' . json_encode($resultObject->{$property}), E_USER_WARNING);
+                        trigger_error('Cloudstack error. Unexpected stdObject class received in property: ' . $property . ', value: ' . json_encode($resultObject->{$property}), E_USER_WARNING);
                         $item->{$property} = json_encode($resultObject->{$property});
                     } else {
                         $item->{$property} = (string) $resultObject->{$property};

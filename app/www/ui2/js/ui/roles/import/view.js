@@ -1,5 +1,5 @@
 Scalr.regPage('Scalr.ui.roles.import.view', function (loadParams, moduleParams) {
-	if (Ext.Object.getSize(moduleParams['platforms']) === 0) {
+	if (!moduleParams['platforms'].length) {
         Scalr.message.Flush(true);
 		Scalr.message.Warning('Please configure cloud credentials first.');
 		Scalr.event.fireEvent('redirect', '#/account/environments', true);
@@ -41,9 +41,8 @@ Scalr.regPage('Scalr.ui.roles.import.view', function (loadParams, moduleParams) 
                     xtype: 'textfield',
                     name: 'roleName',
                     allowBlank: false,
-                    regex: /^[A-Za-z0-9-]+$/,
-                    minLength: 3,
-                    fieldLabel: 'Role name',
+                    vtype: 'rolename',
+                    fieldLabel: 'Name',
                     listeners: {
                         change: {
                             fn: function() {
@@ -54,18 +53,13 @@ Scalr.regPage('Scalr.ui.roles.import.view', function (loadParams, moduleParams) 
                     }
                 },{
                     xtype: 'checkbox',
-                    boxLabel: 'Create only Image for future use and do not create role',
+                    boxLabel: 'Only create an Image, do not create a Role using that Image',
                     name: 'roleImage',
-                    hidden: !Scalr.flags['betaMode'],
                     listeners: {
                         boxready: function() {
-                            if ('image' in loadParams) {
+                            if ('image' in loadParams || (moduleParams['server'] && moduleParams['server']['object'] == 'image')) {
                                 this.setValue(true);
                             }
-                        },
-                        change: function(field, value) {
-                            this.prev().setValue().setDisabled(value);
-                            panel.onServerInfoChange();
                         }
                     }
                 },{
@@ -84,7 +78,7 @@ Scalr.regPage('Scalr.ui.roles.import.view', function (loadParams, moduleParams) 
                     items: {
                         xtype: 'cloudlocationmap',
                         itemId: 'locationmap',
-                        platforms: moduleParams['platforms'],
+                        platforms: Scalr.platforms,
                         size: 'large',
                         autoSelect: true,
                         listeners: {
@@ -263,7 +257,7 @@ Scalr.regPage('Scalr.ui.roles.import.view', function (loadParams, moduleParams) 
             flex: 1,
             items: [{
                 xtype: 'fieldset',
-                title: 'Role creation progress',
+                title: (moduleParams['server'] && moduleParams['server']['object'] == 'role' ? 'Role' : 'Image') + ' creation progress',
                 cls: 'x-fieldset-separator-none',
                 itemId: 'progress',
                 layout: {
@@ -320,7 +314,7 @@ Scalr.regPage('Scalr.ui.roles.import.view', function (loadParams, moduleParams) 
                     html: 'Setting automation'
                 },{
                     xtype: 'component',
-                    html: 'Building role'
+                    html: 'Building ' + (moduleParams['server'] ? moduleParams['server']['object'] : '')
                 },{
                     xtype: 'component',
                     html: 'Complete!'
@@ -342,33 +336,30 @@ Scalr.regPage('Scalr.ui.roles.import.view', function (loadParams, moduleParams) 
                 itemId: 'automation',
                 cls: 'x-fieldset-separator-top',
                 hidden: true,
-                title: 'Select Scalr automation <span class="x-fieldset-header-description">Scalr can automate this role based on certain installed software:</span>',
+                title: 'Select Scalr automation <span class="x-fieldset-header-description">Scalr can automate this ' + (moduleParams['server'] ? moduleParams['server']['object'] : '') + ' based on certain installed software:</span>',
                 defaults: {
                     anchor: '100%'
                 },
                 addBehaviors: function(behaviors){
                     var ct = this.down('#behaviors'),
-                        automation = moduleParams['step'] == 2,
-                        baseBehaviors = ['base', 'chef'];
+                        automationVisible = moduleParams['step'] == 2;
                     behaviors = behaviors || [];
-                    if (!automation) {
-                        Ext.Array.each(behaviors, function(behavior){
-                            if (!Ext.Array.contains(baseBehaviors, behavior)) {
-                                automation = true;
-                                return false;
-                            }
-                        });
+                    if (!automationVisible) {
+                        automationVisible = behaviors.length > 1 || behaviors.length === 1 && behaviors[0] !== 'base';
                     }
-                    ct.setVisible(automation);
-                    this.down('#noautomation').setVisible(!automation);
+                    ct.setVisible(automationVisible);
+                    this.down('#noautomation').setVisible(!automationVisible);
                     ct.suspendLayouts();
                     ct.removeAll();
                     for (var i=0, len=behaviors.length; i<len; i++) {
+                        var isBaseBehavior = behaviors[i] === 'base' || behaviors[i] === 'chef';
                         ct.add({
                             iconCls: 'x-icon-behavior-large x-icon-behavior-large-' + behaviors[i],
                             text: Scalr.utils.beautifyBehavior(behaviors[i]),
                             behavior: behaviors[i],
-                            pressed: moduleParams['step'] == 2
+                            disabled: isBaseBehavior,
+                            pressed: moduleParams['step'] == 2 || isBaseBehavior,
+                            tooltip: isBaseBehavior ? 'Enabled by default' : ''
                         });
                     }
                     ct.resumeLayouts(true);
@@ -383,7 +374,7 @@ Scalr.regPage('Scalr.ui.roles.import.view', function (loadParams, moduleParams) 
                     itemId: 'noautomation',
                     cls: 'x-form-field-info',
                     margin: '12 0 0',
-                    value: 'No software supported by built-in Scalr automation was found on this server'
+                    value: 'No software supported by built-in Scalr automation was found on this server. You can still continue with Server Import.'
                 },{
                     xtype: 'fieldcontainer',
                     itemId: 'behaviors',
@@ -402,7 +393,7 @@ Scalr.regPage('Scalr.ui.roles.import.view', function (loadParams, moduleParams) 
                 }]
             },{
                 xtype: 'fieldset',
-                title: 'Role creation log',
+                title: (moduleParams['server'] && moduleParams['server']['object'] == 'role' ? 'Role' : 'Image') + ' creation log',
                 cls: 'x-fieldset-separator-top-bottom',
                 itemId: 'log',
                 collapsible: true,
@@ -437,7 +428,7 @@ Scalr.regPage('Scalr.ui.roles.import.view', function (loadParams, moduleParams) 
                                             me.loadBundleTaskData();
                                         }, 5000);
                                     } else {
-                                        panel.onBundleTaskSuccess(data['roleId']);
+                                        panel.onBundleTaskSuccess(data);
                                     }
                                 }
                             }
@@ -505,7 +496,7 @@ Scalr.regPage('Scalr.ui.roles.import.view', function (loadParams, moduleParams) 
                 cls: 'x-fieldset-subheader',
                 style: 'text-align:center',
                 margin: '48 0 16',
-                html: 'New role has successfully been created'
+                html: 'New ' + (moduleParams['server'] ? moduleParams['server']['object'] : '') + ' has successfully been created'
             },{
                 xtype: 'container',
                 itemId: 'failed',
@@ -516,7 +507,7 @@ Scalr.regPage('Scalr.ui.roles.import.view', function (loadParams, moduleParams) 
                     cls: 'x-fieldset-subheader',
                     style: 'text-align:center',
                     margin: '0 0 16',
-                    html: 'Role creation failed'
+                    html: (moduleParams['server'] && moduleParams['server']['object'] == 'role' ? 'Role' : 'Image') + ' creation failed'
                 },{
                     xtype: 'component',
                     style: 'text-align:center',
@@ -537,7 +528,7 @@ Scalr.regPage('Scalr.ui.roles.import.view', function (loadParams, moduleParams) 
                         xtype: 'button',
                         itemId: 'create',
                         hidden: true,
-                        text: 'Create role',
+                        text: 'Create ' + (moduleParams['server'] ? moduleParams['server']['object'] : ''),
                         handler: function() {
                             panel.buildRole();
                         }
@@ -551,7 +542,7 @@ Scalr.regPage('Scalr.ui.roles.import.view', function (loadParams, moduleParams) 
                                     xtype: 'component',
                                     style: 'text-align: center',
                                     margin: '36 0 0',
-                                    html: '<span class="x-fieldset-subheader">Are you sure want to cancel role creation?</span>'
+                                    html: '<span class="x-fieldset-subheader">Are you sure want to cancel ' + moduleParams['server']['object'] + ' creation?</span>'
                                 },
                                 success: function() {
                                     panel.cancelImport(true);
@@ -570,13 +561,17 @@ Scalr.regPage('Scalr.ui.roles.import.view', function (loadParams, moduleParams) 
                     },
                     items: [{
                         xtype: 'button',
-                        text: 'Edit role',
+                        text: 'View ' + (moduleParams['server'] ? moduleParams['server']['object'] : ''),
                         handler: function() {
-                            Scalr.event.fireEvent('redirect', '#/roles/'+panel.roleId+'/edit');
+                            if (moduleParams['server']['object'] == 'role')
+                                Scalr.event.fireEvent('redirect', '#/roles/manager?roleId=' + panel.roleId);
+                            else
+                                Scalr.event.fireEvent('redirect', '#/images/view?platform=' + panel.platform + '&id=' + panel.imageId);
                         }
                     },{
                         xtype: 'button',
                         text: 'Build farm',
+                        hidden: moduleParams['server'] ? moduleParams['server']['object'] == 'image' : false,
                         handler: function() {
                             Scalr.event.fireEvent('redirect', '#/farms/build');
                         }
@@ -618,7 +613,7 @@ Scalr.regPage('Scalr.ui.roles.import.view', function (loadParams, moduleParams) 
                     panel.fireEvent((!state ? 'de' : '') + 'selectplatform', this.value);
                 }
             },
-            items: Ext.Array.map(Ext.Object.getKeys(moduleParams['platforms']), function(platform){
+            items: Ext.Array.map(moduleParams['platforms'], function(platform){
                 return {
                     iconCls: 'x-icon-platform-large x-icon-platform-large-' + platform,
                     text: Scalr.utils.getPlatformName(platform, true),
@@ -644,8 +639,8 @@ Scalr.regPage('Scalr.ui.roles.import.view', function (loadParams, moduleParams) 
                     platform: this.platform,
                     cloudLocation: leftcol.down('[name="cloudLocation"]').getValue(),
                     cloudServerId: leftcol.down('[name="cloudServerId"]').getValue(),
-                    roleName: leftcol.down('[name="roleName"]').getValue(),
-                    roleImage: leftcol.down('[name="roleImage"]').getValue()
+                    name: leftcol.down('[name="roleName"]').getValue(),
+                    createImage: leftcol.down('[name="roleImage"]').getValue()
                 },
                 url: '/roles/import/xInitiateImport/',
                 success: function (data) {
@@ -850,13 +845,15 @@ Scalr.regPage('Scalr.ui.roles.import.view', function (loadParams, moduleParams) 
             this.down('#rightcol').down('#create').hide();
             this.down('#log').show().setBundleTaskId(bundleTaskId);
         },
-        onBundleTaskSuccess: function(roleId) {
+        onBundleTaskSuccess: function(data) {
             var rightcol = this.getComponent('rightcol');
             rightcol.down('#successButtons').show();
             rightcol.down('#commonButtons').hide();
             rightcol.down('#log').hide();
             rightcol.down('#success').show();
-            this.roleId = roleId;
+            this.roleId = data['roleId'];
+            this.platform = data['platform'];
+            this.imageId = data['imageId'];
         },
         onBundleTaskFailed: function(failureReason) {
             var rightcol = this.getComponent('rightcol'),
@@ -883,6 +880,7 @@ Scalr.regPage('Scalr.ui.roles.import.view', function (loadParams, moduleParams) 
             leftcol.down('[name="cloudServerId"]').setDisabled(true);
             leftcol.down('[name="cloudLocation"]').setDisabled(true);
             leftcol.down('[name="roleName"]').setDisabled(true);
+            leftcol.down('[name="roleImage"]').setDisabled(true);
             this.getDockedComponent('tabs').items.each(function(){
                 this.disable();
             });
@@ -920,11 +918,10 @@ Scalr.regPage('Scalr.ui.roles.import.view', function (loadParams, moduleParams) 
                 var me = this,
                     leftcol = me.getComponent('leftcol'),
                     serverId = leftcol.down('[name="cloudServerId"]'),
-                    locationIds = Ext.Object.getKeys(moduleParams['platforms'][platform]['locations']) || [],
-                    locations = moduleParams['platforms'][platform]['locations'] || [],
                     defaultLocations = {/*ec2: 'us-east-1',*/ gce: 'us-central1-a'},
-                    callback = function(){
+                    callback = function(locations){
                         var cloudLocationField = leftcol.down('[name="cloudLocation"]'),
+                            locationIds = Ext.Object.getKeys(locations),
                             location = defaultLocations[platform] || (locationIds.length ? locationIds[0] : '');
                         serverId.reset();
                         serverId.store.getProxy().params = {
@@ -934,7 +931,7 @@ Scalr.regPage('Scalr.ui.roles.import.view', function (loadParams, moduleParams) 
                         leftcol.down('#locationmap').selectLocation(platform, location, locationIds, 'world');
                         cloudLocationField.store.load({data: locations});
                         cloudLocationField.setValue(location);
-                        cloudLocationField.setDisabled(locations.length === 0);
+                        cloudLocationField.setDisabled(Ext.Object.getSize(locations) === 0);
                         me.onServerInfoChange();
                         if (moduleParams['step'] && moduleParams['server']) {
                             me.loadServer();
@@ -951,22 +948,23 @@ Scalr.regPage('Scalr.ui.roles.import.view', function (loadParams, moduleParams) 
                             params: {}
                         },
                         function(data, status){
+                            var locations = {};
                             if (status) {
-                                locationIds = [];
                                 Ext.Array.each(data['zones'], function(zone){
                                     if (zone.state === 'UP') {
-                                        locationIds.push(zone.name)
+                                        locations[zone.name] = zone.name;
                                     }
                                 });
-                                locations = Ext.Array.toValueMap(locationIds);
                             }
-                            callback();
+                            callback(locations);
                             leftcol.el.unmask();
                         },
                         me
                     );
                 } else {
-                    callback();
+                    Scalr.loadCloudLocations(platform, function(){console.log(Scalr.platforms[platform].locations)
+                        callback(Scalr.platforms[platform] ? Scalr.platforms[platform].locations : null);
+                    });
                 }
             },
             selectlocation: function(location) {

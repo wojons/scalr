@@ -50,6 +50,22 @@ class TimelineEventEntity extends \Scalr\Model\AbstractEntity
     public $userId;
 
     /**
+     * Account id
+     *
+     * @Column(type="integer")
+     * @var int
+     */
+    public $accountId;
+
+    /**
+     * Environment id
+     *
+     * @Column(type="integer")
+     * @var int
+     */
+    public $envId;
+
+    /**
      * The event type
      *
      * @Column(type="integer")

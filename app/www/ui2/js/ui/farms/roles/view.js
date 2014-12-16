@@ -127,11 +127,6 @@ Scalr.regPage('Scalr.ui.farms.roles.view', function (loadParams, moduleParams) {
                         xtype: 'menuseparator',
                         itemId: 'option.mainSep'
                     }, {
-                        itemId: 'option.downgrade',
-                        iconCls: 'x-menu-icon-downgrade',
-                        text: 'Downgrade role to previous version',
-                        href: "#/farms/" + loadParams['farmId'] + "/roles/{id}/downgrade"
-                    }, {
                         xtype: 'menuseparator',
                         itemId: 'option.mainSep2'
                     }, {
@@ -139,6 +134,14 @@ Scalr.regPage('Scalr.ui.farms.roles.view', function (loadParams, moduleParams) {
                         iconCls: 'x-menu-icon-execute',
                         text: 'Execute script',
                         href: '#/scripts/execute?farmRoleId={id}'
+                    }, {
+                        itemId: 'option.fire',
+                        iconCls: 'x-menu-icon-execute',
+                        text: 'Fire event',
+                        href: '#/scripts/events/fire?farmRoleId={id}',
+                        getVisibility: function(data) {
+                            return Scalr.isAllowed('GENERAL_CUSTOM_EVENTS', 'fire');
+                        }
                     }, {
                         xtype: 'menuseparator',
                         itemId: 'option.eSep'

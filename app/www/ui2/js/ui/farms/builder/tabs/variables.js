@@ -3,8 +3,8 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.variables', function (moduleTabParams
 		tabTitle: 'Global variables',
         itemId: 'variables',
 		labelWidth: 200,
-        
-        layout: 'anchor',
+        layout: 'fit',
+
 		isEnabled: function (record) {
 			return true;
 		},
@@ -18,21 +18,19 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.variables', function (moduleTabParams
 		},
 
 		hideTab: function (record) {
-			record.set('variables', this.down('variablefield').getValue());
+            var me = this;
+
+            me.down('variablefield').showExtendedForm(false);
+
+			record.set('variables', this.down('variablefield').getValue(true));
 		},
 
-		items: [{
-			xtype: 'fieldset',
-			autoScroll: true,
-            cls: 'x-fieldset-separator-none',
-            title: 'Farm role global variables <img class="x-fieldset-infobox" src="' + Ext.BLANK_IMAGE_URL + '" data-qtip="Global variables are key value store in Scalr that can be used in scripts." />',
-			items: [{
-				xtype: 'variablefield',
-				name: 'variables',
-				currentScope: 'farmrole',
-                encodeParams: false,
-				maxWidth: 1200
-			}]
-		}]
+		items: {
+            xtype: 'variablefield',
+            name: 'variables',
+            currentScope: 'farmrole',
+            encodeParams: false,
+            maxWidth: 1200
+        }
 	});
 });

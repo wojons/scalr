@@ -236,7 +236,7 @@ class UpgradeHandler
                 $update = new $updateClass($fileInfo, $this->stateBefore);
                 $this->updates[$update->getUuidHex()] = $update;
             } catch (\Exception $e) {
-                $this->console->error("Cound not load update %s. %s", $fileInfo->getPathname(), $e->getMessage());
+                $this->console->error("Error. Cound not load update %s. %s", $fileInfo->getPathname(), $e->getMessage());
             }
         }
     }
@@ -276,15 +276,21 @@ class UpgradeHandler
             $upd->updateAppears();
             //Compare checksum
             if ($upd->getEntity()->hash == $upd->getHash()) {
+                //file modified time could be the issue
+                $upd->updateApplied();
+                $upd->getEntity()->save();
+
                 if (!empty($this->opt->verbosity) ||
                     isset($this->opt->cmd) && $this->opt->cmd == self::CMD_RUN_SPECIFIC && $this->opt->uuid == $upd->getUuidHex()) {
                     $this->console->warning('Ingnoring %s because of having complete status.', $upd->getName());
                 }
+
                 return true;
             } if ($upd->getIgnoreChanges()) {
                 //We should ignore changes in the script and update hash
                 $upd->updateHash();
                 $upd->getEntity()->save();
+
                 return true;
             } else {
                 //Update script has been changed and needs to be re-executed
@@ -371,10 +377,11 @@ class UpgradeHandler
 
             //Validates environment before applying
             if (!$upd->validateBefore($stage)) {
-                $this->console->warning(
-                    'Stage %d of update %s could not be applied because of invalid environment!',
-                    $stage, $upd->getName()
+                $this->console->error(
+                    'Error. Stage %d of update %s could not be applied because of invalid environment! validateBefore(%d) returned false.',
+                    $stage, $upd->getName(), $stage
                 );
+
                 return false;
             }
 
@@ -386,7 +393,7 @@ class UpgradeHandler
                 $this->recurrences[$upd->getUuidHex()] = true;
 
                 $upd->setStatus(AbstractUpgradeEntity::STATUS_FAILED);
-                $upd->console->error('Stage %d of update %s failed! %s', $stage, $upd->getName(), $e->getMessage());
+                $upd->console->error('Error. Stage %d of update %s failed! %s', $stage, $upd->getName(), $e->getMessage());
                 $upd->getEntity()->save();
                 $upd->getEntity()->createFailureMessage($upd->console->getLog());
 
@@ -510,11 +517,11 @@ class UpgradeHandler
         }
 
         if (count($pending) == 0) {
-            $this->console->out('Anything has been found');
+            $this->console->out('Scalr is up-to-date');
             return;
         }
 
-        $this->console->success('Starting scalr upgrade');
+        $this->console->success('Starting Scalr upgrade');
 
         //Applies updates
         foreach ($pending as $update) {
@@ -522,6 +529,6 @@ class UpgradeHandler
             $this->applyUpdate($update);
         }
 
-        $this->console->success('Finishing scalr upgrade');
+        $this->console->success('Done');
     }
 }

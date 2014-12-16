@@ -2,8 +2,11 @@
 
 namespace Scalr\Modules\Platforms\Ec2;
 
+use FarmLogMessage;
+use \Logger;
+use Scalr\Service\Aws\Exception\InstanceNotFoundException;
 use Scalr\Service\Aws\S3\DataType\ObjectData;
-use Scalr\Service\Aws\Client\ClientException;
+use Scalr\Service\Aws\Client\ClientException as AwsClientException;
 use Scalr\Service\Aws\DataType\ErrorData;
 use Scalr\Service\Aws\Ec2\DataType\SecurityGroupFilterNameType;
 use Scalr\Service\Aws\Ec2\DataType\IpPermissionData;
@@ -21,9 +24,12 @@ use Scalr\Service\Aws\Ec2\DataType\InternetGatewayFilterNameType;
 use Scalr\Service\Aws\Ec2\DataType\RouteTableFilterNameType;
 use Scalr\Service\Aws\Ec2\DataType\IamInstanceProfileRequestData;
 use Scalr\Service\Aws\Ec2\DataType\ReservationList;
+use Scalr\Service\Aws\Ec2\DataType\VolumeData;
+use Scalr\Service\Aws\Ec2\DataType\VolumeFilterNameType;
 use Scalr\Modules\Platforms\AbstractAwsPlatformModule;
 use Scalr\Modules\Platforms\Ec2\Adapters\StatusAdapter;
 use Scalr\Service\Aws\Ec2\DataType\RouteData;
+use Scalr\Model\Entity\Image;
 use \EC2_SERVER_PROPERTIES;
 use \DBServer;
 use \DBFarm;
@@ -37,6 +43,9 @@ use \SERVER_PROPERTIES;
 use \SERVER_SNAPSHOT_CREATION_STATUS;
 use \ROLE_BEHAVIORS;
 use \SERVER_STATUS;
+use Scalr\Service\Aws;
+use Scalr\Service\Aws\Ec2\DataType\EbsBlockDeviceData;
+use Scalr\Service\Aws\Ec2\DataType\BlockDeviceMappingList;
 
 class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modules\PlatformModuleInterface
 {
@@ -50,6 +59,7 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
 
     const DEFAULT_VPC_ID = 'ec2.vpc.default';
     const ACCOUNT_TYPE_GOV_CLOUD = 'gov-cloud';
+    const ACCOUNT_TYPE_CN_CLOUD = 'cn-cloud';
 
     /**
      * @var array
@@ -382,6 +392,15 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
             )
         );
 
+        // New region supports only new instance types
+        if ($cloudLocation == Aws::REGION_EU_CENTRAL_1) {
+            foreach ($definition as $key => $value) {
+                if (!in_array(substr($key, 0, 2), array('t2','m3','c3','r3','i2')))
+                    unset($definition[$key]);
+            }
+        }
+
+
         if (!$details)
             return array_combine(array_keys($definition), array_keys($definition));
         else
@@ -396,7 +415,7 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
     {
         if (!$this->container->analytics->enabled) return false;
 
-        if ($env->getPlatformConfigValue(self::ACCOUNT_TYPE) == self::ACCOUNT_TYPE_GOV_CLOUD) {
+        if (in_array($env->getPlatformConfigValue(self::ACCOUNT_TYPE), array(self::ACCOUNT_TYPE_GOV_CLOUD, self::ACCOUNT_TYPE_CN_CLOUD))) {
             $locations = $this->getLocations($env);
             $cloudLocation = key($locations);
         }
@@ -489,7 +508,6 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
         $retval = array();
         /* @var $subnet \Scalr\Service\Aws\Ec2\DataType\SubnetData  */
         foreach ($subnets as $subnet) {
-
             $item = array(
                 'id'          => $subnet->subnetId,
                 'description' => "{$subnet->subnetId} ({$subnet->cidrBlock} in {$subnet->availabilityZone})",
@@ -671,12 +689,8 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
                     $status = 'not-found';
                 }
 
-            } catch (Exception $e) {
-                if (stristr($e->getMessage(), "does not exist")) {
-                    $status = 'not-found';
-                } else {
-                    throw $e;
-                }
+            } catch (InstanceNotFoundException $e) {
+                $status = 'not-found';
             }
         } else {
             $status = $this->instancesListCache[$cacheKey][$iid];
@@ -739,87 +753,82 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
      * {@inheritdoc}
      * @see \Scalr\Modules\PlatformModuleInterface::RemoveServerSnapshot()
      */
-    public function RemoveServerSnapshot(DBRole $DBRole)
+    public function RemoveServerSnapshot(Image $image)
     {
-        foreach ($DBRole->getImageId(SERVER_PLATFORMS::EC2) as $location => $imageId) {
+        try {
+            if (! $image->getEnvironment())
+                return true;
+
+            $aws = $image->getEnvironment()->aws($image->cloudLocation);
             try {
-                $aws = $DBRole->getEnvironmentObject()->aws($location);
-                try {
-                    $ami = $aws->ec2->image->describe($imageId)->get(0);
-                } catch (Exception $e) {
-                    if (stristr($e->getMessage(), "Failure Signing Data") ||
-                        stristr($e->getMessage(), "is no longer available") ||
-                        stristr($e->getMessage(), "does not exist") ||
-                        stristr($e->getMessage(), "Not authorized for image")) {
-
-                        return true;
-                    } else {
-
-                        throw $e;
-                    }
-                }
-
-                //$ami variable is expected to be defined here
-
-                $platfrom = $ami->platform;
-                $rootDeviceType = $ami->rootDeviceType;
-
-                if ($rootDeviceType == 'ebs') {
-                    $ami->deregister();
-
-                    //blockDeviceMapping is not mandatory option in the response as well as ebs data set.
-                    $snapshotId = $ami->blockDeviceMapping && count($ami->blockDeviceMapping) > 0 &&
-                                  $ami->blockDeviceMapping->get(0)->ebs ?
-                                  $ami->blockDeviceMapping->get(0)->ebs->snapshotId : null;
-
-                    if ($snapshotId) {
-                        $aws->ec2->snapshot->delete($snapshotId);
-                    }
-                } else {
-                    $image_path = $ami->imageLocation;
-                    $chunks = explode("/", $image_path);
-
-                    $bucketName = array_shift($chunks);
-                    $manifestObjectName = implode('/', $chunks);
-
-                    $prefix = str_replace(".manifest.xml", "", $manifestObjectName);
-
-                    try {
-                        $bucket_not_exists = false;
-                        $objects = $aws->s3->bucket->listObjects($bucketName, null, null, null, $prefix);
-                    } catch (\Exception $e) {
-                        if ($e instanceof ClientException &&
-                            $e->getErrorData() instanceof ErrorData &&
-                            $e->getErrorData()->getCode() == 404) {
-                            $bucket_not_exists = true;
-                        }
-                    }
-
-                    if ($ami) {
-                        if (!$bucket_not_exists) {
-                            /* @var $object ObjectData */
-                            foreach ($objects as $object) {
-                                $object->delete();
-                            }
-                            $bucket_not_exists = true;
-                        }
-
-                        if ($bucket_not_exists) {
-                            $aws->ec2->image->deregister($imageId);
-                        }
-                    }
-                }
-
-                unset($aws);
-                unset($ami);
-
+                $ami = $aws->ec2->image->describe($image->id)->get(0);
             } catch (Exception $e) {
                 if (stristr($e->getMessage(), "is no longer available") ||
-                    stristr($e->getMessage(), "Not authorized for image")) {
-                    continue;
+                    stristr($e->getMessage(), "does not exist")) {
+                    return true;
                 } else {
                     throw $e;
                 }
+            }
+
+            //$ami variable is expected to be defined here
+
+            $platfrom = $ami->platform;
+            $rootDeviceType = $ami->rootDeviceType;
+
+            if ($rootDeviceType == 'ebs') {
+                $ami->deregister();
+
+                //blockDeviceMapping is not mandatory option in the response as well as ebs data set.
+                $snapshotId = $ami->blockDeviceMapping && count($ami->blockDeviceMapping) > 0 &&
+                              $ami->blockDeviceMapping->get(0)->ebs ?
+                              $ami->blockDeviceMapping->get(0)->ebs->snapshotId : null;
+
+                if ($snapshotId) {
+                    $aws->ec2->snapshot->delete($snapshotId);
+                }
+            } else {
+                $image_path = $ami->imageLocation;
+                $chunks = explode("/", $image_path);
+
+                $bucketName = array_shift($chunks);
+                $manifestObjectName = implode('/', $chunks);
+
+                $prefix = str_replace(".manifest.xml", "", $manifestObjectName);
+
+                try {
+                    $bucket_not_exists = false;
+                    $objects = $aws->s3->bucket->listObjects($bucketName, null, null, null, $prefix);
+                } catch (\Exception $e) {
+                    if ($e instanceof AwsClientException &&
+                        $e->getErrorData() instanceof ErrorData &&
+                        $e->getErrorData()->getCode() == 404) {
+                        $bucket_not_exists = true;
+                    }
+                }
+
+                if ($ami) {
+                    if (!$bucket_not_exists) {
+                        /* @var $object ObjectData */
+                        foreach ($objects as $object) {
+                            $object->delete();
+                        }
+                        $bucket_not_exists = true;
+                    }
+
+                    if ($bucket_not_exists) {
+                        $aws->ec2->image->deregister($image->id);
+                    }
+                }
+            }
+
+            unset($aws);
+            unset($ami);
+
+        } catch (Exception $e) {
+            if (stristr($e->getMessage(), "is no longer available")) {
+            } else {
+                throw $e;
             }
         }
     }
@@ -832,8 +841,7 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
     {
         if ($BundleTask->bundleType == SERVER_SNAPSHOT_CREATION_TYPE::EC2_WIN2003) {
 
-        } else if (in_array($BundleTask->bundleType,
-                   array(SERVER_SNAPSHOT_CREATION_TYPE::EC2_EBS_HVM, SERVER_SNAPSHOT_CREATION_TYPE::EC2_WIN200X))) {
+        } else if ($BundleTask->bundleType == SERVER_SNAPSHOT_CREATION_TYPE::EC2_EBS_HVM) {
             try {
                 $DBServer = DBServer::LoadByID($BundleTask->serverId);
 
@@ -860,7 +868,11 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
 
                     $BundleTask->SnapshotCreationComplete($BundleTask->snapshotId, $metaData);
                 } else {
-                    $BundleTask->Log("CheckServerSnapshotStatus: AMI status = {$ami->imageState}. Waiting...");
+                    if ($ami->imageState == 'failed') {
+                        $BundleTask->SnapshotCreationFailed("AMI in FAILED state. Reason: {$ami->stateReason->message}");
+                    } else {
+                        $BundleTask->Log("CheckServerSnapshotStatus: AMI status = {$ami->imageState}. Waiting...");
+                    }
                 }
             } catch (Exception $e) {
                 \Logger::getLogger(__CLASS__)->fatal("CheckServerSnapshotStatus ({$BundleTask->id}): {$e->getMessage()}");
@@ -875,7 +887,6 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
     public function CreateServerSnapshot(BundleTask $BundleTask)
     {
         $DBServer = DBServer::LoadByID($BundleTask->serverId);
-
         $aws = $DBServer->GetEnvironmentObject()->aws($DBServer);
 
         if (!$BundleTask->prototypeRoleId) {
@@ -884,79 +895,61 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
         } else {
             $protoRole = DBRole::loadById($BundleTask->prototypeRoleId);
 
-            $proto_image_id = $protoRole->getImageId(
+            $image = $protoRole->__getNewRoleObject()->getImage(
                 SERVER_PLATFORMS::EC2,
                 $DBServer->GetProperty(EC2_SERVER_PROPERTIES::REGION)
             );
-
-            $details = $protoRole->getImageDetails(
-                SERVER_PLATFORMS::EC2,
-                $DBServer->GetProperty(EC2_SERVER_PROPERTIES::REGION)
-            );
+            $proto_image_id = $image->imageId;
 
             //Bundle EC2 in AWS way
-            if (in_array($details['os_family'], array('oel', 'redhat', 'scientific'))) {
+            if (in_array($image->getImage()->osFamily, array('oel', 'redhat', 'scientific'))) {
+                $BundleTask->bundleType = SERVER_SNAPSHOT_CREATION_TYPE::EC2_EBS_HVM;
+            }
+           
+            if ($image->getImage()->osFamily == 'centos' && $image->getImage()->osGeneration == '7') {
+                $BundleTask->bundleType = SERVER_SNAPSHOT_CREATION_TYPE::EC2_EBS_HVM;
+            }
+        
+            if ($image->getImage()->osFamily == 'amazon' && $image->getImage()->osVersion == '2014.09') {
                 $BundleTask->bundleType = SERVER_SNAPSHOT_CREATION_TYPE::EC2_EBS_HVM;
             }
         }
 
-        $ami = $aws->ec2->image->describe($proto_image_id)->get(0);
-        $platfrom = $ami->platform;
-
-        if ($platfrom == 'windows') {
-            if ($ami->rootDeviceType != 'ebs') {
+        $callEc2CreateImage = false;
+        $reservationSet = $aws->ec2->instance->describe($DBServer->GetCloudServerID())->get(0);
+        $ec2Server = $reservationSet->instancesSet->get(0);
+        
+        if ($ec2Server->platform == 'windows') {
+            if ($ec2Server->rootDeviceType != 'ebs') {
                 $BundleTask->SnapshotCreationFailed("Only EBS root filesystem supported for Windows servers.");
-
                 return;
             }
             if ($BundleTask->status == SERVER_SNAPSHOT_CREATION_STATUS::PENDING) {
-                $BundleTask->bundleType = SERVER_SNAPSHOT_CREATION_TYPE::EC2_WIN200X;
+                $BundleTask->bundleType = SERVER_SNAPSHOT_CREATION_TYPE::EC2_EBS_HVM;
                 $BundleTask->Log(sprintf(_("Selected platfrom snapshoting type: %s"), $BundleTask->bundleType));
                 $BundleTask->status = SERVER_SNAPSHOT_CREATION_STATUS::PREPARING;
-                try {
-                    $msg = $DBServer->SendMessage(new \Scalr_Messaging_Msg_Win_PrepareBundle($BundleTask->id));
-                    if ($msg) {
-                        $BundleTask->Log(sprintf(
-                            _("PrepareBundle message sent. MessageID: %s. Bundle task status changed to: %s"),
-                            $msg->messageId, $BundleTask->status
-                        ));
-                    } else {
-                        throw new Exception("Cannot send message");
-                    }
-                } catch (Exception $e) {
-                    $BundleTask->SnapshotCreationFailed("Cannot send PrepareBundle message to server.");
-
-                    return false;
-                }
+                
+                $msg = $DBServer->SendMessage(new \Scalr_Messaging_Msg_Win_PrepareBundle($BundleTask->id));
+                $BundleTask->Log(sprintf(
+                    _("PrepareBundle message sent. MessageID: %s. Bundle task status changed to: %s"),
+                    $msg->messageId, $BundleTask->status
+                ));
+                $BundleTask->Save();
             } elseif ($BundleTask->status == SERVER_SNAPSHOT_CREATION_STATUS::PREPARING) {
-                $BundleTask->Log(sprintf(_("Selected platform snapshot type: %s"), $BundleTask->bundleType));
-                try {
-                    $request = new CreateImageRequestData(
-                        $DBServer->GetProperty(EC2_SERVER_PROPERTIES::INSTANCE_ID),
-                        $BundleTask->roleName . "-" . date("YmdHi")
-                    );
-                    $request->description = $BundleTask->roleName;
-                    $request->noReboot = false;
-
-                    $imageId = $aws->ec2->image->create($request);
-
-                    $BundleTask->status = SERVER_SNAPSHOT_CREATION_STATUS::IN_PROGRESS;
-                    $BundleTask->snapshotId = $imageId;
-                    $BundleTask->Log(sprintf(
-                        _("Snapshot creating initialized (AMIID: %s). Bundle task status changed to: %s"),
-                        $BundleTask->snapshotId, $BundleTask->status
-                    ));
-                } catch (Exception $e) {
-                    $BundleTask->SnapshotCreationFailed($e->getMessage());
-
-                    return;
-                }
+                $callEc2CreateImage = true;
             }
         } else {
+            if ($image) {
+                $BundleTask->Log(sprintf(
+                    _("Image OS: %s %s"),
+                    $image->getImage()->osFamily, $image->getImage()->osGeneration
+                ));
+            }
+            
             $BundleTask->status = SERVER_SNAPSHOT_CREATION_STATUS::IN_PROGRESS;
             if (!$BundleTask->bundleType) {
-                if ($ami->rootDeviceType == 'ebs') {
-                    if ($ami->virtualizationType == 'hvm') {
+                if ($ec2Server->rootDeviceType == 'ebs') {
+                    if ($ec2Server->virtualizationType == 'hvm') {
                         $BundleTask->bundleType = SERVER_SNAPSHOT_CREATION_TYPE::EC2_EBS_HVM;
                     } else {
                         $BundleTask->bundleType = SERVER_SNAPSHOT_CREATION_TYPE::EC2_EBS;
@@ -964,51 +957,121 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
                 } else {
                     $BundleTask->bundleType = SERVER_SNAPSHOT_CREATION_TYPE::EC2_S3I;
                 }
+                
+                $BundleTask->Log(sprintf(_("Selected platfrom snapshoting type: %s"), $BundleTask->bundleType));
             }
             $BundleTask->Save();
-            $BundleTask->Log(sprintf(_("Selected platfrom snapshoting type: %s"), $BundleTask->bundleType));
+            
             if ($BundleTask->bundleType == SERVER_SNAPSHOT_CREATION_TYPE::EC2_EBS_HVM) {
-                try {
-                    $request = new CreateImageRequestData(
-                        $DBServer->GetProperty(EC2_SERVER_PROPERTIES::INSTANCE_ID),
-                        $BundleTask->roleName . "-" . date("YmdHi")
-                    );
-                    $request->description = $BundleTask->roleName;
-                    $request->noReboot = false;
-
-                    $imageId = $aws->ec2->image->create($request);
-
-                    $BundleTask->status = SERVER_SNAPSHOT_CREATION_STATUS::IN_PROGRESS;
-                    $BundleTask->snapshotId = $imageId;
-                    $BundleTask->Log(sprintf(
-                        _("Snapshot creating initialized (AMIID: %s). Bundle task status changed to: %s"),
-                        $BundleTask->snapshotId, $BundleTask->status
-                    ));
-                } catch (Exception $e) {
-                    $BundleTask->SnapshotCreationFailed($e->getMessage());
-
-                    return;
-                }
+                $callEc2CreateImage = true;
             } else {
                 $msg = new \Scalr_Messaging_Msg_Rebundle($BundleTask->id, $BundleTask->roleName, array());
                 $metaData = $BundleTask->getSnapshotDetails();
-                if ($metaData['rootVolumeSize']) {
-                    $msg->volumeSize = $metaData['rootVolumeSize'];
-                }
-                if (!$DBServer->SendMessage($msg)) {
-                    $BundleTask->SnapshotCreationFailed(
-                        "Cannot send rebundle message to server. Please check event log for more details."
-                    );
 
-                    return;
-                } else {
-                    $BundleTask->Log(sprintf(
-                        _("Snapshot creation started (MessageID: %s). Bundle task status changed to: %s"),
-                        $msg->messageId, $BundleTask->status
-                    ));
+                if ($DBServer->IsSupported('2.11.4')) {
+                    $msg->rootVolumeTemplate = $metaData['rootBlockDeviceProperties'];
+                } else if ($metaData['rootBlockDeviceProperties']) {
+                    $msg->volumeSize = $metaData['rootBlockDeviceProperties']['size'];
                 }
+                
+                $DBServer->SendMessage($msg);
+                    
+                $BundleTask->Log(sprintf(
+                    _("Snapshot creation started (MessageID: %s). Bundle task status changed to: %s"),
+                    $msg->messageId, $BundleTask->status
+                ));
             }
         }
+        
+        if ($callEc2CreateImage) {
+            try {
+                $metaData = $BundleTask->getSnapshotDetails();
+            
+                $ebs = new EbsBlockDeviceData();
+                $bSetEbs = false;
+                if ($metaData['rootBlockDeviceProperties']) {
+                    if ($metaData['rootBlockDeviceProperties']['size']) {
+                        $ebs->volumeSize = $metaData['rootBlockDeviceProperties']['size'];
+                        $bSetEbs = true;
+                    }
+            
+                    if ($metaData['rootBlockDeviceProperties']['volume_type']) {
+                        $ebs->volumeType = $metaData['rootBlockDeviceProperties']['volume_type'];
+                        $bSetEbs = true;
+                    }
+            
+                    if ($metaData['rootBlockDeviceProperties']['iops']) {
+                        $ebs->iops = $metaData['rootBlockDeviceProperties']['iops'];
+                        $bSetEbs = true;
+                    }
+                }
+            
+                $blockDeviceMapping = new BlockDeviceMappingList();
+                
+                if ($bSetEbs)
+                    $blockDeviceMapping->append(new BlockDeviceMappingData($ec2Server->rootDeviceName, null, null, $ebs));
+                
+                //TODO: Remove all attached devices other than root device from blockDeviceMapping
+                $currentMapping = $ec2Server->blockDeviceMapping;
+                $BundleTask->Log(sprintf(
+                    _("Server block device mapping: %s"),
+                    json_encode($currentMapping->toArray())
+                ));
+                foreach ($currentMapping as $blockDeviceMappingData) {
+                    /* @var $blockDeviceMappingData \Scalr\Service\Aws\Ec2\DataType\InstanceBlockDeviceMappingResponseData */
+                    
+                    if ($blockDeviceMappingData->deviceName != $ec2Server->rootDeviceName) {
+                        $blockDeviceMapping->append(['deviceName' => $blockDeviceMappingData->deviceName, 'noDevice' => '']);
+                    } else {
+                        if (!$bSetEbs) {
+                            $ebsInfo = $aws->ec2->volume->describe($blockDeviceMappingData->ebs->volumeId)->get(0);
+                            $ebs->volumeSize = $ebsInfo->size;
+                            $ebs->deleteOnTermination = true;
+                            $ebs->volumeType = $ebsInfo->volumeType;
+                            $ebs->encrypted = $ebsInfo->encrypted;
+                            if ($ebsInfo->volumeType == 'io1')
+                                $ebs->iops = $ebsInfo->iops;
+                            
+                            $blockDeviceMapping->append(new BlockDeviceMappingData($ec2Server->rootDeviceName, null, null, $ebs));
+                        }
+                    }
+                }
+                
+                if ($blockDeviceMapping->count() == 0)
+                    $blockDeviceMapping = null;
+                else {
+                    /*
+                    $BundleTask->Log(sprintf(
+                        _("New block device mapping: %s"),
+                        json_encode($blockDeviceMapping->toArray())
+                    ));
+                    */
+                }
+                
+                $request = new CreateImageRequestData(
+                    $DBServer->GetProperty(EC2_SERVER_PROPERTIES::INSTANCE_ID),
+                    $BundleTask->roleName . "-" . date("YmdHi"),
+                    $blockDeviceMapping
+                );
+            
+                $request->description = $BundleTask->roleName;
+                $request->noReboot = false;
+            
+                $imageId = $aws->ec2->image->create($request);
+            
+                $BundleTask->status = SERVER_SNAPSHOT_CREATION_STATUS::IN_PROGRESS;
+                $BundleTask->snapshotId = $imageId;
+                $BundleTask->Log(sprintf(
+                    _("Snapshot creating initialized (AMIID: %s). Bundle task status changed to: %s"),
+                    $BundleTask->snapshotId, $BundleTask->status
+                ));
+                $BundleTask->Save();
+            } catch (Exception $e) {
+                $BundleTask->SnapshotCreationFailed($e->getMessage() . "(".json_encode($request).")");
+                return;
+            }
+        }
+        
         $BundleTask->setDate('started');
         $BundleTask->Save();
     }
@@ -1038,7 +1101,7 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
      * {@inheritdoc}
      * @see \Scalr\Modules\PlatformModuleInterface::GetServerExtendedInformation()
      */
-    public function GetServerExtendedInformation(DBServer $DBServer)
+    public function GetServerExtendedInformation(DBServer $DBServer, $extended = false)
     {
         try {
             $aws = $DBServer->GetEnvironmentObject()->aws($DBServer);
@@ -1048,9 +1111,29 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
                 return false;
 
             $iinfo = $aws->ec2->instance->describe($iid)->get(0);
+            $blockStorage = null;
 
             if (isset($iinfo->instancesSet)) {
 
+                if ($extended) {
+                    $filter = array(array(
+                        'name'  => VolumeFilterNameType::attachmentInstanceId(),
+                        'value' => $iid,
+                    ));
+                    
+                    $ebs = $aws->ec2->volume->describe(null, $filter);
+                    foreach ($ebs as $volume) {
+                        /* @var $volume \Scalr\Service\Aws\Ec2\DataType\VolumeData */                    
+                        
+                        $blockStorage[] = $volume->attachmentSet->get(0)->device . " - {$volume->size} Gb"
+                        . " (<a href='#/tools/aws/ec2/ebs/volumes/" . $volume->volumeId . "/view"
+                            . "?cloudLocation=" . $DBServer->GetCloudLocation()
+                            . "&platform=ec2'>" . $volume->volumeId . "</a>)";
+                        
+                        //array('id' => $volume->volumeId, 'size' => $volume->size, 'device' => $volume->attachmentSet->get(0)->device);
+                    }
+                }
+                
                 $instanceData = $iinfo->instancesSet->get(0);
 
                 if (isset($iinfo->groupSet[0]->groupId)) {
@@ -1070,6 +1153,17 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
                       . "&platform=ec2'>" . $sg->groupId . "</a>)";
                 }
 
+                $tags = array();
+                if ($instanceData->tagSet->count() > 0) {
+                    foreach ($instanceData->tagSet as $tag) {
+                        /* @var $tag \Scalr\Service\Aws\Ec2\DataType\ResourceTagSetData */
+                        if ($tag->value)
+                            $tags[] = "{$tag->key}={$tag->value}";
+                        else
+                            $tags[] = "{$tag->key}";
+                    }
+                }
+
                 //monitoring isn't mandatory data set in the InstanceData
                 $monitoring = isset($instanceData->monitoring->state) ?
                     $instanceData->monitoring->state : null;
@@ -1079,52 +1173,7 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
                 else
                     $monitoring = "Enabled";
 
-                try {
-                    $statusInfo = $aws->ec2->instance->describeStatus(
-                        $DBServer->GetProperty(EC2_SERVER_PROPERTIES::INSTANCE_ID)
-                    )->get(0);
-                } catch (Exception $e) {
-                }
-
-                if (!empty($statusInfo)) {
-
-                    if ($statusInfo->systemStatus->status == 'ok') {
-                        $systemStatus = '<span style="color:green;">OK</span>';
-                    } else {
-                        $txtDetails = "";
-                        if (!empty($statusInfo->systemStatus->details)) {
-                            foreach ($statusInfo->systemStatus->details as $d) {
-                                /* @var $d \Scalr\Service\Aws\Ec2\DataType\InstanceStatusDetailsSetData */
-                                $txtDetails .= " {$d->name} is {$d->status},";
-                            }
-                        }
-                        $txtDetails = trim($txtDetails, " ,");
-                        $systemStatus = "<span style='color:red;'>"
-                                      . $statusInfo->systemStatus->status
-                                      . "</span> ({$txtDetails})";
-                    }
-
-                    if ($statusInfo->instanceStatus->status == 'ok') {
-                        $iStatus = '<span style="color:green;">OK</span>';
-                    } else {
-                        $txtDetails = "";
-                        foreach ($statusInfo->instanceStatus->details as $d) {
-                            $txtDetails .= " {$d->name} is {$d->status},";
-                        }
-                        $txtDetails = trim($txtDetails, " ,");
-                        $iStatus = "<span style='color:red;'>"
-                                 . $statusInfo->instanceStatus->status
-                                 . "</span> ({$txtDetails})";
-                    }
-
-                } else {
-                    $systemStatus = "Unknown";
-                    $iStatus = "Unknown";
-                }
-
                 $retval = array(
-                    'AWS System Status'       => $systemStatus,
-                    'AWS Instance Status'     => $iStatus,
                     'Cloud Server ID'         => $DBServer->GetProperty(EC2_SERVER_PROPERTIES::INSTANCE_ID),
                     'Owner ID'                => $iinfo->ownerId,
                     'Image ID (AMI)'          => $instanceData->imageId,
@@ -1144,8 +1193,60 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
                     'Tenancy'                 => isset($instanceData->placement) ? $instanceData->placement->tenancy : null,
                     'EBS Optimized'           => $instanceData->ebsOptimized ? "Yes" : "No",
                     'Monitoring (CloudWatch)' => $monitoring,
-                    'Security groups'         => implode(', ', $groups)
+                    'Security groups'         => implode(', ', $groups),
+                    'Tags'                    => implode(', ', $tags)
                 );
+                
+                if ($extended) {
+                    try {
+                        $statusInfo = $aws->ec2->instance->describeStatus(
+                            $DBServer->GetProperty(EC2_SERVER_PROPERTIES::INSTANCE_ID)
+                        )->get(0);
+                    } catch (Exception $e) {}
+                
+                    if (!empty($statusInfo)) {
+                
+                        if ($statusInfo->systemStatus->status == 'ok') {
+                            $systemStatus = '<span style="color:green;">OK</span>';
+                        } else {
+                            $txtDetails = "";
+                            if (!empty($statusInfo->systemStatus->details)) {
+                                foreach ($statusInfo->systemStatus->details as $d) {
+                                    /* @var $d \Scalr\Service\Aws\Ec2\DataType\InstanceStatusDetailsSetData */
+                                    $txtDetails .= " {$d->name} is {$d->status},";
+                                }
+                            }
+                            $txtDetails = trim($txtDetails, " ,");
+                            $systemStatus = "<span style='color:red;'>"
+                                . $statusInfo->systemStatus->status
+                                . "</span> ({$txtDetails})";
+                        }
+                
+                        if ($statusInfo->instanceStatus->status == 'ok') {
+                            $iStatus = '<span style="color:green;">OK</span>';
+                        } else {
+                            $txtDetails = "";
+                            foreach ($statusInfo->instanceStatus->details as $d) {
+                                $txtDetails .= " {$d->name} is {$d->status},";
+                            }
+                            $txtDetails = trim($txtDetails, " ,");
+                            $iStatus = "<span style='color:red;'>"
+                            . $statusInfo->instanceStatus->status
+                            . "</span> ({$txtDetails})";
+                        }
+                    } else {
+                        $systemStatus = "Unknown";
+                        $iStatus = "Unknown";
+                    }
+                    
+                    $retval['AWS System Status'] = $systemStatus;
+                    $retval['AWS Instance Status'] = $iStatus;
+                }
+                
+                if ($blockStorage) {
+                    $retval['Block storage'] = implode(', ', $blockStorage);
+                }
+                
                 if ($instanceData->subnetId) {
                     $retval['VPC ID'] = $instanceData->vpcId;
                     $retval['Subnet ID'] = $instanceData->subnetId;
@@ -1250,6 +1351,30 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
         return $routingTable->routeTableId;
     }
 
+    public function getDefaultVpc(\Scalr_Environment $environment, $cloudLocation)
+    {
+        $vpcId = $environment->getPlatformConfigValue(self::DEFAULT_VPC_ID.".{$cloudLocation}");
+        if ($vpcId === null || $vpcId === false) {
+            $vpcId = "";
+
+            $aws = $environment->aws($cloudLocation);
+            $list = $aws->ec2->describeAccountAttributes(array('default-vpc'));
+            foreach ($list as $item) {
+                if ($item->attributeName == 'default-vpc')
+                    $vpcId = $item->attributeValueSet[0]->attributeValue;
+            }
+
+            if ($vpcId == 'none')
+                $vpcId = '';
+
+            $environment->setPlatformConfig(array(
+                self::DEFAULT_VPC_ID . ".{$cloudLocation}" => $vpcId
+            ));
+        }
+
+        return $vpcId;
+    }
+
     /**
      * {@inheritdoc}
      * @see \Scalr\Modules\PlatformModuleInterface::LaunchServer()
@@ -1269,26 +1394,23 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
 
         if (!$launchOptions) {
             $launchOptions = new \Scalr_Server_LaunchOptions();
-            $DBRole = DBRole::loadById($DBServer->roleId);
 
             $dbFarmRole = $DBServer->GetFarmRoleObject();
+            $DBRole = $dbFarmRole->GetRoleObject();
 
             $runInstanceRequest->setMonitoring(
                 $dbFarmRole->GetSetting(\DBFarmRole::SETTING_AWS_ENABLE_CW_MONITORING)
             );
 
-            $launchOptions->imageId = $DBRole->getImageId(
+            $image = $DBRole->__getNewRoleObject()->getImage(
                 SERVER_PLATFORMS::EC2,
                 $dbFarmRole->CloudLocation
             );
+
+            $launchOptions->imageId = $image->imageId;
 
             // Need OS Family to get block device mapping for OEL roles
-            $imageInfo = $DBRole->getImageDetails(
-                SERVER_PLATFORMS::EC2,
-                $dbFarmRole->CloudLocation
-            );
-            $launchOptions->osFamily = $imageInfo['os_family'];
-
+            $launchOptions->osFamily = $image->getImage()->osFamily;
             $launchOptions->cloudLocation = $dbFarmRole->CloudLocation;
 
             $akiId = $DBServer->GetProperty(EC2_SERVER_PROPERTIES::AKIID);
@@ -1343,7 +1465,17 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
 
             $customUserData = $dbFarmRole->GetSetting('base.custom_user_data');
             if ($customUserData) {
-                $userData = str_replace('{SCALR_USER_DATA}', $u_data, $customUserData);
+                $repos = $DBServer->getScalarizrRepository();
+                
+                $userData = str_replace(array(
+                    '{SCALR_USER_DATA}', 
+                    '{RPM_REPO_URL}',
+                    '{DEB_REPO_URL}'
+                ), array(
+                    $u_data,
+                    $repos['rpm_repo_url'],
+                    $repos['deb_repo_url']
+                ), $customUserData);
             } else {
                 $userData = $u_data;
             }
@@ -1483,25 +1615,8 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
 
         $aws = $environment->aws($launchOptions->cloudLocation);
 
-        if (!$vpcId) {
-            $vpcId = $environment->getPlatformConfigValue(self::DEFAULT_VPC_ID.".{$launchOptions->cloudLocation}");
-
-            if ($vpcId === null || $vpcId === false) {
-                $vpcId = "";
-                $list = $aws->ec2->describeAccountAttributes(array('default-vpc'));
-                foreach ($list as $item) {
-                    if ($item->attributeName == 'default-vpc') {
-                        $vpcId = $item->attributeValueSet[0]->attributeValue;
-                    }
-                }
-                if ($vpcId == 'none') {
-                    $vpcId = '';
-                }
-                $environment->setPlatformConfig(array(
-                    self::DEFAULT_VPC_ID . ".{$launchOptions->cloudLocation}" => $vpcId
-                ));
-            }
-        }
+        if (!$vpcId)
+            $vpcId = $this->getDefaultVpc($environment, $launchOptions->cloudLocation);
 
         // Set AMI, AKI and ARI ids
         $runInstanceRequest->imageId = $launchOptions->imageId;
@@ -1551,24 +1666,6 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
             ))) {
 
             $placementGroup = $DBServer->GetFarmRoleObject()->GetSetting(\DBFarmRole::SETTING_AWS_CLUSTER_PG);
-
-            /*
-            if (!$placementGroup && in_array($runInstanceRequest->instanceType, array('cc2.8xlarge'))) {
-                $placementGroup = "scalr-role-{$DBServer->farmRoleId}";
-                try {
-                    $aws->ec2->placementGroup->create($placementGroup);
-                } catch (Exception $e) {
-                    if (!stristr($e->getMessage(), "already exists"))
-                        throw new Exception(sprintf(
-                            _("Cannot launch new instance. Unable to create placement group: %s"),
-                            $result->faultstring
-                        ));
-                }
-
-                $DBServer->GetFarmRoleObject()->SetSetting(\DBFarmRole::SETTING_AWS_CLUSTER_PG, $placementGroup, \DBFarmRole::TYPE_LCL);
-            }
-            */
-
             if ($placementGroup) {
                 if ($placementData === null) {
                     $placementData = new PlacementResponseData(null, $placementGroup);
@@ -1585,6 +1682,9 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
         $sshKey = \Scalr_SshKey::init();
         if ($DBServer->status == SERVER_STATUS::TEMPORARY) {
             $keyName = "SCALR-ROLESBUILDER-" . SCALR_ID;
+            if (!$sshKey->loadGlobalByName($keyName, $launchOptions->cloudLocation, $DBServer->envId, SERVER_PLATFORMS::EC2))
+                $keyName = "SCALR-ROLESBUILDER-" . SCALR_ID . "-{$DBServer->envId}";
+                
             $farmId = NULL;
         } else {
             $keyName = $governance->getValue(SERVER_PLATFORMS::EC2, \Scalr_Governance::AWS_KEYPAIR);
@@ -1659,9 +1759,10 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
                 EC2_SERVER_PROPERTIES::ARCHITECTURE  => $result->instancesSet->get(0)->architecture,
             ]);
 
-            $DBServer->osType = $result->instancesSet->get(0)->platform ? $result->instancesSet->get(0)->platform : 'linux';
+            $DBServer->setOsType($result->instancesSet->get(0)->platform ? $result->instancesSet->get(0)->platform : 'linux');
             $DBServer->cloudLocation = $launchOptions->cloudLocation;
             $DBServer->cloudLocationZone = $result->instancesSet->get(0)->placement->availabilityZone;
+            $DBServer->imageId = $launchOptions->imageId;
 
             return $DBServer;
         } else {
@@ -1726,7 +1827,8 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
                 'm1.small', 'c1.medium', 'm1.medium', 'm1.large', 'm1.xlarge',
                 'm2.xlarge', 'm2.2xlarge', 'm2.4xlarge',
                 'm3.large', 'm3.xlarge', 'm3.2xlarge',
-                'i2.xlarge','i2.2xlarge','i2.4xlarge','i2.8xlarge',
+                'i2.xlarge', 'i2.2xlarge', 'i2.4xlarge', 'i2.8xlarge',
+                'r3.large', 'r3.xlarge', 'r3.2xlarge', 'r3.4xlarge', 'r3.8xlarge',
                 'c1.xlarge', 'cc1.4xlarge', 'cc2.8xlarge', 'cr1.8xlarge',
                 'hi1.4xlarge', 'cr1.8xlarge'
             ))) {
@@ -1739,6 +1841,7 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
                 'm3.xlarge', 'm3.2xlarge',
                 'cc2.8xlarge', 'cc1.4xlarge',
                 'i2.2xlarge','i2.4xlarge','i2.8xlarge',
+                'r3.8xlarge',
                 'c1.xlarge', 'cr1.8xlarge', 'hi1.4xlarge', 'm2.2xlarge', 'cr1.8xlarge'))) {
             $retval[] = new BlockDeviceMappingData("{$prefix}c", 'ephemeral1');
         }
@@ -1793,8 +1896,9 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
         $checkGroups = array();
         $sgGovernance = true;
         $allowAdditionalSgs = true;
+        $roleBuiledSgName = \Scalr::config('scalr.aws.security_group_name') . "-rb";
 
-        if ($governance) {
+        if ($governance && $DBServer->farmRoleId) {
             $sgs = $governance->getValue(SERVER_PLATFORMS::EC2, \Scalr_Governance::AWS_SECURITY_GROUPS);
             if ($sgs !== null) {
                 $governanceSecurityGroups = @explode(",", $sgs);
@@ -1808,7 +1912,8 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
                 $sgGovernance = false;
                 $allowAdditionalSgs = $governance->getValue(SERVER_PLATFORMS::EC2, \Scalr_Governance::AWS_SECURITY_GROUPS, 'allow_additional_sec_groups');
             }
-        }
+        } else
+            $sgGovernance = false;
 
         if (!$sgGovernance || $allowAdditionalSgs) {
             if ($DBServer->farmRoleId != 0) {
@@ -1848,7 +1953,7 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
                     }
                 }
             } else
-                array_push($checkGroups, 'scalr-rb-system');
+                array_push($checkGroups, $roleBuiledSgName);
         }
 
         // No name based security groups, return only SG ids.
@@ -1892,11 +1997,11 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
                 array_push($retval, $sgList[$groupName]);
 
             // Check Roles builder SG
-            } elseif ($groupName == 'scalr-rb-system') {
+            } elseif ($groupName == $roleBuiledSgName) {
                 if (!isset($sgList[$groupName])) {
                     try {
                         $securityGroupId = $ec2->securityGroup->create(
-                            'scalr-rb-system', "Security group for Roles Builder", $vpcId
+                            $roleBuiledSgName, "Security group for Roles Builder", $vpcId
                         );
                         $ipRangeList = new IpRangeList();
                         foreach (\Scalr::config('scalr.aws.ip_pool') as $ip) {
@@ -1910,9 +2015,9 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
                             new IpPermissionData('tcp', 8008, 8013, $ipRangeList)
                         ), $securityGroupId);
 
-                        $sgList['scalr-rb-system'] = $securityGroupId;
+                        $sgList[$roleBuiledSgName] = $securityGroupId;
                     } catch (Exception $e) {
-                        throw new Exception(sprintf(_("Cannot create security group '%s': %s"), 'scalr-rb-system', $e->getMessage()));
+                        throw new Exception(sprintf(_("Cannot create security group '%s': %s"), $roleBuiledSgName, $e->getMessage()));
                     }
                 }
                 array_push($retval, $sgList[$groupName]);

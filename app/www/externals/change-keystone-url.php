@@ -11,6 +11,8 @@ use Scalr\Modules\Platforms\Openstack\OpenstackPlatformModule;
 $validator = new Scalr_Validator();
 $crypto = new Scalr_Util_CryptoTool(MCRYPT_TRIPLEDES, MCRYPT_MODE_CFB, 24, 8);
 
+$db = Scalr::getDb();
+
 $envs = $db->Execute("SELECT id FROM client_environments");
 while ($env = $envs->FetchRow()) {
     $environment = Scalr_Environment::init()->loadById($env['id']);

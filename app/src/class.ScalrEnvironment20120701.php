@@ -42,7 +42,7 @@ class ScalrEnvironment20120701 extends ScalrEnvironment20120417
                 'flagFinal' => $final,
                 'flagRequired' => 0
             )),
-            $this->DBServer->roleId,
+            $this->DBServer->GetFarmRoleObject()->RoleID,
             $this->DBServer->farmId,
             $this->DBServer->farmRoleId,
         	$this->DBServer->serverId
@@ -65,7 +65,7 @@ class ScalrEnvironment20120701 extends ScalrEnvironment20120417
         $configNode = $ResponseDOMDocument->createElement("variables");
 
         $globalVariables = new Scalr_Scripting_GlobalVariables($this->DBServer->clientId, $this->DBServer->envId, Scalr_Scripting_GlobalVariables::SCOPE_SERVER);
-        $vars = $globalVariables->listVariables($this->DBServer->roleId, $this->DBServer->farmId, $this->DBServer->farmRoleId, $this->DBServer->serverId);
+        $vars = $globalVariables->listVariables($this->DBServer->GetFarmRoleObject()->RoleID, $this->DBServer->farmId, $this->DBServer->farmRoleId, $this->DBServer->serverId);
         foreach ($vars as $key => $value) {
             $settingNode = $ResponseDOMDocument->createElement("variable");
 
@@ -120,6 +120,9 @@ class ScalrEnvironment20120701 extends ScalrEnvironment20120417
         // Base configuration
         if ($this->DBServer->farmRoleId == $farmRoleId) {
             $data = Scalr_Role_Behavior::loadByName(ROLE_BEHAVIORS::BASE)->getBaseConfiguration($this->DBServer);
+            
+            @file_put_contents('/tmp/debug.txt', json_encode($data));
+            
             foreach ((array)$data as $k => $v) {
                 $bodyEl = $this->serialize($v, $k, $ResponseDOMDocument);
                 $ResponseDOMDocument->documentElement->appendChild($bodyEl);

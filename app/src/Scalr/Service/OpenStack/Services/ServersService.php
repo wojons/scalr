@@ -182,6 +182,18 @@ class ServersService extends AbstractService implements ServiceInterface
     }
 
     /**
+     * Starts os on server
+     *
+     * @param   string     $serverId A server ID to resume
+     * @return  bool       Returns true on success or false otherwise
+     * @throws  RestClientException
+     */
+    public function osStart($serverId)
+    {
+        return $this->getApiHandler()->osStart($serverId);
+    }
+    
+    /**
      * Resumes a server
      *
      * @param   string     $serverId A server ID to resume

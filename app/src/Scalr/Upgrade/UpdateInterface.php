@@ -130,6 +130,27 @@ interface UpdateInterface
     public function hasTableColumnDefault($table, $column, $default, $schema = null);
 
     /**
+     * Checks whether the table has auto incremented primary key
+     *
+     * @param   string    $table   The name of the database table
+     * @param   string    $schema  optional The name of the database. If it's omitted will be used schema
+     *                             that is specified in the config.
+     * @return  bool      Returns  true if specified table has auto incremented primary key
+     */
+    public function hasTableAutoIncrement($table, $schema = null);
+
+    /**
+     * Gets column definition for the specified table and database shcema
+     *
+     * @param   string    $table   The name of the database table
+     * @param   string    $column  The name of the column
+     * @param   string    $schema  optional The name of the database. If it's omitted will be used schema
+     *                             that is specified in the config.
+     * @return  \Scalr\Model\Entity\InformationSchema\ColumnEntity  Returns column definition object
+     */
+    public function getTableColumnDefinition($table, $column, $schema = null);
+
+    /**
      * Verifies whether database has specified table
      *
      * @param   string    $table     A database table name

@@ -88,7 +88,8 @@ class Scalr_UI_Controller_Account2_Users extends Scalr_UI_Controller
     {
         $this->request->defineParams(array(
             'teams' => array('type' => 'json'), 'action',
-            'password' => array('type' => 'string', 'rawValue' => true)
+            'password' => array('type' => 'string', 'rawValue' => true),
+            'currentPassword' => array('type' => 'string', 'rawValue' => true)
         ));
 
         $user = Scalr_Account_User::init();
@@ -117,9 +118,16 @@ class Scalr_UI_Controller_Account2_Users extends Scalr_UI_Controller
         }
 
         $password = $this->getParam('password');
-        if (!$password && ($this->request->hasParam('password') || $newUser)) {
+        if (!$newUser && $password) {
+            $existingPasswordChanged = true;
+        } else if (!$password && ($this->request->hasParam('password') || $newUser)) {
             $password = $this->getCrypto()->sault(10);
             $sendResetLink = true;
+        }
+        if (($existingPasswordChanged || !$newUser && $sendResetLink) && !$this->user->checkPassword($this->getParam('currentPassword'))) {
+            $this->response->data(['errors' => ['currentPassword' => 'Invalid password']]);
+            $this->response->failure();
+            return;
         }
         if ($password) {
             $user->updatePassword($password);
@@ -208,6 +216,15 @@ class Scalr_UI_Controller_Account2_Users extends Scalr_UI_Controller
                 );
             } catch (Exception $e) {
             }
+        } else if ($existingPasswordChanged) {
+            // Send notification E-mail
+            $this->getContainer()->mailer->sendTemplate(
+                SCALR_TEMPLATES_PATH . '/emails/password_change_notification.eml',
+                array(
+                    '{{fullname}}' => $user->fullname ? $user->fullname : $user->getEmail()
+                ),
+                $user->getEmail(), $user->fullname
+            );
         }
 
         $userTeams = array();
@@ -220,7 +237,12 @@ class Scalr_UI_Controller_Account2_Users extends Scalr_UI_Controller
             );
         }
 
-        $this->response->data(array('user' => $user->getUserInfo(), 'teams' => $userTeams));
+        $data = ['user' => $user->getUserInfo(), 'teams' => $userTeams];
+        if ($existingPasswordChanged && $user->getId() == $this->user->getId()) {
+            Scalr_Session::create($this->user->getId());
+            $data['specialToken'] = Scalr_Session::getInstance()->getToken();
+        }
+        $this->response->data($data);
         $this->response->success('User successfully saved');
     }
 

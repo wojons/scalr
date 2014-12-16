@@ -8,17 +8,36 @@ Scalr.utils.CreateProcessBox = function (config) {
 		launch: 'Launching ...',
 		save: 'Saving ...'
 	};
+
 	config = config || {};
-	config['msg'] = config['msg'] || messages[config['type']] || 'Processing ...';
+
+	config.msg = config.msg || messages[config.type] || 'Processing ...';
+    config.msg = !config.text ? config.msg : config.msg +
+        '<div class="x-fieldset-header-description" style="white-space: pre-wrap">' +
+        config.text + '</div>';
+
+    var progressBar = config.progressBar;
+
+    if (progressBar) {
+        if (!Ext.isObject(progressBar)) {
+            progressBar = {};
+        }
+
+        Ext.applyIf(progressBar, {
+            xtype: 'progressbar',
+            margin: '0 0 24 24',
+            width: 265
+        });
+    }
 
 	return Scalr.utils.Window({
 		title: config['msg'],
 		width: 313,
         zIndexPriority: 10,
-		items: [{
-			xtype: 'component',
+		items: progressBar || {
+            xtype: 'component',
             cls: 'x-panel-confirm-loading'
-		}],
+        },
         itemId: 'proccessBox',
 		closeOnEsc: false
 	});
@@ -84,6 +103,7 @@ Scalr.utils.Confirm = function (config) {
 				itemId: 'buttonOk',
                 cls: 'x-btn-defaultfocus',
 				disabled: config['disabled'] || false,
+                // TODO: add ability to run handler manually
 				handler: function () {
 					var values = this.up('#box').down('#form') ? this.up('#box').down('#form').getValues() : {};
 
@@ -579,7 +599,7 @@ Scalr.utils.isOpenstack = function(platform, pureOnly) {
 }
 
 Scalr.utils.isCloudstack = function(platform) {
-    var list = ['cloudstack', 'idcf', 'ucloud'];
+    var list = ['cloudstack', 'idcf'];
     return Ext.Array.contains(list, platform);
 }
 
@@ -670,6 +690,11 @@ Scalr.utils.loadCloudLocations = function(platforms, callback) {
     }
 }
 
+Scalr.utils.getMinStorageSizeByIops = function(iops) {
+    var minSize = Math.ceil(iops/Scalr.constants.ebsMaxIopsSizeRatio);
+    return Scalr.constants.ebsMinProIopsStorageSize > minSize ? Scalr.constants.ebsMinProIopsStorageSize : minSize;
+}
+
 Scalr.utils.getRoleCls = function(context) {
     var b = context['behaviors'],
         behaviors = [
@@ -710,6 +735,63 @@ Scalr.utils.getRandomString = function(len) {
         text += possible.charAt(Math.floor(Math.random() * possible.length));
 
     return text;
+};
+
+Scalr.utils.saveSpecialToken = function(specialToken) {
+    Ext.Ajax.extraParams['X-Requested-Token'] = Scalr.flags.specialToken = specialToken;
+};
+
+Scalr.utils.ConfirmPassword = function(cb) {
+    return Scalr.Confirm({
+        closeOnSuccess: true,
+        formWidth: 400,
+        formValidate: true,
+        form: [{
+            xtype: 'container',
+            cls: 'x-container-fieldset x-fieldset-no-bottom-padding',
+            layout: 'anchor',
+            defaults: {
+                anchor: '100%'
+            },
+            items: [{
+                xtype: 'component',
+                cls: 'x-fieldset-subheader',
+                style: 'text-align:center',
+                html: 'Please enter your current password',
+            },{
+                xtype: 'component',
+                style: 'text-align:center',
+                html: Scalr.user['userName'],
+                margin: '0 0 12 0'
+            },{
+                xtype: 'textfield',
+                inputType: 'password',
+                name: 'currentPassword',
+                emptyText: 'Password',
+                allowBlank: false,
+                listeners: {
+                    afterrender: function() {
+                        Ext.defer(this.focus, 100, this);
+                    }
+                }
+            }]
+        }],
+        winConfig: {
+            onFailure: function(errors) {
+                if (Ext.Object.getSize(errors) == 1 && errors['currentPassword']) {
+                    var field = this.down('[name="currentPassword"]');
+                    field.markInvalid(errors['currentPassword']);
+                    Ext.defer(field.focus, 100, field);
+                } else {
+                    this.close();
+                }
+            },
+        },
+        success: function(values, form) {
+            cb(values['currentPassword']);
+            return false;
+        }
+    });
 };
 
 Scalr.strings = {

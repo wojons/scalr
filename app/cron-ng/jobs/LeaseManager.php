@@ -1,5 +1,9 @@
 <?php
 
+/**
+ * @deprecated It has been deprecated since 02.12.2014 because of implementing a new Scalr service
+ * @see        \Scalr\System\Zmq\Cron\Task\LeaseManager
+ */
 class Scalr_Cronjob_LeaseManager extends Scalr_System_Cronjob_MultiProcess_DefaultWorker
 {
     static function getConfig () {
@@ -51,7 +55,11 @@ class Scalr_Cronjob_LeaseManager extends Scalr_System_Cronjob_MultiProcess_Defau
         $this->logger->info("Fetching farms...");
 
         $farms = array();
-        $envs = $this->db->GetAll('SELECT env_id, value FROM governance WHERE enabled = 1 AND name = ?', array(Scalr_Governance::GENERAL_LEASE));
+        $envs = $this->db->GetAll('
+            SELECT env_id, value FROM governance
+            WHERE enabled = 1 AND name = ?
+        ', array(Scalr_Governance::GENERAL_LEASE));
+
         foreach ($envs as $env) {
             $env['value'] = json_decode($env['value'], true);
             $period = 0;

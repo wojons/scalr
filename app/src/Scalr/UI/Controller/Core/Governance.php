@@ -1,6 +1,7 @@
 <?php
 use Scalr\Acl\Acl;
 use Scalr\Modules\PlatformFactory;
+use Scalr\Model\Entity\ChefServer;
 
 class Scalr_UI_Controller_Core_Governance extends Scalr_UI_Controller
 {
@@ -33,10 +34,22 @@ class Scalr_UI_Controller_Core_Governance extends Scalr_UI_Controller
             $platforms[$platform] = $platform == SERVER_PLATFORMS::EC2 ? self::loadController('Platforms')->getCloudLocations($platform, false) : array();
         }
 
+        $chefServers = [];
+        foreach (ChefServer::getList($this->user->getAccountId(), $this->getEnvironmentId()) as $chefServer) {
+            $chefServers[] = [
+                'id'    => $chefServer->id,
+                'url'   => $chefServer->url,
+                'level' => $chefServer->level == 1 ? 'scalr' : ($chefServer->level == 2 ? 'account' : 'environment')
+            ];
+        }
+        
         $governance = new Scalr_Governance($this->getEnvironmentId());
         $this->response->page('ui/core/governance/edit.js', array(
             'platforms' => $platforms,
-            'values' => $governance->getValues()
+            'values' => $governance->getValues(),
+            'chef' => [
+                'servers' => $chefServers
+            ]
         ), array('ux-boxselect.js', 'ui/core/governance/lease.js'), array('ui/core/governance/edit.css'));
     }
 

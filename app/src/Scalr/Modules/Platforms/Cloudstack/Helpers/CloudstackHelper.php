@@ -17,7 +17,7 @@ class CloudstackHelper
     {
         foreach ($roles as $DBFarmRole)
         {
-            if (!in_array($DBFarmRole->Platform, array(SERVER_PLATFORMS::CLOUDSTACK, SERVER_PLATFORMS::IDCF, SERVER_PLATFORMS::UCLOUD))) {
+            if (!in_array($DBFarmRole->Platform, array(SERVER_PLATFORMS::CLOUDSTACK, SERVER_PLATFORMS::IDCF))) {
                 continue;
             }
 

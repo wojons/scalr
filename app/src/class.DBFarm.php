@@ -440,10 +440,10 @@ class DBFarm
             $DBFarmRole->SetSetting($k, $v);
         }
 
-        if ($farm_role_id && \Scalr::getContainer()->analytics->enabled) {
+        if ($farm_role_id && $DBFarmRole && \Scalr::getContainer()->analytics->enabled) {
             \Scalr::getContainer()->analytics->tags->syncValue(
                 $this->ClientID, \Scalr\Stats\CostAnalytics\Entity\TagEntity::TAG_ID_FARM_ROLE, $farm_role_id,
-                sprintf('%s > %s', $this->Name, $DBRole->name)
+                sprintf('%s', $DBFarmRole->Alias)
             );
         }
 
@@ -779,8 +779,13 @@ class DBFarm
         }
 
         if (Scalr::getContainer()->analytics->enabled) {
+            //Farm tag
             Scalr::getContainer()->analytics->tags->syncValue(
                 $this->ClientID, \Scalr\Stats\CostAnalytics\Entity\TagEntity::TAG_ID_FARM, $this->ID, $this->Name
+            );
+            //Farm owner tag
+            Scalr::getContainer()->analytics->tags->syncValue(
+                $this->ClientID, \Scalr\Stats\CostAnalytics\Entity\TagEntity::TAG_ID_FARM_OWNER, $this->ID, $this->createdByUserId
             );
         }
     }

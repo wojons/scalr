@@ -265,7 +265,7 @@ class Scalr_UI_Controller_Platforms_Ec2 extends Scalr_UI_Controller
                     $farmRole = DBFarmRole::LoadByID($info['farm_roleid']);
                     $this->user->getPermissions()->validate($farmRole);
 
-                    $itm['roleName'] = $farmRole->GetRoleObject()->name;
+                    $itm['roleName'] = $farmRole->Alias;
                     $itm['farmName'] = $farmRole->GetFarmObject()->Name;
                     $itm['serverIndex'] = $info['instance_index'];
                 } catch (Exception $e) {}
@@ -322,7 +322,7 @@ class Scalr_UI_Controller_Platforms_Ec2 extends Scalr_UI_Controller
 
         try {
             /* @var $instanceProfileData \Scalr\Service\Aws\Iam\DataType\InstanceProfileData */
-            foreach ($this->getEnvironment()->aws()->iam->instanceProfile->describe() as $instanceProfileData) {
+            foreach ($this->getEnvironment()->aws('us-east-1')->iam->instanceProfile->describe() as $instanceProfileData) {
                 $list[] = array(
                     'arn' => $instanceProfileData->arn,
                     'name' => $instanceProfileData->instanceProfileName

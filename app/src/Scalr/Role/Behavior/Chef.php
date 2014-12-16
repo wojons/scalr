@@ -148,7 +148,7 @@ class Scalr_Role_Behavior_Chef extends Scalr_Role_Behavior implements Scalr_Role
         $jsonAttributes = $chefSettings[self::ROLE_CHEF_ATTRIBUTES];
         if (!empty($chefSettings[self::ROLE_CHEF_COOKBOOK_URL])) {
             $configuration->cookbookUrl = $chefSettings[self::ROLE_CHEF_COOKBOOK_URL];
-            $configuration->runList = $chefSettings[self::ROLE_CHEF_RUNLIST];
+            $configuration->runList = $dbServer->applyGlobalVarsToValue($chefSettings[self::ROLE_CHEF_RUNLIST]);
             $configuration->cookbookUrlType = $chefSettings[self::ROLE_CHEF_COOKBOOK_URL_TYPE];
             $configuration->sshPrivateKey = isset($chefSettings[self::ROLE_CHEF_SSH_PRIVATE_KEY]) ? $chefSettings[self::ROLE_CHEF_SSH_PRIVATE_KEY] : false;
             $configuration->relativePath = isset($chefSettings[self::ROLE_CHEF_RELATIVE_PATH]) ? $chefSettings[self::ROLE_CHEF_RELATIVE_PATH] : false;
@@ -173,7 +173,7 @@ class Scalr_Role_Behavior_Chef extends Scalr_Role_Behavior implements Scalr_Role
             if (!empty($chefSettings[self::ROLE_CHEF_ROLE_NAME]))
                 $configuration->role = $chefSettings[self::ROLE_CHEF_ROLE_NAME];
             else
-                $configuration->runList = $chefSettings[self::ROLE_CHEF_RUNLIST];
+                $configuration->runList = $dbServer->applyGlobalVarsToValue($chefSettings[self::ROLE_CHEF_RUNLIST]);
 
             $configuration->environment = $chefSettings[self::ROLE_CHEF_ENVIRONMENT];
             $configuration->daemonize = $chefSettings[self::ROLE_CHEF_DAEMONIZE];

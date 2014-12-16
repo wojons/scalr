@@ -1,22 +1,19 @@
 Scalr.regPage('Scalr.ui.core.variables', function (loadParams, moduleParams) {
 	return Ext.create('Ext.form.Panel', {
-		width: 1300,
+        scalrOptions: {
+            'maximize': 'all'
+        },
 		title: 'Environment global variables',
 		fieldDefaults: {
 			labelWidth: 110
 		},
-        layout: 'auto',
-		items: [{
-			xtype: 'fieldset',
-            cls: 'x-fieldset-separator-none',
-			items: [{
-				xtype: 'variablefield',
-				name: 'variables',
-				currentScope: 'env',
-				value: moduleParams.variables
-			}]
-		}],
-
+        layout: 'fit',
+        items: {
+            xtype: 'variablefield',
+            name: 'variables',
+            currentScope: 'env',
+            value: moduleParams.variables
+        },
 		dockedItems: [{
 			xtype: 'container',
 			dock: 'bottom',
@@ -29,13 +26,17 @@ Scalr.regPage('Scalr.ui.core.variables', function (loadParams, moduleParams) {
 				xtype: 'button',
 				text: 'Save',
 				handler: function() {
-					if (this.up('form').getForm().isValid())
+                    var me = this;
+
+                    var form = me.up('form').getForm();
+
+					if (form.isValid())
 						Scalr.Request({
 							processBox: {
 								type: 'save'
 							},
 							url: '/core/xSaveVariables/',
-							form: this.up('form').getForm(),
+							form: form,
 							success: function () {
 								Scalr.event.fireEvent('refresh');
 							}

@@ -12,8 +12,8 @@ Scalr.regPage('Scalr.ui.admin.utils.debug', function (loadParams, moduleParams) 
             xtype: 'fieldset',
             items: [{
                 xtype: 'checkbox',
-                name: 'sql',
-                boxLabel: 'Enable SQL debug'
+                name: 'enabled',
+                boxLabel: 'Enable debug (sql, dump, exception)'
             }]
         }],
         dockedItems: [{
@@ -36,7 +36,7 @@ Scalr.regPage('Scalr.ui.admin.utils.debug', function (loadParams, moduleParams) 
                         form: this.up('form').getForm(),
                         success: function (data) {
                             if (data['js'])
-                                Ext.Loader.loadScripts(data['js'], Ext.emptyFn);
+                                Ext.Loader.loadScripts([data['js']], Ext.emptyFn);
 
                             Scalr.event.fireEvent('close');
                         }

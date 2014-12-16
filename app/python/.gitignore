@@ -1,0 +1,4 @@
+*.py[cod]
+.vagrant
+/scalrpy/pylintrc
+/tests/pip-log.txt

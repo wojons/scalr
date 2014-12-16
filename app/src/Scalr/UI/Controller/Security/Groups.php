@@ -694,6 +694,13 @@ class Scalr_UI_Controller_Security_Groups extends Scalr_UI_Controller
             );
         }
 
+        if (empty($filters['vpcId'])) {
+            $p = PlatformFactory::NewPlatform(SERVER_PLATFORMS::EC2);
+            $defaultVpc = $p->getDefaultVpc($this->environment, $cloudLocation);
+            if ($defaultVpc)
+                $filters['vpcId'] = $defaultVpc;
+        }
+        
         if (!empty($filters['vpcId'])) {
             $sgFilter = is_null($sgFilter) ? array() : $sgFilter;
             $sgFilter[] = array(
@@ -705,6 +712,10 @@ class Scalr_UI_Controller_Security_Groups extends Scalr_UI_Controller
         $sgList = $this->getPlatformService($platform, $cloudLocation)->describe(null, null, $sgFilter);
         /* @var $sg SecurityGroupData */
         foreach ($sgList as $sg) {
+            
+            if (is_array($filters) && array_key_exists('vpcId', $filters) && $filters['vpcId'] == null && $sg->vpcId)
+                continue;
+            
             $result[] = array(
                 'id'          => $sg->groupId,
                 'name'        => $sg->groupName,
@@ -828,9 +839,8 @@ class Scalr_UI_Controller_Security_Groups extends Scalr_UI_Controller
 
     private function getPlatformService($platform, $cloudLocation)
     {
-        if ($platform == SERVER_PLATFORMS::EC2 || $platform == SERVER_PLATFORMS::EUCALYPTUS) {
-            $method = $platform == SERVER_PLATFORMS::EC2 ? 'aws' : 'eucalyptus';
-            return $this->getEnvironment()->$method($cloudLocation)->ec2->securityGroup;
+        if ($platform == SERVER_PLATFORMS::EC2) {
+            return $this->getEnvironment()->aws($cloudLocation)->ec2->securityGroup;
         } elseif (PlatformFactory::isOpenstack($platform)) {
             $openstack = $this->getEnvironment()->openstack($platform, $cloudLocation);
             return $openstack;

@@ -248,7 +248,7 @@ Scalr.regPage('Scalr.ui.tools.aws.ec2.elb.create', function (loadParams, moduleP
                     displayField: 'name',
                     allowBlank: false,
                     listConfig: {
-                        cls: 'x-boundlist-checkboxes',
+                        cls: 'x-boundlist-with-icon',
                         tpl : '<tpl for=".">'+
                                 '<tpl if="state != \'available\'">'+
                                     '<div class="x-boundlist-item x-boundlist-item-disabled" title="Zone is offline for maintenance"><img class="x-boundlist-icon" src="' + Ext.BLANK_IMAGE_URL + '"/>{name}&nbsp;<span class="warning"></span></div>'+

@@ -691,6 +691,47 @@ CREATE TABLE `clients` (
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
+-- Table structure for table `cloud_instance_types`
+--
+
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
+CREATE TABLE `cloud_instance_types` (
+  `cloud_location_id` binary(16) NOT NULL COMMENT 'cloud_locations.cloud_location_id ref',
+  `instance_type_id` varchar(45) NOT NULL COMMENT 'ID of the instance type',
+  `name` varchar(255) NOT NULL COMMENT 'Display name',
+  `ram` varchar(255) NOT NULL COMMENT 'Memory info',
+  `vcpus` varchar(255) NOT NULL DEFAULT '' COMMENT 'CPU info',
+  `disk` varchar(255) NOT NULL DEFAULT '' COMMENT 'Disk info',
+  `type` varchar(255) NOT NULL DEFAULT '' COMMENT 'Storage type info',
+  `note` varchar(255) NOT NULL DEFAULT '' COMMENT 'Notes',
+  `options` text NOT NULL COMMENT 'Json encoded options',
+  `status` tinyint(4) NOT NULL DEFAULT '1' COMMENT '0-inactive, 1-active, 2-obsolete',
+  PRIMARY KEY (`cloud_location_id`,`instance_type_id`),
+  KEY `idx_instance_type_id` (`instance_type_id`),
+  KEY `idx_status` (`status`),
+  CONSTRAINT `fk_e3824ee2da38` FOREIGN KEY (`cloud_location_id`) REFERENCES `cloud_locations` (`cloud_location_id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8 COMMENT='Instance types for each cloud location';
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Table structure for table `cloud_locations`
+--
+
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
+CREATE TABLE `cloud_locations` (
+  `cloud_location_id` binary(16) NOT NULL COMMENT 'UUID',
+  `platform` varchar(20) NOT NULL COMMENT 'Cloud platform',
+  `url` varchar(255) NOT NULL DEFAULT '' COMMENT 'Normalized endpoint url',
+  `cloud_location` varchar(255) NOT NULL COMMENT 'Cloud location',
+  `updated` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`cloud_location_id`),
+  UNIQUE KEY `idx_unique` (`platform`,`url`,`cloud_location`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8 COMMENT='Known cloud locations for each platform';
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
 -- Table structure for table `comments`
 --
 
@@ -1003,11 +1044,15 @@ CREATE TABLE `elastic_ips` (
 /*!40101 SET character_set_client = utf8 */;
 CREATE TABLE `event_definitions` (
   `id` int(11) NOT NULL AUTO_INCREMENT,
-  `account_id` int(11) NOT NULL,
-  `env_id` int(11) NOT NULL,
+  `account_id` int(11) DEFAULT NULL,
+  `env_id` int(11) DEFAULT NULL,
   `name` varchar(25) NOT NULL,
   `description` text NOT NULL,
-  PRIMARY KEY (`id`)
+  PRIMARY KEY (`id`),
+  KEY `fk_event_defs_client_envs_id` (`env_id`),
+  KEY `fk_event_defs_clients_id` (`account_id`),
+  CONSTRAINT `fk_event_defs_clients_id` FOREIGN KEY (`account_id`) REFERENCES `clients` (`id`) ON DELETE CASCADE ON UPDATE NO ACTION,
+  CONSTRAINT `fk_event_defs_client_envs_id` FOREIGN KEY (`env_id`) REFERENCES `client_environments` (`id`) ON DELETE CASCADE ON UPDATE NO ACTION
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
@@ -1475,6 +1520,7 @@ CREATE TABLE `farms` (
   KEY `env_id` (`env_id`),
   KEY `idx_created_by_id` (`created_by_id`),
   KEY `idx_changed_by_id` (`changed_by_id`),
+  KEY `idx_status` (`status`),
   CONSTRAINT `farms_ibfk_1` FOREIGN KEY (`clientid`) REFERENCES `clients` (`id`) ON DELETE CASCADE ON UPDATE NO ACTION
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1;
 /*!40101 SET character_set_client = @saved_cs_client */;
@@ -1499,30 +1545,53 @@ CREATE TABLE `governance` (
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
+-- Table structure for table `image_software`
+--
+
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
+CREATE TABLE `image_software` (
+  `id` int(11) unsigned NOT NULL AUTO_INCREMENT,
+  `image_hash` binary(16) NOT NULL DEFAULT '\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0',
+  `name` varchar(45) NOT NULL DEFAULT '',
+  `version` varchar(20) DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `idx_image_hash` (`image_hash`),
+  CONSTRAINT `fk_images_hash_image_software` FOREIGN KEY (`image_hash`) REFERENCES `images` (`hash`) ON DELETE CASCADE ON UPDATE NO ACTION
+) ENGINE=InnoDB DEFAULT CHARSET=latin1;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
 -- Table structure for table `images`
 --
 
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8 */;
 CREATE TABLE `images` (
+  `hash` binary(16) NOT NULL,
   `id` varchar(128) NOT NULL DEFAULT '',
   `env_id` int(11) DEFAULT NULL,
   `bundle_task_id` int(11) DEFAULT NULL,
   `platform` varchar(25) NOT NULL DEFAULT '',
   `cloud_location` varchar(255) NOT NULL DEFAULT '',
-  `os_family` varchar(25) DEFAULT NULL,
+  `name` varchar(255) DEFAULT NULL,
+  `os` varchar(60) DEFAULT NULL,
+  `os_family` varchar(30) DEFAULT NULL,
+  `os_generation` varchar(10) DEFAULT NULL,
   `os_version` varchar(10) DEFAULT NULL,
-  `os_name` varchar(255) DEFAULT NULL,
   `dt_added` datetime DEFAULT NULL,
   `created_by_id` int(11) DEFAULT NULL,
   `created_by_email` varchar(100) DEFAULT NULL,
   `architecture` enum('i386','x86_64') NOT NULL DEFAULT 'x86_64',
+  `size` int(11) DEFAULT NULL,
   `is_deprecated` tinyint(1) NOT NULL DEFAULT '0',
   `source` enum('BundleTask','Manual') NOT NULL DEFAULT 'Manual',
   `type` varchar(20) DEFAULT NULL,
   `status` varchar(20) NOT NULL,
+  `status_error` varchar(255) DEFAULT NULL,
   `agent_version` varchar(20) DEFAULT NULL,
-  UNIQUE KEY `id` (`env_id`,`id`,`platform`,`cloud_location`),
+  PRIMARY KEY (`hash`),
+  UNIQUE KEY `idx_id` (`env_id`,`id`,`platform`,`cloud_location`),
   CONSTRAINT `fk_images_client_environmnets_id` FOREIGN KEY (`env_id`) REFERENCES `client_environments` (`id`) ON DELETE CASCADE ON UPDATE NO ACTION
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1;
 /*!40101 SET character_set_client = @saved_cs_client */;
@@ -1738,6 +1807,28 @@ CREATE TABLE `role_categories` (
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
+-- Table structure for table `role_image_history`
+--
+
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
+CREATE TABLE `role_image_history` (
+  `id` int(11) unsigned NOT NULL AUTO_INCREMENT,
+  `role_id` int(11) NOT NULL,
+  `platform` varchar(25) NOT NULL,
+  `cloud_location` varchar(36) NOT NULL,
+  `image_id` varchar(255) NOT NULL DEFAULT '',
+  `old_image_id` varchar(255) NOT NULL DEFAULT '',
+  `dt_added` datetime NOT NULL,
+  `added_by_id` int(11) DEFAULT NULL,
+  `added_by_email` varchar(50) DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `idx_role_id` (`role_id`),
+  CONSTRAINT `fk_role_image_history_roles_id` FOREIGN KEY (`role_id`) REFERENCES `roles` (`id`) ON DELETE CASCADE ON UPDATE NO ACTION
+) ENGINE=InnoDB DEFAULT CHARSET=latin1;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
 -- Table structure for table `role_images`
 --
 
@@ -1749,16 +1840,9 @@ CREATE TABLE `role_images` (
   `cloud_location` varchar(36) DEFAULT NULL,
   `image_id` varchar(255) DEFAULT NULL,
   `platform` varchar(25) DEFAULT NULL,
-  `architecture` varchar(6) DEFAULT NULL,
-  `os_family` varchar(25) DEFAULT NULL,
-  `os_name` varchar(50) DEFAULT NULL,
-  `os_version` varchar(10) DEFAULT NULL,
-  `agent_version` varchar(20) DEFAULT NULL,
   PRIMARY KEY (`id`),
-  UNIQUE KEY `role_id_location` (`role_id`,`cloud_location`,`platform`),
-  UNIQUE KEY `unique` (`role_id`,`image_id`(50),`cloud_location`,`platform`),
-  KEY `NewIndex1` (`platform`),
-  KEY `location` (`cloud_location`),
+  UNIQUE KEY `key_idx` (`role_id`,`platform`,`cloud_location`,`image_id`),
+  KEY `idx_role_id` (`role_id`),
   CONSTRAINT `role_images_ibfk_1` FOREIGN KEY (`role_id`) REFERENCES `roles` (`id`) ON DELETE CASCADE ON UPDATE NO ACTION
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1;
 /*!40101 SET character_set_client = @saved_cs_client */;
@@ -1848,39 +1932,6 @@ CREATE TABLE `role_security_rules` (
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
--- Table structure for table `role_software`
---
-
-/*!40101 SET @saved_cs_client     = @@character_set_client */;
-/*!40101 SET character_set_client = utf8 */;
-CREATE TABLE `role_software` (
-  `id` int(11) NOT NULL AUTO_INCREMENT,
-  `role_id` int(11) NOT NULL,
-  `software_name` varchar(45) DEFAULT NULL,
-  `software_version` varchar(20) DEFAULT NULL,
-  `software_key` varchar(20) DEFAULT NULL,
-  PRIMARY KEY (`id`),
-  KEY `role_id` (`role_id`),
-  CONSTRAINT `role_software_ibfk_1` FOREIGN KEY (`role_id`) REFERENCES `roles` (`id`) ON DELETE CASCADE ON UPDATE NO ACTION
-) ENGINE=InnoDB DEFAULT CHARSET=latin1;
-/*!40101 SET character_set_client = @saved_cs_client */;
-
---
--- Table structure for table `role_tags`
---
-
-/*!40101 SET @saved_cs_client     = @@character_set_client */;
-/*!40101 SET character_set_client = utf8 */;
-CREATE TABLE `role_tags` (
-  `role_id` int(11) NOT NULL DEFAULT '0',
-  `tag` varchar(25) NOT NULL DEFAULT '',
-  PRIMARY KEY (`role_id`,`tag`),
-  KEY `role_id` (`role_id`),
-  CONSTRAINT `role_tags_ibfk_1` FOREIGN KEY (`role_id`) REFERENCES `roles` (`id`) ON DELETE CASCADE ON UPDATE NO ACTION
-) ENGINE=InnoDB DEFAULT CHARSET=latin1;
-/*!40101 SET character_set_client = @saved_cs_client */;
-
---
 -- Table structure for table `role_variables`
 --
 
@@ -1918,7 +1969,6 @@ CREATE TABLE `roles` (
   `behaviors` varchar(90) DEFAULT NULL,
   `is_devel` tinyint(1) NOT NULL DEFAULT '0',
   `is_deprecated` tinyint(1) DEFAULT '0',
-  `history` text,
   `generation` tinyint(4) DEFAULT '1',
   `os` varchar(60) DEFAULT NULL,
   `os_family` varchar(30) DEFAULT NULL,
@@ -1933,22 +1983,6 @@ CREATE TABLE `roles` (
   KEY `NewIndex3` (`env_id`),
   KEY `idx_os_family` (`os_family`)
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1;
-/*!40101 SET character_set_client = @saved_cs_client */;
-
---
--- Table structure for table `roles_queue`
---
-
-/*!40101 SET @saved_cs_client     = @@character_set_client */;
-/*!40101 SET character_set_client = utf8 */;
-CREATE TABLE `roles_queue` (
-  `id` int(11) NOT NULL AUTO_INCREMENT,
-  `role_id` int(11) DEFAULT NULL,
-  `dtadded` datetime DEFAULT NULL,
-  `action` varchar(50) DEFAULT NULL,
-  PRIMARY KEY (`id`),
-  KEY `role_id` (`role_id`)
-) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -2220,6 +2254,22 @@ CREATE TABLE `server_properties` (
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
+-- Table structure for table `server_termination_errors`
+--
+
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
+CREATE TABLE `server_termination_errors` (
+  `server_id` varchar(36) NOT NULL COMMENT 'servers.server_id ref',
+  `retry_after` datetime NOT NULL COMMENT 'After what time it should be revalidated',
+  `attempts` int(10) unsigned NOT NULL DEFAULT '1' COMMENT 'The number of unsuccessful attempts',
+  `last_error` text COMMENT 'Error message',
+  PRIMARY KEY (`server_id`),
+  KEY `idx_retry_after` (`retry_after`)
+) ENGINE=InnoDB DEFAULT CHARSET=latin1 COMMENT='Server termination process errors';
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
 -- Table structure for table `server_variables`
 --
 
@@ -2253,7 +2303,6 @@ CREATE TABLE `servers` (
   `farm_roleid` int(11) DEFAULT NULL,
   `client_id` int(11) DEFAULT NULL,
   `env_id` int(11) NOT NULL,
-  `role_id` int(11) DEFAULT NULL,
   `platform` varchar(20) DEFAULT NULL,
   `status` varchar(25) DEFAULT NULL,
   `remote_ip` varchar(15) DEFAULT NULL,
@@ -2262,6 +2311,7 @@ CREATE TABLE `servers` (
   `index` int(11) DEFAULT NULL,
   `cloud_location` varchar(255) DEFAULT NULL,
   `cloud_location_zone` varchar(255) DEFAULT NULL,
+  `image_id` varchar(255) DEFAULT NULL,
   `dtshutdownscheduled` datetime DEFAULT NULL,
   `dtrebootstart` datetime DEFAULT NULL,
   `replace_server_id` varchar(36) DEFAULT NULL,
@@ -2273,9 +2323,9 @@ CREATE TABLE `servers` (
   KEY `farmid_status` (`farm_id`,`status`),
   KEY `local_ip` (`local_ip`),
   KEY `env_id` (`env_id`),
-  KEY `role_id` (`role_id`),
   KEY `client_id` (`client_id`),
-  KEY `idx_dtshutdownscheduled` (`dtshutdownscheduled`)
+  KEY `idx_dtshutdownscheduled` (`dtshutdownscheduled`),
+  KEY `idx_image_id` (`image_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
@@ -2425,7 +2475,9 @@ CREATE TABLE `services_chef_runlists` (
 /*!40101 SET character_set_client = utf8 */;
 CREATE TABLE `services_chef_servers` (
   `id` int(11) unsigned NOT NULL AUTO_INCREMENT,
+  `account_id` int(11) DEFAULT NULL,
   `env_id` int(11) DEFAULT NULL,
+  `level` tinyint(4) NOT NULL COMMENT '1 - Scalr, 2 - Account, 4 - Env',
   `url` varchar(255) DEFAULT NULL,
   `username` varchar(50) DEFAULT NULL,
   `auth_key` text,
@@ -2614,7 +2666,6 @@ CREATE TABLE `ssh_keys` (
   KEY `idx_platform` (`platform`,`type`,`env_id`,`farm_id`,`cloud_location`,`cloud_key_name`),
   KEY `fk_ssh_keys_client_environments_id` (`env_id`),
   KEY `fk_ssh_keys_farms_id` (`farm_id`),
-  CONSTRAINT `fk_ssh_keys_farms_id` FOREIGN KEY (`farm_id`) REFERENCES `farms` (`id`) ON DELETE CASCADE ON UPDATE NO ACTION,
   CONSTRAINT `fk_ssh_keys_client_environments_id` FOREIGN KEY (`env_id`) REFERENCES `client_environments` (`id`) ON DELETE CASCADE ON UPDATE NO ACTION
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1;
 /*!40101 SET character_set_client = @saved_cs_client */;
@@ -2979,6 +3030,8 @@ CREATE TABLE `webhook_configs` (
   `env_id` int(11) DEFAULT NULL,
   `post_data` text,
   `skip_private_gv` tinyint(1) DEFAULT '0',
+  `timeout` int(2) NOT NULL DEFAULT '3',
+  `attempts` int(2) NOT NULL DEFAULT '3',
   PRIMARY KEY (`webhook_id`),
   KEY `idx_level` (`level`),
   KEY `idx_account_id` (`account_id`),
@@ -3025,11 +3078,14 @@ CREATE TABLE `webhook_history` (
   `endpoint_id` binary(16) NOT NULL COMMENT 'UUID',
   `event_id` char(36) NOT NULL COMMENT 'UUID',
   `farm_id` int(11) NOT NULL,
+  `server_id` varchar(36) DEFAULT NULL,
   `event_type` varchar(128) NOT NULL,
   `status` tinyint(4) NOT NULL DEFAULT '0',
   `response_code` smallint(6) DEFAULT NULL,
   `payload` text,
   `error_msg` text,
+  `handle_attempts` int(2) DEFAULT '0',
+  `dtlasthandleattempt` datetime DEFAULT NULL,
   PRIMARY KEY (`history_id`),
   KEY `idx_webhook_id` (`webhook_id`),
   KEY `idx_endpoint_id` (`endpoint_id`),
@@ -3054,4 +3110,4 @@ CREATE TABLE `webhook_history` (
 /*!40014 SET UNIQUE_CHECKS=@OLD_UNIQUE_CHECKS */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
--- Dump completed on 2014-08-26  4:11:10
+-- Dump completed on 2014-12-16  5:07:29

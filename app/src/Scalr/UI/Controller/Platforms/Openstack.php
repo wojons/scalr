@@ -34,7 +34,7 @@ class Scalr_UI_Controller_Platforms_Openstack extends Scalr_UI_Controller
             }
         } catch (Exception $e) {}
 
-        if ($client->hasService('network')) {
+        if ($client->hasService('network') && !in_array($this->getParam('platform'), array(SERVER_PLATFORMS::RACKSPACENG_US, SERVER_PLATFORMS::RACKSPACENG_UK))) {
             $data['ipPools'] = array(array('id' =>'', 'name' => ''));
             $data['networks'] = array();
             $networks = $client->network->listNetworks();
@@ -48,13 +48,13 @@ class Scalr_UI_Controller_Platforms_Openstack extends Scalr_UI_Controller
                             'id' => $network->id,
                             'name' => $network->name
                         );
-                    } else {
-                        if ($tenantId == $network->tenant_id) {
-                            $data['networks'][] = array(
-                                'id' => $network->id,
-                                'name' => $network->name
-                            );
-                        }
+                    }
+                    
+                    if ($tenantId == $network->tenant_id || $network->shared == true) {
+                        $data['networks'][] = array(
+                            'id' => $network->id,
+                            'name' => $network->name
+                        );
                     }
                 }
             }
@@ -95,13 +95,13 @@ class Scalr_UI_Controller_Platforms_Openstack extends Scalr_UI_Controller
                             'id' => $network->id,
                             'name' => $network->name
                         );
-                    } else {
-                        if ($tenantId == $network->tenant_id) {
-                            $data['networks'][] = array(
-                                'id' => $network->id,
-                                'name' => $network->name
-                            );
-                        }
+                    }
+                    
+                    if ($tenantId == $network->tenant_id || $network->shared == true) {
+                        $data['networks'][] = array(
+                            'id' => $network->id,
+                            'name' => $network->name
+                        );
                     }
                 }
             }

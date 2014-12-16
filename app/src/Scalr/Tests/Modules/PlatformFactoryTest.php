@@ -4,6 +4,7 @@ namespace Scalr\Tests\Modules;
 
 use Scalr\Modules\PlatformFactory;
 use Scalr\Tests\WebTestCase;
+use Scalr\Model\Entity\CloudLocation;
 
 /**
  * PlatformFactory test
@@ -49,7 +50,16 @@ class PlatformFactoryTest extends WebTestCase
 
     /**
      * @test
+     */
+    public function testWarmUp()
+    {
+        CloudLocation::warmUp();
+    }
+
+    /**
+     * @test
      * @dataProvider providerNewPlatform
+     * @depends testWarmUp
      */
     public function testNewPlatform($platformName)
     {

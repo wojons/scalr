@@ -1,6 +1,6 @@
 Scalr.regPage('Scalr.ui.sshkeys.view', function (loadParams, moduleParams) {
 	var store = Ext.create('store.store', {
-		fields: [ 'id','type','fingerprint','cloud_location','farm_id','cloud_key_name' ],
+		fields: [ 'id','type','fingerprint','cloud_location','farm_id','cloud_key_name', 'status', 'farmName' ],
 		proxy: {
 			type: 'scalr.paging',
 			url: '/sshkeys/xListSshKeys/'
@@ -21,7 +21,7 @@ Scalr.regPage('Scalr.ui.sshkeys.view', function (loadParams, moduleParams) {
 		plugins: {
 			ptype: 'gridstore'
 		},
-
+        
 		tools: [{
 			xtype: 'gridcolumnstool'
 		}, {
@@ -34,13 +34,13 @@ Scalr.regPage('Scalr.ui.sshkeys.view', function (loadParams, moduleParams) {
 
 		viewConfig: {
 			emptyText: 'No SSH keys found',
-			disableSelection: true,
 			loadingText: 'Loading SSH keys ...'
 		},
 
 		columns: [
 			{ text: 'Key ID', width: 100, dataIndex: 'id', sortable: true },
 			{ text: 'Name', flex: 1, dataIndex: 'cloud_key_name', sortable: false },
+            { header: 'Status', xtype: 'statuscolumn', dataIndex: 'status', statustype: 'sshkey', sortable: true, resizable: false, maxWidth: 90, qtipConfig: {width: 300}},
 			{ header: 'Type', width: 200, dataIndex: 'type', sortable: true },
 			{ header: "Cloud location", width: 150, dataIndex: 'cloud_location', sortable: true, xtype: 'templatecolumn', tpl: 
 			'<tpl if="cloud_location">{cloud_location}<tpl else><img src="/ui2/images/icons/false.png" /></tpl>'
@@ -49,7 +49,7 @@ Scalr.regPage('Scalr.ui.sshkeys.view', function (loadParams, moduleParams) {
 			{
 				xtype: 'optionscolumn2',
 				menu: [{
-					text: 'Download Private key',
+					text: 'Download SSH Private key',
 					iconCls: 'x-menu-icon-downloadprivatekey',
 					menuHandler: function (data) {
  						Scalr.utils.UserLoadFile('/sshkeys/' + data['id'] + '/downloadPrivate');
@@ -73,9 +73,9 @@ Scalr.regPage('Scalr.ui.sshkeys.view', function (loadParams, moduleParams) {
 							type: 'delete',
 							msg: 'Removing SSH keypair ...'
 						},
-						url: '/sshkeys/delete/',
+						url: '/sshkeys/xRemove',
 						dataHandler: function (data) {
-							return { sshKeyId: data['id'] };
+							return { sshKeyId: Ext.encode([data['id']])};
 						},
 						success: function () {
 							store.load();
@@ -84,11 +84,58 @@ Scalr.regPage('Scalr.ui.sshkeys.view', function (loadParams, moduleParams) {
 				}]
 			}
 		],
+        
+		multiSelect: true,
+		selModel: {
+            selType: 'selectedmodel',
+			getVisibility: function(record) {
+				return true;
+			}
+        },
+
+        
+		listeners: {
+			selectionchange: function(selModel, selections) {
+				var toolbar = this.down('scalrpagingtoolbar');
+				toolbar.down('#delete').setDisabled(!selections.length);
+			}
+		},
 
 		dockedItems: [{
 			xtype: 'scalrpagingtoolbar',
 			store: store,
 			dock: 'top',
+			afterItems: [{
+				ui: 'paging',
+				itemId: 'delete',
+				iconCls: 'x-tbar-delete',
+				tooltip: 'Select one or more SSH keypair to remove them',
+				disabled: true,
+				handler: function() {
+					var request = {
+						confirmBox: {
+							msg: 'Remove selected SSH keypair(s): %s ?',
+							type: 'delete'
+						},
+						processBox: {
+							msg: 'Removing selected SSH keypair(s) ...',
+							type: 'delete'
+						},
+						url: '/sshkeys/xRemove',
+						success: function() {
+							store.load();
+						}
+					}, records = this.up('grid').getSelectionModel().getSelection(), data = [];
+
+					request.confirmBox.objects = [];
+					for (var i = 0, len = records.length; i < len; i++) {
+						data.push(records[i].get('id'));
+						request.confirmBox.objects.push(records[i].get('cloud_key_name'));
+					}
+					request.params = { sshKeyId: Ext.encode(data) };
+					Scalr.Request(request);
+				}
+			}],
 			items: [{
 				xtype: 'filterfield',
 				store: store

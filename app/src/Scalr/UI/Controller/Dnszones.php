@@ -50,8 +50,8 @@ class Scalr_UI_Controller_Dnszones extends Scalr_UI_Controller
         $records = array();
         foreach ($this->getParam('records') as $key => $r) {
             if (($r['name'] || $r['value'])) {
-                $r['name'] = str_replace("%hostname%", "fakedomainname.qq", $r['name']);
-                $r['value'] = str_replace("%hostname%", "fakedomainname.qq", $r['value']);
+                $r['name'] = str_replace(array("%hostname%", "%zonename%"), array("fakedomainname.qq", "fakedomainname.qq"), $r['name']);
+                $r['value'] = str_replace(array("%hostname%", "%zonename%"), array("fakedomainname.qq", "fakedomainname.qq"), $r['value']);
                 if (!$r['ttl'])
                     $r['ttl'] = 14400;
 
@@ -64,8 +64,8 @@ class Scalr_UI_Controller_Dnszones extends Scalr_UI_Controller
             $this->db->Execute("DELETE FROM default_records WHERE clientid=?", array($this->user->getAccountId()));
 
             foreach ($records as $r) {
-                $r['name'] = str_replace('fakedomainname.qq', '%hostname%', $r['name']);
-                $r['value'] = str_replace('fakedomainname.qq', '%hostname%', $r['value']);
+                $r['name'] = str_replace('fakedomainname.qq', array("%zonename%"), $r['name']);
+                $r['value'] = str_replace('fakedomainname.qq', array("%zonename%"), $r['value']);
 
                 $this->db->Execute("INSERT INTO default_records SET clientid=?, `type`=?, `ttl`=?, `priority`=?, `value`=?, `name`=?",
                     array($this->user->getAccountId(), $r['type'], (int)$r['ttl'],
@@ -150,9 +150,9 @@ class Scalr_UI_Controller_Dnszones extends Scalr_UI_Controller
         $farms = self::loadController('Farms')->getFarmWidgetFarms(array('addEmpty'));
 
         $records = array();
-        $nss = $this->db->GetAll("SELECT * FROM nameservers WHERE isbackup='0'");
-        foreach ($nss as $ns)
-            $records[] = array("id" => "c".rand(10000, 999999), "type" => "NS", "ttl" => 14400, "value" => "{$ns["host"]}.", "name" => "%hostname%.", "issystem" => 0);
+        $nameservers = Scalr::config('scalr.dns.global.nameservers');
+        foreach ($nameservers as $ns)
+            $records[] = array("id" => "c".rand(10000, 999999), "type" => "NS", "ttl" => 14400, "value" => "{$ns}.", "name" => "%zonename%.", "issystem" => 0);
 
         $defRecords = $this->db->GetAll("SELECT * FROM default_records WHERE clientid=?", array($this->user->getAccountId()));
         foreach ($defRecords as $record)
@@ -169,7 +169,7 @@ class Scalr_UI_Controller_Dnszones extends Scalr_UI_Controller
                 'soaOwner'   => str_replace('@', '.', $this->user->getEmail()),
                 'soaRetry' => '7200',
                 'soaRefresh' => '14400',
-                'soaExpire' => '86400'
+                'soaExpire' => '604800'
             ),
             'records' => $records
         ), array('ui/dnszones/dnsfield.js'), array('ui/dnszones/create.css'));
@@ -311,8 +311,8 @@ class Scalr_UI_Controller_Dnszones extends Scalr_UI_Controller
         $records = array();
         foreach ($this->getParam('records') as $key => $r) {
             if (($r['name'] || $r['value']) && $r['issystem'] == 0) {
-                $r['name'] = str_replace("%hostname%", "{$domainName}", $r['name']);
-                $r['value'] = str_replace("%hostname%", "{$domainName}", $r['value']);
+                $r['name'] = str_replace(array("%hostname%","%zonename%"), array("{$domainName}", "{$domainName}"), $r['name']);
+                $r['value'] = str_replace(array("%hostname%","%zonename%"), array("{$domainName}", "{$domainName}"), $r['value']);
 
                 $records[$key] = $r;
             }
@@ -349,7 +349,7 @@ class Scalr_UI_Controller_Dnszones extends Scalr_UI_Controller
                 $DBDNSZone->clientId = $this->user->getAccountId();
                 $DBDNSZone->envId = $this->getEnvironmentId();
 
-                $this->response->success("DNS zone successfully added to database. It could take up to 5 minutes to setup it on NS servers.");
+                $this->response->success("DNS zone successfully added to database. Please allow up to 5 minutes for it to be configured on your NS servers.");
             }
 
             if ($DBDNSZone->farmRoleId != $farmRoleId || $DBDNSZone->farmId != $farmId) {

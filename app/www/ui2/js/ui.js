@@ -58,12 +58,19 @@ Ext.define('Ext.layout.container.Scalr', {
 					var listeners = {
 						beforeactivate: function() {
 							me.owner.getPlugin('leftmenu').show(o.scalrOptions.leftMenu);
+                            if (o.scalrOptions.leftMenu.showPageTitle && o.scalrOptions.title) {
+                                var title = me.owner.getDockedComponent('globalTitle');
+                                title.update(o.scalrOptions.title);
+                                title.show();
+                            }
 						},
 						beforedestroy: function() {
 							me.owner.getPlugin('leftmenu').hide();
+                            me.owner.getDockedComponent('globalTitle').hide();
 						},
 						hide: function() {
 							me.owner.getPlugin('leftmenu').hide();
+                            me.owner.getDockedComponent('globalTitle').hide();
 						}
 					};
 					o.on(listeners);
@@ -216,7 +223,7 @@ Ext.define('Ext.layout.container.Scalr', {
 			}
 
 			this.activeItem = newPage;
-			this.setSize(this.activeItem);
+            this.activeItem.doAutoRender();////todo: check & remove in extjs5
 
 			if (! newPage.scalrOptions.modal) {
 				var docTitle = this.activeItem.title || (this.activeItem.scalrOptions ? (this.activeItem.scalrOptions.title || null) : null);
@@ -225,6 +232,7 @@ Ext.define('Ext.layout.container.Scalr', {
 
             this.activeItem.fireEvent('beforeactivate');
             this.activeItem.fireEvent('applyparams', param);
+			this.setSize(this.activeItem);
 			this.activeItem.show();
 			this.activeItem.el.unmask();
 			this.activeItem.fireEvent('activate');
@@ -233,7 +241,7 @@ Ext.define('Ext.layout.container.Scalr', {
 
 			if (this.activeItem.scalrOptions.modal)
 				this.activeItem.el.setStyle({ 'z-index': this.zIndex });
-			
+
 			return true;
 		}
 	},
@@ -241,8 +249,6 @@ Ext.define('Ext.layout.container.Scalr', {
 	setSize: function (comp) {
 		var r = this.getTarget().getSize();
 		var top = 0, left = 0;
-
-		comp.doAutoRender();
 
 		if (comp.scalrOptions.modal) {
 			top = top + 5;
@@ -281,6 +287,7 @@ Ext.define('Ext.layout.container.Scalr', {
 
 	onOwnResize: function () {
 		if (this.activeItem) {
+            this.activeItem.doAutoRender();//todo: check & remove in extjs5
 			this.setSize(this.activeItem);
 		}
 	}
@@ -327,6 +334,13 @@ Scalr.application = Ext.create('Ext.panel.Panel', {
 			border: false
 		}
 	},{
+        xtype: 'component',
+        itemId: 'globalTitle',
+        dock: 'top',
+        hidden: true,
+        padding: '13 6 10 12',
+        cls: 'x-panel-header-default x-panel-header-text-container-default'
+	},{
         itemId: 'globalWarning',
         dock: 'top',
         xtype: 'displayfield',
@@ -350,7 +364,7 @@ Scalr.application = Ext.create('Ext.panel.Panel', {
                     item.setVisible(!item.wasHiddenBefore);
                     delete item.wasHiddenBefore;
                 }
-                
+
                 item.enable();
             }
 		});
@@ -425,7 +439,7 @@ Ext.apply(Scalr.application, {
                 Scalr.flags.needEnvConfig = false;
                 Scalr.application.updateContext(function() {
                     if (platform == 'ec2') {
-                        Scalr.message.Success('Cloud credentials successfully configured. Now you can start to build your first farm. <a target="_blank" href="http://www.youtube.com/watch?v=6u9M-PD-_Ds&t=6s">Learn how to do this by watching video tutorial.</a>');
+                        Scalr.message.Success('Cloud credentials successfully configured. Now you can start to build your first farm. <a target="_blank" href="https://scalr-wiki.atlassian.net/wiki/x/XhUb">Learn how with this introductory tutorial.</a>');
                         Scalr.event.fireEvent('redirect', '#/farms/build', true);
                     } else if (platform == 'rackspace' || platform == 'gce') {
                         Scalr.message.Success('Cloud credentials successfully configured. You need to create some roles before you will be able to create your first farm.');
@@ -500,7 +514,7 @@ Scalr.application.applyContext = function(context, onlyVars) {
     this.getDockedComponent('globalWarning').hide();
 	if (Scalr.user.userId) {
 		this.createMenu(context);
-        
+
         if (Scalr.user.envId && Scalr.getPlatformConfigValue('ec2', 'autoDisabled')) {
             this.getDockedComponent('globalWarning').setValue((new Ext.Template(Scalr.strings['aws.revoked_credentials'])).apply({envId: Scalr.user.envId})).show();
         }
@@ -520,8 +534,8 @@ Scalr.application.applyContext = function(context, onlyVars) {
         Scalr.event.on('update', Scalr.application.updateMenuHandler);
         window.onhashchange(true);
 	}
-    
-    if (Ext.isDefined(Scalr.user.userId) &&  Ext.isDefined(Scalr.user.userName)) {    	
+
+    if (Ext.isDefined(Scalr.user.userId) &&  Ext.isDefined(Scalr.user.userName)) {
     	_trackingUserEmail = Scalr.user.userName;
     	_trackEvent("000000132973");
     }
@@ -553,23 +567,31 @@ Scalr.application.createMenu = function(context) {
             hrefTarget: '_self'
         }, {
             text: 'Roles',
-            menu: [{
-                text: 'View all',
-                href: '#/roles/manager'
-            }, {
-                text: 'View shared roles',
-                href: '#/roles/manager'
-            }, {
-                text: 'Add new',
-                href: '#/roles/edit'
-            }]
+            href: '#/roles/manager',
+            hrefTarget: '_self'
+        }, {
+            text: 'Images',
+            href: '#/images/view',
+            hrefTarget: '_self'
         }, {
             text: 'Scripts',
             href: '#/scripts/view',
             hrefTarget: '_self'
         }, {
+            text: 'Custom events',
+            href: '#/scripts/events',
+            hrefTarget: '_self'
+        }, {
             text: 'Global variables',
             href: '#/admin/variables',
+            hrefTarget: '_self'
+        }, {
+            text: 'Webhooks',
+            href: '#/webhooks/endpoints',
+            hrefTarget: '_self'
+        }, {
+            text: 'Chef servers',
+            href: '#/services/chef/servers',
             hrefTarget: '_self'
         }, {
             text: 'Settings',
@@ -701,14 +723,7 @@ Scalr.application.createMenu = function(context) {
             text: 'Roles',
             href: '#/roles/manager',
             iconCls: 'x-topmenu-icon-roles',
-            addLinkHref: '#/roles/builder',
-            hidden: !Scalr.isAllowed('FARMS_ROLES') || Scalr.flags['betaMode']
-        }, {
-            xtype: 'menuitemtop',
-            text: 'Roles',
-            href: '#/roles/manager',
-            iconCls: 'x-topmenu-icon-roles',
-            hidden: !Scalr.isAllowed('FARMS_ROLES') || !Scalr.flags['betaMode'],
+            hidden: !Scalr.isAllowed('FARMS_ROLES'),
             addLinkHref: '#/roles/create',
             menu: [{
                 text: 'Roles Library',
@@ -733,22 +748,27 @@ Scalr.application.createMenu = function(context) {
             text: 'Images',
             href: '#/images/view',
             iconCls: 'x-topmenu-icon-images',
-            //hidden: !Scalr.isAllowed('FARMS_ROLES'),
-            hidden: !Scalr.flags['betaMode'],
-            //addLinkHref: '#//create',
+            hidden: !Scalr.isAllowed('FARMS_IMAGES'),
+            addLinkHref: '#/images/create',
             menu: [{
                 text: 'Images Library',
                 href: '#/images/view',
                 iconCls: 'x-topmenu-icon-library'
             }, {
+                text: 'Register existing Image',
+                iconCls: 'x-topmenu-icon-new',
+                href: '#/images/create?register',
+                hidden: !Scalr.isAllowed('FARMS_IMAGES', 'create')
+            }, {
                 text: 'Image Builder',
                 iconCls: 'x-topmenu-icon-builder',
-                href: '#/roles/builder?image'
+                href: '#/roles/builder?image',
+                hidden: !Scalr.isAllowed('FARMS_IMAGES', 'create')
             }, {
                 text: 'Create Image from non-Scalr Server',
                 href: '#/roles/import?image',
                 iconCls: 'x-topmenu-icon-import',
-                hidden: !Scalr.isAllowed('FARMS_ROLES', 'create')
+                hidden: !Scalr.isAllowed('FARMS_IMAGES', 'create')
             }]
         }, {
             text: 'Servers',
@@ -848,7 +868,7 @@ Scalr.application.createMenu = function(context) {
             iconCls: 'x-topmenu-icon-metrics',
             hidden: !Scalr.isAllowed('GENERAL_CUSTOM_SCALING_METRICS')
         }, {
-            text: 'Custom events',
+            text: 'Environment custom events',
             href: '#/scripts/events',
             iconCls: 'x-topmenu-icon-events',
             hidden: !Scalr.isAllowed('GENERAL_CUSTOM_EVENTS')
@@ -857,6 +877,16 @@ Scalr.application.createMenu = function(context) {
             href: '#/core/variables',
             iconCls: 'x-topmenu-icon-variables',
             hidden: !Scalr.isAllowed('ENVADMINISTRATION_GLOBAL_VARIABLES')
+        }, {
+            text: 'Environment webhooks',
+            href: '#/webhooks/endpoints',
+            iconCls: 'x-topmenu-icon-webhooks',
+            hidden: !Scalr.isAllowed('ENVADMINISTRATION_WEBHOOKS')
+        }, {
+            text: 'Environment chef servers',
+            href: '#/services/chef/servers/view',
+            iconCls: 'x-topmenu-icon-chef',
+            hidden: !Scalr.isAllowed('SERVICES_ENVADMINISTRATION_CHEF')
         }, {
             text: 'Governance',
             href: '#/core/governance',
@@ -867,16 +897,6 @@ Scalr.application.createMenu = function(context) {
             href: '#/services/ssl/certificates/view',
             iconCls: 'x-topmenu-icon-sslcertificates',
             hidden: !Scalr.isAllowed('SERVICES_SSL')
-        }, {
-            text: 'Chef servers',
-            href: '#/services/chef/servers/view',
-            iconCls: 'x-topmenu-icon-chef',
-            hidden: !Scalr.isAllowed('SERVICES_CHEF')
-        }, {
-            text: 'Webhooks',
-            href: '#/webhooks/endpoints',
-            iconCls: 'x-topmenu-icon-webhooks',
-            hidden: !Scalr.isAllowed('GENERAL_WEBHOOKS')
         }];
 
         if (Scalr.isPlatformEnabled('ec2')) {
@@ -1028,7 +1048,7 @@ Scalr.application.createMenu = function(context) {
                         }]
                     });
                 }
-                
+
                 menuItems.push({
                     text: 'Details',
                     href: '#/tools/openstack/details?platform=' + platform
@@ -1047,23 +1067,6 @@ Scalr.application.createMenu = function(context) {
                 }
             }
         });
-
-        if (Scalr.isPlatformEnabled('ucloud')) {
-            mainMenu.push({
-				xtype: 'menuseparator'
-			}, {
-				text: 'uCloud',
-				hideOnClick: false,
-				iconCls: 'x-topmenu-icon-ucloud',
-				menu: [{
-					text: 'Volumes',
-					href: '#/tools/cloudstack/volumes?platform=ucloud'
-				}, {
-					text: 'Snapshots',
-					href: '#/tools/cloudstack/snapshots?platform=ucloud'
-				}]
-            });
-        }
 
         if (Scalr.isPlatformEnabled('rackspace')) {
             mainMenu.push({
@@ -1170,9 +1173,12 @@ Scalr.application.createMenu = function(context) {
 				href: '#/scripts/view',
 				text: 'Scripts'
 			}, {
-				href: '#/logs/system',
-				text: 'System Log'
-			}]);
+                href: '#/logs/system',
+                text: 'System Log'
+            }, {
+                href: '#/logs/scripting',
+                text: 'Scripting Log'
+            }]);
 			Scalr.storage.set('system-favorites-created', true);
 		}
 
@@ -1537,6 +1543,10 @@ Scalr.application.createMenu = function(context) {
                     iconCls: 'x-topmenu-icon-support',
                     hrefTarget: '_blank'
                 }, {
+                    text: 'About Scalr',
+                    href: '#/core/about',
+                    iconCls: 'x-topmenu-icon-info'
+                } , {
                     text: 'Full screen',
                     hidden: !Scalr.flags['betaMode'],
                     handler: function() {
@@ -1677,7 +1687,10 @@ window.onhashchange = function (e) {
 		};
 	};
 
-	// check in cache
+    Ext.apply(param, Scalr.state.pageRedirectParams);
+    Scalr.state.pageRedirectParams = {};
+
+    // check in cache
 	Scalr.application.items.each(function () {
 		if (this.scalrRegExp && this.scalrRegExp.test(link)) {
 
@@ -1712,9 +1725,6 @@ window.onhashchange = function (e) {
         finishChange();
 		return;
 	}
-
-	Ext.apply(param, Scalr.state.pageRedirectParams);
-	Scalr.state.pageRedirectParams = {};
 
 	var r = {
 		disableFlushMessages: true,
@@ -1787,7 +1797,7 @@ window.onhashchange = function (e) {
                         }
 					}
 				};
-				
+
 				Ext.apply(param, cache.scalrParamGets(link));
 
                 if (data.moduleRequires)

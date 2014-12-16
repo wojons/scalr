@@ -31,21 +31,26 @@ Scalr.regPage('Scalr.ui.farms.extendedinfo', function (loadParams, moduleParams)
 	if (form.down('#updSettingsSave')) {
 		form.down('#updSettingsSave').on('click', function(){
 			
-			var params = form.getForm().getValues(),
+			var frm = form.getForm(),
+                params = frm.getValues(),
                 isValid = true,
                 validators = {
                     hh: /^(\*|(1{0,1}\d|2[0-3])(-(1{0,1}\d|2[0-3])){0,1}(,(1{0,1}\d|2[0-3])(-(1{0,1}\d|2[0-3])){0,1})*)(\/(1{0,1}\d|2[0-3])){0,1}$/,
                     dd: /^(\*|([12]{0,1}\d|3[01])(-([12]{0,1}\d|3[01])){0,1}(,([12]{0,1}\d|3[01])(-([12]{0,1}\d|3[01])){0,1})*)(\/([12]{0,1}\d|3[01])){0,1}$/,
-                    dw: /^(\*|[0-6](-([0-6])){0,1}(,([0-6])(-([0-6])){0,1})*)(\/([0-6])){0,1}$/i
+                    dw: /^(\*|[0-6](-([0-6])){0,1}(,([0-6])(-([0-6])){0,1})*)(\/([0-6])){0,1}$/
                 };
 			params['farmId'] = loadParams['farmId'];
 			Ext.Object.each(validators, function(name, regexp){
-                var field = form.getForm().findField(name);
+                var field = frm.findField(name);
                 isValid = regexp.test(field.getValue());
                 isValid || field.markInvalid('Invalid format');
                 return isValid;
             });
             if (isValid) {
+                if (frm.findField('dd').getValue() !== '*' && frm.findField('dw').getValue() !== '*') {
+                    frm.findField('dw').markInvalid('"Day of month" and "Day of week" cannot be set at the same time');
+                    return false;
+                }
                 Scalr.Request({
                     processBox: {
                         type: 'action',
@@ -72,7 +77,7 @@ Scalr.regPage('Scalr.ui.farms.extendedinfo', function (loadParams, moduleParams)
             Scalr.Request({
                 confirmBox: {
                     type: 'action',
-                    msg: 'Are you sure want to extend farm expiration date ?'
+                    msg: 'Please confirm that you want to extend the farm termination date?'
                 },
                 processBox: {
                     type: 'action'

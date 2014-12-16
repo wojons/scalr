@@ -5,6 +5,7 @@ use Scalr\Service\Aws\Client\ClientException;
 use Scalr\Service\Aws\Elb\DataType\LoadBalancerDescriptionList;
 use Scalr\Service\Aws\Elb\DataType\ListenerList;
 use Scalr\Service\Aws\DataType\ListDataType;
+use Scalr\Service\Aws;
 
 /**
  * Amazon web servise Elastic load balancer service interface
@@ -58,7 +59,23 @@ class Elb extends AbstractService implements ServiceInterface
      */
     public function getUrl()
     {
-        return 'elasticloadbalancing.' . $this->getAws()->getRegion() . '.amazonaws.com';
+        $region = $this->getAws()->getRegion();
+        if ($region == Aws::REGION_US_GOV_WEST_1) {
+            return 'elasticloadbalancing.us-gov-west-1.amazonaws.com';
+        } elseif ($region == Aws::REGION_CN_NORTH_1) {
+            return 'elasticloadbalancing.cn-north-1.amazonaws.com.cn';
+        }
+        
+        return 'elasticloadbalancing.' . $region . '.amazonaws.com';
+    }
+
+    /**
+     * {@inheritdoc}
+     * @see \Scalr\Service\Aws\AbstractService::getName()
+     */
+    public function getName()
+    {
+        return 'elasticloadbalancing';
     }
 
     /**

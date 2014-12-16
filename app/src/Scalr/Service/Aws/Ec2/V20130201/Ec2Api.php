@@ -2684,6 +2684,7 @@ class Ec2Api extends AbstractApi
         if ($destRegion !== null) {
             //It overrides region to copy
             $options['_host'] = $this->ec2->getUrl($destRegion);
+            $options['_region'] = $destRegion;
         }
         $response = $this->client->call(ucfirst(__FUNCTION__), $options);
         if ($response->getError() === false) {
@@ -3075,6 +3076,7 @@ class Ec2Api extends AbstractApi
         if ($destRegion !== null) {
             //It overrides region to copy
             $options['_host'] = $this->ec2->getUrl($destRegion);
+            $options['_region'] = $destRegion;
         }
         $response = $this->client->call(ucfirst(__FUNCTION__), $options);
         if ($response->getError() === false) {

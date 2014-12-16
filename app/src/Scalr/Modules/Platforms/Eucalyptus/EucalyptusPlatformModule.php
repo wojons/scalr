@@ -6,6 +6,8 @@ use \DBServer;
 use \DBRole;
 use \BundleTask;
 use \DBFarmRole;
+use Exception;
+use Scalr\Service\Aws\Exception\InstanceNotFoundException;
 use Scalr\Service\Aws\S3\DataType\ObjectData;
 use Scalr\Service\Aws\Client\ClientException;
 use Scalr\Service\Aws\DataType\ErrorData;
@@ -19,6 +21,8 @@ use Scalr\Service\Aws\Ec2\DataType\RunInstancesRequestData;
 use Scalr\Service\Aws\Ec2\DataType\PlacementResponseData;
 use Scalr\Modules\Platforms\Eucalyptus\Adapters\StatusAdapter;
 use Scalr\Modules\AbstractPlatformModule;
+use Scalr\Model\Entity\Image;
+use Scalr\Model\Entity\CloudLocation;
 
 class EucalyptusPlatformModule extends AbstractPlatformModule implements \Scalr\Modules\PlatformModuleInterface
 {
@@ -33,7 +37,7 @@ class EucalyptusPlatformModule extends AbstractPlatformModule implements \Scalr\
     const EC2_URL			= 'eucalyptus.ec2_url';
     const S3_URL			= 'eucalyptus.s3_url';
 
-    private $instancesListCache = array();
+    public $instancesListCache = array();
 
     /**
      * {@inheritdoc}
@@ -66,18 +70,23 @@ class EucalyptusPlatformModule extends AbstractPlatformModule implements \Scalr\
      */
     public function hasCloudPrices(\Scalr_Environment $env)
     {
-        if (!$this->container->analytics->enabled) return false;
+        if (!$this->container->analytics->enabled) {
+            return false;
+        }
 
         foreach ($this->getLocations($env) as $location => $desc) {
-            $url = $env->getPlatformConfigValue(static::EC2_URL, false, $location);
+            $url = $env->getPlatformConfigValue($this::EC2_URL, false, $location);
 
-            if (empty($url)) continue;
+            if (empty($url)) {
+                continue;
+            }
 
             $res = $this->container->analytics->prices->hasPriceForUrl(
                 \SERVER_PLATFORMS::EUCALYPTUS,
                 $url,
                 $location
             );
+
             //Some region hasn't any price set
             if (!$res) {
                 return $url;
@@ -186,12 +195,8 @@ class EucalyptusPlatformModule extends AbstractPlatformModule implements \Scalr\
                     $status = 'not-found';
                 }
 
-            } catch (\Exception $e) {
-                if (stristr($e->getMessage(), "does not exist")) {
-                    $status = 'not-found';
-                } else {
-                    throw $e;
-                }
+            } catch (InstanceNotFoundException $e) {
+                $status = 'not-found';
             }
         } else {
             $status = $this->instancesListCache[$DBServer->GetEnvironmentObject()->id][$region][$iid];
@@ -228,87 +233,84 @@ class EucalyptusPlatformModule extends AbstractPlatformModule implements \Scalr\
      * {@inheritdoc}
      * @see \Scalr\Modules\PlatformModuleInterface::RemoveServerSnapshot()
      */
-    public function RemoveServerSnapshot(DBRole $DBRole)
+    public function RemoveServerSnapshot(Image $image)
     {
-        foreach ($DBRole->getImageId(\SERVER_PLATFORMS::EUCALYPTUS) as $location => $imageId) {
+        try {
+            if (! $image->getEnvironment())
+                return true;
+
+            $euca = $image->getEnvironment()->eucalyptus($image->cloudLocation);
             try {
-                $euca = $DBRole->getEnvironmentObject()->eucalyptus($location);
-                try {
-                    $ami = $euca->ec2->image->describe($imageId)->get(0);
-                } catch (\Exception $e) {
-                    if (stristr($e->getMessage(), "Failure Signing Data") ||
-                        stristr($e->getMessage(), "is no longer available") ||
-                        stristr($e->getMessage(), "does not exist") ||
-                        stristr($e->getMessage(), "Not authorized for image")) {
-
-                        return true;
-                    } else {
-
-                        throw $e;
-                    }
-                }
-
-                //$ami variable is expected to be defined here
-
-                $platfrom = $ami->platform;
-                $rootDeviceType = $ami->rootDeviceType;
-
-                if ($rootDeviceType == 'ebs') {
-                    $ami->deregister();
-
-                    //blockDeviceMapping is not mandatory option in the response as well as ebs data set.
-                    $snapshotId = $ami->blockDeviceMapping && count($ami->blockDeviceMapping) > 0 &&
-                                  $ami->blockDeviceMapping->get(0)->ebs ?
-                                  $ami->blockDeviceMapping->get(0)->ebs->snapshotId : null;
-
-                    if ($snapshotId) {
-                        $euca->ec2->snapshot->delete($snapshotId);
-                    }
-                } else {
-                    $image_path = $ami->imageLocation;
-                    $chunks = explode("/", $image_path);
-
-                    $bucketName = array_shift($chunks);
-                    $manifestObjectName = implode('/', $chunks);
-
-                    $prefix = str_replace(".manifest.xml", "", $manifestObjectName);
-
-                    try {
-                        $bucket_not_exists = false;
-                        $objects = $euca->s3->bucket->listObjects($bucketName, null, null, null, $prefix);
-                    } catch (\Exception $e) {
-                        if ($e instanceof ClientException &&
-                            $e->getErrorData() instanceof ErrorData &&
-                            $e->getErrorData()->getCode() == 404) {
-                            $bucket_not_exists = true;
-                        }
-                    }
-
-                    if ($ami) {
-                        if (!$bucket_not_exists) {
-                            /* @var $object ObjectData */
-                            foreach ($objects as $object) {
-                                $object->delete();
-                            }
-                            $bucket_not_exists = true;
-                        }
-
-                        if ($bucket_not_exists) {
-                            $euca->ec2->image->deregister($imageId);
-                        }
-                    }
-                }
-
-                unset($euca);
-                unset($ami);
-
+                $ami = $euca->ec2->image->describe($image->id)->get(0);
             } catch (\Exception $e) {
                 if (stristr($e->getMessage(), "is no longer available") ||
-                    stristr($e->getMessage(), "Not authorized for image")) {
-                    continue;
+                    stristr($e->getMessage(), "does not exist")) {
+
+                    return true;
                 } else {
+
                     throw $e;
                 }
+            }
+
+            //$ami variable is expected to be defined here
+
+            $platfrom = $ami->platform;
+            $rootDeviceType = $ami->rootDeviceType;
+
+            if ($rootDeviceType == 'ebs') {
+                $ami->deregister();
+
+                //blockDeviceMapping is not mandatory option in the response as well as ebs data set.
+                $snapshotId = $ami->blockDeviceMapping && count($ami->blockDeviceMapping) > 0 &&
+                              $ami->blockDeviceMapping->get(0)->ebs ?
+                              $ami->blockDeviceMapping->get(0)->ebs->snapshotId : null;
+
+                if ($snapshotId) {
+                    $euca->ec2->snapshot->delete($snapshotId);
+                }
+            } else {
+                $image_path = $ami->imageLocation;
+                $chunks = explode("/", $image_path);
+
+                $bucketName = array_shift($chunks);
+                $manifestObjectName = implode('/', $chunks);
+
+                $prefix = str_replace(".manifest.xml", "", $manifestObjectName);
+
+                try {
+                    $bucket_not_exists = false;
+                    $objects = $euca->s3->bucket->listObjects($bucketName, null, null, null, $prefix);
+                } catch (\Exception $e) {
+                    if ($e instanceof ClientException &&
+                        $e->getErrorData() instanceof ErrorData &&
+                        $e->getErrorData()->getCode() == 404) {
+                        $bucket_not_exists = true;
+                    }
+                }
+
+                if ($ami) {
+                    if (!$bucket_not_exists) {
+                        /* @var $object ObjectData */
+                        foreach ($objects as $object) {
+                            $object->delete();
+                        }
+                        $bucket_not_exists = true;
+                    }
+
+                    if ($bucket_not_exists) {
+                        $euca->ec2->image->deregister($image->id);
+                    }
+                }
+            }
+
+            unset($euca);
+            unset($ami);
+
+        } catch (\Exception $e) {
+            if (stristr($e->getMessage(), "Not authorized for image")) {
+            } else {
+                throw $e;
             }
         }
     }
@@ -336,10 +338,10 @@ class EucalyptusPlatformModule extends AbstractPlatformModule implements \Scalr\
             $protoImageId = $DBServer->GetProperty(\EUCA_SERVER_PROPERTIES::EMIID);
         }
         else {
-            $protoImageId = DBRole::loadById($BundleTask->prototypeRoleId)->getImageId(
+            $protoImageId = DBRole::loadById($BundleTask->prototypeRoleId)->__getNewRoleObject()->getImage(
                 \SERVER_PLATFORMS::EUCALYPTUS,
                 $DBServer->GetProperty(\EUCA_SERVER_PROPERTIES::REGION)
-            );
+            )->imageId;
         }
 
         $ami = $euca->ec2->image->describe($protoImageId)->get(0);
@@ -414,7 +416,7 @@ class EucalyptusPlatformModule extends AbstractPlatformModule implements \Scalr\
      * {@inheritdoc}
      * @see \Scalr\Modules\PlatformModuleInterface::GetServerExtendedInformation()
      */
-    public function GetServerExtendedInformation(DBServer $DBServer)
+    public function GetServerExtendedInformation(DBServer $DBServer, $extended = false)
     {
         try {
             $euca = $DBServer->GetEnvironmentObject()->eucalyptus($DBServer);
@@ -558,9 +560,9 @@ class EucalyptusPlatformModule extends AbstractPlatformModule implements \Scalr\
 
         if (!$launchOptions) {
             $launchOptions = new \Scalr_Server_LaunchOptions();
-            $DBRole = DBRole::loadById($DBServer->roleId);
 
             $dbFarmRole = $DBServer->GetFarmRoleObject();
+            $DBRole = $dbFarmRole->GetRoleObject();
 
             /*
             $runInstanceRequest->setMonitoring(
@@ -568,17 +570,15 @@ class EucalyptusPlatformModule extends AbstractPlatformModule implements \Scalr\
             );
             */
 
-            $launchOptions->imageId = $DBRole->getImageId(
+            $image = $DBRole->__getNewRoleObject()->getImage(
                 \SERVER_PLATFORMS::EUCALYPTUS,
                 $dbFarmRole->CloudLocation
             );
 
+            $launchOptions->imageId = $image->imageId;
+
             // Need OS Family to get block device mapping for OEL roles
-            $imageInfo = $DBRole->getImageDetails(
-                \SERVER_PLATFORMS::EUCALYPTUS,
-                $dbFarmRole->CloudLocation
-            );
-            $launchOptions->osFamily = $imageInfo['os_family'];
+            $launchOptions->osFamily = $image->getImage()->osFamily;
             $launchOptions->cloudLocation = $dbFarmRole->CloudLocation;
 
             $akiId = $DBServer->GetProperty(\EUCA_SERVER_PROPERTIES::EKIID);
@@ -719,10 +719,10 @@ class EucalyptusPlatformModule extends AbstractPlatformModule implements \Scalr\
                 \EUCA_SERVER_PROPERTIES::ARCHITECTURE  => $result->instancesSet->get(0)->architecture,
             ]);
 
-            $DBServer->osType = $result->instancesSet->get(0)->platform ? $result->instancesSet->get(0)->platform : 'linux';
+            $DBServer->setOsType($result->instancesSet->get(0)->platform ? $result->instancesSet->get(0)->platform : 'linux');
             $DBServer->cloudLocation = $launchOptions->cloudLocation;
             $DBServer->cloudLocationZone = $result->instancesSet->get(0)->placement->availabilityZone;
-
+            $DBServer->imageId = $launchOptions->imageId;
 
             return $DBServer;
         } else {
@@ -1148,24 +1148,52 @@ class EucalyptusPlatformModule extends AbstractPlatformModule implements \Scalr\
     {
         if (!($env instanceof \Scalr_Environment) || empty($cloudLocation)) {
             throw new \InvalidArgumentException(sprintf(
-                "Method %s requires both environment object and cloudLocation to be specified.", __METHOD__
+                "Method %s requires both environment object and cloudLocation to be specified.",
+                __METHOD__
             ));
         }
 
-        $client = $env->eucalyptus($cloudLocation);
-        $ret = array();
+        $ret = [];
+        $detailed = [];
 
-        foreach ($client->describeInstanceTypes() as $item) {
-            if (!$details)
-                $ret[(string)$item->name] = sprintf("%s (CPUs: %d DISK: %d RAM: %d)", $item->name, $item->cpu, $item->disk, $item->memory);
-            else
-                $ret[(string) $item->name] = array(
-                    'name' => (string) $item->name,
-                    'ram' => (string) $item->memory,
+        //Trying to retrieve instance types from the cache
+        $url = $this->getConfigVariable($this::EC2_URL, $env, false, $cloudLocation);
+        $collection = $this->getCachedInstanceTypes(\SERVER_PLATFORMS::EUCALYPTUS, $url, $cloudLocation);
+
+        if ($collection === false || $collection->count() == 0) {
+            //No cache. Fetching data from the cloud
+            $client = $env->eucalyptus($cloudLocation);
+
+            foreach ($client->describeInstanceTypes() as $item) {
+                $detailed[(string)$item->name] = [
+                    'name'  => (string) $item->name,
+                    'ram'   => (string) $item->memory,
                     'vcpus' => (string) $item->cpu,
-                    'disk' => (string) $item->disk,
-                    'type' => 'hdd',
-                );
+                    'disk'  => (string) $item->disk,
+                    'type'  => 'hdd',
+                ];
+
+                if (!$details) {
+                    $ret[(string)$item->name] = sprintf("%s (CPUs: %d DISK: %d RAM: %d)",
+                        $item->name, $item->cpu, $item->disk, $item->memory);
+                } else {
+                    $ret[(string)$item->name] = $detailed[(string)$item->name];
+                }
+            }
+
+            //Refreshes/creates a cache
+            CloudLocation::updateInstanceTypes(\SERVER_PLATFORMS::EUCALYPTUS, $url, $cloudLocation, $detailed);
+        } else {
+            //Takes data from cache
+            foreach ($collection as $cloudInstanceType) {
+                /* @var $cloudInstanceType \Scalr\Model\Entity\CloudInstanceType */
+                if (!$details) {
+                    $ret[$cloudInstanceType->instanceTypeId] = sprintf("%s (CPUs: %d DISK: %d RAM: %d)",
+                        $cloudInstanceType->name, $cloudInstanceType->cpu, $cloudInstanceType->disk, $cloudInstanceType->ram);
+                } else {
+                    $ret[$cloudInstanceType->instanceTypeId] = $cloudInstanceType->getProperties();
+                }
+            }
         }
 
         return $ret;

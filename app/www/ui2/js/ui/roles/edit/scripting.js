@@ -2,6 +2,7 @@ Ext.define('Scalr.ui.RoleDesignerTabScripting', {
     extend: 'Ext.container.Container',
     alias: 'widget.roleeditscripting',
     layout: 'fit',
+    cls: 'scalr-ui-role-edit-tab-scripting',
     items: [{
         xtype: 'scriptfield',
         itemId: 'rolescripting',
@@ -15,7 +16,6 @@ Ext.define('Scalr.ui.RoleDesignerTabScripting', {
                     var rolescripting = this.down('#rolescripting');
                     rolescripting.loadScripts(params['scriptData']['scripts'] || []);
                     rolescripting.loadEvents(params['scriptData']['events'] || {});
-                    rolescripting.loadRoleScripts(params['role']['scripts']);
                 },
                 single: true
             },
@@ -24,7 +24,12 @@ Ext.define('Scalr.ui.RoleDesignerTabScripting', {
                     scripting = [];
 
                 scripts.each(function(item) {
-                    scripting.push(item.getData());
+                    var script = item.getData();
+                    if (!script['system']) {
+                        script['event_name'] = script['event'];
+                        script['script_name'] = script['script'];
+                        scripting.push(script);
+                    }
                 });
 
                 params['role']['scripts'] = scripting;
@@ -33,13 +38,30 @@ Ext.define('Scalr.ui.RoleDesignerTabScripting', {
         this.addListener({
             showtab: {
                 fn: function(params){
-                    var rolescripting = this.down('#rolescripting');
+                    var rolescripting = this.down('#rolescripting'),
+                        scripts = [];
                     rolescripting.chefSettings = params['role']['chef'] || {};
                     rolescripting.setCurrentRoleOptions({
                         osFamily: params['role']['osFamily'],
                         chefAvailable: Ext.Array.contains(params['role']['behaviors'], 'chef')
                     });
                     rolescripting.roleOs = params['role']['osFamily'];
+
+                    if (params['role']['scripts'].length) {
+                        scripts.push.apply(scripts, params['role']['scripts']);
+                    }
+                    if (params['accountScripts'].length) {
+                        Ext.each(params['accountScripts'], function(script){
+                            var addScript = true;
+                            if (script['script_type'] === 'scalr') {
+                                addScript = script['os'] == params['role']['osFamily'] || script['os'] == 'linux' && params['role']['osFamily'] != 'windows';
+                            }
+                            if (addScript) {
+                                scripts.push(script);
+                            }
+                        });
+                    }
+                    rolescripting.loadRoleScripts(scripts);
                 }
             }
         });
@@ -50,8 +72,10 @@ Ext.define('Scalr.ui.RoleDesignerTabScripting', {
 
         scripts.each(function(item) {
             var script = item.getData();
-            script['event_name'] = script['event'];
-            scripting.push(script);
+            if (!script['system']) {
+                script['event_name'] = script['event'];
+                scripting.push(script);
+            }
         });
 
         return {scripts: scripting};

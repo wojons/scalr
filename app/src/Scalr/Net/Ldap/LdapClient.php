@@ -322,10 +322,9 @@ class LdapClient
 
         if (($ret = $this->bindRdn()) == false) {
             throw new LdapException(sprintf(
-                "Cannot bind to ldap server. Check user ({$this->username}) and password in the scalr.connections.ldap section of config. %s"
+                "Cannot bind to ldap server with username '{$this->config->user}' and password in the scalr.connections.ldap section of config. %s"
                 , $this->getLdapError()));
         } else {
-
 
             if (stristr($this->username, "{$this->getConfig()->usernameAttribute}="))
                 $filter = sprintf('(&%s(' . $this->getConfig()->usernameAttribute . '=%s))', $this->config->userFilter, self::realEscape($this->uid));

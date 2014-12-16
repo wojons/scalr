@@ -56,7 +56,7 @@ Ext.define('Scalr.ui.RoleScriptingGrid', {
             }
 
             return {
-                rowBody: '<div style="cursor:pointer"><span title="Execution mode" style="float:left;width:52px;margin-right:7px;text-align:center;font-size:90%;line-height:95%;word-wrap:break-word">' + (record.get('isSync') == 1 ? 'blocking' : '<span style="color:green;position:relative;top:-5px;">non blocking</span>') + '</span><div '+(system ? 'title="'+system+' level script"' : '')+' style="margin:0 57px 5px">'+name+'</div></div>',
+                rowBody: '<div style="cursor:pointer"><span title="Execution mode" style="float:left;width:52px;margin-right:7px;text-align:center;font-size:90%;line-height:95%;word-wrap:break-word">' + (record.get('isSync') == 1 ? 'blocking' : '<span style="color:green;position:relative;top:-5px;">non blocking</span>') + '</span><div style="margin:0 57px 5px">'+name+'</div></div>',
                 rowBodyColspan: this.view.headerCt.getColumnCount(),
                 rowBodyCls: record.get('system') ? 'x-grid-row-system' : ''
             };
@@ -113,11 +113,12 @@ Ext.define('Scalr.ui.RoleScriptingGrid', {
     columns: [{
         flex: 1,
         dataIndex: 'order_index',
-        renderer: function(val, meta, record, rowIndex, colIndex, store) {
+        renderer: function(val, meta, record, rowIndex, colIndex, store, view) {
             var script,
-                system = record.get('system'),
                 scriptType = record.get('script_type'),
-                scope = '';
+                scriptField = view.up('scriptfield'),
+                scope = record.get('system') || (scriptField ? scriptField.mode : 'role'),
+                params;
             switch (scriptType) {
                 case 'scalr':
                     script = record.get('script') + '&nbsp;&nbsp;<img style="opacity:.6;position:relative;top:-2px" src="'+Ext.BLANK_IMAGE_URL+'" class="x-icon-osfamily-small x-icon-osfamily-small-'+(record.get('os')=='windows'?'windows':'oel')+'" />';
@@ -126,17 +127,23 @@ Ext.define('Scalr.ui.RoleScriptingGrid', {
                     script = Ext.String.htmlEncode(record.get('script_path'));
                 break;
                 case 'chef':
-                    script = 'Chef runlist';
+                    params = record.get('params');
+                    if (params['chef.cookbook_url']) {
+                        script = 'Chef: Chef Solo';
+                    } else if (Ext.Object.getSize(params)===3 && params['chef.runlist']==='' && params['chef.attributes']==='' && params['chef.role_name']==='' ) {
+                        script = 'Chef: Reconverge (Server)';
+                    } else {
+                        script = 'Chef: Override Runlist (Server)';
+                    }
                 break;
             }
             if (record.dirty) {
                 meta.tdCls += ' x-grid-dirty-cell';
             }
-            if (system) {
-                meta.tdAttr += ' title="'+system+' level script"';
-                scope = '<img src="'+Ext.BLANK_IMAGE_URL+'" class="scalr-ui-variablefield-scope-'+system+'" style="width:10px;height:10px;vertical-align:top;position:relative;top:4px"/>&nbsp;';
-            }
-            return '<span style="float:left;width:46px;font-size:90%;">#'+record.get('order_index')+'</span> '+scope+'<b>'+script+'</b>';
+            
+            return '<span style="float:left;width:46px;font-size:90%;">#'+record.get('order_index')+'</span> '+
+                   '<img data-qtip="'+Ext.String.capitalize((scope || '').replace('farmrole', 'Farm Role'))+' scope" src="'+Ext.BLANK_IMAGE_URL+'" class="scalr-scope-'+scope+'" style="width:10px;height:10px;vertical-align:top;position:relative;top:2px"/>&nbsp;'+
+                   '<b>'+script+'</b>';
         }
     }],
     initComponent: function() {
@@ -191,7 +198,7 @@ Ext.define('Scalr.ui.RoleScriptingPanel', {
     },
     initComponent: function() {
         this.callParent(arguments);
-        this.down('#chef').add(Scalr.flags['betaMode'] ? {
+        this.down('#chef').add({
             xtype: 'cheforchestration',
             itemId: 'chefSettings',
             relayEventsList: ['change'],
@@ -204,19 +211,18 @@ Ext.define('Scalr.ui.RoleScriptingPanel', {
                     }
                 }
             }
-        }:{
-            xtype: 'label',
-            text: 'Coming soon...'
         });
     },
     beforeRender: function() {
         if (this.mode === 'role') {
             this.down('#targetRolesWrap').hide();
-            this.down('#targetBehaviorsWrap').hide();
+            /* @DEPRECATED AND NEED TO BE REMOVED IN FUTURE */
+            //this.down('#targetBehaviorsWrap').hide();
             this.down('#targetRole').show();
         } else if (this.mode === 'account') {
             this.down('#targetRolesWrap').hide();
-            this.down('#targetBehaviorsWrap').hide();
+            /* @DEPRECATED AND NEED TO BE REMOVED IN FUTURE */
+            //this.down('#targetBehaviorsWrap').hide();
             this.down('#targetFarm').hide();
             this.down('#chef').tab.hide();
             //this.down('[name="run_as"]').show();
@@ -345,14 +351,19 @@ Ext.define('Scalr.ui.RoleScriptingPanel', {
                         xtype: 'combo',
                         store: {
                             fields: [
-                                'id',
+                                'name',
+                                'description',
+                                'scope',
+                                {
+                                    name: 'id',
+                                    convert: function (v, record) {return record.data.name;}
+                                },
                                 {
                                     name: 'title',
                                     convert: function (v, record) {
-                                        return record.get('id') == '*' ? 'All Events' : record.get('id');
+                                        return record.data.name === '*' ? 'All Events' : record.data.name;
                                     }
-                                },
-                                'name'
+                                }
                             ],
                             proxy: 'object'
                         },
@@ -371,17 +382,45 @@ Ext.define('Scalr.ui.RoleScriptingPanel', {
                         autoSearch: false,
                         forceSelection: true,
                         hideInputOnReadOnly: true,
+                        selectOnFocus: true,
                         listConfig: {
                             cls: 'x-boundlist-role-scripting-events',
                             style: 'white-space:nowrap',
                             getInnerTpl: function (displayField) {
-                                return '<tpl if=\'id == \"*\"\'>All Events<tpl else>{id} ' +
-                                    '<tpl if="name">' +
-                                    '<span style="color:#999">({name})</span>' +
-                                    '</tpl>' +
+                                return '&nbsp;<img src="'+Ext.BLANK_IMAGE_URL+'" class="scalr-scope-{scope}" data-qtip="{scope:capitalize} scope" style="width:10px;height:10px" />&nbsp; '+
+                                    '<tpl if=\'id == \"*\"\'>'+
+                                        'All Events<tpl else>{id} ' +
+                                        '<tpl if="description">' +
+                                            '<span style="color:#999">({description})</span>' +
+                                        '</tpl>' +
                                     '</tpl>';
                             }
                         },
+                        setInputImgElType: function(newValue, oldValue) {
+                            var me = this,
+                                rec = me.findRecordByValue(newValue),
+                                oldRec = me.findRecordByValue(oldValue),
+                                scope;
+                            if (oldRec) {
+                                this.inputImgEl.removeCls('scalr-scope-' + oldRec.get('scope'));
+                            }
+                            if (rec) {
+                                scope = rec.get('scope');
+                                if (scope) {
+                                    this.inputImgEl.addCls('scalr-scope-' + scope);
+                                    this.inputImgEl.set({'data-qtip': Ext.String.capitalize(scope) + ' scope'});
+                                    this.inputImgEl.show();
+                                    this.inputEl.setStyle('padding-left', '20px');
+                                } else {
+                                    this.inputEl.setStyle('padding-left', '7px');
+                                    this.inputImgEl.hide();
+                                }
+                            } else {
+                                this.inputEl.setStyle('padding-left', '7px');
+                                this.inputImgEl.hide();
+                            }
+                        },
+
                         listeners: {
                             specialkey: function (field, e) {
                                 if (e.getKey() === e.ESC) {
@@ -390,32 +429,47 @@ Ext.define('Scalr.ui.RoleScriptingPanel', {
                             },
                             afterrender: function (field) {
                                 field.inputEl.on('click', function () {
-                                    field.expand();
+                                    if (!field.disabled && !field.readOnly) {
+                                        field.expand();
+                                    }
                                 });
+
+                                field.inputImgEl = field.inputCell.createChild({
+                                    tag: 'img',
+                                    src: Ext.BLANK_IMAGE_URL,
+                                    style: 'position:absolute;top:8px;left:6px;'
+                                });
+                                field.inputImgEl.setVisibilityMode(Ext.Element.DISPLAY);
+                                field.setInputImgElType(field.getValue());
+
                             },
                             beforeselect: function(comp, rec, index) {
                                 var formPanel = this.up('form'),
                                     record = formPanel.getRecord(),
                                     eventId = rec.get('id'),
-                                    tabs;
-                                if (Scalr.flags['betaMode']) {
-                                    var isEventForbiddenForChef = Ext.Array.contains(['HostInit', 'HostDown', 'BeforeInstanceLaunch'], eventId);
-                                    tabs = formPanel.down('#tabs');
-                                    if (isEventForbiddenForChef && tabs.getComponent('chef').tab.isVisible()) {
-                                        Scalr.message.InfoTip('Please note that Chef runlist can\'t be used with '+eventId+' event', comp.inputEl, {anchor: 'bottom'});
-                                    }
-                                    if (record.store === undefined) {
-                                        if (tabs.activeTab.itemId !== 'chef') {
-                                            tabs.getComponent('chef').setDisabled(isEventForbiddenForChef);
-                                        } else if (isEventForbiddenForChef) {
-                                            return false;
+                                    tabs, chefTab;
+                                var disableChef = Ext.Array.contains(['HostInit', 'HostDown', 'BeforeInstanceLaunch'], eventId);
+                                tabs = formPanel.down('#tabs');
+                                chefTab = tabs.getComponent('chef');
+                                chefTab.tab.setTooltip();
+                                if (disableChef && chefTab.tab.isVisible()) {
+                                    Scalr.message.InfoTip('Please note that Chef can\'t be used with '+eventId+' event', comp.inputEl, {anchor: 'bottom'});
+                                }
+                                if (record.store === undefined) {
+                                    if (tabs.activeTab.itemId !== 'chef') {
+                                        if (tabs.down('#chefSettings').chefSettings['chef.daemonize'] == 1) {
+                                            disableChef = true;
+                                            chefTab.tab.setTooltip('Chef is not available in case of enabled Chef client Daemonize option');
                                         }
-                                    } else if (record.get('script_type') === 'chef' && isEventForbiddenForChef) {
+                                        chefTab.setDisabled(disableChef);
+                                    } else if (disableChef) {
                                         return false;
                                     }
+                                } else if (record.get('script_type') === 'chef' && disableChef) {
+                                    return false;
                                 }
                             },
-                            change: function (comp, value) {
+                            change: function (comp, value, oldValue) {
                                 var formPanel = this.up('form'),
                                     form = formPanel.getForm(),
                                     record = formPanel.getRecord(),
@@ -458,8 +512,13 @@ Ext.define('Scalr.ui.RoleScriptingPanel', {
                                     formPanel.updateRecord(['event', 'target', 'target_roles']);
                                     
                                 }
-                                comp.next().update(scriptRecord ? scriptRecord.get('name') : '');
+                                comp.next().update(scriptRecord ? scriptRecord.get('description') : '');
                                 formPanel.resumeLayouts(true);
+                                
+                                if (comp.inputImgEl) {
+                                    comp.setInputImgElType(value, oldValue);
+                                }
+
                             }
                         }
                     }, {
@@ -508,7 +567,7 @@ Ext.define('Scalr.ui.RoleScriptingPanel', {
                                 for (var i = 0, len = fields.length; i < len; i++) {
                                     fields[i].setDisabled(false);
                                 }
-                                if (Scalr.flags['betaMode'] && !record.get('system')) {
+                                if (!record.get('system')) {
                                     field = formPanel.getForm().findField('isSync');
                                     if (tab.itemId === 'chef') {
                                         field.setReadOnly(true);
@@ -552,7 +611,7 @@ Ext.define('Scalr.ui.RoleScriptingPanel', {
                                 allowBlank: false,
                                 validateOnChange: false,
                                 store: {
-                                    fields: [ 'id', 'name', 'description', 'os', 'isSync', 'timeout', 'versions', 'accountId', 'createdByEmail'  ],
+                                    fields: [ 'id', 'name', 'description', 'os', 'isSync', 'timeout', 'versions', 'accountId', 'scope', 'createdByEmail'  ],
                                     proxy: 'object'
                                 },
                                 triggerAction: 'last',
@@ -729,9 +788,17 @@ Ext.define('Scalr.ui.RoleScriptingPanel', {
                             anchor: '100%'
                         },
                         tabConfig: {
-                            title: 'Chef runlist'
+                            title: 'Chef',
+                            width: 100
                         }
                     }]
+                },{
+                    xtype: 'displayfield',
+                    itemId: 'abortIfBeforeHostUpFails',
+                    cls: 'x-form-field-warning',
+                    anchor: '100%',
+                    hidden: true,
+                    value: 'Scalr will abort Server initialization if this Script fails.'
                 },{
                     xtype: 'container',
                     layout: 'hbox',
@@ -828,13 +895,17 @@ Ext.define('Scalr.ui.RoleScriptingPanel', {
                 },
                 refreshTargets: function() {
                     var mode = this.up('scriptfield').mode,
-                        scriptType = this.up('form').getRecord().get('script_type');
+                        record = this.up('form').getRecord(),
+                        scriptType = record.get('script_type'),
+                        params = record.get('params'),
+                        isReconverge = (Ext.Object.getSize(params) === 3 && params['chef.runlist']==='' && params['chef.attributes']==='' && params['chef.role_name']==='');
                     if (mode === 'farmrole') {
-                        this.down('#targetRolesWrap').setVisible(scriptType !== 'chef');
-                        this.down('#targetBehaviorsWrap').setVisible(scriptType !== 'chef');
+                        this.down('#targetRolesWrap').setVisible(scriptType !== 'chef' || isReconverge);
+                        /* @DEPRECATED AND NEED TO BE REMOVED IN FUTURE */
+                        //this.down('#targetBehaviorsWrap').setVisible(scriptType !== 'chef');
                     }
                     if (mode !== 'account') {
-                        this.down('#targetFarm').setVisible(scriptType !== 'chef');
+                        this.down('#targetFarm').setVisible(scriptType !== 'chef' || isReconverge);
                     }
                     if (mode === 'role') {
                         this.down('#targetRole').setVisible(scriptType !== 'chef');
@@ -931,6 +1002,8 @@ Ext.define('Scalr.ui.RoleScriptingPanel', {
 
                         }]
                     },{
+                        /* @DEPRECATED AND NEED TO BE REMOVED IN FUTURE */
+                        hidden: true,
                         xtype: 'container',
                         itemId: 'targetBehaviorsWrap',
                         margin: '6 0 0',
@@ -1069,12 +1142,10 @@ Ext.define('Scalr.ui.RoleScriptingPanel', {
                     if (isNewRecord || record.get('target') != 'roles') {
                         form.findField('target_roles').setValue([this.up('scriptfield').farmRoleId]);
                     }
-                    if (Scalr.flags['betaMode']) {
-                        chefSettingsField = this.down('#chefSettings');
-                        chefSettingsField.readOnly = readOnly;
-                        chefSettingsField.chefSettings = scriptField.chefSettings || {};
-                        chefSettingsField.setValue(isNewRecord ? scriptField.chefSettings : (record.get('params') || {}));
-                    }
+                    chefSettingsField = this.down('#chefSettings');
+                    chefSettingsField.readOnly = readOnly;
+                    chefSettingsField.chefSettings = scriptField.chefSettings || {};
+                    chefSettingsField.setValue(record.get('params') || {});
                     form.clearInvalid();
                     if (!this.isVisible()) {
                         this.setVisible(true);
@@ -1087,6 +1158,13 @@ Ext.define('Scalr.ui.RoleScriptingPanel', {
                     }
                     this.down('#targetsWrapper').refreshTargets();
                     this.isLoading = false;
+                    this.down('#abortIfBeforeHostUpFails').setVisible(
+                        this.up('scriptfield').abortIfBeforeHostUpFails &&
+                        record.get('event') == 'BeforeHostUp' &&
+                        scriptType === 'scalr' &&
+                        record.get('isSync') == 1
+                    );
+
                 }
             },
 
@@ -1144,10 +1222,7 @@ Ext.define('Scalr.ui.RoleScriptingPanel', {
                     return;
                 }
                 if (isNew) {
-                    fields = ['script_path', 'script_id', 'version', 'script', 'os', 'run_as', 'order_index', 'event', 'isSync', 'timeout']
-                    if (Scalr.flags['betaMode']) {
-                        fields.push('chef');
-                    }
+                    fields = ['script_path', 'script_id', 'version', 'script', 'os', 'run_as', 'order_index', 'event', 'isSync', 'timeout', 'chef']
                 }
                 for (var i=0, len=fields.length; i<len; i++) {
                     if (Ext.typeOf(fields[i]) == 'object') {
@@ -1195,11 +1270,11 @@ Ext.define('Scalr.ui.RoleScriptingPanel', {
                 }
                 var isEventForbiddenForChef = Ext.Array.contains(['HostInit', 'HostDown', 'BeforeInstanceLaunch'], values['event']);
                 if (values['script_type'] === 'chef' && isEventForbiddenForChef) {
-                    Scalr.message.InfoTip(values['event'] + ' event is not available for Chef runlist', form.findField('event').inputEl, {anchor: 'bottom'});
+                    Scalr.message.InfoTip(values['event'] + ' event is not available for Chef', form.findField('event').inputEl, {anchor: 'bottom'});
                     return;
                 }
 
-                var refreshTargets = values['script_type'] != record.get('script_type');
+                var refreshTargets = values['script_type'] != record.get('script_type') || record.get('script_type') === 'chef';
 
                 if (Ext.Object.getSize(values) && record) {
                     this.grid.disableOnFocusChange = true;
@@ -1217,6 +1292,13 @@ Ext.define('Scalr.ui.RoleScriptingPanel', {
                 if (refreshTargets) {
                     this.down('#targetsWrapper').refreshTargets();
                 }
+
+                this.down('#abortIfBeforeHostUpFails').setVisible(
+                    this.up('scriptfield').abortIfBeforeHostUpFails &&
+                    record.get('event') == 'BeforeHostUp' &&
+                    record.get('script_type') === 'scalr' &&
+                    record.get('isSync') == 1
+                );
 
             }
         }
@@ -1272,7 +1354,7 @@ Ext.define('Scalr.ui.RoleScriptingPanel', {
     },
 
     loadEvents: function(data) {
-        var events = {'*': 'All events'};
+        var events = {'*': {name: '*', description: 'All events', scope: ''}};
         Ext.apply(events, data);
         this.down('#event').getStore().load({data: events});
         this.down('grid').getStore().loadEvents(events);

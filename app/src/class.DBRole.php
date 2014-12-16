@@ -1,6 +1,8 @@
 <?php
 
 use Scalr\Modules\PlatformFactory;
+use Scalr\Role\Role;
+use Scalr\Model\Entity\Image;
 
 class DBRole
 {
@@ -29,9 +31,8 @@ class DBRole
         $tags = array(),
         $images,
         $behaviorsRaw,
-        $history,
-        $environment;
-
+        $environment,
+        $__newRoleObject; // temp
 
     /*Temp*/
     public $instanceType;
@@ -56,14 +57,10 @@ class DBRole
         'os_generation'  => 'osGeneration',
         'os_version'     => 'osVersion',
 
-        'history'		=> 'history',
         'behaviors'		=> 'behaviorsRaw'
     );
 
     const PROPERTY_SSH_PORT = 'system.ssh-port';
-    const PROPERTY_NIMBULA_ENTRY = 'nimbula.entry';
-    const PROPERTY_NIMBULA_INIT_ROOT_USER = 'nimbula.init.root_user';
-    const PROPERTY_NIMBULA_INIT_ROOT_PASS = 'nimbula.init.root_pass';
 
     public function __construct($id)
     {
@@ -137,30 +134,6 @@ class DBRole
         return $this->db->GetOne("SELECT name FROM role_categories WHERE id=? LIMIT 1", array($this->catId));
     }
 
-    public function getRoleHistory($get_last = true)
-    {
-        $history = explode(",", $this->history);
-
-        if ($get_last)
-            return array_pop($history);
-        else
-            return $history;
-    }
-
-    public function getTags()
-    {
-        $this->loadTagsCache();
-
-        return array_keys($this->tags);
-    }
-
-    public function hasTag($tag)
-    {
-        $this->loadTagsCache();
-
-        return ($this->tags[$tag] == 1);
-    }
-
     public function getDbMsrBehavior()
     {
         if ($this->hasBehavior(ROLE_BEHAVIORS::REDIS))
@@ -183,132 +156,12 @@ class DBRole
         return (in_array($behavior, $this->getBehaviors()));
     }
 
-    public function getSoftwareList()
-    {
-        $retval = array();
-        foreach ((array)$this->db->GetAll("SELECT * FROM role_software WHERE role_id=?", array($this->id)) as $soft)
-            $retval[$soft['software_key']] = array('name' => $soft['software_name'], 'version' => $soft['software_version']);
-
-        return $retval;
-    }
-
     public function getBehaviors()
     {
         if (!$this->behaviors)
             $this->behaviors = explode(",", $this->behaviorsRaw);
 
         return $this->behaviors;
-    }
-
-    private function loadTagsCache()
-    {
-        if (!$this->tags)
-        {
-            $tags = $this->db->Execute("SELECT * FROM role_tags WHERE role_id=?", array($this->id));
-            while ($t = $tags->FetchRow())
-                $this->tags[$t['tag']] = 1;
-        }
-    }
-
-    private function loadImagesCache()
-    {
-        if (!$this->images)
-        {
-            $images = $this->db->GetAll("SELECT * FROM role_images WHERE role_id=?", array($this->id));
-            foreach ($images as $image)
-            {
-                $this->images[$image['platform']][$image['cloud_location']] = $image['image_id'];
-                $this->imagesDetails[$image['platform']][$image['cloud_location']] = array(
-                    'image_id' 	=> $image['image_id'],
-                    'architecture'=> $image['architecture'],
-                    'szr_version'=> $image['agent_version']
-                );
-            }
-        }
-    }
-
-    public function getCloudLocations($platform = null)
-    {
-        $this->loadImagesCache();
-
-        $retval = array();
-
-        if (!$platform) {
-            foreach ($this->getPlatforms() as $platform)
-                $retval = array_merge($this->images[$platform], $retval);
-        }
-        else
-            $retval = (array)$this->images[$platform];
-
-        return array_keys($retval);
-    }
-
-    public function getPlatforms()
-    {
-        $this->loadImagesCache();
-
-        return !empty($this->images) ? array_keys($this->images) : array();
-    }
-
-    public function getImages($extended = false)
-    {
-        $this->loadImagesCache();
-
-        if (!$extended)
-            return $this->images;
-        else
-            return $this->imagesDetails;
-    }
-
-    public function getImagesString()
-    {
-        $this->loadImagesCache();
-
-        $images = "";
-
-        foreach ($this->images as $p => $r)
-        {
-            foreach ($r as $rk => $i)
-            {
-                $images .= "{$p}/{$rk}: {$i}, ";
-            }
-        }
-
-        $images = trim($images, ", ");
-
-        return $images;
-    }
-
-    public function getImageDetails($platform, $cloudLocation) {
-        $this->loadImagesCache();
-
-        if (in_array($platform, array(SERVER_PLATFORMS::GCE, SERVER_PLATFORMS::ECS)))
-            $cloudLocation = '';
-
-        return $this->imagesDetails[$platform][$cloudLocation];
-    }
-
-    public function getImageId($platform = null, $cloudLocation = null)
-    {
-        $this->loadImagesCache();
-
-        if ($platform)
-        {
-            if ($cloudLocation)
-            {
-                $allRegionsImage = $this->images[$platform][''];
-
-                $retval = $this->images[$platform][$cloudLocation];
-                if (!$retval)
-                    return $allRegionsImage;
-                else
-                    return $retval;
-            }
-            else
-                return $this->images[$platform];
-        }
-        else
-            return array_shift(array_values(array_values($this->images)));
     }
 
     /**
@@ -432,83 +285,55 @@ class DBRole
 
         }
 
+        $this->syncAnalyticsTags();
+
         return $this;
     }
 
-    public function remove($removeImage = false)
+    /**
+     * Synchronizes analytics role related tags
+     */
+    public function syncAnalyticsTags()
     {
-        if ($removeImage)
-        {
-            $platforms = array_keys($this->getImages());
-            foreach ($platforms as $platform)
-                PlatformFactory::NewPlatform($platform)->RemoveServerSnapshot($this);
-        }
+        if (Scalr::getContainer()->analytics->enabled) {
+            //Role name
+            Scalr::getContainer()->analytics->tags->syncValue(
+                $this->clientId, \Scalr\Stats\CostAnalytics\Entity\TagEntity::TAG_ID_ROLE, $this->id, $this->name
+            );
 
+            //Role behavior
+            $baseBehavior = !empty($this->behaviorsRaw) ? preg_split('/[,\s]+/', trim($this->behaviorsRaw))[0] : '';
+
+            Scalr::getContainer()->analytics->tags->syncValue(
+                $this->clientId, \Scalr\Stats\CostAnalytics\Entity\TagEntity::TAG_ID_ROLE_BEHAVIOR, $this->id, $baseBehavior
+            );
+        }
+    }
+
+    /**
+     * @deprecated
+     */
+    public function remove()
+    {
         $this->db->Execute("DELETE FROM roles WHERE id = ?", array($this->id));
-        $this->db->Execute("DELETE FROM roles_queue WHERE role_id = ?", array($this->id));
     }
 
-    public function isUsed()
+    /**
+     * @return \Scalr\Role\Role
+     * @throws Exception
+     */
+    public function __getNewRoleObject()
     {
-        return (bool)$this->db->GetOne("SELECT id FROM farm_roles WHERE role_id=? OR new_role_id=? LIMIT 1",
-            array($this->id, $this->id)
-        );
-    }
+        if (! $this->__newRoleObject) {
+            if ($this->id) {
+                $this->__newRoleObject = Role::findPk($this->id);
+            }
 
-    public function removeImage($imageId)
-    {
-        $this->db->Execute("DELETE FROM role_images WHERE image_id = ? AND role_id = ?", array($imageId, $this->id));
-    }
-
-    public function setImage($imageId, $platform, $cloudLocation='', $agentVersion = '', $architecture = '')
-    {
-        $this->db->Execute("INSERT INTO role_images SET
-            `role_id`			= ?,
-            `cloud_location`	= ?,
-            `image_id`			= ?,
-            `platform`			= ?,
-            `agent_version`		= ?,
-            `architecture`		= ?
-            ON DUPLICATE KEY UPDATE
-            `image_id` = ?,
-            `architecture`		= ?
-        ", array(
-            $this->id,
-            $cloudLocation,
-            trim($imageId),
-            $platform,
-            $agentVersion,
-            $architecture,
-            trim($imageId),
-            $architecture
-        ));
-    }
-
-    public function setTags(array $tags = array())
-    {
-        $this->db->Execute("DELETE FROM role_tags WHERE role_id = ?", array($this->id));
-        foreach ($tags as $tag) {
-            $this->db->Execute("INSERT INTO role_tags SET role_id = ?, `tag` = ?", array($this->id, $tag));
+            if (! $this->__newRoleObject)
+                throw new Exception('Role object is not found');
         }
-    }
 
-    public function setSoftware(array $software = array())
-    {
-        //TODO: validate
-
-        foreach ($software as $software_key => $software_version) {
-            $this->db->Execute("INSERT INTO role_software SET
-                role_id			= ?,
-                software_name	= ?,
-                software_version= ?,
-                software_key	= ?
-            ", array(
-                $this->id,
-                $software_key,
-                $software_version,
-                $software_key
-            ));
-        }
+        return $this->__newRoleObject;
     }
 
     public function getParameters()
@@ -670,9 +495,8 @@ class DBRole
     public function cloneRole($newRoleName, $accountId, $envId)
     {
         $this->db->BeginTrans();
+
         try {
-
-
             $this->db->Execute("INSERT INTO roles SET
                 name            = ?,
                 origin          = ?,
@@ -681,7 +505,6 @@ class DBRole
                 cat_id          = ?,
                 description     = ?,
                 behaviors       = ?,
-                history         = ?,
                 generation      = ?,
                 os              = ?,
                 os_family       = ?,
@@ -695,7 +518,6 @@ class DBRole
                 $this->catId,
                 $this->description,
                 $this->behaviorsRaw,
-                "*cloned from {$this->name} ($this->id)*",
                 2,
                 $this->os,
                 $this->osFamily,
@@ -716,20 +538,8 @@ class DBRole
                     `role_id` = ?,
                     `cloud_location` = ?,
                     `image_id` = ?,
-                    `platform` = ?,
-                    `architecture` = ?,
-                    `agent_version` = ?
-                ", array($newRoleId, $r7['cloud_location'], $r7['image_id'], $r7['platform'], $r7['architecture'], $r7['agent_version']));
-            }
-
-            //Set tags
-            $rsr1 = $this->db->Execute("SELECT * FROM role_tags WHERE role_id = ?", array($this->id));
-            $tags = array();
-            while ($r1 = $rsr1->FetchRow()) {
-                $this->db->Execute("INSERT INTO role_tags SET
-                    `role_id` = ?,
-                    `tag` = ?
-                ", array($newRoleId, $r1['tag']));
+                    `platform` = ?
+                ", array($newRoleId, $r7['cloud_location'], $r7['image_id'], $r7['platform']));
             }
 
             $props = $this->db->Execute("SELECT * FROM role_properties WHERE role_id=?", array($this->id));
@@ -747,17 +557,6 @@ class DBRole
                     $p1['value'],
                     $p1['value']
                 ));
-            }
-
-            //Set software
-            $rsr2 = $this->db->Execute("SELECT * FROM role_software WHERE role_id = ?", array($this->id));
-            while ($r2 = $rsr2->FetchRow()) {
-                $this->db->Execute("INSERT INTO role_software SET
-                    `role_id` = ?,
-                    `software_name` = ?,
-                    `software_version` = ?,
-                    `software_key` = ?
-                ", array($newRoleId, $r2['software_name'], $r2['software_version'], $r2['software_key']));
             }
 
             //Set global variables
@@ -791,6 +590,11 @@ class DBRole
         }
 
         $this->db->CommitTrans();
+
+        if (!empty($newRoleId)) {
+            $newRole = self::loadById($newRoleId);
+            $newRole->syncAnalyticsTags();
+        }
 
         return $newRoleId;
     }
@@ -861,7 +665,6 @@ class DBRole
             cat_id          = ?,
             description		= ?,
             behaviors		= ?,
-            history			= ?,
             generation		= ?,
             added_by_email  = ?,
             added_by_userid = ?,
@@ -877,7 +680,6 @@ class DBRole
             $catId,
             $BundleTask->description,
             $proto_role['behaviors'],
-            trim("{$proto_role['history']},{$proto_role['name']}", ","),
             2,
             $BundleTask->createdByEmail,
             $BundleTask->createdById,
@@ -896,7 +698,7 @@ class DBRole
             $BundleTask->roleName, $BundleTask->roleId
         ));
 
-        $role =  self::loadById($role_id);
+        $role = self::loadById($role_id);
 
         $behaviors = explode(",", $proto_role['behaviors']);
         foreach ($behaviors as $behavior) {
@@ -910,17 +712,16 @@ class DBRole
         }
 
         // Set image
-        $role->setImage(
-            $BundleTask->snapshotId,
+        $role->__getNewRoleObject()->setImage(
             $BundleTask->platform,
             (!in_array($BundleTask->platform, array(SERVER_PLATFORMS::GCE, SERVER_PLATFORMS::ECS))) ? $BundleTask->cloudLocation : "",
-            $meta['szr_version'],
-            $proto_role['architecture']
+            $BundleTask->snapshotId,
+            $BundleTask->createdById,
+            $BundleTask->createdByEmail
         );
 
         // Set params
-        if ($proto_role['id'])
-        {
+        if ($proto_role['id']){
             $dbParams = $db->GetAll("SELECT name,type,isrequired,defval,allow_multiple_choice,options,hash,issystem
                 FROM role_parameters WHERE role_id = ?", array($proto_role['id'])
             );
@@ -948,27 +749,7 @@ class DBRole
             $variables->setValues($variables->getValues($proto_role['id']), $role->id);
         }
 
-        // Set software
-        if ($meta) {
-
-            $software = array();
-            foreach ((array)$meta['software'] as $soft)
-                $software[$soft->name] = $soft->version;
-
-            $role->setSoftware($software);
-
-            $role->setTags((array)$meta['tags']);
-
-            if ($BundleTask->platform == SERVER_PLATFORMS::NIMBULA) {
-                $props = array(
-                    array('name' => self::PROPERTY_NIMBULA_INIT_ROOT_USER, 'value' => $meta['init_root_user']),
-                    array('name' => self::PROPERTY_NIMBULA_INIT_ROOT_PASS, 'value' => $meta['init_root_pass']),
-                    array('name' => self::PROPERTY_NIMBULA_ENTRY, 'value' => '')
-                );
-                foreach ($props as $prop)
-                    $role->setProperty($prop['name'], $prop['value']);
-            }
-        }
+        $role->syncAnalyticsTags();
 
         return $role;
     }

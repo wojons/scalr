@@ -2,15 +2,13 @@ Scalr.regPage('Scalr.ui.roles.manager', function (loadParams, moduleParams) {
     var isScalrAdmin = Scalr.user.type === 'ScalrAdmin';
     var deleteConfirmationForm = {
         xtype: 'fieldset',
-        title: 'Removal parameters',
         cls: 'x-fieldset-separator-none x-fieldset-no-bottom-padding',
         hidden: isScalrAdmin,
         items: [{
-            xtype: 'checkbox',
-            boxLabel: 'Remove image from cloud',
-            inputValue: 1,
-            checked: false,
-            name: 'removeFromCloud'
+            xtype: 'displayfield',
+            cls: 'x-form-field-warning',
+            anchor: '100%',
+            value: 'Removing this Role will not remove the Images associated with it (neither in Scalr nor in your Cloud)'
         }]
     };
 
@@ -59,7 +57,7 @@ Scalr.regPage('Scalr.ui.roles.manager', function (loadParams, moduleParams) {
 			{name: 'id', type: 'int'},
 			{name: 'client_id', type: 'int'},
 			'name', 'origin', 'behaviors', 'os', 'osFamily', 'platforms','used_servers','status',
-            'software', 'images', 'description', 'usedBy'
+            'images', 'description', 'usedBy'
 		],
 		proxy: {
 			type: 'ajax',
@@ -133,6 +131,10 @@ Scalr.regPage('Scalr.ui.roles.manager', function (loadParams, moduleParams) {
                     rolesStore,
                     {single: true}
                 );
+            } else if (params['chefServerId']) {
+                resetFilterFields();
+                grid.down('#filterfield').setValue('(chefServerId:' + params['chefServerId'] + ')').clearButton.show();
+                rolesStore.updateParamsAndLoad({chefServerId: params['chefServerId']}, true);
             } else if (params['imageId']) {
                 resetFilterFields();
                 grid.down('#platform').setValue(params['platform'], true);
@@ -192,7 +194,25 @@ Scalr.regPage('Scalr.ui.roles.manager', function (loadParams, moduleParams) {
         },
 
         columns: [
-            { header: 'Role', flex: 2, dataIndex: 'name', sortable: true,  xtype: 'templatecolumn', tpl: '<tpl if="origin==\'SHARED\'"><span class="scalr-ui-shared-role-name" title="Quick start role.">{name}</span><tpl else>{name}</tpl>' },
+            {
+                header: '<img style="cursor: help" src="'+Ext.BLANK_IMAGE_URL+'" class="x-icon-info" data-qclass="x-tip-light" data-qtip="' +
+                Ext.String.htmlEncode('<div>Scopes:</div>' +
+                '<div><img src="' + Ext.BLANK_IMAGE_URL + '" class="scalr-scope-scalr">&nbsp;&nbsp;Scalr</div>' +
+                '<div><img src="' + Ext.BLANK_IMAGE_URL + '" class="scalr-scope-environment">&nbsp;&nbsp;Environment</div>') +
+                '" />&nbsp;Role',
+                dataIndex: 'name',
+                sortable: true,
+                flex: 2,
+                xtype: 'templatecolumn',
+                tpl: new Ext.XTemplate('{[this.getScope(values.origin)]}&nbsp;&nbsp;{name}',
+                    {
+                        getScope: function(origin){
+                            var scope = origin == 'SHARED' ? 'scalr' : 'environment';
+                            return '<img src="' + Ext.BLANK_IMAGE_URL + '" class="scalr-scope-'+scope+'" data-qtip="This Role is defined in the '+Ext.String.capitalize(scope)+' Scope"/>';
+                        }
+                    }
+                )
+            },
             { header: "Clouds", flex: .5, minWidth: 110, dataIndex: 'platforms', sortable: false, xtype: 'templatecolumn', tpl:
                 '<tpl for="platforms">'+
                     '<img style="margin:0 3px"  class="x-icon-platform-small x-icon-platform-small-{.}" title="{[Scalr.utils.getPlatformName(values)]}" src="' + Ext.BLANK_IMAGE_URL + '"/>'+
@@ -228,9 +248,38 @@ Scalr.regPage('Scalr.ui.roles.manager', function (loadParams, moduleParams) {
                 store: rolesStore,
                 flex: 1,
                 minWidth: 100,
-                maxWidth: 160,
+                maxWidth: 200,
                 margin: 0,
-                separatedParams: ['roleId', 'imageId']
+                form: {
+                    items: [{
+                        xtype: 'textfield',
+                        name: 'imageId',
+                        fieldLabel: 'Image ID',
+                        labelAlign: 'top'
+                    }]
+                },
+                separatedParams: ['roleId', 'chefServerId']
+            },{
+                xtype: 'cyclealt',
+                itemId: 'platform',
+                getItemIconCls: false,
+                flex: 1,
+                minWidth: 90,
+                maxWidth: 110,
+                hidden: platformFilterItems.length === 1,
+                cls: 'x-btn-compressed',
+                changeHandler: function(comp, item) {
+                    comp.next('#location').setPlatform(item.value);
+                    rolesStore.updateParamsAndLoad({platform: item.value, cloudLocation: undefined});
+                },
+                getItemText: function(item) {
+                    return item.value ? 'Cloud: <img src="' + Ext.BLANK_IMAGE_URL + '" class="' + item.iconCls + '" title="' + item.text + '" />' : item.text;
+                },
+                menu: {
+                    cls: 'x-menu-light x-menu-cycle-button-filter',
+                    minWidth: 200,
+                    items: platformFilterItems
+                }
             },{
                 xtype: 'combo',
                 itemId: 'location',
@@ -284,6 +333,7 @@ Scalr.regPage('Scalr.ui.roles.manager', function (loadParams, moduleParams) {
                     this.resumeEvents();
                 }
             },{
+                // TODO: replace scope within origin
                 xtype: 'cyclealt',
                 itemId: 'origin',
                 getItemIconCls: false,
@@ -292,49 +342,29 @@ Scalr.regPage('Scalr.ui.roles.manager', function (loadParams, moduleParams) {
                 maxWidth: 110,
                 cls: 'x-btn-compressed',
                 changeHandler: function(comp, item) {
-                    rolesStore.updateParamsAndLoad({origin: item.value});
+                    rolesStore.updateParamsAndLoad({scope: item.value});
                 },
                 getItemText: function(item) {
-                    return item.value ? 'Owner: <img src="' + Ext.BLANK_IMAGE_URL + '" class="' + item.iconCls + '" title="' + item.text + '" />' : item.text;
+                    return item.value ? 'Scope: <img src="' + Ext.BLANK_IMAGE_URL + '" class="' + item.iconCls + '" style="vertical-align: top; width: 14px; height: 14px;" title="' + item.text + '" />' : item.text;
                 },
                 menu: {
                     cls: 'x-menu-light x-menu-cycle-button-filter',
                     minWidth: 200,
                     items: [{
-                        text: 'All owners',
+                        text: 'All scopes',
                         value: null
                     },{
-                        text: 'Scalr',
-                        value: 'Shared',
-                        iconCls: 'x-icon-scalr-small'
+                        text: 'Scalr scope',
+                        value: 'scalr',
+                        iconCls: 'x-menu-item-icon-scope scalr-scope-scalr'
                     },{
-                        text: 'Private',
-                        value: 'Custom',
-                        iconCls: 'x-icon-private-small'
+                        text: 'Environment scope',
+                        value: 'env',
+                        iconCls: 'x-menu-item-icon-scope scalr-scope-env'
                     }]
                 }
+
             }, {
-                xtype: 'cyclealt',
-                itemId: 'platform',
-                getItemIconCls: false,
-                flex: 1,
-                minWidth: 90,
-                maxWidth: 110,
-                hidden: platformFilterItems.length === 2,
-                cls: 'x-btn-compressed',
-                changeHandler: function(comp, item) {
-                    comp.prev('#location').setPlatform(item.value);
-                    rolesStore.updateParamsAndLoad({platform: item.value, cloudLocation: undefined});
-                },
-                getItemText: function(item) {
-                    return item.value ? 'Cloud: <img src="' + Ext.BLANK_IMAGE_URL + '" class="' + item.iconCls + '" title="' + item.text + '" />' : item.text;
-                },
-                menu: {
-                    cls: 'x-menu-light x-menu-cycle-button-filter',
-                    minWidth: 200,
-                    items: platformFilterItems
-                }
-            },{
                  xtype: 'cyclealt',
                  itemId: 'os',
                  flex: 1,
@@ -362,7 +392,7 @@ Scalr.regPage('Scalr.ui.roles.manager', function (loadParams, moduleParams) {
                 margin: 0,
                 cls: 'x-btn-green-bg',
                 handler: function() {
-                    Scalr.event.fireEvent('redirect', '#/roles/' + (isScalrAdmin ? 'edit' : (Scalr.flags['betaMode'] ? 'create' : 'builder')));
+                    Scalr.event.fireEvent('redirect', '#/roles/' + (isScalrAdmin ? 'edit' : 'create'));
                 }
             },{
                 itemId: 'refresh',
@@ -463,13 +493,12 @@ Scalr.regPage('Scalr.ui.roles.manager', function (loadParams, moduleParams) {
             }
         },
         showRoleInfo: function() {
-            var software = [],
-                behaviors = [],
+            var behaviors = [],
                 images = [],
                 usedBy = [],
                 platformsAdded = {},
-                record = this.getRecord(),
-                isRoleDeleting = record.get('status').indexOf('Deleting') !== -1;
+                record = this.getRecord();
+
             Ext.Array.each(record.get('images'), function(value){
                 images.push(value);
                 platformsAdded[value['platform']] = true;
@@ -483,13 +512,8 @@ Scalr.regPage('Scalr.ui.roles.manager', function (loadParams, moduleParams) {
                 });
             }
             
-            Ext.Object.each(record.get('software'), function(key, value){
-                if (value.name) {
-                    software.push(Ext.String.capitalize(value.name) + ' ' + value.version);
-                }
-            });
             Ext.Array.each(record.get('behaviors'), function(value){
-                if (value !== 'chef' && value !== 'base') {
+                if (value !== 'base') {
                     behaviors.push('<span style="white-space:nowrap" data-qtip="' + Ext.htmlEncode(Scalr.utils.beautifyBehavior(value, true)) + '"><img class="x-icon-role-small x-icon-role-small-' + value + '" src="' + Ext.BLANK_IMAGE_URL + '" />&nbsp;' + Scalr.utils.beautifyBehavior(value) + '</span>');
                 }
             });
@@ -501,14 +525,13 @@ Scalr.regPage('Scalr.ui.roles.manager', function (loadParams, moduleParams) {
             this.down('#main').setTitle(record.get('name'), record.get('description') || '<i>description is empty</i>');
             this.down('[name="id"]').setValue(record.get('id'));
             this.down('[name="os"]').setValue('<img src="'+Ext.BLANK_IMAGE_URL+'" title="" class="x-icon-osfamily-small x-icon-osfamily-small-'+record.get('osFamily')+'" />&nbsp;' + record.get('os'));
-            this.down('[name="software"]').setValue(software.length > 0 ? software.join(', ') : '-');
             this.down('[name="behaviors"]').setValue(behaviors.length > 0 ? behaviors.join(',&nbsp;&nbsp; ') : '-');
             this.down('[name="usedBy"]').setValue(usedBy.length > 0 ? usedBy.join(', ') : '-').setFieldLabel(record.get('usedBy') ? ('Used by ' + record.get('usedBy')['cnt'] + ' farms') : 'Used by');
             this.down('#images').store.load({data: images});
-            this.down('#edit').setDisabled(record.get('origin') !== 'CUSTOM' && !isScalrAdmin || isRoleDeleting).setHref('#/roles/' + record.get('id') + '/edit');
-            this.down('#copy').setDisabled(record.get('origin') !== 'CUSTOM' || !Ext.Array.contains(record.get('platforms'), 'ec2') || isRoleDeleting);
-            this.down('#clone').setDisabled(!Scalr.isAllowed('FARMS_ROLES', 'clone') || isRoleDeleting);
-            this.down('#delete').setDisabled(!isScalrAdmin && record.get('origin') !== 'CUSTOM' || isRoleDeleting);
+            this.down('#addToFarm').setDisabled(record.get('images').length == 0);
+            this.down('#edit').setDisabled(record.get('origin') !== 'CUSTOM' && !isScalrAdmin).setHref('#/roles/' + record.get('id') + '/edit');
+            this.down('#clone').setDisabled(!Scalr.isAllowed('FARMS_ROLES', 'clone'));
+            this.down('#delete').setDisabled(!isScalrAdmin && record.get('origin') !== 'CUSTOM');
             this.up().unmask();
             this.show();
         },
@@ -574,12 +597,8 @@ Scalr.regPage('Scalr.ui.roles.manager', function (loadParams, moduleParams) {
                     fieldLabel: 'Operating system'
                 },{
                     xtype: 'displayfield',
-                    name: 'software',
-                    fieldLabel: 'Software version'
-                }, {
-                    xtype: 'displayfield',
                     name: 'behaviors',
-                    fieldLabel: 'Scalr automation'
+                    fieldLabel: 'Built-in automation'
                 },{
                     xtype: 'displayfield',
                     fieldLabel: 'Used by',
@@ -596,38 +615,62 @@ Scalr.regPage('Scalr.ui.roles.manager', function (loadParams, moduleParams) {
                     flex: 1,
                     //platforms: moduleParams['platforms'],
                     store: {
-                        fields: [ 'platform', 'location', 'image_id'],
+                        fields: [ 'platform', 'cloudLocation', 'imageId', 'extended'],
                         proxy: 'object'
                     },
                     viewConfig: {
                         emptyText: 'No images found',
                         deferEmptyText: false,
                         getRowClass: function (record) {
-                            return record.get('image_id') ? '' : 'x-grid-row-disabled';
+                            return record.get('imageId') ? '' : 'x-grid-row-disabled';
                         }
                     },
                     columns: [
-                        { header: "Cloud", flex: .6, dataIndex: 'platform', sortable: true, xtype: 'templatecolumn', tpl:
-                            '<img class="x-icon-platform-small x-icon-platform-small-{platform}" src="' + Ext.BLANK_IMAGE_URL + '"/>&nbsp;&nbsp;{[Scalr.utils.getPlatformName(values.platform)]}'
-                        },
-                        { header: "Location", flex: 1, dataIndex: 'location', sortable: true, renderer:
+                        { header: "Cloud Location", flex: 0.6, dataIndex: 'platform', sortable: true, renderer:
                             function(value, meta, record) {
                                 var platform = record.get('platform'),
-                                    location = record.get('location'),
+                                    cloudLocation = record.get('cloudLocation'),
                                     res = '';
-                                if (record.get('image_id')) {
+
+                                res = '<img class="x-icon-platform-small x-icon-platform-small-' + platform + '" src="' + Ext.BLANK_IMAGE_URL + '"/>&nbsp;&nbsp;';
+                                if (record.get('imageId')) {
                                     if (platform === 'gce' || platform === 'ecs') {
                                         res += 'All regions';
                                     } else if (location) {
-                                        if (Scalr.platforms[platform] && Scalr.platforms[platform]['locations'] && Scalr.platforms[platform]['locations'][location]) {
-                                            res += Scalr.platforms[platform]['locations'][location];
+                                        if (Scalr.platforms[platform] && Scalr.platforms[platform]['locations'] && Scalr.platforms[platform]['locations'][cloudLocation]) {
+                                            res += Scalr.platforms[platform]['locations'][cloudLocation];
                                         } else {
-                                            res += location;
+                                            res += cloudLocation;
                                         }
                                     }
                                 } else {
+                                    res += Scalr.utils.getPlatformName(platform) + '&nbsp;';
+                                }
+                                return res;
+                            }
+                        },
+                        { header: "Image", flex: 1, dataIndex: 'cloudLocation', sortable: true, renderer:
+                            function(value, meta, record) {
+                                var res = '', extended = record.get('extended');
+                                if (record.get('imageId')) {
+                                    var qtip = [];
+                                    if (extended['size'])
+                                        qtip.push('Size: ' + extended['size'] + 'Gb');
+                                    if (extended['software'])
+                                        qtip.push('Software: ' + extended['software']);
+                                    if (extended['type'] && (record.get('platform') == 'ec2'))
+                                        qtip.push('Type: ' + extended['type']);
+                                    if (qtip.length)
+                                        qtip = ' data-qtip="' + Ext.htmlEncode(qtip.join('<br>')) + '"';
+                                    else
+                                        qtip = '';
+
+                                    res = '<a href="#/images/view?platform=' + record.get('platform') + '&cloudLocation=' +
+                                        record.get('cloudLocation') + '&id=' + record.get('imageId') + '"' + qtip + '>' + extended['name'] + '</a>';
+                                } else {
                                     res = '<i>No image has been added for this cloud</i>';
                                 }
+
                                 return res;
                             }
                         }
@@ -686,85 +729,9 @@ Scalr.regPage('Scalr.ui.roles.manager', function (loadParams, moduleParams) {
                         },
                         url: '/roles/xClone/',
                         params: { roleId: record.get('id') },
-                        success: function () {
+                        success: function (data) {
                             Scalr.message.Success("Role successfully cloned");
-                            rolesStore.updateParamsAndLoad();
-                        }
-                    });
-                }
-            },{
-                itemId: 'copy',
-                xtype: 'button',
-                text: 'Copy',
-                tooltip: 'Copy to another EC2 region',
-                handler: function() {
-                    var record = this.up('form').getRecord();
-                    Scalr.Request({
-                        params: {
-                            roleId: record.get('id')
-                        },
-                        processBox: {
-                            msg: 'Copying role ...',
-                            type: 'action'
-                        },
-                        url: '/roles/xGetMigrateDetails/',
-                        success: function(data) {
-                            Scalr.Request({
-                                confirmBox: {
-                                    type: 'action',
-                                    msg: 'Use a role in a different EC2 region by copying its image there',
-                                    formWidth: 600,
-                                    form: [{
-                                        xtype: 'fieldset',
-                                        title: 'Copy role image across regions',
-                                        defaults: {
-                                            anchor: '100%',
-                                            labelWidth: 120
-                                        },
-                                        items: [{
-                                            xtype: 'displayfield',
-                                            fieldLabel: 'Role name',
-                                            value: data['roleName']
-                                        },{
-                                            xtype: 'combo',
-                                            fieldLabel: 'Source region',
-                                            store: {
-                                                fields: [ 'cloudLocation', 'name' ],
-                                                proxy: 'object',
-                                                data: data['availableSources']
-                                            },
-                                            autoSetValue: true,
-                                            valueField: 'cloudLocation',
-                                            displayField: 'name',
-                                            editable: false,
-                                            queryMode: 'local',
-                                            name: 'sourceRegion'
-                                        }, {
-                                            xtype: 'combo',
-                                            fieldLabel: 'Destination region',
-                                            store: {
-                                                fields: [ 'cloudLocation', 'name' ],
-                                                proxy: 'object',
-                                                data: data['availableDestinations']
-                                            },
-                                            autoSetValue: true,
-                                            valueField: 'cloudLocation',
-                                            displayField: 'name',
-                                            editable: false,
-                                            queryMode: 'local',
-                                            name: 'destinationRegion'
-                                        }]
-                                    }]
-                                },
-                                processBox: {
-                                    type: 'action'
-                                },
-                                url: '/roles/xMigrate',
-                                params: {roleId: data.roleId},
-                                success: function () {
-                                    rolesStore.updateParamsAndLoad();
-                                }
-                            });
+                            Scalr.event.fireEvent('redirect', '#/roles/manager?roleId=' + data.newRoleId);
                         }
                     });
                 }

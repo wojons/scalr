@@ -36,7 +36,7 @@ class Scalr_UI_Controller_Guest extends Scalr_UI_Controller
         );
 
         $mode = Scalr_Session::getInstance()->getDebugMode();
-        if (isset($mode['sql']) && $mode['sql'])
+        if (isset($mode['enabled']) && $mode['enabled'])
             $initParams['extjs'][] = $this->response->getModuleName('ui-debug.js');
 
         $initParams['css'] = array(
@@ -107,8 +107,7 @@ class Scalr_UI_Controller_Guest extends Scalr_UI_Controller
             $allowedClouds = (array) \Scalr::config('scalr.allowed_clouds');
 
             foreach (SERVER_PLATFORMS::getList() as $platform => $platformName) {
-                if (!in_array($platform, $allowedClouds) ||
-                    $platform == SERVER_PLATFORMS::UCLOUD && !$this->request->getHeaderVar('Interface-Beta')) {
+                if (!in_array($platform, $allowedClouds) && !$this->request->getHeaderVar('Interface-Beta')) {
                     continue;
                 }
 
@@ -650,10 +649,10 @@ class Scalr_UI_Controller_Guest extends Scalr_UI_Controller
 
             // Send welcome E-mail
             $this->getContainer()->mailer->sendTemplate(
-                SCALR_TEMPLATES_PATH . '/emails/password_change_confirm.eml',
+                SCALR_TEMPLATES_PATH . '/emails/password_reset_confirmation.eml',
                 array(
                     '{{fullname}}' => $clientinfo['fullname'],
-                    '{{link}}'     => "https://{$_SERVER['HTTP_HOST']}/#/guest/updatePassword/?hash={$hash}",
+                    '{{link}}'     => Scalr::config('scalr.endpoint.scheme') . "://" . Scalr::config('scalr.endpoint.host') . "/#/guest/updatePassword/?hash={$hash}",
                 ),
                 $clientinfo['email'], $clientinfo['fullname']
             );

@@ -88,19 +88,19 @@ class Scalr_UI_Controller_Bundletasks extends Scalr_UI_Controller
     public function xListTasksAction()
     {
         $this->request->defineParams(array(
-            'bundleTaskId' => array('type' => 'int'),
+            'id' => array('type' => 'int'),
             'sort' => array('type' => 'json', 'default' => array('property' => 'id', 'direction' => 'DESC'))
         ));
 
-        $sql = "SELECT * FROM bundle_tasks WHERE env_id = ?";
+        $sql = "SELECT * FROM bundle_tasks WHERE env_id = ? AND :FILTER:";
         $args = array($this->getEnvironmentId());
 
         if ($this->getParam('id') > 0) {
             $sql .= " AND id = ?";
-            $args[] = $this->getParam('bundleTaskId');
+            $args[] = $this->getParam('id');
         }
 
-        $response = $this->buildResponseFromSql2($sql, array('id', 'server_id', 'rolename', 'status', 'os_family', 'dtadded', 'dtstarted', 'created_by_email'), array(), $args);
+        $response = $this->buildResponseFromSql2($sql, array('id', 'server_id', 'rolename', 'status', 'os_family', 'dtadded', 'dtstarted', 'created_by_email'), array('rolename'), $args);
 
         foreach ($response["data"] as &$row) {
             $row['server_exists'] = DBServer::IsExists($row['server_id']);

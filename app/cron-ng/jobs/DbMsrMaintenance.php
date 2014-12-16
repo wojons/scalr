@@ -172,8 +172,7 @@ class Scalr_Cronjob_DbMsrMaintenance extends Scalr_System_Cronjob_MultiProcess_D
 
            $backupsNotSupported = in_array($dbFarmRole->Platform, array(
                SERVER_PLATFORMS::CLOUDSTACK,
-               SERVER_PLATFORMS::IDCF,
-               SERVER_PLATFORMS::UCLOUD
+               SERVER_PLATFORMS::IDCF
            ));
 
            //********* Backup database data ***********/

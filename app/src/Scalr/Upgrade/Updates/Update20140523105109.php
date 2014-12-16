@@ -16,11 +16,11 @@ class Update20140523105109 extends AbstractUpdate implements SequenceInterface
 
     protected $description = 'Fill new table images from bundle_tasks and role_images';
 
-    protected $ignoreChanges = true;
+    protected $ignoreChanges = false;
 
     public function getNumberStages()
     {
-        return 1;
+        return 3;
     }
 
     public  function validateBefore1()
@@ -40,6 +40,7 @@ class Update20140523105109 extends AbstractUpdate implements SequenceInterface
         }
 
         $this->db->Execute("CREATE TABLE `images` (
+              `hash` binary(16) NOT NULL,
               `id` varchar(128) NOT NULL DEFAULT '',
               `env_id` int(11) NULL DEFAULT NULL,
               `bundle_task_id` int(11) NULL DEFAULT NULL,
@@ -55,8 +56,10 @@ class Update20140523105109 extends AbstractUpdate implements SequenceInterface
               `source` enum('BundleTask','Manual') NOT NULL DEFAULT 'Manual',
               `type` varchar(20) NULL DEFAULT NULL,
               `status` varchar(20) NOT NULL,
+              `status_error` varchar(255) NULL DEFAULT NULL,
               `agent_version` varchar(20) NULL DEFAULT NULL,
-              UNIQUE KEY `id` (`env_id`, `id`, `platform`, `cloud_location`),
+              PRIMARY KEY (`hash`),
+              UNIQUE KEY `idx_id` (`env_id`, `id`, `platform`, `cloud_location`),
               CONSTRAINT `fk_images_client_environmnets_id` FOREIGN KEY (`env_id`) REFERENCES `client_environments` (`id`) ON DELETE CASCADE ON UPDATE NO ACTION
             ) ENGINE=InnoDB DEFAULT CHARSET=latin1;
         ");
@@ -159,9 +162,6 @@ class Update20140523105109 extends AbstractUpdate implements SequenceInterface
                             }
                             break;
 
-                        case \SERVER_PLATFORMS::NIMBULA:
-                            continue;
-
                         default:
                             if (PlatformFactory::isOpenstack($t['platform'])) {
                                 $snap = $env->openstack($t['platform'], $t['cloud_location'])->servers->getImage($t['id']);
@@ -196,7 +196,7 @@ class Update20140523105109 extends AbstractUpdate implements SequenceInterface
                         $image->cloudLocation = $t['cloud_location'];
                         $image->osFamily = $t['os_family'];
                         $image->osVersion = $t['os_version'];
-                        $image->osName = $t['os_name'];
+                        $image->os = $t['os_name'];
                         $image->createdById = $t['created_by_id'];
                         $image->createdByEmail = $t['created_by_email'];
                         $image->architecture = $t['architecture'] ? $t['architecture'] : 'x86_64';
@@ -237,5 +237,60 @@ class Update20140523105109 extends AbstractUpdate implements SequenceInterface
         $this->console->notice('Found %d records', $allRecords);
         $this->console->notice('Excluded %d images because of null cloud_location', $excludedCL);
         $this->console->notice('Excluded %d missed images', $excludedMissing);
+    }
+
+    public function validateBefore2()
+    {
+        return $this->hasTable('images');
+    }
+
+    public function isApplied2()
+    {
+        return $this->hasTableColumn('images', 'hash');
+    }
+
+    public function run2()
+    {
+        if ($this->hasTableIndex('images', 'id')) {
+            $this->db->Execute('ALTER TABLE images DROP KEY id, ADD UNIQUE KEY `idx_id` (`env_id`,`id`,`platform`,`cloud_location`)');
+        }
+
+        $this->db->Execute('ALTER TABLE images ADD `hash` binary(16) NOT NULL FIRST');
+
+        foreach ($this->db->GetAll('SELECT * FROM images') as $im) {
+            if ($im['env_id']) {
+                $this->db->Execute('UPDATE images SET hash = UNHEX(?) WHERE env_id = ? AND id = ? AND platform = ? AND cloud_location = ?', [
+                    str_replace('-', '', Image::calculateHash($im['env_id'], $im['id'], $im['platform'], $im['cloud_location'])),
+                    $im['env_id'],
+                    $im['id'],
+                    $im['platform'],
+                    $im['cloud_location']
+                ]);
+            } else {
+                $this->db->Execute('UPDATE images SET hash = UNHEX(?) WHERE ISNULL(env_id) AND id = ? AND platform = ? AND cloud_location = ?', [
+                    str_replace('-', '', Image::calculateHash($im['env_id'], $im['id'], $im['platform'], $im['cloud_location'])),
+                    $im['id'],
+                    $im['platform'],
+                    $im['cloud_location']
+                ]);
+            }
+        }
+
+        // remove possible duplicates
+        foreach ($this->db->GetAll('SELECT `hash`, count(*) as cnt FROM images GROUP BY hash HAVING cnt > 1') as $im) {
+            $this->db->Execute('DELETE FROM images WHERE hash = ? LIMIT ?', [$im['hash'], $im['cnt'] - 1]);
+        }
+
+        $this->db->Execute('ALTER TABLE images ADD PRIMARY KEY(`hash`)');
+    }
+
+    public function isApplied3()
+    {
+        return $this->hasTableColumn('images', 'status_error');
+    }
+
+    public function run3()
+    {
+        $this->db->Execute('ALTER TABLE images ADD COLUMN `status_error` varchar(255) NULL DEFAULT NULL AFTER `status`');
     }
 }

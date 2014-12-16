@@ -93,17 +93,41 @@ Ext.define('Scalr.ui.FarmRoleNetworkGce', {
     itemId: 'gce',
 
     beforeShowTab: function (record, handler) {
+        var settings = record.get('settings', true);
         Scalr.cachedRequest.load(
             {
                 url: '/platforms/gce/xGetOptions',
-                params: {
-                    cloudLocation: record.get('cloud_location'),
-                    farmRoleId: record.get('new') ? '' : record.get('farm_role_id')
-                }
+                params: {}
             },
             function(data, status){
-                this.tabData = data;
-                status ? handler() : this.up().deactivateTab();
+                if (status) {
+                    this.tabData = data;
+                    if (false && Scalr.flags['betaMode']) {//disable gce staticips
+                        Scalr.CachedRequestManager.get('farmbuilder').load(
+                            {
+                                url: '/platforms/gce/xGetFarmRoleStaticIps',
+                                params: {
+                                    region: settings['gce.region'],
+                                    cloudLocation: settings['gce.cloud-location'],
+                                    farmRoleId: record.get('new') ? '' : record.get('farm_role_id')
+                                }
+                            },
+                            function(data, status){
+                                if (status) {
+                                    Ext.apply(this.tabData, data);
+                                    handler();
+                                } else {
+                                    this.up().deactivateTab();
+                                }
+                            },
+                            this
+                        );
+                    } else {
+                        handler();
+                    }
+                } else {
+                    this.up().deactivateTab();
+                }
             },
             this
         );
@@ -120,7 +144,7 @@ Ext.define('Scalr.ui.FarmRoleNetworkGce', {
 
         //static ips
         var sipsFieldset = this.down('[name="gce.use_static_ips"]');
-        if (Scalr.flags['betaMode'] && data['staticIps']) {
+        if (false && Scalr.flags['betaMode'] && data['staticIps']) {//disable gce staticips
             var staticIpMap = [];
             if (settings['gce.static_ips.map']) {
                 Ext.each((settings['gce.static_ips.map']).split(';'), function(value) {
@@ -736,11 +760,7 @@ Ext.define('Scalr.ui.FarmRoleNetworkOpenstack', {
         networksField.setValue(Ext.decode(settings['openstack.networks']));
         networksField.toggleIcon('governance', !!limits);
 	
-        //if (Scalr.flags['betaMode']) {
-        	eipsFieldset.hide();
-        //} else {
-        //	eipsFieldset.show();
-        //}
+      	eipsFieldset.hide();
         
 	    //static nat
 	    if (eipsData) {
@@ -1007,7 +1027,7 @@ Ext.define('Scalr.ui.FarmRoleNetworkEc2', {
                                 this.up().deactivateTab();
                             } else {
                                 this.tabData['elb'] = data;
-                                if (/*Scalr.flags['betaMode'] &&*/ this.vpc !== false) {
+                                if (this.vpc !== false) {
                                     Scalr.CachedRequestManager.get('farmbuilder').load(this.getListSubnetsRequest(),
                                         function(data, status) {
                                             this.tabData['subnets'] = data;
@@ -1217,30 +1237,13 @@ Ext.define('Scalr.ui.FarmRoleNetworkEc2', {
             field, value;
         
         if (me.vpc !== false) {
-            //if (Scalr.flags['betaMode']) {
-                value = me.down('[name="aws.vpc_subnet_id"]').getValue();
-                settings['aws.vpc_subnet_id'] = Ext.encode(value);
-                field = me.down('[name="router.scalr.farm_role_id"]');
-                settings['router.scalr.farm_role_id'] = field.isVisible() ? field.getValue() : null;
+            value = me.down('[name="aws.vpc_subnet_id"]').getValue();
+            settings['aws.vpc_subnet_id'] = Ext.encode(value);
+            field = me.down('[name="router.scalr.farm_role_id"]');
+            settings['router.scalr.farm_role_id'] = field.isVisible() ? field.getValue() : null;
 
-                field = me.down('[name="router.vpc.networkInterfaceId"]');
-                settings['router.vpc.networkInterfaceId'] = field.isVisible() ? field.getValue() : null;
-            /*
-            } else {
-                settings['aws.vpc_subnet_id'] = null;
-                settings['aws.vpc_avail_zone'] = null;
-                settings['aws.vpc_internet_access'] = null;
-                settings['aws.vpc_routing_table_id'] = null;
-
-                if (me.down('[name="vpcSubnetType"]').getValue() === 'new') {
-                    settings['aws.vpc_internet_access'] = me.down('[name="aws.vpc_internet_access"]').getValue();
-                    settings['aws.vpc_routing_table_id'] = me.down('[name="aws.vpc_routing_table_id"]').getValue();
-                    settings['aws.vpc_avail_zone'] = me.down('[name="aws.vpc_avail_zone"]').getValue();
-                } else {
-                    settings['aws.vpc_subnet_id'] = me.down('[name="aws.vpc_subnet_id"]').getValue();
-                }
-            }
-            */
+            field = me.down('[name="router.vpc.networkInterfaceId"]');
+            settings['router.vpc.networkInterfaceId'] = field.isVisible() ? field.getValue() : null;
         }
 
         //elastic IPs
@@ -1275,7 +1278,7 @@ Ext.define('Scalr.ui.FarmRoleNetworkEc2', {
         this.down('#removeElb').hide();
         this.down('[name="aws.elb.id"]').reset();
 
-        if (me.vpc !== false /*&& Scalr.flags['betaMode'] */) {
+        if (me.vpc !== false) {
             this.down('[name="aws.vpc_subnet_id"]').reset();
         }
         
@@ -1349,8 +1352,7 @@ Ext.define('Scalr.ui.FarmRoleNetworkEc2', {
         baseTitle: 'VPC subnet',
         itemId: 'vpcoptions',
         hidden: true,
-        items:
-        /* Scalr.flags['betaMode'] ?*/ [{
+        items:[{
             xtype: 'comboboxselect',
             name: 'aws.vpc_subnet_id',
             valueField: 'id',

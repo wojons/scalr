@@ -4,6 +4,9 @@ namespace Scalr\Stats\CostAnalytics;
 use Scalr\Stats\CostAnalytics\Entity\PriceHistoryEntity;
 use Scalr\Stats\CostAnalytics\Entity\PriceEntity;
 use Scalr\Model\Collections\ArrayCollection;
+use Scalr\Modules\PlatformFactory;
+use \SERVER_PLATFORMS;
+use Scalr\Model\Entity\CloudLocation;
 
 /**
  * Cloud prices
@@ -311,15 +314,7 @@ class Prices
      */
     public function normalizeUrl($url)
     {
-        if (empty($url)) return '';
-
-        $arr = parse_url($url);
-
-        //Scheme should be omitted
-        $ret = $arr['host'] . (isset($arr['port']) ? ':' . $arr['port'] : '') .
-               (isset($arr['path']) ? rtrim($arr['path'], '/') : '');
-
-        return $ret;
+        return CloudLocation::normalizeUrl($url);
     }
 
     /**
@@ -371,4 +366,32 @@ class Prices
 
         return !!$res;
     }
+
+    /**
+     * Gets array of supported clouds
+     *
+     * @return array
+     */
+    public function getSupportedClouds()
+    {
+        $allowedClouds = (array) \Scalr::config('scalr.allowed_clouds');
+
+        return array_values(array_intersect($allowedClouds, array_merge([
+                SERVER_PLATFORMS::EC2,
+            ],
+            array_diff(PlatformFactory::getOpenstackBasedPlatforms(), [\SERVER_PLATFORMS::CONTRAIL]),
+            PlatformFactory::getCloudstackBasedPlatforms()
+        )));
+    }
+
+    /**
+     * Gets array of unsupported clouds
+     *
+     * @return array
+     */
+    public function getUnsupportedClouds()
+    {
+        return array_diff(array_keys(SERVER_PLATFORMS::GetList()), $this->getSupportedClouds());
+    }
+
 }

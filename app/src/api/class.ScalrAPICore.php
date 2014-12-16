@@ -1,6 +1,5 @@
 <?php
 
-
 abstract class ScalrAPICore
 {
     const HASH_ALGO = 'SHA256';
@@ -59,9 +58,40 @@ abstract class ScalrAPICore
         return $this->container;
     }
 
+    /**
+     * Sets necessary stuff into DI container
+     */
+    private function setDiContainer()
+    {
+        $requestClass = 'Scalr_UI_Request';
+
+        $this->getContainer()->environment = $this->Environment;
+
+        //Creates a request object
+        $request = new Scalr_UI_Request(Scalr_UI_Request::REQUEST_TYPE_API, [], $_SERVER, [], []);
+
+        //Sets authenticated user object
+        $puser = new ReflectionProperty($requestClass, 'user');
+        $puser->setAccessible(true);
+        $puser->setValue($request, $this->user);
+
+        //Sets user's environment object
+        $penvironment = new ReflectionProperty($requestClass, 'environment');
+        $penvironment->setAccessible(true);
+        $penvironment->setValue($request, $this->Environment);
+
+        //Sets internal instance
+        $pinstance = new ReflectionProperty($requestClass, '_instance');
+        $pinstance->setAccessible(true);
+        $pinstance->setValue($request, $request);
+
+        //Injects request into DI container
+        $this->getContainer()->request = $request;
+    }
+
     protected function insensitiveUksort($a,$b)
     {
-        return strtolower($a)>strtolower($b);
+        return strtolower($a) > strtolower($b);
     }
 
     private function AuthenticateLdap($request)
@@ -89,7 +119,6 @@ abstract class ScalrAPICore
             //Provides that login is always with domain suffix
             $request['Login'] = $ldap->getUsername();
 
-            //TODO:
             $this->Environment = Scalr_Environment::init()->loadById($request['EnvID']);
 
             $start = microtime(true);
@@ -110,7 +139,7 @@ abstract class ScalrAPICore
             $this->user->applyLdapGroups($groups);
             $this->user->getPermissions()->setEnvironmentId($this->Environment->id)->validate($this->Environment);
             //We must set environment to DI Container.
-            $this->getContainer()->environment = $this->Environment;
+            $this->setDiContainer();
         } else {
             throw new Exception("Incorrect login or password (1)");
         }
@@ -185,7 +214,7 @@ abstract class ScalrAPICore
 
             $this->user->getPermissions()->setEnvironmentId($this->Environment->id)->validate($this->Environment);
             //We must set environment to DI Container.
-            $this->getContainer()->environment = $this->Environment;
+            $this->setDiContainer();
         }
 
         $valid_sign = base64_encode(hash_hmac(self::HASH_ALGO, trim($string_to_sign), $auth_key, 1));
@@ -268,7 +297,7 @@ abstract class ScalrAPICore
 
             $this->user->getPermissions()->setEnvironmentId($this->Environment->id)->validate($this->Environment);
             //We must set environment to DI Container.
-            $this->getContainer()->environment = $this->Environment;
+            $this->setDiContainer();
         }
 
         $valid_sign = base64_encode(hash_hmac(self::HASH_ALGO, trim($string_to_sign), $auth_key, 1));
@@ -330,7 +359,7 @@ abstract class ScalrAPICore
 
             $this->user->getPermissions()->setEnvironmentId($this->Environment->id)->validate($this->Environment);
             //We must set environment to DI Container.
-            $this->getContainer()->environment = $this->Environment;
+            $this->setDiContainer();
         }
 
         $valid_sign = base64_encode(hash_hmac(self::HASH_ALGO, trim($string_to_sign), $auth_key, 1));
@@ -458,15 +487,15 @@ abstract class ScalrAPICore
                     response		= ?,
                     clientid		= ?,
                     env_id			= ?
-                ",array(
+                ", array(
                     $trans_id,
                     time(),
                     $action,
                     $ipaddr,
                     http_build_query($request),
                     $response,
-                    $this->user->getAccountId(),
-                    $this->Environment->id
+                    ($this->user instanceof Scalr_Account_User ? $this->user->getAccountId() : null),
+                    (!empty($this->Environment->id) ? $this->Environment->id : null),
                 ));
             } catch (Exception $e) {
             }

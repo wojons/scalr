@@ -2,7 +2,7 @@ Scalr.regPage('Scalr.ui.scripts.view', function (loadParams, moduleParams) {
 	var store = Ext.create('store.store', {
 		fields: [
 			{ name: 'id', type: 'int' }, { name: 'accountId', type: 'int' },
-			'name', 'description', 'dtCreated', 'dtChanged', 'version', 'isSync', 'os'
+			'name', 'description', 'dtCreated', 'dtChanged', 'version', 'isSync', 'os', 'envId'
 		],
 		proxy: {
 			type: 'scalr.paging',
@@ -41,7 +41,31 @@ Scalr.regPage('Scalr.ui.scripts.view', function (loadParams, moduleParams) {
 
 		columns: [
 			{ header: 'ID', width: 60, dataIndex: 'id', sortable: true },
-			{ header: 'Name', flex: 1, dataIndex: 'name', sortable: true },
+			{
+                header: '<img style="cursor: help" src="'+Ext.BLANK_IMAGE_URL+'" class="x-icon-info" data-qclass="x-tip-light" data-qtip="' +
+                Ext.String.htmlEncode('<div>Scopes:</div>' +
+                '<div><img src="' + Ext.BLANK_IMAGE_URL + '" class="scalr-scope-scalr">&nbsp;&nbsp;Scalr</div>' +
+                '<div><img src="' + Ext.BLANK_IMAGE_URL + '" class="scalr-scope-environment">&nbsp;&nbsp;Environment</div>') +
+                '" />&nbsp;Name',
+                flex: 1,
+                dataIndex: 'name',
+                sortable: true,
+                xtype: 'templatecolumn',
+                tpl: new Ext.XTemplate('{[this.getScope(values)]}&nbsp;&nbsp;{name}',
+                    {
+                        getScope: function(data){
+                            var scope = 'scalr';
+                            if (data['envId']) {
+                                scope = 'environment';
+                            } else if (data['accountId']) {
+                                scope = 'account';
+                            }
+                            return '<img src="' + Ext.BLANK_IMAGE_URL + '" class="scalr-scope-'+scope+'" data-qtip="This Script is defined in the '+Ext.String.capitalize(scope)+' Scope"/>';
+                        }
+                    }
+                )
+
+            },
 			{ header: 'Description', flex: 2, dataIndex: 'description', sortable: true },
             { header: 'Execution mode', width: 150, dataIndex: 'isSync', sortable: true, xtype: 'statuscolumn', statustype: 'script'},
 			{ header: 'Latest version', width: 100, dataIndex: 'version', sortable: false, align:'center' },
@@ -176,34 +200,35 @@ Scalr.regPage('Scalr.ui.scripts.view', function (loadParams, moduleParams) {
 				xtype: 'filterfield',
 				store: store
 			}, ' ', {
-				xtype: 'buttongroupfield',
-				fieldLabel: 'Owner',
-				labelWidth: 45,
-				hidden: (Scalr.user.type == 'ScalrAdmin'),
-				value: '',
+                xtype: 'cyclealt',
                 name: 'origin',
-				items: [{
-					xtype: 'button',
-					text: 'All',
-					value: '',
-					width: 70
-				}, {
-					xtype: 'button',
-					text: 'Scalr',
-					width: 70,
-					value: 'Shared'
-				}, {
-					xtype: 'button',
-					text: 'Private',
-					width: 70,
-					value: 'Custom'
-				}],
-				listeners: {
-					change: function (field, value) {
-						store.proxy.extraParams.origin = value;
+                getItemIconCls: false,
+                hidden: (Scalr.user.type == 'ScalrAdmin'),
+                width: 110,
+                cls: 'x-btn-compressed',
+                changeHandler: function(comp, item) {
+						store.proxy.extraParams.origin = item.value;
 						store.loadPage(1);
-					}
-				}
+                },
+                getItemText: function(item) {
+                    return item.value ? 'Scope: <img src="' + Ext.BLANK_IMAGE_URL + '" class="' + item.iconCls + '" style="vertical-align: top; width: 14px; height: 14px;" title="' + item.text + '" />' : item.text;
+                },
+                menu: {
+                    cls: 'x-menu-light x-menu-cycle-button-filter',
+                    minWidth: 200,
+                    items: [{
+                        text: 'All scopes',
+                        value: null
+                    },{
+                        text: 'Scalr scope',
+                        value: 'Shared',
+                        iconCls: 'x-menu-item-icon-scope scalr-scope-scalr'
+                    },{
+                        text: 'Environment scope',
+                        value: 'Custom',
+                        iconCls: 'x-menu-item-icon-scope scalr-scope-env'
+                    }]
+                }
 			}]
 		}]
 	});

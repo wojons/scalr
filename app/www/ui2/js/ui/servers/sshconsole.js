@@ -78,6 +78,7 @@ Scalr.regPage('Scalr.ui.servers.sshconsole', function (loadParams, moduleParams)
                             '<param name="ignoreHostKeys" value="1">' +
                             '<param name="logLevel" value="' +  params['ssh.console.log_level'] + '">' +
                             '<param name="disableKeyAuth" value="' +  params['ssh.console.disable_key_auth'] + '">' +
+                            '<param name="enableAgentForwarding" value="' +  params['ssh.console.enable_agent_forwarding'] + '">' +
                             (params['ssh.console.preferred_provider'] ? '<param name="preferredProvider" value="'+params['ssh.console.preferred_provider']+'">' : '')+
                     '</object>'
                 );

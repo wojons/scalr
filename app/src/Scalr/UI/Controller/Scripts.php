@@ -460,10 +460,10 @@ class Scalr_UI_Controller_Scripts extends Scalr_UI_Controller
         }
 
         $data['farmWidget'] = self::loadController('Farms', 'Scalr_UI_Controller')->getFarmWidget(array(
-            'farmId' => (string) $farmId, // TODO: remove (string) and use integer keys for whole project [UI-312]
+            'farmId' => ($farmId == 0 ? '' : (string) $farmId), // TODO: remove (string) and use integer keys for whole project [UI-312]
             'farmRoleId' => (string) $farmRoleId,
             'serverId' => $serverId
-        ), array('addAll', 'addAllFarm', 'requiredFarm'));
+        ), array('addAll', 'addAllFarm', 'requiredFarm', 'addEmptyFarm'));
 
         $data['scriptId'] = $scriptId;
 

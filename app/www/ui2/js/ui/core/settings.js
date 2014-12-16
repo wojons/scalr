@@ -251,6 +251,21 @@ Scalr.regPage('Scalr.ui.core.settings', function (loadParams, moduleParams) {
                           'Scalr will not override it. <br/>View <a href="http:/scalr-wiki.atlassian.net" target="_blank">this Wiki page for important information</a>.')
                 }]
             },{
+                xtype: 'buttongroupfield',
+                name: 'ssh.console.enable_agent_forwarding',
+                fieldLabel: 'Agent Forwarding',
+                value: '0',
+                defaults: {
+                    width: 90
+                },
+                items: [{
+                    text: 'Disabled',
+                    value: '0'
+                },{
+                    text: 'Enabled',
+                    value: '1'
+                }]
+            },{
                 xtype: 'container',
                 layout: 'hbox',
                 items: [{
@@ -337,6 +352,7 @@ Scalr.regPage('Scalr.ui.core.settings', function (loadParams, moduleParams) {
 	});
 
     moduleParams['ssh.console.disable_key_auth'] = moduleParams['ssh.console.disable_key_auth'] || '0';
+    moduleParams['ssh.console.enable_agent_forwarding'] = moduleParams['ssh.console.enable_agent_forwarding'] || '0';
 	form.getForm().setValues(moduleParams);
 	return form;
 });

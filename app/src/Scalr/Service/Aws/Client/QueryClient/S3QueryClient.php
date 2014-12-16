@@ -44,15 +44,18 @@ class S3QueryClient extends QueryClient
      * @return    ClientResponseInterface
      * @throws    ClientException
      */
-    public function call ($action, $options, $path = '/')
+    public function call($action, $options, $path = '/')
     {
         $httpRequest = $this->createRequest();
+
         $httpMethod = $action ?: 'GET';
+
         if (substr($path, 0, 1) !== '/') {
             $path = '/' . $path;
         }
 
         $this->lastApiCall = null;
+
         $eventObserver = $this->getAws()->getEventObserver();
         if ($eventObserver && $eventObserver->isSubscribed(EventType::EVENT_SEND_REQUEST)) {
             foreach (debug_backtrace() as $arr) {
@@ -68,20 +71,14 @@ class S3QueryClient extends QueryClient
 
         //Wipes out extra options from headers and moves them to separate array.
         //It also collects an x-amz headers.
-        $extraOptions = array();
-        $amzHeaders = array();
+        $extraOptions = ['region' => null];
         foreach ($options as $key => $val) {
             if (substr($key, 0, 1) === '_') {
                 $extraOptions[substr($key, 1)] = $val;
                 unset($options[$key]);
-            } elseif (preg_match('/^x-amz-/i', $key)) {
-                //Saves amz headers which are used to sign the request
-                $amzHeaders[strtolower($key)] = $val;
             }
         }
-        if (!isset($options['Date'])) {
-            $options['Date'] = gmdate('r');
-        }
+
         if (!isset($options['Host'])) {
             $options['Host'] = (isset($extraOptions['subdomain']) ? $extraOptions['subdomain'] . '.' : '') . $this->url;
         }
@@ -105,8 +102,8 @@ class S3QueryClient extends QueryClient
                 if (!isset($options['Content-Length'])) {
                     $options['Content-Length'] = strlen($extraOptions['putData']);
                 }
-                if (!isset($options['Content-MD5']) && !empty($options['Content-Length'])) {
-                    $options['Content-MD5'] = Aws::getMd5Base64Digest($extraOptions['putData']);
+                if (!isset($options['Content-Md5']) && !empty($options['Content-Length'])) {
+                    $options['Content-Md5'] = Aws::getMd5Base64Digest($extraOptions['putData']);
                 }
             } elseif (array_key_exists('putFile', $extraOptions)) {
                 if ($httpMethod === 'PUT') {
@@ -117,17 +114,78 @@ class S3QueryClient extends QueryClient
                 if (!isset($options['Content-Length'])) {
                     $options['Content-Length'] = filesize($extraOptions['putFile']);
                 }
-                if (!isset($options['Content-MD5']) && !empty($options['Content-Length'])) {
-                    $options['Content-MD5'] = Aws::getMd5Base64DigestFile($extraOptions['putFile']);
+                if (!isset($options['Content-Md5']) && !empty($options['Content-Length'])) {
+                    $options['Content-Md5'] = Aws::getMd5Base64DigestFile($extraOptions['putFile']);
                 }
             }
         }
+
+        $httpRequest->setUrl($scheme . '://' . $options['Host'] . $path);
+
+        $httpRequest->setMethod(constant('HTTP_METH_' . $httpMethod));
+
+        $httpRequest->addHeaders($options);
+
+        //Signature version 4 sign for China region
+        if (preg_match('/^(cn|eu\-central)\-/', ($extraOptions['region'] ?: $this->getAws()->getRegion() ?: ''))) {
+            $this->signRequestV4($httpRequest, (!empty($extraOptions['region']) ? $extraOptions['region'] : null));
+        } else {
+            $this->signRequestV3($httpRequest, (isset($extraOptions['subdomain']) ? $extraOptions['subdomain'] : null));
+        }
+
+        $response = $this->tryCall($httpRequest);
+
+        if ($this->getAws() && $this->getAws()->getDebug()) {
+            echo "\n";
+            echo $httpRequest->getRawRequestMessage() . "\n";
+            echo $httpRequest->getRawResponseMessage() . "\n";
+        }
+
+        return $response;
+    }
+
+    /**
+     * Signs request with signature v3
+     *
+     * @param   \HttpRequest   $request    Http request
+     * @param   string         $subdomain  optional A subdomain
+     */
+    protected function signRequestV3($request, $subdomain = null)
+    {
+        $time = time();
+
+        //Gets the http method name
+        $httpMethod = self::$httpMethods[$request->getMethod()];
+
+        $components = parse_url($request->getUrl());
+
+        //Retrieves headers from request
+        $options = $request->getHeaders();
+
+        //Adding timestamp
+        if (!isset($options['Date'])) {
+            $options['Date'] = gmdate('r', $time);
+
+            $request->addHeaders([
+                'Date' => $options['Date']
+            ]);
+        }
+
         //This also includes a mock objects which look like "Mock_S3QueryClient_d65a1dc1".
         if (preg_match('#(?<=[_\\\\])S3QueryClient(?=_|$)#', get_class($this))) {
+            $amzHeaders = [];
+            foreach ($options as $key => $val) {
+                if (preg_match('/^x-amz-/i', $key)) {
+                    //Saves amz headers which are used to sign the request
+                    $amzHeaders[strtolower($key)] = $val;
+                }
+            }
+
             //S3 Client has a special Authorization string
             $canonicalizedAmzHeaders = '';
             if (!empty($amzHeaders)) {
                 ksort($amzHeaders);
+
                 foreach ($amzHeaders as $k => $v) {
                     $canonicalizedAmzHeaders .= $k . ':' . trim(preg_replace('/#( *[\r\n]+ *)+#/', ' ', $v)) . "\n";
                 }
@@ -135,27 +193,34 @@ class S3QueryClient extends QueryClient
 
             //Note that in case of multiple sub-resources, sub-resources must be lexicographically sorted
             //by sub-resource name and separated by '&'. e.g. ?acl&versionId=value.
-            $t = explode('?', $path);
-            if (!empty($t[1])) {
-                $canonPath = $t[0] . '?';
-                parse_str($t[1], $subresources);
+            if (!empty($components['query'])) {
+                $canonPath = $components['path'] . '?';
+
+                parse_str($components['query'], $subresources);
+
                 ksort($subresources);
+
                 $allowed = $this->getAllowedSubResources();
+
                 foreach ($subresources as $k => $v) {
                     if (in_array($k, $allowed)) {
                         $canonPath .= $k . ($v !== '' ? '=' . $v : '' ) . '&';
                     }
                 }
+
                 $canonPath = substr($canonPath, 0, -1);
             }
 
-            $canonicalizedResource = (isset($extraOptions['subdomain']) ? '/' . strtolower($extraOptions['subdomain']) : '')
-              . (isset($canonPath) ? $canonPath : $path);
+            $canonicalizedResource = (isset($subdomain) ? '/' . strtolower($subdomain) : '')
+              . (isset($canonPath) ? $canonPath :
+                 $components['path']
+                 . (!empty($components['query']) ? '?' . $components['query'] : '')
+                 . (!empty($components['fragment']) ? '#' . $components['fragment'] : ''));
 
             $stringToSign =
                 $httpMethod . "\n"
-              . (!empty($options['Content-MD5']) ? (string)$options['Content-MD5'] : '') . "\n"
-              . (!empty($options['Content-Type']) ? (string)$options['Content-Type'] : '') . "\n"
+              . (!empty($options['Content-Md5']) ? $options['Content-Md5'] . '' : '') . "\n"
+              . (!empty($options['Content-Type']) ? $options['Content-Type'] . '' : '') . "\n"
               . (isset($amzHeaders['x-amz-date']) ? '' : $options['Date'] . "\n")
               . $canonicalizedAmzHeaders . $canonicalizedResource
             ;
@@ -167,18 +232,8 @@ class S3QueryClient extends QueryClient
               . base64_encode(hash_hmac('sha1', $options['Date'], $this->secretAccessKey, 1));
         }
 
-        $httpRequest->setUrl($scheme . '://' . $options['Host'] . $path);
-        $httpRequest->setMethod(constant('HTTP_METH_' . $httpMethod));
-        $httpRequest->addHeaders($options);
-
-        $response = $this->tryCall($httpRequest);
-
-        if ($this->getAws() && $this->getAws()->getDebug()) {
-            echo "\n";
-            echo $httpRequest->getRawRequestMessage() . "\n";
-            echo $httpRequest->getRawResponseMessage() . "\n";
-        }
-
-        return $response;
+        $request->addHeaders([
+            'Authorization' => $options['Authorization']
+        ]);
     }
 }

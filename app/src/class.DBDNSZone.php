@@ -138,9 +138,11 @@ class DBDNSZone
         $zone->soaExpire = $soaExpire;
         $zone->status = DNS_ZONE_STATUS::PENDING_CREATE;
 
+        $nameservers = Scalr::config('scalr.dns.global.nameservers');
+        
         $zone->soaOwner = $soaOwner;
         $zone->soaTtl = 14400;
-        $zone->soaParent = "ns1.scalr.net";
+        $zone->soaParent = $nameservers[0];
         $zone->soaSerial = date("Ymd")."01";
         $zone->soaRetry = $soaRetry ? $soaRetry : 7200;
         $zone->soaMinTtl = 300;
@@ -604,134 +606,6 @@ class DBDNSZone
         return $retval;
     }
 
-    //TODO: Rewrite this
-    protected function saveInPowerDns()
-    {
-
-        $pdnsDb = \Scalr::getContainer()->dnsdb;
-
-        $pdnsDomainId = $pdnsDb->GetOne("SELECT id FROM domains WHERE name = ? AND scalr_dns_type = 'global' LIMIT 1", array($this->zoneName));
-
-        // Remove domain from powerdns
-        if ($this->status == DNS_ZONE_STATUS::INACTIVE || $this->status == DNS_ZONE_STATUS::PENDING_DELETE) {
-            if ($pdnsDomainId) {
-                $pdnsDb->Execute("DELETE FROM domains WHERE id = ?", array($pdnsDomainId));
-            }
-        } else {
-
-            if (!$pdnsDomainId) {
-
-                $pdnsDb->Execute("INSERT INTO domains SET
-                    `name` = ?,
-                    `type` = ?,
-                    `scalr_dns_type` = ?
-                ", array(
-                    $this->zoneName,
-                    'NATIVE',
-                    'global'
-                ));
-
-                $pdnsDomainId = $pdnsDb->Insert_ID();
-            }
-
-            $records = $this->db->Execute("SELECT * FROM dns_zone_records WHERE zone_id = ?", array($this->id));
-
-            // Remove all records
-            $pdnsDb->Execute("DELETE FROM records WHERE domain_id = ?", array($pdnsDomainId));
-
-            // Add SOA record
-            //primary hostmaster serial refresh retry expire default_ttl
-            $owner = substr_replace($this->soaOwner, '@', strpos($this->soaOwner, '.'), 1);
-            $soa = "ns1.scalr.net {$owner} {$this->soaSerial} {$this->soaRefresh} {$this->soaRetry} {$this->soaExpire} {$this->soaMinTtl}";
-            $pdnsDb->Execute("INSERT INTO records SET
-                domain_id = ?,
-                name = ?,
-                type = ?,
-                content = ?,
-                ttl = ?,
-                prio = ?,
-                change_date = ?,
-                server_id = ?,
-                service = ?,
-                ordername = ?,
-                auth = ?
-            ", array(
-                $pdnsDomainId,
-                $this->zoneName,
-                "SOA",
-                $soa,
-                86400,
-                0,
-                time(),
-                '',
-                '',
-                '',
-                1
-            ));
-
-            //check AXFR
-            if ($this->isZoneConfigModified) {
-                $pdnsDb->Execute("DELETE FROM domainmetadata WHERE domain_id = ?", array($pdnsDomainId));
-                $axfr = explode(";", $this->axfrAllowedHosts);
-                foreach ($axfr as $axfrIp) {
-                    if (ip2long($axfrIp) !== false)
-                        $pdnsDb->Execute("INSERT INTO domainmetadata SET `domain_id` = ?, `kind` = ?, `content` = ?", array($pdnsDomainId, 'ALLOW-AXFR-FROM', $axfrIp));
-                }
-            }
-
-
-            while ($record = $records->FetchRow()) {
-
-                // Convert name
-                $name = str_replace(array("@", ""), "{$this->zoneName}.", $record['name']);
-                if (substr($name, -1) != '.') {
-                    $name = "{$name}.{$this->zoneName}";
-                }
-                $name = trim($name, '.');
-
-                // Convert content
-                $content = $record['value'];
-                if (substr($content, -1) != '.' && $record['type'] != 'TXT') {
-                    if (ip2long($content) === false && !$this->IsDomain($content))
-                        $content = "{$content}.{$this->zoneName}";
-                }
-                $content = trim($content, '.');
-                if ($record['type'] == 'SRV') {
-                    $content = "{$record['weight']} {$record['port']} {$content}";
-                }
-
-                if (!$record['ttl'])
-                    $record['ttl'] = 20;
-
-                $pdnsDb->Execute("INSERT INTO records SET
-                    domain_id = ?,
-                    name = ?,
-                    type = ?,
-                    content = ?,
-                    ttl = ?,
-                    prio = ?,
-                    change_date = ?,
-                    server_id = ?,
-                    service = ?,
-                    ordername = ?,
-                    auth = ?
-                ", array(
-                    $pdnsDomainId,
-                    $name,
-                    $record['type'],
-                    $content,
-                    $record['ttl'],
-                    $record['priority'],
-                    time(),
-                    $record['server_id'],
-                    $record['issystem'] ? "_system" : "_custom",
-                    '',
-                    1
-                ));
-            }
-        }
-    }
-
     public function save ($update_system_records = false) {
 
         $row = $this->unBind();
@@ -829,11 +703,5 @@ class DBDNSZone
         }
 
         $this->db->CommitTrans();
-
-        try {
-            //$this->saveInPowerDns();
-        } catch (Exception $e) {
-            Logger::getLogger("DNS")->fatal("Unable to save data in PowerDNS db: {$e->getMessage()}");
-        }
     }
 }

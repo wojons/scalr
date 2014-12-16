@@ -17,6 +17,7 @@ class Scalr_Db_Msr
     const DATA_STORAGE_EBS_SIZE = 'db.msr.data_storage.ebs.size';
     const DATA_STORAGE_EBS_TYPE = 'db.msr.data_storage.ebs.type';
     const DATA_STORAGE_EBS_IOPS = 'db.msr.data_storage.ebs.iops';
+    const DATA_STORAGE_EBS_ENCRYPTED = 'db.msr.data_storage.ebs.encrypted';
     const DATA_STORAGE_EBS_ENABLE_ROTATION = 'db.msr.data_storage.ebs.snaps.enable_rotation';
     const DATA_STORAGE_EBS_ROTATE = 'db.msr.data_storage.ebs.snaps.rotate';
 
@@ -144,28 +145,33 @@ class Scalr_Db_Msr
 
         if ($dbSettings->snapshotConfig) {
             try {
-                $snapshot = Scalr_Storage_Snapshot::init();
-                $snapshot->loadBy(array(
-                    'id'			=> $dbSettings->snapshotConfig->id,
-                    'client_id'		=> $dbServer->clientId,
-                    'env_id'		=> $dbServer->envId,
-                    'farm_id'		=> $dbServer->farmId,
-                    'farm_roleid'	=> $dbServer->farmRoleId,
-                    'name'			=> "Automatical '{$message->dbType}' data bundle",
-                    'type'			=> $dbFarmRole->GetSetting(Scalr_Db_Msr::DATA_STORAGE_ENGINE),
-                    'platform'		=> $dbServer->platform,
-                    'description'	=> "'{$message->dbType}' data bundle created automatically by Scalr",
-                    'service'		=> $message->dbType
-                ));
-                $snapshot->setConfig($dbSettings->snapshotConfig);
-                $snapshot->save(true);
-
+                
+                try {
+                    $snapshot = Scalr_Storage_Snapshot::init();
+                    $snapshot->loadBy(array(
+                        'id'			=> $dbSettings->snapshotConfig->id,
+                        'client_id'		=> $dbServer->clientId,
+                        'env_id'		=> $dbServer->envId,
+                        'farm_id'		=> $dbServer->farmId,
+                        'farm_roleid'	=> $dbServer->farmRoleId,
+                        'name'			=> "Automatical '{$message->dbType}' data bundle",
+                        'type'			=> $dbFarmRole->GetSetting(Scalr_Db_Msr::DATA_STORAGE_ENGINE),
+                        'platform'		=> $dbServer->platform,
+                        'description'	=> "'{$message->dbType}' data bundle created automatically by Scalr",
+                        'service'		=> $message->dbType
+                    ));
+                    $snapshot->setConfig($dbSettings->snapshotConfig);
+                    $snapshot->save(true);
+                } catch (Exception $e) {
+                    if (!stristr($e->getMessage(), "Duplicate entry"))
+                        throw $e;
+                }
 
                 $dbFarmRole->SetSetting(Scalr_Db_Msr::SNAPSHOT_ID, $snapshot->id);
 
                 if ($message->dbType == self::DB_TYPE_MYSQL) {
-                       $dbFarmRole->SetSetting(Scalr_Db_Msr_Mysql::LOG_FILE, $dbSettings->logFile, DBFarmRole::TYPE_LCL);
-                       $dbFarmRole->SetSetting(Scalr_Db_Msr_Mysql::LOG_POS, $dbSettings->logPos, DBFarmRole::TYPE_LCL);
+                    $dbFarmRole->SetSetting(Scalr_Db_Msr_Mysql::LOG_FILE, $dbSettings->logFile, DBFarmRole::TYPE_LCL);
+                    $dbFarmRole->SetSetting(Scalr_Db_Msr_Mysql::LOG_POS, $dbSettings->logPos, DBFarmRole::TYPE_LCL);
                 }
                 elseif ($message->dbType == self::DB_TYPE_MYSQL2 || $message->dbType == self::DB_TYPE_PERCONA || $message->dbType == self::DB_TYPE_MARIADB) {
                     $dbFarmRole->SetSetting(Scalr_Db_Msr_Mysql2::LOG_FILE, $dbSettings->logFile, DBFarmRole::TYPE_LCL);

@@ -11,8 +11,7 @@ Scalr.regPage('Scalr.ui.account2.environments.clouds', function (loadParams, mod
         ocs: 'http://wiki.scalr.com/display/docs/OpenStack#OpenStack-Step2:AddYourOpenStackCredentials',
         ecs: 'http://wiki.scalr.com/display/docs/OpenStack#OpenStack-Step2:AddYourOpenStackCredentials',
         contrail: 'http://wiki.scalr.com/display/docs/OpenStack#OpenStack-Step2:AddYourOpenStackCredentials',
-        eucalyptus: 'http://wiki.scalr.com/display/docs/Eucalyptus#Eucalyptus-Step1:AddYourEucalyptusCredentials',
-        nimbula: 'http://wiki.scalr.com/display/docs/Nimbula#Nimbula-Step1:AddYourNimbulaCredentials'
+        eucalyptus: 'http://wiki.scalr.com/display/docs/Eucalyptus#Eucalyptus-Step1:AddYourEucalyptusCredentials'
     };
 
     var editPlatform = function(params, data) {

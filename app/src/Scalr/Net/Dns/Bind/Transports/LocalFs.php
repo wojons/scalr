@@ -28,7 +28,7 @@
         public function getNamedConf()
         {
             $retval = @file_get_contents("{$this->zonesPath}/zones.include");
-            if (!$retval)
+            if ($retval === false)
                 throw new Exception("Cannot load zones.include file");
             else
                 return $retval;

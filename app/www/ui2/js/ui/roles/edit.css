@@ -53,3 +53,7 @@
 .x-btn-pressed .scalr-ui-role-edit-icon-chef{
     background-position: -80px -260px;
 }
+
+.scalr-ui-role-edit-tab-scripting .x-container .x-mask{
+    background: transparent;
+}

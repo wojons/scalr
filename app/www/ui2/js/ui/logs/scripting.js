@@ -282,7 +282,23 @@ Scalr.regPage('Scalr.ui.logs.scripting', function (loadParams, moduleParams) {
 						panel.store.loadPage(1);
 					}
 				}
-			}]
+			}, ' ', {
+                xtype: 'combo',
+                store: [['', 'All'], ['0', 'Success'], ['1', 'Failure']],
+                name: 'status',
+                editable: false,
+                value: loadParams['status'] || '',
+                forceSelection: true,
+                fieldLabel: 'Result',
+                labelWidth: 40,
+                width: 180,
+				listeners: {
+					change: function (comp, value) {
+                        panel.store.proxy.extraParams['status'] = value;
+						panel.store.loadPage(1);
+					}
+				}
+            }]
 		}]
 	});
 

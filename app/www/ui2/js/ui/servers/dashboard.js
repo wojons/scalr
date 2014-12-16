@@ -71,7 +71,11 @@ Scalr.regPage('Scalr.ui.servers.dashboard', function (loadParams, moduleParams) 
                         name: 'role',
                         fieldLabel: 'Role name',
                         renderer: function(value, comp) {
-                            return '<img src="' + Ext.BLANK_IMAGE_URL + '" class="x-icon-platform-small x-icon-platform-small-' + value.platform + '"/>&nbsp;&nbsp;' + value.name;
+                            var name = value.name;
+                            if (value.id) {
+                                name = '<a href="#/roles/manager?roleId=' + value.id + '">' + name + '</a>';
+                            }
+                            return '<img src="' + Ext.BLANK_IMAGE_URL + '" class="x-icon-platform-small x-icon-platform-small-' + value.platform + '"/>&nbsp;&nbsp;' + name;
                         }
                     },{
                         name: 'os',
@@ -103,7 +107,8 @@ Scalr.regPage('Scalr.ui.servers.dashboard', function (loadParams, moduleParams) 
                             return Scalr.ui.ColoredStatus.getHtml({
                                 type: 'server',
                                 status: moduleParams['general']['status'],
-                                data: moduleParams['general']
+                                data: moduleParams['general'],
+                                qtipConfig: {width: 300}
                             });
                         }
                     },{
@@ -118,6 +123,23 @@ Scalr.regPage('Scalr.ui.servers.dashboard', function (loadParams, moduleParams) 
                     },{
                         name: 'instType',
                         fieldLabel: 'Instance type'
+                    }, {
+                        name: 'imageId',
+                        fieldLabel: 'Image ID',
+                        icons: {
+                            question: true
+                        },
+                        renderer: function(value) {
+                            return '<a href="#/images/view?id=' + value + '">' + value + '</a>';
+                        },
+                        iconsPosition: 'outer',
+                        questionTooltip: "This Server was launched using an Image that is no longer used in its Role's configuration.",
+                        listeners: {
+                            afterrender: function() {
+                                if (moduleParams['general']['imageIdDifferent'])
+                                    this.toggleIcon('question', true);
+                            }
+                        }
                     }]
                 }]
             },{
@@ -125,6 +147,13 @@ Scalr.regPage('Scalr.ui.servers.dashboard', function (loadParams, moduleParams) 
                 name: 'securityGroups',
                 anchor: '100%',
                 fieldLabel: 'Security groups',
+                cls: 'x-display-field-highlight',
+                labelWidth: 130
+            },{
+                xtype: 'displayfield',
+                name: 'blockStorage',
+                anchor: '100%',
+                fieldLabel: 'Block storage',
                 cls: 'x-display-field-highlight',
                 labelWidth: 130
             }]
@@ -315,7 +344,9 @@ Scalr.regPage('Scalr.ui.servers.dashboard', function (loadParams, moduleParams) 
                                     },
                                     processBox: {
                                         type: 'action',
-                                        msg: 'Updating scalarizr ...'
+                                        msg: 'Updating scalarizr ...',
+                                        text: 'Scalarizr update can take up to 2 minutes',
+                                        progressBar: true
                                     },
                                     url: '/servers/xSzrUpdate/',
                                     params: {serverId: loadParams['serverId']},
@@ -630,7 +661,8 @@ Scalr.regPage('Scalr.ui.servers.dashboard', function (loadParams, moduleParams) 
 
     }
     var cloudPropertiesCt = panel.down('#cloudProperties'),
-        securityGroupsField = panel.down('[name="securityGroups"]');
+        securityGroupsField = panel.down('[name="securityGroups"]'),
+        blockStorageField = panel.down('[name="blockStorage"]');
     if (moduleParams['cloudProperties'] !== undefined) {
         var items = [];
         Ext.Object.each(moduleParams['cloudProperties'], function(key, value){
@@ -647,9 +679,16 @@ Scalr.regPage('Scalr.ui.servers.dashboard', function (loadParams, moduleParams) 
         } else {
             securityGroupsField.hide();
         }
+        
+        if (moduleParams['cloudProperties']['Block storage']) {
+        	blockStorageField.setValue(moduleParams['cloudProperties']['Block storage']);
+        } else {
+        	blockStorageField.hide();
+        }
     } else {
         cloudPropertiesCt.hide();
         securityGroupsField.hide();
+        blockStorageField.hide();
     }
 
     var internalPropertiesCt = panel.down('#internalProperties');

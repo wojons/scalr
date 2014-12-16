@@ -104,7 +104,9 @@ class Scalr_UI_Controller_Farms_Builder extends Scalr_UI_Controller
             foreach ($roles as $role) {
                 $dbRole = DBRole::loadById($role['role_id']);
 
-                if (!$dbRole->getImageId($role['platform'], $role['cloud_location'])) {
+                try {
+                    $dbRole->__getNewRoleObject()->getImage($role['platform'], $role['cloud_location']);
+                } catch (Exception $e) {
                     $this->setBuildError(
                         $dbRole->name,
                         sprintf("Role '%s' is not available in %s on %s",
@@ -317,7 +319,7 @@ class Scalr_UI_Controller_Farms_Builder extends Scalr_UI_Controller
 
                         if ($farmSettings['vpc_id']) {
                             $sgs = @json_decode($role['settings'][DBFarmRole::SETTING_AWS_SECURITY_GROUPS_LIST]);
-                            if (!$dbRole->hasBehavior(ROLE_BEHAVIORS::VPC_ROUTER) && empty($sgs) && !$role['settings'][DBFarmRole::SETTING_AWS_SG_LIST]) {
+                            if (!$dbRole->hasBehavior(ROLE_BEHAVIORS::VPC_ROUTER) && empty($sgs) && !$role['settings'][DBFarmRole::SETTING_AWS_SG_LIST] && !$role['settings']['aws.security_group']) {
                                 $this->setBuildError(
                                     DBFarmRole::SETTING_AWS_SECURITY_GROUPS_LIST,
                                     'Security group(s) should be selected',
@@ -813,7 +815,7 @@ class Scalr_UI_Controller_Farms_Builder extends Scalr_UI_Controller
             $client->SetSettingValue(CLIENT_SETTINGS::DATE_FARM_CREATED, time());
 
         $this->response->success('Farm successfully saved');
-        $this->response->data(array('farmId' => $dbFarm->ID));
+        $this->response->data(array('farmId' => $dbFarm->ID, 'isNewFarm' => $bNew));
     }
 
     public function getFarm2($farmId)
@@ -899,8 +901,6 @@ class Scalr_UI_Controller_Farms_Builder extends Scalr_UI_Controller
                 $isBundling = false;
             }
 
-            $imageDetails = $dbFarmRole->GetRoleObject()->getImageDetails($dbFarmRole->Platform, $dbFarmRole->CloudLocation);
-
             $storages = array(
                 'configs' => $dbFarmRole->getStorage()->getConfigs()
             );
@@ -925,17 +925,14 @@ class Scalr_UI_Controller_Farms_Builder extends Scalr_UI_Controller
                             $info['serverInstanceId'] = $server->GetProperty(EC2_SERVER_PROPERTIES::INSTANCE_ID);
                         }
                     } catch (Exception $e) {
-                        $this->response->varDump($e->getMessage());
-                        $this->response->varDump($e->getTraceAsString());
+                        $this->response->debugException($e);
                     }
 
                     $storages['devices'][$configKey][] = $info;
                 }
             }
 
-            $imageInfo = $dbFarmRole->GetRoleObject()->getImageDetails($dbFarmRole->Platform, $dbFarmRole->CloudLocation);
-            $architecture = $imageInfo['architecture'];
-
+            $image = $dbFarmRole->GetRoleObject()->__getNewRoleObject()->getImage($dbFarmRole->Platform, $dbFarmRole->CloudLocation);
             $securityGroups = $this->getInitialSecurityGroupsList($dbFarmRole);
 
             $farmRoles[] = array(
@@ -950,7 +947,6 @@ class Scalr_UI_Controller_Farms_Builder extends Scalr_UI_Controller
                 'generation'	=> $dbFarmRole->GetRoleObject()->generation,
                 'group'			=> $dbFarmRole->GetRoleObject()->getCategoryName(),
                 'cat_id'        => $dbFarmRole->GetRoleObject()->catId,
-                'arch'          => $architecture,
                 'name'			=> $roleName,
                 'is_bundle_running'	=> $isBundling,
                 'behaviors'		=> implode(",", $dbFarmRole->GetRoleObject()->getBehaviors()),
@@ -961,7 +957,7 @@ class Scalr_UI_Controller_Farms_Builder extends Scalr_UI_Controller
                 'launch_index'	=> (int)$dbFarmRole->LaunchIndex,
                 'scaling'		=> $scaling,
                 'config_presets'=> $presets,
-                'tags'			=> $dbFarmRole->GetRoleObject()->getTags(),
+                'image'         => $image->getImage(),
                 'storages'      => $storages,
                 'variables'     => $farmRoleVariables->getValues($dbFarmRole->GetRoleID(), $dbFarm->ID, $dbFarmRole->ID),
                 'running_servers' => $dbFarmRole->GetRunningInstancesCount(),

@@ -8,6 +8,10 @@ use \DBRole;
 use \BundleTask;
 use Scalr\Modules\Platforms\Rackspace\Adapters\StatusAdapter;
 use Scalr\Modules\AbstractPlatformModule;
+use Scalr\Model\Entity\Image;
+use Scalr\Service\Cloud\Rackspace\Exception\InstanceNotFoundException;
+use Scalr\Service\Cloud\Rackspace\Exception\NotFoundException;
+use Scalr_Service_Cloud_Rackspace_CS;
 
 class RackspacePlatformModule extends AbstractPlatformModule implements \Scalr\Modules\PlatformModuleInterface
 {
@@ -17,7 +21,7 @@ class RackspacePlatformModule extends AbstractPlatformModule implements \Scalr\M
     const API_KEY		= 'rackspace.api_key';
     const IS_MANAGED	= 'rackspace.is_managed';
 
-    private $instancesListCache = array();
+    public $instancesListCache = array();
 
     public $_tmpVar;
 
@@ -143,28 +147,18 @@ class RackspacePlatformModule extends AbstractPlatformModule implements \Scalr\M
         $environment = $DBServer->GetEnvironmentObject();
 
         $iid = $DBServer->GetProperty(\RACKSPACE_SERVER_PROPERTIES::SERVER_ID);
-        if (!$iid)
-        {
+        if (!$iid) {
             $status = 'not-found';
-        }
-        elseif (!$this->instancesListCache[$environment->id][$cloudLocation][$iid])
-        {
+        } elseif (!$this->instancesListCache[$environment->id][$cloudLocation][$iid]) {
             $rsClient = $this->getRsClient($environment, $cloudLocation);
 
             try {
                 $result = $rsClient->getServerDetails($DBServer->GetProperty(\RACKSPACE_SERVER_PROPERTIES::SERVER_ID));
                 $status = $result->server->status;
+            } catch(NotFoundException $e) {
+                $status = 'not-found';
             }
-            catch(Exception $e)
-            {
-                if (stristr($e->getMessage(), "404"))
-                    $status = 'not-found';
-                else
-                    throw $e;
-            }
-        }
-        else
-        {
+        } else {
             $status = $this->instancesListCache[$environment->id][$cloudLocation][$DBServer->GetProperty(\RACKSPACE_SERVER_PROPERTIES::SERVER_ID)];
         }
 
@@ -179,7 +173,11 @@ class RackspacePlatformModule extends AbstractPlatformModule implements \Scalr\M
     {
         $rsClient = $this->getRsClient($DBServer->GetEnvironmentObject(), $DBServer->GetProperty(\RACKSPACE_SERVER_PROPERTIES::DATACENTER));
 
-        $rsClient->deleteServer($DBServer->GetProperty(\RACKSPACE_SERVER_PROPERTIES::SERVER_ID));
+        try {
+            $rsClient->deleteServer($DBServer->GetProperty(\RACKSPACE_SERVER_PROPERTIES::SERVER_ID));
+        } catch (NotFoundException $e) {
+            throw new InstanceNotFoundException($e->getMessage(), $e->getCode(), $e);
+        }
 
         return true;
     }
@@ -192,7 +190,11 @@ class RackspacePlatformModule extends AbstractPlatformModule implements \Scalr\M
     {
         $rsClient = $this->getRsClient($DBServer->GetEnvironmentObject(), $DBServer->GetProperty(\RACKSPACE_SERVER_PROPERTIES::DATACENTER));
 
-        $rsClient->rebootServer($DBServer->GetProperty(\RACKSPACE_SERVER_PROPERTIES::SERVER_ID));
+        try {
+            $rsClient->rebootServer($DBServer->GetProperty(\RACKSPACE_SERVER_PROPERTIES::SERVER_ID));
+        } catch (NotFoundException $e) {
+            throw new InstanceNotFoundException($e->getMessage(), $e->getCode(), $e);
+        }
 
         return true;
     }
@@ -201,26 +203,25 @@ class RackspacePlatformModule extends AbstractPlatformModule implements \Scalr\M
      * {@inheritdoc}
      * @see \Scalr\Modules\PlatformModuleInterface::RemoveServerSnapshot()
      */
-    public function RemoveServerSnapshot(DBRole $DBRole)
+    public function RemoveServerSnapshot(Image $image)
     {
-        foreach ($DBRole->getImageId(\SERVER_PLATFORMS::RACKSPACE) as $location => $imageId) {
+        if (! $image->getEnvironment())
+            return true;
 
-            $rsClient = $this->getRsClient($DBRole->getEnvironmentObject(), $location);
+        $rsClient = $this->getRsClient($image->getEnvironment(), $image->cloudLocation);
 
-            try {
-                $rsClient->deleteImage($imageId);
-            }
-            catch(Exception $e)
-            {
-                if (stristr($e->getMessage(), "Cannot destroy a destroyed snapshot") ||
-                    stristr($e->getMessage(), "com.rackspace.cloud.service.servers.ItemNotFoundFault") ||
-                    stristr($e->getMessage(), "Bad username or password") ||
-                    stristr($e->getMessage(), "NotFoundException")
-                )
-                    return true;
-                else
-                    throw $e;
-            }
+        try {
+            $rsClient->deleteImage($image->id);
+        }
+        catch(Exception $e)
+        {
+            if (stristr($e->getMessage(), "Cannot destroy a destroyed snapshot") ||
+                stristr($e->getMessage(), "com.rackspace.cloud.service.servers.ItemNotFoundFault") ||
+                stristr($e->getMessage(), "NotFoundException")
+            )
+                return true;
+            else
+                throw $e;
         }
 
         return true;
@@ -283,7 +284,7 @@ class RackspacePlatformModule extends AbstractPlatformModule implements \Scalr\M
      * {@inheritdoc}
      * @see \Scalr\Modules\PlatformModuleInterface::GetServerExtendedInformation()
      */
-    public function GetServerExtendedInformation(DBServer $DBServer)
+    public function GetServerExtendedInformation(DBServer $DBServer, $extended = false)
     {
         try
         {
@@ -322,9 +323,9 @@ class RackspacePlatformModule extends AbstractPlatformModule implements \Scalr\M
         if (!$launchOptions)
         {
             $launchOptions = new \Scalr_Server_LaunchOptions();
-            $DBRole = DBRole::loadById($DBServer->roleId);
+            $DBRole = $DBServer->GetFarmRoleObject()->GetRoleObject();
 
-            $launchOptions->imageId = $DBRole->getImageId(\SERVER_PLATFORMS::RACKSPACE, $DBServer->GetProperty(\RACKSPACE_SERVER_PROPERTIES::DATACENTER));
+            $launchOptions->imageId = $DBRole->__getNewRoleObject()->getImage(\SERVER_PLATFORMS::RACKSPACE, $DBServer->GetProperty(\RACKSPACE_SERVER_PROPERTIES::DATACENTER))->imageId;
             $launchOptions->serverType = $DBServer->GetFarmRoleObject()->GetSetting(\DBFarmRole::SETTING_RS_FLAVOR_ID);
                $launchOptions->cloudLocation = $DBServer->GetFarmRoleObject()->CloudLocation;
 
@@ -367,6 +368,7 @@ class RackspacePlatformModule extends AbstractPlatformModule implements \Scalr\M
                 \SERVER_PROPERTIES::ARCHITECTURE               => $launchOptions->architecture,
                 \RACKSPACE_SERVER_PROPERTIES::DATACENTER       => $launchOptions->cloudLocation,
             ]);
+            $DBServer->imageId = $launchOptions->imageId;
 
             return $DBServer;
         } else {

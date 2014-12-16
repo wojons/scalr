@@ -83,7 +83,7 @@ final class EVENT_TYPE
             EVENT_TYPE::INSTANCE_IP_ADDRESS_CHANGED => EVENT_TYPE::GetEventDescription(EVENT_TYPE::INSTANCE_IP_ADDRESS_CHANGED),
             EVENT_TYPE::EBS_VOLUME_ATTACHED => EVENT_TYPE::GetEventDescription(EVENT_TYPE::EBS_VOLUME_ATTACHED),
             EVENT_TYPE::EBS_VOLUME_MOUNTED => EVENT_TYPE::GetEventDescription(EVENT_TYPE::EBS_VOLUME_MOUNTED),
-            EVENT_TYPE::NEW_MYSQL_MASTER => EVENT_TYPE::GetEventDescription(EVENT_TYPE::NEW_MYSQL_MASTER),
+            //EVENT_TYPE::NEW_MYSQL_MASTER => EVENT_TYPE::GetEventDescription(EVENT_TYPE::NEW_MYSQL_MASTER),
             EVENT_TYPE::BEFORE_HOST_UP => EVENT_TYPE::GetEventDescription(EVENT_TYPE::BEFORE_HOST_UP),
             EVENT_TYPE::HOST_UP => EVENT_TYPE::GetEventDescription(EVENT_TYPE::HOST_UP),
             EVENT_TYPE::BEFORE_HOST_TERMINATE => EVENT_TYPE::GetEventDescription(EVENT_TYPE::BEFORE_HOST_TERMINATE),
@@ -94,4 +94,18 @@ final class EVENT_TYPE
             EVENT_TYPE::CHECK_RECOVERED => EVENT_TYPE::GetEventDescription(EVENT_TYPE::CHECK_RECOVERED)
         );
     }
+
+    public static function getScriptingEventsWithScope()
+    {
+        $events = [];
+        foreach (self::getScriptingEvents() as $k => $v) {
+            $events[$k] = [
+                'name'        => $k,
+                'description' => $v,
+                'scope'       => 'scalr'
+            ];
+        }
+        return $events;
+    }
+
 }

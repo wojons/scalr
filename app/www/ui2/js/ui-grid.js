@@ -671,7 +671,7 @@ Ext.define('Scalr.ui.MultiCheckboxColumn', {
                 if (column.readonly){
                     cls += ' ' + column.itemReadOnlyCls;
                 }
-                html.push('<span class="' + cls + '" data-value="' + key + '"><img src="' + Ext.BLANK_IMAGE_URL + '"/>' + key + '</span>');
+                html.push(' <span class="' + cls + '" data-value="' + key + '"><img src="' + Ext.BLANK_IMAGE_URL + '"/>' + (column.labelRenderer ? column.labelRenderer(key) : key) + '</span>');
             });
         }
         return column.customRenderer ? column.customRenderer(html, record) : html.join('');
@@ -872,6 +872,7 @@ Ext.define('Scalr.ui.GridStatusColumn', {
         var column = grid.panel.columns[colIndex];
         return Scalr.ui.ColoredStatus.getHtml({
             type: column['statustype'],
+            params: column['params'],
             status: record.data.status,
             data: record.data
         }, column.qtipConfig);

@@ -99,7 +99,7 @@ class Field
      */
     public function getColumnName($tableAlias = null, $alias = null)
     {
-        return '`' . ($tableAlias ?: $this->getEntityAnnotation()->table->name) . '`.`' . $this->column->name . '`' .
+        return '`' . ($tableAlias ?: str_replace('.', '`.`', $this->getEntityAnnotation()->table->name)) . '`.`' . $this->column->name . '`' .
                (!empty($alias) ? ' AS `' . $alias . '`' : '');
     }
 }

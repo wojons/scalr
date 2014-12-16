@@ -8,6 +8,7 @@ use Scalr\Exception;
 use \DateTime;
 use \DateTimeZone;
 use Scalr\Upgrade\Entity\MysqlUpgradeEntity;
+use Scalr\Model\Entity\InformationSchema\ColumnEntity;
 
 /**
  * UpdateInterface
@@ -462,19 +463,17 @@ abstract class AbstractUpdate extends AbstractGetter implements UpdateInterface
 
     /**
      * {@inheritdoc}
-     * @see \Scalr\Upgrade\UpdateInterface::hasTableColumnAutoIncrement()
+     * @see \Scalr\Upgrade\UpdateInterface::hasTableAutoIncrement()
      */
     public function hasTableAutoIncrement($table, $schema = null)
     {
         $ret = $this->db->GetOne("
             SELECT 1 FROM `INFORMATION_SCHEMA`.`COLUMNS` s
             WHERE s.`TABLE_SCHEMA` = " . (isset($schema) ? $this->db->qstr($schema) : "DATABASE()") . "
-            AND s.`TABLE_NAME` = ?
+            AND s.`TABLE_NAME` = " . $this->db->qstr($table) . "
             AND s.`EXTRA` LIKE '%auto_increment%'
             LIMIT 1
-        ", array(
-            $table
-        ));
+        ");
 
         return $ret ? true : false;
     }
@@ -495,6 +494,19 @@ abstract class AbstractUpdate extends AbstractGetter implements UpdateInterface
         ");
 
         return $ret ? true : false;
+    }
+
+    /**
+     * {@inheritdoc}
+     * @see \Scalr\Upgrade\UpdateInterface::getTableColumnDefinition()
+     */
+    public function getTableColumnDefinition($table, $column, $schema = null)
+    {
+        if (!isset($schema)) {
+            $schema = $this->db->GetOne("SELECT DATABASE()");
+        }
+
+        return ColumnEntity::getColumnDefinition($schema, $table, $column);
     }
 
     /**

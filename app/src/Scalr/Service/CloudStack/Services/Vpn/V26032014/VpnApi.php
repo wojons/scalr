@@ -246,8 +246,7 @@ class VpnApi extends AbstractApi
             foreach($properties as $property => $value) {
                 if (property_exists($resultObject, "$property")) {
                     if (is_object($resultObject->{$property})) {
-                        // Fix me. Temporary fix.
-                        trigger_error('Cloudstack error. Unexpected sdt object class received in property: ' . $property . ', value: ' . json_encode($resultObject->{$property}), E_USER_WARNING);
+                        trigger_error('Cloudstack error. Unexpected stdObject class received in property: ' . $property . ', value: ' . json_encode($resultObject->{$property}), E_USER_WARNING);
                         $item->{$property} = json_encode($resultObject->{$property});
                     } else {
                         $item->{$property} = (string) $resultObject->{$property};
@@ -297,8 +296,7 @@ class VpnApi extends AbstractApi
             foreach($properties as $property => $value) {
                 if (property_exists($resultObject, "$property")) {
                     if (is_object($resultObject->{$property})) {
-                        // Fix me. Temporary fix.
-                        trigger_error('Cloudstack error. Unexpected sdt object class received in property: ' . $property . ', value: ' . json_encode($resultObject->{$property}), E_USER_WARNING);
+                        trigger_error('Cloudstack error. Unexpected stdObject class received in property: ' . $property . ', value: ' . json_encode($resultObject->{$property}), E_USER_WARNING);
                         $item->{$property} = json_encode($resultObject->{$property});
                     } else {
                         $item->{$property} = (string) $resultObject->{$property};

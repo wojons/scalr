@@ -18,20 +18,19 @@ Scalr.regPage('Scalr.ui.account2.orchestration.view', function (loadParams, modu
                 orchestrationRules: Ext.encode(scripting)
             },
             success: function () {
-                Scalr.message.Flush(true);
-                cb ? cb() : Scalr.event.fireEvent('refresh');
+                Ext.isFunction(cb) ? cb() : Scalr.event.fireEvent('refresh');
             }
         });
     }
     
-    var pageTitle = 'Account orchestration';
 	var panel = Ext.create('Ext.panel.Panel', {
 		scalrOptions: {
-			title: pageTitle,
+			title: 'Account management &raquo; Orchestration',
 			maximize: 'all',
 			leftMenu: {
 				menuId: 'settings',
 				itemId: 'orchestration',
+                showPageTitle: true,
                 beforeClose: function(cb) {
                     if (panel.down('#scripting').hasDirtyRecords()) {
                         Scalr.utils.Window({

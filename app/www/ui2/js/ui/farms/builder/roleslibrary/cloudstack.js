@@ -16,7 +16,7 @@ Scalr.regPage('Scalr.ui.farms.builder.addrole.cloudstack', function () {
         },
         
         isVisibleForRole: function(record) {
-            return Ext.Array.contains(['cloudstack', 'idcf', 'ucloud'], record.get('platform'));
+            return Ext.Array.contains(['cloudstack', 'idcf'], record.get('platform'));
         },
 
         setRole: function(record) {

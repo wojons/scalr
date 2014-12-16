@@ -65,6 +65,8 @@ get_behaviour() {
 			echo "\"recipe[mongodb]\", "
 	elif [ "$bhv" = "percona" ]; then
 			echo "\"recipe[percona]\", "
+	elif [ "$bhv" = "mariadb" ]; then
+			echo "\"recipe[mariadb]\", "
 	elif [ "$bhv" = "tomcat" ]; then
 			echo "\"recipe[tomcat]\", "
 	elif [ "$bhv" = "haproxy" ]; then

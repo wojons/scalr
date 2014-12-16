@@ -79,12 +79,12 @@ Scalr.regPage('Scalr.ui.public.report', function (loadParams, moduleParams) {
                    '</tr>'+
                    '<tr>' +
                        '<td >' +
-                           '<br/><div class="x-title1">Prev. {period} ({prevPeriod})</div>' +
+                           '<br/><div class="x-title1">Prev. {[values.period!=\'custom\'?values.period:\'day\']} ({prevPeriod})</div>' +
                            '<span class="x-title2">{[this.currency(values.totals.prevCost)]}</span>' +
                        '</td>' +
                        '<td>' +
                            '<br/><div class="x-title1">{[values.totals.trends.rollingAverageMessage]}</div>' +
-                           '<span class="x-title2">{[this.currency(values.totals.trends.rollingAverage)]} </span>per day' +
+                           '<span class="x-title2">{[this.currency(values.totals.trends.rollingAverage)]} </span>per {interval}' +
                        '</td>' +
                    '</tr>'
 

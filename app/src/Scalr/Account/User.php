@@ -46,6 +46,7 @@ class Scalr_Account_User extends Scalr_Model
     const VAR_SSH_CONSOLE_PORT = 'ssh.console.port';
     const VAR_SSH_CONSOLE_KEY_NAME = 'ssh.console.key_name';
     const VAR_SSH_CONSOLE_DISABLE_KEY_AUTH = 'ssh.console.disable_key_auth';
+    const VAR_SSH_CONSOLE_ENABLE_AGENT_FORWARDING = 'ssh.console.enable_agent_forwarding';
     const VAR_SSH_CONSOLE_LOG_LEVEL = 'ssh.console.log_level';
     const VAR_SSH_CONSOLE_PREFERRED_PROVIDER = 'ssh.console.preferred_provider';
 
@@ -418,14 +419,18 @@ class Scalr_Account_User extends Scalr_Model
      * @param $pwd
      * @return bool
      */
-    public function checkPassword($pwd)
+    public function checkPassword($pwd, $updateLoginAttempt = true)
     {
         if ($this->password != $this->getCrypto()->hash($pwd)) {
-            $this->updateLoginAttempt(1);
+            if ($updateLoginAttempt) {
+                $this->updateLoginAttempt(1);
+            }
             return false;
         }
         else {
-            $this->updateLoginAttempt();
+            if ($updateLoginAttempt) {
+                $this->updateLoginAttempt();
+            }
             return true;
         }
     }
@@ -769,7 +774,7 @@ class Scalr_Account_User extends Scalr_Model
      */
     public function isUser()
     {
-        return in_array($this->getType(), [self::TYPE_ACCOUNT_OWNER, self::TYPE_ACCOUNT_ADMIN, self::TYPE_TEAM_USER]);
+        return in_array($this->getType(), [self::TYPE_ACCOUNT_OWNER, self::TYPE_ACCOUNT_SUPER_ADMIN, self::TYPE_ACCOUNT_ADMIN, self::TYPE_TEAM_USER]);
     }
 
     /**
@@ -794,7 +799,7 @@ class Scalr_Account_User extends Scalr_Model
                $user->getAccountId() == $this->getAccountId() &&
                !$user->isAccountOwner() &&
                $this->getId() != $user->getId() &&
-               ($this->isAccountOwner() || $this->isAccountSuperAdmin() || !$user>isAccountSuperAdmin()) ;
+               ($this->isAccountOwner() || $this->isAccountSuperAdmin() || !$user->isAccountSuperAdmin()) ;
     }
 
     /**
@@ -847,7 +852,8 @@ class Scalr_Account_User extends Scalr_Model
             Scalr_Account_User::VAR_SSH_CONSOLE_KEY_NAME,
             Scalr_Account_User::VAR_SSH_CONSOLE_DISABLE_KEY_AUTH,
             Scalr_Account_User::VAR_SSH_CONSOLE_LOG_LEVEL,
-            Scalr_Account_User::VAR_SSH_CONSOLE_PREFERRED_PROVIDER
+            Scalr_Account_User::VAR_SSH_CONSOLE_PREFERRED_PROVIDER,
+            Scalr_Account_User::VAR_SSH_CONSOLE_ENABLE_AGENT_FORWARDING
         );
         foreach ($list as $name) {
             $this->setVar($name, $settings[$name]);
@@ -863,7 +869,8 @@ class Scalr_Account_User extends Scalr_Model
             Scalr_Account_User::VAR_SSH_CONSOLE_KEY_NAME,
             Scalr_Account_User::VAR_SSH_CONSOLE_DISABLE_KEY_AUTH,
             Scalr_Account_User::VAR_SSH_CONSOLE_LOG_LEVEL,
-            Scalr_Account_User::VAR_SSH_CONSOLE_PREFERRED_PROVIDER
+            Scalr_Account_User::VAR_SSH_CONSOLE_PREFERRED_PROVIDER,
+            Scalr_Account_User::VAR_SSH_CONSOLE_ENABLE_AGENT_FORWARDING
         );
 
         if ($serverId) {

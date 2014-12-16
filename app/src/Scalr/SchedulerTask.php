@@ -1,7 +1,11 @@
 <?php
 
+use Scalr\LoggerTrait;
+
 class Scalr_SchedulerTask extends Scalr_Model
 {
+    use LoggerTrait;
+
     protected $dbTableName = 'scheduler';
     protected $dbPrimaryKey = 'id';
     protected $dbMessageKeyNotFound = 'Scheduler task #%s not found in database';
@@ -82,7 +86,20 @@ class Scalr_SchedulerTask extends Scalr_Model
 
     public function updateLastStartTime()
     {
-        $this->db->Execute("UPDATE scheduler SET last_start_time = NOW() WHERE id = ?", array($this->id));
+        $this->lastStartTime = date('Y-m-d H:i:s');
+        $this->db->Execute("UPDATE scheduler SET last_start_time = ? WHERE id = ?", [$this->lastStartTime, $this->id]);
+    }
+
+    /**
+     * Checks whether this task was executed recently
+     *
+     * @return boolean Returns TRUE if either the task was executed less than 30 seconds ago or
+     *                 it has never been executed.
+     */
+    public function isExecutedRecently()
+    {
+        //Last start time less than 30 seconds
+        return $this->lastStartTime && (time() - strtotime($this->lastStartTime)) < 30;
     }
 
     /**
@@ -92,7 +109,7 @@ class Scalr_SchedulerTask extends Scalr_Model
     public function execute($manual = false)
     {
         $farmRoleNotFound = false;
-        $logger = Logger::getLogger(__CLASS__);
+        $logger = $this->getLogger() ?: Logger::getLogger(__CLASS__);
 
         switch($this->type) {
             case self::LAUNCH_FARM:

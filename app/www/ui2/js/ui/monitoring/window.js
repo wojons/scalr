@@ -138,6 +138,8 @@ Ext.define('Scalr.ui.monitoring.statistics', {
                 me.setStatisticsWidth();
 
                 me.monitoringRefreshTask.restart();
+
+                me.up('panel').down('treepanel').getView().restoreScrollState();
             }
         };
 

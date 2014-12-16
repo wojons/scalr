@@ -1,5 +1,4 @@
 Scalr.regPage('Scalr.ui.billing.details', function (loadParams, moduleParams) {
-    var pageTitle = 'Billing';
 	var applyLimit = function () {
 		var limit = this.limit['limit'], usage = this.limit['usage'];
 		var color = 'green';
@@ -94,11 +93,12 @@ Scalr.regPage('Scalr.ui.billing.details', function (loadParams, moduleParams) {
 	
 	var panel = Ext.create('Ext.form.Panel', {
 		scalrOptions: {
-			title: pageTitle,
+			title: 'Account management &raquo; Billing',
 			maximize: 'all',
 			leftMenu: {
 				menuId: 'settings',
-				itemId: 'billing'
+				itemId: 'billing',
+                showPageTitle: true
 			}
 		},
         cls: 'x-panel-column-left',

@@ -170,80 +170,6 @@ class Scalr_UI_Controller_Farms_Roles extends Scalr_UI_Controller
         ));
     }
 
-    public function xDowngradeAction()
-    {
-        if (!$this->getParam('roleId'))
-            throw new Exception("Please select role on which you want to downgrade");
-
-
-        $dbFarmRole = DBFarmRole::LoadByID($this->getParam(self::CALL_PARAM_NAME));
-        $this->user->getPermissions()->validate($dbFarmRole);
-
-        if ($dbFarmRole->NewRoleID)
-            throw new Exception("You cannot downgrade role that has active bundle task");
-
-        $newRole = DBRole::loadById($this->getParam('roleId'));
-        if ($newRole->envId != 0)
-            $this->user->getPermissions()->validate($newRole);
-
-        $currentRole = $dbFarmRole->GetRoleObject();
-
-        if ($currentRole->id == $newRole->id)
-            throw new Exception("You're already using selected role");
-
-        $dbFarmRole->RoleID = $newRole->id;
-        $dbFarmRole->Save();
-
-        $this->response->success("Farm role successfully downgraded to older version of role. This action doesn't affect current running instances.");
-    }
-
-    public function downgradeAction()
-    {
-        $dbFarmRole = DBFarmRole::LoadByID($this->getParam(self::CALL_PARAM_NAME));
-        $this->user->getPermissions()->validate($dbFarmRole);
-
-        $dbRole = $dbFarmRole->GetRoleObject();
-
-        $history = array();
-        foreach ($dbRole->getRoleHistory(false) as $roleName)
-        {
-            $item = false;
-            try {
-                $hRole = DBRole::loadByFilter(array('name' => $roleName));
-                if ($hRole->envId != 0)
-                    $this->user->getPermissions()->validate($hRole);
-            } catch (Exception $e) { $hRole = false; }
-
-            if ($hRole){
-                $item = array(
-                    'xtype' => 'radiofield',
-                    'name' => 'roleId',
-                    'boxLabel' => $hRole->name,
-                    'inputValue' => $hRole->id
-                );
-            } elseif ($roleName) {
-                $item = array(
-                    'xtype' => 'displayfield',
-                    'hideLabel' => true,
-                    'value' => $roleName . " [ <span style='color:gray;font-style:italic;'>Role was removed and no longer available</span> ]"
-                );
-            }
-
-            if ($item)
-                $history[] = $item;
-        }
-
-        $history[]  = array(
-            'xtype' => 'displayfield',
-            'hideLabel' => true,
-            'value' => "<b>".$dbRole->name."</b> [ Current role ]"
-        );
-
-        $this->response->page('ui/farms/roles/downgrade.js', array(
-            'history' => $history
-        ));
-    }
-
     public function xLaunchNewServerAction()
     {
         $dbFarmRole = DBFarmRole::LoadByID($this->getParam('farmRoleId'));
@@ -354,10 +280,10 @@ class Scalr_UI_Controller_Farms_Roles extends Scalr_UI_Controller
 
             $DBRole = DBRole::loadById($row['role_id']);
             $row["name"] = $DBRole->name;
-            $row['image_id'] = $DBRole->getImageId(
+            $row['image_id'] = $DBRole->__getNewRoleObject()->getImage(
                 $DBFarmRole->Platform,
                 $DBFarmRole->CloudLocation
-            );
+            )->imageId;
 
             if ($DBFarmRole->GetFarmObject()->Status == FARM_STATUS::RUNNING) {
                 $row['shortcuts'] = [];
@@ -426,7 +352,7 @@ class Scalr_UI_Controller_Farms_Roles extends Scalr_UI_Controller
             )
         ));
 
-        $imageInfo = $newRole->getImageDetails($dbFarmRole->Platform, $dbFarmRole->CloudLocation);
+        $image = $newRole->__getNewRoleObject()->getImage($dbFarmRole->Platform, $dbFarmRole->CloudLocation)->getImage();
 
         $this->response->success("Role successfully replaced.");
         $this->response->data(array(
@@ -438,9 +364,11 @@ class Scalr_UI_Controller_Farms_Roles extends Scalr_UI_Controller
                 'os_generation' => $newRole->osGeneration,
                 'os_version'    => $newRole->osVersion,
                 'generation'	=> $newRole->generation,
-                'tags'			=> $newRole->getTags(),
-                'image_id'      => $imageInfo['image_id'],
-                'arch'          => $imageInfo['architecture'] ? $imageInfo['architecture'] : (stristr($newRole->name, '64-') ? 'x86_64' : null)
+                'image'         => [
+                    'id' => $image->id,
+                    'type' => $image->type,
+                    'architecture' => $image->architecture
+                ]
             ),
         ));
     }

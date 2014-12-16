@@ -167,6 +167,8 @@ if (count($err) == 0) {
     }
 
     if (count($err) == 0) {
+        $db = null;
+
         try {
             require_once __DIR__ . '/../src/prepend.inc.php';
 
@@ -175,6 +177,22 @@ if (count($err) == 0) {
             $db = $container->adodb;
         } catch (\Exception $e) {
             $err[] = "Could not initialize bootstrap. " . $e->getMessage();
+        }
+
+        try {
+            if ($db) {
+                $db->Execute("SHOW TABLES");
+
+                $sessionTz = $db->GetOne("SELECT @@session.time_zone");
+
+                $phpTz = date_default_timezone_get();
+
+                if($sessionTz != 'SYSTEM' && $sessionTz != $phpTz) {
+                    $err[] = "MySQL session timezone ({$sessionTz}) is not system timezone and does not match php timezone ({$phpTz}).";
+                }
+            }
+        } catch (Exception $e) {
+            $err[] = "Could not connect to database. Please check credentials in app/etc/config.yml.";
         }
     }
 }
@@ -190,16 +208,23 @@ if (empty($err)) {
                          . "Look at $PHPSITE/manual/en/ldap.installation.php";
         }
     }
+
+    // Dev requirements
+    if (!class_exists('ZMQ')) {
+        $recommend[] = "ZMQ is used for some new features and should be installed. Look at $PHPSITE/manual/en/zmq.requirements.php";
+    } else if (version_compare(phpversion('zmq'), '1.1.2', '<')) {
+        $recommend[] = "ZMQ is used for some new features. Version of the ZMQ extension must be >= 1.1.2.";
+    }
 }
 
 $congrats = "Congratulations, your environment settings match Scalr requirements!";
-$worningWin = "Please pay attention to the fact that Windows system is not allowed for production environment!";
+$warningWin = "Please pay attention to the fact that Windows system is not allowed for production environment!";
 
 if (!$cli) {
     if (count($err) == 0) {
         print "<span style='color:green'>" . $congrats . "</span><br>\n";
         if ($windows) {
-            print "<span style='color:orange'>" . $worningWin . "</span>\n";
+            print "<span style='color:orange'>" . $warningWin . "</span>\n";
         }
     } else {
         print "<span style='color:red;font-weight:bold;'>Errors:</span><br>";
@@ -216,17 +241,17 @@ if (!$cli) {
     if (count($err) == 0) {
         print "\033[32m" . $congrats . "\033[0m\n";
         if ($windows) {
-            print "\033[31m" . $worningWin . "\033[0m\n";
+            print "\033[31m" . $warningWin . "\033[0m\n";
         }
     } else {
         print "\033[31mErrors:\033[0m\n";
         foreach ($err as $e)
-            print "\033[31m- {$e}\033[0m\n";
+            print "\033[33m- {$e}\033[0m\n";
     }
 
     if (!empty($recommend)) {
-        print "\033[1;30mRecommendations:\033[0m\n";
+        print "\033[0;33mRecommendations:\033[0m\n";
         foreach ($recommend as $e)
-            print "\033[1;30m- {$e}\033[0m\n";
+            print "\033[0;33m- {$e}\033[0m\n";
     }
 }

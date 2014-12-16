@@ -1,9 +1,11 @@
 Scalr.regPage('Scalr.ui.admin.users.create', function (loadParams, moduleParams) {
+    var defaultPassword = '******';
 	var form = Ext.create('Ext.form.Panel', {
 		width: 700,
 		title: (moduleParams['user']) ? 'Admin &raquo; Users &raquo; Edit' : 'Admin &raquo; Users &raquo; Create',
 		fieldDefaults: {
-			anchor: '100%'
+			anchor: '100%',
+            labelWidth: 120
 		},
 
 		items: [{
@@ -18,10 +20,28 @@ Scalr.regPage('Scalr.ui.admin.users.create', function (loadParams, moduleParams)
 			}, {
 				xtype: 'textfield',
 				name: 'password',
+                itemId: 'password',
 				inputType: 'password',
 				fieldLabel: 'Password',
-				value: moduleParams['user'] ? '******': '',
-				allowBlank: false
+				value: moduleParams['user'] ? defaultPassword: '',
+				allowBlank: false,
+                selectOnFocus: true,
+                vtype: 'password',
+                otherPassField: 'cpassword',
+                validateOnChange: false
+			}, {
+				xtype: 'textfield',
+				name: 'cpassword',
+                itemId: 'cpassword',
+				inputType: 'password',
+				fieldLabel: 'Password confirm',
+				value: moduleParams['user'] ? defaultPassword: '',
+				allowBlank: false,
+                selectOnFocus: true,
+                submitValue: false,
+                vtype: 'password',
+                otherPassField: 'password',
+                validateOnChange: false
 			}, {
                 xtype: 'buttongroupfield',
                 name: 'status',
@@ -82,17 +102,41 @@ Scalr.regPage('Scalr.ui.admin.users.create', function (loadParams, moduleParams)
 				xtype: 'button',
 				text: moduleParams['user'] ? 'Save' : 'Create',
 				handler: function () {
-					if (form.getForm().isValid())
+                    var confirmBox,
+                        frm = form.getForm();
+                    sendRequest = function(currentPassword){
 						Scalr.Request({
 							processBox: {
 								type: 'save'
 							},
 							url: '/admin/users/xSave',
-							form: form.getForm(),
-							success: function () {
+							form: frm,
+                            params: {
+                                currentPassword: currentPassword
+                            },
+							success: function (data) {
+                                if (confirmBox) {
+                                    confirmBox.close();
+                                }
+                                if (data.specialToken) {
+                                    Scalr.utils.saveSpecialToken(data.specialToken);
+                                }
 								Scalr.event.fireEvent('close');
-							}
+							},
+                            failure: function(data) {
+                                if (confirmBox) {
+                                    confirmBox.onFailure(data.errors);
+                                }
+                            }
 						});
+                    };
+					if (frm.isValid()) {
+                        if (moduleParams['user'] && frm.findField('password').getValue() !== defaultPassword) {
+                            confirmBox = Scalr.utils.ConfirmPassword(sendRequest);
+                        } else {
+                            sendRequest();
+                        }
+                    }
 				}
 			}, {
 				xtype: 'button',

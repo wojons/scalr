@@ -1,7 +1,29 @@
 Scalr.regPage('Scalr.ui.webhooks.history.view', function (loadParams, moduleParams) {
+    var scalrOptions;
+    if (moduleParams['levelMap'][moduleParams['level']] == 'account') {
+		scalrOptions = {
+			title: 'Account management &raquo; Webhooks &raquo; History',
+			maximize: 'all',
+			leftMenu: {
+				menuId: 'settings',
+				itemId: 'webhooks',
+                showPageTitle: true
+			}
+		};
+    } else {
+		scalrOptions = {
+			title: Ext.String.capitalize(moduleParams['levelMap'][moduleParams['level']]) + ' webhooks &raquo; History',
+			maximize: 'all',
+			leftMenu: {
+				menuId: 'webhooks',
+				itemId: 'history',
+                showPageTitle: true
+			}
+		};
+    }
 
 	var store = Ext.create('store.store', {
-		fields: ['historyId', 'url', 'created', 'farmId', 'eventId', 'eventType', 'status', 'responseCode', 'payload', 'webhookName', 'webhookId', 'endpointId', 'errorMsg'],
+		fields: ['historyId', 'url', 'created', 'farmId', 'serverId', 'eventId', 'eventType', 'status', 'responseCode', 'payload', 'webhookName', 'webhookId', 'endpointId', 'errorMsg', 'handleAttempts'],
 		proxy: {
 			type: 'ajax',
 			url: '/webhooks/history/xGetList/',
@@ -10,7 +32,8 @@ Scalr.regPage('Scalr.ui.webhooks.history.view', function (loadParams, modulePara
                 root: 'data',
                 totalProperty: 'total',
                 successProperty: 'success'
-            }
+            },
+            extraParams: {level: moduleParams['level']}
 		},
         sorters: {
             property: 'created',
@@ -36,7 +59,7 @@ Scalr.regPage('Scalr.ui.webhooks.history.view', function (loadParams, modulePara
         },
         updateParamsAndLoad: function(params, reset) {
             if (reset) {
-                this.proxy.extraParams = {};
+                this.proxy.extraParams = {level: moduleParams['level']};
             }
             var proxyParams = this.proxy.extraParams;
             Ext.Object.each(params, function(name, value) {
@@ -102,12 +125,26 @@ Scalr.regPage('Scalr.ui.webhooks.history.view', function (loadParams, modulePara
         },
 
         columns: [
-            { header: 'Datetime', width: 156, dataIndex: 'created', sortable: false},
-            { header: 'Endpoint', flex: 1, dataIndex: 'url', sortable: false, xtype: 'templatecolumn', tpl: '<a href="#/webhooks/endpoints?endpointId={endpointId}">{url}</a>'},
-            { header: 'Webhook', flex: .6, dataIndex: 'webhookName', sortable: false, xtype: 'templatecolumn', tpl: '<a href="#/webhooks/configs?webhookId={webhookId}">{webhookName}</a>'},
-            { header: 'Event', flex: .8, dataIndex: 'eventType', sortable: false, xtype: 'templatecolumn', tpl: '<a href="#/farms/{farmId}/events?eventId={eventId}">{eventType}</a>'},
-            { header: 'Status', maxWidth: 100, dataIndex: 'status', sortable: false, xtype: 'statuscolumn', statustype: 'webhookhistory', resizable: false},
-            { header: 'Response code', width: 140, dataIndex: 'responseCode', sortable: false}
+            { header: 'Event date and time', width: 160, dataIndex: 'created', sortable: false},
+            { header: 'Webhook', flex: .6, dataIndex: 'webhookName', sortable: false, xtype: 'templatecolumn', tpl: '<a href="#/webhooks/configs?level='+moduleParams['levelMap'][moduleParams['level']]+'&webhookId={webhookId}">{webhookName}</a>'},
+            { header: 'Event', flex: .6, dataIndex: 'eventType', sortable: false, xtype: 'templatecolumn', tpl: '<a href="#/farms/{farmId}/events?eventId={eventId}">{eventType}</a>'},
+            { header: 'Attempts', width: 85, dataIndex: 'handleAttempts', sortable: false},
+            { header: 'Status', maxWidth: 90, dataIndex: 'status', sortable: false, xtype: 'statuscolumn', statustype: 'webhookhistory', resizable: false},
+            {
+                header: 'Last response code',
+                flex: .9,
+                maxWidth: 150,
+                dataIndex: 'responseCode',
+                sortable: false,
+                xtype: 'templatecolumn',
+                tpl:
+                    '<tpl if="handleAttempts&gt;0">' +
+                        '<tpl if="status!=1">' +
+                            '<img style="float:right" src="' + Ext.BLANK_IMAGE_URL + '" class="x-icon-error" data-qtip="Attempt #{handleAttempts} failed. Cause: <b>{[values.errorMsg?Ext.util.Format.htmlEncode(Ext.util.Format.htmlEncode(values.errorMsg)):\'unknown\']}</b>" />' +
+                        '</tpl>' +
+                        '{[values.responseCode||\'None\']} ' +
+                    '</tpl>'
+            }
         ],
 
         dockedItems: [{
@@ -125,9 +162,17 @@ Scalr.regPage('Scalr.ui.webhooks.history.view', function (loadParams, modulePara
                 maxWidth: 380,
                 margin: 0,
                 separatedParams: ['eventId']
+            }, moduleParams['level'] == 2 ? {
+                xtype: 'webhooksaccountmenu',
+                dock: 'top',
+                flex: 2,
+                value: 'history'
+            } : {
+                xtype: 'tbfill',
+                flex: .1
             },{
                 xtype: 'tbfill',
-                flex: .01
+                flex: .1
             },{
                 itemId: 'refresh',
                 ui: 'paging',
@@ -182,7 +227,7 @@ Scalr.regPage('Scalr.ui.webhooks.history.view', function (loadParams, modulePara
             if (!record.get('payload')) {
                 me.currentRequest = Scalr.Request({
                     url: '/webhooks/history/xGetInfo',
-                    params: {historyId: record.get('historyId')},
+                    params: {historyId: record.get('historyId'), level: moduleParams['level']},
                     success: function (data) {
                         delete me.currentRequest;
                         if (data['info']['historyId'] == me.getRecord().get('historyId')) {
@@ -196,7 +241,12 @@ Scalr.regPage('Scalr.ui.webhooks.history.view', function (loadParams, modulePara
             }
         },
         showInfo: function() {
-            this.down('#payload').setValue(this.getRecord().get('payload'));
+            var record = this.getRecord();
+            this.down('#payload').setValue(record.get('payload'));
+            this.down('#eventId').setValue('<a href="#/farms/'+record.get('farmId')+'/events?eventId='+record.get('eventId')+'">'+record.get('eventId')+'</a>');
+            this.down('#serverId').setValue(record.get('serverId') ? '<a href="#/server/view?serverId='+record.get('serverId')+'">'+record.get('serverId')+'</a>' : '-');
+            this.down('#payload').setValue(record.get('payload'));
+            this.down('#endpoint').setValue('<a href="#/webhooks/endpoints?level='+moduleParams['levelMap'][moduleParams['level']]+'&endpointId='+record.get('endpointId')+'">'+record.get('url')+'</a>');
             this.up().unmask();
             this.show();
         },
@@ -207,13 +257,29 @@ Scalr.regPage('Scalr.ui.webhooks.history.view', function (loadParams, modulePara
             defaults: {
                 labelWidth: 90
             },
-            layout: 'fit',
+            layout: {
+                type: 'vbox',
+                align: 'stretch'
+            },
 			items: [{
-                 xtype: 'textarea',
-                 itemId: 'payload',
-                 readOnly: true,
-                 fieldLabel: 'Payload',
-                 labelAlign: 'top'
+                xtype: 'displayfield',
+                itemId: 'endpoint',
+                fieldLabel: 'Endpoint'
+            },{
+                xtype: 'displayfield',
+                itemId: 'eventId',
+                fieldLabel: 'Event ID'
+            },{
+                xtype: 'displayfield',
+                itemId: 'serverId',
+                fieldLabel: 'Server ID'
+            },{
+                xtype: 'textarea',
+                itemId: 'payload',
+                readOnly: true,
+                flex: 1,
+                fieldLabel: 'Payload',
+                labelAlign: 'top'
             }]
         }]
 	});
@@ -224,15 +290,7 @@ Scalr.regPage('Scalr.ui.webhooks.history.view', function (loadParams, modulePara
 			type: 'hbox',
 			align: 'stretch'
 		},
-		scalrOptions: {
-			title: 'History',
-			reload: false,
-			maximize: 'all',
-			leftMenu: {
-				menuId: 'webhooks',
-				itemId: 'history'
-			}
-		},
+		scalrOptions: scalrOptions,
         listeners: {
             applyparams: reconfigurePage
         },
@@ -242,14 +300,15 @@ Scalr.regPage('Scalr.ui.webhooks.history.view', function (loadParams, modulePara
             xtype: 'container',
             itemId: 'rightcol',
             cls: 'x-transparent-mask',
-            flex: .6,
+            flex: .5,
             maxWidth: 640,
-            minWidth: 400,
+            minWidth: 300,
             layout: 'fit',
             items: [
                 form
             ]
         }]
 	});
+
 	return panel;
 });

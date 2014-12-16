@@ -9,7 +9,7 @@ class Update20140821164834 extends AbstractUpdate implements SequenceInterface
 
     protected $uuid = 'e163fffa-1f19-4e67-b761-5f6c100bbb04';
 
-    protected $depends = [];
+    protected $depends = ['e9e2ff6c-4829-40a5-94e7-2a6f54cb06d8'];
 
     protected $description = "Adds index idx_new_role_id to farm_roles table";
 

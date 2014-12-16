@@ -69,6 +69,9 @@ namespace Scalr\DependencyInjection;
  * @property \Scalr\DependencyInjection\AnalyticsContainer $analytics
  *           Gets Cost Analytics sub container
  *
+ * @property \Scalr\Logger $logger
+ *           Gets logger service
+ *
  *
  * @method   mixed config()
  *           config(string $name)
@@ -104,6 +107,14 @@ namespace Scalr\DependencyInjection;
  * @method   \Scalr\Net\Ldap\LdapClient ldap()
  *           ldap($user, $password)
  *           Gets a new instance of LdapClient for specified user
+ *
+ * @method   \Scalr\Logger logger()
+ *           logger(string $name = null)
+ *           Gets logger for specified category or class
+ *
+ * @method   \Scalr\DependencyInjection\Container warmup()
+ *           warmup()
+ *           Releases static cache from the dependency injection service
  */
 class Container extends BaseContainer
 {

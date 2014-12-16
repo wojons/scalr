@@ -80,6 +80,18 @@ abstract class AbstractService
     private $entityManagerEnabled = false;
 
     /**
+     * The name of the service
+     *
+     * @return string Returns the name of the service as it is used in the authentication signature v4
+     */
+    public function getName()
+    {
+        $class = get_class($this);
+
+        return strtolower(substr($class, strrpos($class, '\\') + 1));
+    }
+
+    /**
      * Gets an API version
      *
      * @return string Returns an API Version
@@ -98,11 +110,16 @@ abstract class AbstractService
     {
         if (!isset($this->apiHandler)) {
             $class = get_class($this);
+
             $serviceName = preg_replace('/^.+\\\\([^\\\\]+)$/', '\\1', $class);
+
             $client = $this->getApiClient();
+
             $apiHandlerClass = $class . '\\V' . $this->getApiVersion() . '\\' . $serviceName . 'Api';
+
             $this->apiHandler = new $apiHandlerClass($this, $client);
         }
+
         return $this->apiHandler;
     }
 
@@ -115,24 +132,31 @@ abstract class AbstractService
     public function getApiClient()
     {
         $apiClientType = $this->getApiClientType();
+
         if (!isset($this->apiClients[$apiClientType])) {
             $class = get_class($this);
+
             $serviceName = preg_replace('/^.+\\\\([^\\\\]+)$/', '\\1', $class);
+
             $clientClass = __NAMESPACE__ . '\\Client\\' . $apiClientType . 'Client';
 
             //Some services, like Simple Storage Service, may use different query client.
             if (file_exists(__DIR__ . '/Client/' .  $apiClientType . 'Client/' . $serviceName . $apiClientType . 'Client.php')) {
                 $clientClass = $clientClass . '\\' . $serviceName . $apiClientType . 'Client';
             }
+
             if ($apiClientType == \Scalr\Service\Aws::CLIENT_SOAP) {
                 $wsdlPath = __DIR__ . '/' . $serviceName . '/V' . $this->getApiVersion() . '/' . $serviceName . '.wsdl';
+
                 if (!file_exists($wsdlPath)) {
                     throw new AwsException(sprintf('Could not find wsdl "%s" for the service "%s"', $wsdlPath, $serviceName));
                 }
+
                 $client = new $clientClass(
                     $this->aws->getAccessKeyId(), $this->aws->getSecretAccessKey(),
                     $this->getApiVersion(), $this->getUrl(), $wsdlPath
                 );
+
                 $client->setCertificate($this->aws->getCertificate());
                 $client->setPrivateKey($this->aws->getPrivateKey());
             } else {
@@ -140,10 +164,16 @@ abstract class AbstractService
                     $this->aws->getAccessKeyId(), $this->aws->getSecretAccessKey(),
                     $this->getApiVersion(), $this->getUrl()
                 );
+
+                //Sets the name of the service
+                $client->setServiceName($this->getName());
             }
+
             $client->setAws($this->getAws());
+
             $this->apiClients[$apiClientType] = $client;
         }
+
         return $this->apiClients[$apiClientType];
     }
 
@@ -158,6 +188,7 @@ abstract class AbstractService
         if (!in_array($apiVersion, $this->getAvailableApiVersions())) {
             throw new AwsException(sprintf('Version %d is not supported yet.', $apiVersion));
         }
+
         $this->apiVersion = $apiVersion;
     }
 
@@ -187,7 +218,7 @@ abstract class AbstractService
     }
 
     /**
-     * Ensures getting datatype handlers
+     * Ensures getting datatype handler
      *
      * @param   string   $entityname
      */
@@ -195,11 +226,14 @@ abstract class AbstractService
     {
         if (in_array($entityname, $this->getAllowedEntities())) {
             $class = $this->class . '\\Handler\\' . ucfirst($entityname) . 'Handler';
+
             if (!isset($this->instances[$class])) {
                 $this->instances[$class] = new $class($this);
             }
+
             return $this->instances[$class];
         }
+
         return null;
     }
 
@@ -267,8 +301,11 @@ abstract class AbstractService
             $apiClientType !== \Scalr\Service\Aws::CLIENT_SOAP) {
             throw new AwsException(sprintf('Invalid API client type "%s"', $apiClientType));
         }
+
         $this->apiClientType = $apiClientType;
+
         $this->getApiHandler()->setClient($this->getApiClient());
+
         return $this;
     }
 }

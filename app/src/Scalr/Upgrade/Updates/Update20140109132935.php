@@ -462,10 +462,14 @@ class Update20140109132935 extends AbstractUpdate implements SequenceInterface
               `event_type` TINYINT UNSIGNED NOT NULL COMMENT 'The type of the event' ,
               `dtime` DATETIME NOT NULL COMMENT 'The time of the event' ,
               `user_id` INT(11) NULL COMMENT 'User who triggered this event' ,
+              `account_id` int(11) NULL COMMENT 'Account that triggered this event' ,
+              `env_id` int(11) NULL COMMENT 'Enviroment that triggered this event' ,
               `description` TEXT NOT NULL COMMENT 'Description' ,
               PRIMARY KEY (`uuid`) ,
               INDEX `idx_dtime` (`dtime` ASC) ,
               INDEX `idx_event_type` (`event_type` ASC) ,
+              INDEX `idx_env_id` (`env_id` ASC) ,
+              INDEX `idx_account_id` (`account_id` ASC) ,
               INDEX `idx_user_id` (`user_id` ASC))
             ENGINE = InnoDB DEFAULT CHARSET=utf8
             COMMENT = 'Timeline events'
@@ -531,7 +535,7 @@ class Update20140109132935 extends AbstractUpdate implements SequenceInterface
               `uuid` BINARY(16) NOT NULL COMMENT 'UUID',
               `created` DATETIME NOT NULL COMMENT 'Creation timestamp (UTC)',
               `secret` BINARY(20) NOT NULL COMMENT 'Secret hash (SHA1)',
-              `payload` TEXT NOT NULL COMMENT 'Payload',
+              `payload` MEDIUMTEXT NOT NULL COMMENT 'Payload',
               PRIMARY KEY (`uuid`),
               INDEX `idx_created` (`created` ASC))
             ENGINE = InnoDB DEFAULT CHARSET=utf8
@@ -939,10 +943,14 @@ CREATE  TABLE IF NOT EXISTS `timeline_events` (
   `event_type` TINYINT UNSIGNED NOT NULL COMMENT 'The type of the event' ,
   `dtime` DATETIME NOT NULL COMMENT 'The time of the event' ,
   `user_id` INT(11) NULL COMMENT 'User who triggered this event' ,
+  `account_id` int(11) NULL COMMENT 'Account that triggered this event' ,
+  `env_id` int(11) NULL COMMENT 'Enviroment that triggered this event' ,
   `description` TEXT NOT NULL COMMENT 'Description' ,
   PRIMARY KEY (`uuid`) ,
   INDEX `idx_dtime` (`dtime` ASC) ,
   INDEX `idx_event_type` (`event_type` ASC) ,
+  INDEX `idx_env_id` (`env_id` ASC) ,
+  INDEX `idx_account_id` (`account_id` ASC) ,
   INDEX `idx_user_id` (`user_id` ASC)
 ) ENGINE = InnoDB DEFAULT CHARSET=utf8
 COMMENT = 'Timeline events';
@@ -982,7 +990,7 @@ CREATE TABLE IF NOT EXISTS `report_payloads` (
   `uuid` BINARY(16) NOT NULL COMMENT 'UUID',
   `created` DATETIME NOT NULL COMMENT 'Creation timestamp (UTC)',
   `secret` BINARY(20) NOT NULL COMMENT 'Secret hash (SHA1)',
-  `payload` TEXT NOT NULL COMMENT 'Payload',
+  `payload` MEDIUMTEXT NOT NULL COMMENT 'Payload',
   PRIMARY KEY (`uuid`),
   INDEX `idx_created` (`created` ASC))
 ENGINE = InnoDB DEFAULT CHARSET=utf8
@@ -993,11 +1001,14 @@ COMMENT = 'Report payloads';
 -- -----------------------------------------------------
 INSERT IGNORE INTO `tags` (`tag_id`, `name`) VALUES (1, 'Environment');
 INSERT IGNORE INTO `tags` (`tag_id`, `name`) VALUES (2, 'Platform');
+INSERT IGNORE INTO `tags` (`tag_id`, `name`) VALUES (3, 'Role');
 INSERT IGNORE INTO `tags` (`tag_id`, `name`) VALUES (4, 'Farm');
-INSERT IGNORE INTO `tags` (`tag_id`, `name`) VALUES (5, 'Farm Role');
+INSERT IGNORE INTO `tags` (`tag_id`, `name`) VALUES (5, 'Farm role');
 INSERT IGNORE INTO `tags` (`tag_id`, `name`) VALUES (6, 'User');
+INSERT IGNORE INTO `tags` (`tag_id`, `name`) VALUES (7, 'Role behavior');
 INSERT IGNORE INTO `tags` (`tag_id`, `name`) VALUES (8, 'Cost centre');
 INSERT IGNORE INTO `tags` (`tag_id`, `name`) VALUES (9, 'Project');
+INSERT IGNORE INTO `tags` (`tag_id`, `name`) VALUES (10, 'Farm owner');
 
 INSERT IGNORE INTO `settings` (`id`, `value`) VALUES ('budget_days', '["01-01","04-01","07-01","10-01"]');
 

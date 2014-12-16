@@ -194,7 +194,7 @@ class Scalr_UI_Controller_Db_Backups extends Scalr_UI_Controller
         $link = "http://storage.googleapis.com/{$path}";
         $googleAccessId = str_replace('.apps.googleusercontent.com', '@developer.gserviceaccount.com', $this->environment->getPlatformConfigValue(GoogleCEPlatformModule::CLIENT_ID));
 
-        $signer = new Google_Signer_P12(base64_decode($this->environment->getPlatformConfigValue(GoogleCEPlatformModule::KEY)), 'notasecret');
+        $signer = new Google_Signer_P12(base64_decode($this->environment->getPlatformConfigValue(GoogleCEPlatformModule::KEY)), $this->environment->getPlatformConfigValue(GoogleCEPlatformModule::JSON_KEY) ? null : 'notasecret');
         $signature = $signer->sign($stringToSign);
         $signature = urlencode(base64_encode($signature));
 

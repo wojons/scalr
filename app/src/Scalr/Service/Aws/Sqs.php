@@ -1,6 +1,7 @@
 <?php
 namespace Scalr\Service\Aws;
 
+use Scalr\Service\Aws;
 /**
  * Amazon Simple Queue Service (SQS) interface
  *
@@ -56,6 +57,23 @@ class Sqs extends AbstractService implements ServiceInterface
      */
     public function getUrl()
     {
-        return 'sqs.' . $this->getAws()->getRegion() . '.amazonaws.com';
+        $region = $this->getAws()->getRegion();
+        if ($region == Aws::REGION_US_GOV_WEST_1) {
+            return 'sqs.us-gov-west-1.amazonaws.com';
+        } elseif ($region == Aws::REGION_CN_NORTH_1) {
+            return 'sqs.cn-north-1.amazonaws.com.cn';
+        }
+        
+        return 'sqs.' . $region . '.amazonaws.com';
+        
+    }
+
+    /**
+     * {@inheritdoc}
+     * @see \Scalr\Service\Aws\AbstractService::getName()
+     */
+    public function getName()
+    {
+        return 'sqs';
     }
 }

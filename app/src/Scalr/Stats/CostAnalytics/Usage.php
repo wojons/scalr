@@ -180,6 +180,16 @@ class Usage
         }
 
         //Initializes servers properties
+        $this->initServerProperties();
+    }
+
+    /**
+     * Initializes server's properties which are necessary for cloud cost analytics
+     *
+     * @return   void
+     */
+    private function initServerProperties()
+    {
         $res = $this->db->Execute("
             SELECT DISTINCT s.server_id, s.env_id, s.farm_id
             FROM servers s
@@ -218,6 +228,40 @@ class Usage
                     $projectid
                 ]);
             }
+        }
+
+        //Initializes role.id and farm_role.id server's properties
+        $res = $this->db->Execute("
+            SELECT DISTINCT s.server_id, fr.role_id, s.farm_roleid
+            FROM servers s
+            LEFT JOIN server_properties p ON p.server_id = s.server_id AND p.name = ?
+            LEFT JOIN farm_roles fr ON s.farm_roleid = fr.id
+            WHERE fr.role_id > 0 AND s.farm_roleid > 0
+            AND (p.server_id IS NULL OR p.`value` IS NULL)
+        ", [\SERVER_PROPERTIES::ROLE_ID]);
+
+        while ($rec = $res->FetchRow()) {
+            $this->db->Execute("
+                INSERT `server_properties` (`server_id`, `name`, `value`)
+                VALUE (?, ?, ?)
+                ON DUPLICATE KEY UPDATE `value` = IFNULL(`value`, ?)
+            ", [
+                $rec['server_id'],
+                SERVER_PROPERTIES::ROLE_ID,
+                $rec['role_id'],
+                $rec['role_id']
+            ]);
+
+            $this->db->Execute("
+                INSERT `server_properties` (`server_id`, `name`, `value`)
+                VALUE (?, ?, ?)
+                ON DUPLICATE KEY UPDATE `value` = IFNULL(`value`, ?)
+            ", [
+                $rec['server_id'],
+                SERVER_PROPERTIES::FARM_ROLE_ID,
+                $rec['farm_roleid'],
+                $rec['farm_roleid']
+            ]);
         }
     }
 
@@ -337,12 +381,12 @@ class Usage
             TagEntity::TAG_ID_PLATFORM       => ['platform', 'nu'],
             TagEntity::TAG_ID_FARM           => ['farmId', null],
             TagEntity::TAG_ID_FARM_ROLE      => ['farmRoleId', null],
-            TagEntity::TAG_ID_CLOUD_LOCATION => ['cloudLocation', 'nu'],
             TagEntity::TAG_ID_PROJECT        => ['projectId', null],
             TagEntity::TAG_ID_COST_CENTRE    => ['ccId', 's'],
+            'cloudLocation'                  => ['cloudLocation', 'nu'],
         ];
 
-        $notSupportDaily = ['hour', TagEntity::TAG_ID_FARM_ROLE, TagEntity::TAG_ID_CLOUD_LOCATION];
+        $notSupportDaily = ['hour', TagEntity::TAG_ID_FARM_ROLE, 'cloudLocation'];
 
         $group = '';
         $groupNm = '';

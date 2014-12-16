@@ -614,15 +614,23 @@ class Chargify
 	  	try
 	  	{
 		  	$request = new HttpRequest("https://{$this->domain}.chargify.com{$uri}");
-		  	$request->setHeaders(array('Content-Type' => 'application/json'));
+		  	$request->setHeaders(array(
+		  	    'Content-Type' => 'application/json',
+		  	    'Authorization' => 'Basic '. base64_encode("{$this->apiKey}:x")
+		  	));
 		  	$request->setOptions(array(
 		  		'httpauth'	=> "{$this->apiKey}:x",
 		  		'timeout'	=> 45,
-		  		'connecttimeout' => 45
+		  		'connecttimeout' => 45,
+		  		'ssl' => array('version' => 1)
 		  	));
 
 		  	$request->setMethod(constant("HTTP_METH_{$method}"));
 
+		  	if ($_REQUEST['beta'] == '1') {
+		  	    var_dump($request);
+		  	}
+		  	
 		  	if ($method == 'POST' && $data)
 		  		$request->setBody($data);
 

@@ -71,7 +71,8 @@ Scalr.regPage('Scalr.ui.tools.openstack.details.view', function (loadParams, mod
         cls: 'x-grid-with-formfields x-grid-no-highlighting',
         hideHeaders: true,
 		columns: [
-			{header: 'Name', width: 360, dataIndex: 'name'},
+			{header: 'Name', width: 320, dataIndex: 'name'},
+            {header: 'Alias', width: 220, dataIndex: 'alias'},
             {header: 'Description', flex: 1, dataIndex: 'description'},
 		],
 
@@ -80,7 +81,7 @@ Scalr.regPage('Scalr.ui.tools.openstack.details.view', function (loadParams, mod
 			items: [{
                 xtype: 'filterfield',
                 store: store,
-                filterFields: ['name', 'service'],
+                filterFields: ['name', 'alias', 'service'],
                 listeners: {
                     afterfilter1: function(){
                         //workaround of the extjs grouped store/grid bug

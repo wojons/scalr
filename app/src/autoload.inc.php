@@ -106,7 +106,6 @@ function __autoload($class_name)
         'RACKSPACE_SERVER_PROPERTIES' => SRCPATH . "/types/enum.RACKSPACE_SERVER_PROPERTIES.php",
         'OPENSTACK_SERVER_PROPERTIES' => SRCPATH . "/types/enum.OPENSTACK_SERVER_PROPERTIES.php",
         'CLOUDSTACK_SERVER_PROPERTIES' => SRCPATH . "/types/enum.CLOUDSTACK_SERVER_PROPERTIES.php",
-        'NIMBULA_SERVER_PROPERTIES' => SRCPATH . "/types/enum.NIMBULA_SERVER_PROPERTIES.php",
         'SZR_KEY_TYPE' => SRCPATH . "/types/enum.SZR_KEY_TYPE.php",
         'SERVER_REPLACEMENT_TYPE' => SRCPATH . "/types/enum.SERVER_REPLACEMENT_TYPE.php",
         'SERVER_SNAPSHOT_CREATION_TYPE' => SRCPATH . "/types/enum.SERVER_SNAPSHOT_CREATION_TYPE.php",
@@ -115,17 +114,25 @@ function __autoload($class_name)
         'EC2_EBS_ATTACH_STATUS' => SRCPATH . "/types/enum.EC2_EBS_ATTACH_STATUS.php",
         'EC2_EBS_MOUNT_STATUS' => SRCPATH . "/types/enum.EC2_EBS_MOUNT_STATUS.php",
         /****************************** Observers ***************************/
+        'IEventObserver' => APPPATH . '/observers/interface.IEventObserver.php',
         'EventObserver' => APPPATH . '/observers/abstract.EventObserver.php',
         'DNSEventObserver' => APPPATH . '/observers/class.DNSEventObserver.php',
         'DBEventObserver' => APPPATH . '/observers/class.DBEventObserver.php',
         'MessagingEventObserver' => APPPATH . '/observers/class.MessagingEventObserver.php',
         'ScalarizrEventObserver' => APPPATH . '/observers/class.ScalarizrEventObserver.php',
-        'BehaviorEventObserver' => APPPATH . '/observers/class.BehaviorEventObserver.php'
+        'BehaviorEventObserver' => APPPATH . '/observers/class.BehaviorEventObserver.php',
+        /******************** Logger (mostly deprecated classes) *******************************/
+        'FarmLogMessage' => SRCPATH . '/class.FarmLogMessage.php',
+        'ScriptingLogMessage' => SRCPATH . '/class.ScriptingLogMessage.php',
+        'LoggerAppenderScalr' => SRCPATH . '/class.LoggerAppenderScalr.php',
+        'LoggerFilterCategoryMatch' => SRCPATH . '/class.LoggerFilterCategoryMatch.php',
     );
+
     if (key_exists($class_name, $paths)) {
         require $paths[$class_name];
         return;
     }
+
     // Load packaged classes
     if (strpos($class_name, "_") !== false) {
         $filename =  str_replace("_", DIRECTORY_SEPARATOR, $class_name) . ".php";

@@ -2,7 +2,15 @@
 
 class ScalarizrEventObserver extends EventObserver
 {
-
+    public function OnBeforeHostUp(BeforeHostUpEvent $event) 
+    {
+        try {
+            $hostname = $event->DBServer->scalarizr->system->getHostname();
+        } catch (Exception $e) {}
+        if ($hostname)
+            $event->DBServer->SetProperty(Scalr_Role_Behavior::SERVER_BASE_HOSTNAME, $hostname);
+    }
+    
     public function OnFarmTerminated(FarmTerminatedEvent $event)
     {
         $farmRoles = $event->DBFarm->GetFarmRoles();

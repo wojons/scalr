@@ -75,8 +75,8 @@ class Scalr
         Scalr::AttachObserver(new EbsObserver());
         Scalr::AttachObserver(new CloudstackObserver());
 
-        Scalr::AttachObserver(new MessagingEventObserver());
         Scalr::AttachObserver(new ScalarizrEventObserver());
+        Scalr::AttachObserver(new MessagingEventObserver());
         Scalr::AttachObserver(new BehaviorEventObserver());
 
         Scalr::AttachObserver(new Ec2Observer());
@@ -241,6 +241,7 @@ class Scalr
                 foreach ($webhooks as $webhook) {
                     /* @var $webhook \Scalr\Model\Entity\WebhookConfig */
 
+                    $payload->configurationId = $webhook->webhookId;
                     $payload->data = array();
                     foreach ($globalVars as $gv) {
                         if ($gv->private && $webhook->skipPrivateGv == 1 && !$gv->system)
@@ -254,8 +255,6 @@ class Scalr
                     else
                         $payload->userData = '';
 
-                    $encPayload = json_encode($payload);
-
                     foreach ($webhook->getEndpoints() as $ce) {
                         /* @var $ce \Scalr\Model\Entity\WebhookConfigEndpoint */
 
@@ -263,10 +262,14 @@ class Scalr
                         if (!$endpoint->isValid)
                             continue;
 
+                        $payload->endpointId = $endpoint->endpointId;
+                        $encPayload = json_encode($payload);
+
                         $history = new WebhookHistory();
                         $history->eventId = $event->GetEventID();
                         $history->eventType = $event->GetName();
                         $history->payload = $encPayload;
+                        $history->serverId = ($event->DBServer) ? $event->DBServer->serverId : null;
                         $history->endpointId = $endpoint->endpointId;
                         $history->webhookId = $webhook->webhookId;
                         $history->farmId = $farmid;
@@ -349,12 +352,35 @@ class Scalr
             $propsToSet[SERVER_PROPERTIES::LAUNCHED_BY_ID] = $user->id;
             $propsToSet[SERVER_PROPERTIES::LAUNCHED_BY_EMAIL] = $user->getEmail();
         }
+
+        //We should keep role_id and farm_role_id in server properties to use in cost analytics
+        if (!empty($DBServer->farmRoleId)) {
+            $propsToSet[SERVER_PROPERTIES::FARM_ROLE_ID] = $DBServer->farmRoleId;
+            $propsToSet[SERVER_PROPERTIES::ROLE_ID] = $DBServer->farmRoleId ? $DBServer->GetFarmRoleObject()->RoleID : 0;
+        }
+
         try {
-            if ($DBServer->farmId && (($farm = $DBServer->GetFarmObject()) instanceof DBFarm)) {
+            // Ensures the farm object will be fetched as correctly as possible
+            $farm = $DBServer->farmId ? $DBServer->GetFarmObject() : null;
+            $farmRole = $DBServer->farmRoleId ? $DBServer->GetFarmRoleObject() : null;
+
+            if (!($farmRole instanceof DBFarmRole)) {
+                $farmRole = null;
+            } else if (!($farm instanceof DBFarm)) {
+                // Gets farm through FarmRole object in this case
+                $farm = $farmRole->GetFarmObject();
+            }
+
+            if ($farm instanceof DBFarm) {
                 $propsToSet[SERVER_PROPERTIES::FARM_CREATED_BY_ID] = $farm->createdByUserId;
                 $propsToSet[SERVER_PROPERTIES::FARM_CREATED_BY_EMAIL] = $farm->createdByUserEmail;
                 $propsToSet[SERVER_PROPERTIES::FARM_PROJECT_ID] = $farm->GetSetting(DBFarm::SETTING_PROJECT_ID);
             }
+
+            if ($farmRole instanceof DBFarmRole) {
+                $propsToSet[SERVER_PROPERTIES::INFO_INSTANCE_TYPE_NAME] = $farmRole->GetSetting(DBFarmRole::SETTING_INFO_INSTANCE_TYPE_NAME);
+            }
+
             if ($DBServer->envId && (($environment = $DBServer->GetEnvironmentObject()) instanceof Scalr_Environment)) {
                 $propsToSet[SERVER_PROPERTIES::ENV_CC_ID] = $environment->getPlatformConfigValue(Scalr_Environment::SETTING_CC_ID);
             }
@@ -374,7 +400,7 @@ class Scalr
             $args[0] = DBServer::getLaunchReason($reasonId);
             return [call_user_func_array('sprintf', $args), $reasonId];
         };
-
+        
         if ($delayed) {
             $DBServer->status = SERVER_STATUS::PENDING_LAUNCH;
             list($reasonMsg, $reasonId) = is_array($reason) ? call_user_func_array($fnGetReason, $reason) : $fnGetReason($reason);
@@ -397,7 +423,28 @@ class Scalr
                 return $DBServer;
             }
         }
-
+        
+        // Limit amount of pending servers
+        if ($DBServer->isOpenstack()) {
+            $config = \Scalr::getContainer()->config;
+            if ($config->defined("scalr.{$DBServer->platform}.pending_servers_limit")) {
+                $pendingServersLimit = $config->get("scalr.{$DBServer->platform}.pending_servers_limit");
+                $pendingServers = $db->GetOne("SELECT COUNT(*) FROM servers WHERE platform=? AND status=? AND server_id != ?", array(
+                    $DBServer->platform, SERVER_STATUS::PENDING, $DBServer->serverId
+                ));
+                if ($pendingServers >= $pendingServersLimit) {
+                    Logger::getLogger("SERVER_LAUNCH")->warn("{$pendingServers} servers in PENDING state on {$DBServer->platform}. Limit is: {$pendingServersLimit}. Waiting.");
+                    
+                    $DBServer->status = SERVER_STATUS::PENDING_LAUNCH;
+                    $DBServer->Save();
+        
+                    return $DBServer;
+                } else {
+                    Logger::getLogger("SERVER_LAUNCH")->warn("{$pendingServers} servers in PENDING state on {$DBServer->platform}. Limit is: {$pendingServersLimit}. Launching server.");
+                }
+            }
+        }
+        
         try {
             $account = Scalr_Account::init()->loadById($DBServer->clientId);
             $account->validateLimit(Scalr_Limits::ACCOUNT_SERVERS, 1);

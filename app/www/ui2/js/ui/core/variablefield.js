@@ -1,937 +1,148 @@
 Ext.define('Scalr.ui.VariableField', {
     extend: 'Ext.container.Container',
+
     mixins: {
         field: 'Ext.form.field.Field'
     },
+
     alias: 'widget.variablefield',
 
+    cls: 'scalr-ui-variablefield',
+
     currentScope: 'env',
-    addFieldCls: '',
+
     encodeParams: true,
+
+    layout: {
+        type: 'hbox',
+        align: 'stretch'
+    },
+
+    scopes: {
+        scalr: 'Scalr',
+        account: 'Account',
+        env: 'Environment',
+        role: 'Role',
+        farm: 'Farm',
+        farmrole: 'Farm Role'
+    },
+
+    preserveScrollOnRefresh: true,
+
+    dirty: false,
 
     initComponent : function() {
         var me = this;
+
         me.callParent();
+
         me.initField();
 
-        me.addEvents('addvar', 'editvar', 'removevar');
-    },
+        me.addEvents('beforeselect', 'select', 'datachanged', 'addvariable', 'removevariable', 'load');
 
-    markInvalid: function(errors) {
-        var i, ct = this.down('#ct'), fields = this.query('variablevaluefield'), link = {}, name, j, f;
-
-        for (i = 0; i < fields.length; i++) {
-            name = fields[i].down('[name="name"]').getValue();
-            if (name)
-                link[name] = fields[i];
-        }
-
-        for (i in errors) {
-            if (link[i]) {
-                for (j in errors[i]) {
-                    f = link[i].down('[name="' + j + '"]');
-                    if (f)
-                        f.markInvalid(errors[i][j]);
-                }
-            }
-        }
-    },
-
-    isValid: function() {
-        var items = this.down('#ct').query('variablevaluefield'), length = items.length, i, valid = true;
-        for (i = 0; i < length; i++) {
-            valid = valid && items[i].down('[name="value"]').isValid();
-        }
-
-        return valid;
-    },
-
-    onResize: function() {
-        var lbWidth = 0, ctWidth, curWidth, width, ct = this.down('#ct'), el;
-        ct.items.each(function(c) {
-            var w = c.child('[name="name"]').computedWidth;
-            if (w > lbWidth)
-                lbWidth = w;
+        me.on({
+            beforeselect: me.beforeSelect,
+            select: me.onSelect,
+            datachanged: me.onDataChanged,
+            removevariable: me.onVariableRemove,
+            scope: me
         });
 
-        el = ct.child('[hidden=false]') || ct.items.getAt(0);
+        me.setTitle(me.title);
 
-        curWidth = el.child('[name="name"]').getWidth() + el.child('[name="newName"]').getWidth();
-        ctWidth = el.child('[name="newName"]').next().getWidth();
-
-        if (lbWidth < 150) {
-            width = 150;
-        } else {
-            width = Math.ceil((ctWidth + curWidth) / 2); // 50/50
-            if (width > lbWidth)
-                width = lbWidth;
-            else if (width == 0)
-                width = 150;
-        }
-
-        ct.suspendLayouts();
-        ct.items.each(function(c) {
-            c.child('[name="name"]').setWidth(width);
-            c.child('[name="newName"]').setWidth(width);
-        });
-
-        this.down('#labelContainer').child().setWidth(width);
-        this.down('#showLockedVars').setWidth(curWidth + ctWidth + 5);
-        ct.resumeLayouts();
-        this.updateLayout();
-    },
-
-    getValue: function() {
-        var fields = this.query('variablevaluefield'), variables = [];
-        for (var i = 0; i < fields.length; i++) {
-            var values = fields[i].getFieldValues();
-            if (values)
-                variables.push(values);
-        }
-
-        return this.encodeParams ? Ext.encode(variables) : variables;
-    },
-
-    setValue: function(value) {
-        value = (this.encodeParams ? Ext.decode(value, true) : value) || [];
-        var ct = this.down('#ct'), me = this, currentScope = this.currentScope, i, f, names = [], isLockedVars = false;
-
-        this.down('#showLockedVars').resetLockedVars();
-        ct.suspendLayouts();
-        ct.removeAll();
-
-        this.suspendEvent('addvar', 'editvar', 'removevar');
-
-        // for flagRequiredScope
-        var allowedScopes = [], allowedAllScopes = [], sc = { 'scalr': 'Scalr', 'account': 'Account', 'env': 'Environment', 'role': 'Role', 'farm': 'Farm', 'farmrole': 'FarmRole' }, sca = Ext.Object.getKeys(sc);
-        sca = sca.slice(sca.indexOf(currentScope) + 1 + (currentScope == 'role' ? 1 : 0)); // if currentScope == role, exclude farm
-        for (i = 0; i < sca.length; i++) {
-            allowedScopes.push([ sca[i], sc[sca[i]]]);
-        }
-        for (i in sc) {
-            allowedAllScopes.push([ i, sc[i] ]);
-        }
-
-        for (i = 0; i < value.length; i++) {
-            f = ct.add({
-                currentScope: currentScope,
-                xtype: 'variablevaluefield',
-                originalValues: value[i]
-            });
-            var current = { name: value[i]['name'] };
-
-            if (value[i]['current']) {
-                if (value[i]['current']['flagRequired'])
-                    current['flagRequiredScope'] = value[i]['current']['flagRequired']; // it should be set at first, because of flagRequired field
-                else
-                    current['flagRequiredScope'] = 'farmrole';
-
-                Ext.apply(current, value[i]['current']);
-                f['scope'] = value[i]['current']['scope'];
-            }
-
-            if (value[i]['default']) {
-                f['scope'] = f['scope'] || value[i]['default']['scope'];
-                f['defaultScope'] = value[i]['default']['scope'];
-                // set up-level value
-                f.down('[name="value"]').emptyText = value[i]['default']['value'];
-            } else {
-                f['defaultScope'] = currentScope;
-            }
-
-            names.push(current['name']);
-            current['newValue'] = false;
-
-            f.down('[name="flagRequiredScope"]').store.loadData((value[i]['locked'] || value[i]['default']) ? allowedAllScopes : allowedScopes);
-            f.setFieldValues(current);
-
-            if (value[i]['locked'] || value[i]['default']) {
-                // variable has upper value, block flags
-                var locked = value[i]['locked'] || {};
-                if (locked['flagRequired'])
-                    f.down('[name="flagRequiredScope"]').setValue(locked['flagRequired']).setReadOnly(true);
-
-                f.down('[name="flagRequired"]').setValue(locked['flagRequired']).disable();
-                f.down('[name="flagFinal"]').setValue(locked['flagFinal']).disable();
-                f.down('[name="flagHidden"]').setValue(locked['flagHidden']).disable();
-
-                if (locked['flagFinal'] == 1) {
-                    f.down('[name="value"]').setReadOnly(true);
-                    f.down('[name="value"]').reset(); // fix issue, when variable was redefined on upper level and lock interface
-                    f.down('#reset').disable();
-                    f.down('#delete').disable();
-                    f.lockedVar = true;
-                    isLockedVars = true;
-                    f.hide();
-                }
-
-                f.down('[name="validator"]').setValue(locked['validator']).setReadOnly(true);
-                f.down('[name="validator"]').emptyText = '';
-                f.down('[name="format"]').setValue(locked['format']).setReadOnly(true);
-                f.down('[name="format"]').emptyText = '';
-
-                if (locked['flagRequired'] || locked['format'] || locked['validator']) {
-                    f.down('#configure').toggle(true);
-                }
-
-                var valueField = f.down('[name="value"]');
-                if (locked['flagRequired'] == currentScope && !valueField.emptyText) {
-                    valueField.allowBlank = false;
-                    valueField.isValid();
-                }
-
-                f.down('#configure').disable();
-            }
-
-            if (value[i]['current'] && (value[i]['current']['flagRequired'] || value[i]['current']['format'] || value[i]['current']['validator'])) {
-                f.down('#configure').toggle(true);
-            }
-
-            // not to remove variables from higher scopes
-            if (value[i]['default'])
-                f.down('#delete').disable();
-
-            if (value[i]['flagDelete'] == 1)
-                f.hide();
-
-            if (currentScope == 'farmrole') {
-                // or required and hidden for last scope (farmrole)
-                f.down('[name="flagRequired"]').disable();
-                f.down('[name="flagHidden"]').disable();
-            }
-
-            if (f.down('[name="validator"]').getValue()) {
-                try {
-                    f.down('[name="value"]').regex = new RegExp(f.down('[name="validator"]').getValue());
-                    f.down('[name="value"]').isValid();
-                } catch (e) {}
-            }
-        }
-
-        if (value.length < 10)
-            this.down('filterfield').hide();
-        else
-            this.down('filterfield').show();
-
-        this.resumeEvent('addvar', 'editvar', 'removevar');
-        if (isLockedVars)
-            this.down('#showLockedVars').show();
-
-        var handler = function() {
-            // check, if last new variable was filled
-            var items = ct.items.items, names = [], added = null;
-            for (var i = 0; i < items.length; i++) {
-                if (items[i].xtype == 'variablevaluefield') {
-                    if (items[i].down('[name="newValue"]').getValue() == 'true') {
-                        added = items[i];
-                        var field = added.down('[name="newName"]');
-                        if (field.isValid()) {
-                            if (! field.getValue()) {
-                                field.markInvalid('Name is required');
-                                return;
-                            }
-
-                            items[i].down('[name="newValue"]').setValue(false);
-                        } else {
-                            return;
-                        }
-                        added.originalValues = {
-                            name: added.down('[name="name"]').getValue()
-                        };
-                    }
-                    names.push(items[i].down('[name="name"]').getValue());
-                }
-            }
-
-            this.getPlugin('addfield').hide();
-            ct.suspendLayouts();
-            var f = ct.add({
-                xtype: 'variablevaluefield',
-                currentScope: currentScope,
-                defaultScope: currentScope,
-                scope: currentScope,
-                plugins: {
-                    ptype: 'addfield',
-                    cls: me.addFieldCls,
-                    handler: handler
-                }
-            });
-            f.down('[name="flagRequiredScope"]').store.loadData(allowedScopes);
-            f.setFieldValues({
-                flagRequiredScope: 'farmrole',
-                newValue: true
-            });
-            f.down('[name="newName"]').validatorNames = names;
-            if (currentScope == 'farmrole') {
-                f.down('[name="flagRequired"]').disable();
-                f.down('[name="flagHidden"]').disable();
-            }
-            ct.resumeLayouts(true);
-
-            if (added)
-                me.fireEvent('addvar', added.getFieldValues());
-        };
-
-        f = ct.add({
-            xtype: 'variablevaluefield',
-            currentScope: currentScope,
-            defaultScope: currentScope,
-            scope: currentScope,
-            plugins: {
-                ptype: 'addfield',
-                cls: me.addFieldCls,
-                handler: handler
-            }
-        });
-        f.down('[name="flagRequiredScope"]').store.loadData(allowedScopes);
-        f.setFieldValues({
-            newValue: true,
-            flagRequiredScope: 'farmrole'
-        });
-        f.down('[name="newName"]').validatorNames = names;
-        if (currentScope == 'farmrole') {
-            f.down('[name="flagRequired"]').disable();
-            f.down('[name="flagHidden"]').disable();
-        }
-
-        ct.resumeLayouts(true);
-    },
-
-    items: [{
-        xtype: 'filterfield',
-        width: 176,
-        handler: function(field, value) {
-            this.up('variablefield').down('#ct').items.each(function() {
-                var f = this.child('[name="name"]');
-                if (f.isVisible() && value && (f.getValue().indexOf(value) != -1))
-                    f.addCls('scalr-ui-variablefield-mark');
-                else
-                    f.removeCls('scalr-ui-variablefield-mark');
+        if (me.removeTopSeparator) {
+            Ext.apply(me.down('[name=title]'), {
+                style: 'box-shadow: none'
             });
         }
-    }, {
-        xtype: 'container',
-        itemId: 'labelContainer',
-        layout: 'hbox',
-        margin: '0 0 8 0',
-        items: [{
-            xtype: 'label',
-            cls: 'x-panel-header-text-default',
-            text: 'Name',
-            margin: '0 0 0 6',
-            width: 150
-        },{
-            xtype: 'label',
-            text: 'Value',
-            cls: 'x-panel-header-text-default',
-            flex: 1
-        }]
-    }, {
-        xtype: 'displayfield',
-        fieldCls: 'x-form-display-field x-panel-header-text-default',
-        value: 'Show locked variables',
-        itemId: 'showLockedVars',
-        hidden: true,
-        margin: '0 0 8 0',
-        resetLockedVars: function() {
-            if (this.rendered) {
-                this.setValue('Show locked variables');
-                this.imgEl.replaceCls('x-tool-expand', 'x-tool-collapse');
-            }
-        },
-        listeners: {
-            render: function() {
-                var me = this, value = me.getValue();
+    },
 
-                this.el.applyStyles('height: 26px; padding: 0 5px; background-color: #FBFBFC; border-radius: 3px; overflow: hidden; cursor: pointer');
-                this.imgEl = this.bodyEl.insertFirst({
-                    tag: 'div',
-                    cls: 'x-tool-img x-tool-collapse',
-                    style: 'left: 5px; top: 5px; position: relative; float: left'
-                });
-                this.inputEl.applyStyles('margin-left: 24px; padding-top: 0px');
+    beforeSelect: function (me) {
+        me.saveScrollState();
+    },
 
-                this.el.on('click', function() {
-                    var ct = this.up('variablefield'), els = ct.query('[lockedVar=true]'), flag = this.imgEl.hasCls('x-tool-collapse'), i;
-                    ct.suspendLayouts();
-                    for (i = 0; i < els.length; i++)
-                        els[i][ flag ? 'show' : 'hide']();
-                    ct.resumeLayouts(true);
-                    if (flag) {
-                        this.setValue('Hide locked variables');
-                        this.imgEl.replaceCls('x-tool-collapse', 'x-tool-expand');
-                    } else {
-                        this.setValue('Show locked variables');
-                        this.imgEl.replaceCls('x-tool-expand', 'x-tool-collapse');
-                    }
-                }, this);
-            }
-        }
-    }, {
-        xtype: 'container',
-        layout: {
-            type: 'hbox',
-            align: 'top'
-        },
-        items: [{
-            xtype: 'container',
-            itemId: 'ct',
-            layout: 'anchor',
-            flex: 1,
-            listeners: {
-                afterlayout: function() {
-                    var c = this.down('variablevaluefield:last'), width;
-                    if (c) {
-                        width = 150 + 6 + c.down('[name="value"]').getWidth();
-                        if (width != this.currentFieldWidth) {
-                            this.currentFieldWidth = width;
-                            this.up().prev().setWidth(width);
-                        }
-                    }
-                }
-            }
-        }, {
-            xtype: 'container',
-            margin: '0 0 0 8',
-            layout: {
-                type: 'vbox',
-                align: 'right'
-            },
-            items: [{
-                xtype: 'fieldset',
-                width: 150,
-                collapsible: true,
-                collapsed: true,
-                cls: 'x-fieldset-separator-none x-fieldset-light',
-                title: 'Usage',
-                listeners: {
-                    expand: function () {
-                        this.setWidth(320);
-                    },
-                    collapse: function () {
-                        this.setWidth(150);
-                    }
-                },
-                items: [{
-                    xtype: 'displayfield',
-                    value: '<span style="font-weight: bold">Scope:</span> highest to lowest'
-                }, {
-                    xtype: 'displayfield',
-                    value: '<div class="scalr-ui-variablefield-scope-env icon"></div> Environment'
-                }, {
-                    xtype: 'displayfield',
-                    value: '<div class="scalr-ui-variablefield-scope-role icon"></div> Role'
-                }, {
-                    xtype: 'displayfield',
-                    value: '<div class="scalr-ui-variablefield-scope-farm icon"></div> Farm'
-                }, {
-                    xtype: 'displayfield',
-                    value: '<div class="scalr-ui-variablefield-scope-farmrole icon"></div> FarmRole'
-                }, {
-                    xtype: 'component',
-                    cls: 'x-fieldset-delimiter'
-                }, {
-                    xtype: 'displayfield',
-                    value: '<span style="font-weight: bold">Types:</span>'
-                }, {
-                    xtype: 'displayfield',
-                    cls: 'scalr-ui-variablefield-flag-required',
-                    value: '<div class="x-btn-inner"></div> Shall be set at a lower scope'
-                }, {
-                    xtype: 'displayfield',
-                    cls: 'scalr-ui-variablefield-flag-final',
-                    value: '<div class="x-btn-inner"></div> Cannot be changed at a lower scope'
-                }, {
-                    xtype: 'component',
-                    cls: 'x-fieldset-delimiter'
-                }, {
-                    xtype: 'displayfield',
-                    value: '<span style="font-weight: bold">Description:</span>'
-                }, {
-                    xtype: 'displayfield',
-                    value: 'You can access these variables:<br />'+
-                        '&bull; As OS environment variables when executing a script<br />'+
-                        '&bull; Via CLI command: <i>szradm -q list-global-variables</i><br />'+
-                        '&bull; Via the GlobalVariablesList(ServerID) API call<br />'
-                }]
-            }]
-        }]
-    }]
-});
+    onSelect: function (me) {
+        me.restoreScrollState();
+    },
 
-Ext.define('Scalr.ui.VariableValueField', {
-    extend: 'Ext.form.FieldContainer',
-    alias: 'widget.variablevaluefield',
-    layout: 'hbox',
-    hideLabel: true,
-    plugins: [],
-    cls: 'scalr-ui-variablefield-btn-autohide',
-    margin: 0,
+    onDataChanged: function (me) {
+        me.restoreScrollState();
 
-    listeners: {
-        afterlayout: function() {
-            var pl = this.getPlugin('addfield'), width = this.down('[name="newName"]').getWidth() + 6 + this.down('[name="value"]').getWidth();
-            if (pl && pl.isVisible()) {
-                pl.setWidth(width);
-            }
+        if (!me.isDirty()) {
+            me.markDirty();
         }
     },
 
-    getFieldValues: function () {
-        if (this.down('[name="name"]').getValue()) {
-            var values = { current: null };
-            if (this.down('[name="name"]').getScope() == this.currentScope) {
-                values['current'] = {
-                    name: this.down('[name="name"]').getValue(),
-                    scope: this.down('[name="name"]').getScope(),
-                    value: this.down('[name="value"]').getValue(),
-                    flagFinal: this.down('[name="flagFinal"]').isDisabled() ? '' : this.down('[name="flagFinal"]').getValue(),
-                    flagRequired: this.down('[name="flagRequired"]').isDisabled() ? '' : this.down('[name="flagRequired"]').getValue(),
-                    flagHidden: this.down('[name="flagHidden"]').isDisabled() ? '' : this.down('[name="flagHidden"]').getValue(),
-                    format: this.down('[name="format"]').readOnly ? '' : this.down('[name="format"]').getValue(),
-                    validator: this.down('[name="validator"]').readOnly ? '' : this.down('[name="validator"]').getValue()
-                };
-            }
-
-            Ext.applyIf(values, this.originalValues);
-            values['flagDelete'] = this.down('[name="flagDelete"]').getValue();
-            return values;
-        } else {
-            return null;
-        }
+    onVariableRemove: function (me) {
+        me.restoreScrollState();
     },
 
-    items: [{
-        xtype: 'hidden',
-        name: 'newValue',
-        isFormField: false,
-        listeners: {
-            change: function(field, value) {
-                var me = this.up('variablevaluefield'), flagNew = value == 'true';
-                me.suspendLayouts();
-                me.down('[name="newName"]').setVisible(flagNew);
-                me.down('[name="newName"]').setDisabled(!flagNew);
-                me.down('[name="name"]').setVisible(!flagNew);
-                me.down('#delete').setDisabled(flagNew);
-                me.down('#configure').setDisabled(flagNew);
-                me.down('#reset').setDisabled(flagNew);
-                me.resumeLayouts(true);
-            }
-        }
-    }, {
-        xtype: 'displayfield',
-        name: 'name',
-        fieldCls: 'x-form-display-field x-form-display-field-as-label',
-        width: 150,
-        isFormField: false,
-        updateScope: function(value) {
-            this.scopeEl.dom.className = '';
-            this.scopeEl.addCls('scalr-ui-variablefield-scope-' + value);
-
-            var names = {
-                scalr: 'Scalr',
-                account: 'Account',
-                env: 'Environment',
-                role: 'Role',
-                farm: 'Farm',
-                farmrole: 'FarmRole'
-            };
-            this.scopeEl.set({ title: names[value] || value });
-            this.scope = value;
-        },
-        getScope: function() {
-            return this.scope;
-        },
-        listeners: {
-            render: function() {
-                var me = this, value = me.getValue();
-
-                this.el.applyStyles('height: 26px; padding: 0 5px; background-color: #FBFBFC; border-radius: 3px; overflow: hidden');
-                this.scopeEl = this.bodyEl.insertFirst({
-                    tag: 'div',
-                    style: 'left: 5px; top: 8px; height: 10px; width: 10px; position: absolute'
-                });
-                this.inputEl.applyStyles('margin-left: 24px; padding-top: 0px');
-                // try to calculate real width
-                this.inputEl.applyStyles('display: inline');
-                this.computedWidth = this.inputEl.getWidth() + 24 + 10; // margin-left + padding on parent table
-                this.inputEl.applyStyles('display: ');
-
-                this.inputEl.set({ title: (this.getWidth() >= this.computedWidth) ? '' : this.getValue() });
-                this.updateScope(this.up('variablevaluefield').scope);
-            },
-            resize: function(c, width, height) {
-                if (this.rendered)
-                    this.inputEl.set({ title: (width >= this.computedWidth) ? '' : this.getValue() });
-            },
-            change: function(el, value) {
-                if (this.rendered)
-                    this.inputEl.set({ title: value.length > 15 ? value : '' });
-            }
-        }
-    }, {
-        xtype: 'textfield',
-        name: 'newName',
-        fieldCls: 'x-form-field',
-        isFormField: false,
-        allowChangeable: false,
-        allowChangeableMsg: 'Variable name, cannot be changed',
-        width: 150,
-        validatorNames: [],
-        validator: function(value) {
-            if (! value)
-                return true;
-            if (/^[A-Za-z]{1,1}[A-Za-z0-9_]{1,49}$/.test(value)) {
-                if (this.validatorNames.indexOf(value) == -1)
-                    return true;
-                else
-                    return 'Such name already defined';
-            } else
-                return 'Name should contain only alpha and numbers. Length should be from 2 chars to 50.';
-        },
-        listeners: {
-            blur: function() {
-                this.prev().setValue(this.getValue());
-            },
-            specialkey: function(field, e){
-                if (e.getKey() == e.ENTER) {
-                    this.up('variablevaluefield').getPlugin('addfield').run();
-                }
-            }
-        }
-    }, {
-        xtype: 'container',
-        flex: 1,
-        layout: {
-            type: 'vbox',
-            align: 'stretch'
-        },
-        margin: '0 0 0 6',
-        items: [{
-            xtype: 'textarea',
-            name: 'value',
-            isFormField: false,
-            enableKeyEvents: true,
-            minHeight: 26,
-            height: 26,
-            flex: 1,
-            //regexText: ''
-            resizable: {
-                handles: 's',
-                heightIncrement: 26,
-                pinned: true
-            },
-
-            mode: null,
-
-            setMode: function(mode, resize) {
-                if (mode !== this.mode) {
-                    if (mode == 'multi') {
-                        this.mode = 'multi';
-                        this.toggleWrap('off');
-                        this.inputEl.setStyle('overflow', 'auto');
-                        if (resize) {
-                            this.setHeight(26 * 3);
-                        }
-                    } else {
-                        this.mode = 'single';
-                        this.inputEl.setStyle('overflow', 'hidden');
-                        this.toggleWrap(null);
-                    }
-                }
-            },
-
-            toggleWrap: function(wrap) {
-                if (!wrap) {
-                    wrap = this.inputEl.getAttribute('wrap') == 'off' ? null : 'off';
-                }
-                this.inputEl.set({wrap: wrap});
-            },
-
-            listeners: {
-                keyup: function(comp, e) {
-                    if (e.getKey() === e.ENTER) {
-                        this.setMode('multi', true);
-                    }
-                },
-
-                //todo
-                focus: function() {
-                    var c = this.up('container'), cmp = this.up('variablevaluefield');
-                    if (cmp.down('[name="newValue"]').getValue() == 'true') {
-                        cmp.getPlugin('addfield').run();
-                    }
-
-                    if (! this.readOnly)
-                        c.prev('[name="name"]').updateScope(c.up('variablevaluefield').currentScope);
-                },
-
-                blur: function() {
-                    var c = this.up('container');
-                    if (! this.readOnly) {
-                        if (this.isDirty()) {
-                            c.prev('[name="name"]').updateScope(c.up('variablevaluefield').currentScope);
-                        } else {
-                            c.prev('[name="name"]').updateScope(c.up('variablevaluefield').defaultScope);
-                        }
-
-                        this.up('variablefield').fireEvent('editvar', this.up('variablevaluefield').getFieldValues());
-                    }
-                },
-
-                resize: function(comp, width, height) {
-                    comp.el.parent().setSize(comp.el.getSize());//fix resize wrapper for flex element
-                    comp.setMode(comp.inputEl.getHeight() > 26 ? 'multi' : 'single', false);
-                },
-
-                boxready: function(comp) {
-                    this.setMode(this.getValue().match(/\n/g) ? 'multi' : 'single', true);
-                }
-            }
-        }, {
-            xtype: 'container',
-            itemId: 'configureItems',
-            layout: 'hbox',
-            hidden: true,
-            margin: '0 0 8 0',
-            items: [{
-                xtype: 'textfield',
-                emptyText: 'Format',
-                tooltipText: 'Format',
-                name: 'format',
-                flex: 1,
-                isFormField: false,
-                listeners: {
-                    blur: function() {
-                        this.up('variablefield').fireEvent('editvar', this.up('variablevaluefield').getFieldValues());
-                    }
-                }
-            }, {
-                xtype: 'textfield',
-                emptyText: 'Validation pattern',
-                tooltipText: 'Validation pattern',
-                margin: '0 0 0 5',
-                name: 'validator',
-                isFormField: false,
-                flex: 1,
-                validator: function(value) {
-                    if (value) {
-                        try {
-                            var r = new RegExp(value);
-                            r.test('test');
-                            return true;
-                        } catch (e) {
-                            return e.message;
-                        }
-                    } else
-                        return true;
-                },
-                listeners: {
-                    blur: function() {
-                        if (this.isValid()) {
-                            var c = this.up('variablevaluefield').down('[name="value"]'), value = this.getValue();
-                            if (value)
-                                c.regex = new RegExp(value);
-                            else
-                                delete c.regex;
-
-                            c.validate();
-                            this.up('variablefield').fireEvent('editvar', this.up('variablevaluefield').getFieldValues());
-                        }
-                    }
-                }
-            }, {
-                xtype: 'combo',
-                store: {
-                    reader: 'json',
-                    fields: [ 'id', 'name' ],
-                    data: [[ 'farmrole', 'FarmRole' ]]
-                },
-                valueField: 'id',
-                displayField: 'name',
-                queryMode: 'local',
-                margin: '0 0 0 5',
-                name: 'flagRequiredScope',
-                value: 'farmrole',
-                editable: false,
-                width: 120,
-                hidden: true,
-                isFormField: false,
-                tooltipText: 'Required scope',
-                listeners: {
-                    change: function(field, value) {
-                        this.up('variablevaluefield').down('[name="flagRequired"]').inputValue = value;
-                        this.up('variablefield').fireEvent('editvar', this.up('variablevaluefield').getFieldValues());
-                    }
-                }
-            }]
-        }]
-    }, {
-        xtype: 'buttonfield',
-        ui: 'flag',
-        cls: 'x-btn-flag-final',
-        margin: '0 0 0 6',
-        name: 'flagFinal',
-        tooltip: 'Cannot be changed at a lower scope',
-        inputValue: 1,
-        enableToggle: true,
-        isFormField: false,
-        toggleHandler: function(el, state) {
-            if (this.up('variablevaluefield').currentScope != 'farmrole') {
-                this.next('[name="flagRequired"]')[state ? 'disable' : 'enable']();
-            }
-
-            this.up('variablefield').fireEvent('editvar', this.up('variablevaluefield').getFieldValues());
-        },
-        markInvalid: function(error) {
-            if (this.rendered)
-                Scalr.message.ErrorTip(error, this.el);
-            else
-                this.on('afterrender', function() {
-                    Scalr.message.ErrorTip(error, this.el);
-                }, this, {
-                    single: true,
-                    delay: 200
-                });
-        }
-    }, {
-        xtype: 'buttonfield',
-        ui: 'flag',
-        cls: 'x-btn-flag-required',
-        margin: '0 0 0 6',
-        name: 'flagRequired',
-        tooltip: 'Shall be set at a lower scope',
-        inputValue: 'farmrole',
-        enableToggle: true,
-        isFormField: false,
-        toggleHandler: function(el, state) {
-            this.prev('[name="flagFinal"]')[state ? 'disable' : 'enable']();
-            this.up('variablevaluefield').down('[name="flagRequiredScope"]')[state ? 'show' : 'hide']();
-
-            if (state)
-                this.up('variablevaluefield').down('#configure').toggle(true);
-
-            this.up('variablefield').fireEvent('editvar', this.up('variablevaluefield').getFieldValues());
-        },
-        markInvalid: function(error) {
-            if (this.rendered)
-                Scalr.message.ErrorTip(error, this.el);
-            else
-                this.on('afterrender', function() {
-                    Scalr.message.ErrorTip(error, this.el);
-                }, this, {
-                    single: true,
-                    delay: 200
-                });
-        }
-    }, {
-        xtype: 'buttonfield',
-        ui: 'flag',
-        cls: 'x-btn-flag-hide',
-        margin: '0 0 0 6',
-        name: 'flagHidden',
-        tooltip: 'Do not store this variable on instances, and mask value from view at a lower scope',
-        inputValue: 1,
-        enableToggle: true,
-        isFormField: false,
-        toggleHandler: function(el, state) {
-            this.up('variablefield').fireEvent('editvar', this.up('variablevaluefield').getFieldValues());
-        }
-    }, {
-        xtype: 'button',
-        ui: 'action',
-        itemId: 'reset',
-        margin: '0 0 0 8',
-        cls: 'x-btn-action-reset',
-        handler: function() {
-            var c = this.up('variablevaluefield').down('[name="value"]');
-            c.reset();
-            c.fireEvent('blur');
-            this.up('variablefield').fireEvent('editvar', this.up('variablevaluefield').getFieldValues());
-        }
-    }, {
-        xtype: 'button',
-        ui: 'action',
-        itemId: 'configure',
-        margin: '0 0 0 8',
-        enableToggle: true,
-        cls: 'x-btn-action-configure',
-        toggleHandler: function(el, state) {
-            var c = this.up('variablevaluefield').down('#configureItems');
-            c[state ? 'show' : 'hide' ]();
-        }
-    }, {
-        xtype: 'button',
-        ui: 'action',
-        itemId: 'delete',
-        margin: '0 0 0 8',
-        cls: 'x-btn-action-delete',
-        handler: function() {
-            this.up('variablevaluefield').hide();
-            this.next().setValue(1);
-            this.up('variablefield').fireEvent('removevar', this.up('variablevaluefield').getFieldValues());
-        }
-    }, {
-        xtype: 'hidden',
-        name: 'flagDelete',
-        isFormField: false,
-        value: ''
-    }]
-});
-
-
-Ext.define('Scalr.ui.VariableField2', {
-    extend: 'Ext.container.Container',
-
-    mixins: {
-        field: 'Ext.form.field.Field'
-    },
-    alias: document.location.search.indexOf('newgv') !== -1 ? 'widget.variablefield' : 'widget.variablefield2',
-
-    currentScope: 'env',
-    addFieldCls: '', // TODO: remove
-    encodeParams: true,
-
-    initComponent : function() {
+    saveScrollState: function () {
         var me = this;
-        me.callParent();
-        me.initField();
 
-        me.addEvents('addvar', 'editvar', 'removevar');
-    },
-
-    markInvalid: function(errors) {
-        var i, ct = this.down('#ct'), fields = this.query('variablevaluefield'), link = {}, name, j, f;
-
-        for (i = 0; i < fields.length; i++) {
-            name = fields[i].down('[name="name"]').getValue();
-            if (name)
-                link[name] = fields[i];
+        if (me.preserveScrollOnRefresh) {
+            me.down('grid').getView().saveScrollState();
         }
 
-        for (i in errors) {
-            if (link[i]) {
-                for (j in errors[i]) {
-                    f = link[i].down('[name="' + j + '"]');
-                    if (f)
-                        f.markInvalid(errors[i][j]);
-                }
+        return me;
+    },
+
+    restoreScrollState: function () {
+        var me = this;
+
+        if (me.preserveScrollOnRefresh) {
+            me.down('grid').getView().restoreScrollState();
+        }
+
+        return me;
+    },
+
+    isValid: function () {
+        var me = this;
+
+        var grid = me.down('grid');
+        var isValid = true;
+
+        Ext.Array.each(grid.getStore().data.items, function (record) {
+            if (record.get('validationErrors').length) {
+                isValid = false;
+
+                var selectionModel = grid.getSelectionModel();
+                selectionModel.deselectAll();
+                selectionModel.select(record);
+
+                return false;
             }
-        }
+        });
+
+        return isValid;
     },
 
-    isValid: function() {
-        return true;
+    isDirty: function () {
+        var me = this;
 
-        var items = this.down('#ct').query('variablevaluefield'), length = items.length, i, valid = true;
-        for (i = 0; i < length; i++) {
-            valid = valid && items[i].down('[name="value"]').isValid();
-        }
-
-        return valid;
+        return me.dirty;
     },
 
-    getValue: function () {
+    markDirty: function () {
+        var me = this;
+
+        me.dirty = true;
+
+        return me;
+    },
+
+    setTitle: function (title) {
+        var me = this;
+
+        if (title) {
+            me.down('[name=title]').setText(title);
+        }
+
+        return me;
+    },
+
+    getValue: function (includeLockedVariables) {
         var me = this;
 
         var store = me.down('grid').getStore();
@@ -939,544 +150,1314 @@ Ext.define('Scalr.ui.VariableField2', {
         var variables = [];
 
         Ext.Array.each(records.items, function (record) {
-            variables.push({
-                name: record.get('name'),
-                current: record.get('current'),
-                default: record.get('default'),
-                locked: record.get('locked'),
-                flagDelete: record.get('flagDelete')
-            });
+            var locked = record.get('locked');
+
+            if (includeLockedVariables || !(locked && parseInt(locked.flagFinal))) {
+                variables.push({
+                    name: record.get('name'),
+                    'default': record.get('default'),
+                    locked: locked,
+                    current: record.get('current'),
+                    flagDelete: record.get('flagDelete'),
+                    scopes: record.get('scopes')
+                });
+            }
         });
 
         return me.encodeParams ? Ext.encode(variables) : variables;
     },
 
-    setValue: function(value) {
-        value = (this.encodeParams ? Ext.decode(value, true) : value) || [];
-        var grid = this.down('grid'), me = this, currentScope = this.currentScope, i, f, names = [], isLockedVars = false;
+    setValue: function (value) {
+        var me = this;
 
-        grid.store.loadData(value);
+        value = (me.encodeParams ? Ext.decode(value, true) : value) || [];
+
+        me.down('grid').getStore().loadData(value);
+
+        me.markRequiredVariables();
+
+        me.fireEvent('load', me, value);
+
+        return me;
+    },
+
+    markInvalid: function (errors) {
+        var me = this;
+
+        var variableNames = Ext.Object.getKeys(errors);
+        var grid = me.down('grid');
+        var store = grid.getStore();
+        var firstRecord = null;
+
+        Ext.Array.each(variableNames, function (name) {
+            var record = store.findRecord('name', name);
+            record.set('serverErrors', Ext.Object.getValues(errors[name]));
+
+            firstRecord = firstRecord || record;
+        });
+
+        me.fireEvent('beforeselect', me);
+
+        var selectionModel = grid.getSelectionModel();
+        selectionModel.deselectAll();
+        selectionModel.select(firstRecord);
+
+        return me;
+    },
+
+    addVariable: function () {
+        var me = this;
+
+        var grid = me.down('grid');
+        var view = grid.getView();
+        var store = grid.getStore();
+        var extendedForm = me.down('[name=extendedForm]');
+        var newVariable = me.newVariable;
+        var isNewVariableExist = !(!newVariable ||
+            (newVariable.get('name') && newVariable.get('validationErrors').indexOf('name') === -1));
+
+        var record = isNewVariableExist ? me.newVariable : store.add({
+            current: {
+                scope: me.currentScope
+            },
+            scopes: [ me.currentScope ],
+            validationErrors: []
+        })[0];
+
+        me.fireEvent('beforeselect', me);
+
+        grid.getSelectionModel().select(record, false, true);
+
+        view.focusRow(record);
+        view.scrollBy(0, grid.getHeight());
+        view.saveScrollState();
+
+        extendedForm.setValue(record);
+
+        me.newVariable = record;
+
+        return me;
+    },
+
+    removeVariable: function (record) {
+        var me = this;
+
+        var store = record.store;
+        var extendedForm = me.down('[name=extendedForm]');
+
+        if (!record.get('name')) {
+            store.remove(record);
+            me.newVariable = null;
+        } else {
+            record.set('flagDelete', 1);
+            record.commit();
+
+            store.filter();
+        }
+
+        extendedForm.variable = null;
+        extendedForm.setFormVisible(false);
+
+        me.fireEvent('removevariable', me, record);
+    },
+
+    getNames: function () {
+        var me = this;
+
+        var names = [];
+
+        Ext.Array.each(me.down('grid').getStore().data.items, function (record) {
+            if (!record.get('flagDelete') && record.get('validationErrors').indexOf('name') === -1) {
+                names.push(record.get('name'));
+            }
+        });
+
+        return names;
+    },
+
+    getScopeName: function (scopeId) {
+        var me = this;
+
+        return me.scopes[scopeId] || null;
+    },
+
+    showExtendedForm: function (isVisible) {
+        var me = this;
+
+        var extendedForm = me.down('[name=extendedForm]');
+
+        if (!isVisible) {
+            extendedForm.variable = null;
+        }
+
+        extendedForm.setFormVisible(isVisible);
+
+        return me;
+    },
+
+    isVariableRequired: function (record) {
+        var me = this;
+
+        return !record.get('current').value &&
+            !record.get('default').value &&
+            record.get('locked').flagRequired === me.currentScope;
+    },
+
+    markRequiredVariables: function () {
+        var me = this;
+
+        var store = me.down('grid').getStore();
+
+        Ext.Array.each(store.data.items, function (record) {
+            if (me.isVariableRequired(record)) {
+                record.set('validationErrors', ['value']);
+            }
+        });
+
+        return me;
     },
 
     items: [{
         xtype: 'container',
-        layout: 'hbox',
-        margin: '0 0 12 0',
-        items: [{
-            xtype: 'filterfield',
-            width: 200,
-            handler: function(field, value) {
-                var store = this.up().next().child('grid').getStore();
-
-                if (value) {
-                    store.addFilter({
-                        id: 'searchFilter',
-                        anyMatch: true,
-                        property: 'name',
-                        value: value
-                    });
-                } else {
-                    store.removeFilter('searchFilter');
-                }
-            }
-        }, {
-            xtype: 'button',
-            margin: '0 0 0 12',
-            width: 200,
-            enableToggle: true,
-            text: 'Show locked variables',
-            applyFilter: function (status) {
-                var me = this;
-
-                var store = me.up().next().child('grid').getStore();
-
-                if (status) {
-                    store.removeFilter('finalVariableFilter');
-                    return;
-                }
-
-                store.addFilter({
-                    id: 'finalVariableFilter',
-                    filterFn: function(record) {
-                        return !(record.get('default') && record.get('locked').flagFinal == 1);
-                    }
-                });
-            },
-            listeners: {
-                afterrender: function (me) {
-                    me.applyFilter(false);
-                },
-                toggle: function (me, status) {
-                    me.applyFilter(status);
-                }
-            }
-        }]
-    }, {
-        xtype: 'container',
+        flex: 1,
         layout: {
-            type: 'hbox',
+            type: 'vbox',
             align: 'stretch'
         },
         items: [{
+            name: 'title',
+            cls: 'x-panel-column-left',
+            padding: '1 0 0 12',
+            setText: function (text) {
+                var me = this;
+
+                me.update('<div style="padding-top: 9px" class="x-fieldset-header-text">' + text + '</div>');
+
+                return me;
+            }
+        }, {
             xtype: 'grid',
+            cls: 'x-grid-shadow x-panel-column-left scalr-ui-variablefield-grid',
+            style: 'box-shadow: none',
+            padding: '1 0 12 0',
             flex: 1,
-            cls: 'x-grid-shadow x-grid-no-highlighting x-grid-with-formfields scalr-ui-variablefield2-grid',
+
+            viewConfig: {
+                emptyText: 'No variables'
+            },
+
             store: {
-                fields: [ 'name', 'newValue', 'value', 'current', 'default', 'locked', 'flagDelete' ],
+                fields: [ 'name', 'newValue', 'value', 'current', 'default', 'locked', 'flagDelete', 'scopes', 'validationErrors', 'serverErrors' ],
                 reader: 'object',
-                filterOnLoad: true,
                 filters: [{
                     id: 'deletedVariableFilter',
                     filterFn: function (record) {
                         return !record.get('flagDelete');
                     }
-                }]
-            },
-
-            viewConfig: {
-                preserveScrollOnRefresh: true
-            },
-
-            features: {
-                ftype: 'addbutton',
-                text: 'Add variable',
-                handler: function(view) {
-                    var grid = view.up('grid');
-                    var store = grid.getStore();
-
-                    //grid.getView().saveScrollState();
-
-                    store.add({
-                        newValue: true,
-                        current: { scope: grid.up('variablefield').currentScope }
-                    });
-
-
-                    setTimeout(function () {
-                        grid.getPlugin('cellediting').startEdit(store.findRecord('newValue', true), 0);
-                    }, 50);
-
-                    //grid.getView().restoreScrollState();
-
-                    grid.getView().focusRow(store.findRecord('newValue', true));
+                }],
+                listeners: {
+                    update: function (me, record, operation, modifiedFieldNames) {
+                        if (modifiedFieldNames && modifiedFieldNames[0] === 'flagDelete') {
+                            // todo: variable names event based updating
+                        }
+                    }
                 }
             },
 
-            plugins: [
-                Ext.create('Ext.grid.plugin.CellEditing', {
-                    pluginId: 'cellediting',
-                    clicksToEdit: 1,
+            plugins: {
+                ptype: 'focusedrowpointer',
+                addOffset: 3
+            },
+
+            listeners: {
+                select: function (me, record) {
+                    var grid = me.view.panel;
+
+                    var variableField = grid.up('variablefield');
+                    variableField.fireEvent('beforeselect', variableField);
+
+                    grid.up('variablefield').down('[name=extendedForm]').setValue(record);
+                },
+                itemkeydown: function (me, record, item, index, e) {
+                    var variableField = me.up('variablefield');
+
+                    if (e.getKey() === e.TAB && !variableField.down('[name=newName]').isVisible()) {
+                        variableField.down('[name=flagHidden]').focus();
+                    }
+                }
+            },
+
+            getScopeMarkerHtml: function (scope) {
+                var me = this;
+
+                return '<img src="' + Ext.BLANK_IMAGE_URL + '" class="scalr-scope-' + scope +
+                    '" data-qtip="' + me.up('variablefield').getScopeName(scope) + '" />';
+            },
+
+            getEmptyNameHtml: function (scope) {
+                var me = this;
+
+                return me.getScopeMarkerHtml(scope) +
+                    '<span style="font-style: italic; color: #999; padding-left: 10px">no name</span>';
+            },
+
+            getLockedNameHtml: function (name, scope) {
+                var me = this;
+
+                return '<div data-qtip="' + me.up('variablefield').getScopeName(scope) +
+                    '"class="scalr-ui-variablefield-variable-locked-scope-' +
+                    scope + '"></div><span style="color: #999; padding-left: 2px">' + name + '</span>';
+            },
+
+            getInvalidNameHtml: function (name, scope) {
+                var me = this;
+
+                return me.getScopeMarkerHtml(scope)
+                    + '<span style="color: #f04a46; padding-left: 10px">' + name + '</span>';
+            },
+
+            getNameHtml: function (name, scope, isLocked, isValid) {
+                var me = this;
+
+                if (!name) {
+                    return me.getEmptyNameHtml(scope);
+                }
+
+                if (isLocked) {
+                    return me.getLockedNameHtml(name, scope);
+                }
+
+                if (!isValid) {
+                    return me.getInvalidNameHtml(name, scope);
+                }
+
+                return me.getScopeMarkerHtml(scope) + '<span style="padding-left: 10px">' + name + '</span';
+            },
+
+            getValueColor: function (value) {
+                return !value ? '#999' : '#000';
+            },
+
+            getValueLengthHtml: function (length) {
+                return '<div style="float: right; color: #999; padding-left: 6px">(' + length + ' chars)</div>';
+            },
+
+            getPureValueHtml: function (value, color) {
+                return '<span style="font-family: monospace; color: ' +
+                    color + '">' + value + '</span>';
+            },
+
+            getLongValueHtml: function (valueHtml, valueLengthHtml) {
+                return valueLengthHtml +
+                    '<div class="scalr-ui-variablefield-grid-variable-value-long">' + valueHtml + '</div>';
+            },
+
+            getValueHtml: function (value, color) {
+                var me = this;
+
+                var valueLength = value.length;
+                var valueLengthHtml = me.getValueLengthHtml(valueLength);
+                var linebreakIndex = value.indexOf('\n');
+                var valueHtml = me.getPureValueHtml(value, color);
+
+                if (linebreakIndex > 6) {
+                    valueHtml = me.getPureValueHtml(value.substring(0, linebreakIndex), color);
+
+                    return me.getLongValueHtml(valueHtml, valueLengthHtml);
+                }
+
+                if (valueLength > 60) {
+                    return me.getLongValueHtml(valueHtml, valueLengthHtml);
+                }
+
+                return valueHtml;
+            },
+
+            getFlagFinalClass: function (flagFinal) {
+                return 'scalr-ui-variablefield-grid-flag-final-' + (!flagFinal ? 'off' : 'on');
+            },
+
+            getFlagRequiredClass: function (flagRequired) {
+                return !flagRequired ?
+                    '' : 'scalr-ui-variablefield-grid-flag-required-scope-' + flagRequired;
+            },
+
+            getFlagRequiredTip: function (flagRequired) {
+                var me = this;
+
+                return flagRequired ? '<img src="' + Ext.BLANK_IMAGE_URL +
+                    '" class="scalr-scope-' + flagRequired + '" /><span style="margin-left: 6px">' +
+                    me.up('variablefield').getScopeName(flagRequired) + '</span>' :
+                    '<span style="font-style: italic">not required</span>';
+            },
+
+            getFlagHiddenClass: function (flagHidden) {
+                return 'scalr-ui-variablefield-grid-flag-hidden-' + (!flagHidden ? 'off' : 'on');
+            },
+
+            getFlagFinalHtml: function (flagFinal) {
+                var me = this;
+
+                return '<div class="' + me.getFlagFinalClass(flagFinal) + '" data-qtip="Locked variable"></div>';
+            },
+
+            getFlagRequiredHtml: function (flagRequired) {
+                var me = this;
+
+                return '<div class="scalr-ui-variablefield-grid-flag-required ' +
+                    me.getFlagRequiredClass(flagRequired) +
+                    '" data-qtip=\'<div style="float: left; margin-right: 6px">Required in:</div>' +
+                    me.getFlagRequiredTip(flagRequired) + '\'></div>';
+            },
+
+            getFlagHiddenHtml: function (flagHidden) {
+                var me = this;
+
+                return '<div class="' + me.getFlagHiddenClass(flagHidden) + '" data-qtip="Hidden variable"></div>';
+            },
+
+            getFlagsHtml: function (flagFinal, flagRequired, flagHidden) {
+                var me = this;
+
+                return '<div>' +
+                    me.getFlagFinalHtml(flagFinal) +
+                    me.getFlagRequiredHtml(flagRequired) +
+                    me.getFlagHiddenHtml(flagHidden) +
+                    '</div>';
+            },
+
+            dockedItems: [{
+                xtype: 'toolbar',
+                style: 'box-shadow: none; padding: 12px 0',
+                dock: 'top',
+                layout: 'hbox',
+                items: [{
+                    xtype: 'filterfield',
+                    width: 175,
+                    handler: function (me, value) {
+                        var store = me.up().ownerCt.getStore();
+
+                        if (value) {
+                            store.addFilter({
+                                id: 'searchFilter',
+                                anyMatch: true,
+                                property: 'name',
+                                value: value
+                            });
+
+                            return;
+                        }
+
+                        store.removeFilter('searchFilter');
+                    }
+                }, {
+                    xtype: 'button',
+                    margin: '0 0 0 12',
+                    width: 170,
+                    enableToggle: true,
+                    text: 'Show locked variables',
+                    applyFilter: function (status) {
+                        var me = this;
+
+                        var store = me.up().ownerCt.getStore();
+                        var variableField = me.up('variablefield');
+
+                        if (status) {
+                            store.removeFilter('finalVariableFilter');
+
+                            variableField.fireEvent('select', variableField);
+
+                            return;
+                        }
+
+                        store.addFilter({
+                            id: 'finalVariableFilter',
+                            filterFn: function(record) {
+                                return !(record.get('default') && record.get('locked').flagFinal == 1);
+                            }
+                        });
+
+                        variableField.fireEvent('select', variableField);
+                    },
                     listeners: {
-                        beforeedit: function (plugin, context) {
-                            var record = context.record;
-                            var column = context.column;
-                            var current = record.get('current');
-                            var def = record.get('default');
-                            var locked = record.get('locked');
-
-                            if (context.field === 'value') {
-                                var valueEditor = context.grid.down('[name=value]').getEditor();
-                                var validator = current.validator || locked.validator;
-
-                                valueEditor.regex = validator ? new RegExp(validator) : '';
-
-                                if (locked.flagFinal == 1) {
-                                    return false;
-                                }
-
-                                var editor = context.column.getEditor(record);
-                                editor.emptyText = def['value'] || ' ';
-                                editor.applyEmptyText();
-
-                                if (current.value) {
-                                    record.set('value', current['value']);
-                                }
-                            }
-
-                            if (column.isEditable) {
-                                return column.isEditable(record);
-                            }
-
-                            return true;
+                        afterrender: function (me) {
+                            me.applyFilter(false);
                         },
-                        canceledit: function (plugin, context) {
-                            var grid = context.grid;
-                            var field = context.field;
-                            var store = context.store;
-                            var record = context.record;
-                            var value = context.value;
-
-                            if (field === 'name') {
-
-                                if (value) {
-                                    record.set('name', value);
-                                    return;
-                                }
-
-                                grid.getStore().remove(record);
-                                grid.getView().focusRow(store.getCount() - 1);
-                            }
-                        },
-                        edit: function (plugin, context) {
-                            var grid = context.grid;
-                            var field = context.field;
-                            var store = context.store;
-                            var record = context.record;
-                            var current = record.get('current');
-                            var value = context.value;
-
-                            if (!Ext.isObject(current)) {
-                                current = {};
-                            }
-
-                            if (field === 'name') {
-
-                                if (!value) {
-                                    store.remove(record);
-                                    context.view.focusRow(store.getCount() - 1);
-
-                                    return;
-                                }
-
-                                current.name = value;
-
-                                record.set('current', current);
-                                record.set('newValue', null);
-
-                                return;
-                            }
-
-                            if (field === 'value') {
-                                current.value = value;
-                                current.scope = grid.up('variablefield').currentScope;
-
-                                record.set('current', current);
-                                record.commit();
-
-                                var name = record.get('name');
-                                var extendedProperties = grid.next();
-
-                                if (extendedProperties.isVisible() && name === extendedProperties.down('[name=name]').getValue()) {
-                                    extendedProperties.fireEvent('updateform', extendedProperties, record);
-                                }
-                            }
+                        toggle: function (me, status) {
+                            me.applyFilter(status);
                         }
                     }
-                })
-            ],
+                }, {
+                    xtype: 'tbfill',
+                    flex: 1
+                }, {
+                    xtype: 'button',
+                    text: 'Add variable',
+                    cls: 'x-btn-green-bg',
+                    style: 'padding: 5px 9px',
+                    width: 104,
+                    handler: function (me) {
+                        me.up('variablefield').addVariable();
+                    }
+                }]
+            }],
+
             columns: [{
-                header: 'Name',
+                header:
+                    '<img src="' + Ext.BLANK_IMAGE_URL +
+                    '" style="float: left; cursor: help" class="x-icon-severity x-icon-severity-2" data-qtip=\'' +
+                    '<div>Scopes:</div>' +
+                    '<div><img src="' + Ext.BLANK_IMAGE_URL + '" class="scalr-scope-scalr" />' +
+                    '<span style="padding-left: 6px">Scalr</span></div>' +
+                    '<div><img src="' + Ext.BLANK_IMAGE_URL + '" class="scalr-scope-account" />' +
+                    '<span style="padding-left: 6px">Account</span></div>' +
+                    '<div><img src="' + Ext.BLANK_IMAGE_URL + '" class="scalr-scope-env" />' +
+                    '<span style="padding-left: 6px">Environment</span></div>' +
+                    '<div><img src="' + Ext.BLANK_IMAGE_URL + '" class="scalr-scope-role" />' +
+                    '<span style="padding-left: 6px">Role</span></div>' +
+                    '<div><img src="' + Ext.BLANK_IMAGE_URL + '" class="scalr-scope-farm" />' +
+                    '<span style="padding-left: 6px">Farm</span></div>' +
+                    '<div><img src="' + Ext.BLANK_IMAGE_URL + '" class="scalr-scope-farmrole" />' +
+                    '<span style="padding-left: 6px">Farm Role</span></div>'
+                    + '\' /><div style="float: left; padding-left: 6px">Name</div>',
+                name: 'name',
                 dataIndex: 'name',
-                width: 150,
+                flex: 0.35,
                 renderer: function (value, meta, record) {
-                    var current = record.get('current'),
-                        def = record.get('default'),
-                        locked = record.get('locked');
+                    var me = this;
 
+                    var current = record.get('current');
+                    var def = record.get('default');
+                    var locked = record.get('locked');
                     var scope = current && (current.value || !def) ? current.scope : def.scope;
-                    var output = '<div class="scalr-ui-variablefield2-scopemarker scalr-ui-variablefield2-scopemarker-' +
-                        scope + '"></div>';
 
-                    if (record.get('newValue')) {
-                        return output + '<div class="x-form-text" style="background:#ffb2a3;padding:3px 12px 3px 13px;text-overflow: ellipsis;overflow:hidden;cursor:text" >'+
-                            record.get('name') + '</div>';
+                    return me.getNameHtml(
+                        record.get('name'),
+                        scope,
+                        parseInt(locked.flagFinal) === 1,
+                        !(record.get('serverErrors') || record.get('validationErrors').length)
+                    );
+                }
+            }, {
+                header: 'Value',
+                flex: 0.65,
+                sortable: false,
+                renderer: function (value, meta, record) {
+                    var me = this;
+
+                    var current = record.get('current');
+                    var def = record.get('default');
+                    var locked = record.get('locked');
+
+                    var currentValue = current.value;
+                    var variableValue = currentValue || def.value || '';
+                    var valueColor = me.getValueColor(currentValue);
+
+                    return me.getValueHtml(variableValue, valueColor);
+                }
+            }, {
+                header: 'Flags',
+                width: 103,
+                sortable: false,
+                align: 'center',
+                renderer: function (value, meta, record) {
+                    var me = this;
+
+                    var current = record.get('current');
+                    var locked = record.get('locked');
+
+                    var flagFinal = parseInt(current.flagFinal) === 1 || parseInt(locked.flagFinal) === 1;
+                    var flagRequired = current.flagRequired || locked.flagRequired;
+                    var flagHidden = parseInt(current.flagHidden) === 1 || parseInt(locked.flagHidden) === 1;
+
+                    return me.getFlagsHtml(flagFinal, flagRequired, flagHidden);
+                }
+            }]
+        }]
+    }, {
+        xtype: 'container',
+        name: 'extendedForm',
+        style: 'background-color: #f0f1f4',
+        width: 370,
+        layout: 'vbox',
+
+        getScopesData: function (scopes) {
+            var me = this;
+
+            var variableField = me.up('variablefield');
+            var scopesData = [];
+
+            Ext.Array.each(scopes, function (scope) {
+                scopesData.push({
+                    id: scope,
+                    name: variableField.getScopeName(scope)
+                });
+            });
+
+            return scopesData;
+        },
+
+        setVariableName: function (name, lastDefinitionsScope, scopes) {
+            var me = this;
+
+            var nameField = me.down('[name=name]');
+            nameField.setVisible(name);
+
+            var newNameField = me.down('[name=newName]');
+            newNameField.setVisible(!name);
+
+            var variableField = me.up('variablefield');
+
+            if (name) {
+
+                /*
+                var declarationsScope = scopes.shift();
+                var definitionsScopes = me.getScopesData(scopes);
+                var declarationsScopeName = variableField.getScopeName(declarationsScope);
+
+                nameField.update({
+                    name: name,
+                    lastDefinitionsScope: lastDefinitionsScope,
+                    lastDefinitionsScopeName: variableField.getScopeName(lastDefinitionsScope),
+                    declarationsScope: declarationsScope,
+                    declarationsScopeName: declarationsScopeName,
+                    definitionsScopes: definitionsScopes.length ? definitionsScopes : [{
+                        id: declarationsScope,
+                        name: declarationsScopeName
+                    }]
+                });
+                */
+
+                var declarationsScope = scopes[0];
+
+                nameField.update({
+                    name: name,
+                    lastDefinitionsScope: lastDefinitionsScope,
+                    lastDefinitionsScopeName: variableField.getScopeName(lastDefinitionsScope),
+                    declarationsScope: declarationsScope,
+                    declarationsScopeName: variableField.getScopeName(declarationsScope),
+                    definitionsScopes: me.getScopesData(scopes)
+                });
+
+                return me;
+            }
+
+            newNameField.variableNames = variableField.getNames();
+            newNameField.setValue().focus();
+
+            return me;
+        },
+
+        setVariableFlags: function (record) {
+            var me = this;
+
+            var current = record.get('current');
+            var def = record.get('default');
+            var locked = record.get('locked');
+            var disabled = !Ext.Object.isEmpty(def) || !Ext.Object.isEmpty(locked);
+            var flagRequired = current['flagRequired'] || locked['flagRequired'];
+            var flagFinal = current['flagFinal'] == 1 || locked['flagFinal'] == 1;
+            var flagHidden = current['flagHidden'] == 1 || locked['flagHidden'] == 1;
+
+            me.down('[name=flags]').setValue({
+                disabled: disabled,
+                flagRequired: flagRequired,
+                flagFinal: flagFinal,
+                flagHidden: flagHidden
+            });
+
+            return me;
+        },
+
+        setVariableValue: function (locked, currentValue, defaultValue, validator) {
+            var me = this;
+
+            var field = me.down('[name=value]');
+            field.setDisabled(locked);
+
+            field.setValue();
+            field.emptyText = defaultValue || ' ';
+            field.applyEmptyText();
+
+            if (currentValue && !locked) {
+                field.setValue(currentValue);
+            }
+
+            var isRegexValid = me.down('[name=validator]').validator(validator);
+
+            if (validator && isRegexValid && typeof isRegexValid !== 'string') {
+                field.regex = new RegExp(validator);
+                field.validate();
+
+                return me;
+            }
+
+            field.regex = '';
+            field.validate();
+
+            return me;
+        },
+
+        setVariableRequiredScope: function (flagRequired, scope, readOnly) {
+            var me = this;
+
+            var currentScope = me.currentScope;
+            var field = me.down('[name=requiredScope]');
+
+            var store = field.getStore();
+            store.clearFilter();
+
+            if (!readOnly) {
+                var record = store.findRecord('id', scope);
+                var index = store.indexOf(record);
+
+                store.filterBy(function (record) {
+                    var isScopeBelow = store.indexOf(record) > index;
+
+                    if (currentScope === 'role') {
+                        return isScopeBelow && record.get('id') !== 'farm';
                     }
 
-                    return output + '<span>' + record.get('name') + '</span>';
-                },
-                editor: {
+                    return isScopeBelow;
+                });
+            }
+
+            field.
+                show().
+                setValue(flagRequired || 'farmrole').
+                setDisabled(readOnly);
+
+            if (!flagRequired) {
+                field.hide();
+            }
+
+            return me;
+        },
+
+        setVariableFormat: function (format, readOnly) {
+            var me = this;
+
+            me.down('[name=format]').
+                setValue(format).
+                setDisabled(readOnly).
+                validate();
+
+            return me;
+        },
+
+        setVariableValidator: function (validator, readOnly) {
+            var me = this;
+
+            me.down('[name=validator]').
+                setValue(validator).
+                setDisabled(readOnly).
+                validate();
+
+            return me;
+        },
+
+        getErrorText: function (errors) {
+            var text = [];
+
+            Ext.Array.each(errors, function (error) {
+                text.push('<div>' + error + ' </div>');
+            });
+
+            return text.join('');
+        },
+
+        setHeaderText: function (errors) {
+            var me = this;
+
+            var subHeader = errors ? ('<div style="color: #f04a46">' + me.getErrorText(errors) + '</div>') : '';
+
+            me.down('fieldset').
+                setTitle('Variable details', subHeader);
+
+            return me;
+        },
+
+        setDeletable: function (isDeletable) {
+            var me = this;
+
+            me.down('[name=delete]').setDisabled(isDeletable);
+
+            return me;
+        },
+
+        setFormVisible: function (isVisible) {
+            var me = this;
+
+            me.down('fieldset').setVisible(isVisible);
+            me.down('[name=delete]').setVisible(isVisible);
+
+            return me;
+        },
+
+        setDeleteTooltip: function (readOnly, name, declarationsScope) {
+            var me = this;
+
+            me.down('[name=delete]').setTooltip(
+                !readOnly ? '' : '<div style="float: left"><span style="font-style: italic">' +
+                name + '</span> is declared in: </div>' +
+                '<img style="margin: 0 6px" src="' + Ext.BLANK_IMAGE_URL + '" class="scalr-scope-' +
+                declarationsScope + '" />' + me.up('variablefield').getScopeName(declarationsScope) +
+                ';<div style="text-align: center">delete it there first</div>'
+            );
+
+            return me;
+        },
+
+        setValue: function (record) {
+            var me = this;
+
+            if (!me.variable) {
+                me.setFormVisible(true);
+            }
+
+            me.variable = record;
+
+            var name = record.get('name');
+            var current = record.get('current');
+            var def = record.get('default');
+            var locked = record.get('locked');
+            var readOnly = (!Ext.Object.isEmpty(def) || !Ext.Object.isEmpty(locked));
+            var scopes = Ext.Array.clone(record.get('scopes'));
+            var scope = current.value ? current.scope : (def.scope || locked.scope || current.scope);
+            var validator = readOnly ? locked.validator : current.validator;
+
+            me.
+                setDeletable(readOnly).
+                setDeleteTooltip(readOnly, name, scopes[0]).
+                setHeaderText(record.get('serverErrors')).
+                setVariableName(name, scope, scopes).
+                setVariableRequiredScope(readOnly ? locked.flagRequired : current.flagRequired, scope, readOnly).
+                setVariableFlags(record).
+                setVariableValue(parseInt(locked.flagFinal), current.value, def.value, validator).
+                setVariableFormat(readOnly ? locked.format : current.format, readOnly).
+                setVariableValidator(validator, readOnly);
+
+            var variableField = me.up('variablefield');
+
+            if (!name) {
+                me.setVariableName();
+                variableField.fireEvent('select', variableField);
+                return me;
+            }
+
+            if (record.get('validationErrors').indexOf('name') !== -1) {
+                me.setVariableName();
+                me.down('[name=newName]').setValue(name);
+            }
+
+            variableField.fireEvent('select', variableField);
+
+            return me;
+        },
+
+        setValidationError: function (field, isValid) {
+            var me = this;
+
+            var record = me.variable;
+            var errors = record.get('validationErrors') || [];
+            var fieldNameIndex = errors.indexOf(field);
+
+            if (isValid && fieldNameIndex !== -1) {
+                errors.splice(fieldNameIndex, 1);
+            } else if (!isValid && fieldNameIndex === -1) {
+                errors.push(field);
+            }
+
+            record.set('validationErrors', errors);
+
+            return me;
+        },
+
+        applyName: function (name, isValid, preventFocusOnValue) {
+            var me = this;
+
+            var record = me.variable;
+            var current = record.get('current');
+
+            current.name = name;
+
+            me.setValidationError('name', isValid);
+
+            record.set('current', current);
+            record.set('name', name);
+            record.commit();
+
+            var variableField = me.up('variablefield');
+
+            if (isValid && name) {
+                me.setValue(record);
+
+                variableField.fireEvent('addvariable', variableField, record);
+
+                if (preventFocusOnValue) {
+                    me.down('[name=newName]').preventFocusOnValue = false;
+                    return;
+                }
+
+                me.down('[name=value]').focus(true);
+                return;
+            }
+
+            variableField.fireEvent('select', variableField);
+
+            return me;
+        },
+
+        applyFlagFinal: function (flag) {
+            var me = this;
+
+            var record = me.variable;
+            var current = record.get('current');
+            var readOnly = !Ext.Object.isEmpty(record.get('default')) ||
+                !Ext.Object.isEmpty(record.get('locked'));
+
+            if (!readOnly && parseInt(current.flagFinal) !== flag) {
+                current.flagFinal = flag;
+
+                record.set('current', current);
+                record.commit();
+
+                var variableField = me.up('variablefield');
+                variableField.fireEvent('datachanged', variableField, record);
+            }
+
+            return me;
+        },
+
+        applyFlagRequired: function (state) {
+            var me = this;
+
+            var requiredScopeField = me.down('[name=requiredScope]');
+            var flag = state ? requiredScopeField.getValue() : '';
+            var record = me.variable;
+            var current = record.get('current');
+            var readOnly = !Ext.Object.isEmpty(record.get('default')) ||
+                !Ext.Object.isEmpty(record.get('locked'));
+
+            if (!readOnly && current.flagRequired !== flag) {
+                current.flagRequired = flag;
+
+                record.set('current', current);
+                record.commit();
+
+                requiredScopeField.setVisible(state);
+
+                var variableField = me.up('variablefield');
+                variableField.fireEvent('datachanged', variableField, record);
+
+                return me;
+            }
+
+            requiredScopeField.setVisible(state);
+
+            return me;
+        },
+
+        applyFlagHidden: function (flag) {
+            var me = this;
+
+            var record = me.variable;
+            var current = record.get('current');
+            var readOnly = !Ext.Object.isEmpty(record.get('default')) ||
+                !Ext.Object.isEmpty(record.get('locked'));
+
+            if (!readOnly && parseInt(current.flagHidden) !== flag) {
+                current.flagHidden = flag;
+
+                record.set('current', current);
+                record.commit();
+
+                var variableField = me.up('variablefield');
+                variableField.fireEvent('datachanged', variableField, record);
+            }
+
+            return me;
+        },
+
+        applyValue: function (value, oldValue, isValid) {
+            var me = this;
+
+            var record = me.variable;
+
+            if (record && value !== oldValue) {
+                var current = record.get('current');
+                var scopes = record.get('scopes');
+
+                if (!Ext.isObject(current)) {
+                    current = {
+                        name: record.get('name'),
+                        scope: me.currentScope
+                    };
+                }
+
+                current.value = value;
+
+                var currentScopeIndex = scopes.indexOf(current.scope);
+
+                if (!value && currentScopeIndex !== 0) {
+                    scopes.splice(currentScopeIndex, 1);
+                } else if (currentScopeIndex === -1) {
+                    scopes.push(current.scope);
+                }
+
+                me.setValidationError('value', isValid);
+
+                record.set('current', current);
+                record.set('scopes', scopes);
+                record.commit();
+
+                var nameField = me.down('[name=name]');
+
+                if (nameField.isVisible()) {
+                    var def = record.get('default');
+                    var scope = value || !def ? current.scope : def.scope;
+
+                    me.setVariableName(record.get('name'), scope, Ext.Array.clone(scopes));
+                }
+
+                var variableField = me.up('variablefield');
+                variableField.fireEvent('datachanged', variableField, record);
+            }
+
+            return me;
+        },
+
+        applyRequiredScope: function (requiredScope) {
+            var me = this;
+
+            var record = me.variable;
+
+            if (record) {
+                var current = record.get('current');
+
+                if (current.flagRequired) {
+                    current.flagRequired = requiredScope;
+
+                    record.set('current', current);
+                    record.commit();
+
+                    var variableField = me.up('variablefield');
+                    variableField.fireEvent('datachanged', variableField, record);
+                }
+
+                me.down('[name=flagRequired]').inputValue = requiredScope;
+            }
+
+            return me;
+        },
+
+        applyFormat: function (format, isValid) {
+            var me = this;
+
+            var record = me.variable;
+            var current = record.get('current');
+
+            current.format = format;
+
+            me.setValidationError('format', isValid);
+
+            record.set('current', current);
+            record.commit();
+
+            var variableField = me.up('variablefield');
+            variableField.fireEvent('datachanged', variableField, record);
+
+            return me;
+        },
+
+        applyValidator: function (validator, isValid) {
+            var me = this;
+
+            var record = me.variable;
+            var current = record.get('current');
+            var validationErrors = record.get('validationErrors');
+
+            current.validator = validator;
+
+            me.setValidationError('validator', isValid);
+
+            record.set('current', current);
+            record.commit();
+
+            var valueField = me.down('[name=value]');
+            valueField.regex = isValid ? new RegExp(validator) : '';
+            valueField.validate();
+
+            var variableField = me.up('variablefield');
+            variableField.fireEvent('datachanged', variableField, record);
+
+            return me;
+        },
+
+        listeners: {
+            afterrender: function (me) {
+                me.currentScope = me.up('variablefield').currentScope;
+            }
+        },
+
+        items: [{
+            xtype: 'fieldset',
+            title: 'Variable details',
+            cls: 'x-fieldset-separator-none',
+            flex: 1,
+            width: '100%',
+            autoScroll: true,
+            hidden: true,
+            hideMode: 'visibility',
+            layout: 'vbox',
+            defaults: {
+                width: 300
+            },
+
+            items: [{
+                xtype: 'container',
+                layout: 'hbox',
+                items: [{
+                    xtype: 'component',
+                    name: 'name',
+                    isFormField: false,
+                    tpl: [
+                        '<div style="margin-top: 6px">',
+
+                            '<div style="float: left" data-qtip=\'',
+
+                                '<div style="border-bottom: 1px solid #fff">',
+                                    '<div style="float: left; width: 65px">Declared in:</div>',
+                                    '<img src="' + Ext.BLANK_IMAGE_URL + '" style="margin: 0 6px" class="scalr-scope-{declarationsScope}" />',
+                                    '<span>{declarationsScopeName}</span>',
+                                '</div>',
+
+                                '<div style="margin-top: 6px">',
+                                    '<div style="float: left; width: 65px">',
+                                        '<span>Defined in:</span>',
+                                    '</div>',
+                                    '<div style="float: left">',
+                                        '<tpl for="definitionsScopes">',
+                                            '<div>',
+                                                '<img src="' + Ext.BLANK_IMAGE_URL + '" style="margin: 0 6px" class="scalr-scope-{id}" />',
+                                                '<span>{name}</span>',
+                                            '</div>',
+                                        '</tpl>',
+                                    '</div>',
+                                '</div>',
+
+                            '\'>',
+
+                                '<tpl if="declarationsScope !== lastDefinitionsScope">',
+                                    '<img src="' + Ext.BLANK_IMAGE_URL + '" style="margin: 0 -6px 4px 0" class="scalr-scope-{declarationsScope}" />',
+                                    '<img src="' + Ext.BLANK_IMAGE_URL + '" style="box-shadow: -1px -1px 0 0 #f0f1f4" class="scalr-scope-{lastDefinitionsScope}" />',
+                                '<tpl else>',
+                                    '<img src="' + Ext.BLANK_IMAGE_URL + '" class="scalr-scope-{declarationsScope}" />',
+                                '</tpl>',
+
+                            '</div>',
+
+                            '<div class="scalr-ui-variablefield-extendedform-variable-name">{name}</div>',
+
+                        '</div>'
+                    ]
+                }, {
                     xtype: 'textfield',
-                    cls: 'scalr-ui-variablefield2-editor-scopemarker',
-                    editable: false,
-                    margin: '0 12 0 9',
-                    fixWidth: -25,
+                    name: 'newName',
+                    width: 202,
+                    emptyText: 'Name',
+                    hidden: true,
                     allowChangeable: false,
                     allowChangeableMsg: 'Variable name, cannot be changed',
-                    vtype: 'alphanum',
                     minLength: 2,
+                    minLengthText: 'Variable names must be a minimum of 2 characters',
                     maxLength: 50,
+                    maxLengthText: 'Variable names can be a maximum of 50 character',
+                    isFormField: false,
+                    validateOnChange: true,
 
                     validator: function (value) {
                         var me = this;
 
+                        if (!value) {
+                            return true;
+                        }
+
+                        if (!/^\w+$/.test(value)) {
+                            return 'Variable names can only contain letters, numbers and underscores _';
+                        }
+
                         if (!/^[A-Za-z]/.test(value[0])) {
-                            return 'First character of name must be a letter';
+                            return 'Variable names must start with a letter';
                         }
 
                         if (me.variableNames.indexOf(value) !== -1) {
-                            return 'Such name already defined';
+                            return 'This variable name is already in use';
                         }
 
                         return true;
                     },
 
                     listeners: {
-                        beforerender: function (me) {
-                            me.addCls('scalr-ui-variablefield2-editor-scopemarker-' + me.up('variablefield').currentScope);
-                        },
-                        focus: function (me) {
-                            me.variableNames = me.up('grid').getStore().collect('name', false, true);
+                        blur: function (me) {
+                            me.up('[name=extendedForm]').
+                                applyName(me.getValue(), me.isValid(), me.preventFocusOnValue);
                         },
                         specialkey: function (me, e) {
-                            if (e.getKey() === e.TAB && !me.getValue()) {
-                                return false;
+                            var value = me.getValue();
+
+                            if (e.getKey() === e.ENTER && value && me.isValid()) {
+                                me.preventFocusOnValue = true;
+                                me.blur();
                             }
                         }
                     }
-                },
+                }, {
+                    xtype: 'tbfill',
+                    flex: .01
+                }, {
+                    xtype: 'container',
+                    name: 'flags',
+                    layout: 'hbox',
 
-                isEditable: function(record) {
-                    return !!record.get('newValue');
-                }
-            }, {
-                header: 'Value',
-                name: 'value',
-                dataIndex: 'value',
-                flex: 1,
-                editor: {
-                    xtype: 'textfield',
-                    margin: '0 12 0 13',
-                    fixWidth: -25,
-                    listeners: {
-                        specialkey: function (me, e) {
-                            var grid = me.ownerCt.grid;
-                            var selection = grid.getSelectionModel().getLastSelected();
-                            var view = grid.getView();
+                    setValue: function (value) {
+                        var me = this;
 
-                            if (e.getKey() === e.TAB && selection === grid.getStore().last()) {
-                                view.getFeature(0).handler(view);
-                                return false;
-                            }
+                        // todo: comb this
+
+                        var disabled = value.disabled;
+                        var flags = me.query('buttonfield');
+
+                        if (!disabled) {
+                            Ext.Array.each(flags, function (field) {
+                                field.enable();
+                            });
                         }
-                    }
-                },
-                renderer: function (value, meta, record) {
-                    var current = record.get('current');
-                    var def = record.get('default');
-                    var locked = record.get('locked');
 
-                    if (locked.flagFinal == 1) {
-                        return '<span style="color:#999; padding:3px 12px 3px 13px;text-overflow: ellipsis;overflow:hidden;">' + def.value + '</span>';
-                    }
+                        Ext.Array.each(flags, function (field) {
+                            field.setFlag(value[field.name]);
+                        });
 
-                    var variableValue = current.value || '<span style="color:#999">' + (def.value || '') + '</span>';
-
-                    var getBackground = function (value, validator) {
-                        return new RegExp(validator).test(value) ? '#fff' : '#ffb2a3';
-                    };
-
-                    var background = current.value ?
-                        getBackground(current.value, current.validator) : getBackground(def.value, locked.validator);
-
-                    return  '<div class="x-form-text" style="background:' + background +
-                        ';padding:3px 12px 3px 13px;text-overflow: ellipsis;overflow:hidden;cursor:text" >' +
-                        variableValue + '</div>';
-                }
-
-            }, {
-                header: 'Flags',
-                width: 103,
-                sortable: false,
-                align: 'center',
-                renderer: function(value, meta, record) {
-                    var current = record.get('current'),
-                        def = record.get('default'),
-                        locked = record.get('locked'),
-                        output = '<div>',
-                        disabled = !Ext.Object.isEmpty(def) || !Ext.Object.isEmpty(locked),
-                        flagRequired = current['flagRequired'] || locked['flagRequired'],
-                        flagFinal = current['flagFinal'] == 1 || locked['flagFinal'] == 1,
-                        flagHidden = current['flagHidden'] == 1 || locked['flagHidden'] == 1;
-
-                    output += '<div class="scalr-ui-variablefield2-flag-final' + (!flagRequired ? (disabled ? ' disabled' : '') + (flagFinal ? ' pressed' : '') : ' disabled') + '" title="Final variable"></div>';
-                    output += '<div class="scalr-ui-variablefield2-flag-required' + (!flagFinal ? (disabled ? ' disabled' : '') + (flagRequired ? (' pressed scope-' + flagRequired) : '') : ' disabled') + '" title="Required variable"></div>';
-                    output += '<div class="scalr-ui-variablefield2-flag-hidden' + (disabled ? ' disabled' : '') + (flagHidden ? ' pressed' : '') + '" title="Hidden variable"></div>';
-
-                    return output + '</div>';
-                }
-            }, {
-                header: '&nbsp;',
-                width: 70,
-                sortable: false,
-                renderer: function(value, meta, record) {
-                    var current = record.get('current'),
-                        def = record.get('default'),
-                        locked = record.get('locked'),
-                        selected = record.get('selected'),
-                        output = '<div class="action' + (selected ? 'selected' : '') + '">',
-                        disabled = !Ext.Object.isEmpty(def) || !Ext.Object.isEmpty(locked);
-
-                    output += '<div class="scalr-ui-variablefield2-action-ext' + (selected ? ' pressed' : '') + '" title="Extended properties"></div>';
-                    output += '<div class="scalr-ui-variablefield2-action-delete' + (disabled ? ' disabled' : '') + '" title="Delete variable" style="margin-left: 12px"></div>';
-
-                    return output + '</div>';
-                }
-            }],
-
-            extendProperties: function (record) {
-                var me = this;
-
-                var extendedProperties = me.next();
-                extendedProperties.fireEvent('updateform', extendedProperties, record);
-
-                return me;
-            },
-
-            setFlagFinal: function (record) {
-                var me = this;
-
-                var current = record.get('current');
-                current.flagFinal = current.flagFinal == '1' ? '' : '1';
-
-                record.set('current', current);
-                record.commit();
-
-                return me;
-            },
-
-            setFlagHidden: function (record) {
-                var me = this;
-
-                var current = record.get('current');
-                current.flagHidden = current.flagHidden == '1' ? '' : '1';
-
-                record.set('current', current);
-                record.commit();
-
-                return me;
-            },
-
-            setFlagRequired: function (record) {
-                var me = this;
-
-                var current = record.get('current');
-                current.flagRequired = current.flagRequired ? '' : 'farmrole';
-
-                record.set('current', current);
-                record.commit();
-
-                return me;
-            },
-
-            setSelected: function (record, selectedRecord) {
-                var me = this;
-
-                if (selectedRecord && selectedRecord !== record) {
-                    selectedRecord.set('selected', false);
-                }
-
-                record.set('selected', !record.get('selected'));
-
-                return me;
-            },
-
-            setDeleted: function (record) {
-                var me = this;
-
-                record.set('flagDelete', 1);
-                record.commit();
-                record.store.filter();
-
-                return me;
-            },
-
-            listeners: {
-                itemclick: function (view, record, item, index, e) {
-                    var me = this;
-
-                    var def = record.get('default');
-                    var locked = record.get('locked');
-                    var disabled = !Ext.Object.isEmpty(def) || !Ext.Object.isEmpty(locked);
-                    var selectedRecord = me.getStore().findRecord('selected', true);
-                    var isRecordSelected = selectedRecord === record;
-                    var flagFinal = e.getTarget('div.scalr-ui-variablefield2-flag-final');
-                    var flagHidden = e.getTarget('div.scalr-ui-variablefield2-flag-hidden');
-                    var flagRequired = e.getTarget('div.scalr-ui-variablefield2-flag-required');
-                    var extendButton = e.getTarget('div.scalr-ui-variablefield2-action-ext');
-                    var deleteButton = e.getTarget('div.scalr-ui-variablefield2-action-delete');
-
-                    if (flagFinal && !disabled && !Ext.get(flagFinal).hasCls('disabled')) {
-                        me.setFlagFinal(record).update();
-
-                        if (selectedRecord === record) {
-                            me.extendProperties(record);
+                        if (disabled) {
+                            Ext.Array.each(flags, function (field) {
+                                field.disable();
+                            });
                         }
-                    }
 
-                    if (flagHidden && !disabled) {
-                        me.setFlagHidden(record);
-
-                        if (isRecordSelected) {
-                            me.extendProperties(record);
+                        if (me.up('[name=extendedForm]').currentScope === 'farmrole') {
+                            Ext.Array.each(flags, function (field) {
+                                if (field.name === 'flagFinal') {
+                                    return;
+                                }
+                                field.disable();
+                            });
                         }
-                    }
+                    },
 
-                    if (flagRequired && !disabled && !Ext.get(flagRequired).hasCls('disabled')) {
-                        me.setFlagRequired(record).update();
+                    items: [{
+                        xtype: 'buttonfield',
+                        ui: 'flag',
+                        cls: 'x-btn-flag-final',
+                        name: 'flagFinal',
+                        tooltip: 'Cannot be changed at a lower scope',
+                        inputValue: 1,
+                        enableToggle: true,
+                        isFormField: false,
+                        setFlag: function (value) {
+                            var me = this;
 
-                        if (isRecordSelected) {
-                            me.extendProperties(record);
+                            me.setValue(value);
+                            me.next().setDisabled(value);
+
+                            return me;
+                        },
+                        toggleHandler: function (me, state) {
+                            var extendedForm = me.up('[name=extendedForm]');
+                            extendedForm.applyFlagFinal(me.getValue() || 0);
+
+                            var currentScope = extendedForm.variable.get('current').scope;
+                            me.next().setDisabled(currentScope !== 'farmrole' ? state : true);
                         }
-                    }
+                    }, {
+                        xtype: 'buttonfield',
+                        ui: 'flag',
+                        cls: 'x-btn-flag-required',
+                        margin: '0 0 0 6',
+                        name: 'flagRequired',
+                        tooltip: 'Shall be set at a lower scope',
+                        enableToggle: true,
+                        isFormField: false,
+                        setFlag: function (value) {
+                            var me = this;
 
-                    if (extendButton) {
-                        me.setSelected(record, selectedRecord).extendProperties(record);
-                    }
+                            me.setValue(value);
+                            me.prev().setDisabled(value);
 
-                    if (deleteButton && !disabled) {
-                        me.setDeleted(record);
-
-                        if (isRecordSelected) {
-                            record.set('selected', false);
-                            me.extendProperties(record);
+                            return me;
+                        },
+                        toggleHandler: function (me, state) {
+                            me.up('[name=extendedForm]').applyFlagRequired(state);
+                            me.prev().setDisabled(state);
                         }
-                    }
-                }
-            }
+                    }, {
+                        xtype: 'buttonfield',
+                        ui: 'flag',
+                        cls: 'x-btn-flag-hide',
+                        margin: '0 0 0 6',
+                        name: 'flagHidden',
+                        tooltip: 'Do not store this variable on instances, and mask value from view at a lower scope',
+                        inputValue: 1,
+                        enableToggle: true,
+                        isFormField: false,
+                        setFlag: function (value) {
+                            var me = this;
 
-        }, {
-            xtype: 'container',
-            name: 'extendedProperties',
-            cls: 'scalr-ui-variablefield2-editor-extended-properties',
-            layout: 'anchor',
-            hidden: true,
-            hideMode: 'visibility',
-            width: 300,
-            defaults: {
-                anchor: '100%'
-            },
-            items: [{
-                xtype: 'displayfield',
-                name: 'name',
-                isFormField: false
+                            me.setValue(value);
+
+                            return me;
+                        },
+                        toggleHandler: function (me) {
+                            me.up('[name=extendedForm]').applyFlagHidden(me.getValue() || 0);
+                        }
+                    }]
+                }]
             }, {
                 xtype: 'textarea',
                 name: 'value',
+                margin: '6 0 0 0',
+                flex: 1,
+                minHeight: 100,
                 isFormField: false,
+                fieldStyle: {
+                    fontFamily: 'monospace'
+                },
                 disabled: true,
+                validator: function (value) {
+                    var me = this;
+
+                    var extendedForm = me.up('[name=extendedForm]');
+                    var record = extendedForm.variable;
+                    var defaultValue = record.get('default').value;
+                    var flagRequired = record.get('locked').flagRequired;
+
+                    if (!value && !defaultValue && flagRequired === extendedForm.currentScope) {
+                        return record.get('name') + ' is required variable';
+                    }
+
+                    return true;
+                },
                 listeners: {
+                    focus: function (me) {
+                        me.oldValue = me.getValue();
+                    },
                     blur: function (me) {
-                        var value = me.getValue();
-                        var extendedProperties = me.up();
-                        var record = extendedProperties.variable;
-                        var current = record.get('current');
-
-                        if (!Ext.isObject(current)) {
-                            current = {};
-                        }
-
-                        current['value'] = value;
-                        current['scope'] = me.up('variablefield').currentScope;
-
-                        record.set('current', current);
-                        record.commit();
-
-                        extendedProperties.fireEvent('updateform', extendedProperties, record);
+                        me.up('[name=extendedForm]').applyValue(me.getValue(), me.oldValue, me.isValid());
                     }
                 }
             }, {
                 xtype: 'combo',
-                name: 'scope',
+                name: 'requiredScope',
+                margin: '6 0 0 0',
                 fieldLabel: 'Required scope',
                 store: {
                     fields: [ 'id', 'name' ],
@@ -1486,8 +1467,47 @@ Ext.define('Scalr.ui.VariableField2', {
                         { id: 'env', name: 'Environment' },
                         { id: 'role', name: 'Role' },
                         { id: 'farm', name: 'Farm' },
-                        { id: 'farmrole', name: 'FarmRole' }
+                        { id: 'farmrole', name: 'Farm Role' }
                     ]
+                },
+                fieldSubTpl: [
+                    '<div class="{hiddenDataCls}" role="presentation"></div>',
+                        '<div id="{id}" type="{type}" ',
+                            '<tpl if="size">size="{size}" </tpl>',
+                            '<tpl if="tabIdx">tabIndex="{tabIdx}" </tpl>',
+                        'class="{fieldCls} {typeCls}" style="box-shadow: none" autocomplete="off"></div>',
+                        '<div id="{cmpId}-triggerWrap" class="{triggerWrapCls}" role="presentation">',
+                            '{triggerEl}',
+                        '<div class="{clearCls}" role="presentation"></div>',
+                    '</div>',
+                    {
+                        compiled: true,
+                        disableFormats: true
+                    }
+                ],
+                displayTpl: [
+                    '<tpl for=".">',
+                        '<img src="' + Ext.BLANK_IMAGE_URL + '" class="scalr-scope-{id}" />',
+                        '<span style="padding-left: 6px">{name}</span>',
+                    '</tpl>'
+                ],
+                listConfig: {
+                    getInnerTpl: function () {
+                        return '<img src="' + Ext.BLANK_IMAGE_URL + '" class="scalr-scope-{id}" /><span style="padding-left: 6px">{name}</span>';
+                    }
+                },
+                setRawValue: function (value) {
+                    var me = this;
+
+                    value = Ext.value(me.transformRawValue(value), '');
+                    me.rawValue = value;
+
+                    if (me.inputEl) {
+                        me.inputEl.dom.value = value;
+                        me.inputEl.dom.innerHTML = value;
+                    }
+
+                    return value;
                 },
                 valueField: 'id',
                 displayField: 'name',
@@ -1495,30 +1515,42 @@ Ext.define('Scalr.ui.VariableField2', {
                 triggerAction: 'last',
                 lastQuery: '',
                 editable: false,
-                isFormField: false
+                isFormField: false,
+                disabled: true,
+                listeners: {
+                    change: function (me, value) {
+                        me.up('[name=extendedForm]').applyRequiredScope(value);
+                    }
+                }
             }, {
                 xtype: 'textfield',
                 name: 'format',
+                margin: '6 0 0 0',
                 fieldLabel: 'Format',
                 isFormField: false,
+                disabled: true,
+                validator: function (value) {
+                    var test = value.match(/\%/g);
+
+                    if (!value || (test && test.length === 1)) {
+                        return true;
+                    }
+
+                    return 'Format isn\'t valid';
+                },
                 listeners: {
                     blur: function (me) {
-                        var value = me.getValue();
-                        var record = me.up().variable;
-                        var current = record.get('current');
-
-                        current.format = value;
-
-                        record.set('current', current);
-                        record.commit();
+                        me.up('[name=extendedForm]').applyFormat(me.getValue(), me.isValid());
                     }
                 }
             }, {
                 xtype: 'textfield',
                 name: 'validator',
+                margin: '6 0 0 0',
                 fieldLabel: 'Validation pattern',
                 isFormField: false,
-                validator: function(value) {
+                disabled: true,
+                validator: function (value) {
                     if (value) {
                         try {
                             var r = new RegExp(value);
@@ -1527,150 +1559,33 @@ Ext.define('Scalr.ui.VariableField2', {
                         } catch (e) {
                             return e.message;
                         }
-                    } else
-                        return true;
+                    }
+
+                    return true;
                 },
                 listeners: {
                     blur: function (me) {
-                        var value = me.getValue();
-                        var record = me.up().variable;
-                        var current = record.get('current');
-
-                        current.validator = value;
-
-                        record.set('current', current);
-                        record.commit();
-
-                        if (me.isValid()) {
-                            var valueField = me.up().down('[name=value]');
-                            valueField.regex = new RegExp(value);
-                            valueField.validate();
-                        }
+                        me.up('[name=extendedForm]').applyValidator(me.getValue(), me.isValid());
                     }
                 }
-            }],
-
-            setName: function (name, readOnly) {
-                var me = this;
-
-                me.down('[name=name]').
-                    setDisabled(readOnly).
-                    setValue(name);
-
-                return me;
-            },
-
-            setValue: function (disabled, currentValue, defaultValue) {
-                var me = this;
-
-                var field = me.down('[name=value]');
-                field.setDisabled(disabled);
-
-                field.setValue();
-                field.emptyText = defaultValue || ' ';
-                field.applyEmptyText();
-
-                if (currentValue) {
-                    field.setValue(currentValue);
-
-                    return me;
+            }]
+        }, {
+            xtype: 'container',
+            style: 'border-bottom: 1px solid #dfe4ea',
+            width: '100%',
+            items: [{
+                xtype: 'button',
+                name: 'delete',
+                text: 'Delete',
+                cls: 'x-btn-default-small-red -bottom',
+                margin: '12 0 24 110',
+                height: 32,
+                width: 150,
+                hidden: true,
+                handler: function (me) {
+                    me.up('variablefield').removeVariable(me.up('[name=extendedForm]').variable);
                 }
-
-
-
-                return me;
-            },
-
-            setRequiredScope: function (visible, scope, readOnly) {
-                var me = this;
-
-                var currentScope = me.currentScope;
-                var field = me.down('[name=scope]');
-
-                if (visible) {
-                    var store = field.getStore();
-                    store.clearFilter();
-
-                    if (!readOnly) {
-                        var record = store.findRecord('id', scope);
-                        var index = store.indexOf(record);
-
-                        store.filterBy(function (record) {
-                            var isScopeBelow = store.indexOf(record) > index;
-
-                            if (currentScope === 'role') {
-                                return isScopeBelow && record.get('id') !== 'farm';
-                            }
-
-                            return isScopeBelow;
-                        });
-                    }
-
-                    field.show().setDisabled(readOnly).
-                        setValue(readOnly ? scope : 'farmrole');
-
-                    return me;
-                }
-
-                field.hide();
-                return me;
-            },
-
-            setFormat: function (format, readOnly) {
-                var me = this;
-
-                me.down('[name=format]').
-                    setValue(format).
-                    setDisabled(readOnly);
-
-                return me;
-            },
-
-            setValidator: function (validator, readOnly) {
-                var me = this;
-
-                me.down('[name=validator]').
-                    setValue(validator).
-                    setDisabled(readOnly);
-
-                return me;
-            },
-
-            setVariable: function (record) {
-                var me = this;
-
-                me.variable = record;
-
-                var def = record.get('default');
-                var current = record.get('current');
-                var locked = record.get('locked');
-                var readOnly = !Ext.Object.isEmpty(def) || !Ext.Object.isEmpty(locked);
-
-                me.
-                    setName(record.get('name'), readOnly).
-                    setValue(readOnly ? parseInt(locked.flagFinal) : parseInt(current.flagFinal), current.value, def.value).
-                    setRequiredScope(readOnly ? locked.flagRequired : current.flagRequired,
-                        locked.scope || (readOnly && !current.value ? def.scope : current.scope), readOnly).
-                    setFormat(readOnly ? locked.format : current.format, readOnly).
-                    setValidator(readOnly ? locked.validator : current.validator, readOnly);
-
-                return me;
-            },
-
-            listeners: {
-                afterrender: function (me) {
-                    me.currentScope = me.prev().up('variablefield').currentScope;
-                },
-
-                updateform: function (me, record) {
-                    if (record.get('selected')) {
-                        me.setVariable(record).show();
-                        return;
-                    }
-
-                    me.hide();
-                }
-            }
+            }]
         }]
     }]
 });

@@ -74,6 +74,8 @@ class Scalr_Permissions
             case 'Scalr_Service_Ssl_Certificate':
             case 'Scalr_Db_Backup':
             case 'DBEBSVolume':
+            case 'Scalr\\Role\\Role':
+            case 'Scalr\\Model\\Entity\\Image':
                 return $this->hasAccessEnvironment($object->envId) &&
                        (method_exists($object, 'getFarmObject') ? $this->hasAccessFarm($object->getFarmObject()) : true);
 

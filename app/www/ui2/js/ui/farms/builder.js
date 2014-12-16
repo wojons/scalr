@@ -5,7 +5,7 @@ Scalr.regPage('Scalr.ui.farms.builder', function (loadParams, moduleParams) {
         var record;
 
         if (loadParams['roleId']) {
-            farmbuilder.down('#farmroles').fireEvent('addrole', loadParams['roleId']);
+            farmbuilder.down('#farmroles').fireEvent('addrole', loadParams['roleId']*1);
         }
 
         if (params['farmRoleId']) {
@@ -301,7 +301,10 @@ Scalr.regPage('Scalr.ui.farms.builder', function (loadParams, moduleParams) {
             url: '/farms/builder/xBuild',
             params: farm,
             success: function(data) {
-                Scalr.event.fireEvent('redirect', '#/farms/' + data.farmId + '/view');
+                if (data.isNewFarm)
+                    Scalr.event.fireEvent('redirect', '#/farms/view?farmId=' + data.farmId);
+                else
+                    Scalr.event.fireEvent('close');
             },
             failure: function(data) {
                 if (data['errors']) {
@@ -844,83 +847,188 @@ Scalr.regPage('Scalr.ui.farms.builder', function (loadParams, moduleParams) {
                         }
                     }]
                 }, {
-                    xtype: 'fieldset',
+                    xtype: 'variablefield',
+                    name: 'variables',
+                    itemId: 'variables',
                     title: 'Farm global variables',
-                    cls: 'x-fieldset-separator-none',
-                    hidden: false,
-                    items: [{
-                        xtype: 'variablefield',
-                        name: 'variables',
-                        itemId: 'variables',
-                        maxWidth: 1200,
-                        currentScope: 'farm',
-                        addFieldCls: 'scalr-ui-addfield-light',
-                        encodeParams: false,
-                        listeners: {
-                            addvar: function(item) {
-                                (farmRolesStore.snapshot || farmRolesStore.data).each(function() {
-                                    var variables = this.get('variables', true) || [], flag = true;
-                                    for (var i = 0; i < variables.length; i++) {
-                                        if (variables[i]['name'] == item['name']) {
-                                            flag = false;
-                                        }
-                                    }
-                                    if (flag) {
-                                        variables.push({
-                                            'default': item['current'],
-                                            locked: item['locked'],
-                                            name: item['name']
-                                        });
-                                    }
+                    margin: '0 0 0 18',
+                    maxHeight: 400,
+                    currentScope: 'farm',
+                    encodeParams: false,
+                    removeTopSeparator: true,
+                    restoreContainerScrollState: function () {
+                        var me = this;
 
-                                    this.set('variables', variables);
-                                });
-                            },
-                            editvar: function(item) {
-                                (farmRolesStore.snapshot || farmRolesStore.data).each(function() {
-                                    var variables = this.get('variables', true) || [];
+                        var container = me.up('#farm');
+                        container.el.scrollTo('top', container.scrollTop || 0);
 
-                                    for (var i = 0; i < variables.length; i++) {
-                                        if (variables[i]['name'] == item['name']) {
-                                            if (item['locked']) {
-                                                variables[i]['locked'] = item['locked'];
-                                                if (item['default'])
-                                                    variables[i]['default'] = item['default'];
-                                            }
+                        return me;
+                    },
+                    updateFarmRoleVariable: function (variable, farmCurrent, scopes, farmDefault, farmLocked) {
+                        variable.scopes = scopes;
 
-                                            if (item['current']) {
-                                                if (item['current']['flagFinal'] == 1 || item['current']['flagRequired'] || item['current']['flagHidden'] == 1 ||
-                                                    item['current']['format'] || item['current']['validator']
-                                                ) {
-                                                    variables[i]['locked'] = item['current'];
-                                                }
+                        if (!farmDefault) {
+                            if (farmCurrent.flagFinal == 1 || farmCurrent.flagRequired ||
+                                farmCurrent.flagHidden == 1 || farmCurrent.format || farmCurrent.validator) {
+                                if (farmCurrent.flagFinal == 1) {
+                                    variable.current = '';
+                                }
+                                variable.locked = farmCurrent;
+                            } else {
+                                variable.locked = '';
+                            }
 
-                                                if (item['current']['flagHidden'] == 1)
-                                                    item['current']['value'] = '******';
+                            if (farmCurrent.flagHidden == 1 && farmCurrent.value) {
+                                farmCurrent.value = '******';
+                            }
 
-                                                variables[i]['default'] = item['current'];
-                                            }
-                                        }
-                                    }
+                            variable.default = farmCurrent;
+                        } else {
+                            variable.default = (farmCurrent && farmCurrent.value) ? farmCurrent : farmDefault;
+                            variable.locked = farmLocked;
 
-                                    this.set('variables', variables);
-                                });
-                            },
-                            removevar: function(item) {
-                                (farmRolesStore.snapshot || farmRolesStore.data).each(function() {
-                                    var variables = this.get('variables', true) || [], result = [];
-
-                                    for (var i = 0; i < variables.length; i++) {
-                                        if (! (variables[i]['name'] == item['name'] && !variables[i]['current'])) {
-                                            result.push(variables[i]);
-                                        }
-                                    }
-
-                                    this.set('variables', result);
-                                });
+                            if (farmLocked.flagHidden == 1) {
+                                variable.default.value = '******';
                             }
                         }
-                    }]
+
+                        if (variable.current && variable.current.value) {
+                            variable.scopes.push('farmrole');
+                        }
+                    },
+                    listeners: {
+                        load: function (me, data) {
+                            if (data.length) {
+                                var farmVariables = [];
+
+                                Ext.Array.each(data, function (variable) {
+                                    if (!variable['default']) {
+                                        var current = Ext.clone(variable.current);
+                                        var locked = '';
+
+                                        if (current.flagFinal == 1 || current.flagRequired ||
+                                            current.flagHidden == 1 || current.format || current.validator) {
+                                            if (current.flagHidden == 1) {
+                                                current.value = '******';
+                                            }
+                                            locked = current;
+                                        }
+
+                                        farmVariables.push({
+                                            name: variable.name,
+                                            'default': current,
+                                            locked: locked,
+                                            scopes: Ext.Array.clone(variable.scopes)
+                                        });
+                                    }
+                                });
+
+                                me.farmVariables = farmVariables;
+                            }
+                        },
+                        boxready: function (me) {
+                            var container = me.up('#farm');
+                            container.el.on('scroll', function () {
+                                container.scrollTop = container.el.getScroll().top;
+                            }, me);
+                        },
+                        select: function (me) {
+                            me.restoreContainerScrollState();
+                        },
+                        datachanged: function (me, record) {
+                            me.restoreContainerScrollState();
+
+                            var name = record.get('name');
+                            var current = Ext.clone(record.get('current'));
+                            var def = record.get('default');
+                            var locked = Ext.clone(record.get('locked'));
+                            var scopes = Ext.Array.clone(record.get('scopes'));
+
+                            if (!def) {
+                                Ext.Array.each(me.farmVariables, function (variable) {
+                                    if (variable.name === name) {
+                                        me.updateFarmRoleVariable(variable, current, scopes);
+                                        return false;
+                                    }
+                                });
+                            }
+
+                            (farmRolesStore.snapshot || farmRolesStore.data).each(function (role) {
+                                var variables = role.get('variables', true) || [];
+
+                                Ext.Array.each(variables, function (variable) {
+                                    if (variable.name === name) {
+                                        me.updateFarmRoleVariable(variable, current, scopes, def, locked);
+                                    }
+                                });
+
+                                role.set('variables', variables);
+                            });
+                        },
+                        addvariable: function (me, record) {
+                            var name = record.get('name');
+                            var current = Ext.clone(record.get('current'));
+                            var scopes = Ext.Array.clone(record.get('scopes'));
+                            var newVariable = {
+                                name: name,
+                                'default': current,
+                                scopes: scopes
+                            };
+
+                            me.farmVariables.push(newVariable);
+
+                            (farmRolesStore.snapshot || farmRolesStore.data).each(function (role) {
+                                var variables = role.get('variables', true) || [];
+                                var isVariableExist = false;
+
+                                Ext.Array.each(variables, function (variable) {
+                                    if (variable.name === name) {
+                                        isVariableExist = true;
+                                    }
+                                });
+
+                                if (!isVariableExist) {
+                                    variables.push(newVariable);
+                                }
+
+                                role.set('variables', variables);
+                            });
+                        },
+                        removevariable: function (me, record) {
+                            me.restoreContainerScrollState();
+
+                            var name = record.get('name');
+
+                            Ext.Array.each(me.farmVariables, function (variable, index, farmVariables) {
+                                if (variable.name === name) {
+                                    farmVariables.splice(index, 1);
+
+                                    return false;
+                                }
+                            });
+
+                            (farmRolesStore.snapshot || farmRolesStore.data).each(function (role) {
+                                var variables = role.get('variables', true) || [];
+                                var result = [];
+
+                                Ext.Array.each(variables, function (variable) {
+                                    var current = variable.current;
+
+                                    if (variable.name !== name || (current && current.value)) {
+                                        if (current) {
+                                            variable.locked = '';
+                                            variable.default = '';
+                                            variable.scopes.shift();
+                                        }
+
+                                        result.push(variable);
+                                    }
+                                });
+
+                                role.set('variables', result);
+                            });
+                        }
+                    }
                 }],
                 listeners: {
                     boxready: function() {
@@ -989,18 +1097,13 @@ Scalr.regPage('Scalr.ui.farms.builder', function (loadParams, moduleParams) {
                         if (preloadVpcIdList) {
                             form.down('[name="vpc_id"]').store.load();
                         }
-                        reconfigurePage(loadParams);
+                        form.on('activate', function(){reconfigurePage(loadParams)}, farmbuilder, {single:true});
                     },
                     activate: function() {
                         farmbuilder.down('#farmroles').toggleFarmButton(true);
                         farmbuilder.updateTitle();
                     },
                     deactivate: function() {
-                        // automatically add variable when tab hided
-                        var el = this.down('#variables').down('variablevaluefield:last');
-                        if (el.down('[name="newValue"]').getValue() == 'true' && el.down('[name="name"]').getValue())
-                            el.getPlugin('addfield').run();
-
                         farmbuilder.down('#farmroles').toggleFarmButton(false);
                     }
                 }
@@ -1148,8 +1251,7 @@ Ext.define('Scalr.ui.FarmRoleModel', {
         'os_version',
         'farm_role_id',
         'cloud_location',
-        'arch',
-        'image_id',
+        'image',
         'name',
         'alias',
         'group',
@@ -1163,7 +1265,6 @@ Ext.define('Scalr.ui.FarmRoleModel', {
         'scripting_params',
         'storages',
         'config_presets',
-        'tags',
         'variables',
         'running_servers',
         'suspended_servers',
@@ -1240,19 +1341,23 @@ Ext.define('Scalr.ui.FarmRoleModel', {
     getInstanceType: function(availableInstanceTypes, limits) {
         var me = this,
             settings = me.get('settings', true),
-            tagsString = (me.get('tags', true) || []).join(' '),
+            typeString = me.get('image', true)['type'] || '',
+            isEbs = typeString.indexOf('ebs') !== -1,
+            isHvm = typeString.indexOf('hvm') !== -1,
             behaviors = me.get('behaviors', true),
             platform = me.get('platform'),
             allowedTypes,
             instanceType = settings[this.getInstanceTypeParamName()],
             defaultInstanceType,
             defaultInstanceTypeAllowed,
+            firstAllowedInstanceType,
+            allowedInstanceTypeCount = 0,
             instanceTypes = [];
 
         behaviors = Ext.isArray(behaviors) ? behaviors : behaviors.split(',');
         if (platform === 'ec2') {
-            if (me.get('arch') === 'i386') {
-                if ((tagsString.indexOf('ec2.ebs') != -1 || instanceType == 't1.micro') && !Ext.Array.contains(behaviors, 'cf_cloud_controller')) {
+            if (me.get('image', true)['architecture'] === 'i386') {
+                if ((isEbs || instanceType == 't1.micro') && !Ext.Array.contains(behaviors, 'cf_cloud_controller')) {
                     allowedTypes = ['t1.micro', 'm1.small', 'm1.medium', 'c1.medium'];
                 } else {
                     allowedTypes = ['m1.small', 'm1.medium', 'c1.medium'];
@@ -1261,8 +1366,8 @@ Ext.define('Scalr.ui.FarmRoleModel', {
             } else {
                 defaultInstanceType = 'm1.small';
 
-                if (tagsString.indexOf('ec2.ebs') != -1 || instanceType == 't1.micro') {
-                    if (tagsString.indexOf('ec2.hvm') != -1 && me.get('os') != '2008Server' && me.get('os') != '2008ServerR2' && me.get('os_family') != 'windows') {
+                if (isEbs || instanceType == 't1.micro') {
+                    if (isHvm && me.get('os') != '2008Server' && me.get('os') != '2008ServerR2' && me.get('os_family') != 'windows') {
                         allowedTypes = [
                             't2.micro', 't2.small', 't2.medium',
                             'cc1.4xlarge', 'cc2.8xlarge', 'cg1.4xlarge', 'hi1.4xlarge',
@@ -1290,7 +1395,7 @@ Ext.define('Scalr.ui.FarmRoleModel', {
                         defaultInstanceType = 'm1.small';
                     }
                 } else {
-                    if (tagsString.indexOf('ec2.hvm') != -1) {
+                    if (isHvm) {
                         allowedTypes = [
                             't2.micro', 't2.small', 't2.medium',
                             'm1.small', 'm1.medium', 'm1.large', 'm1.xlarge',
@@ -1330,37 +1435,45 @@ Ext.define('Scalr.ui.FarmRoleModel', {
         }
 
         Ext.each(availableInstanceTypes, function(item) {
-            var allowed = true;
+            var allowed = true, allowedByGovernance = true, clonedItem = Ext.clone(item);
             if (instanceType !== item.id) {
                 if (allowedTypes !== undefined && !Ext.Array.contains(allowedTypes, item.id)) {
                     allowed = false;
                 }
                 if (allowed && limits && limits['value'] !== undefined && !Ext.Array.contains(limits['value'], item.id)) {
                     allowed = false;
+                    allowedByGovernance = false;
                 }
             }
+            if (allowedByGovernance) {
+                instanceTypes.push(clonedItem);
+            }
             if (allowed) {
+                firstAllowedInstanceType = firstAllowedInstanceType || item.id;
+                allowedInstanceTypeCount++;
                 if (defaultInstanceType == item.id) {
                     defaultInstanceTypeAllowed = true;
                 }
-                instanceTypes.push(item);
                 if (limits && !instanceType && limits['default'] == item.id ) {
                     instanceType = limits['default'];
                 }
+            } else {
+                clonedItem.disabled = true;
             }
         });
 
         if (!instanceType) {
             if (defaultInstanceType && defaultInstanceTypeAllowed) {
                 instanceType = defaultInstanceType;
-            } else if (instanceTypes.length) {
-                instanceType = instanceTypes[0].id;
+            } else {
+                instanceType = firstAllowedInstanceType;
             }
         }
         
         return {
             value: instanceType,
-            list: instanceTypes
+            list: instanceTypes,
+            allowedInstanceTypeCount: allowedInstanceTypeCount
         };
     },
 
@@ -1370,7 +1483,7 @@ Ext.define('Scalr.ui.FarmRoleModel', {
             cloudLocation = cloudLocation.replace('x-scalr-custom=', '').split(':');
         } else {
             if (Ext.isEmpty(cloudLocation)) {
-                cloudLocation = 'us-central1-a';
+                cloudLocation = [];
             }
             cloudLocation = [cloudLocation];
         }
@@ -1392,11 +1505,11 @@ Ext.define('Scalr.ui.FarmRoleModel', {
     isEc2EbsOptimizedFlagVisible: function(instType) {
         var me = this,
             result = false,
-            tagsString = (me.get('tags', true) || []).join(' ');
+            typeString = me.get('image', true)['type'] || '';
         if (instType === undefined) {
             instType = me.get('settings', true)['aws.instance_type'];
         }
-        if (tagsString.indexOf('ec2.ebs') !== -1) {
+        if (typeString.indexOf('ebs') !== -1) {
             result = Ext.Array.contains([
             'c1.xlarge', 'c3.xlarge', 'c3.2xlarge', 'c3.4xlarge',
             'r3.large', 'r3.xlarge', 'r3.2xlarge', 'r3.4xlarge', 'r3.8xlarge',
@@ -1459,7 +1572,7 @@ Ext.define('Scalr.ui.FarmRoleModel', {
             engine = this.isMySql() ? 'lvm' : 'eph';
         } else if (platform === 'gce') {
             engine = 'gce_persistent';
-        } else if (platform == 'cloudstack' || platform == 'idcf' || platform == 'ucloud') {
+        } else if (platform == 'cloudstack' || platform == 'idcf') {
             engine = 'csvol';
         }
         return engine;
@@ -1491,7 +1604,7 @@ Ext.define('Scalr.ui.FarmRoleModel', {
             engine = 'ebs';
         } else if (platform === 'rackspace') {
             engine = 'eph';
-        } else if (platform === 'cloudstack' || platform === 'idcf' || platform === 'ucloud') {
+        } else if (platform === 'cloudstack' || platform === 'idcf') {
             engine = 'csvol';
         }
 
@@ -1629,7 +1742,7 @@ Ext.define('Scalr.ui.FarmRoleModel', {
     getAvailableStorageFs: function(featureMFS) {
         var list,
             osFamily = this.get('os_family'),
-            arch = this.get('arch'),
+            arch = this.get('image', true)['architecture'],
             osVersion = this.get('os_generation'),
             extraFs = (osFamily === 'centos' && arch === 'x86_64') ||
                       (osFamily === 'ubuntu' && (osVersion == '10.04' || osVersion == '12.04' || osVersion == '14.04')),
@@ -1713,33 +1826,38 @@ Ext.define('Scalr.ui.FarmRoleModel', {
             },
             function(data, status) {
                 var roleChefEnabled = Ext.isObject(data['chef']) && data['chef']['chef.bootstrap'] == 1,
-                    settings;
+                    farmRoleChefSettings = {};
                 if (status) {
-                    settings = record.get('settings', true);
+                    Ext.Object.each(record.get('settings', true) || {}, function(key, value){
+                        if (key.indexOf('chef.') === 0) {
+                            farmRoleChefSettings[key] = value;
+                        }
+                    });
+                    
                     if (roleChefEnabled) {
                         Ext.apply(chefSettings, data['chef']);
+                        if (farmRoleChefSettings['chef.attributes']) {
+                            chefSettings['chef.attributes'] = farmRoleChefSettings['chef.attributes'];
+                        }
                     } else {
-                        Ext.Object.each(settings || {}, function(key, value){
-                            if (key.indexOf('chef.') === 0) {
-                                chefSettings[key] = value;
-                            }
-                        });
-                    }
-                    if (roleChefEnabled && settings['chef.attributes']) {
-                        chefSettings['chef.attributes'] = settings['chef.attributes'];
+                        Ext.apply(chefSettings, farmRoleChefSettings);
                     }
                 }
-                cb({chefSettings: chefSettings, roleChefEnabled: roleChefEnabled}, status);
+                cb({
+                    chefSettings: chefSettings,
+                    roleChefSettings: roleChefEnabled ? data['chef'] : null,
+                    farmRoleChefSettings: farmRoleChefSettings
+                }, status);
             }
         );
 
     },
 
-    loadEBSEncryptionSupport: function(cb) {
+    loadEBSEncryptionSupport: function(cb, instType) {
         var platform = this.get('platform'),
             cloudLocation = this.get('cloud_location'),
-            instType = this.get('settings', true)['aws.instance_type'],
             encryption = false;
+        instType = instType || this.get('settings', true)['aws.instance_type']
         Scalr.loadInstanceTypes(platform, cloudLocation, function(data, status){
             Ext.each(data, function(i){
                 if (i.id === instType) {
@@ -1763,33 +1881,50 @@ Ext.define('Scalr.ui.FormInstanceTypeField', {
     fieldLabel: 'Instance type',
     anyMatch: true,
     autoSearch: false,
+    selectOnFocus: true,
     icons: {
         governance: true
     },
+    governanceTooltip: 'The account owner has limited which instance types can be used in this Environment',
     store: {
-        fields: [ 'id', 'name', 'note', 'ram', 'type', 'vcpus', 'disk', 'ebsencryption' ],
-        proxy: 'object'
+        fields: [ 'id', 'name', 'note', 'ram', 'type', 'vcpus', 'disk', 'ebsencryption', 'disabled' ],
+        proxy: 'object',
+        sorters: {
+            property: 'disabled'
+        }
     },
     valueField: 'id',
     displayField: 'name',
     listConfig: {
-        //emptyText: 'No instance types found.',
+        emptyText: 'No instance type matching query',
+        emptyTextTpl: new Ext.XTemplate(
+            '<div style="margin:8px 8px 0">' +
+                '<b>No instance type matching query</b>' +
+                '<div style="line-height:24px">Instance types unavailable in <i>{cloudLocation}</i><tpl if="limits"> or restricted by Governance</tpl> are not listed</div>' +
+            '</div>'
+        ),
         cls: 'x-boundlist-alt',
         tpl:
-            '<tpl for="."><div class="x-boundlist-item" style="height: auto; width: auto">' +
-                '<div style="font-weight: bold">{name}</div>' +
+            '<tpl for="."><div class="x-boundlist-item" style="white-space:nowrap;height: auto; width: auto;<tpl if="disabled">color:#999</tpl>">' +
+                '<div><b>{name}</b> &nbsp;<tpl if="disabled"><span style="font-size:12px;font-style:italic">(Not compatible with the selected image)</span></tpl></div>' +
                 '<div style="line-height: 26px;white-space:nowrap;">{[this.instanceTypeInfo(values)]}</div>' +
             '</div></tpl>'
+    },
+    updateListEmptyText: function(data) {
+        var picker = this.getPicker();
+        if (picker) {
+            picker.emptyText = picker.emptyTextTpl.apply(data);
+        }
     },
     initComponent: function() {
         this.callParent(arguments);
         this.on('specialkey', function(comp, e){
-            if(e.getKey() === e.ESC){
+            if(!comp.readOnly && e.getKey() === e.ESC){
                 comp.reset();
             }
         });
         this.on('blur', function(comp){
-            if (!comp.findRecordByValue(comp.getValue())) {
+            if (!comp.readOnly && !comp.findRecordByValue(comp.getValue())) {
                 comp.reset();
             }
         });
@@ -1801,6 +1936,11 @@ Ext.define('Scalr.ui.FormInstanceTypeField', {
         this.on('change', function(comp){
             if (comp.findRecordByValue(comp.getValue())) {
                 comp.resetOriginalValue();
+            }
+        });
+        this.on('beforeselect', function(comp, record){
+            if (record.get('disabled')) {
+                return false;
             }
         });
     }

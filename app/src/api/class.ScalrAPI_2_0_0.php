@@ -18,6 +18,9 @@ class ScalrAPI_2_0_0 extends ScalrAPICore
     {
         $this->restrictAccess(Acl::RESOURCE_DNS_ZONES);
 
+        if (!Scalr::config('scalr.dns.global.enabled'))
+            throw new Exception("DNS functionality is not enabled. Please contact your Scalr administrator.");
+        
         $response = $this->CreateInitialResponse();
         $response->DNSZoneSet = new stdClass();
         $response->DNSZoneSet->Item = array();
@@ -53,6 +56,9 @@ class ScalrAPI_2_0_0 extends ScalrAPICore
     {
         $this->restrictAccess(Acl::RESOURCE_DNS_ZONES);
 
+        if (!Scalr::config('scalr.dns.global.enabled'))
+            throw new Exception("DNS functionality is not enabled. Please contact your Scalr administrator.");
+        
         $zoneinfo = $this->DB->GetRow("SELECT id, env_id FROM dns_zones WHERE zone_name=? LIMIT 1", array($ZoneName));
 
         if (!$zoneinfo || $zoneinfo['env_id'] != $this->Environment->id)
@@ -98,6 +104,9 @@ class ScalrAPI_2_0_0 extends ScalrAPICore
     {
         $this->restrictAccess(Acl::RESOURCE_DNS_ZONES);
 
+        if (!Scalr::config('scalr.dns.global.enabled'))
+            throw new Exception("DNS functionality is not enabled. Please contact your Scalr administrator.");
+        
         $zoneinfo = $this->DB->GetRow("SELECT id, env_id, allow_manage_system_records FROM dns_zones WHERE zone_name=? LIMIT 1", array($ZoneName));
         if (!$zoneinfo || $zoneinfo['env_id'] != $this->Environment->id)
             throw new Exception (sprintf("Zone '%s' not found in database", $ZoneName));
@@ -122,6 +131,9 @@ class ScalrAPI_2_0_0 extends ScalrAPICore
     {
         $this->restrictAccess(Acl::RESOURCE_DNS_ZONES);
 
+        if (!Scalr::config('scalr.dns.global.enabled'))
+            throw new Exception("DNS functionality is not enabled. Please contact your Scalr administrator.");
+        
         $zoneinfo = $this->DB->GetRow("SELECT id, env_id FROM dns_zones WHERE zone_name=? LIMIT 1", array($ZoneName));
         if (!$zoneinfo || $zoneinfo['env_id'] != $this->Environment->id)
             throw new Exception (sprintf("Zone '%s' not found in database", $ZoneName));
@@ -154,6 +166,9 @@ class ScalrAPI_2_0_0 extends ScalrAPICore
     {
         $this->restrictAccess(Acl::RESOURCE_DNS_ZONES);
 
+        if (!Scalr::config('scalr.dns.global.enabled'))
+            throw new Exception("DNS functionality is not enabled. Please contact your Scalr administrator.");
+        
         $DomainName = trim($DomainName);
 
         $Validator = new Scalr_Validator();
@@ -205,14 +220,14 @@ class ScalrAPI_2_0_0 extends ScalrAPICore
 
         $def_records = $this->DB->GetAll("SELECT * FROM default_records WHERE clientid=?", array($this->user->getAccountId()));
         foreach ($def_records as $record) {
-            $record["name"] = str_replace("%hostname%", "{$DomainName}.", $record["name"]);
-            $record["value"] = str_replace("%hostname%", "{$DomainName}.", $record["value"]);
+            $record["name"] = str_replace(array("%hostname%", "%zonename%"), array("{$DomainName}.", "{$DomainName}."), $record["name"]);
+            $record["value"] = str_replace(array("%hostname%", "%zonename%"), array("{$DomainName}.", "{$DomainName}."), $record["value"]);
             $records[] = $record;
         }
 
-        $nss = $this->DB->GetAll("SELECT * FROM nameservers WHERE isbackup='0'");
-        foreach ($nss as $ns)
-            $records[] = array("id" => "c".rand(10000, 999999), "type" => "NS", "ttl" => 14400, "value" => "{$ns["host"]}.", "name" => "{$DomainName}.", "issystem" => 0);
+        $nameservers = Scalr::config('scalr.dns.global.nameservers');
+        foreach ($nameservers as $ns)
+            $records[] = array("id" => "c".rand(10000, 999999), "type" => "NS", "ttl" => 14400, "value" => "{$ns}.", "name" => "{$DomainName}.", "issystem" => 0);
 
         $DBDNSZone->setRecords($records);
 
@@ -426,6 +441,7 @@ class ScalrAPI_2_0_0 extends ScalrAPICore
 
                 $iitm->{"IsDbMaster"} = ($DBServer->GetProperty(SERVER_PROPERTIES::DB_MYSQL_MASTER) == 1 || $DBServer->GetProperty(Scalr_Db_Msr::REPLICATION_MASTER) == 1) ? '1' : '0';
 
+                /*
                 $info = PlatformFactory::NewPlatform($DBServer->platform)->GetServerExtendedInformation($DBServer);
                 $iitm->{"PlatformProperties"} = new stdClass();
                 if (is_array($info) && count($info)) {
@@ -439,6 +455,7 @@ class ScalrAPI_2_0_0 extends ScalrAPICore
                         $iitm->{"PlatformProperties"}->{$name} = $value;
                     }
                 }
+                */
 
                 if ($DBFarmRole->Platform == SERVER_PLATFORMS::EC2) {
                     $iitm->{"PlatformProperties"} = new stdClass();
@@ -466,7 +483,7 @@ class ScalrAPI_2_0_0 extends ScalrAPICore
 
     public function EventsList($FarmID, $StartFrom = 0, $RecordsLimit = 20)
     {
-        $this->restrictAccess(Acl::RESOURCE_FARMS_EVENTS_AND_NOTIFICATIONS);
+        $this->restrictAccess(Acl::RESOURCE_FARMS);
 
         $stmt = "SELECT id FROM farms WHERE id=? AND env_id=?";
         $args = array($FarmID, $this->Environment->id);
@@ -968,7 +985,7 @@ class ScalrAPI_2_0_0 extends ScalrAPICore
 
         //Check is role already synchronizing...
         $chk = $this->DB->GetOne("SELECT server_id FROM bundle_tasks WHERE prototype_role_id=? AND status NOT IN ('success', 'failed') LIMIT 1", array(
-            $DBServer->roleId
+            $DBServer->GetFarmRoleObject()->RoleID
         ));
         if ($chk && $chk != $DBServer->serverId) {
             try {
@@ -988,7 +1005,7 @@ class ScalrAPI_2_0_0 extends ScalrAPICore
         }
 
         if (!$DBRole) {
-            $ServerSnapshotCreateInfo = new ServerSnapshotCreateInfo($DBServer, $RoleName, SERVER_REPLACEMENT_TYPE::NO_REPLACE, false, 'Bundled via API');
+            $ServerSnapshotCreateInfo = new ServerSnapshotCreateInfo($DBServer, $RoleName, SERVER_REPLACEMENT_TYPE::NO_REPLACE, BundleTask::BUNDLETASK_OBJECT_ROLE, 'Bundled via API');
             $BundleTask = BundleTask::Create($ServerSnapshotCreateInfo);
 
             $BundleTask->createdById = $this->user->id;

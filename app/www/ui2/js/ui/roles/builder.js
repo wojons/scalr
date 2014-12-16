@@ -6,11 +6,11 @@ Scalr.regPage('Scalr.ui.roles.builder', function (loadParams, moduleParams) {
 		result = {},
 		behaviors,
 		buttons = {
-			platforms: [], 
-			behaviors: [], 
+			platforms: [],
+			behaviors: [],
 			addons: []
 		};
-	
+
 	if (Ext.Object.getSize(platforms) == 0) {
 		Scalr.message.Error('The Role Builder does not support your enabled clouds. <br/>Please <a href="#/roles/import">Create a role from Non-Scalr server</a> instead.');
 		//Scalr.event.fireEvent('redirect', '#/roles/import', true);
@@ -33,7 +33,7 @@ Scalr.regPage('Scalr.ui.roles.builder', function (loadParams, moduleParams) {
 		//{name: 'mysqlproxy', addon: true, disable: {os: ['centos', 'oel', 'rhel']}},//{family: 'ubuntu', version: ['10.04']}
 		{name: 'chef', addon: true, button: {pressed: true, toggle: Ext.emptyFn}}
 	];
-	
+
 	//behaviors buttons
 	for (var i=0, len=behaviors.length; i<len; i++) {
 		var button = {
@@ -46,7 +46,7 @@ Scalr.regPage('Scalr.ui.roles.builder', function (loadParams, moduleParams) {
 		}
 		buttons[behaviors[i].addon ? 'addons' : 'behaviors'].push(button);
 	}
-	
+
 	//platform buttons
 	for (var i in platforms) {
 		buttons['platforms'].push({
@@ -55,7 +55,7 @@ Scalr.regPage('Scalr.ui.roles.builder', function (loadParams, moduleParams) {
 			value: i
 		});
 	}
-	
+
 	var toggleBehaviors = function(enable) {
 		panel.down('#settings-behaviors').items.each(function(){
 			this[enable?'enable':'disable']();
@@ -68,7 +68,7 @@ Scalr.regPage('Scalr.ui.roles.builder', function (loadParams, moduleParams) {
             }
 		});
 	}
-	
+
 	var onSelectBehavior = function() {
 		if (this.pressed) {
 			result.behaviors.push(this.behavior);
@@ -78,7 +78,7 @@ Scalr.regPage('Scalr.ui.roles.builder', function (loadParams, moduleParams) {
 		panel.refreshBehaviors();
         refreshSoftwareWarning();
 	};
-	
+
 	var onSelectAddon = function() {
 		if (this.pressed) {
 			result.addons.push(this.behavior);
@@ -90,7 +90,7 @@ Scalr.regPage('Scalr.ui.roles.builder', function (loadParams, moduleParams) {
 		}
         refreshSoftwareWarning();
 	};
-    
+
     var refreshSoftwareWarning = function() {
         panel.down('#softwarewarning').setVisible(result.behaviors.length > 0 || result.addons.length > 1);
     };
@@ -108,7 +108,7 @@ Scalr.regPage('Scalr.ui.roles.builder', function (loadParams, moduleParams) {
             ptype: 'localcachedrequest',
             crscope: 'rolebuilder'
         },
-		
+
 		items:[{
 			xtype: 'container',
             cls: 'x-panel-column-left',
@@ -153,7 +153,7 @@ Scalr.regPage('Scalr.ui.roles.builder', function (loadParams, moduleParams) {
 					}
 				},{
 					xtype: 'combo',
-					margin: '0 0 10 0',
+					margin: '0 0 6 0',
 					itemId: 'cloudLocation',
 					editable: false,
 					valueField: 'id',
@@ -162,6 +162,9 @@ Scalr.regPage('Scalr.ui.roles.builder', function (loadParams, moduleParams) {
 					store: {
 						fields: ['id', 'name']
 					},
+                    icons: {
+                        governance: true
+                    },
 					listeners: {
 						change: function(comp, value) {
                             if (value) {
@@ -171,9 +174,162 @@ Scalr.regPage('Scalr.ui.roles.builder', function (loadParams, moduleParams) {
                                     locations.push(rec.get('id'));
                                 });
                                 panel.down('#locationmap').selectLocation(result.platform, result.cloudLocation, locations, 'world');
+                                if (result.platform === 'ec2' && loadParams['vpc'] == 1) {
+                                    var vpcIdField = comp.next('#vpcId'),
+                                        vpcIdFieldProxy = vpcIdField.store.getProxy(),
+                                        disableAddNew = false;
+
+                                    vpcIdField.reset();
+                                    vpcIdField.getPlugin('comboaddnew').postUrl = '?cloudLocation=' + value;
+                                    vpcIdFieldProxy.params = {cloudLocation: value};
+                                    delete vpcIdFieldProxy.filterFn;
+                                    if (moduleParams['vpcLimits'] && moduleParams['vpcLimits']['value'] == 1 && moduleParams['vpcLimits']['regions'] && moduleParams['vpcLimits']['regions'][value]) {
+                                        if (moduleParams['vpcLimits']['regions'][value]['ids'] && moduleParams['vpcLimits']['regions'][value]['ids'].length > 0) {
+                                            vpcIdFieldProxy.filterFn = function(record) {
+                                                return Ext.Array.contains(moduleParams['vpcLimits']['regions'][value]['ids'], record.get('id'));
+                                            };
+                                            //vpcIdField.setValue(moduleParams['vpcLimits']['regions'][value]['ids'][0]);
+                                            disableAddNew = true;
+                                        }
+                                    }
+                                    vpcIdField.getPlugin('comboaddnew').setDisabled(disableAddNew);
+                                }
                             }
 						}
 					}
+                },{
+                    xtype: 'combo',
+                    flex: 1,
+                    name: 'vpcId',
+                    itemId: 'vpcId',
+                    emptyText: 'Do not use VPC',
+                    editable: false,
+
+                    queryCaching: false,
+                    clearDataBeforeQuery: true,
+                    store: {
+                        fields: [ 'id', 'name' ],
+                        proxy: {
+                            type: 'cachedrequest',
+                            crscope: 'rolebuilder',
+                            url: '/platforms/ec2/xGetVpcList',
+                            root: 'vpc',
+                            prependData: [{id: '', name: 'Do not use VPC'}]
+                        }
+                    },
+                    valueField: 'id',
+                    displayField: 'name',
+                    icons: {
+                        governance: true
+                    },
+                    plugins: [{
+                        ptype: 'comboaddnew',
+                        pluginId: 'comboaddnew',
+                        url: '/tools/aws/vpc/create',
+                        applyNewValue: false
+                    }],
+                    hidden: loadParams['vpc'] != 1,
+                    listeners: {
+                        addnew: function(item) {
+                            Scalr.CachedRequestManager.get('rolebuilder').setExpired({
+                                url: '/platforms/ec2/xGetVpcList',
+                                params: {
+                                    cloudLocation: this.prev('combo').getValue()
+                                }
+                            });
+                        },
+                        change: function(field, value) {
+                            if (loadParams['vpc'] == 1) {
+                                var vpcSubnetField = field.next('#vpcSubnetId');
+                                vpcSubnetField.reset();
+                                vpcSubnetField.setVisible(!!value);
+                                vpcSubnetField.store.proxy.params = {
+                                    cloudLocation: result.cloudLocation,
+                                    vpcId: value,
+                                    extended: 1
+                                };
+                                vpcSubnetField.getPlugin('comboaddnew').postUrl = '?cloudLocation=' + result.cloudLocation + '&vpcId=' + value;
+                                vpcSubnetField.getPlugin('comboaddnew').setDisabled(moduleParams['vpcLimits'] && moduleParams['vpcLimits']['value'] == 1 && moduleParams['vpcLimits']['ids'] && Ext.isArray(moduleParams['vpcLimits']['ids'][value]));
+
+                            }
+                        }
+                    }
+                },{
+                    xtype: 'combo',
+                    name: 'vpcSubnetId',
+                    itemId: 'vpcSubnetId',
+                    displayField: 'description',
+                    valueField: 'id',
+                    emptyText: 'Select VPC subnet',
+                    queryCaching: false,
+                    clearDataBeforeQuery: true,
+                    allowBlank: false,
+                    minChars: 0,
+                    autoSearch: false,
+                    queryDelay: 10,
+                    hidden: true,
+                    forceSelection: true,
+                    icons: {
+                        governance: true
+                    },
+                    filterFn: function(record) {
+                        var res = false,
+                            limits = moduleParams['vpcLimits'],
+                            vpcId = this.store.proxy.params.vpcId,
+                            fieldLimits, filterType;
+
+                        var type = record.get('type');
+                        if (limits && limits['ids'] && limits['ids'][vpcId]) {
+                            fieldLimits = limits['ids'][vpcId];
+                            filterType = Ext.isArray(fieldLimits) ? 'subnets' : 'iaccess';
+                            if (filterType === 'subnets' && Ext.Array.contains(fieldLimits, record.get('id'))) {
+                                res = true;
+                            } else if (filterType === 'iaccess') {
+                                res = type === 'private' && fieldLimits === 'outbound-only' || type === 'public' && fieldLimits === 'full';
+                            }
+                        } else {
+                            res = true;
+                        }
+                        return res;
+                    },
+                    store: {
+                        fields: ['id', 'name', 'description', 'ips_left', 'type', 'availability_zone', 'cidr'],
+                        proxy: {
+                            type: 'cachedrequest',
+                            crscope: 'rolebuilder',
+                            url: '/tools/aws/vpc/xListSubnets',
+                            filterFields: ['description']
+                        }
+                    },
+                    listConfig: {
+                        style: 'white-space:nowrap',
+                        cls: 'x-boundlist-alt',
+                        tpl:
+                            '<tpl for="."><div class="x-boundlist-item" style="height: auto; width: auto;line-height:20px">' +
+                                '<div><span style="font-weight: bold">{[values.name || \'<i>No name</i>\' ]} - {id}</span> <span style="font-style: italic;font-size:90%">(Type: <b>{type:capitalize}</b>)</span></div>' +
+                                '<div>{cidr} in {availability_zone} [IPs left: {ips_left}]</div>' +
+                            '</div></tpl>'
+                    },
+                    listeners: {
+                        afterrender: function() {
+                            Ext.apply(this.store.getProxy(), {
+                                filterFn: this.filterFn,
+                                filterFnScope: this
+                            });
+                        },
+                        addnew: function(item) {
+                            Scalr.CachedRequestManager.get('rolebuilder').setExpired({
+                                url: '/tools/aws/vpc/xListSubnets',
+                                params: this.store.proxy.params
+                            });
+                        }
+                    },
+                    plugins: [{
+                        ptype: 'comboaddnew',
+                        pluginId: 'comboaddnew',
+                        url: '/tools/aws/vpc/createSubnet',
+                        applyNewValue: false
+                    }],
 				},{
 					xtype: 'buttongroupfield',
 					itemId: 'architecture',
@@ -269,7 +425,7 @@ Scalr.regPage('Scalr.ui.roles.builder', function (loadParams, moduleParams) {
                 },
                 items: [{
                     xtype: 'textfield',
-                    fieldLabel: 'Role name',
+                    fieldLabel: 'Name',
                     maxWidth: 536,
                     itemId: 'rolename',
                     submitValue: false,
@@ -277,14 +433,8 @@ Scalr.regPage('Scalr.ui.roles.builder', function (loadParams, moduleParams) {
                     vtype: 'rolename'
                 },{
                     xtype: 'checkbox',
-                    boxLabel: 'Create only Image for future use and do not create role',
-                    itemId: 'roleimage',
-                    hidden: !Scalr.flags['betaMode'],
-                    listeners: {
-                        change: function(field, value) {
-                            this.prev().setValue().setDisabled(value);
-                        }
-                    }
+                    boxLabel: 'Only create an Image, do not create a Role using that Image',
+                    itemId: 'roleimage'
                 },{
                     xtype: 'label',
                     text: 'Software:'
@@ -353,24 +503,8 @@ Scalr.regPage('Scalr.ui.roles.builder', function (loadParams, moduleParams) {
                     }
                 },
                 items: [{
-                    xtype: 'combo',
+                    xtype: 'chefserveridcombo',
                     name: 'chef.server',
-                    fieldLabel: 'Chef server',
-                    valueField: 'id',
-                    displayField: 'url',
-                    editable: false,
-                    value: '',
-
-                    queryCaching: false,
-                    clearDataBeforeQuery: true,
-                    store: {
-                        fields: [ 'url', 'id' ],
-                        proxy: {
-                            type: 'cachedrequest',
-                            crscope: 'rolebuilder',
-                            url: '/services/chef/servers/xListServers/'
-                        }
-                    },
                     listeners: {
                         change: function(field, value) {
                             if (value) {
@@ -406,7 +540,7 @@ Scalr.regPage('Scalr.ui.roles.builder', function (loadParams, moduleParams) {
                         proxy: {
                             type: 'cachedrequest',
                             crscope: 'rolebuilder',
-                            url: '/services/chef/servers/xListEnvironments/'
+                            url: '/services/chef/xListEnvironments/'
                         }
                     },
                     listeners: {
@@ -530,7 +664,7 @@ Scalr.regPage('Scalr.ui.roles.builder', function (loadParams, moduleParams) {
 				items: [{
 					xtype: 'button',
 					itemId: 'save',
-					text: 'Create role',
+					text: 'Create',
 					disabled: true,
 					handler: function() {
 						if (chefFieldsetEnabled) {
@@ -545,15 +679,21 @@ Scalr.regPage('Scalr.ui.roles.builder', function (loadParams, moduleParams) {
 								return;
 							}
 						}
-						
+
+                        if (loadParams['vpc'] == 1) {
+                            if (panel.down('#vpcId').getValue() && !panel.down('#vpcSubnetId').isValid()) {
+                                return;
+                            }
+                        }
+
 						if (panel.down('#rolename').isValid()) {
 							var r = Scalr.utils.CloneObject(result);
 							r.advanced = {};
 							r.chef = {};
-							
+
 							//role name
-							r['roleName'] = panel.down('#rolename').getValue();
-                            r['roleImage'] = panel.down('#roleimage').getValue();
+							r['name'] = panel.down('#rolename').getValue();
+                            r['createImage'] = panel.down('#roleimage').getValue();
 
 							//collect behaviors
 							if (! r.behaviors.length) {
@@ -569,7 +709,7 @@ Scalr.regPage('Scalr.ui.roles.builder', function (loadParams, moduleParams) {
 								r['imageId'] = panel.down('#imageId').getValue();
 								delete r['architecture'];
 							}
-							
+
 							//collect fieldsets options
 							var extraOptions = panel.down('#rightcol').getValues();
 							if (advancedFieldsetEnabled) {//collect advanced options
@@ -591,18 +731,22 @@ Scalr.regPage('Scalr.ui.roles.builder', function (loadParams, moduleParams) {
 									}
 								});
 							}
-							
+
 							if (loadParams['devScalarizrBranch']) {
 								r['devScalarizrBranch'] = loadParams['devScalarizrBranch'];
 							}
-							
+
 							//backward compatibility
 							r['mysqlServerType'] = 'mysql';
 							r['location'] = r['cloudLocation'];
-							
+
 							r.advanced = Ext.encode(r.advanced);
 							r.chef = Ext.encode(r.chef);
-							
+
+                            if (loadParams['vpc'] == 1 && r.platform === 'ec2' && panel.down('#vpcId').getValue()) {
+                                r.vpcId = panel.down('#vpcId').getValue();
+                                r.vpcSubnetId = panel.down('#vpcSubnetId').getValue();
+                            }
 							Scalr.Request({
 								processBox: {
 									type: 'action'
@@ -645,7 +789,7 @@ Scalr.regPage('Scalr.ui.roles.builder', function (loadParams, moduleParams) {
             },
 			items: [{
                 xtype: 'fieldset',
-                title: 'Role creation progress',
+                title: moduleParams['server'] ? (moduleParams['server']['object'] == 'role' ? 'Role' : 'Image' + ' creation progress') : '',
                 cls: 'x-fieldset-separator-none',
                 itemId: 'progress',
                 layout: {
@@ -703,14 +847,14 @@ Scalr.regPage('Scalr.ui.roles.builder', function (loadParams, moduleParams) {
                     html: 'Setting automation'
                 },{
                     xtype: 'component',
-                    html: 'Building role'
+                    html: 'Building ' + (moduleParams['server'] ? moduleParams['server']['object'] : '')
                 },{
                     xtype: 'component',
                     html: 'Complete!'
                 }]
             },{
                 xtype: 'fieldset',
-                title: 'Role creation log',
+                title: moduleParams['server'] ? (moduleParams['server']['object'] == 'role' ? 'Role' : 'Image' + ' creation log') : '',
                 cls: 'x-fieldset-separator-top-bottom',
                 itemId: 'log',
                 collapsible: true,
@@ -877,15 +1021,19 @@ Scalr.regPage('Scalr.ui.roles.builder', function (loadParams, moduleParams) {
                     },
                     items: [{
                         xtype: 'button',
-                        text: 'Edit role',
+                        text: 'View ' + (moduleParams['server'] ? moduleParams['server']['object'] : ''),
                         handler: function() {
-                            Scalr.event.fireEvent('redirect', '#/roles/'+panel.roleId+'/edit');
+                            if (moduleParams['server']['object'] == 'role')
+                                Scalr.event.fireEvent('redirect', '#/roles/manager?roleId=' + panel.roleId);
+                            else
+                                Scalr.event.fireEvent('redirect', '#/images/view?platform=' + panel.platform + '&id=' + panel.imageId);
                         }
                     },{
                         xtype: 'button',
                         text: 'Build farm',
+                        hidden: moduleParams['server'] ? moduleParams['server']['object'] == 'image' : false,
                         handler: function() {
-                            Scalr.event.fireEvent('redirect', '#/farms/build');
+                            Scalr.event.fireEvent('redirect', '#/farms/build?roleId=' + panel.roleId);
                         }
                     }]
                 },{
@@ -929,26 +1077,26 @@ Scalr.regPage('Scalr.ui.roles.builder', function (loadParams, moduleParams) {
 			},
 			items: buttons['platforms']
 		}],
-		
+
 		suspendState: 0,
 		platformsState: {},
 		filters: {},
-		
+
 		onSelectPlatform: function(platformId) {
 			var platform = platforms[platformId],
                 platformLocations = Scalr.platforms[platformId] ? Scalr.platforms[platformId].locations : null,
 				images = platform.images,
 				compImages = panel.down('#images'),
-				added = {},	
-				locations = {},	
+				added = {},
+				locations = {},
 				compLocationData = [],
 				archs = {};
-        
+
             panel.toggleRightColumn(images.length == 0);
 			if (result) {
 				this.platformsState[result.platform] = Ext.apply({}, result);
 			}
-			
+
 			if (this.platformsState[platformId]) {
 				this.platformsState[platformId].behaviors = result.behaviors;
 				this.platformsState[platformId].addons = result.addons;
@@ -958,17 +1106,17 @@ Scalr.regPage('Scalr.ui.roles.builder', function (loadParams, moduleParams) {
 				result = {
 					platform: platformId,
 					architecture: 'x86_64',
-					behaviors: result.behaviors || [], 
+					behaviors: result.behaviors || [],
 					addons: result.addons || ['chef']
 				};
 			}
-			
+
 			this.filters = ['architecture'];
 			if (result.platform == 'ec2' && rootDeviceTypeFilterEnabled) {
 				this.filters.push('root_device_type');
 			}
-			
-				
+
+
 			panel.suspendLayouts();
 			compImages.removeAll();
 			if (images.length) {
@@ -1021,7 +1169,9 @@ Scalr.regPage('Scalr.ui.roles.builder', function (loadParams, moduleParams) {
 
 			//location combobox setup
 			var compLocation = panel.down('#cloudLocation');
+            compLocation.store.clearFilter();
             compLocation.reset();
+            compLocation.toggleIcon('governance', false);
 			if (result.platform == 'gce') {
 				compLocation.store.loadData([{id: 'all', name: 'GCE roles are automatically available in all regions.'}]);
 				compLocation.setValue('all');
@@ -1037,16 +1187,37 @@ Scalr.regPage('Scalr.ui.roles.builder', function (loadParams, moduleParams) {
 				compLocation.store.loadData(compLocationData);
 				compLocation.setDisabled(false);
 				compLocation.store.sort('name', 'desc');
-				compLocation.setValue(result.cloudLocation ? result.cloudLocation : (result.platform == 'ec2' && locations['us-east-1'] ? 'us-east-1' : compLocationData[0].id));
+                if (loadParams['vpc'] == 1 && platformId == 'ec2' && moduleParams['vpcLimits'] && moduleParams['vpcLimits']['value'] != 0 && moduleParams['vpcLimits']['regions']) {
+                    var defaultRegion;
+                    compLocation.store.filter({filterFn: function(region){
+                        var r = moduleParams['vpcLimits']['regions'][region.get('id')];
+                        if (r !== undefined && r['default'] == 1) {
+                            defaultRegion = region.get('id');
+                        }
+                        return r !== undefined;
+                    }});
+                    compLocation.setValue(defaultRegion || compLocation.store.first());
+                    compLocation.toggleIcon('governance', true);
+                    this.down('#vpcId').toggleIcon('governance', true);
+                    this.down('#vpcSubnetId').toggleIcon('governance', true);
+                } else {
+                    compLocation.setValue(result.cloudLocation ? result.cloudLocation : (result.platform == 'ec2' && locations['us-east-1'] ? 'us-east-1' : compLocationData[0].id));
+                }
 			}
-			
+
+            if (loadParams['vpc'] == 1) {
+                this.down('#vpcId').setVisible(platformId == 'ec2' && (!moduleParams['vpcLimits'] || moduleParams['vpcLimits'] && moduleParams['vpcLimits']['value'] != 0));
+                this.down('#vpcSubnetId').setVisible(platformId == 'ec2' && this.down('#vpcId').getValue());
+            }
+
+
 			panel.down('#rootdevicetypewrap')[result.platform == 'ec2' && rootDeviceTypeFilterEnabled ? 'show' : 'hide']();
 			//panel.down('#architecture')[Ext.Object.getSize(archs) > 1 ? 'show' : 'hide']();
 			panel.resumeLayouts(true);
-			
-			
+
+
 		},
-		
+
 		initFilters: function() {
 			var me = this;
 			for (var i=0, len=this.filters.length; i<len; i++) {
@@ -1070,13 +1241,13 @@ Scalr.regPage('Scalr.ui.roles.builder', function (loadParams, moduleParams) {
 				}
 			}
 		},
-		
+
 		getImageId: function() {
 			var me = this,
 				imageId,
 				images = moduleParams.platforms[result.platform].images,
 				hvm = panel.down('#hvm').pressed ? 1 : 0;
-				
+
 			for (var j=0, len=images.length; j<len; j++) {
 				var image = images[j],
 					match = result.cloudLocation == 'all' || image.cloud_location == result.cloudLocation;
@@ -1094,9 +1265,9 @@ Scalr.regPage('Scalr.ui.roles.builder', function (loadParams, moduleParams) {
 					break;
 				}
 			}
-			
+
 			return imageId;
-	
+
 		},
 
         findImageById: function(platform, imageId) {
@@ -1117,7 +1288,7 @@ Scalr.regPage('Scalr.ui.roles.builder', function (loadParams, moduleParams) {
 				images = moduleParams.platforms[result.platform].images,
 				state = {images: {}, filters: {}},
 				hvm = panel.down('#hvm').pressed ? 1 : 0;
-			
+
 			for (var j=0, len=images.length; j<len; j++) {
 				var image = images[j],
 					matchHvm = true,
@@ -1125,11 +1296,11 @@ Scalr.regPage('Scalr.ui.roles.builder', function (loadParams, moduleParams) {
 				if (match) {
 					for (var i=0, len1=me.filters.length; i<len1; i++) {
 						match = result[me.filters[i]] ? image[me.filters[i]] == result[me.filters[i]] : true;
-						
+
 						if (match && result.platform == 'ec2' && me.filters[i] == 'root_device_type' && result[me.filters[i]] == 'ebs') {//hvm
 							matchHvm = hvm == (image.hvm || 0);
 						}
-						
+
 						if (!match || !matchHvm) break;
 					}
 				}
@@ -1172,7 +1343,7 @@ Scalr.regPage('Scalr.ui.roles.builder', function (loadParams, moduleParams) {
 				panel.down('#hvm').toggle(false);
 				panel.down('#hvm').disable();
 			}
-	
+
 			compImages.items.each(function() {
 				if (state.images[this.osFamily+' '+this.osVersion]) {
 					this.enable();
@@ -1183,7 +1354,7 @@ Scalr.regPage('Scalr.ui.roles.builder', function (loadParams, moduleParams) {
 					this.disable();
 				}
 			});
-			
+
 			for (var i=0, len=me.filters.length; i<len; i++) {
 				if (state.filters[me.filters[i]]) {
 					var comp = panel.down('#'+me.filters[i]);
@@ -1205,7 +1376,7 @@ Scalr.regPage('Scalr.ui.roles.builder', function (loadParams, moduleParams) {
 				}
 			}
 		},
-		
+
 		refreshBehaviors: function() {
 			var params = {platform: result.platform, behavior: result.behaviors},
 				image = panel.down('#images').down('[pressed=true]');
@@ -1279,7 +1450,7 @@ Scalr.regPage('Scalr.ui.roles.builder', function (loadParams, moduleParams) {
                     opacity: .6
                 });
             }
-            
+
         },
 
         loadServer: function(server, image) {
@@ -1315,9 +1486,11 @@ Scalr.regPage('Scalr.ui.roles.builder', function (loadParams, moduleParams) {
             progresscol.down('#successButtons').show();
             progresscol.down('#commonButtons').hide();
             progresscol.down('#log').hide();
-            success.update('New role &laquo;' + role['roleName'] + '&raquo; has successfully been created');
+            success.update('New ' + moduleParams['server']['object'] + ' &laquo;' + (moduleParams['server']['object'] == 'role' ? role['roleName'] : role['imageId']) + '&raquo; has successfully been created');
             success.show();
             this.roleId = role['roleId'];
+            this.platform = role['platform'];
+            this.imageId = role['imageId'];
         },
         onBundleTaskFailed: function(failureReason) {
             var progresscol = this.getComponent('progresscol'),
@@ -1411,7 +1584,7 @@ Scalr.regPage('Scalr.ui.roles.builder', function (loadParams, moduleParams) {
 					panel.refreshBehaviors();
 				}
 			}
-			
+
 		}
 	});
 	return panel;

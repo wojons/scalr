@@ -135,7 +135,7 @@ class Scalr_UI_Controller_Dashboard_Widget_Cloudyn extends Scalr_UI_Controller_D
 
         $env = $this->getEnvironment();
         $acc = $this->user->getAccount();
-        $iam = $env->aws->iam;
+        $iam = $env->aws('us-east-1')->iam;
 
         //Generates both master and user passwords
         $masterEmail = \Scalr::config('scalr.cloudyn.master_email');

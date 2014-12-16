@@ -31,7 +31,7 @@ Scalr.regPage('Scalr.ui.dnszones.defaultRecords', function (loadParams, modulePa
 			xtype: 'displayfield',
 			cls: 'x-form-field-info',
 			anchor: '100%',
-			value: 'Default DNS records will be automatically added to all your <b>new</b> DNS Zones - If you want to edit existing zone, you should go to Websites -> DNS Zones and choose the Edit DNS zone option. You can use the %hostname% tag, which will be replaced with full zone hostname.'
+			value: 'Default DNS records will be automatically added to all of your <b>new</b> DNS Zones. To edit existing zones within an Account, go to DNS Zones and choose the Edit DNS Zone option. You can use the <b>%zonename%</b> tag, which will be replaced with the full zone name.'
 		},{
 			xtype: 'dnsrecords',
 			cls: 'x-grid-shadow',

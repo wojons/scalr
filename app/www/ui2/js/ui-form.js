@@ -332,7 +332,11 @@ Ext.define('Scalr.ui.FormFilterField', {
         if (this.store.buffered) {
             this.store.removeAll();
         }
-		this.store.loadPage(1);
+        if (this.store.loadPage) {//there is no loadPage in treestore
+            this.store.loadPage(1);
+        } else {
+            this.store.load();
+        }
 	},
 
     bindStore: function(store) {
@@ -697,7 +701,10 @@ Ext.define('Scalr.ui.FormFieldFarmRoles', {
 		valueField: 'id',
 		displayField: 'name',
 		margin: '0 0 0 5',
-		editable: false,
+        editable: true,
+        selectOnFocus: true,
+        forceSelection: true,
+        autoSearch: false,
 		queryMode: 'local'
 	}],
 
@@ -904,6 +911,7 @@ Ext.define('Scalr.ui.CloudLocationMap', {
 			'ap-southeast-1': {region: 'ap', x: {common: 95, large: 142}, y: {common:58, large: 81}},
 			'ap-southeast-2': {region: 'ap', x: {common: 133, large: 193}, y: {common:88, large: 118}},
 			'eu-west-1': {region: 'eu', x: {common: 75, large: 112}, y: {common:14, large: 18}},
+            'eu-central-1': {region: 'eu', x: {common: 88, large: 112}, y: {common:16, large: 18}},
 			'sa-east-1': {region: 'sa', x: {common: 114, large: 170}, y: {common:51, large: 71}},
 			'us-east-1': {region: 'us', x: {common: 145, large: 212}, y: {common:53, large: 74}},
 			'us-west-1': {region: 'us', x: {common: 43, large: 78}, y: {common:50, large: 66}},
@@ -914,6 +922,7 @@ Ext.define('Scalr.ui.CloudLocationMap', {
 			'ap-southeast-1': {region: 'all', x: {common: 156, large: 244}, y: {common:54, large: 78}},
 			'ap-southeast-2': {region: 'all', x: {common: 186, large: 286}, y: {common:76, large: 110}},
 			'eu-west-1': {region: 'all', x: {common: 88, large: 140}, y: {common:24, large: 32}},
+            'eu-central-1': {region: 'all', x: {common: 100, large: 156}, y: {common:26, large: 36}},
 			'sa-east-1': {region: 'all', x: {common: 68, large: 104}, y: {common:70, large: 100}},
 			'us-east-1': {region: 'all', x: {common: 48, large: 78}, y: {common:34, large: 48}},
 			'us-west-1': {region: 'all', x: {common: 28, large: 42}, y: {common:40, large: 50}},
@@ -954,13 +963,20 @@ Ext.define('Scalr.ui.CloudLocationMap', {
             'jp-east-f2v': {region: 'all', x: {common: 182, large: 278}, y: {common:32, large: 40}}
         },
         gce: {
+            //zones
             'us-central1-a': {region: 'all', x: {common: 30, large: 46}, y: {common:32, large: 48}},
             'us-central1-b': {region: 'all', x: {common: 36, large: 56}, y: {common:30, large: 46}},
             'us-central2-a': {region: 'all', x: {common: 42, large: 66}, y: {common:34, large: 48}},
             'europe-west1-a': {region: 'all', x: {common: 95, large: 150}, y: {common:28, large: 38}},
             'europe-west1-b': {region: 'all', x: {common: 100, large: 160}, y: {common:26, large: 36}},
             'asia-east1-b': {region: 'all', x: {common: 166, large: 254}, y: {common:46, large: 64}},
-            'asia-east1-a': {region: 'all', x: {common: 160, large: 246}, y: {common:54, large: 80}}
+            'asia-east1-a': {region: 'all', x: {common: 160, large: 246}, y: {common:54, large: 80}},
+            //gce location beta
+            'us-central1': {region: 'all', x: {common: 36, large: 56}, y: {common:30, large: 46}},
+            'us-central2': {region: 'all', x: {common: 42, large: 66}, y: {common:34, large: 48}},
+            'europe-west1': {region: 'all', x: {common: 95, large: 150}, y: {common:28, large: 38}},
+            'asia-east1': {region: 'all', x: {common: 166, large: 254}, y: {common:46, large: 64}},
+            'us-west1': {region: 'all', x: {common: 30, large: 46}, y: {common:32, large: 48}}
         },
 		openstack: {
 			'ItalyMilano1': {region: 'eu', x: {common: 96, large: 148}, y: {common:26, large: 36}},
@@ -1618,7 +1634,7 @@ Ext.define('Scalr.ui.FormScriptField', {
         tpl:
             '<tpl for=".">' +
                 '<div class="x-boundlist-item" style="height: auto; width: auto; max-width: 900px;">' +
-                    '<div><span style="font-weight: bold">{name}</span>' +
+                    '<div><img src="'+Ext.BLANK_IMAGE_URL+'" class="scalr-scope-{scope}" data-qtip="{scope:capitalize} scope" />&nbsp; <span style="font-weight: bold">{name}</span>' +
                         '<tpl if="createdByEmail"><span style="color: #666; font-size: 11px;">&nbsp;(created by {createdByEmail})</span></tpl>' +
                         '<img src="/ui2/images/ui/scripts/{os}.png" style="float: right; opacity: 0.6">' +
                     '</div>' +
@@ -1658,26 +1674,327 @@ Ext.define('Scalr.ui.FormScriptField', {
             width: 15,
             height: 15
         });
+
+        me.inputImgElScope = me.inputCell.createChild({
+            tag: 'img',
+            src: Ext.BLANK_IMAGE_URL,
+            style: 'position:absolute;top:8px;left:6px;'
+        });
+
+
         me.inputImgEl.setVisibilityMode(Ext.Element.DISPLAY);
+        me.inputImgElScope.setVisibilityMode(Ext.Element.DISPLAY);
         me.setInputImgElType(me.getValue());
     },
 
-    setInputImgElType: function(value) {
-        var me = this, rec = me.findRecordByValue(value);
+    setInputImgElType: function(value, oldValue) {
+        var me = this, 
+            rec = me.findRecordByValue(value),
+            oldRec = me.findRecordByValue(oldValue),
+            scope;
         if (rec) {
             this.inputImgEl.dom.src = '/ui2/images/ui/scripts/' + rec.get('os') + '.png';
             this.inputImgEl.show();
         } else {
             this.inputImgEl.hide();
         }
+
+        if (oldRec) {
+            this.inputImgElScope.removeCls('scalr-scope-' + oldRec.get('scope'));
+        }
+        if (rec) {
+            scope = rec.get('scope');
+            if (scope) {
+                this.inputImgElScope.addCls('scalr-scope-' + scope);
+                this.inputImgElScope.set({'data-qtip': Ext.String.capitalize(scope) + ' scope'});
+                this.inputImgElScope.show();
+                this.inputEl.setStyle('padding-left', '20px');
+            } else {
+                this.inputEl.setStyle('padding-left', '7px');
+                this.inputImgElScope.hide();
+            }
+        } else {
+            this.inputEl.setStyle('padding-left', '7px');
+            this.inputImgElScope.hide();
+        }
+
     },
 
-    onChange: function(newValue) {
+    onChange: function(newValue, oldValue) {
         var me = this;
-        if (me.inputImgEl) {
-            me.setInputImgElType(newValue);
+        if (me.inputImgEl && me.inputImgElScope) {
+            me.setInputImgElType(newValue, oldValue);
         }
 
         me.callParent(arguments);
+    }
+});
+
+Ext.define('Scalr.ui.Ec2TagsField', {
+    extend: 'Ext.grid.Panel',
+    alias: 'widget.ec2tagsfield',
+
+    cls: 'x-grid-shadow x-grid-no-highlighting',
+    allowNameTag: true,
+    governanceTooltip: 'This Environment\'s Tagging Policy does not allow you to add custom tags.',
+
+    initComponent: function() {
+        this.systemTags = {
+            'scalr-env-id': '{SCALR_ENV_ID}',
+            'scalr-owner': '{SCALR_FARM_OWNER_EMAIL}',
+            'scalr-farm-id': '{SCALR_FARM_ID}',
+            'scalr-farm-role-id': '{SCALR_FARM_ROLE_ID}',
+            'scalr-server-id': '{SCALR_SERVER_ID}'
+        };
+        this.callParent(arguments);
+    },
+
+    store: {
+        fields: ['name', 'value', 'system'],
+        proxy: 'object'
+    },
+    features: {
+        ftype: 'addbutton',
+        text: 'Add new tag',
+        maxCount: 10,
+        handler: function(view) {
+            view.up().store.add({});
+        }
+    },
+    plugins: [{
+        ptype: 'cellediting',
+        pluginId: 'cellediting',
+        clicksToEdit: 1,
+        listeners: {
+            beforeedit: function(editor, o) {
+                if (o.grid.readOnly) return false;
+                if (o.column.isEditable) {
+                    return o.column.isEditable(o.record);
+                }
+            }
+        }
+    }],
+    listeners: {
+        viewready: function() {
+            var me = this,
+                view = me.view;
+            cb = function() {
+                var tooltip,
+                    allowNameTag = me.up().allowNameTag,
+                    tagsLimit = allowNameTag ? 10 : 9;
+                tooltip = me.readOnly ? me.governanceTooltip : 'Tag limit of ' + tagsLimit + ' reached' + (!allowNameTag ? ' (1 tag reserved for Name)' : '');
+                view.findFeature('addbutton').setDisabled((view.store.snapshot || view.store.data).length >= tagsLimit || me.readOnly, tooltip);
+            };
+            this.store.on({
+                refresh: cb,
+                add: cb,
+                remove: cb
+            });
+        },
+        itemclick: function (view, record, item, index, e) {
+            var selModel = view.getSelectionModel();
+            if (e.getTarget('img.x-icon-action-delete')) {
+                if (record === selModel.getLastFocused()) {
+                    selModel.deselectAll();
+                    selModel.setLastFocused(null);
+                }
+                view.store.remove(record);
+                if (!view.store.getCount()) {
+                    view.up().store.add({});
+                }
+                return false;
+            }
+        }
+    },
+    columns: [{
+        header: 'Name',
+        sortable: false,
+        resizable: false,
+        dataIndex: 'name',
+        flex: 1,
+        editor: {
+            xtype: 'textfield',
+            editable: false,
+            margin: '0 12 0 13',
+            fixWidth: -25,
+            maxLength: 127,
+            allowBlank: false
+        },
+        isEditable: function(record) {
+            return !record.get('system');
+        },
+        renderer: function(value, meta, record, rowIndex, colIndex, store, grid) {
+            var column = grid.panel.columns[colIndex],
+               valueEncoded = Ext.String.htmlEncode(value);
+            return  '<div class="x-form-text" style="background:#fff;padding:2px 12px 3px 13px;text-overflow: ellipsis;overflow:hidden;cursor:text">'+
+                        (record.get('system') || grid.up().readOnly ? '<span style="color:#999">' + valueEncoded + '</span>' : valueEncoded) +
+                    '</div>';
+        }
+    },{
+        header: 'Value',
+        sortable: false,
+        resizable: false,
+        dataIndex: 'value',
+        flex: 2,
+        editor: {
+            xtype: 'textfield',
+            editable: false,
+            margin: '0 12 0 13',
+            fixWidth: -25,
+            maxLength: 255
+        },
+        isEditable: function(record) {
+            return !record.get('system');
+        },
+        renderer: function(value, meta, record, rowIndex, colIndex, store, grid) {
+            var column = grid.panel.columns[colIndex],
+                valueEncoded = Ext.String.htmlEncode(value);
+            return  '<div class="x-form-text" style="background:#fff;padding:2px 12px 3px 13px;text-overflow: ellipsis;overflow:hidden;cursor:text"  data-qtip="'+Ext.String.htmlEncode(valueEncoded)+'">'+
+                        (record.get('system') || grid.up().readOnly ? '<span style="color:#999">' + valueEncoded + '</span>' : valueEncoded) +
+                    '</div>';
+        }
+    },{
+        renderer: function(value, meta, record, rowIndex, colIndex, store, grid) {
+            var result = '<img style="cursor:pointer;margin-top:6px;',
+                panel = grid.up();
+            if (record.get('system')) {
+                result += 'cursor:default;opacity:.4" width="16" height="16" class="x-icon-server-action x-icon-lock" data-qwidth="440" data-qtip="System tags cannot be modified or removed, and will be added to instances and volumes regardless of whether you enforce a Tagging policy"';
+            } else {
+                if (panel.readOnly) {
+                    result += '" class="x-icon-governance" data-qtip="' + panel.governanceTooltip + '"';
+                } else {
+                    result += '" width="15" height="15" class="x-icon-action x-icon-action-delete" data-qtip="Delete tag"';
+                }
+            }
+            result += ' src="'+Ext.BLANK_IMAGE_URL+'"/>';
+            return result;
+        },
+        width: 42,
+        sortable: false,
+        align:'left'
+
+    }],
+
+    setValue: function(value){
+        var me = this,
+            data = [];
+        value = value || {};
+        Ext.Object.each(me.systemTags, function(tagName, tagValue){
+            data.push({
+                name: tagName,
+                value: tagValue,
+                system: true
+            });
+        });
+        Ext.Object.each(value, function(name, value){
+            if (me.systemTags[name] === undefined) {
+                data.push({
+                    name: name,
+                    value: value
+                });
+            }
+        });
+        me.store.loadData(data);
+    },
+
+    isValid: function(){
+        var me = this,
+            isValid = true,
+            cellEditing = me.getPlugin('cellediting');
+        (me.store.snapshot || me.store.data).each(function(record){
+            var name = record.get('name');
+            if (!name) {
+                cellEditing.startEdit(record, 0);
+                cellEditing.context.column.field.validate();
+                isValid = false;
+                return false;
+            }
+        });
+        return isValid;
+    },
+
+    getValue: function(){
+        var me = this,
+            result  = {};
+        (me.store.snapshot || me.store.data).each(function(record){
+            var name = record.get('name'),
+                value = record.get('value');
+            if (name && !me.systemTags[name]) {
+                result[name] = value;
+            }
+        });
+        return result;
+    },
+
+    setReadOnly: function(readOnly) {
+        this.readOnly = !!readOnly;
+    }
+});
+
+Ext.define('Scalr.ui.ProgressBar', {
+    extend: 'Scalr.ui.FormFieldProgress',
+    alias: 'widget.progressbar',
+
+    warningPercentage: 0,
+    alertPercentage: 0,
+    warningCls: 'x-form-progress-bar',
+    alertCls: 'x-form-progress-bar',
+
+    emptyText: 'Loading...',
+    units: '%',
+
+    minStep: 1,
+    maxStep: 5,
+
+    // max loading time in seconds
+    loadingTime: 100,
+
+    value: 0.001,
+
+    getRandomInt: function (min, max) {
+        return Math.floor(Math.random() * (max - min + 1)) + min;
+    },
+
+    doStep: function () {
+        var me = this;
+
+        var step = me.getRandomInt(me.minStep, me.maxStep);
+
+        if (me.getRandomInt(0, 1)) {
+            step = step / 10;
+        }
+
+        var newValue = me.getValue() + step / me.loadingTime;
+
+        if (newValue >= 1) {
+            me.setValue(1);
+
+            return me;
+        }
+
+        me.setValue(newValue);
+
+        new Ext.util.DelayedTask(function () {
+            if (me.rendered) {
+                me.doStep();
+            }
+        }).delay(step * 1000);
+
+        return me;
+    },
+
+    onBoxReady: function () {
+        var me = this;
+
+        new Ext.util.DelayedTask(function () {
+            if (me.rendered) {
+                me.doStep();
+            }
+        }).delay(1000);
+    },
+
+    beforeDestroy: function () {
+        var me = this;
+        me.setValue(1);
     }
 });

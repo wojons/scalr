@@ -1276,44 +1276,47 @@ Ext.define('Scalr.ui.FormFieldPassword', {
 Ext.define('Scalr.ui.LeftMenu', {
     extend: 'Ext.AbstractPlugin',
     alias: 'plugin.leftmenu',
-	
+
     disabled: false,
 	client:null,
 	menu: null,
 	menuVisible: false,
-	
+
 	currentMenuId: null,
 	currentItemId: null,
     currentOptions: null,
 	itemIdPrefix: 'leftmenu-',
     defaultMenuWidth: 112,
-	
+
 	itemIconClsPrefix: 'x-icon-leftmenu-',
 
-	getMenus: function(menuId){
-		var menus = [];
+	getMenuConfig: function(menuId){
+		var config = {
+            items: [],
+            cls: menuId
+        };
 		switch (menuId) {
 			case 'account':
-                menus.push({
+                config.items.push({
                     itemId:'environments',
                     href: '#/account/environments',
                     text: 'Environments'
                 });
-                
-                menus.push({
+
+                config.items.push({
                     itemId:'teams',
                     href: '#/account/teams',
                     text: 'Teams'
                 });
 
                 if (Scalr.utils.canManageAcl()) {
-                    menus.push({
+                    config.items.push({
                         itemId:'users',
                         href: '#/account/users',
                         text: 'Users'
                     });
 
-                    menus.push({
+                    config.items.push({
                         itemId:'roles',
                         href: '#/account/roles',
                         text: 'ACL'
@@ -1321,19 +1324,19 @@ Ext.define('Scalr.ui.LeftMenu', {
                 }
 			    break;
 			case 'webhooks':
-                menus.push({
+                config.items.push({
                     itemId:'endpoints',
                     href: '#/webhooks/endpoints',
                     text: 'Endpoints'
                 });
 
-                menus.push({
+                config.items.push({
                     itemId:'configs',
                     href: '#/webhooks/configs',
                     text: 'Webhooks'
                 });
 
-                menus.push({
+                config.items.push({
                     itemId:'history',
                     href: '#/webhooks/history',
                     text: 'History'
@@ -1341,7 +1344,7 @@ Ext.define('Scalr.ui.LeftMenu', {
                 break;
 
             case 'analytics':
-                menus.push({
+                config.items.push({
                     itemId: 'dashboard',
                     href: '#/analytics/dashboard',
                     text: 'Dashboard'
@@ -1369,37 +1372,62 @@ Ext.define('Scalr.ui.LeftMenu', {
                 break;
 
 			case 'settings':
-                menus.push({
+                config.items.push({
                     itemId:'orchestration',
                     href: '#/account/orchestration',
                     text: 'Orchestration',
                     hidden: !Scalr.isAllowed('ADMINISTRATION_ORCHESTRATION')
                 });
 
-                menus.push({
+                config.items.push({
+                    itemId:'events',
+                    href: '#/scripts/events/account',
+                    text: 'Custom events',
+                    hidden: !Scalr.isAllowed('GENERAL_CUSTOM_EVENTS')
+                });
+
+                config.items.push({
                     itemId:'variables',
                     href: '#/account/variables',
                     text: 'Global variables',
                     hidden: !Scalr.isAllowed('ADMINISTRATION_GLOBAL_VARIABLES')
                 });
 
-                menus.push({
+                config.items.push({
+                    menuCls: 'webhooks',
+                    itemCls: 'configs',
+                    itemId: 'webhooks',
+                    href: '#/webhooks/endpoints?level=account',
+                    text: 'Webhooks',
+                    hidden: !Scalr.isAllowed('ADMINISTRATION_WEBHOOKS')
+                });
+
+                config.items.push({
+                    itemId:'chef',
+                    href: '#/services/chef/servers?level=account',
+                    text: 'Chef servers',
+                    hidden: !Scalr.isAllowed('SERVICES_ADMINISTRATION_CHEF')
+                });
+
+                config.items.push({
                     itemId:'billing',
                     href: '#/billing',
                     text: 'Billing',
                     hidden: !Scalr.isAllowed('ADMINISTRATION_BILLING') || !Scalr.flags['billingExists']
                 });
+
                 break;
 
 		}
-		return menus;
+		return config;
 	},
-	
+
+
 	init: function(client) {
 		var me = this;
 		me.client = client;
 	},
-	
+
 	create: function() {
         var me = this;
         me.menu = Ext.create('Ext.container.Container', {
@@ -1422,19 +1450,21 @@ Ext.define('Scalr.ui.LeftMenu', {
 		});
 		me.client.addDocked(this.menu);
 	},
-	
+
 	set: function(options) {
-		var me = this, prevBtn;
+		var me = this, prevBtn, newBtn, menuConfig;
         me.currentOptions = options;
 		if (options.menuId !== this.currentMenuId) {
+            menuConfig = this.getMenuConfig(options.menuId);
 			this.menu.removeAll();
-            var iconClsPrefix = me.itemIconClsPrefix + options.menuId;
+            var iconClsPrefix = me.itemIconClsPrefix + (menuConfig.cls || options.menuId);
             this.menu.setWidth(options.width || me.defaultMenuWidth);
-			this.menu.add(Ext.Array.map(this.getMenus(options.menuId), function(item){
+			this.menu.add(Ext.Array.map(menuConfig.items, function(item){
+                var iconClsPrefixLocal = item.menuCls ? me.itemIconClsPrefix + item.menuCls : iconClsPrefix;
                 if (options.icons === false) {
                     item.textAlign = 'left';
                 } else {
-                    item.iconCls = iconClsPrefix + ' ' + iconClsPrefix + '-' + item.itemId;
+                    item.iconCls = iconClsPrefixLocal + ' ' + iconClsPrefixLocal + '-' + (item.itemCls || item.itemId);
                 }
 				item.itemId = me.itemIdPrefix + item.itemId;
 				return item;
@@ -1442,16 +1472,25 @@ Ext.define('Scalr.ui.LeftMenu', {
 			this.currentMenuId = options.menuId;
 			this.currentItemId = null;
 		}
+        newBtn = this.menu.getComponent(me.itemIdPrefix + options.itemId);
 		if (options.itemId !== this.currentItemId) {
             if (this.currentItemId) {
                 prevBtn = this.menu.getComponent(me.itemIdPrefix + this.currentItemId);
                 if (prevBtn) prevBtn.toggle(false, true);
             }
-			this.menu.getComponent(me.itemIdPrefix + options.itemId).toggle(true);
+			if (newBtn) newBtn.toggle(true);
 			this.currentItemId = options.itemId;
 		}
+        if (newBtn && options.subpage) {
+            var newHref = newBtn.href.replace(/[^/]+\/{0,1}$/, options.subpage);
+            if (newBtn.rendered) {
+                newBtn.setHref(newHref);
+            } else {
+                newBtn.href = newHref;
+            }
+        }
 	},
-	
+
 	show: function(options) {
 		if (this.menu === null) {
 			this.create();
@@ -1460,7 +1499,7 @@ Ext.define('Scalr.ui.LeftMenu', {
 		this.menuVisible = true;
 		this.menu.show();
 	},
-	
+
 	hide: function() {
 		this.menuVisible = false;
         if (this.menu) {
@@ -1477,7 +1516,7 @@ Ext.define('Scalr.ui.LeftMenu', {
             return false;
         }
     }
-	
+
 });
 
 Ext.define('Scalr.ui.GridField', {
@@ -2226,7 +2265,7 @@ Ext.define('Scalr.ui.StoreProxyCachedRequest', {
                             }
                             if (queryString) {
                                 if (me.filterFields !== undefined) {
-                                    testRe = new RegExp(queryString, 'i');
+                                    testRe = new RegExp(Ext.String.escapeRegex(queryString), 'i');
                                     filterFn = function(record){
                                         var res = false;
                                         Ext.Array.each(me.filterFields, function(field){
@@ -2465,20 +2504,13 @@ Ext.define('Scalr.ui.ColoredStatus', {
             },
             'Not used': {
                 text: 'This <b>role</b> is currently not used by any <b>farm</b>.'
-            },
-            'Deleting': {
-                cls: 'yellow',
-                text: 'Scalr is currently deleting this <b>role</b>.'
             }
         },
-        image: {
+        chefserver: {
             'In use': {
-                cls: 'green',
-                text: 'This <b>image</b> is currently used by one or more <b>roles</b> to launch instances. '
+                cls: 'green'
             },
-            'Not used': {
-                text: 'This <b>image</b> is currently not used by any <b>role</b>.'
-            }
+            'Not used': {}
         },
         farm: {
             'Running': {
@@ -2669,11 +2701,11 @@ Ext.define('Scalr.ui.ColoredStatus', {
                 text: 'Scalr successfully delivered this Webhook Notification to your Webhook Endpoint, and your Webhook Endpoint responded with a HTTP status code indicating success.'
             },
             'Pending': {
-                text: 'This Webhook Notification has been scheduled, but Scalr hasn\'t attempted delivery to your Webhook Endpoint yet.'
+                text: 'This Webhook Notification has been scheduled. Either Scalr hasn\'t attempted delivering this Webhook Notification yet, or the last delivery attempt has failed, and Scalr will retry delivery at a later time.'
             },
             'Failed': {
                 cls: 'red',
-                text: 'Scalr attempted delivering this Webhook Notification to your Webhook Endpoint, but it failed. Either Scalr was unable to connect to your Webhook Endpoint, or it responded with a HTTP status code indicating failure.'
+                text: 'Scalr attempted delivering this Webhook Notification, but failed permanently. Either your Webhook Endpoint responded with a HTTP status code indicating a bad request (4XX) and caused Scalr to abort, or the maximum number of attempts was exceeded for this Webhook Notification.'
             }
         },
         notification: {
@@ -2683,6 +2715,21 @@ Ext.define('Scalr.ui.ColoredStatus', {
             },
             'Disabled': {
                 text: 'Notifications will not be sent to recipients'
+            }
+        },
+        sshkey: {
+            'In use': {
+                cls: 'green'
+            },
+            'Not used': {}
+        },
+        customevent: {
+            'In use': {
+                cls: 'green',
+                text: 'This <b>Custom Event</b> is currently used.'
+            },
+            'Not used': {
+                text: 'This <b>Custom Event</b> is currently not used.'
             }
         }
     },
@@ -2699,7 +2746,7 @@ Ext.define('Scalr.ui.ColoredStatus', {
             };
         Ext.apply(tooltip, qtipConfig);
         if (Ext.isFunction(this.handlers[config.type])) {
-            renderData = this.handlers[config.type].call(this, config.data);
+            renderData = this.handlers[config.type].call(this, config.data, config.params);
         } else {
             renderData = {status: status};
         }
@@ -2709,7 +2756,7 @@ Ext.define('Scalr.ui.ColoredStatus', {
         if (statusConfig) {
             renderData['cls'] = statusConfig['cls'];
             renderData['iconCls'] = renderData['iconCls'] || statusConfig['iconCls'];
-            if (statusConfig['text']) {
+            if (statusConfig['text'] && !renderData['text']) {
                 renderData['text'] = statusConfig['text'];
             }
             if (statusConfig['title']) {
@@ -2721,8 +2768,8 @@ Ext.define('Scalr.ui.ColoredStatus', {
                 'class="x-colored-status ' + (renderData['cls'] || '') + '" ' +
                 'data-anchor="' + tooltip.anchor + '" ' +
                 'data-qalign="' + tooltip.align + '" ' +
-                'data-qtitle="' + Ext.String.htmlEncode(renderData['title']) + '" ' +
-                (renderData['text'] || renderData['link'] ? 'data-qtip="' + Ext.String.htmlEncode((renderData['text']||'') + (renderData['link'] ? ' <a class="bottom-link" href="' + renderData['link'] + '">' + renderData['linkText'] + '</a>' : '')) + '" ' : '') +
+                'data-qtitle="' + Ext.String.htmlEncode(renderData['tooltipTitle'] || renderData['title']) + '" ' +
+                (renderData['text'] || renderData['link'] ? 'data-qtip="' + Ext.String.htmlEncode((renderData['text']||'') + (renderData['link'] ? ' <a '+(renderData['inlineLink'] ? '' : 'class="bottom-link"')+' href="' + renderData['link'] + '">' + renderData['linkText'] + '</a>' : '') + (renderData['appendText'] || '')) + '" ' : '') +
                 'data-qwidth="' + tooltip.width + '">' +
                 (renderData['iconCls'] ? '<img src="'+Ext.BLANK_IMAGE_URL+'" class="x-icon-colored-status-'+renderData['iconCls']+'" />' : '' ) +
                 renderData['title'] +
@@ -2734,7 +2781,12 @@ Ext.define('Scalr.ui.ColoredStatus', {
     handlers: {
         server: function(data) {
             var result = {status: data['status']},
-                linkOperationStatus = '#/operations/details?serverId=' + data['server_id'] + '&operation=Initialization';
+                linkOperationStatus = '#/operations/details?serverId=' + data['server_id'] + '&operation=Initialization',
+                troubleshootingLinks = {
+                    'Pending launch': 'https://scalr-wiki.atlassian.net/wiki/x/CYG0',
+                    'Pending': 'https://scalr-wiki.atlassian.net/wiki/x/DYG0',
+                    'Initializing': 'https://scalr-wiki.atlassian.net/wiki/x/E4G0'
+                };
 
             if (data['initDetailsSupported']) {
                 if (data['isInitFailed']) {
@@ -2753,10 +2805,22 @@ Ext.define('Scalr.ui.ColoredStatus', {
                     }
                 }
             }
+            if (data['launch_error'] != 1 && troubleshootingLinks[result['status']]) {
+                result['appendText'] = '<div style="border-top:1px solid #fff;padding-top:10px;margin-top:12px;">Does this Server seem stuck in ' + result['status'] + ' State? If it does, consider reviewing the <a href="' + troubleshootingLinks[result['status']] + '" target="blank">troubleshooting documentation</a>.</div>'
+                result['inlineLink'] = true;
+            }
 
             if (data['status'] === 'Importing') {
                 result['link'] = '#/roles/import?serverId=' + data['server_id'];
                 result['linkText'] = 'View progress';
+            }
+
+            if (Ext.Array.contains(['Pending terminate', 'Terminated', 'Pending suspend', 'Suspended'], data['status'])) {
+                if (data['termination_error']) {
+                    result['tooltipTitle'] = 'Error:';
+                    result['text'] = Ext.String.htmlEncode(Ext.String.htmlEncode(data['termination_error']));
+                    result['iconCls'] = 'failed';
+                }
             }
             return result;
         },
@@ -2770,11 +2834,30 @@ Ext.define('Scalr.ui.ColoredStatus', {
             return {status: titles[data['status']] || 'Unknown'};
         },
         image: function(data) {
-            var result = {status: data['status']};
+            var result = {}, text;
 
-            if (data['status'] == 'In use') {
-                result['link'] = '#/roles/manager?platform=' + data['platform'] + '&cloudLocation=' + data['cloudLocation'] + '&imageId=' + data['id'];
-                result['linkText'] = 'Show roles';
+            if (data['status'] == 'failed') {
+                result['status'] = 'Failed';
+                result['text'] = 'Image deletion failed with error: ' + data['statusError'];
+                result['cls'] = 'red';
+            } else if (data['status'] == 'delete') {
+                result['status'] = 'Deleting';
+                result['cls'] = 'yellow';
+                result['text'] = 'Scalr is currently deleting this <b>image</b>.';
+            } else if (data['used']) {
+                text = ['This <b>Image</b> is currently used by '];
+                if (data['used']['rolesCount'] > 0) {
+                    text.push('<a href="#/roles/manager?imageId='+data['id']+'">'+data['used']['rolesCount']+'&nbsp;Role(s)</a>');
+                }
+                if (data['used']['serversCount'] > 0) {
+                    text.push((data['used']['rolesCount']>0 ? ' and ' : '') + '<a href="#/servers/view?imageId='+data['id']+'">'+data['used']['serversCount']+'&nbsp;Server(s)</a>');
+                }
+                result['status'] = 'In use';
+                result['cls'] = 'green';
+                result['text'] = text.join('');
+            } else {
+                result['status'] = 'Not used';
+                result['text'] = 'This <b>Image</b> is currently not used by any <b>Role</b> and <b>Server</b>.';
             }
 
             return result;
@@ -2817,19 +2900,48 @@ Ext.define('Scalr.ui.ColoredStatus', {
             if (data['status'] == 1) {
                 result['status'] = 'Complete';
             } else if (data['status'] == 2) {
-                if (data['errorMsg']) {
-                    result['status'] = 'Custom';
-                    result['cls'] = 'red';
-                    result['text'] = Ext.String.htmlEncode(data['errorMsg']);
-                    result['title'] = 'Failed';
-                } else {
-                    result['status'] = 'Failed';
-                }
+                result['status'] = 'Failed';
             }
             return result;
         },
         notification: function(data) {
             return {status: data['enabled'] == 1 ? 'Enabled' : 'Disabled'};
+        },
+        chefserver: function(data, params) {
+            var text,
+                status,
+                level = params['level'];
+            if (data['status']) {
+                status = 'In use';
+                text = ['This <b>Chef Server</b> is currently used by '];
+                if (data['status']['rolesCount'] > 0) {
+                    text.push(level == 'environment' ? '<a href="#/roles/manager?chefServerId='+data['id']+'">'+data['status']['rolesCount']+'&nbsp;Role(s)</a>' : data['status']['rolesCount']+'&nbsp;Role(s)');
+                }
+                if (data['status']['farmsCount'] > 0) {
+                    text.push((data['status']['rolesCount']>0 ? ' and ' : '') + (level == 'environment' ? '<a href="#/farms/view?chefServerId='+data['id']+'">'+data['status']['farmsCount']+'&nbsp;Farm(s)</a>' : data['status']['farmsCount']+'&nbsp;Farm(s)'));
+                }
+                text = text.join('');
+            } else {
+                status = 'Not used';
+                text = 'This <b>Chef Server</b> is currently not used by any <b>Role</b> and <b>Farm Role</b>.';
+            }
+            return {
+                status: status,
+                text: text
+            };
+        },
+
+        sshkey: function(data, params) {
+            var text;
+            if (data['status'] === 'In use') {
+                text = 'Farm <a href="#/farms/view?farmId='+data['farm_id']+'">'+data['farmName']+'</a> is using this key';
+            } else {
+                text = 'This key is no longer used by Scalr, and can safely be deleted';
+            }
+            return {
+                status: data['status'],
+                text: text
+            };
         }
 
     }

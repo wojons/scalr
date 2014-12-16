@@ -330,7 +330,8 @@ Scalr.regPage('Scalr.ui.account2.users.view', function (loadParams, moduleParams
         //cls: 'scalr-ui-account2-edituser-form',
         hidden: true,
         fieldDefaults: {
-            anchor: '100%'
+            anchor: '100%',
+            labelWidth: 120
         },
         autoScroll: true,
         teamsGridCollapsed: false,
@@ -484,10 +485,37 @@ Scalr.regPage('Scalr.ui.account2.users.view', function (loadParams, moduleParams
             }, {
                 xtype: 'passwordfield',
                 name: 'password',
+                itemId: 'password',
                 fieldLabel: 'Password',
                 hidden: Scalr.flags['authMode'] == 'ldap',
                 emptyText: 'Leave blank to let user specify password',
-                allowBlank: true
+                vtype: 'password',
+                otherPassField: 'cpassword',
+                allowBlank: true,
+                selectOnFocus: true,
+                validateOnChange: false,
+                listeners: {
+                    change: function(comp, value) {
+                        var hideConfirm = !value || value === '******';
+                        if (Scalr.flags['authMode'] !== 'ldap') {
+                            comp.next('#cpassword').setVisible(!hideConfirm).setDisabled(hideConfirm)
+                        }
+                    }
+                }
+            }, {
+				xtype: 'textfield',
+				name: 'cpassword',
+                itemId: 'cpassword',
+				inputType: 'password',
+				fieldLabel: 'Password confirm',
+                hidden: true,
+                disabled: true,
+				allowBlank: false,
+                selectOnFocus: true,
+                submitValue: false,
+                vtype: 'password',
+                otherPassField: 'password',
+                validateOnChange: false
             },{
                 xtype: 'displayfield',
                 itemId: 'userTeams',
@@ -694,8 +722,10 @@ Scalr.regPage('Scalr.ui.account2.users.view', function (loadParams, moduleParams
                 text: 'Save',
                 handler: function () {
                     var frm = form.getForm(),
-                        record = frm.getRecord();
-                    if (frm.isValid()) {
+                        record = frm.getRecord(),
+                        isNewRecord = !record.get('id'),
+                        confirmBox;
+                    sendRequest = function(currentPassword) {
                         var teams = {};
                         storeUserTeams.data.each(function(){
                             if (this.get('checked')) {
@@ -709,11 +739,17 @@ Scalr.regPage('Scalr.ui.account2.users.view', function (loadParams, moduleParams
                             url: '/account/users/xSave',
                             form: frm,
                             params: {
-                                teams: Ext.encode(teams)
+                                teams: Ext.encode(teams),
+                                currentPassword: currentPassword
                             },
                             success: function (data) {
-                                var isNewRecord = !record.get('id'),
-                                    scrollTop = grid.view.el.getScroll().top;
+                                var scrollTop = grid.view.el.getScroll().top;
+                                if (confirmBox) {
+                                    confirmBox.close();
+                                }
+                                if (data.specialToken) {
+                                    Scalr.utils.saveSpecialToken(data.specialToken);
+                                }
                                 grid.getSelectionModel().setLastFocused(null);
                                 form.setVisible(false);
                                 if (isNewRecord) {
@@ -750,9 +786,23 @@ Scalr.regPage('Scalr.ui.account2.users.view', function (loadParams, moduleParams
                                 } else {
                                     grid.getSelectionModel().setLastFocused(record);
                                 }
+                            },
+                            failure: function(data) {
+                                if (confirmBox) {
+                                    confirmBox.onFailure(data.errors);
+                                }
                             }
                         });
                     }
+                    if (frm.isValid()) {
+                        var passwordField = frm.findField('password');
+                        if (!isNewRecord && passwordField.getValue() != passwordField.placeholder) {
+                            confirmBox = Scalr.utils.ConfirmPassword(sendRequest);
+                        } else {
+                            sendRequest();
+                        }
+                    }
+
                 }
             }, {
                 itemId: 'cancel',

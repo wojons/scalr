@@ -2,6 +2,11 @@
 
 require_once dirname(__FILE__).'/../cron-ng/jobs/ScalarizrMessagingHostInit.php';
 
+/**
+ * @deprecated This class has been deprecated since 13.11.2014.
+ *             Please don't add anything into this class anymore without reviewing Scalr\System\Zmq\Cron\Task\ScalarizrMessaging
+ * @see        \Scalr\System\Zmq\Cron\Task\ScalarizrMessaging
+ */
 class SzrMessagingHostInitProcess implements \Scalr\System\Pcntl\ProcessInterface
 {
     public $ThreadArgs;

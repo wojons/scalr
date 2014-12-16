@@ -57,8 +57,11 @@ Scalr.regPage('Scalr.ui.account2.environments.clouds.ec2', function (loadParams,
                 text: 'Regular',
                 value: 'regular'
             },{
-                text: 'GovCloud ',
+                text: 'GovCloud',
                 value: 'gov-cloud'
+            },{
+                text: 'AWS China',
+                value: 'cn-cloud'
             }]
 		},{
 			xtype: 'filefield',

@@ -55,15 +55,16 @@ class DBFarmRole
     const SETTING_OPENSTACK_IP_POOL         =       'openstack.ip-pool';
     const SETTING_OPENSTACK_NETWORKS        =       'openstack.networks';
     const SETTING_OPENSTACK_SECURITY_GROUPS_LIST =  'openstack.security_groups.list';
-
-    /** NIMBULA Settings **/
-    const SETTING_NIMBULA_SHAPE				=		'nimbula.shape';
+    const SETTING_OPENSTACK_KEEP_FIP_ON_SUSPEND =   'openstack.keep_fip_on_suspend';
 
     /** GCE Settings **/
     const SETTING_GCE_MACHINE_TYPE			=		'gce.machine-type';
     const SETTING_GCE_NETWORK				=		'gce.network';
     const SETTING_GCE_CLOUD_LOCATION        =       'gce.cloud-location';
     const SETTING_GCE_ON_HOST_MAINTENANCE   =		'gce.on-host-maintenance';
+    const SETTING_GCE_USE_STATIC_IPS        =		'gce.use_static_ips';
+    const SETTING_GCE_STATIC_IPS_MAP		= 		'gce.static_ips.map';
+    const SETTING_GCE_REGION        		= 		'gce.region';
 
     /** Cloudstack Settings **/
     const SETTING_CLOUDSTACK_SERVICE_OFFERING_ID		=		'cloudstack.service_offering_id';
@@ -73,6 +74,7 @@ class DBFarmRole
     const SETTING_CLOUDSTACK_NETWORK_TYPE				=		'cloudstack.network_type';
     const SETTING_CLOUDSTACK_SHARED_IP_ADDRESS			=		'cloudstack.shared_ip.address';
     const SETTING_CLOUDSTACK_SHARED_IP_ID				=		'cloudstack.shared_ip.id';
+    const SETTING_CLOUDSTACK_SECURITY_GROUPS_LIST	    =		'cloudstack.security_groups.list';
 
     const SETIING_CLOUDSTACK_USE_STATIC_NAT             =       'cloudstack.use_static_nat';
     const SETIING_CLOUDSTACK_STATIC_NAT_MAP             =       'cloudstack.static_nat.map';
@@ -180,6 +182,8 @@ class DBFarmRole
     const SETTING_SYSTEM_REBOOT_TIMEOUT		=		'system.timeouts.reboot';
     const SETTING_SYSTEM_LAUNCH_TIMEOUT		= 		'system.timeouts.launch';
     const SETTING_SYSTEM_NEW_PRESETS_USED   =       'system.new_presets_used';
+
+    const SETTING_INFO_INSTANCE_TYPE_NAME   =       'info.instance_type_name';
 
     const TYPE_CFG = 1; // For configuration
     const TYPE_LCL = 2; // For lifecycle
@@ -964,11 +968,13 @@ class DBFarmRole
         }
     }
 
-    public function isOpenstack() {
+    public function isOpenstack()
+    {
         return PlatformFactory::isOpenstack($this->Platform);
     }
 
-    public function isCloudstack() {
+    public function isCloudstack()
+    {
         return PlatformFactory::isCloudstack($this->Platform);
     }
 
@@ -1018,16 +1024,19 @@ class DBFarmRole
 
     /**
      * Get Role setting by name
+     *
      * @param string $name
      * @return mixed
      */
     public function GetSetting($name)
     {
-        if (!isset($this->SettingsCache[$name]))
-        {
-            $this->SettingsCache[$name] = $this->DB->GetOne("SELECT value FROM farm_role_settings WHERE name=? AND farm_roleid=? LIMIT 1",
-                array($name, $this->ID)
-            );
+        if (!isset($this->SettingsCache[$name])) {
+            $this->SettingsCache[$name] = $this->DB->GetOne("
+                SELECT value
+                FROM farm_role_settings
+                WHERE name=? AND farm_roleid=?
+                LIMIT 1
+            ",[$name, $this->ID]);
         }
 
         return $this->SettingsCache[$name];
@@ -1064,7 +1073,7 @@ class DBFarmRole
         return $row;
     }
 
-    function Save ()
+    function Save()
     {
         $row = $this->Unbind();
 
@@ -1086,6 +1095,13 @@ class DBFarmRole
         } catch (Exception $e) {
             throw new Exception("Cannot save farm role. Error: " . $e->getMessage(), $e->getCode());
         }
+
+        if (!empty($this->ID) && !empty($this->FarmID) && \Scalr::getContainer()->analytics->enabled) {
+            \Scalr::getContainer()->analytics->tags->syncValue(
+                $this->GetFarmObject()->ClientID, \Scalr\Stats\CostAnalytics\Entity\TagEntity::TAG_ID_FARM_ROLE, $this->ID,
+                sprintf('%s', $this->Alias)
+            );
+        }
     }
 
     public function getReplacementRoles($includeSelf = false)
@@ -1096,9 +1112,7 @@ class DBFarmRole
             SELECT r.id
             FROM roles r
             INNER JOIN role_images ri ON r.id = ri.role_id
-            LEFT JOIN roles_queue q ON r.id = q.role_id
             WHERE generation = \'2\' AND env_id IN(0, ?)
-            AND q.id IS NULL
             AND ri.platform = ?' .
             (in_array($this->Platform, array(SERVER_PLATFORMS::GCE, SERVER_PLATFORMS::ECS)) ? '' : 'AND ri.cloud_location = ?') .
             'AND r.os_family = ?' .
@@ -1126,20 +1140,24 @@ class DBFarmRole
             sort($behaviors2);
 
             if ($behaviors == $behaviors2) {
-                $imageInfo = $role->getImageDetails($this->Platform, $this->CloudLocation);
-                $result[] = array(
-                    'id'            => $role->id,
-                    'debug'         => array($imageInfo),
-                    'name'          => $role->name,
-                    'os_name'       => $role->os,
-                    'os_family'     => $role->osFamily,
-                    'os_generation' => $role->osGeneration,
-                    'os_version'    => $role->osVersion,
-                    'shared'        => $role->envId == 0,
-                    'behaviors'     => $role->getBehaviors(),
-                    'image_id'      => $imageInfo['image_id'],
-                    'arch'          => !$imageInfo['architecture'] ? (stristr($role->name, '64-') ? 'x86_64' : 'i386') : $imageInfo['architecture']
-                );
+                $image = $role->__getNewRoleObject()->getImage($this->Platform, $this->CloudLocation)->getImage();
+                if ($image) {
+                    $result[] = array(
+                        'id'            => $role->id,
+                        'name'          => $role->name,
+                        'os_name'       => $role->os,
+                        'os_family'     => $role->osFamily,
+                        'os_generation' => $role->osGeneration,
+                        'os_version'    => $role->osVersion,
+                        'shared'        => $role->envId == 0,
+                        'behaviors'     => $role->getBehaviors(),
+                        'image'         => [
+                            'id' => $image->id,
+                            'type' => $image->type,
+                            'architecture' => $image->architecture
+                        ]
+                    );
+                }
             } else {
                 //var_dump($behaviors2);
             }
@@ -1155,10 +1173,26 @@ class DBFarmRole
             if ($this->GetSetting(Scalr_Role_Behavior_Chef::ROLE_CHEF_ATTRIBUTES)) {
                 $result[Scalr_Role_Behavior_Chef::ROLE_CHEF_ATTRIBUTES] = $this->GetSetting(Scalr_Role_Behavior_Chef::ROLE_CHEF_ATTRIBUTES);
             }
+            if ($this->GetSetting(Scalr_Role_Behavior_Chef::ROLE_CHEF_LOG_LEVEL)) {
+                $result[Scalr_Role_Behavior_Chef::ROLE_CHEF_LOG_LEVEL] = $this->GetSetting(Scalr_Role_Behavior_Chef::ROLE_CHEF_LOG_LEVEL);
+            }
         } else {
             $result = $this->GetSettingsByFilter('chef.');
         }
 
         return $result;
+    }
+
+    /**
+     * Gets the status of the farm which corresponds to the farm role
+     *
+     * @return  int|null  Returns the status of the farm which corresponds to the farm role.
+     *                    It returns NULL if farm does not exist.
+     */
+    public function getFarmStatus()
+    {
+        return $this->DB->GetOne("SELECT f.status FROM `farms` f WHERE f.id = ? LIMIT 1", [
+            $this->FarmID,
+        ]);
     }
 }

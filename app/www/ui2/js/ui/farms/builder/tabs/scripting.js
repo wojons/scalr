@@ -140,6 +140,7 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.scripting', function (tabParams) {
 			rolescripting.loadScripts(this.tabData['scripts'] || []);
 			rolescripting.loadEvents(this.tabData['events'] || {});
 			rolescripting.loadBehaviors(tabParams['behaviors']);
+            rolescripting.abortIfBeforeHostUpFails = record.get('settings', true)['base.abort_init_on_script_fail'] == 1;
 
 			//load role scripts
 			rolescripting.loadRoleScripts(scripts);

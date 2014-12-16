@@ -31,12 +31,18 @@ Scalr.regPage('Scalr.ui.farms.builder.addrole.gce', function () {
                     params: {}
                 },
                 function(data, status){
-                    var locationField = this.down('[name="gce.cloud-location"]');
-                        
-                    locationField.store.loadData(data['zones'] || []);
+                    var locationField = this.down('[name="gce.cloud-location"]'),
+                        zones = [], defaultZone;
+
+                    Ext.each(data['zones'], function(zone){
+                        if (zone['name'].indexOf(record.get('cloud_location')) === 0) {
+                            zones.push(zone);
+                        }
+                    });
+                    locationField.store.loadData(zones);
                     locationField.reset();
-                    locationField.setValue(record.getGceCloudLocation());
-                    
+                    defaultZone = locationField.store.first();
+                    locationField.setValue(defaultZone && defaultZone.get('state') === 'UP' ? defaultZone : '');
                     locationField.setDisabled(!status);
                 },
                 this
@@ -48,21 +54,30 @@ Scalr.regPage('Scalr.ui.farms.builder.addrole.gce', function () {
                 field;
             field = this.down('[name="gce.machine-type"]');
             res = field.validate() || {comp: field, message: 'Instance type is required'};
+            if (res === true) {
+                field = this.down('[name="gce.cloud-location"]');
+                res = field.validate() || {comp: field, message: 'Zone is required'};
+            }
             return res;
         },
 
         getSettings: function() {
-            var location = this.down('[name="gce.cloud-location"]').getValue();
-                if (location.length === 1) {
-                    location = location[0];
-                } else if (location.length > 1) {
-                    location = 'x-scalr-custom=' + location.join(':');
-                } else {
-                    location = '';
-                }
+            var location = this.down('[name="gce.cloud-location"]').getValue(),
+                region = '';
+
+            if (location.length === 1) {
+                location = location[0];
+                region = location;
+            } else if (location.length > 1) {
+                location = 'x-scalr-custom=' + location.join(':');
+                region = 'x-scalr-custom';
+            } else {
+                location = '';
+            }
             return {
+                'gce.machine-type': this.down('[name="gce.machine-type"]').getValue(),
                 'gce.cloud-location': location,
-                'gce.machine-type': this.down('[name="gce.machine-type"]').getValue()
+                'gce.region': region
             };
         },
 
@@ -74,14 +89,15 @@ Scalr.regPage('Scalr.ui.farms.builder.addrole.gce', function () {
             allowBlank: false
         },{
             xtype: 'combobox',
-            fieldLabel: 'Location',
+            fieldLabel: 'Avail zone',
             flex: 1,
             multiSelect: true,
             name: 'gce.cloud-location',
             valueField: 'name',
             displayField: 'description',
+            allowBlank: false,
             listConfig: {
-                cls: 'x-boundlist-checkboxes',
+                cls: 'x-boundlist-with-icon',
                 tpl : '<tpl for=".">'+
                         '<tpl if="state != &quot;UP&quot;">'+
                             '<div class="x-boundlist-item x-boundlist-item-disabled" title="Zone is offline for maintenance"><img class="x-boundlist-icon" src="' + Ext.BLANK_IMAGE_URL + '"/>{description}&nbsp;<span class="warning"></span></div>'+
@@ -91,8 +107,9 @@ Scalr.regPage('Scalr.ui.farms.builder.addrole.gce', function () {
                       '</tpl>'
             },
             store: {
-                fields: [ 'name', 'description', 'state' ],
-                proxy: 'object'
+                fields: [ 'name', {name: 'description', convert: function(v, record){return record.data.description || record.data.name;}}, 'state' ],
+                proxy: 'object',
+                sorters: ['name']
             },
             editable: false,
             queryMode: 'local',
@@ -112,7 +129,7 @@ Scalr.regPage('Scalr.ui.farms.builder.addrole.gce', function () {
                     if (comp.isExpanded) {
                         var result = true;
                         if (comp.getValue().length < 2) {
-                            Scalr.message.InfoTip('At least one cloud location must be selected!', comp.inputEl, {anchor: 'bottom'});
+                            Scalr.message.InfoTip('At least one zone must be selected!', comp.inputEl, {anchor: 'bottom'});
                             result = false;
                         }
                         return result;
@@ -125,12 +142,6 @@ Scalr.regPage('Scalr.ui.farms.builder.addrole.gce', function () {
                             f = panel.getForm().findField('cloud_location'),
                             locations = [],
                             record = container.currentRole;
-                        f.suspendEvents(false);
-                        f.setValue(value.length === 1 ? value[0] : 'x-scalr-custom');
-                        f.resumeEvents();
-                        comp.store.data.each(function(){locations.push(this.get('name'))});
-                        panel.down('#locationmap').selectLocation(panel.state.platform, value, locations, 'world');
-                        
                         Scalr.loadInstanceTypes(record.get('platform'), value[0], Ext.bind(panel.setupInstanceTypeField, panel, [container, record], true));
                     }
                 }

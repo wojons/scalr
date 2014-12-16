@@ -1,6 +1,7 @@
 <?php
 namespace Scalr\Service\Aws\Client;
 
+use Scalr\Service\Aws\Exception\AwsResponseErrorFactory;
 use Scalr\Service\Aws\Plugin\EventObserver;
 use Scalr\Service\Aws\DataType\ErrorData;
 use Scalr\Service\Aws\DataType\Loader\ErrorLoader;
@@ -145,7 +146,7 @@ class QueryClientResponse implements ClientResponseInterface
                 $this->errorData->request = $this->getRequest();
                 $this->errorData->queryNumber = $this->queryNumber;
 
-                $this->exception = new QueryClientException($this->errorData);
+                $this->exception = AwsResponseErrorFactory::make($this->errorData);
             }
         }
 

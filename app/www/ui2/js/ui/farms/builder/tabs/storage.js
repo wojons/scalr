@@ -1,9 +1,4 @@
 Scalr.regPage('Scalr.ui.farms.builder.tabs.storage', function (moduleTabParams) {
-    var iopsMin = 100, 
-        iopsMax = 4000, 
-        integerRe = new RegExp('[0123456789]', 'i'), 
-        maxEbsStorageSize = 1000;
-        
 	return Ext.create('Scalr.ui.FarmsBuilderTab', {
 		tabTitle: 'Storage',
 		itemId: 'storage',
@@ -140,7 +135,7 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.storage', function (moduleTabParams) 
 
             if (osFamily !== 'windows') {
                 data.push({ fs: 'ext3', description: 'Ext3' });
-                if ((osFamily == 'centos' && record.get('arch') == 'x86_64') ||
+                if ((osFamily == 'centos' && record.get('image', true)['architecture'] == 'x86_64') ||
                     (osFamily == 'ubuntu' && Ext.Array.contains(['10.04', '12.04', '14.04'], record.get('os_generation')))
                     ) {
                     if (moduleTabParams['featureMFS']) {
@@ -839,10 +834,10 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.storage', function (moduleTabParams) 
                             
                             var minValue = 1;
                             if (form.down('[name="ebs.type"]').getValue() === 'io1') {
-                                minValue = Math.ceil(form.down('[name="ebs.iops"]').getValue()*1/10);
+                                minValue = Scalr.utils.getMinStorageSizeByIops(form.down('[name="ebs.iops"]').getValue());
                             }
-                            if (value*1 > maxEbsStorageSize) {
-                                return 'Maximum value is ' + maxEbsStorageSize + '.';
+                            if (value*1 > Scalr.constants.ebsMaxStorageSize) {
+                                return 'Maximum value is ' + Scalr.constants.ebsMaxStorageSize + '.';
                             } else if (value*1 < minValue) {
                                 return 'Minimum value is ' + minValue + '.';
                             }
@@ -855,7 +850,7 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.storage', function (moduleTabParams) 
                         fieldLabel: 'EBS type',
                         items: [{
                             xtype: 'combo',
-                            store: [['standard', 'Standard EBS (Magnetic)'],['gp2', 'General Purpose (SSD)'], ['io1', 'Provisioned IOPS (' + iopsMin + ' - ' + iopsMax + '): ']],
+                            store: Scalr.constants.ebsTypes,
                             valueField: 'id',
                             displayField: 'name',
                             editable: false,
@@ -883,15 +878,8 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.storage', function (moduleTabParams) 
                             hidden: true,
                             disabled: true,
                             margin: '0 0 0 5',
-                            maskRe: integerRe,
-                            validator: function(value){
-                                if (value*1 > iopsMax) {
-                                    return 'Maximum value is ' + iopsMax + '.';
-                                } else if (value*1 < iopsMin) {
-                                    return 'Minimum value is ' + iopsMin + '.';
-                                }
-                                return true;
-                            },
+                            vtype: 'iops',
+                            allowBlank: false,
                             flex: 1,
                             maxWidth: 60
                         }]
@@ -973,7 +961,8 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.storage', function (moduleTabParams) 
                         },
                         value: '0',
                         icons: {
-                            question: true
+                            question: true,
+                            szrversion: {tooltipData: {version: '2.9.25'}}
                         },
                         listeners: {
                             writeablechange: function(comp, readOnly) {

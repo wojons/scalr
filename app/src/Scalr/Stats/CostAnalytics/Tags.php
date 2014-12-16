@@ -102,13 +102,12 @@ class Tags
             $tag->valueName = $valueName;
             if ($tagId == TagEntity::TAG_ID_FARM) {
                 foreach ($this->db->GetAll("
-                    SELECT fr.id AS farm_role_id, r.name
+                    SELECT fr.id AS farm_role_id, fr.alias
                     FROM farm_roles fr
-                    JOIN roles r ON r.id = fr.role_id
                     WHERE fr.farmid = ?
                 ", [$valueId]) as $v) {
                     //Updates all related farm roles
-                    $this->syncValue($accountId, TagEntity::TAG_ID_FARM_ROLE, $v['farm_role_id'], sprintf('%s > %s', $valueName, $v['name']), false);
+                    $this->syncValue($accountId, TagEntity::TAG_ID_FARM_ROLE, $v['farm_role_id'], sprintf('%s', $v['alias']), false);
                 }
             }
         } else {

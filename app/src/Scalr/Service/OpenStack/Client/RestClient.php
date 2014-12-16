@@ -98,9 +98,10 @@ class RestClient implements ClientInterface
                 $message = $this->tryCall($httpRequest, $attempts, $interval * 2);
             } else {
                 throw new RestClientException(sprintf(
-                        'Cannot establish connection with OpenStack server. (%s).',
-                        (isset($e->innerException) ? preg_replace('/(\(.*\))/', '', $e->innerException->getMessage()) : $e->getMessage())
-                    ));
+                    'Cannot establish connection with OpenStack server (%s). (%s).',
+                    $httpRequest->getUrl(),
+                    (isset($e->innerException) ? preg_replace('/(\(.*\))/', '', $e->innerException->getMessage()) : $e->getMessage())
+                ));
             }
         }
         return $message;

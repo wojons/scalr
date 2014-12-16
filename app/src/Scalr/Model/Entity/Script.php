@@ -2,6 +2,7 @@
 namespace Scalr\Model\Entity;
 
 use Scalr\Model\AbstractEntity;
+use Scalr\DataType\ScopeInterface;
 
 /**
  * Script entity
@@ -12,7 +13,7 @@ use Scalr\Model\AbstractEntity;
  * @Entity
  * @Table(name="scripts")
  */
-class Script extends AbstractEntity
+class Script extends AbstractEntity implements ScopeInterface
 {
     const TARGET_ALL = 'all';
     const TARGET_FARM = 'farm';
@@ -315,18 +316,20 @@ class Script extends AbstractEntity
     public static function getList($accountId, $envId)
     {
         $criteria = [];
-        if ($accountId) {
-            $criteria[] = [
-                '$or' => [['accountId' => $accountId], ['accountId' => NULL]]
-            ];
-        } else {
-            $criteria[] = ['accountId' => NULL];
-        }
-
-        if ($envId) {
-            $criteria[] = [
-                '$or' => [['envId' => $envId], ['envId' => NULL]]
-            ];
+        if ($accountId && $envId) {//environment scope
+            $criteria[] = ['$or' => [
+                ['$and' => [['accountId' => $accountId], ['envId' => $envId]]],
+                ['$and' => [['accountId' => $accountId], ['envId' => null]]],
+                ['$and' => [['accountId' => null], ['envId' => null]]]
+            ]];
+        } elseif ($accountId && !$envId) {//account scope
+            $criteria[] = ['$or' => [
+                ['$and' => [['accountId' => $accountId], ['envId' => null]]],
+                ['$and' => [['accountId' => null], ['envId' => null]]]
+            ]];
+        } else {//scalr scope
+            $criteria[] = ['envId' => null];
+            $criteria[] = ['accountId' => null];
         }
 
         return array_map(function(Script $script) {
@@ -342,6 +345,7 @@ class Script extends AbstractEntity
                 // TODO: at first check createdById
                 'createdByEmail' => $script->createdByEmail,
                 'accountId' => $script->accountId,
+                'scope' => $script->envId ? self::SCOPE_ENVIRONMENT : ($script->accountId ? self::SCOPE_ACCOUNT : self::SCOPE_SCALR),
                 'versions' => array_map(function(ScriptVersion $version) {
                     return [
                         'version' => $version->version,
@@ -356,7 +360,7 @@ class Script extends AbstractEntity
     public static function getScriptingData($accountId, $envId)
     {
         return [
-            'events' => array_merge(\EVENT_TYPE::getScriptingEvents(), EventDefinition::getList($accountId, $envId)),
+            'events' => array_merge(\EVENT_TYPE::getScriptingEventsWithScope(), EventDefinition::getList($accountId, $envId)),
             'scripts' => self::getList($accountId, $envId)
         ];
     }

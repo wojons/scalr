@@ -39,29 +39,53 @@ Ext.define('Scalr.ui.ChefSettingsField', {
 
     setValue: function(value, callback) {
         var me = this,
+            roleChefSettings = me.roleChefSettings || {},
+            farmRoleChefSettings = me.farmRoleChefSettings || {},
+            overrideAttributes,
+            serverId = value['chef.server_id'],
+            defaultEnv = '_default',
+            limits = me.limits,
             setValues = function(success) {
                 var field;
                 me.reset();
                 me.down('#chefMode').setValue(value['chef.cookbook_url'] ? 'solo' : 'server');
                 me.down('#solo').setValues(value);
                 me.down('[name="chef.bootstrap"]').setValue(value['chef.bootstrap']);
-                me.down('[name="chef.server_id"]').setValue(value['chef.server_id']);
-                me.down('[name="chef.environment"]').setValue(value['chef.environment']);
+                me.down('[name="chef.server_id"]').setValue(serverId);
+                me.down('[name="chef.environment"]').setValue(value['chef.environment'] || (serverId ? defaultEnv : null));
                 me.down('[name="chef.role_name"]').setValue(value['chef.role_name']);
                 me.down('[name="chef.runlist"]').setValue(value['chef.runlist']);
                 me.down('[name="chef.node_name_tpl"]').setValue(value['chef.node_name_tpl']);
                 field = me.down('[name="chef.daemonize"]');
                 field.setValue(value['chef.daemonize']);
                 field.setReadOnly(!!me.disableDaemonize || me.readOnly);
-                me.down('[name="chef.attributes"]').setValue(value['chef.attributes']);
+
+                field = me.down('[name="chef.attributes"]');
+                if (me.readOnly) {
+                    overrideAttributes = farmRoleChefSettings['chef.attributes'];
+                    me.down('#overrideAttributes').setValue(!!overrideAttributes);
+                    field.setValue(overrideAttributes ? farmRoleChefSettings['chef.attributes'] : roleChefSettings['chef.attributes']);
+                    field.setReadOnly(!overrideAttributes);
+                } else {
+                    field.setValue(value['chef.attributes']);
+                }
                 me.down('#confType').setValue(value['chef.role_name'] ? 'role' : 'runlist');
-                me.down('[name="chef.log_level"]').setValue(value['chef.log_level'] || 'auto');
+                me.down('[name="chef.log_level"]').setValue(farmRoleChefSettings['chef.log_level'] || value['chef.log_level'] || 'auto');
                 if (callback !== undefined) {
                     callback(success);
                 }
             };
-
-        if (value['chef.server_id']) {//preload servers if server_id is set
+        if (!serverId && limits !== undefined) {
+            Ext.Object.each(limits['servers'], function(id, server){
+                if (server['default'] == 1) {
+                    serverId = id;
+                    if (server['environments'].length) {
+                        defaultEnv = server['environments'][0];
+                    }
+                }
+            });
+        }
+        if (serverId) {//preload servers if server_id is set
             me.down('[name="chef.server_id"]').store.load(function(records, operation, success){
                 setValues(success);
             });
@@ -71,7 +95,10 @@ Ext.define('Scalr.ui.ChefSettingsField', {
     },
 
     getValue: function() {
-        var value = {};
+        var value = {},
+            roleChefSettings = this.roleChefSettings || {},
+            logLevel = this.down('[name="chef.log_level"]').getValue(),
+            field;
         if (!this.readOnly) {
             value['chef.bootstrap'] = this.down('[name="chef.bootstrap"]').getValue() ? 1 : '';
             if (this.down('#chefMode').getValue() === 'solo') {
@@ -88,9 +115,16 @@ Ext.define('Scalr.ui.ChefSettingsField', {
                 value['chef.node_name_tpl'] = this.down('[name="chef.node_name_tpl"]').getValue();
                 value['chef.daemonize'] = this.down('[name="chef.daemonize"]').getValue() ? 1 : 0;
             }
-            value['chef.log_level'] = this.down('[name="chef.log_level"]').getValue();
+            value['chef.log_level'] = logLevel;
+        } else {
+            if (logLevel != roleChefSettings['chef.log_level']) {
+                value['chef.log_level'] = logLevel;
+            }
         }
-        value['chef.attributes'] = this.down('[name="chef.attributes"]').getValue();
+        field = this.down('[name="chef.attributes"]');
+        if (!field.readOnly) {
+            value['chef.attributes'] = field.getValue();
+        }
         return value;
     },
 
@@ -113,12 +147,16 @@ Ext.define('Scalr.ui.ChefSettingsField', {
 
     setReadOnly: function(readOnly) {
         var fields = this.query('[isFormField]');
+        this.suspendLayouts();
         Ext.Array.each(fields, function(field){
-            if (!Ext.Array.contains(['chef.attributes'], field.name)) {
+            if (!Ext.Array.contains(['overrideAttributes', 'chef.log_level'], field.name)) {
                 field.setReadOnly(!!readOnly, false);
             }
         });
         this.down('#configureRunlist').setDisabled(!!readOnly);
+        this.down('#overrideAttributes').setVisible(!!readOnly);
+        this.down('[name="chef.attributes"]').setFieldLabel(readOnly ? '' : 'Attributes');
+        this.resumeLayouts(true);
         this.readOnly = !!readOnly;
     },
 
@@ -194,11 +232,26 @@ Ext.define('Scalr.ui.ChefSettingsField', {
                 name: 'chef.server_id',
                 listeners: {
                     change: function(comp, value) {
-                        var envField = comp.next();
+                        var envField = comp.next(),
+                            ct = comp.up('chefsettings'),
+                            envValue = value ? '_default' : '',
+                            envList = null;
+
+                        if (value && ct.limits !== undefined && ct.limits['servers'][value]) {
+                            var envs = ct.limits['servers'][value]['environments'] || [];
+                            if (envs.length) {
+                                envList = Ext.Array.map(envs, function(name){
+                                    return {name: name};
+                                });
+                                envValue = '';
+                            }
+                        }
+                        envField.store.proxy.data = envList;
+
                         envField.setDisabled(!value);
                         envField.store.proxy.params['servId'] = value;
                         envField.reset();
-                        envField.setValue(value ? '_default' : '');
+                        envField.setValue(envValue);
                     }
                 }
             },{
@@ -352,8 +405,28 @@ Ext.define('Scalr.ui.ChefSettingsField', {
             name: 'chef.runlist',
             fieldLabel: 'Runlist',
             labelAlign: 'top',
-            height: 220,
-            emptyText: 'Paste your run list in JSON format'
+            height: 100,
+            emptyText: 'Paste your run list in JSON format',
+            icons: {
+                globalvars: true
+            }
+        },{
+            xtype: 'checkbox',
+            name: 'overrideAttributes',
+            itemId: 'overrideAttributes',
+            hidden: true,
+            boxLabel: 'Override attributes defined in the Role scope <img src="'+Ext.BLANK_IMAGE_URL+'" class="x-icon-info" data-qtip="Future attributes changes made on the Role will not affect this Farm Role" />',
+            listeners: {
+                change: function(comp, value) {
+                    var attrField = comp.next('[name="chef.attributes"]'),
+                        roleChefSettings = comp.up('chefsettings').roleChefSettings || {};
+                    attrField.applyEmptyText(value ? '' : 'Paste attributes in JSON format');
+                    attrField.setReadOnly(!value);
+                    if (!value) {
+                        attrField.setValue(roleChefSettings['chef.attributes'] || '');
+                    }
+                }
+            }
         },{
             xtype: 'textarea',
             itemId: 'attributes',
@@ -364,6 +437,7 @@ Ext.define('Scalr.ui.ChefSettingsField', {
             },
             labelAlign: 'top',
             height: 220,
+            margin: '6 0 0',
             emptyText: 'Paste attributes in JSON format'
         }]
     }]
@@ -466,18 +540,66 @@ Ext.define('Scalr.ui.ChefServerIdField', {
     queryCaching: false,
     clearDataBeforeQuery: true,
     store: {
-        fields: [ 'url', 'id' ],
+        fields: ['id', 'url', 'username', 'level' ],
         proxy: {
             type: 'cachedrequest',
             url: '/services/chef/servers/xListServers/'
         }
     },
-    plugins: [{
-        ptype: 'comboaddnew',
-        pluginId: 'comboaddnew',
-        url: '/services/chef/servers/create',
-        disabled: !Scalr.isAllowed('SERVICES_CHEF')
-    }]
+
+    listConfig: {
+        cls: 'x-boundlist-alt',
+        tpl:
+            '<tpl for=".">' +
+                '<div class="x-boundlist-item" style="height: auto; width: auto; max-width: 900px;">' +
+                    '<img src="'+Ext.BLANK_IMAGE_URL+'" class="scalr-scope-{level}" data-qtip="{level:capitalize} scope"/>&nbsp; {url}'+
+                    '<div style="line-height: 16px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;margin:0 0 0 16px">' +
+                        '<span style="font-style: italic;">Username: {username}</span>' +
+                    '</div>' +
+                '</div>' +
+            '</tpl>'
+    },
+
+    onRender: function() {
+        var me = this;
+
+        me.callParent(arguments);
+
+        me.inputImgEl = me.inputCell.createChild({
+            tag: 'img',
+            src: Ext.BLANK_IMAGE_URL,
+            style: 'position:absolute;top:8px;left:6px;'
+        });
+        me.inputImgEl.setVisibilityMode(Ext.Element.DISPLAY);
+        me.setInputImgElType(me.getValue());
+    },
+
+    setInputImgElType: function(newValue, oldValue) {
+        var me = this,
+            rec = me.findRecordByValue(newValue),
+            oldRec = me.findRecordByValue(oldValue);
+        if (oldRec) {
+            this.inputImgEl.removeCls('scalr-scope-' + oldRec.get('level'));
+        }
+        if (rec) {
+            this.inputImgEl.addCls('scalr-scope-' + rec.get('level'));
+            this.inputImgEl.set({'data-qtip': Ext.String.capitalize(rec.get('level')) + ' scope'});
+            this.inputImgEl.show();
+            this.inputEl.setStyle('padding-left', '20px');
+        } else {
+            this.inputEl.setStyle('padding-left', '7px');
+            this.inputImgEl.hide();
+        }
+    },
+
+    onChange: function(newValue, oldValue) {
+        var me = this;
+        if (me.inputImgEl) {
+            me.setInputImgElType(newValue, oldValue);
+        }
+        me.callParent(arguments);
+    }
+
 });
 
 Ext.define('Scalr.ui.ChefEnvironmentField', {
@@ -496,7 +618,7 @@ Ext.define('Scalr.ui.ChefEnvironmentField', {
         fields: [ 'name' ],
         proxy: {
             type: 'cachedrequest',
-            url: '/services/chef/servers/xListEnvironments/'
+            url: '/services/chef/xListEnvironments/'
         }
     }
 });
@@ -833,53 +955,57 @@ Ext.define('Scalr.ui.ChefOrchestrationField', {
         var me = this,
             setValues = function() {
                 var field,
-                    chefServerBtn;
+                    chefServerBtn,
+                    settingsCount = Ext.Object.getSize(value),
+                    isNewRecord = settingsCount === 0,
+                    isReconverge = (settingsCount === 3 && value['chef.runlist']==='' && value['chef.attributes']==='' && value['chef.role_name']===''),
+                    isRoleChefServerSet = me.chefSettings['chef.bootstrap'] ==1 && me.chefSettings['chef.server_id'];
                 me.reset();
 
-                field = me.down('#serverModeType');
-                field.suspendEvents(false);
-                field.setValue(!value['chef.runlist'] && !value['chef.attributes'] && !value['chef.role_name'] ? 'refresh' : 'new');
-                field.resumeEvents();
-                
                 field = me.down('#chefMode');
-                field.setValue(value['chef.cookbook_url'] || !me.chefSettings['chef.server_id'] ? 'solo' : 'server');
+                if (isReconverge || isNewRecord && !isRoleChefServerSet) {
+                    field.setValue('reconverge');
+                } else if (value['chef.cookbook_url']) {
+                    field.setValue('solo');
+                } else {
+                    field.setValue('server');
+                }
                 chefServerBtn = field.items.getAt(0);
-                chefServerBtn.setTooltip(!me.chefSettings['chef.server_id'] ? me.noChefServerMessage : '');
-                chefServerBtn.setDisabled(!me.chefSettings['chef.server_id']);
+                chefServerBtn.setTooltip(!me.chefSettings['chef.server_id'] || me.chefSettings['chef.bootstrap'] != 1 ? me.noChefServerMessage : '');
+                chefServerBtn.setDisabled(!me.chefSettings['chef.server_id'] || me.chefSettings['chef.bootstrap'] != 1);
 
                 me.down('#solo').setValues(value);
 
                 field = me.down('[name="chef.role_name"]');
                 field.store.proxy.params = {servId: me.chefSettings['chef.server_id']};
-                field.setValue(value['chef.role_name']);
+                field.setValue(value['chef.role_name'] || me.chefSettings['chef.role_name']);
                 
-                me.down('[name="chef.runlist"]').setValue(value['chef.runlist']);
-                me.down('[name="chef.attributes"]').setValue(value['chef.attributes']);
-                me.down('#confType').setValue(value['chef.role_name'] ? 'role' : 'runlist');
+                me.down('[name="chef.runlist"]').setValue(value['chef.runlist'] || '');
+                me.down('[name="chef.attributes"]').setValue(value['chef.attributes'] || me.chefSettings['chef.attributes']);
+                me.down('#confType').setValue((value['chef.role_name'] || me.chefSettings['chef.role_name']) ? 'role' : 'runlist');
             };
         setValues();
     },
 
     getValue: function() {
-        var value = {};
+        var value = {},
+            chefMode = this.down('#chefMode').getValue();
         if (!this.readOnly) {
-            if (this.down('#chefMode').getValue() === 'solo') {
+            if (chefMode === 'solo') {
                 value['chef.runlist'] = this.down('[name="chef.runlist"]').getValue();
                 Ext.apply(value, this.down('#solo').getValues());
                 value['chef.attributes'] = this.down('[name="chef.attributes"]').getValue();
+            } else if (chefMode === 'reconverge') {
+                value['chef.role_name'] = '';
+                value['chef.runlist'] = '';
+                value['chef.attributes'] = '';
             } else {
-                if (this.down('#serverModeType').getValue() === 'refresh') {
-                    value['chef.role_name'] = '';
-                    value['chef.runlist'] = '';
-                    value['chef.attributes'] = '';
+                if (this.down('#confType').getValue() === 'role') {
+                    value['chef.role_name'] = this.down('[name="chef.role_name"]').getValue();
                 } else {
-                    if (this.down('#confType').getValue() === 'role') {
-                        value['chef.role_name'] = this.down('[name="chef.role_name"]').getValue();
-                    } else {
-                        value['chef.runlist'] = this.down('[name="chef.runlist"]').getValue();
-                    }
-                    value['chef.attributes'] = this.down('[name="chef.attributes"]').getValue();
+                    value['chef.runlist'] = this.down('[name="chef.runlist"]').getValue();
                 }
+                value['chef.attributes'] = this.down('[name="chef.attributes"]').getValue();
             }
         }
         return value;
@@ -922,12 +1048,17 @@ Ext.define('Scalr.ui.ChefOrchestrationField', {
         itemId: 'chefMode',
         margin: '0 0 28 0',
         defaults: {
-            width: 120,
+            maxWidth: 200,
+            flex: 1,
             height: 32
         },
+        layout: 'hbox',
         items: [{
-            text: 'Chef server',
+            text: 'Override runlist (Server)',
             value: 'server'
+        },{
+            text: 'Reconverge (Server)',
+            value: 'reconverge'
         },{
             text: 'Chef solo',
             value: 'solo'
@@ -942,48 +1073,29 @@ Ext.define('Scalr.ui.ChefOrchestrationField', {
                     serverCt.setVisible(value === 'server');
                     soloCt.setVisible(value === 'solo');
                     if (value === 'server') {
-                        comp.next('#runlist').setVisible(serverCt.down('#confType').getValue() === 'runlist');
-                        ct.down('#serverModeType').show().onValueChange();
+                        ct.down('#attributes').show();
+                        ct.down('#runlist').setVisible(ct.down('#confType').getValue() === 'runlist');
+                        ct.down('#server').show();
+                        ct.down('#reconverge').hide();
+                    } else if (value === 'reconverge') {
+                        ct.down('#reconverge').show();
+                        ct.down('#attributes').hide();
+                        ct.down('#runlist').hide();
+                        ct.down('#server').hide();
                     } else {
                         comp.next('#attributes').show();
                         comp.next('#runlist').show();
-                        ct.down('#serverModeType').hide();
+                        ct.down('#reconverge').hide();
                     }
                 }
                 ct.resumeLayouts(true);
             }
         }
     },{
-        xtype: 'buttongroupfield',
-        itemId: 'serverModeType',
-        fieldLabel: 'Action',
-        labelWidth: 120,
-        defaults: {
-            width: 100
-        },
-        items: [{
-            text: 'Refresh',
-            value: 'refresh'
-        },{
-            text: 'Custom setup',
-            value: 'new'
-        }],
-        onValueChange: function(value) {
-            var ct = this.up('cheforchestration');
-            if (ct.down('#chefMode').getValue() === 'server') {
-                value = value || this.getValue();
-                ct.down('#attributes').setVisible(value !== 'refresh');
-                ct.down('#runlist').setVisible(value !== 'refresh' && ct.down('#confType').getValue() === 'runlist');
-                ct.down('#server').setVisible(value !== 'refresh');
-            }
-        },
-        listeners: {
-            change: function(comp, value) {
-                if (value) {
-                    comp.onValueChange(value);
-                }
-            }
-        }
+        xtype: 'displayfield',
+        itemId: 'reconverge',
+        cls: 'x-form-field-info',
+        value: 'Reconverge will only execute on targets where Bootstrap with Chef was enabled'
     },{
         xtype: 'container',
         itemId: 'server',
@@ -1002,9 +1114,9 @@ Ext.define('Scalr.ui.ChefOrchestrationField', {
                 itemId: 'confType',
                 fieldLabel: 'Configuration',
                 labelWidth: 120,
-                width: 340,
+                width: 380,
                 defaults: {
-                    width: 100
+                    width: 120
                 },
                 items: [{
                     text: 'Role',
@@ -1017,7 +1129,7 @@ Ext.define('Scalr.ui.ChefOrchestrationField', {
                     change: function(comp, value) {
                         var ct = comp.up('cheforchestration');
                         ct.down('[name="chef.role_name"]').setVisible(value === 'role');
-                        if (ct.down('#chefMode').getValue() === 'server' && ct.down('#server').isVisible()) {
+                        if (ct.down('#chefMode').getValue() === 'server') {
                             ct.down('[name="chef.runlist"]').setVisible(value === 'runlist');
                         }
                         ct.down('#configureRunlist').setVisible(value === 'runlist').setDisabled(value !== 'runlist');
@@ -1080,7 +1192,10 @@ Ext.define('Scalr.ui.ChefOrchestrationField', {
         name: 'chef.runlist',
         fieldLabel: 'Runlist',
         labelAlign: 'top',
-        height: 140,
+        height: 120,
+        icons: {
+            globalvars: true
+        },
         emptyText: 'Paste your run list in JSON format'
     },{
         xtype: 'textarea',
@@ -1091,7 +1206,7 @@ Ext.define('Scalr.ui.ChefOrchestrationField', {
             globalvars: true
         },
         labelAlign: 'top',
-        height: 140,
+        height: 120,
         emptyText: 'Paste attributes in JSON format'
     }]
 

@@ -12,12 +12,20 @@ namespace Scalr\Stats\CostAnalytics\Entity;
 class TagEntity extends \Scalr\Model\AbstractEntity
 {
     const TAG_ID_ENVIRONMENT = 1;
+
     const TAG_ID_PLATFORM = 2;
+
+    const TAG_ID_ROLE = 3;
+    const TAG_ID_ROLE_BEHAVIOR = 7;
+
     const TAG_ID_FARM = 4;
+    const TAG_ID_FARM_OWNER = 10;
     const TAG_ID_FARM_ROLE = 5;
+
     const TAG_ID_USER = 6;
-    const TAG_ID_CLOUD_LOCATION = 7;
+
     const TAG_ID_COST_CENTRE = 8;
+
     const TAG_ID_PROJECT = 9;
 
     /**

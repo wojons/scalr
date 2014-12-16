@@ -95,7 +95,7 @@ class FarmRoleStorage
         //TODO: Handle zombies
     }
 
-    public function getVolumesConfigs($serverIndex, $isHostInit = true)
+    public function getVolumesConfigs(\DBServer $dbServer, $isHostInit = true)
     {
         $volumes = array();
 
@@ -104,7 +104,7 @@ class FarmRoleStorage
             //Check for existing volume
             $createFreshConfig = true;
             $volume = null;
-            $dbVolume = FarmRoleStorageDevice::getByConfigIdAndIndex($config->id, $serverIndex);
+            $dbVolume = FarmRoleStorageDevice::getByConfigIdAndIndex($config->id, $dbServer->index);
             if ($dbVolume) {
                  if ($config->reUse == 0 && $isHostInit) {
                      $dbVolume->status = FarmRoleStorageDevice::STATUS_ZOMBY;
@@ -123,6 +123,41 @@ class FarmRoleStorage
                 $volumeConfigTemplate->type = stristr($config->type, "raid.") ? FarmRoleStorageConfig::TYPE_RAID : $config->type;
                 $volumeConfigTemplate->fstype = $config->fs;
                 $volumeConfigTemplate->mpoint = ($config->mount == 1) ? $config->mountPoint : null;
+                
+                //Tags
+                try {
+                    $tags = array(
+                        "scalr-env-id"  => $dbServer->envId,
+                        "scalr-owner" => $dbServer->GetFarmObject()->createdByUserEmail,
+                        "scalr-farm-id" => $dbServer->farmId,
+                        "scalr-farm-role-id" => $dbServer->farmRoleId,
+                        "scalr-server-id" => $dbServer->serverId
+                    );
+                    
+                    $governance = new \Scalr_Governance($this->farmRole->GetFarmObject()->EnvID);
+                    $gTags = (array)$governance->getValue('ec2', 'aws.tags');
+                    if (count($gTags) > 0) {
+                        foreach ($gTags as $tKey => $tValue) {
+                            if ($tKey == 'Name')
+                                continue;
+                            $tags[$tKey] = $dbServer->applyGlobalVarsToValue($tValue);
+                        }
+                    } else {
+                        //Custom tags
+                        $cTags = $dbServer->GetFarmRoleObject()->GetSetting(\DBFarmRole::SETTING_AWS_TAGS_LIST);
+                        $tagsList = @explode("\n", $cTags);
+                        foreach ((array)$tagsList as $tag) {
+                            $tag = trim($tag);
+                            if ($tag && count($tags) < 10) {
+                                $tagChunks = explode("=", $tag);
+                                $tags[trim($tagChunks[0])] = $dbServer->applyGlobalVarsToValue(trim($tagChunks[1]));
+                            }
+                        }
+                    }
+                    
+                    $volumeConfigTemplate->tags = $tags;
+                } catch (\Exception $e) {}
+                //
 
                 switch ($config->type) {
                     case FarmRoleStorageConfig::TYPE_CINDER:

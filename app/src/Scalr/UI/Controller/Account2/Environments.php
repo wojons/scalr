@@ -224,7 +224,8 @@ class Scalr_UI_Controller_Account2_Environments extends Scalr_UI_Controller
                     }
 
                     if ($this->getContainer()->config->get('scalr.connections.ldap.user')) {
-                        $ldap = $this->getContainer()->ldap($this->user->getEmail(), null);
+                        $user = strtok($this->user->getEmail(), '@');
+                        $ldap = $this->getContainer()->ldap($user, null);
                         if ($ldap->isValidUsername()) {
                             $this->user->applyLdapGroups($ldap->getUserGroups());
                         }

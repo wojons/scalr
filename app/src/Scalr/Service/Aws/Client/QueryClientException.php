@@ -1,6 +1,8 @@
 <?php
 namespace Scalr\Service\Aws\Client;
 
+use Exception;
+
 /**
  * QueryClientException
  *
@@ -10,4 +12,3 @@ namespace Scalr\Service\Aws\Client;
 class QueryClientException extends ClientException
 {
 }
-

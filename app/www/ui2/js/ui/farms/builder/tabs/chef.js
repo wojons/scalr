@@ -29,7 +29,7 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.chef', function (tabParams) {
 
             record.loadRoleChefSettings(function(data, status){
                 if (status) {
-                    if (!data.roleChefEnabled && Scalr.flags['betaMode']) {
+                    if (!data.roleChefSettings) {
                         field.disableDaemonize = false;
                         Ext.each(record.get('scripting', true) || [], function(script){
                             if (script['script_type'] === 'chef' && script['params'] && !script['params']['chef.cookbook_url']) {
@@ -38,7 +38,10 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.chef', function (tabParams) {
                             }
                         });
                     }
-                    field.setReadOnly(data.roleChefEnabled);
+                    field.limits = me.up('#farmbuilder').getLimits('general', 'general.chef');
+                    field.setReadOnly(data.roleChefSettings);
+                    field.roleChefSettings = data.roleChefSettings;
+                    field.farmRoleChefSettings = data.farmRoleChefSettings;
                     field.setValue(data.chefSettings, function(success){
                         success ? handler() : me.deactivateTab();
                     });
@@ -60,6 +63,7 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.chef', function (tabParams) {
                 delete settings[key];
             });
             Ext.apply(settings, this.down('chefsettings').getValue());
+            
             record.set('settings', settings);
         },
         items: [{

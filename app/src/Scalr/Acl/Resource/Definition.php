@@ -78,14 +78,8 @@ class Definition
                     $allows . 'access to servers.',
                     Acl::GROUP_FARMS,
                     [
-                        Acl::PERM_FARMS_SERVERS_SSH_CONSOLE => $allows . 'to use server ssh console.'
+                        Acl::PERM_FARMS_SERVERS_SSH_CONSOLE => $allows . 'to use server SSH Launcher.'
                     ]
-                ],
-
-                Acl::RESOURCE_FARMS_EVENTS_AND_NOTIFICATIONS => [
-                    'Events and notifications',
-                    $allows . 'access to events and notifications.',
-                    Acl::GROUP_FARMS
                 ],
 
                 Acl::RESOURCE_FARMS_STATISTICS => [
@@ -103,6 +97,16 @@ class Definition
                         Acl::PERM_FARMS_ROLES_MANAGE      => $allows . 'to manage (edit/delete) roles.',
                         Acl::PERM_FARMS_ROLES_CLONE       => $allows . 'to clone roles.',
                         Acl::PERM_FARMS_ROLES_BUNDLETASKS => $allows . 'to bundle tasks (role creation process logs).',
+                    ]
+                ],
+
+                Acl::RESOURCE_FARMS_IMAGES => [
+                    'Images',
+                    $allows . 'access to images.',
+                    Acl::GROUP_FARMS,
+                    [
+                        Acl::PERM_FARMS_ROLES_CREATE      => $allows . 'to create (build/import) images.',
+                        Acl::PERM_FARMS_ROLES_MANAGE      => $allows . 'to manage (edit/delete) images.'
                     ]
                 ],
 
@@ -262,9 +266,15 @@ class Definition
                     Acl::GROUP_SERVICES
                 ],
 
-                Acl::RESOURCE_SERVICES_CHEF => [
-                    'Chef',
-                    $allows . 'access to chef.',
+                Acl::RESOURCE_SERVICES_ENVADMINISTRATION_CHEF => [
+                    'Chef (environment scope)',
+                    $allows . 'to manage chef servers in the environment scope.',
+                    Acl::GROUP_SERVICES
+                ],
+
+                Acl::RESOURCE_SERVICES_ADMINISTRATION_CHEF => [
+                    'Chef (account scope)',
+                    $allows . 'to manage chef servers in the account scope.',
                     Acl::GROUP_SERVICES
                 ],
 
@@ -283,7 +293,10 @@ class Definition
                 Acl::RESOURCE_GENERAL_CUSTOM_EVENTS => [
                     'Custom events',
                     $allows . 'access to custom events.',
-                    Acl::GROUP_GENERAL
+                    Acl::GROUP_GENERAL,
+                    [
+                        Acl::PERM_GENERAL_CUSTOM_EVENTS_FIRE => $allows . 'to fire custom events.'
+                    ]
                 ],
 
                 Acl::RESOURCE_GENERAL_CUSTOM_SCALING_METRICS => [
@@ -295,12 +308,6 @@ class Definition
                 Acl::RESOURCE_GENERAL_SCHEDULERTASKS => [
                     'Tasks scheduler',
                     $allows . 'access to tasks scheduler.',
-                    Acl::GROUP_GENERAL
-                ],
-
-                Acl::RESOURCE_GENERAL_WEBHOOKS => [
-                    'Webhooks',
-                    $allows . 'to manage webhooks.',
                     Acl::GROUP_GENERAL
                 ],
 
@@ -359,19 +366,19 @@ class Definition
                 ],
 
                 Acl::RESOURCE_ADMINISTRATION_ORCHESTRATION => [
-                    'Orchestration (account level)',
-                    $allows . 'access to orchestration of account level.',
+                    'Orchestration (account scope)',
+                    $allows . 'access to orchestration in the account scope.',
                     Acl::GROUP_ADMINISTRATION
                 ],
 
                 Acl::RESOURCE_ADMINISTRATION_GLOBAL_VARIABLES => [
-                    'Global variables (account level)',
-                    $allows . 'access to global variables of account level.',
+                    'Global variables (account scope)',
+                    $allows . 'access to global variables in the account scope.',
                     Acl::GROUP_ADMINISTRATION
                 ],
 
                 Acl::RESOURCE_ADMINISTRATION_SCRIPTS => [
-                    'Scripts (account level)',
+                    'Scripts (account scope)',
                     $allows . 'access to scripts.',
                     Acl::GROUP_ADMINISTRATION,
                     [
@@ -379,6 +386,12 @@ class Definition
                         Acl::PERM_ADMINISTRATION_SCRIPTS_EXECUTE   => $allows . 'to execute scripts.',
                         Acl::PERM_ADMINISTRATION_SCRIPTS_FORK      => $allows . 'to fork scripts.',
                     ]
+                ],
+
+                Acl::RESOURCE_ADMINISTRATION_WEBHOOKS => [
+                    'Webhooks (account scope)',
+                    $allows . 'to manage webhooks in the account scope.',
+                    Acl::GROUP_ADMINISTRATION
                 ],
 
                 Acl::RESOURCE_ENVADMINISTRATION_ENV_CLOUDS => [
@@ -394,8 +407,14 @@ class Definition
                 ],
 
                 Acl::RESOURCE_ENVADMINISTRATION_GLOBAL_VARIABLES => [
-                    'Global variables (environment level)',
-                    $allows . 'access to global variables of environment level.',
+                    'Global variables (environment scope)',
+                    $allows . 'access to global variables in the environment scope.',
+                    Acl::GROUP_ENVADMINISTRATION
+                ],
+
+                Acl::RESOURCE_ENVADMINISTRATION_WEBHOOKS => [
+                    'Webhooks (environment scope)',
+                    $allows . 'to manage webhooks in the environment scope.',
                     Acl::GROUP_ENVADMINISTRATION
                 ],
 
@@ -403,6 +422,18 @@ class Definition
                     'Cost Analytics Projects',
                     $allows . ' account users to create a new projects for cost analytics',
                     Acl::GROUP_ANALYTICS
+                ],
+
+                Acl::RESOURCE_ADMINISTRATION_ANALYTICS => [
+                    'Cost Analytics (account scope)',
+                    $allows . ' access to Account level Cost Analytics',
+                    Acl::GROUP_ADMINISTRATION
+                ],
+
+                Acl::RESOURCE_ENVADMINISTRATION_ANALYTICS => [
+                    'Cost Analytics (environment scope)',
+                    $allows . ' access to Environment level Cost Analytics',
+                    Acl::GROUP_ENVADMINISTRATION
                 ],
 
                 // ... add more resources here

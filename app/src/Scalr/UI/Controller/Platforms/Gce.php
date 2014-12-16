@@ -5,7 +5,7 @@ use Scalr\Modules\Platforms\GoogleCE\GoogleCEPlatformModule;
 
 class Scalr_UI_Controller_Platforms_Gce extends Scalr_UI_Controller
 {
-    private function getFarmRoleStaticIps($cloudLocation, $farmRoleId) {
+    public function xGetFarmRoleStaticIpsAction($region, $cloudLocation, $farmRoleId) {
         $gceClient = $this->getGceClient($this->environment);
         $projectId = $this->environment->getPlatformConfigValue(GoogleCEPlatformModule::PROJECT_ID);
 
@@ -36,17 +36,17 @@ class Scalr_UI_Controller_Platforms_Gce extends Scalr_UI_Controller
             }
         }
 
-        $response = $gceClient->addresses->listAddresses($projectId, $cloudLocation);
+        $response = $gceClient->addresses->listAddresses($projectId, $region);
 
         $ips = array();
         /* @var $ip \Google_Service_Compute_Address */
         foreach ($response as $ip) {
-
-            var_dump($ip);
-
             $itm = array(
-                'ipAddress'  => $ip->address
+                'ipAddress'  => $ip->getAddress(),
+                'description' => $ip->getDescription()
             );
+            if ($ip->status == 'IN_USE')
+                $itm['instanceId'] = substr(strrchr($ip->users[0], "/"), 1);
 
             $info = $this->db->GetRow("
                 SELECT * FROM elastic_ips WHERE ipaddress = ? LIMIT 1
@@ -54,20 +54,17 @@ class Scalr_UI_Controller_Platforms_Gce extends Scalr_UI_Controller
 
             if ($info) {
                 try {
-                    if ($info['server_id'] && $itm['instanceId']) {
-                        $dbServer = DBServer::LoadByID($info['server_id']);
-                        if ($dbServer->GetProperty(EC2_SERVER_PROPERTIES::INSTANCE_ID) != $itm['instanceId']) {
-                            for ($i = 0; $i < count($map); $i++) {
-                                if ($map[$i]['elasticIp'] == $itm['ipAddress'])
-                                    $map[$i]['warningInstanceIdDoesntMatch'] = true;
-                            }
+                    if ($info['server_id'] == $itm['instanceId']) {
+                        for ($i = 0; $i < count($map); $i++) {
+                            if ($map[$i]['elasticIp'] == $itm['ipAddress'])
+                                $map[$i]['warningInstanceIdDoesntMatch'] = true;
                         }
                     }
 
                     $farmRole = DBFarmRole::LoadByID($info['farm_roleid']);
                     $this->user->getPermissions()->validate($farmRole);
 
-                    $itm['roleName'] = $farmRole->GetRoleObject()->name;
+                    $itm['roleName'] = $farmRole->Alias;
                     $itm['farmName'] = $farmRole->GetFarmObject()->Name;
                     $itm['serverIndex'] = $info['instance_index'];
                 } catch (Exception $e) {}
@@ -78,7 +75,7 @@ class Scalr_UI_Controller_Platforms_Gce extends Scalr_UI_Controller
             $ips[] = $itm;
         }
 
-        return array('map' => $map, 'ips' => $ips);
+        $this->response->data(['data' => ['staticIps' => ['map' => $map, 'ips' => $ips]]]);
     }
 
     private function getGceClient($environment)
@@ -93,7 +90,8 @@ class Scalr_UI_Controller_Platforms_Gce extends Scalr_UI_Controller
         $client->setAssertionCredentials(new Google_Auth_AssertionCredentials(
             $environment->getPlatformConfigValue(GoogleCEPlatformModule::SERVICE_ACCOUNT_NAME),
             array('https://www.googleapis.com/auth/compute'),
-            $key
+            $key,
+            $environment->getPlatformConfigValue(GoogleCEPlatformModule::JSON_KEY) ? null : 'notasecret'
         ));
 
         $client->setClientId($environment->getPlatformConfigValue(GoogleCEPlatformModule::CLIENT_ID));
@@ -157,41 +155,21 @@ class Scalr_UI_Controller_Platforms_Gce extends Scalr_UI_Controller
 
     public function xGetMachineTypesAction()
     {
-        //FIXME please use getInstanceTypes() of the platform factory
         $p = PlatformFactory::NewPlatform(SERVER_PLATFORMS::GCE);
 
-        $client = new Google_Client();
-        $client->setApplicationName("Scalr GCE");
-        $client->setScopes(array('https://www.googleapis.com/auth/compute'));
+        $data['types'] = [];
+        $data['dbTypes'] = [];
 
-        $key = base64_decode($this->environment->getPlatformConfigValue(GoogleCEPlatformModule::KEY));
-        $client->setAssertionCredentials(new Google_Auth_AssertionCredentials(
-            $this->environment->getPlatformConfigValue(GoogleCEPlatformModule::SERVICE_ACCOUNT_NAME),
-            array('https://www.googleapis.com/auth/compute'),
-            $key
-        ));
+        $items = $p->getInstanceTypes($this->environment, $this->getParam('cloudLocation'), true);
 
-        $client->setClientId($this->environment->getPlatformConfigValue(GoogleCEPlatformModule::CLIENT_ID));
-
-        $projectId = $this->environment->getPlatformConfigValue(GoogleCEPlatformModule::PROJECT_ID);
-
-        $gceClient = new Google_Service_Compute($client);
-
-        $data['types'] = array();
-        $data['dbTypes'] = array();
-        $types = $gceClient->machineTypes->listMachineTypes($projectId, $this->getParam('cloudLocation'));
-        foreach ($types->items as $item) {
-            $isEphemeral = (substr($item->name, -2) == '-d');
-
-            if (!$isEphemeral) {
-                $data['types'][] = array(
-                    'name' => $item->name,
-                    'description' => "{$item->name} ({$item->description})"
-                );
-            }
+        foreach ($items as $item) {
+            $data['types'][] = [
+                'name'        => $item['name'],
+                'description' => $item['name'] . " (" . $item['description'] . ")"
+            ];
         }
 
-        $this->response->data(array('data' => $data));
+        $this->response->data(['data' => $data]);
     }
 
 }

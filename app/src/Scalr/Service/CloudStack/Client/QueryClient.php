@@ -140,8 +140,8 @@ class QueryClient implements ClientInterface
                 unset($args[$key]);
             }
 
-            // Workaround for zones. Doesn't work in uCLoud becuase listZones not supported
-            if ($key == 'zoneid' && !is_null($value) && $this->platformName != 'ucloud') {
+            // Workaround for zones.
+            if ($key == 'zoneid' && !is_null($value)) {
                 if (empty($this->zonesCache)) {
                     foreach ($this->cloudstack->zone->describe() as $zone) {
                         $this->zonesCache[$zone->name] = $zone->id;

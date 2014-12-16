@@ -1,3 +1,51 @@
+//constants must be defined before overrides
+Scalr.constants = {
+    iopsMin: 100,
+    iopsMax: 4000,
+    ebsMaxStorageSize: 1000,
+    ebsMinProIopsStorageSize: 10,
+    ebsMaxIopsSizeRatio: 30,
+    redisPersistenceTypes: [
+        ['aof', 'Append Only File'],
+        ['snapshotting', 'Snapshotting'],
+        ['nopersistence', 'No persistence']
+    ]
+};
+Scalr.constants.ebsTypes = [
+    ['standard', 'Standard EBS (Magnetic)'],
+    ['gp2', 'General Purpose (SSD)'],
+    ['io1', 'Provisioned IOPS (' + Scalr.constants.iopsMin + ' - ' + Scalr.constants.iopsMax + '):']
+];
+Scalr.constants.osFamily = [
+    ['amazon', [['2012.09', '2012.09'],['2013.03', '2013.03'],['2014.03', '2014.03'],['2014.09', '2014.09']]],
+    ['centos', [
+        ['5.X', '5', 'Final'],
+        ['6.X', '6', 'Final'],
+        ['7.X', '7', 'Final']
+    ]],
+    ['debian', [
+        ['6.X', '6', 'Squeeze'],
+        ['7.X', '7', 'Wheezy'],
+    ]],
+    ['gcel', [['12.04', '12.04']]],
+    ['oel', [
+        ['5.X', '5', 'Tikanga'],
+        ['6.X', '6', 'Santiago']
+    ]],
+    ['redhat', [
+        ['5.X', '5', 'Tikanga'],
+        ['6.X', '6', 'Santiago'],
+        ['7.X', '7', 'Maipo']
+    ]],
+    ['ubuntu', [
+        ['10.04', '10.04', 'Lucid'],['10.10', '10.10', 'Maverick'],['11.04', '11.04', 'Natty'],['11.10', '11.10', 'Oneiric'],
+        ['12.04', '12.04', 'Precise'],['12.10', '12.10', 'Quantal'],['13.04', '13.04', 'Raring'],['13.10', '13.10', 'Saucy'],
+        ['14.04', '14.04',  'Trusty'],['14.10', '14.10', 'Utopic']
+    ]],
+    ['windows', [['2003', '2003', 'Server'],['2008', '2008', 'Server'],['2012', '2012', 'Server']]]
+];
+
+
 Ext.override(Ext.view.Table, {
     enableTextSelection: true,
     markDirty: false
@@ -102,27 +150,38 @@ Ext.override(Ext.form.field.Base, {
 	},
 
     initIcons: function() {
-        if (this.icons) {
+        var me = this;
+        if (me.icons) {
             var icons = {},
                 iconsConfig = {
                     governance: {
                         hidden: true,
-                        tooltip: this.getGovernanceTooltip()
+                        tooltip: me.getGovernanceTooltip()
                     },
                     globalvars: {
                         tooltip: 'This field supports Global Variable Interpolation.'
                     },
                     question: {
                         hidden: true,
-                        tooltip: this.questionTooltip || ''
+                        tooltip: me.questionTooltip || ''
+                    },
+                    szrversion: {
+                        iconCls: 'warning',
+                        tooltip: 'Feature only available in Scalarizr starting from {version}'
                     }
                 };
-            Ext.Object.each(this.icons, function(name, enabled){
+            Ext.Object.each(me.icons, function(name, enabled){
                 if (enabled) {
                     icons[name] = Ext.apply({}, iconsConfig[name] || {});
+                    if (Ext.isObject(enabled)) {
+                        icons[name].tooltip = enabled['tooltip'] || icons[name].tooltip;
+                        if (enabled['tooltipData']) {
+                            icons[name].tooltip = new Ext.Template(icons[name].tooltip).apply(enabled['tooltipData']);
+                        }
+                    }
                 }
             });
-            this.icons = Ext.Object.getSize(icons) ? icons : undefined;
+            me.icons = Ext.Object.getSize(icons) ? icons : undefined;
         }
     },
 
@@ -137,7 +196,7 @@ Ext.override(Ext.form.field.Base, {
             html = [];
         me.visibleIconsCount = 0;
         Ext.Object.each(this.icons, function(key, value){
-            html.push('<img src="' + Ext.BLANK_IMAGE_URL + '" class="x-icon-' + key + '" data-qtip="' + value['tooltip'] + '" ' + (value['hidden'] ? 'style="display:none"' : '') + ' />');
+            html.push('<img src="' + Ext.BLANK_IMAGE_URL + '" class="x-icon-' + (value['iconCls'] || key) + '" data-qtip="' + value['tooltip'] + '" ' + (value['hidden'] ? 'style="display:none"' : '') + ' />');
             me.visibleIconsCount += value['hidden'] ? 0 : 1;
         });
         this[this.isCheckbox ? 'afterBoxLabelTpl' : 'beforeSubTpl'] = '<span class="x-field-icons">' + html.join('') + '</span>' + (me[this.isCheckbox ? 'afterBoxLabelTpl' : 'beforeSubTpl'] || '');
@@ -174,9 +233,9 @@ Ext.override(Ext.form.field.Base, {
     },
 
     toggleIcon: function(icon, show) {
-        if (!this.icons) return;
+        if (!this.icons || !this.icons[icon]) return;
         if (this.rendered) {
-            var iconEl = this.bodyEl.query('.x-field-icons .x-icon-' + icon);
+            var iconEl = this.bodyEl.query('.x-field-icons .x-icon-' + (this.icons[icon]['iconCls'] || icon));
             if (iconEl.length) {
                 iconEl = Ext.fly(iconEl[0]);
                 var isVisible = iconEl.isVisible();
@@ -203,9 +262,9 @@ Ext.override(Ext.form.field.Base, {
     },
 
     updateIconTooltip: function(icon, tooltip) {
-        if (!this.icons) return;
+        if (!this.icons || !this.icons[icon]) return;
         if (this.rendered) {
-            var iconEl = this.bodyEl.query('.x-field-icons .x-icon-' + icon);
+            var iconEl = this.bodyEl.query('.x-field-icons .x-icon-' + (this.icons[icon]['iconCls'] || icon));
             if (iconEl.length) {
                 iconEl = Ext.fly(iconEl[0]);
                 iconEl.set({'data-qtip': tooltip});
@@ -259,13 +318,18 @@ Ext.override(Ext.form.field.Base, {
     },
 
     getGovernanceTooltip: function(raw) {
-        var message = 'The account owner has enforced a specific policy on ';
-        if (this.governanceTitle) {
-            message += 'the <b>' + this.governanceTitle + '</b>.';
-        } else if (this.fieldLabel) {
-            message += 'the <b>' + this.fieldLabel + '</b> setting.';
+        var message;
+        if (!this.governanceTooltip) {
+            message = 'The account owner has enforced a specific policy on ';
+            if (this.governanceTitle) {
+                message += 'the <b>' + this.governanceTitle + '</b>.';
+            } else if (this.fieldLabel) {
+                message += 'the <b>' + this.fieldLabel + '</b> setting.';
+            } else {
+                message += 'this setting.';
+            }
         } else {
-            message += 'this setting.';
+            message = this.governanceTooltip;
         }
         return raw ? message : Ext.String.htmlEncode(message);
     },
@@ -301,99 +365,6 @@ Ext.override(Ext.form.field.Trigger, {
 
 		me.callOverridden();
 		me[me.readOnly ? 'addCls' : 'removeCls'](me.readOnlyCls);
-	}
-});
-
-// TextArea should always show emptyText via value, not placeholder (scrolling and multi-line will work)
-Ext.override(Ext.form.field.TextArea, {
-	getSubTplData: function() {
-		var me = this,
-			fieldStyle = me.getFieldStyle(),
-			ret = me.callParent();
-
-		if (me.grow) {
-			if (me.preventScrollbars) {
-				ret.fieldStyle = (fieldStyle||'') + ';overflow:hidden;height:' + me.growMin + 'px';
-			}
-		}
-
-		Ext.applyIf(ret, {
-			cols: me.cols,
-			rows: me.rows
-		});
-
-		/** Changed, get from Ext.form.field.Text:getSubTplData */
-		var value = me.getRawValue();
-		var isEmpty = me.emptyText && value.length < 1, placeholder = '';
-		if (isEmpty) {
-			value = me.emptyText;
-			me.valueContainsPlaceholder = true;
-		}
-
-		Ext.apply(ret, {
-			placeholder : placeholder,
-			value       : value,
-			fieldCls    : me.fieldCls + ((isEmpty && (placeholder || value)) ? ' ' + me.emptyCls : '') + (me.allowBlank ? '' :  ' ' + me.requiredCls)
-		});
-		/** End */
-
-		return ret;
-	},
-
-	applyEmptyText: function() {
-
-        if (document.location.search.indexOf('newgv') !== -1) {
-            this.callParent();
-            return;
-        }
-
-		var me = this,
-			emptyText = me.emptyText,
-			isEmpty;
-
-		if (me.rendered && emptyText) {
-			isEmpty = me.getRawValue().length < 1 && !me.hasFocus;
-
-			/** Changed */
-			if (isEmpty) {
-				me.setRawValue(emptyText);
-				me.valueContainsPlaceholder = true;
-			}
-			/** End */
-
-			//all browsers need this because of a styling issue with chrome + placeholders.
-			//the text isnt vertically aligned when empty (and using the placeholder)
-			if (isEmpty) {
-				me.inputEl.addCls(me.emptyCls);
-			}
-
-			me.autoSize();
-		}
-	},
-
-	onFocus: function() {
-		this.callParent(arguments);
-
-		// move to beforeFocus
-		var me = this,
-			inputEl = me.inputEl,
-			emptyText = me.emptyText,
-			isEmpty;
-
-		//debugger;
-		/** Changed */
-		if ((emptyText && (!Ext.supports.Placeholder || me.xtype == 'textarea')) && (inputEl.dom.value === me.emptyText && me.valueContainsPlaceholder)) {
-			me.setRawValue('');
-			isEmpty = true;
-			inputEl.removeCls(me.emptyCls);
-			me.valueContainsPlaceholder = false;
-		} else if (Ext.supports.Placeholder && me.xtype != 'textarea') {
-			me.inputEl.removeCls(me.emptyCls);
-		}
-		if (me.selectOnFocus || isEmpty) {
-			inputEl.dom.select();
-		}
-		/** End */
 	}
 });
 
@@ -605,6 +576,46 @@ Ext.override(Ext.form.field.ComboBox, {
         this.callParent(arguments);
     },
 
+    doLocalQuery: function(queryPlan) {
+        var me = this,
+            queryString = queryPlan.query;
+
+
+        if (!me.queryFilter) {
+
+            me.queryFilter = new Ext.util.Filter({
+                id: me.id + '-query-filter',
+                anyMatch: me.anyMatch,
+                caseSensitive: me.caseSensitive,
+                root: 'data',
+                property: me.displayField
+            });
+            me.store.addFilter(me.queryFilter, false);
+        }
+
+
+        if (queryString || !queryPlan.forceAll) {
+            me.queryFilter.disabled = false;
+            me.queryFilter.setValue(me.enableRegEx ? new RegExp(queryString) : queryString);
+        }
+
+
+        else {
+            me.queryFilter.disabled = true;
+        }
+
+
+        me.store.filter();
+
+        if (me.store.getCount()/** Changed */ || (me.listConfig && me.listConfig.emptyText) /** End */) { //show boundlist empty text if nothing found
+            me.expand();
+        } else {
+            me.collapse();
+        }
+
+        me.afterQuery(queryPlan);
+    },
+    
     onLoad: function(store, records, successful) {
         this.callParent(arguments);
         if (!successful && this.queryMode == 'remote') {
@@ -624,12 +635,55 @@ Ext.override(Ext.form.field.ComboBox, {
     },
 
     assertValue: function() {
+        /** Changed */
         var forceSelection = this.forceSelection;
         if (this.restoreValueOnBlur) {
             forceSelection = true;
         }
-        this.callParent(arguments);
+        /** End */
+
+        var me = this,
+            value = me.getRawValue(),
+            rec, currentValue;
+
+        if (me.forceSelection) {
+            if (me.multiSelect) {
+
+
+                if (value !== me.getDisplayValue()) {
+                    me.setValue(me.lastSelection);
+                }
+            } else {
+                /** Changed */
+                if (me.selectSingleRecordOnPartialMatch) {
+                    rec = me.store.query(me.displayField, value, true);
+                    if (rec.length === 1) {
+                        rec = rec.first();
+                    } else {
+                        delete rec;
+                    }
+                } else {
+                    rec = me.findRecordByDisplay(value);
+                }
+                /** End */
+                if (rec) {
+                    currentValue = me.value;
+
+
+                    if (!me.findRecordByValue(currentValue)) {
+                        me.select(rec, true);
+                    }
+                } else {
+                    me.setValue(me.lastSelection);
+                }
+            }
+        }
+        me.collapse();
+
+        
+        /** Changed */
         this.forceSelection = forceSelection;
+        /** End */
     },
 
     selectRecord: function (key, enteredValue) {
@@ -2254,10 +2308,26 @@ Ext.apply(Ext.form.field.VTypes, {
     daterangeText: 'Start date must be less than end date',
 
     rolename: function(value) {
-        var r = /^[A-z0-9-]+$/, r1 = /^-/, r2 = /-$/;
-        return (r.test(value) && !r1.test(value) && !r2.test(value) && value.length > 2);
+        var r = /^[A-Za-z0-9]+[A-Za-z0-9-]*[A-Za-z0-9]+$/;
+        return r.test(value);
     },
-    rolenameText: 'Name should start and end with letter or number and contain only letters, numbers and dashes.'
+    rolenameText: 'Name should start and end with letter or number and contain only letters, numbers and dashes.',
+
+    iops: function(value){
+        return value*1 >= Scalr.constants.iopsMin && value*1 <= Scalr.constants.iopsMax;
+    },
+    iopsText: 'Value must be between ' + Scalr.constants.iopsMin + ' and ' + Scalr.constants.iopsMax,
+    iopsMask: /[0-9]/,
+
+    password: function(value, field) {
+        if (field.otherPassField) {
+            var otherPassField = field.up('form').down('#' + field.otherPassField);
+            return otherPassField.disabled || value == otherPassField.getValue();
+        }
+        return true;
+    },
+    passwordText: 'Passwords do not match'
+
 
 });
 
@@ -2762,14 +2832,18 @@ Ext.define(null, {
 
     cutUrl: function (ignoredParams) {
         var url = document.URL;
-        var filteredUrl = url.substring(0, url.indexOf('?'));
+        var uncutUrl = url.substring(0, url.indexOf('#'));
+        var cutUrl = url.substring(url.indexOf('#'), url.length);
+        var clearUrl = cutUrl.substring(0, cutUrl.indexOf('?'));
 
-        if (filteredUrl) {
+        if (clearUrl) {
+            clearUrl = uncutUrl + clearUrl;
+
             if (!Ext.Object.isEmpty(ignoredParams)) {
-                filteredUrl = filteredUrl + '?' + Ext.Object.toQueryString(ignoredParams);
+                clearUrl = clearUrl + '?' + Ext.Object.toQueryString(ignoredParams);
             }
 
-            history.replaceState(null, null, filteredUrl);
+            history.replaceState(null, null, clearUrl);
         }
     },
 

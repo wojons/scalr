@@ -1,4 +1,6 @@
 <?php
+use Scalr\UI\Request\Validator;
+use Scalr\UI\Request\RawData;
 
 class Scalr_UI_Controller_Admin_Accounts extends Scalr_UI_Controller
 {
@@ -275,4 +277,56 @@ class Scalr_UI_Controller_Admin_Accounts extends Scalr_UI_Controller
         Scalr_Session::create($user->getId(), true);
         $this->response->success();
     }
+
+    /**
+     * @param int $accountId
+     * @throws Exception
+     */
+    public function changeOwnerPasswordAction($accountId)
+    {
+        $account = new Scalr_Account();
+        $account->loadById($accountId);
+        $this->response->page('ui/admin/accounts/changeOwnerPassword.js', array(
+            'accountName' => $account->name,
+            'email' => $account->getOwner()->getEmail()
+        ));
+    }
+
+    /**
+     * @param int $accountId
+     * @param RawData $password
+     * @param RawData $cpassword
+     * @param RawData $currentPassword
+     * @throws Exception
+     */
+    public function xSaveOwnerPasswordAction($accountId, $password, $cpassword, $currentPassword)
+    {
+        $account = new Scalr_Account();
+        $account->loadById($accountId);
+        
+        $validator = new Validator();
+        $validator->addErrorIf(!$this->user->checkPassword($currentPassword), ['currentPassword'], 'Invalid password');
+
+        $validator->validate($password, 'password', Validator::NOEMPTY);
+        $validator->validate($cpassword, 'cpassword', Validator::NOEMPTY);
+        $validator->addErrorIf(($password && $cpassword && ($password != $cpassword)), ['password','cpassword'], 'Two passwords are not equal');
+
+        if ($validator->isValid($this->response)) {
+            $user = $account->getOwner();
+            $user->updatePassword($password);
+            $user->save();
+            // Send notification E-mail
+            $this->getContainer()->mailer->sendTemplate(
+                SCALR_TEMPLATES_PATH . '/emails/password_change_admin_notification.eml',
+                array(
+                    '{{fullname}}' => $user->fullname ? $user->fullname : $user->getEmail(),
+                    '{{administratorFullName}}' => $this->user->fullname ? $this->user->fullname : $this->user->getEmail()
+                ),
+                $user->getEmail(), $user->fullname
+            );
+
+            $this->response->success('Password successfully updated');
+        }
+    }
+
 }

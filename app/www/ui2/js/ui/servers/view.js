@@ -1,10 +1,10 @@
 Scalr.regPage('Scalr.ui.servers.view', function (loadParams, moduleParams) {
 	var store = Ext.create('store.store', {
 		fields: [
-			'cloud_location', 'flavor', 'cloud_server_id', 'excluded_from_dns', 'server_id', 'remote_ip', 'role_alias',
+			'cloud_location', 'flavor', 'instance_type_name', 'cloud_server_id', 'excluded_from_dns', 'server_id', 'remote_ip', 'role_alias',
 			'local_ip', 'status', 'platform', 'farm_name', 'role_name', 'index', 'role_id', 'farm_id', 'farm_roleid',
 			'uptime', 'ismaster', 'os_family', 'has_eip', 'is_szr', 'cluster_position', 'agent_version', 'agent_update_needed', 'agent_update_manual',
-			'initDetailsSupported', 'isInitFailed', 'la_server', 'launch_error', 'alerts', 'cluster_role', 'is_locked', 'hostname'
+			'initDetailsSupported', 'isInitFailed', 'la_server', 'launch_error', 'alerts', 'cluster_role', 'is_locked', 'hostname', 'termination_error'
 		],
 		proxy: {
 			type: 'scalr.paging',
@@ -271,8 +271,8 @@ Scalr.regPage('Scalr.ui.servers.view', function (loadParams, moduleParams) {
 				'<tpl else><img src="' + Ext.BLANK_IMAGE_URL + '" class="x-icon-minus" /></tpl>'
 			},
 			{ header: "Cloud Location", width: 100, dataIndex: 'cloud_location', sortable: false, hidden: true },
-			{ header: "Status", minWidth: 160, width: 160, dataIndex: 'status', sortable: true, xtype: 'statuscolumn', statustype: 'server'},
-			{ header: 'Type', width: 100, dataIndex: 'flavor', sortable: false, hidden: true },
+			{ header: "Status", minWidth: 160, width: 160, dataIndex: 'status', sortable: true, xtype: 'statuscolumn', statustype: 'server', qtipConfig: {width: 300}},
+			{ header: 'Type', width: 100, dataIndex: 'flavor', sortable: false, hidden: true, xtype: 'templatecolumn', tpl: '{[values.instance_type_name||values.flavor]}' },
 			{ header: "Public IP", width: 120, dataIndex: 'remote_ip', sortable: true, xtype: 'templatecolumn', tpl:
 				'<tpl if="remote_ip">' +
 				'<tpl if="has_eip"><span style="color:green;">{remote_ip} <img title="Elastic IP" src="/ui2/images/icons/elastic_ip.png" /></span></tpl><tpl if="!has_eip">{remote_ip}</tpl>' +
@@ -431,6 +431,11 @@ Scalr.regPage('Scalr.ui.servers.view', function (loadParams, moduleParams) {
                         fieldLabel: 'Hostname',
                         labelAlign: 'top',
                         name: 'hostname'
+                    }, {
+                        xtype: 'textfield',
+                        fieldLabel: 'ImageID',
+                        labelAlign: 'top',
+                        name: 'imageId'
                     }]
 				},
 				store: store

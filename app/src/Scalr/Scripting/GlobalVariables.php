@@ -107,23 +107,34 @@ class Scalr_Scripting_GlobalVariables
         foreach ($groupByName as $name => $values) {
             ksort($values);
             $variable = array(
-                'name' => $name
+                'name' => $name,
+                'scopes' => [],
+                'lastValue' => ''
             );
 
             foreach ($values as $val) {
-                if ($val['value'])
+                if ($val['value']) {
                     $val['value'] = $this->crypto->decrypt($val['value'], $this->cryptoKey);
+                    // to avoid empty value in higher scopes, save last not empty value
+                    $variable['lastValue'] = $val['value'];
+                }
+
+                $variable['scopes'][] = $val['scope'];
 
                 if ($val['scope'] != $this->scope) {
                     if ($val['flagFinal'] == 1 || $val['flagRequired'] || $val['flagHidden'] == 1 || $val['format'] || $val['validator']) {
-                        $variable['locked'] = array(
-                            'flagFinal' => $val['flagFinal'],
-                            'flagRequired' => $val['flagRequired'],
-                            'flagHidden' => $val['flagHidden'],
-                            'format' => $val['format'],
-                            'validator' => $val['validator'],
-                            'scope' => $val['scope']
-                        );
+                        // don't override info if it was set on upper level
+                        if (! $variable['locked']) {
+                            $variable['locked'] = array(
+                                'flagFinal' => $val['flagFinal'],
+                                'flagRequired' => $val['flagRequired'],
+                                'flagHidden' => $val['flagHidden'],
+                                'format' => $val['format'],
+                                'validator' => $val['validator'],
+                                'scope' => $val['scope'],
+                                'value' => $val['value']
+                            );
+                        }
                     }
 
                     $variable['default'] = array(
@@ -322,7 +333,7 @@ class Scalr_Scripting_GlobalVariables
 
             if ($deleteFlag) {
                 $sql = array('`name` = ?');
-                $params = array($variable['name']);
+                $params = array($name);
             } else {
                 $sql = array(
                     '`name` = ?',
@@ -341,7 +352,7 @@ class Scalr_Scripting_GlobalVariables
                 );
 
                 $params = array(
-                    $variable['name'],
+                    $name,
                     $variable['flagFinal'] == 1 ? 1 : 0,
                     $variable['flagRequired'] ? $variable['flagRequired'] : '',
                     $variable['flagHidden'] == 1 ? 1 : 0,
@@ -409,9 +420,14 @@ class Scalr_Scripting_GlobalVariables
     {
         $values = array_values($this->_getValues($roleId, $farmId, $farmRoleId, $serverId));
         foreach ($values as &$value) {
-            if ($value['locked'] && ($value['locked']['flagHidden'] == 1) && $value['default']) {
-                $value['default']['value'] = '******';
+            if ($value['locked'] && ($value['locked']['flagHidden'] == 1)) {
+                if ($value['default'] && $value['default']['value'])
+                    $value['default']['value'] = '******';
+
+                if ($value['locked']['value'])
+                    $value['locked']['value'] = '******';
             }
+            unset($value['lastValue']);
         }
 
         return $values;
@@ -422,11 +438,18 @@ class Scalr_Scripting_GlobalVariables
         $retval = array();
         foreach ($this->_getValues($roleId, $farmId, $farmRoleId, $serverId) as $name => $var) {
             $value = $var['current'] ? $var['current']['value'] : $var['default']['value'];
-            if ($var['locked'] && $var['locked']['format'])
-                $value = @sprintf($var['locked']['format'], $value);
+            if ($value == '')
+                $value = $var['lastValue'];
 
-            if ($var['current'] && $var['current']['format'])
+            if ($var['locked'] && $var['locked']['flagFinal'] == 1) {
+                $value = $var['locked']['value'];
+            }
+
+            if ($var['locked'] && $var['locked']['format']) {
+                $value = @sprintf($var['locked']['format'], $value);
+            } else if ($var['current'] && $var['current']['format']) {
                 $value = @sprintf($var['current']['format'], $value);
+            }
 
             $retval[] = array(
                 'name' => $name,
@@ -476,7 +499,7 @@ class Scalr_Scripting_GlobalVariables
 
         try {
             $globalVariables = new Scalr_Scripting_GlobalVariables($dbServer->GetEnvironmentObject()->clientId, $dbServer->envId, Scalr_Scripting_GlobalVariables::SCOPE_SERVER);
-            $vars = $globalVariables->listVariables($dbServer->roleId, $dbServer->farmId, $dbServer->farmRoleId, $dbServer->serverId);
+            $vars = $globalVariables->listVariables($dbServer->GetFarmRoleObject()->RoleID, $dbServer->farmId, $dbServer->farmRoleId, $dbServer->serverId);
             foreach ($vars as $v)
                 $retval[] = (object)$v;
         } catch (Exception $e) {}

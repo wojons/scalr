@@ -185,7 +185,7 @@ class Scalr_System_Cronjob_MultiProcess extends Scalr_System_Cronjob implements 
 
                 $queue = $this->processPool->workQueue;
                 if (($cap = $queue->capacity()) && $this->config['waitPrevComplete']) {
-                    $this->logger->warn(sprintf("Another cronjob is not complete (%d pending tasks)", $cap));
+                    $this->logger->warn(sprintf("Another cronjob is not completed (%d pending tasks)", $cap));
                     return;
                 }
 

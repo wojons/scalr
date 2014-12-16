@@ -14,7 +14,7 @@ class Scalr_UI_Controller_Farms_Events extends Scalr_UI_Controller
 
     public function hasAccess()
     {
-        return parent::hasAccess() && $this->request->isAllowed(Acl::RESOURCE_FARMS_EVENTS_AND_NOTIFICATIONS);
+        return parent::hasAccess() && $this->request->isAllowed(Acl::RESOURCE_FARMS);
     }
 
     public function init()
@@ -65,21 +65,24 @@ class Scalr_UI_Controller_Farms_Events extends Scalr_UI_Controller
             $row['scripts'] = $this->db->GetOne("SELECT COUNT(*) FROM scripting_log WHERE event_id = ?", array($row['event_id']));
 
             if ($row['event_server_id']) {
-                $esInfo = $this->db->GetRow("SELECT role_id, farm_roleid, `index`, farm_id FROM servers WHERE server_id = ? LIMIT 1", array($row['event_server_id']));
+                
+                try {
+                    $es = DBServer::LoadByID($row['event_server_id']);
+                } catch (Exception $e) {}
 
-                if ($esInfo) {
-                    if (!$cache['farm_names'][$esInfo['farm_id']])
-                        $cache['farm_names'][$esInfo['farm_id']] = $this->db->GetOne("SELECT name FROM farms WHERE id=?", array($esInfo['farm_id']));
-                    $row['event_farm_name'] = $cache['farm_names'][$esInfo['farm_id']];
-                    $row['event_farm_id'] = $esInfo['farm_id'];
+                if ($es) {
+                    if (!$cache['farm_names'][$es->farmId])
+                        $cache['farm_names'][$es->farmId] = $this->db->GetOne("SELECT name FROM farms WHERE id=?", array($es->farmId));
+                    $row['event_farm_name'] = $cache['farm_names'][$es->farmId];
+                    $row['event_farm_id'] = $es->farmId;
 
-                    $row['event_farm_roleid'] = $esInfo['farm_roleid'];
+                    $row['event_farm_roleid'] = $es->farmRoleId;
 
-                    if (!$cache['role_names'][$esInfo['role_id']])
-                        $cache['role_names'][$esInfo['role_id']] = $this->db->GetOne("SELECT name FROM roles WHERE id=?", array($esInfo['role_id']));
-                    $row['event_role_name'] = $cache['role_names'][$esInfo['role_id']];
+                    if (!$cache['role_names'][$es->GetFarmRoleObject()->RoleID])
+                        $cache['role_names'][$es->GetFarmRoleObject()->RoleID] = $es->GetFarmRoleObject()->GetRoleObject()->name;
+                    $row['event_role_name'] = $cache['role_names'][$es->GetFarmRoleObject()->RoleID];
 
-                    $row['event_server_index'] = $esInfo['index'];
+                    $row['event_server_index'] = $es->index;
                 }
             }
             $row['webhooks_count'] = count(WebhookHistory::findByEventId($row['event_id']));

@@ -342,7 +342,7 @@ Ext.define('Scalr.ui.dashboard.Farm', {
 	items: [{
 		xtype: 'dataview',
 		store: {
-			fields: [ 'behaviors', 'group', 'servCount', 'farmRoleId', 'farmId', 'roleId'],
+			fields: [ 'behaviors', 'group', 'servCount', 'farmRoleId', 'farmId', 'roleId', 'farmRoleAlias'],
 			proxy: 'object'
 		},
 		border: true,
@@ -354,7 +354,7 @@ Ext.define('Scalr.ui.dashboard.Farm', {
                 '<ul class="scalr-ui-dashboard-farms" align="center">' +
                     '<tpl for=".">' +
                     '<li>' +
-                    '<a href="#/farms/{farmId}/roles/{farmRoleId}/view" title="{behaviors}" class="icon"><div class="x-icon-role x-icon-role-{[Scalr.utils.getRoleCls(values)]}" /></div></a>' +
+                    '<a href="#/farms/{farmId}/roles/{farmRoleId}/view" data-anchor="top"  data-qtip="{farmRoleAlias:htmlEncode}" class="icon"><div class="x-icon-role x-icon-role-{[Scalr.utils.getRoleCls(values)]}" /></div></a>' +
                     '<a href="#/servers/view?farmId={farmId}&farmRoleId={farmRoleId}" class="count">{servCount}</a>' +
                     '</li>' +
                     '</tpl>' +
@@ -918,11 +918,14 @@ Ext.define('Scalr.ui.dashboard.Status', {
 			scope: this,
 			params: { locations: this.params['locations'] },
 			success: function (content) {
+				var items = [];
 				if (this.isDestroyed)
 					return;
-
+				Ext.each(content['data'], function(item){
+					if (item) items.push(item);
+				});
 				this.child('grid').store.load({
-					data: content['data'] ? content['data'] : []
+					data: items
 				});
 
 				if (content.locations)

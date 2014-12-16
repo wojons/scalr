@@ -4,6 +4,10 @@ use Scalr\Service\Aws;
 use Scalr\Stats\CostAnalytics\Entity\PriceEntity;
 use Scalr\Stats\CostAnalytics\Entity\SettingEntity;
 
+/**
+ * @deprecated It has been deprecated since 01.10.2014 because of implementing a new Scalr service
+ * @see        \Scalr\System\Zmq\Cron\Task\CloudPricing
+ */
 class CloudPricingProcess implements \Scalr\System\Pcntl\ProcessInterface
 {
     public $ThreadArgs;
@@ -38,23 +42,23 @@ class CloudPricingProcess implements \Scalr\System\Pcntl\ProcessInterface
         );
 
         $mapping = [
-+            'us-east'        => 'us-east-1',
-+            'us-west'        => 'us-west-1',
-+            'us-east-1'      => 'us-east-1',
-+            'us-west-1'      => 'us-west-1',
-+            'us-west-2'      => 'us-west-2',
-+            'eu-ireland'     => 'eu-west-1',
-+            'eu-west-1'      => 'eu-west-1',
-+            'eu-central-1'   => 'eu-central-1',
-+            'sa-east-1'      => 'sa-east-1',
-+            'apac-sin'       => 'ap-southeast-1',
-+            'ap-southeast-1' => 'ap-southeast-1',
-+            'apac-tokyo'     => 'ap-northeast-1',
-+            'ap-northeast-1' => 'ap-northeast-1',
-+            'apac-syd'       => 'ap-southeast-2',
-+            'ap-southeast-2' => 'ap-southeast-2',
-+            'us-gov-west-1'  => 'us-gov-west-1',
-+        ];
+            'us-east'        => 'us-east-1',
+            'us-west'        => 'us-west-1',
+            'us-east-1'      => 'us-east-1',
+            'us-west-1'      => 'us-west-1',
+            'us-west-2'      => 'us-west-2',
+            'eu-ireland'     => 'eu-west-1',
+            'eu-west-1'      => 'eu-west-1',
+            'eu-central-1'   => 'eu-central-1',
+            'sa-east-1'      => 'sa-east-1',
+            'apac-sin'       => 'ap-southeast-1',
+            'ap-southeast-1' => 'ap-southeast-1',
+            'apac-tokyo'     => 'ap-northeast-1',
+            'ap-northeast-1' => 'ap-northeast-1',
+            'apac-syd'       => 'ap-southeast-2',
+            'ap-southeast-2' => 'ap-southeast-2',
+            'us-gov-west-1'  => 'us-gov-west-1',
+        ];
 
         $availableLocations = Aws::getCloudLocations();
 
@@ -112,15 +116,20 @@ class CloudPricingProcess implements \Scalr\System\Pcntl\ProcessInterface
                         foreach ($it->sizes as $sz) {
                             foreach ($sz->valueColumns as $v) {
                                 $os = ($v->name == 'linux' ? PriceEntity::OS_LINUX : PriceEntity::OS_WINDOWS);
+
+                                if (!is_numeric($v->prices->USD) || $v->prices->USD < 0.000001) {
+                                    continue;
+                                }
+
                                 if (!isset($latest[$sz->size][$os])) {
                                     $needUpdate = true;
                                 } else if (abs(($latest[$sz->size][$os]['cost'] - $v->prices->USD)/$v->prices->USD) > 0.000001) {
                                     $needUpdate = true;
-                                    $latest[$sz->size][$os]['cost'] = $v->prices->USD;
+                                    $latest[$sz->size][$os]['cost'] = !is_null($v->prices->USD) ? $v->prices->USD : 0.000000;
                             	} else continue;
 
                                 $latest[$sz->size][$os] = array(
-                                    'cost' => $v->prices->USD,
+                                    'cost' => !is_null($v->prices->USD) ? $v->prices->USD : 0.000000,
                                 );
                             }
                         }

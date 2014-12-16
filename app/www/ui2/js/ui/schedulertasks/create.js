@@ -212,7 +212,7 @@ Scalr.regPage('Scalr.ui.schedulertasks.create', function (loadParams, modulePara
                 name: 'scriptId',
                 allowBlank: false,
                 store: {
-                    fields: [ 'id', 'name', 'description', 'os', 'isSync', 'timeout', 'versions', 'accountId', 'createdByEmail' ],
+                    fields: [ 'id', 'name', 'description', 'os', 'isSync', 'timeout', 'versions', 'accountId', 'scope', 'createdByEmail' ],
                     data: moduleParams['scripts'],
                     proxy: 'object'
                 },

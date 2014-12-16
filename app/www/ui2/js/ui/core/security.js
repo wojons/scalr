@@ -1,4 +1,5 @@
 Scalr.regPage('Scalr.ui.core.security', function (loadParams, moduleParams) {
+    var defaultPassword = '******';
 	var form = Ext.create('Ext.form.Panel', {
 		width: 700,
 		title: 'Security',
@@ -15,16 +16,32 @@ Scalr.regPage('Scalr.ui.core.security', function (loadParams, moduleParams) {
 				xtype: 'textfield',
 				inputType:'password',
 				name: 'password',
+                itemId: 'password',
 				allowBlank: false,
+                vtype: 'password',
+                otherPassField: 'cpassword',
 				fieldLabel: 'New password',
-				value: '******'
+				value: defaultPassword,
+                selectOnFocus: true,
+                validateOnChange: false,
+                listeners: {
+                    change: function(){this.clearInvalid();}
+                }
 			},{
 				xtype: 'textfield',
 				inputType:'password',
 				name: 'cpassword',
+                itemId: 'cpassword',
 				allowBlank: false,
+                vtype: 'password',
+                otherPassField: 'password',
 				fieldLabel: 'Confirm password',
-				value: '******'
+				value: defaultPassword,
+                selectOnFocus: true,
+                validateOnChange: false,
+                listeners: {
+                    change: function(){this.clearInvalid();}
+                }
 			}]
 		}, {
 			xtype: 'fieldset',
@@ -242,16 +259,39 @@ Scalr.regPage('Scalr.ui.core.security', function (loadParams, moduleParams) {
 				xtype: 'button',
 				text: 'Save',
 				handler: function() {
-					Scalr.Request({
-						processBox: {
-							type: 'save'
-						},
-						url: '/core/xSecuritySave/',
-						form: this.up('form').getForm(),
-						success: function () {
-							Scalr.event.fireEvent('close');
-						}
-					});
+                    var frm = this.up('form').getForm(),
+                        confirmBox;
+                    sendRequest = function(currentPassword) {
+                        Scalr.Request({
+                            processBox: {
+                                type: 'save'
+                            },
+                            url: '/core/xSecuritySave/',
+                            form: frm,
+                            params: {currentPassword: currentPassword},
+                            success: function (data) {
+                                if (confirmBox) {
+                                    confirmBox.close();
+                                }
+                                if (data.specialToken) {
+                                    Scalr.utils.saveSpecialToken(data.specialToken);
+                                }
+                                Scalr.event.fireEvent('close');
+                            },
+                            failure: function(data) {
+                                if (confirmBox) {
+                                    confirmBox.onFailure(data.errors);
+                                }
+                            }
+                        });
+                    };
+                    if (frm.isValid()) {
+                        if (frm.findField('password').getValue() !== defaultPassword || frm.findField('cpassword').getValue() !== defaultPassword) {
+                            confirmBox = Scalr.utils.ConfirmPassword(sendRequest);
+                        } else {
+                            sendRequest();
+                        }
+                    }
 				}
 			}, {
 				xtype: 'button',

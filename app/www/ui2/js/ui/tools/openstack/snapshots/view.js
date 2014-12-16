@@ -1,7 +1,7 @@
 Scalr.regPage('Scalr.ui.tools.openstack.snapshots.view', function (loadParams, moduleParams) {
 	var store = Ext.create('store.store', {
 		fields: [
-			'snapshotId', 'volumeId', 'status', 'createdAt', 'size', 'progress'
+			'snapshotId', 'volumeId', 'status', 'createdAt', 'size', 'progress', 'name', 'description'
 		],
 		proxy: {
 			type: 'scalr.paging',
@@ -39,6 +39,8 @@ Scalr.regPage('Scalr.ui.tools.openstack.snapshots.view', function (loadParams, m
 
 		columns: [
 			{ header: "ID", width: 300, dataIndex: 'snapshotId', sortable: true },
+			{ header: "Name", width: 150, dataIndex: 'name', sortable: true},
+			{ header: "Description", width: 150, dataIndex: 'description', sortable: true, hidden: true},
 			{ header: "Size", width: 150, dataIndex: 'size', sortable: true},
 			{ header: "Volume ID", width: 300, dataIndex: 'volumeId', sortable: true },
 			{ header: "Status", width: 150, dataIndex: 'status', sortable: true, xtype: 'templatecolumn', tpl:
@@ -48,6 +50,20 @@ Scalr.regPage('Scalr.ui.tools.openstack.snapshots.view', function (loadParams, m
 			{
 				xtype: 'optionscolumn2',
 				menu: [{
+					itemId: 'option.create',
+					text: 'Create new volume based on this snapshot',
+					iconCls: 'x-menu-icon-create',
+					menuHandler: function(data) {
+						Scalr.event.fireEvent('redirect','#/tools/openstack/volumes/create?' +
+							Ext.Object.toQueryString({
+								'snapshotId': data['snapshotId'],
+								'size': data['size'],
+								'cloudLocation': store.proxy.extraParams.cloudLocation,
+								'platform': loadParams['platform']
+							})
+						);
+					}
+				}, {
 					itemId: 'option.delete',
 					text: 'Delete',
 					iconCls: 'x-menu-icon-delete',

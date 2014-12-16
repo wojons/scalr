@@ -1,20 +1,60 @@
 Scalr.regPage('Scalr.ui.webhooks.configs.view', function (loadParams, moduleParams) {
-	var storeWebhooks = Scalr.data.get('webhooks.configs');
-		
-	var store = Ext.create('Scalr.ui.ChildStore', {
-		parentStore: storeWebhooks,
-		filterOnLoad: true,
-		sortOnLoad: true,
+    var scalrOptions;
+    if (moduleParams['levelMap'][moduleParams['level']] == 'account') {
+		scalrOptions = {
+			title: 'Account management &raquo; Webhooks &raquo; Webhooks',
+			maximize: 'all',
+			leftMenu: {
+				menuId: 'settings',
+				itemId: 'webhooks',
+                showPageTitle: true
+			}
+		};
+    } else {
+		scalrOptions = {
+			title: Ext.String.capitalize(moduleParams['levelMap'][moduleParams['level']]) + ' webhooks &raquo; Webhooks',
+			maximize: 'all',
+			leftMenu: {
+				menuId: 'webhooks',
+				itemId: 'configs',
+                showPageTitle: true
+			}
+		};
+    }
+    
+    var store = Ext.create('store.store', {
+        fields: [
+            {name: 'webhookId', type: 'string'},
+            'level',
+            'name',
+            'postData',
+            'skipPrivateGv',
+            'endpoints',
+            'events',
+            'farms',
+            {name: 'timeout', type: 'int', defaultValue: 3},
+            {name: 'attempts', type: 'int', defaultValue: 3},
+            {name: 'id', convert: function(v, record){return record.data.webhookId;}}
+        ],
+        data: moduleParams['configs'],
+		proxy: {
+			type: 'ajax',
+			url: '/webhooks/configs/xList/',
+            extraParams: {
+                level: moduleParams['level']
+            },
+            reader: {
+                type: 'json',
+                root: 'configs',
+                successProperty: 'success'
+            }
+		},
 		sorters: [{
 			property: 'name',
 			transform: function(value){
 				return value.toLowerCase();
 			}
 		}]
-	});
-
-	var storeEndpoints = Ext.create('Scalr.ui.ChildStore', {
-		parentStore: Scalr.data.get('webhooks.endpoints')
 	});
 
 	var reconfigurePage = function(params) {
@@ -40,126 +80,44 @@ Scalr.regPage('Scalr.ui.webhooks.configs.view', function (loadParams, modulePara
         }
     };
 	
-    var grid = Ext.create('Ext.grid.Panel', {
+    var grid = Ext.create('Scalr.ui.WebhooksGrid', {
         cls: 'x-grid-shadow x-panel-column-left',
-        flex: 1,
-        multiSelect: true,
-        selType: 'selectedmodel',
         store: store,
-        plugins: ['focusedrowpointer'],
-        listeners: {
-            selectionchange: function(selModel, selected) {
-                this.down('#delete').setDisabled(!selected.length);
-            }
-        },
-        viewConfig: {
-            preserveScrollOnRefresh: true,
-            markDirty: false,
-            plugins: {
-                ptype: 'dynemptytext',
-                emptyText: 'No webhooks were found to match your search.',
-                emptyTextNoItems: 'You have no webhooks created yet.'
-            },
-            loadingText: 'Loading webhooks ...',
-            deferEmptyText: false,
-            listeners: {
-                refresh: function(view){
-                    view.getSelectionModel().setLastFocused(null);
-                }
-            }
-        },
-
+        type: 'config',
+        filterFields: ['name'],
         columns: [
-            {text: 'Name', flex: 1, dataIndex: 'name', sortable: true}
-        ],
-        dockedItems: [{
-            xtype: 'toolbar',
-            dock: 'top',
-            defaults: {
-                margin: '0 0 0 12',
-                handler: function() {
-                    var action = this.getItemId(),
-                        actionMessages = {
-                            'delete': ['Delete selected webhook(s)', 'Deleting selected webhook(s) ...']
-                        },
-                        selModel = grid.getSelectionModel(),
-                        ids = [],
-                        urls = [],
-                        request = {};
-                    for (var i=0, records = selModel.getSelection(), len=records.length; i<len; i++) {
-                        ids.push(records[i].get('webhookId'));
-                        urls.push(records[i].get('name'));
-                    }
-
-                    request = {
-                        confirmBox: {
-                            msg: actionMessages[action][0],
-                            type: action,
-                            //objects: urls
-                        },
-                        processBox: {
-                            msg: actionMessages[action][1],
-                            type: action
-                        },
-                        params: {webhookIds: ids, action: action},
-                        success: function (data) {
-                            if (data.processed && data.processed.length) {
-                                switch (action) {
-                                    case 'delete':
-                                        var recordsToDelete = [];
-                                        for (var i=0,len=data.processed.length; i<len; i++) {
-                                            recordsToDelete.push(store.getById(data.processed[i]));
-                                            selModel.deselect(recordsToDelete[i]);
-                                        }
-                                        store.remove(recordsToDelete);
-                                    break;
-                                }
-                            }
-                            selModel.refreshLastFocused();
-                        }
-                    };
-                    request.url = '/webhooks/configs/xGroupActionHandler';
-                    request.params.webhookIds = Ext.encode(ids);
-
-                    Scalr.Request(request);
-                }
-            },
-            items: [{
-                xtype: 'filterfield',
-                itemId: 'liveSearch',
-                margin: 0,
-                minWidth: 120,
-                maxWidth: 200,
+            {
+                header: '<img style="cursor: help" src="'+Ext.BLANK_IMAGE_URL+'" class="x-icon-info" data-qclass="x-tip-light" data-qtip="' +
+                    Ext.String.htmlEncode('<div>Scopes:</div>' +
+                    '<div><img src="' + Ext.BLANK_IMAGE_URL + '" class="scalr-scope-scalr">&nbsp;&nbsp;Scalr</div>' +
+                    '<div><img src="' + Ext.BLANK_IMAGE_URL + '" class="scalr-scope-account">&nbsp;&nbsp;Account</div>' +
+                    '<div><img src="' + Ext.BLANK_IMAGE_URL + '" class="scalr-scope-environment">&nbsp;&nbsp;Environment</div>') +
+                    '" />&nbsp;Name',
+                text: 'Name',
                 flex: 1,
-                filterFields: ['name'],
-                handler: null,
-                store: store
-            },{
-                xtype: 'tbfill'
-            },{
-                itemId: 'add',
-                text: 'New webhook',
-                cls: 'x-btn-green-bg',
-                handler: function() {
-                    grid.getSelectionModel().setLastFocused(null);
-                    form.loadRecord(store.createModel({}));
-                }
-            },{
-                itemId: 'refresh',
-                ui: 'paging',
-                iconCls: 'x-tbar-loading',
-                tooltip: 'Refresh',
-                handler: function() {
-                    Scalr.data.reload('webhooks.*');
-                }
-            },{
-                itemId: 'delete',
-                ui: 'paging',
-                iconCls: 'x-tbar-delete',
-                disabled: true,
-                tooltip: 'Delete webhook(s)'
-            }]
-        }]
+                dataIndex: 'name',
+                resizable: false,
+                sortable: true,
+                xtype: 'templatecolumn',
+                tpl: new Ext.XTemplate('{[this.getLevel(values.level)]}&nbsp;&nbsp;{name}',
+                   {
+                       getLevel: function(level){
+                           var scope = moduleParams['levelMap'][level];
+                           return '<img src="' + Ext.BLANK_IMAGE_URL + '" class="scalr-scope-'+scope+'" data-qtip="'+Ext.String.capitalize(scope)+' scope"/>';
+                       }
+                   }
+               )
+            }
+        ],
+        level: moduleParams['level'],
+        listeners: {
+            btnnewclick: function(newRecord) {
+                form.loadRecord(newRecord);
+            },
+            btnrefreshclick: function() {
+                store.load();
+            }
+        }
     });
 
 	var form = 	Ext.create('Ext.form.Panel', {
@@ -177,10 +135,19 @@ Scalr.regPage('Scalr.ui.webhooks.configs.view', function (loadParams, modulePara
             afterrender: function() {
                 var me = this;
                 grid.getSelectionModel().on('focuschange', function(gridSelModel){
+                    var warning = me.up('#rightcol').down('#warning');
                     if (gridSelModel.lastFocused) {
-                        me.loadRecord(gridSelModel.lastFocused);
+                        if (moduleParams['level'] == gridSelModel.lastFocused.get('level')) {
+                            warning.hide();
+                            me.loadRecord(gridSelModel.lastFocused);
+                        } else {
+                            me.hide();
+                            warning.down('displayfield').setValue('<b>'+gridSelModel.lastFocused.get('name')+'</b><br/>'+Ext.String.capitalize(''+moduleParams['levelMap'][gridSelModel.lastFocused.get('level')]) + ' webhook info can\'t be viewed in the current scope.');
+                            warning.show();
+                        }
                     } else {
-                        me.setVisible(false);
+                        me.hide();
+                        me.up('#rightcol').down('#warning').hide();
                     }
                 });
                 form.down('#events').store.load({data: moduleParams['events']});
@@ -198,11 +165,11 @@ Scalr.regPage('Scalr.ui.webhooks.configs.view', function (loadParams, modulePara
 				}
                 grid.down('#add').setDisabled(isNewRecord);
 			},
-			loadrecord: function(record) {
-				if (!this.isVisible()) {
-					this.setVisible(true);
-				}
-			}
+            loadrecord: function() {
+                if (!this.isVisible()) {
+                    this.show();
+                }
+            }
 		},
 		items: [{
 			xtype: 'fieldset',
@@ -210,7 +177,7 @@ Scalr.regPage('Scalr.ui.webhooks.configs.view', function (loadParams, modulePara
             cls: 'x-fieldset-separator-none',
             title: '&nbsp;',
             defaults: {
-                labelWidth: 80
+                labelWidth: 140
             },
 			items: [{
                 xtype: 'hidden',
@@ -225,7 +192,11 @@ Scalr.regPage('Scalr.ui.webhooks.configs.view', function (loadParams, modulePara
                 xtype: 'comboboxselect',
                 itemId: 'endpoints',
                 name: 'endpoints',
-                store: storeEndpoints,
+                store: {
+                    fields: ['id', 'url', 'isValid'],
+                    data: moduleParams['endpoints'],
+                    proxy: 'object'
+                },
                 flex: 1,
                 valueField: 'id',
                 displayField: 'url',
@@ -241,19 +212,25 @@ Scalr.regPage('Scalr.ui.webhooks.configs.view', function (loadParams, modulePara
                 },
                 listConfig: {
                     tpl: '<tpl for="."><div class="x-boundlist-item">{[values.isValid!=1?\'<span style="color:#999">\'+values.url+\' (inactive)</span>\':values.url]}</div></tpl>'
-                }
+                },
+                submitValue: false
             },{
                 xtype: 'comboboxselect',
                 store: {
                     fields: [
-                        'id',
+                        'name',
+                        'description',
+                        'scope',
+                        {
+                            name: 'id',
+                            convert: function (v, record) {return record.data.name;}
+                        },
                         {
                             name: 'title',
-                            convert: function(v, record){
-                                return record.get('id')=='*' ? 'All Events' : record.get('id');
+                            convert: function (v, record) {
+                                return record.data.name === '*' ? 'All Events' : record.data.name;
                             }
-                        },
-                        'name'
+                        }
                     ],
                     proxy: 'object'
                 },
@@ -262,7 +239,7 @@ Scalr.regPage('Scalr.ui.webhooks.configs.view', function (loadParams, modulePara
                 displayField: 'title',
                 queryMode: 'local',
                 allowBlank: false,
-                validateOnChange: false,
+                //validateOnChange: false,
                 itemId: 'events',
                 name: 'events',
                 emptyText: 'Please select events',
@@ -270,9 +247,11 @@ Scalr.regPage('Scalr.ui.webhooks.configs.view', function (loadParams, modulePara
                     cls: 'x-boundlist-role-scripting-events',
                     style: 'white-space:nowrap',
                     getInnerTpl: function(displayField) {
-                        return '<tpl if=\'id == \"*\"\'>All Events<tpl else>{id} <span style="color:#999">({name})</span></tpl>';
+                        return '&nbsp;<img src="'+Ext.BLANK_IMAGE_URL+'" class="scalr-scope-{scope}" data-qtip="{scope:capitalize} scope"/>&nbsp; '+
+                               '<tpl if=\'id == \"*\"\'>All Events<tpl else>{id} <span style="color:#999">({description})</span></tpl>';
                     }
-                }
+                },
+                submitValue: false
             },{
                 xtype: 'comboboxselect',
                 store: {
@@ -286,10 +265,53 @@ Scalr.regPage('Scalr.ui.webhooks.configs.view', function (loadParams, modulePara
                 valueField: 'id',
                 displayField: 'name',
                 queryMode: 'local',
-                validateOnChange: false,
+                //validateOnChange: false,
                 itemId: 'farms',
                 name: 'farms',
-                emptyText: 'All farms'
+                emptyText: 'All farms',
+                submitValue: false
+            },{
+                xtype: 'fieldcontainer',
+                fieldLabel: 'Timeout (sec)',
+                layout: 'hbox',
+                items: [{
+                    xtype: 'combo',
+                    store: [1,2,3,4,5,6,7,8,9,10],
+                    editable: false,
+                    name: 'timeout',
+                    width: 60
+                },{
+                    xtype: 'displayinfofield',
+                    margin: '0 0 0 6',
+                    info: 
+                        '<b>Timeout</b><br/>'+ 
+                        'When delivering a Webhook Notification, Scalr will expect to start<br/>' +
+                        'receiving your Endpoint&#39;s response within this duration. If your<br/>' +
+                        'Endpoint fails to respond in time, Scalr may mark the request as<br/>' +
+                        'failed or retry it at a later time, depending on your configuration<br/>' +
+                        'below (maximum delivery attempts).'
+                }]
+            },{
+                xtype: 'fieldcontainer',
+                fieldLabel: 'Max. delivery attempts',
+                layout: 'hbox',
+                items: [{
+                    xtype: 'combo',
+                    store: [1,2,3,4,5],
+                    editable: false,
+                    name: 'attempts',
+                    width: 60
+                },{
+                    xtype: 'displayinfofield',
+                    margin: '0 0 0 6',
+                    info:
+                        '<b>Maximum delivery attempts</b><br/>'+
+                        'If delivery of a Webhook Notification fails, Scalr will retry the<br/>' +
+                        'request until it succeeds, or until the maximum number of delivery<br/>' +
+                        'attempts configured here has been exceeded. <br/>' + 
+                        'Visit the <a href="https://scalr-wiki.atlassian.net/wiki/x/AgDO" target="_blank">Scalr Wiki</a> for information regarding what Scalr considers<br/>'+
+                        'to be delivery failures and the retry schedule.'
+                }]
             },{
                 xtype: 'checkbox',
                 name: 'skipPrivateGv',
@@ -326,18 +348,22 @@ Scalr.regPage('Scalr.ui.webhooks.configs.view', function (loadParams, modulePara
 				text: 'Save',
 				handler: function() {
 					var frm = form.getForm(),
-                        webhook = frm.getValues(),
+                        params,
                         record = frm.getRecord();
 					if (frm.isValid()) {
-                        webhook.endpoints = Ext.encode(webhook.endpoints);
-                        webhook.events = Ext.encode(webhook.events);
-                        webhook.farms = Ext.encode(webhook.farms);
+                        params = {
+                            endpoints: Ext.encode(frm.findField('endpoints').getValue()),
+                            events: Ext.encode(frm.findField('events').getValue()),
+                            farms: Ext.encode(frm.findField('farms').getValue()),
+                            level: moduleParams['level'],
+                        };
 						Scalr.Request({
 							processBox: {
 								type: 'save'
 							},
 							url: '/webhooks/configs/xSave',
-                            params: webhook,
+                            form: frm,
+                            params: params,
 							success: function (data) {
                                 var isNewRecord = !record.get('webhookId');
                                 grid.getSelectionModel().setLastFocused(null);
@@ -385,7 +411,7 @@ Scalr.regPage('Scalr.ui.webhooks.configs.view', function (loadParams, modulePara
 						},
 						scope: this,
 						url: '/webhooks/configs/xRemove',
-						params: {webhookId: record.get('webhookId')},
+						params: {webhookId: record.get('webhookId'), level: moduleParams['level']},
 						success: function (data) {
 							record.store.remove(record);
 						}
@@ -401,15 +427,7 @@ Scalr.regPage('Scalr.ui.webhooks.configs.view', function (loadParams, modulePara
 			type: 'hbox',
 			align: 'stretch'
 		},
-		scalrOptions: {
-			title: 'Webhooks',
-			reload: false,
-			maximize: 'all',
-			leftMenu: {
-				menuId: 'webhooks',
-				itemId: 'configs'
-			}
-		},
+		scalrOptions: scalrOptions,
         listeners: {
             applyparams: reconfigurePage
         },
@@ -422,10 +440,20 @@ Scalr.regPage('Scalr.ui.webhooks.configs.view', function (loadParams, modulePara
             maxWidth: 640,
             minWidth: 400,
             layout: 'fit',
-            items: [
-                form
-            ]
+            items: [form, {
+                xtype: 'container',
+                cls: 'x-container-fieldset',
+                itemId: 'warning',
+                layout: 'anchor',
+                hidden: true,
+                items: {
+                    xtype: 'displayfield',
+                    anchor: '100%',
+                    cls: 'x-form-field-info'
+                }
+            }]
         }]
 	});
+
 	return panel;
 });

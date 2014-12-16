@@ -1,21 +1,19 @@
 Scalr.regPage('Scalr.ui.admin.variables.view', function (loadParams, moduleParams) {
 	return Ext.create('Ext.form.Panel', {
-		width: 1000,
 		title: 'Scalr global variables',
 		fieldDefaults: {
 			labelWidth: 110
 		},
-		items: [{
-			xtype: 'fieldset',
-            cls: 'x-fieldset-separator-none',
-			items: [{
-				xtype: 'variablefield',
-				name: 'variables',
-				currentScope: 'scalr',
-				value: moduleParams.variables
-			}]
-		}],
-
+        scalrOptions: {
+            'maximize': 'all'
+        },
+        layout: 'fit',
+		items: {
+            xtype: 'variablefield',
+            name: 'variables',
+            currentScope: 'scalr',
+            value: moduleParams.variables
+        },
 		dockedItems: [{
 			xtype: 'container',
 			dock: 'bottom',

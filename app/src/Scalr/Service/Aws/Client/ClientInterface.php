@@ -55,4 +55,23 @@ interface ClientInterface
      * @return   int    Returns the number of the requested queries to the AWS API
      */
     public function getQueriesQuantity();
+
+    /**
+     * Sets service name
+     *
+     * It is used to authenticate signature v4
+     *
+     * @param    string     $service The name of the AWS service in the lower case
+     * @return   ClientInterface
+     */
+    public function setServiceName($service);
+
+    /**
+     * Gets service name
+     *
+     * It is used to authenticate signature v4
+     *
+     * @return string Returns AWS service name in the lower case
+     */
+    public function getServiceName();
 }

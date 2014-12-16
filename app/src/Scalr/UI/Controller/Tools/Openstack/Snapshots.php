@@ -21,6 +21,11 @@ class Scalr_UI_Controller_Tools_Openstack_Snapshots extends Scalr_UI_Controller
         $this->viewAction();
     }
 
+    public function createAction()
+    {
+        $this->response->page('ui/tools/openstack/snapshots/create.js', array());
+    }
+    
     /**
      * @param string $volumeId
      * @param string $cloudLocation
@@ -91,21 +96,22 @@ class Scalr_UI_Controller_Tools_Openstack_Snapshots extends Scalr_UI_Controller
                     continue;
 
                 $item = array(
-                    'name'			=> $pv->name,
-                    'description'   => $pv->description,
+                    'name'			=> $pv->display_name,
+                    'description'   => $pv->display_description,
                     'snapshotId'	=> $pv->id,
                     'size'	        => $pv->size,
                     'volumeId'      => $pv->volume_id,
                     'createdAt'     => $pv->created_at,
                     'status'	    => $pv->status,
-                    'progress'      => $pv->{"os-extended-snapshot-attributes:progress"}
+                    'progress'      => $pv->{"os-extended-snapshot-attributes:progress"},
+                    'debug'         => $pv
                 );
 
                 $snaps[] = $item;
             }
         } while (false !== ($snapshots = $snapshots->getNextPage()));
 
-        $response = $this->buildResponseFromData($snaps, array('snapshotId', 'volumeId', 'status'));
+        $response = $this->buildResponseFromData($snaps, array('snapshotId', 'volumeId', 'status', 'name', 'description'));
 
         $this->response->data($response);
     }

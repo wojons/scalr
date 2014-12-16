@@ -81,6 +81,22 @@ class WebhookConfig extends AbstractEntity
     public $skipPrivateGv;
 
     /**
+     * Timeout
+     *
+     * @Column(type="integer",nullable=true)
+     * @var int
+     */
+    public $timeout;
+
+    /**
+     * Attempts limit
+     *
+     * @Column(type="integer",nullable=true)
+     * @var int
+     */
+    public $attempts;
+
+    /**
      * @var \ArrayObject
      */
     private $_endpoints;
@@ -222,7 +238,11 @@ class WebhookConfig extends AbstractEntity
             FROM " . $cfg->table() . " c
             JOIN `webhook_config_events` ce ON ce.webhook_id = c.webhook_id
             WHERE ce.event_type = ?
-            AND c.account_id = ? AND c.env_id = ?
+            AND (
+                (c.account_id = ? AND c.env_id = ? AND `level` = 4) OR
+                (c.account_id = ? AND c.env_id IS NULL AND `level` = 2) OR
+                (c.account_id IS NULL AND c.env_id IS NULL AND `level` = 1)
+            )
             AND EXISTS (
                 SELECT 1 FROM `webhook_config_farms` cf
                 WHERE cf.webhook_id = c.webhook_id
@@ -232,6 +252,7 @@ class WebhookConfig extends AbstractEntity
             $eventName,
             $accountId,
             $envId,
+            $accountId,
             $farmId
         ));
 

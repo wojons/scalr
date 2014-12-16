@@ -1,7 +1,12 @@
 <?php
 
+use Scalr\Service\Exception\InstanceNotFound;
 use Scalr\Modules\PlatformFactory;
 
+/**
+ * @deprecated  This cron has been deprecated since 29.10.2014 because of replacing with a new Scalr service
+ * @see        \Scalr\System\Zmq\Cron\Task\ServerTerminate
+ */
 class Scalr_Cronjob_ServerTerminate extends Scalr_System_Cronjob_MultiProcess_DefaultWorker
 {
     static function getConfig () {
@@ -57,6 +62,8 @@ class Scalr_Cronjob_ServerTerminate extends Scalr_System_Cronjob_MultiProcess_De
     {
         $this->logger->info("Fetching servers to remove...");
 
+        $bHostedScalr = Scalr::isHostedScalr();
+
         $qty = 0;
         foreach (DBServer::getTerminatingServers() as $row) {
             $workQueue->put($row['server_id']);
@@ -96,52 +103,61 @@ class Scalr_Cronjob_ServerTerminate extends Scalr_System_Cronjob_MultiProcess_De
                 if ($dbServer->GetCloudServerID()) {
                     $serverHistory = $dbServer->getServerHistory();
 
-                    $isTermination = in_array($dbServer->status, array(SERVER_STATUS::TERMINATED, SERVER_STATUS::PENDING_TERMINATE));
-                    $isSuspension = in_array($dbServer->status, array(SERVER_STATUS::SUSPENDED, SERVER_STATUS::PENDING_SUSPEND));
+                    $isTermination = in_array(
+                        $dbServer->status, array(SERVER_STATUS::TERMINATED, SERVER_STATUS::PENDING_TERMINATE)
+                    );
+                    $isSuspension = in_array(
+                        $dbServer->status, array(SERVER_STATUS::SUSPENDED, SERVER_STATUS::PENDING_SUSPEND)
+                    );
 
-                    if (
-                        ($isTermination && !$dbServer->GetRealStatus()->isTerminated()) ||
-                        ($isSuspension && !$dbServer->GetRealStatus()->isSuspended())
-                    ) {
+                    if (($isTermination && !$dbServer->GetRealStatus()->isTerminated()) || ($isSuspension && !$dbServer->GetRealStatus()->isSuspended())) {
                         try {
                             if ($dbServer->farmId != 0) {
-                            	try {
-	                                if ($dbServer->GetFarmRoleObject()->GetRoleObject()->hasBehavior(ROLE_BEHAVIORS::RABBITMQ)) {
-	                                    $serversCount = count($dbServer->GetFarmRoleObject()->GetServersByFilter(array(), array(
-	                                        'status' => array(SERVER_STATUS::TERMINATED, SERVER_STATUS::SUSPENDED)
-	                                    )));
-	                                    if ($dbServer->index == 1 && $serversCount > 1) {
-	                                        Logger::getLogger(LOG_CATEGORY::FARM)->warn(new FarmLogMessage($dbServer->GetFarmObject()->ID, sprintf(
-	                                            "RabbitMQ role. Main DISK node should be terminated after all other nodes. "
-	                                          . "Waiting... (Platform: %s) (ServerTerminate).",
-	                                            $dbServer->serverId, $dbServer->platform
-	                                        )));
-	                                        return;
-	                                    }
-	                                }
-                            	} catch (Exception $e) {}
+                                try {
+                                    if ($dbServer->GetFarmRoleObject()->GetRoleObject()->hasBehavior(ROLE_BEHAVIORS::RABBITMQ)) {
+                                        $serversCount = count($dbServer->GetFarmRoleObject()->GetServersByFilter([], ['status' => [SERVER_STATUS::TERMINATED, SERVER_STATUS::SUSPENDED]]));
+                                        if ($dbServer->index == 1 && $serversCount > 1) {
+                                            Logger::getLogger(LOG_CATEGORY::FARM)->warn(
+                                                new FarmLogMessage(
+                                                    $dbServer->GetFarmObject()->ID, sprintf(
+                                                        "RabbitMQ role. Main DISK node should be terminated after all other nodes. "
+                                                        . "Waiting... (Platform: %s) (ServerTerminate).",
+                                                        $dbServer->serverId, $dbServer->platform
+                                                    )
+                                                )
+                                            );
 
-                                Logger::getLogger(LOG_CATEGORY::FARM)->warn(new FarmLogMessage($dbServer->GetFarmObject()->ID, sprintf(
-                                    "Terminating server '%s' (Platform: %s) (ServerTerminate).",
-                                    $dbServer->serverId, $dbServer->platform
-                                )));
+                                            return;
+                                        }
+                                    }
+                                } catch (Exception $e) {
+                                }
+
+                                Logger::getLogger(LOG_CATEGORY::FARM)->warn(
+                                    new FarmLogMessage(
+                                        $dbServer->GetFarmObject()->ID, sprintf(
+                                            "Terminating server '%s' (Platform: %s) (ServerTerminate).",
+                                            $dbServer->serverId, $dbServer->platform
+                                        )
+                                    )
+                                );
                             }
                         } catch (Exception $e) {
                             Logger::getLogger(LOG_CATEGORY::FARM)->warn($serverId . ": {$e->getMessage()}");
                         }
 
-                        if ($isTermination)
+                        if ($isTermination) {
                             PlatformFactory::NewPlatform($dbServer->platform)->TerminateServer($dbServer);
-                        else
+                        } else {
                             PlatformFactory::NewPlatform($dbServer->platform)->SuspendServer($dbServer);
+                        }
 
                         if ($dbServer->farmId) {
-                            $wasHostDownFired = $this->db->GetOne("SELECT id FROM events WHERE event_server_id = ? AND type = ?", array(
-                                $serverId, 'HostDown'
-                            ));
+                            $wasHostDownFired = $this->db->GetOne("SELECT id FROM events WHERE event_server_id = ? AND type = ?", [$serverId, 'HostDown']);
 
-                            if (!$wasHostDownFired)
+                            if (!$wasHostDownFired) {
                                 Scalr::FireEvent($dbServer->farmId, new HostDownEvent($dbServer));
+                            }
                         }
                     } else {
 
@@ -164,19 +180,12 @@ class Scalr_Cronjob_ServerTerminate extends Scalr_System_Cronjob_MultiProcess_De
                     //$serverHistory->setTerminated(); If there is no cloudserverID we don't need to add this server into server history.
                     $dbServer->Remove();
                 }
-            } catch (Exception $e) {
-                if (stristr($e->getMessage(), "not found") ||
-                    stristr($e->getMessage(), "could not be found") ||
-
-                    // Cloudstack
-                    stristr($e->getMessage(), "or entity does not exist or due to incorrect parameter annotation for the field in api cmd class")) {
-                    if ($serverHistory)
-                        $serverHistory->setTerminated();
-
-                    $dbServer->Remove();
-                } else {
-                    throw $e;
+            } catch (InstanceNotFound $e) {
+                if ($serverHistory) {
+                    $serverHistory->setTerminated();
                 }
+
+                $dbServer->Remove();
             }
         }
     }

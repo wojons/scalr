@@ -140,7 +140,7 @@ class Scalr_UI_Controller_Farms extends Scalr_UI_Controller
                 ),
                 array(
                     'xtype' => 'fieldcontainer',
-                    'fieldLabel' => 'Schedule',
+                    'fieldLabel' => 'Schedule (UTC time)',
                     'layout' => 'hbox',
                     'items' => array(
                         array(
@@ -493,7 +493,8 @@ class Scalr_UI_Controller_Farms extends Scalr_UI_Controller
      *      'addAllFarms' - add "On all farms" options to farms
      *      'disabledFarmRole' - remove farmRole field
      *      'disabledServer' - remove server field
-     *      'addEmpty' - add "*empty*" option
+     *      'addEmpty' - add "*empty*" option (to all lists)
+     *      'addEmptyFarm' - add "*empty*" options to farms list only
      *      'requiredFarm', 'requiredFarmRole', 'requiredServer' - add allowBlank = false to field
      * @return array
      */
@@ -541,11 +542,11 @@ class Scalr_UI_Controller_Farms extends Scalr_UI_Controller
     public function getFarmWidgetFarms($options)
     {
         $farms = $this->db->GetAll('SELECT id, name FROM farms WHERE env_id = ? ORDER BY name', $this->getEnvironmentId());
-        if (in_array('addEmpty', $options))
-            array_unshift($farms, array('id' => '', 'name' => ''));
-
         if (in_array('addAllFarm', $options))
             array_unshift($farms, array('id' => '0', 'name' => 'On all farms'));
+
+        if (in_array('addEmpty', $options) || in_array('addEmptyFarm', $options))
+            array_unshift($farms, array('id' => '', 'name' => ''));
 
         return $farms;
     }
@@ -957,6 +958,19 @@ class Scalr_UI_Controller_Farms extends Scalr_UI_Controller
             $args[] = $this->user->getId();
         }
 
+        if ($this->getParam('chefServerId')) {
+            $sql .= ' AND f.id IN (
+                SELECT fr.farmid
+                FROM farm_roles fr
+                INNER JOIN farm_role_settings frs1 ON fr.id = frs1.farm_roleid AND frs1.name = ? AND frs1.value = ?
+                INNER JOIN farm_role_settings frs2 ON fr.id = frs2.farm_roleid AND frs2.name = ? AND frs2.value = ?
+            )';
+            $args[] = \Scalr_Role_Behavior_Chef::ROLE_CHEF_SERVER_ID;
+            $args[] = (int)$this->getParam('chefServerId');
+            $args[] = \Scalr_Role_Behavior_Chef::ROLE_CHEF_BOOTSTRAP;
+            $args[] = 1;
+        }
+
         $response = $this->buildResponseFromSql2($sql, array('id', 'name', 'dtadded', 'created_by_email', 'status'), array('name', 'id', 'comments'), $args);
 
         foreach ($response["data"] as &$row) {
@@ -1087,9 +1101,7 @@ class Scalr_UI_Controller_Farms extends Scalr_UI_Controller
                 WHERE role_id = r.id
                 AND platform IN ('".implode("','", array_keys($platforms))."')
              )
-             LEFT JOIN roles_queue q ON r.id = q.role_id
              WHERE c.env_id IN (0, ?)
-             AND q.id IS NULL
              GROUP BY c.id
             ",
             array($this->environment->id, $this->environment->id)
@@ -1115,7 +1127,7 @@ class Scalr_UI_Controller_Farms extends Scalr_UI_Controller
         $moduleParams['tabs'] = array(
             'vpcrouter', 'dbmsr', 'mongodb', 'mysql', 'scaling', 'network', 'gce', 'cloudfoundry', 'rabbitmq', 'haproxy', 'proxy',
             'rds',   'scripting',
-            'nimbula', 'ec2', 'security', 'devel', 'storage', 'variables', 'advanced'
+            'ec2', 'security', 'devel', 'storage', 'variables', 'advanced'
         );
 
         if ($this->user->getAccount()->isFeatureEnabled(Scalr_Limits::FEATURE_CHEF)) {
@@ -1146,6 +1158,7 @@ class Scalr_UI_Controller_Farms extends Scalr_UI_Controller
         $moduleParams['tabParams']['scalr.dns.global.enabled'] = \Scalr::config('scalr.dns.global.enabled');
         $moduleParams['tabParams']['scalr.instances_connection_policy'] = \Scalr::config('scalr.instances_connection_policy');
         $moduleParams['tabParams']['scalr.scalarizr_update.repos'] = array_keys(\Scalr::config('scalr.scalarizr_update.repos'));
+        $moduleParams['tabParams']['scalr.scalarizr_update.devel_repos'] = is_array(\Scalr::config('scalr.scalarizr_update.devel_repos')) ? array_keys(\Scalr::config('scalr.scalarizr_update.devel_repos')) : [];
         $moduleParams['tabParams']['scalr.scalarizr_update.default_repo'] = \Scalr::config('scalr.scalarizr_update.default_repo');
 
         $moduleParams['metrics'] = self::loadController('Metrics', 'Scalr_UI_Controller_Scaling')->getList();
@@ -1166,7 +1179,9 @@ class Scalr_UI_Controller_Farms extends Scalr_UI_Controller
 
         $moduleParams['roleDefaultSettings'] = array(
             'base.keep_scripting_logs_time' => \Scalr::config('scalr.system.scripting.default_instance_log_rotation_period'),
-            'security_groups.list' => json_encode($defaultFarmRoleSecurityGroups)
+            'security_groups.list' => json_encode($defaultFarmRoleSecurityGroups),
+            'base.abort_init_on_script_fail' => \Scalr::config('scalr.system.scripting.default_abort_init_on_script_fail') ? 1 : 0,
+            'base.disable_firewall_management' => \Scalr::config('scalr.system.default_disable_firewall_management') ? 1 : 0,
         );
 
         //cost analytics
@@ -1212,7 +1227,6 @@ class Scalr_UI_Controller_Farms extends Scalr_UI_Controller
             'ui/farms/builder/tabs/haproxy.js',
             'ui/farms/builder/tabs/proxy.js',
             'ui/farms/builder/tabs/mysql.js',
-            'ui/farms/builder/tabs/nimbula.js',
             'ui/farms/builder/tabs/rds.js',
             'ui/farms/builder/tabs/gce.js',
             'ui/farms/builder/tabs/scaling.js',

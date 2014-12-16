@@ -28,6 +28,44 @@ CREATE TABLE `account_tag_values` (
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
+-- Table structure for table `farm_usage_d`
+--
+
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
+CREATE TABLE `farm_usage_d` (
+  `account_id` int(11) NOT NULL COMMENT 'scalr.clients.id ref',
+  `farm_role_id` int(11) NOT NULL COMMENT 'scalr.farm_roles.id ref',
+  `instance_type` varchar(45) NOT NULL COMMENT 'Type of the instance',
+  `cc_id` binary(16) NOT NULL DEFAULT '\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0' COMMENT 'scalr.ccs.cc_id ref',
+  `project_id` binary(16) NOT NULL DEFAULT '\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0' COMMENT 'scalr.projects.project_id ref',
+  `date` date NOT NULL COMMENT 'UTC Date',
+  `platform` varchar(20) NOT NULL COMMENT 'cloud platform',
+  `cloud_location` varchar(255) NOT NULL COMMENT 'cloud location',
+  `env_id` int(11) NOT NULL COMMENT 'scalr.client_account_environments.id ref',
+  `farm_id` int(11) NOT NULL COMMENT 'scalr.farms.id ref',
+  `role_id` int(11) NOT NULL COMMENT 'scalr.roles.id ref',
+  `cost` decimal(12,6) NOT NULL DEFAULT '0.000000' COMMENT 'total usage',
+  `min_instances` smallint(5) unsigned NOT NULL DEFAULT '0' COMMENT 'min instances count',
+  `max_instances` smallint(5) unsigned NOT NULL DEFAULT '0' COMMENT 'max instances count',
+  `instance_hours` smallint(5) unsigned NOT NULL DEFAULT '0' COMMENT 'total instance hours',
+  `working_hours` smallint(5) unsigned NOT NULL DEFAULT '0' COMMENT 'hours when farm is running',
+  PRIMARY KEY (`account_id`,`farm_role_id`,`instance_type`,`cc_id`,`project_id`,`date`),
+  KEY `idx_farm_role_id` (`farm_role_id`),
+  KEY `idx_instance_type` (`instance_type`),
+  KEY `idx_date` (`date`),
+  KEY `idx_farm_id` (`farm_id`),
+  KEY `idx_env_id` (`env_id`),
+  KEY `idx_cloud_location` (`cloud_location`),
+  KEY `idx_platform` (`platform`),
+  KEY `idx_role_id` (`role_id`),
+  KEY `idx_project_id` (`project_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8 COMMENT='Farm daily usage'
+/*!50100 PARTITION BY HASH (account_id)
+PARTITIONS 100 */;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
 -- Table structure for table `managed`
 --
 
@@ -130,8 +168,8 @@ CREATE TABLE `nm_usage_subjects_h` (
   `subject_id` binary(16) NOT NULL COMMENT 'ID of the subject',
   PRIMARY KEY (`usage_id`,`subject_id`),
   KEY `idx_subject_id` (`subject_id`),
-  CONSTRAINT `fk_nmusagesubjectsh_nmusageh` FOREIGN KEY (`usage_id`) REFERENCES `nm_usage_h` (`usage_id`) ON DELETE CASCADE,
-  CONSTRAINT `fk_nmusagesubjectsh_nmsubjectsh` FOREIGN KEY (`subject_id`) REFERENCES `nm_subjects_h` (`subject_id`) ON DELETE NO ACTION ON UPDATE NO ACTION
+  CONSTRAINT `fk_nmusagesubjectsh_nmsubjectsh` FOREIGN KEY (`subject_id`) REFERENCES `nm_subjects_h` (`subject_id`) ON DELETE NO ACTION ON UPDATE NO ACTION,
+  CONSTRAINT `fk_nmusagesubjectsh_nmusageh` FOREIGN KEY (`usage_id`) REFERENCES `nm_usage_h` (`usage_id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COMMENT='Subjects - Usages';
 /*!40101 SET character_set_client = @saved_cs_client */;
 
@@ -144,10 +182,12 @@ CREATE TABLE `nm_usage_subjects_h` (
 CREATE TABLE `notifications` (
   `uuid` binary(16) NOT NULL COMMENT 'unique identifier',
   `subject_type` tinyint(4) NOT NULL COMMENT '1- CC, 2 - Project',
+  `subject_id` binary(16) DEFAULT NULL,
   `notification_type` tinyint(4) NOT NULL COMMENT 'Type of the notification',
   `threshold` decimal(12,2) NOT NULL,
   `recipient_type` tinyint(4) NOT NULL DEFAULT '1' COMMENT '1 - Leads 2 - Emails',
   `emails` text COMMENT 'Comma separated recipients',
+  `status` tinyint(4) NOT NULL,
   PRIMARY KEY (`uuid`),
   KEY `idx_notification_type` (`notification_type`),
   KEY `idx_subject_type` (`subject_type`),
@@ -231,7 +271,7 @@ CREATE TABLE `prices` (
   `cost` decimal(9,6) unsigned NOT NULL DEFAULT '0.000000' COMMENT 'The hourly cost of usage (USD)',
   PRIMARY KEY (`price_id`,`instance_type`,`os`),
   KEY `idx_instance_type` (`instance_type`,`os`),
-  KEY `idx_name` (`name`(3)),
+  KEY `idx_name` (`name`(3)) USING BTREE,
   CONSTRAINT `fk_prices_price_revisions` FOREIGN KEY (`price_id`) REFERENCES `price_history` (`price_id`) ON DELETE NO ACTION ON UPDATE NO ACTION
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COMMENT='The Cloud prices for specific revision';
 /*!40101 SET character_set_client = @saved_cs_client */;
@@ -269,7 +309,7 @@ CREATE TABLE `report_payloads` (
   `uuid` binary(16) NOT NULL COMMENT 'UUID',
   `created` datetime NOT NULL COMMENT 'Creation timestamp (UTC)',
   `secret` binary(20) NOT NULL COMMENT 'Secret hash (SHA1)',
-  `payload` text NOT NULL COMMENT 'Payload',
+  `payload` mediumtext NOT NULL COMMENT 'Payload',
   PRIMARY KEY (`uuid`),
   KEY `idx_created` (`created`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COMMENT='Report payloads';
@@ -287,6 +327,7 @@ CREATE TABLE `reports` (
   `subject_id` binary(16) DEFAULT NULL,
   `period` tinyint(4) NOT NULL COMMENT 'Period',
   `emails` text NOT NULL COMMENT 'Comma separated recipients',
+  `status` tinyint(4) NOT NULL,
   PRIMARY KEY (`uuid`),
   KEY `idx_subject_type` (`subject_type`),
   KEY `idx_period` (`period`)
@@ -360,11 +401,15 @@ CREATE TABLE `timeline_events` (
   `event_type` tinyint(3) unsigned NOT NULL COMMENT 'The type of the event',
   `dtime` datetime NOT NULL COMMENT 'The time of the event',
   `user_id` int(11) DEFAULT NULL COMMENT 'User who triggered this event',
+  `account_id` int(11) DEFAULT NULL,
+  `env_id` int(11) DEFAULT NULL,
   `description` text NOT NULL COMMENT 'Description',
   PRIMARY KEY (`uuid`),
   KEY `idx_dtime` (`dtime`),
   KEY `idx_event_type` (`event_type`),
-  KEY `idx_user_id` (`user_id`)
+  KEY `idx_user_id` (`user_id`),
+  KEY `idx_account_id` (`account_id`),
+  KEY `idx_env_id` (`env_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COMMENT='Timeline events';
 /*!40101 SET character_set_client = @saved_cs_client */;
 
@@ -413,9 +458,9 @@ CREATE TABLE `usage_d` (
   `platform` varchar(20) NOT NULL COMMENT 'Cloud platform',
   `cc_id` binary(16) NOT NULL DEFAULT '\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0' COMMENT 'ID of the CC',
   `project_id` binary(16) NOT NULL DEFAULT '\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0' COMMENT 'ID of the project',
-  `env_id` int(11) NOT NULL DEFAULT '0' COMMENT 'ID of the environment',
   `farm_id` int(11) NOT NULL DEFAULT '0' COMMENT 'ID of the farm',
   `cost` decimal(12,6) NOT NULL DEFAULT '0.000000' COMMENT 'daily usage',
+  `env_id` int(11) NOT NULL DEFAULT '0' COMMENT 'ID of the environment',
   PRIMARY KEY (`date`,`farm_id`,`platform`,`cc_id`,`project_id`),
   KEY `idx_farm_id` (`farm_id`),
   KEY `idx_project_id` (`project_id`),
@@ -445,6 +490,7 @@ CREATE TABLE `usage_h` (
   `env_id` int(11) DEFAULT NULL COMMENT 'client_environments.id reference',
   `farm_id` int(11) DEFAULT NULL COMMENT 'farms.id reference',
   `farm_role_id` int(11) DEFAULT NULL COMMENT 'farm_roles.id reference',
+  `role_id` int(11) DEFAULT NULL COMMENT 'scalr.roles.id ref',
   `num` int(10) unsigned NOT NULL DEFAULT '0' COMMENT 'The number of the same instances',
   `cost` decimal(12,6) NOT NULL DEFAULT '0.000000' COMMENT 'Cost of usage',
   PRIMARY KEY (`usage_id`),
@@ -456,7 +502,8 @@ CREATE TABLE `usage_h` (
   KEY `idx_env_id` (`env_id`),
   KEY `idx_farm_role_id` (`farm_role_id`),
   KEY `idx_find` (`account_id`,`dtime`),
-  KEY `idx_dtime` (`dtime`)
+  KEY `idx_dtime` (`dtime`),
+  KEY `idx_role` (`role_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COMMENT='Hourly usage';
 /*!40101 SET character_set_client = @saved_cs_client */;
 
@@ -504,4 +551,4 @@ CREATE TABLE `usage_servers_h` (
 /*!40014 SET UNIQUE_CHECKS=@OLD_UNIQUE_CHECKS */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
--- Dump completed on 2014-08-26  4:11:17
+-- Dump completed on 2014-12-16  5:07:42

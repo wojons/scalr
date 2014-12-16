@@ -1,16 +1,4 @@
 Scalr.regPage('Scalr.ui.farms.builder.addrole.dbmsr', function () {
-    var iopsMin = 100, 
-        iopsMax = 4000, 
-        integerRe = new RegExp('[0123456789]', 'i'), 
-        maxEbsStorageSize = 1000,
-        redisPersistenceTypeData;
-    
-    redisPersistenceTypeData = [
-        {name:'aof', description:'Append Only File'},
-        {name:'snapshotting', description:'Snapshotting'},
-        {name: 'nopersistence', description: 'No persistence'}
-    ];
-    
     return {
         xtype: 'container',
         itemId: 'dbmsr',
@@ -29,15 +17,30 @@ Scalr.regPage('Scalr.ui.farms.builder.addrole.dbmsr', function () {
         },
 
         onSettingsUpdate: function(record, name, value) {
-            this.suspendUpdateEvent++;
+            var me = this;
+            me.suspendUpdateEvent++;
             if (name === 'aws.instance_type' || name === 'gce.machine-type') {
-                this.refreshStorageEngine(record);
-                this.refreshStorageDisks(record);
-                this.refreshDisksCheckboxes(record, 'lvm_settings');
+                me.refreshStorageEngine(record);
+                me.refreshStorageDisks(record);
+                me.refreshDisksCheckboxes(record, 'lvm_settings');
+                if (name === 'aws.instance_type') {
+                    me.refreshEbsEncrypted(record, value);
+                }
             }
             this.suspendUpdateEvent--;
         },
-        
+
+        refreshEbsEncrypted: function(record, instType) {
+            var me = this;
+            record.loadEBSEncryptionSupport(function(encryptionSupported){
+                var field = me.down('[name="db.msr.data_storage.ebs.encrypted"]');
+                if (field) {
+                    field.setValue(!encryptionSupported ? false : field.getValue());
+                    field.setReadOnly(!encryptionSupported);
+                }
+            }, instType);
+        },
+
         refreshStorageEngine: function(record) {
             var field = this.down('[name="db.msr.data_storage.engine"]'),
                 currentValue = field.getValue();
@@ -123,6 +126,7 @@ Scalr.regPage('Scalr.ui.farms.builder.addrole.dbmsr', function () {
             var moduleTabParams = this.up('roleslibrary').moduleParams['tabParams'],
                 field,
                 platform = record.get('platform'),
+                instType,
                 result = true;
                 
             //fs
@@ -162,6 +166,7 @@ Scalr.regPage('Scalr.ui.farms.builder.addrole.dbmsr', function () {
             this.down('[name="db.msr.redis.num_processes"]').setValue(1);
             this.down('[name="db.msr.data_storage.ebs.iops"]').setValue(100);
             this.down('[name="db.msr.data_storage.ebs.size"]').setValue(10);
+            this.down('[name="db.msr.data_storage.ebs.encrypted"]').setValue(false);
             this.down('[name="db.msr.data_storage.cinder.size"]').setValue(100);
             this.down('[name="db.msr.data_storage.gced.size"]').setValue(100);
 
@@ -177,6 +182,11 @@ Scalr.regPage('Scalr.ui.farms.builder.addrole.dbmsr', function () {
                     warningFieldset.down().setValue('Cinder and Swift are not available on your ' + Scalr.utils.getPlatformName(platform) + ' cloud. At least one of these is required to use database roles.');
                     this.down('#dataStorageSettings').hide();
                     result = false;
+                }
+            }
+            if (Scalr.flags['betaMode'] && platform === 'ec2') {
+                if (instType = this.up('form').getForm().findField('aws.instance_type').getValue()) {
+                    this.refreshEbsEncrypted(record, instType);
                 }
             }
             return result;
@@ -243,6 +253,7 @@ Scalr.regPage('Scalr.ui.farms.builder.addrole.dbmsr', function () {
                 settings['db.msr.data_storage.ebs.size'] = this.down('[name="db.msr.data_storage.ebs.size"]').getValue();
                 settings['db.msr.data_storage.ebs.type'] = this.down('[name="db.msr.data_storage.ebs.type"]').getValue();
                 settings['db.msr.data_storage.ebs.iops'] = this.down('[name="db.msr.data_storage.ebs.iops"]').getValue();
+                settings['db.msr.data_storage.ebs.encrypted'] = this.down('[name="db.msr.data_storage.ebs.encrypted"]').getValue() ? 1 : 0;
             }
             
 			if (Ext.Array.contains(record.get('behaviors', true), 'redis')) {
@@ -270,14 +281,10 @@ Scalr.regPage('Scalr.ui.farms.builder.addrole.dbmsr', function () {
                     name: 'db.msr.redis.persistence_type',
                     fieldLabel: 'Persistence type',
                     editable: false,
-                    store: {
-                        fields: [ 'name', 'description' ],
-                        proxy: 'object',
-                        data: redisPersistenceTypeData
-                    },
+                    store: Scalr.constants.redisPersistenceTypes,
+                    valueField: 'id',
+                    displayField: 'name',
                     value: 'snapshotting',
-                    valueField: 'name',
-                    displayField: 'description',
                     flex: 1,
                     labelWidth: 130,
                     queryMode: 'local',
@@ -356,6 +363,7 @@ Scalr.regPage('Scalr.ui.farms.builder.addrole.dbmsr', function () {
                             tab.down('#lvm_settings').setVisible(value === 'lvm');
 
                             tab.down('#ebs_settings').setVisible(value === 'ebs' || value === 'csvol');
+                            tab.down('[name="db.msr.data_storage.ebs.encrypted"]').setVisible(value === 'ebs');
                             tab.down('#ebs_settings_type').setVisible(value === 'ebs');
 
                             tab.down('#cinder_settings').setVisible(value === 'cinder');
@@ -446,100 +454,116 @@ Scalr.regPage('Scalr.ui.farms.builder.addrole.dbmsr', function () {
                     itemId: 'ebs_settings',
                     cls: 'inner-container',
                     hidden: true,
-                    layout: {
-                        type: 'hbox'
-                    },
                     items: [{
                         xtype: 'container',
-                        itemId: 'ebs_settings_type',
-                        layout: 'hbox',
-                        flex: 1,
-                        maxWidth: 362,
-                        margin: '0 32 12 0',
+                        layout: {
+                            type: 'hbox'
+                        },
                         items: [{
-                            xtype: 'combo',
-                            store: [['standard', 'Standard EBS (Magnetic)'],['gp2', 'General Purpose (SSD)'],['io1', 'Provisioned IOPS (' + iopsMin + ' - ' + iopsMax + '): ']],
-                            allowChangeable: false,
-                            fieldLabel: 'EBS type',
-                            labelWidth: 80,
-                            valueField: 'id',
-                            displayField: 'name',
-                            editable: false,
-                            queryMode: 'local',
-                            value: 'standard',
-                            name: 'db.msr.data_storage.ebs.type',
+                            xtype: 'container',
+                            itemId: 'ebs_settings_type',
+                            layout: 'hbox',
                             flex: 1,
-                            maxWidth: 330,
-                            listeners: {
-                                change: function (comp, value) {
-                                    var iopsField = comp.next();
-                                    iopsField.setVisible(value === 'io1');
-                                    if (value === 'io1') {
-                                        iopsField.reset();
-                                        iopsField.setValue(100);
-                                    } else {
-                                        comp.up('container').next().isValid();
-                                    }
-                                }
-                            }
-                        },{
-                            xtype: 'textfield',
-                            itemId: 'db.msr.data_storage.ebs.iops',
-                            name: 'db.msr.data_storage.ebs.iops',
-                            allowChangeable: false,
-                            maskRe: integerRe,
-                            validator: function(value){
-                                if (value*1 > iopsMax) {
-                                    return 'Maximum value is ' + iopsMax + '.';
-                                } else if (value*1 < iopsMin) {
-                                    return 'Minimum value is ' + iopsMin + '.';
-                                }
-                                return true;
-                            },
-                            hideLabel: true,
-                            hidden: true,
-                            margin: '0 0 0 2',
-                            width: 50,
-                            listeners: {
-                                change: function(comp, value){
-                                    var sizeField = comp.up('container').next();
-                                    if (comp.isValid() && comp.prev().getValue() === 'io1') {
-                                        var minSize = Math.ceil(value*1/10);
-                                        if (sizeField.getValue()*1 < minSize) {
-                                            sizeField.setValue(minSize);
+                            maxWidth: 362,
+                            margin: '0 32 12 0',
+                            items: [{
+                                xtype: 'combo',
+                                store: Scalr.constants.ebsTypes,
+                                allowChangeable: false,
+                                fieldLabel: 'EBS type',
+                                labelWidth: 80,
+                                valueField: 'id',
+                                displayField: 'name',
+                                editable: false,
+                                queryMode: 'local',
+                                value: 'standard',
+                                name: 'db.msr.data_storage.ebs.type',
+                                flex: 1,
+                                maxWidth: 330,
+                                listeners: {
+                                    change: function (comp, value) {
+                                        var iopsField = comp.next();
+                                        iopsField.setVisible(value === 'io1');
+                                        if (value === 'io1') {
+                                            iopsField.reset();
+                                            iopsField.setValue(100);
+                                        } else {
+                                            comp.up('container').next().isValid();
                                         }
                                     }
                                 }
-                            }
+                            },{
+                                xtype: 'textfield',
+                                itemId: 'db.msr.data_storage.ebs.iops',
+                                name: 'db.msr.data_storage.ebs.iops',
+                                allowChangeable: false,
+                                vtype: 'iops',
+                                allowBlank: false,
+                                hideLabel: true,
+                                hidden: true,
+                                margin: '0 0 0 2',
+                                width: 50,
+                                listeners: {
+                                    change: function(comp, value){
+                                        var sizeField = comp.up('container').next();
+                                        if (comp.isValid() && comp.prev().getValue() === 'io1') {
+                                            var minSize = Scalr.utils.getMinStorageSizeByIops(value);
+                                            if (sizeField.getValue()*1 < minSize) {
+                                                sizeField.setValue(minSize);
+                                            }
+                                        }
+                                    }
+                                }
+                            }]
+                        },{
+                            xtype: 'textfield',
+                            name: 'db.msr.data_storage.ebs.size',
+                            allowChangeable: false,
+                            fieldLabel: 'Storage size',
+                            width: 140,
+                            vtype: 'num',
+                            validator: function(value){
+                                var minValue = 1,
+                                    container = this.up('container');
+                                if (container.down('[name="db.msr.data_storage.ebs.type"]').getValue() === 'io1') {
+                                    minValue = Scalr.utils.getMinStorageSizeByIops(container.down('[name="db.msr.data_storage.ebs.iops"]').getValue());
+                                }
+                                if (value*1 > Scalr.constants.ebsMaxStorageSize) {
+                                    return 'Maximum value is ' + Scalr.constants.ebsMaxStorageSize + '.';
+                                } else if (value*1 < minValue) {
+                                    return 'Minimum value is ' + minValue + '.';
+                                }
+                                return true;
+                            },
+                            labelWidth: 80,
+                            allowBlank: false,
+                            margin: '0 6 12 0'
+                        },{
+                            xtype: 'label',
+                            cls: 'x-label-grey',
+                            text: 'GB',
+                            margin: '6 0 0 0'
                         }]
                     },{
-                        xtype: 'textfield',
-                        name: 'db.msr.data_storage.ebs.size',
-                        allowChangeable: false,
-                        fieldLabel: 'Storage size',
-                        width: 140,
-                        maskRe: integerRe,
-                        validator: function(value){
-                            var minValue = 1,
-                                container = this.up('container');
-                            if (container.down('[name="db.msr.data_storage.ebs.type"]').getValue() === 'io1') {
-                                minValue = Math.ceil(container.down('[name="db.msr.data_storage.ebs.iops"]').getValue()*1/10);
-                            }
-                            if (value*1 > maxEbsStorageSize) {
-                                return 'Maximum value is ' + maxEbsStorageSize + '.';
-                            } else if (value*1 < minValue) {
-                                return 'Minimum value is ' + minValue + '.';
-                            }
-                            return true;
+                        xtype: 'checkbox',
+                        name: 'db.msr.data_storage.ebs.encrypted',
+                        boxLabel: 'Enable EBS encryption',
+                        defaults: {
+                            width: 90
                         },
-                        labelWidth: 80,
-                        allowBlank: false,
-                        margin: '0 6 12 0'
-                    },{
-                        xtype: 'label',
-                        cls: 'x-label-grey',
-                        text: 'GB',
-                        margin: '6 0 0 0'
+                        value: '0',
+                        hidden: true,
+                        icons: {
+                            question: true,
+                            szrversion: {tooltipData: {version: '2.9.25'}}
+                        },
+                        questionTooltip: 'EBS encryption is not supported by selected instance type',
+                        listeners: {
+                            writeablechange: function(comp, readOnly) {
+                                this.toggleIcon('question', readOnly);
+                            }
+                        }
+
                     }]
                 },{
                     xtype: 'container',
@@ -552,7 +576,7 @@ Scalr.regPage('Scalr.ui.farms.builder.addrole.dbmsr', function () {
                         name: 'db.msr.data_storage.cinder.size',
                         allowChangeable: false,
                         fieldLabel: 'Disk size',
-                        maskRe: integerRe,
+                        vtype: 'num',
                         allowBlank: false,
                         labelWidth: 100,
                         anchor: '100%',
@@ -570,7 +594,7 @@ Scalr.regPage('Scalr.ui.farms.builder.addrole.dbmsr', function () {
                         name: 'db.msr.data_storage.gced.size',
                         allowChangeable: false,
                         fieldLabel: 'Disk size',
-                        maskRe: integerRe,
+                        vtype: 'num',
                         allowBlank: false,
                         labelWidth: 100,
                         anchor: '100%',
@@ -659,7 +683,7 @@ Scalr.regPage('Scalr.ui.farms.builder.addrole.dbmsr', function () {
                             layout: 'hbox',
                             items: [{
                                 xtype: 'combo',
-                                store: [['standard', 'Standard EBS (Magnetic)'],['gp2', 'General Purpose (SSD)'],['io1', 'Provisioned IOPS (' + iopsMin + ' - ' + iopsMax + '): ']],
+                                store: Scalr.constants.ebsTypes,
                                 allowChangeable: false,
                                 fieldLabel: 'EBS type',
                                 labelWidth: 80,
@@ -687,15 +711,7 @@ Scalr.regPage('Scalr.ui.farms.builder.addrole.dbmsr', function () {
                                 itemId: 'db.msr.data_storage.raid.ebs.iops',
                                 allowChangeable: false,
                                 name: 'db.msr.data_storage.raid.ebs.iops',
-                                maskRe: integerRe,
-                                validator: function(value){
-                                    if (value*1 > iopsMax) {
-                                        return 'Maximum value is ' + iopsMax + '.';
-                                    } else if (value*1 < iopsMin) {
-                                        return 'Minimum value is ' + iopsMin + '.';
-                                    }
-                                    return true;
-                                },
+                                vtype: 'iops',
                                 allowBlank: false,
                                 hidden: true,
                                 margin: '0 0 0 2',
@@ -704,7 +720,7 @@ Scalr.regPage('Scalr.ui.farms.builder.addrole.dbmsr', function () {
                                     change: function(comp, value){
                                         var sizeField = comp.up('container').next();
                                         if (comp.isValid() && comp.prev().getValue() === 'io1') {
-                                            var minSize = Math.ceil(value*1/10);
+                                            var minSize = Scalr.utils.getMinStorageSizeByIops(value);
                                             if (sizeField.getValue()*1 < minSize) {
                                                 sizeField.setValue(minSize);
                                             }
@@ -723,7 +739,7 @@ Scalr.regPage('Scalr.ui.farms.builder.addrole.dbmsr', function () {
                             flex: 1,
                             maxWidth: 176,
                             margin: '0 6 0 32',
-                            maskRe: integerRe,
+                            vtype: 'num',
                             value: 10,
                             validator: function(value){
                                 var minValue = 1,
@@ -731,10 +747,10 @@ Scalr.regPage('Scalr.ui.farms.builder.addrole.dbmsr', function () {
                                     ebsTypeField = container.down('[name="db.msr.data_storage.raid.ebs.type"]');
                                 if (ebsTypeField.isVisible()) {
                                     if (ebsTypeField.getValue() === 'io1') {
-                                        minValue = Math.ceil(container.down('[name="db.msr.data_storage.raid.ebs.iops"]').getValue()*1/10);
+                                        minValue = Scalr.utils.getMinStorageSizeByIops(container.down('[name="db.msr.data_storage.raid.ebs.iops"]').getValue());
                                     }
-                                    if (value*1 > maxEbsStorageSize) {
-                                        return 'Maximum value is ' + maxEbsStorageSize + '.';
+                                    if (value*1 > Scalr.constants.ebsMaxStorageSize) {
+                                        return 'Maximum value is ' + Scalr.constants.ebsMaxStorageSize + '.';
                                     } else if (value*1 < minValue) {
                                         return 'Minimum value is ' + minValue + '.';
                                     }

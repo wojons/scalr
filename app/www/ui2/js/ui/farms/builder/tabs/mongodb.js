@@ -1,9 +1,4 @@
 Scalr.regPage('Scalr.ui.farms.builder.tabs.mongodb', function (moduleParams) {
-    var iopsMin = 100, 
-        iopsMax = 4000, 
-        integerRe = new RegExp('[0123456789]', 'i'), 
-        maxEbsStorageSize = 1000;
-        
 	return Ext.create('Scalr.ui.FarmsBuilderTab', {
 		tabTitle: 'MongoDB settings',
 		itemId: 'mongodb',
@@ -265,7 +260,7 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.mongodb', function (moduleParams) {
                     margin: '0 0 6',
                     items: [{
                         xtype: 'combo',
-                        store: [['standard', 'Standard EBS (Magnetic)'],['gp2', 'General Purpose (SSD)'],['io1', 'Provisioned IOPS (' + iopsMin + ' - ' + iopsMax + '): ']],
+                        store: Scalr.constants.ebsTypes,
                         fieldLabel: 'EBS type',
                         labelWidth:160,
                         valueField: 'id',
@@ -297,15 +292,7 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.mongodb', function (moduleParams) {
                         hidden: true,
                         margin: '0 0 0 6',
                         width: 60,
-                        maskRe: integerRe,
-                        validator: function(value){
-                            if (value*1 > iopsMax) {
-                                return 'Maximum value is ' + iopsMax + '.';
-                            } else if (value*1 < iopsMin) {
-                                return 'Minimum value is ' + iopsMin + '.';
-                            }
-                            return true;
-                        },
+                        vtype: 'iops',
                         allowBlank: false,
                         listeners: {
                             change: function(comp, value){
@@ -313,7 +300,7 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.mongodb', function (moduleParams) {
                                     sizeField = tab.down('[name="mongodb.data_storage.ebs.size"]');
                                 if (tab.currentRole.get('new')) {
                                     if (comp.isValid() && comp.prev().getValue() === 'io1') {
-                                        var minSize = Math.ceil(value*1/10);
+                                        var minSize = Scalr.utils.getMinStorageSizeByIops(value);
                                         if (sizeField.getValue()*1 < minSize) {
                                             sizeField.setValue(minSize);
                                         }
@@ -334,16 +321,16 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.mongodb', function (moduleParams) {
                         labelWidth: 160,
                         width: 220,
                         name: 'mongodb.data_storage.ebs.size',
-                        maskRe: integerRe,
+                        vtype: 'num',
                         value: 10,
                         validator: function(value){
                             var minValue = 10,
                                 tab = this.up('#mongodb');
                             if (tab.down('[name="mongodb.data_storage.ebs.type"]').getValue() === 'io1') {
-                                minValue = Math.ceil(tab.down('[name="mongodb.data_storage.ebs.iops"]').getValue()*1/10);
+                                minValue = Scalr.utils.getMinStorageSizeByIops(tab.down('[name="mongodb.data_storage.ebs.iops"]').getValue());
                             }
-                            if (value*1 > maxEbsStorageSize) {
-                                return 'Maximum value is ' + maxEbsStorageSize + '.';
+                            if (value*1 > Scalr.constants.ebsMaxStorageSize) {
+                                return 'Maximum value is ' + Scalr.constants.ebsMaxStorageSize + '.';
                             } else if (value*1 < minValue) {
                                 return 'Minimum value is ' + minValue + '.';
                             }
@@ -415,7 +402,7 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.mongodb', function (moduleParams) {
                     labelWidth: 160,
                     width: 220,
                     value: '10',
-                    maskRe: integerRe,
+                    vtype: 'num',
                     allowBlank: false,
                     name: 'mongodb.data_storage.raid.volume_size'
                 }]

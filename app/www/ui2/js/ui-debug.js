@@ -43,13 +43,13 @@ Scalr.application.addDocked({
             '<tpl if="report.length">' +
             '<ul style="padding-left: 20px; margin: 0 0 8px 0; list-style-type: none; display: none">' +
             '<tpl for="report">' +
-            '<li style="margin: 2px; white-space: pre-wrap; color: {[this.color(values.sql)]}">{sql}</li>' +
+            '<li style="margin: 2px; white-space: pre-wrap; color: {[this.color(values)]}">{value}</li>' +
             '</tpl>' +
             '</ul>' +
             '</tpl>'
         , {
-            color: function(s) {
-                var r = /^([0-9\.]+)\sms/mi, result = r.exec(s), tm = result ? parseFloat(result[1]) : 0;
+            color: function(vs) {
+                var r = /^([0-9\.]+)\sms/mi, result = r.exec(vs.value), tm = result ? parseFloat(result[1]) : 0;
                 if (tm > 500) {
                     return 'red';
                 } else if (tm > 200) {
@@ -95,6 +95,6 @@ Ext.Ajax.on('requestcomplete', function(conn, response) {
     var result = Ext.decode(response.responseText, true), comp = Scalr.application.getDockedComponent('debugSql'), store = comp.getStore();
     store.add({
         url: response.request ? response.request.options.url : (response.responseXML ? response.responseXML.URL : ''),
-        report: result ? result['scalrDebugModeSql'] : []
+        report: result ? result['scalrDebugLog'] : []
     });
 });

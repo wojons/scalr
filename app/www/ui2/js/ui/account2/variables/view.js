@@ -1,33 +1,26 @@
 Scalr.regPage('Scalr.ui.account2.variables.view', function (loadParams, moduleParams) {
-    var pageTitle = 'Account global variables';
 	return Ext.create('Ext.form.Panel', {
 		scalrOptions: {
-			title: pageTitle,
+            title: 'Account management &raquo; Global variables',
 			maximize: 'all',
 			leftMenu: {
 				menuId: 'settings',
-				itemId: 'variables'
+				itemId: 'variables',
+                showPageTitle: true
 			}
 		},
 		fieldDefaults: {
 			labelWidth: 110
 		},
         cls: 'x-panel-column-left',
-        layout: 'auto',
+        layout: 'fit',
         autoScroll: true,
-		items: [{
-			xtype: 'fieldset',
-            cls: 'x-fieldset-separator-none',
-            title: pageTitle,
-			items: [{
-				xtype: 'variablefield',
-				name: 'variables',
-				currentScope: 'account',
-				value: moduleParams.variables,
-                maxWidth: 1100
-			}]
-		}],
-
+		items: {
+            xtype: 'variablefield',
+            name: 'variables',
+            currentScope: 'account',
+            value: moduleParams.variables
+        },
 		dockedItems: [{
 			xtype: 'container',
 			dock: 'bottom',

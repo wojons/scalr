@@ -56,13 +56,13 @@ class Scalr_UI_Controller_Platforms extends Scalr_UI_Controller
     }
 
     /**
-     * @param string $platform
-     * @param string $cloudLocation
+     * @param  string    $platform
+     * @param  string    $cloudLocation
      * @throws Exception
      */
     public function xGetInstanceTypesAction($platform, $cloudLocation = null)
     {
-        if (! in_array($platform, $this->getEnvironment()->getEnabledPlatforms())) {
+        if (!in_array($platform, $this->getEnvironment()->getEnabledPlatforms())) {
             throw new Exception(sprintf('Platform "%s" is not enabled', $platform));
         }
 
@@ -70,7 +70,10 @@ class Scalr_UI_Controller_Platforms extends Scalr_UI_Controller
 
         if (PlatformFactory::isOpenstack($platform) && !$cloudLocation) {
             $locations = $p->getLocations($this->getEnvironment());
-            $cloudLocation = @array_pop(@array_keys($locations));
+            if (empty($locations)) {
+                throw new Exception(sprintf("Unable to retrieve the list of cloud locations for platform %s; the cloud API may be down or unreachable, or the credentials provided to Scalr are invalid.", $platform));
+            }
+            $cloudLocation = array_pop(array_keys($locations));
         }
 
         $data = [];

@@ -10,20 +10,18 @@
 
         public $roleName;
         public $replaceType;
-        public $removePrototypeRole;
+        public $object;
         public $description;
-        public $rootVolumeSize;
-        public $noServersReplace;
+        public $rootBlockDeviceProperties;
 
-        public function __construct(DBServer $DBServer, $role_name, $replace_type, $remove_proto_role = false, $description = '', $rootVolumeSize = '', $noServersReplace = false)
+        public function __construct(DBServer $DBServer, $roleName, $replaceType, $object = 'role', $description = '', $rootBlockDeviceProperties = [])
         {
             $this->DBServer = $DBServer;
-            $this->roleName = $role_name;
-            $this->replaceType = $replace_type;
-            $this->removePrototypeRole = $remove_proto_role;
+            $this->roleName = $roleName;
+            $this->replaceType = $replaceType;
+            $this->object = $object;
             $this->description = $description;
-            $this->rootVolumeSize = $rootVolumeSize;
-            $this->noServersReplace = $noServersReplace;
+            $this->rootBlockDeviceProperties = $rootBlockDeviceProperties;
         }
     }
 

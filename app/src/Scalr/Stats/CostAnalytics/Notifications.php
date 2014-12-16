@@ -127,8 +127,9 @@ class Notifications
             $res = $container->mailer->sendTemplate(
                 SCALR_TEMPLATES_PATH . '/emails/analytics_on_cloud_add.eml.php',
                 [
-                    'isPublicCloud'     => ($platform == \SERVER_PLATFORMS::EC2),
+                    'isEc2'             => ($platform == \SERVER_PLATFORMS::EC2),
                     'userEmail'         => $user->getEmail(),
+                    'isSupported'       => in_array($platform, $analytics->prices->getSupportedClouds()),
                     'cloudName'         => \SERVER_PLATFORMS::GetName($platform),
                     'linkToPricing'     => $baseUrl . '/#/analytics/pricing?platform=' . urlencode($platform)
                                          . '&url=' . urlencode($endpointUrl === false ? '' : $analytics->prices->normalizeUrl($endpointUrl)),

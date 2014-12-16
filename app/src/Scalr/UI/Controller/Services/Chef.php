@@ -1,75 +1,23 @@
 <?php
+use Scalr\Model\Entity\ChefServer;
 
 class Scalr_UI_Controller_Services_Chef extends Scalr_UI_Controller
 {
 
-    public function xListRunlistAction()
+    public function hasAccess()
     {
-        $this->request->defineParams(array(
-            'serverId' => array('type' => 'int'),
-            'chefEnvironment'
-        ));
-
-        $sql = 'SELECT id, name, description, chef_server_id as servId, chef_environment as chefEnv FROM services_chef_runlists WHERE env_id = ?';
-        $params = array($this->getEnvironmentId());
-
-        if ($this->getParam('serverId')) {
-            $sql .= ' AND chef_server_id = ?';
-            $params[] = $this->getParam('serverId');
-        }
-
-        if ($this->getParam('chefEnvironment')) {
-            $sql .= ' AND chef_environment = ?';
-            $params[] = $this->getParam('chefEnvironment');
-        }
-
-        $this->response->data(array(
-            'data' => $this->db->GetAll($sql, $params)
-        ));
+        return true;
     }
 
-    public function xListAllRecipesAction()
+    /**
+     * @param int $servId
+     * @param string $chefEnv
+     */
+    public function xListAllRecipesAction($servId, $chefEnv)
     {
-        $chefClient = $this->getChefClient($this->getParam('servId'));
+        $chefClient = $this->getChefClient($servId);
 
-        $this->response->data(array(
-            'data' => $this->listRecipes($chefClient, $this->getParam('chefEnv'))
-        ));
-    }
-
-    public function xListRolesAction()
-    {
-        $chefClient = $this->getChefClient($this->getParam('servId'));
-
-        $roles = $this->listRoles($chefClient);
-        //array_unshift($roles, array('name' => ''));
-
-        $this->response->data(array(
-            'data' => $roles
-        ));
-    }
-
-    public function xListAllAction()
-    {
-        $chefClient = $this->getChefClient($this->getParam('servId'));
-
-        $roles = $this->listRoles($chefClient);
-        $recipes = $this->listRecipes($chefClient, $this->getParam('chefEnv'));
-
-        $this->response->data(array(
-            'data' => array_merge($roles, $recipes)
-        ));
-    }
-
-    private function getChefClient($chefServerId)
-    {
-        $server = $this->db->GetRow('SELECT url, username, auth_key FROM services_chef_servers WHERE id = ?', array($chefServerId));
-        return Scalr_Service_Chef_Client::getChef($server['url'], $server['username'], $this->getCrypto()->decrypt($server['auth_key'], $this->cryptoKey));
-    }
-
-    private function listRecipes(&$chefClient, $chefEnv)
-    {
-        $recipes = array();
+        $recipes = [];
         $response = (array)$chefClient->listCookbooks($chefEnv || $chefEnv == '_default' ? '' : $chefEnv);
 
         foreach ($response as $key => $value) {
@@ -78,31 +26,91 @@ class Scalr_UI_Controller_Services_Chef extends Scalr_UI_Controller
             foreach ($recipeList as $name => $recipeValue) {
                 if ($name == 'recipes') {
                     foreach ($recipeValue as $recipe) {
-                        $recipes[] = array(
+                        $recipes[] = [
                             'cookbook' => $key,
                             'name' => substr($recipe->name, 0, (strlen($recipe->name)-3))
-                        );
+                        ];
                     }
                 }
             }
         }
         sort($recipes);
-        return $recipes;
+
+        $this->response->data(array(
+            'data' => $recipes
+        ));
     }
 
-    private function listRoles(&$chefClient)
+    /**
+     * @param int $servId
+     */
+    public function xListRolesAction($servId)
     {
-        $roles = array();
+        $chefClient = $this->getChefClient($servId);
+
+        $roles = [];
         $response = (array)$chefClient->listRoles();
 
         foreach ($response as $key => $value) {
             $role = $chefClient->getRole($key);
-            $roles[] = array(
+            $roles[] = [
                 'name' => $role->name,
                 'chef_type' => $role->chef_type
-            );
+            ];
         }
         sort($roles);
-        return $roles;
+
+        $this->response->data(array(
+            'data' => $roles
+        ));
     }
+
+    /**
+     * @param int $servId
+     * @throws Exception
+     */
+    public function xListEnvironmentsAction($servId)
+    {
+        $chefClient = $this->getChefClient($servId);
+        
+        $environments = [];
+        $response = $chefClient->listEnvironments();
+        if ($response instanceof stdClass) {
+            $response = (array)$response;
+        }
+
+        foreach ($response as $key => $value) {
+            $environments[]['name'] = $key;
+        }
+
+        $this->response->data(array('data' => $environments));
+    }
+
+    /**
+     * @param int $servId
+     * @param string $chefEnv
+     */
+    private function getChefClient($servId)
+    {
+        $criteria[] = ['id' => $servId];
+        if ($this->user->isAdmin()) {
+            $criteria[] = ['accountId' => null];
+            $criteria[] = ['envId' => null];
+            $criteria[] = ['level' => ChefServer::LEVEL_SCALR];
+        } else {
+            $criteria[] = ['$or' => [
+                ['$and' => [['accountId' => $this->user->getAccountId()], ['envId' => $this->getEnvironmentId()], ['level' => ChefServer::LEVEL_ENVIRONMENT]]],
+                ['$and' => [['accountId' => $this->user->getAccountId()], ['envId' => null], ['level' => ChefServer::LEVEL_ACCOUNT]]],
+                ['$and' => [['accountId' => null], ['envId' => null], ['level' => ChefServer::LEVEL_SCALR]]]
+            ]];
+        }
+        $server = ChefServer::findOne($criteria);
+
+        if(!$server)
+            throw new Scalr_Exception_InsufficientPermissions();
+
+        return Scalr_Service_Chef_Client::getChef($server->url, $server->username, $this->getCrypto()->decrypt($server->authKey, $this->cryptoKey));
+    }
+
+
 }

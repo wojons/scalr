@@ -67,6 +67,24 @@ class Scalr_Util_DateTime
         return self::convertDateTime($value, $timezone, $format);
     }
 
+    /**
+     * Converts Time according to timezone settings of current user from UTC date.
+     *
+     * @param   DateTime|string|int  $value  DateTime object or Unix Timestamp or string that represents time.
+     * @param   string               $format  Format
+     * @return  string               Returns updated time in given format.
+     */
+    public static function convertTzFromUTC($value, $format = 'M j, Y H:i:s')
+    {
+        if ($value instanceof DateTime) {
+            $dt = $value;
+        } else {
+            $dt = new DateTime($value, new DateTimeZone('UTC'));
+        }
+
+        return self::convertTz($dt, $format);
+    }
+
     public static function getTimezones()
     {
         $timezones = array();

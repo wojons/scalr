@@ -278,6 +278,16 @@ class ErrorData
     const ERR_DB_SNAPSHOT_NOT_FOUND = 'DBSnapshotNotFound';
 
     /**
+     * The specified instance does not exist.
+     */
+    const ERR_EC2_INSTANCE_NOT_FOUND = 'InvalidInstanceID.NotFound';
+
+    /**
+     * The specified instance ID is not valid.
+     */
+    const ERR_EC2_INSTANCE_ID_MALFORMED = 'InvalidInstanceID.Malformed';
+
+    /**
      * Error type
      * @var string
      */

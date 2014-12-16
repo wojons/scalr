@@ -1,13 +1,13 @@
 <?php
 namespace Scalr\Tests\Fixtures\DataType\Iterator;
 
-use Scalr\DataType\Iterator\Filter;
+use Scalr\DataType\Iterator\AbstractFilter;
 
-class TestFilterIterator1 extends Filter
+class TestFilterIterator1 extends AbstractFilter
 {
     /**
      * {@inheritdoc}
-     * @see \Scalr\DataType\Iterator\Filter::accept()
+     * @see \Scalr\DataType\Iterator\AbstractFilter::accept()
      */
     public function accept()
     {

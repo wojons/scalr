@@ -71,6 +71,16 @@ class Rds extends AbstractService implements ServiceInterface
     public function getUrl()
     {
         $region = $this->getAws()->getRegion();
+
         return 'rds.' . $region . '.amazonaws.com';
+    }
+
+    /**
+     * {@inheritdoc}
+     * @see \Scalr\Service\Aws\AbstractService::getName()
+     */
+    public function getName()
+    {
+        return 'rds';
     }
 }

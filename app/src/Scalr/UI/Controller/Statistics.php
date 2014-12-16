@@ -64,11 +64,8 @@ class Scalr_UI_Controller_Statistics extends Scalr_UI_Controller
                 foreach ($type['sizes'] as $size) {
                     $size = (array)$size;
                     $region = str_replace(
-                        array(
-                            'us-east', 'apac-sin', 'apac-syd', 'apac-tokyo', 'eu-ireland'
-                        ), array(
-                            'us-east-1', 'ap-southeast-1', 'ap-southeast-2', 'ap-northeast-1', 'eu-west-1'
-                        ),
+                        ['us-east',   'apac-sin',       'apac-syd',       'apac-tokyo',     'eu-ireland', 'eu-central-1',],
+                        ['us-east-1', 'ap-southeast-1', 'ap-southeast-2', 'ap-northeast-1', 'eu-west-1',  'eu-central-1',],
                         $row->region
                     );
 

@@ -244,7 +244,7 @@ class Scalr_Scripting_Manager
 
         $accountScripts = $db->GetAll("SELECT * FROM account_scripts WHERE (event_name=? OR event_name='*') AND account_id=?", array($event->GetName(), $eventServer->clientId));
 
-        $roleScripts = $db->GetAll("SELECT * FROM role_scripts WHERE (event_name=? OR event_name='*') AND role_id=?", array($event->GetName(), $eventServer->roleId));
+        $roleScripts = $db->GetAll("SELECT * FROM role_scripts WHERE (event_name=? OR event_name='*') AND role_id=?", array($event->GetName(), $eventServer->GetFarmRoleObject()->RoleID));
 
         $scripts = $db->GetAll("SELECT *, `script_type` as `type` FROM farm_role_scripts WHERE (event_name=? OR event_name='*') AND farmid=?", array($event->GetName(), $eventServer->farmId));
 

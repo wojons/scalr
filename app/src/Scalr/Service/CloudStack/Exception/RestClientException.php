@@ -1,6 +1,7 @@
 <?php
 namespace Scalr\Service\CloudStack\Exception;
 
+use Exception;
 use Scalr\Service\CloudStack\DataType\ErrorData;
 
 /**

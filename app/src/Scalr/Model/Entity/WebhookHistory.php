@@ -70,6 +70,14 @@ class WebhookHistory extends AbstractEntity
     public $farmId;
 
     /**
+     * The identifier of the server associated with webhook
+     *
+     * @Column(type="string",nullable=true)
+     * @var   string
+     */
+    public $serverId;
+
+    /**
      * The type of the event
      *
      * @var string
@@ -107,6 +115,23 @@ class WebhookHistory extends AbstractEntity
      * @var string
      */
     public $errorMsg;
+
+    /**
+     * Handle attempts
+     *
+     * @Column(type="integer",nullable=true)
+     * @var int
+     */
+    public $handleAttempts;
+
+    /**
+     * Last handle attempt date
+     *
+     * @Column(type="datetime",nullable=true)
+     * @var \DateTime
+     */
+    public $dtlasthandleattempt;
+
 
     /**
      * Constructor

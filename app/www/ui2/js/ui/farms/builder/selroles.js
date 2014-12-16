@@ -39,7 +39,7 @@ Ext.define('Scalr.ui.FarmBuilderSelRoles', {
                             '</div>',
                             '<div class="icon x-icon-role x-icon-role-{[this.getRoleCls(values)]}"></div>',
                             '<div class="platform">{platform}</div>',
-                            '<div class="location" title="{cloud_location}">{cloud_location}</div>',
+                            '<div class="location" title="{[values.settings[\'gce.region\']||values.cloud_location]}">{[values.settings[\'gce.region\']||values.cloud_location]}</div>',
                         '</div>',
                         '<div class="delete-role-bg"></div>',
                         '<div class="delete-role" title="Delete role from farm"></div>',

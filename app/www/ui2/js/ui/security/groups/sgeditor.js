@@ -13,6 +13,10 @@ Ext.define('Scalr.ui.SecurityGroupEditor', {
         },
         items: [{
             xtype: 'hidden',
+            submitValue: false,
+            name: 'advanced'
+        }, {
+            xtype: 'hidden',
             name: 'platform'
         }, {
             xtype: 'hidden',
@@ -67,7 +71,7 @@ Ext.define('Scalr.ui.SecurityGroupEditor', {
         },{
             xtype: 'grid',
             itemId: 'view',
-            cls: 'x-grid-shadow',
+            cls: 'x-grid-shadow x-grid-no-highlighting',
             maxHeight: 500,
             selModel: {
                 selType: 'selectedmodel'
@@ -89,13 +93,54 @@ Ext.define('Scalr.ui.SecurityGroupEditor', {
                 emptyText: 'No security rules defined',
                 deferEmptyText: false
             },
-            columns: [
-                { header: 'Protocol', width: 100, sortable: true, dataIndex: 'ipProtocol' },
-                { header: 'From port', width: 110, sortable: true, dataIndex: 'fromPort' },
-                { header: 'To port', width: 100, sortable: true, dataIndex: 'toPort' },
-                { header: 'Source', width: 220, sortable: true, dataIndex: 'sourceValue' },
-                { header: 'Comment', flex: 1, sortable: true, dataIndex: 'comment' }
-            ],
+            columns: [{ 
+                header: 'Protocol',
+                width: 100,
+                sortable: true,
+                dataIndex: 'ipProtocol',
+                xtype: 'templatecolumn',
+                tpl: '{[values.ipProtocol||\'ANY\']}'
+            },{
+                header: 'Port range',
+                width: 160,
+                sortable: true,
+                dataIndex: 'fromPort',
+                xtype: 'templatecolumn',
+                tpl:
+                    '<tpl if="ipProtocol==\'icmp\'">' +
+                        '<tpl if="fromPort==-1&&fromPort==toPort">' +
+                            'ANY' +
+                        '<tpl else>' +
+                            '{[values.fromPort==-1?\'ANY\':values.fromPort]}<tpl if="toPort"> - {[values.toPort==-1?\'ANY\':values.toPort]}</tpl>'+
+                        '</tpl>' +
+                    '<tpl else>' +
+                        '<tpl if="!fromPort&&!toPort">' +
+                            'ANY' +
+                        '<tpl elseif="fromPort==toPort||!toPort">' +
+                            '{fromPort}' +
+                        '<tpl else>' +
+                            '{fromPort} - {toPort}' +
+                        '</tpl>' +
+                    '</tpl>'
+            },{
+                header: 'Direction',
+                width: 100,
+                sortable: true,
+                hidden: true,
+                dataIndex: 'direction',
+                xtype: 'templatecolumn',
+                tpl: '<span style="text-transform:capitalize">{[values.direction||\'ingress\']}</span>'
+            },{
+                header: 'Source',
+                width: 220,
+                sortable: true,
+                dataIndex: 'sourceValue'
+            },{
+                header: 'Comment',
+                flex: 1,
+                sortable: true,
+                dataIndex: 'comment'
+            }],
             dockedItems: [{
                 xtype: 'toolbar',
                 ui: 'simple',
@@ -109,13 +154,35 @@ Ext.define('Scalr.ui.SecurityGroupEditor', {
                     itemId: 'add',
                     text: 'Add security rule',
                     cls: 'x-btn-green-bg',
-                    tooltip: 'New security sule',
+                    tooltip: 'Add security rule',
                     handler: function() {
                         var editor = this.up('sgeditor'),
                             accountId = editor.accountId,
                             remoteAddress = editor.remoteAddress,
                             platform = editor.down('[name="platform"]').getValue(),
-                            cloudLocation = editor.down('[name="cloudLocation"]').getValue();
+                            advanced = editor.down('[name="advanced"]').getValue(),
+                            cloudLocation = editor.down('[name="cloudLocation"]').getValue(),
+                            ipProtocols;
+
+                        ipProtocols = [{
+                            text: 'TCP',
+                            value: 'tcp'
+                        },{
+                            text: 'UDP',
+                            value: 'udp'
+                        }];
+                        if (!Scalr.isCloudstack(platform)) {
+                            ipProtocols.push({
+                                text: 'ICMP',
+                                value: 'icmp'
+                            });
+                        }
+                        if (Scalr.isOpenstack(platform)) {
+                            ipProtocols.push({
+                                text: 'Other',
+                                value: 'other'
+                            });
+                        }
                         Scalr.Confirm({
 							form: [{
                                 xtype: 'fieldset',
@@ -126,65 +193,133 @@ Ext.define('Scalr.ui.SecurityGroupEditor', {
                                     labelWidth: 75
                                 },
                                 items: [{
-                                    xtype: 'buttongroupfield',
-                                    name: 'ipProtocol',
-                                    fieldLabel: 'Protocol',
-                                    value: 'tcp',
-                                    defaults: {
-                                        width: 80
-                                    },
+                                    xtype: 'container',
+                                    layout: 'hbox',
                                     items: [{
-                                        text: 'TCP',
-                                        value: 'tcp'
-                                    },{
-                                        text: 'UDP',
-                                        value: 'udp'
-                                    },{
-                                        text: 'ICMP',
-                                        value: 'icmp',
-                                        disabled: Scalr.isCloudstack(platform)
-                                    },{
-                                        text: 'SCTP',
-                                        value: '132',
-                                        disabled: !Scalr.isOpenstack(platform)
-                                    }],
-                                    listeners: {
-                                        change: function(comp, value) {
-                                            if (value == '132') {
-                                                comp.next('[name="fromPort"]').hide().disable();
-                                                comp.next('[name="toPort"]').hide().disable();
-                                            } else {
-                                            	comp.next('[name="fromPort"]').show().enable();
-                                                comp.next('[name="toPort"]').show().enable();
+                                        xtype: 'buttongroupfield',
+                                        name: 'ipProtocol',
+                                        fieldLabel: 'Protocol',
+                                        value: 'tcp',
+                                        labelWidth: 75,
+                                        layout: 'hbox',
+                                        width: 320,
+                                        defaults: {
+                                            flex: 1
+                                        },
+                                        items: ipProtocols,
+                                        listeners: {
+                                            change: function(comp, value) {
+                                                comp.up('form').down('#portCt').setVisible(value !== 'other');
+                                                comp.up('form').down('[name="otherProtocol"]').setVisible(value === 'other').setDisabled(value !== 'other');
+                                                comp.up('form').down('[name="fromPort"]').setDisabled(value === 'other');
+                                                comp.up('form').down('[name="toPort"]').setDisabled(value === 'other');
                                             }
                                         }
-                                    }
-                                }, {
-                                    xtype: 'textfield',
-                                    name: 'fromPort',
-                                    fieldLabel: 'From port',
-                                    allowBlank: false,
-                                    validator: function (value) {
-                                        if (value < -1 || value > 65535) {
-                                            return 'Valid ports are - 1 through 65535';
+                                    },{
+                                        xtype: 'textfield',
+                                        name: 'otherProtocol',
+                                        margin: '0 0 0 10',
+                                        width: 58,
+                                        submitValue: false,
+                                        allowBlank: false,
+                                        hidden: true,
+                                        disabled: true,
+                                        maxLength: 3,
+                                        validator: function (value) {
+                                            if (value < 1 || value > 255) {
+                                                return 'Valid protocols are 1 through 255';
+                                            }
+                                            return true;
                                         }
-                                        return true;
-                                    }
+                                    }]
                                 }, {
-                                    xtype: 'textfield',
-                                    name: 'toPort',
-                                    fieldLabel: 'To port',
-                                    allowBlank: false,
-                                    validator: function (value) {
-                                        if (value < -1 || value > 65535) {
-                                            return 'Valid ports are - 1 through 65535';
+                                    xtype: 'container',
+                                    itemId: 'portCt',
+                                    layout: 'hbox',
+                                    items: [{
+                                        xtype: 'buttongroupfield',
+                                        fieldLabel: 'Port',
+                                        submitValue: false,
+                                        value: 'single',
+                                        width: 330,
+                                        labelWidth: 75,
+                                        defaults: {
+                                            width: 120
+                                        },
+                                        items: [{
+                                            text: 'Single port',
+                                            value: 'single'
+                                        },{
+                                            text: 'Port range',
+                                            value: 'range'
+                                        }],
+                                        listeners: {
+                                            change: function(comp, value) {
+                                                var fromPort = comp.next('[name="fromPort"]'),
+                                                    toPort = comp.next('[name="toPort"]');
+                                                toPort.setVisible(value === 'range');
+                                                if (value === 'single') {
+                                                    toPort.setValue(fromPort.getValue());
+                                                }
+                                                fromPort.focus(true);
+                                            }
                                         }
-                                        return true;
-                                    }
+                                    },{
+                                        xtype: 'textfield',
+                                        name: 'fromPort',
+                                        width: 58,
+                                        allowBlank: false,
+                                        validator: function (value) {
+                                            if (value < -1 || value > 65535) {
+                                                return 'Valid ports are - 1 through 65535';
+                                            }
+                                            return true;
+                                        },
+                                        listeners: {
+                                            change: function(comp, value) {
+                                                var field = comp.next('[name="toPort"]');
+                                                if (field.hidden) {
+                                                    field.setValue(value);
+                                                }
+                                            }
+                                        }
+                                    },{
+                                        xtype: 'textfield',
+                                        name: 'toPort',
+                                        fieldLabel: '&ndash;',
+                                        labelSeparator: '',
+                                        labelWidth: 12,
+                                        width: 76,
+                                        margin: '0 0 0 8',
+                                        hidden: true,
+                                        allowBlank: false,
+                                        validator: function (value) {
+                                            if (value < -1 || value > 65535) {
+                                                return 'Valid ports are - 1 through 65535';
+                                            }
+                                            return true;
+                                        }
+                                    }]
+                                }, {
+                                    xtype: 'buttongroupfield',
+                                    name: 'direction',
+                                    fieldLabel: 'Direction',
+                                    value: 'ingress',
+                                    disabled: !Scalr.isOpenstack(platform) || !advanced,
+                                    hidden: !Scalr.isOpenstack(platform) || !advanced,
+                                    defaults: {
+                                        width: 120
+                                    },
+                                    items: [{
+                                        text: 'Ingress',
+                                        value: 'ingress'
+                                    },{
+                                        text: 'Egress',
+                                        value: 'egress'
+                                    }]
                                 }, {
                                     xtype: 'container',
                                     layout: 'hbox',
-                                    value: 'ip',
                                     items: [{
                                         xtype: 'buttongroupfield',
                                         fieldLabel: 'Source',
@@ -272,12 +407,19 @@ Ext.define('Scalr.ui.SecurityGroupEditor', {
                                 }]
 							}],
                             formWidth: 600,
+                            winConfig: {
+                                autoScroll: false,
+                                alignTop: true
+                            },
 							ok: 'Add',
 							formValidate: true,
 							closeOnSuccess: true,
 							scope: this,
-							success: function (formValues) {
+							success: function (formValues, form) {
 								var view = this.up('#view'), store = view.store;
+                                if (formValues['ipProtocol'] === 'other') {
+                                    formValues['ipProtocol'] = form.getForm().findField('otherProtocol').getValue();
+                                }
 
 								if (store.findBy(function (record) {
 									if (
@@ -320,7 +462,8 @@ Ext.define('Scalr.ui.SecurityGroupEditor', {
         var isNewRecord,
             frm = this.getForm(),
             allRules = [],
-            cloudLocation = data['cloudLocation'];
+            cloudLocation = data['cloudLocation'],
+            grid = this.down('grid');
         if (!data['id'] && data['securityGroupId']) {
             data['id'] = data['securityGroupId'];
         }
@@ -348,7 +491,8 @@ Ext.define('Scalr.ui.SecurityGroupEditor', {
                 });
             }
         });
-        this.down('grid').store.loadData(allRules);
+        grid.store.loadData(allRules);
+        grid.columns[2].setVisible(Scalr.isOpenstack(data['platform']) && data['advanced']);
         frm.setValues(data);
         frm.findField('id').setVisible(!isNewRecord);
         frm.findField('name').setReadOnly(!isNewRecord);

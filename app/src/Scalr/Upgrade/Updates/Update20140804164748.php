@@ -13,7 +13,7 @@ class Update20140804164748 extends AbstractUpdate implements SequenceInterface
 
     protected $description = 'Webhooks & Bundle task structure changes';
 
-    protected $ignoreChanges = false;
+    protected $ignoreChanges = true;
 
     protected $dbservice = 'adodb';
 

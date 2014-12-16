@@ -9,6 +9,8 @@ class Scalr_Role_Behavior
     const ROLE_DM_REMOTE_PATH = 'dm.remote_path';
 
     const ROLE_BASE_KEEP_SCRIPTING_LOGS_TIME   = 'base.keep_scripting_logs_time';
+    const ROLE_BASE_ABORT_INIT_ON_SCRIPT_FAIL   = 'base.abort_init_on_script_fail';
+    const ROLE_BASE_DISABLE_FIREWALL_MANAGEMENT = 'base.disable_firewall_management';
     const ROLE_BASE_HOSTNAME_FORMAT   = 'base.hostname_format';
 
     const ROLE_BASE_TERMINATE_STRATEGY =       'base.terminate_strategy';
@@ -231,11 +233,12 @@ class Scalr_Role_Behavior
         try {
             if ($dbFarmRole) {
                 $storage = new FarmRoleStorage($dbFarmRole);
-                $volumes = $storage->getVolumesConfigs($dbServer->index, $isHostInit);
+                $volumes = $storage->getVolumesConfigs($dbServer, $isHostInit);
                 if (!empty($volumes))
                     $configuration->volumes = $volumes;
             }
         } catch (Exception $e) {
+            
             $this->logger->error(new FarmLogMessage($dbServer->farmId, "Cannot init storage: {$e->getMessage()}"));
         }
 
@@ -248,6 +251,8 @@ class Scalr_Role_Behavior
 
                 $configuration->base = new stdClass();
                 $configuration->base->keepScriptingLogsTime = $scriptingLogTimeout;
+                $configuration->base->abortInitOnScriptFail = (int)$dbFarmRole->GetSetting(self::ROLE_BASE_ABORT_INIT_ON_SCRIPT_FAIL);
+                $configuration->base->disableFirewallManagement = (int)$dbFarmRole->GetSetting(self::ROLE_BASE_DISABLE_FIREWALL_MANAGEMENT);
 
                 $configuration->base->resumeStrategy = PlatformFactory::NewPlatform($dbFarmRole->Platform)->getResumeStrategy();
 
@@ -293,7 +298,7 @@ class Scalr_Role_Behavior
                 try {
                     if ($dbFarmRole) {
                         $storage = new FarmRoleStorage($dbFarmRole);
-                        $volumes = $storage->getVolumesConfigs($dbServer->index, false);
+                        $volumes = $storage->getVolumesConfigs($dbServer, false);
                         if (!empty($volumes))
                             $message->volumes = $volumes;
                     }

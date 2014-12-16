@@ -3,13 +3,14 @@
 class Scalr_UI_Response
 {
     public $body = '';
-    public $headers = array();
+    public $headers = [];
     public $httpResponseCode = 200;
-    public $jsResponse = array('success' => true);
+    public $jsResponse = ['success' => true];
     public $jsResponseFlag = false;
-    public $serverDebugLog = array();
-    public $serverDebugSql = array();
-    public $uiDebugLog = array();
+    public $serverDebugLog = [];
+    public $uiDebugLog = [];
+
+    private $_serverDebugEnabled = false;
 
     private static $_instance = null;
 
@@ -36,17 +37,27 @@ class Scalr_UI_Response
         //throw new Exception('Access denied');
     }
 
-    /*
-     *Normalizes a header name to X-Capitalized-Names
+    /**
+     * Normalizes a header name to X-Capitalized-Names
+     *
+     * @param  string $name
      */
     protected function normalizeHeader($name)
     {
-        $filtered = str_replace(array('-', '_'), ' ', (string) $name);
+        $filtered = str_replace(['-', '_'], ' ', (string) $name);
         $filtered = ucwords(strtolower($filtered));
         $filtered = str_replace(' ', '-', $filtered);
+
         return $filtered;
     }
 
+    /**
+     * Sets a header with a value
+     *
+     * @param   string    $name     A name of the header
+     * @param   string    $value    A value
+     * @param   boolean   $replace  optional
+     */
     public function setHeader($name, $value, $replace = false)
     {
         $name = $this->normalizeHeader($name);
@@ -64,6 +75,27 @@ class Scalr_UI_Response
             'value' => $value,
             'replace' => $replace
         );
+    }
+
+    /**
+     * Gets a value of the header
+     *
+     * @param    string    $name   The name of the header
+     * @return   string    Returns the value of the header or NULL if it does not exist
+     */
+    public function getHeader($name)
+    {
+        $name = $this->normalizeHeader($name);
+
+        //Last header being set
+        foreach (array_reverse($this->headers) as $v) {
+            if ($name == $v['name']) {
+                $value = $v['value'];
+                break;
+            }
+        }
+
+        return isset($value) ? $value : null;
     }
 
     public function setRedirect($url, $code = 302)
@@ -110,12 +142,11 @@ class Scalr_UI_Response
     public function resetResponse()
     {
         $this->body = '';
-        $this->headers = array();
+        $this->headers = [];
         $this->httpResponseCode = 200;
-        $this->jsResponse = array('success' => true);
+        $this->jsResponse = ['success' => true];
         $this->jsResponseFlag = false;
-        $this->serverDebugLog = array();
-        $this->uiDebugLog = array();
+        $this->serverDebugLog = [];
     }
 
     public function getResponse()
@@ -132,30 +163,14 @@ class Scalr_UI_Response
     {
         //if (! isset($_REQUEST['X-Requested-With']) && $_REQUEST['X-Requested-With'] == 'XMLHttpRequest') {
             // when we do file uploads, big log break json parser, may be some issue in extjs 4.2.2
-        if (count($this->serverDebugSql))
-            $this->jsResponse['scalrDebugModeSql'] = $this->serverDebugSql;
+        if ($this->_serverDebugEnabled)
+            $this->jsResponse['scalrDebugLog'] = $this->serverDebugLog;
         //}
 
         $this->setResponse(json_encode($this->jsResponse));
 
-        $output = array();
-        $createdVars = array();
-        foreach ($this->uiDebugLog as $value) {
-            if (isset($createdVars[$value['name']])) {
-                $output[$value['name']][] = $value['value'];
-            } else if (! isset($createdVars[$value['name']])) {
-                if (isset($output[$value['name']])) {
-                    $output[$value['name']] = array($output[$value['name']]);
-                    $output[$value['name']][] = $value['value'];
-                    $createdVars[$value['name']] = true;
-                } else {
-                    $output[$value['name']] = $value['value'];
-                }
-            }
-        }
-
-        if ($output)
-            $this->setHeader('X-Scalr-Debug', json_encode($output));
+        if (count($this->uiDebugLog))
+            $this->setHeader('X-Scalr-Debug', json_encode($this->uiDebugLog));
 
         if (isset($_REQUEST['X-Requested-With']) && $_REQUEST['X-Requested-With'] == 'XMLHttpRequest')
             $this->setHeader('content-type', 'text/html', true); // hack for ajax file uploads and other cases
@@ -265,14 +280,29 @@ class Scalr_UI_Response
         $this->jsResponseFlag = true;
     }
 
-    public function varDump($value, $name = 'var')
+    public function varDump($value)
     {
-        $this->uiDebugLog[] = array('name' => $name, 'value' => $value);
+        $this->debugVar($value, 'var', true);
     }
 
-    public function debugLog($key, $value)
+    public function debugVar($value, $key = 'var', $sentByHeader = false)
     {
-        $this->serverDebugLog[] = array('key' => $key, 'value' => print_r($value, true));
+        if ($sentByHeader) {
+            $this->uiDebugLog[] = array($key => print_r($value, true));
+        } else {
+            $this->serverDebugLog[] = array('name' => $key, 'value' => print_r($value, true));
+        }
+    }
+
+    public function debugException(Exception $e)
+    {
+        $this->serverDebugLog[] = ['name' => 'exception', 'value' => $e->getMessage() . '<br>' . $e->getTraceAsString()];
+    }
+
+    public function debugEnabled($flag)
+    {
+        $this->_serverDebugEnabled = $flag;
+        $this->debugMysql($flag);
     }
 
     public function debugMysql($enabled = true)
@@ -285,7 +315,7 @@ class Scalr_UI_Response
 
                 $msg = str_replace('<br>', '', $msg);
                 $msg = str_replace('(mysqli): ', '', $msg);
-                Scalr_UI_Response::getInstance()->serverDebugSql[] = array('sql' => $msg);
+                Scalr_UI_Response::getInstance()->serverDebugLog[] = array('name' => 'sql', 'value' => $msg);
             };
 
             Scalr::getDb()->debug = -1;

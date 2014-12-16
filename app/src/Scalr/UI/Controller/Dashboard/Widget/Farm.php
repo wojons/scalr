@@ -26,6 +26,7 @@ class Scalr_UI_Controller_Dashboard_Widget_Farm extends Scalr_UI_Controller_Dash
                         'farmId' 		=> $params['farmId'],
                         'roleId'		=> $this->db->GetOne("SELECT role_id FROM farm_roles WHERE id=? AND farmid=? LIMIT 1", array($dbFarmRole->ID,$params['farmId'])),
                         'farmRoleId' 	=> $dbFarmRole->ID,
+                        'farmRoleAlias' => $dbFarmRole->Alias,
                         'behaviors'		=> implode(",", $dbFarmRole->GetRoleObject()->getBehaviors()),
                         'servCount'		=> $servCount
                     );

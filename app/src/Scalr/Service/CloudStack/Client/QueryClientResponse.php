@@ -2,6 +2,7 @@
 namespace Scalr\Service\CloudStack\Client;
 
 use Scalr\Service\CloudStack\DataType\ErrorData;
+use Scalr\Service\CloudStack\Exception\CloudStackResponseErrorFactory;
 use Scalr\Service\CloudStack\Exception\RestClientException;
 use \HttpMessage;
 
@@ -152,7 +153,8 @@ class QueryClientResponse implements ClientResponseInterface
                     $this->errorData->code = $errorBody->errorcode;
                     $this->errorData->message = $errorBody->errortext;
                 }
-                throw new RestClientException($this->errorData);
+
+                throw CloudStackResponseErrorFactory::make($this->errorData);
             }
         }
 

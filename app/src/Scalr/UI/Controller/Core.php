@@ -1,5 +1,6 @@
 <?php
 use Scalr\Acl\Acl;
+use Scalr\UI\Request\RawData;
 use Scalr\UI\Request\JsonData;
 use Scalr\UI\Request\Validator;
 
@@ -70,6 +71,31 @@ class Scalr_UI_Controller_Core extends Scalr_UI_Controller
         }
     }
 
+    public function aboutAction()
+    {
+        $data = array(
+            'version' => @file_get_contents(APPPATH . '/etc/version')
+        );
+        
+        if (!Scalr::isHostedScalr() || $this->request->getHeaderVar('Interface-Beta')) {
+            @exec("git show --format='%h|%ci|%H' HEAD", $output);
+            $info = @explode("|", $output[0]);
+            $data['gitRevision'] = trim($info[0]);
+            $data['gitDate'] = trim($info[1]);
+            $data['gitFullHash'] = trim($info[2]);
+            
+            @exec("git remote -v", $output2);
+            if (stristr($output2[0], 'int-scalr'))
+                $data['edition'] = 'Enterprise Edition';
+            else
+                $data['edition'] = 'Open Source Edition';
+            
+            $data['id'] = SCALR_ID;
+        }
+        
+        $this->response->page('ui/core/about.js', $data);
+    }
+    
     public function supportAction()
     {
         if ($this->user->isAdmin())
@@ -173,13 +199,18 @@ class Scalr_UI_Controller_Core extends Scalr_UI_Controller
     }
 
     /**
-     * @param $password
-     * @param $cpassword
+     * @param RawData $password
+     * @param RawData $cpassword
      * @param $securityIpWhitelist
+     * @param RawData $currentPassword optional
      */
-    public function xSecuritySaveAction($password, $cpassword, $securityIpWhitelist)
+    public function xSecuritySaveAction(RawData $password, RawData $cpassword, $securityIpWhitelist, RawData $currentPassword = null)
     {
         $validator = new Validator();
+        if ($password != '******') {
+            $validator->addErrorIf(!$this->user->checkPassword($currentPassword), ['currentPassword'], 'Invalid password');
+        }
+
         $validator->validate($password, 'password', Validator::NOEMPTY);
         $validator->validate($cpassword, 'cpassword', Validator::NOEMPTY);
         $validator->addErrorIf(($password && $cpassword && ($password != $cpassword)), ['password','cpassword'], 'Two passwords are not equal');
@@ -207,13 +238,24 @@ class Scalr_UI_Controller_Core extends Scalr_UI_Controller
             if ($password != '******') {
                 $this->user->updatePassword($password);
                 $updateSession = true;
+                
+                // Send notification E-mail
+                $this->getContainer()->mailer->sendTemplate(
+                    SCALR_TEMPLATES_PATH . '/emails/password_change_notification.eml',
+                    array(
+                        '{{fullname}}' => $this->user->fullname ? $this->user->fullname : $this->user->getEmail()
+                    ),
+                    $this->user->getEmail(), $this->user->fullname
+                );
             }
 
             $this->user->setVar(Scalr_Account_User::VAR_SECURITY_IP_WHITELIST, count($subnets) ? serialize($subnets) : '');
             $this->user->save();
 
-            if ($updateSession)
+            if ($updateSession) {
                 Scalr_Session::create($this->user->getId());
+                $this->response->data(['specialToken' => Scalr_Session::getInstance()->getToken()]);
+            }
 
             $this->response->success('Security settings successfully updated');
         }
@@ -324,8 +366,8 @@ class Scalr_UI_Controller_Core extends Scalr_UI_Controller
             Scalr_Account_User::VAR_SSH_CONSOLE_KEY_NAME,
             Scalr_Account_User::VAR_SSH_CONSOLE_DISABLE_KEY_AUTH,
             Scalr_Account_User::VAR_SSH_CONSOLE_LOG_LEVEL,
-            Scalr_Account_User::VAR_SSH_CONSOLE_PREFERRED_PROVIDER
-
+            Scalr_Account_User::VAR_SSH_CONSOLE_PREFERRED_PROVIDER,
+            Scalr_Account_User::VAR_SSH_CONSOLE_ENABLE_AGENT_FORWARDING
         ));
 
         $rssLogin = $this->getParam('rss_login');

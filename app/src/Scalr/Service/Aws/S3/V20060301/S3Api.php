@@ -240,8 +240,7 @@ class S3Api extends AbstractApi
      */
     protected static function escapeObjectName($objectName)
     {
-        $objectName = preg_replace('#^/+#', '', $objectName);
-        return self::escape($objectName);
+        return str_replace('%2F', '/', rawurlencode(ltrim($objectName, '/')));
     }
 
     /**
@@ -456,7 +455,7 @@ class S3Api extends AbstractApi
      * authenticated request sender.
      *
      * @param   string     $bucketName     A bucket name.
-     * @param   string     $bucketRegion   optional AWS Region where bucket have to be located.
+     * @param   string     $bucketRegion   AWS Region where bucket have to be located.
      * @param   array      $requestHeaders optional Additional request headers.
      *                                     x-amz-acl|x-amz-grant-read|x-amz-grant-write|x-amz-grant-read-acp|
      *                                     x-amz-grant-write-acp|x-amz-grant-full-control
@@ -464,30 +463,38 @@ class S3Api extends AbstractApi
      * @throws  ClientException
      * @throws  S3Exception
      */
-    public function createBucket($bucketName, $bucketRegion = Aws::REGION_US_EAST_1, array $requestHeaders = null)
+    public function createBucket($bucketName, $bucketRegion, array $requestHeaders = null)
     {
         $result = null;
         $options = array(
             '_subdomain' => (string) $bucketName,
+            '_region'    => $bucketRegion,
         );
+
         if (!empty($requestHeaders)) {
             $requestHeaders = $this->getFilteredArray(self::$xamzAclAllowedHeaders, $requestHeaders);
             $options = array_merge($options, $requestHeaders);
         }
+
         $bucketLocation = $this->_getBucketLocationXml($bucketRegion);
+
         if ($bucketLocation === null) {
             $options['Content-Length'] = 0;
         } else {
             $options['_putData'] = $bucketLocation;
         }
+
         $response = $this->client->call('PUT', $options, '/');
+
         if ($response->getError() === false) {
             $result = new BucketData();
             $result->setS3($this->s3);
             $result->bucketName = (string) $bucketName;
             $result->creationDate = new \DateTime('now', new \DateTimeZone('UTC'));
+
             $this->getEntityManager()->attach($result);
         }
+
         return $result;
     }
 
@@ -499,7 +506,7 @@ class S3Api extends AbstractApi
      */
     protected function _getBucketLocationXml($bucketRegion)
     {
-        if (strpos($bucketRegion, 'eu-') === 0 && $bucketRegion != Aws::REGION_EU_WEST_1) {
+        if (strpos($bucketRegion, 'eu-') === 0 && !in_array($bucketRegion, [Aws::REGION_EU_WEST_1, Aws::REGION_EU_CENTRAL_1])) {
             $bucketRegion = 'EU';
         } elseif ($bucketRegion == Aws::REGION_US_EAST_1) {
             $bucketRegion = null;
@@ -746,7 +753,7 @@ class S3Api extends AbstractApi
      *
      * @param   string      $bucketName A bucket name.
      * @return  string      Returns bucket location
-     *                      Valid Values: EU | eu-west-1 | us-west-1 | us-west-2 | ap-southeast-1 |
+     *                      Valid Values: EU | eu-west-1 | eu-central-1 | us-west-1 | us-west-2 | ap-southeast-1 |
      *                      ap-northeast-1 | sa-east-1 | empty string (for the US Classic Region)
      * @throws  ClientException
      * @throws  S3Exception

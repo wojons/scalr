@@ -1,9 +1,7 @@
 <?php
 
-require_once(LOG4PHP_DIR . '/LoggerAppender.php');
-require_once(LOG4PHP_DIR . '/helpers/LoggerOptionConverter.php');
-
-class LoggerAppenderScalr extends LoggerAppender {
+class LoggerAppenderScalr extends LoggerAppender
+{
 
     /**
      * Create the log table if it does not exists (optional).

@@ -95,12 +95,15 @@ Scalr.regPage('Scalr.ui.account2.environments.accessmap', function (loadParams, 
                 flex: 1,
                 dataIndex: 'permissions',
                 readonly: true,
+                labelRenderer: function(key) {
+                    return key === 'ssh-console' ? 'SSH Launcher' : key;
+                },
                 customRenderer: function(html, record) {
                     var id = record.get('id'),
                         resource = moduleParams['definitions'][id],
                         prefix;
                     prefix = '<div style="float:left;min-width:200px"><div style="font-weight:bold">' + (resource ? resource[0] : id) + '</div><div style="font-size:85%;color:#999">' + (resource ? resource[1] : '') + '</div></div>';
-                    return prefix + html.join('')
+                    return prefix + html.join('');
                 }
             },{
                 xtype: 'templatecolumn',

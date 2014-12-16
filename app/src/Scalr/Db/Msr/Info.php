@@ -158,6 +158,30 @@ abstract class Scalr_Db_Msr_Info
         if ($fsType)
             $volumeConfig->fstype = $fsType;
 
+        //Tags
+        try {
+            $tags = array(
+                "scalr-env-id"  => $this->dbServer->envId,
+                "scalr-owner" => $this->dbServer->GetFarmObject()->createdByUserEmail,
+                "scalr-farm-id" => $this->dbServer->farmId,
+                "scalr-farm-role-id" => $this->dbServer->farmRoleId,
+                "scalr-server-id" => $this->dbServer->serverId
+            );
+        
+            $governance = new \Scalr_Governance($this->dbFarmRole->GetFarmObject()->EnvID);
+            $gTags = (array)$governance->getValue('ec2', 'aws.tags');
+            if (count($gTags) > 0) {
+                foreach ($gTags as $tKey => $tValue) {
+                    if ($tKey == 'Name')
+                        continue;
+                    $tags[$tKey] = $this->dbServer->applyGlobalVarsToValue($tValue);
+                }
+            }
+        
+            $volumeConfig->tags = $tags;
+        } catch (\Exception $e) {}
+        //
+        
         $type = $volumeConfig->type;
 
         // For any Block storage APIs
@@ -249,7 +273,8 @@ abstract class Scalr_Db_Msr_Info
         } else {
             $volumeConfig->size = $this->dbFarmRole->GetSetting(Scalr_Db_Msr::DATA_STORAGE_EBS_SIZE);
             $volumeConfig->volumeType = $this->dbFarmRole->GetSetting(Scalr_Db_Msr::DATA_STORAGE_EBS_TYPE);
-
+            $volumeConfig->encrypted = (int)$this->dbFarmRole->GetSetting(Scalr_Db_Msr::DATA_STORAGE_EBS_ENCRYPTED);
+            
             if ($volumeConfig->volumeType == 'io1')
                 $volumeConfig->iops = $this->dbFarmRole->GetSetting(Scalr_Db_Msr::DATA_STORAGE_EBS_IOPS);
         }

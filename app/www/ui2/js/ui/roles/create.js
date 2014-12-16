@@ -4,6 +4,10 @@ Scalr.regPage('Scalr.ui.roles.create', function (loadParams, moduleParams) {
         width: 380,
         layout: 'hbox',
 
+        scalrOptions: {
+            modal: true
+        },
+
         tools: [{
             type: 'close',
             handler: function () {

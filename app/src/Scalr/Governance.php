@@ -13,6 +13,8 @@ class Scalr_Governance
     const AWS_TAGS = 'aws.tags';
 
     const OPENSTACK_SECURITY_GROUPS = 'openstack.additional_security_groups';
+    
+    const CLOUDSTACK_SECURITY_GROUPS = 'cloudstack.additional_security_groups';
 
     const EUCALYPTUS_KEYPAIR = 'euca.ssh_key_pair';
     const EUCALYPTUS_SECURITY_GROUPS = 'euca.additional_security_groups';
@@ -20,6 +22,7 @@ class Scalr_Governance
     const CATEGORY_GENERAL = 'general';
     const GENERAL_LEASE = 'general.lease';
     const GENERAL_HOSTNAME_FORMAT = 'general.hostname_format';
+    const GENERAL_CHEF = 'general.chef';
 
     public function __construct($envId)
     {

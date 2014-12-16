@@ -105,7 +105,7 @@ class Scalr_UI_Controller_Analytics_Projects extends Scalr_UI_Controller
 
         $this->request->defineParams(array(
             'name'        => array('type' => 'string', 'validator' => array(Scalr_Validator::NOEMPTY => true)),
-            'billingCode' => array('type' => 'string', 'validator' => array(Scalr_Validator::NOEMPTY => true, Scalr_Validator::ALPHANUM => true)),
+            'billingCode' => array('type' => 'string', 'validator' => array(Scalr_Validator::NOEMPTY => true)),
             'leadEmail'   => array('type' => 'string', 'validator' => array(Scalr_Validator::NOEMPTY => true, Scalr_Validator::EMAIL => true)),
             'shared'      => array('type' => 'int')
         ));

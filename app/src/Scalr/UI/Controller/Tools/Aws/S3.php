@@ -39,7 +39,7 @@ class Scalr_UI_Controller_Tools_Aws_S3 extends Scalr_UI_Controller
 
     public function xListBucketsAction()
     {
-        $aws = $this->environment->aws;
+        $aws = $this->environment->aws('us-east-1');
         $distributions = array();
         //Retrieves the list of all distributions
         $distList = $aws->cloudFront->distribution->describe();
@@ -93,7 +93,7 @@ class Scalr_UI_Controller_Tools_Aws_S3 extends Scalr_UI_Controller
 
     public function xCreateBucketAction ()
     {
-        $aws = $this->environment->aws;
+        $aws = $this->environment->aws('us-east-1');
         $aws->s3->bucket->create($this->getParam('bucketName'), $this->getParam('location'));
         $this->response->success('Bucket successfully created');
     }
@@ -104,7 +104,7 @@ class Scalr_UI_Controller_Tools_Aws_S3 extends Scalr_UI_Controller
             'buckets' => array('type' => 'json')
         ));
 
-        $aws = $this->environment->aws;
+        $aws = $this->environment->aws('us-east-1');
         foreach ($this->getParam('buckets') as $bucketName)
             $aws->s3->bucket->delete($bucketName);
 
@@ -118,7 +118,7 @@ class Scalr_UI_Controller_Tools_Aws_S3 extends Scalr_UI_Controller
 
     public function xCreateDistributionAction ()
     {
-        $aws = $this->environment->aws;
+        $aws = $this->environment->aws('us-east-1');
         $distributionConfig = new DistributionConfigData();
         if ($this->getParam('localDomain') && $this->getParam('zone')) {
             $distributionConfig->aliases->append(array(
@@ -181,7 +181,7 @@ class Scalr_UI_Controller_Tools_Aws_S3 extends Scalr_UI_Controller
 
     public function xUpdateDistributionAction ()
     {
-        $aws = $this->environment->aws;
+        $aws = $this->environment->aws('us-east-1');
 
         $dist = $aws->cloudFront->distribution->fetch($this->getParam('id'));
         $dist->distributionConfig->enabled = ($this->getParam('enabled') == 'true');
@@ -192,7 +192,7 @@ class Scalr_UI_Controller_Tools_Aws_S3 extends Scalr_UI_Controller
 
     public function xDeleteDistributionAction ()
     {
-        $aws = $this->environment->aws;
+        $aws = $this->environment->aws('us-east-1');
 
         $dist = $aws->cloudFront->distribution->fetch($this->getParam('id'));
         $result = $dist->delete();

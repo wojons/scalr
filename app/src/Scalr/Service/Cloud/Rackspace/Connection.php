@@ -1,5 +1,9 @@
 <?php
-  class Scalr_Service_Cloud_Rackspace_Connection
+
+use Scalr\Service\Cloud\Rackspace\Exception\ClientException;
+use Scalr\Service\Cloud\Rackspace\Exception\RackspaceResponseErrorFactory;
+
+class Scalr_Service_Cloud_Rackspace_Connection
   {
           protected	$xAuthUser;
         protected	$xAuthKey;
@@ -128,15 +132,17 @@
         }
 
 
-        /**
-        * makes a request to the cloud server
+       /**
+        * Makes a request to the cloud server
         *
-        * @name request
         * @param mixed $method
         * @param mixed $uri
         * @param mixed $args
         * @param mixed $url
-        * @return	void
+        * @param int   $k
+        *
+        * @return mixed
+        * @throws ClientException
         */
         protected function request($method, $uri = "", $args = null, $url = null, $k = 1)
         {
@@ -166,7 +172,7 @@
                 $info = "Method: " . $this->httpRequest->getMethod();
                 $info .= " (". $this->httpRequest->getRawRequestMessage() .")";
 
-                throw new Exception("[Attempt {$k}] ".$e->getMessage() . " [{$info}]");
+                throw RackspaceResponseErrorFactory::make("[Attempt {$k}] ".$e->getMessage() . " [{$info}]");
             }
 
             return json_decode($response['body']);

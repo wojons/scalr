@@ -1,5 +1,9 @@
 <?php
 
+/**
+ * @deprecated It has been deprecated since 27.10.2014 because of creating a new crontab.
+ * @see        \Scalr\System\Zmq\Cron\Task\Scheduler
+ */
 class SchedulerProcess implements \Scalr\System\Pcntl\ProcessInterface
 {
     public $ThreadArgs;
@@ -87,10 +91,9 @@ class SchedulerProcess implements \Scalr\System\Pcntl\ProcessInterface
 
     public function OnEndForking()
     {
-
     }
+
     public function StartThread($queue_name)
     {
-
     }
 }

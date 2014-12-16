@@ -1,9 +1,7 @@
 <?php
 
-require_once(LOG4PHP_DIR . '/helpers/LoggerOptionConverter.php');
-require_once(LOG4PHP_DIR . '/LoggerFilter.php');
-
-class LoggerFilterCategoryMatch extends LoggerFilter {
+class LoggerFilterCategoryMatch extends LoggerFilter
+{
 
     /**
      * @var boolean

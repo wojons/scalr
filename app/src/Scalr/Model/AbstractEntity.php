@@ -7,9 +7,9 @@ use Scalr\Exception\ModelException;
 use Scalr\Model\Type\UuidStringType;
 use Scalr\Model\Collections\ArrayCollection;
 use Scalr\Model\Loader\Entity;
-use BadMethodCallException,
-    IteratorAggregate;
 use Scalr\Model\Loader\Field;
+use BadMethodCallException;
+use IteratorAggregate;
 
 /**
  * AbstractEntity
@@ -384,10 +384,14 @@ abstract class AbstractEntity extends AbstractGetter implements IteratorAggregat
             throw new ModelException(sprintf("Primary key has not been defined with @Id tag for %s", get_class($this)));
         }
 
-        $stmtFields = '';
-        $stmtUpdate = '';
-        $arguments1 = array();
-        $arguments2 = array();
+        $stmtPk      = '';
+        $stmtFields  = '';
+        $stmtUpdate  = '';
+
+        $argumentsPk = [];
+        $arguments1  = [];
+        $arguments2  = [];
+
         foreach ($iterator->fields() as $field) {
             if ($this->{$field->name} === null && isset($field->generatedValue)) {
                 if ($field->type instanceof UuidType || $field->type instanceof UuidStringType ||
@@ -408,13 +412,14 @@ abstract class AbstractEntity extends AbstractGetter implements IteratorAggregat
             }
 
             if (isset($field->id)) {
-                if (!isset($this->{$field->name}) && $field->column->nullable) {
-                    $stmtFields .= ', ' . $field->getColumnName() . ' = NULL';
-                } else {
-                    $stmtFields .= ', ' . $field->getColumnName() . ' = ' . $field->type->wh();
-                    $arguments1[] = $field->type->toDb($this->{$field->name});
-                }
+                //Field takes a part in primary key
+                $stmtFields .= ', ' . $field->getColumnName() . ' = ' . $field->type->wh();
+                $arguments1[] = $field->type->toDb($this->{$field->name});
+
+                $stmtPk .= ' AND ' . $field->getColumnName() . ' = ' . $field->type->wh();
+                $argumentsPk[] = $field->type->toDb($this->{$field->name});
             } else {
+                //Field does not take a part in primary key
                 if (!isset($this->{$field->name}) && $field->column->nullable) {
                     $stmtFields .= ', ' . $field->getColumnName() . ' = NULL';
                     $stmtUpdate .= ', ' . $field->getColumnName() . ' = NULL';
@@ -430,17 +435,84 @@ abstract class AbstractEntity extends AbstractGetter implements IteratorAggregat
 
         $stmtFields = substr($stmtFields, 1);
 
+        if ($stmtPk != '') {
+            $stmtPk = substr($stmtPk, 4);
+        }
+
         if ($stmtUpdate != '') {
             $stmtUpdate = substr($stmtUpdate, 1);
         }
 
-        $this->db()->Execute("
-            INSERT " . ($stmtUpdate == '' ? 'IGNORE' : '') . " {$this->table()} SET " . $stmtFields . "
-            " . ($stmtUpdate != '' ? "ON DUPLICATE KEY UPDATE " . $stmtUpdate : '') . "
-        ", array_merge($arguments1, $arguments2));
+        if ($this->_hasUniqueIndex() && $stmtPk !== '') {
+            //If table has some unique index it should not perform ON DUPLICATE KEY UPDATE clause.
+            //We need to do INSERT if the record does not exist or UPDATE otherwise by primary key.
+
+            //If postInsertField is set it indicates that INSERT statement is expected then
+            if (!isset($postInsertField)) {
+                //Checks if the record with such primary key already exists in database
+                $exists = $this->db()->GetOne("SELECT 1 FROM {$this->table()} WHERE " . $stmtPk . " LIMIT 1", $argumentsPk);
+            } else {
+                //INSERT statement must be used as it's a new record
+                $exists = false;
+            }
+
+            //Saves record making insert or update
+            $this->db()->Execute(
+                ($exists ? "UPDATE" : "INSERT") . " "
+                . $this->table() . " "
+                . "SET " . $stmtFields . " "
+                . ($exists ? "WHERE " . $stmtPk . " LIMIT 1" : ""),
+                ($exists ? array_merge($arguments1, $argumentsPk) : $arguments1)
+            );
+        } else {
+            $this->db()->Execute("
+                INSERT " . $this->table() . "
+                SET " . $stmtFields . "
+                " . ($stmtUpdate != '' ? "ON DUPLICATE KEY UPDATE " . $stmtUpdate : '') . "
+            ", array_merge($arguments1, $arguments2));
+        }
 
         if (isset($postInsertField)) {
+            //Set a value of the auto incrementing field into entity
             $this->{$postInsertField->name} = $postInsertField->type->toPhp($this->db()->Insert_ID());
+        }
+    }
+
+
+    /**
+     * Checks whether the table has at least one unique index
+     *
+     * @return    boolean Returns true if table has unique index
+     */
+    private function _hasUniqueIndex()
+    {
+        $this->_fetchIndexes();
+
+        return self::$cache[get_class($this)]['has_unique'];
+    }
+
+    /**
+     * Retrieves show indexes info and stores it in the cache
+     */
+    private function _fetchIndexes()
+    {
+        $class = get_class($this);
+
+        if (!isset(self::$cache[$class]['show_index'])) {
+            //Cols: Table, Non_unique, Key_name, Seq_in_index, Column_name, Collation, Cardinality, Sub_part,
+            //      Packed, Null, Index_type, Comment, Index_comment
+            self::$cache[$class]['show_index'] = $this->db()->GetAll("SHOW INDEX FROM " . $this->table());
+
+            //Whether table has any unique key
+            self::$cache[$class]['has_unique'] = false;
+
+            foreach (self::$cache[$class]['show_index'] as $v) {
+                if (!$v['Non_unique'] && $v['Key_name'] !== 'PRIMARY') {
+                    self::$cache[$class]['has_unique'] = true;
+
+                    break;
+                }
+            }
         }
     }
 
@@ -532,7 +604,7 @@ abstract class AbstractEntity extends AbstractGetter implements IteratorAggregat
             }
             $this->table = self::$cache[$class]['entity']->table->name;
         }
-        return '`' . $this->table . '`' . (!empty($alias) ? ' `' . $alias . '`' : '');
+        return '`' . str_replace('.', '`.`', $this->table) . '`' . (!empty($alias) ? ' `' . $alias . '`' : '');
     }
 
     /**

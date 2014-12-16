@@ -385,9 +385,11 @@ class AwsTestCase extends TestCase
      */
     public function providerClientType()
     {
-        return array(
-            array(Aws::CLIENT_QUERY),
-            array(Aws::CLIENT_SOAP),
-        );
+        return [
+            [Aws::CLIENT_QUERY],
+
+            //SOAP client has been deprecated
+            //[Aws::CLIENT_SOAP],
+        ];
     }
 }

@@ -479,4 +479,9 @@ class Scalr_UI_Request
     {
         return $this->getHeaderVar('Interface-Beta') || Scalr::isAllowedAnalyticsOnHostedScalrAccount($this->getEnvironment()->clientId);
     }
+
+    public function isInterfaceBeta()
+    {
+        return !!$this->getHeaderVar('Interface-Beta');
+    }
 }

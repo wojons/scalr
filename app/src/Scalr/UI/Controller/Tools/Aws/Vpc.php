@@ -257,7 +257,8 @@ class Scalr_UI_Controller_Tools_Aws_Vpc extends Scalr_UI_Controller
 
     public function xCreateNetworkInterfaceAction()
     {
-        $ec2 = $this->getEnvironment()->aws($this->getParam('cloudLocation'))->ec2;
+        $aws = $this->getEnvironment()->aws($this->getParam('cloudLocation'));
+        $ec2 = $aws->ec2;
 
         try {
             $subnetId = $this->getParam('subnetId');

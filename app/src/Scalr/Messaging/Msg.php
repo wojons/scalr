@@ -1,6 +1,7 @@
 <?php
 
-class Scalr_Messaging_Msg {
+class Scalr_Messaging_Msg
+{
 
     public $messageId;
 
@@ -21,21 +22,23 @@ class Scalr_Messaging_Msg {
         $farmRoleId;
 
 
-    function __construct () {
+    public function __construct ()
+    {
         $this->messageId = Scalr::GenerateUID();
         $this->meta[Scalr_Messaging_MsgMeta::SCALR_VERSION] = SCALR_VERSION;
     }
 
-    public function setServerMetaData(DBServer $dbServer) {
-
+    public function setServerMetaData(DBServer $dbServer)
+    {
         try {
             $this->behaviour = $dbServer->GetFarmRoleObject()->GetRoleObject()->getBehaviors();
             $this->roleName = $dbServer->GetFarmRoleObject()->GetRoleObject()->name;
             $this->farmRoleAlias = $dbServer->GetFarmRoleObject()->Alias;
+
             if (empty($this->farmRoleAlias))
                 $this->farmRoleAlias = $this->roleName;
-
-        } catch (Exception $e) {}
+        } catch (Exception $e) {
+        }
 
         $this->localIp = $dbServer->localIp;
         $this->remoteIp = $dbServer->remoteIp;
@@ -54,32 +57,37 @@ class Scalr_Messaging_Msg {
         );
     }
 
-    function setName($name) {
+    public function setName($name)
+    {
         if ($this->messageName === null)
             $this->messageName = $name;
     }
 
-    function getName () {
+    public function getName()
+    {
         if ($this->messageName === null) {
             $this->messageName = substr(get_class($this), strlen(__CLASS__) + 1);
         }
         return $this->messageName;
     }
 
-    function getTimestamp() {
+    public function getTimestamp()
+    {
         return strtotime($this->meta[Scalr_Messaging_MsgMeta::TIMESTAMP]);
     }
 
-    function getServerId () {
+    public function getServerId()
+    {
         return $this->meta[Scalr_Messaging_MsgMeta::SERVER_ID];
     }
 
-    function setServerId ($serverId) {
+    public function setServerId($serverId)
+    {
         $this->meta[Scalr_Messaging_MsgMeta::SERVER_ID] = $serverId;
     }
 
-    static function getClassForName ($name) {
-
+    public static function getClassForName($name)
+    {
         if (class_exists(__CLASS__ . "_" . $name))
             return __CLASS__ . "_" . $name;
         else

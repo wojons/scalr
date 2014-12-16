@@ -69,24 +69,29 @@ class Update20140127154723 extends AbstractUpdate implements SequenceInterface
     private function validateCommon($tagId, $tagName)
     {
         $dbname = $this->container->config('scalr.analytics.connections.analytics.name');
+
         if (!$this->hasTable('account_tag_values')) {
             $this->console->error("Table %d does not exist.", $dbname . '.account_tag_values');
             return false;
         }
+
         if (!$this->hasTable('tags')) {
             $this->console->error("Table %d does not exist.", $dbname . '.tags');
             return false;
         }
+
         $r = $this->db->GetOne("
             SELECT 1 FROM tags
             WHERE tag_id = ? LIMIT 1
         ", array(
             $tagId
         ));
+
         if (!$r) {
             $this->console->error("Tag %s (%d) does not exist in the %s table.", $tagName, $tagId, $dbname . '.tags');
             return false;
         }
+
         return true;
     }
 
@@ -233,12 +238,15 @@ class Update20140127154723 extends AbstractUpdate implements SequenceInterface
 
     protected function isApplied4($stage)
     {
-        return $this->isAppliedCommon(TagEntity::TAG_ID_FARM);
+        return $this->isAppliedCommon(TagEntity::TAG_ID_FARM) &&
+               $this->isAppliedCommon(TagEntity::TAG_ID_FARM_OWNER);
     }
 
     protected function validateBefore4($stage)
     {
-        return $this->hasTableService('farms') && $this->validateCommon(TagEntity::TAG_ID_FARM, 'Farm');
+        return $this->hasTableService('farms') &&
+               $this->validateCommon(TagEntity::TAG_ID_FARM, 'Farm') &&
+               $this->validateCommon(TagEntity::TAG_ID_FARM_OWNER, 'Farm owner');
     }
 
     protected function run4($stage)
@@ -250,6 +258,7 @@ class Update20140127154723 extends AbstractUpdate implements SequenceInterface
                 TagEntity::TAG_ID_FARM
             ));
         }
+
         $this->console->out('Populating farms to the dictionary');
 
         $db = \Scalr::getDb();
@@ -264,7 +273,20 @@ class Update20140127154723 extends AbstractUpdate implements SequenceInterface
                 f.`id` `value_id`,
                 f.`name` `value_name`
             FROM `farms` f
-        ", [TagEntity::TAG_ID_FARM]);
+
+            UNION ALL
+
+            SELECT
+                f.`clientid` `account_id`,
+                ? `tag_id`,
+                f.`id` `value_id`,
+                f.`created_by_id` `value_name`
+            FROM `farms` f
+            WHERE f.`created_by_id` > 0
+        ", [
+            TagEntity::TAG_ID_FARM,
+            TagEntity::TAG_ID_FARM_OWNER
+        ]);
 
         while ($rec = $res->FetchRow()) {
             $stmt .= ',('
@@ -315,10 +337,9 @@ class Update20140127154723 extends AbstractUpdate implements SequenceInterface
                 f.`clientid` `account_id`,
                 ? `tag_id`,
                 fr.`id` `value_id`,
-                CONCAT_WS(' > ', f.name, r.name) `value_name`
+                fr.`alias` `value_name`
             FROM `farm_roles` fr
             JOIN `farms` f ON f.id = fr.farmid
-            JOIN `roles` r ON r.id = fr.role_id
         ", [TagEntity::TAG_ID_FARM_ROLE]);
 
         while ($rec = $res->FetchRow()) {

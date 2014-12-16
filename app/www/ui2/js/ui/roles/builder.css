@@ -1,5 +1,6 @@
 .x-btn-simple-large-small-text .x-btn-inner{
     font-size: 11px;
+    white-space: normal;
 }
 
 .x-rolebuilder-addons .x-btn-simple-large{

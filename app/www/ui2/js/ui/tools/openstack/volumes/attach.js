@@ -15,7 +15,10 @@ Scalr.regPage('Scalr.ui.tools.openstack.volumes.attach', function (loadParams, m
 				xtype: 'combo',
 				name:'serverId',
 				allowBlank: false,
-				editable: false,
+				editable: true,
+				forceSelection: true,
+				autoSearch: false,
+                selectOnFocus: true,
 				store: {
 					fields: [ 'id', 'name' ],
 					data: moduleParams.servers,

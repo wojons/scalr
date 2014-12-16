@@ -129,7 +129,7 @@ Scalr.event = new Ext.util.Observable();
 /*
  * update - any content on page was changed (notify): function (type, arguments ...)
  * close - close current page and go back
- * redirect - redirect to link: function (href, keepMessages, force)
+ * redirect - redirect to link: function (href, force, params)
  * reload - browser page
  * refresh - current application
  * lock - lock to switch current application (override only throw redirect with force = true)

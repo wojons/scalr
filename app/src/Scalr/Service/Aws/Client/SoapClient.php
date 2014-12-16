@@ -94,6 +94,28 @@ class SoapClient extends \SoapClient implements ClientInterface
      */
     private $aws;
 
+    private $serviceName;
+
+    /**
+     * {@inheritdoc}
+     * @see \Scalr\Service\Aws\Client\ClientInterface::getServiceName()
+     */
+    public function getServiceName()
+    {
+        return $this->serviceName;
+    }
+
+	/**
+     * {@inheritdoc}
+     * @see \Scalr\Service\Aws\Client\ClientInterface::setServiceName()
+     */
+    public function setServiceName($service)
+    {
+        $this->serviceName = $service;
+
+        return $this;
+    }
+
     /**
      * Sets aws instance
      *
@@ -105,6 +127,8 @@ class SoapClient extends \SoapClient implements ClientInterface
         $this->aws = $aws;
         return $this;
     }
+
+
 
     /**
      * Gets AWS instance

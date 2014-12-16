@@ -298,12 +298,15 @@ Scalr.regPage('Scalr.ui.account2.roles.view', function (loadParams, moduleParams
                     flex: 1,
                     minWidth: 390,
                     dataIndex: 'permissions',
+                    labelRenderer: function(key) {
+                        return key === 'ssh-console' ? 'SSH Launcher' : key;
+                    },
                     customRenderer: function(html, record) {
                         var id = record.get('id'),
                             resource = moduleParams['definitions'][id],
                             prefix;
                         prefix = '<div style="float:left;min-width:200px"><div style="font-weight:bold">' + (resource ? resource[0] : id) + '</div><div style="font-size:85%;color:#999">' + (resource ? resource[1] : '') + '</div></div>';
-                        return prefix + html.join('')
+                        return prefix + '<div style="white-space:normal;line-height:20px">' + html.join('') + '</div>';
                     },
                     listeners: {
                         beforechange: function(column, newValue, name, record, cell) {

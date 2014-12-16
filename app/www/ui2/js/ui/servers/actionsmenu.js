@@ -199,7 +199,7 @@ Ext.define('Scalr.ui.ServerMenu', {
         }
     },
     {
-        text: 'Download Private key',
+        text: 'Download SSH Private key',
         iconCls: 'x-menu-icon-downloadprivatekey',
         menuHandler: function (data) {
             var cloudLocation = data['cloud_location'];
@@ -227,6 +227,14 @@ Ext.define('Scalr.ui.ServerMenu', {
         href: '#/scripts/execute?serverId={server_id}',
         getVisibility: function(data) {
             return !Ext.Array.contains(['Importing', 'Pending launch', 'Temporary', 'Troubleshooting', 'Terminated', 'Suspended'], data['status']);
+        }
+    }, {
+        itemId: 'option.fire',
+        iconCls: 'x-menu-icon-execute',
+        text: 'Fire event',
+        href: '#/scripts/events/fire?serverId={server_id}',
+        getVisibility: function(data) {
+            return Scalr.isAllowed('GENERAL_CUSTOM_EVENTS', 'fire') && !Ext.Array.contains(['Importing', 'Pending launch', 'Temporary', 'Troubleshooting', 'Terminated', 'Suspended'], data['status']);
         }
     }, {
         xtype: 'menuseparator'
@@ -321,6 +329,27 @@ Ext.define('Scalr.ui.ServerMenu', {
         href: '#/logs/scripting?serverId={server_id}',
         getVisibility: function(data) {
             return !Ext.Array.contains(['Troubleshooting', 'Suspended'], data['status']);
+        }
+    }, {
+        itemId: 'option.delete',
+        text: 'Delete server',
+        iconCls: 'x-menu-icon-delete',
+        getVisibility: function(data) {
+            return data['termination_error'] && (data['status'] === 'Pending terminate' || data['status'] === 'Terminated');
+        },
+        request: {
+            confirmBox: {
+                type: 'action',
+                msg: 'Are you sure you want to remove server "{server_id}" ?'
+            },
+            processBox: {
+                type: 'action',
+                msg: 'Deleting server ...'
+            },
+            url: '/servers/xServerDelete/',
+            dataHandler: function (data) {
+                return { serverId: data['server_id'] };
+            }
         }
     }]
 });

@@ -276,9 +276,7 @@ class MessagingEventObserver extends EventObserver
         // Create ssh keypair for rackspace
         if ($event->DBServer->IsSupported("0.7"))
         {
-            $authSshKey = $event->DBServer->platform == SERVER_PLATFORMS::RACKSPACE ||
-                $event->DBServer->platform == SERVER_PLATFORMS::NIMBULA ||
-                $event->DBServer->isCloudstack();
+            $authSshKey = $event->DBServer->platform == SERVER_PLATFORMS::RACKSPACE || $event->DBServer->isCloudstack();
 
             if($event->DBServer->isOpenstack()) {
                 $platform = PlatformFactory::NewPlatform($event->DBServer->platform);
@@ -560,7 +558,7 @@ class MessagingEventObserver extends EventObserver
             $msg->dbType = $event->DBServer->GetFarmRoleObject()->GetRoleObject()->getDbMsrBehavior();
             $msg->cloudLocation = $event->DBServer->GetCloudLocation();
 
-            if (in_array($event->DBServer->platform, array(SERVER_PLATFORMS::EC2, SERVER_PLATFORMS::CLOUDSTACK, SERVER_PLATFORMS::IDCF, SERVER_PLATFORMS::UCLOUD))) {
+            if (in_array($event->DBServer->platform, array(SERVER_PLATFORMS::EC2, SERVER_PLATFORMS::CLOUDSTACK, SERVER_PLATFORMS::IDCF))) {
                 try {
                     $volume = Scalr_Storage_Volume::init()->loadById(
                         $event->DBServer->GetFarmRoleObject()->GetSetting(Scalr_Db_Msr::VOLUME_ID)
@@ -573,7 +571,7 @@ class MessagingEventObserver extends EventObserver
             }
 
             if ($event->DBServer->farmRoleId != 0) {
-                foreach (Scalr_Role_Behavior::getListForRole(DBRole::loadById($event->DBServer->roleId)) as $behavior)
+                foreach (Scalr_Role_Behavior::getListForRole($event->DBServer->GetFarmRoleObject()->GetRoleObject()) as $behavior)
                     $msg = $behavior->extendMessage($msg, $event->DBServer);
             }
 
@@ -636,7 +634,7 @@ class MessagingEventObserver extends EventObserver
         }
 
         try {
-            $DBRole = DBRole::loadById($event->DBServer->roleId);
+            $DBRole = $event->DBServer->GetFarmRoleObject()->GetRoleObject();
         }
         catch(Exception $e){}
 
@@ -657,8 +655,8 @@ class MessagingEventObserver extends EventObserver
 
             if ($eventServerIsMaster && !$first_in_role_handled) {
                 if (!$is_synchronize && $DBServer->farmRoleId == $event->DBServer->farmRoleId) {
-                    if (DBRole::loadById($DBServer->roleId)->hasBehavior(ROLE_BEHAVIORS::MYSQL) ||
-                        DBRole::loadById($DBServer->roleId)->getDbMsrBehavior())
+                    if ($DBServer->GetFarmRoleObject()->GetRoleObject()->hasBehavior(ROLE_BEHAVIORS::MYSQL) ||
+                        $DBServer->GetFarmRoleObject()->GetRoleObject()->getDbMsrBehavior())
                     {
                         $first_in_role_handled = true;
                         $first_in_role_server = $DBServer;
@@ -687,7 +685,7 @@ class MessagingEventObserver extends EventObserver
                 $msg = Scalr_Scripting_Manager::extendMessage($msg, $event, $event->DBServer, $DBServer);
 
                 if ($event->DBServer->farmRoleId != 0) {
-                    foreach (Scalr_Role_Behavior::getListForRole(DBRole::loadById($event->DBServer->roleId)) as $behavior)
+                    foreach (Scalr_Role_Behavior::getListForRole($event->DBServer->GetFarmRoleObject()->GetRoleObject()) as $behavior)
                         $msg = $behavior->extendMessage($msg, $event->DBServer);
                 }
             }
@@ -728,7 +726,7 @@ class MessagingEventObserver extends EventObserver
 
                 if ($event->DBServer->IsSupported("0.7"))
                 {
-                    if (in_array($event->DBServer->platform, array(SERVER_PLATFORMS::EC2, SERVER_PLATFORMS::CLOUDSTACK, SERVER_PLATFORMS::IDCF, SERVER_PLATFORMS::UCLOUD))) {
+                    if (in_array($event->DBServer->platform, array(SERVER_PLATFORMS::EC2, SERVER_PLATFORMS::CLOUDSTACK, SERVER_PLATFORMS::IDCF))) {
                         try {
                             $volume = Scalr_Storage_Volume::init()->loadById(
                                 $DBFarmRole->GetSetting(DBFarmRole::SETTING_MYSQL_SCALR_VOLUME_ID)
@@ -756,7 +754,7 @@ class MessagingEventObserver extends EventObserver
                         continue;
 
                     if (($platform == SERVER_PLATFORMS::EC2 && $DBServer->GetProperty(EC2_SERVER_PROPERTIES::AVAIL_ZONE) == $availZone) || $platform != SERVER_PLATFORMS::EC2) {
-                        if (DBRole::loadById($DBServer->roleId)->hasBehavior(ROLE_BEHAVIORS::MYSQL)) {
+                        if ($DBServer->GetFarmRoleObject()->GetRoleObject()->hasBehavior(ROLE_BEHAVIORS::MYSQL)) {
                             $DBFarmRole->SetSetting(DBFarmRole::SETTING_MYSQL_SLAVE_TO_MASTER, 1);
                             $DBServer->SetProperty(SERVER_PROPERTIES::DB_MYSQL_MASTER, 1);
                             $DBServer->SendMessage($msg, false, true);

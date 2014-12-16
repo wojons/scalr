@@ -1,0 +1,104 @@
+scalr:
+  connections:
+    mysql: &connections_mysql
+      host: localhost
+      port: 3306
+      name: scalr_test
+      user: root
+      pass: false
+
+  system:
+    instances_connection_timeout: 4
+
+  instances_connection_policy: local
+
+  analytics:
+    enabled: yes
+    connections:
+      analytics: 
+        host: localhost
+        port: 3306
+        name: analytics_test
+        user: root
+        pass: false
+        pool_size: 50
+      scalr:
+        <<: *connections_mysql
+        pool_size: 50 
+    poller:
+      pool_size: 50
+      cloud_connection_timeout: 20
+      log_file: '/var/log/scalr/analytics-poller-test.log'
+      pid_file: '/var/run/scalr/analytics-poller-test.pid'
+    processing:
+      pool_size: 50
+      log_file: '/var/log/scalr/analytics-processing-test.log'
+      pid_file: '/var/run/scalr/analytics-processing-test.pid'
+
+  msg_sender:
+    connections: 
+      mysql:
+        <<: *connections_mysql
+        pool_size: 20
+    instances_connection_timeout: 5
+    pool_size: 100
+    log_file: "/var/log/scalr/msg-sender-test.log"
+    pid_file: "/var/run/scalr/msg-sender-test.pid"
+
+  dbqueue_event:
+    connections: 
+      mysql:
+        pool_size: 4
+    pool_size: 100
+    log_file: '/var/log/scalr/dbqueue-event-test.log'
+    pid_file: '/var/run/scalr/dbqueue-event-test.pid'
+
+  load_statistics:
+    connections:
+      plotter:
+        scheme: http
+        host: localhost
+        port: 8080
+        pool_size: 100
+      mysql:
+        <<: *connections_mysql
+        pool_size: 100
+    rrd:
+      dir: /tmp/rrd
+      rrdcached_sock_path: /var/run/rrdcached.sock
+    img:
+      dir: /tmp/img
+      scheme: http
+      host: localhost
+      path: graphics
+    log_file: '/var/log/scalr/load-statistics-test.log'
+    pid_file: '/var/run/scalr/load-statistics-test.pid'
+
+  scalarizr_update:
+    # Allowed values client | solo
+    mode: 'client'
+    default_repo: 'stable'
+    api_port: 8008
+    repos:
+      latest:
+        deb_repo_url: 'http://apt.scalr.net/debian scalr/'
+        rpm_repo_url: 'http://rpm.scalr.net/rpm/rhel/$releasever/$basearch'
+        win_repo_url: 'http://win.scalr.net'
+      stable:
+        deb_repo_url: 'http://apt-delayed.scalr.net/debian scalr/'
+        rpm_repo_url: 'http://rpm-delayed.scalr.net/rpm/rhel/$releasever/$basearch'
+        win_repo_url: 'http://win-delayed.scalr.net'
+    devel_repos:
+      buildbot:
+        deb_repo_url: 'http://buildbot.scalr-labs.com/apt/debian %s/'
+        rpm_repo_url: 'http://buildbot.scalr-labs.com/rpm/%s/rhel/$releasever/$basearch'
+        win_repo_url: 'http://buildbot.scalr-labs.com/win/%s/'
+      #stridercd:
+      #  deb_repo_url: 'http://stridercd.scalr-labs.com/apt %s main'
+      #  rpm_repo_url: 'http://stridercd.scalr-labs.com/rpm/%s/rhel/$releasever/$basearch'
+      #  win_repo_url: 'http://buildbot.scalr-labs.com/win/%s/'
+    service:
+      chunk_size: 100
+      pool_size: 100
+      log_file: '/var/log/scalr/szr-upd-service-test.log'
+      pid_file: '/var/run/scalr/szr-upd-service-test.pid'

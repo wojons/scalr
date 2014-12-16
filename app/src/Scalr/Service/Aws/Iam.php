@@ -72,7 +72,19 @@ class Iam extends AbstractService implements ServiceInterface
         $region = $this->getAws()->getRegion();
         if ($region == Aws::REGION_US_GOV_WEST_1) {
             return 'iam.us-gov.amazonaws.com';
+        } elseif ($region == Aws::REGION_CN_NORTH_1) {
+            return 'iam.cn-north-1.amazonaws.com.cn';
         }
+        
         return 'iam.amazonaws.com';
+    }
+
+    /**
+     * {@inheritdoc}
+     * @see \Scalr\Service\Aws\AbstractService::getName()
+     */
+    public function getName()
+    {
+        return 'iam';
     }
 }

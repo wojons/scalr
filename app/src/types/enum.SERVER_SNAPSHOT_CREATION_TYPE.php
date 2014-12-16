@@ -22,6 +22,4 @@ final class SERVER_SNAPSHOT_CREATION_TYPE
     const OSTACK_WINDOWS = 'ostack.windows';
 
     const CSTACK_DEF = 'cstack.default';
-
-    const NIMBULA_DEF = 'nimbula.default';
 }

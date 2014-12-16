@@ -1,6 +1,7 @@
 <?php
 namespace Scalr\Service\OpenStack\Exception;
 
+use Exception;
 use Scalr\Service\OpenStack\Client\ErrorData;
 
 /**

@@ -1,9 +1,4 @@
 Scalr.regPage('Scalr.ui.farms.builder.tabs.mysql', function () {
-    var iopsMin = 100, 
-        iopsMax = 4000, 
-        integerRe = new RegExp('[0123456789]', 'i'), 
-        maxEbsStorageSize = 1000;
-
     return Ext.create('Scalr.ui.FarmsBuilderTab', {
 		tabTitle: 'MySQL settings',
         itemId: 'mysql',
@@ -31,8 +26,7 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.mysql', function () {
 					record.get('platform') == 'ec2' ||
 					record.get('platform') == 'rackspace' ||
 					record.get('platform') == 'cloudstack' ||
-					record.get('platform') == 'idcf' ||
-					record.get('platform') == 'ucloud'
+					record.get('platform') == 'idcf'
 				)
 			);
 		},
@@ -271,7 +265,7 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.mysql', function () {
 				width: 600,
 				items: [{
 					xtype: 'combo',
-					store: [['standard', 'Standard EBS (Magnetic)'],['gp2', 'General Purpose (SSD)'],['io1', 'Provisioned IOPS (' + iopsMin + ' - ' + iopsMax + '): ']],
+					store: Scalr.constants.ebsTypes,
                     fieldLabel: 'EBS type',
                     labelWidth:160,
 					valueField: 'id',
@@ -304,22 +298,15 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.mysql', function () {
 					hidden: true,
 					margin: '0 0 0 2',
 					width: 60,
-                    maskRe: integerRe,
-                    validator: function(value){
-                        if (value*1 > iopsMax) {
-                            return 'Maximum value is ' + iopsMax + '.';
-                        } else if (value*1 < iopsMin) {
-                            return 'Minimum value is ' + iopsMin + '.';
-                        }
-                        return true;
-                    },
+                    vtype: 'iops',
+                    allowBlank: false,
                     listeners: {
                         change: function(comp, value){
                             var tab = comp.up('#mysql'),
                                 sizeField = tab.down('[name="mysql.ebs_volume_size"]');
                             if (tab.currentRole.get('new')) {
                                 if (comp.isValid() && comp.prev().getValue() === 'io1') {
-                                    var minSize = Math.ceil(value*1/10);
+                                    var minSize = Scalr.utils.getMinStorageSizeByIops(value);
                                     if (sizeField.getValue()*1 < minSize) {
                                         sizeField.setValue(minSize);
                                     }
@@ -334,15 +321,15 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.mysql', function () {
 				labelWidth: 160,
 				width: 220,
 				name: 'mysql.ebs_volume_size',
-                maskRe: integerRe,
+                vtype: 'num',
                 validator: function(value){
                     var minValue = 1,
                         tab = this.up('#mysql');
                     if (tab.down('[name="mysql.ebs.type"]').getValue() === 'io1') {
-                        minValue = Math.ceil(tab.down('[name="mysql.ebs.iops"]').getValue()*1/10);
+                        minValue = Scalr.utils.getMinStorageSizeByIops(tab.down('[name="mysql.ebs.iops"]').getValue());
                     }
-                    if (value*1 > maxEbsStorageSize) {
-                        return 'Maximum value is ' + maxEbsStorageSize + '.';
+                    if (value*1 > Scalr.constants.ebsMaxStorageSize) {
+                        return 'Maximum value is ' + Scalr.constants.ebsMaxStorageSize + '.';
                     } else if (value*1 < minValue) {
                         return 'Minimum value is ' + minValue + '.';
                     }

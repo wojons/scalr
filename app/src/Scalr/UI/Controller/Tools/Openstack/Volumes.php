@@ -21,6 +21,28 @@ class Scalr_UI_Controller_Tools_Openstack_Volumes extends Scalr_UI_Controller
         $this->viewAction();
     }
 
+    public function createAction()
+    {
+        $this->response->page('ui/tools/openstack/volumes/create.js', array(
+            'locations'	=> self::loadController('Platforms')->getCloudLocations($this->getParam('platform'), false)
+        ));
+    }
+    
+    public function xCreateAction()
+    {
+        $openstack = $this->getEnvironment()->openstack($this->getParam('platform'), $this->getParam('cloudLocation'));
+    
+        $volume = $openstack->volume->createVolume(
+            $this->getParam('size'),
+            $this->getParam('name'),
+            $this->getParam('description'),
+            $this->getParam('snapshotId') ? $this->getParam('snapshotId') : null 
+        );
+    
+        $this->response->success('Volume has been successfully created');
+        $this->response->data(array('data' => array('volumeId' => $volume->id)));
+    }
+    
     public function xDetachAction()
     {
     	$client = $this->environment->openstack($this->getParam('platform'), $this->getParam('cloudLocation'));
@@ -138,6 +160,9 @@ class Scalr_UI_Controller_Tools_Openstack_Volumes extends Scalr_UI_Controller
                     continue;
 
                 $item = array(
+                    'name' => $pv->display_name,
+                    'description' => $pv->display_description,
+                    'snapshotId' => $pv->snapshot_id,
                     'volumeId'	=> $pv->id,
                     'size'	=> $pv->size,
                     'status' => $pv->status,
@@ -169,7 +194,7 @@ class Scalr_UI_Controller_Tools_Openstack_Volumes extends Scalr_UI_Controller
             }
         } while (false !== ($volumes = $volumes->getNextPage()));
 
-        $response = $this->buildResponseFromData($vols, array('serverId', 'volumeId','farmId', 'farmRoleId'));
+        $response = $this->buildResponseFromData($vols, array('serverId', 'volumeId','farmId', 'farmRoleId', 'name', 'description', 'snapshotId'));
 
         $this->response->data($response);
     }

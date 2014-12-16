@@ -1,4 +1,5 @@
 <?php
+use Scalr\UI\Request\RawData;
 class Scalr_UI_Controller_Admin_Users extends Scalr_UI_Controller
 {
     const CALL_PARAM_NAME = 'userId';
@@ -66,17 +67,26 @@ class Scalr_UI_Controller_Admin_Users extends Scalr_UI_Controller
      * @param int $id
      * @param $email
      * @param $type
-     * @param $password
+     * @param RawData $password
      * @param $status
      * @param $fullname
      * @param $comments
+     * @param RawData $currentPassword optional
      * @throws Scalr_Exception_Core
      * @throws Scalr_Exception_InsufficientPermissions
      */
-    public function xSaveAction($id = 0, $email, $type, $password, $status, $fullname, $comments)
+    public function xSaveAction($id = 0, $email, $type, RawData $password, $status, $fullname, $comments, RawData $currentPassword = null)
     {
         $user = Scalr_Account_User::init();
         $validator = new Scalr_Validator();
+        $isNewUser = empty($id);
+        $isExistingPasswordChanged = false;
+
+        if (!$isNewUser && $password != '******' && !$this->user->checkPassword($currentPassword)) {
+            $this->response->data(['errors' => ['currentPassword' => 'Invalid password']]);
+            $this->response->failure();
+            return;
+        }
 
         if (! $email)
             throw new Scalr_Exception_Core('Email cannot be empty');
@@ -90,7 +100,7 @@ class Scalr_UI_Controller_Admin_Users extends Scalr_UI_Controller
         if (! in_array($status, [Scalr_Account_User::STATUS_ACTIVE, Scalr_Account_User::STATUS_INACTIVE]))
             throw new Scalr_Exception_Core('Status is not valid');
 
-        if ($id) {
+        if (!$isNewUser) {
             $user->loadById($id);
 
             if ($user->getEmail() == 'admin' && $user->getId() != $this->user->getId())
@@ -103,8 +113,12 @@ class Scalr_UI_Controller_Admin_Users extends Scalr_UI_Controller
             $user->type = $type;
         }
 
-        if ($password != '******')
+        if ($password != '******') {
             $user->updatePassword($password);
+            if (!$isNewUser) {
+                $isExistingPasswordChanged = true;
+            }
+        }
 
         if ($user->getEmail() != 'admin') {
             $user->status = $status;
@@ -115,6 +129,29 @@ class Scalr_UI_Controller_Admin_Users extends Scalr_UI_Controller
         }
 
         $user->save();
+        // Send notification E-mail
+        if ($isExistingPasswordChanged) {
+            $this->getContainer()->mailer->sendTemplate(
+                SCALR_TEMPLATES_PATH . '/emails/password_change_admin_notification.eml',
+                array(
+                    '{{fullname}}' => $user->fullname ? $user->fullname : $user->getEmail(),
+                    '{{administratorFullName}}' => $this->user->fullname ? $this->user->fullname : $this->user->getEmail()
+                ),
+                $user->getEmail(), $user->fullname
+            );
+        } else if ($isNewUser) {
+            $this->getContainer()->mailer->sendTemplate(
+                SCALR_TEMPLATES_PATH . '/emails/user_new_admin_notification.eml',
+                array(
+                    '{{fullname}}' => $user->fullname ? $user->fullname : $user->getEmail(),
+                    '{{subject}}' => $user->type == Scalr_Account_User::TYPE_FIN_ADMIN ? 'Financial Admin for Scalr Cost Analytics' : 'Admin for Scalr',
+                    '{{user_type}}' => $user->type == Scalr_Account_User::TYPE_FIN_ADMIN ? 'a Financial Admin' : 'an Admin',
+                    '{{link}}' => Scalr::config('scalr.endpoint.scheme') . "://" . Scalr::config('scalr.endpoint.host')
+                ),
+                $user->getEmail(), $user->fullname
+            );
+        }
+        
         $this->response->success('User successfully saved');
     }
 

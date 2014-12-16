@@ -3,10 +3,11 @@
 namespace Scalr\Stats\CostAnalytics\Events;
 
 use Scalr\Stats\CostAnalytics\Entity\TimelineEventEntity;
-use Scalr_UI_Request;
 use Scalr\Exception\AnalyticsException;
 use Scalr\Stats\CostAnalytics\Entity\TimelineEventCostCentreEntity;
 use Scalr\Stats\CostAnalytics\Entity\TimelineEventProjectEntity;
+use \Scalr_UI_Request;
+use \Scalr_Environment;
 
 /**
  * AbstractEvent
@@ -29,6 +30,13 @@ abstract class AbstractEvent
      * @var \Scalr_Account_User
      */
     protected $user;
+
+    /**
+     * Current environment
+     *
+     * @var \Scalr_Environment
+     */
+    protected $environment;
 
     /**
      * Event message
@@ -72,6 +80,14 @@ abstract class AbstractEvent
         $this->user = $request instanceof Scalr_UI_Request ? $request->getUser() : null;
 
         $this->timelineEvent->userId = $this->user->id;
+
+        if ($request instanceof Scalr_UI_Request && $request->getEnvironment() instanceof Scalr_Environment) {
+            $this->environment = $request->getEnvironment();
+
+            $this->timelineEvent->envId = $this->environment->id;
+
+            $this->timelineEvent->accountId = $this->environment->clientId;
+        }
 
         $constName = 'Scalr\Stats\CostAnalytics\Entity\TimelineEventEntity::EVENT_TYPE_' . strtoupper(substr(\Scalr::decamelize(preg_replace('/^.+\\\\([\w]+)$/', '\\1', get_class($this))), 0, -6));
 

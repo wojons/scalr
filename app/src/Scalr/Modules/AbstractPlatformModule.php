@@ -1,6 +1,8 @@
 <?php
 namespace Scalr\Modules;
 
+use Scalr\Model\Entity\CloudLocation;
+
 abstract class AbstractPlatformModule
 {
     protected $resumeStrategy = \Scalr_Role_Behavior::RESUME_STRATEGY_NOT_SUPPORTED;
@@ -97,5 +99,48 @@ abstract class AbstractPlatformModule
 
         //This method is supposed to be overridden
         return $this->platform ? $this->container->analytics->prices->hasPriceForUrl($this->platform, '') : false;
+    }
+
+    /**
+     * Gets active instance types for the specified cloud platform, url and location
+     * from the cache
+     *
+     * @param   string     $platform      A cloud platform
+     * @param   string     $url           A cloud endpoint url
+     * @param   string     $cloudLocation A cloud location
+     *
+     * @return  \Scalr\Model\Collections\ArrayCollection|boolean
+     *          Returns collection of the CloudInstanceType entities on success or false otherwise
+     */
+    protected function getCachedInstanceTypes($platform, $url, $cloudLocation)
+    {
+        //Gets a lifetime of the cached data from the config
+        $lifetime = (int) \Scalr::config('scalr.cache.instance_types.lifetime');
+
+        //If this lifetime equals zero it means we have to warm-up cache
+        if ($lifetime === 0) {
+            CloudLocation::warmUp();
+            //We have no cached instance types
+            return false;
+        }
+
+        //Checks whether there are active instance types in the cache taking lifetime into account.
+        if (!CloudLocation::hasInstanceTypes($platform, $url, $cloudLocation, $lifetime)) {
+            //No cached data
+            return false;
+        }
+
+        //Fetches cloud location entity from the cache
+        $cl = CloudLocation::findPk(CloudLocation::calculateCloudLocationId($platform, $cloudLocation, $url));
+
+        //It is possible that it might have been already removed
+        if (!($cl instanceof CloudLocation)) {
+            //No cached data
+            return false;
+        }
+
+        //Retrieves an instance types for this cloud location.
+        //We should actually return only active types.
+        return $cl->getActiveInstanceTypes();
     }
 }

@@ -9,6 +9,16 @@ class OpenstackHelper
     {
         try {
             if ($dbServer->GetProperty(\OPENSTACK_SERVER_PROPERTIES::FLOATING_IP)) {
+                
+                if ($dbServer->farmRoleId) {
+                    if ($dbServer->GetFarmRoleObject()->GetSetting(\DBFarmRole::SETTING_OPENSTACK_KEEP_FIP_ON_SUSPEND)) {
+                        if (in_array($dbServer->status, array(\SERVER_STATUS::PENDING_SUSPEND,\SERVER_STATUS::SUSPENDED)) || 
+                            $dbServer->GetRealStatus()->isSuspended()) {
+                            return false;
+                        }
+                    }
+                }
+                
                 $environment = $dbServer->GetEnvironmentObject();
                 $osClient = $environment->openstack($dbServer->platform, $dbServer->GetCloudLocation());
 

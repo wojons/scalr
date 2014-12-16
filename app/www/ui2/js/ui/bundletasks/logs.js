@@ -25,7 +25,7 @@ Scalr.regPage('Scalr.ui.bundletasks.logs', function (loadParams, moduleParams) {
 		}, {
 			ptype: 'rowexpander',
 			rowBodyTpl: [
-				'<p><b>Message:</b> {message}</p>'
+				'<p><b>Message:</b> <span style="white-space: pre">{message}</span></p>'
 			]
 		}],
 

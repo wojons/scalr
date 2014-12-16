@@ -2703,7 +2703,10 @@ class Ec2Api extends AbstractApi
         if ($destRegion !== null) {
             //It overrides region to copy
             $options['_host'] = $this->ec2->getUrl($destRegion);
+            $options['_region'] = $destRegion;
+
             $options['DestinationRegion'] = (string) $destRegion;
+
             if ($presignedUrl !== null) {
                 $options['PresignedUrl'] = (string) $presignedUrl;
             }
@@ -3099,6 +3102,7 @@ class Ec2Api extends AbstractApi
         if ($destRegion !== null) {
             //It overrides region to copy
             $options['_host'] = $this->ec2->getUrl($destRegion);
+            $options['_region'] = $destRegion;
         }
         $response = $this->client->call(ucfirst(__FUNCTION__), $options);
         if ($response->getError() === false) {

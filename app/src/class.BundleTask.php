@@ -6,12 +6,10 @@ class ServerSnapshotDetails
 {
     public function getOsName()
     {
-
     }
 
     public function getSoftwareList()
     {
-
     }
 }
 
@@ -28,7 +26,7 @@ class BundleTask
     public $roleName;
     public $failureReason;
     public $bundleType;
-    public $removePrototypeRole;
+    public $removePrototypeRole; // deprecated, todo: remove
     public $dateAdded;
     public $dateStarted;
     public $dateFinished;
@@ -129,26 +127,25 @@ class BundleTask
         }
     }
 
+    /**
+     * Sets a timestamps according to a specified event
+     *
+     * @param   string   $dt  The name of event (finished | added | started)
+     */
     public function setDate($dt)
     {
         switch ($dt) {
             case "finished":
-
                 $this->dateFinished = date("Y-m-d H:i:s");
-
                 break;
 
             case "added":
-
                 $this->dateAdded = date("Y-m-d H:i:s");
-
                 break;
 
             case "started":
-
                 if (!$this->dateStarted)
                    $this->dateStarted = date("Y-m-d H:i:s");
-
                 break;
         }
     }
@@ -159,33 +156,25 @@ class BundleTask
 
         $n = $DBFarmRole->GetRoleObject()->name;
         preg_match('/^([A-Za-z0-9-]+)-([0-9]+)-([0-9]+)$/si', $n, $m);
-        if ($m[0] == $n)
-        {
-            if (date("Ymd") != $m[2])
-            {
+        if ($m[0] == $n) {
+            if (date("Ymd") != $m[2]) {
                 $name = "{$m[1]}-".date("Ymd")."-01";
                 $i = 1;
-            }
-            else
-            {
+            } else {
                 $s = $m[3]++;
                 $i = $s;
                 $s = ($s < 10) ? "0{$s}" : $s;
                 $name = "{$m[1]}-{$m[2]}-{$s}";
             }
-        }
-        else
-        {
+        } else {
             $name = "{$n}-".date("Ymd")."-01";
             $i = 1;
         }
 
         $role = $db->GetOne("SELECT id FROM roles WHERE name=? AND env_id=? LIMIT 1", array($name, $DBServer->envId));
-        if ($role)
-        {
-            while ($role)
-            {
-                   $i++;
+        if ($role) {
+            while ($role) {
+                $i++;
                 preg_match('/^([A-Za-z0-9-]+)-([0-9]+)-([0-9]+)$/si', $name, $m);
                 $s = ($i < 10) ? "0{$i}" : $i;
                 $name = "{$m[1]}-{$m[2]}-{$s}";
@@ -211,19 +200,31 @@ class BundleTask
         $image->bundleTaskId = $this->id;
         $image->platform = $this->platform;
         $image->cloudLocation = $this->cloudLocation;
+        $image->os = $os->name;
         $image->osFamily = $os->family;
+        $image->osGeneration = $os->generation;
         $image->osVersion = $os->version;
-        $image->osName = $os->name;
         $image->createdById = $this->createdById;
         $image->createdByEmail = $this->createdByEmail;
         $image->architecture = is_null($snapshot['os']->arch) ? 'x86_64' : $snapshot['os']->arch;
-        $image->isDeprecated = 0;
         $image->source = Image::SOURCE_BUNDLE_TASK;
-        $image->type = '';
         $image->status = Image::STATUS_ACTIVE;
         $image->agentVersion = $snapshot['szr_version'];
 
+        $image->checkImage();
+        if (!$image->name)
+            $image->name = $this->roleName . '-' . date('YmdHi');
+
         $image->save();
+
+        if ($snapshot['software']) {
+            $software = [];
+            foreach ((array) $snapshot['software'] as $soft)
+                $software[$soft->name] = $soft->version;
+
+            $image->setSoftware($software);
+        }
+
         return $image;
     }
 
@@ -261,7 +262,7 @@ class BundleTask
             case "centos":
                 $retval->family = $this->osFamily;
                 $retval->generation = (int)substr($this->osVersion, 0, 1);
-                $retval->version = $this->osVersion;
+                $retval->version = "{$retval->generation}.X";
                 $retval->name = "CentOS {$retval->version} Final";
                 break;
             case "amazon":
@@ -279,7 +280,7 @@ class BundleTask
             case "oel":
                 $retval->family = $this->osFamily;
                 $retval->generation = (int)substr($this->osVersion, 0, 1);
-                $retval->version = $this->osVersion;
+                $retval->version = "{$retval->generation}.X";
                 $retval->name = "Oracle Enterprise Linux Server {$this->osVersion}";
                 if ($retval->generation == 5)
                     $retval->name .= " Tikanga";
@@ -289,7 +290,7 @@ class BundleTask
             case "redhat":
                 $retval->family = $this->osFamily;
                 $retval->generation = (int)substr($this->osVersion, 0, 1);
-                $retval->version = $this->osVersion;
+                $retval->version = "{$retval->generation}.X";
                 $retval->name = "Redhat {$this->osVersion}";
                 if ($retval->generation == 5)
                     $retval->name .= " Tikanga";
@@ -299,7 +300,7 @@ class BundleTask
             case "scientific":
                 $retval->family = $this->osFamily;
                 $retval->generation = (int)substr($this->osVersion, 0, 1);
-                $retval->version = $this->osVersion;
+                $retval->version = "{$retval->generation}.X";
                 $retval->name = "Scientific {$this->osVersion}";
                 if ($retval->generation == 5)
                     $retval->name .= " Boron";
@@ -309,7 +310,7 @@ class BundleTask
             case "debian":
                 $retval->family = $this->osFamily;
                 $retval->generation = (int)substr($this->osVersion, 0, 1);
-                $retval->version = $this->osVersion;
+                $retval->version = "{$retval->generation}.X";
                 $retval->name = "Debian {$this->osVersion}";
                 if ($retval->generation == 5)
                     $retval->name .= " Lenny";
@@ -321,7 +322,7 @@ class BundleTask
         }
 
         return $retval;
-       }
+    }
 
     public function setMetaData($data)
     {
@@ -337,7 +338,9 @@ class BundleTask
         $this->status = SERVER_SNAPSHOT_CREATION_STATUS::CREATING_ROLE;
         $this->setMetaData($metaData);
 
-        $this->Log(sprintf(_("Snapshot creation complete. SnapshotID: '%s'. Bundle task status changed to: %s"),
+        $this->createImageEntity();
+
+        $this->Log(sprintf(_("Snapshot creation complete. ImageID: '%s'. Bundle task status changed to: %s"),
             $snapshotId, $this->status
         ));
 
@@ -346,9 +349,6 @@ class BundleTask
 
     public function SnapshotCreationFailed($failed_reason)
     {
-        if ($this->status == SERVER_SNAPSHOT_CREATION_STATUS::REPLACING_SERVERS)
-            $replacingServers = true;
-
         $this->status = SERVER_SNAPSHOT_CREATION_STATUS::FAILED;
 
         $this->failureReason = $failed_reason;
@@ -356,36 +356,16 @@ class BundleTask
         try {
             $dbServer = DBServer::LoadByID($this->serverId);
 
-            if ($replacingServers) {
-                try {
-                    $dbFarmRole = $dbServer->GetFarmRoleObject();
-
-                    $dbFarmRole->NewRoleID = NULL;
-                    $dbFarmRole->Save();
-
-                    $dbServer->roleId = $dbFarmRole->RoleID;
-                    $dbServer->Save();
-
-                    $this->Db->Execute("UPDATE servers SET status=? WHERE role_id = ? AND replace_server_id IS NOT NULL AND farm_roleid=?", array(
-                        SERVER_STATUS::PENDING_TERMINATE,
-                        $this->roleId,
-                        $dbFarmRole->ID
-                    ));
-
-                } catch (Exception $e) {
-                    //TODO:
-                }
-            }
-
-            /** Terminate server **/
+            //Terminate server
             if ($dbServer->status == SERVER_STATUS::TEMPORARY) {
                 try {
                     if (!$dbServer->GetProperty(SERVER_PROPERTIES::SZR_IMPORTING_LEAVE_ON_FAIL) && $dbServer->GetCloudServerID()) {
                         $this->Log(sprintf(_("Terminating temporary server...")));
                         $dbServer->terminate(DBServer::TERMINATE_REASON_TEMPORARY_SERVER_ROLE_BUILDER);
-                        $this->Log("Termination request has been sent");
+                        $this->Log(_("Termination request has been sent"));
                     }
-                } catch (Exception $e) {}
+                } catch (Exception $e) {
+                }
             }
 
             if ($dbServer->status == SERVER_STATUS::IMPORTING) {
@@ -393,6 +373,7 @@ class BundleTask
                 $dbServer->Remove();
             }
         } catch (Exception $e) {
+            $this->Log(sprintf(_("SnapshotCreationFailed raised error: %s"), $e->getMessage()));
         }
 
         $this->Log(sprintf(_("Snapshot creation failed. Reason: %s. Bundle task status changed to: %s"), $failed_reason, $this->status));
@@ -400,7 +381,8 @@ class BundleTask
         $this->Save();
     }
 
-    private function Unbind () {
+    private function Unbind()
+    {
         $row = array();
         foreach (self::$FieldPropertyMap as $field => $property) {
             $row[$field] = $this->{$property};
@@ -409,8 +391,8 @@ class BundleTask
         return $row;
     }
 
-    function Save () {
-
+    function Save()
+    {
         $row = $this->Unbind();
         unset($row['id']);
 
@@ -421,21 +403,20 @@ class BundleTask
             $set[] = "`$field` = ?";
             $bind[] = $value;
         }
+
         $set = join(', ', $set);
 
         try	{
             // Perform Update
             $bind[] = $this->id;
             $this->Db->Execute("UPDATE bundle_tasks SET $set WHERE id = ?", $bind);
-
         } catch (Exception $e) {
             throw new Exception ("Cannot save bundle task. Error: " . $e->getMessage(), $e->getCode());
         }
     }
 
     /**
-     *
-     * @param ServerSnapshotCreateInfo $ServerSnapshotCreateInfo
+     * @param  ServerSnapshotCreateInfo $ServerSnapshotCreateInfo
      * @return BundleTask
      */
     public static function Create(ServerSnapshotCreateInfo $ServerSnapshotCreateInfo, $isRoleBuilder = false)
@@ -449,24 +430,24 @@ class BundleTask
             farm_id		= ?,
             prototype_role_id	= ?,
             replace_type		= ?,
-            remove_proto_role	= ?,
             status		= ?,
             platform	= ?,
             rolename	= ?,
             description	= ?,
+            object = ?,
             cloud_location = ?
         ", array(
             $ServerSnapshotCreateInfo->DBServer->clientId,
             $ServerSnapshotCreateInfo->DBServer->envId,
             $ServerSnapshotCreateInfo->DBServer->serverId,
             $ServerSnapshotCreateInfo->DBServer->farmId,
-            $ServerSnapshotCreateInfo->DBServer->roleId,
+            $ServerSnapshotCreateInfo->DBServer->farmRoleId ? $ServerSnapshotCreateInfo->DBServer->GetFarmRoleObject()->RoleID : 0,
             $ServerSnapshotCreateInfo->replaceType,
-            (int)$ServerSnapshotCreateInfo->removePrototypeRole,
             (!$isRoleBuilder) ? SERVER_SNAPSHOT_CREATION_STATUS::PENDING : SERVER_SNAPSHOT_CREATION_STATUS::STARING_SERVER,
             $ServerSnapshotCreateInfo->DBServer->platform,
             $ServerSnapshotCreateInfo->roleName,
             $ServerSnapshotCreateInfo->description,
+            $ServerSnapshotCreateInfo->object,
             $ServerSnapshotCreateInfo->DBServer->GetCloudLocation()
         ));
 
@@ -475,13 +456,8 @@ class BundleTask
         $task = self::LoadById($bundleTaskId);
 
         $metaData = array();
-
-        if ($ServerSnapshotCreateInfo->rootVolumeSize)
-            $metaData['rootVolumeSize'] = $ServerSnapshotCreateInfo->rootVolumeSize;
-
-        if ($ServerSnapshotCreateInfo->noServersReplace)
-            $metaData['noServersReplace'] = 1;
-
+        if ($ServerSnapshotCreateInfo->rootBlockDeviceProperties)
+            $metaData['rootBlockDeviceProperties'] = $ServerSnapshotCreateInfo->rootBlockDeviceProperties;
 
         $task->setMetaData($metaData);
         $task->setDate('added');
@@ -522,12 +498,34 @@ class BundleTask
             throw new Exception(sprintf(_("Bundle task ID#%s not found in database"), $id));
 
         $task = new BundleTask($id);
-        foreach(self::$FieldPropertyMap as $k=>$v)
-        {
+        foreach (self::$FieldPropertyMap as $k => $v) {
             if (isset($taskinfo[$k]))
                 $task->{$v} = $taskinfo[$k];
         }
 
         return $task;
+    }
+
+    /**
+     * Cancels obsolete tasks
+     *
+     * @param int $limit
+     *
+     * @return int Returns number of cancelled tasks
+     */
+    public static function failObsoleteTasks($limit = null)
+    {
+        $db = \Scalr::getDb();
+
+        $limit = $limit ? "LIMIT {$limit}" : '';
+
+        $db->Execute("UPDATE `bundle_tasks` SET `status` = ? WHERE `dtadded` < NOW() - INTERVAL 3 DAY AND `status` NOT IN (?, ?, ?) {$limit};", [
+                SERVER_SNAPSHOT_CREATION_STATUS::FAILED,
+                SERVER_SNAPSHOT_CREATION_STATUS::SUCCESS,
+                SERVER_SNAPSHOT_CREATION_STATUS::FAILED,
+                SERVER_SNAPSHOT_CREATION_STATUS::CANCELLED
+        ]);
+
+        return $db->Affected_Rows();
     }
 }

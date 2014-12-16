@@ -10,7 +10,6 @@ use Scalr\Modules\Platforms\Cloudstack\CloudstackPlatformModule;
 use Scalr\Modules\Platforms\Ec2\Ec2PlatformModule;
 use Scalr\Modules\Platforms\Eucalyptus\EucalyptusPlatformModule;
 use Scalr\Modules\Platforms\GoogleCE\GoogleCEPlatformModule;
-use Scalr\Modules\Platforms\Nimbula\NimbulaPlatformModule;
 use Scalr\Modules\Platforms\Openstack\OpenstackPlatformModule;
 use Scalr\Modules\Platforms\Rackspace\RackspacePlatformModule;
 use Scalr\Service\CloudStack\CloudStack;
@@ -54,7 +53,6 @@ class Scalr_UI_Controller_Account2_Environments_Clouds extends Scalr_UI_Controll
             'ui/account2/environments/clouds/gce.js',
             'ui/account2/environments/clouds/cloudstack.js',
             'ui/account2/environments/clouds/openstack.js',
-            'ui/account2/environments/clouds/nimbula.js',
             'ui/account2/environments/clouds/rackspace.js',
             'ui/account2/environments/clouds/eucalyptus.js',
         ));
@@ -121,6 +119,50 @@ class Scalr_UI_Controller_Account2_Environments_Clouds extends Scalr_UI_Controll
         }
     }
 
+    private function checkVar2($name, $type, $requiredError = '', $trim = true, $base64encode = false, $fetchIfEmpty = false)
+    {
+        $varName = str_replace('.', '_', $name);
+
+        switch ($type) {
+            case 'string':
+                $value = $this->getParam($varName);
+                $value = $trim ? trim($value) : $value;
+                if (empty($value) && $fetchIfEmpty) {
+                    $value = $this->env->getPlatformConfigValue($name, true);
+                }
+                if (empty($value) && $requiredError) {
+                    $this->checkVarError[$name] = $requiredError;
+                }
+                return $value;
+            case 'password':
+                $value = $this->getParam($varName);
+                if ($value === '******' || empty($value) && $fetchIfEmpty) {
+                    $value = $this->env->getPlatformConfigValue($name, true);
+                }
+                if (empty($value) && $requiredError) {
+                    $this->checkVarError[$name] = $requiredError;
+                }
+                return $value;
+            case 'bool':
+                return $this->getParam($varName) ? 1 : 0;
+
+            case 'file':
+                if (!empty($_FILES[$varName]) && !empty($_FILES[$varName]['tmp_name']) && ($value = @file_get_contents($_FILES[$varName]['tmp_name'])) != '') {
+                    $value = $trim ? trim($value) : $value;
+                }
+
+                if (!empty($value)) {
+                    $value = $base64encode ? base64_encode($value) : $value;
+                } else if ($fetchIfEmpty){
+                    $value = $this->env->getPlatformConfigValue($name, true);
+                }
+                if (empty($value) && $requiredError) {
+                    $this->checkVarError[$name] = $requiredError;
+                }
+                return $value;
+        }
+    }
+
     public function xGetCloudParamsAction()
     {
         $this->response->data(array(
@@ -143,21 +185,30 @@ class Scalr_UI_Controller_Account2_Environments_Clouds extends Scalr_UI_Controll
                     $params[Ec2PlatformModule::CERTIFICATE] = $this->env->getPlatformConfigValue(Ec2PlatformModule::CERTIFICATE) != '' ? 'Uploaded' : '';
 
                     try {
-                        $params['arn'] = $this->env->aws('us-east-1')->getUserArn();
+                        if ($params[Ec2PlatformModule::ACCOUNT_TYPE] == Ec2PlatformModule::ACCOUNT_TYPE_CN_CLOUD)
+                            $params['arn'] = $this->env->aws('cn-north-1')->getUserArn();
+                        elseif ($params[Ec2PlatformModule::ACCOUNT_TYPE] == Ec2PlatformModule::ACCOUNT_TYPE_GOV_CLOUD)
+                            $params['arn'] = $this->env->aws('us-gov-west-1')->getUserArn();
+                        else
+                            $params['arn'] = $this->env->aws('us-east-1')->getUserArn();
                         //$params['username'] = $this->env->aws('us-east-1')->getUsername();
                     } catch (Exception $e) {}
 
                     break;
                 case SERVER_PLATFORMS::GCE:
                     $params[SERVER_PLATFORMS::GCE . '.is_enabled'] = true;
-                    $params[GoogleCEPlatformModule::CLIENT_ID] = $this->env->getPlatformConfigValue(GoogleCEPlatformModule::CLIENT_ID);
                     $params[GoogleCEPlatformModule::PROJECT_ID] = $this->env->getPlatformConfigValue(GoogleCEPlatformModule::PROJECT_ID);
-                    $params[GoogleCEPlatformModule::SERVICE_ACCOUNT_NAME] = $this->env->getPlatformConfigValue(GoogleCEPlatformModule::SERVICE_ACCOUNT_NAME);
-                    $params[GoogleCEPlatformModule::KEY] = $this->env->getPlatformConfigValue(GoogleCEPlatformModule::KEY) != '' ? 'Uploaded' : '';
+                    $jsonKey = $this->env->getPlatformConfigValue(GoogleCEPlatformModule::JSON_KEY);
+                    if (!empty($jsonKey)) {
+                        $params[GoogleCEPlatformModule::JSON_KEY] = 'Uploaded';
+                    } else {
+                        $params[GoogleCEPlatformModule::CLIENT_ID] = $this->env->getPlatformConfigValue(GoogleCEPlatformModule::CLIENT_ID);
+                        $params[GoogleCEPlatformModule::SERVICE_ACCOUNT_NAME] = $this->env->getPlatformConfigValue(GoogleCEPlatformModule::SERVICE_ACCOUNT_NAME);
+                        $params[GoogleCEPlatformModule::KEY] = $this->env->getPlatformConfigValue(GoogleCEPlatformModule::KEY) != '' ? 'Uploaded' : '';
+                    }
                     break;
                 case SERVER_PLATFORMS::CLOUDSTACK:
                 case SERVER_PLATFORMS::IDCF:
-                case SERVER_PLATFORMS::UCLOUD:
                     $params = $this->getCloudStackDetails($platform);
                     break;
                 case SERVER_PLATFORMS::OPENSTACK:
@@ -168,12 +219,6 @@ class Scalr_UI_Controller_Account2_Environments_Clouds extends Scalr_UI_Controll
                 case SERVER_PLATFORMS::OCS:
                 case SERVER_PLATFORMS::NEBULA:
                     $params = $this->getOpenStackDetails($platform);
-                    break;
-                case SERVER_PLATFORMS::NIMBULA:
-                    $params[SERVER_PLATFORMS::NIMBULA . '.is_enabled'] = true;
-                    $params[NimbulaPlatformModule::API_URL] = $this->env->getPlatformConfigValue(NimbulaPlatformModule::API_URL);
-                    $params[NimbulaPlatformModule::USERNAME] = $this->env->getPlatformConfigValue(NimbulaPlatformModule::USERNAME);
-                    $params[NimbulaPlatformModule::PASSWORD] = $this->env->getPlatformConfigValue(NimbulaPlatformModule::PASSWORD);
                     break;
                 case SERVER_PLATFORMS::RACKSPACE:
                     $rows = $this->db->GetAll('SELECT * FROM client_environment_properties WHERE env_id = ? AND name LIKE "rackspace.%" AND `group` != "" GROUP BY `group`', $this->env->id);
@@ -265,8 +310,16 @@ class Scalr_UI_Controller_Account2_Environments_Clouds extends Scalr_UI_Controll
                     $pars[Ec2PlatformModule::PRIVATE_KEY] != $this->env->getPlatformConfigValue(Ec2PlatformModule::PRIVATE_KEY) or
                     $pars[Ec2PlatformModule::CERTIFICATE] != $this->env->getPlatformConfigValue(Ec2PlatformModule::CERTIFICATE)
                 ) {
+
+                    if ($pars[Ec2PlatformModule::ACCOUNT_TYPE] == Ec2PlatformModule::ACCOUNT_TYPE_GOV_CLOUD)
+                        $region = \Scalr\Service\Aws::REGION_US_GOV_WEST_1;
+                    elseif ($pars[Ec2PlatformModule::ACCOUNT_TYPE] == Ec2PlatformModule::ACCOUNT_TYPE_CN_CLOUD)
+                        $region = \Scalr\Service\Aws::REGION_CN_NORTH_1;
+                    else
+                        $region = \Scalr\Service\Aws::REGION_US_EAST_1;
+
                     $aws = $this->env->aws(
-                        ($pars[Ec2PlatformModule::ACCOUNT_TYPE] == Ec2PlatformModule::ACCOUNT_TYPE_GOV_CLOUD ? \Scalr\Service\Aws::REGION_US_GOV_WEST_1 : \Scalr\Service\Aws::REGION_US_EAST_1),
+                        $region,
                         $pars[Ec2PlatformModule::ACCESS_KEY],
                         $pars[Ec2PlatformModule::SECRET_KEY],
                         !empty($pars[Ec2PlatformModule::CERTIFICATE]) ? $pars[Ec2PlatformModule::CERTIFICATE] : null,
@@ -288,7 +341,7 @@ class Scalr_UI_Controller_Account2_Environments_Clouds extends Scalr_UI_Controll
                     } catch (Exception $e) {
                         throw new Exception(sprintf(_("Failed to verify your EC2 access key and secret key: %s"), $e->getMessage()));
                     }
-
+                    
                     //Extract AWS Account ID
                     $pars[Ec2PlatformModule::ACCOUNT_ID] = $aws->getAccountNumber();
 
@@ -349,11 +402,25 @@ class Scalr_UI_Controller_Account2_Environments_Clouds extends Scalr_UI_Controll
         if ($this->getParam('gce_is_enabled')) {
             $enabled = true;
 
-            $pars[GoogleCEPlatformModule::CLIENT_ID] = trim($this->checkVar(GoogleCEPlatformModule::CLIENT_ID, 'string', "GCE Cient ID required"));
-            $pars[GoogleCEPlatformModule::SERVICE_ACCOUNT_NAME] = trim($this->checkVar(GoogleCEPlatformModule::SERVICE_ACCOUNT_NAME, 'string', "GCE email (service account name) required"));
-            $pars[GoogleCEPlatformModule::PROJECT_ID] = trim($this->checkVar(GoogleCEPlatformModule::PROJECT_ID, 'password', "GCE Project ID required"));
-            $pars[GoogleCEPlatformModule::KEY] = $this->checkVar(GoogleCEPlatformModule::KEY, 'file', "GCE Private Key required", '', true, '', true);
-
+            $pars[GoogleCEPlatformModule::PROJECT_ID] = $this->checkVar2(GoogleCEPlatformModule::PROJECT_ID, 'string', 'GCE Project ID required');
+            $isJsonKeySaved = $this->env->getPlatformConfigValue(GoogleCEPlatformModule::JSON_KEY);
+            if (!empty($_FILES[str_replace('.', '_', GoogleCEPlatformModule::JSON_KEY)])) {
+                //json key
+                $pars[GoogleCEPlatformModule::JSON_KEY] = $this->checkVar2(GoogleCEPlatformModule::JSON_KEY, 'file', 'JSON key required', false, false, $isJsonKeySaved);
+                if (!count($this->checkVarError)) {
+                    $jsonKey = json_decode($pars[GoogleCEPlatformModule::JSON_KEY], true);
+                    $jsonKey['private_key'] = str_replace(' PRIVATE KEY-----', ' RSA PRIVATE KEY-----', $jsonKey['private_key']);//see google-api-php-client-git-03102014/src/Google/Signer/P12.php line 46
+                    $pars[GoogleCEPlatformModule::CLIENT_ID] = $jsonKey['client_id'];
+                    $pars[GoogleCEPlatformModule::SERVICE_ACCOUNT_NAME] = $jsonKey['client_email'];
+                    $pars[GoogleCEPlatformModule::KEY] = base64_encode($jsonKey['private_key']);
+                }
+            } else {
+                //p12 key
+                $pars[GoogleCEPlatformModule::CLIENT_ID] = $this->checkVar2(GoogleCEPlatformModule::CLIENT_ID, 'string', 'GCE Cient ID required');
+                $pars[GoogleCEPlatformModule::SERVICE_ACCOUNT_NAME] = $this->checkVar2(GoogleCEPlatformModule::SERVICE_ACCOUNT_NAME, 'string', 'GCE email (service account name) required');
+                $pars[GoogleCEPlatformModule::KEY] = $this->checkVar2(GoogleCEPlatformModule::KEY, 'file', 'GCE Private Key required', false, true, !$isJsonKeySaved);
+                $pars[GoogleCEPlatformModule::JSON_KEY] = false;
+            }
             if (! count($this->checkVarError)) {
                 if (
                     $pars[GoogleCEPlatformModule::CLIENT_ID] != $this->env->getPlatformConfigValue(GoogleCEPlatformModule::CLIENT_ID) or
@@ -370,7 +437,8 @@ class Scalr_UI_Controller_Account2_Environments_Clouds extends Scalr_UI_Controll
                         $client->setAssertionCredentials(new Google_Auth_AssertionCredentials(
                             $pars[GoogleCEPlatformModule::SERVICE_ACCOUNT_NAME],
                             array('https://www.googleapis.com/auth/compute'),
-                            $key
+                            $key,
+                            $pars[GoogleCEPlatformModule::JSON_KEY] ? null : 'notasecret'
                         ));
 
                         //$client->setUseObjects(true);
@@ -420,11 +488,11 @@ class Scalr_UI_Controller_Account2_Environments_Clouds extends Scalr_UI_Controll
 
         try {
             $cs = new CloudStack(
-                    $params[CloudstackPlatformModule::API_URL],
-                    $params[CloudstackPlatformModule::API_KEY],
-                    $params[CloudstackPlatformModule::SECRET_KEY],
-                    $platform
-                );
+                $params[CloudstackPlatformModule::API_URL],
+                $params[CloudstackPlatformModule::API_KEY],
+                $params[CloudstackPlatformModule::SECRET_KEY],
+                $platform
+            );
 
             $params['_info'] = $cs->listCapabilities();
 
@@ -575,7 +643,7 @@ class Scalr_UI_Controller_Account2_Environments_Clouds extends Scalr_UI_Controll
                         'Volumes (Cinder)' => $os->hasService('volume'),
                         'Security groups (Nova)' => $os->servers->isExtensionSupported(ServersExtension::securityGroups()),
                         'Networking (Neutron)' => $os->hasService('network'),
-                        'Load balancing (Neutron LBaaS)' => $os->hasService('network') ? $os->network->isExtensionSupported('lbaas') : false,
+                        'Load balancing (Neutron LBaaS)' => (!in_array($platform, array(SERVER_PLATFORMS::RACKSPACENG_US, SERVER_PLATFORMS::RACKSPACENG_UK)) && $os->hasService('network')) ? $os->network->isExtensionSupported('lbaas') : false,
                         'Floating IPs (Nova)' => $os->servers->isExtensionSupported(ServersExtension::floatingIps()),
                         'Objects store (Swift)' => $os->hasService('object-store')
                     );
@@ -591,6 +659,7 @@ class Scalr_UI_Controller_Account2_Environments_Clouds extends Scalr_UI_Controll
                 }
             } catch (Exception $e) {
                 //TODO: Show in UI
+                $params['info']['exception'] = $e->getMessage();
             }
         }
 
@@ -685,7 +754,7 @@ class Scalr_UI_Controller_Account2_Environments_Clouds extends Scalr_UI_Controll
                 $pars[$this->getOpenStackOption('EXT_SWIFT_ENABLED')] = (int)$os->hasService('object-store');
 
                 // Check LBaas Extension
-                $pars[$this->getOpenStackOption('EXT_LBAAS_ENABLED')] = $os->hasService('network') ? (int)$os->network->isExtensionSupported('lbaas') : 0;
+                $pars[$this->getOpenStackOption('EXT_LBAAS_ENABLED')] = (!in_array($platform, array(SERVER_PLATFORMS::RACKSPACENG_US, SERVER_PLATFORMS::RACKSPACENG_UK)) && $os->hasService('network')) ? (int)$os->network->isExtensionSupported('lbaas') : 0;
             }
 
             $this->db->BeginTrans();
@@ -713,43 +782,6 @@ class Scalr_UI_Controller_Account2_Environments_Clouds extends Scalr_UI_Controll
             } catch (Exception $e) {
                 $this->db->RollbackTrans();
                 throw new Exception(_('Failed to save '.ucfirst($platform).' settings'));
-            }
-            $this->db->CommitTrans();
-        }
-    }
-
-    private function saveNimbula()
-    {
-        $pars = array();
-        $enabled = false;
-
-        if ($this->getParam('nimbula_is_enabled')) {
-            $enabled = true;
-
-            $pars[NimbulaPlatformModule::API_URL] = $this->checkVar(NimbulaPlatformModule::API_URL, 'string', 'API URL required');
-            $pars[NimbulaPlatformModule::USERNAME] = $this->checkVar(NimbulaPlatformModule::USERNAME, 'string', 'Username required');
-            $pars[NimbulaPlatformModule::PASSWORD] = $this->checkVar(NimbulaPlatformModule::PASSWORD, 'string', 'Password required');
-        }
-
-        if (count($this->checkVarError)) {
-            $this->response->failure();
-            $this->response->data(array('errors' => $this->checkVarError));
-        } else {
-            $this->db->BeginTrans();
-            try {
-                $this->env->enablePlatform(SERVER_PLATFORMS::NIMBULA, $enabled);
-
-                if ($enabled)
-                    $this->env->setPlatformConfig($pars);
-
-                if (! $this->user->getAccount()->getSetting(Scalr_Account::SETTING_DATE_ENV_CONFIGURED))
-                    $this->user->getAccount()->setSetting(Scalr_Account::SETTING_DATE_ENV_CONFIGURED, time());
-
-                $this->response->success('Cloud credentials have been ' . ($enabled ? 'saved' : 'removed from Scalr'));
-                $this->response->data(arraY('enabled' => $enabled));
-            } catch (Exception $e) {
-                $this->db->RollbackTrans();
-                throw new Exception(_('Failed to save Nimbula settings'));
             }
             $this->db->CommitTrans();
         }

@@ -2,6 +2,8 @@
 
 namespace Scalr\Util;
 
+use Closure;
+
 /**
  * ClosureInvoker
  *
@@ -11,7 +13,7 @@ namespace Scalr\Util;
 class ClosureInvoker
 {
     /**
-     * @var \Closure
+     * @var Closure
      */
     private $closure;
 
@@ -30,10 +32,10 @@ class ClosureInvoker
     /**
      * Constructor
      *
-     * @param   \Closure $closure The closure which needs to be invoked
+     * @param   Closure $closure The closure which needs to be invoked
      * @param   object   $object  optional The object
      */
-    public function __construct(\Closure $closure, $object = null)
+    public function __construct(Closure $closure, $object = null)
     {
         $this->closure = $closure;
         $this->object = $object;

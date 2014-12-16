@@ -118,7 +118,13 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.ec2', function (moduleParams) {
 
             this.down('[name="aws.aki_id"]').setValue(settings['aws.aki_id']);
             this.down('[name="aws.ari_id"]').setValue(settings['aws.ari_id']);
-            this.down('[name="aws.instance_name_format"]').setValue(settings['aws.instance_name_format']);
+
+            field = this.down('[name="aws.instance_name_format"]');
+            if (limits['aws.tags'] && Ext.Object.getSize(limits['aws.tags'].value)) {
+                field.setValueWithGovernance(settings['aws.instance_name_format'], limits['aws.tags'].value['Name']);
+            } else {
+                field.setValue(settings['aws.instance_name_format']);
+            }
 
             var clusterPlacementGroupReadOnly = !record.isEc2ClusterPlacementGroupVisible();
             field = this.down('[name="aws.cluster_pg"]');
@@ -136,9 +142,19 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.ec2', function (moduleParams) {
             this.down('[name="aws.enable_cw_monitoring"]').setDisabled(record.get('behaviors', true).match("cf_")).setValue(settings['aws.enable_cw_monitoring'] == 1);
 
             //additional tags
-            this.down('[name="aws.additional_tags"]').setValue(settings['aws.additional_tags'] || '');
-            this.down('#additionaltags')[!Ext.isEmpty(settings['aws.additional_tags']) ? 'expand' : 'collapse']();
-            
+            field = this.down('[name="aws.additional_tags"]');
+            if (limits['aws.tags'] !== undefined) {
+                field.setReadOnly(true);
+                field.setValue(limits['aws.tags'].value);
+            } else {
+                field.setReadOnly(false);
+                var tags = {};
+                Ext.Array.each((settings['aws.additional_tags']||'').replace(/(\r\n|\n|\r)/gm,'\n').split('\n'), function(tag){
+                    var pos = tag.indexOf('=');
+                    tags[tag.substring(0, pos)] = tag.substring(pos+1);
+                });
+                field.setValue(tags);
+            }
             this.resumeLayouts(true);
 
             //toggle governance icon before resumeLayouts causes wrong width calculation
@@ -166,7 +182,11 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.ec2', function (moduleParams) {
 			settings['aws.cluster_pg'] = me.down('[name="aws.cluster_pg"]').getValue();
             settings['aws.ebs_optimized'] = me.down('[name="aws.ebs_optimized"]').getValue() ? 1 : 0;
             settings['aws.enable_cw_monitoring'] = me.down('[name="aws.enable_cw_monitoring"]').getValue() ? 1 : 0; 
-			settings['aws.instance_name_format'] = me.down('[name="aws.instance_name_format"]').getValue();
+
+            field = me.down('[name="aws.instance_name_format"]');
+            if (!field.readOnly) {
+                settings['aws.instance_name_format'] = field.getValue();
+            }
 
             field = me.down('[name="aws.iam_instance_profile_arn"]');
             if (!field.readOnly) {
@@ -174,8 +194,14 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.ec2', function (moduleParams) {
             }
 
             //additional tags
-            settings['aws.additional_tags'] = me.down('[name="aws.additional_tags"]').getValue();
-			
+            field = me.down('[name="aws.additional_tags"]');
+            if (!field.readOnly) {
+                var tags = [];
+                Ext.Object.each(field.getValue(), function(key, value){
+                    tags.push(key + '=' + value);
+                });
+                settings['aws.additional_tags'] = tags.join('\n');
+            }
 			record.set('settings', settings);
 		},
         defaults: {
@@ -200,7 +226,8 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.ec2', function (moduleParams) {
                 emptyText: '{SCALR_FARM_NAME} -> {SCALR_ROLE_NAME} #{SCALR_INSTANCE_INDEX}',
                 flex: 1,
                 icons: {
-                    globalvars: true
+                    globalvars: true,
+                    governance: true
                 },
                 iconsPosition: 'outer'
             },{
@@ -317,30 +344,16 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.ec2', function (moduleParams) {
 				name: 'aws.enable_cw_monitoring',
 				boxLabel: 'Enable Detailed <a href="http://aws.amazon.com/cloudwatch/" target="_blank">CloudWatch</a> monitoring for instances of this role (1 min interval)'
             }]
-		}, {
+		},{
 			xtype: 'fieldset',
-            itemId: 'additionaltags',
-            title: 'Additional tags',
-            collapsible: true,
-            collapsed: true,
-            toggleOnTitleClick: true,
-			items: [{
-                xtype: 'container',
-                layout: {
-                    type: 'hbox',
-                    align: 'middle'
-                },
-                items: [{
-                    xtype: 'displayfield',
-                    value: 'One per line: name=value'
-                }]
-            },{
-				xtype: 'textarea',
-				name: 'aws.additional_tags',
-				icons: {
-	                globalvars: true
-	            }
-			}]
-		}]
+            cls: 'x-fieldset-separator-none',
+            title: 'Tags',
+            items: [{
+                xtype: 'ec2tagsfield',
+                itemId: 'additionaltags',
+                name: 'aws.additional_tags',
+                allowNameTag: false
+            }]
+        }]
 	});
 });

@@ -71,6 +71,15 @@ Scalr.regPage('Scalr.ui.core.governance.edit', function (loadParams, moduleParam
                 icons: {
                     globalvars: true
                 }
+            },{
+                name: 'general.chef',
+                title: 'Chef',
+                type: 'chef',
+                defaults: {
+                    value: '',
+                    servers: {}
+                },
+                subheader: 'Limit chef servers and environments.'
             }]
         },
         ec2: {
@@ -125,31 +134,19 @@ Scalr.regPage('Scalr.ui.core.governance.edit', function (loadParams, moduleParam
                 warning: 'List the names of all IAM instance profiles you want to ALLOW. Users will be limited to only these profiles in Farm Designer.<br/>' +
                          '<b>Choose profiles that ALREADY EXIST in your EC2 account. Scalr will NOT CREATE any new profiles.</b>',
                 emptyText: 'ex. Name1,Name2,...'
+            },{
+                name: 'aws.tags',
+                title: 'Tagging',
+                type: 'tags',
+                defaults: {
+                    value: {}
+                },
+                subheader: 'Define tags that should be automatically assigned to every EC2 instance and EBS volume. Enforcing this policy will prevent users from adding additional tags.',
+                warning: 'Global Variable Interpolation is supported for tag values <img src="'+Ext.BLANK_IMAGE_URL+'" class="x-icon-globalvars" style="vertical-align:top;position:relative;top:2px" />'
             }]
         }
     };
 
-    if (Scalr.flags['betaMode']) {
-        config['ec2']['options'].push({
-            name: 'aws.tags',
-            title: 'Tags',
-            type: 'tags',
-            alwaysEnabled: true,
-            defaultTags: {
-                'scalr-env-id': {value: '{SCALR_ENV_ID}', readOnly: true},
-                'scalr-owner': {value: '{SCALR_FARM_OWNER_EMAIL}', readOnly: true},
-                'scalr-farm-id': {value: '{SCALR_FARM_ID}', readOnly: true},
-                'scalr-farm-role-id': {value: '{SCALR_FARM_ROLE_ID}', readOnly: true},
-                'scalr-server-id': {value: '{SCALR_SERVER_ID}', readOnly: true},
-                'Name': {value: '{SCALR_FARM_NAME} -> {SCALR_FARM_ROLE_ALIAS} #{SCALR_SERVER_INDEX}'}
-            },
-            defaults: {
-                value: {}
-            },
-            subheader: 'Define tags that should be automatically assigned to every resource',
-            warning: 'Global Variable Interpolation is supported for tags values <img src="'+Ext.BLANK_IMAGE_URL+'" class="x-icon-globalvars" style="vertical-align:top;position:relative;top:2px" />'
-        });
-    }
     Ext.Object.each(moduleParams['platforms'], function(key, value){
         if (Scalr.isOpenstack(key, true)) {
             config[key] = {
@@ -200,7 +197,7 @@ Scalr.regPage('Scalr.ui.core.governance.edit', function (loadParams, moduleParam
 		items:[{
             xtype: 'grid',
             flex: 1,
-            maxWidth: 500,
+            maxWidth: 400,
             itemId: 'options',
             padding: '12 0',
             cls: 'x-grid-shadow x-panel-column-left x-grid-with-formfields x-grid-no-selection',
@@ -246,10 +243,10 @@ Scalr.regPage('Scalr.ui.core.governance.edit', function (loadParams, moduleParam
                 }
             },
             saveOption: function(enabled){
-                var value, limits,
+                var me = this, value, limits,
                     rightcol = panel.down('#rightcol'),
-                    record = this.getSelectionModel().getSelection()[0];
-                value = this.getSelectionModel().getSelection()[0].getData();
+                    record = me.getSelectionModel().getSelection()[0];
+                value = me.getSelectionModel().getSelection()[0].getData();
                 limits = rightcol.getOptionValue(value.config);
                 if (! limits)
                     return;
@@ -267,7 +264,11 @@ Scalr.regPage('Scalr.ui.core.governance.edit', function (loadParams, moduleParam
                         name: value.config.name,
                         value: Ext.encode(value.settings)
                     },
-                    success: function () {}
+                    success: function () {
+                        if (enabled !== undefined) {
+                            rightcol.setToolbar(enabled);
+                        }
+                    }
                 });
             }
         },{
@@ -282,11 +283,11 @@ Scalr.regPage('Scalr.ui.core.governance.edit', function (loadParams, moduleParam
             setTitle: function(header, subheader){
                 this.getComponent('title').update('<div class="x-fieldset-header-text" style="float:none">'+header + '</div>' + (subheader? '<div class="x-fieldset-header-description">' + subheader + '</div>' : ''));
             },
-            setToolbar: function(option){
+            setToolbar: function(enabled, alwaysEnabled){
                 var toolbar = this.getDockedComponent('toolbar');
-                toolbar.down('#save').setVisible(option.settings.enabled == 1 || option.config.alwaysEnabled).enable();
-                toolbar.down('#disable').setVisible(option.settings.enabled == 1 && !option.config.alwaysEnabled).enable();
-                toolbar.down('#enforce').setVisible(option.settings.enabled != 1 && !option.config.alwaysEnabled).enable();
+                toolbar.down('#save').setVisible(enabled == 1 || alwaysEnabled).enable();
+                toolbar.down('#disable').setVisible(enabled == 1 && !alwaysEnabled).enable();
+                toolbar.down('#enforce').setVisible(enabled != 1 && !alwaysEnabled).enable();
             },
             disableButtons: function() {
                 var toolbar = this.getDockedComponent('toolbar');
@@ -301,7 +302,7 @@ Scalr.regPage('Scalr.ui.core.governance.edit', function (loadParams, moduleParam
                 this.suspendLayouts();
                 this.currentItem = container.getComponent(option.config.type);
                 this.setTitle(option.config.title, option.config.subheader);
-                this.setToolbar(option);
+                this.setToolbar(option.settings.enabled, option.config.alwaysEnabled);
                 this.currentItem.setValues(option);
                 container.items.each(function(){
                     if (this.tab !== undefined) {
@@ -1082,167 +1083,169 @@ Scalr.regPage('Scalr.ui.core.governance.edit', function (loadParams, moduleParam
                     layout: 'fit',
                     maxWidth: maxFormWidth,
                     setValues: function(data){
-                        var limits = data.settings.limits,
-                            grid = this.down('grid'),
-                            savedTags = limits.value || {},
-                            savedTagsCount = Ext.Object.getSize(savedTags),
-                            tags = [];
-                        Ext.Object.each(data.config.defaultTags, function(tagName, tagData){
-                            if (tagData.readOnly && savedTags[tagName] === undefined || !tagData.readOnly && savedTagsCount === 0) {
-                                tags.push({
-                                    name: tagName,
-                                    value: tagData.value,
-                                    readOnly: tagData.readOnly
-                                });
-                            }
-                        });
-                        Ext.Object.each(savedTags, function(name, value){
-                            tags.push({
-                                name: name,
-                                value: value
-                            });
-                        });
-                        grid.store.loadData(tags);
+                        this.down('ec2tagsfield').setValue(data.settings.limits.value);
                     },
                     getValues: function(config){
-                        var valid = true,
-                            grid = this.down('grid'),
-                            cellEditing = grid.getPlugin('cellediting'),
-                            result = {};
-                        (grid.store.snapshot || grid.store.data).each(function(record){
-                            var name = record.get('name'),
-                                value = record.get('value');
-                            if (!name) {
-                                cellEditing.startEdit(record, 0);
-                                cellEditing.context.column.field.validate();
-                                valid = false;
-                                return false;
-                            } else if (!config.defaultTags[name] || config.defaultTags[name].value != value) {
-                                result[name] = value;
-                            }
-                        });
-                        return valid ? {value: result} : null;
+                        var grid = this.down('ec2tagsfield');
+                        return grid.isValid() ? {value: grid.getValue()} : null;
                     },
                     items: [{
-                        xtype: 'grid',
-                        flex: 1,
-                        cls: 'x-grid-shadow x-grid-no-highlighting',
-                        store: {
-                            fields: ['name', 'value', 'readOnly'],
-                            proxy: 'object'
-                        },
-                        features: {
-                            ftype: 'addbutton',
-                            text: 'Add new tag',
-                            maxCount: 10,
-                            handler: function(view) {
-                                view.up().store.add({});
+                        xtype: 'ec2tagsfield',
+                        flex: 1
+                    }]
+                },{
+                    xtype: 'container',
+                    hidden: true,
+                    tab: true,
+                    itemId: 'chef',
+                    flex: 1,
+                    layout: 'fit',
+                    maxWidth: maxFormWidth,
+                    setValues: function(data){
+                        var limits = data.settings.limits,
+                            serversField = this.down('#servers');
+
+                        this.suspendLayouts();
+
+                        serversField.addItems(Ext.Array.map(moduleParams['chef']['servers'], function(server){
+                            var serverId = server['id']+'',
+                                serverValue = limits['servers'][serverId] || {},
+                                ids = serverValue['environments'] || [];
+                            return {
+                                itemData: {
+                                    settings: {
+                                        id: serverId,
+                                        'default': serverValue['default'] || 0,
+                                        ids: ids,
+                                        url: server['url'],
+                                        level: server['level'],
+                                        enabled: limits['servers'][serverId] !== undefined ?  1 : 0
+                                    }
+                                }
+                            };
+                        }), false);
+                        this.resumeLayouts(true);
+                    },
+                    getValues: function(){
+                        var serversField = this.down('#servers'),
+                            value = {servers: {}};
+                        serversField.getItems().each(function(item){
+                            if (item.down('[name="enabled"]').getValue() === 1) {
+                                value.servers[item.itemData.settings.id] = {
+                                    'default': item.down('[name="default"]').getValue() ? 1 : 0,
+                                    environments: item.down('[name="ids"]').getValue()
+                                };
                             }
-                        },
-                        plugins: [
-                            Ext.create('Ext.grid.plugin.CellEditing', {
-                                pluginId: 'cellediting',
-                                clicksToEdit: 1,
+                        });
+                        Scalr.CachedRequestManager.get().setExpired({url: '/services/chef/servers/xListServers/'});
+                        return value;
+                    },
+                    items: [{
+                        xtype: 'notagridview',
+                        itemId: 'servers',
+                        columns: [{
+                            name: 'default',
+                            title: 'Default',
+                            header: {
+                                width: 74
+                            },
+                            defaultValue: 0,
+                            control: {
+                                xtype: 'radio',
+                                width: 54,
+                                margin: '0 0 0 20',
                                 listeners: {
-                                    beforeedit: function(editor, o) {
-                                        if (o.column.isEditable) {
-                                            return o.column.isEditable(o.record);
+                                    change: function(comp, value){
+                                        if (value) {
+                                            comp.ownerCt.down('[name="enabled"]').setValue(1);
                                         }
                                     }
                                 }
-                            })
-                        ],
-                        listeners: {
-                            viewready: function() {
-                                var view = this.view;
-                                cb = function() {
-                                    view.findFeature('addbutton').setDisabled((view.store.snapshot || view.store.data).length >= 10, 'Tags limit of 10 reached');
-                                }
-                                this.store.on({
-                                    add: cb,
-                                    remove: cb
-                                });
-                            },
-                            itemclick: function (view, record, item, index, e) {
-                                if (e.getTarget('img.x-icon-action-delete')) {
-                                    var selModel = view.getSelectionModel();
-                                    if (record === selModel.getLastFocused()) {
-                                        selModel.deselectAll();
-                                        selModel.setLastFocused(null);
-                                    }
-                                    view.store.remove(record);
-                                    if (!view.store.getCount()) {
-                                        view.up().store.add({});
-                                    }
-                                    return false;
-                                }
-                            }
-                        },
-                        columns: [{
-                            header: 'Name',
-                            sortable: false,
-                            resizable: false,
-                            dataIndex: 'name',
-                            flex: 1,
-                            editor: {
-                                xtype: 'textfield',
-                                editable: false,
-                                margin: '0 12 0 13',
-                                fixWidth: -25,
-                                maxLength: 127,
-                                //validateOnChange: false,
-                                allowBlank: false
-                            },
-                            isEditable: function(record) {
-                                return !record.get('readOnly');
-                            },
-                            renderer: function(value, meta, record, rowIndex, colIndex, store, grid) {
-                                var column = grid.panel.columns[colIndex],
-                                   valueEncoded = Ext.String.htmlEncode(value);
-                                return  '<div class="x-form-text" style="background:#fff;padding:2px 12px 3px 13px;text-overflow: ellipsis;overflow:hidden;cursor:text"  data-qtip="'+valueEncoded+'">'+
-                                            (record.get('readOnly') ? '<span style="color:#999">' + valueEncoded + '</span>' : valueEncoded) +
-                                        '</div>';
                             }
                         },{
-                            header: 'Value',
-                            sortable: false,
-                            resizable: false,
-                            dataIndex: 'value',
-                            flex: 2,
-                            editor: {
-                                xtype: 'textfield',
-                                editable: false,
-                                margin: '0 12 0 13',
-                                fixWidth: -25,
-                                maxLength: 255,
-                                //validateOnChange: false,
-                                allowBlank: false
+                            name: 'url',
+                            title: 'Chef server',
+                            width: 244,
+                            overflow: 'hidden',
+                            header: {
+                                width: 244
                             },
-                            isEditable: function(record) {
-                                return !record.get('readOnly');
+                            extendInitialConfig: function(config, itemData){
+                               config.level = itemData.settings.level;
                             },
-                            renderer: function(value, meta, record, rowIndex, colIndex, store, grid) {
-                                var column = grid.panel.columns[colIndex],
-                                    valueEncoded = Ext.String.htmlEncode(value);
-                                return  '<div class="x-form-text" style="background:#fff;padding:2px 12px 3px 13px;text-overflow: ellipsis;overflow:hidden;cursor:text"  data-qtip="'+valueEncoded+'">'+
-                                            (record.get('readOnly') ? '<span style="color:#999">' + valueEncoded + '</span>' : valueEncoded) +
-                                        '</div>';
+                            control:  {
+                                xtype: 'displayfield',
+                                width: 244,
+                                renderer: function(value) {
+                                    return '<div data-qtip="'+Ext.String.capitalize(this.level)+' scope" style="width:100%;overflow:hidden;white-space:nowrap;text-overflow:ellipsis"><img src="'+Ext.BLANK_IMAGE_URL+'" class="scalr-scope-'+this.level+'" />&nbsp;&nbsp;<span data-qtip="'+Ext.String.htmlEncode(value)+'">'+value + '</span></div>'
+                                }
                             }
                         },{
-                            renderer: function(value, meta, record, rowIndex, colIndex, store, grid) {
-                                var result = '<img style="cursor:pointer;margin-top:6px;';
-                                if (record.get('readOnly')) {
-                                    result += 'cursor:default;opacity:.4" width="16" height="16" class="x-icon-server-action x-icon-lock" title="This tag is used by Scalr and cannot be changed or removed"';
-                                } else {
-                                    result += '" width="15" height="15" class="x-icon-action x-icon-action-delete" title="Delete tag"';
-                                }
-                                result += ' src="'+Ext.BLANK_IMAGE_URL+'"/>';
-                                return result;
+                            name: 'enabled',
+                            title: 'Allowed',
+                            header: {
+                                width: 110
                             },
-                            width: 42,
-                            sortable: false,
-                            align:'left'
-
+                            defaultValue: 0,
+                            extendInitialConfig: function(config, itemData){
+                                //config.fieldLabel = itemData.settings.url;
+                            },
+                            control: {
+                                xtype: 'buttongroupfield',
+                                labelSeparator: '',
+                                width: 110,
+                                defaults: {
+                                    width: 40
+                                },
+                                items: [{
+                                    text: 'On',
+                                    value: 1
+                                },{
+                                    text: 'Off',
+                                    value: 0
+                                }],
+                                listeners: {
+                                    change: function(comp, value){
+                                        var fieldIds = comp.ownerCt.down('[name="ids"]');
+                                        fieldIds.setVisible(value === 1);
+                                        fieldIds.setValue(null);
+                                    },
+                                    beforetoggle: function(comp, value){
+                                        if (value === 0 && comp.ownerCt.ownerCt.down('[name="default"]').getValue()) {
+                                            Scalr.message.Warning('Default item can\'t be disabled.');
+                                            return false;
+                                        }
+                                    }
+                                }
+                            }
+                        },{
+                            name: 'ids',
+                            title: 'Allowed environments',
+                            header: {
+                                flex: 1
+                            },
+                            extendInitialConfig: function(config, itemData){
+                                config.hidden = itemData.settings.enabled !== 1;
+                                config.store.data = Ext.Array.map(itemData.settings.ids, function(id){return {id: id, name: id}});
+                                config.store.proxy.params = {servId: itemData.settings.id};
+                            },
+                            control: {
+                                xtype: 'comboboxselect',
+                                displayField: 'name',
+                                valueField: 'name',
+                                emptyText: 'No limits',
+                                columnWidth: 1,
+                                flex: 1,
+                                queryCaching: false,
+                                store: {
+                                    fields: ['name'],
+                                    proxy: {
+                                        type: 'cachedrequest',
+                                        crscope: 'governance',
+                                        url: '/services/chef/xListEnvironments/'
+                                    }
+                                }
+                            }
                         }]
                     }]
                 }]
@@ -1270,7 +1273,6 @@ Scalr.regPage('Scalr.ui.core.governance.edit', function (loadParams, moduleParam
                     text: 'Save & Enforce',
                     handler: function() {
                         panel.down('#options').saveOption(1);
-                        this.up('#rightcol').setToolbar(1);
                     }
                 }, {
                     xtype: 'button',
@@ -1278,7 +1280,6 @@ Scalr.regPage('Scalr.ui.core.governance.edit', function (loadParams, moduleParam
                     text: 'Disable policy',
                     handler: function() {
                         panel.down('#options').saveOption(0);
-                        this.up('#rightcol').setToolbar(0);
                     }
                 }, {
                     xtype: 'button',

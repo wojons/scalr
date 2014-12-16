@@ -1,167 +1,218 @@
-Scalr.regPage('Scalr.ui.servers.createsnapshot', function (loadParams, moduleParams) {
-    var iopsMin = 100, iopsMax = 400, maxEbsStorageSize = 1000;
-	return Ext.create('Ext.form.Panel', {
-		scalrOptions: {
-			'modal': true
-		},
-		width: 900,
-		title: 'Snapshot server to create a new role',
-		fieldDefaults: {
-			anchor: '100%'
-		},
+Scalr.regPage('Scalr.ui.servers.createsnapshot', function  (loadParams, moduleParams) {
+    return Ext.create('Ext.form.Panel', {
+        scalrOptions: {
+            'modal': true
+        },
+        width: 850,
+        title: 'Create server snapshot',
+        fieldDefaults: {
+            anchor: '100%',
+            labelWidth: 80
+        },
 
-		items: [{
-			xtype: 'displayfield',
-			cls: 'x-form-field-warning',
-			value: moduleParams['showWarningMessage'] || '',
-			hidden: ! moduleParams['showWarningMessage']
-		}, {
-			xtype: 'fieldset',
-			title: 'Server details',
-			items: [{
-				xtype: 'displayfield',
-				value: moduleParams['serverId'],
-				fieldLabel: 'Server ID'
-			}, {
-				xtype: 'displayfield',
-				value: moduleParams['farmId'],
-				fieldLabel: 'Farm ID'
-			}, {
-				xtype: 'displayfield',
-				value: moduleParams['farmName'],
-				fieldLabel: 'Farm name'
-			}, {
-				xtype: 'displayfield',
-				value: moduleParams['roleName'],
-				fieldLabel: 'Role name'
-			}]
-		}, {
-			xtype: 'fieldset',
-			title: 'Role replacement scope',
-            //hidden: Scalr.flags['betaMode'],
-			items: [{
-				xtype: 'radiogroup',
-				columns: 1,
-				hideLabel: true,
-				listeners: {
-					change: function (field, value) {
-						if (value['replaceType'] != 'no_replace')
-							this.next().show();
-						else
-							this.next().hide();
-					}
-				},
-				items: [{
-					name: 'replaceType',
-					boxLabel: moduleParams['replaceNoReplace'],
-                    checked: true,
-					inputValue: 'no_replace'
-				}, {
-					name: 'replaceType',
-					boxLabel: moduleParams['replaceFarmReplace'],
-					inputValue: 'replace_farm'
-				}, {
-					name: 'replaceType',
-					boxLabel: moduleParams['replaceAll'],
-					inputValue: 'replace_all'
-				}]
-			}, {
-				xtype: 'checkbox',
-				name: 'noServersReplace',
-				checked: moduleParams['dbSlave'],
-				readOnly: moduleParams['dbSlave'],
-                hidden: true,
-				boxLabel: 'Do not replace servers that are already running. Only NEW servers will be launched with the created role.'
-			}]
+        items: [{
+            xtype: 'displayfield',
+            cls: 'x-form-field-warning',
+            value: moduleParams['showWarningMessage'] || '',
+            hidden: !moduleParams['showWarningMessage']
+        }, {
+            xtype: 'container',
+            layout: 'hbox',
+            cls: 'x-fieldset-separator-bottom',
+            items: [{
+                xtype: 'fieldset',
+                cls: 'x-fieldset-separator-none',
+                flex: 1,
+                items: [{
+                    xtype: 'displayfield',
+                    value: moduleParams['serverId'],
+                    fieldLabel: 'Server ID'
+                }, {
+                    xtype: 'displayfield',
+                    value: moduleParams['farmId'],
+                    fieldLabel: 'Farm ID'
+                }, {
+                    xtype: 'displayfield',
+                    value: moduleParams['farmName'],
+                    fieldLabel: 'Farm name'
+                }]
+            }, {
+                xtype: 'fieldset',
+                cls: 'x-fieldset-separator-left',
+                margin: '0 0 0 12',
+                flex: 1,
+                defaults: {
+                    labelWidth: 100
+                },
+                items: [{
+                    xtype: 'displayfield',
+                    value: moduleParams['roleName'],
+                    fieldLabel: 'Role name'
+                }, {
+                    xtype: 'displayfield',
+                    value: moduleParams['cloudLocation'],
+                    fieldLabel: 'Cloud Location'
+                }, {
+                    xtype: 'displayfield',
+                    value: moduleParams['imageId'],
+                    fieldLabel: 'Image ID',
+                    icons: {
+                        question: true
+                    },
+                    iconsPosition: 'outer',
+                    questionTooltip: "This Server was launched using an Image that is no longer used in its Role's configuration.",
+                    listeners: {
+                        afterrender: function() {
+                            if (moduleParams['imageId'] != moduleParams['roleImageId'])
+                                this.toggleIcon('question', true);
+                        }
+                    }
+                }]
+            }]
         }, {
             xtype: 'fieldset',
-            //title: 'Replacement options',
-            hidden: !Scalr.flags['betaMode'],
+            checkboxToggle: true,
+            title: 'Create new Image',
             items: [{
-                xtype: 'hidden',
-                name: 'useNewReplacementOption',
-                value: true
+                xtype: 'textfield',
+                maxWidth: 450,
+                name: 'name',
+                itemId: 'name',
+                allowBlank: false,
+                vtype: 'rolename',
+                value: moduleParams['roleName'],
+                fieldLabel: 'Name'
             }, {
-                xtype: 'buttongroupfield',
-                name: 'replace2',
-                value: 'role',
-                items: [{
-                    text: 'Create new Role',
-                    value: 'role',
-                    width: 200
-                }, {
-                    text: 'Create new Image',
-                    value: 'image',
-                    width: 200
-                }],
+                xtype: 'checkbox',
+                name: 'replaceImage',
+                disabled: moduleParams['isSharedRole'],
+                boxLabel: 'Replace Image "' +
+                ((moduleParams['roleImageId'] != moduleParams['imageName']) ? (moduleParams['imageName'] + ' [' + moduleParams['roleImageId'] + ']') : moduleParams['roleImageId']) +
+                    '" on Role "' + moduleParams['roleName'] + '" with the newly created Image',
                 listeners: {
                     change: function(field, value) {
-                        this.next('#replaceRole')[value == 'role' ? 'show' : 'hide']();
-                        this.next('#replaceImage')[value == 'image' ? 'show' : 'hide']();
-                        this.next('#replaceImageWarning')[value == 'image' && this.next('#replaceImage').getValue() ? 'show' : 'hide']();
-                    }
-                }
-            }, {
-                xtype: 'checkbox',
-                boxLabel: 'Replace ' + moduleParams['roleName'] + ' with the new Role',
-                itemId: 'replaceRole',
-                listeners: {
-                    change: function (field, value) {
-                        this.up().next()
-
-                        if (value['replaceType'] != 'no_replace')
-                            this.next().show();
-                        else
-                            this.next().hide();
-                    }
-                }
-            }, {
-                xtype: 'checkbox',
-                boxLabel: 'Replace ' + moduleParams['imageId'] + ' on ' + moduleParams['roleName'] + ' with it',
-                itemId: 'replaceImage',
-                hidden: true,
-                listeners: {
-                    change: function (field, value) {
                         this.next()[value ? 'show' : 'hide']();
                     }
                 }
             }, {
                 xtype: 'displayfield',
-                itemId: 'replaceImageWarning',
-                hidden: true,
                 cls: 'x-form-field-warning',
-                value: 'Warning: this will affect all future instances of %Role Name% launched in %Image Location%'
-            }, {
-                xtype: 'checkbox',
-                name: 'noServersReplace2',
-                checked: moduleParams['dbSlave'],
-                readOnly: moduleParams['dbSlave'],
+                anchor: '100%',
                 hidden: true,
-                boxLabel: 'Do not replace servers that are already running. Only NEW servers will be launched with the created role.'
+                value: 'This will affect all future Servers of "' + moduleParams['roleName'] + '" Role launched in "' +
+                (moduleParams['cloudLocation'] ? moduleParams['cloudLocation'] : 'all locations') + '". Running Servers will not be affected.'
+            }],
+            listeners: {
+                boxready: function() {
+                    this.checkboxCmp.disable();
+                }
+            }
+        }, {
+            xtype: 'fieldset',
+            checkboxToggle: true,
+            checkboxName: 'createRole',
+            collapsed: true,
+            title: 'Also create new Role',
+            items: [{
+                xtype: 'textfield',
+                name: 'name',
+                fieldLabel: 'Name',
+                disabled: true,
+                vtype: 'rolename',
+                allowBlank: false,
+                maxWidth: 450,
+                listeners: {
+                    blur: function () {
+                        this.up('fieldset').prev().down('#name').setValue(this.getValue() + '-' + Ext.Date.format(new Date(), 'YmdHi'));
+                    }
+                }
+            }, {
+                xtype: 'textarea',
+                name: 'description',
+                maxWidth: 450,
+                height: 64,
+                fieldLabel: 'Description'
+            }, {
+                xtype: 'container',
+                layout: 'hbox',
+                items: [{
+                    xtype: 'checkbox',
+                    submitValue: false,
+                    itemId: 'replaceRole',
+                    boxLabel: 'Replace Role "' + moduleParams['roleName'] + '" with the newly created Role:',
+                    listeners: {
+                        change: function (field, value) {
+                            this.next().setDisabled(!value);
+                            this.up().next()[value ? 'show' : 'hide']();
+                        }
+                    }
+                }, {
+                    xtype: 'combo',
+                    store: [['farm', 'ONLY on the current Farm "' + moduleParams['farmName'] + '"'], ['all', 'on ALL Farms']],
+                    queryMode: 'local',
+                    allowBlank: false,
+                    disabled: true,
+                    flex: 1,
+                    minWidth: 200,
+                    editable: false,
+                    name: 'replaceRole',
+                    margin: '0 0 0 12'
+                }]
+            }, {
+                xtype: 'displayfield',
+                cls: 'x-form-field-warning',
+                anchor: '100%',
+                hidden: true,
+                value: 'Running Servers will not be affected'
+            }],
+            listeners: {
+                expand: function() {
+                    this.up('form').down('#create').setText('Create Image and Role');
+                    this.down('[name="name"]').enable();
+
+                    var field = this.prev().down('#name');
+                    field.disable();
+                    field.name = 'imageName';
+
+                    this.prev().down('[name="replaceImage"]').disable().setValue();
+                },
+                collapse: function() {
+                    this.up('form').down('#create').setText('Create Image');
+                    this.down('[name="name"]').disable();
+                    this.down('#replaceRole').setValue();
+
+                    var field = this.prev().down('#name');
+                    field.enable();
+                    field.name = 'name';
+
+                    if (! moduleParams['isSharedRole'])
+                        this.prev().down('[name="replaceImage"]').enable();
+                }
+            }
+        }, {
+            xtype: 'fieldset',
+            title: 'Role options',
+            itemId: 'roleOptions',
+            hidden: true,
+            //cls: 'x-fieldset-separator-none',
+            items: [{
+                xtype: 'textfield',
+                name: 'roleName',
+                value: moduleParams['roleName'],
+                fieldLabel: 'Role name'
+            }, {
+                xtype: 'textarea',
+                fieldLabel: 'Description',
+                name: 'roleDescription',
+                height: 100
             }]
         }, {
-			xtype: 'fieldset',
-			title: 'Role options',
-            cls: 'x-fieldset-separator-none',
-			items: [{
-				xtype: 'textfield',
-				name: 'roleName',
-				value: moduleParams['roleName'],
-				fieldLabel: 'Role name'
-			}, {
-				xtype: 'textarea',
-				fieldLabel: 'Description',
-				name: 'roleDescription',
-				height: 100
-        	}]
-        }, Scalr.flags['betaMode'] ? {
-            xtype:'fieldset',
+            xtype: 'fieldset',
             title: 'Root EBS options',
-            cls: 'x-fieldset-separator-top',
-            hidden: !(moduleParams['platform'] == 'ec2' && moduleParams['isVolumeSizeSupported'] == 1),
+            hidden: !moduleParams['isVolumeSizeSupported'],
             defaults: {
                 anchor: '100%',
-                maxWidth: 480
+                maxWidth: 450
             },
             items: [{
                 xtype: 'fieldcontainer',
@@ -171,16 +222,16 @@ Scalr.regPage('Scalr.ui.servers.createsnapshot', function (loadParams, modulePar
                     xtype: 'textfield',
                     name: 'rootVolumeSize',
                     width: 100,
-                    validator: function(value) {
+                    validator: function (value) {
                         var form = this.up('form');
                         var minValue = 1;
                         if (value) {
                             if (form.down('[name="rootVolumeType"]').getValue() === 'io1') {
-                                minValue = Math.ceil(form.down('[name="rootVolumeIops"]').getValue()*1/10);
+                                minValue = Scalr.utils.getMinStorageSizeByIops(form.down('[name="rootVolumeIops"]').getValue());
                             }
-                            if (value*1 > maxEbsStorageSize) {
-                                return 'Maximum value is ' + maxEbsStorageSize + '.';
-                            } else if (value*1 < minValue) {
+                            if (value * 1 > Scalr.constants.ebsMaxStorageSize) {
+                                return 'Maximum value is ' + Scalr.constants.ebsMaxStorageSize + '.';
+                            } else if (value * 1 < minValue) {
                                 return 'Minimum value is ' + minValue + '.';
                             }
                         }
@@ -194,15 +245,17 @@ Scalr.regPage('Scalr.ui.servers.createsnapshot', function (loadParams, modulePar
             }, {
                 xtype: 'fieldcontainer',
                 layout: 'hbox',
+                hidden: !moduleParams['isVolumeTypeSupported'],
+                disabled: !moduleParams['isVolumeTypeSupported'],
                 fieldLabel: 'EBS type',
                 items: [{
                     xtype: 'combo',
-                    store: [['standard', 'Standard EBS (Magnetic)'],['gp2', 'General Purpose (SSD)'], ['io1', 'Provisioned IOPS (' + iopsMin + ' - ' + iopsMax + '): ']],
+                    store: Ext.Array.merge([['', '']], Scalr.constants.ebsTypes),
                     valueField: 'id',
                     displayField: 'name',
                     editable: false,
                     queryMode: 'local',
-                    value: 'standard',
+                    value: '',
                     name: 'rootVolumeType',
                     flex: 1,
                     listeners: {
@@ -225,52 +278,32 @@ Scalr.regPage('Scalr.ui.servers.createsnapshot', function (loadParams, modulePar
                     hidden: true,
                     disabled: true,
                     margin: '0 0 0 5',
-                    maskRe: new RegExp('[0123456789]', 'i'),
-                    validator: function(value){
-                        if (value*1 > iopsMax) {
-                            return 'Maximum value is ' + iopsMax + '.';
-                        } else if (value*1 < iopsMin) {
-                            return 'Minimum value is ' + iopsMin + '.';
-                        }
-                        return true;
-                    },
+                    vtype: 'iops',
+                    allowBlank: false,
                     flex: 1,
                     maxWidth: 60
                 }]
             }]
-        } : {
-            xtype: 'fieldcontainer',
-            fieldLabel: 'Root EBS size',
-            layout: 'hbox',
-            margin: '0 0 0 32',
-            items: [{
-                xtype: 'textfield',
-                name: 'rootVolumeSize',
-                width: 100
-            }, {
-                padding: '0 0 0 5',
-                xtype: 'displayfield',
-                value: 'GB (Leave blank for default value)'
-            }],
-            hidden: !(moduleParams['platform'] == 'ec2' && moduleParams['isVolumeSizeSupported'] == 1)
         }, {
             xtype: 'hidden',
             name: 'serverId',
             value: moduleParams['serverId']
-		}],
+        }],
 
-		dockedItems: [{
-			xtype: 'container',
-			dock: 'bottom',
-			cls: 'x-docked-buttons',
-			layout: {
-				type: 'hbox',
-				pack: 'center'
-			},
-			items: [{
-				xtype: 'button',
-				text: 'Create role',
-				handler: function() {
+        dockedItems: [{
+            xtype: 'container',
+            dock: 'bottom',
+            cls: 'x-docked-buttons',
+            layout: {
+                type: 'hbox',
+                pack: 'center'
+            },
+            items: [{
+                xtype: 'button',
+                itemId: 'create',
+                text: 'Create Image',
+                width: 200,
+                handler: function () {
                     var frm = this.up('form').getForm();
                     if (frm.isValid()) {
                         Scalr.Request({
@@ -284,14 +317,15 @@ Scalr.regPage('Scalr.ui.servers.createsnapshot', function (loadParams, modulePar
                             }
                         });
                     }
-				}
-			}, {
-				xtype: 'button',
-				text: 'Cancel',
-				handler: function() {
-					Scalr.event.fireEvent('close');
-				}
-			}]
-		}]
-	});
+                }
+            }, {
+                xtype: 'button',
+                text: 'Cancel',
+                width: 200,
+                handler: function () {
+                    Scalr.event.fireEvent('close');
+                }
+            }]
+        }]
+    });
 });

@@ -410,7 +410,6 @@ class RdsTest extends AwsTestCase
      */
     public function testFunctionalFast($clientType)
     {
-        $this->markTestSkipped();
         $this->skipIfEc2PlatformDisabled();
 
         $aws = $this->getContainer()->aws(AwsTestCase::REGION);

@@ -102,7 +102,7 @@ class S3QueryClientTest extends AwsTestCase
                     'Date'         => 'Tue, 27 Mar 2007 21:06:08 +0000',
                     'x-amz-acl'    => 'public-read',
                     'Content-Type' => 'application/x-download',
-                    'Content-MD5'  => '4gJE4saaMU4BqNR0kLY+lw==',
+                    'Content-Md5'  => '4gJE4saaMU4BqNR0kLY+lw==',
                     'X-Amz-Meta-ReviewedBy'        => 'joe@johnsmith.net,jane@johnsmith.net',
                     'X-Amz-Meta-FileChecksum'      => '0x02661779',
                     'X-Amz-Meta-ChecksumAlgorithm' => 'crc32',
@@ -177,17 +177,34 @@ class S3QueryClientTest extends AwsTestCase
             ->with($this->equalTo('https://' . $host))
         ;
         $httpStub
+            ->expects($this->any())
+            ->method('getUrl')
+            ->will($this->returnValue('https://' . $host))
+        ;
+        $httpStub
             ->expects($this->once())
             ->method('setMethod')
             ->with($this->equalTo(isset($action) ? constant('HTTP_METH_' . $action) : constant('HTTP_METH_GET')))
         ;
         $httpStub
-            ->expects($this->once())
+            ->expects($this->any())
+            ->method('getMethod')
+            ->will($this->returnValue(isset($action) ? constant('HTTP_METH_' . $action) : constant('HTTP_METH_GET')))
+        ;
+        $httpStub
+            ->expects($this->any())
+            ->method('getHeaders')
+            ->will($this->returnValue($options))
+        ;
+        $httpStub
+            ->expects($this->any())
             ->method('addHeaders')
             ->with(
-                $this->logicalAnd(
-                    $this->arrayHasKey('Authorization'),
-                    new ArrayHas($this->equalTo($authorizationValue), 'Authorization')
+                $this->logicalOr(
+                    $this->logicalNot($this->arrayHasKey('Authorization')),
+                    $this->logicalAnd(
+                        $this->arrayHasKey('Authorization'), new ArrayHas($this->equalTo($authorizationValue), 'Authorization')
+                    )
                 )
             )
         ;

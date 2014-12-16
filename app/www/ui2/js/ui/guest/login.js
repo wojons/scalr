@@ -200,7 +200,7 @@ Scalr.regPage('Scalr.ui.guest.login', function (loadParams, moduleParams) {
                                 }*/
 
                                 if (data.specialToken) {
-                                    Ext.Ajax.extraParams['X-Requested-Token'] = Scalr.flags.specialToken = data.specialToken;
+                                    Scalr.utils.saveSpecialToken(data.specialToken);
                                 }
 
                                 if (Scalr.user.userId && (data.userId == Scalr.user.userId)) {
@@ -279,7 +279,9 @@ Scalr.regPage('Scalr.ui.guest.login', function (loadParams, moduleParams) {
                     else
                         Scalr.event.fireEvent('close', true);
 				} else {
-					Scalr.event.fireEvent('lock', true);
+                     if (!Scalr.state.pageSuspend) {
+                        Scalr.event.fireEvent('lock', true);
+                    }
 					this.down('[name="scalrLogin"]').focus();
 				}
 			}

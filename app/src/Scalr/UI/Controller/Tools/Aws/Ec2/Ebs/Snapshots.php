@@ -63,11 +63,12 @@ class Scalr_UI_Controller_Tools_Aws_Ec2_Ebs_Snapshots extends Scalr_UI_Controlle
     {
         $this->request->defineParams(array(
             'volumeId',
-            'cloudLocation'
+            'cloudLocation',
+            'description'
         ));
 
         $aws = $this->getEnvironment()->aws($this->getParam('cloudLocation'));
-        $snapshot = $aws->ec2->snapshot->create($this->getParam('volumeId'));
+        $snapshot = $aws->ec2->snapshot->create($this->getParam('volumeId'), $this->getParam('description'));
 
         if (isset($snapshot->snapshotId)) {
             /* @var $volume \Scalr\Service\Aws\Ec2\DataType\VolumeData */

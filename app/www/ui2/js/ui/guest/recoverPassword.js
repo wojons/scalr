@@ -1,6 +1,5 @@
 Scalr.regPage('Scalr.ui.guest.recoverPassword', function (loadParams, moduleParams) {
 	return Ext.create('Ext.panel.Panel', {
-		title: 'Recover password',
 		width: 420,
 		scalrOptions: {
 			modal: true
@@ -8,6 +7,8 @@ Scalr.regPage('Scalr.ui.guest.recoverPassword', function (loadParams, modulePara
 		layout: 'anchor',
 		items: [{
 			xtype: 'fieldset',
+            cls: 'x-fieldset-separator-none x-fieldset-no-bottom-padding',
+            title: 'Recover password',
 			items: {
 				xtype: 'textfield',
 				fieldLabel: 'E-mail',
@@ -29,7 +30,7 @@ Scalr.regPage('Scalr.ui.guest.recoverPassword', function (loadParams, modulePara
 			},
 			items: [{
 				xtype: 'button',
-				text: 'Send me new password',
+				text: 'Reset my password',
                 width: 180,
 				handler: function () {
 					if (this.up('panel').down('[name="email"]').validate()) {
@@ -61,7 +62,7 @@ Scalr.regPage('Scalr.ui.guest.recoverPassword', function (loadParams, modulePara
 			activate: function () {
 				if (Scalr.user.userId && !Scalr.state.userNeedLogin) {
 					Scalr.event.fireEvent('close', true);
-				} else {
+				} else if (!Scalr.state.pageSuspend) {
 					Scalr.event.fireEvent('lock', true);
 				}
 			}

@@ -6,6 +6,7 @@ use Scalr\Service\Aws\Client\ClientException;
 use Scalr\Service\Aws\DataType\ListDataType;
 use Scalr\Service\Eucalyptus;
 use Scalr\Service\Aws\Ec2\DataType\RegionInfoList;
+use Scalr\Service\Aws;
 
 /**
  * Amazon EC2 interface
@@ -62,6 +63,15 @@ class Ec2 extends AbstractService implements ServiceInterface
 
     /**
      * {@inheritdoc}
+     * @see \Scalr\Service\Aws\AbstractService::getName()
+     */
+    public function getName()
+    {
+        return 'ec2';
+    }
+
+    /**
+     * {@inheritdoc}
      * @see Scalr\Service\Aws.ServiceInterface::getAllowedEntities()
      */
     public function getAllowedEntities()
@@ -115,7 +125,11 @@ class Ec2 extends AbstractService implements ServiceInterface
                 $region = $aws->getRegion();
             }
         }
-        return 'ec2' . (empty($region) ? '' : '.' . $region) . '.amazonaws.com';
+
+        if ($region == Aws::REGION_CN_NORTH_1)
+            return 'ec2.' . $region . '.amazonaws.com.cn';
+        else
+            return 'ec2' . (empty($region) ? '' : '.' . $region) . '.amazonaws.com';
     }
 
     /**

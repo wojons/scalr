@@ -402,44 +402,6 @@ class Scalr_UI_Controller
                 throw new Scalr_UI_Exception_NotFound();
         }
 
-        /*
-         * Debug action section
-         * Controller::Action => array of filter's params (accountId, userId) or true
-         */
-        $debug = false;
-        $debugMode = false;
-        $key = get_class($this) . '::' . $method;
-
-        if ($debug && array_key_exists($key, $debug)) {
-            $value = $debug[$key];
-
-            if (is_array($value) && $this->user) {
-                if (isset($value['accountId'])) {
-                    if (is_array($value['accountId']) && in_array($this->user->getAccountId(), $value['accountId']))
-                        $debugMode = true;
-
-                    if (is_numeric($value['accountId']) && $value['accountId'] == $this->user->getAccountId())
-                        $debugMode = true;
-                }
-
-                if (isset($value['userId'])) {
-                    if (is_array($value['userId']) && in_array($this->user->getId(), $value['userId']))
-                        $debugMode = true;
-
-                    if (is_numeric($value['userId']) && $value['userId']== $this->user->getId())
-                        $debugMode = true;
-                }
-            } else {
-                $debugMode = true;
-            }
-        }
-
-        if ($debugMode) {
-            $this->response->debugLog('Server', $_SERVER);
-            $this->response->debugLog('Request', $_REQUEST);
-            $this->response->debugLog('Session', Scalr_Session::getInstance());
-        }
-
         $reflection = new ReflectionMethod($this, $method);
         if ($reflection->getNumberOfParameters()) {
             $params = array();
@@ -505,29 +467,6 @@ class Scalr_UI_Controller
         } else {
             $this->{$method}();
         }
-
-        if ($debugMode) {
-            if ($this->response->jsResponseFlag) {
-                $this->response->debugLog('JS Response', $this->response->jsResponse);
-            }
-
-            try {
-                $message = '';
-                foreach($this->response->serverDebugLog as $value) {
-                    $message .= $value['key'] . ":\n" . $value['value'] . "\n\n";
-                }
-
-                $this->db->Execute('INSERT INTO ui_debug_log (ipaddress, url, report, env_id, account_id, user_id) VALUES(?, ?, ?, ?, ?, ?)', array(
-                    $this->request->getClientIp(),
-                    $key,
-                    $message,
-                    $this->getEnvironment() ? $this->getEnvironmentId() : 0,
-                    $this->user ? $this->user->getAccountId() : 0,
-                    $this->user ? $this->user->getId() : 0
-                ));
-
-            } catch(Exception $e) {}
-        }
     }
 
     public function addUiCacheKeyPatternChunk($chunk)
@@ -587,6 +526,7 @@ class Scalr_UI_Controller
             Scalr_UI_Response::getInstance()->setHttpResponseCode(404);
 
         } catch (ADODB_Exception $e) {
+            Scalr_UI_Response::getInstance()->debugException($e);
             try {
                 $db = Scalr::getDb();
                 $user = Scalr_UI_Request::getInstance()->getUser();
@@ -613,6 +553,7 @@ class Scalr_UI_Controller
             if (get_class($e) == 'Scalr_Exception_LimitExceeded')
                 $rawHtml = true;
 
+            Scalr_UI_Response::getInstance()->debugException($e);
             Scalr_UI_Response::getInstance()->failure($e->getMessage(), $rawHtml);
         }
 

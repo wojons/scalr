@@ -206,9 +206,138 @@ Scalr.regPage('Scalr.ui.db.manager.dashboard', function (loadParams, moduleParam
                         ui: 'flag',
                         cls: 'x-btn-flag-increase',
                         margin: '0 0 0 5',
-                        tooltip: 'Increase storage size',
+                        tooltip: Scalr.flags['betaMode'] ? 'Change storage settings' : 'Increase storage size',
                         handler: function(){
-                            var data = this.up('form').moduleParams;
+                            var data = this.up('form').moduleParams,
+                                currentEbsSettings = data['storage']['ebs_settings'];
+                            Scalr.flags['betaMode'] && currentEbsSettings ?
+                                Scalr.Confirm({
+                                    form: {
+                                        xtype: 'fieldset',
+                                        cls: 'x-fieldset-separator-none x-fieldset-no-bottom-padding',
+                                        title: 'Change storage configuration',
+                                        items: [{
+                                            xtype: 'container',
+                                            layout: 'hbox',
+                                            items: [{
+                                                xtype: 'combo',
+                                                store: Scalr.constants.ebsTypes,
+                                                fieldLabel: 'EBS type',
+                                                valueField: 'id',
+                                                displayField: 'name',
+                                                editable: false,
+                                                queryMode: 'local',
+                                                name: 'volumeType',
+                                                width: 340,
+                                                value: currentEbsSettings['volumeType'],
+                                                listeners: {
+                                                    change: function (comp, value) {
+                                                        var form = comp.up('form'),
+                                                            iopsField = form.down('[name="iops"]');
+                                                        iopsField.setVisible(value === 'io1').setDisabled(value !== 'io1');
+                                                        if (value === 'io1') {
+                                                            iopsField.reset();
+                                                            iopsField.setValue(100);
+                                                        } else {
+                                                            form.down('[name="size"]').isValid();
+                                                        }
+                                                    }
+                                                }
+                                            }, {
+                                                xtype: 'textfield',
+                                                name: 'iops',
+                                                vtype: 'iops',
+                                                allowBlank: false,
+                                                hidden: currentEbsSettings['volumeType'] != 'io1',
+                                                disabled: currentEbsSettings['volumeType'] != 'io1',
+                                                margin: '0 0 0 6',
+                                                width: 50,
+                                                value: currentEbsSettings['iops'],
+                                                listeners: {
+                                                    change: function(comp, value){
+                                                        var form = comp.up('form'),
+                                                            sizeField = form.down('[name="size"]');
+                                                        if (comp.isValid() && comp.prev().getValue() === 'io1') {
+                                                            var minSize = Scalr.utils.getMinStorageSizeByIops(value);
+                                                            if (sizeField.getValue()*1 < minSize) {
+                                                                sizeField.setValue(minSize);
+                                                            }
+                                                        }
+                                                    }
+                                                }
+
+                                            }]
+                                        }, {
+                                            xtype: 'container',
+                                            layout: {
+                                                type: 'hbox',
+                                                align: 'middle'
+                                            },
+                                            items: [{
+                                                xtype: 'textfield',
+                                                name: 'size',
+                                                fieldLabel: 'Storage size',
+                                                width: 215,
+                                                value: currentEbsSettings['size'],
+                                                vtype: 'num',
+                                                validator: function(value){
+                                                    var minValue = 1,
+                                                        form = this.up('form');
+                                                    if (form.down('[name="volumeType"]').getValue() === 'io1') {
+                                                        minValue = Scalr.utils.getMinStorageSizeByIops(form.down('[name="iops"]').getValue());
+                                                    }
+                                                    if (value*1 > Scalr.constants.ebsMaxStorageSize) {
+                                                        return 'Maximum value is ' + Scalr.constants.ebsMaxStorageSize + '.';
+                                                    } else if (value*1 < minValue) {
+                                                        return 'Minimum value is ' + minValue + '.';
+                                                    }
+                                                    return true;
+                                                }
+                                            },{
+                                                xtype: 'label',
+                                                text: 'GB',
+                                                margin: '0 0 0 6'
+                                            }]
+                                        }]
+                                    },
+                                    formWidth:480,
+                                    ok: 'Save',
+                                    closeOnSuccess: true,
+                                    success: function (formValues, form) {
+                                        if (form.isValid()) {
+                                            var growConfig = {};
+                                            Ext.Object.each(formValues, function(name, value){
+                                                if (!currentEbsSettings[name] || value != currentEbsSettings[name]) {
+                                                    growConfig[name] = value;
+                                                }
+                                            });
+                                            if (Ext.Object.getSize(growConfig) > 0) {
+                                                if (growConfig['size'] !== undefined) {
+                                                    growConfig['newSize'] = growConfig['size'];
+                                                    delete growConfig['size'];
+                                                }
+                                                Scalr.Request({
+                                                    processBox: {
+                                                        type: 'action',
+                                                        msg: 'Processing ...'
+                                                    },
+                                                    url: '/db/manager/xChangeStorageSettings/',
+                                                    params: Ext.apply(growConfig, {
+                                                        farmRoleId: data['farmRoleId']
+                                                    }),
+                                                    success: function(data){
+                                                        Scalr.message.Success("Storage settings change has been successfully initiated");
+                                                        Scalr.event.fireEvent('redirect', '#/operations/' + data['operationId'] + '/details');
+                                                    }
+                                                });
+
+                                            }
+                                            return true;
+                                        }
+
+                                    }
+                                })
+                            :
                             Scalr.Request({
                                 confirmBox: {
                                     type: 'action',

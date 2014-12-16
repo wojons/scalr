@@ -119,4 +119,11 @@ class PlatformFactory
         return in_array($platform, self::getPublicPlatforms());
     }
 
+    /**
+     * Clears static cache
+     */
+    public static function warmup()
+    {
+        self::$cache = [];
+    }
 }

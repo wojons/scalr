@@ -112,13 +112,15 @@ class EbsObserver extends \EventObserver
      */
     public function OnEBSVolumeMounted(\EBSVolumeMountedEvent $event)
     {
-        $DBEBSVolume = \DBEBSVolume::loadByVolumeId($event->VolumeID);
-
-        $DBEBSVolume->mountStatus = \EC2_EBS_MOUNT_STATUS::MOUNTED;
-        $DBEBSVolume->deviceName = $event->DeviceName;
-        $DBEBSVolume->isFsExists = 1;
-
-        $DBEBSVolume->save();
+        try {
+            $DBEBSVolume = \DBEBSVolume::loadByVolumeId($event->VolumeID);
+    
+            $DBEBSVolume->mountStatus = \EC2_EBS_MOUNT_STATUS::MOUNTED;
+            $DBEBSVolume->deviceName = $event->DeviceName;
+            $DBEBSVolume->isFsExists = 1;
+    
+            $DBEBSVolume->save();
+        } catch (\Exception $e) {}
     }
 
     /**

@@ -36,6 +36,7 @@ class AnalyticsNotificationsProcess implements \Scalr\System\Pcntl\ProcessInterf
         }
 
         $this->console->out("%s (UTC) Start Analytics Notifications process", gmdate('Y-m-d'));
+        $baseUrl = rtrim(\Scalr::getContainer()->config('scalr.endpoint.scheme') . "://" . \Scalr::getContainer()->config('scalr.endpoint.host') , '/');
 
         if (SettingEntity::getValue(SettingEntity::ID_NOTIFICATIONS_CCS_ENABLED) || SettingEntity::getValue(SettingEntity::ID_NOTIFICATIONS_PROJECTS_ENABLED)) {
             $this->console->out('Calculating data for projects notifications');
@@ -49,23 +50,25 @@ class AnalyticsNotificationsProcess implements \Scalr\System\Pcntl\ProcessInterf
             foreach ($projects as $project) {
                 $periodProjectData = \Scalr::getContainer()->analytics->usage->getProjectPeriodData($project->projectId, 'quarter', $date->start->format('Y-m-d'), $date->end->format('Y-m-d'));
                 $projectAnalytics[$project->projectId] = [
-                    'budget'      => $periodProjectData['totals']['budget'],
-                    'name'        => $project->name,
-                    'trends'      => $periodProjectData['totals']['trends'],
-                    'forecastCost'=> $periodProjectData['totals']['forecastCost'],
-                    'interval'    => $periodProjectData['interval'],
-                    'jsonVersion' => '1.0.0',
-                    'farms'       => []
+                    'budget'         => $periodProjectData['totals']['budget'],
+                    'name'           => $project->name,
+                    'trends'         => $periodProjectData['totals']['trends'],
+                    'forecastCost'   => $periodProjectData['totals']['forecastCost'],
+                    'interval'       => $periodProjectData['interval'],
+                    'date'           => $formatedTitle,
+                    'detailsUrl'     => $baseUrl . '#/analytics/projects?projectId=' . $project->projectId,
+                    'jsonVersion'    => '1.0.0',
+                    'farms'          => []
                 ];
 
                 if (!empty($periodProjectData['totals']['farms'])) {
                     foreach ($periodProjectData['totals']['farms'] as $farm) {
                         $projectAnalytics[$project->projectId]['farms'][] = [
-                            'id'      => $farm['id'],
-                            'name'    => $farm['name'],
-                            'median'  => ($farm['median'] / 7),
-                            'cost'    => $farm['cost'],
-                            'costPct' => $farm['costPct']
+                            'id'           => $farm['id'],
+                            'name'         => $farm['name'],
+                            'averageCost'  => $farm['averageCost'],
+                            'cost'         => $farm['cost'],
+                            'costPct'      => $farm['costPct']
                         ];
                     }
                     if (count($projectAnalytics[$project->projectId]['farms'] > 1)) {
@@ -75,8 +78,6 @@ class AnalyticsNotificationsProcess implements \Scalr\System\Pcntl\ProcessInterf
                         }
                     }
                 }
-
-                $projectAnalytics[$project->projectId]['date'] = $formatedTitle;
 
                 if ($project->archived) {
                     continue;
@@ -103,13 +104,15 @@ class AnalyticsNotificationsProcess implements \Scalr\System\Pcntl\ProcessInterf
                 }
                 $periodCostCenterData = \Scalr::getContainer()->analytics->usage->getCostCenterPeriodData($cc->ccId, 'quarter', $date->start->format('Y-m-d'), $date->end->format('Y-m-d'));
                 $ccAnalytics[$cc->ccId] = [
-                    'budget'      => $periodCostCenterData['totals']['budget'],
-                    'name'        => $cc->name,
-                    'trends'      => $periodCostCenterData['totals']['trends'],
-                    'forecastCost'=> $periodCostCenterData['totals']['forecastCost'],
-                    'interval'    => $periodCostCenterData['interval'],
-                    'jsonVersion' => '1.0.0',
-                    'projects'    => []
+                    'budget'         => $periodCostCenterData['totals']['budget'],
+                    'name'           => $cc->name,
+                    'trends'         => $periodCostCenterData['totals']['trends'],
+                    'forecastCost'   => $periodCostCenterData['totals']['forecastCost'],
+                    'interval'       => $periodCostCenterData['interval'],
+                    'date'           => $formatedTitle,
+                    'detailsUrl'     => $baseUrl . '#/analytics/costcenters?ccId=' . $cc->ccId,
+                    'jsonVersion'    => '1.0.0',
+                    'projects'       => []
                 ];
 
                 if (!empty($periodCostCenterData['totals']['projects'])) {
@@ -119,7 +122,7 @@ class AnalyticsNotificationsProcess implements \Scalr\System\Pcntl\ProcessInterf
                             $projectBudget = $projectAnalytics[$project['id']]['budget'];
                             $projectBudget['name'] = $project['name'];
                             $projectBudget['id'] = $project['id'];
-                            $projectBudget['median'] = ($project['median'] / 7);
+                            $projectBudget['averageCost'] = $project['averageCost'];
                             $ccAnalytics[$cc->ccId]['projects'][] = $projectBudget;
                         } else {
                             $otherProjectsKey = $key;
@@ -130,7 +133,7 @@ class AnalyticsNotificationsProcess implements \Scalr\System\Pcntl\ProcessInterf
                         $ccAnalytics[$cc->ccId]['projects'][] = [
                             'id'                => '',
                             'budgetSpent'       => $periodCostCenterData['totals']['projects'][$otherProjectsKey]['cost'],
-                            'median'            => ($periodCostCenterData['totals']['projects'][$otherProjectsKey]['median'] / 7),
+                            'averageCost'       => $periodCostCenterData['totals']['projects'][$otherProjectsKey]['averageCost'],
                             'name'              => $periodCostCenterData['totals']['projects'][$otherProjectsKey]['name'],
                             'estimateOverspend' => null,
                         ];
@@ -144,8 +147,6 @@ class AnalyticsNotificationsProcess implements \Scalr\System\Pcntl\ProcessInterf
                         }
                     }
                 }
-
-                $ccAnalytics[$cc->ccId]['date'] = $formatedTitle;
 
                 $ccsNotifications = NotificationEntity::findBySubjectType(NotificationEntity::SUBJECT_TYPE_CC);
 
@@ -175,22 +176,14 @@ class AnalyticsNotificationsProcess implements \Scalr\System\Pcntl\ProcessInterf
 
                         $periodForecast = 'month';
                         $formatedTitle = (new \DateTime($start, new \DateTimeZone('UTC')))->format('M j');
+                        $formatedForecastDate = (new \DateTime($start, new \DateTimeZone('UTC')))->format('F');
                         break;
 
                     case ReportEntity::PERIOD_MONTHLY:
                         $period = 'month';
                         $start = (new \DateTime('first day of last month', new \DateTimeZone('UTC')))->format('Y-m-d');
                         $end = (new \DateTime('last day of last month', new \DateTimeZone('UTC')))->format('Y-m-d');
-
-                        $quarters = new Quarters(SettingEntity::getQuarters());
-                        $currentQuarter = $quarters->getQuarterForDate(new \DateTime($start, new \DateTimeZone('UTC')));
-                        $currentYear = (new \DateTime($start, new \DateTimeZone('UTC')))->format('Y');
-                        $date = $quarters->getPeriodForQuarter($currentQuarter, $currentYear);
                         $formatedTitle = (new \DateTime($start, new \DateTimeZone('UTC')))->format('M Y');
-
-                        $startForecast = $date->start->format('Y-m-d');
-                        $endForecast = $date->end->format('Y-m-d');
-                        $periodForecast = 'quarter';
                         break;
 
                     case ReportEntity::PERIOD_QUARTELY:
@@ -211,6 +204,7 @@ class AnalyticsNotificationsProcess implements \Scalr\System\Pcntl\ProcessInterf
                         $start = $date->start->format('Y-m-d');
                         $end = $date->end->format('Y-m-d');
                         $formatedTitle = 'Q' . $quarter . ' ' . $year;
+                        $formatedForecastDate = 'End of ' . $currentYear;
 
                         $startForecast = $currentYear . '-01-01';
                         $endForecast = $currentYear . '-12-31';
@@ -222,17 +216,19 @@ class AnalyticsNotificationsProcess implements \Scalr\System\Pcntl\ProcessInterf
                         $end = (new \DateTime('yesterday', new \DateTimeZone('UTC')))->modify('last saturday')->format('Y-m-d');
                         $start = (new \DateTime($end, new \DateTimeZone('UTC')))->modify('last sunday')->format('Y-m-d');
                         $formatedTitle = (new \DateTime($start, new \DateTimeZone('UTC')))->format('M j') . ' - ' . (new \DateTime($end, new \DateTimeZone('UTC')))->format('M j');
-
-                        $startForecast = (new \DateTime('first day of this month', new \DateTimeZone('UTC')))->format('Y-m-d');
-                        $endForecast = (new \DateTime('last day of this month', new \DateTimeZone('UTC')))->format('Y-m-d');
-
-                        if ($startForecast == (new \DateTime('now', new \DateTimeZone('UTC')))->format('Y-m-d')) {
-                            $startForecast = (new \DateTime('first day of last month', new \DateTimeZone('UTC')))->format('Y-m-d');
-                            $endForecast = (new \DateTime('last day of last month', new \DateTimeZone('UTC')))->format('Y-m-d');
-                        }
-
-                        $periodForecast = 'month';
                         break;
+                }
+
+                if ($report->period !== ReportEntity::PERIOD_DAILY && $report->period !== ReportEntity::PERIOD_QUARTELY) {
+                    $quarters = new Quarters(SettingEntity::getQuarters());
+                    $currentQuarter = $quarters->getQuarterForDate(new \DateTime($start, new \DateTimeZone('UTC')));
+                    $currentYear = (new \DateTime($start, new \DateTimeZone('UTC')))->format('Y');
+                    $date = $quarters->getPeriodForQuarter($currentQuarter, $currentYear);
+                    $formatedForecastDate = 'End of Q' . $currentQuarter;
+
+                    $startForecast = $date->start->format('Y-m-d');
+                    $endForecast = $date->end->format('Y-m-d');
+                    $periodForecast = 'quarter';
                 }
 
                 if ($report->subjectType === ReportEntity::SUBJECT_TYPE_CC) {
@@ -247,14 +243,20 @@ class AnalyticsNotificationsProcess implements \Scalr\System\Pcntl\ProcessInterf
                     $periodData = \Scalr::getContainer()->analytics->usage->getDashboardPeriodData($period, $start, $end);
                     $periodDataForecast = \Scalr::getContainer()->analytics->usage->getDashboardPeriodData($periodForecast, $startForecast, $endForecast);
                     $periodData['period'] = $period;
-                    $periodData['forecastPeriod'] = $periodForecast;
+                    $periodData['forecastPeriod'] = $formatedForecastDate;
                     $periodData['totals']['forecastCost'] = $periodDataForecast['totals']['forecastCost'];
-                    $periodData['totals']['trends'] = $periodDataForecast['totals']['trends'];
                     $periodData['name'] = 'Cloud Cost Report';
                     $periodData['jsonVersion'] = '1.0.0';
+                    $periodData['detailsUrl'] = $baseUrl . '#/analytics/dashboard';
                     $periodData['totals']['clouds'] = $this->changeCloudNames($periodData['totals']['clouds']);
                     $periodData['date'] = $formatedTitle;
                     $periodData['totals']['budget']['budget'] = null;
+
+                    if ($period !== 'custom') {
+                        $periodData['totals']['prevPeriodDate'] = (new \DateTime($periodData['previousStartDate'], new \DateTimeZone('UTC')))->format('M d') . " - " . (new \DateTime($periodData['previousEndDate'], new \DateTimeZone('UTC')))->format('M d');
+                    } else {
+                        $periodData['totals']['prevPeriodDate'] = (new \DateTime($periodData['previousEndDate'], new \DateTimeZone('UTC')))->format('M d');
+                    }
 
                     if ($period == 'quarter') {
                         $periodData['totals']['budget'] = [
@@ -305,7 +307,7 @@ class AnalyticsNotificationsProcess implements \Scalr\System\Pcntl\ProcessInterf
                     $this->saveReportData($getPeriodicSubjectData, $subjectEntityName,
                         ['period' => $period, 'start' => $start, 'end' => $end],
                         ['period' => $periodForecast, 'start' => $startForecast, 'end' => $endForecast],
-                        $report->subjectId, $report->subjectType, $report->emails, $formatedTitle
+                        $report->subjectId, $report->subjectType, $report->emails, $formatedTitle, $formatedForecastDate
                     );
                 } else if (!empty($report->subjectType)) {
                     $subjects = call_user_func($subjectEntityName . 'Entity::find');
@@ -319,7 +321,7 @@ class AnalyticsNotificationsProcess implements \Scalr\System\Pcntl\ProcessInterf
                         $this->saveReportData($getPeriodicSubjectData, $subjectEntityName,
                             ['period' => $period, 'start' => $start, 'end' => $end],
                             ['period' => $periodForecast, 'start' => $startForecast, 'end' => $endForecast],
-                            $subject->{$subjectId}, $report->subjectType, $report->emails, $formatedTitle
+                            $subject->{$subjectId}, $report->subjectType, $report->emails, $formatedTitle, $formatedForecastDate
                         );
                     }
 
@@ -359,18 +361,37 @@ class AnalyticsNotificationsProcess implements \Scalr\System\Pcntl\ProcessInterf
      * @param string $subjectType             Subject type of a report
      * @param string $emails                  Target emails
      * @param string $formatedTitle           Formated title name for report
+     * @param string $formatedForecastDate    Formated forecast end estimate
      */
-    private function saveReportData($getPeriodicSubjectData, $subjectEntityName, array $params, array $forecastParams, $subjectId, $subjectType, $emails, $formatedTitle)
+    private function saveReportData($getPeriodicSubjectData, $subjectEntityName, array $params, array $forecastParams, $subjectId, $subjectType, $emails, $formatedTitle, $formatedForecastDate)
     {
         $periodData = \Scalr::getContainer()->analytics->usage->$getPeriodicSubjectData($subjectId, $params['period'], $params['start'], $params['end']);
         $periodDataForecast = \Scalr::getContainer()->analytics->usage->$getPeriodicSubjectData($subjectId, $forecastParams['period'], $forecastParams['start'], $forecastParams['end']);
         $subjectEntity = call_user_func($subjectEntityName . 'Entity::findPk', $subjectId);
+        $baseUrl = rtrim(\Scalr::getContainer()->config('scalr.endpoint.scheme') . "://" . \Scalr::getContainer()->config('scalr.endpoint.host') , '/');
+
+        if (strpos($subjectEntityName, 'Project') !== false) {
+            $subjects = 'projects';
+            $subjectIdName = 'projectId';
+        } else {
+            $subjects = 'costcenters';
+            $subjectIdName = 'ccId';
+        }
+
+        $periodData['detailsUrl'] = $baseUrl . '#/analytics/' . $subjects . '?' . $subjectIdName . '=' . $subjectId;
         $periodData['period'] = $params['period'];
+        $periodData['forecastPeriod'] = $formatedForecastDate;
         $periodData['totals']['forecastCost'] = $periodDataForecast['totals']['forecastCost'];
-        $periodData['totals']['trends'] = $periodDataForecast['totals']['trends'];
         $periodData['name'] = $subjectEntity->name;
         $periodData['jsonVersion'] = '1.0.0';
         $periodData['totals']['clouds'] = $this->changeCloudNames($periodData['totals']['clouds']);
+
+        if ($params['period'] !== 'custom') {
+            $periodData['totals']['prevPeriodDate'] = (new \DateTime($periodData['previousStartDate'], new \DateTimeZone('UTC')))->format('M d') . " - " . (new \DateTime($periodData['previousEndDate'], new \DateTimeZone('UTC')))->format('M d');
+        } else {
+            $periodData['totals']['prevPeriodDate'] = (new \DateTime($periodData['previousEndDate'], new \DateTimeZone('UTC')))->format('M d');
+        }
+
         $periodData['date'] = $formatedTitle;
         $itemKey = isset($periodData['totals']['projects']) ? 'projects' : 'farms';
 
@@ -390,8 +411,15 @@ class AnalyticsNotificationsProcess implements \Scalr\System\Pcntl\ProcessInterf
         if (!ReportPayloadEntity::findPk($entity->uuid)) {
             $payload = json_decode($entity->payload, true);
             $emailTemplate = (strpos($subjectEntityName, 'Project') !== false) ? 'project' : 'cc';
-            $emailSubject = (strpos($subjectEntityName, 'Project') !== false) ? 'Project' : 'Cost Center';
-            \Scalr::getContainer()->mailer->setSubject($emailSubject . ' ' . $subjectEntity->name . ' report')->setContentType('text/html')->sendTemplate(SCALR_TEMPLATES_PATH . '/emails/report_' . $emailTemplate . '.html.php', $payload, $emails);
+
+            if ($periodData['period'] === 'custom') {
+                $subjectPeriod = 'Daily';
+            } else {
+                $subjectPeriod = ucfirst($periodData['period']) . 'ly';
+            }
+
+            $emailSubject = ((strpos($subjectEntityName, 'Project') !== false) ? 'Project' : 'Cost Center') . ' ' . $subjectEntity->name . ' ' . $subjectPeriod . ' report';
+            \Scalr::getContainer()->mailer->setSubject($emailSubject)->setContentType('text/html')->sendTemplate(SCALR_TEMPLATES_PATH . '/emails/report_' . $emailTemplate . '.html.php', $payload, $emails);
             $this->console->out('Report email has been sent');
             $payload['date'] = $entity->created->format('Y-m-d');
             $entity->payload = json_encode($payload);

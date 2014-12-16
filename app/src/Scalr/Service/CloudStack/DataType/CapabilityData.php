@@ -70,7 +70,7 @@ class CapabilityData extends AbstractDataType
     /**
      * True if security groups support is enabled, false otherwise
      *
-     * @var string
+     * @var bool
      */
     public $securitygroupsenabled;
 
@@ -84,8 +84,15 @@ class CapabilityData extends AbstractDataType
     /**
      * True if user and domain admins can set templates to be shared, false otherwise
      *
-     * @var string
+     * @var bool
      */
     public $userpublictemplateenabled;
+
+    /**
+     * True if the firewall rule UI is enabled
+     *
+     * @var bool
+     */
+    public $firewallRuleUiEnabled;
 
 }

@@ -40,20 +40,17 @@ class Scalr_UI_Controller_Admin_Utils extends Scalr_UI_Controller
         $this->response->page('ui/admin/utils/debug.js', Scalr_Session::getInstance()->getDebugMode());
     }
 
-    public function xSaveDebugAction()
+    /**
+     * @param $enabled
+     * @throws Scalr_UI_Exception_NotFound
+     */
+    public function xSaveDebugAction($enabled)
     {
-        Scalr_Session::getInstance()->setDebugMode(array(
-            'sql' => $this->getParam('sql')
-        ));
+        Scalr_Session::getInstance()->setDebugMode(['enabled' => $enabled]);
 
-        $js = array();
-
-        if ($this->getParam('sql')) {
-            $js[] = $this->response->getModuleName('ui-debug.js');
+        if ($enabled) {
+            $this->response->data(['js' => $this->response->getModuleName('ui-debug.js')]);
         }
-
-        if (count($js))
-            $this->response->data(array('js' => $js));
 
         $this->response->success('Debug parameters have applied');
     }

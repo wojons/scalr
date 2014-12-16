@@ -22,7 +22,7 @@ class Acl
     const GROUP_ENVADMINISTRATION = 'Environment management';
     const GROUP_GENERAL = 'General';
     const GROUP_SECURITY = 'Security';
-    const GROUP_FARMS = 'Farms';
+    const GROUP_FARMS = 'Cloud management';
     const GROUP_SERVICES = 'Services';
     const GROUP_LOGS = 'Logs';
     const GROUP_DNS = 'Dns';
@@ -42,10 +42,10 @@ class Acl
     // All defined constants must be referenced in the \Scalr\Acl\Resource\Definition class.
     const RESOURCE_FARMS = 0x100;
     const RESOURCE_FARMS_ALERTS = 0x101;
-    const RESOURCE_FARMS_EVENTS_AND_NOTIFICATIONS = 0x102;
     const RESOURCE_FARMS_STATISTICS = 0x103;
     const RESOURCE_FARMS_ROLES = 0x104;
     const RESOURCE_FARMS_SERVERS = 0x105;
+    const RESOURCE_FARMS_IMAGES = 0x107;
 
     const RESOURCE_CLOUDSTACK_VOLUMES = 0x110;
     const RESOURCE_CLOUDSTACK_SNAPSHOTS = 0x111;
@@ -79,16 +79,18 @@ class Acl
     const RESOURCE_LOGS_SYSTEM_LOGS = 0x142;
 
     const RESOURCE_SERVICES_APACHE = 0x150;
-    const RESOURCE_SERVICES_CHEF = 0x151;
+    const RESOURCE_SERVICES_ENVADMINISTRATION_CHEF = 0x151;
     const RESOURCE_SERVICES_SSL = 0x152;
     const RESOURCE_SERVICES_RABBITMQ = 0x153;
+    const RESOURCE_SERVICES_ADMINISTRATION_CHEF = 0x154;
 
     const RESOURCE_ENVADMINISTRATION_GLOBAL_VARIABLES = 0x160;
     const RESOURCE_GENERAL_CUSTOM_SCALING_METRICS = 0x163;
     const RESOURCE_GENERAL_CUSTOM_EVENTS = 0x164;
     const RESOURCE_GENERAL_SCHEDULERTASKS = 0x165;
-    const RESOURCE_GENERAL_WEBHOOKS = 0x166;
+    const RESOURCE_ENVADMINISTRATION_WEBHOOKS = 0x166;
     const RESOURCE_ADMINISTRATION_GLOBAL_VARIABLES = 0x167;
+    const RESOURCE_ADMINISTRATION_WEBHOOKS = 0x168;
 
     const RESOURCE_DB_BACKUPS = 0x170;
     const RESOURCE_DB_DATABASE_STATUS = 0x171;
@@ -105,6 +107,8 @@ class Acl
     const RESOURCE_ENVADMINISTRATION_ENV_CLOUDS = 0x202;
 
     const RESOURCE_ANALYTICS_PROJECTS = 0x240;
+    const RESOURCE_ADMINISTRATION_ANALYTICS = 0x241;
+    const RESOURCE_ENVADMINISTRATION_ANALYTICS = 0x242;
 
     const RESOURCE_ADMINISTRATION_ORCHESTRATION = 0x250;
     const RESOURCE_ADMINISTRATION_SCRIPTS = 0x106;
@@ -127,6 +131,9 @@ class Acl
     const PERM_FARMS_ROLES_BUNDLETASKS = 'bundletasks';
     const PERM_FARMS_ROLES_CREATE = 'create';
 
+    const PERM_FARMS_IMAGES_MANAGE = 'manage';
+    const PERM_FARMS_IMAGES_CREATE = 'create';
+
     const PERM_FARMS_SERVERS_SSH_CONSOLE = 'ssh-console';
 
     const PERM_ADMINISTRATION_SCRIPTS_MANAGE = 'manage';
@@ -136,6 +143,8 @@ class Acl
     const PERM_DB_BACKUPS_REMOVE = 'remove';
 
     const PERM_DB_DATABASE_STATUS_PMA = 'phpmyadmin';
+
+    const PERM_GENERAL_CUSTOM_EVENTS_FIRE = 'fire';
 
     // ... add more permission_id for existing resource here
     // const PERM_FOORESOURCE_FOOPERMISSIONNAME

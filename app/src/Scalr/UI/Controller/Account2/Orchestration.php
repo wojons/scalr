@@ -94,7 +94,7 @@ class Scalr_UI_Controller_Account2_Orchestration extends Scalr_UI_Controller
             $this->db->Execute("DELETE FROM account_scripts WHERE id = ?", array($rScript['id']));
         }
 
-        $this->response->success('Successfully saved');
+        $this->response->success('Orchestration saved');
     }
 
     public function xGetListAction()

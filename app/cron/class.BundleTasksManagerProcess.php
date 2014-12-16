@@ -3,6 +3,10 @@
 use Scalr\Modules\PlatformFactory;
 use Scalr\Modules\Platforms\Cloudstack\CloudstackPlatformModule;
 
+/**
+ * @deprecated It has been deprecated since 08.12.2014 because of implementing a new Scalr service
+ * @see        \Scalr\System\Zmq\Cron\Task\ImagesBuilder
+ */
 class BundleTasksManagerProcess implements \Scalr\System\Pcntl\ProcessInterface
 {
 
@@ -77,7 +81,7 @@ class BundleTasksManagerProcess implements \Scalr\System\Pcntl\ProcessInterface
                     $BundleTask->Log(sprintf(_("Bundle task status: %s"), $BundleTask->status));
                     $BundleTask->Save();
                 } else {
-                    $errstr = sprintf("Unable to establish outbound (Scalr -> Scalarizr) communication (%s:%s): %s.", $requestHost, $ctrlPort, $errstr);
+                    $errstr = sprintf("Unable to establish outbound (Scalr -> Scalarizr) communication (%s:%s): %s.", $DBServer->getSzrHost(), $DBServer->getPort(DBServer::PORT_CTRL), $errstr);
                     $errMsg = $DBServer->GetProperty(SERVER_PROPERTIES::SZR_IMPORTING_OUT_CONNECTION_ERROR);
                     if (!$errMsg || $errstr != $errMsg) {
                         $DBServer->SetProperty(SERVER_PROPERTIES::SZR_IMPORTING_OUT_CONNECTION_ERROR, $errstr);
@@ -539,255 +543,146 @@ class BundleTasksManagerProcess implements \Scalr\System\Pcntl\ProcessInterface
                 PlatformFactory::NewPlatform($BundleTask->platform)->CheckServerSnapshotStatus($BundleTask);
                 break;
 
-            case SERVER_SNAPSHOT_CREATION_STATUS::REPLACING_SERVERS:
-                $r_farm_roles = array();
-                $BundleTask->Log(sprintf("Bundle task replacement type: %s", $BundleTask->replaceType));
-
-                try {
-                    $DBFarm = DBFarm::LoadByID($BundleTask->farmId);
-                } catch (Exception $e) {
-                    if (stristr($e->getMessage(), "not found in database")) {
-                        $BundleTask->SnapshotCreationFailed("Farm was removed before task was finished");
-                    }
-                    return;
-                }
-
-                if ($BundleTask->replaceType == SERVER_REPLACEMENT_TYPE::REPLACE_FARM) {
-                    try {
-                        $r_farm_roles[] = $DBFarm->GetFarmRoleByRoleID($BundleTask->prototypeRoleId);
-                    } catch (Exception $e) {
-                    }
-                } elseif ($BundleTask->replaceType == SERVER_REPLACEMENT_TYPE::REPLACE_ALL) {
-                    $farm_roles = $db->GetAll("
-                        SELECT id FROM farm_roles
-                        WHERE role_id=? AND new_role_id=?
-                        AND farmid IN (SELECT id FROM farms WHERE env_id=?)
-                    ", array(
-                        $BundleTask->prototypeRoleId,
-                        $BundleTask->roleId,
-                        $BundleTask->envId
-                    ));
-
-                    foreach ($farm_roles as $farm_role) {
-                        try {
-                            $r_farm_roles[] = DBFarmRole::LoadByID($farm_role['id']);
-                        } catch (Exception $e) {
-                        }
-                    }
-                }
-
-                $update_farm_dns_zones = array();
-                $completed_roles = 0;
-                foreach ($r_farm_roles as $DBFarmRole) {
-                    if ($DBFarmRole->CloudLocation != $BundleTask->cloudLocation) {
-                        $BundleTask->Log(sprintf(
-                            "Role '%s' (ID: %s), farm '%s' (ID: %s) using the same role "
-                          . "but in abother cloud location. Skiping it.",
-                            $DBFarmRole->GetRoleObject()->name,
-                            $DBFarmRole->ID,
-                            $DBFarmRole->GetFarmObject()->Name,
-                            $DBFarmRole->FarmID
-                        ));
-                        $completed_roles++;
-                    } else {
-                        $servers = $db->GetAll("SELECT server_id FROM servers WHERE farm_roleid = ? AND role_id=? AND status NOT IN (?,?)", array(
-                            $DBFarmRole->ID,
-                            $DBFarmRole->RoleID,
-                            SERVER_STATUS::TERMINATED,
-                            SERVER_STATUS::PENDING_TERMINATE
-                        ));
-
-                        $BundleTask->Log(sprintf(
-                            "Found %s servers that need to be replaced with new ones. "
-                          . "Role '%s' (ID: %s), farm '%s' (ID: %s)",
-                            count($servers),
-                            $DBFarmRole->GetRoleObject()->name,
-                            $DBFarmRole->ID,
-                            $DBFarmRole->GetFarmObject()->Name,
-                            $DBFarmRole->FarmID
-                        ));
-
-                        if (count($servers) == 0) {
-                            $DBFarmRole->RoleID = $DBFarmRole->NewRoleID;
-                            $DBFarmRole->NewRoleID = null;
-                            $DBFarmRole->Save();
-                            $update_farm_dns_zones[$DBFarmRole->FarmID] = 1;
-                            $completed_roles++;
-                        } else {
-                            $metaData = $BundleTask->getSnapshotDetails();
-                            foreach ($servers as $server) {
-                                try {
-                                    $DBServer = DBServer::LoadByID($server['server_id']);
-                                } catch (Exception $e) {
-                                    //TODO:
-                                    continue;
-                                }
-
-                                if ($DBServer->serverId == $BundleTask->serverId || $metaData['noServersReplace']) {
-                                    $DBServer->roleId = $BundleTask->roleId;
-                                    $DBServer->Save();
-                                    if ($metaData['noServersReplace']) {
-                                        $BundleTask->Log(sprintf(
-                                            "'Do not replace servers' option was checked. "
-                                          . "Server '%s' won't be replaced to new image.",
-                                            $DBServer->serverId
-                                        ));
-                                    } else {
-                                        $BundleTask->Log(sprintf(
-                                            "Server '%s', on which snapshot has been taken, "
-                                          . "already has all modifications. No need to replace it.",
-                                            $DBServer->serverId
-                                        ));
-                                    }
-                                } else {
-                                    if (!$db->GetOne("SELECT server_id FROM servers WHERE replace_server_id=? AND status NOT IN (?,?,?) LIMIT 1", array(
-                                        $DBServer->serverId,
-                                        SERVER_STATUS::TERMINATED,
-                                        SERVER_STATUS::PENDING_TERMINATE,
-                                        SERVER_STATUS::TROUBLESHOOTING,
-                                        SERVER_STATUS::SUSPENDED
-                                    ))) {
-                                        $ServerCreateInfo = new ServerCreateInfo($DBFarmRole->Platform, $DBFarmRole, $DBServer->index, $DBFarmRole->NewRoleID);
-                                        $nDBServer = Scalr::LaunchServer(
-                                            $ServerCreateInfo, null, false, DBServer::LAUNCH_REASON_REPLACE_SERVER_FROM_SNAPSHOT,
-                                            (!empty($BundleTask->createdById) ? $BundleTask->createdById : null)
-                                        );
-                                        $nDBServer->replaceServerID = $DBServer->serverId;
-                                        $nDBServer->Save();
-                                        $BundleTask->Log(sprintf(_("Started new server %s to replace server %s"), $nDBServer->serverId, $DBServer->serverId));
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-
-                if ($completed_roles == count($r_farm_roles)) {
-                    $BundleTask->Log(sprintf(_(
-                        "No servers with old role. Replacement complete. Bundle task complete."),
-                        SERVER_REPLACEMENT_TYPE::NO_REPLACE,
-                        SERVER_SNAPSHOT_CREATION_STATUS::SUCCESS
-                    ));
-
-                    try {
-                        if ($DBServer->status == SERVER_STATUS::IMPORTING) {
-                            $DBServer->Remove();
-                        } elseif ($DBServer->status == SERVER_STATUS::TEMPORARY) {
-                            $BundleTask->Log("Terminating temporary server");
-                            $DBServer->terminate(DBServer::TERMINATE_REASON_TEMPORARY_SERVER_ROLE_BUILDER);
-                            $BundleTask->Log("Termination request has been sent");
-                        }
-                    } catch (Exception $e) {
-                        $BundleTask->Log("Warning: {$e->getMessage()}");
-                    }
-
-                    $BundleTask->setDate('finished');
-                    $BundleTask->status = SERVER_SNAPSHOT_CREATION_STATUS::SUCCESS;
-                    $BundleTask->Save();
-                    $BundleTask->createImageEntity();
-                }
-
-                try {
-                    if (count($update_farm_dns_zones) != 0) {
-                        foreach ($update_farm_dns_zones as $farm_id => $v) {
-                            $dnsZones = DBDNSZone::loadByFarmId($farm_id);
-                            foreach ($dnsZones as $dnsZone) {
-                                if ($dnsZone->status != DNS_ZONE_STATUS::INACTIVE && $dnsZone->status != DNS_ZONE_STATUS::PENDING_DELETE) {
-                                    $dnsZone->updateSystemRecords();
-                                    $dnsZone->save();
-                                }
-                            }
-                        }
-                    }
-                } catch (Exception $e) {
-                    $this->Logger->fatal("DNS ZONE: {$e->getMessage()}");
-                }
-                break;
-
             case SERVER_SNAPSHOT_CREATION_STATUS::CREATING_ROLE:
                 try {
-                    if ($BundleTask->replaceType == SERVER_REPLACEMENT_TYPE::REPLACE_ALL) {
-                        $saveOldRole = false;
-                        try {
-                            $dbRole = DBRole::loadById($DBServer->roleId);
-                            if ($dbRole->name == $BundleTask->roleName && $dbRole->envId == $BundleTask->envId) {
-                                $saveOldRole = true;
-                            }
-                        } catch (Exception $e) {
-                            //NO OLD ROLE
-                        }
-                        if ($dbRole && $saveOldRole) {
-                            if ($DBServer) {
-                                $new_role_name = BundleTask::GenerateRoleName($DBServer->GetFarmRoleObject(), $DBServer);
-                            } else {
-                                $new_role_name = $BundleTask->roleName . "-" . rand(1000, 9999);
-                            }
-                            $dbRole->name = $new_role_name;
-                            $BundleTask->Log(sprintf(_("Old role '%s' (ID: %s) renamed to '%s'"), $BundleTask->roleName, $dbRole->id, $new_role_name));
-                            $dbRole->save();
-                        } else {
-                            //TODO:
-                            //$this->Logger->error("dbRole->replace->fail({$BundleTask->roleName}, {$BundleTask->envId})");
-                        }
-                    }
+                    if ($BundleTask->object == BundleTask::BUNDLETASK_OBJECT_IMAGE) {
+                        if ($BundleTask->replaceType == SERVER_REPLACEMENT_TYPE::REPLACE_ALL) {
+                            $dbRole = $DBServer->GetFarmRoleObject()->GetRoleObject();
+                            $dbRole->__getNewRoleObject()->setImage(
+                                $BundleTask->platform,
+                                $BundleTask->cloudLocation,
+                                $BundleTask->snapshotId,
+                                $BundleTask->createdById,
+                                $BundleTask->createdByEmail
+                            );
 
-                    if ($BundleTask->object == BundleTask::BUNDLETASK_OBJECT_ROLE) {
+                            $BundleTask->Log(sprintf(_("Image replacement completed.")));
+                        }
+
+                        $BundleTask->Log(sprintf(_("Bundle task completed.")));
+
+                        $BundleTask->setDate('finished');
+                        $BundleTask->status = SERVER_SNAPSHOT_CREATION_STATUS::SUCCESS;
+                        $BundleTask->Save();
+
+                    } elseif ($BundleTask->object == BundleTask::BUNDLETASK_OBJECT_ROLE) {
+
+                        if ($BundleTask->replaceType == SERVER_REPLACEMENT_TYPE::REPLACE_ALL) {
+                            $saveOldRole = false;
+                            try {
+                                $dbRole = $DBServer->GetFarmRoleObject()->GetRoleObject();
+                                if ($dbRole->name == $BundleTask->roleName && $dbRole->envId == $BundleTask->envId) {
+                                    $saveOldRole = true;
+                                }
+                            } catch (Exception $e) {
+                                //NO OLD ROLE
+                            }
+                            if ($dbRole && $saveOldRole) {
+                                if ($DBServer) {
+                                    $new_role_name = BundleTask::GenerateRoleName($DBServer->GetFarmRoleObject(), $DBServer);
+                                } else {
+                                    $new_role_name = $BundleTask->roleName . "-" . rand(1000, 9999);
+                                }
+                                $dbRole->name = $new_role_name;
+                                $BundleTask->Log(sprintf(_("Old role '%s' (ID: %s) renamed to '%s'"), $BundleTask->roleName, $dbRole->id, $new_role_name));
+                                $dbRole->save();
+                            } else {
+                                //TODO:
+                                //$this->Logger->error("dbRole->replace->fail({$BundleTask->roleName}, {$BundleTask->envId})");
+                            }
+                        }
+
                         try {
                             $DBRole = DBRole::createFromBundleTask($BundleTask);
                         } catch (Exception $e) {
                             $BundleTask->SnapshotCreationFailed("Role creation failed due to internal error ({$e->getMessage()}). Please try again.");
                             return;
                         }
-                    } else {
-                        // roleName is empty, just create image
-                        $BundleTask->createImageEntity();
-                    }
 
-                    if ($BundleTask->replaceType == SERVER_REPLACEMENT_TYPE::NO_REPLACE) {
-                        $BundleTask->setDate('finished');
-                        $BundleTask->status = SERVER_SNAPSHOT_CREATION_STATUS::SUCCESS;
-
-                        $BundleTask->Log(sprintf(_(
-                            "Replacement type: %s. Bundle task status: %s"),
-                            SERVER_REPLACEMENT_TYPE::NO_REPLACE, SERVER_SNAPSHOT_CREATION_STATUS::SUCCESS
-                        ));
-
-                        try {
-                            $DBServer = DBServer::LoadByID($BundleTask->serverId);
-                            if ($DBServer->status == SERVER_STATUS::IMPORTING) {
-                                if ($DBServer->farmId) {
-                                    // Create DBFarmRole object
-                                    // TODO: create DBFarm role
-                                }
-                            }
-                        } catch (Exception $e) {
-                        }
-                    } else {
-                        try {
-                            $BundleTask->Log(sprintf(_("Replacement type: %s. Bundle task status: %s"), $BundleTask->replaceType, SERVER_SNAPSHOT_CREATION_STATUS::REPLACING_SERVERS));
-                            if ($BundleTask->replaceType == SERVER_REPLACEMENT_TYPE::REPLACE_FARM) {
-                                $DBFarm = DBFarm::LoadByID($BundleTask->farmId);
-                                $DBFarmRole = $DBFarm->GetFarmRoleByRoleID($BundleTask->prototypeRoleId);
-                                $DBFarmRole->NewRoleID = $BundleTask->roleId;
-                                $DBFarmRole->Save();
-                            } else {
-                                $farm_roles = $db->GetAll("SELECT id FROM farm_roles WHERE role_id=? AND farmid IN (SELECT id FROM farms WHERE env_id=?)", array(
-                                    $BundleTask->prototypeRoleId,
-                                    $BundleTask->envId
-                                ));
-
-                                foreach ($farm_roles as $farm_role) {
-                                    $DBFarmRole = DBFarmRole::LoadByID($farm_role['id']);
-                                    $DBFarmRole->NewRoleID = $BundleTask->roleId;
-                                    $DBFarmRole->Save();
-                                }
-                            }
-                            $BundleTask->status = SERVER_SNAPSHOT_CREATION_STATUS::REPLACING_SERVERS;
-                        } catch (Exception $e) {
-                            $this->Logger->error($e->getMessage());
-                            $BundleTask->Log(sprintf(_("Server replacement failed: %s"), $e->getMessage()));
+                        if ($BundleTask->replaceType == SERVER_REPLACEMENT_TYPE::NO_REPLACE) {
                             $BundleTask->setDate('finished');
                             $BundleTask->status = SERVER_SNAPSHOT_CREATION_STATUS::SUCCESS;
+
+                            $BundleTask->Log(sprintf(_(
+                                "Replacement type: %s. Bundle task status: %s"),
+                                SERVER_REPLACEMENT_TYPE::NO_REPLACE, SERVER_SNAPSHOT_CREATION_STATUS::SUCCESS
+                            ));
+                        } else {
+                            try {
+                                $BundleTask->Log(sprintf(_("Replacement type: %s"), $BundleTask->replaceType));
+
+                                $r_farm_roles = array();
+
+                                try {
+                                    $DBFarm = DBFarm::LoadByID($BundleTask->farmId);
+                                } catch (Exception $e) {
+                                    if (stristr($e->getMessage(), "not found in database")) {
+                                        $BundleTask->SnapshotCreationFailed("Farm was removed before task was finished");
+                                    }
+                                    return;
+                                }
+
+                                if ($BundleTask->replaceType == SERVER_REPLACEMENT_TYPE::REPLACE_FARM) {
+                                    try {
+                                        $r_farm_roles[] = $DBFarm->GetFarmRoleByRoleID($BundleTask->prototypeRoleId);
+                                    } catch (Exception $e) {}
+                                } elseif ($BundleTask->replaceType == SERVER_REPLACEMENT_TYPE::REPLACE_ALL) {
+                                    $farm_roles = $db->GetAll("
+                                        SELECT id FROM farm_roles
+                                        WHERE role_id=?
+                                        AND farmid IN (SELECT id FROM farms WHERE env_id=?)
+                                    ", array(
+                                        $BundleTask->prototypeRoleId,
+                                        $BundleTask->envId
+                                    ));
+
+                                    foreach ($farm_roles as $farm_role) {
+                                        try {
+                                            $r_farm_roles[] = DBFarmRole::LoadByID($farm_role['id']);
+                                        } catch (Exception $e) {}
+                                    }
+                                }
+
+                                foreach ($r_farm_roles as $DBFarmRole) {
+                                    if ($DBFarmRole->CloudLocation != $BundleTask->cloudLocation) {
+                                        $BundleTask->Log(sprintf(
+                                            "Role '%s' (ID: %s), farm '%s' (ID: %s) using the same role "
+                                            . "but in abother cloud location. Skiping it.",
+                                            $DBFarmRole->GetRoleObject()->name,
+                                            $DBFarmRole->ID,
+                                            $DBFarmRole->GetFarmObject()->Name,
+                                            $DBFarmRole->FarmID
+                                        ));
+                                    } else {
+                                        $DBFarmRole->RoleID = $BundleTask->roleId;
+                                        $DBFarmRole->Save();
+                                    }
+                                }
+
+                                $BundleTask->Log(sprintf(_("Replacement completed. Bundle task completed.")));
+
+                                try {
+                                    if ($DBServer->status == SERVER_STATUS::IMPORTING) {
+                                        $DBServer->Remove();
+                                    } elseif ($DBServer->status == SERVER_STATUS::TEMPORARY) {
+                                        $BundleTask->Log("Terminating temporary server");
+                                        $DBServer->terminate(DBServer::TERMINATE_REASON_TEMPORARY_SERVER_ROLE_BUILDER);
+                                        $BundleTask->Log("Termination request has been sent");
+                                    }
+                                } catch (Exception $e) {
+                                    $BundleTask->Log("Warning: {$e->getMessage()}");
+                                }
+
+                                $BundleTask->setDate('finished');
+                                $BundleTask->status = SERVER_SNAPSHOT_CREATION_STATUS::SUCCESS;
+                                $BundleTask->Save();
+
+                            } catch (Exception $e) {
+                                $this->Logger->error($e->getMessage());
+                                $BundleTask->Log(sprintf(_("Server replacement failed: %s"), $e->getMessage()));
+                                $BundleTask->setDate('finished');
+                                $BundleTask->status = SERVER_SNAPSHOT_CREATION_STATUS::SUCCESS;
+                            }
                         }
                     }
 
@@ -805,7 +700,6 @@ class BundleTasksManagerProcess implements \Scalr\System\Pcntl\ProcessInterface
                         }
                     }
                     $BundleTask->Save();
-                    $BundleTask->createImageEntity();
 
                 } catch (Exception $e) {
                     $this->Logger->error($e->getMessage());

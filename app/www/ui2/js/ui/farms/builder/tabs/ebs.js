@@ -138,7 +138,7 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.ebs', function (moduleTabParams) {
 				width: 600,
 				items: [{
 					xtype: 'combo',
-					store: [['standard', 'Standard EBS (Magnetic)'],['gp2', 'General Purpose (SSD)'],['io1', 'Provisioned IOPS (1-1000): ']],
+					store: Scalr.constants.ebsTypes,
 					valueField: 'id',
 					displayField: 'name',
 					editable: false,

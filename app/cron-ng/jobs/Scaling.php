@@ -2,6 +2,11 @@
 
 use Scalr\Modules\PlatformFactory;
 
+/**
+ * @deprecated It has been deprecated since 26.11.2014 because of replacing with a new Scalr service.
+ *             Before you modify this code please take a look at Scalr\System\Zmq\Cron\Task\Scaling class.
+ * @see        \Scalr\System\Zmq\Cron\Task\Scaling
+ */
 class Scalr_Cronjob_Scaling extends Scalr_System_Cronjob_MultiProcess_DefaultWorker
 {
     static function getConfig () {
@@ -202,6 +207,29 @@ class Scalr_Cronjob_Scaling extends Scalr_System_Cronjob_MultiProcess_DefaultWor
                                 $got_valid_instance = true;
                             }
                         }
+                        
+                        //Check safe shutdown
+                        if ($DBServer->GetFarmRoleObject()->GetSetting(DBFarmRole::SETTING_SCALING_SAFE_SHUTDOWN) == 1) {
+                            if ($DBServer->IsSupported('0.11.3')) {
+                                try {
+                                    $res  = $DBServer->scalarizr->system->callAuthShutdownHook();
+                                } catch (Exception $e) {
+                                    $res = $e->getMessage();
+                                }
+                            } else {
+                                Logger::getLogger(LOG_CATEGORY::FARM)->error(new FarmLogMessage($request->farmId, sprintf("Safe shutdown enabled, but not supported by scalarizr installed on server '%s'. Ignoring.",
+                                $DBServer->serverId
+                                )));
+                            }
+                        
+                            if ($res != '1') {
+                                Logger::getLogger(LOG_CATEGORY::FARM)->info(new FarmLogMessage($request->farmId, sprintf("Safe shutdown enabled. Server '%s'. Script returned '%s' skipping it.",
+                                $DBServer->serverId,
+                                $res
+                                )));
+                                $got_valid_instance = false;
+                            }
+                        }
                     }
 
                     if ($DBServer && $got_valid_instance) {
@@ -245,28 +273,6 @@ class Scalr_Cronjob_Scaling extends Scalr_System_Cronjob_MultiProcess_DefaultWor
                         }
 
                         if ($allow_terminate) {
-                            //Check safe shutdown
-                            if ($DBServer->GetFarmRoleObject()->GetSetting(DBFarmRole::SETTING_SCALING_SAFE_SHUTDOWN) == 1) {
-                                if ($DBServer->IsSupported('0.11.3')) {
-                                    try {
-                                        $res  = $DBServer->scalarizr->system->callAuthShutdownHook();
-                                    } catch (Exception $e) {
-                                        $res = $e->getMessage();
-                                    }
-                                } else {
-                                    Logger::getLogger(LOG_CATEGORY::FARM)->error(new FarmLogMessage($DBFarm->ID, sprintf("Safe shutdown enabled, but not supported by scalarizr installed on server '%s'. Ignoring.",
-                                        $DBServer->serverId
-                                    )));
-                                }
-
-                                if ($res != '1') {
-                                    Logger::getLogger(LOG_CATEGORY::FARM)->warn(new FarmLogMessage($DBFarm->ID, sprintf("Safe shutdown enabled. Server '%s'. Script returned '%s', server won't be terminated while return value not '1'",
-                                        $DBServer->serverId,
-                                        $res
-                                    )));
-                                    break;
-                                }
-                            }
 
                             $terminateStrategy = $DBFarmRole->GetSetting(Scalr_Role_Behavior::ROLE_BASE_TERMINATE_STRATEGY);
                             if (!$terminateStrategy)

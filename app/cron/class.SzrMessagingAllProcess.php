@@ -3,6 +3,11 @@
 use Scalr\Service\Aws\AbstractApi;
 require_once dirname(__FILE__).'/../cron-ng/jobs/ScalarizrMessaging.php';
 
+/**
+ * @deprecated This class has been deprecated since 13.11.2014.
+ *             Please don't add anything into this class anymore without reviewing Scalr\System\Zmq\Cron\Task\ScalarizrMessaging
+ * @see        \Scalr\System\Zmq\Cron\Task\ScalarizrMessaging
+ */
 class SzrMessagingAllProcess implements \Scalr\System\Pcntl\ProcessInterface
 {
     public $ThreadArgs;
@@ -75,7 +80,7 @@ class SzrMessagingAllProcess implements \Scalr\System\Pcntl\ProcessInterface
 
         $job = new Scalr_Cronjob_ScalarizrMessaging();
 
-        while(true) {
+        while (true) {
             $rows = $db->Execute("
                 SELECT distinct(m.server_id)
                 FROM messages m

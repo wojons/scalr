@@ -15,7 +15,9 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.advanced', function (moduleTabParams)
             'dns.int_record_alias': function(record) {return 'int-' + record.get('alias')},
             'dns.ext_record_alias': function(record) {return 'ext-' + record.get('alias')},
             'base.upd.repository': '',
-            'base.upd.schedule': function(record) {return moduleTabParams['farm']['updSchedule'] || '* * *'}
+            'base.upd.schedule': function(record) {return moduleTabParams['farm']['updSchedule'] || '* * *'},
+            'base.abort_init_on_script_fail': 0,
+            'base.disable_firewall_management': 0
         },
 
         isEnabled: function (record) {
@@ -44,7 +46,9 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.advanced', function (moduleTabParams)
                 'base.upd.repository': settings['base.upd.repository'] || '',
                 'base.upd.schedule.h': schedule.length === 3 ? schedule[0] : '*',
                 'base.upd.schedule.d': schedule.length === 3 ? schedule[1] : '*',
-                'base.upd.schedule.w': schedule.length === 3 ? schedule[2] : '*'
+                'base.upd.schedule.w': schedule.length === 3 ? schedule[2] : '*',
+                'base.abort_init_on_script_fail': settings['base.abort_init_on_script_fail'] == 1,
+                'base.disable_firewall_management': settings['base.disable_firewall_management'] == 1
             });
 		},
 
@@ -56,7 +60,9 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.advanced', function (moduleTabParams)
                 settings['base.hostname_format'] = hostnameFormatField.getValue();
             }
             settings['base.keep_scripting_logs_time'] = this.down('[name="base.keep_scripting_logs_time"]').getValue()*3600;
-            
+   			settings['base.abort_init_on_script_fail'] = this.down('[name="base.abort_init_on_script_fail"]').getValue() ? 1 : 0;
+            settings['base.disable_firewall_management'] = this.down('[name="base.disable_firewall_management"]').getValue() ? 1 : 0;
+
 			settings['system.timeouts.reboot'] = this.down('[name="system.timeouts.reboot"]').getValue();
 			settings['system.timeouts.launch'] = this.down('[name="system.timeouts.launch"]').getValue();
 
@@ -103,20 +109,29 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.advanced', function (moduleTabParams)
                 },
                 iconsPosition: 'outer',
                 governanceTitle: 'format of server hostnames'
-		  }, {
-              xtype: 'textfield',
-              labelWidth: 190,
-              maxWidth: 275,
-              fieldLabel: 'Scalarizr API port',
-              name: 'base.api_port'
-          }, {
-              xtype: 'textfield',
-              labelWidth: 190,
-              maxWidth: 275,
-              fieldLabel: 'Scalarizr control port',
-              name: 'base.messaging_port'
-          }]
-        }, {
+            },{
+                xtype: 'textfield',
+                labelWidth: 190,
+                maxWidth: 275,
+                fieldLabel: 'Scalarizr API port',
+                name: 'base.api_port'
+            },{
+                xtype: 'textfield',
+                labelWidth: 190,
+                maxWidth: 275,
+                fieldLabel: 'Scalarizr control port',
+                name: 'base.messaging_port'
+            },{
+                xtype: 'checkbox',
+                name: 'base.disable_firewall_management',
+                boxLabel: 'Disable automated management of iptables',
+                icons: {
+                    warning: {
+                        tooltip: Ext.String.htmlEncode('Feature only available in Scalarizr starting from 2.11.27 <br/>If you disable automated management of local firewall rules, you\'ll need to ensure that your local firewall is properly configured to allow Scalr traffic. <a href="https://scalr-wiki.atlassian.net/wiki/x/CYA0" target="_blank">View the required configuration here</a>.')
+                    }
+                }
+            }]
+        },{
 			xtype: 'fieldset',
             title: 'Scripting',
 			items: [{
@@ -145,6 +160,13 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.advanced', function (moduleTabParams)
 					xtype: 'label',
 					text: 'hour(s).'
 				}]
+            },{
+                xtype: 'checkbox',
+                name: 'base.abort_init_on_script_fail',
+                boxLabel: 'Abort Server initialization when a Blocking BeforeHostUp Script fails (non-zero exit code)',
+                icons: {
+                    szrversion: {tooltipData: {version: '2.11.15'}}
+                }
             }]
 		}, {
 			xtype: 'fieldset',
@@ -223,6 +245,9 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.advanced', function (moduleTabParams)
 		},{
 			xtype: 'fieldset',
             title: 'Override Scalarizr Agent update settings',
+            defaults: {
+                labelWidth: 140
+            },
 			items: [{
                 xtype: 'combo',
                 editable: false,
@@ -234,26 +259,55 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.advanced', function (moduleTabParams)
                 emptyText: 'Use farm settings'
             },{
                 xtype: 'fieldcontainer',
-                fieldLabel: 'Schedule',
+                fieldLabel: 'Schedule (UTC time)',
                 layout: 'hbox',
+                scheduleValidator: Ext.Function.createBuffered(function() {
+                    var dd = this.down('[name="base.upd.schedule.d"]'),
+                        dw = this.down('[name="base.upd.schedule.w"]');
+                    if (dd.getValue() !== '*' && dw.getValue() !== '*') {
+                        dw.markInvalid('"Day of month" and "Day of week" cannot be set at the same time');
+                    } else {
+                        dw.clearInvalid();
+                        if (!(/^(\*|([12]{0,1}\d|3[01])(-([12]{0,1}\d|3[01])){0,1}(,([12]{0,1}\d|3[01])(-([12]{0,1}\d|3[01])){0,1})*)(\/([12]{0,1}\d|3[01])){0,1}$/).test(dd.getValue())) {
+                            dd.markInvalid('Invalid format');
+                        }
+                        if (!(/^(\*|[0-6](-([0-6])){0,1}(,([0-6])(-([0-6])){0,1})*)(\/([0-6])){0,1}$/).test(dw.getValue())) {
+                            dw.markInvalid('Invalid format');
+                        }
+                    }
+
+                }, 200),
                 items: [{
                     xtype: 'textfield',
                     hideLabel: true,
                     width: 50,
                     margin: '0 3 0 0',
-                    name: 'base.upd.schedule.h'
+                    name: 'base.upd.schedule.h',
+                    validator: function(value) {
+                        return (/^(\*|(1{0,1}\d|2[0-3])(-(1{0,1}\d|2[0-3])){0,1}(,(1{0,1}\d|2[0-3])(-(1{0,1}\d|2[0-3])){0,1})*)(\/(1{0,1}\d|2[0-3])){0,1}$/).test(value) || 'Invalid format';
+                    }
                 },{
                     xtype: 'textfield',
                     hideLabel: true,
                     width: 50,
                     margin: '0 3 0 0',
-                    name: 'base.upd.schedule.d'
+                    name: 'base.upd.schedule.d',
+                    listeners: {
+                        change: function() {
+                            this.up().scheduleValidator();
+                        }
+                    }
                 },{
                     xtype: 'textfield',
                     hideLabel: true,
                     width: 50,
                     name: 'base.upd.schedule.w',
-                    margin: '0 3 0 0'
+                    margin: '0 3 0 0',
+                    listeners: {
+                        change: function() {
+                            this.up().scheduleValidator();
+                        }
+                    }
                 },{
                     xtype: 'displayinfofield',
                     info:

@@ -296,6 +296,7 @@
 
 .x-field .x-field-icons img {
     margin-right: 4px;
+    vertical-align: baseline;
 }
 
 /*display field with background*/
@@ -459,10 +460,6 @@ div.x-colored-status {
     line-height: 40px;
 }
 
-.scalr-ui-shared-role-name{
-    color:#46A657;
-}
-
 .x-fieldset-infobox {
     width: 16px;
     height: 16px;
@@ -575,4 +572,57 @@ div.x-colored-status {
     top: 5px;
     right: 10px;
     z-index: 1000;
+}
+
+.scalr-scope-scalr,
+.scalr-scope-account,
+.scalr-scope-environment,
+.scalr-scope-env,
+.scalr-scope-farm,
+.scalr-scope-role,
+.scalr-scope-farmrole {
+    height: 10px;
+    width: 10px;
+    border-radius: 2px;
+}
+
+.scalr-scope-scalr {
+    background-color: #4567CB;
+}
+
+.scalr-scope-account {
+    background-color: #DA6BE7;
+}
+
+.scalr-scope-environment {
+    background-color: #FCA503;
+}
+
+.scalr-scope-env {
+    background-color: #FCA503;
+}
+
+.scalr-scope-farm {
+    background-color: #0F9104;
+}
+
+.scalr-scope-role {
+    background-color: #7CBFE7;
+}
+
+.scalr-scope-farmrole {
+    background-color: #D90000;
+}
+
+.x-menu-item-icon-scope {
+    background-image: none !important;
+    width: 16px !important;
+    height: 16px !important;
+}
+
+/* move to style, taken from account2/users/view.css */
+.scalr-ui-container-danger {
+    background: #fefde0;
+    border-radius: 3px;
+    padding: 18px 18px 12px;
 }

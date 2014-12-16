@@ -178,7 +178,7 @@ class DNSEventObserver extends EventObserver
         try {
             try {
                 $server = DBServer::LoadByID($server_id);
-                $dbRole = DBRole::loadById($server->roleId);
+                $dbRole = $server->GetFarmRoleObject()->GetRoleObject();
             } catch (Exception $e) {}
 
 

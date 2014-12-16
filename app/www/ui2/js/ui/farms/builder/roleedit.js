@@ -220,7 +220,7 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.main', function (tabParams) {
                 case 'ec2':
                     return {
                         'aws.availability_zone': '',
-                        'aws.instance_type': record.get('arch') == 'i386' ? 'm1.small' : 'm1.large'
+                        'aws.instance_type': record.get('image', true)['architecture'] == 'i386' ? 'm1.small' : 'm1.large'
                     };
                 break;
                 case 'rackspace':
@@ -230,7 +230,6 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.main', function (tabParams) {
                 break;
                 case 'cloudstack':
                 case 'idcf':
-                case 'ucloud':
                     return {
                         'cloudstack.service_offering_id': ''
                     };
@@ -258,7 +257,8 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.main', function (tabParams) {
             };
 
             if (platform === 'gce') {
-                cloudLocation = record.getGceCloudLocation()[0];
+                cloudLocation = record.getGceCloudLocation();
+                cloudLocation = cloudLocation.length > 0 ? cloudLocation[0] : '';
             }
 
             Scalr.loadInstanceTypes(platform, cloudLocation, Ext.bind(me.setupInstanceTypeField, me, [record, callback], true));
@@ -278,6 +278,7 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.main', function (tabParams) {
             me.isLoading = false;
             field.setReadOnly(instanceType.list.length === 0 || (instanceType.list.length === 1 && instanceType.list[0].id === instanceType.value));
             field.toggleIcon('governance', !!limits);
+            field.updateListEmptyText({cloudLocation:record.get('cloud_location'), limits: !!limits});
 
             if(callback) callback();
         },
@@ -314,7 +315,7 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.main', function (tabParams) {
             var me = this,
                 settings = record.get('settings', true),
                 platform = record.get('platform'),
-                arch = record.get('arch'),
+                arch = record.get('image', true)['architecture'],
                 roleBehaviors = record.get('behaviors').split(','),
                 behaviors = [],
                 osName = record.get('os') + (!Ext.isEmpty(arch) ? ' (' + (arch == 'i386' ? '32' : '64') + 'bit)' : '');
@@ -338,7 +339,7 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.main', function (tabParams) {
             me.down('#roleName').update('<img src="' + Ext.BLANK_IMAGE_URL + '" class="x-icon-platform-small x-icon-platform-small-' + record.get('platform') + '"/>&nbsp;&nbsp;<label class="x-label-grey" title="' + record.get('name') + '">' + record.get('name') + '</label>');
             me.down('#replaceRole').setVisible(!record.get('new') && record.get('os_family'))
             me.down('#osName').update('<img src="' + Ext.BLANK_IMAGE_URL + '" class="x-icon-osfamily-small x-icon-osfamily-small-' + record.get('os_family') + '"/>&nbsp;&nbsp;<label class="x-label-grey" title="' + osName + '">' + osName + '</label>');
-            me.down('#cloud_location').selectLocation(platform, record.get('cloud_location'));
+            me.down('#cloud_location').selectLocation(platform, platform === 'gce' ? settings['gce.region'] : record.get('cloud_location'));
             
             me.suspendLayouts();
             me.down('#column2').items.each(function(comp) {
@@ -668,10 +669,20 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.main', function (tabParams) {
            },
             showTab: function(record) {
                 var data = this.cache || {},
-                    field;
-                //cloud location
+                    field, zones = [],
+                    settings = record.get('settings', true);
+                
                 field = this.down('[name="gce.cloud-location"]');
-                field.store.loadData(data['zones'] || []);
+                if (settings['gce.region']) {
+                    Ext.each(data['zones'], function(zone){
+                        if (zone['name'].indexOf(settings['gce.region']) === 0) {
+                            zones.push(zone);
+                        }
+                    });
+                } else {
+                    zones = data['zones'] || [];
+                }
+                field.store.loadData(zones);
                 field.setValue(record.getGceCloudLocation());
             },
             saveParam: function(name, value) {
@@ -772,27 +783,38 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.main', function (tabParams) {
                 listeners: {
                     beforeselect: function(comp, record) {
                         //todo: quick solution - do better
-                        var currentRole, storages, storageTab, allowChange;
+                        var currentRole, storages, storageTab, allowChange = true, dbmsrTab;
                         currentRole = comp.up('#maintab').currentRole;
                         if (!record.get('ebsencryption') && currentRole.get('platform') === 'ec2') {
-                            storageTab = this.up('farmroleedit').down('#tabspanel').getComponent('storage');
-                            if (storageTab && storageTab.isVisible()) {
-                                storages = storageTab.getStorages();
+                            var tabsPanel = this.up('farmroleedit').down('#tabspanel');
+
+                            dbmsrTab = tabsPanel.getComponent('dbmsr');
+                            if (dbmsrTab && dbmsrTab.isVisible()) {
+                                allowChange = dbmsrTab.down('[name="db.msr.data_storage.ebs.encrypted"]').getValue() ? false : true;
                             } else {
-                                storages = (currentRole.get('storages', true)||{})['configs'];
+                                allowChange = currentRole.get('settings', true)['db.msr.data_storage.ebs.encrypted'] != 1;
                             }
-                            if (storages) {
-                                allowChange = true;
-                                Ext.each(storages, function(storage){
-                                    if (storage.settings['ebs.encrypted']) {
-                                        allowChange = false;
-                                        return false;
-                                    }
-                                });
-                                if (!allowChange) Scalr.message.InfoTip('Please remove EBS encrypted storages before changing instance type to '+record.get('name'), comp.inputEl, {anchor: 'bottom'});
-                                return allowChange;
+                            if (!allowChange) Scalr.message.InfoTip('Instance type '+record.get('name') + ' doesn\'t support EBS encrypted storage', comp.inputEl, {anchor: 'bottom'});
+                            //check storages
+                            if (allowChange) {
+                                storageTab = tabsPanel.getComponent('storage');
+                                if (storageTab && storageTab.isVisible()) {
+                                    storages = storageTab.getStorages();
+                                } else {
+                                    storages = (currentRole.get('storages', true)||{})['configs'];
+                                }
+                                if (storages) {
+                                    Ext.each(storages, function(storage){
+                                        if (storage.settings['ebs.encrypted'] == 1) {
+                                            allowChange = false;
+                                            return false;
+                                        }
+                                    });
+                                    if (!allowChange) Scalr.message.InfoTip('Please remove EBS encrypted storages before changing instance type to '+record.get('name'), comp.inputEl, {anchor: 'bottom'});
+                                }
                             }
                         }
+                        return allowChange;
                     },
                     change: function(comp, value) {
                         var record = this.findRecordByValue(value),
@@ -845,24 +867,28 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.main', function (tabParams) {
                 listeners: {
                     selectlocation: function(location, state){
                         var tab = this.up('#maintab'),
-                            record = tab.currentRole;
-                        if (record.get('platform') === 'gce') {
-                            var field = tab.down('[name="gce.cloud-location"]'),
-                                value;
-                            if (field) {
-                                value = Ext.clone(field.getValue());
-                                if (state) {
-                                    if (!Ext.Array.contains(value, location)) {
-                                        value.push(location);
-                                    }
-                                } else {
-                                    if (value.length === 1) {
-                                        Scalr.message.InfoTip('At least one cloud location must be selected!', field.inputEl);
+                            record = tab.currentRole,
+                            settings = record.get('settings', true);
+                        //gce location beta
+                        if (!settings['gce.region']) {
+                            if (record.get('platform') === 'gce') {
+                                var field = tab.down('[name="gce.cloud-location"]'),
+                                    value;
+                                if (field) {
+                                    value = Ext.clone(field.getValue());
+                                    if (state) {
+                                        if (!Ext.Array.contains(value, location)) {
+                                            value.push(location);
+                                        }
                                     } else {
-                                        Ext.Array.remove(value, location);
+                                        if (value.length === 1) {
+                                            Scalr.message.InfoTip('At least one zone must be selected!', field.inputEl);
+                                        } else {
+                                            Ext.Array.remove(value, location);
+                                        }
                                     }
+                                    field.setValue(value);
                                 }
-                                field.setValue(value);
                             }
                         }
                     }
@@ -1011,13 +1037,13 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.main', function (tabParams) {
                     }]
                 },{
                     xtype: 'displayfield',
-                    platform: ['cloudstack', 'idcf', 'ucloud'],
+                    platform: ['cloudstack', 'idcf'],
                     fieldLabel: 'Cloud location',
                     labelWidth: 95,
                     name: 'cloudstack.cloud_location'
                 },{
                     xtype: 'combobox',
-                    fieldLabel: 'Cloud location',
+                    fieldLabel: Scalr.flags['betaMode'] ? 'Avail zone' : 'Cloud location',
                     platform: ['gce'],
                     flex: 1,
                     multiSelect: true,
@@ -1025,7 +1051,7 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.main', function (tabParams) {
                     valueField: 'name',
                     displayField: 'description',
                     listConfig: {
-                        cls: 'x-boundlist-checkboxes',
+                        cls: 'x-boundlist-with-icon',
                         tpl : '<tpl for=".">'+
                                 '<tpl if="state != &quot;UP&quot;">'+
                                     '<div class="x-boundlist-item x-boundlist-item-disabled" title="Zone is offline for maintenance"><img class="x-boundlist-icon" src="' + Ext.BLANK_IMAGE_URL + '"/>{description}&nbsp;<span class="warning"></span></div>'+
@@ -1035,8 +1061,9 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.main', function (tabParams) {
                               '</tpl>'
 				    },
                     store: {
-                        fields: [ 'name', 'description', 'state' ],
-                        proxy: 'object'
+                        fields: [ 'name', {name: 'description', convert: function(v, record){return record.data.description || record.data.name;}}, 'state' ],
+                        proxy: 'object',
+                        sorters: ['name']
                     },
 					editable: false,
 					queryMode: 'local',
@@ -1051,7 +1078,7 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.main', function (tabParams) {
                         beforedeselect: function(comp, record, index) {
                             if (comp.isExpanded) {
                                 if (comp.getValue().length < 2) {
-                                    Scalr.message.InfoTip('At least one cloud location must be selected!', comp.inputEl, {anchor: 'bottom'});
+                                    Scalr.message.InfoTip('At least one zone must be selected!', comp.inputEl, {anchor: 'bottom'});
                                     return false;
                                 } else {
                                     return true;
@@ -1059,11 +1086,17 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.main', function (tabParams) {
                             }
                         },
                         change: function(comp, value) {
-                            var tab = comp.up('#maintab'), locations = [];
+                            var tab = comp.up('#maintab'), locations = [],
+                                record = tab.currentRole,
+                                settings = record.get('settings', true);
+
                             tab.onParamChange(comp.name, value);
                             tab.currentRole.set('cloud_location', value.length === 1 ? value[0] : 'x-scalr-custom');
-                            comp.store.data.each(function(){locations.push(this.get('name'))});
-                            tab.down('#cloud_location').selectLocation(tab.currentRole.get('platform'), value, locations);
+                            //gce location beta
+                            if (!settings['gce.region']) {
+                                comp.store.data.each(function(){locations.push(this.get('name'))});
+                                tab.down('#cloud_location').selectLocation(tab.currentRole.get('platform'), value, locations);
+                            }
                         }
                     }
                 }]

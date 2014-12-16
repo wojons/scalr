@@ -40,13 +40,15 @@ class Scalr_Account extends Scalr_Model
         'name'			=> 'name',
         'status'		=> 'status',
         'comments'		=> 'comments',
-        'dtadded'		=> array('property' => 'dtAdded', 'update' => false, 'type' => 'datetime', 'createSql' => 'NOW()')
+        'dtadded'		=> array('property' => 'dtAdded', 'update' => false, 'type' => 'datetime', 'createSql' => 'NOW()'),
+        'priority'      => 'priority'
     );
 
     public $name;
     public $dtAdded;
     public $status;
     public $comments;
+    public $priority = 0;
 
     /**
      * @return Scalr_Account
@@ -132,7 +134,6 @@ class Scalr_Account extends Scalr_Model
                 $this->db->Execute("DELETE FROM role_parameters WHERE role_id = ?", array($role['id']));
                 $this->db->Execute("DELETE FROM role_properties WHERE role_id = ?", array($role['id']));
                 $this->db->Execute("DELETE FROM role_security_rules WHERE role_id = ?", array($role['id']));
-                $this->db->Execute("DELETE FROM role_software WHERE role_id = ?", array($role['id']));
             }
 
             //Removing cost centres and projects which are set up from this account

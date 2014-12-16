@@ -61,7 +61,7 @@ class CloudstackObserver extends \EventObserver
      */
     public function OnHostUp(\HostUpEvent $event)
     {
-        if (!in_array($event->DBServer->platform, array(\SERVER_PLATFORMS::CLOUDSTACK, \SERVER_PLATFORMS::IDCF, \SERVER_PLATFORMS::UCLOUD)))
+        if (!in_array($event->DBServer->platform, array(\SERVER_PLATFORMS::CLOUDSTACK, \SERVER_PLATFORMS::IDCF)))
             return;
 
         if ($event->DBServer->replaceServerID) return;
@@ -71,7 +71,7 @@ class CloudstackObserver extends \EventObserver
 
     public function OnBeforeHostTerminate(\BeforeHostTerminateEvent $event)
     {
-        if (!in_array($event->DBServer->platform, array(\SERVER_PLATFORMS::CLOUDSTACK, \SERVER_PLATFORMS::IDCF, \SERVER_PLATFORMS::UCLOUD)))
+        if (!in_array($event->DBServer->platform, array(\SERVER_PLATFORMS::CLOUDSTACK, \SERVER_PLATFORMS::IDCF)))
             return;
 
     }
@@ -83,7 +83,7 @@ class CloudstackObserver extends \EventObserver
      */
     public function OnHostDown(\HostDownEvent $event)
     {
-        if (!in_array($event->DBServer->platform, array(\SERVER_PLATFORMS::CLOUDSTACK, \SERVER_PLATFORMS::IDCF, \SERVER_PLATFORMS::UCLOUD))) {
+        if (!in_array($event->DBServer->platform, array(\SERVER_PLATFORMS::CLOUDSTACK, \SERVER_PLATFORMS::IDCF))) {
             return;
         }
         if ($event->DBServer->IsRebooting()) {
@@ -156,7 +156,7 @@ class CloudstackObserver extends \EventObserver
 
     public function OnHostInit(\HostInitEvent $event)
     {
-        if (!in_array($event->DBServer->platform, array(\SERVER_PLATFORMS::CLOUDSTACK, \SERVER_PLATFORMS::IDCF, \SERVER_PLATFORMS::UCLOUD)))
+        if (!in_array($event->DBServer->platform, array(\SERVER_PLATFORMS::CLOUDSTACK, \SERVER_PLATFORMS::IDCF)))
             return;
 
         if ($event->DBServer->farmRoleId) {
@@ -193,9 +193,12 @@ class CloudstackObserver extends \EventObserver
             $environment = $event->DBServer->GetEnvironmentObject();
             $cloudLocation = $event->DBServer->GetCloudLocation();
 
-            if (!$sharedIpId) {
+            if (!$sharedIpId)
                 $sharedIpId = $platform->getConfigVariable(CloudstackPlatformModule::SHARED_IP_ID.".{$cloudLocation}", $environment, false);
-            }
+            
+            if (!$sharedIpId)
+                return true;
+            
             $cs = $environment->cloudstack($event->DBServer->platform);
 
             // Create port forwarding rules for scalarizr

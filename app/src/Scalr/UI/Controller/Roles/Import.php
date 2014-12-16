@@ -93,34 +93,22 @@ class Scalr_UI_Controller_Roles_Import extends Scalr_UI_Controller
     }
 
     /**
-     * @param $platform
-     * @param $cloudLocation
-     * @param $cloudServerId
-     * @param $roleName
-     * @param bool $roleImage
-     * @throws Exception
+     * @param   string      $platform
+     * @param   string      $cloudLocation
+     * @param   string      $cloudServerId
+     * @param   string      $name
+     * @param   bool        $createImage
+     * @throws  Exception
      */
-    public function xInitiateImportAction($platform, $cloudLocation, $cloudServerId, $roleName, $roleImage = false)
+    public function xInitiateImportAction($platform, $cloudLocation, $cloudServerId, $name, $createImage = false)
     {
-        $validator = new Scalr_Validator();
+        if (! \Scalr\Role\Role::validateName($name))
+            throw new Exception(_("Name is incorrect"));
 
-        if ($roleImage) {
-            $roleName = Role::generateName('import');
-        } else {
-            if ($validator->validateNotEmpty($roleName) !== true)
-                throw new Exception('Role name cannot be empty');
-
-            if (strlen($roleName) < 3)
-                throw new Exception(_("Role name should be greater than 3 chars"));
-
-            if (! preg_match("/^[A-Za-z0-9-]+$/si", $roleName))
-                throw new Exception(_("Role name is incorrect"));
-
-            if ($this->db->GetOne("SELECT id FROM roles WHERE name=? AND (env_id = '0' OR env_id = ?) LIMIT 1",
-                array($roleName, $this->getEnvironmentId()))
-            )
-                throw new Exception('Selected role name is already used. Please select another one.');
-        }
+        if (! $createImage && $this->db->GetOne("SELECT id FROM roles WHERE name=? AND (env_id = '0' OR env_id = ?) LIMIT 1",
+            array($name, $this->getEnvironmentId()))
+        )
+            throw new Exception('Selected role name is already used. Please select another one.');
 
         $cryptoKey = Scalr::GenerateRandomKey(40);
 
@@ -129,7 +117,8 @@ class Scalr_UI_Controller_Roles_Import extends Scalr_UI_Controller
         $creInfo->envId = $this->getEnvironmentId();
         $creInfo->farmId = 0;
         $creInfo->SetProperties(array(
-            SERVER_PROPERTIES::SZR_IMPORTING_ROLE_NAME => $roleName,
+            SERVER_PROPERTIES::SZR_IMPORTING_ROLE_NAME => $name,
+            SERVER_PROPERTIES::SZR_IMPORTING_OBJECT => $createImage ? BundleTask::BUNDLETASK_OBJECT_IMAGE : BundleTask::BUNDLETASK_OBJECT_ROLE,
             SERVER_PROPERTIES::SZR_KEY => $cryptoKey,
             SERVER_PROPERTIES::SZR_KEY_TYPE => SZR_KEY_TYPE::PERMANENT,
             SERVER_PROPERTIES::SZR_VESION => "0.14.0",
@@ -219,7 +208,8 @@ class Scalr_UI_Controller_Roles_Import extends Scalr_UI_Controller
             'messaging-p2p.producer-url' => $baseurl . "/messaging",
             'env-id'		=> $dbServer->envId,
             'region'		=> $dbServer->GetCloudLocation(),
-            'scalr-id'		=> SCALR_ID
+            'scalr-id'		=> SCALR_ID/*,
+            'messaging-p2p.message-format' => 'json'*/
         );
 
         $command = 'scalarizr --import -y';
@@ -303,7 +293,8 @@ class Scalr_UI_Controller_Roles_Import extends Scalr_UI_Controller
                         'publicIp' => $ips['remoteIp'],
                         'zone' => $this->getParam('cloudLocation'),
                         'isImporting' => false,
-                        'isManaged' => false
+                        'isManaged' => false,
+                        'fullInfo' => $server
                     );
 
                     //Check is instance already importing
@@ -450,17 +441,12 @@ class Scalr_UI_Controller_Roles_Import extends Scalr_UI_Controller
 
     public function importAction()
     {
-        $unsupportedPlatforms = array('rds', SERVER_PLATFORMS::RACKSPACE, SERVER_PLATFORMS::NIMBULA);
+        $unsupportedPlatforms = array('rds', SERVER_PLATFORMS::RACKSPACE);
         $platforms = array();
         $env = Scalr_Environment::init()->loadById($this->getEnvironmentId());
         foreach ($env->getEnabledPlatforms() as $platform) {
             if (!in_array($platform, $unsupportedPlatforms)) {
-                $platforms[$platform] = array('locations' => array());
-                if ($platform !== SERVER_PLATFORMS::GCE) {
-                    foreach (PlatformFactory::NewPlatform($platform)->getLocations($this->environment) as $lk=>$lv) {
-                        $platforms[$platform]['locations'][$lk] = $lv;
-                    }
-                }
+                $platforms[] = $platform;
             }
         }
 
@@ -480,6 +466,7 @@ class Scalr_UI_Controller_Roles_Import extends Scalr_UI_Controller
                 'cloudServerId' => $dbServer->GetCloudServerID(),
                 'cloudLocation' => $dbServer->GetCloudLocation(),
                 'platform'      => $dbServer->platform,
+                'object'        => $dbServer->GetProperty(SERVER_PROPERTIES::SZR_IMPORTING_OBJECT),
                 'roleName'      => $dbServer->GetProperty(SERVER_PROPERTIES::SZR_IMPORTING_ROLE_NAME)
             );
         }
@@ -501,12 +488,15 @@ class Scalr_UI_Controller_Roles_Import extends Scalr_UI_Controller
         foreach ($logs as &$row) {
             $row['dtadded'] = Scalr_Util_DateTime::convertTz($row['dtadded']);
         }
+
         $this->response->data(array(
             'status'        => $task->status,
             'failureReason' => $task->failureReason,
             'logs'          => $logs,
             'roleId'        => $task->roleId,
-            'roleName'      => $task->roleName
+            'roleName'      => $task->roleName,
+            'platform'      => $task->platform,
+            'imageId'       => $task->snapshotId
         ));
     }
 

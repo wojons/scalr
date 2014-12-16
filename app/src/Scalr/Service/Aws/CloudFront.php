@@ -62,4 +62,13 @@ class CloudFront extends AbstractService implements ServiceInterface
     {
         return 'cloudfront.amazonaws.com';
     }
+
+    /**
+     * {@inheritdoc}
+     * @see \Scalr\Service\Aws\AbstractService::getName()
+     */
+    public function getName()
+    {
+        return 'cloudfront';
+    }
 }

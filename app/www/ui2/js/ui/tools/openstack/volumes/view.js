@@ -2,7 +2,8 @@ Scalr.regPage('Scalr.ui.tools.openstack.volumes.view', function (loadParams, mod
 	var store = Ext.create('store.store', {
 		fields: [
 			'farmId', 'farmRoleId', 'farmName', 'roleName', 'mysql_master_volume', 'mountStatus', 'serverIndex', 'serverId',
-			'volumeId', 'size', 'type', 'availability_zone', 'status', 'attachmentStatus', 'device', 'instanceId', 'autoSnaps', 'autoAttach', 'attachmentId'
+			'volumeId', 'size', 'type', 'availability_zone', 'status', 'attachmentStatus', 'device', 'instanceId', 'autoSnaps', 
+			'autoAttach', 'attachmentId', 'name', 'description'
 		],
 		proxy: {
 			type: 'scalr.paging',
@@ -50,9 +51,11 @@ Scalr.regPage('Scalr.ui.tools.openstack.volumes.view', function (loadParams, mod
 				'<tpl if="!farmId"><img src="/ui2/images/icons/false.png" /></tpl>'
 			},
 			{ header: "Volume ID", width: 260, dataIndex: 'volumeId', sortable: true },
+			{ header: "Name", width: 150, dataIndex: 'name', sortable: true, hidden: true},
+			{ header: "Description", width: 150, dataIndex: 'description', sortable: true, hidden: true},
 			{ header: "Size (GB)", width: 110, dataIndex: 'size', sortable: true },
 			{ header: "Type", width: 150, dataIndex: 'type', sortable: true},
-			{ header: "Zone", width: 90, dataIndex: 'availability_zone', sortable: true },
+			{ header: "Zone", width: 90, dataIndex: 'availability_zone', sortable: true, hidden: true},
 			{ header: "Status", width: 180, dataIndex: 'status', sortable: true, xtype: 'templatecolumn', tpl:
 				'{status}' +
 				'<tpl if="attachmentStatus"> / {attachmentStatus}</tpl>' +
@@ -63,29 +66,17 @@ Scalr.regPage('Scalr.ui.tools.openstack.volumes.view', function (loadParams, mod
 			}, {
 				xtype: 'optionscolumn2',
 				menu: [{
-					itemId: 'option.createSnap',
+					itemId: 'option.create_snapshot',
 					text: 'Create snapshot',
 					iconCls: 'x-menu-icon-create',
-					request: {
-						confirmBox: {
-							type: 'action',
-							msg: 'Are you sure want to create snapshot for Cinder volume "{volumeId}"?'
-						},
-						processBox: {
-							type: 'action',
-							msg: 'Creating snapshot ...'
-						},
-						url: '/tools/openstack/snapshots/xCreate/',
-						dataHandler: function (data) {
-							return { 
-								volumeId: data['volumeId'], 
-								cloudLocation: store.proxy.extraParams.cloudLocation,
-								platform: loadParams['platform']
-							};
-						},
-						success: function (data) {
-							document.location.href = '#/tools/openstack/snapshots/' + data.data.snapshotId + '/view?cloudLocation=' + store.proxy.extraParams.cloudLocation + '&platform=' + loadParams['platform'];
-						}
+					menuHandler: function(data) {
+						Scalr.event.fireEvent('redirect','#/tools/openstack/snapshots/create?' +
+							Ext.Object.toQueryString({
+								'volumeId': data['volumeId'],
+								'cloudLocation': store.proxy.extraParams.cloudLocation,
+								'platform': loadParams['platform']
+							})
+						);
 					}
 				}, {
 					itemId: 'option.attach',
@@ -171,6 +162,18 @@ Scalr.regPage('Scalr.ui.tools.openstack.volumes.view', function (loadParams, mod
             ignoredLoadParams: ['platform'],
 			store: store,
 			dock: 'top',
+			beforeItems: [{
+                text: 'Add volume',
+                cls: 'x-btn-green-bg',
+				handler: function() {
+					Scalr.event.fireEvent('redirect', '#/tools/openstack/volumes/create?' + 
+						Ext.Object.toQueryString({
+							'cloudLocation': store.proxy.extraParams.cloudLocation,
+							'platform': loadParams['platform']
+						})
+					);
+				}
+			}],
 			afterItems: [{
 				ui: 'paging',
 				itemId: 'delete',

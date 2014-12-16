@@ -5,16 +5,16 @@ Scalr.regPage('Scalr.ui.analytics.notifications.view', function (loadParams, mod
         proxy: 'object',
         data: [{
             id: 'notifications.ccs.enabled',
-            name: 'Cost center notifications',
+            name: 'Cost center budget alerts',
             type: 'notifications',
-            description: 'All notifications will be consolidated into a daily email.',
+            description: 'Schedule email alerts for EVERY cost center.',
             enabled: moduleParams['notifications.ccs']['enabled'],
             items: moduleParams['notifications.ccs']['items']
         },{
             id: 'notifications.projects.enabled',
-            name: 'Project notifications',
+            name: 'Project budget alerts',
             type: 'notifications',
-            description: 'All notifications will be consolidated into a daily email.',
+            description: 'Schedule email alerts for EVERY project.',
             enabled: moduleParams['notifications.projects']['enabled'],
             items: moduleParams['notifications.projects']['items']
         },{
@@ -56,7 +56,7 @@ Scalr.regPage('Scalr.ui.analytics.notifications.view', function (loadParams, mod
             },
             store: store,
             columns: [{
-                header: 'Notifications & reports',
+                header: 'Notifications',
                 dataIndex: 'name',
                 flex: 1,
                 sortable: false,
@@ -175,7 +175,7 @@ Scalr.regPage('Scalr.ui.analytics.notifications.view', function (loadParams, mod
                     },
                     features: {
                         ftype: 'addbutton',
-                        text: 'Add new notification',
+                        text: 'Add new alert',
                         handler: function(view) {
                             view.up().store.add({});
                         }
@@ -259,7 +259,7 @@ Scalr.regPage('Scalr.ui.analytics.notifications.view', function (loadParams, mod
                         return !error ? {items: items} : false;
                     },
                     columns: [{
-                        header: 'Notification type',
+                        header: 'Alert type',
                         dataIndex: 'notificationType',
                         width: 220,
                         //tdCls: 'x-form-trigger-wrap',
@@ -271,10 +271,10 @@ Scalr.regPage('Scalr.ui.analytics.notifications.view', function (loadParams, mod
                                 data: [{
                                     id: 1, name: 'Usage', description: 'Receive an email when a certain percentage of your budget has been consumed'
                                 },{
-                                    id: 2, name: 'Projected overspend', description: 'Receive an email when a Scalr expects overspend of a certain percentage'
+                                    id: 2, name: 'Projected overspend', description: 'Receive an email when Scalr expects budget overspend of a certain percentage'
                                 }]
                             },
-                            emptyText: 'Select notification type',
+                            emptyText: 'Select alert type',
                             editable: false,
                             margin: '0 12 0 13',
                             allowBlank: false,
@@ -294,7 +294,7 @@ Scalr.regPage('Scalr.ui.analytics.notifications.view', function (loadParams, mod
                             var column = grid.panel.columns[colIndex],
                                 editor = column.getEditor(record),
                                 rec = editor.findRecordByValue(value);
-                            return '<table class="x-form-trigger-wrap" style="table-layout: fixed; width: 100%;border-collapse:collapse" cellpadding="0"><tr><td class="x-form-trigger-input-cell" style="width: 100%;"><div style="box-shadow:none;padding:2px 12px 3px 13px;text-overflow: ellipsis;overflow:hidden;cursor:text" >'+(value ? (rec ? rec.get(editor.displayField) : value) : '<span style="color:#999">Select notification type</span>')+'</div></td><td valign="top" class="x-trigger-cell"><div class="x-trigger-index-0 x-form-trigger x-form-arrow-trigger x-form-trigger-first"></div></td></tr></table>';
+                            return '<table class="x-form-trigger-wrap" style="table-layout: fixed; width: 100%;border-collapse:collapse" cellpadding="0"><tr><td class="x-form-trigger-input-cell" style="width: 100%;"><div style="box-shadow:none;padding:2px 12px 3px 13px;text-overflow: ellipsis;overflow:hidden;cursor:text" >'+(value ? (rec ? rec.get(editor.displayField) : value) : '<span style="color:#999">Select alert type</span>')+'</div></td><td valign="top" class="x-trigger-cell"><div class="x-trigger-index-0 x-form-trigger x-form-arrow-trigger x-form-trigger-first"></div></td></tr></table>';
                         }
                     },{
                         header: '% of quarterly budget',
@@ -373,7 +373,7 @@ Scalr.regPage('Scalr.ui.analytics.notifications.view', function (loadParams, mod
                         }
                     },{
                         renderer: function(value, meta, record, rowIndex, colIndex, store, grid) {
-                            return '<img style="cursor:pointer;margin-top:6px" width="15" height="15" class="x-icon-action x-icon-action-delete" title="Delete notification" src="'+Ext.BLANK_IMAGE_URL+'"/>';
+                            return '<img style="cursor:pointer;margin-top:6px" width="15" height="15" class="x-icon-action x-icon-action-delete" title="Delete alert" src="'+Ext.BLANK_IMAGE_URL+'"/>';
                         },
                         width: 42,
                         sortable: false,
@@ -503,11 +503,11 @@ Scalr.regPage('Scalr.ui.analytics.notifications.view', function (loadParams, mod
                             store: {
                                 fields: ['id', 'name', 'description'],
                                 data: [{
-                                    id: -1, name: 'Total summary', description: 'Report summurizes spend for ALL cost centers'
+                                    id: -1, name: 'Total summary', description: 'Report summarizes spend for ALL cost centers'
                                 },{
-                                    id: 1, name: 'Cost center', description: 'Report summurizes the spend/budget for individual cost centers'
+                                    id: 1, name: 'Cost center', description: 'Report summarizes the spend/budget for individual cost centers'
                                 },{
-                                    id: 2, name: 'Project', description: 'Report summurizes the spend/budget for individual projects'
+                                    id: 2, name: 'Project', description: 'Report summarizes the spend/budget for individual projects'
                                 }]
                             },
                             emptyText: 'Please select report',
@@ -650,7 +650,7 @@ Scalr.regPage('Scalr.ui.analytics.notifications.view', function (loadParams, mod
                         }
                     },{
                         renderer: function(value, meta, record, rowIndex, colIndex, store, grid) {
-                            return '<img style="cursor:pointer;margin-top:6px" width="15" height="15" class="x-icon-action x-icon-action-delete" title="Delete notification" src="'+Ext.BLANK_IMAGE_URL+'"/>';
+                            return '<img style="cursor:pointer;margin-top:6px" width="15" height="15" class="x-icon-action x-icon-action-delete" title="Delete alert" src="'+Ext.BLANK_IMAGE_URL+'"/>';
                         },
                         width: 42,
                         sortable: false,

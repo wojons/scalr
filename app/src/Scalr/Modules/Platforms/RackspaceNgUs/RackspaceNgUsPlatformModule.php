@@ -40,23 +40,26 @@ class RackspaceNgUsPlatformModule extends OpenstackPlatformModule implements \Sc
      */
     public function GetServerIPAddresses(\DBServer $DBServer)
     {
+        $config = \Scalr::getContainer()->config;
+        
         $client = $this->getOsClient($DBServer->GetEnvironmentObject(), $DBServer->GetProperty(\OPENSTACK_SERVER_PROPERTIES::CLOUD_LOCATION));
         $result = $client->servers->getServerDetails($DBServer->GetProperty(\OPENSTACK_SERVER_PROPERTIES::SERVER_ID));
 
-        if ($result->accessIPv4)
+        $publicNetworkName = 'public';
+        $privateNetworkName = 'private';
+
+        if (is_array($result->addresses->{$publicNetworkName}))
+            foreach ($result->addresses->{$publicNetworkName} as $addr)
+                if ($addr->version == 4) {
+                    $remoteIp = $addr->addr;
+                    break;
+                }
+        
+        if (!$remoteIp && $result->accessIPv4)
             $remoteIp = $result->accessIPv4;
 
-        if (!$remoteIp) {
-            if (is_array($result->addresses->public))
-                foreach ($result->addresses->public as $addr)
-                    if ($addr->version == 4) {
-                        $remoteIp = $addr->addr;
-                        break;
-                    }
-        }
-
-        if (is_array($result->addresses->private))
-            foreach ($result->addresses->private as $addr)
+        if (is_array($result->addresses->{$privateNetworkName}))
+            foreach ($result->addresses->{$privateNetworkName} as $addr)
                 if ($addr->version == 4) {
                     $localIp = $addr->addr;
                     break;

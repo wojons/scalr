@@ -6,11 +6,17 @@ require_once __DIR__ . '/../../../../externals/google-api-php-client-git-0310201
 require_once __DIR__ .'/../../../../externals/google-api-php-client-git-03102014/src/Google/Service/Compute.php';
 
 use \DBServer;
-use \DBRole;
 use \BundleTask;
 use \DBFarmRole;
+use Exception;
+use FarmLogMessage;
+use LOG_CATEGORY;
+use Logger;
 use Scalr\Modules\Platforms\GoogleCE\Adapters\StatusAdapter;
 use Scalr\Modules\AbstractPlatformModule;
+use Scalr\Model\Entity\Image;
+use Scalr\Model\Entity\CloudLocation;
+use Scalr\Modules\Platforms\GoogleCE\Exception\InstanceNotFoundException;
 
 class GoogleCEPlatformModule extends AbstractPlatformModule implements \Scalr\Modules\PlatformModuleInterface
 {
@@ -20,10 +26,11 @@ class GoogleCEPlatformModule extends AbstractPlatformModule implements \Scalr\Mo
     const KEY					= 'gce.key';
     const PROJECT_ID			= 'gce.project_id';
     const ACCESS_TOKEN			= 'gce.access_token';
+    const JSON_KEY				= 'gce.json_key';
 
     const RESOURCE_BASE_URL = 'https://www.googleapis.com/compute/v1/projects/';
 
-    private $instancesListCache;
+    public $instancesListCache;
 
     public function getClient(\Scalr_Environment $environment)
     {
@@ -35,7 +42,8 @@ class GoogleCEPlatformModule extends AbstractPlatformModule implements \Scalr\Mo
         $client->setAssertionCredentials(new \Google_Auth_AssertionCredentials(
             $environment->getPlatformConfigValue(self::SERVICE_ACCOUNT_NAME),
             array('https://www.googleapis.com/auth/compute'),
-            $key
+            $key,
+            $environment->getPlatformConfigValue(self::JSON_KEY) ? null : 'notasecret'
         ));
 
         $client->setClientId($environment->getPlatformConfigValue(self::CLIENT_ID));
@@ -277,11 +285,19 @@ class GoogleCEPlatformModule extends AbstractPlatformModule implements \Scalr\Mo
     {
         $gce = $this->getClient($DBServer->GetEnvironmentObject());
 
-        $gce->instances->delete(
-            $DBServer->GetEnvironmentObject()->getPlatformConfigValue(self::PROJECT_ID),
-            $DBServer->GetCloudLocation(),
-            $DBServer->GetProperty(\GCE_SERVER_PROPERTIES::SERVER_NAME)
-        );
+        try {
+            $gce->instances->delete(
+                $DBServer->GetEnvironmentObject()->getPlatformConfigValue(self::PROJECT_ID),
+                $DBServer->GetCloudLocation(),
+                $DBServer->GetProperty(\GCE_SERVER_PROPERTIES::SERVER_NAME)
+            );
+        } catch (Exception $e) {
+            if (stristr($e->getMessage(), "not found")) {
+                throw new InstanceNotFoundException($e->getMessage(), $e->getCode(), $e);
+            }
+
+            throw $e;
+        }
 
         return true;
     }
@@ -299,26 +315,24 @@ class GoogleCEPlatformModule extends AbstractPlatformModule implements \Scalr\Mo
      * {@inheritdoc}
      * @see \Scalr\Modules\PlatformModuleInterface::RemoveServerSnapshot()
      */
-    public function RemoveServerSnapshot(DBRole $DBRole)
+    public function RemoveServerSnapshot(Image $image)
     {
-        foreach ($DBRole->getImageId(\SERVER_PLATFORMS::GCE) as $location => $imageId) {
+        if (! $image->getEnvironment())
+            return true;
 
-            $gce = $this->getClient($DBRole->GetEnvironmentObject());
+        $gce = $this->getClient($image->getEnvironment());
 
-            try {
+        try {
 
-                $projectId = $DBRole->GetEnvironmentObject()->getPlatformConfigValue(self::PROJECT_ID);
-                $imageId = str_replace("{$projectId}/images/", "", $imageId);
+            $projectId = $image->getEnvironment()->getPlatformConfigValue(self::PROJECT_ID);
+            $imageId = str_replace("{$projectId}/images/", "", $image->id);
 
-                $gce->images->delete($projectId, $imageId);
-            }
-            catch(\Exception $e)
-            {
-                if (stristr($e->getMessage(), "was not found"))
-                    return true;
-                else
-                    throw $e;
-            }
+            $gce->images->delete($projectId, $imageId);
+        } catch(\Exception $e) {
+            if (stristr($e->getMessage(), "was not found"))
+                return true;
+            else
+                throw $e;
         }
 
         return true;
@@ -395,6 +409,8 @@ class GoogleCEPlatformModule extends AbstractPlatformModule implements \Scalr\Mo
                 return self::RESOURCE_BASE_URL."{$objectName}";
         } elseif ($objectType == 'machineTypes' || $objectType == 'disks') {
             return self::RESOURCE_BASE_URL."{$projectName}/zones/{$cloudLocation}/{$objectType}/{$objectName}";
+        } elseif ($objectType == 'regions' || $objectType == 'zones') {
+            return self::RESOURCE_BASE_URL."{$projectName}/{$objectType}/{$objectName}";
         } else {
             return self::RESOURCE_BASE_URL."{$projectName}/global/{$objectType}/{$objectName}";
         }
@@ -409,7 +425,7 @@ class GoogleCEPlatformModule extends AbstractPlatformModule implements \Scalr\Mo
      * {@inheritdoc}
      * @see \Scalr\Modules\PlatformModuleInterface::GetServerExtendedInformation()
      */
-    public function GetServerExtendedInformation(DBServer $DBServer)
+    public function GetServerExtendedInformation(DBServer $DBServer, $extended = false)
     {
         try
         {
@@ -460,6 +476,8 @@ class GoogleCEPlatformModule extends AbstractPlatformModule implements \Scalr\Mo
 
         if ($scope == 'zones') {
             $operation = $gce->zoneOperations->get($projectName, $cloudLocation, $operationId);
+        } elseif ($scope == 'regions') {
+            $operation = $gce->regionOperations->get($projectName, $cloudLocation, $operationId);
         }
 
         return $operation;
@@ -471,9 +489,9 @@ class GoogleCEPlatformModule extends AbstractPlatformModule implements \Scalr\Mo
 
         if (!$launchOptions) {
             $launchOptions = new \Scalr_Server_LaunchOptions();
-            $DBRole = DBRole::loadById($DBServer->roleId);
+            $DBRole = $DBServer->GetFarmRoleObject()->GetRoleObject();
 
-            $launchOptions->imageId = $DBRole->getImageId(\SERVER_PLATFORMS::GCE, $DBServer->GetProperty(\GCE_SERVER_PROPERTIES::CLOUD_LOCATION));
+            $launchOptions->imageId = $DBRole->__getNewRoleObject()->getImage(\SERVER_PLATFORMS::GCE, $DBServer->GetProperty(\GCE_SERVER_PROPERTIES::CLOUD_LOCATION))->imageId;
 
             $launchOptions->serverType = $DBServer->GetFarmRoleObject()->GetSetting(DBFarmRole::SETTING_GCE_MACHINE_TYPE);
 
@@ -660,46 +678,6 @@ class GoogleCEPlatformModule extends AbstractPlatformModule implements \Scalr\Mo
 
         $diskName = "root-{$DBServer->serverId}";
 
-        /*
-        try {
-            $rootDisk = new \Google_Service_Compute_Disk();
-            $rootDisk->setKind("compute#disk");
-            $rootDisk->setZone($this->getObjectUrl(
-                $availZone,
-                'zones',
-                $environment->getPlatformConfigValue(self::PROJECT_ID)
-            ));
-            $rootDisk->setName($diskName);
-            $rootDisk->setDescription("Server persistent disk created from image: {$image}");
-            $rootDisk->setSourceImage($image);
-
-            $op = $gce->disks->insert(
-                $environment->getPlatformConfigValue(self::PROJECT_ID),
-                $availZone,
-                $rootDisk,
-                array('sourceImage' => $image)
-            );
-
-            $DBServer->SetProperty(\GCE_SERVER_PROPERTIES::ROOT_DEVICE_NAME, $diskName);
-        } catch (\Exception $e) {
-            throw new \Exception(sprintf("Cannot create root disk from image: %s", $e->getMessage()));
-        }
-
-        while(true) {
-            //Wait for disk
-            $op = $gce->zoneOperations->get(
-                $environment->getPlatformConfigValue(self::PROJECT_ID),
-                $availZone,
-                $op->name
-            );
-
-            if ($op->status == 'DONE')
-                break;
-
-            if ($op->status == 'PENDING' || $op->status == 'RUNNING')
-                sleep(1);
-        }
-        */
         $initializeParams = new \Google_Service_Compute_AttachedDiskInitializeParams();
         $initializeParams->sourceImage = $image;
         $initializeParams->diskName = $diskName;
@@ -713,15 +691,6 @@ class GoogleCEPlatformModule extends AbstractPlatformModule implements \Scalr\Mo
         $attachedDisk->setAutoDelete(true);
         $attachedDisk->setInitializeParams($initializeParams);
 
-        /*
-        $attachedDisk->setSource($this->getObjectUrl(
-            "root-{$DBServer->serverId}",
-            'disks',
-            $environment->getPlatformConfigValue(self::PROJECT_ID),
-            $availZone
-        ));
-        */
-
         $instance->setDisks(array($attachedDisk));
 
         $instance->setName($DBServer->serverId);
@@ -730,6 +699,7 @@ class GoogleCEPlatformModule extends AbstractPlatformModule implements \Scalr\Mo
             'scalr',
             "env-{$DBServer->envId}"
         );
+
         if ($DBServer->farmId)
             $tags[] = "farm-{$DBServer->farmId}";
 
@@ -745,9 +715,11 @@ class GoogleCEPlatformModule extends AbstractPlatformModule implements \Scalr\Mo
         $items = array();
 
         // Set user data
-         foreach ($userData as $k=>$v)
+        foreach ($userData as $k=>$v)
             $uData .= "{$k}={$v};";
+
         $uData = trim($uData, ";");
+
         if ($uData) {
             $item = new \Google_Service_Compute_MetadataItems();
             $item->setKey('scalr');
@@ -772,7 +744,7 @@ class GoogleCEPlatformModule extends AbstractPlatformModule implements \Scalr\Mo
                 $instance
             );
         } catch (\Exception $e) {
-            throw new \Exception(sprintf(_("Cannot launch new instance. %s (%s, %s)"), $e->getMessage(), $launchOptions->imageId, $launchOptions->serverType));
+            throw new \Exception(sprintf(_("Cannot launch new instance. %s (%s, %s)"), $e->getMessage(), $image, $launchOptions->serverType));
         }
 
         if ($result->id) {
@@ -783,16 +755,14 @@ class GoogleCEPlatformModule extends AbstractPlatformModule implements \Scalr\Mo
                 \GCE_SERVER_PROPERTIES::CLOUD_LOCATION_ZONE  => $availZone,
                 \GCE_SERVER_PROPERTIES::MACHINE_TYPE         => $launchOptions->serverType,
                 \SERVER_PROPERTIES::ARCHITECTURE             => $launchOptions->architecture,
+                'debug.region'                               => $result->region,
+                'debug.zone'                                 => $result->zone,
             ]);
 
-            //TODO: separate regions from zones.
-            $DBServer->SetProperties([
-                'debug.region' => $result->region,
-                'debug.zone'   => $result->zone,
-            ]);
-
+            $DBServer->setOsType('linux');
             $DBServer->cloudLocation = $availZone;
             $DBServer->cloudLocationZone = $availZone;
+            $DBServer->imageId = $launchOptions->imageId;
 
             return $DBServer;
         } else {
@@ -862,21 +832,48 @@ class GoogleCEPlatformModule extends AbstractPlatformModule implements \Scalr\Mo
 
         $projectId = $env->getPlatformConfigValue(self::PROJECT_ID);
 
-        $ret = array();
-        $types = $gceClient->machineTypes->listMachineTypes($projectId, $cloudLocation);
-        foreach ($types->items as $item) {
-            $isEphemeral = (substr($item->name, -2) == '-d');
-            if (!$isEphemeral) {
-                if (!$details)
-                    $ret[(string)$item->name] = "{$item->name} ({$item->description})";
-                else
-                    $ret[(string)$item->name] = array(
-                        'name' => (string) $item->name,
-                        'ram' => (string) $item->memoryMb,
-                        'vcpus' => (string) $item->guestCpus,
-                        'disk' => (string) $item->imageSpaceGb,
-                        'type' => "HDD",
-                    );
+        $ret = [];
+        $detailed = [];
+
+        //Trying to retrieve instance types from the cache
+        $collection = $this->getCachedInstanceTypes(\SERVER_PLATFORMS::GCE, '', $cloudLocation);
+
+        if ($collection === false || $collection->count() == 0) {
+            //No cache. Fetching data from the cloud
+            $types = $gceClient->machineTypes->listMachineTypes($projectId, $cloudLocation);
+
+            foreach ($types->items as $item) {
+                $isEphemeral = (substr($item->name, -2) == '-d');
+
+                if (!$isEphemeral) {
+                    $detailed[(string)$item->name] = [
+                        'name'        => (string) $item->name,
+                        'description' => (string) $item->description,
+                        'ram'         => (string) $item->memoryMb,
+                        'vcpus'       => (string) $item->guestCpus,
+                        'disk'        => (string) $item->imageSpaceGb,
+                        'type'        => "HDD",
+                    ];
+
+                    if (!$details) {
+                        $ret[(string)$item->name] = "{$item->name} ({$item->description})";
+                    } else {
+                        $ret[(string)$item->name] = $detailed[(string)$item->name];
+                    }
+                }
+            }
+
+            //Refreshes/creates a cache
+            CloudLocation::updateInstanceTypes(\SERVER_PLATFORMS::GCE, '', $cloudLocation, $detailed);
+        } else {
+            //Takes data from cache
+            foreach ($collection as $cloudInstanceType) {
+                /* @var $cloudInstanceType \Scalr\Model\Entity\CloudInstanceType */
+                if (!$details) {
+                    $ret[$cloudInstanceType->instanceTypeId] = $cloudInstanceType->name . "(" . $cloudInstanceType->options->description . ")";
+                } else {
+                    $ret[$cloudInstanceType->instanceTypeId] = $cloudInstanceType->getProperties();
+                }
             }
         }
 

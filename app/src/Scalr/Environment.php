@@ -5,10 +5,8 @@ use Scalr\Modules\Platforms\Ec2\Ec2PlatformModule;
 use Scalr\Modules\Platforms\Eucalyptus\EucalyptusPlatformModule;
 use Scalr\Modules\Platforms\GoogleCE\GoogleCEPlatformModule;
 use Scalr\Modules\Platforms\Idcf\IdcfPlatformModule;
-use Scalr\Modules\Platforms\Nimbula\NimbulaPlatformModule;
 use Scalr\Modules\Platforms\Openstack\OpenstackPlatformModule;
 use Scalr\Modules\Platforms\Rackspace\RackspacePlatformModule;
-use Scalr\Modules\Platforms\UCloud\UCloudPlatformModule;
 
 /**
  * Scalr_Environment class
@@ -70,6 +68,9 @@ use Scalr\Modules\Platforms\UCloud\UCloudPlatformModule;
  * @property \Scalr\DependencyInjection\AnalyticsContainer $analytics
  *           Gets Cost Analytics sub container
  *
+ * @property \Scalr\Logger $logger
+ *           Gets logger service
+ *
  *
  * @method   mixed config()
  *           config(string $name)
@@ -87,6 +88,10 @@ use Scalr\Modules\Platforms\UCloud\UCloudPlatformModule;
  * @method   \Scalr\Net\Ldap\LdapClient ldap()
  *           ldap($user, $password)
  *           Gets a new instance of LdapClient for specified user
+ *
+ * @method   \Scalr\Logger logger()
+ *           logger(string $name = null)
+ *           Gets logger for specified category or class
  */
 class Scalr_Environment extends Scalr_Model
 {
@@ -568,10 +573,6 @@ class Scalr_Environment extends Scalr_Model
                 SERVER_PLATFORMS::IDCF . "." . IdcfPlatformModule::API_URL,
                 SERVER_PLATFORMS::IDCF . "." . IdcfPlatformModule::SECRET_KEY,
 
-                SERVER_PLATFORMS::UCLOUD . "." . UCloudPlatformModule::API_KEY,
-                SERVER_PLATFORMS::UCLOUD . "." . UCloudPlatformModule::API_URL,
-                SERVER_PLATFORMS::UCLOUD . "." . UCloudPlatformModule::SECRET_KEY,
-
                 SERVER_PLATFORMS::OPENSTACK . "." . OpenstackPlatformModule::API_KEY,
                 SERVER_PLATFORMS::OPENSTACK . "." . OpenstackPlatformModule::AUTH_TOKEN,
                 SERVER_PLATFORMS::OPENSTACK . "." . OpenstackPlatformModule::KEYSTONE_URL,
@@ -646,11 +647,7 @@ class Scalr_Environment extends Scalr_Model
                 GoogleCEPlatformModule::KEY,
                 GoogleCEPlatformModule::PROJECT_ID,
                 GoogleCEPlatformModule::SERVICE_ACCOUNT_NAME,
-
-                NimbulaPlatformModule::API_URL,
-                NimbulaPlatformModule::IMAGE_LIST_ENTRY_VALUE,
-                NimbulaPlatformModule::PASSWORD,
-                NimbulaPlatformModule::USERNAME,
+                GoogleCEPlatformModule::JSON_KEY,
 
                 RackspacePlatformModule::API_KEY,
                 RackspacePlatformModule::IS_MANAGED,
@@ -689,7 +686,8 @@ class Scalr_Environment extends Scalr_Model
                     GoogleCEPlatformModule::KEY,
                     GoogleCEPlatformModule::PROJECT_ID,
                     GoogleCEPlatformModule::RESOURCE_BASE_URL,
-                    GoogleCEPlatformModule::SERVICE_ACCOUNT_NAME
+                    GoogleCEPlatformModule::SERVICE_ACCOUNT_NAME,
+                    GoogleCEPlatformModule::JSON_KEY,
                 ),
                 'enabledPlatforms' => array()
             );
@@ -699,7 +697,6 @@ class Scalr_Environment extends Scalr_Model
             }
 
             foreach (array(SERVER_PLATFORMS::IDCF,
-                SERVER_PLATFORMS::UCLOUD,
                 SERVER_PLATFORMS::CLOUDSTACK) as $platform) {
                 $ret[$platform] = array(
                     $platform . "." . CloudstackPlatformModule::ACCOUNT_NAME,

@@ -23,9 +23,11 @@ $ADODB_CACHE_DIR = CACHEPATH . "/adodb";
 define("SCALR_TEMPLATES_PATH", APPPATH . "/templates/en_US");
 
 // Require autoload definition
-$classpath[] = $base;
-$classpath[] = $base . "/externals/ZF-1.10.8";
-$classpath[] = $base . "/externals/google-api-php-client-git-03102014/src";
+$classpath = [
+    $base,
+    $base . "/externals/ZF-1.10.8",
+    $base . "/externals/google-api-php-client-git-03102014/src"
+];
 set_include_path(get_include_path() . PATH_SEPARATOR . join(PATH_SEPARATOR, $classpath));
 
 require_once SRCPATH . "/autoload.inc.php";
@@ -33,6 +35,10 @@ require_once SRCPATH . "/autoload.inc.php";
 spl_autoload_register("__autoload");
 
 set_error_handler("Scalr::errorHandler");
+
+if (file_exists(APPPATH . "/../vendor/autoload.php")) {
+    require_once APPPATH . "/../vendor/autoload.php";
+}
 
 //Container witn adodb service needs to be defined in the first turn, as much depends on it.
 Scalr::initializeContainer();
@@ -50,28 +56,10 @@ if (!$id) {
 
 define("SCALR_ID", $id);
 
-// Define log4php contants
-define("LOG4PHP_DIR", SRCPATH . '/externals/apache-log4php-2.0.0-incubating/src/main/php');
-require_once LOG4PHP_DIR . '/Logger.php';
-
 require_once SRCPATH . '/externals/adodb5-18/adodb-exceptions.inc.php';
 require_once SRCPATH . '/externals/adodb5-18/adodb.inc.php';
 
-$cfg = Scalr::getContainer()->config;
-
-try {
-    $db = Scalr::getDb();
-} catch (Exception $e) {
-    throw new Exception("Service is temporary not available. Please try again in a minute. [DB]");
-}
-
-require_once SRCPATH . '/class.LoggerAppenderScalr.php';
-require_once SRCPATH . '/class.FarmLogMessage.php';
-require_once SRCPATH . '/class.ScriptingLogMessage.php';
-require_once SRCPATH . '/class.LoggerFilterCategoryMatch.php';
-
-Logger::configure(APPPATH.'/etc/log4php.xml', 'LoggerConfiguratorXml');
-
-// Require observer interfaces
-require_once APPPATH . '/observers/interface.IEventObserver.php';
-
+// Define log4php contants
+define("LOG4PHP_DIR", SRCPATH . '/externals/apache-log4php-2.0.0-incubating/src/main/php');
+require_once LOG4PHP_DIR . '/Logger.php';
+Logger::configure(APPPATH . '/etc/log4php.xml', 'LoggerConfiguratorXml');

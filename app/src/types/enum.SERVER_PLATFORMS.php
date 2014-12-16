@@ -23,11 +23,6 @@ final class SERVER_PLATFORMS
     const CLOUDSTACK = 'cloudstack';
     const IDCF		= 'idcf';
 
-    //Deprecated
-    const UCLOUD	= 'ucloud';
-    const NIMBULA	= 'nimbula';
-
-
     public static function GetList()
     {
         return array(
@@ -35,17 +30,15 @@ final class SERVER_PLATFORMS
             self::GCE			=> 'Google Compute Engine',
             self::EUCALYPTUS 	=> 'Eucalyptus',
             self::RACKSPACE		=> 'Legacy Rackspace',
-            self::NIMBULA		=> 'Nimbula',
             self::CLOUDSTACK	=> 'Cloudstack',
             self::OPENSTACK		=> 'Openstack',
             self::IDCF			=> 'IDC Frontier',
-            ///self::UCLOUD		=> 'KT uCloud',
             self::RACKSPACENG_US=> 'Rackspace',
             self::RACKSPACENG_UK=> 'Rackspace UK',
             self::ECS           => 'Enter Cloud Suite',
             self::CONTRAIL      => 'Contrail',
             self::OCS           => 'CloudScaling',
-            self::NEBULA        => 'Nebula',
+            self::NEBULA        => 'Nebula'
         );
     }
 

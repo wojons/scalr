@@ -23,7 +23,7 @@ Scalr.regPage('Scalr.ui.farms.roles.replaceRole', function (loadParams, modulePa
                 }
             }],
             store: {
-                fields: ['id', 'name', 'os_name', 'os_family', 'os_generation', 'os_version', 'shared', 'arch', 'behaviors'],
+                fields: ['id', 'name', 'os_name', 'os_family', 'os_generation', 'os_version', 'shared', 'image', 'behaviors'],
                 proxy: 'object',
                 data: moduleParams['roles'],
                 sortOnLoad: true,
@@ -37,7 +37,7 @@ Scalr.regPage('Scalr.ui.farms.roles.replaceRole', function (loadParams, modulePa
                 flex: 1,
                 tpl: 
                     '<img src="' + Ext.BLANK_IMAGE_URL + '" class="x-icon-osfamily-small x-icon-osfamily-small-{os_family}"/>&nbsp;&nbsp;'+
-                    '{os_name} {[values.arch==\'i386\'?32:64]}bit'+
+                    '{os_name} {[values.image.architecture==\'i386\'?32:64]}bit'+
                     '&nbsp;&nbsp;(<tpl if="shared"><span style="color:#46A657" title="Quick start role.">{name}</span><tpl else>{name}</tpl>)'
                     
             },{

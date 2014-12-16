@@ -1,8 +1,58 @@
 <?php
 use Scalr\Acl\Acl;
+use Scalr\UI\Request\JsonData;
+use Scalr\UI\Request\Validator;
+use Scalr\Model\Entity\ChefServer;
 
 class Scalr_UI_Controller_Services_Chef_Servers extends Scalr_UI_Controller
 {
+    private static $levelMap = [
+        'environment' => ChefServer::LEVEL_ENVIRONMENT,
+        'account'     => ChefServer::LEVEL_ACCOUNT,
+        'scalr'       => ChefServer::LEVEL_SCALR
+    ];
+
+    var $level = null;
+
+    public function hasAccess()
+    {
+        return true;
+    }
+    
+    public function init()
+    {
+        if ($this->user->isScalrAdmin()) {
+            $level = 'scalr';
+        } else {
+            $level = $this->getParam('level') ? $this->getParam('level') : 'environment';
+        }
+        if (isset(self::$levelMap[$level])) {
+            $this->level = self::$levelMap[$level];
+        } elseif (in_array($level, [ChefServer::LEVEL_ENVIRONMENT, ChefServer::LEVEL_ACCOUNT, ChefServer::LEVEL_SCALR])) {
+            $this->level = (int)$level;
+        } else {
+            throw new Scalr_Exception_Core('Invalid chef servers scope');
+        }
+    }
+
+    private function canManageServers()
+    {
+        return ($this->level == ChefServer::LEVEL_ENVIRONMENT && $this->request->isAllowed(Acl::RESOURCE_SERVICES_ENVADMINISTRATION_CHEF) && !$this->user->isScalrAdmin() ||
+               $this->level == ChefServer::LEVEL_ACCOUNT && $this->request->isAllowed(Acl::RESOURCE_SERVICES_ADMINISTRATION_CHEF) && !$this->user->isScalrAdmin() ||
+               $this->level == ChefServer::LEVEL_SCALR && $this->user->isScalrAdmin());
+    }
+
+    /**
+     * @param ChefServer $server
+     */
+    private function canEditServer($server)
+    {
+        return $this->level == $server->level &&
+               ($server->level == ChefServer::LEVEL_ENVIRONMENT && $server->envId == $this->getEnvironmentId() && $server->accountId == $this->user->getAccountId() ||
+               $server->level == ChefServer::LEVEL_ACCOUNT && $server->accountId == $this->user->getAccountId() && empty($server->envId) ||
+               $server->level == ChefServer::LEVEL_SCALR && empty($server->accountId) && empty($server->envId));
+    }
+    
     public function defaultAction()
     {
         $this->viewAction();
@@ -10,109 +60,228 @@ class Scalr_UI_Controller_Services_Chef_Servers extends Scalr_UI_Controller
 
     public function viewAction()
     {
-        $this->request->restrictAccess(Acl::RESOURCE_SERVICES_CHEF);
-        $this->response->page('ui/services/chef/servers/view.js');
-    }
-
-    public function editAction()
-    {
-        $this->request->restrictAccess(Acl::RESOURCE_SERVICES_CHEF);
-        $servParams = $this->db->GetRow('SELECT env_id, url, auth_key as authKey, username as userName, v_auth_key as authVKey, v_username as userVName
-            FROM services_chef_servers WHERE id = ?', array($this->getParam('servId')));
-
-        if (!$this->user->getPermissions()->hasAccessEnvironment($servParams['env_id']))
+        if (!$this->canManageServers()) {
             throw new Scalr_Exception_InsufficientPermissions();
+        }
 
-        $servParams['authKey'] = $this->getCrypto()->decrypt($servParams['authKey'], $this->cryptoKey);
-        $servParams['authVKey'] = $this->getCrypto()->decrypt($servParams['authVKey'], $this->cryptoKey);
-        $this->response->page('ui/services/chef/servers/create.js', array('servParams'=>$servParams));
+        $this->response->page('ui/services/chef/servers/view.js', [
+            'servers' => $this->getList(),
+            'level' => $this->level,
+            'levelMap' => array_flip(self::$levelMap)
+        ]);
     }
 
-    public function createAction()
+    public function xListAction()
     {
-        $this->request->restrictAccess(Acl::RESOURCE_SERVICES_CHEF);
-        $this->response->page('ui/services/chef/servers/create.js');
+        if (!$this->canManageServers()) {
+            throw new Scalr_Exception_InsufficientPermissions();
+        }
+    
+        $this->response->data([
+            'servers' => $this->getList()
+        ]);
     }
 
+    //with governance
     public function xListServersAction()
     {
-        $response = $this->buildResponseFromSql('SELECT id, url, username FROM services_chef_servers WHERE env_id = '.$this->getEnvironmentId());
-        $this->response->data($response);
+        if (!$this->user->isAdmin()) {
+            $governance = new Scalr_Governance($this->getEnvironmentId());
+            $limits = $governance->getValue(Scalr_Governance::CATEGORY_GENERAL, Scalr_Governance::GENERAL_CHEF, null);
+        }
+        $list = [];
+        $levelMap = array_flip(self::$levelMap);
+        foreach ($this->getList() as $server) {
+            if (!$limits || isset($limits['servers'][(string)$server['id']])) {
+                $list[] = [
+                    'id'       => (string)$server['id'],
+                    'url'      => $server['url'],
+                    'username' => $server['username'],
+                    'level'    => $levelMap[$server['level']]
+                ];
+            }
+        }
+        $this->response->data([
+            'data' => $list
+        ]);
     }
 
-    public function xListEnvironmentsAction()
+    /**
+     * @param int $id
+     * @throws Exception
+     */
+    public function xRemoveAction($id)
     {
-        $servParams = $this->db->GetRow('SELECT id, url, env_id, auth_key as authKey, username as userName FROM services_chef_servers WHERE id = ?', array($this->getParam('servId')));
-
-        if(!$this->user->getPermissions()->hasAccessEnvironment($servParams['env_id']))
+        if (!$this->canManageServers()) {
             throw new Scalr_Exception_InsufficientPermissions();
-
-        $chef = Scalr_Service_Chef_Client::getChef($servParams['url'], $servParams['userName'], $this->getCrypto()->decrypt($servParams['authKey'], $this->cryptoKey));
-        $response = $chef->listEnvironments();
-        if ($response instanceof stdClass)
-            $response = (array)$response;
-        $envs = array();
-        foreach ($response as $key => $value)
-            $envs[]['name'] = $key;
-
-        $this->response->data(array('data' => $envs));
-    }
-
-    public function xDeleteServerAction()
-    {
-        $this->request->restrictAccess(Acl::RESOURCE_SERVICES_CHEF);
-        $sql = 'SELECT name FROM services_chef_runlists WHERE chef_server_id = '.$this->db->qstr($this->getParam('servId'));
-        $result = $this->buildResponseFromSql($sql);
-        if($result['total'])
-            $this->response->failure('This chef server is in use by runlist(s). It can\'t be deleted');
-        else {
-            $this->db->Execute('DELETE FROM services_chef_servers WHERE id = ? AND env_id = ?', array($this->getParam('servId'), $this->getEnvironmentId()));
-            $this->response->success('Chef server successfully deleted');
         }
+        
+        $server = ChefServer::findPk($id);
+        
+        if (!$this->canEditServer($server)) {
+            throw new Scalr_Exception_Core('Insufficient permissions to remove chef server.');
+        }
+
+        if ($server->isInUse()) {
+            throw new Scalr_Exception_Core('Chef server is in use and can\'t be removed.');
+        }
+        
+        $server->delete();
+        $this->response->success("Chef server successfully removed.");
     }
 
-    public function xSaveServerAction()
+    /**
+     * @param int $id
+     * @param string $url
+     * @param string $username
+     * @param string $authKey
+     * @param string $vUsername
+     * @param string $vAuthKey
+     * @throws Exception
+     */
+    public function xSaveAction($id, $url, $username, $authKey, $vUsername, $vAuthKey)
     {
-        $this->request->restrictAccess(Acl::RESOURCE_SERVICES_CHEF);
-        $servId = $this->getParam('servId');
-
-        $key = str_replace("\r\n", "\n", $this->getParam('authKey'));
-        $vKey = str_replace("\r\n", "\n", $this->getParam('authVKey'));
-
-        $chef = Scalr_Service_Chef_Client::getChef($this->getParam('url'), $this->getParam('userName'), $key);
-        $response = $chef->listCookbooks();
-        $chef2 = Scalr_Service_Chef_Client::getChef($this->getParam('url'), $this->getParam('userVName'), $vKey);
-        $response = $chef2->createClient('scalr-temp-client');
-        $response2 = $chef->removeClient('scalr-temp-client');
-
-        if ($servId) {
-            $this->db->Execute('UPDATE services_chef_servers SET  `url` = ?, `username` = ?, `auth_key` = ?, `v_username` = ?, `v_auth_key` = ? WHERE `id` = ? AND env_id = ?', array(
-                $this->getParam('url'),
-                $this->getParam('userName'),
-                $this->getCrypto()->encrypt($key, $this->cryptoKey),
-                $this->getParam('userVName'),
-                $this->getCrypto()->encrypt($vKey, $this->cryptoKey),
-                $servId,
-                $this->getEnvironmentId()
-            ));
+        if (!$this->canManageServers()) {
+            throw new Scalr_Exception_InsufficientPermissions();
+        }
+        
+        if (!$id) {
+            $server = new ChefServer();
+            $server->level = $this->level;
+            if ($this->level == ChefServer::LEVEL_ENVIRONMENT) {
+                $server->accountId = $this->user->getAccountId();
+                $server->envId = $this->getEnvironmentId();
+            } elseif ($this->level == ChefServer::LEVEL_ACCOUNT) {
+                $server->accountId = $this->user->getAccountId();
+            }
         } else {
-            $this->db->Execute('INSERT INTO services_chef_servers (`env_id`, `url`, `username`, `auth_key`, `v_username`, `v_auth_key`) VALUES (?, ?, ?, ?, ?, ?)', array(
-                $this->getEnvironmentId(),
-                $this->getParam('url'),
-                $this->getParam('userName'),
-                $this->getCrypto()->encrypt($key, $this->cryptoKey),
-                $this->getParam('userVName'),
-                $this->getCrypto()->encrypt($vKey, $this->cryptoKey),
-            ));
-            $servId = $this->db->Insert_ID();
+            $server = ChefServer::findPk($id);
+            if (!$this->canEditServer($server)) {
+                throw new Scalr_Exception_Core('Insufficient permissions to edit chef server at this scope');
+            }
         }
+
+        $validator = new Validator();
+        $validator->validate($url, 'url', Validator::NOEMPTY);
+
+        //check url unique within current level
+        $criteria = [];
+        $criteria[] = ['url' => $url];
+        $criteria[] = ['level' => $this->level];
+        if ($server->id) {
+            $criteria[] = ['id' => ['$ne' => $server->id]];
+        }
+        if ($this->level == ChefServer::LEVEL_ENVIRONMENT) {
+            $criteria[] = ['envId' => $server->envId];
+            $criteria[] = ['accountId' => $server->accountId];
+        } elseif ($this->level == ChefServer::LEVEL_ACCOUNT) {
+            $criteria[] = ['envId' => null];
+            $criteria[] = ['accountId' => $server->accountId];
+        } elseif ($this->level == ChefServer::LEVEL_SCALR) {
+            $criteria[] = ['envId' => null];
+            $criteria[] = ['accountId' => null];
+        }
+
+        if (ChefServer::findOne($criteria)) {
+            $validator->addError('url', 'Url must be unique within current scope');
+        }
+
+        if (!$validator->isValid($this->response))
+            return;
+
+
+        $authKey = str_replace("\r\n", "\n", $authKey);
+        $vAuthKey = str_replace("\r\n", "\n", $vAuthKey);
+
+        $server->url = $url;
+        $server->username = $username;
+        $server->vUsername = $vUsername;
+        $server->authKey = $this->getCrypto()->encrypt($authKey, $this->cryptoKey);
+        $server->vAuthKey = $this->getCrypto()->encrypt($vAuthKey, $this->cryptoKey);
+
+        $chef = Scalr_Service_Chef_Client::getChef($server->url, $server->username, $authKey);
+        $response = $chef->listCookbooks();
+        $chef2 = Scalr_Service_Chef_Client::getChef($server->url, $server->vUsername, $vAuthKey);
+        $clientName = 'scalr-temp-client-' . rand(10000, 99999);
+        $response = $chef2->createClient($clientName);
+        $response2 = $chef->removeClient($clientName);
+
+        $server->save();
 
         $this->response->data(array(
-            'server' => array(
-                'id' => (string)$servId,
-                'url' => $this->getParam('url')
-            )
+            'server' => $this->getServerData($server)
         ));
-        $this->response->success('Server successfully saved');
+        $this->response->success('Chef server successfully saved');
+    }
+
+    /**
+     * @param JsonData $serverIds
+     * @throws Exception
+     */
+    public function xGroupActionHandlerAction(JsonData $serverIds)
+    {
+        if (!$this->canManageServers()) {
+            throw new Scalr_Exception_InsufficientPermissions();
+        }
+        
+        $processed = array();
+        $errors = array();
+        if (!empty($serverIds)) {
+            $servers = ChefServer::find(array(
+                array(
+                    'id'  => array('$in' => $serverIds)
+                )
+            ));
+            foreach($servers as $server) {
+                if (!$this->canEditServer($server)) {
+                    $errors[] = 'Insufficient permissions to remove chef server';
+                } elseif ($server->isInUse()) {
+                    $errors[] = 'Chef server is in use and can\'t be removed.';
+                } else {
+                    $processed[] = $server->id;
+                    $server->delete();
+                }
+            }
+        }
+
+        $num = count($serverIds);
+        if (count($processed) == $num) {
+            $this->response->success('Chef servers successfully removed');
+        } else {
+            array_walk($errors, function(&$item) { $item = '- ' . $item; });
+            $this->response->warning(sprintf("Successfully removed %d from %d chef servers. \nFollowing errors occurred:\n%s", count($processed), $num, join($errors, '')));
+        }
+
+        $this->response->data(array('processed' => $processed));
+    }
+
+
+    private function getList()
+    {
+        $list = ChefServer::getList($this->user->getAccountId(), $this->getEnvironmentId(true), $this->level);
+        $data = [];
+        foreach ($list as $entity) {
+            $data[] = $this->getServerData($entity);
+        }
+
+        return $data;
+    }
+
+    private function getServerData($server)
+    {
+        $data = [
+            'id'       => $server->id,
+            'url'      => $server->url,
+            'username' => $server->username,
+            'status'   => $server->isInUse($this->user->getAccountId(), $this->getEnvironmentId(true), $this->level),
+            'level'    => $server->level
+        ];
+        if ($this->level == $server->level) {
+            $data['authKey'] = $this->getCrypto()->decrypt($server->authKey, $this->cryptoKey);
+            $data['vUsername'] = $server->vUsername;
+            $data['vAuthKey'] = $this->getCrypto()->decrypt($server->vAuthKey, $this->cryptoKey);
+        }
+
+        return $data;
     }
 }

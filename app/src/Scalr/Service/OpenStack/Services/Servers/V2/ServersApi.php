@@ -341,6 +341,29 @@ class ServersApi
     }
 
     /**
+     * Starts os on server
+     *
+     * @param   string     $serverId A server ID to resume
+     * @return  bool       Returns true on success or false otherwise
+     * @throws  RestClientException
+     */
+    public function osStart($serverId)
+    {
+        $result = null;
+        $options = array(
+            'os-start' => null,
+        );
+        $response = $this->getClient()->call(
+            $this->service,
+            sprintf('/servers/%s/action', $serverId), $options, 'POST'
+        );
+        if ($response->hasError() === false) {
+            $result = true;
+        }
+        return $result;
+    }
+    
+    /**
      * Resumes a server
      *
      * @param   string     $serverId A server ID to resume

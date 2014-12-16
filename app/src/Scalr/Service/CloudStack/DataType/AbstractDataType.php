@@ -210,7 +210,9 @@ abstract class AbstractDataType
 
         if (count($this->_properties) > 0) {
             foreach($this->_properties as $property) {
-                if (!empty($this->{$property})) {
+                if ($this instanceof PaginationType) {
+                    $result[$property] = $this->{$property};
+                } else if (!empty($this->{$property})) {
                     $result[$property] = $this->{$property}->toArray();
                 }
             }

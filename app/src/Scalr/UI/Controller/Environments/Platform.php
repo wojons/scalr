@@ -7,7 +7,6 @@ use Scalr\Modules\Platforms\Cloudstack\CloudstackPlatformModule;
 use Scalr\Modules\Platforms\Ec2\Ec2PlatformModule;
 use Scalr\Modules\Platforms\Eucalyptus\EucalyptusPlatformModule;
 use Scalr\Modules\Platforms\GoogleCE\GoogleCEPlatformModule;
-use Scalr\Modules\Platforms\Nimbula\NimbulaPlatformModule;
 use Scalr\Modules\Platforms\Openstack\OpenstackPlatformModule;
 use Scalr\Modules\Platforms\Rackspace\RackspacePlatformModule;
 use Scalr\Service\CloudStack\CloudStack;
@@ -37,7 +36,7 @@ class Scalr_UI_Controller_Environments_Platform extends Scalr_UI_Controller
 
     public static function getApiDefinitions()
     {
-        return array('xSaveEc2', 'xSaveRackspace', 'xSaveNimbula', 'xSaveCloudstack', 'xSaveOpenstack', 'xSaveEucalyptus');
+        return array('xSaveEc2', 'xSaveRackspace', 'xSaveCloudstack', 'xSaveOpenstack', 'xSaveEucalyptus');
     }
 
     private function checkVar($name, $type, $requiredError = '', $group = '', $noFileTrim = false)
@@ -300,43 +299,6 @@ class Scalr_UI_Controller_Environments_Platform extends Scalr_UI_Controller
             } catch (Exception $e) {
                 $this->db->RollbackTrans();
                 throw new Exception(_('Failed to save Rackspace settings'));
-            }
-            $this->db->CommitTrans();
-        }
-    }
-
-    public function xSaveNimbulaAction()
-    {
-        $pars = array();
-        $enabled = false;
-
-        if ($this->getParam('nimbula_is_enabled')) {
-            $enabled = true;
-
-            $pars[NimbulaPlatformModule::API_URL] = $this->checkVar(NimbulaPlatformModule::API_URL, 'string', 'API URL required');
-            $pars[NimbulaPlatformModule::USERNAME] = $this->checkVar(NimbulaPlatformModule::USERNAME, 'string', 'Username required');
-            $pars[NimbulaPlatformModule::PASSWORD] = $this->checkVar(NimbulaPlatformModule::PASSWORD, 'string', 'Password required');
-        }
-
-        if (count($this->checkVarError)) {
-            $this->response->failure();
-            $this->response->data(array('errors' => $this->checkVarError));
-        } else {
-            $this->db->BeginTrans();
-            try {
-                $this->env->enablePlatform(SERVER_PLATFORMS::NIMBULA, $enabled);
-
-                if ($enabled)
-                    $this->env->setPlatformConfig($pars);
-
-                if (! $this->user->getAccount()->getSetting(Scalr_Account::SETTING_DATE_ENV_CONFIGURED))
-                    $this->user->getAccount()->setSetting(Scalr_Account::SETTING_DATE_ENV_CONFIGURED, time());
-
-                $this->response->success('Environment saved');
-                $this->response->data(arraY('enabled' => $enabled));
-            } catch (Exception $e) {
-                $this->db->RollbackTrans();
-                throw new Exception(_('Failed to save Nimbula settings'));
             }
             $this->db->CommitTrans();
         }

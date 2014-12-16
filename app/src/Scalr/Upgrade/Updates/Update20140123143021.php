@@ -57,7 +57,7 @@ class Update20140123143021 extends AbstractUpdate implements SequenceInterface
             if (!($env instanceof \Scalr_Environment)) continue;
             $accountNumber = $env->getPlatformConfigValue(Ec2PlatformModule::ACCOUNT_ID);
             try {
-                $num = $env->aws()->getAccountNumber();
+                $num = $env->aws('us-east-1')->getAccountNumber();
                 if ($num != $accountNumber) {
                     $this->console->out('Updating account_number for %d environment: "%s" -> "%s"', $env->id, $accountNumber, $num);
                     $env->setPlatformConfig(array(

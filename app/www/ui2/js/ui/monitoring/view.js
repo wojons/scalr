@@ -166,6 +166,10 @@ Scalr.regPage('Scalr.ui.monitoring.view', function (loadParams, moduleParams) {
 
                         store: store,
 
+                        viewConfig: {
+                            preserveScrollOnRefresh: true
+                        },
+
                         setCompareMode: function (compareMode) {
                             var me = this;
                             me.compareMode = compareMode;
@@ -313,20 +317,29 @@ Scalr.regPage('Scalr.ui.monitoring.view', function (loadParams, moduleParams) {
                                 me.hideTreeIcons();
                                 //me.restoreFilteredNodesView();
                             },
-                            select: function (view, record) {
+                            select: function (context, record) {
                                 var me = this;
+
                                 if (!me.compareMode) {
+                                    var view = me.getView();
+                                    view.saveScrollState();
+
                                     var params = me.prepareDataForMonitoring([record]);
                                     panel.updateStatisticsView(params);
+
+                                    view.restoreScrollState();
                                 }
                             },
                             checkchange: function () {
                                 var me = this;
+
                                 var checkedNodes = me.getChecked();
                                 var checkNodesNumber = checkedNodes.length;
                                 var params = me.prepareDataForMonitoring(checkedNodes);
 
                                 if (checkNodesNumber) {
+                                    me.getView().saveScrollState();
+
                                     panel.updateStatisticsView(params, checkNodesNumber);
                                 }
                             }

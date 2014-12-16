@@ -64,7 +64,7 @@ class IamTest extends AwsTestCase
 
         $assumeRolePolicyDocument= '{"Version": "2008-10-17","Statement": [{"Sid": "","Effect": "Deny","Principal": {"Service": "ec2.amazonaws.com"},"Action": "sts:AssumeRole"}]}';
 
-        $aws = $this->getContainer()->aws;
+        $aws = $this->getContainer()->aws(AwsTestCase::REGION);
         $roleName = self::getTestName(self::ROLE_NAME);
         $instanceProfileName = self::getTestName(self::INSTANCE_PROFILE_NAME);
 
@@ -86,10 +86,12 @@ class IamTest extends AwsTestCase
                 foreach ($instanceProfile->getRoles() as $r) {
                     $instanceProfile->removeRole($r->roleName);
                 }
+
                 $instanceProfile->delete();
                 break;
             }
         }
+
         unset($instanceProfileList);
 
         //Removing previously created role

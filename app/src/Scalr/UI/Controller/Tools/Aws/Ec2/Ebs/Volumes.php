@@ -41,7 +41,7 @@ class Scalr_UI_Controller_Tools_Aws_Ec2_Ebs_Volumes extends Scalr_UI_Controller
         foreach ($dbServers as $dbServer) {
             $dbServer = DBServer::LoadByID($dbServer['server_id']);
             if ($dbServer->GetProperty(EC2_SERVER_PROPERTIES::AVAIL_ZONE) == $vol->availabilityZone) {
-                $servers[$dbServer->serverId] = "{$dbServer->remoteIp} ({$dbServer->serverId})";
+                $servers[$dbServer->serverId] = $dbServer->getNameByConvention();
             }
         }
 

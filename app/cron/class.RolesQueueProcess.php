@@ -1,11 +1,19 @@
 <?php
 
+use Scalr\Model\Entity\Image;
+
+/**
+ * @deprecated It has been deprecated since 02.12.2014 because of implementing a new Scalr service.
+ * @see        \Scalr\System\Zmq\Cron\Task\ImagesCleanup
+ */
 class RolesQueueProcess implements \Scalr\System\Pcntl\ProcessInterface
 {
     public $ThreadArgs;
-    public $ProcessDescription = "Roles queue";
+    public $ProcessDescription = "Roles queue (images queue)";
     public $Logger;
     public $IsDaemon;
+
+    // TODO: in new cron system rewrite as cron image delete
 
     public function __construct()
     {
@@ -17,14 +25,33 @@ class RolesQueueProcess implements \Scalr\System\Pcntl\ProcessInterface
     {
         $db = \Scalr::getDb();
 
-        $roles = $db->GetAll("SELECT * FROM roles_queue WHERE `action` = 'remove'");
-        foreach ($roles as $role)
-        {
+        foreach (Image::find([['status' => Image::STATUS_DELETE]]) as $image) {
             try {
-                $dbRole = DBRole::loadById($role['role_id']);
-                $dbRole->remove(true);
+                /* @var $image Image */
+                $image->deleteCloudImage();
+                $image->delete();
             } catch (Exception $e) {
-                print $e->getMessage()."\n";
+                $flag = false;
+
+                if (strpos($e->getMessage(), 'The resource could not be found') !== FALSE) {
+                    $flag = true;
+                } else if (strpos($e->getMessage(), 'The requested URL / was not found on this server.') !== FALSE) {
+                    $flag = true;
+                } else if (strpos($e->getMessage(), 'Not Found') !== FALSE) {
+                    $flag = true;
+                } else if (strpos($e->getMessage(), 'was not found') !== FALSE) {
+                    $flag = true;
+                } else if (strpos($e->getMessage(), 'OpenStack error. Image not found.') !== FALSE) {
+                    $flag = true;
+                }
+
+                if ($flag) {
+                    $image->delete();
+                } else {
+                    $image->status = Image::STATUS_FAILED;
+                    $image->statusError = $e->getMessage();
+                    $image->save();
+                }
             }
         }
     }

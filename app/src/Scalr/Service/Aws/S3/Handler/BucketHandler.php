@@ -103,8 +103,10 @@ class BucketHandler extends AbstractS3Handler
      * @throws  ClientException
      * @throws  S3Exception
      */
-    public function create($bucketName, $bucketRegion = Aws::REGION_US_EAST_1, array $requestHeaders = null)
+    public function create($bucketName, $bucketRegion = null, array $requestHeaders = null)
     {
+        $bucketRegion = isset($bucketRegion) ? $bucketRegion : ($this->getS3()->getAws()->getRegion() ?: Aws::REGION_US_EAST_1);
+
         return $this->getS3()->getApiHandler()->createBucket($bucketName, $bucketRegion, $requestHeaders);
     }
 
@@ -341,7 +343,7 @@ class BucketHandler extends AbstractS3Handler
      *
      * @param   BucketData|string $bucketName A bucket name.
      * @return  string      Returns bucket location
-     *                      Valid Values: EU | eu-west-1 | us-west-1 | us-west-2 | ap-southeast-1 |
+     *                      Valid Values: EU | eu-west-1 | eu-central-1 | us-west-1 | us-west-2 | ap-southeast-1 |
      *                      ap-northeast-1 | sa-east-1 | empty string (for the US Classic Region)
      * @throws  ClientException
      * @throws  S3Exception

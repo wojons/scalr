@@ -125,6 +125,31 @@ class Scalr_UI_Controller_Services_Ssl_Certificates extends Scalr_UI_Controller
             $this->response->failure();
         } else {
             $cert->save();
+            
+            if ($this->getParam('id')) {
+                try {
+                    // Update existing servers
+                    $res = $this->db->Execute("SELECT farm_roleid FROM farm_role_settings WHERE name='nginx.proxies' AND value LIKE '%ssl_certificate_id\":\"{$cert->id}%'");
+                    while ($f = $res->FetchRow()) {
+                        $dbFarmRole = DBFarmRole::LoadByID($f['farm_roleid']);
+                        $servers = $dbFarmRole->GetServersByFilter(array('status' => SERVER_STATUS::RUNNING));
+                        foreach ($servers as $server) {
+                            $msg = new Scalr_Messaging_Msg_SSLCertificateUpdate();
+                            $msg->id = $cert->id;
+                            $msg->certificate = $cert->certificate;
+                            $msg->cacertificate = $cert->caBundle;
+                            $msg->privateKey = $cert->privateKey;
+        
+                            $server->SendMessage($msg, false, true);
+                        }
+                    }
+                    
+                    // Update apache server
+                    
+                    
+                } catch (Exception $e) {}
+            }
+            
             $this->response->success('Certificate was successfully saved');
             if ($flagNew) {
                 $this->response->data(array('cert' => array(

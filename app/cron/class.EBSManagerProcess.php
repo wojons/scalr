@@ -37,6 +37,8 @@ class EBSManagerProcess implements \Scalr\System\Pcntl\ProcessInterface
     {
         $db = \Scalr::getDb();
 
+        Logger::getLogger(__CLASS__)->warn("OnEndForking: start");
+        
         $list = $db->GetAll("
             SELECT farm_roleid
             FROM farm_role_settings
@@ -95,6 +97,8 @@ class EBSManagerProcess implements \Scalr\System\Pcntl\ProcessInterface
             }
         }
 
+        Logger::getLogger(__CLASS__)->warn("OnEndForking: rotate mysql snapshots");
+        
         // Rotate MySQL master snapshots.
         $list = $db->GetAll("
             SELECT farm_roleid
@@ -177,6 +181,8 @@ class EBSManagerProcess implements \Scalr\System\Pcntl\ProcessInterface
             }
         }
 
+        Logger::getLogger(__CLASS__)->warn("OnEndForking: auto-snapshot volumes");
+        
         // Auto - snapshoting
         $snapshots_settings = $db->Execute("
             SELECT * FROM autosnap_settings
@@ -184,9 +190,17 @@ class EBSManagerProcess implements \Scalr\System\Pcntl\ProcessInterface
             AND objectid != '0' AND object_type = ?",
             array(AUTOSNAPSHOT_TYPE::EBSSnap)
         );
+        
+        Logger::getLogger(__CLASS__)->warn(sprintf("OnEndForking: found %s volumes", $snapshots_settings->RecordCount()));
+        
         while ($snapshot_settings = $snapshots_settings->FetchRow()) {
             try {
                 $environment = Scalr_Environment::init()->loadById($snapshot_settings['env_id']);
+                
+                $account = Scalr_Account::init()->loadById($environment->clientId);
+                if ($account->status != Scalr_Account::STATUS_ACTIVE)
+                    continue;
+                
                 $aws = $environment->aws($snapshot_settings['region']);
 
                 // Check volume
@@ -217,8 +231,7 @@ class EBSManagerProcess implements \Scalr\System\Pcntl\ProcessInterface
                             $farmName = DBFarm::LoadByID($info['farm_id'])->Name;
                             $roleName = DBFarmRole::LoadByID($info['farm_roleid'])->GetRoleObject()->name;
                             $serverIndex = $info['server_index'];
-                        } catch (Exception $e) {
-                        }
+                        } catch (Exception $e) {}
                     }
 
                     if ($farmName) {

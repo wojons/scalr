@@ -24,19 +24,14 @@ class Scalr_UI_Controller_Analytics_Pricing extends Scalr_UI_Controller
     public function defaultAction()
     {
         //Platforms should be in the same order everywhere
-        $platforms = array_values(array_intersect(array_keys(SERVER_PLATFORMS::GetList()), array_merge([
-                SERVER_PLATFORMS::EC2,
-            ],
-            PlatformFactory::getOpenstackBasedPlatforms(),
-            PlatformFactory::getCloudstackBasedPlatforms()
-        )));
+        $platforms = $this->getContainer()->analytics->prices->getSupportedClouds();
 
         $this->response->page('ui/analytics/pricing/view.js',
             [
                 'platforms'             => $platforms,
                 'forbidAutomaticUpdate' => [
                     SERVER_PLATFORMS::EC2 => !!SettingEntity::getValue(SettingEntity::ID_FORBID_AUTOMATIC_UPDATE_AWS_PRICES),
-                 ],
+                ],
             ],
             [],
             ['ui/analytics/pricing/view.css']
@@ -185,17 +180,18 @@ class Scalr_UI_Controller_Analytics_Pricing extends Scalr_UI_Controller
         if ($envId) {
             $env = Scalr_Environment::init()->loadById($envId);
         } else if ($platform == SERVER_PLATFORMS::EC2) {
-            //Search for govcloud environment
+            //Search for govcloud or china cloud environment
             $gcenvid = $this->db->GetOne("
                 SELECT e.id
                 FROM client_environments e
                 JOIN client_environment_properties p ON p.env_id = e.id AND p.name = ?
                 JOIN clients c ON c.id = e.client_id
-                WHERE p.value = ? AND e.status = ? AND c.status = ?
+                WHERE (p.value = ? OR p.value = ?) AND e.status = ? AND c.status = ?
                 LIMIT 1
             ",[
                 Ec2PlatformModule::ACCOUNT_TYPE,
                 Ec2PlatformModule::ACCOUNT_TYPE_GOV_CLOUD,
+                Ec2PlatformModule::ACCOUNT_TYPE_CN_CLOUD,
                 Scalr_Environment::STATUS_ACTIVE,
                 Scalr_Account::STATUS_ACTIVE,
             ]);

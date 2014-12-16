@@ -60,6 +60,19 @@ class Route53 extends AbstractService implements ServiceInterface
     public function getUrl()
     {
         return 'route53.amazonaws.com';
+
+        /* $region = $this->getAws()->getRegion();
+
+
+        if ($region == Aws::REGION_US_GOV_WEST_1) {
+            return 'route53.us-gov-west-1.amazonaws.com';
+        } elseif ($region == Aws::REGION_CN_NORTH_1) {
+            return 'route53.cn-north-1.amazonaws.com.cn';
+        }
+
+
+        return 'route53.' . $region . '.amazonaws.com';
+        */
     }
 
     /**
@@ -69,5 +82,14 @@ class Route53 extends AbstractService implements ServiceInterface
     public function getAllowedEntities()
     {
         return array('zone', 'record', 'health');
+    }
+
+    /**
+     * {@inheritdoc}
+     * @see \Scalr\Service\Aws\AbstractService::getName()
+     */
+    public function getName()
+    {
+        return 'route53';
     }
 }

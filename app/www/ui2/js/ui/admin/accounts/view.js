@@ -152,6 +152,11 @@ Scalr.regPage('Scalr.ui.admin.accounts.view', function (loadParams, moduleParams
 							});
 						}
 					}
+                },{
+					iconCls: 'x-menu-icon-key',
+					text: 'Change owner password',
+                    hidden: Scalr.flags['authMode'] == 'ldap',
+					href: "#/admin/accounts/{id}/changeOwnerPassword"
 				}]
 			}
 		],

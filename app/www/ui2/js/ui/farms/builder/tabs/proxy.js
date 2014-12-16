@@ -522,9 +522,15 @@ Ext.define('Scalr.ui.ProxySettingsField', {
                                     }, locationsCount = item.down('#locations').items.length;
                                     item.down('#locations').items.each(function(destination){
                                         var type = destination.down('[name="proxy.type"]').getValue(),
-                                            location = {}, field;
+                                            location = {}, field, network;
                                         location[type] = destination.down('[name="proxy.' + type + '"]').getValue();
                                         location['port'] = destination.down('[name="proxy.port"]').getValue();
+                                        if (type === 'farm_role_id') {
+                                            network = destination.down('[name="proxy.network"]').getValue();
+                                            if (network) {
+                                                location['network'] = network;
+                                            }
+                                        }
                                         if (locationsCount > 1) {
                                             location['weight'] = destination.down('[name="proxy.weight"]').getValue();
                                         }
@@ -881,103 +887,135 @@ Ext.define('Scalr.ui.ProxySettingsBackend', {
             item;
         item = ct.add({
             xtype: 'container',
-            layout: 'hbox',
-            margin: '0 0 5 0',
-            items:[{
-                xtype: 'buttongroupfield',
-                name: 'proxy.type',
-                value: 'host',
-                defaults: {
-                    width: 45
+            layout: 'anchor',
+            margin: '0 0 10 0',
+            items: [{
+                xtype: 'container',
+                layout: 'hbox',
+                margin: '0 0 3 0',
+                items:[{
+                    xtype: 'buttongroupfield',
+                    name: 'proxy.type',
+                    value: 'host',
+                    defaults: {
+                        width: 45
+                    },
+                    items: [{
+                        value: 'host',
+                        text: 'Host'
+                    },{
+                        value: 'farm_role_id',
+                        text: 'Role',
+                        disabled: !this.roles.length,
+                        tooltip: !this.roles.length ? 'No roles available' : ''
+                    }],
+                    margin: '0 5 0 3',
+                    listeners: {
+                        change: function(comp, value) {
+                            var ct = comp.up('container');
+                            ct.suspendLayouts();
+                            ct.down('[name="proxy.host"]').setVisible(value === 'host');
+                            ct.down('[name="proxy.farm_role_id"]').setVisible(value === 'farm_role_id');
+                            ct.up().down('#network').setVisible(value === 'farm_role_id');
+                            ct.resumeLayouts(true);
+                        }
+                    }
+                },{
+                    xtype: 'combo',
+                    name: 'proxy.farm_role_id',
+                    emptyText: 'Select role',
+                    valueField: 'id',
+                    displayField: 'name',
+                    store: {
+                        fields: [ 'id', 'name' ],
+                        proxy: 'object',
+                        data: this.roles
+                    },
+                    editable: false,
+                    allowBlank: false,
+                    queryMode: 'local',
+                    hidden: true,
+                    flex: 1,
+                    listeners: {
+                        change: this.reminder
+                    }
+                },{
+                    xtype: 'textfield',
+                    name: 'proxy.host',
+                    emptyText: 'IP or hostname',
+                    allowBlank: false,
+                    flex: 1,
+                    listeners: {
+                        change: this.reminder
+                    }
+                },{
+                    xtype: 'textfield',
+                    name: 'proxy.port',
+                    emptyText: 'port',
+                    allowBlank: false,
+                    fieldLabel: ':',
+                    labelSeparator: '',
+                    labelWidth: 4,
+                    margin: '0 4',
+                    width: 65,
+                    value: 80
+                },{
+                    xtype: 'textfield',
+                    name: 'proxy.weight',
+                    emptyText: 'weight',
+                    margin: '0 4',
+                    maxWidth: 50,
+                    hidden: true,
+                    value: ''
+                },{
+                    xtype: 'button',
+                    itemId: 'add',
+                    ui: 'action',
+                    cls: 'x-btn-action-add',
+                    margin: '0 12 0 4',
+                    handler: function() {
+                        this.up('proxysettingsbackend').addDestination();
+                    }
+                },{
+                    xtype: 'button',
+                    itemId: 'delete',
+                    ui: 'action',
+                    cls: 'x-btn-action-remove',
+                    margin: '0 12 0 4',
+                    handler: function() {
+                        item.ownerCt.remove(item);
+                    }
+                }]
+            },{
+                xtype: 'container',
+                itemId: 'network',
+                hidden: true,
+                padding: '0 0 0 68',
+                layout: {
+                    type: 'hbox',
+                    align: 'middle'
                 },
                 items: [{
-                    value: 'host',
-                    text: 'Host'
+                    xtype: 'label',
+                    text: 'Use'
                 },{
-                    value: 'farm_role_id',
-                    text: 'Role',
-                    disabled: !this.roles.length,
-                    tooltip: !this.roles.length ? 'No roles available' : ''
-                }],
-                margin: '0 5 0 3',
-                listeners: {
-                    change: function(comp, value) {
-                        var ct = comp.up('container');
-                        ct.suspendLayouts();
-                        ct.down('[name="proxy.host"]').setVisible(value === 'host');
-                        ct.down('[name="proxy.farm_role_id"]').setVisible(value === 'farm_role_id');
-                        ct.resumeLayouts(true);
+                    xtype: 'combo',
+                    name: 'proxy.network',
+                    editable: false,
+                    width: 100,
+                    margin: '0 6',
+                    value: '',
+                    store: [['','Auto'],['public','Public'],['private','Private']],
+                    icons: {
+                        szrversion: {tooltipData: {version: '2.11.6'}}
                     }
-                }
-            },{
-                xtype: 'combo',
-                name: 'proxy.farm_role_id',
-                emptyText: 'Select role',
-                valueField: 'id',
-                displayField: 'name',
-                store: {
-                    fields: [ 'id', 'name' ],
-                    proxy: 'object',
-                    data: this.roles
-                },
-                editable: false,
-                allowBlank: false,
-                queryMode: 'local',
-                hidden: true,
-                flex: 1,
-                listeners: {
-                    change: this.reminder
-                }
-            },{
-                xtype: 'textfield',
-                name: 'proxy.host',
-                emptyText: 'IP or hostname',
-                allowBlank: false,
-                flex: 1,
-                listeners: {
-                    change: this.reminder
-                }
-            },{
-                xtype: 'textfield',
-                name: 'proxy.port',
-                emptyText: 'port',
-                allowBlank: false,
-                fieldLabel: ':',
-                labelSeparator: '',
-                labelWidth: 4,
-                margin: '0 4',
-                width: 65,
-                value: 80
-            },{
-                xtype: 'textfield',
-                name: 'proxy.weight',
-                emptyText: 'weight',
-                margin: '0 4',
-                maxWidth: 50,
-                hidden: true,
-                value: ''
-            },{
-                xtype: 'button',
-                itemId: 'add',
-                ui: 'action',
-                cls: 'x-btn-action-add',
-                margin: '0 12 0 4',
-                handler: function() {
-                    this.up('proxysettingsbackend').addDestination();
-                }
-            },{
-                xtype: 'button',
-                itemId: 'delete',
-                ui: 'action',
-                cls: 'x-btn-action-remove',
-                margin: '0 12 0 4',
-                handler: function() {
-                    var item = this.up('container');
-                    item.ownerCt.remove(item);
-                }
+                },{
+                    xtype: 'label',
+                    text: 'upstream IPs'
+                }]
             }]
         });
-        item.add([{
+        item.down('container').add([{
             xtype: 'buttonfield',
             ui: 'flag',
             cls: 'x-btn-flag-backup',
@@ -1007,6 +1045,7 @@ Ext.define('Scalr.ui.ProxySettingsBackend', {
                 'proxy.farm_role_id': data.farm_role_id,
                 'proxy.host': data.host,
                 'proxy.port': data.port || 80,
+                'proxy.network': data.network || '',
                 'proxy.weight': data.weight || '',
                 'proxy.backup': data.backup,
                 'proxy.down': data.down

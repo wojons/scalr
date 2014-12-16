@@ -319,10 +319,7 @@ Scalr.regPage('Scalr.ui.farms.view', function (loadParams, moduleParams) {
                         itemId: 'option.events',
                         text: 'Events & notifications',
                         iconCls: 'x-menu-icon-events',
-                        href: '#/farms/{id}/events',
-                        getVisibility: function() {
-                            return Scalr.isAllowed('FARMS_EVENTS_AND_NOTIFICATIONS');
-                        }
+                        href: '#/farms/{id}/events'
                     }, {
                         xtype: 'menuseparator',
                         itemId: 'option.mysqlSep'
@@ -397,6 +394,14 @@ Scalr.regPage('Scalr.ui.farms.view', function (loadParams, moduleParams) {
                         href: '#/scripts/execute?farmId={id}',
                         getVisibility: function(data) {
                             return data.status != 0;
+                        }
+                    }, {
+                        itemId: 'option.event',
+                        iconCls: 'x-menu-icon-execute',
+                        text: 'Fire event',
+                        href: '#/scripts/events/fire?farmId={id}',
+                        getVisibility: function(data) {
+                            return data.status != 0 && Scalr.isAllowed('GENERAL_CUSTOM_EVENTS', 'fire');
                         }
                     }, {
                         xtype: 'menuseparator',

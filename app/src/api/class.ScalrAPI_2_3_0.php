@@ -10,20 +10,11 @@ class ScalrAPI_2_3_0 extends ScalrAPI_2_2_0
     {
         $this->restrictAccess(Acl::RESOURCE_GENERAL_CUSTOM_EVENTS);
 
-        $isEventExist = $this->DB->GetOne("
-            SELECT id FROM event_definitions
-            WHERE name = ? AND env_id = ?
-            LIMIT 1
-        ", array(
-            $EventName,
-            $this->Environment->id
-        ));
-
         $dbServer = DBServer::LoadByID($ServerID);
         if ($dbServer->envId != $this->Environment->id)
             throw new Exception(sprintf("Server ID #%s not found", $ServerID));
 
-        if ($isEventExist) {
+        if (\Scalr\Model\Entity\EventDefinition::isExisted($EventName, $this->user->getAccountId(), $this->Environment->id)) {
             $event = new CustomEvent($dbServer, $EventName, (array)$Params);
         } else
             throw new Exception(sprintf("Event %s is not defined", $EventName));
@@ -152,6 +143,8 @@ class ScalrAPI_2_3_0 extends ScalrAPI_2_2_0
         }
 
         $this->user->getPermissions()->validate($dbFarm);
+        
+        $governance = new Scalr_Governance($this->Environment->id);
 
         $dbFarm->isLocked(true);
 
@@ -175,6 +168,57 @@ class ScalrAPI_2_3_0 extends ScalrAPI_2_2_0
         }
 
         $this->validateFarmRoleConfiguration($Configuration);
+        
+        if ($DBFarmRole->Platform == SERVER_PLATFORMS::EC2) {
+            $vpcId = $dbFarm->GetSetting(DBFarm::SETTING_EC2_VPC_ID); 
+            if ($vpcId) {
+                if (!$Configuration['aws.vpc_subnet_id'])
+                    throw new Exception("Farm configured to run inside VPC. 'aws.vpc_subnet_id' is required");
+                
+                $vpcGovernance = $governance->getValue('ec2', 'aws.vpc');
+                $vpcGovernanceIds = $governance->getValue('ec2', 'aws.vpc', 'ids');
+                
+                $subnets = json_decode($Configuration['aws.vpc_subnet_id'], true);
+                if (count($subnets) == 0)
+                    throw new Exception("Subnets list is empty or json is incorrect");
+                
+                $type = false;
+                
+                foreach ($subnets as $subnetId) {
+                
+                    $platfrom = PlatformFactory::NewPlatform(SERVER_PLATFORMS::EC2);
+                    $info = $platfrom->listSubnets($this->Environment, $CloudLocation, $vpcId, true, $subnetId);
+                
+                    if (substr($info['availability_zone'], 0, -1) != $vpcRegion)
+                        throw new Exception(sprintf("Only subnets from %s region are allowed according to VPC settings", $vpcRegion));
+                
+                    if ($vpcGovernance == 1) {
+                        // Check valid subnets
+                        if ($vpcGovernanceIds[$vpcId] && is_array($vpcGovernanceIds[$vpcId]) && !in_array($subnetId, $vpcGovernanceIds[$vpcId]))
+                            throw new Exception(sprintf("Only %s subnet(s) allowed by governance settings", implode (', ', $vpcGovernanceIds[$vpcId])));
+                
+                
+                        // Check if subnets types
+                        if ($vpcGovernanceIds[$vpcId] == "outbound-only") {
+                            if ($info['type'] != 'private')
+                                throw new Exception("Only private subnets allowed by governance settings");
+                        }
+                
+                        if ($vpcGovernanceIds[$vpcId] == "full") {
+                            if ($info['type'] != 'public')
+                                throw new Exception("Only public subnets allowed by governance settings");
+                        }
+                    }
+                
+                    if (!$type)
+                        $type = $info['type'];
+                    else {
+                        if ($type != $info['type'])
+                            throw new Exception("Mix of public and private subnets are not allowed. Please specify only public or only private subnets.");
+                    }
+                }
+            }
+        }
 
         if ($Configuration[Scalr_Role_Behavior_Chef::ROLE_CHEF_BOOTSTRAP] == 1 && !$Configuration[Scalr_Role_Behavior_Chef::ROLE_CHEF_ENVIRONMENT])
             $Configuration[Scalr_Role_Behavior_Chef::ROLE_CHEF_ENVIRONMENT] = '_default';
@@ -190,7 +234,7 @@ class ScalrAPI_2_3_0 extends ScalrAPI_2_2_0
     }
 
     private function validateFarmRoleConfiguration(array $config)
-    {
+    {        
         $allowedConfiguration = array(
             'scaling.enabled',
             'scaling.min_instances',
@@ -205,12 +249,23 @@ class ScalrAPI_2_3_0 extends ScalrAPI_2_2_0
             'openstack.networks',
             'openstack.security_groups.list',
 
+            'cloudstack.security_groups.list',
+            'cloudstack.service_offering_id',
+            'cloudstack.network_id',
+
             'chef.bootstrap',
             'chef.server_id',
             'chef.environment',
             'chef.role_name',
             'chef.attributes',
-
+            'chef.runlist',
+            'chef.node_name_tpl',
+            'chef.cookbook_url',
+            'chef.cookbook_url_type',
+            'chef.ssh_private_key',
+            'chef.relative_path',
+            'chef.log_level',
+            
             'dns.create_records',
             'dns.ext_record_alias',
             'dns.int_record_alias',
@@ -219,10 +274,11 @@ class ScalrAPI_2_3_0 extends ScalrAPI_2_2_0
             'aws.instance_type',
             'aws.security_groups.list',
             'aws.iam_instance_profile_arn',
+            'aws.vpc_subnet_id',
 
-            'cloudstack.service_offering_id',
-            'cloudstack.network_id',
-            'cloudstack.network_type'
+            'gce.machine-type',
+            'gce.network',
+            'gce.on-host-maintenance'
         );
 
         foreach ($config as $key => $value) {
@@ -231,6 +287,11 @@ class ScalrAPI_2_3_0 extends ScalrAPI_2_2_0
                     "Unknown configuration option '%s'",
                     $this->stripValue($key)
                 ));
+
+            /*
+            if ($key == 'gce.on-host-maintenance' && !in_array($value, array('MIGRATE, TERMINATE')))
+                throw new Exception("Allowed values for 'gce.on-host-maintenance' are MIGRATE or TERMINATE");
+            */
         }
 
         return true;
@@ -250,6 +311,8 @@ class ScalrAPI_2_3_0 extends ScalrAPI_2_2_0
 
         $dbFarm->isLocked(true);
 
+        $governance = new Scalr_Governance($this->Environment->id);
+        
         $dbRole = DBRole::loadById($RoleID);
         if ($dbRole->envId != 0)
             $this->user->getPermissions()->validate($dbRole);
@@ -273,6 +336,66 @@ class ScalrAPI_2_3_0 extends ScalrAPI_2_2_0
         }
         if ($Platform == SERVER_PLATFORMS::EC2) {
             $config['aws.security_groups.list'] = json_encode(array('default', \Scalr::config('scalr.aws.security_group_name')));
+            
+            $vpcId = $dbFarm->GetSetting(DBFarm::SETTING_EC2_VPC_ID); 
+            if ($vpcId) {
+                if (!$Configuration['aws.vpc_subnet_id'])
+                    throw new Exception("Farm configured to run inside VPC. 'aws.vpc_subnet_id' is required");
+                
+                $vpcRegion = $dbFarm->GetSetting(DBFarm::SETTING_EC2_VPC_REGION);
+                if ($CloudLocation != $vpcRegion)
+                    throw new Exception(sprintf("Farm configured to run inside VPC in %s region. Only roles in this region are allowed.", $vpcRegion));
+                
+                $vpcGovernance = $governance->getValue('ec2', 'aws.vpc');
+                $vpcGovernanceIds = $governance->getValue('ec2', 'aws.vpc', 'ids');
+                
+                $subnets = json_decode($Configuration['aws.vpc_subnet_id'], true);
+                if (count($subnets) == 0)
+                    throw new Exception("Subnets list is empty or json is incorrect");
+                
+                $type = false;
+                
+                foreach ($subnets as $subnetId) {
+                    
+                    $platfrom = PlatformFactory::NewPlatform(SERVER_PLATFORMS::EC2);
+                    $info = $platfrom->listSubnets($this->Environment, $CloudLocation, $vpcId, true, $subnetId);
+                    
+                    if (substr($info['availability_zone'], 0, -1) != $vpcRegion)
+                        throw new Exception(sprintf("Only subnets from %s region are allowed according to VPC settings", $vpcRegion));
+                    
+                    if ($vpcGovernance == 1) {
+                        // Check valid subnets
+                        if ($vpcGovernanceIds[$vpcId] && is_array($vpcGovernanceIds[$vpcId]) && !in_array($subnetId, $vpcGovernanceIds[$vpcId]))
+                            throw new Exception(sprintf("Only %s subnet(s) allowed by governance settings", implode (', ', $vpcGovernanceIds[$vpcId])));
+                        
+                        
+                        // Check if subnets types
+                        if ($vpcGovernanceIds[$vpcId] == "outbound-only") {
+                            if ($info['type'] != 'private')
+                                throw new Exception("Only private subnets allowed by governance settings");
+                        }
+                        
+                        if ($vpcGovernanceIds[$vpcId] == "full") {
+                            if ($info['type'] != 'public')
+                                throw new Exception("Only public subnets allowed by governance settings");
+                        }
+                    }
+                    
+                    if (!$type)
+                        $type = $info['type'];
+                    else {
+                        if ($type != $info['type'])
+                            throw new Exception("Mix of public and private subnets are not allowed. Please specify only public or only private subnets.");
+                    }
+                }
+            }
+        }
+        if (PlatformFactory::isCloudstack($Platform)) {
+            $config['cloudstack.security_groups.list'] = json_encode(array('default', \Scalr::config('scalr.aws.security_group_name')));
+        }
+        if ($Platform == SERVER_PLATFORMS::GCE) {
+            $config['gce.network'] = 'default';
+            $config['gce.on-host-maintenance'] = 'MIGRATE';
         }
 
         if ($Configuration[Scalr_Role_Behavior_Chef::ROLE_CHEF_BOOTSTRAP] == 1 && !$Configuration[Scalr_Role_Behavior_Chef::ROLE_CHEF_ENVIRONMENT])
@@ -281,22 +404,25 @@ class ScalrAPI_2_3_0 extends ScalrAPI_2_2_0
         $config = array_merge($config, $Configuration);
         $this->validateFarmRoleConfiguration($config);
 
+        if ($Platform == SERVER_PLATFORMS::GCE) {
+            $config['gce.cloud-location'] = $CloudLocation;
+            $config['gce.region'] = substr($CloudLocation, 0, -1);
+        }
+
         $Alias = $this->stripValue($Alias);
         if (strlen($Alias) < 4)
             throw new Exception("Role Alias should be longer than 4 characters");
 
-        if (preg_match("/^[^A-Za-z0-9_-]+$/", $Alias))
-            throw new Exception("Role Alias should has only 'A-Za-z0-9-_' characters");
-
-        if (!PlatformFactory::isOpenstack($Platform) && $Platform != SERVER_PLATFORMS::EC2 && $Platform != SERVER_PLATFORMS::CLOUDSTACK)
-            throw new Exception("Only EC2, Openstack, and CloudStack roles are supported by this method");
+        if (!preg_match("/^[A-Za-z0-9]+[A-Za-z0-9-]*[A-Za-z0-9]+$/si", $Alias))
+            throw new Exception("Alias should start and end with letter or number and contain only letters, numbers and dashes.");
 
         if (!$this->Environment->isPlatformEnabled($Platform))
             throw new Exception("'{$Platform}' cloud is not configured in your environment");
 
-        $locations = $dbRole->getCloudLocations($Platform);
-        if (!in_array($CloudLocation, $locations))
-            throw new Exception(sprintf("Role '%s' doesn't have image configured for cloud location '%s'", $dbRole->name, $CloudLocation));
+        $images = $dbRole->__getNewRoleObject()->getImages();
+        $locations = isset($images[$Platform]) ? array_keys($images[$Platform]) : [];
+        if (!in_array($CloudLocation, $locations) && $Platform != SERVER_PLATFORMS::GCE)
+            throw new Exception(sprintf("Role '%s' doesn't have an image configured for cloud location '%s'", $dbRole->name, $CloudLocation));
 
         if ($Alias) {
             foreach ($dbFarm->GetFarmRoles() as $farmRole) {
@@ -430,10 +556,12 @@ class ScalrAPI_2_3_0 extends ScalrAPI_2_2_0
         return $response;
     }
 
-    public function FarmCreate($Name, $Description = "", $ProjectID = "")
+    public function FarmCreate($Name, $Description = "", $ProjectID = "", array $Configuration = array())
     {
         $this->restrictAccess(Acl::RESOURCE_FARMS, Acl::PERM_FARMS_MANAGE);
 
+        $governance = new Scalr_Governance($this->Environment->id);
+        
         $ProjectID = strtolower($ProjectID);
 
         $response = $this->CreateInitialResponse();
@@ -443,6 +571,27 @@ class ScalrAPI_2_3_0 extends ScalrAPI_2_2_0
 
         if (!$Name || strlen($Name) < 5)
             throw new Exception('Name should be at least 5 characters');
+
+        if ($Configuration['vpc_region'] && !$Configuration['vpc_id'])
+            throw new Exception("VPC ID is required if VPC region was specified");
+
+        if (!$Configuration['vpc_region'] && $Configuration['vpc_id'])
+            throw new Exception("VPC Region is required if VPC ID was specified");
+        
+        // VPC Governance validation
+        $vpcGovernance = $governance->getValue('ec2', 'aws.vpc');
+        if ($vpcGovernance) {
+            $vpcGovernanceRegions = $governance->getValue('ec2', 'aws.vpc', 'regions');
+            
+            if (!$Configuration['vpc_region'])
+                throw new Exception("VPC configuration is required according to governance settings");
+        
+            if (!in_array($Configuration['vpc_region'], array_keys($vpcGovernanceRegions)))
+                throw new Exception(sprintf("Only %s region(s) allowed according to governance settings", implode (', ', array_keys($vpcGovernanceRegions))));
+        
+            if (!in_array($Configuration['vpc_id'], $vpcGovernanceRegions[$Configuration['vpc_region']]['ids']))
+                throw new Exception(sprintf("Only %s VPC(s) allowed according to governance settings", implode (', ', $vpcGovernanceRegions[$Configuration['vpc_region']]['ids'])));
+        }
 
         $dbFarm = new DBFarm();
         $dbFarm->ClientID = $this->user->getAccountId();
@@ -463,10 +612,18 @@ class ScalrAPI_2_3_0 extends ScalrAPI_2_2_0
         //Associates cost analytics project with the farm.
         $dbFarm->setProject(!empty($ProjectID) ? $ProjectID : null);
 
-        $governance = new Scalr_Governance($this->Environment->id);
-
         if ($governance->isEnabled(Scalr_Governance::CATEGORY_GENERAL, Scalr_Governance::GENERAL_LEASE)) {
             $dbFarm->SetSetting(DBFarm::SETTING_LEASE_STATUS, 'Active'); // for created farm
+        }
+
+        if (!$Configuration['timezone'])
+            $Configuration['timezone'] = date_default_timezone_get();
+
+        $dbFarm->SetSetting(DBFarm::SETTING_TIMEZONE, $Configuration['timezone']);
+
+        if ($Configuration['vpc_region']) {
+            $dbFarm->SetSetting(DBFarm::SETTING_EC2_VPC_ID, $Configuration['vpc_id']);
+            $dbFarm->SetSetting(DBFarm::SETTING_EC2_VPC_REGION, $Configuration['vpc_region']);
         }
 
         $response->FarmID = $dbFarm->ID;
@@ -670,7 +827,7 @@ class ScalrAPI_2_3_0 extends ScalrAPI_2_2_0
 
         $response = $this->CreateInitialResponse();
 
-        $info = PlatformFactory::NewPlatform($DBServer->platform)->GetServerExtendedInformation($DBServer);
+        $info = PlatformFactory::NewPlatform($DBServer->platform)->GetServerExtendedInformation($DBServer, false);
 
         $response->FarmInfo = new stdClass();
         $response->FarmInfo->ID = $DBServer->GetFarmObject()->ID;
@@ -678,7 +835,7 @@ class ScalrAPI_2_3_0 extends ScalrAPI_2_2_0
 
         $response->FarmRoleInfo = new stdClass();
         $response->FarmRoleInfo->ID = $DBServer->farmRoleId;
-        $response->FarmRoleInfo->RoleID = $DBServer->roleId;
+        $response->FarmRoleInfo->RoleID = $DBServer->GetFarmRoleObject()->RoleID;
         $response->FarmRoleInfo->Alias = $DBServer->GetFarmRoleObject()->Alias;
         $response->FarmRoleInfo->CloudLocation = $DBServer->GetFarmRoleObject()->CloudLocation;
 
@@ -813,7 +970,7 @@ class ScalrAPI_2_3_0 extends ScalrAPI_2_2_0
             $this->user->getPermissions()->validate($DBServer);
 
             $globalVariables = new Scalr_Scripting_GlobalVariables($this->Environment->clientId, $this->Environment->id, Scalr_Scripting_GlobalVariables::SCOPE_FARMROLE);
-            $vars = $globalVariables->listVariables($DBServer->roleId, $DBServer->farmId, $DBServer->farmRoleId, $ServerID);
+            $vars = $globalVariables->listVariables($DBServer->GetFarmRoleObject()->RoleID, $DBServer->farmId, $DBServer->farmRoleId, $ServerID);
         } elseif ($FarmID) {
             $DBFarm = DBFarm::LoadByID($FarmID);
             if ($DBFarm->EnvID != $this->Environment->id)

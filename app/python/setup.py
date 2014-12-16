@@ -1,74 +1,40 @@
 import os
 import sys
-import platform
 import subprocess
 
-requires = [
-    'pytz',
-    'boto',
-    'pyyaml',
-    'gevent',
-    'psutil',
-    'sqlsoup',
-    'pymysql>=0.6.2',
-    'httplib2',
-    'cherrypy==3.2.6',
-    'requests',
-    #'pyopenssl', # uncomment this line if you need https
-    'pycrypto',
-    'sqlalchemy',
-    'apache-libcloud==0.15.1',
-    'google-api-python-client==1.3',
-]
 
-if sys.version_info < (2, 7):
-    requires.append(['argparse'])
-
-os_name, os_version = platform.dist()[0].lower(), platform.dist()[1]
-
-print os_name, os_version
-
-cmd = None
-if os_name == 'ubuntu':
-    if os_version >= '12':
-        cmd = '/bin/bash %s/scripts/debian.sh' 
-    else:
-        cmd = '/bin/bash %s/scripts/ubuntu10.sh'
-elif os_name in ['centos', 'redhat']:
-    if os_version.startswith('5.'):
-        cmd = '/bin/bash %s/scripts/centos5.sh'
-    elif os_version.startswith('6.'):
-        cmd = '/bin/bash %s/scripts/centos6.sh'
-elif os_name == 'debian':
-    cmd = '/bin/bash %s/scripts/debian.sh'
-
-if not cmd:
-    print 'Unsupported os'
-    raise sys.exit(1)
-
-cwd = os.path.dirname(os.path.abspath(__file__))
-cmd = cmd % cwd
-
-p = subprocess.Popen(cmd.split())
-p.communicate()
-if p.returncode != 0:
-    sys.stderr.write('Error\n')
-    raise sys.exit(1)
-
-from setuptools import setup, find_packages
-
-setup(
-    name = 'ScalrPy',
-    version = open(
-        '%s/src/scalrpy/version' % os.path.dirname(os.path.abspath(__file__))
-    ).read().strip(),
-    author = "Scalr Inc.",
-    author_email = "info@scalr.net",
-    url = "https://scalr.net",
-    license = 'ASL 2.0',
-    description = ('Set of python scripts for Scalr'),
-    package_dir = {'':'src'},
-    packages = find_packages('src'),
-    include_package_data = True,
-    install_requires = requires,
+msg = (
+    "WARNING!\n\n"
+    "The Scalr Python components have been recently updated,\n"
+    "and running `python setup.py install` is no longer required.\n\n"
+    "If you are installing Scalr for the first time, you shouldn't be running this script.\n"
+    "Please double check you are using the correct installation instructions for this version of Scalr.\n\n"
+    "If you are upgrading an existing Scalr installation, you need to manually upgrade.\n"
+    "Please review the instructions on this page: https://scalr-wiki.atlassian.net/wiki/x/FYD4\n\n"
+    "Once you're done, proceed.\n"
 )
+print msg
+
+
+value = None
+while value not in ['y', 'yes', 'n', 'no']:
+    value = raw_input("Are you ready to continue? y/n ")
+
+if value in ['n', 'no']:
+    print 'Abort'
+    sys.exit(1)
+
+
+python_cmd = [sys.executable, '-m', 'scalrpy.__init__']
+try:
+    return_code = subprocess.check_call(
+            'cd /tmp && %s -m scalrpy.__init__' % sys.executable,
+            stderr=subprocess.PIPE,
+            shell=True)
+    print 'ERROR!'
+    print 'Found old ScalrPy installation.'
+    print 'Please stop all ScalrPy scripts, uninstall ScalrPy with right pip executable and retry.'
+    sys.exit(1)
+except subprocess.CalledProcessError:
+    pass
+

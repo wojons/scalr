@@ -1,7 +1,7 @@
 <?php
 namespace Scalr\Stats\CostAnalytics\Iterator;
 
-use Scalr\DataType\Iterator\Filter;
+use Scalr\DataType\Iterator\AbstractFilter;
 use Scalr\Model\Collections\ArrayCollection;
 use Scalr\Stats\CostAnalytics\Entity\ProjectEntity;
 use Scalr\Exception\AnalyticsException;
@@ -15,7 +15,7 @@ use Scalr_Account_User,
  * @author   Vitaliy Demidov  <vitaliy@scalr.com>
  * @since    5.0 (25.04.2014)
  */
-class SharedProjectsFilterIterator extends Filter
+class SharedProjectsFilterIterator extends AbstractFilter
 {
 
     /**
@@ -79,7 +79,7 @@ class SharedProjectsFilterIterator extends Filter
 
     /**
      * {@inheritdoc}
-     * @see \Scalr\DataType\Iterator\Filter::accept()
+     * @see \Scalr\DataType\Iterator\AbstractFilter::accept()
      */
     public function accept()
     {

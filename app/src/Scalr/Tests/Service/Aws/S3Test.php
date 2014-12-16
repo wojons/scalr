@@ -47,7 +47,7 @@ class S3Test extends AwsTestCase
     {
         parent::setUp();
         if (!$this->isSkipFunctionalTests()) {
-            $this->s3 = $this->getContainer()->aws->s3;
+            $this->s3 = $this->getContainer()->aws(AwsTestCase::REGION)->s3;
             $this->s3->enableEntityManager();
         }
     }
@@ -125,48 +125,58 @@ class S3Test extends AwsTestCase
         $this->skipIfEc2PlatformDisabled();
         $client = $this->s3->getApiHandler()->getClient();
 
+        //AP region aws instance
+        $awsap = \Scalr::getContainer()->aws(Aws::REGION_AP_SOUTHEAST_1);
+        $awsap->s3->enableEntityManager();
+
         $bucketList = $this->s3->bucket->getList();
         $this->assertInstanceOf(self::CLASS_S3_BUCKET_LIST, $bucketList);
         $this->assertInstanceOf(self::CLASS_S3, $bucketList->getS3());
         $this->assertInstanceOf(self::CLASS_S3_OWNER_DATA, $bucketList->getOwner());
 
         $bucket = $this->s3->bucket->get(self::getTestName('bucket'));
+
         if ($bucket !== null) {
-            $list = $bucket->listObjects();
+            $list = $awsap->s3->bucket->listObjects($bucket->bucketName);
             /* @var $object ObjectData */
             foreach ($list as $object) {
                 if ($object->objectName == self::getTestName(self::OBJECT_NAME_DUMMY)) {
+                    //Removes dummy object
                     $object->delete();
                 }
             }
-            unset($list);
-            $bucket->delete();
+
+            //Removes bucket
+            $awsap->s3->bucket->delete($bucket->bucketName);
+
             unset($bucket);
+            unset($list);
         }
 
         $bucket = $this->s3->bucket->get(self::getTestName('bucket-copy'));
+
         if ($bucket !== null) {
-            $list = $bucket->listObjects();
-            /* @var $object ObjectData */
+            $list = $awsap->s3->bucket->listObjects($bucket->bucketName);
             foreach ($list as $object) {
                 if ($object->objectName == self::getTestName(self::OBJECT_NAME_DUMMY)) {
                     $object->delete();
                 }
             }
-            unset($list);
-            $bucket->delete();
+
+            $awsap->s3->bucket->delete($bucket->bucketName);
+
             unset($bucket);
+            unset($list);
         }
 
         //Tests creation of the bucket
-        $bucket = $this->s3->bucket->create(self::getTestName('bucket'), Aws::REGION_AP_SOUTHEAST_1);
+        $bucket = $awsap->s3->bucket->create(self::getTestName('bucket'));
         $this->assertInstanceOf(self::CLASS_S3_BUCKET_DATA, $bucket);
         $this->assertInstanceOf(self::CLASS_S3, $bucket->getS3());
-        $this->assertEquals(spl_object_hash($bucket), spl_object_hash($this->s3->bucket->get(self::getTestName('bucket'))));
         $this->assertEquals(self::getTestName('bucket'), $bucket->bucketName);
         $this->assertNotEmpty($bucket->creationDate);
 
-        $bucketCopy = $this->s3->bucket->create(self::getTestName('bucket-copy'), Aws::REGION_AP_SOUTHEAST_1);
+        $bucketCopy = $awsap->s3->bucket->create(self::getTestName('bucket-copy'));
         $this->assertInstanceOf(self::CLASS_S3_BUCKET_DATA, $bucketCopy);
         $this->assertInstanceOf(self::CLASS_S3, $bucketCopy->getS3());
 
@@ -206,10 +216,11 @@ class S3Test extends AwsTestCase
 
         $objList = $bucket->listObjects();
         $this->assertInstanceOf($this->getS3ClassName('DataType\\ObjectList'), $objList);
-        $object = $this->s3->object->get(array(self::getTestName('bucket'), self::getTestName(self::OBJECT_NAME_DUMMY)));
+
+        $object = $awsap->s3->object->get(array(self::getTestName('bucket'), self::getTestName(self::OBJECT_NAME_DUMMY)));
         $this->assertInstanceOf($this->getS3ClassName('DataType\\ObjectData'), $object);
         $this->assertSame($object, $objList[0]);
-        $arr = $this->s3->bucket->getObjectsFromStorage(self::getTestName('bucket'));
+        $arr = $awsap->s3->bucket->getObjectsFromStorage(self::getTestName('bucket'));
         $this->assertSame($object, $arr[0]);
         unset($arr);
 
@@ -246,7 +257,7 @@ class S3Test extends AwsTestCase
         unset($objList);
         unset($object);
         //Object must be detached from entity storage after deletion.
-        $object = $this->s3->object->get(array(self::getTestName('bucket'), self::getTestName(self::OBJECT_NAME_DUMMY)));
+        $object = $awsap->s3->object->get(array(self::getTestName('bucket'), self::getTestName(self::OBJECT_NAME_DUMMY)));
         $this->assertNull($object);
 
         $dresponse = $bucketCopy->deleteObject(self::getTestName(self::OBJECT_NAME_DUMMY));

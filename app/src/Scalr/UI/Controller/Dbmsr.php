@@ -33,7 +33,10 @@ class Scalr_UI_Controller_Dbmsr extends Scalr_UI_Controller
                 $volumeConfig = $volume->getConfig();
                 $platformAccessData = PlatformFactory::NewPlatform($dbFarmRole->Platform)->GetPlatformAccessData($this->environment, $master);
 
-                $result = $master->scalarizr->mysql->growStorage($volumeConfig, $this->getParam('newSize'), $platformAccessData);
+                $newConfig = new stdClass();
+                $newConfig->size = $this->getParam('newSize');
+                
+                $result = $master->scalarizr->mysql->growStorage($volumeConfig, $newConfig, $platformAccessData);
 
                 // Do not remove. We need to wait a bit before operation will be registered in scalr.
                 sleep(2);
@@ -298,8 +301,7 @@ class Scalr_UI_Controller_Dbmsr extends Scalr_UI_Controller
 
         $data['backupsNotSupported'] = in_array($dbFarmRole->Platform, array(
             SERVER_PLATFORMS::CLOUDSTACK,
-            SERVER_PLATFORMS::IDCF,
-            SERVER_PLATFORMS::UCLOUD
+            SERVER_PLATFORMS::IDCF
         ));
 
         if ($dbFarmRole->GetSetting(DBFarmRole::SETTING_MYSQL_PMA_USER))
@@ -379,7 +381,7 @@ class Scalr_UI_Controller_Dbmsr extends Scalr_UI_Controller
 
                 try
                    {
-                       $isCloudstack = in_array($dbFarmRole->Platform, array(SERVER_PLATFORMS::CLOUDSTACK, SERVER_PLATFORMS::IDCF, SERVER_PLATFORMS::UCLOUD));
+                       $isCloudstack = in_array($dbFarmRole->Platform, array(SERVER_PLATFORMS::CLOUDSTACK, SERVER_PLATFORMS::IDCF));
                        $isMaster = ($dbServer->GetProperty(SERVER_PROPERTIES::DB_MYSQL_MASTER) == 1);
 
                        if (!$isCloudstack) {
@@ -465,7 +467,7 @@ class Scalr_UI_Controller_Dbmsr extends Scalr_UI_Controller
                     }
 
                 } catch (Exception $e) {
-                    $this->response->varDump($e->getMessage());
+                    $this->response->debugException($e);
                 }
             }
 
@@ -591,7 +593,7 @@ class Scalr_UI_Controller_Dbmsr extends Scalr_UI_Controller
 
                 try {
 
-                    $isCloudstack = in_array($dbFarmRole->Platform, array(SERVER_PLATFORMS::CLOUDSTACK, SERVER_PLATFORMS::IDCF, SERVER_PLATFORMS::UCLOUD));
+                    $isCloudstack = in_array($dbFarmRole->Platform, array(SERVER_PLATFORMS::CLOUDSTACK, SERVER_PLATFORMS::IDCF));
                        $isMaster = ($dbServer->GetProperty(Scalr_Db_Msr::REPLICATION_MASTER) == 1);
 
                        if (!$isCloudstack && in_array($this->getParam('type'), array(ROLE_BEHAVIORS::MYSQL2, ROLE_BEHAVIORS::PERCONA, ROLE_BEHAVIORS::MARIADB))) {

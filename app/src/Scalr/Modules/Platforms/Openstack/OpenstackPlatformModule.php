@@ -3,8 +3,10 @@
 namespace Scalr\Modules\Platforms\Openstack;
 
 use \DBServer;
-use \DBRole;
 use \BundleTask;
+use Exception;
+use Scalr\Service\OpenStack\Exception\InstanceNotFoundException;
+use Scalr\Service\OpenStack\Exception\NotFoundException;
 use Scalr\Service\OpenStack\Services\Servers\Type\Personality;
 use Scalr\Service\OpenStack\Services\Servers\Type\PersonalityList;
 use Scalr\Service\OpenStack\Services\Servers\Type\ServersExtension;
@@ -12,12 +14,12 @@ use Scalr\Service\OpenStack\Services\Servers\Type\RebootType;
 use Scalr\Service\OpenStack\Services\Servers\Type\NetworkList;
 use Scalr\Service\OpenStack\Services\Servers\Type\Network;
 use Scalr\Service\OpenStack\Type\PaginationInterface;
-use Scalr\Modules\PlatformFactory;
 use Scalr\Modules\Platforms\Openstack\Adapters\StatusAdapter;
 use Scalr\Modules\Platforms\AbstractOpenstackPlatformModule;
 use Scalr\Service\OpenStack\Client\AuthToken;
-use Scalr\Service\OpenStack\OpenStack;
-use Scalr\Service\OpenStack\Services\Network\Type\NetworkExtension;
+use Scalr\Service\OpenStack\Services\Network\Type\CreateSecurityGroupRule;
+use Scalr\Model\Entity\Image;
+use Scalr\Model\Entity\CloudLocation;
 
 class OpenstackPlatformModule extends AbstractOpenstackPlatformModule implements \Scalr\Modules\PlatformModuleInterface
 {
@@ -40,8 +42,8 @@ class OpenstackPlatformModule extends AbstractOpenstackPlatformModule implements
     const EXT_LBAAS_ENABLED = 'ext.lbaas_enabled';
     const EXT_CONTRAIL_ENABLED = 'ext.contrail_enabled';
 
-    private $instancesListCache = array();
-    private $instancesDetailsCache = array();
+    public $instancesListCache = array();
+    public $instancesDetailsCache = array();
 
     public $debugLog;
 
@@ -75,7 +77,6 @@ class OpenstackPlatformModule extends AbstractOpenstackPlatformModule implements
      */
     public function getLocations(\Scalr_Environment $environment = null)
     {
-
         if ($environment === null || !$environment->isPlatformEnabled($this->platform)) {
             return array();
         }
@@ -102,7 +103,7 @@ class OpenstackPlatformModule extends AbstractOpenstackPlatformModule implements
 
         $platform = $this->platform ?: \SERVER_PLATFORMS::OPENSTACK;
 
-        $url = $this->getConfigVariable(static::KEYSTONE_URL, $env);
+        $url = $this->getConfigVariable($this::KEYSTONE_URL, $env);
 
         if (empty($url)) return false;
 
@@ -162,16 +163,21 @@ class OpenstackPlatformModule extends AbstractOpenstackPlatformModule implements
 
     public function determineServerIps(\Scalr\Service\OpenStack\OpenStack $client, $server)
     {
-        if (is_array($server->addresses->public)) {
-            foreach ($server->addresses->public as $addr)
+        $config = \Scalr::getContainer()->config;
+
+        $publicNetworkName = 'public';
+        $privateNetworkName = 'private';
+
+        if (is_array($server->addresses->{$publicNetworkName})) {
+            foreach ($server->addresses->{$publicNetworkName} as $addr)
             if ($addr->version == 4) {
                 $remoteIp = $addr->addr;
                 break;
             }
         }
 
-        if (is_array($server->addresses->private)) {
-            foreach ($server->addresses->private as $addr)
+        if (is_array($server->addresses->{$privateNetworkName})) {
+            foreach ($server->addresses->{$privateNetworkName} as $addr)
             if ($addr->version == 4) {
                 $localIp = $addr->addr;
                 break;
@@ -266,13 +272,8 @@ class OpenstackPlatformModule extends AbstractOpenstackPlatformModule implements
             try {
                 $result = $osClient->servers->getServerDetails($DBServer->GetProperty(\OPENSTACK_SERVER_PROPERTIES::SERVER_ID));
                 $status = $result->status;
-            }
-            catch(\Exception $e)
-            {
-                if (stristr($e->getMessage(), "404") || stristr($e->getMessage(), "could not be found"))
-                    $status = 'not-found';
-                else
-                    throw $e;
+            } catch(NotFoundException $e) {
+                $status = 'not-found';
             }
         }
         else
@@ -290,7 +291,11 @@ class OpenstackPlatformModule extends AbstractOpenstackPlatformModule implements
     public function ResumeServer(DBServer $DBServer)
     {
         $client = $this->getOsClient($DBServer->GetEnvironmentObject(), $DBServer->GetProperty(\OPENSTACK_SERVER_PROPERTIES::CLOUD_LOCATION));
-        $info = $client->servers->resume($DBServer->GetProperty(\OPENSTACK_SERVER_PROPERTIES::SERVER_ID));
+
+        if ($DBServer->GetRealStatus()->getName() == 'SHUTOFF')
+            $info = $client->servers->osStart($DBServer->GetProperty(\OPENSTACK_SERVER_PROPERTIES::SERVER_ID));
+        else
+            $info = $client->servers->resume($DBServer->GetProperty(\OPENSTACK_SERVER_PROPERTIES::SERVER_ID));
 
         parent::ResumeServer($DBServer);
 
@@ -301,7 +306,13 @@ class OpenstackPlatformModule extends AbstractOpenstackPlatformModule implements
     public function SuspendServer(DBServer $DBServer)
     {
         $client = $this->getOsClient($DBServer->GetEnvironmentObject(), $DBServer->GetProperty(\OPENSTACK_SERVER_PROPERTIES::CLOUD_LOCATION));
-        $info = $client->servers->suspend($DBServer->GetProperty(\OPENSTACK_SERVER_PROPERTIES::SERVER_ID));
+
+        try {
+            $info = $client->servers->suspend($DBServer->GetProperty(\OPENSTACK_SERVER_PROPERTIES::SERVER_ID));
+        } catch (NotFoundException $e) {
+            throw new InstanceNotFoundException($e->getMessage(), $e->getCode(), $e);
+        }
+
         return true;
     }
 
@@ -312,7 +323,13 @@ class OpenstackPlatformModule extends AbstractOpenstackPlatformModule implements
     public function TerminateServer(DBServer $DBServer)
     {
         $client = $this->getOsClient($DBServer->GetEnvironmentObject(), $DBServer->GetProperty(\OPENSTACK_SERVER_PROPERTIES::CLOUD_LOCATION));
-        $info = $client->servers->deleteServer($DBServer->GetProperty(\OPENSTACK_SERVER_PROPERTIES::SERVER_ID));
+
+        try {
+            $info = $client->servers->deleteServer($DBServer->GetProperty(\OPENSTACK_SERVER_PROPERTIES::SERVER_ID));
+        } catch (NotFoundException $e) {
+            throw new InstanceNotFoundException($e->getMessage(), $e->getCode(), $e);
+        }
+
         return true;
     }
 
@@ -324,10 +341,14 @@ class OpenstackPlatformModule extends AbstractOpenstackPlatformModule implements
     {
         $client = $this->getOsClient($DBServer->GetEnvironmentObject(), $DBServer->GetProperty(\OPENSTACK_SERVER_PROPERTIES::CLOUD_LOCATION));
 
-        if ($soft)
-            $client->servers->rebootServer($DBServer->GetProperty(\OPENSTACK_SERVER_PROPERTIES::SERVER_ID), RebootType::soft());
-        else
-            $client->servers->rebootServer($DBServer->GetProperty(\OPENSTACK_SERVER_PROPERTIES::SERVER_ID), RebootType::hard());
+        try {
+            if ($soft)
+                $client->servers->rebootServer($DBServer->GetProperty(\OPENSTACK_SERVER_PROPERTIES::SERVER_ID), RebootType::soft());
+            else
+                $client->servers->rebootServer($DBServer->GetProperty(\OPENSTACK_SERVER_PROPERTIES::SERVER_ID), RebootType::hard());
+        } catch (NotFoundException $e) {
+            throw new InstanceNotFoundException($e->getMessage(), $e->getCode(), $e);
+        }
 
         return true;
     }
@@ -336,23 +357,25 @@ class OpenstackPlatformModule extends AbstractOpenstackPlatformModule implements
      * {@inheritdoc}
      * @see \Scalr\Modules\PlatformModuleInterface::RemoveServerSnapshot()
      */
-    public function RemoveServerSnapshot(DBRole $DBRole)
+    public function RemoveServerSnapshot(Image $image)
     {
-        foreach (PlatformFactory::getOpenstackBasedPlatforms() as $platform) {
-            $images = $DBRole->getImageId($platform);
-            if (count($images) > 0) {
-                foreach ($images as $location => $imageId) {
-                    try {
-                        $osClient = $DBRole->getEnvironmentObject()->openstack($platform, $location);
-                        $osClient->servers->images->delete($imageId);
-                    } catch(\Exception $e) {
-                        if (stristr($e->getMessage(), "Unavailable service \"compute\" or region") || stristr($e->getMessage(), "Image not found") || stristr($e->getMessage(), "Cannot destroy a destroyed snapshot") || stristr($e->getMessage(), "OpenStack error. Could not find user")) {
-                          //DO NOTHING
-                        } else
-                            throw $e;
-                    }
-                }
+        if (! $image->getEnvironment())
+            return true;
+
+        try {
+            $cloudLocation = $image->cloudLocation;
+            if ($image->cloudLocation == '') {
+                $locations = $this->getLocations($image->getEnvironment());
+                $cloudLocation = array_keys($locations)[0];
             }
+
+            $osClient = $image->getEnvironment()->openstack($image->platform, $cloudLocation);
+            $osClient->servers->images->delete($image->id);
+        } catch(\Exception $e) {
+            if (stristr($e->getMessage(), "Image not found") || stristr($e->getMessage(), "Cannot destroy a destroyed snapshot")) {
+                //DO NOTHING
+            } else
+                throw $e;
         }
 
         return true;
@@ -517,7 +540,7 @@ class OpenstackPlatformModule extends AbstractOpenstackPlatformModule implements
      * {@inheritdoc}
      * @see \Scalr\Modules\PlatformModuleInterface::GetServerExtendedInformation()
      */
-    public function GetServerExtendedInformation(DBServer $DBServer)
+    public function GetServerExtendedInformation(DBServer $DBServer, $extended = false)
     {
         try {
             try	{
@@ -595,9 +618,9 @@ class OpenstackPlatformModule extends AbstractOpenstackPlatformModule implements
 
         if (!$launchOptions) {
             $launchOptions = new \Scalr_Server_LaunchOptions();
-            $DBRole = DBRole::loadById($DBServer->roleId);
+            $DBRole = $DBServer->GetFarmRoleObject()->GetRoleObject();
 
-            $launchOptions->imageId = $DBRole->getImageId($this->platform, $DBServer->GetCloudLocation());
+            $launchOptions->imageId = $DBRole->__getNewRoleObject()->getImage($this->platform, $DBServer->GetCloudLocation())->imageId;
             $launchOptions->serverType = $DBServer->GetFarmRoleObject()->GetSetting(\DBFarmRole::SETTING_OPENSTACK_FLAVOR_ID);
             $launchOptions->cloudLocation = $DBServer->GetFarmRoleObject()->CloudLocation;
 
@@ -630,8 +653,11 @@ class OpenstackPlatformModule extends AbstractOpenstackPlatformModule implements
                 $deviceMapping->uuid = $launchOptions->imageId;
                 $deviceMapping->boot_index = 0;
             }
+
+            $customUserData = $DBServer->GetFarmRoleObject()->GetSetting('base.custom_user_data');
         } else {
             $launchOptions->userData = array();
+            $customUserData = false;
 
             if (!$launchOptions->networks) {
                 $launchOptions->networks = array();
@@ -643,11 +669,23 @@ class OpenstackPlatformModule extends AbstractOpenstackPlatformModule implements
 
         // Prepare user data
         $u_data = "";
-        foreach ($launchOptions->userData as $k => $v) {
+        foreach ($launchOptions->userData as $k => $v)
             $u_data .= "{$k}={$v};";
-        }
 
         $u_data = trim($u_data, ";");
+        if ($customUserData) {
+            $repos = $DBServer->getScalarizrRepository();
+
+            $extProperties["user_data"] = str_replace(array(
+                '{SCALR_USER_DATA}',
+                '{RPM_REPO_URL}',
+                '{DEB_REPO_URL}'
+            ), array(
+                $u_data,
+                $repos['rpm_repo_url'],
+                $repos['deb_repo_url']
+            ), $customUserData);
+        }
 
         $personality = new PersonalityList();
 
@@ -779,11 +817,12 @@ class OpenstackPlatformModule extends AbstractOpenstackPlatformModule implements
                 $ipPool = $DBServer->GetFarmRoleObject()->GetSetting(\DBFarmRole::SETTING_OPENSTACK_IP_POOL);
                 if ($ipPool)
                     $DBServer->SetProperty(\SERVER_PROPERTIES::SYSTEM_IGNORE_INBOUND_MESSAGES, 1);
-            }
+                }
 
-            $DBServer->osType = ($isWindows) ? 'windows' : 'linux';
+            $DBServer->setOsType($isWindows ? 'windows' : 'linux');
             $DBServer->cloudLocation = $launchOptions->cloudLocation;
             $DBServer->cloudLocationZone = ""; // Not supported by openstack
+            $DBServer->imageId = $launchOptions->imageId;
 
             return $DBServer;
         } catch (\Exception $e) {
@@ -849,13 +888,8 @@ class OpenstackPlatformModule extends AbstractOpenstackPlatformModule implements
      */
     public function ClearCache()
     {
-        $this->instancesListCache = array();
-    }
-    
-    private function hasOpenStackNetworkSecurityGroupExtension(OpenStack $openstack)
-    {
-    	return $openstack->hasService(OpenStack::SERVICE_NETWORK) &&
-    	$openstack->network->isExtensionSupported(NetworkExtension::securityGroup());
+        $this->instancesListCache = [];
+        $this->instancesDetailsCache = [];
     }
 
     private function GetServerSecurityGroupsList(DBServer $DBServer, \Scalr\Service\OpenStack\OpenStack $osClient, \Scalr_Governance $governance = null)
@@ -902,11 +936,7 @@ class OpenstackPlatformModule extends AbstractOpenstackPlatformModule implements
         }
 
         try {
-        	if ($this->hasOpenStackNetworkSecurityGroupExtension($osClient)) {
-        		$list = $osClient->network->securityGroups->list();
-        	} else {
-        		$list = $osClient->servers->securityGroups->list();
-        	}
+        	$list = $osClient->listSecurityGroups();
             do {
                 foreach ($list as $sg) {
                     $sgroups[strtolower($sg->name)] = $sg;
@@ -924,11 +954,12 @@ class OpenstackPlatformModule extends AbstractOpenstackPlatformModule implements
         }
 
         foreach ($checkGroups as $groupName) {
-            if (preg_match('/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/si', $groupName) || !in_array($groupName, array('scalr-rb-system', 'default', \Scalr::config('scalr.aws.security_group_name')))) {
-                if (isset($sgroupIds[$groupName]))
+            // || !in_array($groupName, array('scalr-rb-system', 'default', \Scalr::config('scalr.aws.security_group_name')))
+            if (preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/si', $groupName)) {
+                if (isset($sgroupIds[strtolower($groupName)]))
                     $groupName = $sgroupIds[$groupName]->name;
                 else
-                   throw new \Exception(sprintf(_("Security group '%s' is not found"), $groupName));
+                   throw new \Exception(sprintf(_("Security group '%s' is not found (1)"), $groupName));
             }
 
             // Check default SG
@@ -937,74 +968,37 @@ class OpenstackPlatformModule extends AbstractOpenstackPlatformModule implements
 
                 // Check Roles builder SG
             } elseif ($groupName == 'scalr-rb-system' || $groupName == \Scalr::config('scalr.aws.security_group_name')) {
-                if (!isset($sgroups[$groupName])) {
-                	if ($this->hasOpenStackNetworkSecurityGroupExtension($osClient)) {
-                		try {
-                		
-                			$group = $osClient->network->securityGroups->create($groupName, _("Scalr system security group"));
-                			$groupId = $group->id;
-                		}
-                		catch(\Exception $e) {
-                			throw new \Exception("GetServerSecurityGroupsList failed on scalr.ip-pool: {$e->getMessage()}");
-                		}
-                		
-                		
-                		//Temporary solution because of API requests rate limit
-                		$rule = new \stdClass();
-                		
-                		$rule->protocol = "tcp";
-                		$rule->port_range_min = 1;
-                		$rule->port_range_max = 65535;
-                		$rule->remote_ip_prefix = "0.0.0.0/0";
-                		$rule->security_group_id = $groupId;
-                		
-                		$res = $osClient->servers->securityGroups->addRule($rule);
-                		
-                		$rule = new \stdClass();
-                		
-                		$rule->protocol = "udp";
-                		$rule->port_range_min = 1;
-                		$rule->port_range_max = 65535;
-                		$rule->remote_ip_prefix = "0.0.0.0/0";
-                		$rule->security_group_id = $groupId;
-                		
-                		$res = $osClient->servers->securityGroups->addRule($rule);
-                	} else {
-	                    try {
-	                    	
-	                        $group = $osClient->servers->securityGroups->create($groupName, _("Scalr system security group"));
-	                        $groupId = $group->id;
-	                    }
-	                    catch(\Exception $e) {
-	                        throw new \Exception("GetServerSecurityGroupsList failed on scalr.ip-pool: {$e->getMessage()}");
-	                    }
-	
-	                    //Temporary solution because of API requests rate limit
-	                    $rule = new \stdClass();
-	
-	                    $rule->ip_protocol = "tcp";
-	                    $rule->from_port = 1;
-	                    $rule->to_port = 65535;
-	                    $rule->cidr = "0.0.0.0/0";
-	                    $rule->parent_group_id = $groupId;
-	
-	                    $res = $osClient->servers->securityGroups->addRule($rule);
-	
-	                    $rule = new \stdClass();
-	
-	                    $rule->ip_protocol = "udp";
-	                    $rule->from_port = 1;
-	                    $rule->to_port = 65535;
-	                    $rule->cidr = "0.0.0.0/0";
-	                    $rule->parent_group_id = $groupId;
-	
-	                    $res = $osClient->servers->securityGroups->addRule($rule);
-                	}
+                if (!isset($sgroups[strtolower($groupName)])) {
+                    try {
+                        $group = $osClient->createSecurityGroup($groupName, _("Scalr system security group"));
+                        $groupId = $group->id;
+                    }
+                    catch (\Exception $e) {
+                            throw new \Exception("GetServerSecurityGroupsList failed on scalr.ip-pool: {$e->getMessage()}");
+                    }
+
+                    $r = new CreateSecurityGroupRule($groupId);
+                    $r->direction = 'ingress';
+                    $r->protocol = 'tcp';
+                    $r->port_range_min = 1;
+                    $r->port_range_max = 65535;
+                    $r->remote_ip_prefix = "0.0.0.0/0";
+
+                    $res = $osClient->createSecurityGroupRule($r);
+
+                    $r = new CreateSecurityGroupRule($groupId);
+                    $r->direction = 'ingress';
+                    $r->protocol = 'udp';
+                    $r->port_range_min = 1;
+                    $r->port_range_max = 65535;
+                    $r->remote_ip_prefix = "0.0.0.0/0";
+
+                    $res = $osClient->createSecurityGroupRule($r);
                 }
                 array_push($retval, $groupName);
             } else {
-                if (!isset($sgroups[$groupName])) {
-                    throw new \Exception(sprintf(_("Security group '%s' is not found"), $groupName));
+                if (!isset($sgroups[strtolower($groupName)])) {
+                    throw new \Exception(sprintf(_("Security group '%s' is not found (2)"), $groupName));
                 } else
                     array_push($retval, $groupName);
             }
@@ -1024,20 +1018,48 @@ class OpenstackPlatformModule extends AbstractOpenstackPlatformModule implements
                 "Method %s requires both environment object and cloudLocation to be specified.", __METHOD__
             ));
         }
-        $ret = array();
-        $client = $env->openstack($this->platform, $cloudLocation);
-        foreach ($client->servers->listFlavors() as $flavor) {
-            if (!$details)
-                $ret[(string)$flavor->id] = (string) $flavor->name;
-            else
-                $ret[(string)$flavor->id] = array(
-                    'name' => (string) $flavor->name,
-                    'ram' => (string) $flavor->ram,
+
+        $ret = [];
+        $detailed = [];
+
+        //Trying to retrieve instance types from the cache
+        $url = $this->getConfigVariable($this::KEYSTONE_URL, $env);
+        $collection = $this->getCachedInstanceTypes($this->platform, $url, $cloudLocation);
+
+        if ($collection === false || $collection->count() == 0) {
+            //No cache. Fetching data from the cloud
+            $client = $env->openstack($this->platform, $cloudLocation);
+
+            foreach ($client->servers->listFlavors() as $flavor) {
+                $detailed[(string)$flavor->id] = array(
+                    'name'  => (string) $flavor->name,
+                    'ram'   => (string) $flavor->ram,
                     'vcpus' => (string) $flavor->vcpus,
-                    'disk' => (string) $flavor->disk,
-                    'type' => 'HDD'
+                    'disk'  => (string) $flavor->disk,
+                    'type'  => 'HDD'
                 );
+
+                if (!$details) {
+                    $ret[(string)$flavor->id] = (string) $flavor->name;
+                } else {
+                    $ret[(string)$flavor->id] = $detailed[(string)$flavor->id];
+                }
+            }
+
+            //Refreshes/creates a cache
+            CloudLocation::updateInstanceTypes($this->platform, $url, $cloudLocation, $detailed);
+        } else {
+            //Takes data from cache
+            foreach ($collection as $cloudInstanceType) {
+                /* @var $cloudInstanceType \Scalr\Model\Entity\CloudInstanceType */
+                if (!$details) {
+                    $ret[$cloudInstanceType->instanceTypeId] = $cloudInstanceType->name;
+                } else {
+                    $ret[$cloudInstanceType->instanceTypeId] = $cloudInstanceType->getProperties();
+                }
+            }
         }
+
         return $ret;
     }
 }

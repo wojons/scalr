@@ -6,6 +6,7 @@ FARMS:
   - /farms/xUnlock
   - /farms/xListFarms
   - /farms/xLock
+  - [/farms/events, {"farmId":"%OWNED_FARM_ID%"}, all]
   FARMS_MANAGE:
   - /farms/builder/xBuild
   - /farms/xRemove
@@ -31,9 +32,6 @@ FARMS:
 FARMS_ALERTS:
 - [/alerts, ~, all]
 
-FARMS_EVENTS_AND_NOTIFICATIONS:
-- [/farms/events, {"farmId":"%OWNED_FARM_ID%"}, all]
-
 FARMS_STATISTICS:
 - [/statistics, ~, all]
 
@@ -47,7 +45,7 @@ FARMS_ROLES:
   FARMS_ROLES_CREATE:
   - /roles/xBuild?platform=&architecture=&behaviors=&roleName=&roleImage=0&imageId=&cloudLocation=&osfamily=&hvm=&advanced=&chef=
   - /roles/builder
-  - /servers/xServerCreateSnapshot
+  - /servers/xServerCreateSnapshot?serverId=&replaceType=
   - /servers/createSnapshot
   - [/roles/import, ~, all]
 

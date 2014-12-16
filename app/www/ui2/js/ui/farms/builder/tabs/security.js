@@ -66,9 +66,9 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.security', function (moduleTabParams)
                 names: []
             };
             Ext.Array.each(list, function(item) {
-            	
+            	item = item.toString();
             	if (Scalr.isOpenstack(p) || Scalr.isCloudstack(p)) {
-            		if (item == 'default' || item.toString().indexOf('ip-pool') !== -1) {
+            		if (item == 'default' || item.indexOf('ip-pool') !== -1) {
             			result['names'].push(item);
             		} else {
             			result['ids'].push(item);
@@ -287,7 +287,11 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.security', function (moduleTabParams)
                                             rulesGrid.store.loadData(allRules);
                                             rulesGrid.show();
                                         } else {
-                                            groupNotFound.down().setValue('The <b>'+(newFocused.get('name') || newFocused.get('id'))+'</b> security group does not exist yet. It will be created when the first instance is launched.');
+                                            if (!newFocused.get('id')) {
+                                                groupNotFound.down().setValue('The <b>' + newFocused.get('name') + '</b> security group does not exist yet. It will be created when the first instance is launched.');
+                                            } else {
+                                                groupNotFound.down().setValue('The <b>' + newFocused.get('id') + '</b> security group does not exist.');
+                                            }
                                             groupNotFound.show();
                                         }
                                     },

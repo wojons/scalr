@@ -208,7 +208,7 @@ class ProcessManager
 
         // Run routines after forking
         $this->ProcessObject->OnEndForking();
-        $this->Logger->debug("Main process complete. Exiting...");
+        $this->Logger->debug("Main process completed. Exiting...");
 
         exit();
     }

@@ -85,6 +85,7 @@ Scalr.regPage('Scalr.ui.tools.aws.ec2.ebs.volumes.create', function (loadParams,
 				xtype: 'textfield',
 				fieldLabel: 'Snapshot',
 				readOnly: true,
+				hidden: !(loadParams['snapshotId']), 
 				name: 'snapshotId',
 				value: loadParams['snapshotId'] || ''
 			}]

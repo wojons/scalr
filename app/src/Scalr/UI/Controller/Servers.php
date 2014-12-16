@@ -7,6 +7,7 @@ use Scalr\Modules\PlatformFactory;
 use Scalr\Model\Entity;
 use Scalr\UI\Request\JsonData;
 use Scalr\Modules\Platforms\Openstack\Helpers\OpenstackHelper;
+use Scalr\Exception\Http\NotFoundException;
 
 class Scalr_UI_Controller_Servers extends Scalr_UI_Controller
 {
@@ -319,7 +320,7 @@ class Scalr_UI_Controller_Servers extends Scalr_UI_Controller
 
         if ($ipAddress) {
             $dBFarm = $dbServer->GetFarmObject();
-            $dbRole = DBRole::loadById($dbServer->roleId);
+            $dbRole = $dbServer->GetFarmRoleObject()->GetRoleObject();
 
             $sshPort = $dbRole->getProperty(DBRole::PROPERTY_SSH_PORT);
             if (!$sshPort)
@@ -342,7 +343,8 @@ class Scalr_UI_Controller_Servers extends Scalr_UI_Controller
                 Scalr_Account_User::VAR_SSH_CONSOLE_PORT => $userSshSettings[Scalr_Account_User::VAR_SSH_CONSOLE_PORT] ? $userSshSettings[Scalr_Account_User::VAR_SSH_CONSOLE_PORT] : $sshPort,
                 Scalr_Account_User::VAR_SSH_CONSOLE_USERNAME => $userSshSettings[Scalr_Account_User::VAR_SSH_CONSOLE_USERNAME] ? $userSshSettings[Scalr_Account_User::VAR_SSH_CONSOLE_USERNAME] : ($dbServer->platform == SERVER_PLATFORMS::GCE ? 'scalr' : 'root'),
                 Scalr_Account_User::VAR_SSH_CONSOLE_LOG_LEVEL => $userSshSettings[Scalr_Account_User::VAR_SSH_CONSOLE_LOG_LEVEL] ? $userSshSettings[Scalr_Account_User::VAR_SSH_CONSOLE_LOG_LEVEL] : 'CONFIG',
-                Scalr_Account_User::VAR_SSH_CONSOLE_PREFERRED_PROVIDER => $userSshSettings[Scalr_Account_User::VAR_SSH_CONSOLE_PREFERRED_PROVIDER] ? $userSshSettings[Scalr_Account_User::VAR_SSH_CONSOLE_PREFERRED_PROVIDER] : ''
+                Scalr_Account_User::VAR_SSH_CONSOLE_PREFERRED_PROVIDER => $userSshSettings[Scalr_Account_User::VAR_SSH_CONSOLE_PREFERRED_PROVIDER] ? $userSshSettings[Scalr_Account_User::VAR_SSH_CONSOLE_PREFERRED_PROVIDER] : '',
+                Scalr_Account_User::VAR_SSH_CONSOLE_ENABLE_AGENT_FORWARDING => $userSshSettings[Scalr_Account_User::VAR_SSH_CONSOLE_ENABLE_AGENT_FORWARDING] ? $userSshSettings[Scalr_Account_User::VAR_SSH_CONSOLE_ENABLE_AGENT_FORWARDING] : '0',
             );
 
             if ($this->request->isAllowed(Acl::RESOURCE_SECURITY_SSH_KEYS)) {
@@ -352,6 +354,16 @@ class Scalr_UI_Controller_Servers extends Scalr_UI_Controller
                     $dbServer->GetFarmRoleObject()->CloudLocation,
                     $dbServer->platform
                 );
+
+                if (!$sshKey) {
+                    throw new NotFoundException(sprintf(
+                        "Cannot find ssh key corresponding to environment:'%d', farm:'%d', platform:'%s', cloud location:'%s'.",
+                        $dbServer->envId,
+                        $dbServer->farmId,
+                        strip_tags($dbServer->platform),
+                        strip_tags($dbServer->GetFarmRoleObject()->CloudLocation)
+                    ));
+                }
 
                 $cloudKeyName = $sshKey->cloudKeyName;
                 if (substr_count($cloudKeyName, '-') == 2) {
@@ -535,11 +547,12 @@ class Scalr_UI_Controller_Servers extends Scalr_UI_Controller
             'sort' => array('type' => 'json')
         ));
 
-        $sql = 'SELECT servers.*, farms.name AS farm_name, roles.name AS role_name, farm_roles.alias AS role_alias
+        $sql = 'SELECT servers.*, farms.name AS farm_name, roles.name AS role_name, farm_roles.alias AS role_alias, ste.last_error AS termination_error
                 FROM servers
                 LEFT JOIN farms ON servers.farm_id = farms.id
-                LEFT JOIN roles ON roles.id = servers.role_id
                 LEFT JOIN farm_roles ON farm_roles.id = servers.farm_roleid
+                LEFT JOIN roles ON roles.id = farm_roles.role_id
+                LEFT JOIN server_termination_errors ste ON servers.server_id = ste.server_id
                 WHERE servers.env_id = ? AND :FILTER:';
         $args = array($this->getEnvironmentId());
 
@@ -643,13 +656,18 @@ class Scalr_UI_Controller_Servers extends Scalr_UI_Controller
         }
 
         if ($this->getParam('roleId')) {
-            $sql .= " AND role_id=?";
+            $sql .= " AND farm_roles.role_id=?";
             $args[] = $this->getParam('roleId');
         }
 
         if ($this->getParam('serverId')) {
-            $sql .= " AND server_id=?";
+            $sql .= " AND servers.server_id=?";
             $args[] = $this->getParam('serverId');
+        }
+
+        if ($this->getParam('imageId')) {
+            $sql .= " AND image_id=?";
+            $args[] = $this->getParam('imageId');
         }
 
         if ($this->getParam('hideTerminated')) {
@@ -657,13 +675,18 @@ class Scalr_UI_Controller_Servers extends Scalr_UI_Controller
             $args[] = SERVER_STATUS::TERMINATED;
         }
 
-        $response = $this->buildResponseFromSql2($sql, array('platform', 'farm_name', 'role_name', 'role_alias', 'index', 'server_id', 'remote_ip', 'local_ip', 'uptime', 'status'),
+        $response = $this->buildResponseFromSql2($sql, array('platform', 'farm_name', 'role_name', 'role_alias', 'index', 'servers.server_id', 'remote_ip', 'local_ip', 'uptime', 'status'),
             array('servers.server_id', 'farm_id', 'farms.name', 'remote_ip', 'local_ip', 'servers.status', 'farm_roles.alias'), $args);
 
         foreach ($response["data"] as &$row) {
             try {
                 $dbServer = DBServer::LoadByID($row['server_id']);
-
+            } catch (Exception $e) {
+                continue;
+            }
+            
+            
+            try {
                 $row['cloud_server_id'] = $dbServer->GetCloudServerID();
                 $row['hostname'] = $dbServer->GetProperty(Scalr_Role_Behavior::SERVER_BASE_HOSTNAME);
 
@@ -745,6 +768,7 @@ class Scalr_UI_Controller_Servers extends Scalr_UI_Controller
             $row['agent_update_manual'] = !$dbServer->IsSupported("0.5");
             $row['os_family'] = $dbServer->GetOsFamily();
             $row['flavor'] = $dbServer->GetFlavor();
+            $row['instance_type_name'] = $dbServer->GetProperty(SERVER_PROPERTIES::INFO_INSTANCE_TYPE_NAME);
             $row['alerts'] = $serverAlerts->getActiveAlertsCount();
             if (!$row['flavor'])
                 $row['flavor'] = '';
@@ -870,7 +894,7 @@ class Scalr_UI_Controller_Servers extends Scalr_UI_Controller
         if (!$port)
             $port = 8008;
 
-        $updateClient = new Scalr_Net_Scalarizr_UpdateClient($dbServer, $port, 30);
+        $updateClient = new Scalr_Net_Scalarizr_UpdateClient($dbServer, $port, 100);
         $status = $updateClient->updateScalarizr();
 
         $this->response->success('Scalarizr successfully updated to the latest version');
@@ -935,7 +959,7 @@ class Scalr_UI_Controller_Servers extends Scalr_UI_Controller
                 if ($scalarizr->candidate && $scalarizr->installed != $scalarizr->candidate) {
                     $nextUpdate = [
                         'candidate'   => htmlspecialchars($scalarizr->candidate),
-                        'scheduledOn' => $scheduledOn ? Scalr_Util_DateTime::convertTz($scheduledOn) : null
+                        'scheduledOn' => $scheduledOn ? Scalr_Util_DateTime::convertTzFromUTC($scheduledOn) : null
                     ];
                 }
                 return [
@@ -944,7 +968,7 @@ class Scalr_UI_Controller_Servers extends Scalr_UI_Controller
                     'candidate'   => htmlspecialchars($scalarizr->candidate),
                     'repository'  => ucfirst(htmlspecialchars($scalarizr->repository)),
                     'lastUpdate'  => [
-                        'date'        => ($scalarizr->executed_at) ? Scalr_Util_DateTime::convertTz($scalarizr->executed_at) : "",
+                        'date'        => ($scalarizr->executed_at) ? Scalr_Util_DateTime::convertTzFromUTC($scalarizr->executed_at) : "",
                         'error'       => nl2br(htmlspecialchars($scalarizr->error))
                     ],
                     'nextUpdate'  => $nextUpdate,
@@ -1002,7 +1026,7 @@ class Scalr_UI_Controller_Servers extends Scalr_UI_Controller
         $data = array();
 
         $p = PlatformFactory::NewPlatform($dbServer->platform);
-        $info = $p->GetServerExtendedInformation($dbServer);
+        $info = $p->GetServerExtendedInformation($dbServer, true);
         if (is_array($info) && count($info)) {
             $data['cloudProperties'] = $info;
 
@@ -1013,8 +1037,11 @@ class Scalr_UI_Controller_Servers extends Scalr_UI_Controller
             }
         }
 
+        $imageIdDifferent = false;
         try {
             $dbRole = $dbServer->GetFarmRoleObject()->GetRoleObject();
+            // GCE didn't have imageID before we implement this feature
+            $imageIdDifferent = ($dbRole->__getNewRoleObject()->getImage($dbServer->platform, $dbServer->cloudLocation)->imageId != $dbServer->imageId) && $dbServer->imageId;
         } catch (Exception $e) {}
 
 
@@ -1035,6 +1062,10 @@ class Scalr_UI_Controller_Servers extends Scalr_UI_Controller
             $hash = $dbServer->GetFarmObject()->Hash;
         }
 
+        $instType = $dbServer->GetProperty(SERVER_PROPERTIES::INFO_INSTANCE_TYPE_NAME);
+        if (empty($instType)) {
+            $instType = PlatformFactory::NewPlatform($dbServer->platform)->GetServerFlavor($dbServer);
+        }
         $data['general'] = array(
             'server_id'         => $dbServer->serverId,
             'hostname_debug'    => urlencode($hostnameDebug),
@@ -1042,12 +1073,15 @@ class Scalr_UI_Controller_Servers extends Scalr_UI_Controller
             'farm_id'           => $dbServer->farmId,
             'farm_name'         => $dbServer->farmId ? $dbServer->GetFarmObject()->Name : "",
             'farm_roleid'       => $dbServer->farmRoleId,
+            'imageId'           => $dbServer->imageId,
+            'imageIdDifferent'  => $imageIdDifferent,
             'farm_hash'         => $hash,
             'role_id'           => isset($dbRole) ? $dbRole->id : null,
             'platform'          => $dbServer->platform,
             'cloud_location'    => $dbServer->GetCloudLocation(),
             'role'              => array (
                                     'name'      => isset($dbRole) ? $dbRole->name : 'unknown',
+                                    'id'        => isset($dbRole) ? $dbRole->id : 0,
                                     'platform'  => $dbServer->platform
                                 ),
             'os'                => array(
@@ -1060,7 +1094,7 @@ class Scalr_UI_Controller_Servers extends Scalr_UI_Controller
             'index'             => $dbServer->index,
             'local_ip'          => $dbServer->localIp,
             'remote_ip'         => $dbServer->remoteIp,
-            'instType'          => PlatformFactory::NewPlatform($dbServer->platform)->GetServerFlavor($dbServer),
+            'instType'          => $instType,
             'addedDate'         => Scalr_Util_DateTime::convertTz($dbServer->dateAdded),
             'excluded_from_dns' => (!$dbServer->GetProperty(SERVER_PROPERTIES::EXCLUDE_FROM_DNS) && !$r_dns) ? false : true,
             'is_locked'         => $dbServer->GetProperty(EC2_SERVER_PROPERTIES::IS_LOCKED) ? 1 : 0,
@@ -1457,105 +1491,157 @@ class Scalr_UI_Controller_Servers extends Scalr_UI_Controller
             throw new Exception(sprintf(_("You cannot create snapshot from selected server because scalr-ami-scripts package on it is too old.")));
 
         //Check is role already synchronizing...
-        $chk = $this->db->GetOne("SELECT server_id FROM bundle_tasks WHERE prototype_role_id=? AND status NOT IN ('success', 'failed') LIMIT 1", array(
-            $dbServer->roleId
+        $chk = $this->db->GetRow("SELECT id, server_id FROM bundle_tasks WHERE prototype_role_id=? AND status NOT IN ('success', 'failed') LIMIT 1", array(
+            $dbServer->GetFarmRoleObject()->RoleID
         ));
 
-        if ($chk && $chk != $dbServer->serverId) {
+        if ($chk && ($chk['server_id'] != $dbServer->serverId)) {
             try {
-                $bDBServer = DBServer::LoadByID($chk);
+                $bDBServer = DBServer::LoadByID($chk['server_id']);
             }
             catch(Exception $e) {}
 
             if ($bDBServer->farmId == $dbServer->farmId) {
-                $this->response->failure(sprintf(_("This role is already synchonizing. <a href='#/bundletasks/%s/logs'>Check status</a>."), $chk), true);
+                $this->response->failure(sprintf(_("This role is already synchonizing. <a href='#/bundletasks/%s/logs'>Check status</a>."), $chk['id']), true);
                 return;
             }
         }
 
-        $imageId = $dbFarmRole->GetRoleObject()->getImageId($dbServer->platform, $dbServer->GetCloudLocation());
+        $roleImage = $dbFarmRole->GetRoleObject()->__getNewRoleObject()->getImage($dbServer->platform, $dbServer->GetCloudLocation());
+        $image = $roleImage->getImage();
         $roleName = $dbServer->GetFarmRoleObject()->GetRoleObject()->name;
         $this->response->page('ui/servers/createsnapshot.js', array(
             'serverId' 	=> $dbServer->serverId,
             'platform'	=> $dbServer->platform,
             'dbSlave'	=> $dbSlave,
-            'isVolumeSizeSupported'=> (int)$dbServer->IsSupported('0.7'),
+            'isVolumeSizeSupported' => $dbServer->platform == SERVER_PLATFORMS::EC2 && (
+                $dbServer->IsSupported('0.7') && $dbServer->osType == 'linux' ||
+                $image->isEc2HvmImage()
+            ),
+            'isVolumeTypeSupported' => $dbServer->platform == SERVER_PLATFORMS::EC2 && (
+                $dbServer->IsSupported('2.11.4') && $dbServer->osType == 'linux' ||
+                $image->isEc2HvmImage()
+            ),
             'farmId' => $dbServer->farmId,
             'farmName' => $dbServer->GetFarmObject()->Name,
             'roleName' => $roleName,
-            'imageId' => $imageId,
+            'imageId' => $dbServer->imageId,
+            'roleImageId' => $roleImage->imageId,
+            'imageName' => $image->name,
+            'isSharedRole' => $dbFarmRole->GetRoleObject()->envId == 0,
+            'cloudLocation' => $dbServer->GetCloudLocation(),
             'replaceNoReplace' => "<b>DO NOT REPLACE</b> any roles on any farms, just create a new one.</td>",
             'replaceFarmReplace' => "Replace the role '{$roleName}' with this new one <b>ONLY</b> on the current farm '{$dbServer->GetFarmObject()->Name}'</td>",
             'replaceAll' => "Replace the role '{$roleName}' with this new one on <b>ALL MY FARMS</b> <br/><span style=\"font-style:italic;font-size:11px;\">(You will be able to bundle this role with the same name. The old role will be renamed.)</span></td>"
         ));
     }
 
-    public function xServerCreateSnapshotAction()
+    /**
+     * @param   string  $serverId
+     * @param   string  $name
+     * @param   string  $description
+     * @param   bool    $createRole
+     * @param   string  $replaceRole
+     * @param   bool    $replaceImage
+     * @param   int     $rootVolumeSize
+     * @param   string  $rootVolumeType
+     * @param   int     $rootVolumeIops
+     * @throws Exception
+     */
+    public function xServerCreateSnapshotAction($serverId, $name = '', $description = '', $createRole = false, $replaceRole = '', $replaceImage = false, $rootVolumeSize = 0, $rootVolumeType = '', $rootVolumeIops = 0)
     {
         $this->request->restrictAccess(Acl::RESOURCE_FARMS_ROLES, Acl::PERM_FARMS_ROLES_CREATE);
 
-        $this->request->defineParams(array(
-            'rootVolumeSize' => array('type' => 'int')
-        ));
+        if (! $serverId)
+            throw new Exception('Server not found');
 
-        if (! $this->getParam('serverId'))
-            throw new Exception(_('Server not found'));
-
-        $dbServer = DBServer::LoadByID($this->getParam('serverId'));
+        $dbServer = DBServer::LoadByID($serverId);
         $this->user->getPermissions()->validate($dbServer);
 
-        $err = array();
-
-        if (strlen($this->getParam('roleName')) < 3)
-            $err[] = _("Role name should be greater than 3 chars");
-
-        if (! preg_match("/^[A-Za-z0-9-]+$/si", $this->getParam('roleName')))
-            $err[] = _("Role name is incorrect");
-
-        $roleinfo = $this->db->GetRow("SELECT * FROM roles WHERE name=? AND (env_id=? OR env_id='0') LIMIT 1", array($this->getParam('roleName'), $dbServer->envId, $dbServer->roleId));
-        if ($this->getParam('replaceType') != SERVER_REPLACEMENT_TYPE::REPLACE_ALL) {
-            if ($roleinfo)
-                $err[] = _("Specified role name is already used by another role. You can use this role name only if you will replace old one on ALL your farms.");
-        } else {
-            if ($roleinfo && $roleinfo['env_id'] == 0)
-                $err[] = _("Selected role name is reserved and cannot be used for custom role");
-        }
-
+        $errorMsg = [];
         //Check for already running bundle on selected instance
         $chk = $this->db->GetOne("SELECT id FROM bundle_tasks WHERE server_id=? AND status NOT IN ('success', 'failed') LIMIT 1",
             array($dbServer->serverId)
         );
 
         if ($chk)
-            $err[] = sprintf(_("Server '%s' is already synchonizing."), $dbServer->serverId);
+            $errorMsg[] = sprintf(_("Server '%s' is already synchonizing."), $dbServer->serverId);
 
         //Check is role already synchronizing...
         $chk = $this->db->GetOne("SELECT server_id FROM bundle_tasks WHERE prototype_role_id=? AND status NOT IN ('success', 'failed') LIMIT 1", array(
-            $dbServer->roleId
+            $dbServer->GetFarmRoleObject()->RoleID
         ));
 
         if ($chk && $chk != $dbServer->serverId) {
             try	{
                 $bDBServer = DBServer::LoadByID($chk);
-                if ($bDBServer->farmId == $DBServer->farmId)
-                    $err[] = sprintf(_("Role '%s' is already synchonizing."), $dbServer->GetFarmRoleObject()->GetRoleObject()->name);
+                if ($bDBServer->farmId == $dbServer->farmId)
+                    $errorMsg[] = sprintf(_("Role '%s' is already synchonizing."), $dbServer->GetFarmRoleObject()->GetRoleObject()->name);
             } catch(Exception $e) {}
         }
 
         if ($dbServer->GetFarmRoleObject()->NewRoleID)
-            $err[] = sprintf(_("Role '%s' is already synchonizing."), $dbServer->GetFarmRoleObject()->GetRoleObject()->name);
+            $errorMsg[] = sprintf(_("Role '%s' is already synchonizing."), $dbServer->GetFarmRoleObject()->GetRoleObject()->name);
 
-        if (count($err))
-            throw new Exception(nl2br(implode('\n', $err)));
+        if (! empty($errorMsg))
+            throw new Exception(implode('\n', $errorMsg));
+
+        $validator = new \Scalr\UI\Request\Validator();
+        $validator->addErrorIf(strlen($name) < 3, 'name', _("Role name should be greater than 3 chars"));
+        $validator->addErrorIf(! preg_match("/^[A-Za-z0-9-]+$/si", $name), 'name', _("Role name is incorrect"));
+        $validator->addErrorIf(! in_array($replaceRole, ['farm', 'all', '']), 'replaceRole', 'Invalid value');
+
+        $object = $createRole ? BundleTask::BUNDLETASK_OBJECT_ROLE : BundleTask::BUNDLETASK_OBJECT_IMAGE;
+        $replaceType = SERVER_REPLACEMENT_TYPE::NO_REPLACE;
+
+        if ($createRole) {
+            if ($replaceRole == 'farm')
+                $replaceType = SERVER_REPLACEMENT_TYPE::REPLACE_FARM;
+            else if ($replaceRole == 'all')
+                $replaceType = SERVER_REPLACEMENT_TYPE::REPLACE_ALL;
+        } else {
+            if ($replaceImage && $dbServer->GetFarmRoleObject()->GetRoleObject()->envId != 0)
+                $replaceType = SERVER_REPLACEMENT_TYPE::REPLACE_ALL;
+        }
+
+        if ($createRole) {
+            $roleInfo = $this->db->GetRow("SELECT * FROM roles WHERE name=? AND (env_id=? OR env_id='0') LIMIT 1", array($name, $dbServer->envId, $dbServer->GetFarmRoleObject()->RoleID));
+            if ($roleInfo) {
+                if ($roleInfo['env_id'] == 0) {
+                    $validator->addError('name', _("Selected role name is reserved and cannot be used for custom role"));
+                } else if ($replaceType != SERVER_REPLACEMENT_TYPE::REPLACE_ALL) {
+                    $validator->addError('name', _("Specified role name is already used by another role. You can use this role name only if you will replace old one on ALL your farms."));
+                } else if ($replaceType == SERVER_REPLACEMENT_TYPE::REPLACE_ALL && $roleInfo['id'] != $dbServer->GetFarmRoleObject()->RoleID) {
+                    $validator->addError('name', _("This Role name is already in use. You cannot replace a Role different from the one you are currently snapshotting."));
+                }
+            }
+        }
+
+        $roleImage = $dbServer->GetFarmRoleObject()->GetRoleObject()->__getNewRoleObject()->getImage($dbServer->platform, $dbServer->GetCloudLocation());
+        $rootBlockDevice = [];
+        if ($dbServer->platform == SERVER_PLATFORMS::EC2 && ($dbServer->IsSupported('0.7') && $dbServer->osType == 'linux' || $roleImage->getImage()->isEc2HvmImage())) {
+            if ($rootVolumeSize > 0) {
+                $rootBlockDevice['size'] = $rootVolumeSize;
+            }
+
+            if (in_array($rootVolumeType, ['standard', 'gp2', 'io1'])) {
+                $rootBlockDevice['volume_type'] = $rootVolumeType;
+                if ($rootVolumeType == 'io1' && $rootVolumeIops > 0) {
+                    $rootBlockDevice['iops'] = $rootVolumeIops;
+                }
+            }
+        }
+
+        if (! $validator->isValid($this->response))
+            return;
 
         $ServerSnapshotCreateInfo = new ServerSnapshotCreateInfo(
             $dbServer,
-            $this->getParam('roleName'),
-            $this->getParam('replaceType'),
-            false,
-            $this->getParam('roleDescription'),
-            $this->getParam('rootVolumeSize'),
-            $this->getParam('noServersReplace') == 'on' ? true : false
+            $name,
+            $replaceType,
+            $object,
+            $description,
+            $rootBlockDevice
         );
         $BundleTask = BundleTask::Create($ServerSnapshotCreateInfo);
 
@@ -1566,18 +1652,36 @@ class Scalr_UI_Controller_Servers extends Scalr_UI_Controller
             $BundleTask->generation = 2;
         }
 
-        $protoRole = DBRole::loadById($dbServer->roleId);
+        $protoRole = DBRole::loadById($dbServer->GetFarmRoleObject()->RoleID);
 
         $BundleTask->osFamily = $protoRole->osFamily;
         $BundleTask->osVersion = $protoRole->osVersion;
 
         if (in_array($protoRole->osFamily, array('redhat', 'oel', 'scientific')) &&
-        $dbServer->platform == SERVER_PLATFORMS::EC2) {
+            $dbServer->platform == SERVER_PLATFORMS::EC2) {
             $BundleTask->bundleType = SERVER_SNAPSHOT_CREATION_TYPE::EC2_EBS_HVM;
         }
 
         $BundleTask->save();
 
         $this->response->success("Bundle task successfully created. <a href='#/bundletasks/{$BundleTask->id}/logs'>Click here to check status.</a>", true);
+    }
+
+    public function xServerDeleteAction($serverId)
+    {
+        $this->request->restrictAccess(Acl::RESOURCE_FARMS_SERVERS);
+
+        $dbServer = DBServer::LoadByID($serverId);
+        $this->user->getPermissions()->validate($dbServer);
+
+        if ($dbServer->status == SERVER_STATUS::PENDING_TERMINATE || $dbServer->status == SERVER_STATUS::TERMINATED) {
+            $serverHistory = $dbServer->getServerHistory();
+            if ($serverHistory) {
+                $serverHistory->setTerminated();
+            }
+            $dbServer->Remove();
+        }
+
+        $this->response->success('Server record successfully removed.');
     }
 }

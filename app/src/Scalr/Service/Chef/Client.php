@@ -217,6 +217,9 @@
                 $data = $httpRequest->getResponseData();
                 $retval = ($data['body']) ? json_decode($data['body']) : true;
             }
+            else if ($httpRequest->getResponseCode() >= 300 && $httpRequest->getResponseCode() < 400) {
+                throw new Exception("Request to chef server failed. Chef server returned code {$httpRequest->getResponseCode()}. Redirect URL: {$httpRequest->getHeader("Location")}");
+            }
             else if ($httpRequest->getResponseCode() > 400) {
                 $data = $httpRequest->getResponseData();
 

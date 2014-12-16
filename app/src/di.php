@@ -475,3 +475,33 @@ $container->analytics->setShared('notifications', function ($analyticsContainer)
 $container->setShared('model.loader', function ($cont) {
     return new \Scalr\Model\Loader\MappingLoader();
 });
+
+$container->set('logger', function($cont, array $arguments = null) {
+    $params = [];
+
+    if (!empty($arguments[0])) {
+        $params[0] = (string)$arguments[0];
+    }
+
+    $serviceid = 'logger' . (!empty($params[0]) ? '.' . $params[0] : '');
+
+    if (!$cont->initialized($serviceid)) {
+        $cont->setShared($serviceid, function($cont) use ($params) {
+            return new \Scalr\Logger(!empty($params[0]) ? $params[0] : null);
+        });
+    }
+
+    return $cont->get($serviceid);
+});
+
+$container->set('warmup', function($cont, array $arguments = null) {
+    //Releases cloud credentials
+    foreach(['aws', 'openstack', 'cloudstack', 'eucalyptus', 'cloudyn'] as $srv) {
+        $cont->release($srv);
+    }
+
+    //Releases platform module static cache
+    \Scalr\Modules\PlatformFactory::warmup();
+
+    return $cont;
+});

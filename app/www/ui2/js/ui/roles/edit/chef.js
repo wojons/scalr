@@ -11,9 +11,18 @@ Ext.define('Scalr.ui.RoleDesignerTabChef', {
         this.addListener({
             showtab: {
                 fn: function(params){
-                    this.down('chefsettings').setValue(params['role']['chef'] || {});
-                },
-                single: true
+                    var field = this.down('chefsettings'),
+                        governance = params['governance'] || {};
+                    field.limits = governance['general.chef'] || undefined;
+                    field.disableDaemonize = false;
+                    Ext.each(params['role']['scripts'] || [], function(script){
+                        if (script['script_type'] === 'chef' && script['params'] && !script['params']['chef.cookbook_url']) {
+                            field.disableDaemonize = true;
+                            return false;
+                        }
+                    });
+                    field.setValue(params['role']['chef'] || {});
+                }
             },
             hidetab: function(params) {
                 params['role']['chef'] = this.down('chefsettings').getValue();

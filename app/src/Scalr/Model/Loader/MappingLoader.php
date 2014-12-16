@@ -3,6 +3,8 @@ namespace Scalr\Model\Loader;
 
 use Scalr\Exception\ModelException;
 use Scalr\Model\Mapping\Column;
+use ReflectionProperty, ReflectionClass, GlobIterator;
+use InvalidArgumentException;
 
 /**
  * Mapping loader
@@ -21,7 +23,7 @@ class MappingLoader
     public function __construct()
     {
         $this->mappingClasses = array();
-        $iterator = new \GlobIterator(__DIR__ . '/../Mapping/*.php', \FilesystemIterator::KEY_AS_FILENAME);
+        $iterator = new GlobIterator(__DIR__ . '/../Mapping/*.php', \FilesystemIterator::KEY_AS_FILENAME);
         foreach ($iterator as $fileInfo) {
             /* @var $fileInfo \SplFileInfo */
             $this->mappingClasses[substr($fileInfo->getFilename(), 0, -4)] = true;
@@ -56,12 +58,12 @@ class MappingLoader
      */
     public function load($refl)
     {
-        if ($refl instanceof \ReflectionProperty || $refl instanceof \ReflectionClass) {
+        if ($refl instanceof ReflectionProperty || $refl instanceof ReflectionClass) {
             $str =  join('|', array_map('preg_quote', array_keys($this->mappingClasses)));
 
             $comment = $refl->getDocComment();
 
-            $annotation = $refl instanceof \ReflectionProperty ? new Field() : new Entity();
+            $annotation = $refl instanceof ReflectionProperty ? new Field() : new Entity();
             $annotation->name = $refl->name;
 
             if (preg_match_all('/^\s+\*\s+@(' . $str . ')(.*)$/m', $comment, $matches, PREG_SET_ORDER)) {
@@ -99,7 +101,7 @@ class MappingLoader
                 }
             }
 
-            if ($refl instanceof \ReflectionProperty) {
+            if ($refl instanceof ReflectionProperty) {
                 if (!($annotation->column instanceof Column)) {
                     $annotation->column = new Column();
                     $annotation->column->type = 'string';
@@ -112,7 +114,7 @@ class MappingLoader
 
             $refl->annotation = $annotation;
         } else {
-            throw new \InvalidArgumentException(sprintf(
+            throw new InvalidArgumentException(sprintf(
                 'Either ReflectionProperty or ReflectionClass is expected, "%s" passed.',
                 (is_object($refl) ? get_class($refl) : gettype($refl))
             ));

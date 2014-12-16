@@ -262,7 +262,7 @@ trait Forecast
             $budget['estimateDate'] = $budget['budgetSpentOnDate'];
         }
 
-        if ($budget['budgetSpent'] > 0 && $budget['quarterEndDate'] && $budget['quarterStartDate']) {
+        if ($budget['budget'] > 0 && $budget['budgetSpent'] > 0 && $budget['quarterEndDate'] && $budget['quarterStartDate']) {
             //Calculates the date on which we will have budget exceeded.
             $today = new DateTime('now', new DateTimeZone('UTC'));
 

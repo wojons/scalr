@@ -359,7 +359,10 @@ class Scalr_Cronjob_Poller extends Scalr_System_Cronjob_MultiProcess_DefaultWork
                         	if ($p->debugLog)
                         		Logger::getLogger('Openstack')->fatal($p->debugLog);
                         	
-                            if (!in_array($DBServer->status, array(SERVER_STATUS::PENDING_TERMINATE, SERVER_STATUS::TERMINATED, SERVER_STATUS::SUSPENDED))) {
+                            if (!in_array($DBServer->status, array(SERVER_STATUS::PENDING_TERMINATE, SERVER_STATUS::TERMINATED))) {
+                                if ($DBServer->isOpenstack() && $DBServer->status == SERVER_STATUS::SUSPENDED)
+                                    continue;
+                                
                                 if ($DBServer->GetProperty(SERVER_PROPERTIES::CRASHED) == 1) {
                                 	if (PlatformFactory::isOpenstack($DBServer->platform)) {
                                 		$DBServer->SetProperty(SERVER_PROPERTIES::MISSING, 1);
@@ -492,9 +495,7 @@ class Scalr_Cronjob_Poller extends Scalr_System_Cronjob_MultiProcess_DefaultWork
 
                 if ($DBServer->status != SERVER_STATUS::RUNNING && $DBServer->GetRealStatus()->IsRunning()) {
                     if ($DBServer->status == SERVER_STATUS::SUSPENDED) {
-                        //TODO: Depends on resume strategy need to set server status
                         // For Openstack we need to re-accociate IPs
-                        $DBServer->SetProperty(\SERVER_PROPERTIES::RESUMING, 0);
                         try {
                             if ($DBServer->isOpenstack())
                                 $this->openstackSetFloatingIp($DBServer);
@@ -507,7 +508,20 @@ class Scalr_Cronjob_Poller extends Scalr_System_Cronjob_MultiProcess_DefaultWork
                             }
                         }
 
-                        Scalr::FireEvent($DBFarm->ID, new HostUpEvent($DBServer, ""));
+                        $platform = PlatformFactory::NewPlatform($DBServer->platform);
+                        if ($platform->getResumeStrategy() == \Scalr_Role_Behavior::RESUME_STRATEGY_INIT) {
+                            
+                            $DBServer->status = \SERVER_STATUS::PENDING;
+                            $DBServer->SetProperty(\SERVER_PROPERTIES::RESUMING, 1);
+                            $DBServer->dateAdded = date("Y-m-d H:i:s");
+                            $DBServer->Save();
+                            
+                        } else {
+                            
+                            $DBServer->SetProperty(\SERVER_PROPERTIES::RESUMING, 0);
+                            Scalr::FireEvent($DBFarm->ID, new HostUpEvent($DBServer, ""));
+                            
+                        }
                         continue;
 
                     } elseif (!in_array($DBServer->status, array(SERVER_STATUS::TERMINATED, SERVER_STATUS::TROUBLESHOOTING))) {
@@ -636,6 +650,11 @@ class Scalr_Cronjob_Poller extends Scalr_System_Cronjob_MultiProcess_DefaultWork
 
                             //TODO: Check health:
                         }
+                    }
+                } elseif ($DBServer->status == SERVER_STATUS::SUSPENDED && $DBServer->GetRealStatus()->isTerminated()) { 
+                    if ($DBServer->platform == SERVER_PLATFORMS::EC2) {
+                        $DBServer->terminate(DBServer::TERMINATE_REASON_CRASHED);
+                        Scalr::FireEvent($DBFarm->ID, new HostCrashEvent($DBServer));
                     }
                 } elseif ($DBServer->status == SERVER_STATUS::RUNNING && $DBServer->GetRealStatus()->isRunning()) {
                     // Is IP address changed?

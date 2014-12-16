@@ -68,7 +68,7 @@ Scalr.regPage('Scalr.ui.scripts.execute', function (loadParams, moduleParams) {
                             name: 'scriptId',
                             emptyText: 'Select a script',
                             store: {
-                                fields: [ 'id', 'name', 'description', 'os', 'isSync', 'timeout', 'versions', 'accountId', 'createdByEmail' ],
+                                fields: [ 'id', 'name', 'description', 'os', 'isSync', 'timeout', 'versions', 'accountId', 'scope', 'createdByEmail' ],
                                 data: moduleParams.scripts,
                                 proxy: 'object'
                             },

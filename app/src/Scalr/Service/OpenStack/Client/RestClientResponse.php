@@ -1,6 +1,8 @@
 <?php
 namespace Scalr\Service\OpenStack\Client;
 
+use Scalr\Service\Aws\Exception\AwsResponseErrorFactory;
+use Scalr\Service\OpenStack\Exception\OpenStackResponseErrorFactory;
 use Scalr\Service\OpenStack\Type\AppFormat;
 use Scalr\Service\OpenStack\Exception\RestClientException;
 
@@ -132,7 +134,8 @@ class RestClientResponse implements ClientResponseInterface
                         'Unexpected application format "%s" in class %s', (string)$this->format, get_class($this)
                     ));
                 }
-                throw new RestClientException($this->errorData);
+
+                throw OpenStackResponseErrorFactory::make($this->errorData);
             }
         }
         return $this->errorData;

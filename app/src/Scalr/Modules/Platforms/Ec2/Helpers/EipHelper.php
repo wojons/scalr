@@ -202,9 +202,14 @@ class EipHelper
                 $dbServer->serverId,
                 $ip['ipaddress']
             ));
+            
+            /*
+             * DO NOT FIRE THIS EVENT AND LET POLLER TO FIND OUT THAT IP WAS CHANGED AND
+             * FIRE EVENT. BY THIS TIME MOST LIKELY IP WILL BE ROUTABLE
             \Scalr::FireEvent($dbServer->farmId, new \IPAddressChangedEvent(
                 $dbServer, $ip['ipaddress'], $dbServer->localIp
             ));
+            */
         } else {
             \Logger::getLogger(\LOG_CATEGORY::FARM)->fatal(
                 new \FarmLogMessage($dbServer->farmId, sprintf(

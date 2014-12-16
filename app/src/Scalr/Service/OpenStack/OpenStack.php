@@ -392,12 +392,13 @@ class OpenStack
      */
     public function createSecurityGroupRule($request)
     {
+        if (!is_array($request)) {
+            $request = get_object_vars($request);
+        }
         if ($this->hasNetworkSecurityGroupExtension()) {
-            $result = $this->network->securityGroups->addRule($request);
+            $requestObject = CreateSecurityGroupRule::initArray($request);
+            $result = $this->network->securityGroups->addRule($requestObject);
         } else {
-            if (!is_array($request)) {
-                $request = get_object_vars($request);
-            }
             $requestData = array(
                 'parent_group_id'  => $request['security_group_id'],
                 'ip_protocol'      => !empty($request['protocol']) ? $request['protocol'] : null,

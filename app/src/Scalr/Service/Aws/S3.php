@@ -28,6 +28,15 @@ class S3 extends AbstractService implements ServiceInterface
 
     /**
      * {@inheritdoc}
+     * @see \Scalr\Service\Aws\AbstractService::getName()
+     */
+    public function getName()
+    {
+        return 's3';
+    }
+
+    /**
+     * {@inheritdoc}
      * @see Scalr\Service\Aws.ServiceInterface::getAllowedEntities()
      */
     public function getAllowedEntities()
@@ -64,7 +73,10 @@ class S3 extends AbstractService implements ServiceInterface
             $url = rtrim($aws->getUrl('s3'), '/ ');
         } else {
             $region = $this->getAws()->getRegion();
-            $url = 's3' . ($region && $region != Aws::REGION_US_EAST_1 ? '-' . $region : '') . '.amazonaws.com';
+            if ($region == Aws::REGION_CN_NORTH_1)
+                $url = 's3.' . $region . '.amazonaws.com.cn';
+            else
+                $url = 's3' . ($region && $region != Aws::REGION_US_EAST_1 ? '-' . $region : '') . '.amazonaws.com';
         }
         return $url;
     }

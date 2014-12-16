@@ -26,11 +26,6 @@ Scalr.regPage('Scalr.ui.dnszones.view', function (loadParams, moduleParams) {
 		},
 
 		tools: [{
-			type: 'video',
-			handler: function () {
-				window.open('http://youtu.be/CckXS9OSYx8?t=7s');
-			}
-		}, {
 			xtype: 'gridcolumnstool'
 		},  {
 			xtype: 'favoritetool',

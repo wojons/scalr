@@ -52,6 +52,11 @@ class Aws
     const REGION_EU_WEST_1 = 'eu-west-1';
 
     /**
+     * Europe Central (Frankfurt) Region.
+     */
+    const REGION_EU_CENTRAL_1 = 'eu-central-1';
+
+    /**
      * Asia Pacific Southeast (Singapore) Region.
      */
     const REGION_AP_SOUTHEAST_1 = 'ap-southeast-1';
@@ -72,6 +77,11 @@ class Aws
     const REGION_SA_EAST_1 = 'sa-east-1';
 
     /**
+     * China North 1 (China)
+     */
+    const REGION_CN_NORTH_1 = 'cn-north-1';
+
+    /**
      * GovCloud (US)
      */
     const REGION_US_GOV_WEST_1 = 'us-gov-west-1';
@@ -79,47 +89,52 @@ class Aws
     /**
      * United States East (Northern Virginia) Region Hosted Zone Id.
      */
-    const REGION_US_EAST_1_ZONE_ID = 'Z3AQBSTGFYJSTF';
+    const ZONE_ID_US_EAST_1 = 'Z3AQBSTGFYJSTF';
 
     /**
      * United States West (Northern California) Region Hosted Zone Id.
      */
-    const REGION_US_WEST_1_ZONE_ID = 'Z2F56UZL2M1ACD';
+    const ZONE_ID_US_WEST_1 = 'Z2F56UZL2M1ACD';
 
     /**
      * United States West (Oregon) Region Hosted Zone Id.
      */
-    const REGION_US_WEST_2_ZONE_ID = 'Z3BJ6K6RIION7M';
+    const ZONE_ID_US_WEST_2 = 'Z3BJ6K6RIION7M';
 
     /**
      * Europe West (Ireland) Region Hosted Zone Id.
      */
-    const REGION_EU_WEST_1_ZONE_ID = 'Z1BKCTXD74EZPE';
+    const ZONE_ID_EU_WEST_1 = 'Z1BKCTXD74EZPE';
+
+    /**
+     * Europe Central (Frankfurt) Region Hosted Zone Id.
+     */
+    const ZONE_ID_EU_CENTRAL_1 = 'Z21DNDUVLTQW6Q';
 
     /**
      * Asia Pacific Southeast (Singapore) Region Hosted Zone Id.
      */
-    const REGION_AP_SOUTHEAST_1_ZONE_ID = 'Z3O0J2DXBE1FTB';
+    const ZONE_ID_AP_SOUTHEAST_1 = 'Z3O0J2DXBE1FTB';
 
     /**
      * Sydney Hosted Zone Id
      */
-    const REGION_AP_SOUTHEAST_2_ZONE_ID = 'Z1WCIGYICN2BYD';
+    const ZONE_ID_AP_SOUTHEAST_2 = 'Z1WCIGYICN2BYD';
 
     /**
      * Asia Pacific Northeast (Tokyo) Region Hosted Zone Id.
      */
-    const REGION_AP_NORTHEAST_1_ZONE_ID = 'Z2M4EHUR26P7ZW';
+    const ZONE_ID_AP_NORTHEAST_1 = 'Z2M4EHUR26P7ZW';
 
     /**
      * South America (Sao Paulo) Region Hosted Zone Id.
      */
-    const REGION_SA_EAST_1_ZONE_ID = 'Z7KQH4QJS55SO';
+    const ZONE_ID_SA_EAST_1 = 'Z7KQH4QJS55SO';
 
     /**
      * GovCloud (US) Hosted Zone Id
      */
-    const REGION_US_GOV_WEST_1_ZONE_ID = 'Z31GFT0UA1I2HV';
+    const ZONE_ID_US_GOV_WEST_1 = 'Z31GFT0UA1I2HV';
 
     /**
      * Elastic Load Balancer Web service interface
@@ -388,7 +403,7 @@ class Aws
      */
     public function getAvailableServiceInterfaces()
     {
-        return array(
+        return [
             self::SERVICE_INTERFACE_ELB,
             self::SERVICE_INTERFACE_CLOUD_WATCH,
             self::SERVICE_INTERFACE_CLOUD_FRONT,
@@ -398,7 +413,7 @@ class Aws
             self::SERVICE_INTERFACE_EC2,
             self::SERVICE_INTERFACE_RDS,
             self::SERVICE_INTERFACE_ROUTE53,
-        );
+        ];
     }
 
     /**
@@ -419,17 +434,19 @@ class Aws
      */
     public static function getCloudLocations()
     {
-        return array(
+        return [
             self::REGION_AP_NORTHEAST_1,
             self::REGION_AP_SOUTHEAST_1,
             self::REGION_AP_SOUTHEAST_2,
             self::REGION_EU_WEST_1,
+            self::REGION_EU_CENTRAL_1,
             self::REGION_SA_EAST_1,
             self::REGION_US_EAST_1,
             self::REGION_US_WEST_1,
             self::REGION_US_WEST_2,
             self::REGION_US_GOV_WEST_1,
-        );
+            self::REGION_CN_NORTH_1,
+        ];
     }
 
     /**
@@ -439,17 +456,19 @@ class Aws
      */
     public static function getCloudLocationsZoneIds()
     {
-        return array(
-            self::REGION_AP_NORTHEAST_1 => self::REGION_AP_NORTHEAST_1_ZONE_ID,
-            self::REGION_AP_SOUTHEAST_1 => self::REGION_AP_SOUTHEAST_1_ZONE_ID,
-            self::REGION_AP_SOUTHEAST_2 => self::REGION_AP_SOUTHEAST_2_ZONE_ID,
-            self::REGION_EU_WEST_1      => self::REGION_EU_WEST_1_ZONE_ID,
-            self::REGION_SA_EAST_1      => self::REGION_SA_EAST_1_ZONE_ID,
-            self::REGION_US_EAST_1      => self::REGION_US_EAST_1_ZONE_ID,
-            self::REGION_US_WEST_1      => self::REGION_US_WEST_1_ZONE_ID,
-            self::REGION_US_WEST_2      => self::REGION_US_WEST_2_ZONE_ID,
-            self::REGION_US_GOV_WEST_1  => self::REGION_US_GOV_WEST_1_ZONE_ID,
-        );
+        return [
+            self::REGION_AP_NORTHEAST_1 => self::ZONE_ID_AP_NORTHEAST_1,
+            self::REGION_AP_SOUTHEAST_1 => self::ZONE_ID_AP_SOUTHEAST_1,
+            self::REGION_AP_SOUTHEAST_2 => self::ZONE_ID_AP_SOUTHEAST_2,
+            self::REGION_EU_WEST_1      => self::ZONE_ID_EU_WEST_1,
+            self::REGION_EU_CENTRAL_1   => self::ZONE_ID_EU_CENTRAL_1,
+            self::REGION_SA_EAST_1      => self::ZONE_ID_SA_EAST_1,
+            self::REGION_US_EAST_1      => self::ZONE_ID_US_EAST_1,
+            self::REGION_US_WEST_1      => self::ZONE_ID_US_WEST_1,
+            self::REGION_US_WEST_2      => self::ZONE_ID_US_WEST_2,
+            self::REGION_US_GOV_WEST_1  => self::ZONE_ID_US_GOV_WEST_1,
+            //TODO add zone id for China region
+        ];
     }
 
     /**
@@ -754,8 +773,8 @@ class Aws
         $signingKey = hash_hmac('sha256', 'aws4_request', $dateRegionServiceKey, true);
         $signature = hash_hmac('sha256', $stringToSign, $signingKey);
 
-    $presignedUrl = "https://" . $this->{$service}->getUrl() . "/?" . $canonicalizedQueryString
-            . "&X-Amz-Signature=" . rawurlencode($signature);
+        $presignedUrl = "https://" . $this->{$service}->getUrl() . "/?" . $canonicalizedQueryString
+                      . "&X-Amz-Signature=" . rawurlencode($signature);
 
         return $presignedUrl;
     }

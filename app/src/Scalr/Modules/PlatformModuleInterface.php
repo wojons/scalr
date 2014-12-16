@@ -2,7 +2,6 @@
 
 namespace Scalr\Modules;
 
-
 interface PlatformModuleInterface
 {
     /**
@@ -41,19 +40,27 @@ interface PlatformModuleInterface
     /**
      * Terminates specified server
      *
+     * This method should throw valid InstanceNotFound excepiton for the case
+     * when the node does not exist in the cloud.
+     *
      * @param   \DBServer $DBServer The DB Server object
      * @return  bool      Returns TRUE on success or throws an Exception otherwise.
      * @throws  \Exception
+     * @throws  \Scalr\Service\Exception\InstanceNotFound
      */
     public function TerminateServer(\DBServer $DBServer);
 
     /**
      * Reboots specified server
      *
+     * This method should throw valid InstanceNotFound excepiton for the case
+     * when the node does not exist in the cloud.
+     *
      * @param   \DBServer $DBServer The DB Server object
      * @param   bool      $soft     Soft reboot or HARD
      * @return  bool      Returns   TRUE on success or throws an Exception otherwise.
      * @throws  \Exception
+     * @throws  \Scalr\Service\Exception\InstanceNotFound
      */
     public function RebootServer(\DBServer $DBServer, $soft = true);
 
@@ -75,9 +82,9 @@ interface PlatformModuleInterface
     /**
      * Removes servers snapshot
      *
-     * @param   \DBRole $DBRole The DB Role object
+     * @param   \Scalr\Model\Entity\Image $image The Image object
      */
-    public function RemoveServerSnapshot(\DBRole $DBRole);
+    public function RemoveServerSnapshot(\Scalr\Model\Entity\Image $image);
 
     /**
      * Gets server extended information
@@ -85,7 +92,7 @@ interface PlatformModuleInterface
      * @param   \DBServer $DBServer  The DBServer object
      * @return  array|bool  Returns array on success or false otherwise
      */
-    public function GetServerExtendedInformation(\DBServer $DBServer);
+    public function GetServerExtendedInformation(\DBServer $DBServer, $extended = false);
 
     /**
      * Gets console output for the specified server

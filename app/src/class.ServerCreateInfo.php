@@ -59,9 +59,6 @@ class ServerCreateInfo
                 ));
             } else {
                 switch($this->platform) {
-                	case SERVER_PLATFORMS::NIMBULA:
-                	    break;
-
                 	case SERVER_PLATFORMS::EUCALYPTUS:
                 	    $this->SetProperties(array(
                 	       EUCA_SERVER_PROPERTIES::REGION => $DBFarmRole->CloudLocation

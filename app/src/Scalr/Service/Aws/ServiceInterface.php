@@ -15,6 +15,13 @@ interface ServiceInterface
 {
 
     /**
+     * Gets the the name of the service
+     *
+     * @return  string Returns name of the service as it is used in authentication signature v4 version
+     */
+    public function getName();
+
+    /**
      * Gets url for current region
      *
      * @return string Returns url for Query API for current region

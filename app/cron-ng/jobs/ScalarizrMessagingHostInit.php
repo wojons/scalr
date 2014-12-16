@@ -4,6 +4,11 @@ use Scalr\Modules\PlatformFactory;
 use Scalr\Modules\Platforms\Cloudstack\CloudstackPlatformModule;
 use Scalr\Modules\Platforms\Rackspace\RackspacePlatformModule;
 
+/**
+ * @deprecated This class has been deprecated since 13.11.2014.
+ *             Please don't add anything into this class anymore without reviewing Scalr\System\Zmq\Cron\Task\ScalarizrMessaging
+ * @see        \Scalr\System\Zmq\Cron\Task\ScalarizrMessaging
+ */
 class Scalr_Cronjob_ScalarizrMessagingHostInit extends Scalr_System_Cronjob_MultiProcess_DefaultWorker
 {
 
@@ -315,16 +320,11 @@ class Scalr_Cronjob_ScalarizrMessagingHostInit extends Scalr_System_Cronjob_Mult
                     } elseif ($message instanceof Scalr_Messaging_Msg_Hello) {
                         $event = $this->onHello($message, $dbserver);
                     } elseif ($message instanceof Scalr_Messaging_Msg_FireEvent) {
-                        //Validate event
-                        $isEventExist = $this->db->GetOne("
-                            SELECT id FROM event_definitions
-                            WHERE name = ? AND env_id = ?
-                            LIMIT 1
-                        ", array(
+                        if (\Scalr\Model\Entity\EventDefinition::isExisted(
                             $message->eventName,
+                            $dbserver->GetEnvironmentObject()->clientId,
                             $dbserver->envId
-                        ));
-                        if ($isEventExist) {
+                        )) {
                             $event = new CustomEvent($dbserver, $message->eventName, (array)$message->params);
                         }
                     } elseif ($message instanceof Scalr_Messaging_Msg_HostUpdate) {
@@ -532,9 +532,6 @@ class Scalr_Cronjob_ScalarizrMessagingHostInit extends Scalr_System_Cronjob_Mult
                                     $dbserver->GetEnvironmentObject()->getContainer()->release('aws');
                                     unset($aws);
                                 }
-                            } elseif ($dbserver->platform == SERVER_PLATFORMS::NIMBULA) {
-                                $metaData['init_root_user'] = $message->sshUser;
-                                $metaData['init_root_pass'] = $message->sshPassword;
                             }
                             $metaData['tags'] = $tags;
                             $event = new RebundleCompleteEvent($dbserver, $message->snapshotId, $message->bundleTaskId, $metaData);
@@ -680,6 +677,14 @@ class Scalr_Cronjob_ScalarizrMessagingHostInit extends Scalr_System_Cronjob_Mult
                 $bundleTask->bundleType = SERVER_SNAPSHOT_CREATION_TYPE::EC2_EBS_HVM;
             }
 
+            if ($bundleTask->osFamily == 'centos' && strstr("7.", $bundleTask->osVersion) !== false && $dbserver->platform == SERVER_PLATFORMS::EC2) {
+                $bundleTask->bundleType = SERVER_SNAPSHOT_CREATION_TYPE::EC2_EBS_HVM;
+            }
+
+            if ($bundleTask->osFamily == 'amazon' && $bundleTask->osVersion == '2014.09' && $dbserver->platform == SERVER_PLATFORMS::EC2) {
+                $bundleTask->bundleType = SERVER_SNAPSHOT_CREATION_TYPE::EC2_EBS_HVM;
+            }
+
             $bundleTask->save();
         }
         if ($dbserver->status == SERVER_STATUS::IMPORTING) {
@@ -796,13 +801,6 @@ class Scalr_Cronjob_ScalarizrMessagingHostInit extends Scalr_System_Cronjob_Mult
                             ));
                             break;
 
-                        case SERVER_PLATFORMS::NIMBULA:
-                            $dbserver->SetProperties(array(
-                                NIMBULA_SERVER_PROPERTIES::NAME => $message->serverName,
-                                SERVER_PROPERTIES::ARCHITECTURE => $message->architecture
-                            ));
-                            break;
-
                         case SERVER_PLATFORMS::RACKSPACE:
                             $env = $dbserver->GetEnvironmentObject();
                             $cs = Scalr_Service_Cloud_Rackspace::newRackspaceCS(
@@ -847,15 +845,25 @@ class Scalr_Cronjob_ScalarizrMessagingHostInit extends Scalr_System_Cronjob_Mult
 
             // Bundle image
             $creInfo = new ServerSnapshotCreateInfo(
-                $dbserver, $dbserver->GetProperty(SERVER_PROPERTIES::SZR_IMPORTING_ROLE_NAME),
-                SERVER_REPLACEMENT_TYPE::NO_REPLACE
+                $dbserver,
+                $dbserver->GetProperty(SERVER_PROPERTIES::SZR_IMPORTING_ROLE_NAME),
+                SERVER_REPLACEMENT_TYPE::NO_REPLACE,
+                $dbserver->GetProperty(SERVER_PROPERTIES::SZR_IMPORTING_OBJECT)
             );
             $bundleTask = BundleTask::Create($creInfo);
             $bundleTask->osFamily = $message->dist->distributor;
             $bundleTask->osName = $message->dist->codename;
             $bundleTask->osVersion = $message->dist->release;
-            if (in_array($message->dist->distributor, array('oel', 'redhat', 'scientific')) &&
-                $dbserver->platform == SERVER_PLATFORMS::EC2) {
+            if (in_array($message->dist->distributor, array('redhat', 'oel', 'scientific')) &&
+            $dbserver->platform == SERVER_PLATFORMS::EC2) {
+                $bundleTask->bundleType = SERVER_SNAPSHOT_CREATION_TYPE::EC2_EBS_HVM;
+            }
+
+            if ($bundleTask->osFamily == 'centos' && strstr("7.", $bundleTask->osVersion) !== false && $dbserver->platform == SERVER_PLATFORMS::EC2) {
+                $bundleTask->bundleType = SERVER_SNAPSHOT_CREATION_TYPE::EC2_EBS_HVM;
+            }
+
+            if ($bundleTask->osFamily == 'amazon' && $bundleTask->osVersion == '2014.09' && $dbserver->platform == SERVER_PLATFORMS::EC2) {
                 $bundleTask->bundleType = SERVER_SNAPSHOT_CREATION_TYPE::EC2_EBS_HVM;
             }
 
