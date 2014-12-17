@@ -4,7 +4,7 @@ CHANGELOG for 5.1.x
 This changelog references the relevant changes (bug and security fixes) done
 in 5.1 minor versions.
 
-To get the diff between two versions, go to https://github.com/Scalr/scalr/compare/5.0.1...5.1.0
+To get the diff between two versions, go to https://github.com/Scalr/scalr/compare/v5.0.1...v5.1.0
 
 * 5.1.0 
  * UI-342 The SSH Launcher is inconsistently referred to in the UI (igrkio)
