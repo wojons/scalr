@@ -225,7 +225,7 @@ class AnalyticsProcessing(application.ScalrIterationApplication):
                     gevent.sleep(0) # force switch
 
             self._pool.join()
-            #self.analytics.fill_farm_usage_d(date, hour)
+            self.analytics.fill_farm_usage_d(date, hour)
 
         except:
             msg = "Unable to calculate date {date}, hour {hour}, reason: {error}".format(
@@ -259,7 +259,7 @@ class AnalyticsProcessing(application.ScalrIterationApplication):
                     gevent.sleep(0) # force switch
 
             self._pool.join()
-            #self.analytics.fill_farm_usage_d(date, hour, platform=self.config['platform'])
+            self.analytics.fill_farm_usage_d(date, hour, platform=self.config['platform'])
 
         except:
             msg = "Unable to recalculate date {date}, hour {hour}, reason: {error}".format(

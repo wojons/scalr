@@ -20,18 +20,18 @@ class Scalr_UI_Controller_Analytics_Budgets extends Scalr_UI_Controller
 
     public function defaultAction()
     {
-        $this->response->page('ui/analytics/budgets/view.js', array(
+        $this->response->page('ui/analytics/admin/budgets/view.js', array(
             'quarters' => SettingEntity::getQuarters(true),
             'quartersConfirmed' => SettingEntity::getValue(SettingEntity::ID_QUARTERS_DAYS_CONFIRMED)
-        ), array('/ui/analytics/analytics.js'), array('/ui/analytics/analytics.css', '/ui/analytics/budgets/budgets.css'));
+        ), array(), array('ui/analytics/analytics.css', '/ui/analytics/admin/admin.css', '/ui/analytics/admin/budgets/budgets.css'));
     }
 
     public function quarterCalendarAction()
     {
-        $this->response->page('ui/analytics/budgets/quarterCalendar.js', array(
+        $this->response->page('ui/analytics/admin/budgets/quarterCalendar.js', array(
             'quarters' => SettingEntity::getQuarters(true),
             'quartersConfirmed' => SettingEntity::getValue(SettingEntity::ID_QUARTERS_DAYS_CONFIRMED)
-        ), array('/ui/analytics/analytics.js'), array('/ui/analytics/analytics.css'));
+        ));
     }
 
     public function xSaveQuarterCalendarAction()
@@ -260,19 +260,27 @@ class Scalr_UI_Controller_Analytics_Budgets extends Scalr_UI_Controller
         ];
     }
 
-    public function xListAction()
+    /**
+     * xListAction
+     *
+     * @param string $ccId      optional Identifier of the cost center
+     * @param int    $quarter   optional Current Quarter number
+     * @param int    $year      optional Current year
+     * @param string $query     optional Search query
+     */
+    public function xListAction($ccId = null, $quarter = null, $year = null, $query = null)
     {
-        $quarter = $this->getParam('quarter');
-        $year = $this->getParam('year');
-        $query = trim($this->getParam('query'));
-
         $quarters = new Quarters(SettingEntity::getQuarters(true));
 
         $period = $quarters->getPeriodForDate();
 
-        if (!$quarter) $quarter = $period->quarter;
+        if (!$quarter) {
+            $quarter = $period->quarter;
+        }
 
-        if (!$year) $year = $period->year;
+        if (!$year) {
+            $year = $period->year;
+        }
 
         if ($quarter !== 'year') {
             $period = $quarters->getPeriodForQuarter($quarter, $year);
@@ -285,7 +293,7 @@ class Scalr_UI_Controller_Analytics_Budgets extends Scalr_UI_Controller
             'year'      => $period->year,
             'startDate' => $period->start->format('Y-m-d'),
             'endDate'   => $period->end->format('Y-m-d'),
-            'nodes'     => $this->getNodesList($period, $this->getParam('ccId'), $query)
+            'nodes'     => $this->getNodesList($period, $ccId, trim($query))
         ));
     }
 
@@ -297,10 +305,12 @@ class Scalr_UI_Controller_Analytics_Budgets extends Scalr_UI_Controller
     private function getNodesList($period, $ccId = null, $query = null)
     {
         $nodes = array();
+
         if (!$ccId) {
             $criteria = null;
             if ($query) {
                 $criteria = array('name' => array('$like' => array('%'.$query.'%')));
+
                 foreach (ProjectEntity::find($criteria) as $item) {
                     /* @var $item ProjectEntity */
                     if (!isset($nodes[$item->ccId])) {
@@ -309,12 +319,14 @@ class Scalr_UI_Controller_Analytics_Budgets extends Scalr_UI_Controller
                     }
                     $nodes[$item->ccId]['nodes'][] = $this->getProjectData($item, $period);
                 }
+
                 foreach (CostCentreEntity::find($criteria) as $item) {
                     /* @var $item CostCentreEntity */
                     if (!isset($nodes[$item->ccId])) {
                         $nodes[$item->ccId] = $this->getCostCenterData($item, $period);
-                        $nodes[$item->ccId]['nodes'] = array();
                     }
+                    $nodes[$item->ccId]['nodes'] = array();
+
                     $projectItems = ProjectEntity::findByCcId($item->ccId);
 
                     foreach ($projectItems as $projectItem) {
@@ -328,8 +340,12 @@ class Scalr_UI_Controller_Analytics_Budgets extends Scalr_UI_Controller
                 }
             }
         } else {
-            foreach ($this->getContainer()->analytics->ccs->get($ccId)->getProjects() as $item) {
-                $nodes[$item->projectId] = $this->getProjectData($item, $period);
+            $cc = $this->getContainer()->analytics->ccs->get($ccId);
+
+            if ($cc instanceof CostCentreEntity) {
+                foreach ($cc->getProjects() as $item) {
+                    $nodes[$item->projectId] = $this->getProjectData($item, $period);
+                }
             }
         }
 
@@ -339,7 +355,7 @@ class Scalr_UI_Controller_Analytics_Budgets extends Scalr_UI_Controller
     /**
      * Gets budget data for specified CC and period
      *
-     * @param   CostCentreEntity $projectEntity
+     * @param   CostCentreEntity $cc
      * @param   QuarterPeriod    $period
      * @return  array Returns budget data
      */
@@ -349,7 +365,7 @@ class Scalr_UI_Controller_Analytics_Budgets extends Scalr_UI_Controller
             'ccId'          => $cc->ccId,
             'name'          => $cc->name,
             'billingCode'   => $cc->getProperty(CostCentrePropertyEntity::NAME_BILLING_CODE),
-            'description'   => $cc->getProperty(CostCentrePropertyEntity::NAME_DESCRIPTION)
+            'description'   => $cc->getProperty(CostCentrePropertyEntity::NAME_DESCRIPTION),
         );
 
         $budget = $this->getBudgetUsedPercentage(['ccId' => $cc->ccId, 'period' => $period, 'getRelationDependentBudget' => true]);

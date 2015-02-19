@@ -33,16 +33,19 @@ class Scalr_UI_Controller_Tools_Aws_Route53_Recordsets extends Scalr_UI_Controll
      */
     public function xListAction($cloudLocation, $zoneId, $type = null, $aliases = null, $weighted = null)
     {
-        $resultList = array();
-        $marker = null;
+        $resultList = [];
+        $nextName = null;
+        $nextType = null;
 
         do {
             if (isset($recordListResponse)) {
-                $marker = new MarkerType($recordListResponse->marker);
+                $nextName = $recordListResponse->nextRecordName;
+                $nextType = $recordListResponse->nextRecordType;
             }
+
             $recordListResponse = $this->environment
                     ->aws($cloudLocation)->route53->record
-                    ->describe($zoneId, null, null, $marker);
+                    ->describe($zoneId, $nextName, $nextType);
 
             foreach ($recordListResponse as $record) {
                 if (!empty($type) && $record->type != $type) {
@@ -57,9 +60,9 @@ class Scalr_UI_Controller_Tools_Aws_Route53_Recordsets extends Scalr_UI_Controll
                 $result = self::loadRecordSetData($record);
                 $resultList[] = $result;
             }
-        } while ($recordListResponse->marker !== null);
+        } while (!empty($recordListResponse->isTruncated));
 
-        $response = $this->buildResponseFromData($resultList, array('name', 'type'));
+        $response = $this->buildResponseFromData($resultList, array('name', 'type'), true);
         $this->response->data($response);
     }
 
@@ -135,19 +138,15 @@ class Scalr_UI_Controller_Tools_Aws_Route53_Recordsets extends Scalr_UI_Controll
      * @param string $failover
      * @param string $cloudLocation
      * @param JsonData  $resourceRecord
-     * @param JsonData $oldRecordSet       optional
      */
     public function xSaveAction($zoneId, $policy, $healthId, $dnsName,
             $action, $aliasZoneId, $evaluateTargetHealth, $name, $type,
-            $ttl, $weight, $setIdentifier, $region, $failover, $cloudLocation, JsonData $resourceRecord,
-            JsonData $oldRecordSet = null
+            $ttl, $weight, $setIdentifier, $region, $failover, $cloudLocation, JsonData $resourceRecord
         )
     {
         $rrsRequest = new ChangeRecordSetsRequestData();
         $rrsCnahgeList = new ChangeRecordSetList();
-        if (!empty($oldRecordSet)) {
-            $rrsCnahgeList->append(self::getRecordDeleteXml($oldRecordSet));
-        }
+
         $rrsCnahgeListData = new ChangeRecordSetData($action);
 
         $rrsData = new RecordSetData(
@@ -238,13 +237,14 @@ class Scalr_UI_Controller_Tools_Aws_Route53_Recordsets extends Scalr_UI_Controll
 
     /**
      * @param string $name
+     * @param string $cloudLocation
      */
-    public function xGetS3TargetsAction($name)
+    public function xGetS3TargetsAction($name, $cloudLocation)
     {
         $result = array();
         $name = rtrim($name, '.');
 
-        $result['data'] = $this->listS3Websites($name);
+        $result['data'] = $this->listS3Websites($name, $cloudLocation);
 
         $this->response->data($result);
     }
@@ -354,16 +354,19 @@ class Scalr_UI_Controller_Tools_Aws_Route53_Recordsets extends Scalr_UI_Controll
      */
     protected function listRecordSetDomains($zoneId, $cloudLocation, $name)
     {
-        $result = array();
-        $marker = null;
+        $result = [];
+        $nextName = null;
+        $nextType = null;
 
         do {
             if (isset($rrsList)) {
-                $marker = new MarkerType($rrsList->marker);
+                $nextName = $rrsList->nextRecordName;
+                $nextType = $rrsList->nextRecordType;
             }
+
             $rrsList = $this->environment
                     ->aws($cloudLocation)->route53->record
-                    ->describe($zoneId, null, null, $marker);
+                    ->describe($zoneId, $nextName, $nextType);
 
             foreach ($rrsList as $record) {
                 if ('NS' == $record->type || 'SOA' == $record->type || $name . '.' == $record->name) {
@@ -375,7 +378,7 @@ class Scalr_UI_Controller_Tools_Aws_Route53_Recordsets extends Scalr_UI_Controll
                     'title'      => self::RECORD_SETS_ALIAS_TARGET_TITLE
                 );
             }
-        } while ($rrsList->marker !== null);
+        } while (!empty($rrsList->isTruncated));
 
         return $result;
     }

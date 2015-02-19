@@ -72,6 +72,11 @@ namespace Scalr\DependencyInjection;
  * @property \Scalr\Logger $logger
  *           Gets logger service
  *
+ * @property \Scalr\Util\CryptoTool $crypto
+ *           Gets cryptotool
+ *
+ * @property \Scalr\Util\CryptoTool $srzcrypto
+ *           Gets Scalarizr cryptotool
  *
  * @method   mixed config()
  *           config(string $name)
@@ -115,6 +120,14 @@ namespace Scalr\DependencyInjection;
  * @method   \Scalr\DependencyInjection\Container warmup()
  *           warmup()
  *           Releases static cache from the dependency injection service
+ *
+ * @method   \Scalr\Util\CryptoTool crypto(string $algo = MCRYPT_RIJNDAEL_256, string $method = MCRYPT_MODE_CFB, mixed $cryptoKey = null, int $keySize = null, int $blockSize = null)
+ *           crypto(string $algo = MCRYPT_RIJNDAEL_256, string $method = MCRYPT_MODE_CFB, string|resource|SplFileObject|array $cryptoKey = null, int $keySize = null, int $blockSize = null)
+ *           Gets cryptographic tool with a given algorithm
+ *
+ * @method   \Scalr\Util\CryptoTool srzcrypto(mixed $cryptoKey = null)
+ *           srzcrypto(string|resource|SplFileObject|array $cryptoKey = null)
+ *           Gets Scalarizr cryptographic tool
  */
 class Container extends BaseContainer
 {

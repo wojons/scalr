@@ -181,7 +181,7 @@ Ext.define('Scalr.ui.GridStorePlugin', {
 
 				if (this.getView().rendered)
 					this.getView().clearViewEl();
-				if (! this.getView().loadMask)
+				if (! this.getView().loadMask && !this.processBox)
 					this.processBox = Scalr.utils.CreateProcessBox({
 						type: 'action',
 						msg: client.getView().loadingText
@@ -197,8 +197,12 @@ Ext.define('Scalr.ui.GridStorePlugin', {
                     delete store.gridHightlight;
                 }
 
-				if (! this.getView().loadMask)
-					this.processBox.destroy();
+				if (this.isDestroyed || !this.getView().loadMask) {
+                    if (this.processBox) {
+                        this.processBox.destroy();
+                        delete this.processBox;
+                    }
+                }
 			}
 		});
 
@@ -1302,7 +1306,7 @@ Ext.define('Scalr.ui.LeftMenu', {
                     href: '#/account/environments',
                     text: 'Environments'
                 });
-
+                
                 config.items.push({
                     itemId:'teams',
                     href: '#/account/teams',
@@ -1344,11 +1348,14 @@ Ext.define('Scalr.ui.LeftMenu', {
                 break;
 
             case 'analytics':
+                if (Scalr.utils.isAdmin()) {
+                    config.items.push({
+                        itemId: 'dashboard',
+                        href: '#/analytics/dashboard',
+                        text: 'Dashboard'
+                    });
+                }
                 config.items.push({
-                    itemId: 'dashboard',
-                    href: '#/analytics/dashboard',
-                    text: 'Dashboard'
-                },{
                     itemId: 'costcenters',
                     href: '#/analytics/costcenters',
                     text: 'Cost centers'
@@ -1364,13 +1371,29 @@ Ext.define('Scalr.ui.LeftMenu', {
                     itemId: 'pricing',
                     href: '#/analytics/pricing',
                     text: 'Pricing list'
+                });
+                if (Scalr.utils.isAdmin()) {
+                    config.items.push({
+                        itemId: 'notifications',
+                        href: '#/analytics/notifications',
+                        text: 'Notifications',
+                    });
+                }
+                break;
+            case 'envanalytics':
+                config.cls = 'analytics';
+                config.items.push({
+                    itemId: 'dashboard',
+                    itemCls: 'environments',
+                    href: '#/analytics/environment/dashboard',
+                    text: 'Environment'
                 },{
-                    itemId: 'notifications',
-                    href: '#/analytics/notifications',
-                    text: 'Notifications'
+                    itemId: 'farms',
+                    itemCls: 'farms',
+                    href: '#/analytics/environment/farms',
+                    text: 'Farms'
                 });
                 break;
-
 			case 'settings':
                 config.items.push({
                     itemId:'orchestration',
@@ -1392,7 +1415,7 @@ Ext.define('Scalr.ui.LeftMenu', {
                     text: 'Global variables',
                     hidden: !Scalr.isAllowed('ADMINISTRATION_GLOBAL_VARIABLES')
                 });
-
+                
                 config.items.push({
                     menuCls: 'webhooks',
                     itemCls: 'configs',
@@ -1407,6 +1430,14 @@ Ext.define('Scalr.ui.LeftMenu', {
                     href: '#/services/chef/servers?level=account',
                     text: 'Chef servers',
                     hidden: !Scalr.isAllowed('SERVICES_ADMINISTRATION_CHEF')
+                });
+
+                config.items.push({
+                    itemCls: 'analytics',
+                    itemId: 'resources',
+                    href: '#/analytics/account/projects',
+                    text: 'Cost analytics',
+                    hidden: !Scalr.isAllowed('ADMINISTRATION_ANALYTICS') || !Scalr.flags['analyticsEnabled']
                 });
 
                 config.items.push({
@@ -1434,7 +1465,8 @@ Ext.define('Scalr.ui.LeftMenu', {
 			hidden: true,
 			dock: 'left',
             cls: 'x-docked-tabs',
-            width: me.defaultMenuWidth,
+            width: me.defaultMenuWidth + Ext.getScrollbarSize().width,
+            overflowY: 'auto',
 			defaults: {
                 xtype: 'button',
                 ui: 'tab',
@@ -2708,13 +2740,13 @@ Ext.define('Scalr.ui.ColoredStatus', {
                 text: 'Scalr attempted delivering this Webhook Notification, but failed permanently. Either your Webhook Endpoint responded with a HTTP status code indicating a bad request (4XX) and caused Scalr to abort, or the maximum number of attempts was exceeded for this Webhook Notification.'
             }
         },
-        notification: {
+        costanalyticsnotification: {
             'Enabled': {
                 cls: 'green',
-                text: 'Notifications will be sent to recipients'
+                text: 'Notification will be sent to recipients'
             },
             'Disabled': {
-                text: 'Notifications will not be sent to recipients'
+                text: 'Notification will not be sent to recipients'
             }
         },
         sshkey: {
@@ -2731,7 +2763,100 @@ Ext.define('Scalr.ui.ColoredStatus', {
             'Not used': {
                 text: 'This <b>Custom Event</b> is currently not used.'
             }
-        }
+        },
+		rdsdbinstance: {
+			'creating': {
+				cls: 'yellow',
+				title: 'Creating',
+                text: 'The instance is being created. The instance is inaccessible while it is being created.'
+			},
+			'backing-up': {
+				cls: 'yellow',
+				title: 'Backing up',
+                text: 'The instance is currently being backed up.'
+			},
+			'available': {
+				cls: 'green',
+				title: 'Available',
+                text: 'The instance is healthy and available.'
+			},
+			'pending' : {
+				cls: 'yellow',
+				title: 'Pending'
+			},
+			'rebooting' : {
+				cls: 'yellow',
+				title: 'Rebooting',
+                text: 'The instance is being rebooted because of a customer request or an Amazon RDS ' +
+                'process that requires the rebooting of the instance.'
+			},
+			'modifying': {
+				cls: 'yellow',
+				title: 'Modifying',
+                text: 'The instance is being modified because of a customer request to modify the instance.'
+			},
+            'renaming': {
+                cls: 'yellow',
+                title: 'Renaming',
+                text: 'The instance is being renamed because of a customer request to rename it.'
+            },
+            'resetting-master-credentials': {
+                cls: 'yellow',
+                title: 'Resetting master credentials',
+                text: 'The master credentials for the instance are being reset ' +
+                'because of a customer request to reset them.'
+            },
+			'deleting': {
+				title: 'Deleting',
+                text: 'The instance is being deleted.'
+			},
+            'failed': {
+                cls: 'red',
+                title: 'Failed',
+                text: 'The instance has failed and Amazon RDS was unable to recover it. ' +
+                'Perform a point-in-time restore to the latest restorable time of the instance to recover the data.'
+            },
+            'incompatible-network': {
+                cls: 'red',
+                title: 'Incompatible network',
+                text: 'Amazon RDS is attempting to perform a recovery action on an instance but is unable to do ' +
+                'so because the VPC is in a state that is preventing the action from being completed. ' +
+                'This status can occur if, for example, all available IP addresses in a subnet were in use and ' +
+                'Amazon RDS was unable to get an IP address for the DB instance.'
+            },
+            'incompatible-option-group': {
+                cls: 'red',
+                title: 'Incompatible option group',
+                text: 'Amazon RDS attempted to apply an option group change but was unable to do so, ' +
+                'and Amazon RDS was unable to roll back to the previous option group state. ' +
+                'Consult the Recent Events list for the DB instance for more information. ' +
+                'This status can occur if, for example, the option group contains an option such as TDE ' +
+                'and the DB instance does not contain encrypted information.'
+            },
+            'incompatible-parameters': {
+                cls: 'red',
+                title: 'Incompatible parameters',
+                text: 'Amazon RDS was unable to start up the DB instance because the parameters specified ' +
+                'in the instance\'s DB parameter group were not compatible. ' +
+                'Revert the parameter changes or make them compatible with the instance to regain access ' +
+                'to your instance. Consult the Recent Events list for the DB instance for more information ' +
+                'about the incompatible parameters.'
+            },
+            'incompatible-restore': {
+                cls: 'red',
+                title: 'Incompatible restore',
+                text: 'Amazon RDS is unable to do a point-in-time restore. ' +
+                'Common causes for this status include using temp tables or using MyISAM tables.'
+            },
+            'storage-full': {
+                cls: 'red',
+                title: 'Storage full',
+                text: 'The instance has reached its storage capacity allocation. ' +
+                'This is a critical status and should be remedied immediately; ' +
+                'you should scale up your storage by modifying the DB instance. Set CloudWatch alarms to ' +
+                'warn you when storage space is getting low so you don\'t run into this situation.'
+            }
+		}
     },
 
     getHtml: function(config, qtipConfig) {
@@ -2904,9 +3029,6 @@ Ext.define('Scalr.ui.ColoredStatus', {
             }
             return result;
         },
-        notification: function(data) {
-            return {status: data['enabled'] == 1 ? 'Enabled' : 'Disabled'};
-        },
         chefserver: function(data, params) {
             var text,
                 status,
@@ -2930,6 +3052,9 @@ Ext.define('Scalr.ui.ColoredStatus', {
                 text: text
             };
         },
+        costanalyticsnotification: function(data) {
+            return {status: data['status'] == 1 ? 'Enabled' : 'Disabled'};
+        },
 
         sshkey: function(data, params) {
             var text;
@@ -2943,7 +3068,6 @@ Ext.define('Scalr.ui.ColoredStatus', {
                 text: text
             };
         }
-
     }
 });
 

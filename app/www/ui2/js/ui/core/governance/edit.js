@@ -24,6 +24,29 @@ Scalr.regPage('Scalr.ui.core.governance.edit', function (loadParams, moduleParam
             },
             subheader: 'Set security groups list that will be applied to all instances.',
             warning: 'Please ensure that the security groups that you list already exist within your cloud setup. Scalr WILL NOT create these groups and instances will fail to launch otherwise.'
+        },{
+            name: 'openstack.tags',
+            title: 'Metadata',
+            type: 'tags',
+            defaults: {
+                value: {}
+            },
+            tagsLimit: 0,
+            subheader: 'Define metadata name-value pairs that should be automatically assigned to every instance. Enforcing this policy will prevent users from adding additional metadata.',
+            warning: 'Global Variable Interpolation is supported for metadata values <img src="'+Ext.BLANK_IMAGE_URL+'" class="x-icon-globalvars" style="vertical-align:top;position:relative;top:2px" />'+
+                     '<br/><i>Scalr reserves some <a href="https://scalr-wiki.atlassian.net/wiki/x/MwAeAQ" target="_blank">metadata name-value pairs</a> to configure the Scalarizr agent.</i>'
+        },{
+            name: 'openstack.instance_name_format',
+            title: 'Instance name',
+            type: 'text',
+            emptyText: '{SCALR_SERVER_ID}',
+            defaults: {
+                value: ''
+            },
+            subheader: 'Define a instance name format that will be used for all instances.',
+            icons: {
+                globalvars: true
+            }
         }],
         cloudstack: [{
             name: 'cloudstack.service_offering_id',
@@ -141,6 +164,7 @@ Scalr.regPage('Scalr.ui.core.governance.edit', function (loadParams, moduleParam
                 defaults: {
                     value: {}
                 },
+                tagsLimit: 10,
                 subheader: 'Define tags that should be automatically assigned to every EC2 instance and EBS volume. Enforcing this policy will prevent users from adding additional tags.',
                 warning: 'Global Variable Interpolation is supported for tag values <img src="'+Ext.BLANK_IMAGE_URL+'" class="x-icon-globalvars" style="vertical-align:top;position:relative;top:2px" />'
             }]
@@ -1083,7 +1107,10 @@ Scalr.regPage('Scalr.ui.core.governance.edit', function (loadParams, moduleParam
                     layout: 'fit',
                     maxWidth: maxFormWidth,
                     setValues: function(data){
-                        this.down('ec2tagsfield').setValue(data.settings.limits.value);
+                        var field = this.down('ec2tagsfield');
+                        field.setTagsLimit(data.config.tagsLimit);
+                        field.setCloud(Scalr.isOpenstack(data.platform) ? 'openstack' : data.platform);
+                        field.setValue(data.settings.limits.value);
                     },
                     getValues: function(config){
                         var grid = this.down('ec2tagsfield');

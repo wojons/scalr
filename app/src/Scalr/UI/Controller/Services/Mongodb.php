@@ -214,7 +214,7 @@ class Scalr_UI_Controller_Services_Mongodb extends Scalr_UI_Controller
 
         // Terminate instances
         foreach ($dbFarmRole->GetServersByFilter(array('status' => array(SERVER_STATUS::RUNNING, SERVER_STATUS::INIT, SERVER_STATUS::PENDING, SERVER_STATUS::PENDING_LAUNCH))) as $server) {
-            /** @var DBServer $server */
+            /* @var $server \DBServer */
             if ($server->GetProperty(Scalr_Role_Behavior_MongoDB::SERVER_REPLICA_SET_INDEX) == $rReplica) {
                 $server->terminate(array(DBServer::TERMINATE_REASON_REMOVING_REPLICA_SET_FROM_CLUSTER, 'MongoDB'), false, $this->user);
             }

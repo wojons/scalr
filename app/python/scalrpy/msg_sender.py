@@ -71,7 +71,7 @@ class MsgSender(application.ScalrIterationApplication):
         assert crypto_key, 'scalarizr.key'
         assert data, 'data to encrypt'
         crypto_algo = dict(name="des_ede3_cbc", key_size=24, iv_size=8)
-        data = cryptotool.encrypt(crypto_algo, data, cryptotool.decrypt_key(crypto_key))
+        data = cryptotool.encrypt_scalarizr(crypto_algo, data, cryptotool.decrypt_key(crypto_key))
         headers = headers or dict()
         headers['X-Signature'], headers['Date'] = cryptotool.sign(data, crypto_key)
         headers['X-Server-Id'] = server_id

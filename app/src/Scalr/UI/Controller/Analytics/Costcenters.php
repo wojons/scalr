@@ -1,10 +1,12 @@
 <?php
-
+use Scalr\Stats\CostAnalytics\Entity\NotificationEntity;
+use Scalr\Stats\CostAnalytics\Entity\ReportEntity;
 use Scalr\Stats\CostAnalytics\Entity\CostCentreEntity;
 use Scalr\Stats\CostAnalytics\Entity\CostCentrePropertyEntity;
 use Scalr\Stats\CostAnalytics\Entity\TagEntity;
 use Scalr\Stats\CostAnalytics\Iterator\ChartPeriodIterator;
 use Scalr\Stats\CostAnalytics\Entity\SettingEntity;
+use Scalr\UI\Request\JsonData;
 use Scalr\Exception\AnalyticsException;
 
 class Scalr_UI_Controller_Analytics_Costcenters extends Scalr_UI_Controller
@@ -18,24 +20,35 @@ class Scalr_UI_Controller_Analytics_Costcenters extends Scalr_UI_Controller
 
     public function defaultAction()
     {
-        $this->response->page('ui/analytics/costcenters/view.js', array(
+        $this->response->page('ui/analytics/admin/costcenters/view.js', array(
             'ccs' => $this->getCostCentersList(),
             'quarters' => SettingEntity::getQuarters(true)
-        ), array('/ui/analytics/analytics.js'), array('/ui/analytics/analytics.css'));
+        ), array('/ui/analytics/analytics.js'), array('ui/analytics/analytics.css', '/ui/analytics/admin/admin.css'));
     }
 
-    public function xListAction()
+    /**
+     * xListAction
+     *
+     * @param string $query optional Search query
+     * @param bool $showArchived optional show old archived cost centers
+     */
+    public function xListAction($query= null, $showArchived = false)
     {
-        $query = trim($this->getParam('query'));
         $this->response->data(array(
-            'ccs' => $this->getCostCentersList($query)
+            'ccs' => $this->getCostCentersList(trim($query), $showArchived)
         ));
     }
 
-    public function editAction()
+    /**
+     * Edit cost center action
+     *
+     * @param string $ccId  optional Cost center identifier
+     * @throws Scalr_UI_Exception_NotFound
+     */
+    public function editAction($ccId = null)
     {
-        if ($this->getParam('ccId')) {
-            $cc = $this->getContainer()->analytics->ccs->get($this->getParam('ccId'));
+        if ($ccId) {
+            $cc = $this->getContainer()->analytics->ccs->get($ccId);
             if (!$cc)
                 throw new Scalr_UI_Exception_NotFound();
         }
@@ -53,12 +66,25 @@ class Scalr_UI_Controller_Analytics_Costcenters extends Scalr_UI_Controller
             $ccData = [];
         }
 
-        $this->response->page('ui/analytics/costcenters/edit.js', array(
+        $this->response->page('ui/analytics/admin/costcenters/edit.js', array(
             'cc' => $ccData
-        ), array('/ui/analytics/analytics.js'));
+        ));
     }
 
-    public function xSaveAction()
+    /**
+     * xSaveAction
+     *
+     * @param string $name         Cost center name
+     * @param string $billingCode  Cost center billing code
+     * @param string $leadEmail    Cost center lead's email address
+     * @param int    $locked       1 if locked. 0 otherwise.
+     * @param string $ccId         optional Cost center identifier
+     * @param string $description  optional Description
+     * @throws AnalyticsException
+     * @throws Exception
+     * @throws Scalr_UI_Exception_NotFound
+     */
+    public function xSaveAction($name, $billingCode, $leadEmail, $locked, $ccId = null, $description = null)
     {
         $this->request->defineParams(array(
             'name'        => array('type' => 'string', 'validator' => array(Scalr_Validator::NOEMPTY => true)),
@@ -66,8 +92,8 @@ class Scalr_UI_Controller_Analytics_Costcenters extends Scalr_UI_Controller
             'leadEmail'   => array('type' => 'string', 'validator' => array(Scalr_Validator::NOEMPTY => true, Scalr_Validator::EMAIL => true))
         ));
 
-        if ($this->getParam('ccId')) {
-            $cc = $this->getContainer()->analytics->ccs->get($this->getParam('ccId'));
+        if ($ccId) {
+            $cc = $this->getContainer()->analytics->ccs->get($ccId);
 
             if (!$cc) {
                 throw new Scalr_UI_Exception_NotFound();
@@ -84,10 +110,10 @@ class Scalr_UI_Controller_Analytics_Costcenters extends Scalr_UI_Controller
             return;
         }
 
-        $cc->name = $this->getParam('name');
+        $cc->name = $name;
 
         //Checks whether billing code specified in the request is already used in another Cost Centre
-        $criteria = [['name' => CostCentrePropertyEntity::NAME_BILLING_CODE], ['value' => $this->getParam('billingCode')]];
+        $criteria = [['name' => CostCentrePropertyEntity::NAME_BILLING_CODE], ['value' => $billingCode]];
 
         if ($cc->ccId !== null) {
             $criteria[] = ['ccId' => ['$ne' => $cc->ccId]];
@@ -117,7 +143,7 @@ class Scalr_UI_Controller_Analytics_Costcenters extends Scalr_UI_Controller
         if (!empty($found)) {
             throw new AnalyticsException(sprintf(
                 'Billing code "%s" is already used in Cost center "%s"',
-                strip_tags($this->getParam('billingCode')),
+                strip_tags($billingCode),
                 $found->name
             ));
         }
@@ -127,9 +153,12 @@ class Scalr_UI_Controller_Analytics_Costcenters extends Scalr_UI_Controller
         try {
             $cc->save();
 
-            $cc->saveProperty(CostCentrePropertyEntity::NAME_BILLING_CODE, $this->getParam('billingCode'));
-            $cc->saveProperty(CostCentrePropertyEntity::NAME_DESCRIPTION, $this->getParam('description'));
-            $cc->saveProperty(CostCentrePropertyEntity::NAME_LEAD_EMAIL, $this->getParam('leadEmail'));
+            //NOTE please take into account the presence of the usage->createHostedScalrAccountCostCenter() method
+
+            $cc->saveProperty(CostCentrePropertyEntity::NAME_BILLING_CODE, $billingCode);
+            $cc->saveProperty(CostCentrePropertyEntity::NAME_DESCRIPTION, $description);
+            $cc->saveProperty(CostCentrePropertyEntity::NAME_LEAD_EMAIL, $leadEmail);
+            $cc->saveProperty(CostCentrePropertyEntity::NAME_LOCKED, $locked);
 
             $this->db->CommitTrans();
         } catch (Exception $e) {
@@ -142,9 +171,16 @@ class Scalr_UI_Controller_Analytics_Costcenters extends Scalr_UI_Controller
         $this->response->success('Cost center has been successfully saved');
     }
 
-    public function xRemoveAction()
+    /**
+     * xRemoveAction
+     *
+     * @param string $ccId Cost center identifier
+     * @throws Scalr_UI_Exception_NotFound
+     */
+    public function xRemoveAction($ccId)
     {
-        $cc = $this->getContainer()->analytics->ccs->get($this->getParam('ccId'));
+        $cc = $this->getContainer()->analytics->ccs->get($ccId);
+
         if ($cc) {
             try {
                 $removable = $cc->checkRemoval();
@@ -161,19 +197,131 @@ class Scalr_UI_Controller_Analytics_Costcenters extends Scalr_UI_Controller
     }
 
     /**
+     * @param string $ccId
+     */
+    public function notificationsAction($ccId)
+    {
+        $this->response->page('ui/analytics/admin/costcenters/notifications.js', array(
+            'notifications' => NotificationEntity::find([['subjectType' => NotificationEntity::SUBJECT_TYPE_CC],['subjectId' => $ccId]]),
+            'reports'       => ReportEntity::find([['subjectType' => NotificationEntity::SUBJECT_TYPE_CC],['subjectId' => $ccId]]),
+        ), array(), array('ui/analytics/admin/notifications/view.css'));
+    }
+
+    /**
+     * @param JsonData $notifications
+     */
+    public function xSaveNotificationsAction(JsonData $notifications)
+    {
+        $data = [];
+
+        foreach ($notifications as $id => $settings) {
+            if ($id == 'reports') {
+                $this->saveReports($settings);
+                $data[$id] = ReportEntity::all();
+            } elseif ($id == 'notifications') {
+                $this->saveNotifications(NotificationEntity::SUBJECT_TYPE_CC, $settings);
+                $data[$id] = NotificationEntity::findBySubjectType(NotificationEntity::SUBJECT_TYPE_CC);
+            }
+        }
+
+        $this->response->data($data);
+        $this->response->success('Notifications successfully saved');
+    }
+
+    /**
+     * @param $subjectType
+     * @param $settings
+     * @throws \Scalr\Exception\ModelException
+     */
+    private function saveNotifications($subjectType, $settings)
+    {
+        $uuids = array();
+
+        foreach ($settings['items'] as $item) {
+            $notification = new NotificationEntity();
+            if ($item['uuid']) {
+                $notification->findPk($item['uuid']);
+            }
+            $notification->subjectType = $subjectType;
+            $notification->subjectId = $item['subjectId'] ? $item['subjectId'] : null;
+            $notification->notificationType = $item['notificationType'];
+            $notification->threshold = $item['threshold'];
+            $notification->recipientType = $item['recipientType'];
+            $notification->emails = $item['emails'];
+            $notification->status = $item['status'];
+            $notification->save();
+            $uuids[] = $notification->uuid;
+        }
+
+        foreach (NotificationEntity::findBySubjectType($subjectType) as $notification) {
+            if (!in_array($notification->uuid, $uuids)) {
+                $notification->delete();
+            }
+        }
+    }
+
+    /**
+     * @param $settings
+     * @throws AnalyticsException
+     * @throws Scalr_UI_Exception_NotFound
+     */
+    private function saveReports($settings)
+    {
+        $uuids = array();
+
+        foreach ($settings['items'] as $item) {
+            $report = new ReportEntity();
+            if ($item['uuid']) {
+                $report->findPk($item['uuid']);
+            }
+            $report->subjectType = $item['subjectType'];
+
+            $subject = null;
+            if ($report->subjectType == ReportEntity::SUBJECT_TYPE_CC) {
+                $subject = $this->getContainer()->analytics->ccs->get($item['subjectId']);
+            } elseif ($report->subjectType == ReportEntity::SUBJECT_TYPE_PROJECT) {
+                $subject = $this->getContainer()->analytics->projects->get($item['subjectId']);
+            } else {
+                $report->subjectType = null;
+                $report->subjectId = null;
+            }
+
+            if ($report->subjectType) {
+                if ($item['subjectId'] && !$subject) {
+                    throw new Scalr_UI_Exception_NotFound();
+                }
+                $report->subjectId = $item['subjectId'] ? $item['subjectId'] : null;
+            }
+
+            $report->period = $item['period'];
+            $report->emails = $item['emails'];
+            $report->status = $item['status'];
+            $report->save();
+            $uuids[] = $report->uuid;
+        }
+
+        foreach (ReportEntity::all() as $report) {
+            if (!in_array($report->uuid, $uuids)) {
+                $report->delete();
+            }
+        }
+    }
+
+    /**
      * Gets the list of the cost centres
      *
+     * @param string $query optional Search query
+     * @param bool $showArchived
      * @return   array Returns the list of the cost centres
      */
-    private function getCostCentersList($query = null)
+    private function getCostCentersList($query = null, $showArchived = false)
     {
         $ccs = array();
-        $criteria = null;
 
         $collection = $this->getContainer()->analytics->ccs->findByKey($query);
 
         if ($collection->count()) {
-            $iterator = new ChartPeriodIterator('month', gmdate('Y-m-01'), null, 'UTC');
+            $iterator = ChartPeriodIterator::create('month', gmdate('Y-m-01'), null, 'UTC');
 
             //It calculates usage for all provided cost centres
             $usage = $this->getContainer()->analytics->usage->get(
@@ -204,7 +352,7 @@ class Scalr_UI_Controller_Analytics_Costcenters extends Scalr_UI_Controller
 
                 //Archived cost centres are excluded only when there aren't any usage for this month and
                 //query filter key has not been provided.
-                if (($query === null || $query === '') && $ccEntity->archived && $totalCost < 0.01) {
+                if (($query === null || $query === '') && $ccEntity->archived && $totalCost < 0.01 && !$showArchived) {
                     continue;
                 }
 
@@ -244,6 +392,7 @@ class Scalr_UI_Controller_Analytics_Costcenters extends Scalr_UI_Controller
             'billingCode'   => $cc->getProperty(CostCentrePropertyEntity::NAME_BILLING_CODE),
             'description'   => $cc->getProperty(CostCentrePropertyEntity::NAME_DESCRIPTION),
             'leadEmail'     => $cc->getProperty(CostCentrePropertyEntity::NAME_LEAD_EMAIL),
+            'locked'        => $cc->getProperty(CostCentrePropertyEntity::NAME_LOCKED) ? 1 : 0,
             'created'       => $cc->created->format('Y-m-d'),
             'createdByEmail'=> $cc->createdByEmail,
             'archived'      => $cc->archived,
@@ -252,7 +401,7 @@ class Scalr_UI_Controller_Analytics_Costcenters extends Scalr_UI_Controller
         );
 
         if ($calculate) {
-            $iterator = new ChartPeriodIterator('month', gmdate('Y-m-01'), null, 'UTC');
+            $iterator = ChartPeriodIterator::create('month', gmdate('Y-m-01'), null, 'UTC');
 
             $usage = $this->getContainer()->analytics->usage->get(['ccId' => $cc->ccId], $iterator->getStart(), $iterator->getEnd());
 

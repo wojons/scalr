@@ -121,8 +121,6 @@ class ScalrEnvironment20120701 extends ScalrEnvironment20120417
         if ($this->DBServer->farmRoleId == $farmRoleId) {
             $data = Scalr_Role_Behavior::loadByName(ROLE_BEHAVIORS::BASE)->getBaseConfiguration($this->DBServer);
             
-            @file_put_contents('/tmp/debug.txt', json_encode($data));
-            
             foreach ((array)$data as $k => $v) {
                 $bodyEl = $this->serialize($v, $k, $ResponseDOMDocument);
                 $ResponseDOMDocument->documentElement->appendChild($bodyEl);

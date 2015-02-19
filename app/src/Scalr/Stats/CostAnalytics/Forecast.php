@@ -1,6 +1,7 @@
 <?php
 namespace Scalr\Stats\CostAnalytics;
 
+use Scalr\DataType\AggregationCollection;
 use Scalr_Util_Arrays,
     DateTime,
     DateTimeZone,
@@ -22,7 +23,7 @@ trait Forecast
     /**
      * Calculates forecast usage according to current spend over the period
      *
-     * @param   float          $currentUsage    Current udage (month to day)
+     * @param   float          $currentUsage    Current usage (month to day)
      * @param   DateTime       $start           Start date of the period
      * @param   DateTime       $end             End date of the period
      * @param   float          $previousUsage   optional The previous whole period usage
@@ -85,11 +86,13 @@ trait Forecast
 
         $ret['growthPct'] = $growthPct === null ? null : round($growthPct, 0);
 
-        //Gets budget
-        $ret = $this->getBudgetUsedPercentage([
-            'ccId'      => $data['ccId'],
-            'projectId' => $data['projectId'],
-        ]) + $ret;
+        if (isset($data['ccId']) || isset($data['projectId'])) {
+            //Gets budget for projects and ccs
+            $ret = $this->getBudgetUsedPercentage([
+                'ccId'      => $data['ccId'],
+                'projectId' => $data['projectId'],
+            ]) + $ret;
+        }
 
         return $ret;
     }
@@ -243,7 +246,7 @@ trait Forecast
      * Calculates estimates for budget data
      *
      * @param   array    $budget       The budget that is calculated by getBudgetUsedPercentage method
-     * @param   float    $forecastCost optional Foracast usage for this period calculated externally
+     * @param   float    $forecastCost optional Forecast usage for this period calculated externally
      * @throws  \DomainException
      */
     public function calculateBudgetEstimateOverspend(&$budget, $forecastCost = null)
@@ -348,10 +351,10 @@ trait Forecast
     /**
      * Gets point data array
      *
-     * @param   array    $currentPeriod
-     * @param   array    $previousPeriod
-     * @param   array    $previousPoint
-     * @return  array
+     * @param   array    $currentPeriod     Current period data set
+     * @param   array    $previousPeriod    Previous period data set
+     * @param   array    $previousPoint     Previous point data set
+     * @return  array    Returns current point data array
      */
     public function getPointDataArray($currentPeriod, $previousPeriod, $previousPoint)
     {
@@ -445,17 +448,21 @@ trait Forecast
         //short form of the data array
         if ($bshort) return $cl;
 
+        $queryInterval = preg_replace('/^1 /', '', $iterator->getInterval());
+
+        $itemsRollingAvg = $this->getRollingAvg([], $queryInterval, $iterator->getEnd(), null, $currentPeriod);
         // forecasted spend for period
         $cl['forecastCost'] = self::calculateForecast(
             $cl['cost'], $iterator->getStart(), $iterator->getEnd(), $previousWholePeriod['cost'],
-            ($cl['growth'] > 0 ? 1 : -1) * $cl['growthPct']
+            ($cl['growth'] > 0 ? 1 : -1) * $cl['growthPct'],
+            (isset($itemsRollingAvg['rollingAverageDaily']) ? $itemsRollingAvg['rollingAverageDaily'] : null)
         );
 
 
         $mediandata = [];
         if (!empty($detailed[$id]['data'])) {
             $dt = $iterator->getStart();
-            //FIXME rewrite searching a point
+
             foreach ($detailed[$id]['data'] as $i => $v) {
                 if ($dt > $iterator->today) break;
                 $mediandata[] = !isset($v['cost']) ? 0 : $v['cost'];
@@ -483,10 +490,13 @@ trait Forecast
      * @param   array    $criteria      Criteria accepts two parameters 'projectId' and 'ccId'
      * @param   array    $queryInterval The interval of each point on chart
      * @param   string   $toDate        To date
+     * @param   int      $accountId     optional Current user id. Required for calculating trends for farms
+     * @param   string   $usage         optional Current usage
+     * @param   array    $breakdown     optional Array of subtotals and item names ('subtotal' => 'items')
      * @throws  \InvalidArgumentException
      * @return  array
      */
-    public function getRollingAvg($criteria, $queryInterval, $toDate = null)
+    public function getRollingAvg($criteria, $queryInterval, $toDate = null, $accountId = null, $usage = null, array $breakdown = null)
     {
         $tz = new DateTimeZone('UTC');
 
@@ -544,13 +554,37 @@ trait Forecast
         $end->setTime(23, 59, 59);
         $start->setTime(0, 0, 0);
 
-        $usage = \Scalr::getContainer()->analytics->usage->get($criteria, $start, $end, $queryInterval);
+        $itemsAverage = [];
+
+        if (!isset($usage)) {
+            if (isset($criteria['farmId']) && isset($accountId)) {
+                $usage = \Scalr::getContainer()->analytics->usage->getFarmData($accountId, ['farmId' => $criteria['farmId']], $start, $end);
+            } else if (isset($criteria['envId']) && isset($accountId)) {
+                $usage = \Scalr::getContainer()->analytics->usage->getFarmData($accountId, ['envId' => $criteria['envId']], $start, $end);
+            } else {
+                $usage = \Scalr::getContainer()->analytics->usage->get($criteria, $start, $end, $queryInterval);
+            }
+        } else if (isset($breakdown)) {
+            foreach ($breakdown as $itemId => $itemName) {
+                $arr = (new AggregationCollection([$itemId], ['cost' => 'sum']))->load($usage)->calculatePercentage();
+
+                if (!empty($arr['data'])) {
+                    foreach ($arr['data'] as $id => $value) {
+                        $itemsAverage[$itemName][$id] = [
+                            'rollingAverage'        => round($value['cost'] / $num, 2),
+                            'rollingAverageMessage' => $info,
+                            'rollingAverageDaily'   => round(($days == 0 ? 0 : $value['cost'] / $days), 2),
+                        ];
+                    }
+                }
+            }
+        }
 
         return [
             'rollingAverage'        => round($usage['cost'] / $num, 2),
             'rollingAverageMessage' => $info,
             'rollingAverageDaily'   => round(($days == 0 ? 0 : $usage['cost'] / $days), 2),
-        ];
+        ] + $itemsAverage;
     }
 
     /**
@@ -560,10 +594,11 @@ trait Forecast
      * @param   array    $timeline      Timeline array
      * @param   array    $queryInterval The interval of each point on chart (hour, day, week, month, quarter)
      * @param   DateTime $toDate        The date that rolling average should be calculated to.
+     * @param   int      $accountId     optional Curretn user id. Required for calculating trends for farms
      * @throws  \InvalidArgumentException
      * @return  array
      */
-    public function calculateSpendingTrends($criteria, &$timeline, $queryInterval, $toDate)
+    public function calculateSpendingTrends($criteria, &$timeline, $queryInterval, $toDate, $accountId = null)
     {
         $dailyusage = [];
 
@@ -599,7 +634,7 @@ trait Forecast
         $date->modify('-1 day');
 
         if ($date < $toDate) {
-            $rollingAverage = $this->getRollingAvg($criteria, $queryInterval, min($date, $toDate));
+            $rollingAverage = $this->getRollingAvg($criteria, $queryInterval, min($date, $toDate), $accountId);
         } else {
             //For previous complete periods it returns usual average of datapoints
             $rollingAverage = [
@@ -615,4 +650,30 @@ trait Forecast
             'periodLowDate'  => $minDate,
         ];
     }
+
+    /**
+     * Returns iterator for current quarter
+     *
+     * @return Iterator\ChartQuarterlyIterator
+     */
+    public function getCurrentQuarterIterator()
+    {
+        $quarters = new Quarters(SettingEntity::getQuarters());
+        $currentQuarter = $quarters->getQuarterForDate(new \DateTime('now', new \DateTimeZone('UTC')));
+        $currentYear = (new \DateTime('now', new \DateTimeZone('UTC')))->format('Y');
+
+        if ($currentQuarter === 1) {
+            $quarter = 4;
+            $year = $currentYear - 1;
+        } else {
+            $quarter = $currentQuarter - 1;
+            $year = $currentYear;
+        }
+
+        $date = $quarters->getPeriodForQuarter($quarter, $year);
+        $iterator = ChartPeriodIterator::create('quarter', $date->start, $date->end, 'UTC');
+
+        return $iterator;
+    }
+
 }

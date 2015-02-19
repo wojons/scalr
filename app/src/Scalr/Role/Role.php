@@ -201,7 +201,7 @@ class Role extends AbstractEntity
             if ($this->osFamily && $this->osGeneration && $newImage->osFamily && $newImage->osGeneration) {
                 // check only if they are set
                 if ($this->osFamily != $newImage->osFamily || $this->osGeneration != $newImage->osGeneration) {
-                    throw new \Exception("OS values are mismatched ({$this->osFamily}, {$newImage->osFamily}, {$this->osGeneration}, {$newImage->osGeneration})");
+                    throw new \Exception("[RoleID: {$this->id}, ImageID: {$newImage->id}] OS values are mismatched ({$this->osFamily}, {$newImage->osFamily}, {$this->osGeneration}, {$newImage->osGeneration})");
                 }
             }
 

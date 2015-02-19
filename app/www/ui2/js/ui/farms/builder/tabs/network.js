@@ -14,7 +14,7 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.network', function (moduleTabParams) 
         
         getHandlerName: function(record) {
             var platform = record.get('platform');
-            if (Scalr.isOpenstack(platform, true)) {
+            if (Scalr.isOpenstack(platform, false)) {
                 return 'openstack';
             } else if (Scalr.isCloudstack(platform)) {
                 return 'cloudstack';
@@ -379,7 +379,7 @@ Ext.define('Scalr.ui.FarmRoleNetworkCloudstack', {
     showTab: function (record) {
         var me = this,
             settings = record.get('settings'),
-            eipsData = this.tabData['eips'],
+            eipsData = (this.tabData) ? this.tabData['eips'] : null,
             eipsFieldset = this.down('[name="cloudstack.use_static_nat"]'),
             field, defaultValue;
 
@@ -740,7 +740,7 @@ Ext.define('Scalr.ui.FarmRoleNetworkOpenstack', {
             settings = record.get('settings', true),
             networksField = me.down('[name="openstack.networks"]'),
             storeData,
-            eipsData = this.tabData['floatingIps'],
+            eipsData = (this.tabData) ? this.tabData['floatingIps'] : null,
             eipsFieldset = this.down('[name="openstack.use_floating_ips"]'),
             field,
             cloudLocation = record.get('cloud_location'),

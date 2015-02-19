@@ -215,7 +215,6 @@ class Scalr_UI_Controller_Account2_Environments_Clouds extends Scalr_UI_Controll
                 case SERVER_PLATFORMS::RACKSPACENG_UK:
                 case SERVER_PLATFORMS::RACKSPACENG_US:
                 case SERVER_PLATFORMS::ECS:
-                case SERVER_PLATFORMS::CONTRAIL:
                 case SERVER_PLATFORMS::OCS:
                 case SERVER_PLATFORMS::NEBULA:
                     $params = $this->getOpenStackDetails($platform);
@@ -329,7 +328,8 @@ class Scalr_UI_Controller_Account2_Environments_Clouds extends Scalr_UI_Controll
                     //Validates private key and certificate if they are provided
                     if (!empty($pars[Ec2PlatformModule::CERTIFICATE]) || !empty($pars[Ec2PlatformModule::PRIVATE_KEY])) {
                         try {
-                            $aws->validateCertificateAndPrivateKey();
+                            //FIXME 24284 SOAP is not supported anymore
+                            //$aws->validateCertificateAndPrivateKey();
                         } catch (Exception $e) {
                             throw new Exception(_("Incorrect format of X.509 certificate or private key. Make sure that you are using files downloaded from AWS profile. ({$e->getMessage()})"));
                         }
@@ -341,7 +341,7 @@ class Scalr_UI_Controller_Account2_Environments_Clouds extends Scalr_UI_Controll
                     } catch (Exception $e) {
                         throw new Exception(sprintf(_("Failed to verify your EC2 access key and secret key: %s"), $e->getMessage()));
                     }
-                    
+
                     //Extract AWS Account ID
                     $pars[Ec2PlatformModule::ACCOUNT_ID] = $aws->getAccountNumber();
 
@@ -627,34 +627,39 @@ class Scalr_UI_Controller_Account2_Environments_Clouds extends Scalr_UI_Controll
 
                 $params['regions'] = $os->listZones();
                 foreach ($params['regions'] as $region) {
-                    $cloudLocation = $region->name;
-                    $os = new OpenStack(new OpenStackConfig(
-                            $params[OpenstackPlatformModule::USERNAME],
-                            $params[OpenstackPlatformModule::KEYSTONE_URL],
-                            $cloudLocation,
-                            $params[OpenstackPlatformModule::API_KEY],
-                            null, // Closure callback for token
-                            null, // Auth token. We should be assured about it right now
-                            $this->env->getPlatformConfigValue("{$platform}." . OpenstackPlatformModule::PASSWORD),
-                            $this->env->getPlatformConfigValue("{$platform}." . OpenstackPlatformModule::TENANT_NAME)
-                    ));
-
-                    $params['features'][$cloudLocation] = array(
-                        'Volumes (Cinder)' => $os->hasService('volume'),
-                        'Security groups (Nova)' => $os->servers->isExtensionSupported(ServersExtension::securityGroups()),
-                        'Networking (Neutron)' => $os->hasService('network'),
-                        'Load balancing (Neutron LBaaS)' => (!in_array($platform, array(SERVER_PLATFORMS::RACKSPACENG_US, SERVER_PLATFORMS::RACKSPACENG_UK)) && $os->hasService('network')) ? $os->network->isExtensionSupported('lbaas') : false,
-                        'Floating IPs (Nova)' => $os->servers->isExtensionSupported(ServersExtension::floatingIps()),
-                        'Objects store (Swift)' => $os->hasService('object-store')
-                    );
-
-                    $params['info'][$cloudLocation] = array(
-                        'services' => $os->listServices(),
-                        'nova_extensions' => $os->servers->listExtensions()
-                    );
-
-                    if ($os->hasService('network')) {
-                        $params['info'][$cloudLocation]['neutron_extensions'] = $os->network->listExtensions();
+                    try{
+                        $cloudLocation = $region->name;
+                        $os = new OpenStack(new OpenStackConfig(
+                                $params[OpenstackPlatformModule::USERNAME],
+                                $params[OpenstackPlatformModule::KEYSTONE_URL],
+                                $cloudLocation,
+                                $params[OpenstackPlatformModule::API_KEY],
+                                null, // Closure callback for token
+                                null, // Auth token. We should be assured about it right now
+                                $this->env->getPlatformConfigValue("{$platform}." . OpenstackPlatformModule::PASSWORD),
+                                $this->env->getPlatformConfigValue("{$platform}." . OpenstackPlatformModule::TENANT_NAME)
+                        ));
+    
+                        $params['features'][$cloudLocation] = array(
+                            'Volumes (Cinder)' => $os->hasService('volume'),
+                            'Security groups (Nova)' => $os->servers->isExtensionSupported(ServersExtension::securityGroups()),
+                            'Networking (Neutron)' => $os->hasService('network'),
+                            'Load balancing (Neutron LBaaS)' => (!in_array($platform, array(SERVER_PLATFORMS::RACKSPACENG_US, SERVER_PLATFORMS::RACKSPACENG_UK)) && $os->hasService('network')) ? $os->network->isExtensionSupported('lbaas') : false,
+                            'Floating IPs (Nova)' => $os->servers->isExtensionSupported(ServersExtension::floatingIps()),
+                            'Objects store (Swift)' => $os->hasService('object-store')
+                        );
+    
+                        $params['info'][$cloudLocation] = array(
+                            'services' => $os->listServices(),
+                            'nova_extensions' => $os->servers->listExtensions()
+                        );
+    
+                        if ($os->hasService('network')) {
+                            $params['info'][$cloudLocation]['neutron_url'] = $os->network->getEndpointUrl();
+                            $params['info'][$cloudLocation]['neutron_extensions'] = $os->network->listExtensions();
+                        }
+                    } catch (Exception $e) {
+                        $params['info'][$cloudLocation]['exception'] = $e->getMessage();
                     }
                 }
             } catch (Exception $e) {

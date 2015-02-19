@@ -11,6 +11,22 @@
 /*!40111 SET @OLD_SQL_NOTES=@@SQL_NOTES, SQL_NOTES=0 */;
 
 --
+-- Table structure for table `account_ccs`
+--
+
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
+CREATE TABLE `account_ccs` (
+  `account_id` int(11) NOT NULL COMMENT 'clients.id reference',
+  `cc_id` binary(16) NOT NULL COMMENT 'ccs.cc_id reference',
+  PRIMARY KEY (`account_id`,`cc_id`),
+  KEY `idx_cc_id` (`cc_id`),
+  CONSTRAINT `fk_bd44f317af5fc8ab` FOREIGN KEY (`account_id`) REFERENCES `clients` (`id`) ON DELETE CASCADE ON UPDATE NO ACTION,
+  CONSTRAINT `fk_b6e70905def505d6` FOREIGN KEY (`cc_id`) REFERENCES `ccs` (`cc_id`) ON DELETE CASCADE ON UPDATE NO ACTION
+) ENGINE=InnoDB DEFAULT CHARSET=latin1;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
 -- Table structure for table `account_limits`
 --
 
@@ -165,7 +181,8 @@ CREATE TABLE `account_user_settings` (
   `name` varchar(255) NOT NULL DEFAULT '',
   `value` varchar(255) DEFAULT NULL,
   PRIMARY KEY (`user_id`,`name`),
-  KEY `name` (`name`)
+  KEY `name` (`name`),
+  CONSTRAINT `fk_account_users_id_user_settings` FOREIGN KEY (`user_id`) REFERENCES `account_users` (`id`) ON DELETE CASCADE ON UPDATE NO ACTION
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
@@ -535,6 +552,7 @@ CREATE TABLE `bundle_tasks` (
   `created_by_email` varchar(100) DEFAULT NULL,
   `generation` tinyint(1) DEFAULT '1',
   `object` varchar(20) DEFAULT 'role',
+  `os_id` varchar(25) DEFAULT '',
   PRIMARY KEY (`id`),
   KEY `clientid` (`client_id`),
   KEY `env_id` (`env_id`),
@@ -686,7 +704,8 @@ CREATE TABLE `clients` (
   PRIMARY KEY (`id`),
   KEY `idx_dtadded` (`dtadded`),
   KEY `idx_isactive` (`isactive`),
-  KEY `idx_dtdue` (`dtdue`)
+  KEY `idx_dtdue` (`dtdue`),
+  KEY `idx_status` (`status`)
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
@@ -1076,6 +1095,14 @@ CREATE TABLE `events` (
   `msg_expected` int(11) DEFAULT NULL,
   `msg_created` int(11) DEFAULT NULL,
   `msg_sent` int(11) DEFAULT '0',
+  `wh_total` int(3) DEFAULT '0',
+  `wh_completed` int(3) DEFAULT '0',
+  `wh_failed` int(3) DEFAULT '0',
+  `scripts_total` int(3) DEFAULT '0',
+  `scripts_completed` int(3) DEFAULT '0',
+  `scripts_failed` int(3) DEFAULT '0',
+  `scripts_timedout` int(3) DEFAULT '0',
+  `is_suspend` tinyint(1) DEFAULT '0',
   PRIMARY KEY (`id`),
   UNIQUE KEY `event_id` (`event_id`),
   KEY `farmid` (`farmid`),
@@ -1083,7 +1110,7 @@ CREATE TABLE `events` (
   KEY `idx_ishandled` (`ishandled`),
   KEY `idx_dtadded` (`dtadded`),
   KEY `idx_type` (`type`)
-) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+) ENGINE=InnoDB DEFAULT CHARSET=latin1;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -1580,6 +1607,7 @@ CREATE TABLE `images` (
   `os_generation` varchar(10) DEFAULT NULL,
   `os_version` varchar(10) DEFAULT NULL,
   `dt_added` datetime DEFAULT NULL,
+  `dt_last_used` datetime DEFAULT NULL,
   `created_by_id` int(11) DEFAULT NULL,
   `created_by_email` varchar(100) DEFAULT NULL,
   `architecture` enum('i386','x86_64') NOT NULL DEFAULT 'x86_64',
@@ -1590,6 +1618,7 @@ CREATE TABLE `images` (
   `status` varchar(20) NOT NULL,
   `status_error` varchar(255) DEFAULT NULL,
   `agent_version` varchar(20) DEFAULT NULL,
+  `os_id` varchar(25) NOT NULL DEFAULT '',
   PRIMARY KEY (`hash`),
   UNIQUE KEY `idx_id` (`env_id`,`id`,`platform`,`cloud_location`),
   CONSTRAINT `fk_images_client_environmnets_id` FOREIGN KEY (`env_id`) REFERENCES `client_environments` (`id`) ON DELETE CASCADE ON UPDATE NO ACTION
@@ -1673,6 +1702,25 @@ CREATE TABLE `nameservers` (
   `ipaddress` varchar(15) DEFAULT NULL,
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Table structure for table `os`
+--
+
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
+CREATE TABLE `os` (
+  `id` varchar(25) NOT NULL,
+  `name` varchar(50) NOT NULL,
+  `family` varchar(20) NOT NULL,
+  `generation` varchar(10) NOT NULL,
+  `version` varchar(15) NOT NULL,
+  `status` enum('active','inactive') DEFAULT 'inactive',
+  `is_system` tinyint(1) DEFAULT '0',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `main` (`version`,`name`,`family`,`generation`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -1932,6 +1980,24 @@ CREATE TABLE `role_security_rules` (
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
+-- Table structure for table `role_software_deleted`
+--
+
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
+CREATE TABLE `role_software_deleted` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `role_id` int(11) NOT NULL,
+  `software_name` varchar(45) DEFAULT NULL,
+  `software_version` varchar(20) DEFAULT NULL,
+  `software_key` varchar(20) DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `role_id` (`role_id`),
+  CONSTRAINT `role_software_deleted_ibfk_1` FOREIGN KEY (`role_id`) REFERENCES `roles` (`id`) ON DELETE CASCADE ON UPDATE NO ACTION
+) ENGINE=InnoDB DEFAULT CHARSET=latin1;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
 -- Table structure for table `role_variables`
 --
 
@@ -1975,8 +2041,10 @@ CREATE TABLE `roles` (
   `os_generation` varchar(10) DEFAULT NULL,
   `os_version` varchar(10) DEFAULT NULL,
   `dtadded` datetime DEFAULT NULL,
+  `dt_last_used` datetime DEFAULT NULL,
   `added_by_userid` int(11) DEFAULT NULL,
   `added_by_email` varchar(50) DEFAULT NULL,
+  `os_id` varchar(25) NOT NULL DEFAULT '',
   PRIMARY KEY (`id`),
   KEY `NewIndex1` (`origin`),
   KEY `NewIndex2` (`client_id`),
@@ -3110,4 +3178,4 @@ CREATE TABLE `webhook_history` (
 /*!40014 SET UNIQUE_CHECKS=@OLD_UNIQUE_CHECKS */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
--- Dump completed on 2014-12-16  5:07:29
+-- Dump completed on 2015-02-19  4:02:57

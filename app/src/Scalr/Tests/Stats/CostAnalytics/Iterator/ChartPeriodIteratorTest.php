@@ -127,7 +127,7 @@ class ChartPeriodIteratorTest extends WebTestCase
      */
     public function testConstructor($mode, $start, $end, $fixture)
     {
-        $iterator = new ChartPeriodIterator($mode, $start, $end);
+        $iterator = ChartPeriodIterator::create($mode, $start, $end);
 
         $this->assertEquals($fixture['interval'], $iterator->getInterval());
 

@@ -1,6 +1,8 @@
 <?php
 use Scalr\UI\Request\Validator;
 use Scalr\UI\Request\RawData;
+use Scalr\Stats\CostAnalytics\Entity\AccountCostCenterEntity;
+
 
 class Scalr_UI_Controller_Admin_Accounts extends Scalr_UI_Controller
 {
@@ -126,8 +128,9 @@ class Scalr_UI_Controller_Admin_Accounts extends Scalr_UI_Controller
                 'featureApi' => '1',
                 'featureScripting' => '1',
                 'featureCsm' => '1'
-            )
-        ));
+            ),
+            'ccs' => $this->getCostCenters()
+        ), array('ux-boxselect.js'));
     }
 
     public function getAccount()
@@ -147,14 +150,23 @@ class Scalr_UI_Controller_Admin_Accounts extends Scalr_UI_Controller
         if ($this->getContainer()->config->get('scalr.auth_mode') == 'ldap')
             $result['ownerEmail'] = $account->getOwner()->getEmail();
 
+        $result['ccs'] = [];
+        if ($this->getContainer()->analytics->enabled) {
+            foreach (AccountCostCenterEntity::findByAccountId($account->id) as $accountCcsEntity) {
+                $result['ccs'][] = $accountCcsEntity->ccId;
+            }
+        }
         return $result;
     }
 
     public function editAction()
     {
+        $account = $this->getAccount();
         $this->response->page('ui/admin/accounts/edit.js', array(
-            'account' => $this->getAccount()
-        ));
+            'account' => $account,
+            'ccs'     => $this->getCostCenters($account['ccs']),
+
+        ), array('ux-boxselect.js'));
     }
 
     public function xGetInfoAction()
@@ -170,7 +182,8 @@ class Scalr_UI_Controller_Admin_Accounts extends Scalr_UI_Controller
                 Scalr_Validator::NOHTML => true,
                 Scalr_Validator::REQUIRED => true
             )),
-            'comments' => array('type' => 'string')
+            'comments' => array('type' => 'string'),
+            'ccs' => array('type' => 'json'),
         ));
 
         $account = Scalr_Account::init();
@@ -224,8 +237,22 @@ class Scalr_UI_Controller_Admin_Accounts extends Scalr_UI_Controller
             ));
 
             if (!$this->getParam('id')) {
+                $bNewAccount = true;
+
+                $user = $account->createUser($this->getParam('ownerEmail'), $this->getParam('ownerPassword'), Scalr_Account_User::TYPE_ACCOUNT_OWNER);
+
+                if ($this->getContainer()->analytics->enabled) {
+                    
+                        //Default Cost Center should be assigned
+                        $cc = $this->getContainer()->analytics->ccs->get($this->getContainer()->analytics->usage->autoCostCentre());
+                    
+
+                    //Assigns account with Cost Center
+                    $accountCcEntity = new AccountCostCenterEntity($account->id, $cc->ccId);
+                    $accountCcEntity->save();
+                }
+
                 $account->createEnvironment("default");
-                $account->createUser($this->getParam('ownerEmail'), $this->getParam('ownerPassword'), Scalr_Account_User::TYPE_ACCOUNT_OWNER);
             }
 
             if ($this->getContainer()->config->get('scalr.auth_mode') == 'ldap' && $this->getParam('id')) {
@@ -240,6 +267,25 @@ class Scalr_UI_Controller_Admin_Accounts extends Scalr_UI_Controller
                         $user->save();
                     } else {
                         $account->createUser($this->getParam('ownerEmail'), $this->getParam('ownerPassword'), Scalr_Account_User::TYPE_ACCOUNT_OWNER);
+                    }
+                }
+            }
+
+            if ($this->getContainer()->analytics->enabled) {
+                if (!Scalr::isHostedScalr()) {
+                    //save ccs
+                    $ccs = (array)$this->getParam('ccs');
+                    foreach(AccountCostCenterEntity::findByAccountId($account->id) as $accountCcsEntity) {
+                        $index = array_search($accountCcsEntity->ccId, $ccs);
+                        if ($index === false) {
+                            $accountCcsEntity->delete();
+                        } else {
+                            unset($ccs[$index]);
+                        }
+                    }
+                    foreach ($ccs as $ccId) {
+                        $accountCcsEntity = new AccountCostCenterEntity($account->id, $ccId);
+                        $accountCcsEntity->save();
                     }
                 }
             }
@@ -303,7 +349,7 @@ class Scalr_UI_Controller_Admin_Accounts extends Scalr_UI_Controller
     {
         $account = new Scalr_Account();
         $account->loadById($accountId);
-        
+
         $validator = new Validator();
         $validator->addErrorIf(!$this->user->checkPassword($currentPassword), ['currentPassword'], 'Invalid password');
 
@@ -327,6 +373,32 @@ class Scalr_UI_Controller_Admin_Accounts extends Scalr_UI_Controller
 
             $this->response->success('Password successfully updated');
         }
+    }
+
+    private function getCostCenters($requiredCcIds = [])
+    {
+        $ccs = [];
+        if ($this->getContainer()->analytics->enabled) {
+            foreach ($this->getContainer()->analytics->ccs->all(true) as $ccEntity) {
+                /* @var $ccEntity \Scalr\Stats\CostAnalytics\Entity\CostCentreEntity */
+                $isRequiredCcId = in_array($ccEntity->ccId, $requiredCcIds);
+                if (!$isRequiredCcId && ($ccEntity->archived || Scalr::isHostedScalr())) {
+                    continue;
+                }
+                $cc = get_object_vars($ccEntity);
+
+                $cc['envs'] = \Scalr::getDb()->GetAll("
+                    SELECT e.id, e.name FROM client_environments e
+                    JOIN client_environment_properties ep ON ep.env_id = e.id
+                    WHERE ep.name = ? AND ep.value = ?
+                ", [
+                    \Scalr_Environment::SETTING_CC_ID,
+                    strtolower($ccEntity->ccId)
+                ]);
+                $ccs[] = $cc;
+            }
+        }
+        return $ccs;
     }
 
 }

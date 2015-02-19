@@ -10,8 +10,8 @@ use Scalr\Stats\CostAnalytics\QuarterPeriod;
 /**
  * ChartPeriod Iterator
  *
- * This iterator is used to iterete over the date period
- * according to cost analysics data retention policy.
+ * This iterator is used to iterate over the date period
+ * according to cost analytics data retention policy.
  *
  * @author   Vitaliy Demidov  <vitaliy@scalr.com>
  * @since    5.0 (11.02.2014)
@@ -24,14 +24,14 @@ class ChartPeriodIterator implements Iterator
      *
      * @var string
      */
-    private $mode;
+    protected $mode;
 
     /**
      * Timezone
      *
      * @var \DateTimeZone
      */
-    private $timezone;
+    protected $timezone;
 
     /**
      * Today date
@@ -45,77 +45,77 @@ class ChartPeriodIterator implements Iterator
      *
      * @var \DateTime
      */
-    private $start;
+    protected $start;
 
     /**
      * Previous preiod start date
      *
      * @var \DateTime
      */
-    private $prevStart;
+    protected $prevStart;
 
     /**
      * Previous period end date based on today date
      *
      * @var \DateTime
      */
-    private $prevEnd;
+    protected $prevEnd;
 
     /**
      * Whole previous period end data
      *
      * @var \DateTime
      */
-    private $wholePeriodPerviousEnd;
+    protected $wholePeriodPerviousEnd;
 
     /**
      * End date
      *
      * @var \DateTime
      */
-    private $end;
+    protected $end;
 
     /**
      * Previous period interval
      *
      * @var \DateInterval
      */
-    private $prevInterval;
+    protected $prevInterval;
 
     /**
      * The interval between each data point
      *
      * @var string
      */
-    private $interval;
+    protected $interval;
 
     /**
      * Interval between an each data point
      *
      * @var \DateInterval
      */
-    private $di;
+    protected $di;
 
     /**
      * Date Time used to iterate over
      *
      * @var \DateTime
      */
-    private $dt;
+    protected $dt;
 
     /**
      * Counter
      *
      * @var int
      */
-    private $i;
+    protected $i;
 
     /**
      * Cache
      *
      * @var array
      */
-    private $c;
+    protected $c;
 
     /**
      * Gets the end date
@@ -289,165 +289,10 @@ class ChartPeriodIterator implements Iterator
     }
 
     /**
-     * Constructor
-     *
-     * @param   string       $mode      The mode
-     * @param   string       $start     The start date of the period 'YYYY-mm-dd'
-     * @param   string       $end       optional End date
-     * @param   string       $timezone  optional Timezone
-     * @throws  \InvalidArgumentException
-     */
-    public function __construct($mode, $start, $end = null, $timezone = 'UTC')
-    {
-        $this->mode = $mode;
-        $this->timezone = new DateTimeZone($timezone);
-        $this->today = $this->getTodayDate();
-        $this->start = new DateTime(($start instanceof DateTime ? $start->format('Y-m-d 00:00:00') : $start), $this->timezone);
-        $this->end = (!empty($end) ? new DateTime(($end instanceof DateTime ? $end->format('Y-m-d 00:00:00') : $end), $this->timezone) : null);
-
-        switch ($mode) {
-            case 'week':
-                //Week should start from sunday
-                if ($this->start->format('w') != 0) {
-                    $this->start->modify('last sunday');
-                }
-
-                $this->prevInterval = new \DateInterval('P7D');
-
-                //Each point
-                $this->interval = '1 day';
-
-                $this->end = clone $this->start;
-                $this->end->add(new \DateInterval('P6D'));
-
-                $this->prevStart = clone $this->start;
-                $this->prevStart->sub($this->prevInterval);
-
-                $this->wholePeriodPerviousEnd = clone $this->start;
-                $this->wholePeriodPerviousEnd->modify('-1 day');
-
-                $this->prevEnd = clone $this->prevStart;
-                $this->prevEnd->add(new \DateInterval('P' . $this->start->diff(min($this->end, $this->today), true)->days . 'D'));
-
-                //Week length is always the same so we don't need to use determinePrevEnd() method
-                break;
-
-            case 'month':
-                //Previous period is the previous month started from the the first day of the month
-                $this->prevInterval = new \DateInterval('P1M');
-                $this->interval = '1 day';
-
-                $this->start = new DateTime($this->start->format('Y-m-01'), $this->timezone);
-                $this->end = new DateTime($this->start->format('Y-m-t'), $this->timezone);
-
-                $this->prevStart = clone $this->start;
-                $this->prevStart->sub($this->prevInterval);
-
-                $this->wholePeriodPerviousEnd = clone $this->prevStart;
-                $this->wholePeriodPerviousEnd->modify('last day of this month');
-
-                $this->determinePrevEnd();
-                break;
-
-            case 'quarter':
-                $quarters = new Quarters(SettingEntity::getQuarters());
-
-                $this->interval = '1 week';
-
-                $currentPeriod = $quarters->getPeriodForDate($this->start);
-
-                $this->start = $currentPeriod->start;
-                $this->end = $currentPeriod->end;
-
-                $this->wholePeriodPerviousEnd = clone $this->start;
-                $this->wholePeriodPerviousEnd->modify('-1 day');
-
-                $prevPeriod = $quarters->getPeriodForDate($this->wholePeriodPerviousEnd);
-                $this->prevStart = $prevPeriod->start;
-
-                $this->prevInterval = new \DateInterval('P' . sprintf("%d", $this->start->diff($this->end, true)->days) . 'D');
-
-                $this->determinePrevEnd();
-                break;
-
-            case 'year':
-                //Previous period is the previous year started from the first day of the year
-                $this->prevInterval = new \DateInterval('P1Y');
-                $this->interval = '1 month';
-
-                $this->start = new DateTime($this->start->format('Y-01-01'), $this->timezone);
-                $this->end = clone $this->start;
-                $this->end->modify('+1 year -1 day');
-
-                $this->prevStart = clone $this->start;
-                $this->prevStart->sub($this->prevInterval);
-
-                $this->wholePeriodPerviousEnd = clone $this->start;
-                $this->wholePeriodPerviousEnd->modify('-1 day');
-
-                $this->determinePrevEnd();
-                break;
-
-            case 'custom':
-                if (!($this->end instanceof DateTime) || $this->end < $this->start) {
-                    throw new \InvalidArgumentException(sprintf(
-                        "Invalid period. Start date should be either less or equal then End date."
-                    ));
-                }
-
-                //Difference in days between Start and End dates
-                $diffdays = $this->start->diff($this->end, true)->days;
-
-                //Difference in days between Start and Today dates
-                $diffTodayDays = $this->start->diff($this->today, true)->days;
-
-                //Previous interval is the same period in the past
-                $this->prevInterval = new \DateInterval('P' . ($diffdays + 1) . 'D');
-
-                if ($diffdays < 2 && $diffTodayDays < 14) {
-                    $this->interval = '1 hour';
-                } else if ($diffdays < 31) {
-                    $this->interval = '1 day';
-                } else if ($diffdays < 31 * 4) {
-                    $this->interval = '1 week';
-                } else if ($diffdays < 366 * 3) {
-                    $this->interval = '1 month';
-                } else {
-                    $this->interval = '1 year';
-                }
-
-                $this->prevStart = clone $this->start;
-                $this->prevStart->sub($this->prevInterval);
-
-                $this->wholePeriodPerviousEnd = clone $this->start;
-                $this->wholePeriodPerviousEnd->modify('-1 day');
-
-                $this->prevEnd = clone $this->prevStart;
-                $this->prevEnd->add(new \DateInterval('P' . $this->start->diff(min($this->end, $this->today), true)->days . 'D'));
-                break;
-
-            default:
-                throw new \UnexpectedValueException(sprintf("Unexpected chart mode %s", strip_tags($mode)));
-                break;
-        }
-
-        $endoftheday = new \DateInterval('PT23H59M59S');
-
-        $this->end->add($endoftheday);
-        $this->prevEnd->add($endoftheday);
-        $this->wholePeriodPerviousEnd->add($endoftheday);
-
-        if (!$this->di)
-            $this->di = \DateInterval::createFromDateString($this->interval);
-
-        $this->dt = clone $this->start;
-    }
-
-    /**
      * Sets prevEnd property based on period.
      * It's only for internal usage.
      */
-    private function determinePrevEnd()
+    protected  function determinePrevEnd()
     {
         if ($this->end < $this->today) {
             //For any historical period, has already happened in full, growth
@@ -479,6 +324,7 @@ class ChartPeriodIterator implements Iterator
         if (!isset($this->c[$this->i])) {
             $this->c[$this->i] = new ChartPointInfo($this);
         }
+
         return $this->c[$this->i];
     }
 
@@ -564,4 +410,52 @@ class ChartPeriodIterator implements Iterator
     {
         return $this->dt > $this->today;
     }
+
+    /**
+     * Creates iterator object according to mode value
+     *
+     * @param   string       $mode      The mode
+     * @param   string       $start     The start date of the period 'YYYY-mm-dd'
+     * @param   string       $end       optional End date
+     * @param   string       $timezone  optional Timezone
+     * @throws  \InvalidArgumentException
+     * @return  ChartDailyIterator|ChartWeeklyIterator|ChartMonthlyIterator|ChartQuarterlyIterator|ChartYearlyIterator|ChartCustomIterator
+     */
+    public static function create($mode, $start, $end = null, $timezone = 'UTC')
+    {
+        if (substr($mode, -1) == 'y') {
+            $modeName = substr_replace($mode, 'i', -1);
+        } else {
+            $modeName = $mode;
+        }
+
+        $modeName = ucfirst($modeName);
+
+        if ($mode != 'custom') {
+            $modeName .= 'ly';
+        }
+
+        $chartClass = 'Scalr\\Stats\\CostAnalytics\\Iterator\\Chart' . $modeName . 'Iterator';
+        $iterator = new $chartClass($start, $end, $timezone);
+
+        return $iterator;
+    }
+
+    /**
+     * Search chart point by date
+     *
+     * @param string $date         Date time
+     * @return null|int Returns chart point position if found. False otherwise
+     */
+    public function searchPoint($date)
+    {
+        foreach ($this as $chartPoint) {
+            if ($chartPoint->dt->format('Y-m-d H:00') === $date) {
+                return $chartPoint->i;
+            }
+        }
+
+        return false;
+    }
+
 }

@@ -193,7 +193,8 @@ def update(file_path, data, sock_path):
 
 
 
-def write(base_dir, data, sock_path='/var/run/rrdcached/rrdcached.sock'):
+def write(base_dir, data, sock_path=None):
+    sock_path = sock_path or '/var/run/rrdcached.sock'
     try:
         for metric_name, metric_data in data.iteritems():
             if metric_name == 'snum':

@@ -40,7 +40,7 @@ class Google_IO_Curl extends Google_IO_Abstract
   public function executeRequest(Google_Http_Request $request)
   {
     $curl = curl_init();
-
+    
     if ($request->getPostBody()) {
       curl_setopt($curl, CURLOPT_POSTFIELDS, $request->getPostBody());
     }
@@ -75,7 +75,7 @@ class Google_IO_Curl extends Google_IO_Abstract
     if (!isset($this->options[CURLOPT_CAINFO])) {
       curl_setopt($curl, CURLOPT_CAINFO, dirname(__FILE__) . '/cacerts.pem');
     }
-
+    
     $response = curl_exec($curl);
     if ($response === false) {
       throw new Google_IO_Exception(curl_error($curl));

@@ -9,7 +9,7 @@ use Scalr\Service\OpenStack\Services\Network\Type\CreateRouter;
 use Scalr\Modules\Platforms\Openstack\OpenstackPlatformModule;
 
 $validator = new Scalr_Validator();
-$crypto = new Scalr_Util_CryptoTool(MCRYPT_TRIPLEDES, MCRYPT_MODE_CFB, 24, 8);
+$crypto = \Scalr::getContainer()->crypto;
 
 $db = Scalr::getDb();
 

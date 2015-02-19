@@ -73,7 +73,7 @@ class Scalr_UI_Controller_Tools_Aws_Rds_Snapshots extends Scalr_UI_Controller
             throw new Exception (sprintf(_("Can't create db snapshot: %s"), $e->getMessage()));
         }
 
-        $this->response->success(sprintf(_("DB snapshot '%s' successfully create"), $snapId));
+        $this->response->success(sprintf(_("DB snapshot '%s' successfully initiated"), $snapId));
     }
 
     public function xDeleteSnapshotsAction()

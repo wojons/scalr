@@ -28,9 +28,7 @@ use FilesystemIterator;
  *
  * @property \Scalr\Service\OpenStack\Services\NetworkService $network
  *           A Quantum API (Network) service interface.
- *
- * @property \Scalr\Service\OpenStack\Services\ContrailService $contrail
- *           Contrail service interface.
+ *           
  *
  * @property \Scalr\Service\OpenStack\Services\SwiftService $swift
  *           Object Storage (SWIFT) service interface.
@@ -53,8 +51,6 @@ class OpenStack
     const SERVICE_OBJECT_STORE = 'object-store';
 
     const SERVICE_IDENTITY = 'identity';
-
-    const SERVICE_CONTRAIL = 'contrail';
 
     /**
      * Available services
@@ -241,8 +237,11 @@ class OpenStack
             if (!($cfg->getAuthToken() instanceof AuthToken)) {
                 $client->auth();
             }
-            $ret = array_keys($cfg->getAuthToken()->getRegionEndpoints());
-            $this->cache['services'] = array_combine($ret, $ret);
+            $region = $cfg->getRegion();
+            foreach ($cfg->getAuthToken()->getRegionEndpoints() as $service => $info) {
+                if ($info[$region])
+                    $this->cache['services'][$service] = $service;
+            }
         }
         return array_values($this->cache['services']);
     }
@@ -260,30 +259,9 @@ class OpenStack
             $this->listServices();
         }
 
-        if ($serviceName == self::SERVICE_CONTRAIL) {
-            return $this->hasContrailService();
-        }
-
         return array_key_exists((isset($ns) ? $ns . ':' : '') . $serviceName, $this->cache['services']);
     }
 
-    /**
-     * Checks whether Contrail is available on this openstack
-     *
-     * @return   boolean
-     */
-    private function hasContrailService()
-    {
-        if (!array_key_exists('contrail-service-resources', $this->cache)) {
-            try {
-                $ret = $this->contrail->getApiHandler()->discoverApiServerResources();
-                $this->cache['contrail-service-resources'] = $ret;
-            } catch (\Exception $e) {
-                $this->cache['contrail-service-resources'] = false;
-            }
-        }
-        return !empty($this->cache['contrail-service-resources']) ? true : false;
-    }
 
     /**
      * Decamelizes a string

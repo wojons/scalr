@@ -16,7 +16,7 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.pg.edit', function (loadParams, modulePara
 				value: moduleParams.group['dBParameterGroupName']
 			},
 			{
-				fieldLabel: 'Engine',
+				fieldLabel: 'Parameter Group Family',
 				name: 'Engine',
 				value: moduleParams.group['dBParameterGroupFamily']
 			},

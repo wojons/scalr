@@ -159,10 +159,11 @@ abstract class Google_IO_Abstract
   public function processEntityRequest(Google_Http_Request $request)
   {
     $postBody = $request->getPostBody();
+    
     $contentType = $request->getRequestHeader("content-type");
-
+    
     // Set the default content-type as application/x-www-form-urlencoded.
-    if (false == $contentType) {
+    if (false == $contentType && $request->getRequestMethod() != 'POST') {
       $contentType = self::FORM_URLENCODED;
       $request->setRequestHeaders(array('content-type' => $contentType));
     }

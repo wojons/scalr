@@ -115,7 +115,8 @@ Scalr.regPage('Scalr.ui.farms.builder', function (loadParams, moduleParams) {
 
     var addRoleHandler = function (role) {
         var behaviors = role.get('behaviors'),
-            alias = role.get('alias');
+            alias = role.get('alias'),
+            msg;
 
         if (!Ext.form.field.VTypes.rolename(alias)) {
             Scalr.message.Error(Ext.form.field.VTypes.rolenameText);
@@ -165,10 +166,14 @@ Scalr.regPage('Scalr.ui.farms.builder', function (loadParams, moduleParams) {
         });
 
         farmbuilder.down('#edit').addRoleDefaultValues(role);
-        
-        farmRolesStore.add(role);
-        Scalr.message.Success('Role "' + role.get('alias') + '" added');
 
+        farmRolesStore.add(role);
+        msg = 'Role "' + role.get('alias') + '" added';
+        if (Scalr.flags['analyticsEnabled'] && !Ext.Array.contains(moduleParams['analytics']['unsupportedClouds'], role.get('platform'))) {
+            role.loadHourlyRate(null, function(){Scalr.message.Success(msg);});
+        } else {
+            Scalr.message.Success(msg);
+        }
     };
 
     var saveErrorHandler = function(errors) {
@@ -206,7 +211,7 @@ Scalr.regPage('Scalr.ui.farms.builder', function (loadParams, moduleParams) {
                 }
                 farmErrors.push(error);
             });
-            
+
             fbcard.layout.setActiveItem('farm');
             errorTipEl = farmPanel.el;
         } else if (activeRole !== undefined) {
@@ -239,7 +244,7 @@ Scalr.regPage('Scalr.ui.farms.builder', function (loadParams, moduleParams) {
         p['timezone'] = farmbuilder.down('#timezone').getValue();
         p['rolesLaunchOrder'] = farmbuilder.down('#launchorder').getValue();
         p['variables'] = farmbuilder.down('#variables').getValue();
-        p['projectId'] = farmbuilder.down('#projectId').getValue();
+        p['projectId'] = farmbuilder.down('#costMetering').getProjectId();
 
         //vpc
         var vpcEnabledField = farmbuilder.down('[name="vpc_enabled"]'),
@@ -475,10 +480,10 @@ Scalr.regPage('Scalr.ui.farms.builder', function (loadParams, moduleParams) {
                         cls: 'x-fieldset-separator-right',
                         title: 'General info',
                         flex: 1,
-                        maxWidth: 700,
+                        maxWidth: 600,
                         defaults: {
                             anchor: '100%',
-                            labelWidth: 80
+                            labelWidth: 125
                         },
                         items: [{
                             xtype: 'textfield',
@@ -498,15 +503,14 @@ Scalr.regPage('Scalr.ui.farms.builder', function (loadParams, moduleParams) {
                             queryMode: 'local',
                             anyMatch: true
                         }, moduleParams.farm ? {
-                            xtype: 'container',
+                            xtype: 'fieldcontainer',
                             layout: 'hbox',
+                            fieldLabel: 'Owner',
                             items: [{
                                 xtype: 'combo',
                                 flex: 1,
                                 itemId: 'farmOwner',
                                 name: 'owner',
-                                fieldLabel: 'Owner',
-                                labelWidth: 80,
                                 editable: false,
                                 queryMode: 'local',
                                 store: {
@@ -577,6 +581,40 @@ Scalr.regPage('Scalr.ui.farms.builder', function (loadParams, moduleParams) {
                                 }
                             }]
                         } : null, {
+                            xtype: 'fieldcontainer',
+                            fieldLabel: 'Roles launch order',
+                            layout: 'hbox',
+                            items: [{
+                                xtype: 'buttongroupfield',
+                                name: 'rolesLaunchOrder',
+                                itemId: 'launchorder',
+                                columns: 1,
+                                listeners: {
+                                    change: function(comp, value) {
+                                        farmbuilder.down('#farmroles').toggleLaunchOrder(value == 1);
+                                        if (value == 1) {
+                                            farmRolesStore.resetLaunchIndexes();
+                                        }
+                                    }
+                                },
+                                defaults: {
+                                    width: 130
+                                },
+                                items: [{
+                                    text: 'Simultaneous',
+                                    value: '0'
+                                }, {
+                                    text: 'Sequential',
+                                    value: '1'
+                                }]
+
+                            },{
+                                xtype: 'displayinfofield',
+                                margin: '0 0 0 5',
+                                info:   '<b>Simultaneous</b>: Launch all roles at the same time<br/>' +
+                                        '<b>Sequential</b>: Use drag and drop to adjust the launching order of roles'
+                            }]
+                        },{
                             xtype: 'textarea',
                             name: 'description',
                             itemId: 'farmDescription',
@@ -585,80 +623,14 @@ Scalr.regPage('Scalr.ui.farms.builder', function (loadParams, moduleParams) {
                             growMin: 70
                         }]
                     },{
-                        xtype: 'fieldset',
-                        title: 'Roles launch order',
-                        cls: 'x-fieldset-separator-none',
-                        width: 470,
-                        defaults: {
-                            anchor: '100%',
-                            labelWidth: 80
-                        },
-                        items: [{
-                            xtype: 'buttongroupfield',
-                            name: 'rolesLaunchOrder',
-                            itemId: 'launchorder',
-                            columns: 1,
-                            listeners: {
-                                change: function(comp, value) {
-                                    farmbuilder.down('#launchorderinfo').setValue(value == 1?'Use drag and drop to adjust the launching order of roles.':'Launch all roles at the same time.');
-                                    farmbuilder.down('#farmroles').toggleLaunchOrder(value == 1);
-                                    if (value == 1) {
-                                        farmRolesStore.resetLaunchIndexes();
-                                    }
-                                }
-                            },
-                            defaults: {
-                                width: 130
-                            },
-                            items: [{
-                                text: 'Simultaneous',
-                                value: '0'
-                            }, {
-                                text: 'Sequential',
-                                value: '1'
-                            }]
-                        },{
-                            xtype: 'displayfield',
-                            itemId: 'launchorderinfo',
-                            cls: 'x-form-field-info',
-                            value: 'Launch all roles at the same time.'
-                        }]
-                    }]
-                },{
-                    xtype: 'fieldset',
-                    title: 'Cost metering',
-                    hidden: !moduleParams['analytics'] || (!Scalr.flags['betaMode'] && !Scalr.flags['allowManageAnalytics']),
-                    layout: 'hbox',
-                    items: [{
-                        xtype: 'combo',
-                        store: {
-                            fields: [ 'projectId', 'name' ],
-                            data: moduleParams['analytics'] ? moduleParams['analytics']['projects'] : []
-                        },
+                        xtype: 'farmcostmetering',
+                        itemId: 'costMetering',
+                        title: 'Cost metering',
                         flex: 1,
-                        maxWidth: 370,
-                        editable: false,
-                        autoSetSingleValue: true,
-                        valueField: 'projectId',
-                        displayField: 'name',
-                        fieldLabel: 'Project',
-                        labelWidth: 60,
-                        name: 'projectId',
-                        itemId: 'projectId',
-                        plugins: [{
-                            ptype: 'comboaddnew',
-                            pluginId: 'comboaddnew',
-                            url: '/analytics/projects/add',
-                            disabled: !Scalr.isAllowed('ANALYTICS_PROJECTS')
-                        }]
-                    },{
-                        xtype: 'displayfield',
-                        fieldLabel: 'Cost center',
-                        value: moduleParams['analytics'] ? moduleParams['analytics']['costCenterName'] : null,
-                        margin: '0 0 0 24',
-                        labelWidth: 90
-
-                   }]
+                        farmRolesStore: farmRolesStore,
+                        analyticsData: moduleParams['analytics'],
+                        hidden: !Scalr.flags['analyticsEnabled'],
+                    }]
                 },{
                     xtype: 'displayfield',
                     itemId: 'vpcinfo',
@@ -1102,6 +1074,9 @@ Scalr.regPage('Scalr.ui.farms.builder', function (loadParams, moduleParams) {
                     activate: function() {
                         farmbuilder.down('#farmroles').toggleFarmButton(true);
                         farmbuilder.updateTitle();
+                        if (Scalr.flags['analyticsEnabled']) {
+                            farmbuilder.down('#costMetering').refresh();
+                        }
                     },
                     deactivate: function() {
                         farmbuilder.down('#farmroles').toggleFarmButton(false);
@@ -1268,7 +1243,8 @@ Ext.define('Scalr.ui.FarmRoleModel', {
         'variables',
         'running_servers',
         'suspended_servers',
-        'security_groups'
+        'security_groups',
+        'hourly_rate'
     ],
 
     constructor: function() {
@@ -1375,10 +1351,11 @@ Ext.define('Scalr.ui.FarmRoleModel', {
                             'i2.xlarge', 'i2.2xlarge', 'i2.4xlarge', 'i2.8xlarge',
                             'm3.medium', 'm3.large', 'm3.xlarge', 'm3.2xlarge',
                             'c3.large', 'c3.xlarge', 'c3.2xlarge', 'c3.4xlarge', 'c3.8xlarge',
+                            'c4.large', 'c4.xlarge', 'c4.2xlarge', 'c4.4xlarge', 'c4.8xlarge',
                             'r3.large', 'r3.xlarge', 'r3.2xlarge', 'r3.4xlarge', 'r3.8xlarge'
                         ];
                         defaultInstanceType = 'c3.large';
-                        
+
                     } else {
                         allowedTypes = [
                             't1.micro',
@@ -1387,6 +1364,7 @@ Ext.define('Scalr.ui.FarmRoleModel', {
                             'm3.medium', 'm3.large', 'm3.xlarge', 'm3.2xlarge',
                             'c1.medium', 'c1.xlarge',
                             'c3.large', 'c3.xlarge', 'c3.2xlarge', 'c3.4xlarge', 'c3.8xlarge',
+                            //'c4.large', 'c4.xlarge', 'c4.2xlarge', 'c4.4xlarge', 'c4.8xlarge',
                             //'r3.large', 'r3.xlarge', 'r3.2xlarge', 'r3.4xlarge', 'r3.8xlarge',
                             'i2.xlarge', 'i2.2xlarge', 'i2.4xlarge', 'i2.8xlarge',
                             'g2.2xlarge',
@@ -1403,6 +1381,7 @@ Ext.define('Scalr.ui.FarmRoleModel', {
                             'm3.medium', 'm3.large', 'm3.xlarge', 'm3.2xlarge',
                             'c1.medium', 'c1.xlarge',
                             'c3.large', 'c3.xlarge', 'c3.2xlarge', 'c3.4xlarge', 'c3.8xlarge',
+                            'c4.large', 'c4.xlarge', 'c4.2xlarge', 'c4.4xlarge', 'c4.8xlarge',
                             'r3.large', 'r3.xlarge', 'r3.2xlarge', 'r3.4xlarge', 'r3.8xlarge',
                             'hi1.4xlarge', 'hs1.8xlarge'
                         ];
@@ -1413,6 +1392,7 @@ Ext.define('Scalr.ui.FarmRoleModel', {
                             'm3.medium', 'm3.large', 'm3.xlarge', 'm3.2xlarge',
                             'c1.medium', 'c1.xlarge',
                             'c3.large', 'c3.xlarge', 'c3.2xlarge', 'c3.4xlarge', 'c3.8xlarge',
+                            //'c4.large', 'c4.xlarge', 'c4.2xlarge', 'c4.4xlarge', 'c4.8xlarge',
                             'hi1.4xlarge', 'hs1.8xlarge'
                         ];
                     }
@@ -1440,7 +1420,7 @@ Ext.define('Scalr.ui.FarmRoleModel', {
                 if (allowedTypes !== undefined && !Ext.Array.contains(allowedTypes, item.id)) {
                     allowed = false;
                 }
-                if (allowed && limits && limits['value'] !== undefined && !Ext.Array.contains(limits['value'], item.id)) {
+                if (limits && limits['value'] !== undefined && !Ext.Array.contains(limits['value'], item.id)) {
                     allowed = false;
                     allowedByGovernance = false;
                 }
@@ -1469,7 +1449,7 @@ Ext.define('Scalr.ui.FarmRoleModel', {
                 instanceType = firstAllowedInstanceType;
             }
         }
-        
+
         return {
             value: instanceType,
             list: instanceTypes,
@@ -1653,7 +1633,7 @@ Ext.define('Scalr.ui.FarmRoleModel', {
 
     isVpcRouter: function() {
         var behaviors = this.get('behaviors', true);
-        
+
         behaviors = Ext.isArray(behaviors) ? behaviors : behaviors.split(',');
         return Ext.Array.contains(behaviors, 'router');
     },
@@ -1867,7 +1847,27 @@ Ext.define('Scalr.ui.FarmRoleModel', {
             });
             cb(encryption);
         });
-        
+
+    },
+    
+    loadHourlyRate: function(instanceType, cb) {
+        var me = this,
+            settings = me.get('settings', true);
+        Scalr.CachedRequestManager.get('farmbuilder').load({
+            url: '/farms/builder/xGetInstanceTypeHourlyRate',
+            params: {
+                platform: me.get('platform'),
+                cloudLocation: me.get('cloud_location'),
+                instanceType: instanceType || settings[me.getInstanceTypeParamName()],
+                osFamily: me.get('os_family')
+            }
+        }, function(data, status){
+                if (status) {
+                    me.set('hourly_rate', data['hourly_rate']);
+                    cb(data['hourly_rate']);
+                }
+            }
+        );
     }
 });
 

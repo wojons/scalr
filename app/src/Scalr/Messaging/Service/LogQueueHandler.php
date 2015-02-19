@@ -72,6 +72,19 @@ class Scalr_Messaging_Service_LogQueueHandler implements Scalr_Messaging_Service
 
                 if ($message->meta[Scalr_Messaging_MsgMeta::SZR_VERSION])
                     DBServer::LoadByID($message->getServerId())->setScalarizrVersion($message->meta[Scalr_Messaging_MsgMeta::SZR_VERSION]);
+                
+                if ($message->eventId) {
+                    
+                    if ($message->returnCode == 130) {
+                        $field = 'scripts_timedout';
+                    } elseif ($message->returnCode != 0) {
+                        $field = 'scripts_failed';
+                    } else {
+                        $field = 'scripts_completed';
+                    }
+                    
+                    $this->db->Execute("UPDATE events SET `{$field}` = `{$field}`+1 WHERE event_id = ?", array($message->eventId));
+                }
 
             } catch (Exception $e) {
                 $this->logger->fatal($e->getMessage());

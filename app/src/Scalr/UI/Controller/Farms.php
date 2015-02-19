@@ -4,7 +4,13 @@ use Scalr\Acl\Acl;
 use Scalr\Farm\FarmLease;
 use Scalr\Modules\Platforms\Ec2\Ec2PlatformModule;
 use Scalr\Stats\CostAnalytics\Entity\CostCentreEntity;
+use Scalr\Stats\CostAnalytics\Entity\CostCentrePropertyEntity;
 use Scalr\Stats\CostAnalytics\Iterator\SharedProjectsFilterIterator;
+use Scalr\Stats\CostAnalytics\Entity\QuarterlyBudgetEntity;
+use Scalr\Stats\CostAnalytics\Quarters;
+use Scalr\Stats\CostAnalytics\Entity\SettingEntity;
+use Scalr\Stats\CostAnalytics\Entity\ProjectEntity;
+use Scalr\Stats\CostAnalytics\Entity\AccountCostCenterEntity;
 
 class Scalr_UI_Controller_Farms extends Scalr_UI_Controller
 {
@@ -103,6 +109,23 @@ class Scalr_UI_Controller_Farms extends Scalr_UI_Controller
                 )
             )
         );
+
+        if ($this->getContainer()->analytics->enabled) {
+            $projectId = $dbFarm->GetSetting(DBFarm::SETTING_PROJECT_ID);
+            if (empty($projectId)) {
+                $projectName = 'Unassigned resource';
+            } else {
+                $projectEntity = ProjectEntity::findPk($projectId);
+                $ccEntity = $projectEntity->getCostCenter();
+                $projectName = $projectEntity->name . " ({$ccEntity->name})";
+            }
+
+            $form[0]['items'][] = [
+                        'xtype' => 'displayfield',
+                        'fieldLabel' => 'Project (Cost Center)',
+                        'value' => $projectName
+                    ];
+        }
 
         ///Update settings
         $scalarizrRepos = array_keys(Scalr::config('scalr.scalarizr_update.repos'));
@@ -1125,20 +1148,21 @@ class Scalr_UI_Controller_Farms extends Scalr_UI_Controller
         }
 
         $moduleParams['tabs'] = array(
-            'vpcrouter', 'dbmsr', 'mongodb', 'mysql', 'scaling', 'network', 'gce', 'cloudfoundry', 'rabbitmq', 'haproxy', 'proxy',
+            'vpcrouter', 'dbmsr', 'mongodb', 'mysql', 'scaling', 'network', 'cloudfoundry', 'rabbitmq', 'haproxy', 'proxy',
             'rds',   'scripting',
-            'ec2', 'security', 'devel', 'storage', 'variables', 'advanced'
+            'ec2', 'openstack', 'gce', 'security', 'devel', 'storage', 'variables', 'advanced'
         );
 
         if ($this->user->getAccount()->isFeatureEnabled(Scalr_Limits::FEATURE_CHEF)) {
             $moduleParams['tabs'][] = 'chef';
         }
         //deprecated tabs
-        $moduleParams['tabs'][] = 'deployments';
-        $moduleParams['tabs'][] = 'ebs';
-        $moduleParams['tabs'][] = 'params';
-        $moduleParams['tabs'][] = 'servicesconfig';
-
+        if (\Scalr::config('scalr.ui.show_deprecated_features')) {
+            $moduleParams['tabs'][] = 'deployments';
+            $moduleParams['tabs'][] = 'ebs';
+            $moduleParams['tabs'][] = 'params';
+            $moduleParams['tabs'][] = 'servicesconfig';
+        }
         $conf = $this->getContainer()->config->get('scalr.load_statistics.connections.plotter');
         $moduleParams['tabParams'] = array(
             'farmId'        => $farmId,
@@ -1188,37 +1212,85 @@ class Scalr_UI_Controller_Farms extends Scalr_UI_Controller
         if ($this->getContainer()->analytics->enabled && $this->getEnvironment()->getPlatformConfigValue(Scalr_Environment::SETTING_CC_ID)) {
             $costCenter = $this->getContainer()->analytics->ccs->get($this->getEnvironment()->getPlatformConfigValue(Scalr_Environment::SETTING_CC_ID));
 
+            $currentYear = (new \DateTime('now', new \DateTimeZone('UTC')))->format('Y');
+            $quarters = new Quarters(SettingEntity::getQuarters());
+            $currentQuarter = $quarters->getQuarterForDate(new \DateTime('now', new \DateTimeZone('UTC')));
+
             $projects = [];
+
+            if ($farmId) {
+                $farm = DBFarm::LoadByID($farmId);
+                $currentProjectId = $farm->GetSetting(DBFarm::SETTING_PROJECT_ID);
+                $currentProject = ProjectEntity::findPk($currentProjectId);
+
+                if (!empty($currentProject)) {
+                    $quarterBudget = QuarterlyBudgetEntity::findOne([['year' => $currentYear], ['subjectType' => QuarterlyBudgetEntity::SUBJECT_TYPE_PROJECT], ['subjectId' => $currentProject->projectId], ['quarter' => $currentQuarter]]);
+                    $projects[] = [
+                        'projectId' => $currentProject->projectId,
+                        'name' => $currentProject->name,
+                        'budgetRemain' => (!is_null($quarterBudget) && $quarterBudget->budget > 0)
+                            ? max(0, round($quarterBudget->budget - $quarterBudget->cumulativespend))
+                            : null,
+                    ];
+                }
+            }
 
             if ($costCenter instanceof CostCentreEntity) {
                 $projectsIterator = new SharedProjectsFilterIterator($costCenter->getProjects(), $costCenter->ccId, $this->user, $this->getEnvironment());
+
                 foreach ($projectsIterator as $item) {
-                    /* @var $item ProjectEntity */
+                    /* @var $item Scalr\Stats\CostAnalytics\Entity\ProjectEntity */
+                    if (!empty($currentProjectId) && $item->projectId == $currentProjectId) {
+                        continue;
+                    }
+
+                    $quarterBudget = QuarterlyBudgetEntity::findOne([['year' => $currentYear], ['subjectType' => QuarterlyBudgetEntity::SUBJECT_TYPE_PROJECT], ['subjectId' => $item->projectId], ['quarter' => $currentQuarter]]);
                     $projects[] = array(
-                        'projectId' => $item->projectId,
-                        'name'      => $item->name
+                        'projectId'     => $item->projectId,
+                        'name'          => $item->name,
+                        'budgetRemain'  => (!is_null($quarterBudget) && $quarterBudget->budget > 0)
+                                            ? max(0, round($quarterBudget->budget - $quarterBudget->cumulativespend))
+                                            : null,
                     );
                 }
                 $costCentreName = $costCenter->name;
+                $isLocked = $costCenter->getProperty(CostCentrePropertyEntity::NAME_LOCKED);
+                $accountCcs = AccountCostCenterEntity::findOne([['accountId' => $this->environment->clientId], ['ccId' => $costCenter->ccId]]);
+
+                if ($isLocked || !($accountCcs instanceof AccountCostCenterEntity)) {
+                    $costCentreLocked = 1;
+                } else {
+                    $costCentreLocked = 0;
+                }
+
             } else {
                 $costCentreName = '';
+                $costCentreLocked = 0;
             }
 
+            $supportedClouds = $this->getContainer()->analytics->prices->getSupportedClouds();
+
             $moduleParams['analytics'] = array(
-                'costCenterName' => $costCentreName,
-                'projects'       => $projects
+                'costCenterName'    => $costCentreName,
+                'costCenterLocked'  => $costCentreLocked,
+                'projects'          => $projects,
+                'unsupportedClouds' => array_values(array_diff($this->environment->getEnabledPlatforms(), $supportedClouds))
             );
 
             if ($farmId) {
                 $dbFarm = DBFarm::LoadByID($farmId);
                 $moduleParams['farm']['farm']['projectId'] = $dbFarm->GetSetting(DBFarm::SETTING_PROJECT_ID);
+                if ($moduleParams['farm']['farm']['projectId']) {
+                    $moduleParams['analytics']['farmCostMetering'] = $this->getContainer()->analytics->usage->getFarmCostMetering($this->user->getAccountId(), $farmId);
+                }
             }
-
         }
+
         $this->response->page('ui/farms/builder.js', $moduleParams, array(
             'ui/farms/builder/selroles.js',
             'ui/farms/builder/roleedit.js',
             'ui/farms/builder/roleslibrary.js',
+            'ui/farms/builder/costmetering.js',
             //tabs
             'ui/farms/builder/tabs/dbmsr.js',
             'ui/farms/builder/tabs/cloudfoundry.js',
@@ -1229,6 +1301,7 @@ class Scalr_UI_Controller_Farms extends Scalr_UI_Controller
             'ui/farms/builder/tabs/mysql.js',
             'ui/farms/builder/tabs/rds.js',
             'ui/farms/builder/tabs/gce.js',
+            'ui/farms/builder/tabs/openstack.js',
             'ui/farms/builder/tabs/scaling.js',
             'ui/farms/builder/tabs/scripting.js',
             'ui/farms/builder/tabs/advanced.js',
@@ -1274,6 +1347,7 @@ class Scalr_UI_Controller_Farms extends Scalr_UI_Controller
             'ui/core/variablefield.css',
             'ui/scripts/scriptfield.css',
             'ui/farms/builder/tabs/scaling.css',
+            'ui/analytics/analytics.css',
         ));
     }
 

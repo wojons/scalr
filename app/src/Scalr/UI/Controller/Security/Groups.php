@@ -14,6 +14,8 @@ use Scalr\Modules\Platforms\Ec2\Ec2PlatformModule;
 use Scalr\Service\Aws\Client\QueryClientException;
 use Scalr\Service\OpenStack\OpenStack;
 use Scalr\Service\OpenStack\Services\Network\Type\NetworkExtension;
+use Scalr\Service\Aws\Rds\DataType\DBSecurityGroupData;
+use Scalr\Util\CryptoTool;
 
 class Scalr_UI_Controller_Security_Groups extends Scalr_UI_Controller
 {
@@ -95,13 +97,16 @@ class Scalr_UI_Controller_Security_Groups extends Scalr_UI_Controller
             sleep(2);
         }
 
-        $currentGroupData = $this->getGroup($platform, $cloudLocation, $groupData['id']);
-
         $warning = null;
-        try {
-            $this->saveGroupRules($platform, $cloudLocation, $currentGroupData, array('rules' => $groupData['rules'], 'sgRules' => $groupData['sgRules']));
-        } catch (QueryClientException $e) {
-            $warning = $e->getErrorData()->getMessage();
+
+        if ($platform !== 'rds') {
+            $currentGroupData = $this->getGroup($platform, $cloudLocation, $groupData['id']);
+
+            try {
+                $this->saveGroupRules($platform, $cloudLocation, $currentGroupData, array('rules' => $groupData['rules'], 'sgRules' => $groupData['sgRules']));
+            } catch (QueryClientException $e) {
+                $warning = $e->getErrorData()->getMessage();
+            }
         }
 
         if ($this->getParam('returnData') && $groupData['id']) {
@@ -201,7 +206,7 @@ class Scalr_UI_Controller_Security_Groups extends Scalr_UI_Controller
                 );
                 $r['cidrIp'] = $ipRange->cidrIp;
                 $r['rule'] = "{$r['ipProtocol']}:{$r['fromPort']}:{$r['toPort']}:{$r['cidrIp']}";
-                $r['id'] = Scalr_Util_CryptoTool::hash($r['rule']);
+                $r['id'] = CryptoTool::hash($r['rule']);
                 $r['comment'] = $this->getRuleComment($platform, $cloudLocation, $sgInfo->vpcId, $sgInfo->groupName, $r['rule']);
 
                 if (!isset($rules[$r['id']])) {
@@ -219,7 +224,7 @@ class Scalr_UI_Controller_Security_Groups extends Scalr_UI_Controller
 
                 $r['sg'] =  $group->userId . '/' . $name;
                 $r['rule'] = "{$r['ipProtocol']}:{$r['fromPort']}:{$r['toPort']}:{$r['sg']}";
-                $r['id'] = Scalr_Util_CryptoTool::hash($r['rule']);
+                $r['id'] = CryptoTool::hash($r['rule']);
                 $r['comment'] = $this->getRuleComment($platform, $cloudLocation, $sgInfo->vpcId, $sgInfo->groupName, $r['rule']);
 
                 if (!isset($sgRules[$r['id']])) {
@@ -239,6 +244,25 @@ class Scalr_UI_Controller_Security_Groups extends Scalr_UI_Controller
             'sgRules'         => $sgRules,
             'raw_data'        => $sgInfo->toArray()
         );
+    }
+
+    private function getGroupRds($platform, $cloudLocation, $securityGroupId)
+    {
+        /* @var $sgInfo DBSecurityGroupData */
+        $sgInfo = $this->getEnvironment()->aws($cloudLocation)->rds->dbSecurityGroup->describe($securityGroupId)->get(0);
+        $result = [];
+
+        if ($sgInfo instanceof DBSecurityGroupData) {
+            $result = [
+                'platform'        => $platform,
+                'cloudLocation'   => $cloudLocation,
+                'name'            => $sgInfo->dBSecurityGroupName,
+                'description'     => $sgInfo->dBSecurityGroupDescription,
+                'raw_data'        => $sgInfo->toArray()
+            ];
+        }
+
+        return $result;
     }
 
     private function getGroupOpenstack($platform, $cloudLocation, $securityGroupId)
@@ -396,7 +420,7 @@ class Scalr_UI_Controller_Security_Groups extends Scalr_UI_Controller
                         $rule = "{$r['ipProtocol']}:{$r['fromPort']}:{$r['toPort']}:{$r['sg']}";
                     }
 
-                    $id = Scalr_Util_CryptoTool::hash($rule);
+                    $id = CryptoTool::hash($rule);
                     if (!$groupData[$ruleType][$id]) {
                         $addRulesSet[$ruleType][] = $r;
                         if ($r['comment']) {
@@ -715,11 +739,35 @@ class Scalr_UI_Controller_Security_Groups extends Scalr_UI_Controller
             
             if (is_array($filters) && array_key_exists('vpcId', $filters) && $filters['vpcId'] == null && $sg->vpcId)
                 continue;
-            
+
             $result[] = array(
                 'id'          => $sg->groupId,
                 'name'        => $sg->groupName,
                 'description' => $sg->groupDescription,
+                'vpcId'       => $sg->vpcId,
+                'owner'       => $sg->ownerId
+            );
+        }
+
+        return $result;
+
+    }
+
+    private function listGroupsRds($platform, $cloudLocation, $filters)
+    {
+        $result = [];
+
+        $sgList = $this->getEnvironment()->aws($cloudLocation)->rds->dbSecurityGroup->describe();
+
+        /* @var $sg DBSecurityGroupData */
+        foreach ($sgList as $sg) {
+            if (!empty($filters['vpcId']) && $filters['vpcId'] != $sg->vpcId) {
+                continue;
+            }
+
+            $result[] = array(
+                'name'        => $sg->dBSecurityGroupName,
+                'description' => $sg->dBSecurityGroupDescription,
                 'vpcId'       => $sg->vpcId,
                 'owner'       => $sg->ownerId
             );
@@ -781,6 +829,13 @@ class Scalr_UI_Controller_Security_Groups extends Scalr_UI_Controller
         return $securityGroupId;
     }
 
+    private function createGroupRds($platform, $cloudLocation, $groupData)
+    {
+        $securityGroup = $this->getEnvironment()->aws($cloudLocation)->rds->dbSecurityGroup->create($groupData['name'], $groupData['description']);
+        sleep(5);
+        return $securityGroup->dBSecurityGroupName;
+    }
+
     private function createGroupOpenstack($platform, $cloudLocation, $groupData)
     {
         $openstack = $this->getPlatformService($platform, $cloudLocation);
@@ -826,6 +881,8 @@ class Scalr_UI_Controller_Security_Groups extends Scalr_UI_Controller
             $method .= ucfirst(SERVER_PLATFORMS::OPENSTACK);
         } elseif (PlatformFactory::isCloudstack($platform)) {
             $method .= ucfirst(SERVER_PLATFORMS::CLOUDSTACK);
+        } elseif ($platform === 'rds') {
+            $method .= ucfirst($platform);
         } else {
             throw new Exception('Security groups are not supported for this cloud.');
         }

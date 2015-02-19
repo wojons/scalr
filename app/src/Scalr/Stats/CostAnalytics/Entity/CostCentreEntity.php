@@ -17,6 +17,16 @@ use DateTime, DateTimeZone;
 class CostCentreEntity extends \Scalr\Model\AbstractEntity
 {
     /**
+     * The cost center is archived
+     */
+    const ARCHIVED = 1;
+
+    /**
+     * The cost center is not archived
+     */
+    const NOT_ARCHIVED = 0;
+
+    /**
      * Cost centre identifier (UUID)
      *
      * @Id
@@ -234,7 +244,7 @@ class CostCentreEntity extends \Scalr\Model\AbstractEntity
 
         if ($item) {
             throw new AnalyticsException(sprintf(
-                'Cost center with such name already exists. Please choose another name.'
+                'A Cost Center with this name already exists. Please choose another name.'
             ));
         }
 
@@ -259,6 +269,44 @@ class CostCentreEntity extends \Scalr\Model\AbstractEntity
     public function checkRemoval()
     {
         //Checks data integrity
+
+        if ($this->ccId == Usage::DEFAULT_CC_ID) {
+            throw new AnalyticsException(sprintf(
+                "'%s' is default automatically created Cost Center and it can not be archived.",
+                $this->name
+            ));
+        }
+
+        $accountCcs = \Scalr::getDb()->GetAll("
+            SELECT ac.account_id, c.name FROM account_ccs ac
+            JOIN clients c ON c.id = ac.account_id
+            WHERE ac.cc_id = UNHEX(?)
+            LIMIT 4
+        ", [$this->type('ccId')->toDb($this->ccId)]);
+
+        $someofthem = '';
+
+        foreach ($accountCcs as $ac) {
+            $cnt = 0;
+
+            if ($cnt++ > 3) {
+                $someofthem .= ' ...';
+                break;
+            }
+            $someofthem .= ', "' . $ac['name'] . '"';
+        }
+
+        if (count($accountCcs) > 0) {
+            throw new AnalyticsException(sprintf(
+                "Cost center '%s' can not be archived because it is used by following account%s: %s. "
+              . "Please contact your scalr admin to set free '%s' before you can archive it.",
+                $this->name,
+                (count($accountCcs) > 1 ? 's' : ''),
+                substr($someofthem, 2),
+                $this->name
+            ));
+        }
+
         $env = \Scalr::getDb()->GetRow("
             SELECT e.id, e.name FROM client_environments e
             JOIN client_environment_properties ep ON ep.env_id = e.id

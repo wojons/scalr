@@ -17,6 +17,10 @@ class CostCentrePropertyEntity extends \Scalr\Model\AbstractEntity
 
     const NAME_DESCRIPTION = 'description';
 
+    //Only financial admin is allowed to add Projects to this CC
+    //Defatult value: false
+    const NAME_LOCKED = 'locked';
+
     /**
      * The email of the Cost centre's lead
      */

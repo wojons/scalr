@@ -850,7 +850,7 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.scaling', function (moduleTabParams) 
                             items: [{
                                 xtype: 'label',
                                 flex: 1,
-                                text: 'Scale up when average bandwidth usage on role is less than'
+                                text: 'Scale up when average bandwidth usage on role is more than'
                             }, {
                                 xtype: 'textfield',
                                 name: 'min',
@@ -870,7 +870,7 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.scaling', function (moduleTabParams) 
                             items: [{
                                 xtype: 'label',
                                 flex: 1,
-                                text: 'Scale down when average bandwidth usage on role is more than'
+                                text: 'Scale down when average bandwidth usage on role is less than'
                             }, {
                                 xtype: 'textfield',
                                 name: 'max',

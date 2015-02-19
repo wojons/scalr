@@ -9,7 +9,7 @@ Scalr.regPage('Scalr.ui.logs.api', function (loadParams, moduleParams) {
 	});
 
 	return Ext.create('Ext.grid.Panel', {
-		title: 'Logs &raquo; API',
+		title: 'Logs &raquo; API Log',
 		scalrOptions: {
 			'reload': false,
 			'maximize': 'all'
@@ -32,8 +32,8 @@ Scalr.regPage('Scalr.ui.logs.api', function (loadParams, moduleParams) {
 		}],
 
 		viewConfig: {
-			emptyText: 'No logs found',
-			loadingText: 'Loading logs ...'
+			emptyText: 'Nothing found',
+			loadingText: 'Loading...'
 		},
 
 		columns: [

@@ -1,6 +1,9 @@
 <?php
 namespace Scalr\Service\Aws\Rds\Handler;
 
+use Scalr\Service\Aws\Rds\DataType\CreateDBInstanceReadReplicaData;
+use Scalr\Service\Aws\Rds\DataType\DescribeOrderableDBInstanceOptionsData;
+use Scalr\Service\Aws\Rds\DataType\OrderableDBInstanceOptionsList;
 use Scalr\Service\Aws\Rds\DataType\RestoreDBInstanceFromDBSnapshotRequestData;
 use Scalr\Service\Aws\Rds\DataType\DBSnapshotData;
 use Scalr\Service\Aws\Rds\DataType\ModifyDBInstanceRequestData;
@@ -163,4 +166,48 @@ class DbInstanceHandler extends AbstractRdsHandler
     {
         return $this->getRds()->getApiHandler()->restoreDBInstanceFromDBSnapshot($request);
     }
+
+    /**
+     * Creates a DB instance that acts as a Read Replica of a source DB instance.
+     *
+     * @param CreateDBInstanceReadReplicaData $request
+     * @return DBInstanceData
+     * @throws RdsException
+     */
+    public function createReplica(CreateDBInstanceReadReplicaData $request)
+    {
+        return $this->getRds()->getApiHandler()->createDBInstanceReadReplica($request);
+    }
+
+    /**
+     * Promotes a Read Replica DB instance to a standalone DB instance.
+     *
+     * @param string    $dBInstanceIdentifier
+     * @param int       $backupRetentionPeriod
+     * @param string    $preferredBackupWindow
+     * @return DBInstanceData
+     * @throws RdsException
+     */
+    public function promoteReplica($dBInstanceIdentifier, $backupRetentionPeriod = null, $preferredBackupWindow = null)
+    {
+        return $this->getRds()->getApiHandler()->promoteReadReplica($dBInstanceIdentifier, $backupRetentionPeriod, $preferredBackupWindow);
+    }
+
+    /**
+     * Describe DBInstance Types action
+     *
+     * Returns a list of orderable DB instance options for the specified engine. This API supports pagination
+     *
+     * @param   DescribeOrderableDBInstanceOptionsData  $request Describe DB Instance Types request object.
+     * @param   string          $marker                 optional The response includes only records beyond the marker.
+     * @param   int             $maxRecords             optional The maximum number of records to include in the response.
+     * @return  OrderableDBInstanceOptionsList  Returns the list of DB Instance types
+     * @throws  ClientException
+     * @throws  RdsException
+     */
+    public function describeTypes(DescribeOrderableDBInstanceOptionsData $request, $marker = null, $maxRecords = null)
+    {
+        return $this->getRds()->getApiHandler()->describeOrderableDBInstanceOptions($request, $marker, $maxRecords);
+    }
+
 }

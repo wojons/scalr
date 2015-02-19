@@ -10,6 +10,8 @@ class HostDownEvent extends Event
 
     public $terminationReasonId = 0;
     public $terminationReason = '';
+    
+    public $isSuspended = false;
 
     /**
      *
@@ -40,6 +42,7 @@ class HostDownEvent extends Event
         return array(
             "termination_reason" => "terminationReason",
             "termination_reason_code" => "terminationReasonId",
+            "is_suspend" => "isSuspended"
         );
     }
 

@@ -12,7 +12,7 @@ use Scalr\Service\OpenStack\Services\Servers\Type\ServersExtension;
 $db = Scalr::getDb();
 
 $validator = new Scalr_Validator();
-$crypto = new Scalr_Util_CryptoTool(MCRYPT_TRIPLEDES, MCRYPT_MODE_CFB, 24, 8);
+$crypto = \Scalr::getContainer()->crypto;
 
 if (!$_REQUEST['update'] && !$_REQUEST['delete']) {
     if (!$_REQUEST['name'])

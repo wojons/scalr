@@ -418,6 +418,8 @@ class CloudstackPlatformModule extends AbstractCloudstackPlatformModule implemen
 
         $diskOffering = null;
         $size = null;
+        
+        $cs = $environment->cloudstack($this->platform);
 
         if (!$launchOptions){
             $farmRole = $DBServer->GetFarmRoleObject();
@@ -458,9 +460,16 @@ class CloudstackPlatformModule extends AbstractCloudstackPlatformModule implemen
 
         $launchOptions->architecture = 'x86_64';
 
-        $cs = $environment->cloudstack($this->platform);
-
         if (!$sharedIp && !$useStaticNat && $networkId != 'SCALR_MANUAL') {
+            if ($networkId && !$networkType) {
+                foreach ($cs->network->describe(array('id' => $networkId)) as $network) {
+                    if ($network->id == $networkId) {
+                        $farmRole->SetSetting(\DBFarmRole::SETTING_CLOUDSTACK_NETWORK_TYPE, $network->type, \DBFarmRole::TYPE_LCL);
+                        $networkType = $network->type;
+                    }
+                }
+            }
+            
             if (($networkId && ($networkType == 'Virtual' || $networkType == 'Isolated')) || !$networkType) {
                 $sharedIpId = $this->getConfigVariable(self::SHARED_IP_ID.".{$launchOptions->cloudLocation}", $environment, false);
 
@@ -584,7 +593,7 @@ class CloudstackPlatformModule extends AbstractCloudstackPlatformModule implemen
                 'networkids' => ($networkId != 'SCALR_MANUAL') ? $networkId : null,
                 'size' => $size, //size
                 'userdata' => base64_encode($launchOptions->userData),
-                'securitygroupids' => implode(",", $sgs)
+                'securitygroupids' => !empty($sgs) ? implode(",", $sgs) : null
             )
         );
         if (!empty($vResult->id)) {
@@ -690,7 +699,7 @@ class CloudstackPlatformModule extends AbstractCloudstackPlatformModule implemen
                 if (!isset($sgroups[strtolower($groupName)])) {
                     throw new \Exception(sprintf(_("Security group '%s' is not found (2)"), $groupName));
                 } else
-                    array_push($retval, $sgroups[$groupName]->id);
+                    array_push($retval, $sgroups[strtolower($groupName)]->id);
             }
         }
 
@@ -797,4 +806,17 @@ class CloudstackPlatformModule extends AbstractCloudstackPlatformModule implemen
 
         return $ret;
     }
+
+    /**
+     * Gets endpoint url for private cloud
+     *
+     * @param \Scalr_Environment $env       The scalr environment object
+     * @param string             $group     optional The group name for eucaliptus
+     * @return string Returns endpoint url for cloudstack.
+     */
+    public function getEndpointUrl(\Scalr_Environment $env, $group = null)
+    {
+        return $env->getPlatformConfigValue($this->platform . "." . self::API_URL);
+    }
+
 }

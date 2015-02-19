@@ -402,14 +402,7 @@ class LdapClient
                 $attrs[] = $fullNameAttribute;
             }
 
-            if (($pos = strpos($this->username, "@")) !== false) {
-                $filter = sprintf('(&%s(' . $this->config->usernameAttribute . '=%s))', $this->config->userFilter, self::realEscape(strtok($this->username, '@')));
-                $query = @ldap_search($this->conn, $this->config->baseDn, $filter, $attrs, 0, 1);
-                $this->log("Query baseDn (1):%s filter:%s, attributes: %s - %s",
-                    $this->config->baseDn, $filter, join(', ', $attrs),
-                    ($query !== false ? 'OK' : 'Failed')
-                );
-            } elseif (preg_match('/(^|,)cn=/i', $this->username) || ($this->config->usernameAttribute && preg_match('/'.$this->config->usernameAttribute.'=/i', $this->username))) {
+            if (preg_match('/(^|,)cn=/i', $this->username) || ($this->config->usernameAttribute && preg_match('/'.$this->config->usernameAttribute.'=/i', $this->username))) {
                 //username is provided as distinguished name.
                 //We need to make additional query to validate user's password
                 $filter = sprintf('(&%s(' . $this->config->usernameAttribute . '=*))', $this->config->userFilter);
@@ -419,8 +412,12 @@ class LdapClient
                     ($query !== false ? 'OK' : 'Failed')
                 );
             } else {
-                $this->log("Valid username or user's DN is expected, \"%s\" specified", $this->username);
-                return false;
+                $filter = sprintf('(&%s(' . $this->config->usernameAttribute . '=%s))', $this->config->userFilter, self::realEscape(strtok($this->username, '@')));
+                $query = @ldap_search($this->conn, $this->config->baseDn, $filter, $attrs, 0, 1);
+                $this->log("Query baseDn (1):%s filter:%s, attributes: %s - %s",
+                    $this->config->baseDn, $filter, join(', ', $attrs),
+                    ($query !== false ? 'OK' : 'Failed')
+                );
             }
 
 

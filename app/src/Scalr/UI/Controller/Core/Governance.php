@@ -23,7 +23,6 @@ class Scalr_UI_Controller_Core_Governance extends Scalr_UI_Controller
             SERVER_PLATFORMS::CLOUDSTACK,
             SERVER_PLATFORMS::IDCF,
             SERVER_PLATFORMS::ECS,
-            SERVER_PLATFORMS::CONTRAIL,
             SERVER_PLATFORMS::OPENSTACK,
             SERVER_PLATFORMS::NEBULA,
             SERVER_PLATFORMS::OCS

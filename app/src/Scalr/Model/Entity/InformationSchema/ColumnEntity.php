@@ -114,17 +114,4 @@ class ColumnEntity extends AbstractEntity
      * @var string
      */
     public $columnComment;
-
-    /**
-     * Gets table column definition
-     *
-     * @param   string    $schema The database schema
-     * @param   string    $table  The table name
-     * @param   string    $column The column name
-     * @return  ColumnEntity Returns column definition
-     */
-    public static function getColumnDefinition($schema, $table, $column)
-    {
-        return self::findOne([['tableSchema' => $schema], ['tableName' => $table], ['columnName' => $column]]);
-    }
 }

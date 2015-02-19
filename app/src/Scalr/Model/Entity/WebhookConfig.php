@@ -2,7 +2,6 @@
 namespace Scalr\Model\Entity;
 
 use Scalr\Model\AbstractEntity;
-use Event;
 use Scalr\Model\Collections\ArrayCollection;
 
 /**
@@ -210,7 +209,7 @@ class WebhookConfig extends AbstractEntity
     /**
      * Sets the list of the farms
      *
-     * @param   \ArrayObject   $events
+     * @param   \ArrayObject   $farms
      * @return  \Scalr\Model\Entity\WebhookConfig
      */
     public function setFarms(\ArrayObject $farms = null)

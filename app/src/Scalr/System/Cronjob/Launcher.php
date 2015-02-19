@@ -19,7 +19,7 @@ class Scalr_System_Cronjob_Launcher {
      * @key string $clsNamespace
      * @key bool $oldSyntax (default true)
      * TODO: add $getopt key
-     * TODO: support new syntax: php -q cron.php [options] task
+     * TODO: support new syntax: php cron.php [options] task
      */
     function __construct ($config) {
         foreach ($config as $k => $v) {

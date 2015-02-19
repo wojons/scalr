@@ -27,6 +27,10 @@ class NotificationEntity extends \Scalr\Model\AbstractEntity
 
     const RECIPIENT_TYPE_EMAILS = 2;
 
+    const STATUS_ENABLED = 1;
+
+    const STATUS_DISABLED = 0;
+
     /**
      * identifier (UUID)
      *
@@ -45,6 +49,14 @@ class NotificationEntity extends \Scalr\Model\AbstractEntity
      * @var int
      */
     public $subjectType;
+
+    /**
+     * Identifier of the CC or Project
+     *
+     * @Column(type="uuid",nullable=true)
+     * @var string
+     */
+    public $subjectId;
 
     /**
      * The type of the notification
@@ -78,6 +90,14 @@ class NotificationEntity extends \Scalr\Model\AbstractEntity
      * @var string
      */
     public $emails;
+
+    /**
+     * Status
+     *
+     * @Column(type="integer")
+     * @var int
+     */
+    public $status;
 
     /**
      * Constructor

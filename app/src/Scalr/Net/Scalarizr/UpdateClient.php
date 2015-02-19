@@ -1,5 +1,8 @@
 <?php
-    class Scalr_Net_Scalarizr_UpdateClient
+
+use Scalr\Util\CryptoTool;
+
+class Scalr_Net_Scalarizr_UpdateClient
     {
         private $dbServer,
             $port,
@@ -17,7 +20,7 @@
                 if (DBFarm::LoadByID($this->dbServer->farmId)->GetSetting(DBFarm::SETTING_EC2_VPC_ID))
                     $this->isVPC = true;
 
-            $this->cryptoTool = Scalr_Messaging_CryptoTool::getInstance();
+            $this->cryptoTool = \Scalr::getContainer()->srzcrypto($this->dbServer->GetKey(true));
         }
 
         public function configure($repo, $schedule)
@@ -88,11 +91,19 @@
             if ($newEncryptionProtocol) {
                 $jsonRequest = $this->cryptoTool->encrypt($jsonRequest, $this->dbServer->GetKey(true));
 
-                $canonical_string = $jsonRequest . $timestamp;
-                $signature = base64_encode(hash_hmac('SHA1', $canonical_string, $this->dbServer->GetKey(true), 1));
+                $signature = $this->cryptoTool->sign(
+                    $jsonRequest,
+                    $this->dbServer->GetKey(true),
+                    $timestamp,
+                    Scalr_Net_Scalarizr_Client::HASH_ALGO
+                );
             } else {
-                $canonical_string = $jsonRequest . $timestamp;
-                $signature = base64_encode(hash_hmac('SHA1', $canonical_string, $this->dbServer->GetProperty(SERVER_PROPERTIES::SZR_KEY), 1));
+                $signature = $this->cryptoTool->sign(
+                    $jsonRequest,
+                    $this->dbServer->GetProperty(SERVER_PROPERTIES::SZR_KEY),
+                    $timestamp,
+                    Scalr_Net_Scalarizr_Client::HASH_ALGO
+                );
             }
 
             $request = new HttpRequest();
@@ -143,8 +154,10 @@
 
                     $response = $request->getResponseData();
                     $body = $response['body'];
-                    if ($newEncryptionProtocol)
-                        $body = $this->cryptoTool->decrypt($body, $this->dbServer->GetKey(true));
+                    if ($newEncryptionProtocol) {
+                        $this->cryptoTool->setCryptoKey($this->dbServer->GetKey(true));
+                        $body = $this->cryptoTool->decrypt($body);
+                    }
 
                     $jResponse = @json_decode($body);
 
@@ -153,7 +166,7 @@
 
                     return $jResponse;
                 } else {
-                    throw new Exception(sprintf("Unable to perform request to update client: %s", $request->getResponseCode()));
+                    throw new Exception(sprintf("Unable to perform request to update client (%s). Server returned error %s", $requestHost, $request->getResponseCode()));
                 }
             } catch(HttpException $e) {
                 if (isset($e->innerException))
@@ -161,7 +174,7 @@
                 else
                     $msg = $e->getMessage();
 
-                throw new Exception(sprintf("Unable to perform request to update client: %s", $msg));
+                throw new Exception(sprintf("Unable to perform request to update client (%s): %s", $requestHost, $msg));
             }
         }
     }

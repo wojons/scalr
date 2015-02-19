@@ -9,7 +9,8 @@ use Scalr\Service\Aws\Route53\AbstractRoute53ListDataType;
  * @author    Vlad Dobrovolskiy   <v.dobrovolskiy@scalr.com>
  * @since     4.5.2
  *
- * @property  string $marker
+ * @property  string $nextRecordName
+ * @property  string $nextRecordType
  * @property  int    $maxItems
  * @property  bool   $isTruncated
  */
@@ -29,7 +30,7 @@ class RecordSetList extends AbstractRoute53ListDataType
      *
      * @var  array
      */
-    protected $_properties = array('marker', 'maxItems', 'isTruncated');
+    protected $_properties = array('maxItems', 'isTruncated', 'nextRecordName', 'nextRecordType');
 
     /**
      * Constructor

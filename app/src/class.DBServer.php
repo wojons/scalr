@@ -8,6 +8,7 @@ use Scalr\Stats\CostAnalytics\Entity\ProjectEntity;
 use Scalr\Stats\CostAnalytics\Entity\CostCentrePropertyEntity;
 use Scalr\Stats\CostAnalytics\Entity\ProjectPropertyEntity;
 use Scalr\Model\Entity\ServerTerminationError;
+use \SERVER_PROPERTIES;
 
 /**
  * Core Server object
@@ -129,7 +130,6 @@ class DBServer
         SERVER_PLATFORMS::RACKSPACENG_UK => 'OPENSTACK_SERVER_PROPERTIES',
         SERVER_PLATFORMS::RACKSPACENG_US => 'OPENSTACK_SERVER_PROPERTIES',
         SERVER_PLATFORMS::ECS => 'OPENSTACK_SERVER_PROPERTIES',
-        SERVER_PLATFORMS::CONTRAIL => 'OPENSTACK_SERVER_PROPERTIES',
         SERVER_PLATFORMS::OCS => 'OPENSTACK_SERVER_PROPERTIES',
         SERVER_PLATFORMS::NEBULA => 'OPENSTACK_SERVER_PROPERTIES'
     );
@@ -768,14 +768,29 @@ class DBServer
             $this->Db->BeginTrans();
 
             // We need to perpetuate server_properties records for removed servers
-            $this->Db->Execute('DELETE FROM servers WHERE server_id=?', array($this->serverId));
-            $this->Db->Execute('DELETE FROM messages WHERE server_id=?', array($this->serverId));
+            $this->Db->Execute("DELETE FROM servers WHERE server_id=?", array($this->serverId));
+            $this->Db->Execute("DELETE FROM messages WHERE server_id=?", array($this->serverId));
 
             $this->Db->Execute("
                 UPDATE `dm_deployment_tasks` SET status=? WHERE server_id=?
             ", array(
                 Scalr_Dm_DeploymentTask::STATUS_ARCHIVED, $this->serverId
             ));
+
+            $importantProperties = SERVER_PROPERTIES::getImportantList();
+            $properties = array_diff(array_keys($this->GetAllProperties()), $importantProperties);
+
+            if (!empty($properties)) {
+                $and = " AND (";
+
+                foreach ($properties as $name) {
+                    $and .= "name=" . $this->Db->qstr($name) . " OR ";
+                }
+
+                $and = substr($and, 0, -3) . ")";
+
+                $this->Db->Execute("DELETE FROM server_properties WHERE server_id=?" . $and, [$this->serverId]);
+            }
 
             $this->Db->CommitTrans();
         } catch (Exception $e) {
@@ -876,7 +891,43 @@ class DBServer
         return $DBServer;
     }
 
+    /**
+     * Gets a list of servers by filter
+     *
+     * @param array $filter optional Filter value ['envId' => 'value']
+     * @return array Returns array of DBServer objects
+     */
+    public static function listByFilter(array $filter = null)
+    {
+        $result = [];
 
+        $db = \Scalr::getDb();
+
+        $where = "WHERE 1=1";
+
+        if (isset($filter)) {
+            foreach ($filter as $name => $value) {
+                $fieldName = \Scalr::decamelize($name);
+                $where .= " AND " . $fieldName . "=" . $db->qstr($value);
+            }
+        }
+
+        $servers = $db->GetAll("SELECT * FROM servers " . $where);
+
+        foreach ($servers as $server) {
+            $DBServer = new DBServer($server['server_id']);
+
+            foreach (self::$FieldPropertyMap as $k => $v) {
+                if (isset($server[$k])) {
+                    $DBServer->{$v} = $server[$k];
+                }
+            }
+
+            $result[] = $DBServer;
+        }
+
+        return $result;
+    }
 
     public function GetFreeDeviceName()
     {
@@ -892,7 +943,7 @@ class DBServer
         foreach ($list as $deviceName) {
             preg_match("/(sd|xvd)([a-z][0-9]*)/", $deviceName, $matches);
 
-            if (!in_array($matches[2], $mapUsed))
+            if (is_array($matches[2]) && !in_array($matches[2], $mapUsed))
                 array_push($mapUsed, $matches[2]);
         }
 
@@ -1232,7 +1283,7 @@ class DBServer
 
         $logger = Logger::getLogger('DBServer');
         $serializer = Scalr_Messaging_XmlSerializer::getInstance();
-        $cryptoTool = Scalr_Messaging_CryptoTool::getInstance();
+        $cryptoTool = \Scalr::getContainer()->srzcrypto($this->GetKey(true));
 
         if ($this->GetProperty(SERVER_PROPERTIES::SZR_MESSAGE_FORMAT) == 'json') {
             $serializer = Scalr_Messaging_JsonSerializer::getInstance();
@@ -1297,10 +1348,10 @@ class DBServer
         if (!$this->remoteIp && !$this->localIp && !$isVPC)
             return;
 
-
-        $cryptoKey = $this->GetKey(true);
-        $encMessage = $cryptoTool->encrypt($rawMessage, $cryptoKey);
-        list($signature, $timestamp) = $cryptoTool->sign($encMessage, $cryptoKey);
+        $cryptoTool->setCryptoKey($this->GetKey(true));
+        $encMessage = $cryptoTool->encrypt($rawMessage);
+        $timestamp = date("c", time());
+        $signature = $cryptoTool->sign($encMessage, null, $timestamp);
 
         try {
             $request = new HttpRequest();
@@ -1421,7 +1472,7 @@ class DBServer
                 $val = trim($val);
 
                 if (isset($formats[$name]))
-                    $value = @sprintf($formats[$name], $val);
+                    $val = @sprintf($formats[$name], $val);
 
                 $this->globalVariablesCache[$name] = $val;
             }
@@ -1439,7 +1490,10 @@ class DBServer
         $keys = array_map($f, $keys);
         $values = array_values($this->globalVariablesCache);
 
-        return str_replace($keys, $values, $value);
+        $retval = str_replace($keys, $values, $value);
+        
+        // Strip undefined variables & return value
+        return preg_replace("/{[A-Za-z0-9_-]+}/", "", $retval);
     }
 
     /**
@@ -1540,12 +1594,22 @@ class DBServer
 
                 $repo = isset($develRepos[$develRepository]) ? $develRepos[$develRepository] : array_shift($develRepos);
 
-                return array_merge($retval, array(
-                	'repository' => $normalizedValue,
-                    'deb_repo_url' => sprintf($repo['deb_repo_url'], $normalizedValue),
-                    'rpm_repo_url' => sprintf($repo['rpm_repo_url'], $normalizedValue),
-                    'win_repo_url' => sprintf($repo['win_repo_url'], $normalizedValue)
-                ));
+                if ($repo['msi_repo_url']) {
+                    return array_merge($retval, array(
+                    	'repository' => $normalizedValue,
+                        'deb_repo_url' => sprintf($repo['deb_repo_url'], $normalizedValue),
+                        'rpm_repo_url' => sprintf($repo['rpm_repo_url'], $normalizedValue),
+                        'win_repo_url' => sprintf($repo['win_repo_url'], $normalizedValue),
+                        'msi_repo_url' => sprintf($repo['msi_repo_url'], $normalizedValue)
+                    ));
+                } else {
+                    return array_merge($retval, array(
+                        'repository' => $normalizedValue,
+                        'deb_repo_url' => sprintf($repo['deb_repo_url'], $normalizedValue),
+                        'rpm_repo_url' => sprintf($repo['rpm_repo_url'], $normalizedValue),
+                        'win_repo_url' => sprintf($repo['win_repo_url'], $normalizedValue)
+                    ));
+                }
             }
 
             $configuredRepo = $this->GetFarmRoleObject()->GetSetting(Scalr_Role_Behavior::ROLE_BASE_SZR_UPD_REPOSITORY);
@@ -1555,15 +1619,6 @@ class DBServer
             $configuredRepo = $this->GetFarmObject()->GetSetting(DBFarm::SETTING_SZR_UPD_REPOSITORY);
 
         $retval['repository'] = ($configuredRepo) ? $configuredRepo : Scalr::config('scalr.scalarizr_update.default_repo');
-
-        if ($retval['repository'] == 'latest') {
-            try {
-                $client = Scalr_Account::init()->loadById($this->clientId);
-                if ($client->priority == 0 && $config->defined("scalr.scalarizr_update.repos.testing")) {
-                    $retval['repository'] = 'testing';
-                }
-            } catch (Exception $e) {}
-        }
 
         if (!$config->defined("scalr.scalarizr_update.repos.{$retval['repository']}"))
             throw new Exception("Scalarizr repository configuration is incorrect. Unknown repository name: {$retval['repository']}");

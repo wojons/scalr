@@ -9,7 +9,7 @@ Scalr.regPage('Scalr.ui.farms.view', function (loadParams, moduleParams) {
             name: 'expirePeriod'
         });
     }
-    if ((Scalr.flags['betaMode'] || Scalr.flags['allowManageAnalytics']) && Scalr['flags']['analyticsEnabled']) {
+    if (Scalr['flags']['analyticsEnabled']) {
         filterFieldForm.push({
             xtype: 'textfield',
             fieldLabel: 'Project ID',
@@ -316,11 +316,6 @@ Scalr.regPage('Scalr.ui.farms.view', function (loadParams, moduleParams) {
                             return data.status != 0;
                         }
                     }, {
-                        itemId: 'option.events',
-                        text: 'Events & notifications',
-                        iconCls: 'x-menu-icon-events',
-                        href: '#/farms/{id}/events'
-                    }, {
                         xtype: 'menuseparator',
                         itemId: 'option.mysqlSep'
                     }, {
@@ -412,11 +407,6 @@ Scalr.regPage('Scalr.ui.farms.view', function (loadParams, moduleParams) {
                         iconCls: 'x-menu-icon-downloadprivatekey',
                         href: '#/sshkeys/view?farmId={id}'
                     }, {
-                        itemId: 'option.logs',
-                        iconCls: 'x-menu-icon-logs',
-                        text: 'View log',
-                        href: "#/logs/system?farmId={id}"
-                    }, {
                         itemId: 'option.alerts',
                         iconCls: 'x-menu-icon-alerts',
                         text: 'Alerts',
@@ -477,6 +467,23 @@ Scalr.regPage('Scalr.ui.farms.view', function (loadParams, moduleParams) {
                                 store.load();
                             }
                         }
+                    },{
+                        xtype: 'menuseparator'
+                    }, {
+                        itemId: 'option.events',
+                        text: 'Event Log',
+                        iconCls: 'x-menu-icon-events',
+                        href: '#/logs/events?farmId={id}'
+                    }, {
+                        itemId: 'option.logs',
+                        iconCls: 'x-menu-icon-logs',
+                        text: 'System Log',
+                        href: "#/logs/system?farmId={id}"
+                    }, {
+                        itemId: 'option.scripting_logs',
+                        iconCls: 'x-menu-icon-logs',
+                        text: 'Scripting Log',
+                        href: "#/logs/scripting?farmId={id}"
 	    			}]
                 }
 			}

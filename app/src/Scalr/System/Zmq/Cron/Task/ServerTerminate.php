@@ -42,8 +42,6 @@ class ServerTerminate extends AbstractTask
 
         $this->getLogger()->info("Fetching servers to remove...");
 
-        $bHostedScalr = \Scalr::isHostedScalr();
-
         foreach (DBServer::getTerminatingServers() as $row) {
             $obj = new stdClass();
             $obj->serverId = $row['server_id'];
@@ -148,12 +146,15 @@ class ServerTerminate extends AbstractTask
 
                             if ($dbServer->farmId) {
                                 $wasHostDownFired = \Scalr::getDb()->GetOne("
-                                    SELECT id FROM events WHERE event_server_id = ? AND type = ?", array(
+                                    SELECT id FROM events WHERE event_server_id = ? AND type = ? AND is_suspend = '0'", array(
                                     $request->serverId, 'HostDown'
                                 ));
 
                                 if (!$wasHostDownFired) {
-                                    \Scalr::FireEvent($dbServer->farmId, new HostDownEvent($dbServer));
+                                    $event = new HostDownEvent($dbServer);
+                                    $event->isSuspended = !$isTermination;
+                                    
+                                    \Scalr::FireEvent($dbServer->farmId, $event);
                                 }
                             }
                         }

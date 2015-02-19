@@ -26,6 +26,7 @@ sys.path.insert(0, scalrpy_dir)
 
 import time
 import uuid
+import json
 import socket
 import gevent
 import urllib2
@@ -43,6 +44,7 @@ import libcloud.security
 libcloud.security.VERIFY_SSL_CERT = False
 
 import httplib2
+import googleapiclient
 from googleapiclient.discovery import build
 from oauth2client.client import SignedJwtAssertionCredentials
 
@@ -121,19 +123,29 @@ def _handle_exception(e, msg):
             socket.timeout,
             socket.gaierror]:
         LOG.warning(msg)
+    elif type(e) == socket.error and e.errno in [111, 113]:
+        LOG.warning(msg)
+    elif type(e) == googleapiclient.errors.HttpError and e.resp['status'] in ['403']:
+        LOG.warning(msg)
     else:
         LOG.error(msg)
 
 
 
 def _ec2_region(region, cred):
-    access_key = cred['access_key']
-    secret_key = cred['secret_key']
-    conn = boto.ec2.connect_to_region(
-        region,
-        aws_access_key_id=access_key,
-        aws_secret_access_key=secret_key
-    )
+    access_key = cryptotool.decrypt_scalr(app.crypto_key, cred['access_key'])
+    secret_key = cryptotool.decrypt_scalr(app.crypto_key, cred['secret_key'])
+    kwds = {
+            'aws_access_key_id': access_key,
+            'aws_secret_access_key': secret_key
+    }
+    if app.scalr_config.get('aws', {}).get('use_proxy', False) in [True, 'yes']:
+        if app.scalr_config['connections'].get('proxy', {}).get('use_on', 'both') in ['both', 'scalr']:
+            kwds['proxy'] = app.scalr_config['connections']['proxy']['host']
+            kwds['proxy_port'] = app.scalr_config['connections']['proxy']['port']
+            kwds['proxy_user'] = app.scalr_config['connections']['proxy']['user']
+            kwds['proxy_pass'] = app.scalr_config['connections']['proxy']['pass']
+    conn = boto.ec2.connect_to_region(region, **kwds)
     cloud_nodes = _ec2_get_only_instances(conn)
     timestamp = int(time.time())
     nodes = list()
@@ -209,9 +221,9 @@ def ec2(cred):
 
 
 def _eucalyptus(cred):
-    access_key = cred['access_key']
-    secret_key = cred['secret_key']
-    ec2_url = cred['ec2_url']
+    access_key = cryptotool.decrypt_scalr(app.crypto_key, cred['access_key'])
+    secret_key = cryptotool.decrypt_scalr(app.crypto_key, cred['secret_key'])
+    ec2_url = cryptotool.decrypt_scalr(app.crypto_key, cred['ec2_url'])
     url = urlparse.urlparse(ec2_url)
     splitted_netloc = url.netloc.split(':')
     host = splitted_netloc[0]
@@ -275,9 +287,9 @@ def eucalyptus(cred):
 
 def _cloudstack(cred):
     result = list()
-    api_key = cred['api_key']
-    secret_key = cred['secret_key']
-    api_url = cred['api_url']
+    api_key = cryptotool.decrypt_scalr(app.crypto_key, cred['api_key'])
+    secret_key = cryptotool.decrypt_scalr(app.crypto_key, cred['secret_key'])
+    api_url = cryptotool.decrypt_scalr(app.crypto_key, cred['api_url'])
     url = urlparse.urlparse(api_url)
     splitted_netloc = url.netloc.split(':')
     host = splitted_netloc[0]
@@ -348,18 +360,19 @@ def idcf(cred):
     return cloudstack(cred)
 
 
-
 def _gce_conn(cred):
-    service_account_name = cred['service_account_name']
-    key = cred['key']
-
-    # convert pkcs12 to rsa
-    out, err, ret_code = helper.call(
-        "openssl pkcs12 -nodes -nocerts -passin pass:notasecret | openssl rsa",
-        input=binascii.a2b_base64(key),
-        shell=True
-    )
-    key = out.strip()
+    service_account_name = cryptotool.decrypt_scalr(app.crypto_key, cred['service_account_name'])
+    if 'json_key' in cred:
+        key = json.loads(cryptotool.decrypt_scalr(app.crypto_key, cred['json_key']))['private_key']
+    else:
+        key = cryptotool.decrypt_scalr(app.crypto_key, cred['key'])
+        # convert pkcs12 to rsa
+        out, err, ret_code = helper.call(
+            "openssl pkcs12 -nodes -nocerts -passin pass:notasecret | openssl rsa",
+            input=binascii.a2b_base64(key),
+            shell=True
+        )
+        key = out.strip()
 
     signed_jwt_assert_cred = SignedJwtAssertionCredentials(
         service_account_name,
@@ -374,7 +387,7 @@ def _gce_conn(cred):
 
 def _gce_zone(zone, cred):
     conn, http = _gce_conn(cred)
-    project_id = cred['project_id']
+    project_id = cryptotool.decrypt_scalr(app.crypto_key, cred['project_id'])
     request = conn.instances().list(
         project=project_id,
         zone=zone,
@@ -408,7 +421,7 @@ def gce(cred):
 
     result = list()
 
-    project_id = cred['project_id']
+    project_id = cryptotool.decrypt_scalr(app.crypto_key, cred['project_id'])
     try:
         conn, http = _gce_conn(cred)
         request = conn.zones().list(project=project_id)
@@ -444,18 +457,18 @@ def gce(cred):
 
 
 def _openstack_cred(cred):
-    username = cred['username']
+    username = cryptotool.decrypt_scalr(app.crypto_key, cred['username'])
     if 'password' in cred:
-        password = cred['password']
+        password = cryptotool.decrypt_scalr(app.crypto_key, cred['password'])
         auth_version = '2.0_password'
     else:
-        password = cred['api_key']
+        password = cryptotool.decrypt_scalr(app.crypto_key, cred['api_key'])
         auth_version = '2.0_apikey'
-    keystone_url = cred['keystone_url']
+    keystone_url = cryptotool.decrypt_scalr(app.crypto_key, cred['keystone_url'])
     if not keystone_url.rstrip('/').endswith('/tokens'):
         keystone_url = os.path.join(keystone_url, 'tokens')
     if 'tenant_name' in cred:
-        tenant_name = cred['tenant_name']
+        tenant_name = cryptotool.decrypt_scalr(app.crypto_key, cred['tenant_name'])
     else:
         tenant_name = None
     return username, password, auth_version, keystone_url, tenant_name
@@ -833,13 +846,14 @@ def db_update(sorted_data, envs_ids, cred):
         for region_data in sorted_data:
             try:
                 sid = uuid.uuid4()
-                if platform == 'ec2':
-                    cloud_account = cred['account_id'] if 'account_id' in cred else None
+                if platform == 'ec2' and 'account_id' in cred:
+                    cloud_account = cryptotool.decrypt_scalr(app.crypto_key, cred['account_id'])
                 else:
                     cloud_account = None
 
                 if url_map[platform]:
-                    url = urlparse.urlparse(cred[url_map[platform]].rstrip('/'))
+                    url = urlparse.urlparse(cryptotool.decrypt_scalr(
+                            app.crypto_key, cred[url_map[platform]]).rstrip('/'))
                     url = '%s%s' % (url.netloc, url.path)
                 else:
                     url = ''
@@ -917,9 +931,6 @@ def process_credential(cred, envs_ids=None):
         envs_ids = [cred.env_id]
 
     try:
-        for k, v in cred.iteritems():
-            if k in cred.scheme[cred.platform]:
-                cred[k] = cryptotool.decrypt_scalr(app.crypto_key, v)
         cloud_data = eval(cred.platform)(cred)
         if cloud_data:
             sorted_data = sort_nodes(cloud_data, cred, envs_ids)

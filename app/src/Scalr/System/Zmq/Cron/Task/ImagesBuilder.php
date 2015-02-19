@@ -1,4 +1,5 @@
 <?php
+
 namespace Scalr\System\Zmq\Cron\Task;
 
 use ArrayObject, Exception, DateTime, DateTimeZone, stdClass;
@@ -422,10 +423,8 @@ class ImagesBuilder extends AbstractTask
                      */
                     $chefServerId = $dbServer->GetProperty(SERVER_PROPERTIES::SZR_IMPORTING_CHEF_SERVER_ID);
                     if ($chefServerId) {
-                        $crypto = new \Scalr_Util_CryptoTool(MCRYPT_TRIPLEDES, MCRYPT_MODE_CFB, 24, 8);
-                        $cryptoKey = @file_get_contents(APPPATH . "/etc/.cryptokey");
                         $chefServerInfo = $db->GetRow("SELECT * FROM services_chef_servers WHERE id=?", array($chefServerId));
-                        $chefServerInfo['v_auth_key'] = $crypto->decrypt($chefServerInfo['v_auth_key'], $cryptoKey);
+                        $chefServerInfo['v_auth_key'] = \Scalr::getContainer()->crypto->decrypt($chefServerInfo['v_auth_key']);
                     }
 
                     $scriptContents = str_replace(

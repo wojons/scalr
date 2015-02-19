@@ -18,7 +18,7 @@ Scalr.regPage('Scalr.ui.roles.builder', function (loadParams, moduleParams) {
 	}
 
 	behaviors = [
-		{name: 'mysql2', disable: {behavior: ['postgresql', 'redis', 'mongodb', 'percona','mariadb']}},
+		{name: 'mysql2', disable: {behavior: ['postgresql', 'redis', 'mongodb', 'percona','mariadb'], os:[{family: 'centos', version: /^7/i}]}},
 		{name: 'mariadb', disable: {behavior: ['postgresql', 'redis', 'mongodb', 'percona','mysql2']}},
 		{name: 'postgresql', disable: {platform: ['gce'], behavior: ['redis', 'mongodb', 'percona', 'mysql2']}},
 		{name: 'percona', disable: Ext.apply({behavior: ['postgresql', 'redis', 'mongodb', 'mysql2']})},
@@ -1401,9 +1401,14 @@ Scalr.regPage('Scalr.ui.roles.builder', function (loadParams, moduleParams) {
 											break;
 										}
 									} else {
-										if (value.family == item.disable[key][j].family && Ext.Array.contains(item.disable[key][j].version, value.version)) {
-											enabled = false;
-											break;
+										if (value.family == item.disable[key][j].family) {
+                                            if (Ext.isArray(item.disable[key][j].version) && Ext.Array.contains(item.disable[key][j].version, value.version)) {
+    											enabled = false;
+        										break;
+                                            } else if (Ext.isString(value.version) && value.version.match(item.disable[key][j].version)){
+    											enabled = false;
+        										break;
+                                            }
 										}
 									}
 								}

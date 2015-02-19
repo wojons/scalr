@@ -2,6 +2,15 @@ Ext.define('Scalr.ui.SecurityGroupEditor', {
 	extend: 'Ext.form.Panel',
 	alias: 'widget.sgeditor',
     vpcIdReadOnly: false,
+
+    initComponent: function () {
+        var me = this;
+
+        me.callParent(arguments);
+
+        me.down('#view').setVisible(me.platform !== 'rds');
+    },
+
     items: {
         xtype: 'fieldset',
         itemId: 'formtitle',
@@ -558,6 +567,21 @@ Ext.define('Scalr.ui.SecurityGroupMultiSelect', {
     selection: [],//selected records
     limit: 0,
 
+    selectOnLoad: function (store) {
+        var me = this;
+
+        var records = [];
+
+        Ext.Array.each(me.selection, function(rec){
+            var record = store.getById(rec.get('id'));
+            if (record) {
+                records.push(record);
+            }
+        });
+
+        me.down('grid').getView().getSelectionModel().select(records);
+    },
+
     initComponent: function() {
         var me = this;
         me.callParent(arguments);
@@ -574,21 +598,14 @@ Ext.define('Scalr.ui.SecurityGroupMultiSelect', {
             listeners: {
                 beforeload: function() {
                     me.down('grid').getView().getSelectionModel().deselectAll(true);
-                },
-                load: function(store) {
-                    var records = [];
-                    Ext.Array.each(me.selection, function(rec){
-                        var record = store.getById(rec.get('id'));
-                        if (record) {
-                            records.push(record);
-                        }
-                    });
-                    me.down('grid').getView().getSelectionModel().select(records);
                 }
             },
             pageSize: 15,
             remoteSort: true
         });
+
+        store.on('load', me.selectOnLoad, me);
+
         me.add([{
             xtype: 'grid',
             cls: 'x-grid-shadow',
@@ -624,7 +641,7 @@ Ext.define('Scalr.ui.SecurityGroupMultiSelect', {
                         visible = false;
                     }
 
-                    if (visible && me.excludeGroups['names'] !== undefined && Ext.Array.contains(me.excludeGroups['ids'], record.get('id'))) {
+                    if (visible && me.excludeGroups['ids'] !== undefined && Ext.Array.contains(me.excludeGroups['ids'], record.get('id'))) {
                         visible = false;
                     }
                     return visible;
@@ -705,6 +722,7 @@ Ext.define('Scalr.ui.SecurityGroupMultiSelect', {
                          vpcIdReadOnly: true,
                          accountId: me.accountId,
                          remoteAddress: me.remoteAddress,
+                        platform: me.storeExtraParams['platform'],
                          listeners: {
                              afterrender: function() {
                                  this.setValues(data);

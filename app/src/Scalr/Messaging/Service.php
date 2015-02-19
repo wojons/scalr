@@ -1,7 +1,8 @@
 <?php
 
+use Scalr\Util\CryptoTool;
+
 class Scalr_Messaging_Service {
-    const HASH_ALGO = 'SHA1';
 
     private $cryptoTool;
 
@@ -13,7 +14,7 @@ class Scalr_Messaging_Service {
     private $logger;
 
     function __construct () {
-        $this->cryptoTool = Scalr_Messaging_CryptoTool::getInstance();
+        $this->cryptoTool = \Scalr::getContainer()->srzcrypto;
         $this->serializer = new Scalr_Messaging_XmlSerializer();
         $this->jsonSerializer = new Scalr_Messaging_JsonSerializer();
         $this->logger = Logger::getLogger(__CLASS__);
@@ -50,6 +51,7 @@ class Scalr_Messaging_Service {
             $this->debug($_SERVER["HTTP_X_SERVER_ID"], "SERVER_FOUND");
 
             $cryptoKey = $DBServer->GetKey(true);
+            $this->cryptoTool->setCryptoKey($cryptoKey);
 //             $isOneTimeKey = $DBServer->GetProperty(SERVER_PROPERTIES::SZR_KEY_TYPE) == SZR_KEY_TYPE::ONE_TIME;
             $isOneTimeKey = false;
             $keyExpired = $DBServer->GetProperty(SERVER_PROPERTIES::SZR_ONETIME_KEY_EXPIRED);
@@ -67,7 +69,7 @@ class Scalr_Messaging_Service {
             $this->debug($_SERVER["HTTP_X_SERVER_ID"], "POST_LENGTH: " . strlen(implode("\n", $_POST)));
 
             $this->logger->info(sprintf(_("Validating signature '%s'"), $_SERVER["HTTP_X_SIGNATURE"]));
-            $this->validateSignature($cryptoKey, $payload, $_SERVER["HTTP_X_SIGNATURE"], $_SERVER["HTTP_DATE"]);
+            $this->validateSignature($payload, $_SERVER["HTTP_X_SIGNATURE"], $_SERVER["HTTP_DATE"]);
 
             if ($isOneTimeKey) {
                 $DBServer->SetProperty(SERVER_PROPERTIES::SZR_ONETIME_KEY_EXPIRED, 1);
@@ -80,7 +82,7 @@ class Scalr_Messaging_Service {
         // Decrypt and decode message
         try {
             $this->logger->info(sprintf(_("Decrypting message '%s'"), $payload));
-            $string = $this->cryptoTool->decrypt($payload, $cryptoKey);
+            $string = $this->cryptoTool->decrypt($payload);
 
             if ($contentType == 'application/json') {
                 $message = $this->jsonSerializer->unserialize($string);
@@ -115,10 +117,8 @@ class Scalr_Messaging_Service {
 
     }
 
-    private function validateSignature($key, $payload, $signature, $timestamp) {
-        $string_to_sign = $payload . $timestamp;
-
-        $valid_sign = base64_encode(hash_hmac(self::HASH_ALGO, $string_to_sign, $key, 1));
+    private function validateSignature($payload, $signature, $timestamp) {
+        $valid_sign = $this->cryptoTool->sign($payload, null, $timestamp, Scalr_Net_Scalarizr_Client::HASH_ALGO);
 
         $this->debug("NO_SID", "VALID_SIGNATURE: {$valid_sign}");
 

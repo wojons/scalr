@@ -102,6 +102,18 @@ abstract class AbstractPlatformModule
     }
 
     /**
+     * Gets endpoint url for private clouds
+     *
+     * @param \Scalr_Environment $env       The scalr environment object
+     * @param string             $group     optional The group name for eucaliptus
+     * @return string|null Returns endpoint url for private clouds. Null otherwise.
+     */
+    public function getEndpointUrl(\Scalr_Environment $env, $group = null)
+    {
+        return null;
+    }
+
+    /**
      * Gets active instance types for the specified cloud platform, url and location
      * from the cache
      *

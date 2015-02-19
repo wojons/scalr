@@ -14,7 +14,6 @@
 # License for the specific language governing permissions and limitations
 # under the License.
 
-import sys
 import uuid
 import json
 import datetime
@@ -50,7 +49,7 @@ class Credentials(dict):
         'ec2': ['access_key', 'secret_key', 'account_id'],
         'ecs': ['username', 'api_key', 'password', 'keystone_url', 'tenant_name'],
         'eucalyptus': ['access_key', 'secret_key', 'ec2_url', 'group'],
-        'gce': ['service_account_name', 'key', 'project_id'],
+        'gce': ['service_account_name', 'key', 'project_id', 'json_key'],
         'idcf': ['api_key', 'secret_key', 'api_url'],
         'openstack': ['username', 'api_key', 'password', 'keystone_url', 'tenant_name'],
         'rackspacenguk': ['username', 'api_key', 'keystone_url'],
@@ -238,6 +237,7 @@ class Analytics(object):
                 if k not in server:
                     continue
                 server['instance_id'] = server.pop(k)
+                break
             try:
                 server['user'] = server.pop('farm.created_by_id')
             except:
@@ -280,8 +280,8 @@ class Analytics(object):
                 msg = "Unable to load cc_id for server: {0}".format(server)
                 LOG.error(msg)
 
-        # server table
-        server_ids = list(set(_['server_id'] for _ in servers if _['server_id'] or _['server_id'] == 0))
+        # servers table
+        server_ids = list(set(_['server_id'] for _ in servers if _['server_id']))
         if not server_ids:
             return
 
@@ -293,9 +293,12 @@ class Analytics(object):
         results = self.scalr_db.execute(query, retries=1)
         existing_server_ids = [_['server_id'] for _ in results]
         missing_server_ids = [_ for _ in server_ids if _ not in existing_server_ids]
+
+        # servers_history
         if missing_server_ids:
             query = (
-                    "SELECT server_id, farm_id, farm_roleid as farm_role_id "
+                    "SELECT server_id, farm_id, farm_roleid as farm_role_id, "
+                    "cloud_server_id as instance_id "
                     "FROM servers_history "
                     "WHERE server_id IN ({server_id})"
             ).format(server_id=str(missing_server_ids)[1:-1])
@@ -490,24 +493,24 @@ class Analytics(object):
                     "ph1.account_id, p1.instance_type, p1.cost,p1.os "
                     "FROM "
                     "( "
-                        "(price_history AS ph1 JOIN prices AS p1 ON p1.price_id=ph1.price_id) "
-                        "LEFT JOIN "
-                        "(price_history AS ph2 JOIN prices AS p2 ON p2.price_id=ph2.price_id) "
-                        "ON ph2.platform=ph1.platform "
-                        "AND ph2.cloud_location=ph1.cloud_location "
-                        "AND ph2.url=ph1.url "
-                        "AND ph2.account_id=ph1.account_id "
-                        "AND p2.instance_type=p1.instance_type "
-                        "AND p2.os=p1.os "
-                        "AND ph2.applied>ph1.applied "
-                        "AND ph2.applied<='{date}' "
+                    "(price_history AS ph1 JOIN prices AS p1 ON p1.price_id=ph1.price_id) "
+                    "LEFT JOIN "
+                    "(price_history AS ph2 JOIN prices AS p2 ON p2.price_id=ph2.price_id) "
+                    "ON ph2.platform=ph1.platform "
+                    "AND ph2.cloud_location=ph1.cloud_location "
+                    "AND ph2.url=ph1.url "
+                    "AND ph2.account_id=ph1.account_id "
+                    "AND p2.instance_type=p1.instance_type "
+                    "AND p2.os=p1.os "
+                    "AND ph2.applied>ph1.applied "
+                    "AND ph2.applied<='{date}' "
                     ") "
                     "WHERE ph2.price_id IS NULL "
                     "AND ph1.applied<='{date}' "
                     "AND ph1.account_id IN ({account_id})")
             i, chunk_size = 0, 100
             while True:
-                chunk_accounts_ids = accounts_ids[i*chunk_size:(i+1)*chunk_size]
+                chunk_accounts_ids = accounts_ids[i * chunk_size:(i + 1) * chunk_size]
                 if len(chunk_accounts_ids) == 0:
                     break
                 query = base_query.format(
@@ -567,7 +570,7 @@ class Analytics(object):
                 "Unable to get cost for account_id: {0}, platform: {1}, url: {2}, "
                 "cloud_location: {3}, instance_type: {4}, os: {5}. Use 0.0, reason: {6}"
             ).format(account_id, platform, url, cloud_location,
-                    instance_type, os, helper.exc_info())
+                     instance_type, os, helper.exc_info())
             LOG.debug(msg)
         return cost
 
@@ -635,7 +638,7 @@ class Analytics(object):
                 self.analytics_db.commit()
             except:
                 self.analytics_db.rollback()
-                raise sys.exc_info()[0], sys.exc_info()[1], sys.exc_info()[2]
+                raise
             finally:
                 self.analytics_db.autocommit(True)
         except:
@@ -692,7 +695,7 @@ class Analytics(object):
                     self.analytics_db.commit()
                 except:
                     self.analytics_db.rollback()
-                    raise sys.exc_info()[0], sys.exc_info()[1], sys.exc_info()[2]
+                    raise
                 finally:
                     self.analytics_db.autocommit(True)
         except:
@@ -707,14 +710,14 @@ class Analytics(object):
                 "INSERT INTO farm_usage_d "
                 "(account_id, farm_role_id, instance_type, cc_id, project_id, date, "
                 "platform, cloud_location, env_id, "
-                "farm_id, role_id, cost, min_instances, max_instances, instance_hours, working_hours) " 
+                "farm_id, role_id, cost, min_instances, max_instances, instance_hours, working_hours) "
                 "SELECT account_id, farm_role_id, instance_type, cc_id, project_id, '{date}', "
                 "platform, cloud_location, env_id, farm_id, role_id, "
                 "cost, min_instances, max_instances, instance_hours, working_hours "
                 "FROM ("
                 "SELECT account_id, farm_role_id, instance_type, "
-                "IFNULL(cc_id, '') cc_id, IFNULL(project_id, '') project_id, "
-                "platform, cloud_location, env_id, farm_id, role_id, SUM(cost) cost, "
+                "IFNULL(cc_id, '') cc_id, IFNULL(project_id, '') project_id, platform, "
+                "cloud_location, env_id, IFNULL(farm_id, 0) farm_id, role_id, SUM(cost) cost, "
                 "(CASE WHEN COUNT(dtime)={hour} THEN MIN(num) ELSE 0 END) min_instances, "
                 "MAX(num) max_instances, SUM(num) instance_hours, COUNT(dtime) working_hours "
                 "FROM usage_h uh "
@@ -735,7 +738,7 @@ class Analytics(object):
                 "instance_hours = t.instance_hours, "
                 "working_hours = t.working_hours"
         )
-        query = query.format(date=date, hour=hour+1)
+        query = query.format(date=date, hour=hour + 1)
         self.analytics_db.execute(query, retries=1)
 
 
@@ -867,19 +870,19 @@ class QuartersCalendar(object):
 
         tmp = 0
         for i in range(4):
-            if calendar[i] < calendar[i-1]:
+            if calendar[i] < calendar[i - 1]:
                 tmp = 1
             self._start_year_correction.append(tmp)
         tmp = 0
         for i in range(4):
-            if calendar[(i+1)%4] < calendar[i]:
+            if calendar[(i + 1) % 4] < calendar[i]:
                 tmp = 1
             self._end_year_correction.append(tmp)
 
         if sum(self._start_year_correction) >= 2:
-            self._start_year_correction = [i-1 for i in self._start_year_correction]
+            self._start_year_correction = [i - 1 for i in self._start_year_correction]
             if sum(self._end_year_correction) >= 2:
-                self._end_year_correction = [i-1 for i in self._end_year_correction]
+                self._end_year_correction = [i - 1 for i in self._end_year_correction]
 
 
     def quarter_for_date(self, date):
@@ -887,26 +890,26 @@ class QuartersCalendar(object):
         date = '-'.join(date.split('-')[-2:])
         for i in range(4):
             date_1 = self.calendar[i]
-            date_2 = self.calendar[(i+1)%4]
+            date_2 = self.calendar[(i + 1) % 4]
 
             if date >= date_1 and date < date_2:
-                return i+1
+                return i + 1
             if date >= date_1 and date > date_2 and date_1 > date_2:
-                return i+1
+                return i + 1
             if date < date_1 and date < date_2 and date_1 > date_2:
-                return i+1
+                return i + 1
 
 
     def date_for_quarter(self, quarter, year=None):
         year = year or datetime.date.today().year
 
-        start_y = year + self._start_year_correction[quarter-1]
-        start_m, start_d = map(int, self.calendar[quarter-1].split('-'))
+        start_y = year + self._start_year_correction[quarter - 1]
+        start_m, start_d = map(int, self.calendar[quarter - 1].split('-'))
         start_date = datetime.date(start_y, start_m, start_d)
 
-        next_year_correction = self._end_year_correction[quarter-1]
+        next_year_correction = self._end_year_correction[quarter - 1]
         next_start_y = year + next_year_correction
-        next_start_m, next_start_d = map(int, self.calendar[quarter%4].split('-'))
+        next_start_m, next_start_d = map(int, self.calendar[quarter % 4].split('-'))
         next_start_date = datetime.date(next_start_y, next_start_m, next_start_d)
 
         end_date = next_start_date + datetime.timedelta(seconds=-1)
@@ -915,10 +918,10 @@ class QuartersCalendar(object):
 
     def year_for_date(self, date):
         quarter_number = self.quarter_for_date(date)
-        if '-'.join(str(date).split('-')[-2:]) >= self.calendar[quarter_number-1]:
-            year_correction = self._start_year_correction[quarter_number-1]
+        if '-'.join(str(date).split('-')[-2:]) >= self.calendar[quarter_number - 1]:
+            year_correction = self._start_year_correction[quarter_number - 1]
         else:
-            year_correction = self._end_year_correction[quarter_number-1]
+            year_correction = self._end_year_correction[quarter_number - 1]
         year = int(str(date).split('-')[0])
         return year - year_correction
 
@@ -1369,4 +1372,3 @@ class UUIDType(object):
 
     def __repr__(self):
         return self.__str__()
-

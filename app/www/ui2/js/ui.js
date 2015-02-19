@@ -241,7 +241,7 @@ Ext.define('Ext.layout.container.Scalr', {
 
 			if (this.activeItem.scalrOptions.modal)
 				this.activeItem.el.setStyle({ 'z-index': this.zIndex });
-
+			
 			return true;
 		}
 	},
@@ -364,7 +364,7 @@ Scalr.application = Ext.create('Ext.panel.Panel', {
                     item.setVisible(!item.wasHiddenBefore);
                     delete item.wasHiddenBefore;
                 }
-
+                
                 item.enable();
             }
 		});
@@ -514,7 +514,7 @@ Scalr.application.applyContext = function(context, onlyVars) {
     this.getDockedComponent('globalWarning').hide();
 	if (Scalr.user.userId) {
 		this.createMenu(context);
-
+        
         if (Scalr.user.envId && Scalr.getPlatformConfigValue('ec2', 'autoDisabled')) {
             this.getDockedComponent('globalWarning').setValue((new Ext.Template(Scalr.strings['aws.revoked_credentials'])).apply({envId: Scalr.user.envId})).show();
         }
@@ -534,8 +534,8 @@ Scalr.application.applyContext = function(context, onlyVars) {
         Scalr.event.on('update', Scalr.application.updateMenuHandler);
         window.onhashchange(true);
 	}
-
-    if (Ext.isDefined(Scalr.user.userId) &&  Ext.isDefined(Scalr.user.userName)) {
+    
+    if (Ext.isDefined(Scalr.user.userId) &&  Ext.isDefined(Scalr.user.userName)) {    	
     	_trackingUserEmail = Scalr.user.userName;
     	_trackEvent("000000132973");
     }
@@ -785,20 +785,31 @@ Scalr.application.createMenu = function(context) {
         }, {
             text: 'Logs',
             iconCls: 'x-topmenu-icon-logs',
-            hidden: !(Scalr.isAllowed('LOGS_SYSTEM_LOGS') || Scalr.isAllowed('LOGS_API_LOGS') || Scalr.isAllowed('LOGS_SCRIPTING_LOGS')),
-            menu: [{
-                text: 'System',
-                href: '#/logs/system',
-                hidden: !Scalr.isAllowed('LOGS_SYSTEM_LOGS')
-            }, {
-                text: 'Scripting',
-                href: '#/logs/scripting',
-                hidden: !Scalr.isAllowed('LOGS_SCRIPTING_LOGS')
-            }, {
-                text: 'API',
-                href: '#/logs/api',
-                hidden: !Scalr.isAllowed('LOGS_API_LOGS')
-            }]
+            hidden: !(Scalr.isAllowed('LOGS_EVENT_LOGS') || Scalr.isAllowed('LOGS_SYSTEM_LOGS') || Scalr.isAllowed('LOGS_API_LOGS') || Scalr.isAllowed('LOGS_SCRIPTING_LOGS')),
+            menu: {
+                cls: 'x-topmenu-dropdown',
+                items: [{
+                    text: 'Event Log',
+                    iconCls: 'x-topmenu-icon-events',
+                    href: '#/logs/events',
+                    hidden: !Scalr.isAllowed('LOGS_EVENT_LOGS')
+                }, {
+                    text: 'System Log',
+                    iconCls: 'x-topmenu-icon-logs',
+                    href: '#/logs/system',
+                    hidden: !Scalr.isAllowed('LOGS_SYSTEM_LOGS')
+                }, {
+                    text: 'Scripting Log',
+                    iconCls: 'x-topmenu-icon-logs',
+                    href: '#/logs/scripting',
+                    hidden: !Scalr.isAllowed('LOGS_SCRIPTING_LOGS')
+                }, {
+                    text: 'API Log',
+                    iconCls: 'x-topmenu-icon-logs',
+                    href: '#/logs/api',
+                    hidden: !Scalr.isAllowed('LOGS_API_LOGS')
+                }]
+            }
         }, {
             xtype: 'menuseparator'
         }, {
@@ -818,7 +829,7 @@ Scalr.application.createMenu = function(context) {
         }, {
             text: 'Deployments',
             iconCls: 'x-topmenu-icon-deployments',
-            hidden: !(Scalr.isAllowed('DEPLOYMENTS_APPLICATIONS') || Scalr.isAllowed('DEPLOYMENTS_SOURCES') || Scalr.isAllowed('DEPLOYMENTS_TASKS')),
+            hidden: !Scalr.flags['showDeprecatedFeatures'] || !(Scalr.isAllowed('DEPLOYMENTS_APPLICATIONS') || Scalr.isAllowed('DEPLOYMENTS_SOURCES') || Scalr.isAllowed('DEPLOYMENTS_TASKS')),
             menu: [{
                 text: 'Deployments',
                 href: '#/dm/tasks/view',
@@ -861,7 +872,7 @@ Scalr.application.createMenu = function(context) {
             text: 'Server config presets',
             href: '#/services/configurations/presets/view',
             iconCls: 'x-topmenu-icon-presets',
-            hidden: !Scalr.isAllowed('DB_SERVICE_CONFIGURATION')
+            hidden: !Scalr.flags['showDeprecatedFeatures'] || !Scalr.isAllowed('DB_SERVICE_CONFIGURATION')
         }, {
             text: 'Custom scaling metrics',
             href: '#/scaling/metrics/view',
@@ -878,6 +889,12 @@ Scalr.application.createMenu = function(context) {
             iconCls: 'x-topmenu-icon-variables',
             hidden: !Scalr.isAllowed('ENVADMINISTRATION_GLOBAL_VARIABLES')
         }, {
+            text: 'Environment cost analytics',
+            href: '#/analytics/environment/dashboard',
+            iconCls: 'x-topmenu-icon-billing',
+            hrefTarget: '_self',
+            hidden: !Scalr.flags['analyticsEnabled'] || !Scalr.isAllowed('ENVADMINISTRATION_ANALYTICS')
+        },{
             text: 'Environment webhooks',
             href: '#/webhooks/endpoints',
             iconCls: 'x-topmenu-icon-webhooks',
@@ -994,7 +1011,7 @@ Scalr.application.createMenu = function(context) {
             }
         });
 
-        Ext.Array.each(['openstack', 'ecs', 'nebula', 'ocs', 'contrail'], function(platform){
+        Ext.Array.each(['openstack', 'ecs', 'nebula', 'ocs'], function(platform){
             var menuItems = [];
             if (Scalr.isPlatformEnabled(platform)) {
                 if (Scalr.isAllowed('OPENSTACK_VOLUMES')) {
@@ -1030,25 +1047,7 @@ Scalr.application.createMenu = function(context) {
                         }]
                     });
                 }
-                if (platform == 'contrail') {
-                    menuItems.push({
-                        text: 'Networking',
-                        menu: [{
-                            text: 'DNS',
-                            href: '#/tools/openstack/contrail/dns?platform=' + platform
-                        }, {
-                            text: 'IPAM',
-                            href: '#/tools/openstack/contrail/ipam?platform=' + platform
-                        }, {
-                            text: 'Policies',
-                            href: '#/tools/openstack/contrail/policies?platform=' + platform
-                        }, {
-                            text: 'Networks',
-                            href: '#/tools/openstack/contrail/networks?platform=' + platform
-                        }]
-                    });
-                }
-
+                
                 menuItems.push({
                     text: 'Details',
                     href: '#/tools/openstack/details?platform=' + platform
@@ -1797,7 +1796,7 @@ window.onhashchange = function (e) {
                         }
 					}
 				};
-
+				
 				Ext.apply(param, cache.scalrParamGets(link));
 
                 if (data.moduleRequires)

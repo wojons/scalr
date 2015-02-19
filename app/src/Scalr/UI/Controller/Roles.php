@@ -735,6 +735,8 @@ class Scalr_UI_Controller_Roles extends Scalr_UI_Controller
             'origin'		=> $dbRole->origin,
             'os'			=> $dbRole->os,
             'osFamily'      => $dbRole->osFamily,
+            'dtAdded'       => $dbRole->dateAdded ? Scalr_Util_DateTime::convertTz($dbRole->dateAdded) : NULL,
+            'dtLastUsed'    => $dbRole->dtLastUsed ? Scalr_Util_DateTime::convertTz($dbRole->dtLastUsed): NULL,
             'platforms'		=> array_keys($dbRole->__getNewRoleObject()->getImages()),
             'client_name'   => $dbRole->clientId == 0 ? 'Scalr' : 'Private'
         );

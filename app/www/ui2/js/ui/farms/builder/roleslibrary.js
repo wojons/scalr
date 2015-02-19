@@ -1642,7 +1642,7 @@ Ext.define('Scalr.ui.RolesLibrary', {
                         imageOptions = imageOptions.isVisible() ? imageOptions : me.down('#imageinfo');
 
                         if (me.mode === 'shared') {
-                            var farmVariables = me.up('#farmbuilder').down('#variables').farmVariables;
+                            var farmVariables = me.up('#farmbuilder').down('#variables').farmVariables || [];
                             var filteredRoleVariables = [];
 
                             Ext.Array.each(role.variables || [], function (roleVariable) {
@@ -1661,6 +1661,7 @@ Ext.define('Scalr.ui.RolesLibrary', {
                             values.os_family = role.os_family;
                             values.os_generation = role.os_generation;
                             values.behaviors = role.behaviors;
+                            values.variables = Ext.Array.merge(filteredRoleVariables, farmVariables);
                         }
                         record.set(values);
                         
@@ -1750,7 +1751,7 @@ Ext.define('Scalr.ui.RolesLibrary', {
                             });
                         }
 
-                        var farmVariables = this.up('#farmbuilder').down('#variables').farmVariables;
+                        var farmVariables = this.up('#farmbuilder').down('#variables').farmVariables || [];
                         var roleVariables = Ext.clone(this.currentRole.get('variables'));
 
                         /*

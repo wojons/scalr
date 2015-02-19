@@ -13,6 +13,8 @@ class Scalr_Governance
     const AWS_TAGS = 'aws.tags';
 
     const OPENSTACK_SECURITY_GROUPS = 'openstack.additional_security_groups';
+    const OPENSTACK_INSTANCE_NAME_FORMAT = 'openstack.instance_name_format';
+    const OPENSTACK_TAGS = 'openstack.tags';
     
     const CLOUDSTACK_SECURITY_GROUPS = 'cloudstack.additional_security_groups';
 

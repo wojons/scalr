@@ -1,6 +1,8 @@
 <?php
+
 namespace Scalr\Farm;
-use Scalr_Util_CryptoTool;
+
+use Scalr\Util\CryptoTool;
 
 class FarmLease
 {
@@ -18,7 +20,7 @@ class FarmLease
 
     public static function getKey()
     {
-        return Scalr_Util_CryptoTool::sault(8);
+        return CryptoTool::sault(8);
     }
 
     public function __construct(\DBFarm $dbFarm)

@@ -1,6 +1,7 @@
 <?php
 use Scalr\Acl\Acl;
 use Scalr\Model\Entity\Script;
+use Scalr\Model\Entity\WebhookHistory;
 
 class Scalr_UI_Controller_Logs extends Scalr_UI_Controller
 {
@@ -511,4 +512,94 @@ class Scalr_UI_Controller_Logs extends Scalr_UI_Controller
 
         $this->response->page('ui/logs/apilogentrydetails.js', $form);
     }
+
+    public function eventsAction()
+    {
+        $this->request->restrictAccess(Acl::RESOURCE_LOGS_EVENT_LOGS);
+
+        $farms = self::loadController('Farms')->getList();
+        array_unshift($farms, array('id' => 0, 'name' => 'All farms'));
+
+        $this->response->page('ui/logs/events.js', array(
+            'farms' => $farms
+        ));
+    }
+
+    public function xListEventLogsAction()
+    {
+        $this->request->defineParams(array(
+            'farmId' => array('type' => 'int'),
+            'eventServerId',
+            'eventId',
+            'query' => array('type' => 'string'),
+            'sort' => array('type' => 'string', 'default' => 'id'),
+            'dir' => array('type' => 'string', 'default' => 'DESC')
+        ));
+
+        $sql = "
+            SELECT *
+            FROM events
+            WHERE farmid IN (SELECT id FROM farms where env_id = ".$this->db->qstr($this->getEnvironmentId()).")
+        ";
+
+        if ($this->getParam('farmId'))
+            $sql .= " AND farmid = ".$this->db->qstr($this->getParam('farmId'));
+
+        if ($this->getParam('eventServerId'))
+            $sql .= " AND event_server_id = ".$this->db->qstr($this->getParam('eventServerId'));
+
+        if ($this->getParam('eventId'))
+            $sql .= " AND event_id = ".$this->db->qstr($this->getParam('eventId'));
+
+        $response = $this->buildResponseFromSql($sql, array("message", "type", "dtadded", "event_server_id", "event_id"));
+
+        $cache = array();
+
+        foreach ($response['data'] as &$row) {
+            $row['message'] = nl2br($row['message']);
+            $row["dtadded"] = Scalr_Util_DateTime::convertTz($row["dtadded"]);
+            
+            if ($row['is_suspend'] == 1)
+                $row['type'] = "{$row['type']} (Suspend)";
+
+            if ($row['event_server_id']) {
+
+                try {
+                    $es = DBServer::LoadByID($row['event_server_id']);
+
+                    if (!$cache['farm_names'][$es->farmId])
+                        $cache['farm_names'][$es->farmId] = $this->db->GetOne("SELECT name FROM farms WHERE id=?", array($es->farmId));
+                    $row['event_farm_name'] = $cache['farm_names'][$es->farmId];
+                    $row['event_farm_id'] = $es->farmId;
+
+                    $row['event_farm_roleid'] = $es->farmRoleId;
+
+                    if (!$cache['role_names'][$es->GetFarmRoleObject()->RoleID])
+                        $cache['role_names'][$es->GetFarmRoleObject()->RoleID] = $es->GetFarmRoleObject()->GetRoleObject()->name;
+                    $row['event_role_name'] = $cache['role_names'][$es->GetFarmRoleObject()->RoleID];
+
+                    $row['event_server_index'] = $es->index;
+                } catch (Exception $e) {}
+
+            }
+            
+            $row['scripts'] = [
+                'total' => $row['scripts_total'], 
+                'complete' => $row['scripts_completed'], 
+                'failed' => $row['scripts_failed'], 
+                'timeout' => $row['scripts_timedout'], 
+                'pending' => $row['scripts_total'] - $row['scripts_completed'] - $row['scripts_failed'] - $row['scripts_timedout']
+            ];
+            $row['webhooks'] = [
+                'total' => $row['wh_total'], 
+                'complete' => $row['wh_completed'], 
+                'failed' => $row['wh_failed'], 
+                'pending' => $row['wh_total'] - $row['wh_completed'] - $row['wh_failed']
+            ];
+        }
+
+        $this->response->data($response);
+    }
+
+
 }

@@ -2,16 +2,19 @@
 
 use Scalr\Farm\Role\FarmRoleStorage;
 use Scalr\Modules\PlatformFactory;
+use Scalr\Util\CryptoTool;
 
 class Scalr_Role_Behavior
 {
     const ROLE_DM_APPLICATION_ID = 'dm.application_id';
     const ROLE_DM_REMOTE_PATH = 'dm.remote_path';
 
-    const ROLE_BASE_KEEP_SCRIPTING_LOGS_TIME   = 'base.keep_scripting_logs_time';
+    const ROLE_BASE_KEEP_SCRIPTING_LOGS_TIME    = 'base.keep_scripting_logs_time';
     const ROLE_BASE_ABORT_INIT_ON_SCRIPT_FAIL   = 'base.abort_init_on_script_fail';
     const ROLE_BASE_DISABLE_FIREWALL_MANAGEMENT = 'base.disable_firewall_management';
-    const ROLE_BASE_HOSTNAME_FORMAT   = 'base.hostname_format';
+    const ROLE_BASE_HOSTNAME_FORMAT             = 'base.hostname_format';
+    const ROLE_BASE_CUSTOM_TAGS                 = 'base.custom_tags';
+    const ROLE_INSTANCE_NAME_FORMAT             = 'base.instance_name_format';
 
     const ROLE_BASE_TERMINATE_STRATEGY =       'base.terminate_strategy';
     const ROLE_BASE_CONSIDER_SUSPENDED =       'base.consider_suspended';
@@ -34,6 +37,11 @@ class Scalr_Role_Behavior
      * @var \ADODB_mysqli
      */
     public $db;
+
+    /**
+     * @var CryptoTool
+     */
+    protected $crypto;
 
     /**
      * @return Scalr_Role_Behavior
@@ -207,13 +215,12 @@ class Scalr_Role_Behavior
     }
 
     /**
-     * @return Scalr_Util_CryptoTool
+     * @return CryptoTool
      */
     protected function getCrypto()
     {
-        if (! $this->crypto) {
-            $this->crypto = new Scalr_Util_CryptoTool(MCRYPT_TRIPLEDES, MCRYPT_MODE_CFB, 24, 8);
-            $this->cryptoKey = @file_get_contents(dirname(__FILE__)."/../../../etc/.cryptokey");
+        if (!$this->crypto) {
+            $this->crypto = \Scalr::getContainer()->crypto;
         }
 
         return $this->crypto;
@@ -238,7 +245,6 @@ class Scalr_Role_Behavior
                     $configuration->volumes = $volumes;
             }
         } catch (Exception $e) {
-            
             $this->logger->error(new FarmLogMessage($dbServer->farmId, "Cannot init storage: {$e->getMessage()}"));
         }
 
@@ -364,7 +370,7 @@ class Scalr_Role_Behavior
 
     public function onHostDown(DBServer $dbServer)
     {
-
+        
     }
 
     public function onBeforeInstanceLaunch(DBServer $dbServer)

@@ -381,7 +381,7 @@ class DBEventObserver extends EventObserver
 
         //TERMINATE RUNNING INSTANCES
         foreach ($servers as $dbServer) {
-            /** @var DBServer $dbServer */
+            /* @var $dbServer \DBServer */
             if ($this->DB->GetOne("
                     SELECT id
                     FROM bundle_tasks

@@ -15,33 +15,7 @@ class CloudstackHelper
 {
     public static function farmSave(DBFarm $DBFarm, array $roles)
     {
-        foreach ($roles as $DBFarmRole)
-        {
-            if (!in_array($DBFarmRole->Platform, array(SERVER_PLATFORMS::CLOUDSTACK, SERVER_PLATFORMS::IDCF))) {
-                continue;
-            }
-
-            $cs = $DBFarm->GetEnvironmentObject()->cloudstack($DBFarmRole->Platform);
-
-            $networkId = $DBFarmRole->GetSetting(DBFarmRole::SETTING_CLOUDSTACK_NETWORK_ID);
-            if ($networkId == 'SCALR_MANUAL') {
-                return true;
-            }
-
-            if ($networkId) {
-                $set = false;
-                foreach ($cs->network->describe(array('id' => $networkId)) as $network) {
-                    if ($network->id == $networkId) {
-                        $DBFarmRole->SetSetting(DBFarmRole::SETTING_CLOUDSTACK_NETWORK_TYPE, $network->type, DBFarmRole::TYPE_LCL);
-                        $set = true;
-                    }
-                }
-
-                if (!$set) {
-                    throw new \Exception("Unable to get GuestIPType for Network #{$networkId}. Please try again later or choose another network offering.");
-                }
-            }
-        }
+        
     }
 
     /**

@@ -2,23 +2,23 @@
 
 class SERVER_PROPERTIES
 {
-    /* SYSTEM PROPERTIES */
+    //System properties
     const SYSTEM_IGNORE_INBOUND_MESSAGES = 'system.ignore_inbound_messages';
     const SYSTEM_USER_DATA_METHOD = 'system.user_data_method';
 
-    /* SCALARIZR PROPERTIES */
+    //Scalarizr properties
     const SZR_KEY			= 'scalarizr.key';
-    // permanent, one-time
+    //permanent, one-time
     const SZR_KEY_TYPE		= 'scalarizr.key_type';
     const SZR_MESSAGE_FORMAT = 'scalarizr.message_format';
 
     const SZR_ONETIME_KEY_EXPIRED = 'scalarizr.onetime_key_expired';
 
-    // 0.5 or 0.2-139
+    //0.5 or 0.2-139
     const SZR_VESION		= 'scalarizr.version';
     const SZR_UPD_CLIENT_VERSION = 'scalarizr.update_client.version';
 
-    // New Importing process
+    //New Importing process
     const SZR_IMPORTING_VERSION = 'scalarizr.import.version';
     const SZR_IMPORTING_STEP    = 'scalarizr.import.step';
     const SZR_IMPORTING_OUT_CONNECTION       = 'scalarizr.import.outbound_connection';
@@ -53,14 +53,14 @@ class SERVER_PROPERTIES
     const SZR_UPDC_PORT = 'scalarizr.updc_port';
     const CUSTOM_SSH_PORT = 'scalarizr.ssh_port';
 
-    /* DATABASE PROPERTIES */
+    //Database properties
     const DB_MYSQL_MASTER	= 'db.mysql.master';
     const DB_MYSQL_REPLICATION_STATUS = 'db.mysql.replication_status';
 
-    /* DNS PROPERTIES */
+    //DNS properties
     const EXCLUDE_FROM_DNS	= 'dns.exclude_instance';
 
-    /* System PROPERTIES */
+    //System properties
     const ARCHITECTURE = "system.architecture";
     const REBOOTING = "system.rebooting";
     const RESUMING = "system.resuming";
@@ -69,30 +69,29 @@ class SERVER_PROPERTIES
     const INITIALIZED_TIME = "system.date.initialized";
     const TERMINATION_REQUEST_UNIXTIME = "system.termination.request.unixtime";
 
-    /* Healthcheck PROPERTIES */
+    //Healthcheck properties
     const HEALTHCHECK_FAILED = "system.healthcheck.failed";
     const HEALTHCHECK_TIME = "system.healthcheck.time";
 
-    /* Statistics */
+    //Statistics
     const STATISTICS_BW_IN 	= "statistics.bw.in";
     const STATISTICS_BW_OUT	= "statistics.bw.out";
     const STATISTICS_LAST_CHECK_TS	= "statistics.lastcheck_ts";
 
-    //!IMPORTANT Farm derived properties
+    //Farm derived properties
     const FARM_CREATED_BY_ID = 'farm.created_by_id';
     const FARM_CREATED_BY_EMAIL = 'farm.created_by_email';
-    //!IMPORTANT These are necessary for cost analytics
+    //They are necessary for cost analytics
     const FARM_PROJECT_ID = 'farm.project_id';
     const FARM_ROLE_ID = 'farm_role.id';
     const ROLE_ID = 'role.id';
 
-    //!IMPORTANT Environment derived properties
+    //Environment derived properties
     const ENV_CC_ID = 'env.cc_id';
 
-    //!IMPORTANT OS type is used in CA
+    //It is used in CA
     const OS_TYPE = 'os_type';
 
-    //!IMPORTANT Audit properties
     const LAUNCHED_BY_ID = 'audit.launched_by_id';
     const LAUNCHED_BY_EMAIL = 'audit.launched_by_email';
     const TERMINATED_BY_ID = 'audit.terminated_by_id';
@@ -101,5 +100,27 @@ class SERVER_PROPERTIES
     const SCALR_INBOUND_REQ_RATE = 'scalr.inbound.req.rate';
 
     const INFO_INSTANCE_TYPE_NAME = 'info.instance_type_name';
-}
 
+    /**
+     * Gets a list of important properties which must not be deleted
+     *
+     * @return array Returns array of properties
+     */
+    public static function getImportantList()
+    {
+        return [
+            self::FARM_CREATED_BY_ID,
+            self::FARM_CREATED_BY_EMAIL,
+            self::FARM_PROJECT_ID,
+            self::FARM_ROLE_ID,
+            self::ROLE_ID,
+            self::ENV_CC_ID,
+            self::OS_TYPE,
+            self::LAUNCHED_BY_ID,
+            self::LAUNCHED_BY_EMAIL,
+            self::TERMINATED_BY_ID,
+            self::TERMINATED_BY_EMAIL,
+            self::INFO_INSTANCE_TYPE_NAME
+        ];
+    }
+}

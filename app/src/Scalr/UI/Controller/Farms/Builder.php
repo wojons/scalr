@@ -1,9 +1,9 @@
 <?php
 
 use Scalr\Acl\Acl;
-use Scalr\Stats\CostAnalytics\Entity\ProjectEntity;
 use Scalr\Model\Entity\Script;
 use Scalr\Modules\PlatformFactory;
+use Scalr\Stats\CostAnalytics\Entity\PriceEntity;
 
 class Scalr_UI_Controller_Farms_Builder extends Scalr_UI_Controller
 {
@@ -360,8 +360,24 @@ class Scalr_UI_Controller_Farms_Builder extends Scalr_UI_Controller
                         break;
                 }
 
+                if ($role['settings'][Scalr_Role_Behavior::ROLE_BASE_CUSTOM_TAGS] && PlatformFactory::isOpenstack($role['platform'])) {
+                    $reservedBaseCustomTags = ['farmid', 'role', 'httpproto', 'region', 'hash', 'realrolename', 'szr_key', 'serverid', 'p2p_producer_endpoint', 'queryenv_url', 'behaviors', 'farm_roleid', 'roleid', 'env_id', 'platform', 'server_index', 'cloud_server_id', 'cloud_location_zone', 'owner_email'];
+                    $baseCustomTags = @explode("\n", $role['settings'][Scalr_Role_Behavior::ROLE_BASE_CUSTOM_TAGS]);
+                    foreach ((array)$baseCustomTags as $tag) {
+                        $tag = trim($tag);
+                        $tagChunks = explode("=", $tag);
+                        if (in_array(trim($tagChunks[0]), $reservedBaseCustomTags)) {
+                            $this->setBuildError(
+                                Scalr_Role_Behavior::ROLE_BASE_CUSTOM_TAGS,
+                                "avoid using Scalr-reserved metadata names.",
+                                $role['farm_role_id']
+                            );
+                        }
+                    }
+                }
+
                 if ($role['settings'][Scalr_Role_Behavior::ROLE_BASE_HOSTNAME_FORMAT]) {
-                    if (!preg_match("/^[A-Za-z0-9\{\}_\.-]+$/si", $role['settings'][Scalr_Role_Behavior::ROLE_BASE_HOSTNAME_FORMAT])) {
+                    if (!preg_match('/^[A-Za-z0-9\{\}_\.-]+$/si', $role['settings'][Scalr_Role_Behavior::ROLE_BASE_HOSTNAME_FORMAT])) {
                         $this->setBuildError(
                             Scalr_Role_Behavior::ROLE_BASE_HOSTNAME_FORMAT,
                             "server hostname format for role'{$dbRole->name}' should contain only [a-z0-9-] chars. First char should not be hypen.",
@@ -372,7 +388,7 @@ class Scalr_UI_Controller_Farms_Builder extends Scalr_UI_Controller
 
                 if ($role['settings'][DBFarmRole::SETTING_DNS_CREATE_RECORDS]) {
                     if ($role['settings'][DBFarmRole::SETTING_DNS_EXT_RECORD_ALIAS]) {
-                        if (!preg_match("/^[A-Za-z0-9\{\}_\.-]+$/si", $role['settings'][DBFarmRole::SETTING_DNS_EXT_RECORD_ALIAS])) {
+                        if (!preg_match('/^[A-Za-z0-9\{\}_\.-]+$/si', $role['settings'][DBFarmRole::SETTING_DNS_EXT_RECORD_ALIAS])) {
                             $this->setBuildError(
                                 DBFarmRole::SETTING_DNS_EXT_RECORD_ALIAS,
                                 "ext- record alias for role '{$dbRole->name}' should contain only [A-Za-z0-9-] chars. First and last char should not be hypen.",
@@ -382,7 +398,7 @@ class Scalr_UI_Controller_Farms_Builder extends Scalr_UI_Controller
                     }
 
                     if ($role['settings'][DBFarmRole::SETTING_DNS_INT_RECORD_ALIAS]) {
-                        if (!preg_match("/^[A-Za-z0-9\{\}_\.-]+$/si", $role['settings'][DBFarmRole::SETTING_DNS_INT_RECORD_ALIAS])) {
+                        if (!preg_match('/^[A-Za-z0-9\{\}_\.-]+$/si', $role['settings'][DBFarmRole::SETTING_DNS_INT_RECORD_ALIAS])) {
                             $this->setBuildError(
                                 DBFarmRole::SETTING_DNS_INT_RECORD_ALIAS,
                                 "int- record alias for role '{$dbRole->name}' should contain only [A-Za-z0-9-] chars. First and last char should not by hypen.",
@@ -614,24 +630,21 @@ class Scalr_UI_Controller_Farms_Builder extends Scalr_UI_Controller
             $variables->setValues(is_array($farm['variables']) ? $farm['variables'] : [], 0, $dbFarm->ID, 0, '', false, true);
         }
 
-        if (!$farm['timezone'])
+        if (!$farm['timezone']) {
             $farm['timezone'] = date_default_timezone_get();
+        }
 
         $dbFarm->SetSetting(DBFarm::SETTING_TIMEZONE, $farm['timezone']);
         $dbFarm->SetSetting(DBFarm::SETTING_EC2_VPC_ID, $farm['vpc_id']);
         $dbFarm->SetSetting(DBFarm::SETTING_EC2_VPC_REGION, $farm['vpc_region']);
 
-        if (!$dbFarm->GetSetting(DBFarm::SETTING_CRYPTO_KEY))
+        if (!$dbFarm->GetSetting(DBFarm::SETTING_CRYPTO_KEY)) {
             $dbFarm->SetSetting(DBFarm::SETTING_CRYPTO_KEY, Scalr::GenerateRandomKey(40));
+        }
 
         if ($this->getContainer()->analytics->enabled) {
-            if ($this->request->isInterfaceBetaOrNotHostedScalr()) {
-                //Cost analytics project must be set for the Farm object
-                $dbFarm->setProject((!empty($farm['projectId']) ? $farm['projectId'] : null), $this->request->isInterfaceBetaOrNotHostedScalr());
-            } else if (isset($bNew)) {
-                //Default project is set for hosted scalr accounts. Users cannot manage it.
-                $farm['projectId'] = $dbFarm->setProject(null);
-            }
+            //Cost analytics project must be set for the Farm object
+            $dbFarm->setProject((!empty($farm['projectId']) ? $farm['projectId'] : null));
         }
 
         $virtualFarmRoles = array();
@@ -769,8 +782,6 @@ class Scalr_UI_Controller_Farms_Builder extends Scalr_UI_Controller
                 }
 
                 $farmRoleVariables->setValues(is_array($role['variables']) ? $role['variables']: [], $dbFarmRole->GetRoleID(), $dbFarm->ID, $dbFarmRole->ID, '', false, true);
-
-                Scalr_Helpers_Dns::farmUpdateRoleSettings($dbFarmRole, $oldRoleSettings, $role['settings']);
 
                 foreach (Scalr_Role_Behavior::getListForFarmRole($dbFarmRole) as $behavior)
                     $behavior->onFarmSave($dbFarm, $dbFarmRole);
@@ -962,7 +973,8 @@ class Scalr_UI_Controller_Farms_Builder extends Scalr_UI_Controller
                 'variables'     => $farmRoleVariables->getValues($dbFarmRole->GetRoleID(), $dbFarm->ID, $dbFarmRole->ID),
                 'running_servers' => $dbFarmRole->GetRunningInstancesCount(),
                 'suspended_servers' => $dbFarmRole->GetSuspendedInstancesCount(),
-                'security_groups' => $securityGroups
+                'security_groups' => $securityGroups,
+                'hourly_rate'     => $this->getInstanceTypeHourlyRate($dbFarmRole->Platform, $dbFarmRole->CloudLocation, $dbFarmRole->getInstanceType(), $dbFarmRole->GetRoleObject()->osFamily)
             );
         }
 
@@ -1045,6 +1057,44 @@ class Scalr_UI_Controller_Farms_Builder extends Scalr_UI_Controller
             $this->user->getPermissions()->validate($dbRole);
 
         $this->response->data(array('chef' => $dbRole->getProperties('chef.')));
+    }
+
+    /**
+     * @param string $platform
+     * @param string $cloudLocation
+     * @param string $instanceType
+     * @param string $osFamily
+     * @return float
+     */
+    public function xGetInstanceTypeHourlyRateAction($platform, $cloudLocation, $instanceType, $osFamily)
+    {
+        $this->response->data(['hourly_rate' => $this->getInstanceTypeHourlyRate($platform, $cloudLocation, $instanceType, $osFamily)]);
+    }
+
+    /**
+     * Gets instance type houry rate
+     *
+     * @param string $platform
+     * @param string $cloudLocation
+     * @param string $instanceType
+     * @param string $osFamily
+     * @return float
+     */
+    private function getInstanceTypeHourlyRate($platform, $cloudLocation, $instanceType, $osFamily)
+    {
+        $rate = 0;
+        if ($this->getContainer()->analytics->enabled) {
+            $env = $this->getEnvironment();
+            $applied = new DateTime('now', new DateTimeZone('UTC'));
+            $platformModule = PlatformFactory::NewPlatform($platform);
+            $osType = $osFamily === 'windows' ? PriceEntity::OS_WINDOWS : PriceEntity::OS_LINUX;
+
+            $roleInstancePricing = $env->analytics->prices->getActualPrices($platform, $cloudLocation, $platformModule->getEndpointUrl($env), $applied, 0, $instanceType, $osType);
+            $pricing = reset($roleInstancePricing);
+
+            $rate = $pricing instanceof PriceEntity ? $pricing->cost : 0;
+        }
+        return $rate;
     }
 
 }

@@ -69,7 +69,7 @@ class Application(object):
     config = {
         'user': False,
         'group': False,
-        'log_size': 1024*1000,
+        'log_size': 1024*1024*10,
         'log_file': '/var/log/scalr.%s.log' % name,
         'pid_file': '/var/run/scalr.%s.pid' % name,
     }

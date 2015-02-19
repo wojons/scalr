@@ -506,7 +506,11 @@ abstract class AbstractUpdate extends AbstractGetter implements UpdateInterface
             $schema = $this->db->GetOne("SELECT DATABASE()");
         }
 
-        return ColumnEntity::getColumnDefinition($schema, $table, $column);
+        // Update with the service
+        $entity = new ColumnEntity();
+        $entity->db = $this->db;
+
+        return $entity->findOne([['tableSchema' => $schema], ['tableName' => $table], ['columnName' => $column]]);
     }
 
     /**

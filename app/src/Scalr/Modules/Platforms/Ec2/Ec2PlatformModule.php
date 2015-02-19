@@ -34,6 +34,7 @@ use \EC2_SERVER_PROPERTIES;
 use \DBServer;
 use \DBFarm;
 use \Exception;
+use Scalr\Util\CryptoTool;
 use \SERVER_PLATFORMS;
 use \DBRole;
 use \SERVER_SNAPSHOT_CREATION_TYPE;
@@ -225,6 +226,47 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
                'vcpus' => '8',
                'disk' => '1680',
                'type' => 'HDD'
+            ),
+            
+            'c4.large' => array(
+                'name' => 'c4.large',
+                'ram' => '3840',
+                'vcpus' => '2',
+                'disk' => '32',
+                'type' => 'SSD',
+                'ebsencryption' => true
+            ),
+            'c4.xlarge' => array(
+                'name' => 'c4.xlarge',
+                'ram' => '7680',
+                'vcpus' => '4',
+                'disk' => '80',
+                'type' => 'SSD',
+                'ebsencryption' => true
+            ),
+            'c4.2xlarge' => array(
+                'name' => 'c4.2xlarge',
+                'ram' => '15360',
+                'vcpus' => '8',
+                'disk' => '160',
+                'type' => 'SSD',
+                'ebsencryption' => true
+            ),
+            'c4.4xlarge' => array(
+                'name' => 'c4.4xlarge',
+                'ram' => '30720',
+                'vcpus' => '16',
+                'disk' => '320',
+                'type' => 'SSD',
+                'ebsencryption' => true
+            ),
+            'c4.8xlarge' => array(
+                'name' => 'c4.8xlarge',
+                'ram' => '61440',
+                'vcpus' => '36',
+                'disk' => '640',
+                'type' => 'SSD',
+                'ebsencryption' => true
             ),
 
             'c3.large' => array(
@@ -1650,8 +1692,10 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
 
         if (substr($launchOptions->serverType, 0, 2) == 'm3' ||
             substr($launchOptions->serverType, 0, 2) == 'i2' ||
+            substr($launchOptions->serverType, 0, 2) == 'r3' ||
             $launchOptions->serverType == 'hi1.4xlarge' ||
             $launchOptions->serverType == 'cc2.8xlarge' ||
+            $launchOptions->serverType == 'hs1.8xlarge' ||
             $launchOptions->osFamily == 'oel') {
             foreach ($this->GetBlockDeviceMapping($launchOptions->serverType) as $bdm) {
                 $runInstanceRequest->appendBlockDeviceMapping($bdm);
@@ -1828,9 +1872,10 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
                 'm2.xlarge', 'm2.2xlarge', 'm2.4xlarge',
                 'm3.large', 'm3.xlarge', 'm3.2xlarge',
                 'i2.xlarge', 'i2.2xlarge', 'i2.4xlarge', 'i2.8xlarge',
+                'c3.large', 'c3.xlarge', 'c3.2xlarge', 'c3.4xlarge', 'c3.8xlarge',
                 'r3.large', 'r3.xlarge', 'r3.2xlarge', 'r3.4xlarge', 'r3.8xlarge',
                 'c1.xlarge', 'cc1.4xlarge', 'cc2.8xlarge', 'cr1.8xlarge',
-                'hi1.4xlarge', 'cr1.8xlarge'
+                'hi1.4xlarge', 'cr1.8xlarge', 'hs1.8xlarge'
             ))) {
             $retval[] = new BlockDeviceMappingData("{$prefix}b", 'ephemeral0');
         }
@@ -1839,42 +1884,63 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
         if (in_array($instanceType, array(
                 'm1.large', 'm1.xlarge',
                 'm3.xlarge', 'm3.2xlarge',
+                'c3.large', 'c3.xlarge', 'c3.2xlarge', 'c3.4xlarge', 'c3.8xlarge',
                 'cc2.8xlarge', 'cc1.4xlarge',
                 'i2.2xlarge','i2.4xlarge','i2.8xlarge',
                 'r3.8xlarge',
-                'c1.xlarge', 'cr1.8xlarge', 'hi1.4xlarge', 'm2.2xlarge', 'cr1.8xlarge'))) {
+                'c1.xlarge', 'cr1.8xlarge', 'hi1.4xlarge', 'm2.2xlarge', 'cr1.8xlarge', 'hs1.8xlarge'))) {
             $retval[] = new BlockDeviceMappingData("{$prefix}c", 'ephemeral1');
         }
 
         //e
-        if (in_array($instanceType, array('m1.xlarge', 'c1.xlarge', 'cc2.8xlarge', 'i2.4xlarge', 'i2.8xlarge'))) {
+        if (in_array($instanceType, array('m1.xlarge', 'c1.xlarge', 'cc2.8xlarge', 'i2.4xlarge', 'i2.8xlarge', 'hs1.8xlarge'))) {
              $retval[] = new BlockDeviceMappingData("{$prefix}e", 'ephemeral2');
         }
 
         //f
-        if (in_array($instanceType, array('m1.xlarge', 'c1.xlarge', 'cc2.8xlarge', 'i2.4xlarge', 'i2.8xlarge'))) {
+        if (in_array($instanceType, array('m1.xlarge', 'c1.xlarge', 'cc2.8xlarge', 'i2.4xlarge', 'i2.8xlarge', 'hs1.8xlarge'))) {
             $retval[] = new BlockDeviceMappingData("{$prefix}f", 'ephemeral3');
         }
 
 
         //g
-        if (in_array($instanceType, array('i2.8xlarge'))) {
+        if (in_array($instanceType, array('i2.8xlarge', 'hs1.8xlarge'))) {
             $retval[] = new BlockDeviceMappingData("{$prefix}g", 'ephemeral4');
         }
 
         //h
-        if (in_array($instanceType, array('i2.8xlarge'))) {
+        if (in_array($instanceType, array('i2.8xlarge', 'hs1.8xlarge'))) {
             $retval[] = new BlockDeviceMappingData("{$prefix}h", 'ephemeral5');
         }
 
         //i
-        if (in_array($instanceType, array('i2.8xlarge'))) {
+        if (in_array($instanceType, array('i2.8xlarge', 'hs1.8xlarge'))) {
             $retval[] = new BlockDeviceMappingData("{$prefix}i", 'ephemeral6');
         }
 
         //j
-        if (in_array($instanceType, array('i2.8xlarge'))) {
+        if (in_array($instanceType, array('i2.8xlarge', 'hs1.8xlarge'))) {
             $retval[] = new BlockDeviceMappingData("{$prefix}j", 'ephemeral7');
+        }
+        
+        //k
+        if (in_array($instanceType, array('hs1.8xlarge'))) {
+            $retval[] = new BlockDeviceMappingData("{$prefix}k1", 'ephemeral8');
+            $retval[] = new BlockDeviceMappingData("{$prefix}k2", 'ephemeral9');
+            $retval[] = new BlockDeviceMappingData("{$prefix}k3", 'ephemeral10');
+            $retval[] = new BlockDeviceMappingData("{$prefix}k4", 'ephemeral11');
+            $retval[] = new BlockDeviceMappingData("{$prefix}k5", 'ephemeral12');
+            $retval[] = new BlockDeviceMappingData("{$prefix}k6", 'ephemeral13');
+            $retval[] = new BlockDeviceMappingData("{$prefix}k7", 'ephemeral14');
+            $retval[] = new BlockDeviceMappingData("{$prefix}k8", 'ephemeral15');
+            $retval[] = new BlockDeviceMappingData("{$prefix}k9", 'ephemeral16');
+            $retval[] = new BlockDeviceMappingData("{$prefix}l1", 'ephemeral17');
+            $retval[] = new BlockDeviceMappingData("{$prefix}l2", 'ephemeral18');
+            $retval[] = new BlockDeviceMappingData("{$prefix}l3", 'ephemeral19');
+            $retval[] = new BlockDeviceMappingData("{$prefix}l4", 'ephemeral20');
+            $retval[] = new BlockDeviceMappingData("{$prefix}l5", 'ephemeral21');
+            $retval[] = new BlockDeviceMappingData("{$prefix}l6", 'ephemeral22');
+            $retval[] = new BlockDeviceMappingData("{$prefix}l7", 'ephemeral23');
         }
 
         return $retval;
@@ -2069,7 +2135,7 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
                         $dbRules = $DBServer->GetFarmRoleObject()->GetRoleObject()->getSecurityRules();
                         $groupRules = array();
                         foreach ($dbRules as $rule) {
-                            $groupRules[\Scalr_Util_CryptoTool::hash($rule['rule'])] = $rule;
+                            $groupRules[CryptoTool::hash($rule['rule'])] = $rule;
                         }
 
                         // Behavior rules
@@ -2077,7 +2143,7 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
                             $bRules = $bObj->getSecurityRules();
                             foreach ($bRules as $r) {
                                 if ($r) {
-                                    $groupRules[\Scalr_Util_CryptoTool::hash($r)] = array('rule' => $r);
+                                    $groupRules[CryptoTool::hash($r)] = array('rule' => $r);
                                 }
                             }
                         }
@@ -2306,7 +2372,7 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
         $accessData->cert = $environment->getPlatformConfigValue(self::CERTIFICATE);
         $accessData->pk = $environment->getPlatformConfigValue(self::PRIVATE_KEY);
 
-        if ($config('scalr.aws.use_proxy')) {
+        if ($config('scalr.aws.use_proxy') && in_array($config('scalr.connections.proxy.use_on'), array('both', 'instance'))) {
             $proxySettings = $config('scalr.connections.proxy');
             $accessData->proxy = new \stdClass();
             $accessData->proxy->host = $proxySettings['host'];

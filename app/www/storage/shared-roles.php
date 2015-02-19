@@ -45,6 +45,10 @@ while ($role = $rs20->FetchRow()) {
                     $image['cloud_location'],
                     $image['image_id']
                 ]);
+                // temporary solution because of os-refactoring feature, remove in next OSS release
+                unset($image['image']['os_id']);
+                unset($image['image']['dt_last_used']);
+
                 $image['image']['software'] = $db->GetAll('SELECT name, version FROM image_software WHERE image_hash = UNHEX(?)', [$image['image']['hash']]);
             } else {
                 $image['architecture'] = NULL;

@@ -3,9 +3,6 @@
 namespace Scalr\Server;
 
 use Exception;
-use SERVER_PLATFORMS;
-use EC2_SERVER_PROPERTIES;
-use RACKSPACE_SERVER_PROPERTIES;
 use ReflectionClass;
 use ReflectionProperty;
 

@@ -29,6 +29,6 @@ class Scalr_UI_Controller_Public extends Scalr_UI_Controller
             throw new Scalr_UI_Exception_NotFound();
         }
 
-        $this->response->page('ui/public/report.js', json_decode($data->payload, true), array('ui/analytics/analytics.js'), array('ui/analytics/analytics.css', 'ui/public/report.css'));
+        $this->response->page('ui/public/report.js', json_decode($data->payload, true), array(), array('ui/analytics/analytics.css', 'ui/analytics/admin/admin.css', 'ui/public/report.css'));
     }
 }

@@ -4,10 +4,7 @@ import hashlib
 import binascii
 
 from M2Crypto.EVP import Cipher
-from Crypto.Cipher import DES3
-
-
-READ_BUF_SIZE = 1024 * 1024
+from Crypto.Cipher import AES
 
 
 
@@ -18,56 +15,6 @@ def decrypt_key(key):
 
 def read_key(key_path):
     return open(key_path).read().strip()
-
-
-"""
-crypto_algo = dict(name="des_ede3_cbc", key_size=24, iv_size=8)
-crypto_algo = dict(name="des_ede3_cfb", key_size=24, iv_size=8)
-"""
-
-
-def _init_cipher(crypto_algo, key, op_enc=1):
-    skey = key[0:crypto_algo["key_size"]]
-    iv = key[-crypto_algo["iv_size"]:]
-    return Cipher(crypto_algo["name"], skey, iv, op_enc)
-
-
-
-def encrypt(crypto_algo, s, key):
-    c = _init_cipher(crypto_algo, key, 1)
-    ret = c.update(s)
-    ret += c.final()
-    del c
-    return binascii.b2a_base64(ret)
-
-
-
-def decrypt(crypto_algo, s, key):
-    c = _init_cipher(crypto_algo, key, 0)
-    ret = c.update(binascii.a2b_base64(s))
-    ret += c.final()
-    del c
-    return ret
-
-
-
-def digest_file(digest, f):
-    while 1:
-        buf = f.read(READ_BUF_SIZE)
-        if not buf:
-            break
-        digest.update(buf)
-    return digest.final()
-
-
-
-def crypt_file(cipher, in_file, out_file):
-    while 1:
-        buf = in_file.read(READ_BUF_SIZE)
-        if not buf:
-            break
-        out_file.write(cipher.update(buf))
-    out_file.write(cipher.final())
 
 
 
@@ -91,15 +38,48 @@ def sign(data, crypto_key, utc_struct_time=None, date_format=None, version=1):
 
 
 
+# scalr tools
+
 def encrypt_scalr(crypto_key, data):
-    obj = DES3.new(crypto_key[0:24], DES3.MODE_CFB, crypto_key[-8:])
+    obj = AES.new(crypto_key[0:32], AES.MODE_CFB, crypto_key[-AES.block_size:])
     return binascii.b2a_base64(obj.encrypt(data))
 
 
-
 def decrypt_scalr(crypto_key, data):
-    obj = DES3.new(crypto_key[0:24], DES3.MODE_CFB, crypto_key[-8:])
+    obj = AES.new(crypto_key[0:32], AES.MODE_CFB, crypto_key[-AES.block_size:])
     tmp = obj.decrypt(binascii.a2b_base64(data))
     tmp = ''.join(c for c in tmp if ord(c) in range(32, 127))
     return tmp
+
+
+
+# scalarizr tools
+
+"""
+crypto_algo = dict(name="des_ede3_cbc", key_size=24, iv_size=8)
+crypto_algo = dict(name="des_ede3_cfb", key_size=24, iv_size=8)
+"""
+
+def _init_cipher(crypto_algo, key, op_enc=1):
+    skey = key[0:crypto_algo["key_size"]]
+    iv = key[-crypto_algo["iv_size"]:]
+    return Cipher(crypto_algo["name"], skey, iv, op_enc)
+
+
+
+def encrypt_scalarizr(crypto_algo, s, key):
+    c = _init_cipher(crypto_algo, key, 1)
+    ret = c.update(s)
+    ret += c.final()
+    del c
+    return binascii.b2a_base64(ret)
+
+
+
+def decrypt_scalarizr(crypto_algo, s, key):
+    c = _init_cipher(crypto_algo, key, 0)
+    ret = c.update(binascii.a2b_base64(s))
+    ret += c.final()
+    del c
+    return ret
 

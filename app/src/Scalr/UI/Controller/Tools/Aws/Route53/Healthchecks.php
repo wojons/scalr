@@ -43,7 +43,7 @@ class Scalr_UI_Controller_Tools_Aws_Route53_Healthchecks extends Scalr_UI_Contro
             }
         } while ($checkList->marker !== null);
 
-        $response = $this->buildResponseFromData($result, array('hostName', 'resourcePath', 'searchString', 'ipAddress'));
+        $response = $this->buildResponseFromData($result, array('hostName', 'resourcePath', 'searchString', 'ipAddress'), true);
         $this->response->data($response);
     }
 

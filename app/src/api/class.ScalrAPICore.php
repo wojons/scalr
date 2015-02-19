@@ -387,8 +387,8 @@ abstract class ScalrAPICore
                         throw new Exception(_("Your API keys are currently disabled. You can enable access at Settings > API access."));
 
                     //Check IP Addresses
-                    if ($this->user->getSetting(Scalr_Account_User::SETTING_API_IP_WHITELIST)) {
-                        $ips = explode(",", $this->user->getSetting(Scalr_Account_User::SETTING_API_IP_WHITELIST));
+                    if ($this->user->getVar(Scalr_Account_User::VAR_API_IP_WHITELIST)) {
+                        $ips = explode(",", $this->user->getVar(Scalr_Account_User::VAR_API_IP_WHITELIST));
                         if (!$this->IPAccessCheck($ips))
                             throw new Exception(sprintf(_("Access to the API is not allowed from your IP '%s'"), $_SERVER['REMOTE_ADDR']));
                     }

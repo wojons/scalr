@@ -12,7 +12,6 @@ final class SERVER_PLATFORMS
     const ECS = 'ecs';
     const OCS = 'ocs';
     const NEBULA = 'nebula';
-    const CONTRAIL = 'contrail';
 
 
     const RACKSPACENG_US = 'rackspacengus';
@@ -36,7 +35,6 @@ final class SERVER_PLATFORMS
             self::RACKSPACENG_US=> 'Rackspace',
             self::RACKSPACENG_UK=> 'Rackspace UK',
             self::ECS           => 'Enter Cloud Suite',
-            self::CONTRAIL      => 'Contrail',
             self::OCS           => 'CloudScaling',
             self::NEBULA        => 'Nebula'
         );

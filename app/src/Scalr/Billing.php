@@ -254,6 +254,12 @@ class Scalr_Billing
             'c3.2xlarge' => 8,
             'c3.4xlarge' => 16,
             'c3.8xlarge' => 32,
+            
+            'c4.large' => 2.25,
+            'c4.xlarge' => 4.5,
+            'c4.2xlarge' => 9,
+            'c4.4xlarge' => 17,
+            'c4.8xlarge' => 33,
 
             'r3.large' => 2,
             'r3.xlarge' => 4,

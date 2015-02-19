@@ -382,15 +382,33 @@ Scalr.utils.Request = function (config) {
 
 Scalr.utils.UserLoadFile = function(path) {
     path = Ext.String.urlAppend(path, 'X-Requested-Token=' + Scalr.flags.specialToken);
-	Ext.Function.defer(
-		Ext.getBody().createChild({
-			tag: 'iframe',
-			src: path,
-			width: 0,
-			height: 0,
-			frameborder: 0
-		}).remove, 1000
-	);
+    var iframeEl = Ext.getBody().createChild({
+        tag: 'iframe',
+        src: path,
+        width: 0,
+        height: 0,
+        frameborder: 0
+    }).on('load', function(){
+        var doc, contentNode, response;
+        try {
+            doc = this.el.dom.contentWindow.document || this.el.dom.contentDocument;
+            if (doc && doc.body) {
+                // Response sent as Content-Type: text/json or text/plain. Browser will embed in a <pre> element
+                // Note: The statement below tests the result of an assignment.
+                if ((contentNode = doc.body.firstChild) && /pre/i.test(contentNode.tagName)) {
+                   response = contentNode.textContent || contentNode.innerText;
+                }
+            }
+            response =  Ext.decode(response);
+        } catch (e) {};
+        if (Ext.isObject(response) && !response.success && response.errorMessage) {
+            Scalr.message.Error(response.errorMessage);
+        }
+    });
+    //load event is not firing in Chrome when content is an attachment
+    Ext.Function.defer(function(){
+        iframeEl.remove();
+    }, 5000);
 };
 
 Scalr.utils.VarDump = function (c) {
@@ -485,7 +503,6 @@ Scalr.utils.getColorById = function(id, colorSetName) {
             eucalyptus: 5,
             cloudstack: 6,
             openstack: 7,
-            contrail: 8,
             ocs: 9,
             nebula: 10
         },
@@ -590,8 +607,12 @@ Scalr.utils.canManageAcl = function(){
     return Scalr.user['type'] === 'AccountOwner' || Scalr.user['type'] === 'AccountAdmin' || Scalr.user['type'] === 'AccountSuperAdmin';
 }
 
+Scalr.utils.isAdmin = function(){
+    return Scalr.user['type'] === 'ScalrAdmin' || Scalr.user['type'] === 'FinAdmin';
+}
+
 Scalr.utils.isOpenstack = function(platform, pureOnly) {
-    var list = ['openstack', 'ecs', 'ocs', 'nebula', 'contrail'];
+    var list = ['openstack', 'ecs', 'ocs', 'nebula'];
     if (!pureOnly) {
         list.push('rackspacengus', 'rackspacenguk');
     }
@@ -736,6 +757,127 @@ Scalr.utils.getRandomString = function(len) {
 
     return text;
 };
+
+Scalr.utils.Quarters = {
+
+    defaultDays: ['01-01', '04-01', '07-01', '10-01'],
+
+    getDate: function(date, skipClearTime) {
+        var res, h = 0, m = 0, s = 0;
+        if (Ext.isArray(date)) {
+            res = new Date(date[0], date[1], date[2], 0, 0, 0, 0);
+        } else if (Ext.isDate(date)) {
+            res = date;
+        } else if (Ext.isString(date)) {
+            var splitDate = date.split(' ');
+            splitDate.unshift.apply(splitDate, splitDate[0].split('-'));
+            splitDate.splice(3, 1);
+            if (splitDate.length > 3) {
+                splitDate.push.apply(splitDate, splitDate[3].split(':'));
+                splitDate.splice(3, 1);
+                h = splitDate[3]*1;
+            }
+            if (splitDate.length > 4) {
+                m = splitDate[4]*1;
+            }
+            if (splitDate.length > 5) {
+                s = splitDate[5]*1;
+            }
+            res = new Date(splitDate[0]*1, splitDate[1]*1-1, splitDate[2], h, m, s, 0);
+        } else {
+            res = new Date();
+            res = Ext.Date.add(res, Ext.Date.MINUTE, res.getTimezoneOffset());
+        }
+        if (!skipClearTime) {
+            res = Ext.Date.clearTime(res);
+        }
+        return res;
+    },
+
+    getNYSettings: function() {
+        var days = this.days || this.defaultDays,
+            result = [],
+            ny = 0;
+        for (var i=0; i<4; i++) {
+            result[i] = ny;
+            if (days[i].substr(0, 2) > days[(i + 1) % 4].substr(0, 2)) {
+                ny = 1;
+            }
+        }
+        return {
+            q: result,
+            sum: Ext.Array.sum(result)
+        };
+    },
+
+    getPeriodForQuarter: function(quarter, year){
+        var ny = this.getNYSettings(),
+            days = this.days || this.defaultDays,
+            add, result;
+
+        add = ny['sum'] >= 2 ? -1 : 0;
+
+        result = {
+            startDate: this.getDate((year + add + ny.q[quarter - 1]) + '-' + days[quarter - 1]),
+            endDate: this.getDate((year + add + (ny.q[quarter - 1] || ny.q[quarter % 4] || (days[quarter - 1] > days[quarter % 4] ? 1 : 0))) + '-' + days[quarter % 4]),
+            quarter: quarter,
+            year: year
+        };
+        result['endDate'] = Ext.Date.add(result['endDate'], Ext.Date.DAY, -1);
+        result['shortTitle'] = 'Q' + quarter + ' ' + year;
+        result['title'] = 'Q' + quarter + ' ' + year + ' (' + Ext.Date.format(result['startDate'], 'M j') + ' &ndash; ' + Ext.Date.format(result['endDate'], 'M j') + ')';
+
+        return result;
+    },
+
+    getQuarterForDate: function(date) {
+        var result = null,
+            days = this.days || this.defaultDays,
+            p, next, y;
+        date = date || this.getDate();
+        p = Ext.Date.format(date, 'm-d');
+
+        for (var i=0; i<4; i++) {
+            next = (i + 1) % 4;
+            y = days[i] <= p && p <= '12-31' ? '0' : '1';
+            if (days[i] < days[next]) {
+                if (days[i] <= p && p < days[next]) {
+                    result = i + 1;
+                    break;
+                }
+            } else {
+                if (('0' + days[i]) <= (y + p) && (y + p) < ('1' + days[next])) {
+                    result = i + 1;
+                    break;
+                }
+            }
+
+        }
+        return result;
+    },
+
+    getPeriodForDate: function(date, shift) {
+        var quarter = this.getQuarterForDate(date),
+            period = this.getPeriodForQuarter(quarter, Ext.Date.format(date, 'Y')*1);
+
+        if (period['endDate'] < date) {
+            period = this.getPeriodForQuarter(quarter, Ext.Date.format(date, 'Y')*1 + 1);
+        } else if (period['startDate'] > date) {
+            period = this.getPeriodForQuarter(quarter, Ext.Date.format(date, 'Y')*1 - 1);
+        }
+
+        if (shift < 0) {
+            period = this.getPeriodForDate(Ext.Date.add(period['startDate'], Ext.Date.DAY, -1));
+        } else if (shift > 0) {
+            period = this.getPeriodForDate(Ext.Date.add(period['endDate'], Ext.Date.DAY, 1));
+        }
+
+        return period;
+
+    }
+
+};
+
 
 Scalr.utils.saveSpecialToken = function(specialToken) {
     Ext.Ajax.extraParams['X-Requested-Token'] = Scalr.flags.specialToken = specialToken;

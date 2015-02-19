@@ -1,5 +1,7 @@
 <?php
 
+use Scalr\Util\CryptoTool;
+
 /**
  * Scalrizr API Client
  *
@@ -13,7 +15,7 @@
  * @property-read  Scalr_Net_Scalarizr_Services_Sysinfo        $sysinfo        SysInfo namespace
  * @property-read  Scalr_Net_Scalarizr_Services_System         $system         System namespace
  * @property-read  Scalr_Net_Scalarizr_Services_Operation      $operation      Operation namespace
- * @property-read  Scalr_Net_Scalarizr_Services_Image      	   $image          Image namespace
+ * @property-read  Scalr_Net_Scalarizr_Services_Image          $image          Image namespace
  */
 class Scalr_Net_Scalarizr_Client
 {
@@ -25,6 +27,13 @@ class Scalr_Net_Scalarizr_Client
     const NAMESPACE_SYSTEM = 'system';
     const NAMESPACE_OPERATION = 'operation';
     const NAMESPACE_IMAGE = 'image';
+
+    const CRYPTO_ALGO = MCRYPT_TRIPLEDES;
+    const CIPHER_MODE = MCRYPT_MODE_CBC;
+    const CRYPTO_KEY_SIZE = 24;
+    const CRYPTO_BLOCK_SIZE = 8;
+
+    const HASH_ALGO = 'SHA1';
 
     private $dbServer,
         $port,
@@ -86,7 +95,7 @@ class Scalr_Net_Scalarizr_Client
             if (DBFarm::LoadByID($this->dbServer->farmId)->GetSetting(DBFarm::SETTING_EC2_VPC_ID))
                 $this->isVPC = true;
 
-        $this->cryptoTool = Scalr_Messaging_CryptoTool::getInstance();
+        $this->cryptoTool = \Scalr::getContainer()->srzcrypto($this->dbServer->GetKey(true));
     }
 
     public function __get($name) {
@@ -108,13 +117,13 @@ class Scalr_Net_Scalarizr_Client
 
         $this->walkSerialize($params, $requestObj->params, 'underScope');
 
-        $jsonRequest = $this->cryptoTool->encrypt(json_encode($requestObj), $this->dbServer->GetKey(true));
+        $this->cryptoTool->setCryptoKey($this->dbServer->GetKey(true));
+        $jsonRequest = $this->cryptoTool->encrypt(json_encode($requestObj));
 
         $dt = new DateTime('now', new DateTimeZone("UTC"));
         $timestamp = $dt->format("D d M Y H:i:s e");
 
-        $canonical_string = $jsonRequest . $timestamp;
-        $signature = base64_encode(hash_hmac('SHA1', $canonical_string, $this->dbServer->GetKey(true), 1));
+        $signature = $this->cryptoTool->sign($jsonRequest, null, $timestamp, Scalr_Net_Scalarizr_Client::HASH_ALGO);
 
 
         $request = new HttpRequest();
@@ -169,7 +178,7 @@ class Scalr_Net_Scalarizr_Client
             if ($request->getResponseCode() == 200) {
 
                 $response = $request->getResponseData();
-                $body = $this->cryptoTool->decrypt($response['body'], $this->dbServer->GetKey(true));
+                $body = $this->cryptoTool->decrypt($response['body']);
 
                 $jResponse = @json_decode($body);
 
@@ -249,5 +258,10 @@ class Scalr_Net_Scalarizr_Client
             $ret .= $part[0];
         }
         return $ret;
+    }
+
+    public static function getCryptoTool($cryptoKey = null)
+    {
+        return \Scalr::getContainer()->srzcrypto($cryptoKey);
     }
 }

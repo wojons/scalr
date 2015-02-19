@@ -1,5 +1,6 @@
 <?php
 
+use Exception;
 use Scalr\Stats\CostAnalytics\Entity\PriceHistoryEntity;
 use Scalr\Stats\CostAnalytics\Entity\PriceEntity;
 use Scalr\Modules\Platforms\Openstack\OpenstackPlatformModule;
@@ -8,10 +9,13 @@ use Scalr\Modules\Platforms\Eucalyptus\EucalyptusPlatformModule;
 use Scalr\Modules\PlatformFactory;
 use Scalr\Stats\CostAnalytics\Entity\SettingEntity;
 use Scalr\Modules\Platforms\Ec2\Ec2PlatformModule;
+use Scalr\Modules\Platforms\GoogleCE\GoogleCEPlatformModule;
 use Scalr\Modules\PlatformModuleInterface;
 use Scalr\Exception\Http\NotFoundException;
 use Scalr\UI\Request\JsonData;
 use Scalr\Model\Collections\ArrayCollection;
+use Scalr\Model\Entity\CloudLocation;
+use Scalr\Model\Entity\CloudInstanceType;
 
 class Scalr_UI_Controller_Analytics_Pricing extends Scalr_UI_Controller
 {
@@ -26,7 +30,7 @@ class Scalr_UI_Controller_Analytics_Pricing extends Scalr_UI_Controller
         //Platforms should be in the same order everywhere
         $platforms = $this->getContainer()->analytics->prices->getSupportedClouds();
 
-        $this->response->page('ui/analytics/pricing/view.js',
+        $this->response->page('ui/analytics/admin/pricing/view.js',
             [
                 'platforms'             => $platforms,
                 'forbidAutomaticUpdate' => [
@@ -34,7 +38,7 @@ class Scalr_UI_Controller_Analytics_Pricing extends Scalr_UI_Controller
                 ],
             ],
             [],
-            ['ui/analytics/pricing/view.css']
+            ['ui/analytics/admin/pricing/view.css']
         );
     }
 
@@ -48,6 +52,7 @@ class Scalr_UI_Controller_Analytics_Pricing extends Scalr_UI_Controller
     public function getPrice(PriceHistoryEntity $price)
     {
         $result = array();
+
         foreach ($price->getDetails() as $priceEntity) {
             /* @var $priceEntity PriceEntity */
             if (!isset($result[$priceEntity->instanceType]))
@@ -61,7 +66,7 @@ class Scalr_UI_Controller_Analytics_Pricing extends Scalr_UI_Controller
             } else if ($priceEntity->os == PriceEntity::OS_WINDOWS) {
                 $system = 'priceWindows';
             } else {
-                throw new \Exception(sprintf("Unexpected os:%d. Not implemented yet.", $priceEntity->os));
+                throw new Exception(sprintf("Unexpected os:%d. Not implemented yet.", $priceEntity->os));
             }
 
             $result[$priceEntity->instanceType][$system] = $priceEntity->cost;
@@ -179,22 +184,8 @@ class Scalr_UI_Controller_Analytics_Pricing extends Scalr_UI_Controller
         $env = null;
         if ($envId) {
             $env = Scalr_Environment::init()->loadById($envId);
-        } else if ($platform == SERVER_PLATFORMS::EC2) {
-            //Search for govcloud or china cloud environment
-            $gcenvid = $this->db->GetOne("
-                SELECT e.id
-                FROM client_environments e
-                JOIN client_environment_properties p ON p.env_id = e.id AND p.name = ?
-                JOIN clients c ON c.id = e.client_id
-                WHERE (p.value = ? OR p.value = ?) AND e.status = ? AND c.status = ?
-                LIMIT 1
-            ",[
-                Ec2PlatformModule::ACCOUNT_TYPE,
-                Ec2PlatformModule::ACCOUNT_TYPE_GOV_CLOUD,
-                Ec2PlatformModule::ACCOUNT_TYPE_CN_CLOUD,
-                Scalr_Environment::STATUS_ACTIVE,
-                Scalr_Account::STATUS_ACTIVE,
-            ]);
+        } else if ($platform == SERVER_PLATFORMS::EC2 || $platform == SERVER_PLATFORMS::GCE) {
+            $gcenvid = $this->getPlatformEnvId($platform);
 
             if ($gcenvid) {
                 $gcenv = Scalr_Environment::init()->loadById($gcenvid);
@@ -202,7 +193,20 @@ class Scalr_UI_Controller_Analytics_Pricing extends Scalr_UI_Controller
             }
         }
 
-        foreach (array_merge((!empty($aLocations) ? $aLocations : []), $pm->getLocations($env)) as $location => $name) {
+        try {
+            $pmlocations = $pm->getLocations($env);
+        } catch (Exception $e) {
+            $pmlocations = [];
+        }
+
+        if (empty($pmlocations)) {
+            foreach (CloudLocation::find([['platform' => $platform],['url' => $url]], ['updated' => false]) as $clEntity) {
+                /* @var $clEntity CloudLocation */
+                $pmlocations[$clEntity->cloudLocation] = $clEntity->cloudLocation;
+            }
+        }
+
+        foreach (array_merge((!empty($aLocations) ? $aLocations : []), $pmlocations) as $location => $name) {
             if (!in_array($url . ';' . $location, $existingLocations)) {
                 $result[] = [
                     'url'           => $url,
@@ -218,7 +222,7 @@ class Scalr_UI_Controller_Analytics_Pricing extends Scalr_UI_Controller
                 $pm,
                 $platform,
                 null,
-                $env
+                (empty($env) && $platform == SERVER_PLATFORMS::GCE) ? $gcenv : $env
             );
         }
 
@@ -234,7 +238,6 @@ class Scalr_UI_Controller_Analytics_Pricing extends Scalr_UI_Controller
      */
     public function xGetPlatformEndpointsAction($platform)
     {
-
         if (PlatformFactory::isOpenstack($platform)) {
             $key = $platform . '.' . OpenstackPlatformModule::KEYSTONE_URL;
         } else if (PlatformFactory::isCloudstack($platform)) {
@@ -296,13 +299,30 @@ class Scalr_UI_Controller_Analytics_Pricing extends Scalr_UI_Controller
      */
     private function getTypesWithPrices($cloudLocation, $url, $pm, $platformName, $effectiveDate = null, Scalr_Environment $env = null)
     {
-        $typeNames = $pm->getInstanceTypes($env, $cloudLocation);
-
         $result = [
             'cloudLocation'     => $cloudLocation,
-            'types'             => array_keys($typeNames),
             'url'               => $this->getContainer()->analytics->prices->normalizeUrl($url),
         ];
+
+        try {
+            $typeNames = $pm->getInstanceTypes($env, $cloudLocation);
+        } catch (Exception $e) {
+            //Has no connection to cloud provider or invalid keys
+            $typeNames = [];
+
+            //Fetches cloud location entity from the cache
+            $cl = CloudLocation::findPk(CloudLocation::calculateCloudLocationId($platformName, $result['cloudLocation'], $result['url']));
+
+            //It is possible that it might have been already removed
+            if ($cl instanceof CloudLocation) {
+                foreach ($cl->getActiveInstanceTypes() as $instanceTypeEntity) {
+                    /* @var $instanceTypeEntity CloudInstanceType */
+                    $typeNames[$instanceTypeEntity->instanceTypeId] = $instanceTypeEntity->name;
+                }
+            }
+        }
+
+        $result['types'] = array_keys($typeNames);
 
         $pricing = $this->getPlatformPricing($platformName, $result['cloudLocation'], $result['url'], $effectiveDate);
 
@@ -352,23 +372,39 @@ class Scalr_UI_Controller_Analytics_Pricing extends Scalr_UI_Controller
         $env = null;
         $url = '';
 
-        if (!empty($envId)) {
-            $env = Scalr_Environment::init()->loadById($envId);
+        try {
+            if (!empty($envId)) {
+                $env = Scalr_Environment::init()->loadById($envId);
 
-            //TODO the key should be retrieved from the method which is provisioned by interface
-            if (PlatformFactory::isOpenstack($platform)) {
-                $key = $platform . '.' . OpenstackPlatformModule::KEYSTONE_URL;
-            } else if (PlatformFactory::isCloudstack($platform)) {
-                $key = $platform . '.' . CloudstackPlatformModule::API_URL;
-            } else if ($platform == SERVER_PLATFORMS::EUCALYPTUS) {
-                $key = EucalyptusPlatformModule::EC2_URL;
-                $url = $this->getContainer()->analytics->prices->normalizeUrl($env->getPlatformConfigValue($key, false, $cloudLocation));
-            } else {
-                throw new Exception('This action is not yet supported for the specified cloud platform.');
+                if (PlatformFactory::isOpenstack($platform)) {
+                    $key = $platform . '.' . OpenstackPlatformModule::KEYSTONE_URL;
+                } else if (PlatformFactory::isCloudstack($platform)) {
+                    $key = $platform . '.' . CloudstackPlatformModule::API_URL;
+                } else if ($platform == SERVER_PLATFORMS::EUCALYPTUS) {
+                    $key = EucalyptusPlatformModule::EC2_URL;
+                    $url = $this->getContainer()->analytics->prices->normalizeUrl($env->getPlatformConfigValue($key, false, $cloudLocation));
+                } else {
+                    throw new Exception('This action is not yet supported for the specified cloud platform.');
+                }
+
+                if (empty($url)) {
+                    $url = $this->getContainer()->analytics->prices->normalizeUrl($env->getPlatformConfigValue($key));
+                }
+            } else if ($platform == SERVER_PLATFORMS::EC2 || $platform == SERVER_PLATFORMS::GCE) {
+                $gcenvid = $this->getPlatformEnvId($platform);
+                $env = Scalr_Environment::init()->loadById($gcenvid);
             }
-
-            if (empty($url)) {
-                $url = $this->getContainer()->analytics->prices->normalizeUrl($env->getPlatformConfigValue($key));
+        } catch (Exception $e) {
+            if (stristr($e->getMessage(), 'not found')) {
+                //Tries to find url from the cloud_locations table
+                if (empty($url) && (PlatformFactory::isOpenstack($platform) || PlatformFactory::isCloudstack($platform))) {
+                    $clEntity = CloudLocation::findOne([['platform' => $platform], ['cloudLocation' => $cloudLocation]], ['updated' => false]);
+                    if ($clEntity instanceof CloudLocation) {
+                        $url = $clEntity->url;
+                    }
+                }
+            } else {
+                throw $e;
             }
         }
 
@@ -572,4 +608,40 @@ class Scalr_UI_Controller_Analytics_Pricing extends Scalr_UI_Controller
 
         $this->response->success('Prices have been updated');
     }
+
+    /**
+     * Gets envId for Ec2 or GCE platform module
+     *
+     * @param string $platform Platform name (GCE or EC2)
+     * @return int Return environment id
+     */
+    private function getPlatformEnvId($platform)
+    {
+        $and = '';
+
+        if ($platform == SERVER_PLATFORMS::EC2) {
+            $pname = Ec2PlatformModule::ACCOUNT_TYPE;
+            $and = " AND (p.value = '" . Ec2PlatformModule::ACCOUNT_TYPE_GOV_CLOUD . "' OR p.value = '" . Ec2PlatformModule::ACCOUNT_TYPE_CN_CLOUD . "') ";
+        } else {
+            $pname = GoogleCEPlatformModule::CLIENT_ID;
+        }
+
+        $statement = "
+            SELECT e.id
+            FROM client_environments e
+            JOIN client_environment_properties p ON p.env_id = e.id AND p.name = '$pname'
+            JOIN clients c ON c.id = e.client_id
+            WHERE e.status = ? AND c.status = ?
+            $and
+            LIMIT 1
+        ";
+
+        $gcenvid = $this->db->GetOne($statement,[
+            Scalr_Environment::STATUS_ACTIVE,
+            Scalr_Account::STATUS_ACTIVE,
+        ]);
+
+        return $gcenvid;
+    }
+
 }

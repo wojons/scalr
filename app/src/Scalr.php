@@ -11,6 +11,9 @@ use Scalr\Modules\Platforms\Openstack\Observers\OpenstackObserver;
 
 use Scalr\Model\Entity\WebhookConfig;
 use Scalr\Model\Entity\WebhookHistory;
+use Scalr\Model\Entity\Image;
+
+use Scalr\Stats\CostAnalytics\Entity\ProjectEntity;
 
 class Scalr
 {
@@ -184,13 +187,6 @@ class Scalr
             // Generate event message
             $message = $event->getTextDetails();
 
-            $eventStr = null;
-            try {
-                $eventStr = serialize($event);
-            } catch (Exception $e) {
-
-            }
-
             //short_message temporary used for time tracking
             // Store event in database
             $DB->Execute("INSERT INTO events SET
@@ -198,16 +194,21 @@ class Scalr
                 type	= ?,
                 dtadded	= NOW(),
                 message	= ?,
-                event_object = ?,
+                event_object = '',
                 event_id	 = ?,
                 event_server_id = ?,
                 short_message = ?,
                 msg_expected = ?,
-                msg_created = ?
-                ",
-                array($farmid, $event->GetName(), $message, $eventStr, $event->GetEventID(), $eventServerId, $eventTime,
-                    $event->msgExpected, $event->msgCreated
-            ));
+                msg_created = ?,
+                scripts_total = ?,
+                is_suspend = ?",
+                array($farmid, $event->GetName(), $message, $event->GetEventID(), $eventServerId, $eventTime,
+                    $event->msgExpected,
+                    $event->msgCreated,
+                    $event->scriptsCount,
+                    $event->isSuspended ? 1 : 0
+                )
+            );
         }
         catch(Exception $e) {
             Logger::getLogger(__CLASS__)->fatal(sprintf(_("Cannot store event in database: %s"), $e->getMessage()));
@@ -216,6 +217,9 @@ class Scalr
         try {
             if ($eventServerId) {
                 $dbServer = DBServer::LoadByID($eventServerId);
+
+                if (!$dbServer->farmRoleId)
+                    return true;
 
                 $dt = new DateTime('now', new DateTimeZone("UTC"));
                 $timestamp = $dt->format("D d M Y H:i:s e");
@@ -238,6 +242,7 @@ class Scalr
                     $dbServer->envId
                 );
 
+                $count = 0;
                 foreach ($webhooks as $webhook) {
                     /* @var $webhook \Scalr\Model\Entity\WebhookConfig */
 
@@ -275,8 +280,13 @@ class Scalr
                         $history->farmId = $farmid;
 
                         $history->save();
+
+                        $count++;
                     }
                 }
+
+                if ($count != 0)
+                    $DB->Execute("UPDATE events SET wh_total = ? WHERE event_id = ?", array($count, $event->GetEventID()));
             }
         } catch (Exception $e) {
             Logger::getLogger(__CLASS__)->fatal(sprintf(_("WebHooks: %s"), $e->getMessage()));
@@ -374,14 +384,33 @@ class Scalr
             if ($farm instanceof DBFarm) {
                 $propsToSet[SERVER_PROPERTIES::FARM_CREATED_BY_ID] = $farm->createdByUserId;
                 $propsToSet[SERVER_PROPERTIES::FARM_CREATED_BY_EMAIL] = $farm->createdByUserEmail;
-                $propsToSet[SERVER_PROPERTIES::FARM_PROJECT_ID] = $farm->GetSetting(DBFarm::SETTING_PROJECT_ID);
+                $projectId = $farm->GetSetting(DBFarm::SETTING_PROJECT_ID);
+
+                if (!empty($projectId)) {
+                    try {
+                        $projectEntity = ProjectEntity::findPk($projectId);
+
+                        if ($projectEntity instanceof ProjectEntity) {
+                            /* @var $projectEntity ProjectEntity */
+                            $ccId = $projectEntity->ccId;
+                        } else {
+                            $projectId = null;
+                        }
+                    } catch (Exception $e) {
+                        $projectId = null;
+                    }
+                }
+
+                $propsToSet[SERVER_PROPERTIES::FARM_PROJECT_ID] = $projectId;
             }
 
             if ($farmRole instanceof DBFarmRole) {
                 $propsToSet[SERVER_PROPERTIES::INFO_INSTANCE_TYPE_NAME] = $farmRole->GetSetting(DBFarmRole::SETTING_INFO_INSTANCE_TYPE_NAME);
             }
 
-            if ($DBServer->envId && (($environment = $DBServer->GetEnvironmentObject()) instanceof Scalr_Environment)) {
+            if (!empty($ccId)) {
+                $propsToSet[SERVER_PROPERTIES::ENV_CC_ID] = $ccId;
+            } elseif ($DBServer->envId && (($environment = $DBServer->GetEnvironmentObject()) instanceof Scalr_Environment)) {
                 $propsToSet[SERVER_PROPERTIES::ENV_CC_ID] = $environment->getPlatformConfigValue(Scalr_Environment::SETTING_CC_ID);
             }
         } catch (Exception $e) {
@@ -400,7 +429,7 @@ class Scalr
             $args[0] = DBServer::getLaunchReason($reasonId);
             return [call_user_func_array('sprintf', $args), $reasonId];
         };
-        
+
         if ($delayed) {
             $DBServer->status = SERVER_STATUS::PENDING_LAUNCH;
             list($reasonMsg, $reasonId) = is_array($reason) ? call_user_func_array($fnGetReason, $reason) : $fnGetReason($reason);
@@ -423,7 +452,7 @@ class Scalr
                 return $DBServer;
             }
         }
-        
+
         // Limit amount of pending servers
         if ($DBServer->isOpenstack()) {
             $config = \Scalr::getContainer()->config;
@@ -434,17 +463,17 @@ class Scalr
                 ));
                 if ($pendingServers >= $pendingServersLimit) {
                     Logger::getLogger("SERVER_LAUNCH")->warn("{$pendingServers} servers in PENDING state on {$DBServer->platform}. Limit is: {$pendingServersLimit}. Waiting.");
-                    
+
                     $DBServer->status = SERVER_STATUS::PENDING_LAUNCH;
                     $DBServer->Save();
-        
+
                     return $DBServer;
                 } else {
                     Logger::getLogger("SERVER_LAUNCH")->warn("{$pendingServers} servers in PENDING state on {$DBServer->platform}. Limit is: {$pendingServersLimit}. Launching server.");
                 }
             }
         }
-        
+
         try {
             $account = Scalr_Account::init()->loadById($DBServer->clientId);
             $account->validateLimit(Scalr_Limits::ACCOUNT_SERVERS, 1);
@@ -464,6 +493,26 @@ class Scalr
 
                 $DBServer->getServerHistory()->markAsLaunched($reasonMsg, $reasonId);
                 $DBServer->updateTimelog('ts_launched');
+
+                if ($DBServer->imageId) {
+                    //Update Image last used date
+                    $image = Image::findOne([['id' => $DBServer->imageId], ['envId' => $DBServer->envId], ['platform' => $DBServer->platform], ['cloudLocation' => $DBServer->cloudLocation]]);
+                    if (!$image)
+                        $image = Image::findOne([['id' => $DBServer->imageId], ['envId' => NULL], ['platform' => $DBServer->platform], ['cloudLocation' => $DBServer->cloudLocation]]);
+
+                    if ($image) {
+                        $image->dtLastUsed = new DateTime();
+                        $image->save();
+                    }
+
+                    //Update Role last used date
+                    if ($DBServer->farmRoleId) {
+                        $dbRole = $DBServer->GetFarmRoleObject()->GetRoleObject();
+                        $dbRole->dtLastUsed = date("Y-m-d H:i:s");
+                        $dbRole->save();
+                    }
+                }
+
             } catch (Exception $e) {
                 Logger::getLogger('SERVER_HISTORY')->error(sprintf("Cannot update servers history: {$e->getMessage()}"));
             }
@@ -599,7 +648,6 @@ class Scalr
             return false;
         }
 
-        $logfile = '/var/log/php-warnings.log';
         $date = date("Y-m-d H:i:s");
 
         //Friendly error name
@@ -666,7 +714,7 @@ class Scalr
             case E_USER_ERROR:
                 $exception = new \Exception($message, $errno);
                 $message = $date . " " . $message . "Backtrace:\n " . str_replace("\n#", "\n  #", $exception->getTraceAsString()) . "\n\n";
-                @error_log($message, 3, $logfile);
+                @error_log($message);
                 throw $exception;
                 break;
 
@@ -676,7 +724,7 @@ class Scalr
                 $exception = new \Exception($message, $errno);
                 $message = $message . "Backtrace:\n  " . str_replace("\n#", "\n  #", $exception->getTraceAsString()) . "\n\n";
             default:
-                @error_log($date . " " . $message, 3, $logfile);
+                @error_log($date . " " . $message);
                 break;
         }
     }

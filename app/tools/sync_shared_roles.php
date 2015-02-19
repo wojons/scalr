@@ -89,21 +89,33 @@ try {
 				", array($r7['role_id'], $r7['cloud_location'], $r7['image_id'], $r7['platform']));
 
                 if ($r7['image']) {
-                    $hash = $r7['image']['hash'];
-                    unset($r7['image']['hash']);
-                    $software = $r7['image']['software'];
-                    unset($r7['image']['software']);
+                    $i = $r7['image'];
 
-                    $db->Execute('DELETE FROM images WHERE hash = UNHEX(?)', [$hash]);
-                    $db->Execute('INSERT INTO images (hash, ' . implode(',', array_keys($r7['image'])) . ') VALUES(UNHEX(?), ' . implode(',', array_fill(0, count($r7['image']), '?')) .
-                        ')', array_merge([$hash], array_values($r7['image'])));
+                    $db->Execute('DELETE FROM images WHERE hash = UNHEX(?)', [$i['hash']]);
+                    $db->Execute('INSERT INTO images SET
+                        hash = UNHEX(?), id = ?, env_id = ?, bundle_task_id = ?,
+                        platform = ?, cloud_location = ?, name = ?, os = ?,
+                        os_family = ?, os_generation = ?, os_version = ?,
+                        dt_added = ?, created_by_id = ?, created_by_email = ?,
+                        architecture = ?, size = ?,
+                        is_deprecated = ?, source = ?, type = ?,
+                        status = ?, status_error = ?, agent_version = ?', [
+                            $i['hash'], $i['id'], $i['env_id'], $i['bundle_task_id'],
+                            $i['platform'], $i['cloud_location'], $i['name'], $i['os'],
+                            $i['os_family'], $i['os_generation'], $i['os_version'],
+                            $i['dt_added'], $i['created_by_id'], $i['created_by_email'],
+                            $i['architecture'], $i['size'],
+                            $i['is_deprecated'], $i['source'], $i['type'],
+                            $i['status'], $i['status_error'], $i['agent_version']
+                        ]
+                    );
 
-                    $db->Execute('DELETE FROM image_software WHERE image_hash = UNHEX(?)', [$hash]);
+                    $db->Execute('DELETE FROM image_software WHERE image_hash = UNHEX(?)', [$i['hash']]);
 
-                    if (count($software)) {
-                        foreach ($software as $soft) {
+                    if (count($i['software'])) {
+                        foreach ($i['software'] as $soft) {
                             $db->Execute('INSERT INTO image_software (image_hash, name, version) VALUES(UNHEX(?), ?, ?)', [
-                                $hash,
+                                $i['hash'],
                                 $soft['name'],
                                 $soft['version']
                             ]);

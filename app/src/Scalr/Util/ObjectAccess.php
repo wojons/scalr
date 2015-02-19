@@ -68,7 +68,7 @@ class ObjectAccess implements ArrayAccess, IteratorAggregate, Countable, JsonSer
      * Cast to primitive type
      *
      * @param   mixed $ref
-     * @param   bool  $toupper [optional]
+     * @param   bool  $toupper optional
      * @return  int|string
      */
     public static function asIndex($ref, $toupper = false)
@@ -80,8 +80,8 @@ class ObjectAccess implements ArrayAccess, IteratorAggregate, Countable, JsonSer
     /**
      * ObjectAccess
      *
-     * @param   array|object $data    [optional]
-     * @param   mixed        $default [optional]
+     * @param   array|object $data    optional
+     * @param   mixed        $default optional
      */
     public function __construct(&$data = array(), $default = null)
     {
@@ -103,8 +103,8 @@ class ObjectAccess implements ArrayAccess, IteratorAggregate, Countable, JsonSer
      * ObjectAccess
      *
      * @param   array|object $obj
-     * @param   mixed        $default  [optional]
-     * @param   bool         $populate [optional]
+     * @param   mixed        $default  optional
+     * @param   bool         $populate optional
      * @return  ObjectAccess
      */
     public static function wrap($obj, $default = null, $populate = false)

@@ -558,4 +558,45 @@ class LoadBalancerDescriptionData extends AbstractElbDataType
         $this->throwExceptionIfNotInitialized();
         return $this->getElb()->loadBalancer->setPoliciesForBackendServer($this->loadBalancerName, $instancePort, $policyNamesList);
     }
+
+    /**
+     * Adds one or more tags for the specified load balancer. Each load balancer can have a maximum of 10 tags.
+     * Each tag consists of a key and an optional value.
+     * Tag keys must be unique for each load balancer.
+     * If a tag with the same key is already associated with the load balancer, this action will update the value of the key.
+     *
+     * @param array|TagsList  $tagsList List of tags to add
+     *
+     * @return array
+     */
+    public function addTags($tagsList)
+    {
+        $this->throwExceptionIfNotInitialized();
+        return $this->getElb()->loadBalancer->addTags([$this->loadBalancerName], $tagsList);
+    }
+
+    /**
+     * Removes one or more tags from the specified load balancer.
+     *
+     * @param array|string $tagsKeys   A list of tag keys to remove.
+     *
+     * @return bool
+     */
+    public function removeTags($tagsKeys)
+    {
+        $this->throwExceptionIfNotInitialized();
+        return $this->getElb()->loadBalancer->removeTags([$this->loadBalancerName], $tagsKeys);
+    }
+
+    /**
+     * Describes the tags associated with current load balancer.
+     *
+     * @return TagDescriptionList
+     */
+    public function describeTags()
+    {
+        $this->throwExceptionIfNotInitialized();
+        return $this->getElb()->loadBalancer->describeTags([$this->loadBalancerName]);
+    }
+
 }

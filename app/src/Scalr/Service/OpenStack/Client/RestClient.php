@@ -73,7 +73,7 @@ class RestClient implements ClientInterface
             'useragent'      => $this->useragent,
             'verifypeer'     => false,
             'verifyhost'     => false,
-            'timeout'        => 30,
+            'timeout'        => \Scalr::config('scalr.openstack.api_client.timeout'),
             'connecttimeout' => 30
         ));
         return $req;

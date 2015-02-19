@@ -1,6 +1,7 @@
 <?php
 
 use Scalr\Acl\Acl;
+use Scalr\Service\Aws\Ec2\DataType\SecurityGroupFilterNameType;
 use Scalr\Service\Aws\Ec2\DataType\SnapshotFilterNameType;
 use Scalr\Service\Aws\Ec2\DataType\AddressFilterNameType;
 use Scalr\Service\Aws\Ec2\DataType\SnapshotData;
@@ -8,6 +9,8 @@ use Scalr\Service\Aws\Ec2\DataType\SubnetFilterNameType;
 use Scalr\Farm\Role\FarmRoleService;
 use Scalr\Service\Aws\Ec2\DataType\RouteTableFilterNameType;
 use Scalr\Modules\Platforms\Ec2\Ec2PlatformModule;
+use Scalr\Modules\PlatformFactory;
+use \SERVER_PLATFORMS;
 
 
 class Scalr_UI_Controller_Platforms_Ec2 extends Scalr_UI_Controller
@@ -159,11 +162,13 @@ class Scalr_UI_Controller_Platforms_Ec2 extends Scalr_UI_Controller
         ));
     }
 
-    public function xGetVpcListAction()
+    public function xGetVpcListAction($cloudLocation = null)
     {
-        $aws = $this->getEnvironment()->aws($this->getParam('cloudLocation'));
+        $aws = $this->getEnvironment()->aws($cloudLocation);
 
         $vpcList = $aws->ec2->vpc->describe();
+        $vpcSglist = $aws->ec2->securityGroup->describe();
+
         $rows = array();
         /* @var $vpcData Scalr\Service\Aws\Ec2\DataType\VpcData */
         foreach ($vpcList as $vpcData) {
@@ -175,14 +180,32 @@ class Scalr_UI_Controller_Platforms_Ec2 extends Scalr_UI_Controller
                 }
             }
 
+            $defaultSecurityGroupId = null;
+            $defaultSecurityGroupName = null;
+
+            foreach ($vpcSglist as $vpcSg) {
+                /* @var $vpcSg Scalr\Service\Aws\Ec2\DataType\SecurityGroupData */
+                if ($vpcSg->vpcId == $vpcData->vpcId && $vpcSg->groupName == 'default') {
+                    $defaultSecurityGroupId = $vpcSg->groupId;
+                    $defaultSecurityGroupName = $vpcSg->groupName;
+                    break;
+                }
+            }
+
             $rows[] = array(
-                'id'   => $vpcData->vpcId,
-                'name' => "{$name} - {$vpcData->vpcId} ({$vpcData->cidrBlock}, Tenancy: {$vpcData->instanceTenancy})",
+                'id'                        => $vpcData->vpcId,
+                'name'                      => "{$name} - {$vpcData->vpcId} ({$vpcData->cidrBlock}, Tenancy: {$vpcData->instanceTenancy})",
+                'defaultSecurityGroupId'    => $defaultSecurityGroupId,
+                'defaultSecurityGroupName'  => $defaultSecurityGroupName
             );
         }
 
+        $platform = PlatformFactory::NewPlatform(SERVER_PLATFORMS::EC2);
+        $default = $platform->getDefaultVpc($this->getEnvironment(), $cloudLocation);
+
         $this->response->data(array(
-            'vpc' => $rows,
+            'vpc'     => $rows,
+            'default' => !empty($default) ? $default : null
         ));
     }
 

@@ -1,5 +1,8 @@
 <?php
 use Scalr\Acl\Acl;
+use Scalr\Stats\CostAnalytics\Entity\CostCentreEntity;
+use Scalr\Stats\CostAnalytics\Entity\CostCentrePropertyEntity;
+use Scalr\Stats\CostAnalytics\Entity\AccountCostCenterEntity;
 
 class Scalr_UI_Controller_Account2_Environments extends Scalr_UI_Controller
 {
@@ -13,18 +16,32 @@ class Scalr_UI_Controller_Account2_Environments extends Scalr_UI_Controller
     public function viewAction()
     {
         $ccs = false;
+        $unassignedCcs = false;
         if ($this->getContainer()->analytics->enabled) {
-            //Fetches cost centers which have projects assigned and which are not archived as well
             $ccs = [];
-            foreach ($this->getContainer()->analytics->ccs->all(true) as $ccEntity) {
+            foreach (AccountCostCenterEntity::findByAccountId($this->user->getAccountId()) as $accountCc) {
+                /* @var $accountCs \Scalr\Stats\CostAnalytics\Entity\AccountCostCenterEntity */
+                $ccEntity = CostCentreEntity::findPk($accountCc->ccId);
                 /* @var $ccEntity \Scalr\Stats\CostAnalytics\Entity\CostCentreEntity */
-                if (!$ccEntity->hasProjects() || $ccEntity->archived) continue;
-                $ccs[] = get_object_vars($ccEntity);
+                if ($ccEntity->archived) {
+                    continue;
+                }
+                $ccs[$accountCc->ccId] = get_object_vars($ccEntity);
+            }
+
+            $unassignedCcs = [];
+            foreach ($this->user->getEnvironments() as $row) {
+                $env = Scalr_Environment::init()->loadById($row['id']);
+                $ccEntity = CostCentreEntity::findPk($env->getPlatformConfigValue(Scalr_Environment::SETTING_CC_ID));
+                /* @var $ccEntity \Scalr\Stats\CostAnalytics\Entity\CostCentreEntity */
+                if ($ccEntity && !isset($ccs[$ccEntity->ccId])) {
+                    $unassignedCcs[$row['id']] = ['ccId' => $ccEntity->ccId, 'name' => $ccEntity->name];
+                }
             }
         }
 
         $this->response->page('ui/account2/environments/view.js',
-            array('ccs' => $ccs),
+            array('ccs' => array_values($ccs), 'unassignedCcs' => $unassignedCcs),
             array('ui/account2/dataconfig.js'),
             array('ui/account2/environments/view.css'),
             array('account.environments', 'account.teams')
@@ -183,6 +200,19 @@ class Scalr_UI_Controller_Account2_Environments extends Scalr_UI_Controller
                 if ($this->getContainer()->analytics->enabled && $this->getParam('ccId')) {
                     $oldCcId = $env->getPlatformConfigValue(Scalr_Environment::SETTING_CC_ID);
                     $env->setPlatformConfig(array(Scalr_Environment::SETTING_CC_ID => $this->getParam('ccId')));
+
+                    if ($isNew || $oldCcId != $this->getParam('ccId')) {
+                        $cc = CostCentreEntity::findPk($this->getParam('ccId'));
+                        $email = $cc->getProperty(CostCentrePropertyEntity::NAME_LEAD_EMAIL);
+                        $emailData = [
+                            'envName' => $env->name,
+                            'ccName'  => $cc->name
+                        ];
+
+                        if (!empty($email)) {
+                            \Scalr::getContainer()->mailer->sendTemplate(SCALR_TEMPLATES_PATH . '/emails/analytics_on_cc_add.eml.php', $emailData, $email);
+                        }
+                    }
 
                     if ($isNew || empty($oldCcId)) {
                         $this->getContainer()->analytics->events->fireAssignCostCenterEvent($env, $this->getParam('ccId'));

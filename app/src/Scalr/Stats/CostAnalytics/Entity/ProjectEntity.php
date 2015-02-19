@@ -17,18 +17,35 @@ use DateTime, DateTimeZone;
  */
 class ProjectEntity extends \Scalr\Model\AbstractEntity
 {
-
-    // The project is accessible only for owner or financial admin
+    /**
+     * The project is accessible only for owner or financial admin
+     */
     const SHARED_TO_OWNER = 0;
 
-    // The project is accessible for all farms which environment is associated with this cost centre
+    /**
+     * The project is accessible for all farms which environment is associated with this cost centre
+     */
     const SHARED_WITHIN_CC = 1;
 
-    // The same as WITHIN_CC but additionally restricted by the account
+    /**
+     * The same as WITHIN_CC but additionally restricted by the account
+     */
     const SHARED_WITHIN_ACCOUNT = 2;
 
-    // The same as WITHIN_ACCOUNT but additionally restricted by the environment
+    /**
+     * The same as WITHIN_ACCOUNT but additionally restricted by the environment
+     */
     const SHARED_WITHIN_ENV = 3;
+
+    /**
+     * The project is archived
+     */
+    const ARCHIVED = 1;
+
+    /**
+     * The project is not archived
+     */
+    const NOT_ARCHIVED = 0;
 
     /**
      * Project identifier (UUID)
@@ -264,7 +281,7 @@ class ProjectEntity extends \Scalr\Model\AbstractEntity
 
         if ($item) {
             throw new AnalyticsException(sprintf(
-                'Project with such name already exists. Please choose another name.'
+                'A Project with this name already exists. Please choose another name.'
             ));
         }
 
@@ -289,6 +306,14 @@ class ProjectEntity extends \Scalr\Model\AbstractEntity
     public function checkRemoval()
     {
         //Checks data integrity
+
+        if ($this->projectId == Usage::DEFAULT_PROJECT_ID) {
+            throw new AnalyticsException(sprintf(
+                "'%s' is default automatically created Project and it can not be archived.",
+                $this->name
+            ));
+        }
+
         $farm = \Scalr::getDb()->GetRow("
             SELECT f.id, f.name FROM farms f
             JOIN farm_settings fs ON fs.farmid = f.id
@@ -301,8 +326,8 @@ class ProjectEntity extends \Scalr\Model\AbstractEntity
 
         if ($farm) {
             throw new AnalyticsException(sprintf(
-                "Project %s can not be archived because it is used by the farm %s (id:%d). "
-              . "Please contact your scalr admin to reallocate %s to a new project before you can archive '%s'.",
+                "Project '%s' can not be archived because it is used by the farm '%s' (id:%d). "
+              . "Reallocate '%s' to another project first.",
                 $this->name, $farm['name'], $farm['id'], $farm['name'], $this->name
             ));
         }

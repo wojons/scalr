@@ -93,7 +93,7 @@ class Scalr_UI_Controller_Db_Backups extends Scalr_UI_Controller
     private function getBackupDetails($backupId)
     {
         $links = array();
-        /** @var Scalr_Db_Backup $backup */
+        /* @var $backup \Scalr_Db_Backup */
         $backup = Scalr_Db_Backup::init()->loadById($backupId);
 
         $this->user->getPermissions()->validate($backup);

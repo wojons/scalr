@@ -33,9 +33,9 @@ class Scalr_UI_Controller_Sshkeys extends Scalr_UI_Controller
      */
     public function downloadPrivateAction($sshKeyId = null, $farmId = null, $platform = null, $cloudLocation = null)
     {
-        if ($sshKeyId)
+        if ($sshKeyId) {
             $sshKey = Scalr_SshKey::init()->loadById($sshKeyId);
-        else
+        } else {
             $sshKey = Scalr_SshKey::init()->loadGlobalByFarmId(
                 $this->getEnvironmentId(),
                 $farmId,
@@ -43,9 +43,20 @@ class Scalr_UI_Controller_Sshkeys extends Scalr_UI_Controller
                 $platform
             );
 
+            if (!$sshKey && $platform == SERVER_PLATFORMS::EC2) {
+                $governance = new \Scalr_Governance($this->getEnvironmentId());
+                $keyName = $governance->getValue(SERVER_PLATFORMS::EC2, \Scalr_Governance::AWS_KEYPAIR);
+                if ($keyName) {
+                    throw new Exception(
+                        "The SSH Key was not found. Note that SSH Key Governance is active, so Scalr does not automatically create SSH Keys for your Amazon EC2 Servers."
+                    );
+                }
+            }
+        }
+
         if (!$sshKey)
             throw new Exception('SSH key not found in database');
-
+        
         $this->user->getPermissions()->validate($sshKey);
         $retval = $sshKey->getPrivate();
 

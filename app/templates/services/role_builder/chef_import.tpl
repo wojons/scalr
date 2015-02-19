@@ -127,7 +127,7 @@ if [ "$rhel" -eq 0 ] && [ "$fedora" -eq 0 ] && [ "$amazon" -eq 0 ]; then
 			action "Enabling universe repository" 'echo -e "$add_to_apt" >> /etc/apt/sources.list'
 		fi
 	fi
-	action "Installing essential packages" "apt-get update && apt-get install -y curl git-core"
+	action "Installing essential packages" "apt-get update && apt-get install -y curl git-core libc6"
 else
 	rpm -e rightscale > /dev/null 2>&1 || rpm --noscripts -e rightscale > /dev/null 2>&1
 	userdel -r rightscale > /dev/null 2>&1
@@ -135,23 +135,21 @@ else
 	echo -n > /etc/motd 
 	if [ "$rhel" -lt 6 ]; then
 		action "Removing unnecessary packages" "yum -y remove mysql*"
+		action "Adding EPEL repository" "rpm -Uvh http://dl.fedoraproject.org/pub/epel/5/x86_64/epel-release-5-4.noarch.rpm"
 	fi
-	action "Installing curl" "yum -y install curl git-core"
+	action "Installing essential packages" "yum -y install curl git glibc"
 fi
 
 cd /tmp
 
 action "Downloading chef installation script" 'curl -O https://www.opscode.com/chef/install.sh'
-action "Installing chef" 'chmod +x install.sh; /tmp/install.sh -v 11.6.0-1'
+action "Installing chef" 'chmod +x install.sh; /tmp/install.sh -v 11.18.0-1'
 
 mkdir -p /tmp/chef-solo
 action "Creating chef configuration file" "echo -e 'file_cache_path \"/tmp/chef-solo/cookbooks\"\r\ncookbook_path \"/tmp/chef-solo/cookbooks\"' > /tmp/solo.rb"
 action "Retrieving cookbooks from scalr's public repo" "git clone git://github.com/Scalr/cookbooks.git /tmp/chef-solo"
 action "Creating runlist" 		'echo $CHEF_RUNLIST | tee /tmp/soft.json'
-chef_solo_exec=`which chef-solo`
-if [ -z "$chef_solo_exec" ]; then
-	chef_solo_exec=`gem contents chef | grep bin/chef-solo | head -1`
-fi
+chef_solo_exec='/usr/bin/chef-solo'
 
 # Chef crashes on low-memory instances
 

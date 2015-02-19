@@ -4,6 +4,7 @@ namespace Scalr\Stats\CostAnalytics;
 use Scalr\Stats\CostAnalytics\Entity\CostCentreEntity;
 use Scalr\Model\Collections\ArrayCollection;
 use Scalr\Stats\CostAnalytics\Entity\CostCentrePropertyEntity;
+use Scalr\Stats\CostAnalytics\Entity\ProjectEntity;
 use Scalr_Environment;
 use Scalr_Account;
 
@@ -44,23 +45,35 @@ class CostCentres
      * Gets all cost centres with all theirs properties
      *
      * @param    bool   $addHasProjects      optional Should it provide result with hasProjects flag
+     * @param    array  $criteria            optional Search criteria
      * @param    bool   $ignoreCache         optional Should it ignore cache or not
      * @return   ArrayCollection  Returns collection of the CostCentreEntity objects
      */
-    public function all($addHasProjects = false, $ignoreCache = false)
+    public function all($addHasProjects = false, $criteria = null, $ignoreCache = false)
     {
         if ($this->collection === null || $ignoreCache) {
             $this->collection = new ArrayCollection();
 
             $ccEntity = new CostCentreEntity();
 
+            $ccPropertyEntity = new CostCentrePropertyEntity();
+
+            $projectEntity = new ProjectEntity();
+
+            $where = 'WHERE 1=1';
+            $join = '';
+
             $idField = $ccEntity->getIterator()->getField('ccId');
 
+            $this->parseFindCriteria($criteria, $join, $where);
+
             $rs = $this->db->Execute("
-                SELECT " . $ccEntity->fields('c') . ", pp.name as property_name, pp.value as property_value
+                SELECT " . $ccEntity->fields('c') . ", cp.name as property_name, cp.value as property_value
                 " . ($addHasProjects ? ", EXISTS(SELECT 1 FROM projects pr WHERE pr.cc_id = c.cc_id) AS `hasProjects`" : "") . "
                 FROM " . $ccEntity->table('c') . "
-                LEFT JOIN `cc_properties` pp ON pp.cc_id = c.cc_id
+                LEFT JOIN " . $ccPropertyEntity->table('cp') . " ON cp.cc_id = c.cc_id
+                " . $join . "
+                " . $where . "
                 ORDER BY c.cc_id
             ");
 
@@ -88,31 +101,68 @@ class CostCentres
     }
 
     /**
+     * Parses common criteria
+     *
+     * @param     array    $criteria array of the query search criteria
+     * @param     string   $join     joins
+     * @param     string   $where    where part of the statement
+     */
+    private function parseFindCriteria($criteria, &$join, &$where)
+    {
+        
+
+        if (isset($criteria['accountId'])) {
+            $join .= " JOIN account_ccs ac ON ac.cc_id = c.cc_id ";
+            $where .= "
+                AND ac.account_id = " . $this->db->escape($criteria['accountId']) . "
+                AND EXISTS (
+                    SELECT 1 FROM projects p WHERE p.cc_id = c.cc_id
+                    AND p.shared = " . ProjectEntity::SHARED_WITHIN_ACCOUNT. "
+                    AND p.account_id = " . $this->db->escape($criteria['accountId']) . "
+               )
+           ";
+        }
+    }
+
+    /**
      * Finds cost centres by key
      * It searches by name or billing number
      *
-     * @param   string    $key  optional Search key
+     * @param   string    $key          optional Search key
+     * @param   array     $criteria     optional Search criteria
+     * @param   bool      $ignoreCache  optional Should it ignore cache or not
      * @return  ArrayCollection Returns collection of the CostCentreEntity objects
      */
-    public function findByKey($key = null)
+    public function findByKey($key = null, $criteria = null, $ignoreCache = false)
     {
         if (is_null($key) || $key === '') {
-            return $this->all();
+            return $this->all(false, $criteria, $ignoreCache);
         }
 
         $collection = new ArrayCollection();
 
         $ccEntity = new CostCentreEntity();
 
+        $ccPropertyEntity = new CostCentrePropertyEntity();
+
+        $projectEntity = new ProjectEntity();
+
+        $where = '';
+        $join = '';
+
+        $this->parseFindCriteria($criteria, $join, $where);
+
         $rs = $this->db->Execute("
             SELECT " . $ccEntity->fields('c') . "
-            FROM " . $ccEntity->table('c') . "
-            WHERE c.`name` LIKE ?
+            FROM " . $ccEntity->table('c') . " " .
+            $join . "
+            WHERE (c.`name` LIKE ?
             OR EXISTS (
-                SELECT 1 FROM cc_properties cp
+                SELECT 1 FROM " . $ccPropertyEntity->table('cp') . "
                 WHERE `cp`.cc_id = `c`.`cc_id`
                 AND `cp`.`name` = ? AND `cp`.`value` LIKE ?
-            )
+            ))
+            " . $where . "
         ", [
             '%' . $key . '%',
             CostCentrePropertyEntity::NAME_BILLING_CODE,
@@ -133,11 +183,12 @@ class CostCentres
      *
      * @param   string    $ccId         The identifier of the cost centre
      * @param   bool      $ignoreCache  optional Should it ignore cache or not
+     * @param   array     $criteria     optional Search criteria ['userEmail' => '']
      * @return  CostCentreEntity Returns the CostCentreEntity on success or null if it does not exist.
      */
-    public function get($ccId, $ignoreCache = false)
+    public function get($ccId, $ignoreCache = false, $criteria = null)
     {
-        $all = $this->all(true, $ignoreCache);
+        $all = $this->all(true, $ignoreCache, $criteria);
         return isset($all[$ccId]) ? $all[$ccId] : null;
     }
 

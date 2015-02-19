@@ -3,6 +3,7 @@
 use Scalr\Modules\PlatformFactory;
 use Scalr\Role\Role;
 use Scalr\Model\Entity\Image;
+use Scalr\Util\CryptoTool;
 
 class DBRole
 {
@@ -19,6 +20,7 @@ class DBRole
         $isDevel,
         $generation,
         $addedByUserId,
+        $dtLastUsed,
         $addedByEmail,
         $os,
         $osFamily,
@@ -50,6 +52,7 @@ class DBRole
         'os'			=> 'os',
 
         'dtadded'         => 'dateAdded',
+        'dt_last_used'    => 'dtLastUsed',
         'added_by_userid' => 'addedByUserId',
         'added_by_email'  => 'addedByEmail',
 
@@ -275,9 +278,10 @@ class DBRole
             $this->db->Execute("UPDATE roles SET
                 name		= ?,
                 description	= ?,
-                behaviors	= ?
+                behaviors	= ?,
+                dt_last_used = ?
             WHERE id =?
-            ", array($this->name, $this->description, $this->behaviorsRaw, $this->id));
+            ", array($this->name, $this->description, $this->behaviorsRaw, $this->dtLastUsed, $this->id));
 
             $this->db->Execute("DELETE FROM role_behaviors WHERE role_id = ?", array($this->id));
             foreach ($this->getBehaviors() as $behavior)
@@ -443,7 +447,7 @@ class DBRole
                     $script['isSync'],
                     serialize($script['params']),
                     $script['order_index'],
-                    (!$script['hash']) ? Scalr_Util_CryptoTool::sault(12) : $script['hash'],
+                    (!$script['hash']) ? CryptoTool::sault(12) : $script['hash'],
                     $script['script_path'],
                     $script['run_as'],
                     $script['script_type']
@@ -581,7 +585,7 @@ class DBRole
                     hash = ?
                 ", array(
                     $newRoleId, $r8['event_name'], $r8['target'], $r8['script_id'], $r8['version'],
-                    $r8['timeout'], $r8['issync'], $r8['params'], $r8['order_index'], $r8['script_type'], $r8['script_path'], Scalr_Util_CryptoTool::sault(12)
+                    $r8['timeout'], $r8['issync'], $r8['params'], $r8['order_index'], $r8['script_type'], $r8['script_path'], CryptoTool::sault(12)
                 ));
             }
         } catch (Exception $e) {

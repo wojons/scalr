@@ -98,6 +98,20 @@ class ServersService extends AbstractService implements ServiceInterface
     }
     
     /**
+     * Update server meta data
+     *
+     * @param string $serverId
+     * @param array $metadata
+     * @return object
+     * @throws  RestClientException
+     */
+    public function updateServerMetadata($serverId, array $metadata) {
+        return $this->getApiHandler()->updateServerMetadata(
+            $serverId, $metadata
+        );
+    }
+    
+    /**
      * Create Server action
      *
      * @param   string          $name        A server name to create.
@@ -355,6 +369,19 @@ class ServersService extends AbstractService implements ServiceInterface
         return $this->getApiHandler()->listFloatingIpPools();
     }
 
+    /**
+     * List Nova Networks
+     *
+     * Lists nova networks that are available to the tenant.
+     *
+     * @return  DefaultPaginationList Returns the list nova networks associated with the tenant or account.
+     * @throws  RestClientException
+     */
+    public function listNetworks()
+    {
+        return $this->getApiHandler()->listNetworks();
+    }
+    
     /**
      * List Floating Ips action
      *

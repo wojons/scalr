@@ -72,23 +72,21 @@ class Update20140127154723 extends AbstractUpdate implements SequenceInterface
 
         if (!$this->hasTable('account_tag_values')) {
             $this->console->error("Table %d does not exist.", $dbname . '.account_tag_values');
+
             return false;
         }
 
         if (!$this->hasTable('tags')) {
             $this->console->error("Table %d does not exist.", $dbname . '.tags');
+
             return false;
         }
 
-        $r = $this->db->GetOne("
-            SELECT 1 FROM tags
-            WHERE tag_id = ? LIMIT 1
-        ", array(
-            $tagId
-        ));
+        $r = $this->db->GetOne("SELECT 1 FROM tags WHERE tag_id = ? LIMIT 1", [$tagId]);
 
         if (!$r) {
             $this->console->error("Tag %s (%d) does not exist in the %s table.", $tagName, $tagId, $dbname . '.tags');
+
             return false;
         }
 
@@ -223,17 +221,76 @@ class Update20140127154723 extends AbstractUpdate implements SequenceInterface
 
     protected function isApplied3($stage)
     {
-        return true;
+        return $this->isAppliedCommon(TagEntity::TAG_ID_ROLE);
     }
 
     protected function validateBefore3($stage)
     {
-        return true;
+        return $this->hasTableService('servers') && $this->validateCommon(TagEntity::TAG_ID_ROLE, 'Role');
     }
 
     protected function run3($stage)
     {
-        //3 tag (Team) is rejected
+        if ($this->getCountOfAccountTagValues(TagEntity::TAG_ID_ROLE) &&
+            $this->console->confirm('Would you like to remove old roles from account_tag_values?')) {
+            $this->console->out("Removing old roles");
+            $this->db->Execute("DELETE FROM account_tag_values WHERE tag_id = ?", array(
+                TagEntity::TAG_ID_ROLE
+            ));
+        }
+
+        $this->console->out('Populating roles and theirs behaviors to the dictionary');
+
+        self::_updateRoleTags();
+    }
+
+    /**
+     * Populating roles and theirs behaviors to the dictionary
+     *
+     * This method has been made to provide access from later upgrade.
+     */
+    public static function _updateRoleTags()
+    {
+        $db   = \Scalr::getContainer()->adodb;
+        $cadb = \Scalr::getContainer()->cadb;
+
+        $stmt = '';
+
+        //Retrieves data from scalr database
+        $res = $db->Execute("
+            SELECT
+                r.`client_id` `account_id`,
+                r.`id` `value_id`,
+                r.`name` `value_name`,
+                r.behaviors
+            FROM `roles` r
+        ");
+
+        while ($rec = $res->FetchRow()) {
+            $stmt .= ',('
+                  . $db->qstr($rec['account_id']) . ', '
+                  . $db->qstr(TagEntity::TAG_ID_ROLE) . ', '
+                  . $db->qstr($rec['value_id']) . ', '
+                  . $db->qstr($rec['value_name']) . ')'
+            ;
+
+            if (!empty($rec['behaviors'])) {
+                $stmt .= ',('
+                  . $db->qstr($rec['account_id']) . ', '
+                  . $db->qstr(TagEntity::TAG_ID_ROLE_BEHAVIOR) . ', '
+                  . $db->qstr($rec['value_id']) . ', '
+                  . $db->qstr( preg_split('/[,\s]+/', trim($rec['behaviors']))[0] ) . ')'
+                ;
+            }
+        }
+
+        if ($stmt != '') {
+            //Inserts data to analytics database
+            $cadb->Execute("
+                INSERT IGNORE `account_tag_values` (`account_id`, `tag_id`, `value_id`, `value_name`)
+                VALUES " . substr($stmt, 1) . "
+            ");
+        }
     }
 
     protected function isApplied4($stage)
@@ -261,7 +318,16 @@ class Update20140127154723 extends AbstractUpdate implements SequenceInterface
 
         $this->console->out('Populating farms to the dictionary');
 
+        self::_updateFarmOwnerTags();
+    }
+
+    /**
+     * Updates farm owner tags
+     */
+    public static function _updateFarmOwnerTags()
+    {
         $db = \Scalr::getDb();
+        $cadb = \Scalr::getContainer()->cadb;
 
         $stmt = '';
 
@@ -299,7 +365,7 @@ class Update20140127154723 extends AbstractUpdate implements SequenceInterface
 
         if ($stmt != '') {
             //Inserts data to analytics database
-            $this->db->Execute("
+            $cadb->Execute("
                 INSERT IGNORE `account_tag_values` (`account_id`, `tag_id`, `value_id`, `value_name`)
                 VALUES " . substr($stmt, 1) . "
             ");
@@ -327,7 +393,16 @@ class Update20140127154723 extends AbstractUpdate implements SequenceInterface
         }
         $this->console->out('Populating farm roles to the dictionary');
 
+        self::_updateFarmRoleTags();
+    }
+
+    /**
+     * Updates farm role tags
+     */
+    public static function _updateFarmRoleTags()
+    {
         $db = \Scalr::getDb();
+        $cadb = \Scalr::getContainer()->cadb;
 
         $stmt = '';
 
@@ -353,8 +428,8 @@ class Update20140127154723 extends AbstractUpdate implements SequenceInterface
 
         if ($stmt != '') {
             //Inserts data to analytics database
-            $this->db->Execute("
-                INSERT IGNORE `account_tag_values` (`account_id`, `tag_id`, `value_id`, `value_name`)
+            $cadb->Execute("
+                REPLACE `account_tag_values` (`account_id`, `tag_id`, `value_id`, `value_name`)
                 VALUES " . substr($stmt, 1) . "
             ");
         }

@@ -16,7 +16,7 @@ Scalr.regPage('Scalr.ui.logs.system', function (loadParams, moduleParams) {
 	};
 
 	var panel = Ext.create('Ext.grid.Panel', {
-		title: 'Logs &raquo; System',
+		title: 'Logs &raquo; System Log',
 		scalrOptions: {
 			'reload': false,
 			'maximize': 'all'
@@ -40,14 +40,14 @@ Scalr.regPage('Scalr.ui.logs.system', function (loadParams, moduleParams) {
 		}, {
 			xtype: 'favoritetool',
 			favorite: {
-				text: 'System log',
+				text: 'System Log',
 				href: '#/logs/system'
 			}
 		}],
 
 		viewConfig: {
-			emptyText: 'No logs found',
-			loadingText: 'Loading logs ...',
+			emptyText: 'Nothing found',
+			loadingText: 'Loading...',
 			disableSelection: true,
 			getRowClass: function (record) {
                 if (record.get('severity') > 3) {

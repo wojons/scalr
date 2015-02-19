@@ -104,7 +104,7 @@ class NetworkService extends AbstractService implements ServiceInterface
         $cfg = $this->getOpenStack()->getConfig();
         return $cfg->getAuthToken() === null ?
             $cfg->getIdentityEndpoint() :
-            rtrim(parent::getEndpointUrl(), '/') . '/v2.0';
+            rtrim(rtrim(parent::getEndpointUrl(), '/'), '/v2.0') . '/v2.0';
     }
 
     /**

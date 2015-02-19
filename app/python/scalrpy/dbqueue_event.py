@@ -47,7 +47,6 @@ helper.patch_gevent()
 app = None
 
 
-
 class DBQueueEvent(application.ScalrIterationApplication):
 
     def __init__(self, argv=None):
@@ -62,10 +61,12 @@ class DBQueueEvent(application.ScalrIterationApplication):
 
         self.config.update({
             'pool_size': 100,
+            'retry_interval': 180,
             '_scalr_mail_service_url': 'https://my.scalr.com/webhook_mail.php',
         })
         self._db = None
         self._pool = None
+
         self.iteration_timeout = 180
 
         self.https_session = requests.Session()
@@ -86,7 +87,7 @@ class DBQueueEvent(application.ScalrIterationApplication):
         query = (
                 "SELECT HEX(wh.history_id) as history_id, HEX(wh.webhook_id) as webhook_id, "
                 "HEX(wh.endpoint_id) as endpoint_id, wh.payload, wh.handle_attempts, "
-                "wh.dtlasthandleattempt, wh.error_msg, we.url, "
+                "wh.dtlasthandleattempt, wh.error_msg, wh.event_id, we.url, "
                 "we.security_key, wc.timeout, wc.attempts "
                 "FROM webhook_history wh "
                 "JOIN webhook_endpoints we ON wh.endpoint_id=we.endpoint_id "
@@ -159,13 +160,37 @@ class DBQueueEvent(application.ScalrIterationApplication):
                 time.sleep(5)
 
 
+    def update_event(self, webhook):
+        try:
+            assert webhook['history_id'], 'event_id is null'
+            if webhook['status'] == 1:
+                query = (
+                        """UPDATE events """
+                        """SET wh_completed=wh_completed+1 """
+                        """WHERE events.event_id='{event_id}'"""
+                ).format(**webhook)
+            elif webhook['status'] == 2:
+                query = (
+                        """UPDATE events """
+                        """SET wh_failed=wh_failed+1 """
+                        """WHERE events.event_id='{event_id}'"""
+                ).format(**webhook)
+            else:
+                return
+            self._db.execute(query, retries=3)
+        except:
+            msg = "Events update failed, history_id: {0}, reason: {1}"
+            msg = msg.format(webhook['history_id'], helper.exc_info())
+            LOG.warning(msg)
+            
+
     def do_iteration(self):
         webhooks = self.get_webhooks()
 
         webhooks_to_post = list()
         for webhook in webhooks:
             attempt = int(webhook['handle_attempts']) + 1
-            delta = datetime.timedelta(minutes=((attempt-1)*3))
+            delta = datetime.timedelta(seconds=((attempt-1)*self.config['retry_interval']))
             if webhook['dtlasthandleattempt'] + delta <= datetime.datetime.utcnow():
                 webhooks_to_post.append(webhook)
 
@@ -221,6 +246,9 @@ class DBQueueEvent(application.ScalrIterationApplication):
 
                 self._pool.wait()
                 self._pool.apply_async(self.update_webhook, (webhook,))
+                if webhook['status'] in [1, 2]:
+                    self._pool.wait()
+                    self._pool.apply_async(self.update_event, (webhook,))
                 webhooks_to_iterate.remove(webhook)
 
         self._pool.join()

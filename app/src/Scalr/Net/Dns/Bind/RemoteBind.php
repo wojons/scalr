@@ -3,7 +3,6 @@
 class Scalr_Net_Dns_Bind_RemoteBind
 {
     /**
-     *
      * @var Scalr_Net_Dns_Bind_Transport
      */
     private $transport;
@@ -26,12 +25,14 @@ class Scalr_Net_Dns_Bind_RemoteBind
 
     function listZones()
     {
-        if (count($this->zonesConfig) == 0)
-        {
+        if (count($this->zonesConfig) == 0) {
             $contents = $this->transport->getNamedConf();
+
             preg_match_all("/\/\/(.*?)-BEGIN(.*?)\/\/\\1-END/sm", $contents, $matches);
-            foreach ($matches[1] as $index=>$domain_name)
+
+            foreach ($matches[1] as $index => $domain_name) {
                 $this->zonesConfig[$domain_name] = $matches[0][$index];
+            }
         }
 
         return array_keys($this->zonesConfig);

@@ -1,5 +1,7 @@
 <?php
 
+use Scalr\Util\CryptoTool;
+
 class Scalr_SshKey extends Scalr_Model
 {
     protected $dbTableName = 'ssh_keys';
@@ -55,9 +57,10 @@ class Scalr_SshKey extends Scalr_Model
      */
     public function getFarmObject()
     {
-        if (!$this->dbFarm && !empty($this->farmId)) {
-            $this->dbFarm = \DBFarm::LoadByID($this->farmId);
-        }
+        try {
+            if (!$this->dbFarm && !empty($this->farmId))
+                $this->dbFarm = \DBFarm::LoadByID($this->farmId);
+        } catch (Exception $e) {}
 
         return $this->dbFarm;
     }
@@ -113,7 +116,7 @@ class Scalr_SshKey extends Scalr_Model
         $ppkPrivateKey = tempnam("/tmp", "SSHPPK");
 
         $pipes = array();
-        $process = @proc_open("/usr/bin/puttygen {$pemPrivateKey} -o {$ppkPrivateKey}", $descriptorspec, $pipes);
+        $process = @proc_open("puttygen {$pemPrivateKey} -o {$ppkPrivateKey}", $descriptorspec, $pipes);
         if (@is_resource($process)) {
 
             @fclose($pipes[0]);
@@ -140,7 +143,7 @@ class Scalr_SshKey extends Scalr_Model
            2 => array("pipe", "w")
         );
 
-        $filePath = CACHEPATH."/_tmp.".Scalr_Util_CryptoTool::hash($tmpFileContents);
+        $filePath = CACHEPATH . "/_tmp." . CryptoTool::hash($tmpFileContents);
 
         if (!$readTmpFile)
         {
@@ -188,21 +191,21 @@ class Scalr_SshKey extends Scalr_Model
 
     public function setPrivate($key)
     {
-        $this->privateKeyEnc = $this->getCrypto()->encrypt($key, $this->cryptoKey);
+        $this->privateKeyEnc = $this->getCrypto()->encrypt($key);
     }
 
     public function setPublic($key)
     {
-        $this->publicKeyEnc = $this->getCrypto()->encrypt($key, $this->cryptoKey);
+        $this->publicKeyEnc = $this->getCrypto()->encrypt($key);
     }
 
     public function getPrivate()
     {
-        return $this->getCrypto()->decrypt($this->privateKeyEnc, $this->cryptoKey);
+        return $this->getCrypto()->decrypt($this->privateKeyEnc);
     }
 
     public function getPublic()
     {
-        return $this->getCrypto()->decrypt($this->publicKeyEnc, $this->cryptoKey);
+        return $this->getCrypto()->decrypt($this->publicKeyEnc);
     }
 }

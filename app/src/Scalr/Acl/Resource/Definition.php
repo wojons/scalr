@@ -242,21 +242,27 @@ class Definition
                     Acl::GROUP_SECURITY
                 ],
 
-                Acl::RESOURCE_LOGS_API_LOGS => [
-                    'API logs',
-                    $allows . 'access to API logs.',
-                    Acl::GROUP_LOGS
-                ],
-
-                Acl::RESOURCE_LOGS_SCRIPTING_LOGS => [
-                    'Scripting logs',
-                    $allows . 'access to scripting logs.',
+                Acl::RESOURCE_LOGS_EVENT_LOGS => [
+                    'Event Log',
+                    $allows . 'access to the Event Log.',
                     Acl::GROUP_LOGS
                 ],
 
                 Acl::RESOURCE_LOGS_SYSTEM_LOGS => [
-                    'System logs',
-                    $allows . 'access to system logs.',
+                    'System Log',
+                    $allows . 'access to the System Log.',
+                    Acl::GROUP_LOGS
+                ],
+
+                Acl::RESOURCE_LOGS_SCRIPTING_LOGS => [
+                    'Scripting Log',
+                    $allows . 'access to the Scripting Log.',
+                    Acl::GROUP_LOGS
+                ],
+
+                Acl::RESOURCE_LOGS_API_LOGS => [
+                    'API Log',
+                    $allows . 'access to the API Log.',
                     Acl::GROUP_LOGS
                 ],
 
@@ -426,13 +432,17 @@ class Definition
 
                 Acl::RESOURCE_ADMINISTRATION_ANALYTICS => [
                     'Cost Analytics (account scope)',
-                    $allows . ' access to Account level Cost Analytics',
-                    Acl::GROUP_ADMINISTRATION
+                    $allows . ' access to Cost Analytics in the account scope',
+                    Acl::GROUP_ADMINISTRATION,
+                    [
+                        Acl::PERM_ADMINISTRATION_ANALYTICS_MANAGE_PROJECTS => $allows . 'to edit/create projects in the account scope.',
+                        Acl::PERM_ADMINISTRATION_ANALYTICS_ALLOCATE_BUDGET => $allows . "to set/edit projects' budgets in the account scope.",
+                    ]
                 ],
 
                 Acl::RESOURCE_ENVADMINISTRATION_ANALYTICS => [
                     'Cost Analytics (environment scope)',
-                    $allows . ' access to Environment level Cost Analytics',
+                    $allows . ' access to Cost Analytics in the environment scope',
                     Acl::GROUP_ENVADMINISTRATION
                 ],
 

@@ -208,6 +208,14 @@ Scalr.regPage('Scalr.ui.account2.environments.view', function (loadParams, modul
                 if (rackspaceBtn) {
                     rackspaceBtn.setVisible(Ext.Array.contains(record.get('platforms'), 'rackspace'));
                 }
+
+                if (moduleParams['ccs']) {
+                    var ccs = moduleParams['ccs'];
+                    if (!isNewRecord && moduleParams['unassignedCcs'][record.get('id')]) {
+                        ccs = Ext.Array.merge(ccs, [moduleParams['unassignedCcs'][record.get('id')]])
+                    }
+                    frm.findField('ccId').store.load({data: ccs});
+                }
 			},
 			loadrecord: function(record) {
 				envTeamsStore.loadData(storeTeams.getRange());
@@ -269,21 +277,36 @@ Scalr.regPage('Scalr.ui.account2.environments.view', function (loadParams, modul
                 xtype: 'combo',
                 store: {
                     fields: [ 'ccId', 'name' ],
-                    data: moduleParams['ccs']
+                    proxy: 'object'
                 },
                 anchor: '50%',
                 maxWidth: 370,
                 margin: '0 20 0 0',
                 editable: false,
                 autoSetSingleValue: true,
-                hidden: !moduleParams['ccs'] || (!Scalr.flags['betaMode'] && !Scalr.flags['allowManageAnalytics']),
-                allowBlank: !moduleParams['ccs'] || (!Scalr.flags['betaMode'] && !Scalr.flags['allowManageAnalytics']),
+                hidden: !Scalr.flags['analyticsEnabled'],
+                allowBlank: !Scalr.flags['analyticsEnabled'],
                 valueField: 'ccId',
                 displayField: 'name',
                 fieldLabel: 'Cost center',
                 labelWidth: 80,
                 name: 'ccId',
-                readOnly: !isAccountOwner && !isAccountSuperAdmin
+                readOnly: !isAccountOwner && !isAccountSuperAdmin,
+                listeners: {
+                    beforeselect: function(field, newRecord) {
+                        var text, oldName,
+                            isNewEnvironment = !field.up('form').getForm().getRecord().store,
+                            oldRecord = field.findRecordByValue(field.getValue());
+                        if (!isNewEnvironment && oldRecord && field.getPicker().isVisible()) {
+                            oldName = oldRecord ? oldRecord.get('name') : field.getValue()
+                            text = 'Switching to <b>' + newRecord.get('name') + '</b> will prevent new Farms in <b>' + field.up('form').down('[name="name"]').getValue() +
+                                   '</b> from being associated with any Projects in <b>' + oldName + '</b>. This will not automatically affect any existing farm.<br/>' +
+                                   'However, users will need to manually change the Project associated with existing Farms next time any Farm is edited.<br/>' +
+                                   'Please ensure that at least 1 Project exists in <b>' + newRecord.get('name') + '</b>, otherwise, users will not be able to save their Farms.'
+                            Scalr.message.WarningTip(text, field.inputEl);
+                        }
+                    }
+                }
 
             }]
 		}, {

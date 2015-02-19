@@ -26,14 +26,7 @@ class Scalr_Scripting_GlobalVariables
      */
     public function __construct($accountId = 0, $envId = 0, $scope = Scalr_Scripting_GlobalVariables::SCOPE_SCALR)
     {
-        $this->crypto = new Scalr_Util_CryptoTool(
-            MCRYPT_RIJNDAEL_256,
-            MCRYPT_MODE_CFB,
-            @mcrypt_get_key_size(MCRYPT_RIJNDAEL_256, MCRYPT_MODE_CFB),
-            @mcrypt_get_iv_size(MCRYPT_RIJNDAEL_256, MCRYPT_MODE_CFB)
-        );
-
-        $this->cryptoKey = @file_get_contents(APPPATH."/etc/.cryptokey");
+        $this->crypto = \Scalr::getContainer()->crypto;
 
         $this->accountId = $accountId;
         $this->envId = $envId;
@@ -114,7 +107,7 @@ class Scalr_Scripting_GlobalVariables
 
             foreach ($values as $val) {
                 if ($val['value']) {
-                    $val['value'] = $this->crypto->decrypt($val['value'], $this->cryptoKey);
+                    $val['value'] = $this->crypto->decrypt($val['value']);
                     // to avoid empty value in higher scopes, save last not empty value
                     $variable['lastValue'] = $val['value'];
                 }
@@ -325,7 +318,7 @@ class Scalr_Scripting_GlobalVariables
 
             $variable['value'] = trim($variable['value']);
             if ($variable['value'] != '') {
-                $variable['value'] = $this->crypto->encrypt($variable['value'], $this->cryptoKey);
+                $variable['value'] = $this->crypto->encrypt($variable['value']);
             } else {
                 if (isset($currentValues[$name]['default']))
                     $deleteFlag = true;

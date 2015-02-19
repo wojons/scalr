@@ -3,38 +3,42 @@
 namespace Scalr\Tests\Util;
 
 use Scalr\Tests\TestCase;
+use Scalr\Util\CryptoTool;
 
 class CryptoToolTest extends TestCase
 {
+
+    /**
+     * @var CryptoTool
+     */
     protected static $cryptoDes;
+
+    /**
+     * @var CryptoTool
+     */
     protected static $cryptoAes;
+
+    /**
+     * @var CryptoTool
+     */
     protected static $cryptoSzr;
 
-    protected static $cryptoKey;
     protected static $testSzr = false;
     // require python with M2Crypto installed
 
     public static function initCrypto()
     {
         if (!self::$cryptoAes) {
-            self::$cryptoAes = new \Scalr_Util_CryptoTool(
-                MCRYPT_RIJNDAEL_256,
-                MCRYPT_MODE_CFB,
-                @mcrypt_get_key_size(MCRYPT_RIJNDAEL_256, MCRYPT_MODE_CFB),
-                @mcrypt_get_iv_size(MCRYPT_RIJNDAEL_256, MCRYPT_MODE_CFB)
-            );
+            self::$cryptoAes = \Scalr::getContainer()->crypto;
         }
 
         if (!self::$cryptoDes) {
-            self::$cryptoDes = new \Scalr_Util_CryptoTool(MCRYPT_TRIPLEDES, MCRYPT_MODE_CFB, 24, 8);
+            self::$cryptoDes = \Scalr::getContainer()->crypto(MCRYPT_TRIPLEDES, MCRYPT_MODE_CFB, null, 24, 8);
         }
 
         if (!self::$cryptoSzr) {
-            self::$cryptoSzr = \Scalr_Messaging_CryptoTool::getInstance();
-        }
-
-        if (!self::$cryptoKey) {
-            self::$cryptoKey = file_get_contents(APPPATH . "/etc/.cryptokey");
+            $key = file_get_contents(APPPATH . "/etc/.cryptokey");
+            self::$cryptoSzr = \Scalr::getContainer()->srzcrypto($key);
         }
     }
 
@@ -72,10 +76,7 @@ class CryptoToolTest extends TestCase
      */
     public function testCryptoAes($string)
     {
-        $this->assertEquals($string, self::$cryptoAes->decrypt(
-            self::$cryptoAes->encrypt($string, self::$cryptoKey),
-            self::$cryptoKey
-        ));
+        $this->assertEquals($string, self::$cryptoAes->decrypt(self::$cryptoAes->encrypt($string)));
     }
 
     /**
@@ -84,10 +85,7 @@ class CryptoToolTest extends TestCase
      */
     public function testCryptoDes($string)
     {
-        $this->assertEquals($string, self::$cryptoDes->decrypt(
-            self::$cryptoDes->encrypt($string, self::$cryptoKey),
-            self::$cryptoKey
-        ));
+        $this->assertEquals($string, self::$cryptoDes->decrypt(self::$cryptoDes->encrypt($string)));
     }
 
     /**
@@ -97,11 +95,11 @@ class CryptoToolTest extends TestCase
     public function testCryptoSzr($string)
     {
         if (self::$testSzr) {
-            $key = self::$cryptoKey;
+            $key = base64_encode(self::$cryptoSzr->getCryptoKey());
             $str = escapeshellarg($string);
             $cmd = 'python ' . __DIR__ . "/CryptoToolSzr.py encrypt {$str} {$key}";
             exec($cmd, $result);
-            $this->assertEquals(self::$cryptoSzr->encrypt($string, base64_decode(self::$cryptoKey)), $result[0]);
+            $this->assertEquals(self::$cryptoSzr->encrypt($string), $result[0]);
         } else {
             $this->markTestSkipped();
         }
@@ -114,8 +112,8 @@ class CryptoToolTest extends TestCase
     public function testDecryptoSzr($string)
     {
         if (self::$testSzr) {
-            $key = self::$cryptoKey;
-            $str = escapeshellarg(self::$cryptoSzr->encrypt($string, base64_decode(self::$cryptoKey)));
+            $key = base64_encode(self::$cryptoSzr->getCryptoKey());
+            $str = escapeshellarg(self::$cryptoSzr->encrypt($string));
             exec('python ' . __DIR__ . "/CryptoToolSzr.py decrypt {$str} {$key}", $result);
             $this->assertEquals($string, $result[0]);
         } else {

@@ -17,6 +17,11 @@ use Scalr\System\Zmq\Cron\AbstractPayload;
 class CloudPricing extends AbstractTask
 {
 
+    /**
+     * @var \HttpRequest
+     */
+    private $request;
+
     public static $mapping = [
         'us-east'        => 'us-east-1',
         'us-west'        => 'us-west-1',
@@ -64,7 +69,7 @@ class CloudPricing extends AbstractTask
         $availableLocations = Aws::getCloudLocations();
 
         foreach ($urls as $link) {
-            $json = trim(preg_replace('/^.+?callback\((.+?)\);\s*$/sU', '\\1', file_get_contents($link)));
+            $json = trim(preg_replace('/^.+?callback\((.+?)\);\s*$/sU', '\\1', $this->getPricingContent($link)));
 
             $data = json_decode(preg_replace('/(\w+):/', '"\\1":', $json));
 
@@ -77,6 +82,54 @@ class CloudPricing extends AbstractTask
         }
 
         return $queue;
+    }
+
+    /**
+     * Gets pricing content
+     *
+     * @param string $link
+     *
+     * @return string
+     */
+    private function getPricingContent($link)
+    {
+        $request = $this->getRequest();
+        $request->setUrl($link);
+
+        return $request->send()->getBody();
+    }
+
+    /**
+     * Gets configured HttpRequest
+     *
+     * @return \HttpRequest
+     */
+    private function getRequest()
+    {
+        if(!$this->request) {
+            $opt = ['timeout' => 15];
+
+            if (\Scalr::config('scalr.aws.use_proxy')) {
+                $proxy = \Scalr::config('scalr.connections.proxy');
+                if (in_array($proxy['use_on'], array('both', 'scalr'))) {
+                    $opt['proxyhost'] = $proxy['host'];
+                    $opt['proxyport'] = $proxy['port'];
+                    $opt['proxytype'] = $proxy['type'];
+    
+                    if (!empty($proxy['pass']) && !empty($proxy['user'])) {
+                        $opt['proxyauth'] = "{$proxy['user']}:{$proxy['pass']}";
+                        $opt['proxyauthtype'] = $proxy['authtype'];
+                    }
+                }
+            }
+
+            $this->request = new \HttpRequest(null, HTTP_METH_GET, $opt);
+        } else {
+            $this->request->resetCookies(true);
+            $this->request->clearHistory();
+        }
+
+        return $this->request;
     }
 
     /**

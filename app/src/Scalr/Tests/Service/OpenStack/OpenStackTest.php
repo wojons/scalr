@@ -11,6 +11,9 @@ use Scalr\Service\OpenStack\Services\Servers\Type\ServersExtension;
 use Scalr\Service\OpenStack\Exception\RestClientException;
 use Scalr\Service\OpenStack\OpenStack;
 use Scalr\Service\OpenStack\Type\DefaultPaginationList;
+use Scalr\Service\OpenStack\Client\RestClient;
+use Scalr\Service\OpenStack\OpenStackConfig;
+use ReflectionMethod;
 
 /**
  * OpenStack TestCase
@@ -138,6 +141,23 @@ class OpenStackTest extends OpenStackTestCase
 
     /**
      * @test
+     */
+    public function testApiClientOptions()
+    {
+        $client = new RestClient(new OpenStackConfig('foo', 'foo', 'regionOne'));
+        $this->assertInstanceOf('Scalr\\Service\\OpenStack\\Client\\RestClient', $client);
+
+        $refMethod = new ReflectionMethod($client, 'createHttpRequest');
+        $refMethod->setAccessible(true);
+        $res = $refMethod->invoke($client);
+
+        $opt = $res->getOptions();
+
+        $this->assertEquals(\Scalr::config('scalr.openstack.api_client.timeout'), $opt['timeout']);
+    }
+
+    /**
+     * @test
      * @dataProvider providerRs
      */
     public function testFunctionalOpenStack($platform, $region, $imageId)
@@ -233,230 +253,6 @@ class OpenStackTest extends OpenStackTestCase
         $this->assertNotEmpty($tenants);
         $this->assertTrue(is_array($tenants));
         unset($tenants);
-
-        //Contrail related tests
-        if ($rs->hasService(OpenStack::SERVICE_CONTRAIL)) {
-            //Look at SCALRCORE-726 for more info about Contrail responses
-            $testFqName = self::getTestName(self::NAME_FQ);
-            $testDomainName = self::getTestName(self::NAME_DOMAIN) . '.com';
-            $testFqNetworkName = self::getTestName(self::NAME_FQ_NETWORK);
-            $testNetworkPolicyName = self::getTestName(self::NAME_NETWORK_POLICY);
-            $tenant = $rs->getConfig()->getTenantName();
-
-            //Lists virtual networks
-            $listVirtualNetworks = $rs->contrail->listVirtualNetworks();
-
-            $this->assertTrue(
-                $listVirtualNetworks instanceof DefaultPaginationList,
-                'The list of virtual networks is expected to be DefaultPaginationList instance.'
-            );
-
-            //Removes previously created test virtual networks
-            foreach ($listVirtualNetworks as $v) {
-                if (isset($v->fq_name) && is_array($v->fq_name) && in_array($testFqNetworkName, $v->fq_name)) {
-                    $ret = $rs->contrail->deleteVirtualNetwork($v->uuid);
-                    $this->assertTrue($ret);
-                }
-            }
-            unset($listVirtualNetworks);
-
-            //Describes network policies
-            $listNetworkPolicies = $rs->contrail->listNetworkPolicies();
-
-            $this->assertTrue(
-                $listNetworkPolicies instanceof DefaultPaginationList,
-                'The list of network policies is expected to be DefaultPaginationList instance.'
-            );
-
-            foreach ($listNetworkPolicies as $v) {
-                if (isset($v->fq_name) && is_array($v->fq_name) && in_array($testNetworkPolicyName, $v->fq_name)) {
-                    $ret = $rs->contrail->deleteNetworkPolicy($v->uuid);
-                    $this->assertTrue($ret);
-                }
-            }
-            unset($listNetworkPolicies);
-
-            //Select IPAMs
-            $listIpams = $rs->contrail->listIpam();
-
-            $this->assertTrue(
-                $listIpams instanceof DefaultPaginationList,
-                'The list of IPAMs is expected to be DefaultPaginationList instance.'
-            );
-
-            //Removes previously created IPAM if it does exist
-            foreach ($listIpams as $ipam) {
-                if (isset($ipam->fq_name) && is_array($ipam->fq_name) && in_array($testFqName, $ipam->fq_name)) {
-                    $ret = $rs->contrail->deleteIpam($ipam->uuid);
-                    $this->assertTrue($ret);
-                }
-            }
-            unset($listIpams);
-
-            //Lists virtual DNSs
-            $dnsList = $rs->contrail->listVirtualDns();
-
-            $this->assertTrue(
-                $dnsList instanceof DefaultPaginationList,
-                'The list of virtual DNSs is expected to be DefaultPaginationList instance.'
-            );
-
-            //Removes previously created virtual dns
-            foreach ($dnsList as $v) {
-                if (!empty($v->fq_name) && is_array($v->fq_name) && in_array($testFqName, $v->fq_name)) {
-                    $ret = $rs->contrail->deleteVirtualDns($v->uuid);
-                    $this->assertTrue($ret);
-                }
-            }
-            unset($dnsList);
-
-            //Creates a virtual DNS
-            $virtualDns = $rs->contrail->createVirtualDns(array(
-                'parent_type' => 'domain',
-                'fq_name' => array(
-                    'default-domain',
-                    $testFqName
-                ),
-                'virtual_DNS_data' => array(
-                    "default_ttl_seconds"         => 8144,
-                    "domain_name"                 => $testDomainName,
-                    "dynamic_records_from_client" => true,
-                    "next_virtual_DNS"            => self::NEXT_VIRTUAL_DNS_ADDRESS,
-                    "record_order"                => "random"
-                ),
-            ));
-            $this->assertInternalType('object', $virtualDns);
-            foreach (array('fq_name', 'parent_uuid', 'parent_href', 'uuid', 'href', 'name') as $attr) {
-                $this->assertObjectHasAttribute('href', $virtualDns);
-            }
-            $this->assertNotEmpty($virtualDns->uuid);
-            $this->assertEquals($testFqName, $virtualDns->name);
-
-
-            //List of the specified virtual DNS
-            $vdns = $rs->contrail->listVirtualDns($virtualDns->uuid);
-            $this->assertInternalType('object', $vdns);
-            foreach (array('fq_name', 'parent_uuid', 'parent_href', 'uuid', 'href', 'name', 'virtual_DNS_data', 'id_perms') as $attr) {
-                $this->assertObjectHasAttribute('href', $virtualDns);
-            }
-            $this->assertEquals($virtualDns->name, $vdns->name);
-            $this->assertEquals($virtualDns->uuid, $vdns->uuid);
-            unset($virtualDns);
-
-            //Creates IPAM
-            $ipam = $rs->contrail->createIpam(array(
-                "parent_type"       => "project",
-                "fq_name"           => array("default-domain", $tenant, $testFqName),
-                "network_ipam_mgmt" => array(
-                    "dhcp_option_list" => array(
-                        "dhcp_option"    => array(array(
-                            "dhcp_option_name"  => "15",
-                            "dhcp_option_value" => $testDomainName,
-                        ))
-                    ),
-                    "ipam_dns_method"  => "tenant-dns-server",
-                    "ipam_dns_server"  => array(
-                        "tenant_dns_server_address" => array(
-                            "ip_address"  => array(self::DNS_SERVER_ADDRESS),
-                        ),
-                        "virtual_dns_server_name"   => null,
-                    ),
-                ),
-            ));
-
-            $this->assertInternalType('object', $ipam);
-
-
-            //Show specified IPAM
-            $ipam2 = $rs->contrail->listIpam($ipam->uuid);
-            $this->assertInternalType('object', $ipam2);
-            $this->assertEquals($ipam2->uuid, $ipam->uuid);
-            unset($ipam2);
-
-
-            //Creates virtual network
-            $virtualNetwork = $rs->contrail->createVirtualNetwork(array(
-                "parent_type" => "project",
-                "fq_name"     => array("default-domain", $tenant, $testFqNetworkName)
-            ));
-            $this->assertInternalType('object', $virtualNetwork);
-            $this->assertNotEmpty($virtualNetwork->uuid);
-
-
-            //Show specified virtual network
-            $vn2 = $rs->contrail->listVirtualNetworks($virtualNetwork->uuid);
-            $this->assertInternalType('object', $vn2);
-            $this->assertEquals($virtualNetwork->uuid, $vn2->uuid);
-            unset($vn2);
-
-            //Creating network policy
-            $networkPolicy = $rs->contrail->createNetworkPolicy([
-                "parent_type"            => "project",
-                "fq_name"                => ["default-domain", $tenant, $testNetworkPolicyName],
-                "network_policy_entries" => [
-                    "policy_rule" => [[
-                        "direction"     => "<>",
-                        "protocol"      => "any",
-                        "src_addresses" => [["virtual_network" => "default-domain:" . $tenant . ":" . $testFqNetworkName]],
-                        "dst_ports"     => [["start_port" => -1, "end_port" => -1]],
-                        "action_list"   => ["apply_service" => null],
-                        "dst_addresses" => [["virtual_network" => "default-domain:" . $tenant . ":" . $testFqNetworkName]],
-                        "src_ports"     => [["end_port" => -1, "start_port" => -1]],
-                    ]],
-                ],
-            ]);
-            $this->assertInternalType('object', $networkPolicy);
-            $this->assertNotEmpty($networkPolicy->uuid);
-
-            //Show detailed info of the specified network policy
-            $np2 = $rs->contrail->listNetworkPolicies($networkPolicy->uuid);
-            $this->assertInternalType('object', $np2);
-            $this->assertEquals($networkPolicy->uuid, $np2->uuid);
-            unset($np2);
-
-            //Associates IPAM and Network Policy to virtual network
-            $rs->contrail->updateVirtualNetwork($virtualNetwork->uuid, [
-                "fq_name"           => $virtualNetwork->fq_name,
-                "network_ipam_refs" => [[
-                    "attr" => [
-                        "ipam_subnets" => [[
-                            "default_gateway" => "192.168.80.6",
-                            "subnet"          => [
-                                "ip_prefix"     => "192.168.80.1",
-                                "ip_prefix_len" => 29
-                            ],
-                        ]],
-                    ],
-                    "to"   => ["default-domain", $tenant, $testFqName],
-                ]],
-                "network_policy_refs" => [[
-                    "to"   => ["default-domain", $tenant, $testNetworkPolicyName],
-                    "attr" => [
-                        "sequence" => ["major" => 0, "minor" => 0],
-                        "timer"    => null,
-                    ],
-                ]],
-            ]);
-
-            //Removing Virtual Network
-            $ret = $rs->contrail->deleteVirtualNetwork($virtualNetwork->uuid);
-            $this->assertTrue($ret);
-
-            //Removing network policy
-            $ret = $rs->contrail->deleteNetworkPolicy($networkPolicy->uuid);
-            $this->assertTrue($ret);
-
-            //Removing IPAM
-            $ret = $rs->contrail->deleteIpam($ipam->uuid);
-            $this->assertTrue($ret);
-
-            //Removing virtual DNS
-            $ret = $rs->contrail->deleteVirtualDns($vdns->uuid);
-            $this->assertTrue($ret);
-
-            $this->markTestSkipped('For Contrail to check only its API and nothing more.');
-            return;
-        }
 
         //Get Limits test
         $limits = $rs->servers->getLimits();

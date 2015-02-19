@@ -56,6 +56,14 @@ interface TaskInterface
     public function onResponse(AbstractPayload $payload);
 
     /**
+     * Action that might need to be performed when all task are done
+     *
+     * It executes withing the client's thread.
+     * This method isn't necessarily to be overriden.
+     */
+    public function onCompleted();
+
+    /**
      * Shutdown
      *
      * It terminates all child processes

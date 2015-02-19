@@ -128,19 +128,6 @@ class Scalr_Cronjob_MetricCheck extends Scalr_System_Cronjob_MultiProcess_Defaul
                 if ($dbServer->IsSupported("0.8") && !$dbServer->IsSupported("0.9"))
                     continue;
 
-                $subStatus = $dbServer->GetProperty(SERVER_PROPERTIES::SUB_STATUS);
-                if ($subStatus != '') {
-                    if ($subStatus == 'stopped') {
-                        //Need to solve ALL failed metrics
-                        $serverAlerts = new Alerts($dbServer);
-                        if ($serverAlerts->getActiveAlertsCount()) {
-                            $serverAlerts->solveAlert();
-                        }
-                    }
-
-                    continue;
-                }
-
                 if ($dbServer->GetProperty(SERVER_PROPERTIES::REBOOTING))
                     continue;
 

@@ -10,14 +10,18 @@ scalr:
       user: scalr
       pass: 'scalr'
 
-## Proxy settings that can be used with option scalr.aws.use_proxy = yes
-## allowed types: 4 - socks4, 5 - socks5, 0 - http
+#    # Proxy settings that can be used with option scalr.aws.use_proxy = yes
+#    # allowed types: 4 - socks4, 5 - socks5, 0 - http
+#    # allowed authtypes: 1 - Basic, Digest - 2, GSSNeg - 4, NTLM - 8, any - -1
 #    proxy:
 #      host: 'localhost'
 #      port: 3128
 #      user: ''
 #      pass: ''
 #      type: 0
+#      authtype: 1
+#      # allowed values: scalr, instance, both 
+#      use_on: both
 
 #    # Mongodb may be used as storage for auditlog. This feature is still under development.
 #    mongodb: &connections_mongo
@@ -26,7 +30,7 @@ scalr:
 #      port: 27017
 #      name: 'db'
 
-#    ## This section is optional and it is required only when you use ldap for user's authentication (scalr.auth_mode: ldap).
+#    # This section is optional and it is required only when you use ldap for user's authentication (scalr.auth_mode: ldap).
 #    ldap:
 #      host: 'localhost'
 #      #port: ~
@@ -95,6 +99,168 @@ scalr:
 #    master_email: ''
 #    # Allowed values: DEV | ITG | QA | PROD Default: PROD
 #    environment: PROD
+
+  crontab:
+#    heartbeat:
+#      # ZMQ MDP heartbeat interval msecs (Default: 18000)
+#      delay: 18000
+#      # ZMP MDP liveness (Default: 3)
+#      liveness: 3
+    
+#    sockets:
+#      # DSN of the ZMQ MDP broker (Default: ipc://[SYSTEM-TMP-PATH]/[SCALR-ID].broker.ipc)
+#      broker: ipc:///tmp/{SCALR_ID}.broker.ipc
+    
+#    # Path to the log file of the service. Default: (/dev/null)
+#    log: /var/log/scalr/service.log
+    
+#    # Log level of the service. Type:Integer. Valid predefined values are FATAL|ERROR|WARN|INFO|DEBUG (Default: ERROR)
+#    log_level: ERROR    
+
+    services:
+#      # Cron task template. It may be used as an example how to define a service.
+#      # Default values should be defined in the Scalr\System\Config\Extension.
+#      
+#      # The name of the service
+#      the_name_of_the_service_here:
+#        # Whether the service is enabled (Default: no)
+#        # System administrator is in charge of enable a new service when doing Scalr upgrade.
+#        enabled: no
+#                
+#        # What time task should start at. Format: "minute hour dayOfMonth month dayOfWeek"
+#        # where:
+#        #   minute     values range from 0 to 59, 
+#        #   hour       values range from 0 to 23, 
+#        #   dayOfMonth values range from 1 to 31, 
+#        #   month      values range from 1 to 12, 
+#        #   dayOfWeek  values range from 0 to 6, with 0 meaning Sunday 
+#        # If it is a demonized service, time does not need to be set here, whereas 'daemon' property has to be set to yes.
+#        time: "1 */4 * * *"
+#        
+#        ## The number of parallel workers 
+#        workers: 1
+#        
+#        ## Whether process should be demonized
+#        daemon: no
+#
+#        ## The idle time for demonized task in seconds
+#        idle: 5
+#        
+#        ## Time zone which is used to run task. System timezone will be used by default.
+#        timezone: ~
+#        
+#        ## Log destination
+#        log: /dev/null
+#        
+#        ## Log level. Type:Integer. Valid predefined values are FATAL|ERROR|WARN|INFO|DEBUG
+#        log_level: WARN
+#
+#        ## Memory limit in Mb
+#        memory_limit: 0
+      
+      analytics_notifications:
+        enabled: no
+#        log: /var/log/scalr/analytics_notifications.log
+#        time: "1 1 * * *"
+#        timezone: UTC
+      
+      cloud_poller:
+        enabled: no
+#        log: /var/log/scalr/cloud_poller.log
+#        time: "*/2 * * * *"
+#        workers: 14
+      
+      cloud_pricing:
+        enabled: no
+#        log: /var/log/scalr/cloud_pricing.log
+#        time: "1 */4 * * *"
+#        workers: 4
+#        timezone: UTC
+      
+      db_msr_maintenance:
+        enabled: no
+#        log: /var/log/scalr/db_msr_maintenance.log
+#        time: "*/5 * * * *"
+#        workers: 10
+      
+      dns_manager:
+        enabled: no
+#        log: /var/log/scalr/dns_manager.log
+#        workers: 4
+      
+      images_builder:
+        enabled: no
+#        log: /var/log/scalr/images_builder.log
+#        workers: 4
+      
+      images_cleanup:
+        enabled: no
+#        log: /var/log/scalr/images_cleanup.log
+#        time: "0/20 * * * *"
+      
+      lease_manager:
+        enabled: no
+#        log: /var/log/scalr/lease_manager.log
+#        time: "2/20 * * * *"
+#        workers: 3
+      
+      rotate:
+        enabled: no
+#        log: /var/log/scalr/rotate.log
+#        time: "17 */2 * * *"
+#        # Depending on your load and database master-slave replication characteristics
+#        delete: 
+#          # The number of the records to delete per one time. (Default: 1000)
+#          limit: 1000
+#          # Idle time in secodns between consecutive deletions. (Default: 60)
+#          sleep: 60
+#        # How long it will keep data for the specified tables. 
+#        # The value must be valid relative DateTime unit (http://php.net/manual/en/datetime.formats.relative.php)  
+#        keep:
+#          scalr:
+#            logentries: "-10 days"
+#            scripting_log: "-7 days"
+#            events: "-2 months"
+#            messages: "-10 days"
+#            webhook_history: "-30 days"
+#            # It rotates log when the number of the records hits the specified value. (Default: 1000000)
+#            syslog: 1000000
+#          analytics:
+#            # Long periods here will hit performance
+#            poller_sessions: "-7 days"
+#            usage_h: "-14 days"
+      
+      scalarizr_messaging:
+        enabled: no
+#        log: /var/log/scalr/scalarizr_messaging.log
+        replicate:
+          type: 
+          - HostInit
+          - BeforeHostUp
+          - HostUp
+#        workers: 4
+      
+      scaling:
+        enabled: no
+#        log: /var/log/scalr/scaling.log
+#        time: "*/2 * * * *"
+#        workers: 14
+      
+      scheduler:
+        enabled: no  
+#        log: /var/log/scalr/scheduler.log      
+#        workers: 4
+      
+      server_status_manager:
+        enabled: no
+#        log: /var/log/scalr/server_status_manager.log
+#        time: "1/2 * * * *"
+#        workers: 4
+      
+      server_terminate:
+        enabled: no
+#        log: /var/log/scalr/server_terminate.log
+#        workers: 4
       
   system:
     default_disable_firewall_management: no
@@ -115,6 +281,7 @@ scalr:
   ui:
     support_url: 'https://groups.google.com/d/forum/scalr-discuss'
     wiki_url: 'http://wiki.scalr.com'
+    show_deprecated_features: true
     recaptcha:
       public_key: ''
       private_key: ''
@@ -195,6 +362,10 @@ scalr:
 #  openstack:
 #    # How to pass user data to openstack: meta-data | personality | both
 #    user_data_method: 'both'
+#    # Openstack API client options
+#    api_client:
+#      # Default connection timeout for api calls
+#      timeout: 30
 
 #  rackspacengus:
 #    instance_public_ni_name: 'public'

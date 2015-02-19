@@ -56,7 +56,7 @@ class Scalr_UI_Controller_Tools_Openstack_Details extends Scalr_UI_Controller
             }
         }
 
-        foreach ([OpenStack::SERVICE_NETWORK, OpenStack::SERVICE_VOLUME, OpenStack::SERVICE_CONTRAIL] as $service) {
+        foreach ([OpenStack::SERVICE_NETWORK, OpenStack::SERVICE_VOLUME] as $service) {
             if ($client->hasService($service)) {
                 foreach ($client->$service->listExtensions() as $name => $ext) {
                     $key = !empty($ext->alias) ? $ext->alias : $name;

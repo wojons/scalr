@@ -9,6 +9,7 @@ use Scalr\UI\Request\JsonData;
 use Scalr\UI\Request\RawData;
 use Scalr\UI\Request\FileUploadData;
 use Scalr\UI\Request\Validator;
+use Scalr\Util\CryptoTool;
 
 class Scalr_UI_Controller_Scripts extends Scalr_UI_Controller
 {
@@ -605,7 +606,7 @@ class Scalr_UI_Controller_Scripts extends Scalr_UI_Controller
             }
 
             $serializer = Scalr_Messaging_JsonSerializer::getInstance();
-            $cryptoTool = Scalr_Messaging_CryptoTool::getInstance();
+            $cryptoTool = \Scalr::getContainer()->srzcrypto;
 
             // send message to start executing task (starts script)
             if (count($servers) > 0) {

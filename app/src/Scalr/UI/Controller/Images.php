@@ -100,6 +100,8 @@ class Scalr_UI_Controller_Images extends Scalr_UI_Controller
             
             if (in_array($os['osFamily'], array('centos', 'oel', 'redhat', 'scientific', 'debian'))) {
                 $criteria[] = ['osGeneration' => (int)substr($os['osVersion'], 0, 1)];
+            } elseif ($os['osFamily'] == 'windows') {
+                $criteria[] = ['osGeneration' => $os['osVersion']];
             } else {
                 $criteria[] = ['osVersion' => $os['osVersion']];
             }
@@ -134,6 +136,7 @@ class Scalr_UI_Controller_Images extends Scalr_UI_Controller
             /* @var Image $image */
             $s = get_object_vars($image);
             $s['dtAdded'] = $image->dtAdded ? Scalr_Util_DateTime::convertTz($image->dtAdded) : '';
+            $s['dtLastUsed'] = $image->dtLastUsed ? Scalr_Util_DateTime::convertTz($image->dtLastUsed) : '';
             $s['used'] = $image->getUsed();
             $s['software'] = $image->getSoftwareAsString();
             $data[] = $s;

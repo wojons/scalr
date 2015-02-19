@@ -1,5 +1,9 @@
 <?php
 
+/**
+ * @deprecated  It has been deprecated since 5.3.0
+ * @see         Scalr\System\Zmq\Cron\Task\DnsManager
+ */
 class DNSManagerPollProcess implements \Scalr\System\Pcntl\ProcessInterface
 {
     public $ThreadArgs;

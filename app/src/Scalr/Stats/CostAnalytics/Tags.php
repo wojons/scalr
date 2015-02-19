@@ -83,14 +83,9 @@ class Tags
      * @param   int     $tagId        The identifier of the clould analytics tag
      * @param   string  $valueId      The identifier of the tag's value
      * @param   string  $valueName    The name of the tag's value
-     * @param   string  $checkAffectedRows optional It will check the presence of the
-     *                  affected rows in scalr database before performing update
      */
-    public function syncValue($accountId, $tagId, $valueId, $valueName, $checkAffectedRows = true)
+    public function syncValue($accountId, $tagId, $valueId, $valueName)
     {
-        //If nothing has changed it will omit synchronization
-        if ($checkAffectedRows && !$this->db->Affected_Rows()) return;
-
         $tag = AccountTagEntity::findPk($accountId, $tagId, $valueId);
         if (!($tag instanceof AccountTagEntity)) {
             $tag = new AccountTagEntity();
@@ -107,7 +102,7 @@ class Tags
                     WHERE fr.farmid = ?
                 ", [$valueId]) as $v) {
                     //Updates all related farm roles
-                    $this->syncValue($accountId, TagEntity::TAG_ID_FARM_ROLE, $v['farm_role_id'], sprintf('%s', $v['alias']), false);
+                    $this->syncValue($accountId, TagEntity::TAG_ID_FARM_ROLE, $v['farm_role_id'], sprintf('%s', $v['alias']));
                 }
             }
         } else {

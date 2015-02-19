@@ -152,7 +152,7 @@ class Route53Api extends AbstractApi
     {
         $result = new ZoneList();
         $result->setRoute53($this->route53);
-        $result->setMarker($this->exist($sxml->Marker) ? (string)$sxml->Marker : null);
+        $result->setMarker($this->exist($sxml->NextMarker) ? (string)$sxml->NextMarker : null);
         $result->setMaxItems($this->exist($sxml->MaxItems) ? (int)$sxml->MaxItems : null);
         $result->setIsTruncated($this->exist($sxml->IsTruncated) ? ((string)$sxml->IsTruncated == 'true') : null);
 
@@ -444,9 +444,10 @@ class Route53Api extends AbstractApi
     {
         $result = new RecordSetList();
         $result->setRoute53($this->route53);
-        $result->setMarker($this->exist($sxml->Marker) ? (string)$sxml->Marker : null);
         $result->setMaxItems($this->exist($sxml->MaxItems) ? (int)$sxml->MaxItems : null);
         $result->setIsTruncated($this->exist($sxml->IsTruncated) ? ((string)$sxml->IsTruncated == 'true') : null);
+        $result->setNextRecordName($this->exist($sxml->NextRecordName) ? (string)$sxml->NextRecordName : null);
+        $result->setNextRecordType($this->exist($sxml->NextRecordType) ? (string)$sxml->NextRecordType : null);
 
         if (!empty($sxml->ResourceRecordSets)) {
             foreach ($sxml->ResourceRecordSets->ResourceRecordSet as $v) {
@@ -657,7 +658,7 @@ class Route53Api extends AbstractApi
     {
         $result = new HealthList();
         $result->setRoute53($this->route53);
-        $result->setMarker($this->exist($sxml->Marker) ? (string)$sxml->Marker : null);
+        $result->setMarker($this->exist($sxml->NextMarker) ? (string)$sxml->NextMarker : null);
         $result->setMaxItems($this->exist($sxml->MaxItems) ? (int)$sxml->MaxItems : null);
         $result->setIsTruncated($this->exist($sxml->IsTruncated) ? ((string)$sxml->IsTruncated == 'true') : null);
 

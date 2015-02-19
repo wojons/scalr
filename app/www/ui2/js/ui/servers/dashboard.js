@@ -232,10 +232,12 @@ Scalr.regPage('Scalr.ui.servers.dashboard', function (loadParams, moduleParams) 
                             url: '/servers/xGetServerRealStatus/',
                             params: {serverId: loadParams['serverId'], timeout: me.requestTimeout},
                             success: function(data){
-                                me.unmask();
-                                me.showStatus(data['scalarizr']);
-                                if (Ext.isString(me.error) && me.error.indexOf('Unable to perform request to update client: Timeout was reached') !== -1) {
-                                    me.requestTimeout += 15;
+                                if (!me.isDestroyed) {
+                                    me.unmask();
+                                    me.showStatus(data['scalarizr']);
+                                    if (Ext.isString(me.error) && me.error.indexOf('Unable to perform request to update client: Timeout was reached') !== -1) {
+                                        me.requestTimeout += 15;
+                                    }
                                 }
                                 delete me.request;
                             }

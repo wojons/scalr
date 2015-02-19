@@ -383,6 +383,10 @@ class ScalarizrMessaging extends AbstractTask
 
                     	$dbserver->SetProperty(SERVER_PROPERTIES::SZR_IS_INIT_ERROR_MSG, $errorText);
                     	$event = new HostInitFailedEvent($dbserver, $errorText);
+                    } elseif ($message instanceof \Scalr_Messaging_Msg_RuntimeError) {
+                        $logger->fatal(new FarmLogMessage(
+                            $dbserver->farmId, "Scalarizr failed to launch on server '{$dbserver->getNameByConvention()}' with runtime error: {$message->message}"
+                        ));
                     } elseif ($message instanceof Scalr_Messaging_Msg_UpdateControlPorts) {
                         $apiPort = $message->api;
                         $ctrlPort = $message->messaging;
@@ -432,8 +436,7 @@ class ScalarizrMessaging extends AbstractTask
                             if ($isStopping) {
                                 $dbserver->SetProperties([
                                     SERVER_PROPERTIES::REBOOTING  => 0,
-                                    SERVER_PROPERTIES::RESUMING   => 0,
-                                    SERVER_PROPERTIES::SUB_STATUS => "",
+                                    SERVER_PROPERTIES::RESUMING   => 0
                                 ]);
 
                                 $dbserver->remoteIp = "";
@@ -444,6 +447,7 @@ class ScalarizrMessaging extends AbstractTask
                             }
 
                             $event = new HostDownEvent($dbserver);
+                            $event->isSuspended = true;
                         }
                     } elseif ($message instanceof Scalr_Messaging_Msg_Win_PrepareBundleResult) {
                         try {
@@ -486,11 +490,13 @@ class ScalarizrMessaging extends AbstractTask
                         //Validate event
                         $isEventExist = $this->db->GetOne("
                             SELECT id FROM event_definitions
-                            WHERE name = ? AND env_id = ?
+                            WHERE name = ? AND ((env_id = ? AND account_id = ?) OR (env_id IS NULL AND account_id = ?))
                             LIMIT 1
                         ", array(
                             $message->eventName,
-                            $dbserver->envId
+                            $dbserver->envId,
+                            $dbserver->clientId,
+                            $dbserver->clientId
                         ));
                         if ($isEventExist) {
                             $event = new CustomEvent($dbserver, $message->eventName, (array)$message->params);
@@ -541,16 +547,6 @@ class ScalarizrMessaging extends AbstractTask
 
                     } elseif ($message instanceof Scalr_Messaging_Msg_HostDown) {
                         $isMoving = false;
-                        if ($dbserver->platform == SERVER_PLATFORMS::RACKSPACE) {
-                            $p = PlatformFactory::NewPlatform($dbserver->platform);
-                            $status = $p->GetServerRealStatus($dbserver)->getName();
-                            if (stristr($status, 'MOVE') || stristr($status, 'REBOOT')) {
-                                $logger->error(new FarmLogMessage(
-                                    $dbserver->farmId, "Rackspace server is in MOVING state. Ignoring HostDown message."
-                                ));
-                                $isMoving = true;
-                            }
-                        }
                         if ($dbserver->isOpenstack()) {
                             $p = PlatformFactory::NewPlatform($dbserver->platform);
                             $status = $p->GetServerRealStatus($dbserver)->getName();
@@ -566,10 +562,6 @@ class ScalarizrMessaging extends AbstractTask
                             $p = PlatformFactory::NewPlatform($dbserver->platform);
                             $status = $p->GetServerRealStatus($dbserver);
                             if (!$status->isTerminated()) {
-                                //Stopping
-                                $logger->error(new FarmLogMessage(
-                                    $dbserver->farmId, "Server is in '{$status->getName()}' state. Ignoring HostDown event."
-                                ));
                                 $isStopping = true;
                             }
                         }
@@ -577,8 +569,7 @@ class ScalarizrMessaging extends AbstractTask
                         if ($isStopping) {
                             $dbserver->SetProperties([
                                 SERVER_PROPERTIES::REBOOTING  => 0,
-                                SERVER_PROPERTIES::RESUMING   => 0,
-                                SERVER_PROPERTIES::SUB_STATUS => "",
+                                SERVER_PROPERTIES::RESUMING   => 0
                             ]);
 
                             $dbserver->remoteIp = "";
@@ -588,11 +579,13 @@ class ScalarizrMessaging extends AbstractTask
                             $dbserver->Save();
 
                             $event = new HostDownEvent($dbserver);
-                        }
-
-                        if (!$isMoving && !$isStopping && !$isRebooting) {
+                            $event->isSuspended = true;
+                            
+                        } elseif ($isRebooting) {
+                            $event = new RebootBeginEvent($dbserver);
+                        } else {
                             if ($dbserver->farmId) {
-                                $wasHostDownFired = $this->db->GetOne("SELECT id FROM events WHERE event_server_id = ? AND type = ?", array(
+                                $wasHostDownFired = $this->db->GetOne("SELECT id FROM events WHERE event_server_id = ? AND type = ? AND is_suspend = '0'", array(
                                     $dbserver->serverId, 'HostDown'
                                 ));
 
@@ -600,9 +593,7 @@ class ScalarizrMessaging extends AbstractTask
                                     $event = new HostDownEvent($dbserver);
                             }
                         }
-                        if ($isRebooting) {
-                            $event = new RebootBeginEvent($dbserver);
-                        }
+                        
                     } elseif ($message instanceof Scalr_Messaging_Msg_RebootStart) {
                         $event = new RebootBeginEvent($dbserver);
                     } elseif ($message instanceof Scalr_Messaging_Msg_RebootFinish) {

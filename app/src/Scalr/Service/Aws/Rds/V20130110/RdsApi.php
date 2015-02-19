@@ -1,9 +1,17 @@
 <?php
 namespace Scalr\Service\Aws\Rds\V20130110;
 
+use Scalr\Service\Aws\Rds\DataType\AvailabilityZoneData;
+use Scalr\Service\Aws\Rds\DataType\CharacterSetData;
+use Scalr\Service\Aws\Rds\DataType\CharacterSetList;
+use Scalr\Service\Aws\Rds\DataType\DBEngineVersionList;
+use Scalr\Service\Aws\Rds\DataType\DBEngineVersionData;
+use Scalr\Service\Aws\Rds\DataType\DBSubnetGroupList;
+use Scalr\Service\Aws\Rds\DataType\DescribeDBEngineVersionsData;
 use Scalr\Service\Aws\Rds\DataType\EventData;
 use Scalr\Service\Aws\Rds\DataType\EventList;
 use Scalr\Service\Aws\Rds\DataType\DescribeEventRequestData;
+use Scalr\Service\Aws\Rds\DataType\ModifyDBSubnetGroupRequestData;
 use Scalr\Service\Aws\Rds\DataType\RestoreDBInstanceFromDBSnapshotRequestData;
 use Scalr\Service\Aws\Rds\DataType\DBSnapshotData;
 use Scalr\Service\Aws\Rds\DataType\DBSnapshotList;
@@ -19,6 +27,8 @@ use Scalr\Service\Aws\Rds\DataType\EC2SecurityGroupList;
 use Scalr\Service\Aws\Rds\DataType\DBSecurityGroupData;
 use Scalr\Service\Aws\Rds\DataType\DBSecurityGroupList;
 use Scalr\Service\Aws\Rds\DataType\ModifyDBInstanceRequestData;
+use Scalr\Service\Aws\Rds\DataType\SubnetData;
+use Scalr\Service\Aws\Rds\DataType\SubnetList;
 use Scalr\Service\Aws\Rds\DataType\VpcSecurityGroupMembershipData;
 use Scalr\Service\Aws\Rds\DataType\VpcSecurityGroupMembershipList;
 use Scalr\Service\Aws\Rds\DataType\DBSecurityGroupMembershipData;
@@ -31,6 +41,8 @@ use Scalr\Service\Aws\Rds\DataType\EndpointData;
 use Scalr\Service\Aws\Rds\DataType\DBInstanceData;
 use Scalr\Service\Aws\Rds\DataType\DBInstanceList;
 use Scalr\Service\Aws\Rds\DataType\CreateDBInstanceRequestData;
+use Scalr\Service\Aws\Rds\DataType\CreateDBSubnetGroupRequestData;
+use Scalr\Service\Aws\Rds\DataType\DBSubnetGroupData;
 use Scalr\Service\Aws;
 use Scalr\Service\Aws\AbstractApi;
 use Scalr\Service\Aws\Rds;
@@ -182,6 +194,8 @@ class RdsApi extends AbstractApi
                 (string) $sxml->ReadReplicaSourceDBInstanceIdentifier : null;
             $item->secondaryAvailabilityZone = $this->exist($sxml->SecondaryAvailabilityZone) ?
                 (string) $sxml->SecondaryAvailabilityZone : null;
+            $item->iops = $this->exist($sxml->Iops) ? (int) $sxml->Iops : null;
+            $item->storageType = $this->exist($sxml->StorageType) ? (string) $sxml->StorageType : null;
 
             $item->readReplicaDBInstanceIdentifiers = array();
             if (!empty($sxml->ReadReplicaDBInstanceIdentifiers->ReadReplicaDBInstanceIdentifier)) {
@@ -324,8 +338,8 @@ class RdsApi extends AbstractApi
     {
         $list = new VpcSecurityGroupMembershipList();
         $list->setRds($this->rds);
-        if (!empty($sxml->VpcSecurityGroup)) {
-            foreach ($sxml->VpcSecurityGroup as $v) {
+        if (!empty($sxml->VpcSecurityGroupMembership)) {
+            foreach ($sxml->VpcSecurityGroupMembership as $v) {
                 $item = new VpcSecurityGroupMembershipData(
                     ($this->exist($v->VpcSecurityGroupId) ? (string)$v->VpcSecurityGroupId : null),
                     ($this->exist($v->Status) ? (string)$v->Status : null)
@@ -1375,4 +1389,323 @@ class RdsApi extends AbstractApi
         }
         return $item;
     }
+
+    /**
+     * Creates a new DB subnet group.
+     * DB subnet groups must contain at least one subnet in at least two AZs in the region.
+     *
+     * @param CreateDBSubnetGroupRequestData $request
+     * @return DBSubnetGroupData
+     * @throws RdsException
+     */
+    public function createDBSubnetGroup(CreateDBSubnetGroupRequestData $request)
+    {
+        $result = null;
+        $options = $request->getQueryArray();
+
+        if ($this->rds->getApiClientType() === Aws::CLIENT_SOAP) {
+            if (isset($options['SubnetIds.member.1'])) {
+                foreach ($options as $k => $v) {
+                    if (strpos($k, 'SubnetIds.member.') !== false) {
+                        $options['SubnetIds']['SubnetId'][] = $v;
+                        unset($options[$k]);
+                    }
+                }
+            }
+        }
+
+        $response = $this->client->call(ucfirst(__FUNCTION__), $options);
+
+        if ($response->getError() === false) {
+            $sxml = simplexml_load_string($response->getRawContent());
+
+            if (!$this->exist($sxml->CreateDBSubnetGroupResult)) {
+                throw new RdsException(sprintf(self::UNEXPECTED, 'create DBSubnet group'));
+            }
+
+            $result = $this->_loadDBSubnetGroupData($sxml->CreateDBSubnetGroupResult->DBSubnetGroup);
+        }
+
+        return $result;
+    }
+
+    /**
+     * Loads DBSubnetGroupData from simple xml object
+     *
+     * @param \SimpleXMLElement $sxml
+     * @return null|DBSubnetGroupData
+     */
+    protected function _loadDBSubnetGroupData(\SimpleXMLElement $sxml)
+    {
+        $item = null;
+
+        if ($this->exist($sxml)) {
+            $item = new DBSubnetGroupData();
+            $item->setRds($this->rds);
+            $item->dBSubnetGroupDescription = $this->exist($sxml->DBSubnetGroupDescription) ? (string) $sxml->DBSubnetGroupDescription : null;
+            $item->dBSubnetGroupName = $this->exist($sxml->DBSubnetGroupName) ? (string) $sxml->DBSubnetGroupName : null;
+            $item->subnetGroupStatus = $this->exist($sxml->SubnetGroupStatus) ? (string) $sxml->SubnetGroupStatus : null;
+            $item->vpcId = $this->exist($sxml->VpcId) ? (string) $sxml->VpcId : null;
+            $item->subnets = $this->exist($sxml->Subnets) ? $this->_loadSubnetsList($sxml->Subnets) : null;
+        }
+
+        return $item;
+    }
+
+    /**
+     * Loads SubnetList from simple xml object
+     *
+     * @param   \SimpleXMLElement $sxml
+     * @return  SubnetList Returns SubnetList
+     */
+    protected function _loadSubnetsList(\SimpleXMLElement $sxml)
+    {
+        $list = new SubnetList();
+        $list->setRds($this->rds);
+
+        if (!empty($sxml->Subnet)) {
+            foreach ($sxml->Subnet as $v) {
+                $item = new SubnetData();
+                $item->subnetStatus = $this->exist($v->SubnetStatus) ? (string)$v->SubnetStatus : null;
+                $item->subnetIdentifier = $this->exist($v->SubnetIdentifier) ? (string)$v->SubnetIdentifier : null;
+                $item->subnetAvailabilityZone = $this->exist($v->SubnetAvailabilityZone) ? $this->_loadAvailabilityZoneData($sxml->SubnetAvailabilityZone) : null;
+                $item->setRds($this->rds);
+                $list->append($item);
+                unset($item);
+            }
+        }
+        return $list;
+    }
+
+    /**
+     * Loads AvailabilityZoneData from simple xml object
+     *
+     * @param \SimpleXMLElement $sxml
+     * @return AvailabilityZoneData
+     */
+    public function _loadAvailabilityZoneData(\SimpleXMLElement $sxml)
+    {
+        $item = new AvailabilityZoneData(
+            $this->exist($sxml->Name) ? (string)$sxml->Name : null,
+            $this->exist($sxml->ProvisionedIopsCapable) ? (((string)$sxml->ProvisionedIopsCapable) == 'true') : null
+        );
+        $item->setRds($this->rds);
+
+        return $item;
+    }
+
+    /**
+     * Modifies an existing DB subnet group.
+     * DB subnet groups must contain at least one subnet in at least two AZs in the region.
+     *
+     * @param ModifyDBSubnetGroupRequestData $request
+     * @return DBSubnetGroupData
+     * @throws RdsException
+     */
+    public function modifyDBSubnetGroup(ModifyDBSubnetGroupRequestData $request)
+    {
+        $result = null;
+        $options = $request->getQueryArray();
+
+        if ($this->rds->getApiClientType() === Aws::CLIENT_SOAP) {
+            if (isset($options['SubnetIds.member.1'])) {
+                foreach ($options as $k => $v) {
+                    if (strpos($k, 'SubnetIds.member.') !== false) {
+                        $options['SubnetIds']['SubnetId'][] = $v;
+                        unset($options[$k]);
+                    }
+                }
+            }
+        }
+
+        $response = $this->client->call(ucfirst(__FUNCTION__), $options);
+
+        if ($response->getError() === false) {
+            $sxml = simplexml_load_string($response->getRawContent());
+
+            if (!$this->exist($sxml->ModifyDBSubnetGroupResult)) {
+                throw new RdsException(sprintf(self::UNEXPECTED, 'modify DBSubnet group'));
+            }
+
+            $result = $this->_loadDBSubnetGroupData($sxml->ModifyDBSubnetGroupResult->DBSubnetGroup);
+        }
+
+        return $result;
+    }
+
+    /**
+     * Returns a list of DBSubnetGroup descriptions.
+     * If a DBSubnetGroupName is specified, the list will contain only the descriptions of the specified DBSubnetGroup.
+     *
+     * @param   string     $dBSubnetGroupName   optional Subnet group name
+     * @param   string     $marker              optional Pagination token, provided by a previous request.
+     * @param   string     $maxRecords          optional The maximum number of records to include in the response.
+     * @return  DBSubnetGroupList               Returns the list of the DBSubnetGroupData
+     * @throws  RdsException
+     */
+    public function describeDBSubnetGroups($dBSubnetGroupName = null, $marker = null, $maxRecords = null)
+    {
+        $result = null;
+        $options = [];
+        $action = ucfirst(__FUNCTION__);
+
+        if ($dBSubnetGroupName !== null) {
+            $options['DBSubnetGroupName'] = (string) $dBSubnetGroupName;
+        }
+
+        if ($marker !== null) {
+            $options['Marker'] = (string) $marker;
+        }
+
+        if ($maxRecords !== null) {
+            $options['MaxRecords'] = (int) $maxRecords;
+        }
+
+        $response = $this->client->call($action, $options);
+
+        if ($response->getError() === false) {
+            $sxml = simplexml_load_string($response->getRawContent());
+
+            if (!$this->exist($sxml->{$action . 'Result'})) {
+                throw new RdsException(sprintf(self::UNEXPECTED, $action));
+            }
+
+            $ptr = $sxml->{$action . 'Result'};
+            $result = new DBSubnetGroupList();
+            $result->setRds($this->rds);
+            $result->marker = $this->exist($ptr->Marker) ? (string) $ptr->Marker : null;
+
+            if (isset($ptr->DBSubnetGroups->DBSubnetGroup)) {
+                foreach ($ptr->DBSubnetGroups->DBSubnetGroup as $v) {
+                    $item = $this->_loadDBSubnetGroupData($v);
+                    $result->append($item);
+                    unset($item);
+                }
+            }
+        }
+
+        return $result;
+    }
+
+    /**
+     * DeleteDBSubnetGroup action
+     * Deletes a DB subnet group.
+     *
+     * @param   string  $dBSubnetGroupName  Subnet group name
+     * @return  bool       Returns true on success or throws an exception.
+     */
+    public function deleteDBSubnetGroup($dBSubnetGroupName)
+    {
+        $result = false;
+        $options = [
+            'DBSubnetGroupName' => (string) $dBSubnetGroupName
+        ];
+
+        $response = $this->client->call(ucfirst(__FUNCTION__), $options);
+
+        if ($response->getError() === false) {
+            $sxml = simplexml_load_string($response->getRawContent());
+            $result = true;
+        }
+
+        return $result;
+    }
+
+    /**
+     * Returns a list of the available DB engines.
+     *
+     * @param DescribeDBEngineVersionsData $request
+     * @param string                       $marker
+     * @param int                          $maxRecords
+     * @return DBEngineVersionList
+     * @throws RdsException
+     */
+    public function describeDBEngineVersions(DescribeDBEngineVersionsData $request = null, $marker = null, $maxRecords = null)
+    {
+        $result = null;
+        $options = $request->getQueryArray();
+        $action = ucfirst(__FUNCTION__);
+
+        if ($marker !== null) {
+            $options['Marker'] = (string) $marker;
+        }
+
+        if ($maxRecords !== null) {
+            $options['MaxRecords'] = (int) $maxRecords;
+        }
+
+        $response = $this->client->call($action, $options);
+
+        if ($response->getError() === false) {
+            $sxml = simplexml_load_string($response->getRawContent());
+
+            if (!$this->exist($sxml->{$action . 'Result'})) {
+                throw new RdsException(sprintf(self::UNEXPECTED, $action));
+            }
+
+            $ptr = $sxml->{$action . 'Result'};
+            $result = new DBEngineVersionList();
+            $result->setRds($this->rds);
+            $result->marker = $this->exist($ptr->Marker) ? (string) $ptr->Marker : null;
+
+            if (isset($ptr->DBEngineVersions->DBEngineVersion)) {
+                foreach ($ptr->DBEngineVersions->DBEngineVersion as $v) {
+                    $item = $this->_loadDBEngineVersionData($v);
+                    $result->append($item);
+                    unset($item);
+                }
+            }
+        }
+
+        return $result;
+    }
+
+    /**
+     * Loads DBEngineVersionData from simple xml object
+     *
+     * @param \SimpleXMLElement $sxml
+     * @return DBEngineVersionData
+     */
+    public function _loadDBEngineVersionData(\SimpleXMLElement $sxml)
+    {
+        $item = null;
+
+        if ($this->exist($sxml)) {
+            $item = new DBEngineVersionData();
+            $item->setRds($this->rds);
+            $item->dBEngineDescription = $this->exist($sxml->DBEngineDescription) ? (string) $sxml->DBEngineDescription : null;
+            $item->dBEngineVersionDescription = $this->exist($sxml->DBEngineVersionDescription) ? (string) $sxml->DBEngineVersionDescription : null;
+            $item->dBParameterGroupFamily = $this->exist($sxml->DBParameterGroupFamily) ? (string) $sxml->DBParameterGroupFamily : null;
+            $item->engine = $this->exist($sxml->Engine) ? (string) $sxml->Engine : null;
+            $item->engineVersion = $this->exist($sxml->EngineVersion) ? (string) $sxml->EngineVersion : null;
+
+            $dfc = null;
+
+            if ($this->exist($sxml->DefaultCharacterSet)) {
+                $dfc = new CharacterSetData();
+                $dfc->characterSetName = $this->exist($sxml->DefaultCharacterSet->CharacterSetName) ? (string) $sxml->DefaultCharacterSet->CharacterSetName : null;
+                $dfc->characterSetDescription = $this->exist($sxml->DefaultCharacterSet->CharacterSetDescription) ? (string) $sxml->DefaultCharacterSet->CharacterSetDescription : null;
+            }
+
+            $item->defaultCharacterSet = $dfc;
+
+            $scs = null;
+
+            if ($this->exist($sxml->SupportedCharacterSets->CharacterSet)) {
+                $scs = new CharacterSetList();
+                $scs->setRds($this->rds);
+
+                foreach ($sxml->SupportedCharacterSets->CharacterSet as $v) {
+                    $cs = new CharacterSetData();
+                    $cs->characterSetName = $this->exist($v->CharacterSetName) ? (string) $v->CharacterSetName : null;
+                    $cs->characterSetDescription = $this->exist($v->CharacterSetDescription) ? (string) $v->CharacterSetDescription : null;
+                }
+            }
+
+            $item->supportedCharacterSets = $scs;
+        }
+
+        return $item;
+    }
+
 }

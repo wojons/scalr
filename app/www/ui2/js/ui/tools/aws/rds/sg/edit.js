@@ -11,8 +11,24 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.sg.edit', function (loadParams, modulePara
 	return Ext.create('Ext.panel.Panel', {
 		title: 'Tools &raquo; Amazon Web Services &raquo; Amazon RDS &raquo; Security groups &raquo; ' + loadParams['dbSgName'] + ' &raquo; Edit',
 		width: 625,
+        scalrOptions: {
+            modal: true
+        },
         bodyCls: 'x-container-fieldset',
         items: [{
+            xtype: 'textfield',
+            width: 560,
+            fieldLabel: 'Name',
+            readOnly: true,
+            value: loadParams['dbSgName']
+        }, {
+            xtype: 'textfield',
+            width: 560,
+            name: 'description',
+            fieldLabel: 'Description',
+            readOnly: true,
+            value: moduleParams['description']
+        }, {
             xtype: 'grid',
             cls: 'x-grid-shadow',
             store: rulesStore,
@@ -20,8 +36,9 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.sg.edit', function (loadParams, modulePara
                 ptype: 'gridstore'
             },
             viewConfig: {
-                deferEmptyText: false,
-                emptyText: 'No rules found'
+                focusedItemCls: 'no-focus',
+                emptyText: 'No security rules defined',
+                deferEmptyText: false
             },
             columns: [{
                 text: "Type", width: 200, dataIndex: 'Type', sortable: true
@@ -79,16 +96,19 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.sg.edit', function (loadParams, modulePara
                 xtype: 'toolbar',
                 ui: 'simple',
                 dock: 'top',
+                padding: '8 0 7 0',
                 layout: {
                     type: 'hbox',
                     pack: 'start'
                 },
                 items:[{
-                    text: 'Add rule',
+                    xtype: 'tbfill'
+                }, {
+                    text: 'Add security rule',
                     cls: 'x-btn-green-bg',
                     handler: function() {
                         Scalr.Confirm({
-                            title: 'Add new Rule',
+                            title: 'New security rule',
                             form: [{
                                 xtype: 'fieldset',
                                 cls: 'x-fieldset-separator-none',
@@ -108,22 +128,27 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.sg.edit', function (loadParams, modulePara
                                     store: [ ['CIDR IP','CIDR IP'], ['EC2 Security Group','EC2 Security Group'] ],
                                     listeners: {
                                         change: function (field, value) {
-                                            if (value == 'CIDR IP') {
-                                                this.next('[name="ipRanges"]').show().enable();
-                                                this.next('[name="UserId"]').hide().disable();
-                                                this.next('[name="Group"]').hide().disable();
-                                            }
-                                            else {
-                                                this.next('[name="ipRanges"]').hide().disable();
-                                                this.next('[name="UserId"]').show().enable();
-                                                this.next('[name="Group"]').show().enable();
-                                            }
+                                            var isCidr = value == 'CIDR IP';
+
+                                            field.next('[name=ipRanges]').
+                                                setVisible(isCidr).
+                                                setDisabled(!isCidr);
+
+                                            field.next('[name=UserId]').
+                                                setVisible(!isCidr).
+                                                setDisabled(isCidr);
+
+                                            field.next('[name=Group]').
+                                                setVisible(!isCidr).
+                                                setDisabled(isCidr);
+
+                                            field.up('form').updateLayout();
                                         }
                                     }
                                 },{
                                     xtype: 'textfield',
                                     name: 'ipRanges',
-                                    fieldLabel: 'Ip Ranges',
+                                    fieldLabel: 'IP Ranges',
                                     value: '0.0.0.0/0',
                                     hidden: true,
                                     allowBlank: false

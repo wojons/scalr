@@ -1,6 +1,5 @@
 <?php
 
-use Scalr\Stats\CostAnalytics\Entity\SettingEntity;
 use Scalr\Stats\CostAnalytics\Entity\NotificationEntity;
 use Scalr\Stats\CostAnalytics\Entity\CostCentreEntity;
 use Scalr\Stats\CostAnalytics\Entity\ProjectEntity;
@@ -24,25 +23,16 @@ class Scalr_UI_Controller_Analytics_Notifications extends Scalr_UI_Controller
         }
 
         foreach (ProjectEntity::find([['archived' => 0]]) as $project) {
-            $projects[$project->projectId] =$project->name;
+            $projects[$project->projectId] = $project->name;
         }
 
-        $this->response->page('ui/analytics/notifications/view.js', array(
-            'notifications.ccs' => array(
-                'enabled' => SettingEntity::getValue(SettingEntity::ID_NOTIFICATIONS_CCS_ENABLED),
-                'items'   => NotificationEntity::findBySubjectType(NotificationEntity::SUBJECT_TYPE_CC)
-            ),
-            'notifications.projects' => array(
-                'enabled' => SettingEntity::getValue(SettingEntity::ID_NOTIFICATIONS_PROJECTS_ENABLED),
-                'items'   => NotificationEntity::findBySubjectType(NotificationEntity::SUBJECT_TYPE_PROJECT)
-            ),
-            'reports' => array(
-                'enabled' => SettingEntity::getValue(SettingEntity::ID_REPORTS_ENABLED),
-                'items'   => ReportEntity::all()
-            ),
+        $this->response->page('ui/analytics/admin/notifications/view.js', array(
+            'notifications.ccs' => NotificationEntity::findBySubjectType(NotificationEntity::SUBJECT_TYPE_CC),
+            'notifications.projects' => NotificationEntity::findBySubjectType(NotificationEntity::SUBJECT_TYPE_PROJECT),
+            'reports' => ReportEntity::all(),
             'ccs' => $ccs,
             'projects' => $projects
-        ), array(), array());
+        ), array(), array('ui/analytics/admin/notifications/view.css'));
     }
 
     /**
@@ -50,21 +40,26 @@ class Scalr_UI_Controller_Analytics_Notifications extends Scalr_UI_Controller
      */
     public function xSaveAction(JsonData $notifications)
     {
+        //$this->response->data(array('data'=> $notifications));
+        $data = [];
         foreach ($notifications as $id => $settings) {
-            if ($id == SettingEntity::ID_REPORTS_ENABLED) {
-                $this->saveReports(SettingEntity::ID_REPORTS_ENABLED, $settings);
-            } elseif ($id == SettingEntity::ID_NOTIFICATIONS_CCS_ENABLED) {
-                $this->saveNotifications($id, NotificationEntity::SUBJECT_TYPE_CC, $settings);
-            } elseif ($id == SettingEntity::ID_NOTIFICATIONS_PROJECTS_ENABLED) {
-                $this->saveNotifications($id, NotificationEntity::SUBJECT_TYPE_PROJECT, $settings);
+            if ($id == 'reports') {
+                $this->saveReports($settings);
+                $data[$id] = ReportEntity::all();
+            } elseif ($id == 'notifications.ccs') {
+                $this->saveNotifications(NotificationEntity::SUBJECT_TYPE_CC, $settings);
+                $data[$id] = NotificationEntity::findBySubjectType(NotificationEntity::SUBJECT_TYPE_CC);
+            } elseif ($id == 'notifications.projects') {
+                $this->saveNotifications(NotificationEntity::SUBJECT_TYPE_PROJECT, $settings);
+                $data[$id] = NotificationEntity::findBySubjectType(NotificationEntity::SUBJECT_TYPE_PROJECT);
             }
         }
+        $this->response->data($data);
+        $this->response->success('Notifications successfully saved');
     }
 
-    private function saveNotifications($id, $subjectType, $settings)
+    private function saveNotifications($subjectType, $settings)
     {
-        SettingEntity::setValue($id, $settings['enabled']);
-
         $uuids = array();
         foreach ($settings['items'] as $item) {
             $notification = new NotificationEntity();
@@ -72,10 +67,12 @@ class Scalr_UI_Controller_Analytics_Notifications extends Scalr_UI_Controller
                 $notification->findPk($item['uuid']);
             }
             $notification->subjectType = $subjectType;
+            $notification->subjectId = $item['subjectId'] ? $item['subjectId'] : null;
             $notification->notificationType = $item['notificationType'];
             $notification->threshold = $item['threshold'];
             $notification->recipientType = $item['recipientType'];
             $notification->emails = $item['emails'];
+            $notification->status = $item['status'];
             $notification->save();
             $uuids[] = $notification->uuid;
         }
@@ -86,9 +83,8 @@ class Scalr_UI_Controller_Analytics_Notifications extends Scalr_UI_Controller
         }
     }
 
-    private function saveReports($id, $settings)
+    private function saveReports($settings)
     {
-        SettingEntity::setValue($id, $settings['enabled']);
         $uuids = array();
         foreach ($settings['items'] as $item) {
             $report = new ReportEntity();
@@ -115,6 +111,7 @@ class Scalr_UI_Controller_Analytics_Notifications extends Scalr_UI_Controller
             }
             $report->period = $item['period'];
             $report->emails = $item['emails'];
+            $report->status = $item['status'];
             $report->save();
             $uuids[] = $report->uuid;
         }

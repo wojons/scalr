@@ -127,7 +127,10 @@ class Scalr_Scaling_Manager
         // Check do we need upscale to min instances count
         $roleTotalInstances = $this->dbFarmRole->GetRunningInstancesCount()+$this->dbFarmRole->GetPendingInstancesCount();
 
-        if ($roleTotalInstances < $this->dbFarmRole->GetSetting(DBFarmRole::SETTING_SCALING_MIN_INSTANCES)) {
+        $maxInstances = $this->dbFarmRole->GetSetting(DBFarmRole::SETTING_SCALING_MAX_INSTANCES);
+        $minInstances = $this->dbFarmRole->GetSetting(DBFarmRole::SETTING_SCALING_MIN_INSTANCES);
+        
+        if ($roleTotalInstances < $minInstances) {
             if ($needOneByOneLaunch) {
                 $pendingTerminateInstances = count($this->dbFarmRole->GetServersByFilter(array('status' => SERVER_STATUS::PENDING_TERMINATE)));
                 // If we launching DbMSR instances. Master should be running.
@@ -156,7 +159,7 @@ class Scalr_Scaling_Manager
                 return Scalr_Scaling_Decision::UPSCALE;
             }
         }
-        elseif ($this->dbFarmRole->GetRunningInstancesCount() > $this->dbFarmRole->GetSetting(DBFarmRole::SETTING_SCALING_MAX_INSTANCES)) {
+        elseif ($maxInstances && $this->dbFarmRole->GetRunningInstancesCount() > $maxInstances) {
             // Need to check Date&Time based scaling. Otherwise Scalr downscale role every time.
             if ($scalingMetricInstancesCount) {
                 if ($this->dbFarmRole->GetRunningInstancesCount() > $scalingMetricInstancesCount) {

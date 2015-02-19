@@ -142,7 +142,7 @@ class Launcher
      */
     public static function getStartPhpScriptCommand($script)
     {
-        return '/usr/bin/env php -q ' . realpath(APPPATH . $script);
+        return '/usr/bin/env php ' . realpath(APPPATH . $script);
     }
 
     /**

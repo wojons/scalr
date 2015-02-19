@@ -31,17 +31,17 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.snapshots', function (loadParams, modulePa
 
 		columns: [
 			{ header: "Name", flex: 1, dataIndex: 'name', sortable: false },
-			{ header: "Storage", width: 100, dataIndex: 'storage', sortable: false },
-			{ header: "Created at", width: 150, dataIndex: 'dtcreated', sortable: false },
-			{ header: "Instance created at", width: 150, dataIndex: 'idtcreated', sortable: false },
-			{ header: "Status", width: 150, dataIndex: 'status', sortable: false },
-			{ header: "Port", width: 150, dataIndex: 'port', sortable: false },
-			{ header: "Placement", width: 150, dataIndex: 'avail_zone', sortable: false },
+            { header: "Port", width: 70, dataIndex: 'port', sortable: false },
+            { header: "Status", minWidth: 160, width: 130, dataIndex: 'status', sortable: true, xtype: 'statuscolumn', statustype: 'rdsdbinstance' },
 			{ header: "Engine", width: 150, dataIndex: 'engine', sortable: false },
+            { header: "Storage", width: 75, dataIndex: 'storage', sortable: false },
+            { header: "Created at", width: 170, dataIndex: 'dtcreated', sortable: false },
+            { header: "Instance created at", width: 170, dataIndex: 'idtcreated', sortable: false },
 			{
 				xtype: 'optionscolumn2',
 				menu: [{
-					text: 'Restore DB instance from this snapshot',
+					text: 'Restore',
+                    iconCls: 'x-menu-icon-reboot',
 					menuHandler: function (data) {
 						document.location.href = '#/tools/aws/rds/instances/restore?snapshot=' + data['name'] + '&cloudLocation=' + store.proxy.extraParams.cloudLocation;
 					}

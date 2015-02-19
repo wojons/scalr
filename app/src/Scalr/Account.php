@@ -1,5 +1,10 @@
 <?php
 
+use \DBServer;
+use Scalr\Stats\CostAnalytics\Entity\AccountCostCenterEntity;
+use Scalr\Stats\CostAnalytics\Entity\CostCentreEntity;
+use Scalr\Model\Collections\ArrayCollection;
+
 class Scalr_Account extends Scalr_Model
 {
     protected $dbTableName = 'clients';
@@ -53,7 +58,8 @@ class Scalr_Account extends Scalr_Model
     /**
      * @return Scalr_Account
      */
-    public function loadById($id) {
+    public function loadById($id)
+    {
         return parent::loadById($id);
     }
 
@@ -87,6 +93,13 @@ class Scalr_Account extends Scalr_Model
      */
     public function delete($id = null)
     {
+        $servers = DBServer::listByFilter(['clientId' => $this->id]);
+
+        foreach ($servers as $server) {
+            /* @var DBServer $server */
+            $server->Remove();
+        }
+
         try {
             $this->db->StartTrans();
 
@@ -111,7 +124,6 @@ class Scalr_Account extends Scalr_Model
 
             $this->db->Execute("DELETE FROM acl_account_roles WHERE account_id=?", array($this->id));
 
-            $this->db->Execute("DELETE FROM servers WHERE client_id=?", array($this->id));
             $this->db->Execute("DELETE FROM ec2_ebs WHERE client_id=?", array($this->id));
             $this->db->Execute("DELETE FROM apache_vhosts WHERE client_id=?", array($this->id));
             $this->db->Execute("DELETE FROM scheduler WHERE account_id=?", array($this->id));
@@ -210,6 +222,7 @@ class Scalr_Account extends Scalr_Model
     }
 
     /**
+     * Creates a new environment assosiated with the account
      *
      * @param string $name
      * @throws Scalr_Exception_LimitExceeded
@@ -217,19 +230,17 @@ class Scalr_Account extends Scalr_Model
      */
     public function createEnvironment($name)
     {
-        if (!$this->id)
-            throw new Exception("Account is not created");
+        if (!$this->id) {
+            throw new Exception("Account has not been created yet.");
+        }
 
         $this->validateLimit(Scalr_Limits::ACCOUNT_ENVIRONMENTS, 1);
 
         $env = Scalr_Environment::init()->create($name, $this->id);
 
         $config[Scalr_Environment::SETTING_TIMEZONE] = "America/Adak";
-
-        /*
-            $config[Scalr_Environment::SETTING_API_LIMIT_ENABLED] = 1;
-            $config[Scalr_Environment::SETTING_API_LIMIT_REQPERHOUR] = 18000;
-        */
+//         $config[Scalr_Environment::SETTING_API_LIMIT_ENABLED] = 1;
+//         $config[Scalr_Environment::SETTING_API_LIMIT_REQPERHOUR] = 18000;
 
         $env->setPlatformConfig($config, false);
 
@@ -377,7 +388,26 @@ class Scalr_Account extends Scalr_Model
      * Init
      * @return Scalr_Account
      */
-    public static function init($className = null) {
+    public static function init($className = null)
+    {
         return parent::init();
+    }
+
+    /**
+     * Gets the list of the Cost Centers which correspond to Account
+     *
+     * @return  \Scalr\Model\Collections\ArrayCollection  Returns collection of the entities
+     */
+    public function getCostCenters()
+    {
+        $ccs = new ArrayCollection;
+        foreach (AccountCostCenterEntity::findByAccountId($this->id) as $accountCc) {
+            $cc = CostCentreEntity::findPk($accountCc->ccId);
+            if (!($cc instanceof CostCentreEntity)) {
+                continue;
+            }
+            $ccs->append($cc);
+        }
+        return $ccs;
     }
 }

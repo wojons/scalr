@@ -124,7 +124,7 @@ $container->aws = function ($cont, array $arguments = null) {
 
     $config = $cont->config;
     $proxySettings = null;
-    if ($config('scalr.aws.use_proxy')) {
+    if ($config('scalr.aws.use_proxy') && in_array($config('scalr.connections.proxy.use_on'), array('both', 'scalr'))) {
         $proxySettings = $config('scalr.connections.proxy');
     }
 
@@ -505,3 +505,47 @@ $container->set('warmup', function($cont, array $arguments = null) {
 
     return $cont;
 });
+
+$container->set(
+    'crypto',
+    function (\Scalr\DependencyInjection\BaseContainer $cont, array $arguments = []) {
+        $algo = array_shift($arguments) ?: MCRYPT_RIJNDAEL_128;
+        $mode = array_shift($arguments) ?: MCRYPT_MODE_CFB;
+        $cryptoKey = $cryptoKeyId = array_shift($arguments) ?: (APPPATH . "/etc/.cryptokey");
+        $keySize = array_shift($arguments) ?: 32;
+        $blockSize = array_shift($arguments) ?: 16;
+
+        if($cryptoKey instanceof SplFileObject) {
+            $cryptoKeyId = $cryptoKey->getRealPath();
+        } else if(is_resource($cryptoKey) && get_resource_type($cryptoKey) == 'stream') {
+            $cryptoKeyId = realpath(stream_get_meta_data($cryptoKey)['uri']);
+        } else if((is_string($cryptoKey) || is_numeric($cryptoKey)) && @file_exists($cryptoKey)) {
+            $cryptoKeyId = realpath($cryptoKey);
+        } else if(is_array($cryptoKey)) {
+            $cryptoKeyId = implode('', $cryptoKey);
+        } else if($cryptoKey === null) {
+            $cryptoKeyId = uniqid();
+        }
+
+        $cryptoId = hash("sha256", "crypto_{$algo}_{$mode}_{$cryptoKeyId}_{$keySize}_{$blockSize}");
+        if (!$cont->initialized($cryptoId)) {
+            $cont->setShared(
+                $cryptoId,
+                function (\Scalr\DependencyInjection\BaseContainer $cont) use ($algo, $mode, $cryptoKey, $keySize, $blockSize) {
+                    return new \Scalr\Util\CryptoTool($algo, $mode, $cryptoKey, $keySize, $blockSize);
+                }
+            );
+        }
+
+        return $cont->get($cryptoId);
+    }
+);
+
+$container->set(
+    'srzcrypto',
+    function(\Scalr\DependencyInjection\Container $cont, array $arguments = []) {
+        $cryptoKey = array_shift($arguments);
+
+        return $cont->crypto(MCRYPT_TRIPLEDES, MCRYPT_MODE_CBC, $cryptoKey, 24, 8);
+    }
+);

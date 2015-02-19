@@ -118,6 +118,14 @@ class UsageHourlyEntity extends AbstractEntity
     public $farmRoleId;
 
     /**
+     * The identifier of the role
+     *
+     * @Column(type="integer")
+     * @var int
+     */
+    public $roleId;
+
+    /**
      * The number of the nodes of the same type
      *
      * @Column(type="integer")

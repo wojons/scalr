@@ -311,6 +311,28 @@ class CreateDBInstanceRequestData extends AbstractRdsDataType
     public $vpcSecurityGroupIds;
 
     /**
+     * Specifies whether the DB instance is encrypted.
+     *
+     * Default: false
+     *
+     * @var bool
+     */
+    public $storageEncrypted;
+
+    /**
+     * Specifies the storage type to be associated with the DB instance.
+     *
+     * Valid values: standard | gp2 | io1
+     *
+     * If you specify io1, you must also include a value for the Iops parameter.
+     *
+     * Default: io1 if the Iops parameter is specified; otherwise standard
+     *
+     * @var string
+     */
+    public $storageType;
+
+    /**
      * Constructor
      *
      * @param   string     $dBInstanceIdentifier A user-supplied database identifier

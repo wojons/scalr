@@ -27,8 +27,10 @@ sys.path.insert(0, scalrpy_dir)
 import re
 import time
 import gzip
+import json
 import socket
 import gevent
+import pymysql
 import requests
 import StringIO
 import datetime
@@ -85,8 +87,6 @@ class SzrUpdService(application.ScalrIterationApplication):
         helper.validate_config(self.config)
         if self.config['interval']:
             self.iteration_timeout = int(self.config['interval'])
-        else:
-            self.iteration_timeout = 300
         socket.setdefaulttimeout(self.config['instances_connection_timeout'])
 
         self._db = dbmanager.ScalrDB(self.config['connections']['mysql'])
@@ -212,6 +212,30 @@ class SzrUpdService(application.ScalrIterationApplication):
         else:
             self.get_szr_ver_from_repo.im_func.cache = out
         return out
+
+
+    def _update_scalr_repo_data(self):
+        info = {}
+        vers = self.get_szr_ver_from_repo()
+        repos = self.scalr_config['scalarizr_update']['repos']
+        for repo_url in vers:
+            for repo in repos:
+                if repo_url in repos[repo].values():
+                    info[repo] = vers[repo_url]
+                    break
+        if not info:
+            return
+
+        query = (
+                "INSERT INTO settings "
+                "(id, value) "
+                "VALUES ('szr.repo.{name}', '{value}') "
+                "ON DUPLICATE KEY "
+                "UPDATE value = '{value}'"
+        )
+        for repo, vers in info.iteritems():
+            repo = pymysql.escape_string(repo)
+            self._db.execute(query.format(name=repo, value=vers))
 
 
     def _get_db_servers(self):
@@ -351,8 +375,9 @@ class SzrUpdService(application.ScalrIterationApplication):
             last_update_dt = last_update_dt.replace(minute=0, second=0, microsecond=0)
             utcnow_dt = datetime.datetime.utcnow()
             utcnow_dt = utcnow_dt.replace(minute=0, second=0, microsecond=0)
-            if last_update_dt == utcnow_dt and status['error']:
+            if last_update_dt == utcnow_dt and status['state'] == 'error':
                 # skip failed server
+                LOG.debug('Skip server: {0}, reason: server in error state'.format(server['server_id']))
                 return False
         return True
 
@@ -434,6 +459,11 @@ class SzrUpdService(application.ScalrIterationApplication):
             except:
                 LOG.warning(helper.exc_info())
         self._pool.join()
+        try:
+            self._update_scalr_repo_data()
+        except:
+            msg = 'Unable to update scalr.settings table, reason: {0}'.format(helper.exc_info())
+            LOG.error(msg)
 
 
     def on_iteration_error(self):

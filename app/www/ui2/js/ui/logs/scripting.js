@@ -26,7 +26,7 @@ Scalr.regPage('Scalr.ui.logs.scripting', function (loadParams, moduleParams) {
 	});
 
 	var panel = Ext.create('Ext.grid.Panel', {
-		title: 'Logs &raquo; Scripting',
+		title: 'Logs &raquo; Scripting Log',
 		scalrOptions: {
 			reload: false,
 			maximize: 'all'
@@ -61,8 +61,8 @@ Scalr.regPage('Scalr.ui.logs.scripting', function (loadParams, moduleParams) {
 			}
 		}],
 		viewConfig: {
-			emptyText: 'No logs found',
-			loadingText: 'Loading logs ...',
+			emptyText: 'Nothing found',
+			loadingText: 'Loading...',
 			disableSelection: true,
 			getRowClass: function (record, rowIndex, rowParams) {
                 var exitCode = record.get('exec_exitcode');
@@ -119,30 +119,30 @@ Scalr.regPage('Scalr.ui.logs.scripting', function (loadParams, moduleParams) {
 			{ header: 'Event', width: 200, dataIndex: 'event', sortable: false, xtype: 'templatecolumn', tpl: 
 				'<tpl if="!event_id || !event_farm_id">'+
 				'{event}'+
-				'<tpl else><a href="#/farms/{event_farm_id}/events?eventId={event_id}">{event}</a></tpl>'
+				'<tpl else><a href="#/logs/events?eventId={event_id}">{event}</a></tpl>'
 			},
 			{ header: 'Fired by', flex: 1, dataIndex: 'event_server_id', sortable: false, xtype: 'templatecolumn', tpl:
 				'<tpl if="event_farm_id">' +
-					'<a href="#/farms/{event_farm_id}/view" title="Farm {event_farm_name}">{event_farm_name}</a>' +
 					'<tpl if="event_role_name">' +
+						'<a href="#/farms/{event_farm_id}/view" title="Farm {event_farm_name}">{event_farm_name}</a>' +
 						'&nbsp;&rarr;&nbsp;<a href="#/farms/{event_farm_id}/roles/{event_farm_roleid}/view" title="Role {event_role_name}">{event_role_name}</a> ' +
+						'&nbsp;#<a href="#/servers/{event_server_id}/view">{event_server_index}</a>'+
 					'</tpl>' +
 					'<tpl if="!event_role_name">' +
-						'&nbsp;&rarr;&nbsp;*removed role*&nbsp;' +
+						'{event_server_id}' +
 					'</tpl>' +
-					'#<a href="#/servers/{event_server_id}/view">{event_server_index}</a>'+
-				'<tpl else><img src="/ui2/images/icons/false.png"></tpl>'
+				'<tpl else>{event_server_id}</tpl>'
 			},
 			{ header: 'Executed on', flex: 2, dataIndex: 'server_id', sortable: false, xtype: 'templatecolumn', tpl:
 				'<tpl if="target_farm_id">' +
-					'<a href="#/farms/{target_farm_id}/view" title="Farm {target_farm_name}">{target_farm_name}</a>' +
 					'<tpl if="target_role_name">' +
+						'<a href="#/farms/{target_farm_id}/view" title="Farm {target_farm_name}">{target_farm_name}</a>' +
 						'&nbsp;&rarr;&nbsp;<a href="#/farms/{target_farm_id}/roles/{target_farm_roleid}/view" title="Role {target_role_name}">{target_role_name}</a> ' +
+						'&nbsp;#<a href="#/servers/{target_server_id}/view">{target_server_index}</a>'+
 					'</tpl>' +
 					'<tpl if="!target_role_name">' +
-						'&nbsp;&rarr;&nbsp;*removed role*&nbsp;' +
+						'{target_server_id}' +
 					'</tpl>' +
-					'#<a href="#/servers/{target_server_id}/view">{target_server_index}</a>'+
 				'</tpl>'
 			},
 			{ header: 'Script name', width: 200, dataIndex: 'script_name', sortable: false },

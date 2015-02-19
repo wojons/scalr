@@ -39,7 +39,7 @@ def answer(environ, start_response):
     server_id = environ['HTTP_X_SERVER_ID']
     data = environ['wsgi.input'].readline()
     crypto_key = lib.world.server_properties[server_id]['scalarizr.key']
-    msg = cryptotool.decrypt(CRYPTO_ALGO, data, cryptotool.decrypt_key(crypto_key))
+    msg = cryptotool.decrypt_scalarizr(CRYPTO_ALGO, data, cryptotool.decrypt_key(crypto_key))
     if msg != 'Carrot': 
         start_response('400 NOT OK', [('Content-Type', 'text/html')])
     else:

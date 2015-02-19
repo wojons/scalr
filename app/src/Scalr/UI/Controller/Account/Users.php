@@ -1,4 +1,7 @@
 <?php
+
+use Scalr\Util\CryptoTool;
+
 class Scalr_UI_Controller_Account_Users extends Scalr_UI_Controller
 {
     const CALL_PARAM_NAME = 'userId';
@@ -246,7 +249,7 @@ class Scalr_UI_Controller_Account_Users extends Scalr_UI_Controller
 
             $sendResetLink = false;
             if (!$this->getParam('password')) {
-                $password = Scalr_Util_CryptoTool::sault(10);
+                $password = CryptoTool::sault(10);
                 $sendResetLink = true;
             } else {
                 $password = $this->getParam('password');

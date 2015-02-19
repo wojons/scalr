@@ -496,6 +496,7 @@ class Google_Client
         $request->enableGzip();
       }
       $request->maybeMoveParametersToBody();
+      
       return Google_Http_REST::execute($this, $request);
     } else if ($request instanceof Google_Http_Batch) {
       return $request->execute();

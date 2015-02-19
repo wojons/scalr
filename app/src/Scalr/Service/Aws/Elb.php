@@ -6,6 +6,7 @@ use Scalr\Service\Aws\Elb\DataType\LoadBalancerDescriptionList;
 use Scalr\Service\Aws\Elb\DataType\ListenerList;
 use Scalr\Service\Aws\DataType\ListDataType;
 use Scalr\Service\Aws;
+use Scalr\Service\Aws\Elb\DataType\TagsList;
 
 /**
  * Amazon web servise Elastic load balancer service interface
@@ -124,12 +125,14 @@ class Elb extends AbstractService implements ServiceInterface
      * @param  string $scheme optional
      *         The type of LoadBalancer
      *
+     * @param  array|TagsList  $tagsList optional List of tags to add
+     *
      * @return string Returns the DNS name of the created load balancer
      * @throws ElbException
      * @throws ClientException
      */
     public function createLoadBalancer($loadBalancerName, $listenersList, $availabilityZonesList = null,
-                                       $subnetsList = null, $securityGroupsList = null, $scheme = null)
+                                       $subnetsList = null, $securityGroupsList = null, $scheme = null, $tagsList = null)
     {
         if (!is_string($loadBalancerName)) {
             throw new \InvalidArgumentException('Invalid loadBalancerName argument. It must be string.');
@@ -149,9 +152,12 @@ class Elb extends AbstractService implements ServiceInterface
         if ($subnetsList !== null && !($subnetsList instanceof ListDataType)) {
             $subnetsList = new ListDataType($subnetsList);
         }
+        if ($tagsList !== null && !($tagsList instanceof TagsList)) {
+            $tagsList = new TagsList($tagsList);
+        }
         return $this->getApiHandler()->createLoadBalancer(
             $loadBalancerName, $listenersList, $availabilityZonesList,
-            $subnetsList, $securityGroupsList, $scheme
+            $subnetsList, $securityGroupsList, $scheme, $tagsList
         );
     }
 

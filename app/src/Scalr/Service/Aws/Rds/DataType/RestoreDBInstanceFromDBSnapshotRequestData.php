@@ -67,7 +67,7 @@ class RestoreDBInstanceFromDBSnapshotRequestData extends AbstractRdsDataType
      *
      * @var string
      */
-    public $dbName;
+    public $dBName;
 
     /**
      * Name of the DB Instance to create from the DB Snapshot.
@@ -151,9 +151,18 @@ class RestoreDBInstanceFromDBSnapshotRequestData extends AbstractRdsDataType
     public $port;
 
     /**
+     * Specifies the accessibility options for the DB instance
+     *
      * @var bool
      */
     public $publiclyAccessible;
+
+    /**
+     * Specifies the storage type to be associated with the DB instance.
+     *
+     * @var string
+     */
+    public $storageType;
 
     /**
      * Constructor

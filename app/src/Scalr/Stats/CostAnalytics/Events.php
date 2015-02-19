@@ -73,11 +73,10 @@ class Events
      * @param $interval              $interval   Interval of the each point on the chart
      * @param \DateTime              $begin      Start date of the period on the chart
      * @param \DateTime              $end        The end date of the period on the chart
-     * @param string                 $ccId       optional Cost center id
-     * @param string                 $projectId  optional Project id
+     * @param array                  $criteria   optional Filter array ['filterId' => 'value']
      * @return array    Returns array of events amount sorted by datetime
      */
-    public function count($interval, $begin, $end, $ccId = null, $projectId = null)
+    public function count($interval, $begin, $end, array $criteria = null)
     {
         if (!($begin instanceof DateTime) || !($end instanceof DateTime)) {
             throw new \InvalidArgumentException(sprintf("Both Start end End time should be instance of DateTime."));
@@ -92,7 +91,15 @@ class Events
         ];
 
         $eventEntity = new TimelineEventEntity();
-        $joinData = $this->buildJoin($ccId, $projectId);
+        $joinData = $this->buildJoin($criteria);
+        $and = '';
+
+        if (!empty($criteria['envId'])) {
+            $and = 'AND e.env_id =' . $criteria['envId'];
+        } else if (!empty($criteria['accountId'])) {
+            $and = 'AND e.account_id =' . $criteria['accountId'];
+        }
+
 
         $dtimeType = $eventEntity->type('dtime');
 
@@ -100,7 +107,8 @@ class Events
             SELECT COUNT(*) as count, ". $groupFields[$interval] . " as dtime
             FROM " . $eventEntity->table() . " e " .
             (isset($joinData['join']) ? $joinData['join'] : ''). "
-            WHERE e.dtime BETWEEN ? AND ?
+            WHERE e.dtime BETWEEN ? AND ? "
+            . $and . "
             GROUP BY " . $groupFields[$interval] . "
         ", [
             $dtimeType->toDb($begin),
@@ -144,15 +152,21 @@ class Events
      *
      * @param  \DateTime              $start      Start date of the period
      * @param  \DateTime              $end        End date of the period
-     * @param  string                 $ccId       optional Cost center id
-     * @param  string                 $projectId  optional Project id
+     * @param  array                  $criteria   optional Filter array ['filterId' => 'value']
      * @return ArrayCollection        Returns collection of the TimelineEventEntity objects
      */
-    public function get($start, $end, $ccId = null, $projectId = null)
+    public function get($start, $end, array $criteria = null)
     {
         $eventEntity = new TimelineEventEntity();
 
-        $joinData = $this->buildJoin($ccId, $projectId);
+        $joinData = $this->buildJoin($criteria);
+        $and = '';
+
+        if (!empty($criteria['envId'])) {
+            $and = 'AND e.env_id =' . $criteria['envId'];
+        } else if (!empty($criteria['accountId'])) {
+            $and = 'AND e.account_id =' . $criteria['accountId'];
+        }
 
         $fields = '';
         foreach ($eventEntity->getIterator()->fields() as $field) {
@@ -165,7 +179,8 @@ class Events
                 SELECT " . $eventEntity->fields('e') . "
                 FROM " . $eventEntity->table('e') .
                 (isset($joinData['join']) ? $joinData['join'] : '') . "
-                WHERE e.dtime BETWEEN " . $eventEntity->qstr('dtime', $start) . " AND " . $eventEntity->qstr('dtime', $end) . "
+                WHERE e.dtime BETWEEN " . $eventEntity->qstr('dtime', $start) . " AND " . $eventEntity->qstr('dtime', $end) . " "
+                . $and . "
                 " . (isset($joinData['join']) ? "
                 UNION
                 SELECT " . $eventEntity->fields('e2') . "
@@ -192,22 +207,21 @@ class Events
     /**
      * Buld join sql statement part
      *
-     * @param string $ccId      optional Cost center id
-     * @param string $projectId optional Project id
+     * @param array $criteria   optional Filter array ['filterId' => 'value']
      * @return array            Returns array of prepared data for join sql statement
      */
-    private function buildJoin($ccId = null, $projectId = null)
+    private function buildJoin(array $criteria = null)
     {
         $join = [];
 
-        if (!empty($projectId)) {
+        if (!empty($criteria['projectId'])) {
             $eventTable = 'projects';
             $field = 'project_id';
-            $value = $projectId;
-        } else if (!empty($ccId)) {
+            $value = $criteria['projectId'];
+        } else if (!empty($criteria['ccId'])) {
             $eventTable = 'ccs';
             $field = 'cc_id';
-            $value = $ccId;
+            $value = $criteria['ccId'];
         }
 
         if (!empty($eventTable)) {

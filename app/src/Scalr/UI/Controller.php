@@ -1,6 +1,7 @@
 <?php
 
 use Scalr\UI\Request\ObjectInitializingInterface;
+use Scalr\Util\CryptoTool;
 
 class Scalr_UI_Controller
 {
@@ -30,9 +31,11 @@ class Scalr_UI_Controller
     protected $environment;
 
     /**
-     * @var Scalr_Util_CryptoTool
+     * @var CryptoTool
      */
     private $crypto;
+
+    public $cryptoKey;
 
     /**
      * DI Container
@@ -63,13 +66,12 @@ class Scalr_UI_Controller
     }
 
     /**
-     * @return Scalr_Util_CryptoTool
+     * @return CryptoTool
      */
     protected function getCrypto()
     {
         if (! $this->crypto) {
-            $this->crypto = new Scalr_Util_CryptoTool(MCRYPT_TRIPLEDES, MCRYPT_MODE_CFB, 24, 8);
-            $this->crypto->setCryptoKey(@file_get_contents(dirname(__FILE__)."/../../../etc/.cryptokey"));
+            $this->crypto = \Scalr::getContainer()->crypto;
         }
 
         return $this->crypto;
@@ -142,7 +144,7 @@ class Scalr_UI_Controller
         return 0;
     }
 
-    protected function buildResponseFromData(array $data, $filterFields = array())
+    protected function buildResponseFromData(array $data, $filterFields = array(), $ignoreLimit = false)
     {
         $this->request->defineParams(array(
             'start' => array('type' => 'int', 'default' => 0),
@@ -198,7 +200,7 @@ class Scalr_UI_Controller
             usort($data, array($this, 'sort'));
         }
 
-        $data = (count($data) > $this->getParam('limit')) ? array_slice($data, $this->getParam('start'), $this->getParam('limit')) : $data;
+        $data = (count($data) > $this->getParam('limit')) && !$ignoreLimit ? array_slice($data, $this->getParam('start'), $this->getParam('limit')) : $data;
 
         $response["success"] = true;
         $response['data'] = array_values($data);

@@ -315,9 +315,14 @@ Ext.define('Scalr.ui.ServerMenu', {
     }, {
         xtype: 'menuseparator'
     }, {
+        itemId: 'option.events',
+        text: 'Event Log',
+        iconCls: 'x-menu-icon-events',
+        href: '#/logs/events?eventServerId={server_id}'
+    }, {
         itemId: 'option.logs',
         iconCls: 'x-menu-icon-logs',
-        text: 'System logs',
+        text: 'System Log',
         href: '#/logs/system?serverId={server_id}',
         getVisibility: function(data) {
             return !Ext.Array.contains(['Troubleshooting', 'Suspended'], data['status']);
@@ -325,7 +330,7 @@ Ext.define('Scalr.ui.ServerMenu', {
     }, {
         itemId: 'option.scripting_logs',
         iconCls: 'x-menu-icon-logs',
-        text: 'Scripting logs',
+        text: 'Scripting Log',
         href: '#/logs/scripting?serverId={server_id}',
         getVisibility: function(data) {
             return !Ext.Array.contains(['Troubleshooting', 'Suspended'], data['status']);

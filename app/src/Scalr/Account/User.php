@@ -1,5 +1,10 @@
 <?php
 
+use Scalr\Stats\CostAnalytics\Entity\ProjectEntity;
+use Scalr\Stats\CostAnalytics\Entity\CostCentreEntity;
+use Scalr\Stats\CostAnalytics\Entity\ProjectPropertyEntity;
+use Scalr\Stats\CostAnalytics\Entity\CostCentrePropertyEntity;
+
 class Scalr_Account_User extends Scalr_Model
 {
     protected $dbTableName = 'account_users';
@@ -19,7 +24,6 @@ class Scalr_Account_User extends Scalr_Model
     const SETTING_API_ACCESS_KEY 	= 'api.access_key';
     const SETTING_API_SECRET_KEY 	= 'api.secret_key';
     const SETTING_API_ENABLED 		= 'api.enabled';
-    const SETTING_API_IP_WHITELIST 	= 'api.ip.whitelist';
 
     const SETTING_RSS_LOGIN 	= 'rss.login';
     const SETTING_RSS_PASSWORD 	= 'rss.password';
@@ -31,9 +35,8 @@ class Scalr_Account_User extends Scalr_Model
 
     const SETTING_GRAVATAR_EMAIL = 'gravatar.email';
     const SETTING_LDAP_EMAIL = 'ldap.email';
-
-    // @deprecated in favor of VAR_SECURITY_IP_WHITELIST
-    const SETTING_SECURITY_IP_WHITELIST 	= 'security.ip.whitelist';
+    const SETTING_LEAD_VERIFIED = 'lead.verified';
+    const SETTING_LEAD_HASH = 'lead.hash';
 
     const SETTING_SECURITY_2FA_GGL = 'security.2fa.ggl';
     const SETTING_SECURITY_2FA_GGL_KEY = 'security.2fa.ggl.key';
@@ -41,6 +44,7 @@ class Scalr_Account_User extends Scalr_Model
 
     const VAR_UI_STORAGE = 'ui.storage';
     const VAR_SECURITY_IP_WHITELIST = 'security.ip.whitelist';
+    const VAR_API_IP_WHITELIST = 'api.ip.whitelist';
 
     const VAR_SSH_CONSOLE_USERNAME = 'ssh.console.username';
     const VAR_SSH_CONSOLE_PORT = 'ssh.console.port';
@@ -557,10 +561,22 @@ class Scalr_Account_User extends Scalr_Model
         }
     }
 
-    public function getEnvironments()
+    /**
+     * Gets environments of the current user filtered by name
+     *
+     * @param string $filter optional Filter string
+     * @return array
+     */
+    public function getEnvironments($filter = null)
     {
+        $like = '';
+
+        if (isset($filter)) {
+            $like = " AND ce.name LIKE '%" . $this->db->escape($filter) . "%'";
+        }
+
         if ($this->canManageAcl()) {
-            return $this->db->getAll('SELECT id, name FROM client_environments WHERE client_id = ?', array(
+            return $this->db->getAll('SELECT ce.id, ce.name FROM client_environments ce WHERE ce.client_id = ?' . $like, array(
                 $this->getAccountId()
             ));
         } else {
@@ -568,13 +584,15 @@ class Scalr_Account_User extends Scalr_Model
             foreach ($this->getTeams() as $team)
                 $teams[] = $team['id'];
 
-            if (count($teams))
+            if (count($teams)) {
                 return $this->db->getAll('
                     SELECT ce.id, ce.name FROM client_environments ce
                     JOIN account_team_envs te ON ce.id = te.env_id
-                    WHERE te.team_id IN (' . implode(',', $teams) . ')
+                    WHERE te.team_id IN (' . implode(',', $teams) . ')'
+                    . $like . '
                     GROUP BY ce.id
                 ');
+            }
         }
 
         return array();
@@ -884,6 +902,40 @@ class Scalr_Account_User extends Scalr_Model
                 $result[$name] = $dbServer->applyGlobalVarsToValue($result[$name]);
         }
         return $result;
+    }
+
+    /**
+     * @return bool Returns true if lead is verified
+     */
+    public function isLeadVerified()
+    {
+        return ($this->getSetting(self::SETTING_LEAD_VERIFIED) != 1) ? false : true;
+    }
+
+    /**
+     * Checks if user has access to project or cost center
+     *
+     * @param string $projectId optional Id of the project
+     * @param string $ccId      optional Id of the cost center
+     * @return boolean          Returns false if user is not lead of the subject
+     */
+    public function isSubjectLead($projectId = null, $ccId = null)
+    {
+        if (!empty($projectId)) {
+            $project = ProjectEntity::findPk($projectId);
+
+            if (empty($project) || $project->getProperty(ProjectPropertyEntity::NAME_LEAD_EMAIL) !== $this->getEmail()) {
+                return false;
+            }
+        } else if (!empty($ccId)) {
+            $ccs = CostCentreEntity::findPk($ccId);
+
+            if (empty($ccs) || $ccs->getProperty(CostCentrePropertyEntity::NAME_LEAD_EMAIL) !== $this->getEmail()) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
 }

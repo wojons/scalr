@@ -601,7 +601,7 @@ class LoadStatistics(application.ScalrApplication):
             'interval': 120,
             'rrd': {
                 'dir': None,
-                'rrdcached_sock_path': False,
+                'rrdcached_sock_path': '/var/run/rrdcached.sock',
             },
             'img': {
                 'dir': None,

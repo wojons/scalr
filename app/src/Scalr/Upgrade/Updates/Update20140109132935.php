@@ -322,19 +322,21 @@ class Update20140109132935 extends AbstractUpdate implements SequenceInterface
         $this->console->out("Creating notifications table...");
 
         $this->db->Execute("
-            CREATE TABLE IF NOT EXISTS `notifications` (
+            CREATE TABLE `notifications` (
               `uuid` BINARY(16) NOT NULL COMMENT 'unique identifier',
               `subject_type` TINYINT NOT NULL COMMENT '1- CC, 2 - Project',
+              `subject_id` BINARY(16) DEFAULT NULL,
               `notification_type` TINYINT NOT NULL COMMENT 'Type of the notification',
               `threshold` DECIMAL(12,2) NOT NULL,
-              `recipient_type` TINYINT NOT NULL DEFAULT 1 COMMENT '1 - Leads 2 - Emails',
-              `emails` TEXT NULL COMMENT 'Comma separated recipients',
+              `recipient_type` TINYINT NOT NULL DEFAULT '1' COMMENT '1 - Leads 2 - Emails',
+              `emails` TEXT COMMENT 'Comma separated recipients',
+              `status` TINYINT NOT NULL,
               PRIMARY KEY (`uuid`),
-              INDEX `idx_notification_type` (`notification_type` ASC),
-              INDEX `idx_subject_type` (`subject_type` ASC),
-              INDEX `idx_recipient_type` (`recipient_type` ASC))
-            ENGINE = InnoDB DEFAULT CHARSET=utf8
-            COMMENT = 'Notifications'
+              KEY `idx_notification_type` (`notification_type`),
+              KEY `idx_subject_type` (`subject_type`),
+              KEY `idx_recipient_type` (`recipient_type`)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8
+            COMMENT='Notifications'
         ");
     }
 
@@ -440,6 +442,7 @@ class Update20140109132935 extends AbstractUpdate implements SequenceInterface
               `subject_id` BINARY(16) NULL,
               `period` TINYINT NOT NULL COMMENT 'Period',
               `emails` TEXT NOT NULL COMMENT 'Comma separated recipients',
+              `status` tinyint(4) NOT NULL,
               PRIMARY KEY (`uuid`),
               INDEX `idx_subject_type` (`subject_type` ASC),
               INDEX `idx_period` (`period` ASC))
@@ -845,9 +848,9 @@ CREATE TABLE IF NOT EXISTS `usage_d` (
   `platform` VARCHAR(20) NOT NULL COMMENT 'Cloud platform',
   `cc_id` BINARY(16) NOT NULL DEFAULT '\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0' COMMENT 'ID of the CC',
   `project_id` BINARY(16) NOT NULL DEFAULT '\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0' COMMENT 'ID of the project',
-  `env_id` INT(11) NOT NULL DEFAULT 0 COMMENT 'ID of the environment',
   `farm_id` INT(11) NOT NULL DEFAULT 0 COMMENT 'ID of the farm',
   `cost` DECIMAL(12,6) NOT NULL DEFAULT 0.000000 COMMENT 'daily usage',
+  `env_id` INT(11) NOT NULL DEFAULT 0 COMMENT 'ID of the environment',
   PRIMARY KEY (`date`, `farm_id`, `platform`, `cc_id`, `project_id`),
   INDEX `idx_farm_id` (`farm_id` ASC),
   INDEX `idx_project_id` (`project_id` ASC),
@@ -909,16 +912,18 @@ COMMENT = 'Not managed daily usage';
 CREATE TABLE IF NOT EXISTS `notifications` (
   `uuid` BINARY(16) NOT NULL COMMENT 'unique identifier',
   `subject_type` TINYINT NOT NULL COMMENT '1- CC, 2 - Project',
+  `subject_id` BINARY(16) DEFAULT NULL,
   `notification_type` TINYINT NOT NULL COMMENT 'Type of the notification',
   `threshold` DECIMAL(12,2) NOT NULL,
-  `recipient_type` TINYINT NOT NULL DEFAULT 1 COMMENT '1 - Leads 2 - Emails',
-  `emails` TEXT NULL COMMENT 'Comma separated recipients',
+  `recipient_type` TINYINT NOT NULL DEFAULT '1' COMMENT '1 - Leads 2 - Emails',
+  `emails` TEXT COMMENT 'Comma separated recipients',
+  `status` TINYINT NOT NULL,
   PRIMARY KEY (`uuid`),
-  INDEX `idx_notification_type` (`notification_type` ASC),
-  INDEX `idx_subject_type` (`subject_type` ASC),
-  INDEX `idx_recipient_type` (`recipient_type` ASC))
-ENGINE = InnoDB DEFAULT CHARSET=utf8
-COMMENT = 'Notifications';
+  KEY `idx_notification_type` (`notification_type`),
+  KEY `idx_subject_type` (`subject_type`),
+  KEY `idx_recipient_type` (`recipient_type`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8
+COMMENT='Notifications';
 
 -- -----------------------------------------------------
 -- Table `reports`
@@ -929,6 +934,7 @@ CREATE TABLE IF NOT EXISTS `reports` (
   `subject_id` BINARY(16) NULL,
   `period` TINYINT NOT NULL COMMENT 'Period',
   `emails` TEXT NOT NULL COMMENT 'Comma separated recipients',
+  `status` tinyint(4) NOT NULL,
   PRIMARY KEY (`uuid`),
   INDEX `idx_subject_type` (`subject_type` ASC),
   INDEX `idx_period` (`period` ASC))

@@ -123,6 +123,8 @@ class Scalr_Scripting_Manager
                     $itm->executionId = $script['execution_id'];
 
                     $retval[] = $itm;
+                    
+                    $event->scriptsCount++;
                 }
             }
         } catch (Exception $e) {
@@ -229,7 +231,11 @@ class Scalr_Scripting_Manager
             if ($chefSettings['chef.ssh_private_key'])
                 $chef->sshPrivateKey = $chefSettings['chef.ssh_private_key'];
 
-            $chef->runList = $chefSettings['chef.runlist'];
+            if ($chefSettings['chef.role_name']) {
+                $chef->role = $chefSettings['chef.role_name'];
+            } else {
+                $chef->runList = $chefSettings['chef.runlist'];
+            }
             $chef->jsonAttributes = $chefSettings['chef.attributes'];
 
             $template['chef'] = $chef;

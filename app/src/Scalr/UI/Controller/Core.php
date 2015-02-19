@@ -1,8 +1,10 @@
 <?php
+
 use Scalr\Acl\Acl;
 use Scalr\UI\Request\RawData;
 use Scalr\UI\Request\JsonData;
 use Scalr\UI\Request\Validator;
+use Scalr\Util\CryptoTool;
 
 class Scalr_UI_Controller_Core extends Scalr_UI_Controller
 {
@@ -76,19 +78,36 @@ class Scalr_UI_Controller_Core extends Scalr_UI_Controller
         $data = array(
             'version' => @file_get_contents(APPPATH . '/etc/version')
         );
-        
+
         if (!Scalr::isHostedScalr() || $this->request->getHeaderVar('Interface-Beta')) {
-            @exec("git show --format='%h|%ci|%H' HEAD", $output);
-            $info = @explode("|", $output[0]);
-            $data['gitRevision'] = trim($info[0]);
-            $data['gitDate'] = trim($info[1]);
-            $data['gitFullHash'] = trim($info[2]);
+            $manifest = @file_get_contents(APPPATH . '/../manifest.json');
+            if ($manifest) {
+                $info = @json_decode($manifest, true);
+                if ($info) {
+                    if (stristr($info['edition'], 'ee'))
+                        $data['edition'] = 'Enterprise Edition';
+                    else
+                        $data['edition'] = 'Open Source Edition';
+                    
+                    $data['gitFullHash'] = $info['full_revision'];
+                    $data['gitDate'] = $info['date'];
+                    $data['gitRevision'] = $info['revision'];
+                }
+            }
             
-            @exec("git remote -v", $output2);
-            if (stristr($output2[0], 'int-scalr'))
-                $data['edition'] = 'Enterprise Edition';
-            else
-                $data['edition'] = 'Open Source Edition';
+            if (!$data['edition']) {
+                @exec("git show --format='%h|%ci|%H' HEAD", $output);
+                $info = @explode("|", $output[0]);
+                $data['gitRevision'] = trim($info[0]);
+                $data['gitDate'] = trim($info[1]);
+                $data['gitFullHash'] = trim($info[2]);
+                
+                @exec("git remote -v", $output2);
+                if (stristr($output2[0], 'int-scalr'))
+                    $data['edition'] = 'Enterprise Edition';
+                else
+                    $data['edition'] = 'Open Source Edition';
+            }
             
             $data['id'] = SCALR_ID;
         }
@@ -109,7 +128,7 @@ class Scalr_UI_Controller_Core extends Scalr_UI_Controller
                 "expires" => date("D M d H:i:s O Y", time()+120)
             );
 
-            $token = Scalr_Util_CryptoTool::generateTenderMultipassToken(json_encode($args));
+            $token = CryptoTool::generateTenderMultipassToken(json_encode($args));
 
             $this->response->setRedirect("http://support.scalr.net/?sso={$token}");
         } else {
@@ -132,10 +151,10 @@ class Scalr_UI_Controller_Core extends Scalr_UI_Controller
         }
 
         $params[Scalr_Account_User::SETTING_API_ENABLED] = $this->user->getSetting(Scalr_Account_User::SETTING_API_ENABLED) == 1 ? true : false;
-        $params[Scalr_Account_User::SETTING_API_IP_WHITELIST] = (string)$this->user->getSetting(Scalr_Account_User::SETTING_API_IP_WHITELIST);
         $params[Scalr_Account_User::SETTING_API_ACCESS_KEY] = $this->user->getSetting(Scalr_Account_User::SETTING_API_ACCESS_KEY);
         $params[Scalr_Account_User::SETTING_API_SECRET_KEY] = $this->user->getSetting(Scalr_Account_User::SETTING_API_SECRET_KEY);
         $params['api.endpoint'] = \Scalr::config('scalr.endpoint.scheme').'://'.\Scalr::config('scalr.endpoint.host').'/api/api.php';
+        $params[Scalr_Account_User::VAR_API_IP_WHITELIST] = (string)$this->user->getVar(Scalr_Account_User::VAR_API_IP_WHITELIST);
 
         $this->response->page('ui/core/api.js', $params);
     }
@@ -156,10 +175,10 @@ class Scalr_UI_Controller_Core extends Scalr_UI_Controller
             throw new Scalr_Exception_InsufficientPermissions();
 
         $apiEnabled = $this->getParam(str_replace(".", "_", Scalr_Account_User::SETTING_API_ENABLED)) == 'on' ? true : false;
-        $ipWhitelist = $this->getParam(str_replace(".", "_", Scalr_Account_User::SETTING_API_IP_WHITELIST));
+        $ipWhitelist = $this->getParam(str_replace(".", "_", Scalr_Account_User::VAR_API_IP_WHITELIST));
 
         $this->user->setSetting(Scalr_Account_User::SETTING_API_ENABLED, $apiEnabled);
-        $this->user->setSetting(Scalr_Account_User::SETTING_API_IP_WHITELIST, $ipWhitelist);
+        $this->user->setVar(Scalr_Account_User::VAR_API_IP_WHITELIST, $ipWhitelist);
 
         $this->response->success('API settings successfully saved');
     }
@@ -276,7 +295,7 @@ class Scalr_UI_Controller_Core extends Scalr_UI_Controller
             $qr = $this->getCrypto()->decrypt($this->user->getSetting(Scalr_Account_User::SETTING_SECURITY_2FA_GGL_KEY));
             $resetCode = $this->user->getSetting(Scalr_Account_User::SETTING_SECURITY_2FA_GGL_RESET_CODE);
 
-            if (Scalr_Util_Google2FA::verifyKey($qr, $code) || Scalr_Util_CryptoTool::hash($code) == $resetCode) {
+            if (Scalr_Util_Google2FA::verifyKey($qr, $code) || CryptoTool::hash($code) == $resetCode) {
                 $this->user->setSetting(Scalr_Account_User::SETTING_SECURITY_2FA_GGL, '');
                 $this->user->setSetting(Scalr_Account_User::SETTING_SECURITY_2FA_GGL_KEY, '');
                 $this->user->setSetting(Scalr_Account_User::SETTING_SECURITY_2FA_GGL_RESET_CODE, '');
@@ -306,13 +325,13 @@ class Scalr_UI_Controller_Core extends Scalr_UI_Controller
 
         if ($qr && $code) {
             if (Scalr_Util_Google2FA::verifyKey($qr, $code)) {
-                $resetCode = Scalr_Util_CryptoTool::sault(12);
+                $resetCode = CryptoTool::sault(12);
                 $this->user->setSetting(Scalr_Account_User::SETTING_SECURITY_2FA_GGL, 1);
                 $this->user->setSetting(Scalr_Account_User::SETTING_SECURITY_2FA_GGL_KEY,
                     $this->getCrypto()->encrypt($qr)
                 );
                 $this->user->setSetting(Scalr_Account_User::SETTING_SECURITY_2FA_GGL_RESET_CODE,
-                    Scalr_Util_CryptoTool::hash($resetCode)
+                    CryptoTool::hash($resetCode)
                 );
 
                 $this->response->data(['resetCode' => $resetCode]);
@@ -340,8 +359,6 @@ class Scalr_UI_Controller_Core extends Scalr_UI_Controller
             array(
                 'gravatar_email' => $this->user->getSetting(Scalr_Account_User::SETTING_GRAVATAR_EMAIL) ? $this->user->getSetting(Scalr_Account_User::SETTING_GRAVATAR_EMAIL) : '',
                 'gravatar_hash' => $this->user->getGravatarHash(),
-                'rss_login' => $this->user->getSetting(Scalr_Account_User::SETTING_RSS_LOGIN),
-                'rss_pass' => $this->user->getSetting(Scalr_Account_User::SETTING_RSS_PASSWORD),
                 'timezone' => $this->user->getSetting(Scalr_Account_User::SETTING_UI_TIMEZONE),
                 'timezones_list' => Scalr_Util_DateTime::getTimezones(),
                 'user_email' => $this->user->getEmail(),
@@ -405,8 +422,6 @@ class Scalr_UI_Controller_Core extends Scalr_UI_Controller
 
         $panel = self::loadController('Dashboard')->fillDash($panel);
 
-        $this->user->setSetting(Scalr_Account_User::SETTING_RSS_LOGIN, $rssLogin);
-        $this->user->setSetting(Scalr_Account_User::SETTING_RSS_PASSWORD, $rssPass);
         $this->user->setSetting(Scalr_Account_User::SETTING_UI_TIMEZONE, $this->getParam('timezone'));
 
         $gravatarEmail = $this->getParam('gravatar_email');

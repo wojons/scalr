@@ -3,6 +3,7 @@ Copyright 2012 Scalr Corporation.
 
 This product is proud to use the following open source software:
 
+* ZeroMQ - LGPL - http://zeromq.org/
 * M2Crypto - BSD - http://freshmeat.net/projects/m2crypto/
 * Pexpect - MIT - http://www.noah.org/wiki/Pexpect#License
 * PySNMP - BSD - http://pysnmp.sourceforge.net/

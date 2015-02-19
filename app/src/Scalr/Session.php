@@ -1,5 +1,7 @@
 <?php
 
+use Scalr\Util\CryptoTool;
+
 /**
  * Scalr Session class
  *
@@ -61,7 +63,7 @@ class Scalr_Session
     {
         if (self::$_session === null) {
             self::$_session = new Scalr_Session();
-            self::$_session->hashpwd = Scalr_Util_CryptoTool::hash(@file_get_contents(APPPATH."/etc/.cryptokey"));
+            self::$_session->hashpwd = CryptoTool::hash(@file_get_contents(APPPATH."/etc/.cryptokey"));
             ini_set('session.cookie_httponly', true);
         }
 
@@ -75,11 +77,11 @@ class Scalr_Session
                     $hash = self::getInstance()->hashpwd;
                     // validate token value
                     if ($_COOKIE['scalr_signature']) {
-                        if (Scalr_Util_CryptoTool::hash("{$_COOKIE['scalr_signature']}:{$hash}") === $_COOKIE[self::SESSION_TOKEN])
+                        if (CryptoTool::hash("{$_COOKIE['scalr_signature']}:{$hash}") === $_COOKIE[self::SESSION_TOKEN])
                             self::$_session->setToken($_COOKIE[self::SESSION_TOKEN]);
                     } else {
                         $id = session_id();
-                        if (Scalr_Util_CryptoTool::hash("{$id}:{$hash}") === $_COOKIE[self::SESSION_TOKEN])
+                        if (CryptoTool::hash("{$id}:{$hash}") === $_COOKIE[self::SESSION_TOKEN])
                             self::$_session->setToken($_COOKIE[self::SESSION_TOKEN]);
                     }
                 }
@@ -95,22 +97,22 @@ class Scalr_Session
      */
     public static function create($userId, $virtual = false)
     {
-        @session_start();
+        session_start();
         $_SESSION[__CLASS__][self::SESSION_USER_ID] = $userId;
         $_SESSION[__CLASS__][self::SESSION_VIRTUAL] = $virtual;
 
-        $sault = Scalr_Util_CryptoTool::sault();
+        $sault = CryptoTool::sault();
         $_SESSION[__CLASS__][self::SESSION_SAULT] = $sault;
         $_SESSION[__CLASS__][self::SESSION_HASH] = self::createHash($userId, $sault);
 
         if (! $virtual) {
             $id = session_id();
             $hash = self::getInstance()->hashpwd;
-            $token = Scalr_Util_CryptoTool::hash("{$id}:{$hash}");;
+            $token = CryptoTool::hash("{$id}:{$hash}");;
             $https = ($_SERVER['HTTPS']) ? true : false;
             $_SESSION[__CLASS__][self::SESSION_TOKEN] = $token;
             setcookie('scalr_token', $token, null, '/', null, $https, false);
-            @session_write_close();
+            session_write_close();
         }
 
         self::restore(false);
@@ -136,7 +138,7 @@ class Scalr_Session
         if (!$hash) {
             $accountId = $db->GetOne('SELECT account_id FROM account_users WHERE id = ? LIMIT 1', array($userId));
             if ($accountId) {
-                $hash = Scalr_Util_CryptoTool::sault();
+                $hash = CryptoTool::sault();
                 $acc = new Scalr_Account();
                 $acc->loadById($accountId);
                 $acc->setSetting(Scalr_Account::SETTING_AUTH_HASH, $hash);
@@ -149,20 +151,20 @@ class Scalr_Session
     protected static function createHash($userId, $sault)
     {
         $pass = self::getUserPassword($userId);
-        return Scalr_Util_CryptoTool::hash("{$userId}:{$pass}:" . self::getInstance()->hashpwd . ":{$sault}");
+        return CryptoTool::hash("{$userId}:{$pass}:" . self::getInstance()->hashpwd . ":{$sault}");
     }
 
     protected static function createCookieHash($userId, $sault, $hash)
     {
         $pass = self::getUserPassword($userId);
         $userHash = self::getAccountHash($userId);
-        return Scalr_Util_CryptoTool::hash("{$sault}:{$hash}:{$userId}:{$userHash}:{$pass}:" . self::getInstance()->hashpwd);
+        return CryptoTool::hash("{$sault}:{$hash}:{$userId}:{$userHash}:{$pass}:" . self::getInstance()->hashpwd);
     }
 
     protected static function restore($checkKeepSessionCookie = true)
     {
         $session = self::getInstance();
-        @session_start();
+        session_start();
         $refClass = self::getReflectionClass();
         foreach ($refClass->getConstants() as $constname => $constvalue) {
             if (substr($constname, 0, 8) !== 'SESSION_') continue;
@@ -180,7 +182,7 @@ class Scalr_Session
                 self::restore(false);
         }
 
-        @session_write_close();
+        session_write_close();
     }
 
     public static function isCookieKeepSession()
@@ -209,8 +211,8 @@ class Scalr_Session
 
     public static function destroy()
     {
-        @session_start();
-        @session_destroy();
+        session_start();
+        session_destroy();
 
         if (\Scalr::config('scalr.ui.tender_api_key') != '') {
             @setcookie("tender_email", "", time()-86400, "/");
@@ -246,7 +248,7 @@ class Scalr_Session
             @setcookie("scalr_token", "", time() - 86400, "/", null, $setHttpsCookie, false);
         }
 
-        @session_write_close();
+        session_write_close();
     }
 
     public static function keepSession()
@@ -257,7 +259,7 @@ class Scalr_Session
 
         $setHttpsCookie = ($_SERVER['HTTPS']) ? true : false;
         $signature = self::createCookieHash($session->userId, $session->sault, $session->hash);
-        $token = Scalr_Util_CryptoTool::hash("{$signature}:" . $session->hashpwd);
+        $token = CryptoTool::hash("{$signature}:" . $session->hashpwd);
 
         setcookie('scalr_user_id', $session->userId, $tm, "/", null, $setHttpsCookie, true);
         setcookie('scalr_sault', $session->sault, $tm, "/", null, $setHttpsCookie, true);
@@ -282,9 +284,9 @@ class Scalr_Session
 
     public function setEnvironmentId($envId)
     {
-        @session_start();
+        session_start();
         $_SESSION[__CLASS__][self::SESSION_ENV_ID] = $this->envId = $envId;
-        @session_write_close();
+        session_write_close();
     }
 
     /**
@@ -305,10 +307,10 @@ class Scalr_Session
                     return $this->{$property};
                 } elseif ($m[1] == 'set') {
                     //set are expected to be here
-                    @session_start();
+                    session_start();
                     $this->{$property} = $params[0];
                     $_SESSION[__CLASS__][$property] = $this->{$property};
-                    @session_write_close();
+                    session_write_close();
                     return $this;
                 }
             }

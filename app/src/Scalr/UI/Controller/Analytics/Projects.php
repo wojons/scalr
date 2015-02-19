@@ -1,12 +1,16 @@
 <?php
 
-use Scalr\Acl\Acl;
 use Scalr\Stats\CostAnalytics\Entity\ProjectEntity;
 use Scalr\Stats\CostAnalytics\Entity\ProjectPropertyEntity;
+use Scalr\Stats\CostAnalytics\Entity\CostCentrePropertyEntity;
 use Scalr\Stats\CostAnalytics\Iterator\ChartPeriodIterator;
 use Scalr\Stats\CostAnalytics\Entity\TagEntity;
 use Scalr\Exception\AnalyticsException;
 use Scalr\Stats\CostAnalytics\Entity\SettingEntity;
+use Scalr\Stats\CostAnalytics\Entity\NotificationEntity;
+use Scalr\Stats\CostAnalytics\Entity\ReportEntity;
+use Scalr\Stats\CostAnalytics\Entity\AccountCostCenterEntity;
+use Scalr\UI\Request\JsonData;
 
 class Scalr_UI_Controller_Analytics_Projects extends Scalr_UI_Controller
 {
@@ -14,29 +18,28 @@ class Scalr_UI_Controller_Analytics_Projects extends Scalr_UI_Controller
 
     public function hasAccess()
     {
-        return true;
+        return $this->user->isAdmin();
     }
 
     public function defaultAction()
     {
-        if (!$this->user->isAdmin())
-            throw new Scalr_Exception_InsufficientPermissions();
-
-        $this->response->page('ui/analytics/projects/view.js', array(
+        $this->response->page('ui/analytics/admin/projects/view.js', array(
             'projects' => $this->getProjectsList(),
             'quarters' => SettingEntity::getQuarters(true)
-        ),array('/ui/analytics/analytics.js'), array('/ui/analytics/analytics.css'));
+        ),array('/ui/analytics/analytics.js'), array('ui/analytics/analytics.css', '/ui/analytics/admin/admin.css'));
     }
 
-    public function xListAction()
+    /**
+     * xListAction
+     *
+     * @param string $query optional Search query
+     * @param bool $showArchived optional show old archived projects
+     * @throws Scalr_Exception_InsufficientPermissions
+     */
+    public function xListAction($query = null, $showArchived = false)
     {
-        $query = trim($this->getParam('query'));
-
-        if (!$this->user->isAdmin())
-            throw new Scalr_Exception_InsufficientPermissions();
-
         $this->response->data(array(
-            'projects' => $this->getProjectsList($query)
+            'projects' => $this->getProjectsList(trim($query), $showArchived)
         ));
     }
 
@@ -45,36 +48,39 @@ class Scalr_UI_Controller_Analytics_Projects extends Scalr_UI_Controller
         $this->editAction();
     }
 
-    public function editAction()
+    public function editAction($projectId = null, $ccId = null)
     {
-        $ccs = array();
-        if ($this->user->isAdmin()) {
-            $collection = $this->getContainer()->analytics->ccs->all();
+        $ccs = [];
 
-            if ($this->getParam('projectId')) {
-                $project = $this->getContainer()->analytics->projects->get($this->getParam('projectId'));
-                if (!$project)
-                    throw new Scalr_UI_Exception_NotFound();
+        $accountId = null;
+        $envId = null;
+        $userId = null;
+
+        $collection = $this->getContainer()->analytics->ccs->all();
+
+        if ($projectId) {
+            $project = $this->getContainer()->analytics->projects->get($projectId);
+
+            if (!$project) {
+                throw new Scalr_UI_Exception_NotFound();
             }
 
-            foreach ($collection as $cc) {
-                /* @var $cc \Scalr\Stats\CostAnalytics\Entity\CostCentreEntity */
-                //For new projects we should exclude archived cost centres
-                if ($cc->archived) {
-                    continue;
-                }
+            $accountId = $project->accountId;
+            $envId = $project->envId;
+            $userId = $project->shared == ProjectEntity::SHARED_TO_OWNER ? $project->createdById : null;
+        }
 
-                $ccs[] = array(
-                    'ccId' => $cc->ccId,
-                    'name' => $cc->name,
-                );
+        foreach ($collection as $cc) {
+            /* @var $cc \Scalr\Stats\CostAnalytics\Entity\CostCentreEntity */
+            //For new projects we should exclude archived cost centres
+            if ($cc->archived) {
+                continue;
             }
-        } else {
-            $this->request->restrictAccess(Acl::RESOURCE_ANALYTICS_PROJECTS);
-            $cc = $this->getContainer()->analytics->ccs->get($this->getEnvironment()->getPlatformConfigValue(Scalr_Environment::SETTING_CC_ID));
-            $ccs[] = array(
+
+            $ccs[$cc->ccId] = array(
                 'ccId' => $cc->ccId,
                 'name' => $cc->name,
+                'billingCode' => $cc->getProperty(CostCentrePropertyEntity::NAME_BILLING_CODE)
             );
         }
 
@@ -91,57 +97,67 @@ class Scalr_UI_Controller_Analytics_Projects extends Scalr_UI_Controller
             $projectData = [];
         }
 
-        $this->response->page('ui/analytics/projects/edit.js', array(
-            'project' => $projectData,
-            'ccs'     => $ccs
-        ), array('/ui/analytics/analytics.js'));
+        $projectWidget = $this->getWidget([
+            'accountId'  => $accountId,
+            'envId'      => $envId,
+            'userId'     => $userId,
+            'ccId'       => $project->ccId,
+            'shared'     => $project->shared,
+            'farmsCount' => $projectData['farmsCount']
+        ]);
+
+        $this->response->page('ui/analytics/admin/projects/edit.js', array(
+            'project'      => $projectData,
+            'ccs'          => $ccs,
+            'sharedWidget' => $projectWidget
+        ));
     }
 
-    public function xSaveAction()
+    /**
+     * xSaveAction
+     *
+     * @param string $ccId
+     * @param string $projectId
+     * @param string $name
+     * @param string $description
+     * @param string $billingCode
+     * @param string $leadEmail
+     * @param int $shared
+     * @param int $accountId optional
+     * @param bool $checkAccountAccessToCc optional
+     * @param bool $grantAccountAccessToCc optional
+     * @throws Scalr_Exception_InsufficientPermissions
+     */
+    public function xSaveAction($ccId, $projectId, $name, $description, $billingCode, $leadEmail, $shared, $accountId = null, $checkAccountAccessToCc = true, $grantAccountAccessToCc = false)
     {
-        if (!$this->user->isAdmin() && !$this->request->isAllowed(Acl::RESOURCE_ANALYTICS_PROJECTS))
-            throw new Scalr_Exception_InsufficientPermissions();
+        if ($projectId) {
+            $project = $this->getContainer()->analytics->projects->get($projectId);
 
+            if (!$project) {
+                throw new Scalr_UI_Exception_NotFound();
+            }
+        } else {
+            $project = new ProjectEntity();
+            $project->createdById = $this->user->id;
+            $project->createdByEmail = $this->user->getEmail();
 
-        $this->request->defineParams(array(
-            'name'        => array('type' => 'string', 'validator' => array(Scalr_Validator::NOEMPTY => true)),
-            'billingCode' => array('type' => 'string', 'validator' => array(Scalr_Validator::NOEMPTY => true)),
-            'leadEmail'   => array('type' => 'string', 'validator' => array(Scalr_Validator::NOEMPTY => true, Scalr_Validator::EMAIL => true)),
-            'shared'      => array('type' => 'int')
-        ));
-
-        if ($this->user->isAdmin()) {
-            if ($this->getParam('projectId')) {
-                $project = $this->getContainer()->analytics->projects->get($this->getParam('projectId'));
-
-                if (!$project) {
-                    throw new Scalr_UI_Exception_NotFound();
-                }
-            } else {
-                $project = new ProjectEntity();
+            $cc = $this->getContainer()->analytics->ccs->get($ccId);
+            if (!$cc) {
+                $this->request->addValidationErrors('ccId', 'Cost center ID should be set');
             }
 
-            $cc = $this->getContainer()->analytics->ccs->get($this->getParam('ccId'));
-        } else {
-            $this->request->restrictAccess(Acl::RESOURCE_ANALYTICS_PROJECTS);
+            $project->ccId = $ccId;
 
-            $project = new ProjectEntity();
-
-            $cc = $this->getContainer()->analytics->ccs->get(
-                $this->getEnvironment()->getPlatformConfigValue(Scalr_Environment::SETTING_CC_ID)
-            );
-
-            $project->shared = $this->getParam('shared');
-
-            $project->envId = $this->getEnvironment()->id;
-
-            $project->accountId = $this->user->getAccountId();
         }
 
-        $this->request->validate();
-
-        if (!$cc) {
-            $this->request->addValidationErrors('ccId', 'Cost center ID should be set');
+        if ($shared == ProjectEntity::SHARED_WITHIN_ACCOUNT) {
+            $project->shared = ProjectEntity::SHARED_WITHIN_ACCOUNT;
+            $project->accountId = $accountId;
+        } elseif ($shared == ProjectEntity::SHARED_WITHIN_CC) {
+            $project->shared = ProjectEntity::SHARED_WITHIN_CC;
+            $project->accountId = null;
+        } else {
+            throw new Scalr_UI_Exception_NotFound();
         }
 
         if (!$this->request->isValid()) {
@@ -150,53 +166,32 @@ class Scalr_UI_Controller_Analytics_Projects extends Scalr_UI_Controller
             return;
         }
 
-        //Checks whether billing code specified in the request is already used in another Project
-        $criteria = [['name' => ProjectPropertyEntity::NAME_BILLING_CODE], ['value' => $this->getParam('billingCode')]];
-
-        if ($project->projectId !== null) {
-            $criteria[] = ['projectId' => ['$ne' => $project->projectId]];
-        } else {
-            //This is a new record.
-            //Email and identifier of the user who creates this record must be set.
-            $project->createdById = $this->user->id;
-
-            $project->createdByEmail = $this->user->getEmail();
+        if ($project->shared == ProjectEntity::SHARED_WITHIN_ACCOUNT) {
+            if (!AccountCostCenterEntity::findOne([['accountId' => $project->accountId], ['ccId' => $ccId]])) {
+                if ($checkAccountAccessToCc) {
+                    $this->response->data(['ccIsNotAllowedToAccount' => true]);
+                    $this->response->failure();
+                    return;
+                } elseif ($grantAccountAccessToCc) {
+                    //give account access to cc
+                    $accountCcEntity = new AccountCostCenterEntity($project->accountId, $ccId);
+                    $accountCcEntity->save();
+                }
+            }
         }
-
-        $project->name = $this->getParam('name');
-        $project->ccId = $cc->ccId;
-
-        $pp = new ProjectPropertyEntity();
-
-        $record = $this->db->GetRow("
-            SELECT " . $project->fields('p') . "
-            FROM " . $project->table('p') . "
-            JOIN " . $pp->table('pp') . " ON pp.project_id = p.project_id
-            WHERE " . $pp->_buildQuery($criteria, 'AND', 'pp')['where'] . "
-            LIMIT 1
-        ");
-
-        if ($record) {
-            $found = new ProjectEntity();
-            $found->load($record);
-        }
-
-        if (!empty($found)) {
-            throw new AnalyticsException(sprintf(
-                'Billing code "%s" is already used in the Project "%s"',
-                strip_tags($this->getParam('billingCode')),
-                $found->name
-            ));
-        }
+        
+        $project->name = $name;
 
         $this->db->BeginTrans();
 
         try {
             $project->save();
 
-            $project->saveProperty(ProjectPropertyEntity::NAME_BILLING_CODE, $this->getParam('billingCode'));
-            $project->saveProperty(ProjectPropertyEntity::NAME_DESCRIPTION, $this->getParam('description'));
-            $project->saveProperty(ProjectPropertyEntity::NAME_LEAD_EMAIL, $this->getParam('leadEmail'));
+            //NOTE please take into account the presence of the usage->createHostedScalrAccountCostCenter() method
+
+            $project->saveProperty(ProjectPropertyEntity::NAME_BILLING_CODE, $billingCode);
+            $project->saveProperty(ProjectPropertyEntity::NAME_DESCRIPTION, $description);
+            $project->saveProperty(ProjectPropertyEntity::NAME_LEAD_EMAIL, $leadEmail);
 
             $this->db->CommitTrans();
         } catch (Exception $e) {
@@ -207,14 +202,19 @@ class Scalr_UI_Controller_Analytics_Projects extends Scalr_UI_Controller
 
         $this->response->data(['project' => $this->getProjectData($project)]);
         $this->response->success('Project has been successfully saved');
+
     }
 
-    public function xRemoveAction()
+    /**
+     * xRemoveAction
+     *
+     * @param string $projectId Identifier of the project
+     * @throws Scalr_Exception_InsufficientPermissions
+     * @throws Scalr_UI_Exception_NotFound
+     */
+    public function xRemoveAction($projectId)
     {
-        if (!$this->user->isAdmin())
-            throw new Scalr_Exception_InsufficientPermissions();
-
-        $project = $this->getContainer()->analytics->projects->get($this->getParam('projectId'));
+        $project = $this->getContainer()->analytics->projects->get($projectId);
 
         if ($project) {
             try {
@@ -232,14 +232,127 @@ class Scalr_UI_Controller_Analytics_Projects extends Scalr_UI_Controller
         $this->response->success();
     }
 
-    private function getProjectsList($query = null)
+    /**
+     * @param string $projectId
+     */
+    public function notificationsAction($projectId)
+    {
+        $this->response->page('ui/analytics/admin/projects/notifications.js', array(
+            'notifications' => NotificationEntity::find([['subjectType' => NotificationEntity::SUBJECT_TYPE_PROJECT],['subjectId' => $projectId]]),
+            'reports'       => ReportEntity::find([['subjectType' => NotificationEntity::SUBJECT_TYPE_PROJECT],['subjectId' => $projectId]]),
+        ), array(), array('ui/analytics/admin/notifications/view.css'));
+    }
+
+    /**
+     * @param JsonData $notifications
+     */
+    public function xSaveNotificationsAction(JsonData $notifications)
+    {
+        $data = [];
+
+        foreach ($notifications as $id => $settings) {
+            if ($id == 'reports') {
+                $this->saveReports($settings);
+                $data[$id] = ReportEntity::all();
+            } elseif ($id == 'notifications') {
+                $this->saveNotifications(NotificationEntity::SUBJECT_TYPE_PROJECT, $settings);
+                $data[$id] = NotificationEntity::findBySubjectType(NotificationEntity::SUBJECT_TYPE_PROJECT);
+            }
+        }
+
+        $this->response->data($data);
+        $this->response->success('Notifications successfully saved');
+    }
+
+    private function saveNotifications($subjectType, $settings)
+    {
+        $uuids = array();
+
+        foreach ($settings['items'] as $item) {
+            $notification = new NotificationEntity();
+
+            if ($item['uuid']) {
+                $notification->findPk($item['uuid']);
+            }
+
+            $notification->subjectType = $subjectType;
+            $notification->subjectId = $item['subjectId'] ? $item['subjectId'] : null;
+            $notification->notificationType = $item['notificationType'];
+            $notification->threshold = $item['threshold'];
+            $notification->recipientType = $item['recipientType'];
+            $notification->emails = $item['emails'];
+            $notification->status = $item['status'];
+            $notification->save();
+            $uuids[] = $notification->uuid;
+        }
+
+        foreach (NotificationEntity::findBySubjectType($subjectType) as $notification) {
+            if (!in_array($notification->uuid, $uuids)) {
+                $notification->delete();
+            }
+        }
+    }
+
+    private function saveReports($settings)
+    {
+        $uuids = array();
+
+        foreach ($settings['items'] as $item) {
+            $report = new ReportEntity();
+
+            if ($item['uuid']) {
+                $report->findPk($item['uuid']);
+            }
+
+            $report->subjectType = $item['subjectType'];
+
+            $subject = null;
+
+            if ($report->subjectType == ReportEntity::SUBJECT_TYPE_CC) {
+                $subject = $this->getContainer()->analytics->ccs->get($item['subjectId']);
+            } elseif ($report->subjectType == ReportEntity::SUBJECT_TYPE_PROJECT) {
+                $subject = $this->getContainer()->analytics->projects->get($item['subjectId']);
+            } else {
+                $report->subjectType = null;
+                $report->subjectId = null;
+            }
+
+            if ($report->subjectType) {
+                if ($item['subjectId'] && !$subject) {
+                    throw new Scalr_UI_Exception_NotFound();
+                }
+                $report->subjectId = $item['subjectId'] ? $item['subjectId'] : null;
+            }
+
+            $report->period = $item['period'];
+            $report->emails = $item['emails'];
+            $report->status = $item['status'];
+            $report->save();
+            $uuids[] = $report->uuid;
+        }
+
+        foreach (ReportEntity::all() as $report) {
+            if (!in_array($report->uuid, $uuids)) {
+                $report->delete();
+            }
+        }
+    }
+
+    /**
+     * Gets an array of projects' data
+     *
+     * @param string $query Search query
+     * @param bool $showArchived
+     * @return array Returns project's list
+     */
+    private function getProjectsList($query = null, $showArchived = false)
     {
         $projects = [];
 
         $collection = $this->getContainer()->analytics->projects->findByKey($query);
 
         if ($collection->count()) {
-            $iterator = new ChartPeriodIterator('month', gmdate('Y-m-01'), null, 'UTC');
+            $iterator = ChartPeriodIterator::create('month', gmdate('Y-m-01'), null, 'UTC');
 
             //It calculates usage for all provided cost centres
             $usage = $this->getContainer()->analytics->usage->get(
@@ -266,29 +379,29 @@ class Scalr_UI_Controller_Analytics_Projects extends Scalr_UI_Controller
             foreach ($collection as $projectEntity) {
                 /* @var $projectEntity \Scalr\Stats\CostAnalytics\Entity\ProjectEntity */
                 $totalCost = round((isset($usage['data'][$projectEntity->projectId]) ?
-                             $usage['data'][$projectEntity->projectId]['cost'] : 0), 2);
+                    $usage['data'][$projectEntity->projectId]['cost'] : 0), 2);
 
                 //Archived projects are excluded only when there aren't any usage for this month and
                 //query filter key has not been provided.
-                if (($query === null || $query === '') && $projectEntity->archived && $totalCost < 0.01) {
+                if (($query === null || $query === '') && $projectEntity->archived && $totalCost < 0.01 && !$showArchived) {
                     continue;
                 }
 
                 $projects[$projectEntity->projectId] = $this->getProjectData($projectEntity);
 
                 $prevCost      = round((isset($prevusage['data'][$projectEntity->projectId]) ?
-                                 $prevusage['data'][$projectEntity->projectId]['cost'] : 0), 2);
+                    $prevusage['data'][$projectEntity->projectId]['cost'] : 0), 2);
 
                 $prevWholeCost = round((isset($prevWholePeriodUsage['data'][$projectEntity->projectId]) ?
-                                 $prevWholePeriodUsage['data'][$projectEntity->projectId]['cost'] : 0), 2);
+                    $prevWholePeriodUsage['data'][$projectEntity->projectId]['cost'] : 0), 2);
 
                 $projects[$projectEntity->projectId] = $this->getWrappedUsageData([
-                    'projectId'      => $projectEntity->projectId,
-                    'iterator'       => $iterator,
-                    'usage'          => $totalCost,
-                    'prevusage'      => $prevCost,
-                    'prevusagewhole' => $prevWholeCost,
-                ]) + $projects[$projectEntity->projectId];
+                        'projectId'      => $projectEntity->projectId,
+                        'iterator'       => $iterator,
+                        'usage'          => $totalCost,
+                        'prevusage'      => $prevCost,
+                        'prevusagewhole' => $prevWholeCost,
+                    ]) + $projects[$projectEntity->projectId];
 
             }
         }
@@ -316,11 +429,22 @@ class Scalr_UI_Controller_Analytics_Projects extends Scalr_UI_Controller
             'created'        => $projectEntity->created->format('Y-m-d'),
             'createdByEmail' => $projectEntity->createdByEmail,
             'archived'       => $projectEntity->archived,
+            'shared'         => $projectEntity->shared,
             'farmsCount'     => count($projectEntity->getFarmsList()),
         );
 
+        if (!empty($projectEntity->accountId) && $projectEntity->shared === ProjectEntity::SHARED_WITHIN_ACCOUNT) {
+            $ret['accountId'] = $projectEntity->accountId;
+            $ret['accountName'] = Scalr_Account::init()->loadById($projectEntity->accountId)->name;
+        } elseif (!empty($projectEntity->envId) && $projectEntity->shared === ProjectEntity::SHARED_WITHIN_ENV) {
+            $ret['accountId'] = $projectEntity->accountId;
+            $ret['accountName'] = Scalr_Account::init()->loadById($projectEntity->accountId)->name;
+            $ret['envId'] = $projectEntity->envId;
+            $ret['envName'] = Scalr_Environment::init()->loadById($projectEntity->envId)->name;
+        }
+
         if ($calculate) {
-            $iterator = new ChartPeriodIterator('month', gmdate('Y-m-01'), null, 'UTC');
+            $iterator = ChartPeriodIterator::create('month', gmdate('Y-m-01'), null, 'UTC');
 
             $usage = $this->getContainer()->analytics->usage->get(
                 ['projectId' => $ret['projectId']], $iterator->getStart(), $iterator->getEnd()
@@ -341,13 +465,13 @@ class Scalr_UI_Controller_Analytics_Projects extends Scalr_UI_Controller
             }
 
             $ret = $this->getWrappedUsageData([
-                'ccId'           => $ret['ccId'],
-                'projectId'      => $ret['projectId'],
-                'iterator'       => $iterator,
-                'usage'          => $usage['cost'],
-                'prevusage'      => $prevusage['cost'],
-                'prevusagewhole' => $prevWholePeriodUsage['cost'],
-            ]) + $ret;
+                    'ccId'           => $ret['ccId'],
+                    'projectId'      => $ret['projectId'],
+                    'iterator'       => $iterator,
+                    'usage'          => $usage['cost'],
+                    'prevusage'      => $prevusage['cost'],
+                    'prevusagewhole' => $prevWholePeriodUsage['cost'],
+                ]) + $ret;
         }
 
         return $ret;
@@ -363,9 +487,6 @@ class Scalr_UI_Controller_Analytics_Projects extends Scalr_UI_Controller
      */
     public function xGetPeriodDataAction($projectId, $mode, $startDate, $endDate)
     {
-        if (!$this->user->isAdmin())
-            throw new Scalr_Exception_InsufficientPermissions();
-
         $this->response->data($this->getContainer()->analytics->usage->getProjectPeriodData($projectId, $mode, $startDate, $endDate));
     }
 
@@ -381,9 +502,6 @@ class Scalr_UI_Controller_Analytics_Projects extends Scalr_UI_Controller
      */
     public function xGetMovingAverageToDateAction($projectId, $mode, $date, $startDate, $endDate, $ccId = null)
     {
-        if (!$this->user->isAdmin())
-            throw new Scalr_Exception_InsufficientPermissions();
-
         $this->response->data($this->getContainer()->analytics->usage->getProjectMovingAverageToDate(
             $projectId, $mode, $date, $startDate, $endDate, $ccId
         ));
@@ -402,11 +520,46 @@ class Scalr_UI_Controller_Analytics_Projects extends Scalr_UI_Controller
      */
     public function xGetProjectFarmsTopUsageOnDateAction($projectId, $platform, $mode, $date, $start, $end, $ccId = null)
     {
-        if (!$this->user->isAdmin())
-            throw new Scalr_Exception_InsufficientPermissions();
-
         $this->response->data($this->getContainer()->analytics->usage->getProjectFarmsTopUsageOnDate(
             $projectId, $platform, $mode, $date, $start, $end, $ccId
         ));
     }
+
+    /**
+     * Gets data for dropdown shared type fields on project edbit page
+     *
+     * @param array $values Array of optional params for widget
+     * @return array
+     */
+    private function getWidget(array $values)
+    {
+        $values['accounts'] = $this->getWidgetAccounts();
+
+        return $values;
+    }
+
+    /**
+     * Gets list of accounts for widget
+     *
+     * @return array
+     */
+    private function getWidgetAccounts()
+    {
+        $accounts = $this->db->GetAll('SELECT id, name FROM clients WHERE status = ? ORDER BY name', \Scalr_Account::STATUS_ACTIVE);
+
+        return $accounts;
+    }
+
+    /**
+     * xGetProjectWidgetAccountsAction
+     *
+     * @throws Scalr_Exception_InsufficientPermissions
+     */
+    public function xGetProjectWidgetAccountsAction()
+    {
+        $this->response->data(array(
+            'accounts' => $this->getWidgetAccounts()
+        ));
+    }
+
 }

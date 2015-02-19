@@ -40,7 +40,6 @@ class OpenstackPlatformModule extends AbstractOpenstackPlatformModule implements
     const EXT_CINDER_ENABLED = 'ext.cinder_enabled';
     const EXT_FLOATING_IPS_ENABLED = 'ext.floating_ips_enabled';
     const EXT_LBAAS_ENABLED = 'ext.lbaas_enabled';
-    const EXT_CONTRAIL_ENABLED = 'ext.contrail_enabled';
 
     public $instancesListCache = array();
     public $instancesDetailsCache = array();
@@ -655,6 +654,11 @@ class OpenstackPlatformModule extends AbstractOpenstackPlatformModule implements
             }
 
             $customUserData = $DBServer->GetFarmRoleObject()->GetSetting('base.custom_user_data');
+            
+            $serverNameFormat = $governance->getValue($DBServer->platform, \Scalr_Governance::OPENSTACK_INSTANCE_NAME_FORMAT);
+            if (!$serverNameFormat)
+                $serverNameFormat = $DBServer->GetFarmRoleObject()->GetSetting(\Scalr_Role_Behavior::ROLE_INSTANCE_NAME_FORMAT);
+            
         } else {
             $launchOptions->userData = array();
             $customUserData = false;
@@ -676,7 +680,7 @@ class OpenstackPlatformModule extends AbstractOpenstackPlatformModule implements
         if ($customUserData) {
             $repos = $DBServer->getScalarizrRepository();
 
-            $extProperties["user_data"] = str_replace(array(
+            $extProperties["user_data"] = base64_encode(str_replace(array(
                 '{SCALR_USER_DATA}',
                 '{RPM_REPO_URL}',
                 '{DEB_REPO_URL}'
@@ -684,7 +688,7 @@ class OpenstackPlatformModule extends AbstractOpenstackPlatformModule implements
                 $u_data,
                 $repos['rpm_repo_url'],
                 $repos['deb_repo_url']
-            ), $customUserData);
+            ), $customUserData));
         }
 
         $personality = new PersonalityList();
@@ -790,9 +794,12 @@ class OpenstackPlatformModule extends AbstractOpenstackPlatformModule implements
             $osUserData = $launchOptions->userData;
         }
 
+        
+        $serverName = ($serverNameFormat) ? $DBServer->applyGlobalVarsToValue($serverNameFormat) : $DBServer->serverId;
+        
         try {
             $result = $client->servers->createServer(
-                $DBServer->serverId,
+                $serverName,
                 $launchOptions->serverType,
                 $launchOptions->imageId,
                 null,
@@ -1062,4 +1069,17 @@ class OpenstackPlatformModule extends AbstractOpenstackPlatformModule implements
 
         return $ret;
     }
+
+    /**
+     * Gets endpoint url for private clouds
+     *
+     * @param \Scalr_Environment $env       The scalr environment object
+     * @param string             $group     optional The group name for eucaliptus
+     * @return string Returns endpoint url for private clouds.
+     */
+    public function getEndpointUrl(\Scalr_Environment $env, $group = null)
+    {
+        return $env->getPlatformConfigValue($this->platform . "." . self::KEYSTONE_URL);
+    }
+
 }

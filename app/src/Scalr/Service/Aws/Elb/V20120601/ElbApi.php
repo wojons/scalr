@@ -18,6 +18,10 @@ use Scalr\Service\Aws\Elb\DataType\ListenerDescriptionList;
 use Scalr\Service\Aws\Client\ClientException;
 use Scalr\Service\Aws\Elb\DataType\LoadBalancerDescriptionData;
 use Scalr\Service\Aws\Elb;
+use Scalr\Service\Aws\Elb\DataType\TagDescriptionData;
+use Scalr\Service\Aws\Elb\DataType\TagDescriptionList;
+use Scalr\Service\Aws\Elb\DataType\TagsData;
+use Scalr\Service\Aws\Elb\DataType\TagsList;
 use Scalr\Service\Aws\ElbException;
 use Scalr\Service\Aws\Elb\DataType\LoadBalancerDescriptionList;
 use Scalr\Service\Aws\Elb\V20120601\Loader\DescribeLoadBalancersLoader;
@@ -103,12 +107,13 @@ class ElbApi extends AbstractApi
      * @param  ListDataType $securityGroupsList    optional The security groups assigned to your
      *                                             LoadBalancer within your VPC.
      * @param  string       $scheme                optional The type of LoadBalancer
+     * @param  TagsList     $tagsList              optional A list of tags for each load balancer.
      * @return string       Returns DNSName for the created LoadBalancer.
      * @throws ElbException
      * @throws ClientException
      */
     public function createLoadBalancer($loadBalancerName, ListenerList $listenersList, ListDataType $availabilityZonesList = null,
-                                       ListDataType $subnetsList = null, ListDataType $securityGroupsList = null, $scheme = null)
+                                       ListDataType $subnetsList = null, ListDataType $securityGroupsList = null, $scheme = null, TagsList $tagsList = null)
     {
         $result = null;
         $options = array(
@@ -119,8 +124,10 @@ class ElbApi extends AbstractApi
             $listenersList->getQueryArray(),
             $availabilityZonesList !== null ? $availabilityZonesList->getQueryArray('AvailabilityZones') : array(),
             $securityGroupsList !== null ? $securityGroupsList->getQueryArray('SecurityGroups') : array(),
-            $subnetsList !== null ? $subnetsList->getQueryArray('Subnets') : array()
+            $subnetsList !== null ? $subnetsList->getQueryArray('Subnets') : array(),
+            $tagsList !== null ? $tagsList->getQueryArray() : []
         );
+
         if ($scheme !== null) {
             $options['Scheme'] = (string) $scheme;
         }
@@ -977,6 +984,123 @@ class ElbApi extends AbstractApi
                 }
             }
         }
+        return $result;
+    }
+
+    /**
+     * Describes the tags associated with one or more load balancers.
+     *
+     * @param ListDataType $loadBalancerNamesList A list of names associated with the LoadBalancers at creation time.
+     * @return TagDescriptionList
+     * @throws ElbException
+     */
+    public function describeTags(ListDataType $loadBalancerNamesList)
+    {
+        $result = null;
+
+        $options = $loadBalancerNamesList->getQueryArray('LoadBalancerNames');
+
+        $response = $this->client->call('DescribeTags', $options);
+
+        if ($response->getError() === false) {
+            $sxml = simplexml_load_string($response->getRawContent());
+
+            if (!isset($sxml->DescribeTagsResult)) {
+                throw new ElbException('Unexpected response ' . $response->getRawContent());
+            }
+
+            $result = new TagDescriptionList();
+
+            if (isset($sxml->DescribeTagsResult->TagDescriptions->member)) {
+                foreach ($sxml->DescribeTagsResult->TagDescriptions->member as $v) {
+                    $item = new TagDescriptionData();
+                    $item->loadBalancerName = (string) $v->LoadBalancerName;
+
+                    $tagsItems = new TagsList();
+
+                    if (isset($v->Tags->member)) {
+                        foreach ($v->Tags->member as $tag) {
+                            $tagsItem = new TagsData();
+                            $tagsItem->key = (string) $tag->Key;
+                            $tagsItem->value = (string) $tag->Value;
+                            $tagsItems->append($tagsItem);
+                            unset($tagsItem);
+                        }
+                    }
+
+                    $item->tags = $tagsItems;
+                    $result->append($item);
+                    unset($item);
+                }
+            }
+        }
+
+        return $result;
+    }
+
+    /**
+     * Adds one or more tags for the specified load balancer.
+     *
+     * @param ListDataType $loadBalancerNamesList A list of names associated with the LoadBalancers at creation time.
+     * @param TagsList $tagsList                  A list of tags for each load balancer.
+     * @return array                              Returns an array of added tags
+     * @throws ElbException
+     */
+    public function addTags(ListDataType $loadBalancerNamesList, TagsList $tagsList)
+    {
+        $result = [];
+
+        $options = $loadBalancerNamesList->getQueryArray('LoadBalancerNames');
+        $options = array_merge($options, $tagsList->getQueryArray());
+        $response = $this->client->call('AddTags', $options);
+
+        if ($response->getError() === false) {
+            $sxml = simplexml_load_string($response->getRawContent());
+
+            if (!isset($sxml->AddTagsResult)) {
+                throw new ElbException('Unexpected response ' . $response->getRawContent());
+            }
+
+            $result = array_values($tagsList->getQueryArray());
+        }
+
+        return $result;
+    }
+
+    /**
+     * Removes one or more tags from the specified load balancer.
+     *
+     * @param ListDataType $loadBalancerNamesList A list of names associated with the LoadBalancers at creation time.
+     * @param ListDataType $tagsKeys              A list of tag keys to remove.
+     * @return bool                               Returns true on success. False otherwise
+     * @throws ElbException
+     */
+    public function removeTags(ListDataType $loadBalancerNamesList, ListDataType $tagsKeys)
+    {
+        $result = false;
+
+        $options = $loadBalancerNamesList->getQueryArray('LoadBalancerNames');
+        $tagsArray = $tagsKeys->getQueryArray();
+
+        foreach ($tagsArray as $key => $option) {
+            $newKey = $key . '.Key';
+            $tagsOptions[$newKey] = $option;
+        }
+
+        $options = array_merge($options, $tagsOptions);
+
+        $response = $this->client->call('RemoveTags', $options);
+
+        if ($response->getError() === false) {
+            $sxml = simplexml_load_string($response->getRawContent());
+
+            if (!isset($sxml->RemoveTagsResult)) {
+                throw new ElbException('Unexpected response ' . $response->getRawContent());
+            }
+
+            $result = true;
+        }
+
         return $result;
     }
 

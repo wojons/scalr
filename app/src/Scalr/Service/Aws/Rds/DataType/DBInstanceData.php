@@ -1,6 +1,8 @@
 <?php
 namespace Scalr\Service\Aws\Rds\DataType;
 
+use Scalr\Service\Aws\DataType\ListDataType;
+use Scalr\Service\Aws\Rds;
 use Scalr\Service\Aws\RdsException;
 use Scalr\Service\Aws\Rds\AbstractRdsDataType;
 use \DateTime;
@@ -19,6 +21,9 @@ use \DateTime;
  *
  * @property \Scalr\Service\Aws\Rds\DataType\EndpointData $endpoint
  *           Specifies the connection endpoint
+ *
+ * @property \Scalr\Service\Aws\Rds\DataType\DBSubnetGroupData $dBSubnetGroup
+ *           Provides DB Subnet Group element
  *
  * @property \Scalr\Service\Aws\Rds\DataType\OptionGroupMembershipData $optionGroupMembership
  *           Specifies the name and status of the option group that this instance belongs to.
@@ -240,6 +245,13 @@ class DBInstanceData extends AbstractRdsDataType
     public $secondaryAvailabilityZone;
 
     /**
+     * Specifies the storage type to be associated with the DB instance.
+     *
+     * @var string
+     */
+    public $storageType;
+
+    /**
      * {@inheritdoc}
      * @see Scalr\Service\Aws\Rds.AbstractRdsDataType::throwExceptionIfNotInitialized()
      */
@@ -396,4 +408,46 @@ class DBInstanceData extends AbstractRdsDataType
         }
         return $this->getRds()->dbInstance->restoreFromSnapshot($request);
     }
+
+    /**
+     * Adds metadata tags to an Amazon RDS resource.
+     *
+     * @param array|TagsList $tagsList  List of tags to add
+     * @return array    Returns array of added tags
+     * @throws RdsException
+     */
+    public function addTags($tagsList)
+    {
+        $this->throwExceptionIfNotInitialized();
+
+        return $this->getRds()->tag->add($this->dBInstanceIdentifier, Rds::DB_INSTANCE_RESOURCE_TYPE, $tagsList);
+    }
+
+    /**
+     * Removes metadata tags from an Amazon RDS resource.
+     *
+     * @param  array|ListDataType  $tagsKeys      Array of tag keys to remove
+     * @return bool
+     * @throws RdsException
+     */
+    public function removeTags($tagsKeys)
+    {
+        $this->throwExceptionIfNotInitialized();
+
+        return $this->getRds()->tag->remove($this->dBInstanceIdentifier, Rds::DB_INSTANCE_RESOURCE_TYPE, $tagsKeys);
+    }
+
+    /**
+     * Lists all tags on an Amazon RDS resource.
+     *
+     * @return TagsList
+     * @throws RdsException
+     */
+    public function describeTags()
+    {
+        $this->throwExceptionIfNotInitialized();
+
+        return $this->getRds()->tag->describe($this->dBInstanceIdentifier, Rds::DB_INSTANCE_RESOURCE_TYPE);
+    }
+
 }

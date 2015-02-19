@@ -68,6 +68,13 @@ abstract class AbstractTask implements TaskInterface
     private $config;
 
     /**
+     * The time when memory usage prints to log
+     *
+     * @var int
+     */
+    private $lastMemoryUsageTime = 0;
+
+    /**
      * Constructor
      */
     public function __construct()
@@ -102,7 +109,16 @@ abstract class AbstractTask implements TaskInterface
      */
     public function onResponse(AbstractPayload $payload)
     {
-        //This method is expected to be overriden only if it's needed
+        //This method may be overriden if it's needed
+    }
+
+    /**
+     * {@inheritdoc}
+     * @see \Scalr\System\Zmq\Cron\TaskInterface::onCompleted()
+     */
+    public function onCompleted()
+    {
+        //This method may be overriden if it's needed
     }
 
     /**
@@ -145,6 +161,8 @@ abstract class AbstractTask implements TaskInterface
                 $this->onResponse($payload);
                 unset($payload);
             }
+
+            $this->onCompleted();
 
             return;
         } else {
@@ -409,13 +427,17 @@ abstract class AbstractTask implements TaskInterface
                 $this->terminateWorker($pid);
 
                 //We need to get up a replacement for that one
-                $this->addWorker($address);
+                $pid = $this->addWorker($address);
+                //It is important to save a PID of the process to be able terminate all workers along with client
+                $this->pids[$pid] = $pid;
             }
 
             //Resets event
             $this->toDisconnect = [];
             usleep(100000);
         }
+
+        $this->onCompleted();
     }
 
     /**
@@ -448,6 +470,9 @@ abstract class AbstractTask implements TaskInterface
             // Forces default memory_limit to set 70% of php.ini value for the demonized task
             if ($this->config->daemon && empty($this->config->memory_limit)) {
                 $this->config->memory_limit = round(ini_get('memory_limit') * 0.7);
+                if ($this->config->memory_limit <= 0) {
+                    $this->config->memory_limit = 400;
+                }
             }
         }
 
@@ -463,11 +488,21 @@ abstract class AbstractTask implements TaskInterface
         $config = $this->config();
 
         if (!empty($config->memory_limit)) {
-            $usage = memory_get_usage() / 1024 / 1024;
+            $usage = explode(PHP_EOL, shell_exec(sprintf('ps -o rss -p %s', getmypid())));
+            if (!empty($usage[1])) {
+                $usage = trim($usage[1]) / 1024;
+            } else {
+                $usage = memory_get_usage() / 1024 / 1024;
+            }
 
             if ($usage > $config->memory_limit) {
                 $this->log('WARN', "Memory limit of %d Mb has been reached. Current usage is %0.3f Mb.", $config->memory_limit, $usage);
                 return false;
+            } else {
+                if ((time() - $this->lastMemoryUsageTime) > 600) {
+                    $this->lastMemoryUsageTime = time();
+                    $this->log('SERVICE', 'Memory usage: %0.2f MB', $usage);
+                }
             }
         }
 

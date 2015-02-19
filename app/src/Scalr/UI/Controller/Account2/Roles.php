@@ -1,7 +1,5 @@
 <?php
 use Scalr\Acl\Acl;
-use Scalr\Acl\Role;
-use Scalr\Acl\Resource;
 
 class Scalr_UI_Controller_Account2_Roles extends Scalr_UI_Controller
 {

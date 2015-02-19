@@ -116,7 +116,7 @@ class Security(object):
         if not self.encrypt:
             return data
         try:
-            return cryptotool.decrypt(self.crypto_algo, data, self.crypto_key)
+            return cryptotool.decrypt_scalarizr(self.crypto_algo, data, self.crypto_key)
         except:
             raise InvalidRequestError('Failed to decrypt data. Error:%s' % helper.exc_info())
 
@@ -125,7 +125,7 @@ class Security(object):
         if not self.encrypt:
             return data
         try:
-            return cryptotool.encrypt(self.crypto_algo, data, self.crypto_key)
+            return cryptotool.encrypt_scalarizr(self.crypto_algo, data, self.crypto_key)
         except:
             raise InvalidRequestError('Failed to encrypt data. Error:%s' % helper.exc_info())
 

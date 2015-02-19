@@ -1,6 +1,7 @@
 <?php
 
 use Scalr\Modules\PlatformFactory;
+use Scalr\Exception\NotApplicableException;
 
 class Scalr_Role_DbMsrBehavior extends Scalr_Role_Behavior
 {
@@ -67,15 +68,23 @@ class Scalr_Role_DbMsrBehavior extends Scalr_Role_Behavior
         return null;
     }
 
+    /**
+     * Creates backup
+     *
+     * @param    DBFarmRole    $dbFarmRole  DBFarmRole to create backup
+     * @throws   NotApplicableException
+     */
     public function createBackup(DBFarmRole $dbFarmRole)
     {
-        if ($dbFarmRole->GetSetting(Scalr_Db_Msr::DATA_BACKUP_IS_RUNNING) == 1)
-            throw new Exception("Backup already in progress");
+        if ($dbFarmRole->GetSetting(Scalr_Db_Msr::DATA_BACKUP_IS_RUNNING) == 1) {
+            throw new NotApplicableException("Backup already in progress");
+        }
 
         $currentServer = $this->getServerForBackup($dbFarmRole);
 
-        if (!$currentServer)
-            throw new Exception("No suitable server for backup");
+        if (!$currentServer) {
+            throw new NotApplicableException("No suitable server for backup");
+        }
 
         // 0.23.0 Supporting new Operations feature
         $backup = new stdClass();
@@ -89,6 +98,13 @@ class Scalr_Role_DbMsrBehavior extends Scalr_Role_Behavior
         $dbFarmRole->SetSetting(Scalr_Db_Msr::getConstant("DATA_BACKUP_SERVER_ID"), $currentServer->serverId, DBFarmRole::TYPE_LCL);
     }
 
+    /**
+     * Creates data bundle
+     *
+     * @param  DBFarmRole  $dbFarmRole  DBFarmRole object to create data bundle
+     * @param  array       $params      optional Additional parameters
+     * @throws NotApplicableException
+     */
     public function createDataBundle(DBFarmRole $dbFarmRole, array $params = array())
     {
         if (empty($params['dataBundleType']))
@@ -97,16 +113,16 @@ class Scalr_Role_DbMsrBehavior extends Scalr_Role_Behavior
         if ($params['compressor'] === null)
             $params['compressor'] = 'gzip';
 
-        //$params['useSlave']
-
         if ($dbFarmRole->GetSetting(Scalr_Db_Msr::DATA_BUNDLE_IS_RUNNING) == 1)
-            throw new Exception("Data bundle already in progress");
+            throw new NotApplicableException("Data bundle already in progress");
 
         $currentServer = $this->getServerForDataBundle($dbFarmRole, $params['useSlave']);
+
         if (!$currentServer)
-            throw new Exception("No suitable server for data bundle");
+            throw new NotApplicableException("No suitable server for data bundle");
 
         $behavior = $dbFarmRole->GetRoleObject()->getDbMsrBehavior();
+
         if ($dbFarmRole->isOpenstack()) {
             $driver = 'swift';
         } else {
@@ -123,7 +139,9 @@ class Scalr_Role_DbMsrBehavior extends Scalr_Role_Behavior
 
         $storageType = $dbFarmRole->GetSetting(Scalr_Db_Msr::DATA_STORAGE_ENGINE);
         $storageGeneration = $storageType == 'lvm' ? 2 : 1;
+
         $backup = new stdClass();
+
         if ($storageGeneration == 2) {
             $backup->type = 'xtrabackup';
             $backup->compressor = $params['compressor'];
@@ -148,10 +166,11 @@ class Scalr_Role_DbMsrBehavior extends Scalr_Role_Behavior
 
         
             $message = new Scalr_Messaging_Msg_DbMsr_CreateDataBundle();
-            if ($storageGeneration == 2) {
 
-                if (!isset($message->{$behavior}))
+            if ($storageGeneration == 2) {
+                if (!isset($message->{$behavior})) {
                     $message->{$behavior} = new stdClass();
+                }
 
                 $message->{$behavior}->backup = $backup;
             }
@@ -164,14 +183,20 @@ class Scalr_Role_DbMsrBehavior extends Scalr_Role_Behavior
         $dbFarmRole->SetSetting(Scalr_Db_Msr::getConstant("DATA_BUNDLE_SERVER_ID"), $currentServer->serverId, DBFarmRole::TYPE_LCL);
     }
 
+    /**
+     * Retrieves server to create data bundle
+     *
+     * @param   DBFarmRole $dbFarmRole  FarmRole object
+     * @param   string     $useSlave    optional Should it use slave
+     * @return  DBServer   Returns dbserver
+     */
     public function getServerForDataBundle(DBFarmRole $dbFarmRole, $useSlave = false)
     {
         // perform data bundle on master
-           $servers = $dbFarmRole->GetServersByFilter(array('status' => array(SERVER_STATUS::RUNNING)));
+        $servers = $dbFarmRole->GetServersByFilter(array('status' => array(SERVER_STATUS::RUNNING)));
         $currentServer = null;
         $currentMetric = 0;
         foreach ($servers as $dbServer) {
-
             $isMaster = $dbServer->GetProperty(Scalr_Db_Msr::REPLICATION_MASTER);
 
             if ($isMaster) {
@@ -188,24 +213,32 @@ class Scalr_Role_DbMsrBehavior extends Scalr_Role_Behavior
             }
         }
 
-        if ($useSlave && !$currentServer)
+        if ($useSlave && !$currentServer) {
             $currentServer = $masterServer;
+        }
 
         return $currentServer;
     }
 
+    /**
+     * Retrieves server for backup
+     *
+     * @param   DBFarmRole   $dbFarmRole  DBFarmRole object to search
+     * @return  DBServer|null Returns server or null
+     */
     public function getServerForBackup(DBFarmRole $dbFarmRole)
     {
         $serverTypeForBackup = $dbFarmRole->GetSetting(self::ROLE_DATA_BACKUP_SERVER_TYPE);
-        if (!$serverTypeForBackup)
+
+        if (!$serverTypeForBackup) {
             $serverTypeForBackup = 'master-if-no-slaves';
+        }
 
         $servers = $dbFarmRole->GetServersByFilter(array('status' => array(SERVER_STATUS::RUNNING)));
         $masterServer = null;
         $slaveServer = null;
         $currentMetric = 0;
         foreach ($servers as $dbServer) {
-
             $isMaster = $dbServer->GetProperty(Scalr_Db_Msr::REPLICATION_MASTER);
 
             if ($isMaster)
@@ -236,12 +269,11 @@ class Scalr_Role_DbMsrBehavior extends Scalr_Role_Behavior
             $dbFarmRole = $dbServer->GetFarmRoleObject();
             $storageType = $dbFarmRole->GetSetting(Scalr_Db_Msr::DATA_STORAGE_ENGINE);
             $storageGeneration = $storageType == 'lvm' ? 2 : 1;
-        } catch (Exception $e) {}
+        } catch (Exception $e) {
+        }
 
-        switch (get_class($message))
-        {
+        switch (get_class($message)) {
             case "Scalr_Messaging_Msg_HostInitResponse":
-
                 $dbMsrInfo = Scalr_Db_Msr_Info::init($dbFarmRole, $dbServer, $this->behavior);
                 $message->addDbMsrInfo($dbMsrInfo);
 
@@ -267,7 +299,6 @@ class Scalr_Role_DbMsrBehavior extends Scalr_Role_Behavior
                 }
 
                 if ($storageGeneration == 2) {
-
                     $message->volumeConfig = null;
                     $message->snapshotConfig = null;
 
@@ -365,7 +396,6 @@ class Scalr_Role_DbMsrBehavior extends Scalr_Role_Behavior
                 if ($noDataBundle)
                     $message->{$this->behavior}->noDataBundle = 1;
 
-
                 // IDCF using Cloudstack 2.X with very unstable volumes implementation.
                 // To avoid 500 errors during volumes re-attach we need to promote slaves to master with their own data.
                 if ($dbServer->platform == SERVER_PLATFORMS::IDCF) {
@@ -374,7 +404,6 @@ class Scalr_Role_DbMsrBehavior extends Scalr_Role_Behavior
                 }
 
                 if ($storageGeneration == 2) {
-
                     $message->volumeConfig = null;
                     $message->snapshotConfig = null;
 
@@ -413,7 +442,6 @@ class Scalr_Role_DbMsrBehavior extends Scalr_Role_Behavior
                 break;
 
             case "Scalr_Messaging_Msg_DbMsr_NewMasterUp":
-
                 $dbMsrInfo = Scalr_Db_Msr_Info::init($dbFarmRole, $dbServer, $this->behavior);
                 $message->addDbMsrInfo($dbMsrInfo);
 

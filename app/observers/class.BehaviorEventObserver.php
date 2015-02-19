@@ -1,5 +1,8 @@
 <?php
 
+use Scalr\Farm\Role\FarmRoleStorage;
+use Scalr\Farm\Role\FarmRoleStorageDevice;
+
 class BehaviorEventObserver extends EventObserver
 {
     public function OnBeforeInstanceLaunch(BeforeInstanceLaunchEvent $event)
@@ -62,6 +65,27 @@ class BehaviorEventObserver extends EventObserver
 
             foreach (Scalr_Role_Behavior::getListForFarmRole($dbFarmRole) as $bObj) {
                 $bObj->onHostDown($dbServer);
+            }
+            
+            //Storage
+            if (!$event->isSuspended) {
+                try {
+                    $storage = new FarmRoleStorage($dbFarmRole);
+                    $storageConfigs = $storage->getConfigs();
+                    if (empty($storageConfigs))
+                        return true;
+                    
+                    foreach ($storageConfigs as $config) {
+                        //Check for existing volume
+                        $dbVolume = FarmRoleStorageDevice::getByConfigIdAndIndex($config->id, $dbServer->index);
+                        if ($dbVolume && !$config->reUse) {
+                            $dbVolume->status = FarmRoleStorageDevice::STATUS_ZOMBY;
+                            $dbVolume->save();
+                        }
+                    }
+                } catch (Exception $e) {
+                    $this->logger->error(new FarmLogMessage($dbServer->farmId, "Marking storage for disposal failed: {$e->getMessage()}"));
+                }
             }
         }
     }

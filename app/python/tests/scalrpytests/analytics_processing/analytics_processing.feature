@@ -126,7 +126,7 @@ Feature: Analytics processing
             | '00000000000000000000000000000002' | 'm1.small'     | 0  | 3    |
             | '00000000000000000000000000000002' | 'm1.medium'    | 1  | 5    |
 
-        White Rabbit starts script with options '-c ../../../tests/etc/config.yml -v DEBUG --recalculate --platform ec2 --date-from 2014-12-08'
+        White Rabbit starts script with options '-c ../../../tests/etc/config.yml -v DEBUG --recalculate --platform ec2 --date-from 2015-01-15'
         White Rabbit waits 10 seconds
         White Rabbit stops script with options '-c ../../../tests/etc/config.yml -v DEBUG'
 

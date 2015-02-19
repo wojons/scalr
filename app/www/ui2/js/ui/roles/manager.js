@@ -56,7 +56,7 @@ Scalr.regPage('Scalr.ui.roles.manager', function (loadParams, moduleParams) {
 		fields: [
 			{name: 'id', type: 'int'},
 			{name: 'client_id', type: 'int'},
-			'name', 'origin', 'behaviors', 'os', 'osFamily', 'platforms','used_servers','status',
+			'name', 'origin', 'behaviors', 'os', 'osFamily', 'dtAdded', 'dtLastUsed', 'platforms','used_servers','status',
             'images', 'description', 'usedBy'
 		],
 		proxy: {
@@ -527,6 +527,9 @@ Scalr.regPage('Scalr.ui.roles.manager', function (loadParams, moduleParams) {
             this.down('[name="os"]').setValue('<img src="'+Ext.BLANK_IMAGE_URL+'" title="" class="x-icon-osfamily-small x-icon-osfamily-small-'+record.get('osFamily')+'" />&nbsp;' + record.get('os'));
             this.down('[name="behaviors"]').setValue(behaviors.length > 0 ? behaviors.join(',&nbsp;&nbsp; ') : '-');
             this.down('[name="usedBy"]').setValue(usedBy.length > 0 ? usedBy.join(', ') : '-').setFieldLabel(record.get('usedBy') ? ('Used by ' + record.get('usedBy')['cnt'] + ' farms') : 'Used by');
+            this.down('[name="dtAdded"]').setValue(record.get('dtAdded') || 'Unknown');
+            this.down('[name="dtLastUsed"]')[record.get('origin') == 'SHARED' && Scalr.user.type != 'ScalrAdmin' ? 'hide' : 'show']()
+                .setValue(record.get('dtLastUsed') || 'Unknown');
             this.down('#images').store.load({data: images});
             this.down('#addToFarm').setDisabled(record.get('images').length == 0);
             this.down('#edit').setDisabled(record.get('origin') !== 'CUSTOM' && !isScalrAdmin).setHref('#/roles/' + record.get('id') + '/edit');
@@ -599,15 +602,23 @@ Scalr.regPage('Scalr.ui.roles.manager', function (loadParams, moduleParams) {
                     xtype: 'displayfield',
                     name: 'behaviors',
                     fieldLabel: 'Built-in automation'
-                },{
+                }, {
                     xtype: 'displayfield',
                     fieldLabel: 'Used by',
-                    name: 'usedBy',
-                    margin: '0 0 11 0'
-                },{
+                    name: 'usedBy'
+                }, {
+                    xtype: 'displayfield',
+                    fieldLabel: 'Created on',
+                    name: 'dtAdded'
+                }, {
+                    xtype: 'displayfield',
+                    fieldLabel: 'Last used on',
+                    name: 'dtLastUsed'
+                }, {
+                    margin: '5 0 0 0',
                     xtype: 'label',
                     text: 'Images:'
-                },{
+                }, {
                     xtype: 'grid',
                     itemId: 'images',
                     cls: 'x-grid-shadow x-grid-no-highlighting',

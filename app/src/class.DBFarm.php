@@ -3,6 +3,7 @@
 use Scalr\Modules\Platforms\Cloudstack\Helpers\CloudstackHelper;
 use Scalr\Stats\CostAnalytics\Entity\ProjectEntity;
 use Scalr\Exception\AnalyticsException;
+use Scalr\Util\CryptoTool;
 
 class DBFarm
 {
@@ -150,7 +151,7 @@ class DBFarm
                 $template = $definition->name . ' (clone #%s)';
                 $i = 1;
             } else {
-                preg_match("/^(.*?)\(clone \#([0-9]*)\)$/si", $definition->name, $matches);
+                preg_match('/^(.*?)\(clone \#([0-9]*)\)$/si', $definition->name, $matches);
                 $template = trim($matches[1])." (clone #%s)";
                 $i = $matches[2]+1;
             }
@@ -488,12 +489,11 @@ class DBFarm
      * It does not perform any actions if cost analytics is disabled
      *
      * @param   ProjectEntity|string  $project         The project entity or its identifier
-     * @param   bool                  $ignoreAutomatic optional Should it ignore auto assignment of the default project
      * @return  string                Returns identifier of the associated project
      * @throws  InvalidArgumentException
      * @throws  AnalyticsException
      */
-    public function setProject($project, $ignoreAutomatic = false)
+    public function setProject($project)
     {
         if (Scalr::getContainer()->analytics->enabled) {
             if ($project instanceof ProjectEntity) {
@@ -505,10 +505,17 @@ class DBFarm
 
             $analytics = Scalr::getContainer()->analytics;
 
-            if (!$ignoreAutomatic && Scalr::isHostedScalr() && !Scalr::isAllowedAnalyticsOnHostedScalrAccount($this->ClientID)) {
-                //Overrides project with automatic one
-                $projectId = $analytics->usage->autoProject($this->EnvID, $this->ID);
-            } else if (!empty($projectId)) {
+            if ($projectId === null) {
+                $ccId = $this->GetEnvironmentObject()->getPlatformConfigValue(Scalr_Environment::SETTING_CC_ID);
+                if (!empty($ccId)) {
+                    //Assigns Project automatically only if it is the one withing the Cost Center
+                    $projects = ProjectEntity::findByCcId($ccId);
+                    if (count($projects) == 1) {
+                        $project = $projects[0];
+                        $projectId = $project->projectId;
+                    }
+                }
+            } elseif (!empty($projectId)) {
                 //Validates specified project's identifier
                 if (!preg_match('/^[[:xdigit:]-]{36}$/', $projectId)) {
                     throw new InvalidArgumentException(sprintf(
@@ -658,6 +665,25 @@ class DBFarm
     }
 
     /**
+     * Load DBInstance
+     *
+     * @param array $record Array of farm fields
+     * @return \DBFarm
+     */
+    public static function loadFields($record)
+    {
+        $DBFarm = new DBFarm($record['id']);
+
+        foreach (self::$FieldPropertyMap as $k => $v) {
+            if (isset($record[$k])) {
+                $DBFarm->{$v} = $record[$k];
+            }
+        }
+
+        return $DBFarm;
+    }
+
+    /**
      * Load DBInstance by database id
      * @param $id
      * @return DBFarm
@@ -697,7 +723,7 @@ class DBFarm
         $container = \Scalr::getContainer();
         if (!$this->ID) {
             $this->ID = 0;
-            $this->Hash = substr(Scalr_Util_CryptoTool::hash(uniqid(rand(), true)),0, 14);
+            $this->Hash = substr(CryptoTool::hash(uniqid(rand(), true)),0, 14);
 
             if (!$this->ClientID && $container->initialized('environment')) {
                 $this->ClientID = $container->environment->clientId;

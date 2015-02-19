@@ -1,5 +1,7 @@
 <?php
 
+use Scalr\Util\CryptoTool;
+
 abstract class Scalr_Model
 {
     public $id;
@@ -34,7 +36,10 @@ abstract class Scalr_Model
     protected $dbPropertyMap = array();
     protected $dbMessageKeyNotFound = "Key#%s not found in database";
 
-    protected $crypto, $cryptoKey;
+    /**
+     * @var CryptoTool
+     */
+    protected $crypto;
 
     /**
      * DI Container
@@ -62,13 +67,12 @@ abstract class Scalr_Model
     }
 
     /**
-     * @return Scalr_Util_CryptoTool
+     * @return CryptoTool
      */
     protected function getCrypto()
     {
         if (! $this->crypto) {
-            $this->crypto = new Scalr_Util_CryptoTool(MCRYPT_TRIPLEDES, MCRYPT_MODE_CFB, 24, 8);
-            $this->cryptoKey = @file_get_contents(dirname(__FILE__)."/../../etc/.cryptokey");
+            $this->crypto = \Scalr::getContainer()->crypto;
         }
 
         return $this->crypto;
@@ -144,7 +148,7 @@ abstract class Scalr_Model
                             break;
                         case 'encrypted':
                             if ($val)
-                                $val = $this->getCrypto()->decrypt($val, $this->cryptoKey);
+                                $val = $this->getCrypto()->decrypt($val);
                             break;
                     }
                 }
@@ -254,7 +258,7 @@ abstract class Scalr_Model
                         break;
                     case 'encrypted':
                         if ($val)
-                            $val = $this->getCrypto()->encrypt($val, $this->cryptoKey);
+                            $val = $this->getCrypto()->encrypt($val);
                         break;
                 }
             }

@@ -85,7 +85,8 @@ class Scalr_UI_Controller_Platforms_Openstack extends Scalr_UI_Controller
             $data['ipPools'] = array(array('id' =>'', 'name' => ''));
             $data['networks'] = array();
             $networks = $client->network->listNetworks();
-
+            $data['networks_debug'] = $networks->toArray();
+            
             $tenantId = $client->getConfig()->getAuthToken()->getTenantId();
 
             foreach ($networks as $network) {
@@ -105,6 +106,18 @@ class Scalr_UI_Controller_Platforms_Openstack extends Scalr_UI_Controller
                     }
                 }
             }
+            
+            if ($this->getParam('platform') == SERVER_PLATFORMS::RACKSPACENG_US) {
+                $data['networks'][] = array(
+                    'id' => '00000000-0000-0000-0000-000000000000',
+                    'name' => 'PublicNet'
+                );
+                $data['networks'][] = array(
+                    'id' => '11111111-1111-1111-1111-111111111111',
+                    'name' => 'ServiceNet'
+                );
+            }
+            
         } else {
             //Check floating IPs
             if ($client->servers->isExtensionSupported(ServersExtension::EXT_FLOATING_IP_POOLS)) {
@@ -115,13 +128,28 @@ class Scalr_UI_Controller_Platforms_Openstack extends Scalr_UI_Controller
                         $client
                 );
 
+                $ipPoolNetworkNames = array();
                 $data['ipPools'] = array(array('id' =>'', 'name' => ''));
+                $data['networks'] = array();
                 $pools = $client->servers->listFloatingIpPools();
                 foreach ($pools as $pool) {
                     $data['ipPools'][] = array(
                         'id' => $pool->name,
                         'name' => $pool->name
                     );
+                    array_push($ipPoolNetworkNames, $pool->name);
+                }
+            }
+            
+            if ($client->servers->isExtensionSupported(ServersExtension::EXT_NETWORKS)) {
+                $novaNetworks = $client->servers->listNetworks();
+                foreach ($novaNetworks as $network) {
+                    //if (!in_array($n->label, $ipPoolNetworkNames)) {
+                        $data['networks'][] = array(
+                            'id' => $network->id,
+                            'name' => $network->label
+                        );
+                    //}
                 }
             }
         }
@@ -219,6 +247,18 @@ class Scalr_UI_Controller_Platforms_Openstack extends Scalr_UI_Controller
                                 'name' => $network->name
                             );
                         }
+                    }
+                }
+            } else {
+                if ($client->servers->isExtensionSupported(ServersExtension::EXT_NETWORKS)) {
+                    $novaNetworks = $client->servers->listNetworks();
+                    foreach ($novaNetworks as $network) {
+                        //if (!in_array($n->label, $ipPoolNetworkNames)) {
+                        $data[$cloudLocation][] = array(
+                            'id' => $network->id,
+                            'name' => $network->label
+                        );
+                        //}
                     }
                 }
             }

@@ -8,6 +8,7 @@ use Scalr\Model\Entity;
 use Scalr\UI\Request\JsonData;
 use Scalr\Modules\Platforms\Openstack\Helpers\OpenstackHelper;
 use Scalr\Exception\Http\NotFoundException;
+use Scalr\Util\CryptoTool;
 
 class Scalr_UI_Controller_Servers extends Scalr_UI_Controller
 {
@@ -148,7 +149,7 @@ class Scalr_UI_Controller_Servers extends Scalr_UI_Controller
 
         if ($encPassword) {
             $privateKey = Scalr_SshKey::init()->loadGlobalByFarmId($dbServer->envId, $dbServer->farmId, $dbServer->GetCloudLocation(), $dbServer->platform);
-            $password = Scalr_Util_CryptoTool::opensslDecrypt(base64_decode($encPassword), $privateKey->getPrivate());
+            $password = CryptoTool::opensslDecrypt(base64_decode($encPassword), $privateKey->getPrivate());
         }
 
         $this->response->data(array('password' => $password, 'encodedPassword' => $encPassword));
@@ -745,9 +746,11 @@ class Scalr_UI_Controller_Servers extends Scalr_UI_Controller
                 if ($missing)
                     $row['status'] = "Missing";
 
+                /*
                 $subStatus = $dbServer->GetProperty(SERVER_PROPERTIES::SUB_STATUS);
                 if ($subStatus)
                     $row['status'] = ucfirst($subStatus);
+                */
             }
 
             $row['is_locked'] = $dbServer->GetProperty(EC2_SERVER_PROPERTIES::IS_LOCKED) ? 1 : 0;
@@ -846,16 +849,23 @@ class Scalr_UI_Controller_Servers extends Scalr_UI_Controller
                 $rebooting = $this->db->GetOne("SELECT value FROM server_properties WHERE server_id=? AND `name`=? LIMIT 1", array(
                     $server['server_id'], SERVER_PROPERTIES::REBOOTING
                 ));
-                if ($rebooting) {
-                    $server['status'] = "Rebooting";
-                }
 
-                $subStatus =  $this->db->GetOne("SELECT value FROM server_properties WHERE server_id=? AND `name`=? LIMIT 1", array(
-                    $server['server_id'], SERVER_PROPERTIES::SUB_STATUS
+                $resuming = $this->db->GetOne("SELECT value FROM server_properties WHERE server_id=? AND `name`=? LIMIT 1", array(
+                    $server['server_id'], SERVER_PROPERTIES::RESUMING
                 ));
-                if ($subStatus) {
-                    $server['status'] = ucfirst($subStatus);
-                }
+
+                $missing = $this->db->GetOne("SELECT value FROM server_properties WHERE server_id=? AND `name`=? LIMIT 1", array(
+                    $server['server_id'], SERVER_PROPERTIES::MISSING
+                ));
+
+                if ($rebooting)
+                    $server['status'] = "Rebooting";
+
+                if ($resuming)
+                    $server['status'] = "Resuming";
+
+                if ($missing)
+                    $server['status'] = "Missing";
 
                 $szrInitFailed = $this->db->GetOne("SELECT value FROM server_properties WHERE server_id=? AND `name`=? LIMIT 1", array(
                     $server['server_id'], SERVER_PROPERTIES::SZR_IS_INIT_FAILED
@@ -928,7 +938,7 @@ class Scalr_UI_Controller_Servers extends Scalr_UI_Controller
      */
     public function getServerStatus(DBServer $dbServer, $cached = true, $timeout = 0)
     {
-        if ($dbServer->status == SERVER_STATUS::RUNNING && $dbServer->GetProperty(SERVER_PROPERTIES::SUB_STATUS) != 'stopped' &&
+        if ($dbServer->status == SERVER_STATUS::RUNNING &&
             (($dbServer->IsSupported('0.8') && $dbServer->osType == 'linux') || ($dbServer->IsSupported('0.19') && $dbServer->osType == 'windows'))) {
             if ($cached && !$dbServer->IsSupported('2.7.7')) {
                 return [
@@ -1123,10 +1133,12 @@ class Scalr_UI_Controller_Servers extends Scalr_UI_Controller
                 $data['general']['status'] = "Rebooting";
             }
 
+            /*
             $subStatus = $dbServer->GetProperty(SERVER_PROPERTIES::SUB_STATUS);
             if ($subStatus) {
                 $data['general']['status'] = ucfirst($subStatus);
             }
+            */
         }
 
         $status = $this->getServerStatus($dbServer, true);
@@ -1137,26 +1149,6 @@ class Scalr_UI_Controller_Servers extends Scalr_UI_Controller
         $internalProperties = $dbServer->GetAllProperties();
         if (!empty($internalProperties)) {
             $data['internalProperties'] = $internalProperties;
-        }
-
-        if (!$dbServer->IsSupported('0.5'))
-        {
-            $baseurl = $this->getContainer()->config('scalr.endpoint.scheme') . "://" .
-                       $this->getContainer()->config('scalr.endpoint.host');
-
-            $authKey = $dbServer->GetKey();
-            if (!$authKey) {
-                $authKey = Scalr::GenerateRandomKey(40);
-                $dbServer->SetProperty(SERVER_PROPERTIES::SZR_KEY, $authKey);
-            }
-
-            $dbServer->SetProperty(SERVER_PROPERTIES::SZR_KEY_TYPE, SZR_KEY_TYPE::PERMANENT);
-            $data['updateAmiToScalarizr'] = sprintf("wget " . $baseurl . "/storage/scripts/amiscripts-to-scalarizr.py && python amiscripts-to-scalarizr.py -s %s -k %s -o queryenv-url=%s -o messaging_p2p.producer_url=%s",
-                $dbServer->serverId,
-                $authKey,
-                $baseurl . "/query-env",
-                $baseurl . "/messaging"
-            );
         }
 
         $this->response->page('ui/servers/dashboard.js', $data, array('ui/servers/actionsmenu.js', 'ui/monitoring/window.js'));

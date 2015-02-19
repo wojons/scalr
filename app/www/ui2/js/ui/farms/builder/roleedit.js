@@ -295,19 +295,16 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.main', function (tabParams) {
             } else if (fullname === 'settings.scaling.max_instances') {
                 comp = this.down('[name="max_instances"]');
             } else if (fullname === 'settings.scaling.enabled') {
-                this.down('#mainscaling').setScalingDisabled(value != 1);
-            } else if (fullname === 'scaling') {
-                this.down('#mainscalinggrid').loadMetrics(value);
-            /*} else if (fullname === 'settings.db.msr.data_storage.engine') {
-                if (record.get('platform') === 'gce') {
-                    this.gce.refreshMachineType.call(this, record, null, value);
-                }*/
+                this.down('#costmetering').onScalingDisabled(value != 1);
             }
             
             if (comp) {
                 comp.suspendEvents(false);
                 comp.setValue(value);
                 comp.resumeEvents();
+                if (Scalr.flags['analyticsEnabled']) {
+                    this.down('#costmetering').updateRates();
+                }
             }
         },
 
@@ -336,6 +333,13 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.main', function (tabParams) {
                     'base.consider_suspended': settings['base.consider_suspended'] || 'running'
                 }
             });
+            if (Scalr.flags['analyticsEnabled']) {
+                if (Ext.isNumeric(record.get('hourly_rate')) || Ext.Array.contains(me.up('farmroleedit')['moduleParams']['analytics']['unsupportedClouds'], record.get('platform'))) {
+                    me.down('#costmetering').updateRates();
+                } else {
+                    record.loadHourlyRate(null, function() {me.down('#costmetering').updateRates();});
+                }
+            }
             me.down('#roleName').update('<img src="' + Ext.BLANK_IMAGE_URL + '" class="x-icon-platform-small x-icon-platform-small-' + record.get('platform') + '"/>&nbsp;&nbsp;<label class="x-label-grey" title="' + record.get('name') + '">' + record.get('name') + '</label>');
             me.down('#replaceRole').setVisible(!record.get('new') && record.get('os_family'))
             me.down('#osName').update('<img src="' + Ext.BLANK_IMAGE_URL + '" class="x-icon-osfamily-small x-icon-osfamily-small-' + record.get('os_family') + '"/>&nbsp;&nbsp;<label class="x-label-grey" title="' + osName + '">' + osName + '</label>');
@@ -348,22 +352,21 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.main', function (tabParams) {
             me.resumeLayouts(true);
             
             var scalingTab = me.up('farmroleedit').down('#scaling'),
-                topScalingTab = me.down('#mainscaling'),
+                topCostTab = me.down('#costmetering'),
                 isVpcRouter = Ext.Array.contains(roleBehaviors, 'router');
-            topScalingTab.down('#mainscalinggrid').loadMetrics(record.get('scaling'));
             if (scalingTab.isActive(record) && settings['scaling.enabled'] == 1 || isVpcRouter) {
-                topScalingTab.setScalingDisabled(false);
+                topCostTab.onScalingDisabled(false);
                 if (isVpcRouter) {
-                    topScalingTab.down('[name="max_instances"]').setReadOnly(true);
-                    topScalingTab.down('[name="min_instances"]').setReadOnly(true);
+                    topCostTab.down('[name="max_instances"]').setReadOnly(true);
+                    topCostTab.down('[name="min_instances"]').setReadOnly(true);
                 } else {
                     var readonly = scalingTab.isTabReadonly(record),
                         isCfRole = (Ext.Array.contains(roleBehaviors, 'cf_cloud_controller') || Ext.Array.contains(roleBehaviors, 'cf_health_manager'));
-                    topScalingTab.down('[name="max_instances"]').setReadOnly(readonly);
-                    topScalingTab.down('[name="min_instances"]').setReadOnly(readonly && (isCfRole || !record.get('new')));
+                    topCostTab.down('[name="max_instances"]').setReadOnly(readonly);
+                    topCostTab.down('[name="min_instances"]').setReadOnly(readonly && (isCfRole || !record.get('new')));
                 }
             } else {
-                topScalingTab.setScalingDisabled(true);
+                topCostTab.onScalingDisabled(true);
             }
 
             me.callPlatformHandler('showTab', arguments);
@@ -783,8 +786,10 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.main', function (tabParams) {
                 listeners: {
                     beforeselect: function(comp, record) {
                         //todo: quick solution - do better
+                    	
                         var currentRole, storages, storageTab, allowChange = true, dbmsrTab;
                         currentRole = comp.up('#maintab').currentRole;
+                        
                         if (!record.get('ebsencryption') && currentRole.get('platform') === 'ec2') {
                             var tabsPanel = this.up('farmroleedit').down('#tabspanel');
 
@@ -812,6 +817,13 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.main', function (tabParams) {
                                     });
                                     if (!allowChange) Scalr.message.InfoTip('Please remove EBS encrypted storages before changing instance type to '+record.get('name'), comp.inputEl, {anchor: 'bottom'});
                                 }
+                            }
+                        }
+                        if (allowChange && Scalr.flags['analyticsEnabled']) {
+                            if (!Ext.Array.contains(this.up('farmroleedit')['moduleParams']['analytics']['unsupportedClouds'], currentRole.get('platform'))) {
+                                currentRole.loadHourlyRate(record.get('id'), function(){comp.up('#maintab').down('#costmetering').updateRates()});
+                            } else {
+                                comp.up('#maintab').down('#costmetering').updateRates();
                             }
                         }
                         return allowChange;
@@ -1102,149 +1114,12 @@ Scalr.regPage('Scalr.ui.farms.builder.tabs.main', function (tabParams) {
                 }]
            }]
         },{
-            xtype: 'container',
-            itemId: 'mainscaling',
+            xtype: 'farmrolecostmetering',
+            itemId: 'costmetering',
             layout: 'anchor',
-            cls: 'x-container-fieldset',
+            style: 'padding-right:0',
             flex: 1.8,
-            minWidth: 320,
-            items: [{
-                xtype: 'label',
-                text: 'Scaling',
-                itemId: 'mainscalingtitle',
-                cls: 'x-fieldset-subheader',
-                hideOnMinify: true
-            },{
-                xtype: 'container',
-                anchor: '100%',
-                layout: 'hbox',
-                items: [{
-                    xtype: 'textfield',
-                    fieldLabel: 'Min&nbsp;instances',
-                    labelWidth: 90,
-                    width: 132,
-                    margin: '0 18 0 0',
-                    name: 'min_instances',
-                    hideOnDisabled: true,
-                    listeners: {
-                        change: function(comp, value) {
-                            comp.up('#maintab').onParamChange(comp.name, value);
-                        }
-                    }
-                },{
-                    xtype: 'textfield',
-                    fieldLabel: 'Max&nbsp;instances',
-                    labelWidth: 90,
-                    width: 132,
-                    margin: '0 18 0 0',
-                    name: 'max_instances',
-                    hideOnDisabled: true,
-                    listeners: {
-                        change: function(comp, value) {
-                            comp.up('#maintab').onParamChange(comp.name, value);
-                        }
-                    }
-                },{
-                    xtype: 'displayfield',
-                    fieldLabel: 'Running servers',
-                    value: 0,
-                    name: 'running_servers',
-                    renderer: function(value) {
-                        var html, tip;
-                        if (value.suspended_servers > 0) {
-                            tip = 'Running servers: <span style="color:#00CC00; cursor:pointer;">' + (value.running_servers || 0) + '</span>' +
-                                  (value.suspended_servers > 0 ? '<br/>' + (value['base.consider_suspended'] === 'running' ? 'Including' : 'Not including') + ' <span style="color:#4DA6FF;">' + value.suspended_servers + '</span> Suspended server(s)' : '');
-                        }
-                        html = '<span data-anchor="right" data-qalign="r-l" data-qtip="' + (tip ? Ext.String.htmlEncode(tip) : '') + '" data-qwidth="270">' +
-                               '<span style="color:#00CC00; cursor:pointer;">' + (value.running_servers || 0) + '</span>' +
-                               (value.suspended_servers > 0 ? ' (<span style="color:#4DA6FF;">' + (value.suspended_servers || 0) + '</span>)' : '')+
-                                '</span>';
-                        return value.running_servers > 0 ? '<a href="#">' + html + '</a>' : html;
-                    },
-                    listeners: {
-                        boxready: function() {
-                            this.inputEl.on('click', function(e) {
-                                var link = document.location.href.split('#'),
-                                    farmRoleId = this.up('#maintab').currentRole.get('farm_role_id');
-                                if (farmRoleId) {
-                                    window.open(link[0] + '#/servers/view?farmId=' + tabParams['farmId'] + '&farmRoleId=' + farmRoleId);
-                                }
-                                e.preventDefault();
-                            }, this);
-                        }
-                    }
-                }]
-
-            },{
-                xtype: 'grid',
-                itemId: 'mainscalinggrid',
-                cls: 'x-grid-shadow',
-                hideOnMinify: true,
-                hideOnDisabled: true,
-                margin: '16 0 0 0',
-                enableColumnResize: false,
-                maxWidth: 430,
-                store: {
-                    fields: ['id', 'name', 'max', 'min', 'last'],
-                    proxy: 'object'
-                },
-                columns: [{
-                    text: 'Metric',
-                    sortable: false,
-                    dataIndex: 'name',
-                    flex: 1.6
-                },{
-                    text: 'Scale out',
-                    xtype: 'templatecolumn',
-                    tpl: '{max:htmlEncode}',
-                    sortable: false,
-                    flex: 1
-                },{
-                    text: 'Scale in',
-                    xtype: 'templatecolumn',
-                    tpl: '{min:htmlEncode}',
-                    sortable: false,
-                    flex: 1
-                },{
-                    text: 'Last value',
-                    sortable: false,
-                    dataIndex: 'last',
-                    flex: 1
-                }],
-                viewConfig: {
-                    focusedItemCls: '',
-                    selectedItemCls: '',
-                    overItemCls: '',
-                    emptyText: 'No scaling rule yet added.',
-                    deferEmptyText: false
-                },
-                loadMetrics: function(data) {
-                    var dataToLoad = [],
-                        metrics = tabParams['metrics'];
-                    if (data) {
-                        Ext.Object.each(data, function(id, value){
-                            dataToLoad.push({
-                                id:id, 
-                                name: metrics[id].name, 
-                                min: metrics[id].alias === 'ram' ? (value.max ? '> ' + value.max : '') : (value.min ? '< ' + value.min : ''), 
-                                max: metrics[id].alias === 'ram' ? (value.min ? '< ' + value.min : '') : (value.max ? '> ' + value.max : ''), 
-                                last: metrics[id].last || ''
-                            });
-                        })
-                    }
-                    this.store.loadData(dataToLoad);
-                }
-
-            }],
-            setScalingDisabled: function(disabled) {
-                this.suspendLayouts();
-                this.down('#mainscalingtitle').setText(disabled ? ' <span style="color:#777">Auto scaling disabled</span>' : 'Scaling', false);
-                Ext.Array.each(this.query('[hideOnDisabled]'), function(item){
-                    item.setVisible(!disabled);
-                    item.forceHidden = disabled;
-                });
-                this.resumeLayouts(true);
-            }
+            minWidth: 320
         }]
 	})
 });

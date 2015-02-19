@@ -15,4 +15,5 @@ abstract class AbstractOpenstackPlatformModule extends AbstractPlatformModule
         parent::__construct();
         $this->platform = $platform;
     }
+
 }

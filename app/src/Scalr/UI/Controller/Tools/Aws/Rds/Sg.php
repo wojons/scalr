@@ -28,10 +28,10 @@ class Scalr_UI_Controller_Tools_Aws_Rds_Sg extends Scalr_UI_Controller
         ));
     }
 
-    public function xListAction()
+    public function xListAction($name = null)
     {
-        $sGroups = $this->getAwsClient()->rds->dbSecurityGroup->describe()->toArray(true);
-        $response = $this->buildResponseFromData($sGroups, array('DBSecurityGroupDescription', 'DBSecurityGroupName'));
+        $sGroups = $this->getAwsClient()->rds->dbSecurityGroup->describe($name)->toArray(true);
+        $response = $this->buildResponseFromData($sGroups, ['DBSecurityGroupName']);
         $this->response->data($response);
     }
 
@@ -67,7 +67,7 @@ class Scalr_UI_Controller_Tools_Aws_Rds_Sg extends Scalr_UI_Controller
 
         $rules = array('ipRules' => $ipRules, 'groupRules' => $groupRules);
 
-        $this->response->page('ui/tools/aws/rds/sg/edit.js', array('rules' => $rules));
+        $this->response->page('ui/tools/aws/rds/sg/edit.js', ['rules' => $rules, 'description' => $group->dBSecurityGroupDescription]);
     }
 
     public function xSaveAction()

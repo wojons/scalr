@@ -88,8 +88,6 @@ abstract class ScalrRESTService
         foreach ($this->Request as $k=>$v)
             $string_to_sign.= "{$k}{$v}";
 
-        $string_to_sign .= $timestamp;
-
         try {
             $DBServer = DBServer::LoadByID($serverid);
         } catch (Exception $e) {
@@ -99,9 +97,8 @@ abstract class ScalrRESTService
             throw $e;
         }
 
-        $auth_key = $DBServer->GetKey(true);
+        $valid_sign = \Scalr\Util\CryptoTool::keySign($string_to_sign, $DBServer->GetKey(true), $timestamp, static::HASH_ALGO);
 
-        $valid_sign = base64_encode(hash_hmac(self::HASH_ALGO, $string_to_sign, $auth_key, 1));
         if ($valid_sign != $signature)
             throw new ForbiddenException("Signature doesn't match");
 

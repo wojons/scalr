@@ -264,7 +264,7 @@ interface StreamWrapper
      * @link    http://php.net/manual/en/streamwrapper.stream-seek.php
      *
      * @param   int $offset     stream offset to seek to.
-     * @param   int $whence     [optional] Possible values:
+     * @param   int $whence     optional Possible values:
      *                          SEEK_SET: Set position equal to offset bytes.
      *                          SEEK_CUR: Set position to current location plus offset.
      *                          SEEK_END: Set position to end-of-file plus offset.

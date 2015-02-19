@@ -7,6 +7,8 @@ use Scalr\Modules\Platforms\GoogleCE\GoogleCEPlatformModule;
 use Scalr\Modules\Platforms\Idcf\IdcfPlatformModule;
 use Scalr\Modules\Platforms\Openstack\OpenstackPlatformModule;
 use Scalr\Modules\Platforms\Rackspace\RackspacePlatformModule;
+use \DBServer;
+use Scalr\Stats\CostAnalytics\Entity\AccountCostCenterEntity;
 
 /**
  * Scalr_Environment class
@@ -112,7 +114,8 @@ class Scalr_Environment extends Scalr_Model
         $dtAdded,
         $status;
 
-    private $cache = array();
+    private $cache = array(),
+        $globalVariablesCache = array();
 
     /**
      * Encrypted variables list
@@ -295,10 +298,16 @@ class Scalr_Environment extends Scalr_Model
         $this->save();
 
         if (\Scalr::getContainer()->analytics->enabled) {
-            $ccId = \Scalr::getContainer()->analytics->usage->autoCostCentre($this->id);
-            $this->setPlatformConfig([Scalr_Environment::SETTING_CC_ID => $ccId]);
+            //Default Cost Center for the new Environment is the first Cost Center
+            //from the list of the Account Cost Centers
+            $accountCcEntity = AccountCostCenterEntity::findOne([['accountId' => $clientId]]);
 
-            \Scalr::getContainer()->analytics->events->fireAssignCostCenterEvent($this, $ccId);
+            if ($accountCcEntity instanceof AccountCostCenterEntity) {
+                //Associates environment with the Cost Center
+                $this->setPlatformConfig([Scalr_Environment::SETTING_CC_ID => $accountCcEntity->ccId]);
+                //Fire event
+                \Scalr::getContainer()->analytics->events->fireAssignCostCenterEvent($this, $accountCcEntity->ccId);
+            }
         }
 
         return $this;
@@ -306,12 +315,12 @@ class Scalr_Environment extends Scalr_Model
 
     protected function encryptValue($value)
     {
-        return $this->getCrypto()->encrypt($value, $this->cryptoKey);
+        return $this->getCrypto()->encrypt($value);
     }
 
     protected function decryptValue($value)
     {
-        return $this->getCrypto()->decrypt($value, $this->cryptoKey);
+        return $this->getCrypto()->decrypt($value);
     }
 
     public function loadDefault($clientId)
@@ -408,7 +417,47 @@ class Scalr_Environment extends Scalr_Model
 
         return $this->cache['locations'];
     }
-
+    
+    public function applyGlobalVarsToValue($value)
+    {
+        if (empty($this->globalVariablesCache)) {
+            $formats = \Scalr::config("scalr.system.global_variables.format");
+        
+            $systemVars = array(
+                'env_id'		=> $this->id,
+                'env_name'		=> $this->name,
+            );
+            
+            // Get list of Server system vars
+            foreach ($systemVars as $name => $val) {
+                $name = "SCALR_".strtoupper($name);
+                $val = trim($val);
+        
+                if (isset($formats[$name]))
+                    $val = @sprintf($formats[$name], $val);
+        
+                $this->globalVariablesCache[$name] = $val;
+            }
+        
+            // Add custom variables
+            $gv = new Scalr_Scripting_GlobalVariables($this->clientId, $this->id, Scalr_Scripting_GlobalVariables::SCOPE_ENVIRONMENT);
+            $vars = $gv->listVariables();
+            foreach ($vars as $v)
+                $this->globalVariablesCache[$v['name']] = $v['value'];
+        }
+        
+        //Parse variable
+        $keys = array_keys($this->globalVariablesCache);
+        $f = create_function('$item', 'return "{".$item."}";');
+        $keys = array_map($f, $keys);
+        $values = array_values($this->globalVariablesCache);
+        
+        $retval = str_replace($keys, $values, $value);
+        
+        // Strip undefined variables & return value
+        return preg_replace("/{[A-Za-z0-9_-]+}/", "", $retval);
+    }
+    
     public function enablePlatform($platform, $enabled = true)
     {
         $props = array($platform . '.is_enabled' => $enabled ? 1 : 0);
@@ -519,9 +568,15 @@ class Scalr_Environment extends Scalr_Model
             $this->db->Execute("DELETE FROM elastic_ips WHERE env_id=?", array($this->id));
             $this->db->Execute("DELETE FROM farms WHERE env_id=?", array($this->id));
             $this->db->Execute("DELETE FROM roles WHERE env_id=?", array($this->id));
-            $this->db->Execute("DELETE FROM servers WHERE env_id=?", array($this->id));
 
-            $this->db->Execute('DELETE FROM `account_team_envs` WHERE env_id = ?', array($this->id));
+            $servers = DBServer::listByFilter(['envId' => $this->id]);
+
+            foreach ($servers as $server) {
+                /* @var DBServer $server */
+                $server->Remove();
+            }
+
+            $this->db->Execute("DELETE FROM `account_team_envs` WHERE env_id = ?", array($this->id));
 
         } catch (Exception $e) {
             throw new Exception (sprintf(_("Cannot delete record. Error: %s"), $e->getMessage()), $e->getCode());
@@ -530,12 +585,12 @@ class Scalr_Environment extends Scalr_Model
 
     public function getTeams()
     {
-        return $this->db->getCol('SELECT team_id FROM `account_team_envs` WHERE env_id = ?', array($this->id));
+        return $this->db->getCol("SELECT team_id FROM `account_team_envs` WHERE env_id = ?", array($this->id));
     }
 
     public function clearTeams()
     {
-        $this->db->Execute('DELETE FROM `account_team_envs` WHERE env_id = ?', array($this->id));
+        $this->db->Execute("DELETE FROM `account_team_envs` WHERE env_id = ?", array($this->id));
     }
 
     public function addTeam($teamId)
@@ -553,7 +608,7 @@ class Scalr_Environment extends Scalr_Model
 
     public function removeTeam($teamId)
     {
-        $this->db->Execute('DELETE FROM `account_team_envs` WHERE env_id = ? AND team_id = ?', array($this->id, $teamId));
+        $this->db->Execute("DELETE FROM `account_team_envs` WHERE env_id = ? AND team_id = ?", array($this->id, $teamId));
     }
 
     /**
@@ -604,14 +659,6 @@ class Scalr_Environment extends Scalr_Model
                 SERVER_PLATFORMS::ECS . "." . OpenstackPlatformModule::TENANT_NAME,
                 SERVER_PLATFORMS::ECS . "." . OpenstackPlatformModule::USERNAME,
                 SERVER_PLATFORMS::ECS . "." . OpenstackPlatformModule::SSL_VERIFYPEER,
-
-                SERVER_PLATFORMS::CONTRAIL . "." . OpenstackPlatformModule::API_KEY,
-                SERVER_PLATFORMS::CONTRAIL . "." . OpenstackPlatformModule::AUTH_TOKEN,
-                SERVER_PLATFORMS::CONTRAIL . "." . OpenstackPlatformModule::KEYSTONE_URL,
-                SERVER_PLATFORMS::CONTRAIL . "." . OpenstackPlatformModule::PASSWORD,
-                SERVER_PLATFORMS::CONTRAIL . "." . OpenstackPlatformModule::TENANT_NAME,
-                SERVER_PLATFORMS::CONTRAIL . "." . OpenstackPlatformModule::USERNAME,
-                SERVER_PLATFORMS::CONTRAIL . "." . OpenstackPlatformModule::SSL_VERIFYPEER,
 
                 SERVER_PLATFORMS::RACKSPACENG_UK . "." . OpenstackPlatformModule::API_KEY,
                 SERVER_PLATFORMS::RACKSPACENG_UK . "." . OpenstackPlatformModule::AUTH_TOKEN,

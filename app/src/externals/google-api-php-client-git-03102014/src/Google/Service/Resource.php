@@ -168,7 +168,7 @@ class Google_Service_Resource
 
     if ($postBody) {
       $contentTypeHeader = array();
-      $contentTypeHeader['content-type'] = 'application/json; charset=UTF-8';
+      $contentTypeHeader['Content-Type'] = 'application/json; charset=UTF-8';
       $httpRequest->setRequestHeaders($contentTypeHeader);
       $httpRequest->setPostBody($postBody);
     }

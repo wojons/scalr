@@ -213,7 +213,7 @@ class AggregationCollection implements AggregationCollectionInterface, IteratorA
                 foreach ($ptr['data'] as $k => $v) {
                     foreach ($perFields as $field) {
                         $ptr['data'][$k][$field . '_percentage'] = empty($ptr[$field]) ? 0 :
-                            sprintf($format, ($v[$field] / $ptr[$field]) * 100);
+                            sprintf($format, round(($v[$field] / $ptr[$field]), 2) * 100);
                     }
                     if (!empty($v['data'])) {
                         $fnIterator($ptr['data'][$k]);

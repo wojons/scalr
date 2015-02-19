@@ -1195,7 +1195,50 @@ Ext.override(Ext.grid.plugin.CellEditing, {
 		}
 
 		return editor;
-	}
+	},
+
+    showEditor: function(ed, context, value) {
+        var me = this,
+            record = context.record,
+            columnHeader = context.column,
+            sm = me.grid.getSelectionModel(),
+            preventFocus = sm.preventFocus,
+            selection = sm.getCurrentPosition();
+
+
+
+        if (!columnHeader.up(me.view.ownerCt)) {
+            return me.lockingPartner.showEditor(ed, me.lockingPartner.getEditingContext(selection.record, selection.columnHeader), value);
+        }
+
+        me.setEditingContext(context);
+        me.setActiveEditor(ed);
+        me.setActiveRecord(record);
+        me.setActiveColumn(columnHeader);
+
+
+
+
+        if (!selection || !sm.isCellSelected(me.view, record, columnHeader)) {
+            sm.preventFocus = true;
+            sm.selectByPosition({
+                row: record,
+                column: columnHeader,
+                view: me.view
+            });
+            sm.preventFocus = preventFocus;
+        }
+
+
+        if (/** Changed */ /*Ext.isIE &&*/ /** End */ Ext.EventObject.type === 'click') {//costanalytics admin - notifications - single click edit doesn't work with selectedmodel
+            Ext.Function.defer(ed.startEdit, 1, ed, [me.getCell(record, columnHeader), value, context]);
+        } else {
+            ed.startEdit(me.getCell(record, columnHeader), value, context);
+        }
+        me.editing = true;
+        me.scroll = me.view.el.getScroll();
+    }
+
 });
 
 Ext.override(Ext.data.Model, {
@@ -2621,6 +2664,50 @@ Ext.define(null, {
             me.highlighted = true;
         }
     },
+
+    isItemInPoint: function(x, y, item, i) {
+        var me = this,
+            items = me.items,
+            tolerance = me.selectionTolerance,
+            result = null,
+            prevItem,
+            nextItem,
+            prevPoint,
+            nextPoint,
+            ln,
+            x1,
+            y1,
+            x2,
+            y2,
+            xIntersect,
+            yIntersect,
+            dist1, dist2, dist, midx, midy,
+            sqrt = Math.sqrt, abs = Math.abs;
+
+        nextItem = items[i];
+        prevItem = i && items[i - 1];
+
+        if (i >= ln) {
+            prevItem = items[ln - 1];
+        }
+        prevPoint = prevItem && prevItem.point;
+        nextPoint = nextItem && nextItem.point;
+        x1 = prevItem ? prevPoint[0] : nextPoint[0] - tolerance;
+        y1 = prevItem ? prevPoint[1] : nextPoint[1];
+        x2 = nextItem ? nextPoint[0] : prevPoint[0] + tolerance;
+        y2 = nextItem ? nextPoint[1] : prevPoint[1];
+        dist1 = sqrt((x - x1) * (x - x1) + (y - y1) * (y - y1));
+        dist2 = sqrt((x - x2) * (x - x2) + (y - y2) * (y - y2));
+        dist = Math.min(dist1, dist2);
+
+        if (dist <= tolerance) {
+            /** Changed */
+            //wrong tooltip near left-most point
+            return dist != dist1;
+            /** End */
+        }
+        return false;
+    }
 });
 
 Ext.define(null,{
@@ -2658,10 +2745,12 @@ Ext.define(null,{
 Ext.define(null,{
     override: 'Ext.Template',
 
-    pctLabel: function(growth, growthPct, size, fixed, mode){
+    pctLabel: function(growth, growthPct, size, fixed, mode, round){
         var cost, cls, res, growthPctHR;
         mode = mode || 'default';
-        cost = Ext.String.htmlEncode(Ext.util.Format.currency(Math.round(mode !== 'default' ? Math.abs(growth) : growth), null, 0));
+        round = round === undefined ? true : round;
+        
+        cost = Ext.String.htmlEncode(Ext.util.Format.currency(mode !== 'default' ? Math.abs(growth) : growth, null, round ? 0 : 2));
         cls = 'x-label-pct ' + (growth > 0 ? 'increase' : 'decrease');
         growthPctHR = growthPct;
 
@@ -2695,15 +2784,22 @@ Ext.define(null,{
         return Ext.util.Format.currency(val, sign || null, decimals || 0);
     },
 
-    itemCost: function(item) {
-        var html =
+    currency2: function(value, beautify) {
+        var result = Ext.util.Format.currency(value);
+        return beautify ? '<span class="scalr-ui-analytics-currency">' + result.replace(Ext.util.Format.decimalSeparator, '<span class="small">.') + '</span></span>' : result;
+    },
+
+    itemCost: function(item, round) {
+        var html;
+        round = round === undefined ? true : round;
+        html =
             '<div style="white-space:nowrap">' +
                 '<div style="margin-bottom: 4px">' +
-                    '<span style="font-weight:bold;font-size:110%;">' + item.name + '</span> ' +
+                    '<span '+(item.cls?'class="'+item.cls+'"':'')+' style="font-weight:bold;font-size:110%;'+(item.color?'color:#'+item.color+';':'')+'">' + item.name + '</span> ' +
                         (item.type === 'farms' && item.id !== 'everything else' ? ' (id:' + item.id + ')' : '') +
                         (item.label ? '&nbsp;&nbsp;&nbsp;&nbsp;<i>' + item.label + '</i>' : '') +
                 '</div>' +
-                '<span style="font-weight:bold;font-size:140%">' + this.currency(item.cost)+ '</span> ('+item.costPct+'% of ' + (item.interval ? item.interval+'\'s ' : '') + 'total)' +
+                '<span style="font-weight:bold;font-size:140%">' + this[round ? 'currency' : 'currency2'](item.cost)+ '</span> ('+item.costPct+'% of ' + (item.interval ? item.interval+'\'s ' : '') + 'total)' +
             '</div>';
         return html;
     },
@@ -2724,6 +2820,15 @@ Ext.define(null,{
         if (data['disk']) res.push(data['disk'] + 'GB ' + data['type']);
         if (data['note']) res.push(data['note']);
         return res.join(', ');
+    },
+
+    fitMaxLength: function(s, length) {
+        var flen;
+        if (s.length > length) {
+            flen = Math.ceil(length/2);
+            s = s.substr(0, flen) + '...' + s.substr(s.length - flen, flen);
+        }
+        return s;
     }
 });
 

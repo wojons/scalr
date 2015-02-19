@@ -26,6 +26,10 @@ class ReportEntity extends \Scalr\Model\AbstractEntity
 
     const PERIOD_QUARTELY = 4;
 
+    const STATUS_ENABLED = 1;
+
+    const STATUS_DISABLED = 0;
+
     /**
      * identifier (UUID)
      *
@@ -69,6 +73,14 @@ class ReportEntity extends \Scalr\Model\AbstractEntity
      * @var string
      */
     public $emails;
+
+    /**
+     * Status
+     *
+     * @Column(type="integer")
+     * @var int
+     */
+    public $status;
 
     /**
      * {@inheritdoc}

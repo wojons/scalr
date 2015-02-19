@@ -55,9 +55,9 @@ class Diff
         $diffsInit   = [];
         $diffsFollow = [];
 
-        /** @var $source Table */
+        /* @var $source Table */
         foreach ($this->source as $source) {
-            /** @var $target Table */
+            /* @var $target Table */
             if ($target = $this->target[$source->name]) {
                 foreach ($source->columns as $name => $column) {
                     if (isset($target->columns[$name])) {

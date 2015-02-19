@@ -41,19 +41,21 @@ class Scalr_Role_Behavior_Chef extends Scalr_Role_Behavior implements Scalr_Role
     {
         //Remove role and clear chef settings
         $chefServerInfo = $this->db->GetRow("SELECT * FROM services_chef_servers WHERE id=?", array($chefServerId));
-        $chefServerInfo['auth_key'] = $this->getCrypto()->decrypt($chefServerInfo['auth_key'], $this->cryptoKey);
+        $chefServerInfo['auth_key'] = $this->getCrypto()->decrypt($chefServerInfo['auth_key']);
         $chefClient = Scalr_Service_Chef_Client::getChef($chefServerInfo['url'], $chefServerInfo['username'], trim($chefServerInfo['auth_key']));
 
         $chefClient->removeRole($chefRoleName);
     }
 
     public function onBeforeHostTerminate(DBServer $dbServer) {
+        /*
         $nodeName = $dbServer->GetProperty(self::SERVER_CHEF_NODENAME);
         $config = $this->getConfiguration($dbServer);
         if (!empty($nodeName) && isset($config->serverUrl)) {
             $this->removeNodeFromChefServer($dbServer, $config, $nodeName);
             $dbServer->SetProperty(self::SERVER_CHEF_NODENAME, "");
         }
+        */
     }
 
     public function onHostDown(DBServer $dbServer) {
@@ -69,7 +71,7 @@ class Scalr_Role_Behavior_Chef extends Scalr_Role_Behavior implements Scalr_Role
     {
         $chefSettings = $dbServer->GetFarmRoleObject()->getChefSettings();
         $chefServerInfo = $this->db->GetRow("SELECT * FROM services_chef_servers WHERE id=?", array($chefSettings[self::ROLE_CHEF_SERVER_ID]));
-        $chefServerInfo['auth_key'] = trim($this->getCrypto()->decrypt($chefServerInfo['auth_key'], $this->cryptoKey));
+        $chefServerInfo['auth_key'] = trim($this->getCrypto()->decrypt($chefServerInfo['auth_key']));
 
         $chefClient = Scalr_Service_Chef_Client::getChef($config->serverUrl, $chefServerInfo['username'], trim($chefServerInfo['auth_key']));
 
@@ -156,7 +158,7 @@ class Scalr_Role_Behavior_Chef extends Scalr_Role_Behavior implements Scalr_Role
 
             // Get chef server info
             $chefServerInfo = $this->db->GetRow("SELECT * FROM services_chef_servers WHERE id=?", array($chefSettings[self::ROLE_CHEF_SERVER_ID]));
-            $chefServerInfo['v_auth_key'] = trim($this->getCrypto()->decrypt($chefServerInfo['v_auth_key'], $this->cryptoKey));
+            $chefServerInfo['v_auth_key'] = trim($this->getCrypto()->decrypt($chefServerInfo['v_auth_key']));
 
             // Prepare node name
             $configuration->nodeName = $chefSettings[self::SERVER_CHEF_NODENAME];

@@ -2,6 +2,7 @@
 
 use Scalr\Modules\PlatformFactory;
 use Scalr\Model\Entity\Script;
+use \SERVER_STATUS;
 
 class DBFarmRole
 {
@@ -533,7 +534,7 @@ class DBFarmRole
     public function Delete()
     {
         foreach ($this->GetServersByFilter() as $DBServer) {
-            /** @var DBServer $DBServer */
+            /* @var $DBServer \DBServer */
             if ($DBServer->status != SERVER_STATUS::TERMINATED) {
                 try {
                     $DBServer->terminate(DBServer::TERMINATE_REASON_ROLE_REMOVED);
@@ -544,7 +545,6 @@ class DBFarmRole
             }
         }
 
-        //
         $this->DB->Execute("DELETE FROM farm_roles WHERE id=?", array($this->ID));
 
         // Clear farm role options & scripts
@@ -890,39 +890,36 @@ class DBFarmRole
 
     public function SetParameters(array $p_params)
     {
-        if (count($p_params) > 0)
-        {
+        if (count($p_params) > 0) {
             $current_role_options = $this->DB->GetAll("SELECT * FROM farm_role_options WHERE farm_roleid=?", array($this->ID));
+
             $role_opts = array();
-            foreach ($current_role_options as $cro)
+            foreach ($current_role_options as $cro) {
                 $role_opts[$cro['hash']] = md5($cro['value']);
+            }
 
             $params = array();
-            foreach ($p_params as $name => $value)
-            {
-                if (preg_match("/^(.*?)\[(.*?)\]$/", $name, $matches))
-                {
+            foreach ($p_params as $name => $value) {
+                if (preg_match('/^(.*?)\[(.*?)\]$/', $name, $matches)) {
                     $params[$matches[1]] = array();
 
-                    if ($matches[2] != '' && $value == 1)
+                    if ($matches[2] != '' && $value == 1) {
                         $params[$matches[1]][] = $matches[2];
+                    }
 
                     continue;
-                }
-                else
+                } else {
                     $params[$name] = $value;
+                }
             }
 
             $saved_opts = array();
-            foreach($params as $name => $value)
-            {
-                if ($name)
-                {
+            foreach($params as $name => $value) {
+                if ($name) {
                     $val = (is_array($value)) ? implode(',', $value) : $value;
                     $hash = preg_replace("/[^A-Za-z0-9]+/", "_", strtolower($name));
 
-                    if (!$role_opts[$hash])
-                    {
+                    if (!$role_opts[$hash]) {
                         $this->DB->Execute("INSERT INTO farm_role_options SET
                             farmid		= ?,
                             farm_roleid	= ?,
@@ -938,11 +935,8 @@ class DBFarmRole
                             $hash,
                             $name
                         ));
-                    }
-                    else
-                    {
-                        if (md5($val) != $role_opts[$hash])
-                        {
+                    } else {
+                        if (md5($val) != $role_opts[$hash]) {
                             $this->DB->Execute("UPDATE farm_role_options SET value = ? WHERE
                                 farm_roleid	= ? AND hash = ?
                             ", array(
@@ -956,10 +950,8 @@ class DBFarmRole
                 }
             }
 
-            foreach ($role_opts as $k=>$v)
-            {
-                if (!in_array($k, array_values($saved_opts)))
-                {
+            foreach ($role_opts as $k => $v) {
+                if (!in_array($k, array_values($saved_opts))) {
                     $this->DB->Execute("DELETE FROM farm_role_options WHERE farm_roleid = ? AND hash = ?",
                         array($this->ID, $k)
                     );
@@ -1195,4 +1187,29 @@ class DBFarmRole
             $this->FarmID,
         ]);
     }
+    public function getInstanceType()
+    {
+        switch ($this->Platform) {
+            case SERVER_PLATFORMS::EC2:
+                $name = self::SETTING_AWS_INSTANCE_TYPE;
+                break;
+            case SERVER_PLATFORMS::EUCALYPTUS:
+                $name = self::SETTING_EUCA_INSTANCE_TYPE;
+                break;
+            case SERVER_PLATFORMS::GCE:
+                $name = self::SETTING_GCE_MACHINE_TYPE;
+                break;
+            case SERVER_PLATFORMS::RACKSPACE:
+                $name = self::SETTING_RS_FLAVOR_ID;
+                break;
+            default:
+                if (PlatformFactory::isOpenstack($this->Platform)) {
+                    $name = self::SETTING_OPENSTACK_FLAVOR_ID;
+                } else if (PlatformFactory::isCloudstack($this->Platform)) {
+                    $name = self::SETTING_CLOUDSTACK_SERVICE_OFFERING_ID;
+                }
+        }
+        return $this->GetSetting($name);
+    }
+
 }

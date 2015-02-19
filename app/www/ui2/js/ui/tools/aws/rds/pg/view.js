@@ -71,7 +71,7 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.pg.view', function (loadParams, modulePara
 			store: store,
 			dock: 'top',
 			beforeItems: [{
-                text: 'Add parameter group',
+                text: 'Add group',
                 cls: 'x-btn-green-bg',
 				handler: function() {
 					Scalr.Request({
@@ -96,34 +96,52 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.pg.view', function (loadParams, modulePara
                                     queryMode: 'local',
                                     displayField: 'name',
                                     valueField: 'id',
-                                    value: panel.down('#cloudLocation').value
-                                },{
-                                    xtype: 'combo',
-                                    name: 'Engine',
-                                    store: [
-                                        ['mysql5.1','MySQL 5.1'],
-                                        ['mysql5.5', 'MySQL 5.5'],
-                                        ['oracle-ee-11.2', 'Oracle Database Server EE 11.2'],
-                                        ['oracle-se-11.2', 'Oracle Database Server SE 11.2'],
-                                        ['oracle-se1-11.2', 'Oracle Database Server SE1 11.2'],
-                                        ['sqlserver-ee-10.5', 'MS SQL Server EE 10.5'],
-                                        ['sqlserver-ee-11.0', 'MS SQL Server EE 11.0'],
-                                        ['sqlserver-ex-10.5', 'MS SQL Server EX 10.5'],
-                                        ['sqlserver-ex-11.0', 'MS SQL Server EX 11.0'],
-                                        ['sqlserver-se-10.5', 'MS SQL Server SE 10.5'],
-                                        ['sqlserver-se-11.0', 'MS SQL Server SE 11.0'],
-                                        ['sqlserver-web-10.5', 'MS SQL Server WEB 10.5'],
-                                        ['sqlserver-web-11.0', 'MS SQL Server WEB 11.0']
-                                    ],
-                                    queryMode: 'local',
-                                    value: 'mysql5.5',
-                                    editable: false,
-                                    fieldLabel: 'Engine'
+                                    value: panel.down('#cloudLocation').value,
+                                    listeners: {
+                                        boxready: function (me) {
+                                            me.fireEvent('change', me, me.getValue());
+                                        },
+                                        change: function (me, value) {
+                                            Scalr.Request({
+                                                processBox: {
+                                                    type: 'load'
+                                                },
+                                                url: '/tools/aws/rds/pg/xGetDBFamilyList',
+                                                params: {
+                                                    cloudLocation: value
+                                                },
+                                                success: function (response) {
+                                                    var engineFamilyField = me.next('[name=EngineFamily]');
+                                                    var engineFamilyStore = engineFamilyField.getStore();
+
+                                                    engineFamilyStore.loadData(
+                                                        response['engineFamilyList']
+                                                    );
+
+                                                    engineFamilyField.setValue(
+                                                        engineFamilyStore.first()
+                                                    );
+                                                }
+                                            });
+                                        }
+                                    }
                                 },{
                                     xtype: 'textfield',
                                     name: 'dbParameterGroupName',
                                     fieldLabel: 'Name',
                                     allowBlank: false
+                                },{
+                                    xtype: 'combo',
+                                    name: 'EngineFamily',
+                                    fieldLabel: 'Family',
+                                    queryMode: 'local',
+                                    editable: false,
+                                    store: {
+                                        reader: 'array',
+                                        fields: [ 'family' ]
+                                    },
+                                    valueField: 'family',
+                                    displayField: 'family'
                                 },{
                                     xtype: 'textfield',
                                     name: 'Description',

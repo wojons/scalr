@@ -235,7 +235,7 @@
                        }
 
                        foreach ($dbFarmRole->GetServersByFilter() as $server) {
-                           /** @var DBServer $server */
+                           /* @var $server \DBServer */
                            $shardIndex = $server->GetProperty(self::SERVER_SHARD_INDEX);
                            $replicaSetIndex = $server->GetProperty(self::SERVER_REPLICA_SET_INDEX);
                            $node = $nodes[$shardIndex][$replicaSetIndex];

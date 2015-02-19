@@ -33,7 +33,7 @@ Scalr.regPage('Scalr.ui.sshkeys.view', function (loadParams, moduleParams) {
 		}],
 
 		viewConfig: {
-			emptyText: 'No SSH keys found',
+			emptyText: 'No matching SSH Key found',
 			loadingText: 'Loading SSH keys ...'
 		},
 
@@ -45,7 +45,11 @@ Scalr.regPage('Scalr.ui.sshkeys.view', function (loadParams, moduleParams) {
 			{ header: "Cloud location", width: 150, dataIndex: 'cloud_location', sortable: true, xtype: 'templatecolumn', tpl: 
 			'<tpl if="cloud_location">{cloud_location}<tpl else><img src="/ui2/images/icons/false.png" /></tpl>'
 			},
-			{ header: 'Farm ID', width: 80, dataIndex: 'farm_id', sortable: false },
+			{ header: 'Farm ID', width: 80, dataIndex: 'farm_id', sortable: false, xtype: 'templatecolumn', tpl:
+                '<tpl if="farm_id">' +
+                    '<a href="#/farms/view?farmId={farm_id}">{farm_id}</a>'+
+                '</tpl>'
+            },
 			{
 				xtype: 'optionscolumn2',
 				menu: [{
@@ -144,6 +148,7 @@ Scalr.regPage('Scalr.ui.sshkeys.view', function (loadParams, moduleParams) {
 				fieldLabel: 'Farm',
 				labelWidth: 34,
 				width: 250,
+                itemId: 'farmId',
 				matchFieldWidth: false,
 				listConfig: {
 					minWidth: 150

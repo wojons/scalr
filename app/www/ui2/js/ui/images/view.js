@@ -55,7 +55,7 @@ Scalr.regPage('Scalr.ui.images.view', function (loadParams, moduleParams) {
 
     var imagesStore = Ext.create('store.store', {
         fields: ['id', 'platform', 'cloudLocation', 'name', 'os', 'osFamily', 'osGeneration', 'osVersion', 'size',
-            'architecture', 'source', 'type', 'createdByEmail', 'status', 'statusError', 'used', 'status', 'dtAdded', 'bundleTaskId',
+            'architecture', 'source', 'type', 'createdByEmail', 'status', 'statusError', 'used', 'status', 'dtAdded', 'dtLastUsed', 'bundleTaskId',
             'envId', 'software'
         ],
         proxy: {
@@ -442,14 +442,15 @@ Scalr.regPage('Scalr.ui.images.view', function (loadParams, moduleParams) {
                 this.down('#addTo').setDisabled(record.get('status') != 'active');
                 this.down('#edit').disable();
                 frm.findField('name').setReadOnly(
-                    !record.get('envId') &&
-                    Scalr.user.type != 'ScalrAdmin' &&
-                    !Scalr.isAllowed('FARMS_IMAGES', 'manage')
+                    ! record.get('envId') && Scalr.user.type != 'ScalrAdmin' && Scalr.isAllowed('FARMS_IMAGES', 'manage') ||
+                    record.get('status') == 'delete'
                 );
+
                 frm.findField('status')[record.get('status') != 'active' ? 'show' : 'hide']();
                 frm.findField('used')[record.get('status') == 'active' ? 'show' : 'hide']();
                 frm.findField('statusError')[record.get('status') == 'failed' ? 'show' : 'hide']();
                 frm.findField('type')[record.get('platform') == 'ec2' ? 'show' : 'hide']();
+                frm.findField('dtLastUsed')[Scalr.user.type == 'ScalrAdmin' && !record.get('envId') || record.get('envId') ? 'show' : 'hide']();
             },
             loadrecord: function() {
                 if (!this.isVisible()) {
@@ -615,6 +616,13 @@ Scalr.regPage('Scalr.ui.images.view', function (loadParams, moduleParams) {
                 xtype: 'displayfield',
                 name: 'dtAdded',
                 fieldLabel: 'Created on',
+                renderer: function(value) {
+                    return value ? value : 'Unknown';
+                }
+            }, {
+                xtype: 'displayfield',
+                name: 'dtLastUsed',
+                fieldLabel: 'Last used on',
                 renderer: function(value) {
                     return value ? value : 'Unknown';
                 }

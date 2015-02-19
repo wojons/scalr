@@ -626,10 +626,6 @@ class Chargify
 		  	));
 
 		  	$request->setMethod(constant("HTTP_METH_{$method}"));
-
-		  	if ($_REQUEST['beta'] == '1') {
-		  	    var_dump($request);
-		  	}
 		  	
 		  	if ($method == 'POST' && $data)
 		  		$request->setBody($data);

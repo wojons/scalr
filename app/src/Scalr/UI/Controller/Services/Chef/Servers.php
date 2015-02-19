@@ -1,4 +1,5 @@
 <?php
+
 use Scalr\Acl\Acl;
 use Scalr\UI\Request\JsonData;
 use Scalr\UI\Request\Validator;
@@ -196,8 +197,8 @@ class Scalr_UI_Controller_Services_Chef_Servers extends Scalr_UI_Controller
         $server->url = $url;
         $server->username = $username;
         $server->vUsername = $vUsername;
-        $server->authKey = $this->getCrypto()->encrypt($authKey, $this->cryptoKey);
-        $server->vAuthKey = $this->getCrypto()->encrypt($vAuthKey, $this->cryptoKey);
+        $server->authKey = $this->getCrypto()->encrypt($authKey);
+        $server->vAuthKey = $this->getCrypto()->encrypt($vAuthKey);
 
         $chef = Scalr_Service_Chef_Client::getChef($server->url, $server->username, $authKey);
         $response = $chef->listCookbooks();
@@ -277,9 +278,9 @@ class Scalr_UI_Controller_Services_Chef_Servers extends Scalr_UI_Controller
             'level'    => $server->level
         ];
         if ($this->level == $server->level) {
-            $data['authKey'] = $this->getCrypto()->decrypt($server->authKey, $this->cryptoKey);
+            $data['authKey'] = $this->getCrypto()->decrypt($server->authKey);
             $data['vUsername'] = $server->vUsername;
-            $data['vAuthKey'] = $this->getCrypto()->decrypt($server->vAuthKey, $this->cryptoKey);
+            $data['vAuthKey'] = $this->getCrypto()->decrypt($server->vAuthKey);
         }
 
         return $data;

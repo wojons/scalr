@@ -71,7 +71,7 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.sg.view', function (loadParams, modulePara
 			store: store,
 			dock: 'top',
 			beforeItems: [{
-                text: 'Add security group',
+                text: 'Add group',
                 cls: 'x-btn-green-bg',
 				handler: function() {
 					Scalr.Request({
@@ -125,6 +125,9 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.sg.view', function (loadParams, modulePara
 				}
 			}],
 			items: [{
+				xtype: 'filterfield',
+				store: store
+			}, ' ', {
 				xtype: 'fieldcloudlocation',
 				itemId: 'cloudLocation',
 				store: {

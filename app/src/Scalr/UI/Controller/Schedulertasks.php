@@ -248,7 +248,7 @@ class Scalr_UI_Controller_Schedulertasks extends Scalr_UI_Controller
                     }
                 }
 
-                /** @var Script $script */
+                /* @var $script Script */
                 $script = Script::findPk($this->getParam('scriptId'));
                 try {
                     if ($script) {

@@ -77,6 +77,7 @@ class Acl
     const RESOURCE_LOGS_API_LOGS = 0x140;
     const RESOURCE_LOGS_SCRIPTING_LOGS = 0x141;
     const RESOURCE_LOGS_SYSTEM_LOGS = 0x142;
+    const RESOURCE_LOGS_EVENT_LOGS = 0x143;
 
     const RESOURCE_SERVICES_APACHE = 0x150;
     const RESOURCE_SERVICES_ENVADMINISTRATION_CHEF = 0x151;
@@ -145,6 +146,10 @@ class Acl
     const PERM_DB_DATABASE_STATUS_PMA = 'phpmyadmin';
 
     const PERM_GENERAL_CUSTOM_EVENTS_FIRE = 'fire';
+
+    const PERM_ADMINISTRATION_ANALYTICS_MANAGE_PROJECTS = 'manage-projects';
+
+    const PERM_ADMINISTRATION_ANALYTICS_ALLOCATE_BUDGET = 'allocate-budget';
 
     // ... add more permission_id for existing resource here
     // const PERM_FOORESOURCE_FOOPERMISSIONNAME

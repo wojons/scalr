@@ -36,7 +36,7 @@ class Scalr_UI_Controller_Tools_Aws_Route53_Hostedzones extends \Scalr_UI_Contro
             }
         } while ($zonesList->marker !== null);
 
-        $response = $this->buildResponseFromData($result, array('name', 'comment'));
+        $response = $this->buildResponseFromData($result, array('name', 'comment'), true);
         $this->response->data($response);
     }
 
@@ -104,21 +104,25 @@ class Scalr_UI_Controller_Tools_Aws_Route53_Hostedzones extends \Scalr_UI_Contro
         $aws = $this->environment->aws($cloudLocation);
 
         foreach ($zoneId as $id) {
-            $customRecordSets = array();
-            $marker = null;
+            $customRecordSets = [];
+            $nextName = null;
+            $nextType = null;
 
             do {
                 if (isset($recordsets)) {
-                    $marker = new MarkerType($recordsets->marker);
+                    $nextName = $recordsets->nextRecordName;
+                    $nextType = $recordsets->nextRecordType;
                 }
-                $recordsets = $aws->route53->record->describe($id, null, null, $marker);
+
+                $recordsets = $aws->route53->record->describe($id, $nextName, $nextType);
+
                 foreach ($recordsets as $record) {
                     if ('NS' != $record->type && 'SOA' != $record->type) {
                         $result = Recordsets::loadRecordSetData($record);
                         $customRecordSets[] = $result;
                     }
                 }
-            } while ($recordsets->marker !== null);
+            } while (!empty($recordsets->isTruncated));
 
             if (!empty($customRecordSets)) {
                 $this->deleteCustomRecordsets($customRecordSets, $id, $cloudLocation);
@@ -130,11 +134,11 @@ class Scalr_UI_Controller_Tools_Aws_Route53_Hostedzones extends \Scalr_UI_Contro
     }
 
     /**
-     * @param JsonData $customRecordSets
+     * @param JsonData|array $customRecordSets
      * @param string $zoneId
      * @param string $cloudLocation
      */
-    public function deleteCustomRecordsets(JsonData $customRecordSets, $zoneId, $cloudLocation)
+    public function deleteCustomRecordsets($customRecordSets, $zoneId, $cloudLocation)
     {
         $rrsRequest = new ChangeRecordSetsRequestData();
         $rrsCnahgeList = new ChangeRecordSetList();

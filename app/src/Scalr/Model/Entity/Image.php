@@ -104,6 +104,12 @@ class Image extends AbstractEntity
      * @var \DateTime
      */
     public $dtAdded;
+    
+    /**
+     * @Column(type="datetime",nullable=true)
+     * @var \DateTime
+     */
+    public $dtLastUsed;
 
     /**
      * @Column(type="integer",nullable=true)

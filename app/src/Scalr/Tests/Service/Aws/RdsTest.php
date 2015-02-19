@@ -35,6 +35,10 @@ class RdsTest extends AwsTestCase
 
     const NAME_DB_SNAPSHOT = 'snshot';
 
+    const KEY_TAG = 'tagkey';
+
+    const VALUE_TAG = 'tagvalue';
+
     /**
      * {@inheritdoc}
      * @see Scalr\Tests\Service.AwsTestCase::getFixturesDirectory()
@@ -337,6 +341,25 @@ class RdsTest extends AwsTestCase
             $dbi = $dbi->refresh();
         }
         $this->assertEquals(DBInstanceData::STATUS_AVAILABLE, $dbi->dBInstanceStatus);
+
+        // Adds tags to DB Instance
+        $aws->rds->tag->add(
+            $dbi->dBInstanceIdentifier,
+            Rds::DB_INSTANCE_RESOURCE_TYPE,
+            [['key' => self::getTestName(self::KEY_TAG), 'value' => self::VALUE_TAG]]);
+
+        $tagsList = $aws->rds->tag->describe($dbi->dBInstanceIdentifier, Rds::DB_INSTANCE_RESOURCE_TYPE);
+
+        $this->assertInstanceOf($this->getRdsClassName('DataType\\TagsList'), $tagsList);
+        $this->assertEquals(1, count($tagsList));
+
+        $tagData = $tagsList->get(0);
+
+        $this->assertInstanceOf($this->getRdsClassName('DataType\\TagsData'), $tagData);
+
+        $tagRemoved = $dbi->removeTags([$tagData->key]);
+
+        $this->assertTrue($tagRemoved);
 
         //Created DB Snapshot
         $sn = $dbi->createSnapshot(self::getTestName(self::NAME_DB_SNAPSHOT));

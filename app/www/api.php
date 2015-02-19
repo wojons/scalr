@@ -1,5 +1,7 @@
 <?php
 
+use Scalr\Util\CryptoTool;
+
 $path = trim(str_replace("?{$_SERVER['QUERY_STRING']}", "", $_SERVER['REQUEST_URI']), '/');
 
 @session_start();
@@ -25,7 +27,7 @@ try {
     $postData = isset($_POST['rawPostData']) ? $_POST['rawPostData'] : '';
     $secretKey = $user->getSetting(Scalr_Account_User::SETTING_API_SECRET_KEY);
     $stringToSign = "{$path}:{$keyId}:{$envId}:{$postData}:{$secretKey}";
-    $validToken = Scalr_Util_CryptoTool::hash($stringToSign);
+    $validToken = CryptoTool::hash($stringToSign);
 
     if ($validToken != $token)
         throw new Exception("Invalid authentification token");

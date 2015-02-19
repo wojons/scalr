@@ -1,4 +1,5 @@
 <?php
+
 use Scalr\Model\Entity\ChefServer;
 
 class Scalr_UI_Controller_Services_Chef extends Scalr_UI_Controller
@@ -109,7 +110,7 @@ class Scalr_UI_Controller_Services_Chef extends Scalr_UI_Controller
         if(!$server)
             throw new Scalr_Exception_InsufficientPermissions();
 
-        return Scalr_Service_Chef_Client::getChef($server->url, $server->username, $this->getCrypto()->decrypt($server->authKey, $this->cryptoKey));
+        return Scalr_Service_Chef_Client::getChef($server->url, $server->username, $this->getCrypto()->decrypt($server->authKey));
     }
 
 

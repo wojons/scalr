@@ -463,7 +463,7 @@ abstract class AbstractDataType extends AbstractServiceRelatedType
     {
         //This method is supposed to be overridden where it's needed.
         $dom = new \DOMDocument('1.0', 'UTF-8');
-        throw $returnAsDom ? $dom : $dom->saveXML();
+        return $returnAsDom ? $dom : $dom->saveXML();
     }
 
     /**

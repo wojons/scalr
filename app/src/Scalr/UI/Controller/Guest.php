@@ -1,14 +1,17 @@
 <?php
 
-use Scalr\Acl\Acl;
 use Scalr\Modules\PlatformFactory;
 use Scalr\Modules\Platforms\Openstack\OpenstackPlatformModule;
 use Scalr\Model\Entity\Tag;
 use Scalr\UI\Request\RawData;
 use Scalr\UI\Request\JsonData;
+use Scalr\Stats\CostAnalytics\Entity\AccountCostCenterEntity;
+use Scalr\Util\CryptoTool;
 
 class Scalr_UI_Controller_Guest extends Scalr_UI_Controller
 {
+    protected $ldapGroups = null;
+
     public function logoutAction()
     {
         Scalr_Session::destroy();
@@ -78,6 +81,7 @@ class Scalr_UI_Controller_Guest extends Scalr_UI_Controller
                 }
 
                 $data['flags']['billingExists'] = \Scalr::config('scalr.billing.enabled');
+                $data['flags']['showDeprecatedFeatures'] = \Scalr::config('scalr.ui.show_deprecated_features');
                 $data['flags']['featureUsersPermissions'] = $this->user->getAccount()->isFeatureEnabled(Scalr_Limits::FEATURE_USERS_PERMISSIONS);
 
                 $data['flags']['wikiUrl'] = \Scalr::config('scalr.ui.wiki_url');
@@ -190,47 +194,62 @@ class Scalr_UI_Controller_Guest extends Scalr_UI_Controller
      * @param string $v
      * @param string $numServers
      */
-    public function xCreateAccountAction($name = '', $org = '', $email, $password = '', $agreeTerms = '', $newBilling = '', $country = '', $phone = '', $lastname = '', $firstname = '', $v = '', $numServers = '')
+    public function xCreateAccountAction($name = '', $org = '', $email = '', $password = '', $agreeTerms = '', $newBilling = '', $country = '', $phone = '', $lastname = '', $firstname = '', $v = '', $numServers = '', $beta = 0)
     {
-        if (!\Scalr::config('scalr.billing.enabled'))
+        if (!\Scalr::config('scalr.billing.enabled')) {
+            header("HTTP/1.0 403 Forbidden");
             exit();
+        }
 
         $Validator = new Scalr_Validator();
 
         if ($v == 2) {
-            if (!$firstname)
+            if (!$firstname) {
                 $err['firstname'] = _("First name required");
+            }
 
-            if (!$lastname)
+            if (!$lastname) {
                 $err['lastname'] = _("Last name required");
+            }
 
-            //if (!$org)
-            //    $err['org'] = _("Organization required");
+//             if (!$org) {
+//                 $err['org'] = _("Organization required");
+//             }
 
             $name = $firstname . " " . $lastname;
 
         } else {
-            if (!$name)
+            if (!$name) {
                 $err['name'] = _("Account name required");
+            }
         }
 
-        if (!$password)
+        if (!$password) {
             $password = $this->getCrypto()->sault(10);
+        }
 
-        if ($Validator->validateEmail($email, null, true) !== true)
+        if (!$email) {
+            $err['email'] = _("E-mail address required");
+        }
+
+        if ($Validator->validateEmail($email, null, true) !== true) {
             $err['email'] = _("Invalid E-mail address");
+        }
 
-        if (strlen($password) < 6)
+        if (strlen($password) < 6) {
             $err['password'] = _("Password should be longer than 6 chars");
+        }
 
         // Check email
         $DBEmailCheck = $this->db->GetOne("SELECT COUNT(*) FROM account_users WHERE email=?", array($email));
 
-        if ($DBEmailCheck > 0)
+        if ($DBEmailCheck > 0) {
             $err['email'] = _("E-mail already exists in database");
+        }
 
-        if (!$agreeTerms)
+        if (!$agreeTerms) {
             $err['agreeTerms'] = _("You need to agree with terms and conditions");
+        }
 
         if (count($err) == 0) {
             $account = Scalr_Account::init();
@@ -238,13 +257,27 @@ class Scalr_UI_Controller_Guest extends Scalr_UI_Controller
             $account->status = Scalr_Account::STATUS_ACTIVE;
             $account->save();
 
-            $account->createEnvironment("Environment 1");
-
-            $account->initializeAcl();
-
             $user = $account->createUser($email, $password, Scalr_Account_User::TYPE_ACCOUNT_OWNER);
             $user->fullname = $name;
             $user->save();
+
+            if ($this->getContainer()->analytics->enabled) {
+                $analytics = $this->getContainer()->analytics;
+
+                
+                    //Default Cost Center should be assigned
+                    $cc = $analytics->ccs->get($analytics->usage->autoCostCentre());
+                
+
+                //Assigns account with Cost Center
+                $accountCcEntity = new AccountCostCenterEntity($account->id, $cc->ccId);
+                $accountCcEntity->save();
+            }
+
+            //Creates Environment. It will be associated with the Cost Center itself.
+            $account->createEnvironment("Environment 1");
+
+            $account->initializeAcl();
 
             if ($v == 2) {
                 $user->setSetting('website.phone', $phone);
@@ -255,14 +288,12 @@ class Scalr_UI_Controller_Guest extends Scalr_UI_Controller
             /**
              * Limits
              */
-
             $url = Scalr::config('scalr.endpoint.scheme') . "://" . Scalr::config('scalr.endpoint.host');
 
             try {
                 $billing = new Scalr_Billing();
                 $billing->loadByAccount($account);
                 $billing->createSubscription(Scalr_Billing::PAY_AS_YOU_GO, "", "", "", "");
-                /*******************/
             } catch (Exception $e) {
                 $account->delete();
                 header("Location: {$url}/order/?error={$e->getMessage()}");
@@ -282,15 +313,20 @@ class Scalr_UI_Controller_Guest extends Scalr_UI_Controller
                 $clientSettings[CLIENT_SETTINGS::GA_TIMES_VISITED] = $gaParser->timesVisited;
             }
 
-            $clientSettings[CLIENT_SETTINGS::RSS_LOGIN] = $email;
-            $clientSettings[CLIENT_SETTINGS::RSS_PASSWORD] = $this->getCrypto()->sault(10);
-
-            foreach ($clientSettings as $k=>$v)
-                $account->setSetting($k, $v);
+            if (!empty($clientSettings)) {
+                foreach ($clientSettings as $k => $v) {
+                    $account->setSetting($k, $v);
+                }
+            }
 
             try {
-                $this->db->Execute("INSERT INTO default_records SELECT null, '{$account->id}', rtype, ttl, rpriority, rvalue, rkey FROM default_records WHERE clientid='0'");
-            } catch(Exception $e) {
+                $this->db->Execute("
+                    INSERT INTO default_records
+                    SELECT null, '{$account->id}', rtype, ttl, rpriority, rvalue, rkey
+                    FROM default_records
+                    WHERE clientid='0'
+                ");
+            } catch (Exception $e) {
             }
 
             $clientinfo = array(
@@ -324,11 +360,22 @@ class Scalr_UI_Controller_Guest extends Scalr_UI_Controller
             $user->updateLastLogin();
             Scalr_Session::create($user->getId());
             Scalr_Session::keepSession();
-            $this->response->setRedirect("{$url}/thanks.html");
+
+            if ($beta != 1) {
+                $this->response->setRedirect("{$url}/thanks.html");
+            } else {
+                $this->response->data(array('accountId' => $user->getAccountId()));
+            }
         } else {
-            $errors = array_values($err);
-            $error = $errors[0];
-            $this->response->setRedirect("{$url}/order/?error={$error}");
+            if ($beta == 1) {
+                header("HTTP/1.0 400 Bad request");
+                print json_encode($err);
+                exit();
+            } else {
+                $errors = array_values($err);
+                $error = $errors[0];
+                $this->response->setRedirect("{$url}/order/?error={$error}");
+            }
         }
     }
 
@@ -336,8 +383,6 @@ class Scalr_UI_Controller_Guest extends Scalr_UI_Controller
     {
         $this->response->page('ui/guest/login.js', array('loginAttempts' => 0, 'recaptchaPublicKey' => $this->getContainer()->config->get('scalr.ui.recaptcha.public_key')));
     }
-
-    protected $ldapGroups = null;
 
     private function loginUserGet($login, $password, $accountId, $scalrCaptcha, $scalrCaptchaChallenge)
     {
@@ -599,7 +644,7 @@ class Scalr_UI_Controller_Guest extends Scalr_UI_Controller
             if ($tfaGglCode) {
                 if ($tfaGglReset) {
                     $resetCode = $user->getSetting(Scalr_Account_User::SETTING_SECURITY_2FA_GGL_RESET_CODE);
-                    if ($resetCode != Scalr_Util_CryptoTool::hash($tfaGglCode)) {
+                    if ($resetCode != CryptoTool::hash($tfaGglCode)) {
                         $this->response->data(array('errors' => array('tfaGglCode' => 'Invalid reset code')));
                         $this->response->failure();
                         return;

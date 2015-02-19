@@ -50,61 +50,6 @@ Scalr.regPage('Scalr.ui.core.settings', function (loadParams, moduleParams) {
 			}]
 		}, {
 			xtype: 'fieldset',
-            title: 'RSS feed',
-			items: [{
-				xtype: 'displayfield',
-				cls: 'x-form-field-info',
-				value: 'Each farm has an events and notifications page. You can get these events outside of Scalr on an RSS reader with the below credentials.'
-			}, {
-				xtype: 'textfield',
-				name: 'rss_login',
-				width: 336,
-				fieldLabel: 'Login'
-			}, {
-				xtype: 'fieldcontainer',
-				fieldLabel: 'Password',
-				layout: 'hbox',
-				items: [{
-					xtype: 'textfield',
-					name: 'rss_pass',
-					width: 261,
-					hideLabel: true
-				}, {
-					xtype: 'button',
-					text: 'Generate',
-                    width: 90,
-					margin: '0 0 0 8',
-					handler: function() {
-						function getRandomNum() {
-							var rndNum = Math.random();
-							rndNum = parseInt(rndNum * 1000);
-							rndNum = (rndNum % 94) + 33;
-							return rndNum;
-						};
-
-						function checkPunc(num) {
-							if ((num >=33) && (num <=47)) { return true; }
-							if ((num >=58) && (num <=64)) { return true; }
-							if ((num >=91) && (num <=96)) { return true; }
-							if ((num >=123) && (num <=126)) { return true; }
-							return false;
-						};
-
-						var length=16;
-						var sPassword = "";
-
-						for (var i=0; i < length; i++) {
-							var numI = getRandomNum();
-							while (checkPunc(numI)) { numI = getRandomNum(); }
-							sPassword = sPassword + String.fromCharCode(numI);
-						}
-
-						this.prev().setValue(sPassword);
-					}
-				}]
-			}]
-		}, {
-			xtype: 'fieldset',
 			title: 'User interface',
 			items: [{
 				xtype: 'combo',

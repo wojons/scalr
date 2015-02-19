@@ -127,7 +127,7 @@ Scalr.regPage('Scalr.ui.webhooks.history.view', function (loadParams, modulePara
         columns: [
             { header: 'Event date and time', width: 160, dataIndex: 'created', sortable: false},
             { header: 'Webhook', flex: .6, dataIndex: 'webhookName', sortable: false, xtype: 'templatecolumn', tpl: '<a href="#/webhooks/configs?level='+moduleParams['levelMap'][moduleParams['level']]+'&webhookId={webhookId}">{webhookName}</a>'},
-            { header: 'Event', flex: .6, dataIndex: 'eventType', sortable: false, xtype: 'templatecolumn', tpl: '<a href="#/farms/{farmId}/events?eventId={eventId}">{eventType}</a>'},
+            { header: 'Event', flex: .6, dataIndex: 'eventType', sortable: false, xtype: 'templatecolumn', tpl: '<a href="#/logs/events?eventId={eventId}">{eventType}</a>'},
             { header: 'Attempts', width: 85, dataIndex: 'handleAttempts', sortable: false},
             { header: 'Status', maxWidth: 90, dataIndex: 'status', sortable: false, xtype: 'statuscolumn', statustype: 'webhookhistory', resizable: false},
             {
@@ -243,8 +243,8 @@ Scalr.regPage('Scalr.ui.webhooks.history.view', function (loadParams, modulePara
         showInfo: function() {
             var record = this.getRecord();
             this.down('#payload').setValue(record.get('payload'));
-            this.down('#eventId').setValue('<a href="#/farms/'+record.get('farmId')+'/events?eventId='+record.get('eventId')+'">'+record.get('eventId')+'</a>');
-            this.down('#serverId').setValue(record.get('serverId') ? '<a href="#/server/view?serverId='+record.get('serverId')+'">'+record.get('serverId')+'</a>' : '-');
+            this.down('#eventId').setValue('<a href="#/logs/events?eventId='+record.get('eventId')+'">'+record.get('eventId')+'</a>');
+            this.down('#serverId').setValue(record.get('serverId') ? '<a href="#/servers/view?serverId='+record.get('serverId')+'">'+record.get('serverId')+'</a>' : '-');
             this.down('#payload').setValue(record.get('payload'));
             this.down('#endpoint').setValue('<a href="#/webhooks/endpoints?level='+moduleParams['levelMap'][moduleParams['level']]+'&endpointId='+record.get('endpointId')+'">'+record.get('url')+'</a>');
             this.up().unmask();

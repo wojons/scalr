@@ -246,8 +246,11 @@ class Prices
      * @param   string    $url           optional The keystone url for the private clouds
      * @param   \DateTime $applied       optional The date in UTC
      * @param   int       $accountId     optional ID of the account (global level by default)
+     * @param   string    $instanceType  optional Type of the instance
+     * @param   int       $os            optional Os type [Linux - 0, Windows - 1]
+     * @return  ArrayCollection Returns a collection of price entities
      */
-    public function getActualPrices($platform, $cloudLocation, $url = null, \DateTime $applied = null, $accountId = null)
+    public function getActualPrices($platform, $cloudLocation, $url = null, \DateTime $applied = null, $accountId = null, $instanceType = null, $os = null)
     {
         $ret = new ArrayCollection();
 
@@ -258,7 +261,7 @@ class Prices
         $accountId = $accountId ?: 0;
         $url = $url ?: '';
 
-        $res = $this->cadb->Execute("
+        $sql = "
             SELECT ph.cloud_location, ph.applied, ph.deny_override,
                    p.instance_type, p.os, p.price_id, p.cost
             FROM price_history ph
@@ -276,12 +279,22 @@ class Prices
             AND ph.cloud_location = ?
             AND ph.url = ?
             AND ph.applied <= ?
-        ", [
+        ";
+
+        if ($instanceType !== null) {
+            $sql .= " AND p.instance_type = '$instanceType'";
+        }
+
+        if ($os !== null) {
+            $sql .= " AND p.os =" . $os;
+        }
+
+        $res = $this->cadb->Execute($sql, [
             $applied->format('Y-m-d'),
             $accountId,
             $platform,
             $cloudLocation,
-            $url,
+            $this->normalizeUrl($url),
             $applied->format('Y-m-d')
         ]);
 
@@ -377,9 +390,9 @@ class Prices
         $allowedClouds = (array) \Scalr::config('scalr.allowed_clouds');
 
         return array_values(array_intersect($allowedClouds, array_merge([
-                SERVER_PLATFORMS::EC2,
+                SERVER_PLATFORMS::EC2, SERVER_PLATFORMS::GCE
             ],
-            array_diff(PlatformFactory::getOpenstackBasedPlatforms(), [\SERVER_PLATFORMS::CONTRAIL]),
+            PlatformFactory::getOpenstackBasedPlatforms(),
             PlatformFactory::getCloudstackBasedPlatforms()
         )));
     }

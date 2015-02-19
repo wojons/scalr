@@ -1,4 +1,5 @@
 <?php
+
 namespace Scalr\Upgrade\Updates;
 
 use Scalr\Upgrade\SequenceInterface;
@@ -37,8 +38,7 @@ class Update20131219150637 extends AbstractUpdate implements SequenceInterface
 
     protected function run1($stage)
     {
-        $crypto = new \Scalr_Util_CryptoTool(MCRYPT_TRIPLEDES, MCRYPT_MODE_CFB, 24, 8);
-        $cryptoKey = @file_get_contents(SRCPATH . "/../etc/.cryptokey");
+        $crypto = \Scalr::getContainer()->crypto;
 
         $this->console->out('Creating field ssl_simple_pkey');
         $this->db->Execute(
@@ -51,7 +51,7 @@ class Update20131219150637 extends AbstractUpdate implements SequenceInterface
             if ($value['ssl_pkey']) {
                 $this->db->Execute('UPDATE services_ssl_certs SET ssl_simple_pkey = ?, ssl_pkey = ? WHERE id = ?', array(
                     $value['ssl_pkey'],
-                    $crypto->encrypt($value['ssl_pkey'], $cryptoKey),
+                    $crypto->encrypt($value['ssl_pkey']),
                     $value['id']
                 ));
             }

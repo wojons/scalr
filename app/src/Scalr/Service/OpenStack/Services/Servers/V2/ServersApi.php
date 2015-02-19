@@ -131,6 +131,30 @@ class ServersApi
     }
     
     /**
+     * Update server meta data
+     * 
+     * @param string $serverId
+     * @param array $metadata
+     * @return object
+     * @throws  RestClientException
+     */
+    public function updateServerMetadata($serverId, array $metadata = null)
+    {
+        $result = null;
+        
+        $options = array('metadata' => $metadata);
+        $response = $this->getClient()->call(
+            $this->service,
+            sprintf('/servers/%s/metadata', $serverId), $options, 'POST'
+        );
+        
+        if ($response->hasError() === false) {
+            $result = true;
+        }
+        return $result;
+    }
+    
+    /**
      * Create Server action
      *
      * @param   string          $name        A server name to create.
@@ -765,6 +789,28 @@ class ServersApi
         return $result;
     }
 
+    /**
+     * List Nova Networks
+     *
+     * Lists nova networks that are available to the tenant.
+     *
+     * @return  DefaultPaginationList Returns the list nova networks associated with the tenant or account.
+     * @throws  RestClientException
+     */
+    public function listNetworks()
+    {
+        $result = null;
+        $response = $this->getClient()->call($this->service, '/os-networks');
+        if ($response->hasError() === false) {
+            $result = json_decode($response->getContent());
+            $result = new DefaultPaginationList(
+                $this->service, 'networks', $result->networks,
+                null
+            );
+        }
+        return $result;
+    }
+    
     /**
      * List Floating Ips action
      *

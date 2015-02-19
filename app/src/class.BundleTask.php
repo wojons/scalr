@@ -236,6 +236,13 @@ class BundleTask
         return unserialize($this->metaData);
     }
 
+    public function getOsIds()
+    {
+        $info = $this->getOsDetails();
+        
+        //TODO: Return all OS ids that match.
+    }
+    
     public function getOsDetails()
     {
         $retval = new stdClass();
@@ -243,7 +250,7 @@ class BundleTask
         switch ($this->osFamily) {
             case "windows":
                 $retval->family = "windows";
-
+                
                 if (strpos($this->osName, '2008Server') === 0)
                     $generation = '2008';
                 elseif (strpos($this->osName, '2012Server') === 0)
@@ -251,7 +258,11 @@ class BundleTask
 
                 $retval->generation = $generation;
                 $retval->version = $this->osVersion;
-                $retval->name = $this->osFamily;
+                $retval->name = "Windows {$generation}";
+                
+                if (substr($this->osName, -2) == 'R2')
+                    $retval->name .= " R2";
+                
                 break;
             case "ubuntu":
                 $retval->family = $this->osFamily;

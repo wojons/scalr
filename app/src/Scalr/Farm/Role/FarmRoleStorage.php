@@ -106,15 +106,9 @@ class FarmRoleStorage
             $volume = null;
             $dbVolume = FarmRoleStorageDevice::getByConfigIdAndIndex($config->id, $dbServer->index);
             if ($dbVolume) {
-                 if ($config->reUse == 0 && $isHostInit) {
-                     $dbVolume->status = FarmRoleStorageDevice::STATUS_ZOMBY;
-                     $dbVolume->save();
-                 } else {
-                     $volume = $dbVolume->config;
-                     $createFreshConfig = false;
-
-                     $volume->mpoint = ($config->mount == 1) ? $config->mountPoint : null;
-                 }
+                 $volume = $dbVolume->config;
+                 $createFreshConfig = false;
+                 $volume->mpoint = ($config->mount == 1) ? $config->mountPoint : null;
             }
 
             if ($createFreshConfig || $config->rebuild) {

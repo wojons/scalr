@@ -12,6 +12,8 @@ use Scalr\Service\Aws\Elb\DataType\ListenerList;
 use Scalr\Service\Aws\Elb\DataType\ListenerData;
 use Scalr\Service\Aws\DataType\ListDataType;
 use Scalr\Service\Aws\Elb\DataType\LoadBalancerDescriptionData;
+use Scalr\Service\Aws\Elb\DataType\TagDescriptionList;
+use Scalr\Service\Aws\Elb\DataType\TagsList;
 use Scalr\Service\Aws\ElbException;
 use Scalr\Service\Aws\Elb\AbstractElbHandler;
 
@@ -48,16 +50,18 @@ class LoadBalancerHandler extends AbstractElbHandler
      * @param  string $scheme optional
      *         The type of LoadBalancer
      *
+     * @param  array|TagsList  $tagsList optional List of tags to add
+     *
      * @return string Returns the DNS name of the created load balancer.
      * @throws ElbException
      * @throws ClientException
      */
     public function create($loadBalancerName, $listenersList, $availabilityZonesList = null, $subnetsList = null,
-                           $securityGroupsList = null, $scheme = null)
+                           $securityGroupsList = null, $scheme = null, $tagsList = null)
     {
         return $this->getElb()->createLoadBalancer(
             $loadBalancerName, $listenersList, $availabilityZonesList,
-            $subnetsList, $securityGroupsList, $scheme
+            $subnetsList, $securityGroupsList, $scheme, $tagsList
         );
     }
 
@@ -485,6 +489,71 @@ class LoadBalancerHandler extends AbstractElbHandler
         return $this->getElb()->getApiHandler()->setLoadBalancerPoliciesForBackendServer(
             $loadBalancerName, isset($iport) ? $iport : (int) $instancePort, $policyNamesList
         );
+    }
+
+    /**
+     * Describes the tags associated with one or more load balancers.
+     *
+     * @param  array|string|LoadBalancerDescriptionList|LoadBalancerDescriptionData $loadBalancerNamesList  A list of names associated
+     *                                       with the LoadBalancers at creation time.
+     * @return TagDescriptionList
+     */
+    public function describeTags($loadBalancerNamesList)
+    {
+        if ($loadBalancerNamesList !== null && !($loadBalancerNamesList instanceof ListDataType)) {
+            $list = new ListDataType($loadBalancerNamesList, 'loadBalancerNames');
+        }
+
+        return $this->getElb()->getApiHandler()->describeTags(isset($list) ? $list : null);
+    }
+
+    /**
+     * Adds one or more tags for the specified load balancer. Each load balancer can have a maximum of 10 tags.
+     * Each tag consists of a key and an optional value.
+     * Tag keys must be unique for each load balancer.
+     * If a tag with the same key is already associated with the load balancer, this action will update the value of the key.
+     *
+     * @param  array|string|LoadBalancerDescriptionList|LoadBalancerDescriptionData $loadBalancerNamesList A list of names associated
+     *                                       with the LoadBalancers at creation time.
+     *
+     * @param array|TagsList  $tagsList List of tags to add
+     *
+     * @return array
+     */
+    public function addTags($loadBalancerNamesList, $tagsList)
+    {
+        if ($loadBalancerNamesList !== null && !($loadBalancerNamesList instanceof ListDataType)) {
+            $loadBalancerNamesList = new ListDataType($loadBalancerNamesList, 'loadBalancerName');
+        }
+
+        if ($tagsList !== null && !($tagsList instanceof TagsList)) {
+            $tagsList = new TagsList($tagsList);
+        }
+
+        return $this->getElb()->getApiHandler()->addTags($loadBalancerNamesList, $tagsList);
+    }
+
+    /**
+     * Removes one or more tags from the specified load balancer.
+     *
+     * @param array|string|LoadBalancerDescriptionList|LoadBalancerDescriptionData $loadBalancerNamesList  A list of names associated
+     *                                       with the LoadBalancers at creation time.
+     *
+     * @param array|string $tagsKeys   A list of tag keys to remove.
+     *
+     * @return bool
+     */
+    public function removeTags($loadBalancerNamesList, $tagsKeys)
+    {
+        if ($loadBalancerNamesList !== null && !($loadBalancerNamesList instanceof ListDataType)) {
+            $loadBalancerNamesList = new ListDataType($loadBalancerNamesList, 'loadBalancerName');
+        }
+
+        if ($tagsKeys !== null && !($tagsKeys instanceof ListDataType)) {
+            $tagsKeys = new ListDataType($tagsKeys, 'Tags');
+        }
+
+        return $this->getElb()->getApiHandler()->removeTags($loadBalancerNamesList, $tagsKeys);
     }
 
     /**

@@ -43,7 +43,7 @@ class Scalr_UI_Controller_Tools_Aws_Rds_Pg extends Scalr_UI_Controller
         $aws = $this->getEnvironment()->aws($this->getParam('cloudLocation'));
         $aws->rds->dbParameterGroup->create(new Scalr\Service\Aws\Rds\DataType\DBParameterGroupData(
             $this->getParam('dbParameterGroupName'),
-            $this->getParam('Engine'),
+            $this->getParam('EngineFamily'),
             $this->getParam('Description')
         ));
 
@@ -201,4 +201,30 @@ class Scalr_UI_Controller_Tools_Aws_Rds_Pg extends Scalr_UI_Controller
         }
         $this->response->success("DB parameter group successfully reset to default");
     }
+
+    /**
+     * Gets list of engine families
+     *
+     * @param string $cloudLocation
+     */
+    public function xGetDBFamilyListAction($cloudLocation)
+    {
+        $aws = $this->getEnvironment()->aws($cloudLocation);
+
+        $versions = $aws->rds->describeDBEngineVersions();
+
+        $engineFamilyList = [];
+
+        foreach ($versions as $version) {
+            /* @var $version \Scalr\Service\Aws\Rds\DataType\DBEngineVersionData */
+            $entry = [$version->dBParameterGroupFamily];
+
+            if (!in_array($entry, $engineFamilyList)) {
+                $engineFamilyList[] = $entry;
+            }
+        }
+
+        $this->response->data(['engineFamilyList' => $engineFamilyList]);
+    }
+
 }

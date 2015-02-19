@@ -189,7 +189,7 @@ class Rotate extends AbstractTask
         $config = parent::config();
 
         if ($config->daemon) {
-            //Report warning to php-warnings.log
+            //Report a warning to log
             trigger_error(sprintf("Demonized mode is not allowed for '%s' job.", $this->name), E_USER_WARNING);
 
             //Forces normal mode

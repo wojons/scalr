@@ -256,13 +256,17 @@ class GoogleCEPlatformModule extends AbstractPlatformModule implements \Scalr\Mo
 
             if ($status == 'not-found') {
                 if ($operationId) {
-                    $info = $gce->zoneOperations->get(
-                        $DBServer->GetEnvironmentObject()->getPlatformConfigValue(self::PROJECT_ID),
-                        $cloudLocation,
-                        $operationId
-                    );
-                    if ($info->status != 'DONE')
-                        $status = 'PROVISIONING';
+                    try {
+                        $info = $gce->zoneOperations->get(
+                            $DBServer->GetEnvironmentObject()->getPlatformConfigValue(self::PROJECT_ID),
+                            $cloudLocation,
+                            $operationId
+                        );
+                        if ($info->status != 'DONE')
+                            $status = 'PROVISIONING';
+                    } catch (Exception $e) {
+                        \Logger::getLogger("GCE")->error("GCE: operation was not found: {$operationId}, ServerID: {$DBServer->serverId}, ServerStatus: {$DBServer->status}");
+                    }
                 } else {
                     if ($DBServer->status == \SERVER_STATUS::PENDING)
                         $status = 'PROVISIONING';

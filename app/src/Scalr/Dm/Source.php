@@ -34,20 +34,18 @@ class Scalr_Dm_Source extends Scalr_Model
 
     static public function getIdByUrlAndAuth($url, $authInfo) {
 
-        $crypto = new Scalr_Util_CryptoTool(MCRYPT_TRIPLEDES, MCRYPT_MODE_CFB, 24, 8);
-        $cryptoKey = @file_get_contents(dirname(__FILE__)."/../../etc/.cryptokey");
-        $eAuthInfo = $crypto->encrypt(serialize($authInfo), $cryptoKey);
+        $eAuthInfo = \Scalr::getContainer()->crypto->encrypt(serialize($authInfo));
 
         return \Scalr::getDb()->GetOne("SELECT id FROM dm_sources WHERE `url`=? AND auth_info=? LIMIT 1", array($url, $eAuthInfo));
     }
 
     public function setAuthInfo(stdClass $authInfo = null)
     {
-        $this->authInfo = $this->getCrypto()->encrypt(serialize($authInfo), $this->cryptoKey);
+        $this->authInfo = $this->getCrypto()->encrypt(serialize($authInfo));
     }
 
     public function getAuthInfo()
     {
-        return unserialize(trim($this->getCrypto()->decrypt($this->authInfo, $this->cryptoKey)));
+        return unserialize(trim($this->getCrypto()->decrypt($this->authInfo)));
     }
 }

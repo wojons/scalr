@@ -49,29 +49,39 @@ class AccountTagEntity extends \Scalr\Model\AbstractEntity
      *
      * @param   mixed    $id          Identifier of the tag's value
      * @param   string   $tagId       Identifier of the tag
+     * @param   int      $accountId   optional  Identifier of the account
      * @param   string   $ignoreCache optional TRUE if cache should be ignored, default value is false
      * @return  string   Returns the tag's value name
      */
-    public static function fetchName($id, $tagId, $ignoreCache = false)
+    public static function fetchName($id, $tagId, $accountId = null, $ignoreCache = false)
     {
         static $cache;
 
         $name = null;
 
+        $key = "$tagId|$id|$accountId";
+
         if (empty($id)) {
             $name = 'Unassigned resources';
-        } else if ($ignoreCache || !isset($cache[$tagId][$id])) {
+        } else if ($ignoreCache || !isset($cache[$key])) {
             //Trying to find the name of the project in the tag values history
-            if (null === ($pe = self::findOne([['tagId' => $tagId], ['valueId' => $id]]))) {
+            $findParams = [['tagId' => $tagId], ['valueId' => $id]];
+
+            if (!empty($accountId)) {
+                $findParams[] = ['accountId' => $accountId];
+            }
+
+            if (null === ($pe = self::findOne($findParams))) {
                 $name = $id;
             } else {
                 $name = $pe->valueName;
             }
+
             if (!$ignoreCache) {
-                $cache[$tagId][$id] = $name;
+                $cache[$key] = $name;
             }
         } else {
-            $name = $cache[$tagId][$id];
+            $name = $cache[$key];
         }
 
         return $name;

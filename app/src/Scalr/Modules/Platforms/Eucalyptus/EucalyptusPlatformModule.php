@@ -23,6 +23,7 @@ use Scalr\Modules\Platforms\Eucalyptus\Adapters\StatusAdapter;
 use Scalr\Modules\AbstractPlatformModule;
 use Scalr\Model\Entity\Image;
 use Scalr\Model\Entity\CloudLocation;
+use Scalr\Util\CryptoTool;
 
 class EucalyptusPlatformModule extends AbstractPlatformModule implements \Scalr\Modules\PlatformModuleInterface
 {
@@ -890,7 +891,7 @@ class EucalyptusPlatformModule extends AbstractPlatformModule implements \Scalr\
                         $dbRules = $DBServer->GetFarmRoleObject()->GetRoleObject()->getSecurityRules();
                         $groupRules = array();
                         foreach ($dbRules as $rule) {
-                            $groupRules[\Scalr_Util_CryptoTool::hash($rule['rule'])] = $rule;
+                            $groupRules[CryptoTool::hash($rule['rule'])] = $rule;
                         }
 
                         // Behavior rules
@@ -898,7 +899,7 @@ class EucalyptusPlatformModule extends AbstractPlatformModule implements \Scalr\
                             $bRules = $bObj->getSecurityRules();
                             foreach ($bRules as $r) {
                                 if ($r) {
-                                    $groupRules[\Scalr_Util_CryptoTool::hash($r)] = array('rule' => $r);
+                                    $groupRules[CryptoTool::hash($r)] = array('rule' => $r);
                                 }
                             }
                         }
@@ -1198,5 +1199,19 @@ class EucalyptusPlatformModule extends AbstractPlatformModule implements \Scalr\
 
         return $ret;
     }
+
+    /**
+     * Gets endpoint url for private clouds
+     *
+     * @param \Scalr_Environment $env       The scalr environment object
+     * @param string             $group     optional The group name for eucaliptus
+     * @return string|null Returns endpoint url for private clouds. Null otherwise.
+     */
+    public function getEndpointUrl(\Scalr_Environment $env, $group = null)
+    {
+        //TODO add implementation
+        return null;
+    }
+
 }
 

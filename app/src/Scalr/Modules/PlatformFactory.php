@@ -18,7 +18,6 @@ class PlatformFactory
         return array(
             SERVER_PLATFORMS::OPENSTACK,
             SERVER_PLATFORMS::ECS,
-            SERVER_PLATFORMS::CONTRAIL,
             SERVER_PLATFORMS::OCS,
             SERVER_PLATFORMS::NEBULA,
             SERVER_PLATFORMS::RACKSPACENG_UK,
@@ -73,7 +72,7 @@ class PlatformFactory
             $ucPlatform = ucfirst($platform);
             if ($platform == SERVER_PLATFORMS::GCE) {
                 self::$cache[$platform] = new \Scalr\Modules\Platforms\GoogleCE\GoogleCEPlatformModule();
-            } elseif (in_array($platform, array(SERVER_PLATFORMS::ECS, SERVER_PLATFORMS::CONTRAIL, SERVER_PLATFORMS::OCS, SERVER_PLATFORMS::NEBULA))) {
+            } elseif (in_array($platform, array(SERVER_PLATFORMS::ECS, SERVER_PLATFORMS::OCS, SERVER_PLATFORMS::NEBULA))) {
                 self::$cache[$platform] = new \Scalr\Modules\Platforms\Openstack\OpenstackPlatformModule($platform);
             } elseif ($platform == SERVER_PLATFORMS::RACKSPACENG_UK) {
                 self::$cache[$platform] = new \Scalr\Modules\Platforms\RackspaceNgUk\RackspaceNgUkPlatformModule();

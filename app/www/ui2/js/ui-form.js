@@ -1736,9 +1736,11 @@ Ext.define('Scalr.ui.Ec2TagsField', {
 
     cls: 'x-grid-shadow x-grid-no-highlighting',
     allowNameTag: true,
-    governanceTooltip: 'This Environment\'s Tagging Policy does not allow you to add custom tags.',
+    tagsLimit: 10,
+    cloud: 'ec2',
 
     initComponent: function() {
+        this.reservedNames = [];
         this.systemTags = {
             'scalr-env-id': '{SCALR_ENV_ID}',
             'scalr-owner': '{SCALR_FARM_OWNER_EMAIL}',
@@ -1746,17 +1748,37 @@ Ext.define('Scalr.ui.Ec2TagsField', {
             'scalr-farm-role-id': '{SCALR_FARM_ROLE_ID}',
             'scalr-server-id': '{SCALR_SERVER_ID}'
         };
+        this.on('viewready', function() {
+            this.setCloud(this.cloud);
+        }, this, {single: true});
         this.callParent(arguments);
     },
 
+    setCloud: function(cloud) {
+        var itemName, subjectName, reservedNames;
+        this.cloud = cloud;
+        if (cloud === 'ec2') {
+            this.itemName = 'tag';
+            this.subjectName = 'Tagging';
+            this.reservedNames = [];
+        } else if (cloud === 'openstack') {
+            this.itemName = 'name-value pair';
+            this.subjectName = 'Metadata';
+            this.reservedNames = ['farmid',  'role',  'httpproto',  'region',  'hash',  'realrolename', 'szr_key',  'serverid',  'p2p_producer_endpoint',  'queryenv_url', 'behaviors',  'farm_roleid',  'roleid',  'env_id',  'platform', 'server_index',  'cloud_server_id',  'cloud_location_zone',  'owner_email'];
+        }
+        this.governanceTooltip = 'This Environment\'s '+this.subjectName+' Policy does not allow you to add custom '+this.itemName+'s.',
+        this.view.findFeature('addbutton').text = 'Add ' + this.itemName;
+    },
+    setSubjectName: function(subjectName) {
+        this.subjectName = subjectName;
+    },
     store: {
         fields: ['name', 'value', 'system'],
         proxy: 'object'
     },
     features: {
         ftype: 'addbutton',
-        text: 'Add new tag',
-        maxCount: 10,
+        text: 'Add',
         handler: function(view) {
             view.up().store.add({});
         }
@@ -1776,20 +1798,13 @@ Ext.define('Scalr.ui.Ec2TagsField', {
     }],
     listeners: {
         viewready: function() {
-            var me = this,
-                view = me.view;
-            cb = function() {
-                var tooltip,
-                    allowNameTag = me.up().allowNameTag,
-                    tagsLimit = allowNameTag ? 10 : 9;
-                tooltip = me.readOnly ? me.governanceTooltip : 'Tag limit of ' + tagsLimit + ' reached' + (!allowNameTag ? ' (1 tag reserved for Name)' : '');
-                view.findFeature('addbutton').setDisabled((view.store.snapshot || view.store.data).length >= tagsLimit || me.readOnly, tooltip);
-            };
             this.store.on({
-                refresh: cb,
-                add: cb,
-                remove: cb
+                refresh: this.applyTagsLimit,
+                add: this.applyTagsLimit,
+                remove: this.applyTagsLimit,
+                scope: this
             });
+            this.applyTagsLimit();
         },
         itemclick: function (view, record, item, index, e) {
             var selModel = view.getSelectionModel();
@@ -1818,15 +1833,41 @@ Ext.define('Scalr.ui.Ec2TagsField', {
             margin: '0 12 0 13',
             fixWidth: -25,
             maxLength: 127,
-            allowBlank: false
+            //allowBlank: false,
+            validateOnChange: false,
+            listeners: {
+                focus: function() {
+                    var isValid = this.column.isValid(this.getValue());
+                    if (isValid !== true) {
+                        this.markInvalid(isValid);
+                    }
+                },
+                change: function(comp, value) {
+                    var isValid = comp.column.isValid(value);
+                    if (isValid !== true) {
+                        comp.markInvalid(isValid);
+                    } else {
+                        comp.clearInvalid();
+                    }
+                }
+            }
+        },
+        isValid: function(value, allowEmpty) {
+            var value = Ext.String.trim(value||'');
+            if (!value && !allowEmpty) {
+                return 'Required field';
+            } else {
+                return !Ext.Array.contains(this.ownerCt.grid.reservedNames, value) || 'Reserved name';
+            }
         },
         isEditable: function(record) {
             return !record.get('system');
         },
         renderer: function(value, meta, record, rowIndex, colIndex, store, grid) {
             var column = grid.panel.columns[colIndex],
-               valueEncoded = Ext.String.htmlEncode(value);
-            return  '<div class="x-form-text" style="background:#fff;padding:2px 12px 3px 13px;text-overflow: ellipsis;overflow:hidden;cursor:text">'+
+               valueEncoded = Ext.String.htmlEncode(value),
+               isValid = column.isValid(value, true);
+            return  '<div data-qtip="'+(isValid===true?'':isValid)+'" class="x-form-text" style="background:'+(isValid===true?'#fff':'#ffb2a3')+';padding:2px 12px 3px 13px;text-overflow: ellipsis;overflow:hidden;cursor:text">'+
                         (record.get('system') || grid.up().readOnly ? '<span style="color:#999">' + valueEncoded + '</span>' : valueEncoded) +
                     '</div>';
         }
@@ -1858,12 +1899,12 @@ Ext.define('Scalr.ui.Ec2TagsField', {
             var result = '<img style="cursor:pointer;margin-top:6px;',
                 panel = grid.up();
             if (record.get('system')) {
-                result += 'cursor:default;opacity:.4" width="16" height="16" class="x-icon-server-action x-icon-lock" data-qwidth="440" data-qtip="System tags cannot be modified or removed, and will be added to instances and volumes regardless of whether you enforce a Tagging policy"';
+                result += 'cursor:default;opacity:.4" width="16" height="16" class="x-icon-server-action x-icon-lock" data-qwidth="440" data-qtip="System '+panel.itemName+'s cannot be modified or removed, and will be added to instances and volumes regardless of whether you enforce a '+panel.subjectName+' policy"';
             } else {
                 if (panel.readOnly) {
                     result += '" class="x-icon-governance" data-qtip="' + panel.governanceTooltip + '"';
                 } else {
-                    result += '" width="15" height="15" class="x-icon-action x-icon-action-delete" data-qtip="Delete tag"';
+                    result += '" width="15" height="15" class="x-icon-action x-icon-action-delete" data-qtip="Delete"';
                 }
             }
             result += ' src="'+Ext.BLANK_IMAGE_URL+'"/>';
@@ -1902,10 +1943,12 @@ Ext.define('Scalr.ui.Ec2TagsField', {
             isValid = true,
             cellEditing = me.getPlugin('cellediting');
         (me.store.snapshot || me.store.data).each(function(record){
-            var name = record.get('name');
-            if (!name) {
+            var name = Ext.String.trim(record.get('name'));
+            if (!name || Ext.Array.contains(me.reservedNames, name)) {
                 cellEditing.startEdit(record, 0);
-                cellEditing.context.column.field.validate();
+                if (!name) {
+                    cellEditing.context.column.field.validate();
+                }
                 isValid = false;
                 return false;
             }
@@ -1928,6 +1971,26 @@ Ext.define('Scalr.ui.Ec2TagsField', {
 
     setReadOnly: function(readOnly) {
         this.readOnly = !!readOnly;
+    },
+
+    setTagsLimit: function(tagsLimit) {
+        this.tagsLimit = tagsLimit;
+        this.applyTagsLimit();
+    },
+
+    applyTagsLimit: function() {
+        var me = this,
+            view = me.view,
+            tooltip,
+            tagsLimit;
+        if (me.tagsLimit) {
+            tagsLimit = me.allowNameTag ? me.tagsLimit : me.tagsLimit - 1
+            tooltip = me.readOnly ? me.governanceTooltip : 'Tag limit of ' + tagsLimit + ' reached' + (!me.allowNameTag ? ' (1 tag reserved for Name)' : '');
+            view.findFeature('addbutton').setDisabled((view.store.snapshot || view.store.data).length >= tagsLimit || me.readOnly, tooltip);
+        } else {
+            view.findFeature('addbutton').setDisabled(me.readOnly, '');
+        }
+
     }
 });
 

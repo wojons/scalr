@@ -15,6 +15,8 @@ abstract class Event
     public $msgExpected = 0,
         $msgCreated = 0,
         $msgSent = 0;
+    
+    public $scriptsCount = 0;
 
     /**
      * Constructor

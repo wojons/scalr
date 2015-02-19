@@ -1,10 +1,13 @@
 <?php
+
 use Scalr\Acl\Acl;
 use Scalr\Service\Aws\Elb\DataType\ListenerData;
 use Scalr\Service\Aws\Elb\DataType\LoadBalancerDescriptionData;
 use Scalr\Service\Aws\Elb\DataType\ListenerList;
 use Scalr\Service\Aws\Elb\DataType\HealthCheckData;
 use Scalr\Farm\Role\FarmRoleService;
+use Scalr\Service\Aws\Elb\DataType\TagsList;
+use Scalr\Util\CryptoTool;
 
 class Scalr_UI_Controller_Tools_Aws_Ec2_Elb extends Scalr_UI_Controller
 {
@@ -108,7 +111,7 @@ class Scalr_UI_Controller_Tools_Aws_Ec2_Elb extends Scalr_UI_Controller
         $subnets = $this->getParam('subnets');
         $scheme = $this->getParam('scheme');
 
-        $elb_name = sprintf("scalr-%s-%s", Scalr_Util_CryptoTool::sault(10), rand(100,999));
+        $elb_name = sprintf("scalr-%s-%s", CryptoTool::sault(10), rand(100,999));
 
         $healthCheckType = new HealthCheckData();
         $healthCheckType->target = $healthCheck['target'];
@@ -120,6 +123,21 @@ class Scalr_UI_Controller_Tools_Aws_Ec2_Elb extends Scalr_UI_Controller
         //Creates a new ELB
         $dnsName = $elb->loadBalancer->create($elb_name, $listenersList, !empty($availZones) ? $availZones : null, !empty($subnets) ? $subnets : null, null, !empty($scheme) ? $scheme : null);
 
+        $tags = array(
+            array('key' => "scalr-env-id", 'value' => $this->environment->id),
+            array('key' => "scalr-owner", 'value' => $this->user->getEmail())
+        );
+        
+        //Tags governance
+        $governance = new \Scalr_Governance($this->environment->id);
+        $gTags = (array)$governance->getValue('ec2', 'aws.tags');
+        if (count($gTags) > 0) {
+            foreach ($gTags as $tKey => $tValue)
+                $tags[] = array('key' => $tKey, 'value' => $this->environment->applyGlobalVarsToValue($tValue));
+        }
+        
+        $elb->loadBalancer->addTags($elb_name, $tags);
+        
         try {
             $elb->loadBalancer->configureHealthCheck($elb_name, $healthCheckType);
         } catch (Exception $e) {
@@ -231,8 +249,8 @@ class Scalr_UI_Controller_Tools_Aws_Ec2_Elb extends Scalr_UI_Controller
                 unset($member['cookieExpirationPeriod']);
                 $policies[] = $member;
             }
-        }
-
+        }        
+        
         $arrLb['policies'] = $policies;
 
         $this->response->page('ui/tools/aws/ec2/elb/details.js', array('elb' => $arrLb));

@@ -184,7 +184,7 @@ Scalr.regPage('Scalr.ui.farms.builder.addrole.dbmsr', function () {
                     result = false;
                 }
             }
-            if (Scalr.flags['betaMode'] && platform === 'ec2') {
+            if (platform === 'ec2') {
                 if (instType = this.up('form').getForm().findField('aws.instance_type').getValue()) {
                     this.refreshEbsEncrypted(record, instType);
                 }

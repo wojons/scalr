@@ -2,7 +2,6 @@
 namespace Scalr\Stats\CostAnalytics;
 
 use Scalr\Stats\CostAnalytics\Iterator\ChartPeriodIterator;
-use Scalr\Stats\CostAnalytics\Entity\SettingEntity;
 
 /**
  * ChartPointInfo
@@ -93,7 +92,6 @@ class ChartPointInfo
      * Constructor
      *
      * @param   ChartPeriodIterator $iterator  The iterator
-     * @throws  \InvalidArgumentException
      */
     public function __construct(ChartPeriodIterator $iterator)
     {
@@ -101,92 +99,9 @@ class ChartPointInfo
         $this->dt = $iterator->getIterationTimestamp();
         $this->interval = $iterator->getInterval();
         $this->i = $iterator->getIterationNumber();
-
-        $prevStart = $iterator->getPreviousStart();
-
-        $previousPeriodDt = clone $this->dt;
-        $previousPeriodDt->sub($iterator->getPreviousPeriodInterval());
-
         $this->start = $iterator->getStart();
         $this->end = $iterator->getEnd();
-
         $this->isLastPoint = $iterator->isLastPoint();
-
-        if ($this->mode == 'year' || $this->mode == 'custom' && $this->interval == '1 month') {
-            $this->show = $this->label = $this->dt->format('M');
-
-            $this->key = $this->dt->format('Y-m');
-            $this->previousPeriodKey = $previousPeriodDt->format('Y-m');
-
-        } elseif ($this->mode == 'quarter' || $this->mode == 'custom' && $this->interval == '1 week') {
-            $ddt = clone $this->dt;
-            $ddt->modify('next saturday');
-
-            if ($ddt > $this->end) {
-                $ddt = $this->end;
-            }
-
-            $this->label = $this->dt->format('M j') . ' - ' . $ddt->format('M j');
-
-            $this->key = \Scalr_Util_DateTime::yearweek($this->dt->format('Y-m-d'));
-            $this->previousPeriodKey = \Scalr_Util_DateTime::yearweek($previousPeriodDt->format('Y-m-d'));
-
-            $this->show = $this->i % 3 == 0 ? $this->dt->format('M j') : ($this->isLastPoint && $this->i % 3 > 1 ? $ddt->format('M j') : '');
-
-        } elseif ($this->mode == 'week') {
-            $this->label = $this->dt->format('l, M j');
-            $this->show = $this->dt->format('M j');
-
-            $this->key = $this->dt->format('Y-m-d');
-            $this->previousPeriodKey = $previousPeriodDt->format('Y-m-d');
-
-        } elseif ($this->mode == 'month' || $this->mode == 'custom' && $this->interval == '1 day') {
-            $this->label = $this->dt->format('M j');
-
-            $this->key = $this->dt->format('Y-m-d');
-            $this->previousPeriodKey = $previousPeriodDt->format('Y-m-d');
-
-            $this->show = $this->i % 4 == 0 || $this->isLastPoint && $this->i % 4 > 2 ? $this->dt->format('M j') : '';
-
-        } elseif ($this->mode == 'custom') {
-            switch ($this->interval) {
-                case '1 hour':
-                    $h = $this->dt->format('H');
-                    $this->label = $this->dt->format('l, M j, g A');
-                    $this->show = $h == 0 ? $this->dt->format('M j') : ($h % 3 == 0 ? $this->dt->format('g a') : '');
-
-                    $this->key = $this->dt->format("Y-m-d H:00:00");
-                    $this->previousPeriodKey = $previousPeriodDt->format('Y-m-d H:00:00');
-                    break;
-
-                case '1 quarter':
-                    //Quarter breakdown is not supported yet
-                    $quarters = new Quarters(SettingEntity::getQuarters());
-
-                    $currentPeriod = $quarters->getPeriodForDate($this->start);
-
-                    $prevPeriod = $quarters->getPeriodForDate($prevStart);
-
-                    $this->show = $this->label = $currentPeriod->year . ' Q' . $currentPeriod->quarter;
-
-                    $this->key = $currentPeriod->year . '-' . $currentPeriod->quarter;
-
-                    $this->previousPeriodKey = $prevPeriod->year . '-' . $prevPeriod->quarter;
-                    break;
-
-                case '1 year':
-                    $this->show = $this->label = $this->dt->format('Y');
-
-                    $this->key = $this->label;
-                    $this->previousPeriodKey = $previousPeriodDt->format('Y');
-                    break;
-
-                default:
-                    throw new \InvalidArgumentException(sprintf('Unsupported interval for custom mode %s.', $this->interval));
-                    break;
-            }
-        } else {
-            throw new \InvalidArgumentException(sprintf('Invalid mode %s', strip_tags($this->mode)));
-        }
     }
+
 }
