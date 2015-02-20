@@ -128,6 +128,8 @@ class CloudPoller extends AbstractTask
 
         $this->getLogger()->info("%d server%s for the farm: %d", $servers_count, ($servers_count == 1 ? '' : 's'), $DBFarm->ID);
 
+        $config = \Scalr::getContainer()->config;
+        
         foreach ($DBFarm->GetServersByFilter(array(), array('status' => SERVER_STATUS::PENDING_LAUNCH)) as $DBServer) {
             /* @var $DBServer \DBServer */
             try {
@@ -167,7 +169,11 @@ class CloudPoller extends AbstractTask
                                 }
 
                                 if ($DBServer->GetProperty(SERVER_PROPERTIES::CRASHED) == 1) {
-                                	if (PlatformFactory::isOpenstack($DBServer->platform)) {
+                                    $action = 'terminate';
+                                    if ($config->defined("scalr.{$DBServer->platform}.action_on_missing_server"))
+                                        $action = $config->get("scalr.{$DBServer->platform}.action_on_missing_server");
+                                    
+                                	if ($action == 'flag') {
                                 		$DBServer->SetProperty(SERVER_PROPERTIES::MISSING, 1);
                                 	} else {
 	                                    $DBServer->terminate(DBServer::TERMINATE_REASON_CRASHED);

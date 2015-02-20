@@ -5,6 +5,7 @@ use Scalr\Service\Aws\Ec2\DataType\AttachmentSetResponseData;
 use Scalr\Service\Aws\Ec2\DataType\VolumeData;
 use Scalr\Service\Aws\Ec2\DataType\ResourceTagSetData;
 use Scalr\Service\Aws\Ec2\DataType\CreateVolumeRequestData;
+use Scalr\Model\Entity\Image;
 
 class Scalr_UI_Controller_Tools_Aws_Ec2_Ebs_Volumes extends Scalr_UI_Controller
 {
@@ -102,7 +103,14 @@ class Scalr_UI_Controller_Tools_Aws_Ec2_Ebs_Volumes extends Scalr_UI_Controller
 
         $dBServer = DBServer::LoadByID($this->getParam('serverId'));
 
-        $device = $dBServer->GetFreeDeviceName();
+        $image = Image::findOne([
+            ['platform' => $dBServer->platform],
+            ['id' => $dBServer->imageId],
+            ['cloudLocation' => $dBServer->GetCloudLocation()]
+        ]);
+        
+        $device = $dBServer->GetFreeDeviceName($image->isEc2HvmImage());
+        
         $res = $info->attach($dBServer->GetProperty(EC2_SERVER_PROPERTIES::INSTANCE_ID), $device);
 
         if ($this->getParam('attachOnBoot') == 'on') {

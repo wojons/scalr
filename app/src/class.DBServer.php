@@ -929,21 +929,29 @@ class DBServer
         return $result;
     }
 
-    public function GetFreeDeviceName()
+    public function GetFreeDeviceName($isHvm = false)
     {
         if (!$this->IsSupported('0.11.0'))
             return $this->GetFreeDeviceNameSNMP();
 
         $list = $this->scalarizr->system->blockDevices();
-
-        $map = array("f", "g", "h", "i", "j", "k", "l", "m", "n", "p");
-        $n_map = array("1", "2", "3", "4", "5", "6", "7", "8", "9");
+        
+        if (!$isHvm) {
+            $map = array("f", "g", "h", "i", "j", "k", "l", "m", "n", "p");
+            $n_map = array("1", "2", "3", "4", "5", "6");
+        } else {
+            $map = array("f", "g", "h", "i", "j", "k", "l", "m", "n", "p",
+                "ba", "bb", "bc", "bd", "be", "bf", "bg",
+                "ca", "cb", "cc", "cd", "ce", "cf", "cg",
+            );
+            $n_map = array("");
+        }
         $mapUsed = array();
 
         foreach ($list as $deviceName) {
-            preg_match("/(sd|xvd)([a-z][0-9]*)/", $deviceName, $matches);
+            preg_match("/(sd|xvd)([a-z]{1,2}[0-9]*)/", $deviceName, $matches);
 
-            if (is_array($matches[2]) && !in_array($matches[2], $mapUsed))
+            if (!empty($matches[2]) && !in_array($matches[2], $mapUsed))
                 array_push($mapUsed, $matches[2]);
         }
 
@@ -967,7 +975,7 @@ class DBServer
         if (!$deviceL)
             throw new Exception(_("There is no available device letter on instance for attaching EBS"));
 
-        return "/dev/sd{$deviceL}";
+        return (strlen($deviceL) == 2 && $isHvm) ? "/dev/xvd{$deviceL}" : "/dev/sd{$deviceL}";
     }
 
     public function GetFreeDeviceNameSNMP()

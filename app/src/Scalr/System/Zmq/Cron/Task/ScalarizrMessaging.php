@@ -878,10 +878,6 @@ class ScalarizrMessaging extends AbstractTask
                 if (!$message->behaviour) {
                     $message->behaviour = array('base');
                 }
-                if ((!$dbserver->remoteIp || $dbserver->localIp == $dbserver->remoteIp) &&
-                    $message->messageIpAddress != $dbserver->remoteIp) {
-                    $dbserver->remoteIp = $message->messageIpAddress;
-                }
             }
 
             if (count($message->behaviour) == 1 && $message->behaviour[0] == ROLE_BEHAVIORS::CHEF)
