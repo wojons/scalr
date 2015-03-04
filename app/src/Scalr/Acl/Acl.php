@@ -606,7 +606,7 @@ class Acl
         ));
 
         //Disables administration section in Full access ACL
-        foreach (array(self::RESOURCE_ADMINISTRATION_BILLING, self::RESOURCE_ENVADMINISTRATION_ENV_CLOUDS, self::RESOURCE_ENVADMINISTRATION_GOVERNANCE, self::RESOURCE_ADMINISTRATION_ORCHESTRATION) as $resourceId) {
+        foreach ([self::RESOURCE_ADMINISTRATION_BILLING] as $resourceId) {
             $this->db->Execute("
                 INSERT IGNORE `acl_account_role_resources` (account_role_id, resource_id, granted)
                 VALUES (?, ?, 0)
