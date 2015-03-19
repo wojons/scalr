@@ -1,7 +1,6 @@
 import re
 import socket
 import urllib2
-import logging
 
 from scalrpy.util import rpc
 from scalrpy.util import helper
@@ -20,7 +19,6 @@ def get_cpu_stat(hsp, api_type='linux', timeout=5):
     return cpu
 
 
-
 def get_la_stat(hsp, api_type='linux', timeout=5):
     assert_msg = "Unsupported API type '%s' for LA stat" % api_type
     assert api_type == 'linux', assert_msg
@@ -32,10 +30,8 @@ def get_la_stat(hsp, api_type='linux', timeout=5):
     }
 
 
-
 class APIError(Exception):
     pass
-
 
 
 def get_mem_info(hsp, api_type='linux', timeout=5):
@@ -64,7 +60,6 @@ def get_mem_info(hsp, api_type='linux', timeout=5):
     return ret
 
 
-
 def get_net_stat(hsp, api_type='linux', timeout=5):
     net = hsp.sysinfo.net_stats(timeout=timeout)
     if api_type == 'linux':
@@ -83,19 +78,18 @@ def get_net_stat(hsp, api_type='linux', timeout=5):
                 break
         else:
             msg = (
-                    "Can't find ['^.* Ethernet Adapter.*$', '^.*AWS PV Network Device.*$'] "
-                    "pattern in api response for endpoint: {0}, available: {1}, use {2}"
+                "Can't find ['^.* Ethernet Adapter.*$', '^.*AWS PV Network Device.*$'] "
+                "pattern in api response for endpoint: {0}, available: {1}, use {2}"
             ).format(hsp.endpoint, net.keys(), net.keys()[0])
             LOG.warning(msg)
             first_key = net.keys()[0]
             ret = {
                 'in': float(net[first_key]['receive']['bytes']),
-                'out': float(net[firts_key]['transmit']['bytes']),
+                'out': float(net[first_key]['transmit']['bytes']),
             }
     else:
         raise APIError("Unsupported API type '%s' for NET stat" % api_type)
     return ret
-
 
 
 def get_io_stat(hsp, api_type='linux', timeout=5):
@@ -117,7 +111,6 @@ def get_io_stat(hsp, api_type='linux', timeout=5):
         re.match(r'^xvd[a-z]{1}[0-9]{1,2}$', dev)
     )
     return ret
-
 
 
 def get_metrics(host, port, key, api_type, metrics, headers=None, timeout=5):
@@ -142,10 +135,14 @@ def get_metrics(host, port, key, api_type, metrics, headers=None, timeout=5):
         try:
             data.update({metric: getters[metric](hsp, api_type, timeout=timeout)})
         except (urllib2.URLError, urllib2.HTTPError, socket.timeout):
-            raise
+            msg = "Endpoint: {endpoint}, headers: {headers}, metric: '{metric}', reason: {err}"
+            msg = msg.format(
+                endpoint=endpoint, headers=headers, metric=metric, err=helper.exc_info())
+            raise Exception(msg)
         except:
-            msg = "Endpoint: %s, metric '%s' failed: %s" % (endpoint, metric, helper.exc_info())
+            msg = "Endpoint: {endpoint}, headers: {headers}, metric '{metric}' failed, reason: {er}"
+            msg = msg.format(
+                endpoint=endpoint, headers=headers, metric=metric, err=helper.exc_info())
             LOG.warning(msg)
             continue
     return data
-

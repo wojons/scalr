@@ -1,10 +1,11 @@
 <?php
 namespace Scalr\System\Zmq\Cron;
 
-use DateTime, Exception;
+use DateTime;
+use Exception;
 use Scalr\LoggerTrait;
-use Scalr\System\Zmq\Zmsg;
 use Scalr\System\Zmq\Mdp\Client;
+use Scalr\System\Zmq\Zmsg;
 
 /**
  * Crontab launcher
@@ -142,7 +143,7 @@ class Launcher
      */
     public static function getStartPhpScriptCommand($script)
     {
-        return '/usr/bin/env php ' . realpath(APPPATH . $script);
+        return PHP_BINARY  . ' '. realpath(APPPATH . $script);
     }
 
     /**

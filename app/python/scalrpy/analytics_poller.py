@@ -136,8 +136,8 @@ def _ec2_region(region, cred):
     access_key = cryptotool.decrypt_scalr(app.crypto_key, cred['access_key'])
     secret_key = cryptotool.decrypt_scalr(app.crypto_key, cred['secret_key'])
     kwds = {
-            'aws_access_key_id': access_key,
-            'aws_secret_access_key': secret_key
+        'aws_access_key_id': access_key,
+        'aws_secret_access_key': secret_key
     }
     if app.scalr_config.get('aws', {}).get('use_proxy', False) in [True, 'yes']:
         if app.scalr_config['connections'].get('proxy', {}).get('use_on', 'both') in ['both', 'scalr']:
@@ -201,7 +201,7 @@ def ec2(cred):
         (region, app.pool.apply_async(_ec2_region, args=(region, cred,)))
         for region in regions
     )
-    gevent.sleep(0) # force switch
+    gevent.sleep(0)  # force switch
     timeout = app.config['cloud_connection_timeout'] + 1
     for region, async_result in async_results.iteritems():
         try:
@@ -270,9 +270,9 @@ def eucalyptus(cred):
 
     app.pool.wait()
     async_result = app.pool.apply_async(_eucalyptus, args=(cred,))
-    gevent.sleep(0) # force switch
+    gevent.sleep(0)  # force switch
     try:
-        cloud_nodes = async_result.get(timeout=app.config['cloud_connection_timeout']+1)
+        cloud_nodes = async_result.get(timeout=app.config['cloud_connection_timeout'] + 1)
         if cloud_nodes:
             result.append(cloud_nodes)
     except:
@@ -338,9 +338,9 @@ def cloudstack(cred):
 
     app.pool.wait()
     async_result = app.pool.apply_async(_cloudstack, args=(cred,))
-    gevent.sleep(0) # force switch
+    gevent.sleep(0)  # force switch
     try:
-        result = async_result.get(timeout=app.config['cloud_connection_timeout']+1)
+        result = async_result.get(timeout=app.config['cloud_connection_timeout'] + 1)
     except:
         async_result.kill()
         e = sys.exc_info()[1]
@@ -440,10 +440,10 @@ def gce(cred):
         (zone, app.pool.apply_async(_gce_zone, args=(zone, cred,)))
         for zone in zones
     )
-    gevent.sleep(0) # force switch
+    gevent.sleep(0)  # force switch
     for zone, async_result in async_results.iteritems():
         try:
-            zone_nodes = async_result.get(timeout=app.config['cloud_connection_timeout']+1)
+            zone_nodes = async_result.get(timeout=app.config['cloud_connection_timeout'] + 1)
             if zone_nodes:
                 result.append(zone_nodes)
         except:
@@ -555,10 +555,10 @@ def _openstack(provider, cred):
                 )
             ) for region in regions
         )
-        gevent.sleep(0) # force switch
+        gevent.sleep(0)  # force switch
         for region, async_result in async_results.iteritems():
             try:
-                region_nodes = async_result.get(timeout=app.config['cloud_connection_timeout']+1)
+                region_nodes = async_result.get(timeout=app.config['cloud_connection_timeout'] + 1)
                 if region_nodes:
                     result.append(region_nodes)
             except:
@@ -706,7 +706,7 @@ def sort_nodes(cloud_data, cred, envs_ids):
         results = tuple()
         i, chunk_size = 0, 200
         while True:
-            chunk_ids = instances_ids[i*chunk_size:(i+1)*chunk_size]
+            chunk_ids = instances_ids[i * chunk_size:(i + 1) * chunk_size]
             if not chunk_ids:
                 break
             if url:
@@ -800,9 +800,9 @@ def sort_nodes(cloud_data, cred, envs_ids):
             if instance_id in managed:
                 if managed[instance_id]['env_id'] in envs_ids:
                     node.update({
-                            'env_id': managed[instance_id]['env_id'],
-                            'server_id': managed[instance_id]['server_id'],
-                        })
+                        'env_id': managed[instance_id]['env_id'],
+                        'server_id': managed[instance_id]['server_id'],
+                    })
                     region_data['managed'].append(node)
             else:
                 region_data['not_managed'].append(node)
@@ -903,7 +903,7 @@ def db_update(sorted_data, envs_ids, cred):
                     values_template = "(UNHEX('{sid}'), '{instance_id}', '{instance_type}', {os})"
                     i, chunk_size = 0, 20
                     while True:
-                        chunk_not_managed = region_data['not_managed'][i*chunk_size:(i+1)*chunk_size]
+                        chunk_not_managed = region_data['not_managed'][i * chunk_size:(i + 1) * chunk_size]
                         if not chunk_not_managed:
                             break
                         query = base_query % ','.join(
@@ -1014,7 +1014,7 @@ class AnalyticsPoller(application.ScalrIterationApplication):
                 self.pool.apply_async(
                     process_credential,
                     args=(cred,), kwds={'envs_ids': envs_ids})
-                gevent.sleep(0) # force switch
+                gevent.sleep(0)  # force switch
         self.pool.join()
 
     def on_iteration_error(self):
@@ -1040,4 +1040,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-

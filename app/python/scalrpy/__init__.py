@@ -1,6 +1,5 @@
-__version__ =  '1.1'
+__version__ = '1.1'
 
-import os
 import logging
 
 LOG = logging.getLogger('ScalrPy')
@@ -25,4 +24,3 @@ stderr_frmtr = logging.Formatter(prompt, datefmt='%d/%b/%Y %H:%M:%S')
 stderr_hndlr = helper.StdErrStreamHandler()
 stderr_hndlr.setFormatter(stderr_frmtr)
 LOG.addHandler(stderr_hndlr)
-

@@ -23,6 +23,7 @@ sys.path.insert(0, scalrpy_dir)
 
 import time
 import socket
+import thread
 import cherrypy
 import multiprocessing.pool
 
@@ -40,24 +41,19 @@ from scalrpy import LOG
 app = None
 
 
-
 class Plotter(object):
 
     class PlotterError(Exception):
         pass
 
-
     class BadRequestError(PlotterError):
         pass
-
 
     class FarmTerminatedError(PlotterError):
         pass
 
-
     class IOError(PlotterError):
         pass
-
 
     def __init__(self, config):
         self.config = config
@@ -78,19 +74,25 @@ class Plotter(object):
             os_local.__setattr__(k, v)
         os = os_local
 
-
     @helper.thread()
     def _serve_forever(self):
         LOG.debug('Starting plotter')
-        cherrypy.quickstart(self)
-
+        try:
+            cherrypy.quickstart(self, '/', {'/': {}})
+        except:
+            LOG.error(helper.exc_info())
+            thread.interrupt_main()
 
     def run(self):
         try:
             self.configure()
 
             t = self._serve_forever()
-            time.sleep(5)
+            while not t.is_alive():
+                time.sleep(0.5)
+
+            # wait before change permissions to allow cherrypy read certificates
+            time.sleep(2)
 
             # change permissions
             if self.config['group']:
@@ -103,17 +105,14 @@ class Plotter(object):
         except:
             LOG.exception(helper.exc_info())
 
-
     @helper.thread(daemon=True)
     def run_in_thread(self):
         self.run()
-
 
     @helper.process(daemon=True)
     def run_in_process(self):
         helper.set_proc_name('plotter')
         self.run()
-
 
     def configure(self):
         cnf = self.config['connections']['plotter']
@@ -146,7 +145,6 @@ class Plotter(object):
                 'server.ssl_certificate_chain': ssl_certificate_chain,
             })
 
-
     def _get_farm(self, farm_id):
         if not farm_id:
             return tuple()
@@ -154,19 +152,17 @@ class Plotter(object):
         result = [_ for _ in self._db.execute(query)]
         return result[0] if result else tuple()
 
-
     def _get_tz(self, farm_id):
         query = (
-                "SELECT value "
-                "FROM farm_settings "
-                "WHERE name='timezone' AND farmid={0}"
+            "SELECT value "
+            "FROM farm_settings "
+            "WHERE name='timezone' AND farmid={0}"
         ).format(farm_id)
         result = [_ for _ in self._db.execute(query)]
         if not result or result[0]['value'] == '0':
             return None
         else:
             return result[0]['value']
-
 
     def _check_request(self, kwds):
         try:
@@ -182,11 +178,10 @@ class Plotter(object):
             elif 'farmRoleId' in kwds:
                 int(kwds['farmRoleId'])
             assert kwds['period'] in ['daily', 'weekly', 'monthly', 'yearly'], \
-                    "Unsupported period '%s'" % kwds['period']
+                "Unsupported period '%s'" % kwds['period']
         except (AssertionError, ValueError):
             LOG.warning(helper.exc_info())
             raise Plotter.BadRequestError('Bad request')
-
 
     def _get_relative_dir(self, kwds):
         if 'index' in kwds:
@@ -197,13 +192,11 @@ class Plotter(object):
         else:
             return os.path.join('%s' % kwds['farmId'], 'FARM')
 
-
     def _get_rrd_dir(self, kwds):
         base_rrd_dir = os.path.join(self.config['rrd']['dir'], helper.x1x2(kwds['farmId']))
         relative_dir = self._get_relative_dir(kwds)
         rrd_dir = os.path.join(base_rrd_dir, relative_dir)
         return rrd_dir
-
 
     def _get_rrd_files(self, kwds, metric):
         rrd_dir = self._get_rrd_dir(kwds)
@@ -215,14 +208,13 @@ class Plotter(object):
             m = '%sSNMP' % metric.upper()
         try:
             rrd_files = [os.path.join(rrd_dir, m, f) for f in
-                    os.walk(os.path.join(rrd_dir, m)).next()[2]]
+                         os.walk(os.path.join(rrd_dir, m)).next()[2]]
         except StopIteration:
             rrd_files = []
         for rrd_file in rrd_files:
             if not os.path.exists(rrd_file):
                 raise IOError('No such file or directory: %s' % rrd_file)
         return rrd_files
-
 
     def _get_image_dir(self, kwds):
         relative_dir = self._get_relative_dir(kwds)
@@ -234,7 +226,6 @@ class Plotter(object):
                 if e.errno != 17:  # File exists
                     raise
         return img_dir
-
 
     def _get_url_dir(self, kwds):
         relative_dir = self._get_relative_dir(kwds)
@@ -253,7 +244,6 @@ class Plotter(object):
             )
         return url_dir
 
-
     def _plot(self, kwds, tz, metric):
         img_dir = self._get_image_dir(kwds)
         url_dir = self._get_url_dir(kwds)
@@ -270,18 +260,18 @@ class Plotter(object):
                 dev = os.path.basename(rrd_file)[:-4]
                 url[dev] = dict()
                 img_file = os.path.join(
-                        img_dir,
-                        'io_bits_%s_%s.png' % (dev, kwds['period']))
+                    img_dir,
+                    'io_bits_%s_%s.png' % (dev, kwds['period']))
                 url[dev]['bits_per_sec'] = os.path.join(
-                        url_dir,
-                        'io_bits_%s_%s.png' % (dev, kwds['period']))
+                    url_dir,
+                    'io_bits_%s_%s.png' % (dev, kwds['period']))
                 rrd.plot_io_bits(str(img_file), str(rrd_file), options, tz=tz)
                 img_file = os.path.join(
-                        img_dir,
-                        'io_ops_%s_%s.png' % (dev, kwds['period']))
+                    img_dir,
+                    'io_ops_%s_%s.png' % (dev, kwds['period']))
                 url[dev]['operations_per_sec'] = os.path.join(
-                        url_dir,
-                        'io_ops_%s_%s.png' % (dev, kwds['period']))
+                    url_dir,
+                    'io_ops_%s_%s.png' % (dev, kwds['period']))
                 rrd.plot_io_ops(str(img_file), str(rrd_file), options, tz=tz)
         else:
             rrd_file = rrd_files[0]
@@ -292,11 +282,9 @@ class Plotter(object):
             url = os.path.join(url_dir, '%s_%s.png' % (metric, kwds['period']))
         return url
 
-
     @staticmethod
     def error_page_404(*args, **kwds):
         return "We're terribly sorry, the page you're looking for doesn't seem to exist!"
-
 
     @cherrypy.expose
     @cherrypy.tools.json_in()
@@ -342,9 +330,8 @@ class Plotter(object):
         cherrypy.response.headers['Access-Control-Max-Age'] = 300
         if 'Access-Control-Request-Headers' in cherrypy.request.headers:
             cherrypy.response.headers['Access-Control-Allow-Headers'] = \
-                    cherrypy.request.headers['Access-Control-Request-Headers']
+                cherrypy.request.headers['Access-Control-Request-Headers']
         return result
-
 
 
 class Average(object):
@@ -352,7 +339,6 @@ class Average(object):
     def __init__(self):
         self._count = 0
         self._value = None
-
 
     def __iadd__(self, other):
         """
@@ -373,22 +359,17 @@ class Average(object):
         self._count += 1
         return self
 
-
     def __str__(self):
         return str(self._value)
-
 
     def __repr__(self):
         return str(self._value)
 
-
     def __int__(self):
         return int(self._value)
 
-
     def __float__(self):
         return float(self._value)
-
 
 
 class Poller(object):
@@ -398,21 +379,19 @@ class Poller(object):
         self.scalr_config = scalr_config
         self._db = dbmanager.ScalrDB(self.config['connections']['mysql'], pool_size=1)
 
-
     def _get_servers(self):
         query = (
-                "SELECT f.id farm_id, f.hash, s.server_id, s.farm_roleid, s.index, "
-                "s.remote_ip, s.local_ip, s.env_id, s.os_type, s.platform "
-                "FROM servers s "
-                "JOIN farms f ON s.farm_id=f.id "
-                "JOIN clients c ON s.client_id=c.id "
-                "JOIN client_environments ce ON s.env_id=ce.id "
-                "WHERE c.status='Active' "
-                "AND ce.status='Active' "
-                "AND s.status='Running' "
-                "ORDER BY s.server_id")
+            "SELECT f.id farm_id, f.hash, s.server_id, s.farm_roleid, s.index, "
+            "s.remote_ip, s.local_ip, s.env_id, s.os_type, s.platform "
+            "FROM servers s "
+            "JOIN farms f ON s.farm_id=f.id "
+            "JOIN clients c ON s.client_id=c.id "
+            "JOIN client_environments ce ON s.env_id=ce.id "
+            "WHERE c.status='Active' "
+            "AND ce.status='Active' "
+            "AND s.status='Running' "
+            "ORDER BY s.server_id")
         return self._db.execute_with_limit(query, 1000, retries=1)
-
 
     def _get_rf_keys(self, result):
         r_key = os.path.join(
@@ -428,7 +407,6 @@ class Poller(object):
             'FARM'
         )
         return r_key, f_key
-
 
     def _average(self, results, ra=None, fa=None, rs=None, fs=None):
         ra = ra or dict()
@@ -466,7 +444,6 @@ class Poller(object):
                 LOG.error(helper.exc_info())
         return ra, fa, rs, fs
 
-
     def _get_metrics_api(self, server):
         assert_msg = "Server: '%s' doesn't have a scalarizr key" % server['server_id']
         assert server['scalarizr.key'], assert_msg
@@ -474,7 +451,7 @@ class Poller(object):
         headers = {'X-Server-Id': server['server_id']}
 
         instances_connection_policy = self.scalr_config.get(server['platform'], {}).get(
-                'instances_connection_policy', self.scalr_config['instances_connection_policy'])
+            'instances_connection_policy', self.scalr_config['instances_connection_policy'])
         ip, port, proxy_headers = helper.get_szr_api_conn_info(server, instances_connection_policy)
         headers.update(proxy_headers)
         key = cryptotool.decrypt_key(server['scalarizr.key'])
@@ -482,8 +459,7 @@ class Poller(object):
         metrics = server['metrics']
         timeout = self.config['instances_connection_timeout']
         return szr_api.get_metrics(
-                ip, port, key, api_type, metrics, headers=headers, timeout=timeout)
-
+            ip, port, key, api_type, metrics, headers=headers, timeout=timeout)
 
     def _process_server(self, server):
         data = dict()
@@ -499,7 +475,6 @@ class Poller(object):
             'data': data,
         }
         return result
-
 
     def get_servers(self):
         for servers in self._get_servers():
@@ -533,7 +508,6 @@ class Poller(object):
                     continue
             yield out
 
-
     def run(self):
         srv_pool = multiprocessing.pool.ThreadPool(self.config['pool_size'])
         rrd_pool = multiprocessing.pool.ThreadPool(10)
@@ -545,14 +519,14 @@ class Poller(object):
                 for result in results:
                     if result['data']:
                         file_dir = os.path.join(
-                                self.config['rrd']['dir'],
-                                helper.x1x2(result['farm_id']),
-                                '%s' % result['farm_id'],
-                                'INSTANCE_%s_%s' % (result['farm_roleid'], result['index']))
+                            self.config['rrd']['dir'],
+                            helper.x1x2(result['farm_id']),
+                            '%s' % result['farm_id'],
+                            'INSTANCE_%s_%s' % (result['farm_roleid'], result['index']))
                         rrd_pool.apply_async(
-                                rrd.write,
-                                args=(file_dir, result['data'],),
-                                kwds={'sock_path': rrd_sock})
+                            rrd.write,
+                            args=(file_dir, result['data'],),
+                            kwds={'sock_path': rrd_sock})
                 ra, fa, rs, fs = self._average(results, ra=ra, fa=fa, rs=rs, fs=fs)
             for k, v in ra.iteritems():
                 rrd_pool.apply_async(rrd.write, args=(k, v,), kwds={'sock_path': rrd_sock})
@@ -571,11 +545,9 @@ class Poller(object):
             srv_pool.join()
             rrd_pool.join()
 
-
     @helper.thread(daemon=True)
     def run_in_thread(self):
         self.run()
-
 
     @helper.process(daemon=True)
     def run_in_process(self):
@@ -583,14 +555,13 @@ class Poller(object):
         self.run()
 
 
-
 class LoadStatistics(application.ScalrApplication):
 
     def __init__(self, argv=None):
         self.description = "Scalr load statistics application"
         options = (
-                """  --poller                          start poller process\n"""
-                """  --plotter                         start plotter process\n""")
+            """  --poller                          start poller process\n"""
+            """  --plotter                         start plotter process\n""")
         self.add_options(options)
 
         super(LoadStatistics, self).__init__(argv=argv)
@@ -616,7 +587,7 @@ class LoadStatistics(application.ScalrApplication):
             'plotter': {
                 'bind_scheme': False,
                 'scheme': 'http',
-                'bind_address': False, # deprecated, for compatibility only
+                'bind_address': False,  # deprecated, for compatibility only
                 'bind_host': '0.0.0.0',
                 'bind_port': False,
                 'port': 8080,
@@ -626,7 +597,6 @@ class LoadStatistics(application.ScalrApplication):
                 'ssl_certificate_chain': False,
             },
         })
-
 
     def validate_config(self):
         application.ScalrApplication.validate_config(self)
@@ -642,9 +612,9 @@ class LoadStatistics(application.ScalrApplication):
         if plt_scheme == 'https':
             def _assert(option):
                 assert plt_cnf[option] and isinstance(plt_cnf[option], basestring), (
-                        "Wrong config option connections:plotter:{0}, "
-                        "must be defined and has <type 'str'> not {1}").format(
-                        option, plt_cnf[option])
+                    "Wrong config option connections:plotter:{0}, "
+                    "must be defined and has <type 'str'> not {1}").format(
+                    option, plt_cnf[option])
 
             for opt in ['ssl_certificate', 'ssl_private_key']:
                 _assert(opt)
@@ -652,13 +622,11 @@ class LoadStatistics(application.ScalrApplication):
             if plt_cnf['ssl_certificate_chain']:
                 _assert('ssl_certificate_chain')
 
-
     def configure(self):
         helper.update_config(
-                self.scalr_config.get('load_statistics', {}), self.config)
+            self.scalr_config.get('load_statistics', {}), self.config)
         helper.validate_config(self.config)
         socket.setdefaulttimeout(self.config['instances_connection_timeout'])
-
 
     def __call__(self):
         poller_ps, plotter_ps = None, None
@@ -693,13 +661,14 @@ class LoadStatistics(application.ScalrApplication):
                             poller_ps.terminate()
                         except:
                             msg = 'Unable to terminate, reason: {error}'.format(
-                                    error=helper.exc_info())
+                                error=helper.exc_info())
                             raise Exception(msg)
                     LOG.info('Poller iteration time: %.2f' % (time.time() - start_time))
                 except KeyboardInterrupt:
                     raise
                 except:
-                    msg = 'Poller iteration failed, reason: {error}'.format(error=helper.exc_info())
+                    msg = 'Poller iteration failed, reason: {error}'.format(
+                        error=helper.exc_info())
                     LOG.error(msg)
                 finally:
                     sleep_time = start_time + self.config['interval'] - time.time() - 0.1
@@ -708,7 +677,6 @@ class LoadStatistics(application.ScalrApplication):
 
         if plotter_ps:
             plotter_ps.join()
-
 
 
 def main():
@@ -726,7 +694,5 @@ def main():
         LOG.exception('Oops')
 
 
-
 if __name__ == '__main__':
     main()
-

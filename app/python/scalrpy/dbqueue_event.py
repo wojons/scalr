@@ -182,7 +182,7 @@ class DBQueueEvent(application.ScalrIterationApplication):
             msg = "Events update failed, history_id: {0}, reason: {1}"
             msg = msg.format(webhook['history_id'], helper.exc_info())
             LOG.warning(msg)
-            
+
 
     def do_iteration(self):
         webhooks = self.get_webhooks()
@@ -190,7 +190,7 @@ class DBQueueEvent(application.ScalrIterationApplication):
         webhooks_to_post = list()
         for webhook in webhooks:
             attempt = int(webhook['handle_attempts']) + 1
-            delta = datetime.timedelta(seconds=((attempt-1)*self.config['retry_interval']))
+            delta = datetime.timedelta(seconds=((attempt - 1) * self.config['retry_interval']))
             if webhook['dtlasthandleattempt'] + delta <= datetime.datetime.utcnow():
                 webhooks_to_post.append(webhook)
 
@@ -308,4 +308,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-

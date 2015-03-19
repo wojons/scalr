@@ -328,7 +328,7 @@ class Scalr_UI_Controller_Account2_Environments_Clouds extends Scalr_UI_Controll
                     //Validates private key and certificate if they are provided
                     if (!empty($pars[Ec2PlatformModule::CERTIFICATE]) || !empty($pars[Ec2PlatformModule::PRIVATE_KEY])) {
                         try {
-                            //FIXME 24284 SOAP is not supported anymore
+                            //! SOAP is not supported anymore
                             //$aws->validateCertificateAndPrivateKey();
                         } catch (Exception $e) {
                             throw new Exception(_("Incorrect format of X.509 certificate or private key. Make sure that you are using files downloaded from AWS profile. ({$e->getMessage()})"));
@@ -388,7 +388,7 @@ class Scalr_UI_Controller_Account2_Environments_Clouds extends Scalr_UI_Controll
             throw new Exception(_("Failed to save AWS settings: {$e->getMessage()}"));
         }
 
-        
+
 
         $this->response->success('Cloud credentials have been ' . ($enabled ? 'saved' : 'removed from Scalr'));
         $this->response->data(array('enabled' => $enabled, 'demoFarm' => $demoFarm, 'envAutoEnabled' => $envAutoEnabled));
@@ -639,7 +639,7 @@ class Scalr_UI_Controller_Account2_Environments_Clouds extends Scalr_UI_Controll
                                 $this->env->getPlatformConfigValue("{$platform}." . OpenstackPlatformModule::PASSWORD),
                                 $this->env->getPlatformConfigValue("{$platform}." . OpenstackPlatformModule::TENANT_NAME)
                         ));
-    
+
                         $params['features'][$cloudLocation] = array(
                             'Volumes (Cinder)' => $os->hasService('volume'),
                             'Security groups (Nova)' => $os->servers->isExtensionSupported(ServersExtension::securityGroups()),
@@ -648,12 +648,12 @@ class Scalr_UI_Controller_Account2_Environments_Clouds extends Scalr_UI_Controll
                             'Floating IPs (Nova)' => $os->servers->isExtensionSupported(ServersExtension::floatingIps()),
                             'Objects store (Swift)' => $os->hasService('object-store')
                         );
-    
+
                         $params['info'][$cloudLocation] = array(
                             'services' => $os->listServices(),
                             'nova_extensions' => $os->servers->listExtensions()
                         );
-    
+
                         if ($os->hasService('network')) {
                             $params['info'][$cloudLocation]['neutron_url'] = $os->network->getEndpointUrl();
                             $params['info'][$cloudLocation]['neutron_extensions'] = $os->network->listExtensions();

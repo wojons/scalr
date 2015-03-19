@@ -334,12 +334,24 @@ class CloudPoller extends AbstractTask
                         continue;
                     } elseif (!in_array($DBServer->status, array(SERVER_STATUS::TERMINATED, SERVER_STATUS::TROUBLESHOOTING))) {
                         if ($DBServer->platform == SERVER_PLATFORMS::EC2) {
-                            if ($DBServer->status == SERVER_STATUS::PENDING && $DBFarm->GetSetting(DBFarm::SETTING_EC2_VPC_ID)) {
-                                if ($DBServer->GetFarmRoleObject()->GetSetting(DBFarmRole::SETTING_AWS_VPC_INTERNET_ACCESS) != 'outbound-only') {
-                                    $ipAddress = Ec2EipHelper::setEipForServer($DBServer);
-                                    if ($ipAddress) {
-                                        $DBServer->remoteIp = $ipAddress;
+                            if ($DBServer->status == SERVER_STATUS::PENDING) {
+                                
+                                if (!$DBServer->remoteIp && !$DBServer->localIp) {
+                                    $ipaddresses = PlatformFactory::NewPlatform($DBServer->platform)->GetServerIPAddresses($DBServer);
+                                    if (($ipaddresses['remoteIp'] && !$DBServer->remoteIp) || ($ipaddresses['localIp'] && !$DBServer->localIp)) {
+                                        $DBServer->remoteIp = $ipaddresses['remoteIp'];
+                                        $DBServer->localIp = $ipaddresses['localIp'];
                                         $DBServer->Save();
+                                    }
+                                }
+                                
+                                if ($DBFarm->GetSetting(DBFarm::SETTING_EC2_VPC_ID)) {
+                                    if ($DBServer->GetFarmRoleObject()->GetSetting(DBFarmRole::SETTING_AWS_VPC_INTERNET_ACCESS) != 'outbound-only') {
+                                        $ipAddress = Ec2EipHelper::setEipForServer($DBServer);
+                                        if ($ipAddress) {
+                                            $DBServer->remoteIp = $ipAddress;
+                                            $DBServer->Save();
+                                        }
                                     }
                                 }
                             }

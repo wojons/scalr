@@ -197,7 +197,8 @@ class ServerTerminate extends AbstractTask
                           (stristr($e->getMessage(), "tenant is disabled") ||
                           stristr($e->getMessage(), "was not able to validate the provided access credentials") ||
                           stristr($e->getMessage(), "modify its 'disableApiTermination' instance attribute and try again") ||
-                          stristr($e->getMessage(), "neither api key nor password was provided for the openstack config"))) {
+                          stristr($e->getMessage(), "neither api key nor password was provided for the openstack config") ||
+                          stristr($e->getMessage(), "refreshing the OAuth2 token"))) {
                     //Postpones unsuccessful task for 30 minutes.
                     $ste = new ServerTerminationError(
                         $request->serverId, (isset($request->attempts) ? $request->attempts + 1 : 1), $e->getMessage()

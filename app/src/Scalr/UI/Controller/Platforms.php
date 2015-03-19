@@ -70,10 +70,17 @@ class Scalr_UI_Controller_Platforms extends Scalr_UI_Controller
 
         if (PlatformFactory::isOpenstack($platform) && !$cloudLocation) {
             $locations = $p->getLocations($this->getEnvironment());
+
             if (empty($locations)) {
-                throw new Exception(sprintf("Unable to retrieve the list of cloud locations for platform %s; the cloud API may be down or unreachable, or the credentials provided to Scalr are invalid.", $platform));
+                throw new Exception(sprintf(
+                    "Unable to retrieve the list of cloud locations for platform %s; "
+                  . "the cloud API may be down or unreachable, or the credentials provided to Scalr are invalid.",
+                    $platform
+                ));
             }
-            $cloudLocation = array_pop(array_keys($locations));
+
+            $keys = array_keys($locations);
+            $cloudLocation = array_pop($keys);
         }
 
         $data = [];

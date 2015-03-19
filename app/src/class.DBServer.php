@@ -1306,7 +1306,10 @@ class DBServer
 
         $time = microtime(true) - $startTime;
 
-        if (!$message->dbMessageId) {
+        if (!$this->Db->GetOne("SELECT COUNT(*) FROM `messages` WHERE `messageid` = ? AND `server_id` = ?", [
+            $message->messageId,
+            $this->serverId
+        ])) {
             // Add message to database
             $this->Db->Execute("INSERT INTO messages SET
                 `messageid`	= ?,
@@ -1335,11 +1338,10 @@ class DBServer
                 $messageType,
                 (isset($message->eventId)) ? $message->eventId : ''
             ));
-
-            $message->dbMessageId = $this->Db->Insert_ID();
         } else {
-            $this->Db->Execute("UPDATE messages SET handle_attempts = handle_attempts+1, dtlasthandleattempt = NOW() WHERE id = ?", array(
-                $message->dbMessageId
+            $this->Db->Execute("UPDATE messages SET handle_attempts = handle_attempts+1, dtlasthandleattempt = NOW() WHERE messageid = ? AND server_id = ?", array(
+                $message->messageId,
+                $this->serverId
             ));
         }
 

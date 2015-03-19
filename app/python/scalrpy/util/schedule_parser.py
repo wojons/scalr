@@ -82,4 +82,3 @@ class Schedule(object):
         return now.tm_wday in self.schedule[2] and \
                 now.tm_mday in self.schedule[1] and \
                 now.tm_hour in self.schedule[0]
-

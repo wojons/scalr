@@ -2,13 +2,14 @@
 
 namespace Scalr\Upgrade;
 
-use Scalr\Upgrade\Entity\AbstractUpgradeEntity;
+use DateTime;
+use DateTimeZone;
 use Scalr\DependencyInjection\Container;
 use Scalr\Exception;
-use \DateTime;
-use \DateTimeZone;
-use Scalr\Upgrade\Entity\MysqlUpgradeEntity;
 use Scalr\Model\Entity\InformationSchema\ColumnEntity;
+use Scalr\Model\Entity\InformationSchema\TableEntity;
+use Scalr\Upgrade\Entity\AbstractUpgradeEntity;
+use Scalr\Upgrade\Entity\MysqlUpgradeEntity;
 
 /**
  * UpdateInterface
@@ -266,6 +267,7 @@ abstract class AbstractUpdate extends AbstractGetter implements UpdateInterface
         // This method is expected to be overridden
         if ($this instanceof SequenceInterface) {
             $method = 'run' . intval($stage);
+
             if (method_exists($this, $method)) {
                 return $this->$method($stage);
             } else {
@@ -277,8 +279,8 @@ abstract class AbstractUpdate extends AbstractGetter implements UpdateInterface
             }
         }
         throw new Exception\UpgradeException(sprintf(
-            'Bad usage. Method %s() must be overridden.',
-            $method, get_class($this), __FUNCTION__
+            'Bad usage. Method %s::%s() must be overridden.',
+            get_class($this), __FUNCTION__
         ));
     }
 
@@ -428,6 +430,37 @@ abstract class AbstractUpdate extends AbstractGetter implements UpdateInterface
 
     /**
      * {@inheritdoc}
+     * @see UpdateInterface::hasTableCompatibleIndex()
+     */
+    public function hasTableCompatibleIndex($table, array $columns, $unique = false)
+    {
+        $stmt = $this->db->Prepare("SHOW INDEX FROM `{$table}` WHERE `Column_name` = ? AND `Seq_in_index` = ? AND `Non_unique` = ?");
+
+        foreach ($columns as $idx => $column) {
+            $entries = $this->db->Execute($stmt, [
+                $column,
+                $idx,
+                $unique ? 0 : 1
+            ]);
+
+            $indexes = [];
+
+            foreach ($entries->GetAll() as $entry) {
+                $indexes[] = $entry['Key_name'];
+            }
+
+            $compatible = empty($compatible) ? $indexes : array_intersect($compatible, $indexes);
+
+            if (empty($compatible)) {
+                return false;
+            }
+        }
+
+        return empty($compatible) ? false : $compatible;
+    }
+
+    /**
+     * {@inheritdoc}
      * @see Scalr\Upgrade.UpdateInterface::hasTableColumn()
      */
     public function hasTableColumn($table, $column)
@@ -515,6 +548,35 @@ abstract class AbstractUpdate extends AbstractGetter implements UpdateInterface
 
     /**
      * {@inheritdoc}
+     * @see \Scalr\Upgrade\UpdateInterface::getTableIndex()
+     */
+    public function getTableIndex($table, $indexName, $schema = null)
+    {
+        if (!isset($schema)) {
+            $schema = $this->db->GetOne("SELECT DATABASE()");
+        }
+
+        return $this->db->Execute("SHOW INDEX FROM `{$schema}`.`{$table}` WHERE Key_name = ?", [$indexName]);
+    }
+
+    /**
+     * {@inheritdoc}
+     * @see \Scalr\Upgrade\UpdateInterface::getTableDefinition()
+     */
+    public function getTableDefinition($table, $schema = null)
+    {
+        if (!isset($schema)) {
+            $schema = $this->db->GetOne("SELECT DATABASE()");
+        }
+
+        $entity = new TableEntity();
+        $entity->db = $this->db;
+
+        return $entity->findOne([['tableSchema' => $schema], ['tableName' => $table]]);
+    }
+
+    /**
+     * {@inheritdoc}
      * @see Scalr\Upgrade.UpdateInterface::hasTableForeignKey()
      */
     public function hasTableForeignKey($constraintName, $table, $schema = null)
@@ -592,5 +654,93 @@ abstract class AbstractUpdate extends AbstractGetter implements UpdateInterface
     public function isRefused()
     {
         return false;
+    }
+
+    /**
+     * Creates table named $new like $origin if $new is not exists
+     *
+     * @param string $origin      Source table name
+     * @param string $new         New table name
+     * @param bool   $dropIfExist optional Drop table named $temporary if it exists
+     */
+    public function createTableLike($origin, $new, $dropIfExist = false)
+    {
+        if ($dropIfExist && $this->hasTable($new)) {
+            $this->dropTables((array) $new);
+        }
+
+        $this->db->Execute("CREATE TABLE IF NOT EXISTS `{$new}` LIKE `{$origin}`");
+    }
+
+    /**
+     * Applies ALTER statements on specified table
+     *
+     * @param string   $table   Table name
+     * @param string[] $sql     ALTER statements, without "ALTER TABLE table_name"
+     */
+    public function applyChanges($table, $sql)
+    {
+        $this->db->Execute("ALTER TABLE `{$table}`\n" . implode(",\n", (array) $sql));
+    }
+
+    /**
+     * Renames $first table to $backup, $second table to $first
+     *
+     * @param string $origin Name of table that will be replaced
+     * @param string $new    Name of replacement table
+     * @param string $backup Backup name
+     */
+    public function replaceTableWithBackup($origin, $new, $backup)
+    {
+        $this->db->Execute("RENAME TABLE `{$origin}` TO `{$backup}`, `{$new}` TO `{$origin}`");
+    }
+
+    /**
+     * Copies data from $source to $target, make and run "INSERT ... SELECT ..." statement
+     *
+     * @param string          $target               Target table name
+     * @param string|string[] $sources              Source tables names
+     * @param string[]        $fields      optional Fields names that need to copy
+     * @param string          $where       optional WHERE statement
+     * @param string          $onDuplicate optional ON DUPLICATE KEY UPDATE statement
+     * @param array           $params      optional Query parameters
+     */
+    public function copyData($target, $sources, $fields = null, $where = '', $onDuplicate = '', array $params = [])
+    {
+        $fields = $fields === null ? '*' : ('`' . str_replace('.', '`.`', implode('`,`', $fields)) . '`');
+        $sources = '`' . str_replace('.', '`.`', implode('`,`', (array) $sources)) . '`';
+
+        $query = "
+            INSERT INTO `{$target}`
+            " . ($fields == '*' ? '' : "({$fields})") . "
+              SELECT
+                $fields
+              FROM {$sources}
+              {$where}
+              {$onDuplicate}";
+
+        $this->db->Execute($query, $params);
+    }
+
+    /**
+     * Drops specified tables
+     *
+     * @param array $tables             Names of tables to drop
+     * @param bool  $ifExists  optional Check that tables exists
+     * @param bool  $temporary optional Drop TEMPORARY tables
+     *
+     * @see http://dev.mysql.com/doc/refman/5.0/en/drop-table.html
+     */
+    public function dropTables(array $tables, $ifExists = true, $temporary = false)
+    {
+        $sql = $temporary ? "DROP TEMPORARY TABLE" : "DROP TABLE";
+
+        if ($ifExists) {
+            $sql .= " IF EXISTS";
+        }
+
+        $names = '`' . implode('`,`', $tables) . '`';
+
+        $this->db->Execute("{$sql} {$names}");
     }
 }

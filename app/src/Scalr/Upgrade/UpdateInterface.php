@@ -97,6 +97,17 @@ interface UpdateInterface
     public function hasTableIndex($table, $index);
 
     /**
+     * Verifies whether specified table has compatible index for given columns.
+     *
+     * @param   string   $table   A database table name
+     * @param   string[] $columns Set of columns, in leftmost order, starting with 1
+     * @param   bool     $unique  optional Index type
+     *
+     * @return bool|string[] Returns FALSE if compatible index does not exist, array of indexes names otherwise.
+     */
+    public function hasTableCompatibleIndex($table, array $columns, $unique = false);
+
+    /**
      * Checks whether the database table has specified column.
      *
      * @param   string     $table   A database table name
@@ -149,6 +160,25 @@ interface UpdateInterface
      * @return  \Scalr\Model\Entity\InformationSchema\ColumnEntity  Returns column definition object
      */
     public function getTableColumnDefinition($table, $column, $schema = null);
+
+    /**
+     * Gets index columns information for the specified table and database schema
+     *
+     * @param   string $table The name of the database table
+     * @param   string $indexName The name of index
+     * @param   string $schema optional The name of the database. If it's omitted will be used schema
+     *                                  that is specified in the config.
+     * @return  array Returns array of parts
+     */
+    public function getTableIndex($table, $indexName, $schema = null);
+
+    /**
+     * @param string    $table      The name of the database table
+     * @param string    $schema     optional The name of the database. If it's omitted will be used schema
+     *                              that is specified in the config.
+     * @return \Scalr\Model\Entity\InformationSchema\TableEntity  Returns table definition object
+     */
+    public function getTableDefinition($table, $schema = null);
 
     /**
      * Verifies whether database has specified table

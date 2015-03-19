@@ -266,9 +266,9 @@ class RdsApi extends AbstractApi
     {
         $result = new OptionGroupMembershipList();
 
-        if ($this->exist($sxml->OptionGroupMembership)) {
-            $result->setRds($this->rds);
+        $result->setRds($this->rds);
 
+        if ($this->exist($sxml->OptionGroupMembership)) {
             foreach ($sxml->OptionGroupMembership as $v) {
                 $item = new OptionGroupMembershipData(
                     ($this->exist($v->OptionGroupName) ? (string) $v->OptionGroupName : null),

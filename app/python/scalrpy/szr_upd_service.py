@@ -25,9 +25,7 @@ scalrpy_dir = os.path.join(cwd, '..')
 sys.path.insert(0, scalrpy_dir)
 
 import re
-import time
 import gzip
-import json
 import socket
 import gevent
 import pymysql
@@ -206,7 +204,7 @@ class SzrUpdService(application.ScalrIterationApplication):
                 msg = 'Repository {0} failed, reason: {1}'
                 msg = msg.format(repo_type, helper.exc_info())
                 LOG.error(msg)
-        
+
         if devel_branch:
             self.get_szr_ver_from_repo.im_func.devel_cache[devel_branch] = out
         else:
@@ -385,7 +383,7 @@ class SzrUpdService(application.ScalrIterationApplication):
     def _scheduled_on(self, schedule):
         dt = datetime.datetime.utcnow()
         delta = datetime.timedelta(hours=1)
-        for _ in xrange(0, 24*31*365):
+        for _ in xrange(0, 24 * 31 * 365):
             dt = dt + delta
             if schedule_parser.Schedule(schedule).intime(now=dt.timetuple()):
                 return dt.replace(minute=0, second=0, microsecond=0)
@@ -489,4 +487,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-

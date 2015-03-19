@@ -82,4 +82,3 @@ def decrypt_scalarizr(crypto_algo, s, key):
     ret += c.final()
     del c
     return ret
-

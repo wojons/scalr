@@ -2,7 +2,7 @@
 namespace Scalr\DataType;
 
 use Scalr\DataType\Iterator\AggregationRecursiveIterator;
-use IteratorAggregate, Countable, ArrayAccess, ArrayObject;
+use Scalr\Util\ObjectAccess;
 
 /**
  * AggregationCollection
@@ -10,16 +10,8 @@ use IteratorAggregate, Countable, ArrayAccess, ArrayObject;
  * @author Vitaliy Demidov <vitaliy@scalr.com>
  * @since  5.0 (25.03.2014)
  */
-class AggregationCollection implements AggregationCollectionInterface, IteratorAggregate, Countable, ArrayAccess
+class AggregationCollection extends ObjectAccess implements AggregationCollectionInterface
 {
-
-    /**
-     * The data array
-     *
-     * @var \ArrayObject
-     */
-    protected $array;
-
     /**
      * Internal iterator
      *
@@ -53,9 +45,11 @@ class AggregationCollection implements AggregationCollectionInterface, IteratorA
      */
     public function __construct(array $subtotals, array $aggregateFields)
     {
-        $this->array = new \ArrayObject();
+        parent::__construct();
+
         $this->subtotals = [];
         $i = 0;
+
         foreach ($subtotals as $k => $v) {
             if (is_numeric($k)) {
                 $this->subtotals[$i] = $v;
@@ -65,18 +59,19 @@ class AggregationCollection implements AggregationCollectionInterface, IteratorA
             }
             $i++;
         }
+
         $this->aggregateFields = $aggregateFields;
     }
 
     /**
      * Sets raw array to copy data from another Aggregation Collection
      *
-     * @param   array    $array  Array to set
+     * @param   array    $data  Array to set
      * @return  AggregationCollection
      */
-    public function setArray($array)
+    public function setData(array $data)
     {
-        $this->array = $array instanceof ArrayObject ? $array : new ArrayObject($array);
+        $this->data = $data;
         $this->iterator = null;
 
         return $this;
@@ -89,7 +84,7 @@ class AggregationCollection implements AggregationCollectionInterface, IteratorA
     public function getIterator()
     {
         if (!$this->iterator) {
-            $this->iterator = new AggregationRecursiveIterator($this->array->getArrayCopy());
+            $this->iterator = new AggregationRecursiveIterator($this->data);
         }
         return $this->iterator;
     }
@@ -101,7 +96,7 @@ class AggregationCollection implements AggregationCollectionInterface, IteratorA
      */
     public function append($item)
     {
-        $ptr = & $this->array;
+        $ptr = & $this->data;
 
         $aggregateValues = [];
 
@@ -200,7 +195,7 @@ class AggregationCollection implements AggregationCollectionInterface, IteratorA
         foreach ($this->aggregateFields as $field => $function) {
             if ($function == 'sum' || $function == 'SUM') {
                 $perFields[] = $field;
-                $this->array[$field . '_percentage'] = $decimals ? number_format(100, $decimals) : 100;
+                $this->data[$field . '_percentage'] = $decimals ? number_format(100, $decimals) : 100;
             }
         }
 
@@ -222,19 +217,9 @@ class AggregationCollection implements AggregationCollectionInterface, IteratorA
             }
         };
 
-        $fnIterator($this->array);
+        $fnIterator($this->data);
 
         return $this;
-    }
-
-    /**
-     * Gets copy of the data array
-     *
-     * @return array Returns the copy of the data array
-     */
-    public function getArrayCopy()
-    {
-        return $this->array->getArrayCopy();
     }
 
     /**
@@ -245,7 +230,7 @@ class AggregationCollection implements AggregationCollectionInterface, IteratorA
      */
     public function setId($id)
     {
-        $this->array['id'] = $id;
+        $this->data['id'] = $id;
 
         return $this;
     }
@@ -259,7 +244,7 @@ class AggregationCollection implements AggregationCollectionInterface, IteratorA
     {
         $ret = [];
 
-        foreach ($this->array as $field => $v) {
+        foreach ($this->data as $field => $v) {
             if ($field == 'data') continue;
             $ret[$field] = $v;
         }
@@ -274,48 +259,4 @@ class AggregationCollection implements AggregationCollectionInterface, IteratorA
         return $ret;
     }
 
-    /**
-     * {@inheritdoc}
-     * @see Countable::count()
-     */
-    public function count()
-    {
-        return count($this->array);
-    }
-
-    /**
-     * {@inheritdoc}
-     * @see ArrayAccess::offsetExists()
-     */
-    public function offsetExists($offset)
-    {
-        return $this->array->offsetExists($offset);
-    }
-
-    /**
-     * {@inheritdoc}
-     * @see ArrayAccess::offsetGet()
-     */
-    public function offsetGet($offset)
-    {
-        return $this->array->offsetGet($offset);
-    }
-
-    /**
-     * {@inheritdoc}
-     * @see ArrayAccess::offsetSet()
-     */
-    public function offsetSet($offset, $value)
-    {
-        $this->array->offsetSet($offset, $value);
-    }
-
-    /**
-     * {@inheritdoc}
-     * @see ArrayAccess::offsetUnset()
-     */
-    public function offsetUnset($offset)
-    {
-        $this->array->offsetUnset($offset);
-    }
 }

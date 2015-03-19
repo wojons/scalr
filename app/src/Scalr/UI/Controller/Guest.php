@@ -713,8 +713,12 @@ class Scalr_UI_Controller_Guest extends Scalr_UI_Controller
      */
     public function updatePasswordAction($hash)
     {
-        $user = Scalr_Account_User::init()->loadBySetting(Scalr_Account::SETTING_OWNER_PWD_RESET_HASH, $hash);
-        $this->response->page('ui/guest/updatePassword.js', array('valid' => is_object($user), 'authenticated' => is_object($this->user)));
+        if ($hash) {
+            $user = Scalr_Account_User::init()->loadBySetting(Scalr_Account::SETTING_OWNER_PWD_RESET_HASH, $hash);
+            $this->response->page('ui/guest/updatePassword.js', array('valid' => is_object($user), 'authenticated' => is_object($this->user)));
+        } else {
+            throw new Exception('Incorrect confirmation link');
+        }
     }
 
     /**
@@ -723,9 +727,7 @@ class Scalr_UI_Controller_Guest extends Scalr_UI_Controller
      */
     public function xUpdatePasswordAction($hash, $password)
     {
-        $user = Scalr_Account_User::init()->loadBySetting(Scalr_Account::SETTING_OWNER_PWD_RESET_HASH, $hash);
-
-        if ($user && $password) {
+        if ($hash && ($user = Scalr_Account_User::init()->loadBySetting(Scalr_Account::SETTING_OWNER_PWD_RESET_HASH, $hash)) && $password) {
             $user->updatePassword($password);
             $user->loginattempts = 0;
             $user->save();

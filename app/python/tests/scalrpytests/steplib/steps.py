@@ -1,10 +1,7 @@
 import os
-import yaml
 import uuid
 import time
-import shutil
 import random
-import inspect
 from datetime import datetime
 
 from scalrpy.util import dbmanager
@@ -13,7 +10,7 @@ from scalrpy.util import analytics
 from scalrpytests.steplib import lib
 
 from lettuce import *
-from lettuce import step, after, before
+from lettuce import step
 
 
 cwd = os.path.dirname(os.path.abspath(__file__))
@@ -41,7 +38,7 @@ def drop_db(step):
 
 
 @step(u"White Rabbit creates scalr_test database")
-def create_db(step): 
+def create_db(step):
     assert lib.create_db(lib.world.config['connections']['mysql'])
 
 
@@ -51,7 +48,7 @@ def drop_db(step):
 
 
 @step(u"White Rabbit creates analytics_test database")
-def create_db(step): 
+def create_db(step):
     assert lib.create_db(lib.world.config['connections']['analytics'])
 
 
@@ -87,15 +84,15 @@ def fill_messages(step):
     for record in step.hashes:
         record['messageid'] = record.get('messageid', "'%s'" % str(uuid.uuid4()))
         record['status'] = record.get('status', 0)
-        record['handle_attempts'] = record.get('handle_attempts', 0) 
-        record['dtlasthandleattempt'] = record.get('dthandleattempt', "'%s'" % datetime.now().strftime('%Y-%m-%d %H:%M:%S')) 
+        record['handle_attempts'] = record.get('handle_attempts', 0)
+        record['dtlasthandleattempt'] = record.get('dthandleattempt', "'%s'" % datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
         record['message'] = "'Carrot'"
         record['server_id'] = record.get('server_id', "'%s'" % lib.generate_server_id())
         record['type'] = record.get('type', "'out'")
         record['message_version'] = record.get('message_version', 2)
         record['message_name'] = record.get('message_name', "''")
         record['message_format'] = record.get('message_format', "'json'")
-        record['event_id'] = record.get('event_id', "'%s'" % lib.generate_event_id())
+        record['event_id'] = record.get('event_id', "'%s'" % lib.generate_id())
         query = (
                 "INSERT messages "
                 "(messageid, status, handle_attempts, dtlasthandleattempt, message, "
@@ -115,11 +112,11 @@ def fill_servers(step):
     lib.world.servers = {}
     for record in step.hashes:
         record['server_id'] = record.get('server_id', "'%s'" % lib.generate_server_id())
-        record['farm_id'] = record.get('farm_id', lib.generate_farm_id())
-        record['farm_roleid'] = record.get('farm_roleid', lib.generate_farm_role_id())
-        record['client_id'] = record.get('client_id', lib.generate_client_id())
-        record['env_id'] = record.get('env_id', lib.generate_env_id())
-        record['role_id'] = record.get('env_id', lib.generate_role_id())
+        record['farm_id'] = record.get('farm_id', lib.generate_id())
+        record['farm_roleid'] = record.get('farm_roleid', lib.generate_id())
+        record['client_id'] = record.get('client_id', lib.generate_id())
+        record['env_id'] = record.get('env_id', lib.generate_id())
+        record['role_id'] = record.get('env_id', lib.generate_id())
         record['platform'] = record.get('platform', random.choice(["'ec2'", "'gce'", "'idcf'", "'openstack'"]))
         record['status'] = record.get('status', "'running'")
         record['remote_ip'] = record.get('remote_ip', 'NULL')
@@ -150,13 +147,14 @@ def fill_webhook_history(step):
                 lib.generate_webhook_id()).replace('-', '').upper()
         record['endpoint_id'] = record.get('endpoint_id', "'%s'" %
                 lib.generate_endpoint_id()).replace('-', '').upper()
+        record['event_id'] = record.get('event_id', "'%s'" % lib.generate_id())
         record['status'] = record.get('status', 0)
         record['payload'] = record.get('payload', "'This is text'")
         query = (
                 "INSERT INTO webhook_history "
-                "(history_id, webhook_id, endpoint_id, status, payload) "
+                "(history_id, webhook_id, endpoint_id, event_id, status, payload) "
                 "VALUES (UNHEX({history_id}), UNHEX({webhook_id}), UNHEX({endpoint_id}), "
-                "{status}, {payload})"
+                "{event_id}, {status}, {payload})"
         ).format(**record)
         db.execute(query)
 
@@ -207,7 +205,7 @@ def fill_clients(step):
     db = dbmanager.DB(lib.world.config['connections']['mysql'])
     lib.world.clients = {}
     for record in step.hashes:
-        record['id'] = record.get('id', lib.generate_client_id())
+        record['id'] = record.get('id', lib.generate_id())
         record['status'] = record.get('status', "'Active'")
         query = (
                 "INSERT INTO clients "
@@ -224,8 +222,8 @@ def fill_client_environments(step):
     db = dbmanager.DB(lib.world.config['connections']['mysql'])
     lib.world.client_environments = {}
     for record in step.hashes:
-        record['id'] = record.get('id', lib.generate_env_id())
-        record['client_id'] = record.get('client_id', lib.generate_client_id())
+        record['id'] = record.get('id', lib.generate_id())
+        record['client_id'] = record.get('client_id', lib.generate_id())
         record['status'] = record.get('status', 'Active')
         lib.world.client_environments[record['id']] = record
         query = (
@@ -255,9 +253,9 @@ def fill_farms(step):
     db = dbmanager.DB(lib.world.config['connections']['mysql'])
     lib.world.farms = {}
     for record in step.hashes:
-        record['id'] = record.get('id', lib.generate_farm_id())
-        record['clientid'] = record.get('clientid', lib.generate_client_id())
-        record['env_id'] = record.get('env_id', lib.generate_env_id())
+        record['id'] = record.get('id', lib.generate_id())
+        record['clientid'] = record.get('clientid', lib.generate_id())
+        record['env_id'] = record.get('env_id', lib.generate_id())
         record['hash'] = record.get('hash', "'914d929db09834'")
         record['status'] = record.get('status', "1")
         lib.world.farms[record['id']] = record
@@ -267,6 +265,7 @@ def fill_farms(step):
                 "VALUES ({id}, {clientid}, {env_id}, {hash}, {status})"
         ).format(**record)
         db.execute(query)
+
 
 @step(u"Database has farm_settings records")
 def fill_farm_settings(step):
@@ -293,6 +292,8 @@ def fill_farm_role_settings(step):
 
 
 dtime = time.strftime("%Y-%m-%d %H:00:00", time.gmtime(time.time() - 3600))
+
+
 @step(u"Database has poller_sessions records")
 def fill_poller_sessions(step):
     db = dbmanager.DB(lib.world.config['connections']['analytics'])
@@ -319,8 +320,6 @@ def fill_managed(step):
                 "WHERE sid=UNHEX({sid}) "
                 "LIMIT 1"
         ).format(**record)
-        result = db.execute(query)
-        platform = result[0]['platform']
 
         record['server_id'] = record['server_id'].replace('-', '')
         query = (
@@ -395,6 +394,20 @@ def fill_settings(step):
         query = (
                 "INSERT INTO settings (id,value) "
                 "VALUES ('{id}', '{value}')"
+        ).format(**record)
+        db.execute(query)
+
+
+@step(u"Database has events records")
+def fill_events(step):
+    db = dbmanager.DB(lib.world.config['connections']['mysql'])
+    for record in step.hashes:
+        record['id'] = record.get('id', lib.generate_id())
+        record['event_id'] = record.get('event_id', "'%s'" % lib.generate_id())
+        query = (
+                "INSERT INTO events "
+                "(id, event_id) "
+                "VALUES ({id}, {event_id})"
         ).format(**record)
         db.execute(query)
 
@@ -597,3 +610,18 @@ def update_prices(step):
                 "AND os={os}"
         ).format(**record)
         db.execute(query)
+
+
+@step(u"White Rabbit checks events")
+def check_events(step):
+    db = dbmanager.DB(lib.world.config['connections']['mysql'])
+    for record in step.hashes:
+        query = (
+                "SELECT * "
+                "FROM events "
+                "WHERE event_id={event_id}"
+        ).format(**record)
+        res = db.execute(query)
+        assert res
+        assert int(record['wh_completed']) == int(res[0]['wh_completed']), res[0]['wh_completed']
+        assert int(record['wh_failed']) == int(res[0]['wh_failed']), res[0]['wh_failed']

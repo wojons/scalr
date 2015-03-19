@@ -1,13 +1,13 @@
 <?php
 namespace Scalr\Service\Aws\Route53\Handler;
 
+use Scalr\Service\Aws\Route53\DataType\RecordSetList;
 use Scalr\Service\Aws\Route53Exception;
 use Scalr\Service\Aws\Client\ClientException;
 use Scalr\Service\Aws\Route53\AbstractRoute53Handler;
 use Scalr\Service\Aws\DataType\MarkerType;
 use Scalr\Service\Aws\Route53\DataType\ChangeRecordSetsRequestData;
 use Scalr\Service\Aws\Route53\DataType\ChangeData;
-use Scalr\Service\Aws\Route53\DataType\RecordList;
 
 /**
  * RecordHandler
@@ -41,7 +41,7 @@ class RecordHandler extends AbstractRoute53Handler
      * @param   string       $name optional query parameter.
      * @param   string       $type optional query parameter.
      * @param   MarkerType   $marker optional The query parameters.
-     * @return  RecordList   Returns the list of record sets.
+     * @return  RecordSetList   Returns the list of record sets.
      * @throws  Route53Exception
      * @throws  ClientException
      */

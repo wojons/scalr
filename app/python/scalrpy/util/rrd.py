@@ -24,14 +24,14 @@ SOURCE = {
         'DS:la15:GAUGE:600:U:U',
     ],
     'mem': [
-        'DS:swap:GAUGE:600:U:U',      # SwapTotal
-        'DS:swapavail:GAUGE:600:U:U', # SwapFree
-        'DS:total:GAUGE:600:U:U',     # MemTotal
-        'DS:avail:GAUGE:600:U:U',     # Unknown
-        'DS:free:GAUGE:600:U:U',      # MemFree
-        'DS:shared:GAUGE:600:U:U',    # Shmem
-        'DS:buffer:GAUGE:600:U:U',    # Buffers
-        'DS:cached:GAUGE:600:U:U',    # Cached
+        'DS:swap:GAUGE:600:U:U',       # SwapTotal
+        'DS:swapavail:GAUGE:600:U:U',  # SwapFree
+        'DS:total:GAUGE:600:U:U',      # MemTotal
+        'DS:avail:GAUGE:600:U:U',      # Unknown
+        'DS:free:GAUGE:600:U:U',       # MemFree
+        'DS:shared:GAUGE:600:U:U',     # Shmem
+        'DS:buffer:GAUGE:600:U:U',     # Buffers
+        'DS:cached:GAUGE:600:U:U',     # Cached
     ],
     'net': [
         'DS:in:COUNTER:600:U:21474836480',
@@ -713,4 +713,3 @@ def plot_io_ops(img_path, rrd_path, opt, tz=None):
         'GPRINT:read_avg:<tt>%4.1lf%s</tt>\\t',
         'GPRINT:read_max:<tt>%4.1lf%s</tt>\l'
     )
-

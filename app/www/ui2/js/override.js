@@ -17,7 +17,7 @@ Scalr.constants.ebsTypes = [
     ['io1', 'Provisioned IOPS (' + Scalr.constants.iopsMin + ' - ' + Scalr.constants.iopsMax + '):']
 ];
 Scalr.constants.osFamily = [
-    ['amazon', [['2012.09', '2012.09'],['2013.03', '2013.03'],['2014.03', '2014.03'],['2014.09', '2014.09']]],
+    ['amazon', [['2012.09', '2012.09'],['2013.03', '2013.03'],['2014.03', '2014.03'],['2014.09', '2014.09'],['2015.03', '2015.03']]],
     ['centos', [
         ['5.X', '5', 'Final'],
         ['6.X', '6', 'Final'],

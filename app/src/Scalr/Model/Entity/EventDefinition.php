@@ -62,7 +62,7 @@ class EventDefinition extends AbstractEntity implements ScopeInterface
      * @param $envId
      * @return bool
      */
-    public static function isExisted($name, $accountId, $envId)
+    public static function isExist($name, $accountId, $envId)
     {
         return !!self::findOne([
             ['name' => $name],

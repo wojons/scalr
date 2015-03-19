@@ -529,27 +529,8 @@ class Scalr_UI_Controller
 
         } catch (ADODB_Exception $e) {
             Scalr_UI_Response::getInstance()->debugException($e);
-            try {
-                $db = Scalr::getDb();
-                $user = Scalr_UI_Request::getInstance()->getUser();
-
-                $db->Execute('INSERT INTO ui_errors (tm, file, lineno, url, short, message, browser, account_id, user_id) VALUES (NOW(), ?, ?, ?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE cnt = cnt + 1', array(
-                    $e->getFile(),
-                    $e->getLine(),
-                    $_SERVER['REQUEST_URI'],
-                    substr($e->getMessage(), 0, 255),
-                    $e->getMessage() . "\n" . $e->getTraceAsString(),
-                    $_SERVER['HTTP_USER_AGENT'],
-                    $user ? $user->getAccountId() : '',
-                    $user ? $user->getId() : ''
-                ));
-
-                Scalr_UI_Response::getInstance()->failure('Database error (1)');
-
-            } catch (Exception $e) {
-                Scalr_UI_Response::getInstance()->failure('Database error (2)');
-            }
-
+            @error_log($e->getMessage() . "\n" . $e->getTraceAsString());
+            Scalr_UI_Response::getInstance()->failure('Database error');
         } catch (Exception $e) {
             $rawHtml = false;
             if (get_class($e) == 'Scalr_Exception_LimitExceeded')

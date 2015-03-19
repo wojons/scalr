@@ -21,6 +21,8 @@
          </ResourceRecords>
       </ResourceRecordSet>
    </ResourceRecordSets>
-   <IsTruncated>false</IsTruncated>
+   <IsTruncated>true</IsTruncated>
    <MaxItems>10</MaxItems>
+   <NextRecordName>TestRecordName</NextRecordName>
+   <NextRecordType>TXT</NextRecordType>
 </ListResourceRecordSetsResponse>

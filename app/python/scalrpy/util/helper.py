@@ -210,7 +210,7 @@ class Pool(object):
     def put(self, o):
         with self._lock:
             if o not in self._used:
-                   return
+                return
             self._used.remove(o)
             if self._validator(o):
                 self._free.append(o)
@@ -407,7 +407,7 @@ def chunks(data, chunk_size):
     >>> assert out == [[0, 1, 2], [3, 4, 5], [6, 7, 8], [9]]
     """
     for i in xrange(0, len(data), chunk_size):
-        yield data[i:i+chunk_size]
+        yield data[i:i + chunk_size]
 
 
 
@@ -574,4 +574,3 @@ class HttpsAdapter(HTTPAdapter):
                                        maxsize=maxsize,
                                        block=block,
                                        ssl_version=ssl.PROTOCOL_TLSv1)
-

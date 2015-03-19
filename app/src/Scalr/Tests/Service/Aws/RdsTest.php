@@ -104,10 +104,10 @@ class RdsTest extends AwsTestCase
         $this->assertEquals('10:00-12:00', $dbi->preferredBackupWindow);
         $this->assertEquals('mon:05:00-mon:09:00', $dbi->preferredMaintenanceWindow);
 
-        $this->assertInstanceOf($this->getRdsClassName('DataType\\OptionGroupMembershipData'), $dbi->optionGroupMembership);
+        $this->assertInstanceOf($this->getRdsClassName('DataType\\OptionGroupMembershipList'), $dbi->optionGroupMembership);
         $this->assertInstanceOf($this->getAwsClassName('Rds'), $dbi->optionGroupMembership->getRds());
-        $this->assertEquals('default:mysql-5-1', $dbi->optionGroupMembership->optionGroupName);
-        $this->assertEquals('in-sync', $dbi->optionGroupMembership->status);
+        $this->assertEquals('default:mysql-5-1', $dbi->optionGroupMembership->get(0)->optionGroupName);
+        $this->assertEquals('in-sync', $dbi->optionGroupMembership->get(0)->status);
 
         $this->assertEquals('us-east-1a', $dbi->availabilityZone);
         $this->assertEquals('2013-03-19T16:15:00+00:00', $dbi->latestRestorableTime->format('c'));

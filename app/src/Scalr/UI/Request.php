@@ -195,9 +195,16 @@ class Scalr_UI_Request
         return isset($this->requestParams[$key]);
     }
 
-    public function getRemoteAddr()
+    public function getRemoteAddr($useXforwardedFor = false)
     {
-        return isset($_SERVER['REMOTE_ADDR']) ? $_SERVER['REMOTE_ADDR'] : null;
+        $ip = null;
+        if ($useXforwardedFor && !empty($this->requestHeaders['X-Forwarded-For'])) {
+            $ip = trim(explode(',', $this->requestHeaders['X-Forwarded-For'])[0]);
+            if (filter_var( $ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4 ) === false) {
+                $ip = null;
+            }
+        }
+        return $ip ? $ip : (isset($_SERVER['REMOTE_ADDR']) ? $_SERVER['REMOTE_ADDR'] : null);
     }
 
     public function setParam($key, $value)

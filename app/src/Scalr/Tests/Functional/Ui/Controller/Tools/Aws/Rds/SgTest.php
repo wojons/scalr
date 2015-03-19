@@ -29,6 +29,7 @@ class SgTest extends WebTestCase
     public function testXListAction()
     {
         $content = $this->request('/tools/aws/rds/sg/xList/?cloudLocation=us-east-1');
+
         $this->assertResponseDataHasKeys(array(
             'EC2SecurityGroups' => $this->isType('array'),
             'DBSecurityGroupDescription',

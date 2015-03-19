@@ -15,4 +15,3 @@ class AlreadyRunningError(Exception):
 
 class QuitError(Exception):
     pass
-

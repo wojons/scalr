@@ -97,3 +97,17 @@ To get the diff between two versions, go to https://github.com/Scalr/scalr/compa
  * UI-398 RDS missing some engine types for the Parameter Group (vdobrovolskiy)
  * SCALRCORE-1103 Fix warning (recipe)
  * UI-399 Chef(Override) in orchestration: selected role doesn't passed (igrkio)
+* 5.3.2
+ * SCALRCORE-1110 AWS RDS library related bugs (vdobrovolskiy)
+ * SCALRCORE-1118 Log DB errors to file instead of ui_errors table (vdobrovolskiy)
+ * SCALRCORE-1122 Undefined variables in ScalrApi_2_3_0 (discydel)
+ * SCALRCORE-1133 Fix E_STRICT Only variables should be passed by reference, in app/src/Scalr/UI/Controller/Platforms.php:76 (recipe)
+ * SCALRCORE-1119 Improve ServerStatusManager cronjob (pyscht)
+ * SCALRCORE-1120 Update `messages` PK (pyscht)
+ * SCALRCORE-1130 "My IP" in SG Editor does not work when reverse proxy is in use (igrkio)
+ * SCALRCORE-1136 cloud_pricing old generation instance types prices are not pulled (vdobrovolskiy)
+ * SCALRCORE-1131 Full Access ACL has some permissions turned off for new accounts (recipe)
+ * SCALRCORE-1146 Optimize indexes in `images` table (pyscht)
+ * SCALRCORE-1149 ServerTerminate: handling GCE authorization error (pyscht)
+ * Fix Stage 9 of update Update20140127154723 failed! mysqli error: 1146: Table 'scalr.account_ccs' doesn't exist (recipe)
+    

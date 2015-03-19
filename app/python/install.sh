@@ -347,31 +347,35 @@ else
     fi
 fi
 
-
 log "check python setuptools"
-$python -c "import sys;import setuptools"
-if [ $? -ne 0 ]; then
-    log "python setuptools package is not installed. Installing latest python setuptools package"
-    $pip install setuptools
+install_setuptools="N"
+if [ "$dist" == "ubuntu" ] && [ "$major_ver" == "10" ]; then
+    apt-get purge -y python-setuptools
 fi
-setuptools_info=$($pip show setuptools)
-readarray -t array <<<"$setuptools_info"
-setuptools_info=$(echo ${array[2]} | tr ' ' '\n')
-readarray -t array <<<"$setuptools_info"
-setuptools_version=${array[1]}
-if [[ "$setuptools_version" < "5.5" ]]; then
+setuptools_version=$($python -c "import setuptools;print setuptools.__version__")
+if [ $? -ne 0 ]; then
+    install_setuptools="Y"
+else
+    min_setuptools_version="$(echo -e "$setuptools_version\n5.5" | sort -V | head -n1)"
+    if [ $? -ne 0 ]; then
+        min_setuptools_version="$(echo -e "$setuptools_version\n5.5" | sort -n | head -n1)"
+    fi
+    if [ $? -ne 0 ] || [ $min_setuptools_version == "5.5" ]; then
+        install_setuptools="Y"
+    fi
+fi
+if [ "$install_setuptools" == "Y" ]; then
     log "required python setuptools version >= 5.5. Installing latest python setuptools package"
     $pip uninstall -y setuptools
-    $python -c "import setuptools"
-    if [ $? -eq 0 ]; then
-        if [ "$dist" == "ubuntu" ] && [ "$major_ver" == "10" ]; then
-            apt-get purge -y python-setuptools
-            apt-get purge -y python python2.6 python-dev python2.6-dev
-            apt-get install -y python python-dev
-        fi
-    fi
-    log "install latest setuptools"
-    $pip install -U setuptools
+    #$python -c "import setuptools"
+    #if [ $? -eq 0 ]; then
+    #    if [ "$dist" == "ubuntu" ] && [ "$major_ver" == "10" ]; then
+    #        apt-get purge -y python-setuptools
+    #        apt-get purge -y python python2.6 python-dev python2.6-dev
+    #        apt-get install -y python python-dev
+    #    fi
+    #fi
+    curl https://bootstrap.pypa.io/ez_setup.py | $python
 fi
 
 

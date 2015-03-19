@@ -12,14 +12,14 @@ from scalrpy import LOG
 
 def make_connection(config, autocommit=True):
     connection = pymysql.connect(
-            user=config['user'],
-            passwd=config['pass'],
-            db=config['name'],
-            host=config['host'],
-            port=config['port'],
-            cursorclass=pymysql.cursors.DictCursor,
-            connect_timeout=10
-            )
+        user=config['user'],
+        passwd=config['pass'],
+        db=config['name'],
+        host=config['host'],
+        port=config['port'],
+        cursorclass=pymysql.cursors.DictCursor,
+        connect_timeout=10
+    )
     connection.autocommit(autocommit)
     return connection
 
@@ -124,9 +124,9 @@ class DB(object):
         while True:
             is_last_iter = bool(max_limit) and (i + 1) * chunk_size > max_limit
             if is_last_iter:
-                limit_query = query + " LIMIT %s, %s" % (i*chunk_size, max_limit-i*chunk_size)
+                limit_query = query + " LIMIT %s, %s" % (i * chunk_size, max_limit - i * chunk_size)
             else:
-                limit_query = query + " LIMIT %s, %s" % (i*chunk_size, chunk_size)
+                limit_query = query + " LIMIT %s, %s" % (i * chunk_size, chunk_size)
             results = self.execute(limit_query, retries=retries, retry_timeout=retry_timeout)
             if not results:
                 break
@@ -309,7 +309,7 @@ class ScalrDB(DB):
 
         # router_vpc_ip
         routers_role_id = list(set(_['router_role_id']
-                for _ in servers if 'ec2.vpc.id' in _ and 'router_role_id' in _))
+                               for _ in servers if 'ec2.vpc.id' in _ and 'router_role_id' in _))
         if not routers_role_id:
             return
         query = (
@@ -329,4 +329,3 @@ class ScalrDB(DB):
                 server['router.vpc.ip'] = tmp[server['router_role_id']]
 
         return
-

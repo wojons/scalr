@@ -1,13 +1,12 @@
 <?php
 
 use Scalr\Acl\Acl;
+use Scalr\Exception\Http\NotFoundException;
+use Scalr\Model\Entity;
+use Scalr\Modules\PlatformFactory;
+use Scalr\Modules\Platforms\Openstack\Helpers\OpenstackHelper;
 use Scalr\Server\Alerts;
 use Scalr\Service\Aws\Ec2\DataType\InstanceAttributeType;
-use Scalr\Modules\PlatformFactory;
-use Scalr\Model\Entity;
-use Scalr\UI\Request\JsonData;
-use Scalr\Modules\Platforms\Openstack\Helpers\OpenstackHelper;
-use Scalr\Exception\Http\NotFoundException;
 use Scalr\Util\CryptoTool;
 
 class Scalr_UI_Controller_Servers extends Scalr_UI_Controller
@@ -247,7 +246,10 @@ class Scalr_UI_Controller_Servers extends Scalr_UI_Controller
             $this->user->getPermissions()->validate($dbServer);
 
             if (in_array($dbServer->status, array(SERVER_STATUS::RUNNING, SERVER_STATUS::INIT))) {
-                $this->db->Execute("UPDATE messages SET status=?, handle_attempts='0' WHERE id=?", array(MESSAGE_STATUS::PENDING, $message['id']));
+                $this->db->Execute(
+                    "UPDATE messages SET status=?, handle_attempts='0' WHERE messageid = ? AND server_id = ?",
+                    [MESSAGE_STATUS::PENDING, $message['messageid'], $message['server_id']]
+                );
                 $dbServer->SendMessage($msg);
             }
             else
@@ -267,7 +269,7 @@ class Scalr_UI_Controller_Servers extends Scalr_UI_Controller
 
         $this->request->defineParams(array(
             'serverId',
-            'sort' => array('type' => 'string', 'default' => 'id'),
+            'sort' => array('type' => 'string', 'default' => 'dtadded'),
             'dir' => array('type' => 'string', 'default' => 'DESC')
         ));
 

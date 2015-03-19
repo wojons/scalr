@@ -7,18 +7,20 @@
         <DBInstanceStatus>available</DBInstanceStatus>
         <MultiAZ>false</MultiAZ>
         <VpcSecurityGroups>
-          <VpcSecurityGroup>
+          <VpcSecurityGroupMembership>
             <VpcSecurityGroupId>vpc-secuity-group-id</VpcSecurityGroupId>
             <Status>vpc-status</Status>
-          </VpcSecurityGroup>
+          </VpcSecurityGroupMembership>
         </VpcSecurityGroups>
         <DBInstanceIdentifier>foo-rds</DBInstanceIdentifier>
         <PreferredBackupWindow>10:00-12:00</PreferredBackupWindow>
         <PreferredMaintenanceWindow>mon:05:00-mon:09:00</PreferredMaintenanceWindow>
-        <OptionGroupMembership>
-          <OptionGroupName>default:mysql-5-1</OptionGroupName>
-          <Status>in-sync</Status>
-        </OptionGroupMembership>
+        <OptionGroupMemberships>
+          <OptionGroupMembership>
+            <OptionGroupName>default:mysql-5-1</OptionGroupName>
+            <Status>in-sync</Status>
+          </OptionGroupMembership>
+        </OptionGroupMemberships>
         <AvailabilityZone>us-east-1a</AvailabilityZone>
         <LatestRestorableTime>2013-03-19T16:15:00Z</LatestRestorableTime>
         <ReadReplicaDBInstanceIdentifiers>

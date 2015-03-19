@@ -1,6 +1,9 @@
 <?php
 
 use Scalr\DependencyInjection\Container;
+use Scalr\Model\Entity\Image;
+use Scalr\Model\Entity\WebhookConfig;
+use Scalr\Model\Entity\WebhookHistory;
 use Scalr\Modules\PlatformFactory;
 use Scalr\Modules\Platforms\Cloudstack\Observers\CloudstackObserver;
 use Scalr\Modules\Platforms\Ec2\Observers\EbsObserver;
@@ -8,11 +11,6 @@ use Scalr\Modules\Platforms\Ec2\Observers\Ec2Observer;
 use Scalr\Modules\Platforms\Ec2\Observers\EipObserver;
 use Scalr\Modules\Platforms\Ec2\Observers\ElbObserver;
 use Scalr\Modules\Platforms\Openstack\Observers\OpenstackObserver;
-
-use Scalr\Model\Entity\WebhookConfig;
-use Scalr\Model\Entity\WebhookHistory;
-use Scalr\Model\Entity\Image;
-
 use Scalr\Stats\CostAnalytics\Entity\ProjectEntity;
 
 class Scalr
@@ -435,7 +433,7 @@ class Scalr
             list($reasonMsg, $reasonId) = is_array($reason) ? call_user_func_array($fnGetReason, $reason) : $fnGetReason($reason);
             $DBServer->SetProperties([
                 SERVER_PROPERTIES::LAUNCH_REASON    => $reasonMsg,
-                SERVER_PROPERTIES::LAUNCH_REASON_ID => $reasonId,
+                SERVER_PROPERTIES::LAUNCH_REASON_ID => $reasonId
             ]);
             $DBServer->Save();
             return $DBServer;
@@ -447,7 +445,11 @@ class Scalr
                 $DBServer->status = SERVER_STATUS::PENDING_LAUNCH;
                 $DBServer->Save();
 
-                $DBServer->SetProperty(SERVER_PROPERTIES::LAUNCH_ERROR, "ami-scripts servers no longer supported");
+                $DBServer->SetProperties([
+                    SERVER_PROPERTIES::LAUNCH_ERROR => "ami-scripts servers no longer supported",
+                    SERVER_PROPERTIES::LAUNCH_ATTEMPT => $DBServer->GetProperty(SERVER_PROPERTIES::LAUNCH_ATTEMPT) + 1,
+                    SERVER_PROPERTIES::LAUNCH_LAST_TRY => (new DateTime())->format('Y-m-d H:i:s')
+                ]);
 
                 return $DBServer;
             }
@@ -466,6 +468,11 @@ class Scalr
 
                     $DBServer->status = SERVER_STATUS::PENDING_LAUNCH;
                     $DBServer->Save();
+
+                    $DBServer->SetProperties([
+                        SERVER_PROPERTIES::LAUNCH_ATTEMPT => $DBServer->GetProperty(SERVER_PROPERTIES::LAUNCH_ATTEMPT) + 1,
+                        SERVER_PROPERTIES::LAUNCH_LAST_TRY => (new DateTime())->format('Y-m-d H:i:s')
+                    ]);
 
                     return $DBServer;
                 } else {
@@ -527,7 +534,12 @@ class Scalr
             $existingLaunchError = $DBServer->GetProperty(SERVER_PROPERTIES::LAUNCH_ERROR);
 
             $DBServer->status = SERVER_STATUS::PENDING_LAUNCH;
-            $DBServer->SetProperty(SERVER_PROPERTIES::LAUNCH_ERROR, $e->getMessage());
+            $DBServer->SetProperties([
+                SERVER_PROPERTIES::LAUNCH_ERROR => $e->getMessage(),
+                SERVER_PROPERTIES::LAUNCH_ATTEMPT => $DBServer->GetProperty(SERVER_PROPERTIES::LAUNCH_ATTEMPT) + 1,
+                SERVER_PROPERTIES::LAUNCH_LAST_TRY => (new DateTime())->format('Y-m-d H:i:s')
+            ]);
+
             $DBServer->Save();
 
             if ($DBServer->farmId && !$existingLaunchError)

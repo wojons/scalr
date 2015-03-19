@@ -133,7 +133,7 @@ else
 	userdel -r rightscale > /dev/null 2>&1
 	rm -rf /etc/rightscale.d > /dev/null 2>&1
 	echo -n > /etc/motd 
-	if [ "$rhel" -lt 6 ]; then
+	if [ ! "$rhel" -eq 0 ] && [ "$rhel" -lt 6 ]; then
 		action "Removing unnecessary packages" "yum -y remove mysql*"
 		action "Adding EPEL repository" "rpm -Uvh http://dl.fedoraproject.org/pub/epel/5/x86_64/epel-release-5-4.noarch.rpm"
 	fi

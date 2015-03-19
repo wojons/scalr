@@ -12,8 +12,6 @@ from threading import local
 from scalrpy.util import helper
 from scalrpy.util import cryptotool
 
-from scalrpy import LOG
-
 
 
 class ServiceError(Exception):
@@ -190,4 +188,3 @@ class HttpServiceProxy(ServiceProxy):
                 headers)
         response = urllib2.urlopen(http_req, timeout=timeout).read()
         return self.security.decrypt_data(response) if self.security else response
-

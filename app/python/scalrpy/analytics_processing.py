@@ -154,7 +154,7 @@ class AnalyticsProcessing(application.ScalrIterationApplication):
 
 
     def _get_processing_dtime(self):
-        dtime_hour_ago = datetime.datetime.utcfromtimestamp(int(time.time())-3600)
+        dtime_hour_ago = datetime.datetime.utcfromtimestamp(int(time.time()) - 3600)
 
         if self.config['recalculate'] or self.config['date_from']:
             dtime_from = datetime.datetime.strptime(self.config['date_from'], '%Y-%m-%d')
@@ -217,12 +217,12 @@ class AnalyticsProcessing(application.ScalrIterationApplication):
                 for server in managed_servers:
                     self._pool.wait()
                     self._pool.apply_async(self.analytics.insert_managed_server, (server,))
-                    gevent.sleep(0) # force switch
+                    gevent.sleep(0)  # force switch
 
                 for server in not_managed_servers:
                     self._pool.wait()
                     self._pool.apply_async(self.analytics.insert_not_managed_server, (server,))
-                    gevent.sleep(0) # force switch
+                    gevent.sleep(0)  # force switch
 
             self._pool.join()
             self.analytics.fill_farm_usage_d(date, hour)
@@ -251,12 +251,12 @@ class AnalyticsProcessing(application.ScalrIterationApplication):
                 for record in usage_h_records:
                     self._pool.wait()
                     self._pool.apply_async(self.analytics.update_usage_h, (record,))
-                    gevent.sleep(0) # force switch
+                    gevent.sleep(0)  # force switch
 
                 for record in nm_usage_h_records:
                     self._pool.wait()
                     self._pool.apply_async(self.analytics.update_nm_usage_h, (record,))
-                    gevent.sleep(0) # force switch
+                    gevent.sleep(0)  # force switch
 
             self._pool.join()
             self.analytics.fill_farm_usage_d(date, hour, platform=self.config['platform'])
@@ -368,4 +368,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-

@@ -285,7 +285,10 @@ Scalr.event.on('close', function(force) {
 Scalr.event.on('redirect', function(href, force, params) {
 	Scalr.state.pageSuspendForce = Ext.isBoolean(force) ? force : false;
 	Scalr.state.pageRedirectParams = params || {};
-	document.location.href = href;
+	if (href == undefined)
+        throw 'Not valid redirect link: ' + href;
+
+    document.location.href = href;
 });
 
 Scalr.event.on('lock', function(hide) {

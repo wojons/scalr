@@ -63,9 +63,9 @@ class CloudPricing extends AbstractTask
 
         $urls = array(
             'https://a0.awsstatic.com/pricing/1/ec2/linux-od.min.js',
-            'https://a0.awsstatic.com/pricing/1/ec2/mswin-od.min.js',
+        	'https://a0.awsstatic.com/pricing/1/ec2/mswin-od.min.js',
             'https://a0.awsstatic.com/pricing/1/ec2/previous-generation/linux-od.min.js',
-            'https://a0.awsstatic.com/pricing/1/ec2/previous-generation/mswin-od.min.js',
+            'https://a0.awsstatic.com/pricing/1/ec2/previous-generation/mswin-od.min.js'
         );
 
         $availableLocations = Aws::getCloudLocations();
@@ -150,7 +150,7 @@ class CloudPricing extends AbstractTask
         $now = new DateTime('now', new DateTimeZone('UTC'));
 
         $cadb = \Scalr::getContainer()->cadb;
-        
+
         $os = (strpos($request->url, 'linux') !== false ? PriceEntity::OS_LINUX : PriceEntity::OS_WINDOWS);
 
         foreach ($request->instanceTypes as $it) {

@@ -42,6 +42,7 @@ class Scalr_UI_Controller_Analytics_Notifications extends Scalr_UI_Controller
     {
         //$this->response->data(array('data'=> $notifications));
         $data = [];
+
         foreach ($notifications as $id => $settings) {
             if ($id == 'reports') {
                 $this->saveReports($settings);
@@ -54,6 +55,7 @@ class Scalr_UI_Controller_Analytics_Notifications extends Scalr_UI_Controller
                 $data[$id] = NotificationEntity::findBySubjectType(NotificationEntity::SUBJECT_TYPE_PROJECT);
             }
         }
+
         $this->response->data($data);
         $this->response->success('Notifications successfully saved');
     }
@@ -61,11 +63,14 @@ class Scalr_UI_Controller_Analytics_Notifications extends Scalr_UI_Controller
     private function saveNotifications($subjectType, $settings)
     {
         $uuids = array();
+
         foreach ($settings['items'] as $item) {
             $notification = new NotificationEntity();
+
             if ($item['uuid']) {
                 $notification->findPk($item['uuid']);
             }
+
             $notification->subjectType = $subjectType;
             $notification->subjectId = $item['subjectId'] ? $item['subjectId'] : null;
             $notification->notificationType = $item['notificationType'];
@@ -76,6 +81,7 @@ class Scalr_UI_Controller_Analytics_Notifications extends Scalr_UI_Controller
             $notification->save();
             $uuids[] = $notification->uuid;
         }
+
         foreach (NotificationEntity::findBySubjectType($subjectType) as $notification) {
             if (!in_array($notification->uuid, $uuids)) {
                 $notification->delete();
@@ -85,20 +91,24 @@ class Scalr_UI_Controller_Analytics_Notifications extends Scalr_UI_Controller
 
     private function saveReports($settings)
     {
-        $uuids = array();
+        $uuids = [];
+
         foreach ($settings['items'] as $item) {
             $report = new ReportEntity();
+
             if ($item['uuid']) {
                 $report->findPk($item['uuid']);
             }
+
             $report->subjectType = $item['subjectType'];
 
             $subject = null;
-            if ($report->subjectType == ReportEntity::SUBJECT_TYPE_CC) {
+
+            if ($report->subjectType == ReportEntity::SUBJECT_TYPE_CC && $item['subjectId']) {
                 $subject = $this->getContainer()->analytics->ccs->get($item['subjectId']);
-            } elseif ($report->subjectType == ReportEntity::SUBJECT_TYPE_PROJECT) {
+            } elseif ($report->subjectType == ReportEntity::SUBJECT_TYPE_PROJECT && $item['subjectId']) {
                 $subject = $this->getContainer()->analytics->projects->get($item['subjectId']);
-            } else {
+            } elseif ($item['subjectType'] == -1) {
                 $report->subjectType = null;
                 $report->subjectId = null;
             }
@@ -109,12 +119,14 @@ class Scalr_UI_Controller_Analytics_Notifications extends Scalr_UI_Controller
                 }
                 $report->subjectId = $item['subjectId'] ? $item['subjectId'] : null;
             }
+
             $report->period = $item['period'];
             $report->emails = $item['emails'];
             $report->status = $item['status'];
             $report->save();
             $uuids[] = $report->uuid;
         }
+
         foreach (ReportEntity::all() as $report) {
             if (!in_array($report->uuid, $uuids)) {
                 $report->delete();

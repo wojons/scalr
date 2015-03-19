@@ -1,6 +1,5 @@
 <?php
 
-use Exception;
 use Scalr\Stats\CostAnalytics\Entity\PriceHistoryEntity;
 use Scalr\Stats\CostAnalytics\Entity\PriceEntity;
 use Scalr\Modules\Platforms\Openstack\OpenstackPlatformModule;

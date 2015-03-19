@@ -306,6 +306,8 @@ class Scalr_UI_Controller_Analytics_Budgets extends Scalr_UI_Controller
     {
         $nodes = array();
 
+        $isHostedScalr = \Scalr::isHostedScalr();
+
         if (!$ccId) {
             $criteria = null;
             if ($query) {
@@ -314,9 +316,16 @@ class Scalr_UI_Controller_Analytics_Budgets extends Scalr_UI_Controller
                 foreach (ProjectEntity::find($criteria) as $item) {
                     /* @var $item ProjectEntity */
                     if (!isset($nodes[$item->ccId])) {
-                        $nodes[$item->ccId] = $this->getCostCenterData($this->getContainer()->analytics->ccs->get($item->ccId), $period);
+                        $costCenter = $this->getContainer()->analytics->ccs->get($item->ccId);
+
+                        if ($isHostedScalr && $costCenter === null) {
+                            continue;
+                        }
+
+                        $nodes[$item->ccId] = $this->getCostCenterData($costCenter, $period);
                         $nodes[$item->ccId]['nodes'] = array();
                     }
+
                     $nodes[$item->ccId]['nodes'][] = $this->getProjectData($item, $period);
                 }
 

@@ -2,8 +2,8 @@
 
 namespace Scalr\System\Config;
 
-use Scalr\Util\ClosureInvoker;
 use IteratorAggregate;
+use Scalr\Util\ClosureInvoker;
 
 /**
  * Extension
@@ -315,13 +315,21 @@ class Extension implements IteratorAggregate
                         ->end()
                         ->sub('server_status_manager', false)
                             ->node('enabled', false)
-                            ->node('time', '1/2 * * * *')
+                            ->node('time', '* * * * *')
                             ->node('workers', 4)
-                            ->node('daemon', false)
+                            ->node('daemon', true)
                             ->node('memory_limit', 0)
                             ->node('timezone', null)
                             ->node('log', '/dev/null')
                             ->node('log_level', 'WARN')
+                            ->node('idle', 10)
+                            ->sub('intervals_attempts', false)
+                                ->node('1', '10s')
+                                ->node('2', '1m')
+                                ->node('3', '3m')
+                                ->node('4', '10m')
+                                ->node('5', '1h')
+                            ->end()
                         ->end()
                         ->sub('server_terminate', false)
                             ->node('enabled', false)

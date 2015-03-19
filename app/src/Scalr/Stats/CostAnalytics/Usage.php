@@ -2710,9 +2710,9 @@ class Usage
                 }
                 $new[self::EVERYTHING_ELSE]['cost_percentage'] = round(($usg['data'][$cp->key]['data'][$platform]['cost'] == 0 ? 0 : $new[self::EVERYTHING_ELSE]['cost'] * 100 / $usg['data'][$cp->key]['data'][$platform]['cost']), 0);
 
-                $usgFarms->setArray(['data' => $new]);
+                $usgFarms->setData(['data' => $new]);
             } else {
-                $usgFarms->setArray($usg['data'][$cp->key]['data'][$platform])->calculatePercentage();
+                $usgFarms->setData($usg['data'][$cp->key]['data'][$platform])->calculatePercentage();
             }
 
             //Forms result data array

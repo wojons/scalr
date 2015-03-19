@@ -1068,13 +1068,21 @@ CREATE TABLE `events` (
   `msg_expected` int(11) DEFAULT NULL,
   `msg_created` int(11) DEFAULT NULL,
   `msg_sent` int(11) DEFAULT '0',
+  `wh_total` int(3) DEFAULT '0',
+  `wh_completed` int(3) DEFAULT '0',
+  `wh_failed` int(3) DEFAULT '0',
+  `scripts_total` int(3) DEFAULT '0',
+  `scripts_completed` int(3) DEFAULT '0',
+  `scripts_failed` int(3) DEFAULT '0',
+  `scripts_timedout` int(3) DEFAULT '0',
   PRIMARY KEY (`id`),
   UNIQUE KEY `event_id` (`event_id`),
   KEY `farmid` (`farmid`),
   KEY `event_server_id` (`event_server_id`),
+  KEY `idx_ishandled` (`ishandled`),
   KEY `idx_dtadded` (`dtadded`),
   KEY `idx_type` (`type`)
-) ENGINE=MyISAM AUTO_INCREMENT=6509 DEFAULT CHARSET=latin1;
+) ENGINE=MyISAM AUTO_INCREMENT=11101931 DEFAULT CHARSET=latin1;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -1616,15 +1624,14 @@ DROP TABLE IF EXISTS `messages`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8 */;
 CREATE TABLE `messages` (
-  `id` int(11) NOT NULL AUTO_INCREMENT,
-  `messageid` varchar(75) DEFAULT NULL,
+  `messageid` varchar(75) NOT NULL,
   `processing_time` float DEFAULT NULL,
   `status` tinyint(1) DEFAULT '0',
   `handle_attempts` int(2) DEFAULT '1',
   `dtlasthandleattempt` datetime DEFAULT NULL,
   `dtadded` datetime DEFAULT NULL,
   `message` longtext,
-  `server_id` varchar(36) DEFAULT NULL,
+  `server_id` varchar(36) NOT NULL,
   `event_server_id` varchar(36) DEFAULT NULL,
   `type` enum('in','out') DEFAULT NULL,
   `message_name` varchar(30) DEFAULT NULL,
@@ -1632,16 +1639,17 @@ CREATE TABLE `messages` (
   `message_format` enum('xml','json') DEFAULT NULL,
   `ipaddress` varchar(15) DEFAULT NULL,
   `event_id` varchar(36) DEFAULT NULL,
-  PRIMARY KEY (`id`),
-  UNIQUE KEY `server_message` (`messageid`(36),`server_id`),
+  PRIMARY KEY (`messageid`,`server_id`),
   KEY `server_id` (`server_id`),
-  KEY `serverid_isszr` (`server_id`),
   KEY `messageid` (`messageid`),
   KEY `status` (`status`,`type`),
   KEY `message_name` (`message_name`),
   KEY `dt` (`dtlasthandleattempt`),
-  KEY `idx_type_status_dt` (`type`,`status`,`dtlasthandleattempt`)
-) ENGINE=InnoDB AUTO_INCREMENT=5263 DEFAULT CHARSET=latin1;
+  KEY `msg_format` (`message_format`),
+  KEY `event_id` (`event_id`),
+  KEY `idx_type_status_dt` (`type`,`status`,`dtlasthandleattempt`),
+  KEY `dtadded_idx` (`dtadded`)
+) ENGINE=InnoDB DEFAULT CHARSET=latin1;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --

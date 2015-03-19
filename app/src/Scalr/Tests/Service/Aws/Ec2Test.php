@@ -874,42 +874,6 @@ class Ec2Test extends AwsTestCase
         $ec2->getEntityManager()->detachAll();
     }
 
-
-    public function testFunctionalDescribeInstancesMaxResult()
-    {
-        //FIXME rewrite testFunctionalDescribeInstancesMaxResult
-
-        $this->skipIfEc2PlatformDisabled();
-
-        $aws = $this->getContainer()->aws(AwsTestCase::REGION);
-
-        $list = $aws->ec2->instance->describe();
-
-        if (count($list) < 10) {
-            $this->markTestSkipped('There are at least 3 instances to test it');
-        }
-
-        $reservationsList = $aws->ec2->instance->describe(
-            null,
-            null,
-            null,
-            5
-        );
-
-        $this->assertInstanceOf($this->getEc2ClassName('DataType\\ReservationList'), $reservationsList);
-        $this->assertLessThanOrEqual(5, count($reservationsList));
-        $this->assertNotNull($reservationsList->getNextToken());
-
-        $reservationsListNext = $aws->ec2->instance->describe(
-            null,
-            null,
-            $reservationsList->getNextToken(),
-            5
-        );
-        $this->assertInstanceOf($this->getEc2ClassName('DataType\\ReservationList'), $reservationsListNext);
-        $this->assertLessThanOrEqual(5, count($reservationsListNext));
-    }
-
     /**
      * @test
      */

@@ -70,7 +70,7 @@ class Route53Test extends AwsTestCase
         $this->assertInstanceOf(self::CLASS_ROUTE53, $list->getRoute53());
         $this->assertEquals(1, count($list));
         $this->assertEquals(1, $list->maxItems);
-        $this->assertEquals('', $list->marker);
+        $this->assertEquals('Z222222VVVVVVV', $list->marker);
         $this->assertEquals(true, $list->isTruncated);
 
     }
@@ -87,7 +87,7 @@ class Route53Test extends AwsTestCase
         $this->assertInstanceOf(self::CLASS_ROUTE53, $list->getRoute53());
         $this->assertEquals(1, count($list));
         $this->assertEquals(1, $list->maxItems);
-        $this->assertEquals('', $list->marker);
+        $this->assertEquals('aaaaaaaa-1234-5678-9012-bbbbbbcccccc', $list->marker);
         $this->assertEquals(true, $list->isTruncated);
     }
 
@@ -103,8 +103,9 @@ class Route53Test extends AwsTestCase
         $this->assertInstanceOf(self::CLASS_ROUTE53, $list->getRoute53());
         $this->assertEquals(1, count($list));
         $this->assertEquals(10, $list->maxItems);
-        $this->assertEquals('', $list->marker);
-        $this->assertEquals(false, $list->isTruncated);
+        $this->assertEquals('TestRecordName', $list->nextRecordName);
+        $this->assertEquals('TXT', $list->nextRecordType);
+        $this->assertEquals(true, $list->isTruncated);
 
     }
 

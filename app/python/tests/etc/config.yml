@@ -97,7 +97,7 @@ scalr:
         rpm_repo_url: 'http://buildbot.scalr-labs.com/rpm/%s/rhel/$releasever/$basearch'
         win_repo_url: 'http://buildbot.scalr-labs.com/win/%s/'
     service:
-      interval: 20
+      interval: 50
       chunk_size: 100
       pool_size: 100
       log_file: '/var/log/scalr/szr-upd-service-test.log'

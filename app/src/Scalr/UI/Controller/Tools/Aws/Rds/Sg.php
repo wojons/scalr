@@ -28,6 +28,9 @@ class Scalr_UI_Controller_Tools_Aws_Rds_Sg extends Scalr_UI_Controller
         ));
     }
 
+    /**
+     * @param string $name optional  Filter by name
+     */
     public function xListAction($name = null)
     {
         $sGroups = $this->getAwsClient()->rds->dbSecurityGroup->describe($name)->toArray(true);

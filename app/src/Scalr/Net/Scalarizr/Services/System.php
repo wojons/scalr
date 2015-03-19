@@ -82,6 +82,7 @@ class Scalr_Net_Scalarizr_Services_System extends Scalr_Net_Scalarizr_Client
 
     public function getDebugLog()
     {
+        $this->timeout = 60;
         return $this->request("get_debug_log")->result;
     }
 

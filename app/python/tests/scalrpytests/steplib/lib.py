@@ -11,8 +11,6 @@ import pymysql
 import pymysql.cursors
 import subprocess
 
-from scalrpy.util import dbmanager
-
 
 class World(object):
     pass
@@ -90,7 +88,7 @@ class Script(object):
 
     def __init__(self, opts=None):
         self.opts = opts or ''
-        self.app = self.app_cls(argv=self.opts.split()+['stop'])
+        self.app = self.app_cls(argv=self.opts.split() + ['stop'])
         self.app.load_config()
         self.app.configure()
 
@@ -171,31 +169,7 @@ def generate_server_id():
     return str(uuid.uuid4())
 
 
-def generate_farm_id():
-    return int(time.time() * 1000000) & 0xFFFFFF
-
-
-def generate_client_id():
-    return int(time.time() * 1000000) & 0xFFFFFF
-
-
-def generate_farm_role_id():
-    return int(time.time() * 1000000) & 0xFFFFFF
-
-
-def generate_client_id():
-    return int(time.time() * 1000000) & 0xFFFFFF
-
-
-def generate_env_id():
-    return int(time.time() * 1000000) & 0xFFFFFF
-
-
-def generate_role_id():
-    return int(time.time() * 1000000) & 0xFFFFFF
-
-
-def generate_event_id():
+def generate_id():
     return int(time.time() * 1000000) & 0xFFFFFF
 
 

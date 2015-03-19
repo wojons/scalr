@@ -4,7 +4,7 @@ namespace Scalr\Upgrade\Updates;
 use Scalr\Upgrade\SequenceInterface;
 use Scalr\Upgrade\AbstractUpdate;
 
-class Update20141219133513 extends AbstractUpdate implements SequenceInterface
+class Update20140127150010 extends AbstractUpdate implements SequenceInterface
 {
 
     protected $uuid = '787ab78a-e13a-4532-ad8e-692008014d96';

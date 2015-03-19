@@ -1,11 +1,11 @@
-from fabric.api import run, local, cd, lcd, env, put, hosts
+from fabric.api import run, local, cd, lcd, put
 from fabric.contrib.files import append
 
 import os
 import sys
 
 cwd = os.path.dirname(os.path.abspath(__file__))
-test_dir  = '/home/vagrant/test'
+test_dir = '/home/vagrant/test'
 
 
 def _create_vagrant_file():
@@ -173,7 +173,7 @@ def test_install():
         _test_install()
     finally:
         _cleanup()
-    
+
 
 def test_scripts():
     _export()
@@ -181,4 +181,3 @@ def test_scripts():
         _test_scripts()
     finally:
         _cleanup()
-

@@ -470,7 +470,7 @@ class MessagingEventObserver extends EventObserver
 
                 $msg = $DBServer->SendMessage($msg, false, true);
 
-                if ($msg->dbMessageId)
+                if ($msg)
                     $event->msgCreated++;
                 else
                     throw new Exception("Empty MSG: {$DBServer->serverId} ({$event->DBServer->serverId})");
@@ -691,7 +691,7 @@ class MessagingEventObserver extends EventObserver
             }
 
             $msg = $DBServer->SendMessage($msg, false, true);
-            if ($msg->dbMessageId)
+            if ($msg)
                 $event->msgCreated++;
 
             $loopServerIsMaster =  $DBServer->GetProperty(SERVER_PROPERTIES::DB_MYSQL_MASTER) || $DBServer->GetProperty(Scalr_Db_Msr::REPLICATION_MASTER);

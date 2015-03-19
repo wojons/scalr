@@ -47,7 +47,7 @@ class Scalr_UI_Controller_Security_Groups extends Scalr_UI_Controller
             'cloudLocationName' => $this->getCloudLocationName($this->getParam('platform'), $this->getParam('cloudLocation')),
             'accountId'         => $this->environment->getPlatformConfigValue(Ec2PlatformModule::ACCOUNT_ID),
             'vpcLimits'         => $governance->getValue(SERVER_PLATFORMS::EC2, Scalr_Governance::AWS_VPC, null),
-            'remoteAddress'     => $this->request->getRemoteAddr()
+            'remoteAddress'     => $this->request->getRemoteAddr(true)
         ),array('ui/security/groups/sgeditor.js'));
     }
 
@@ -57,7 +57,7 @@ class Scalr_UI_Controller_Security_Groups extends Scalr_UI_Controller
 
         $data['cloudLocationName'] = $this->getCloudLocationName($this->getParam('platform'), $this->getParam('cloudLocation'));
         $data['accountId'] = $this->environment->getPlatformConfigValue(Ec2PlatformModule::ACCOUNT_ID);
-        $data['remoteAddress'] = $this->request->getRemoteAddr();
+        $data['remoteAddress'] = $this->request->getRemoteAddr(true);
 
         $this->response->page('ui/security/groups/edit.js', $data, array('ui/security/groups/sgeditor.js'));
     }

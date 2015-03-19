@@ -254,7 +254,6 @@ scalr:
       server_status_manager:
         enabled: no
 #        log: /var/log/scalr/server_status_manager.log
-#        time: "1/2 * * * *"
 #        workers: 4
       
       server_terminate:
@@ -545,7 +544,7 @@ scalr:
 #    # value from account_users.id must be provided here
 #    userid: 0
 #    # client_environments.id must be provided here
-#    envid: 0
+#    envid: 0  
 #    openstack:
 #      platforms:
 #      #- [platform, region, imageid]
@@ -559,8 +558,8 @@ scalr:
 #      - [nebula, RegionOne, 07b26892-9716-453f-9443-9b5e90d2c978]
 #      # Open Cloud System
 #      - [ocs, RegionOne, 7a0d5ff5-efa1-4dae-a18e-0238fe27f287]
-#       cloudstack:
-#           platforms:
-            #- [platform, zoneid, templateid, serviceid]
-            # IDCF
-            #- [idcf, jp-east-t1v, 2530, 24]
+#    cloudstack:
+#      platforms:
+#      #- [platform, zoneid, templateid, serviceid]
+#      # IDCF
+#      - [idcf, jp-east-t1v, 2530, 24]

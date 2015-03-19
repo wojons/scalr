@@ -354,7 +354,8 @@ Ext.define('Scalr.ui.FarmBuilderFarmCostMetering', {
     },
     
     getProjectId: function() {
-        return this.down('#projectId').getValue();
+        var f = this.down('#projectId');
+        return f ? f.getValue() : '';
     },
     
     refresh: function() {

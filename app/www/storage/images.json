@@ -160,9 +160,10 @@
 	{"image_id":"ami-e4b5be90","os_version":"6.4","os_family":"centos","cloud_location":"eu-west-1","architecture":"x86_64","root_device_type":"ebs", "hvm": 1}	
 ],
 "gce":[
-	{"os_family":"centos","os_version":"6.6","architecture":"x86_64","image_id":"centos-cloud\/global\/images\/centos-6-v20141218"},
-	{"os_family":"centos","os_version":"7.0","architecture":"x86_64","image_id":"centos-cloud\/global\/images\/centos-7-v20141218"},
-	{"os_family":"debian","os_version":"7.8","architecture":"x86_64","image_id":"debian-cloud\/global\/images\/debian-7-wheezy-v20150112"}
+	{"os_family":"centos","os_version":"6.X","architecture":"x86_64","image_id":"centos-cloud\/global\/images\/centos-6-v20150226"},
+	{"os_family":"centos","os_version":"7.X","architecture":"x86_64","image_id":"centos-cloud\/global\/images\/centos-7-v20150226"},
+	{"os_family":"debian","os_version":"7.X","architecture":"x86_64","image_id":"debian-cloud\/global\/images\/debian-7-wheezy-v20150226"},
+	{"os_family":"ubuntu","os_version":"14.04","architecture":"x86_64","image_id":"ubuntu-os-cloud\/global\/images\/ubuntu-1404-trusty-v20150128"}
 ],
 "rackspacengus":[
 	{"cloud_location":"DFW","os_family":"ubuntu","os_version":"14.04","architecture":"x86_64","image_id":"0112b238-4267-4a22-9785-fcf75814bc2f"},

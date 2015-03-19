@@ -14,7 +14,7 @@ class ScalrAPI_2_3_0 extends ScalrAPI_2_2_0
         if ($dbServer->envId != $this->Environment->id)
             throw new Exception(sprintf("Server ID #%s not found", $ServerID));
 
-        if (\Scalr\Model\Entity\EventDefinition::isExisted($EventName, $this->user->getAccountId(), $this->Environment->id)) {
+        if (\Scalr\Model\Entity\EventDefinition::isExist($EventName, $this->user->getAccountId(), $this->Environment->id)) {
             $event = new CustomEvent($dbServer, $EventName, (array)$Params);
         } else
             throw new Exception(sprintf("Event %s is not defined", $EventName));
@@ -172,49 +172,52 @@ class ScalrAPI_2_3_0 extends ScalrAPI_2_2_0
         if ($DBFarmRole->Platform == SERVER_PLATFORMS::EC2) {
             $vpcId = $dbFarm->GetSetting(DBFarm::SETTING_EC2_VPC_ID); 
             if ($vpcId) {
-                if (!$Configuration['aws.vpc_subnet_id'])
+                if (!$Configuration['aws.vpc_subnet_id'] && !$DBFarmRole->GetSetting(DBFarmRole::SETTING_AWS_VPC_SUBNET_ID))
                     throw new Exception("Farm configured to run inside VPC. 'aws.vpc_subnet_id' is required");
                 
-                $vpcGovernance = $governance->getValue('ec2', 'aws.vpc');
-                $vpcGovernanceIds = $governance->getValue('ec2', 'aws.vpc', 'ids');
-                
-                $subnets = json_decode($Configuration['aws.vpc_subnet_id'], true);
-                if (count($subnets) == 0)
-                    throw new Exception("Subnets list is empty or json is incorrect");
-                
-                $type = false;
-                
-                foreach ($subnets as $subnetId) {
-                
-                    $platfrom = PlatformFactory::NewPlatform(SERVER_PLATFORMS::EC2);
-                    $info = $platfrom->listSubnets($this->Environment, $CloudLocation, $vpcId, true, $subnetId);
-                
-                    if (substr($info['availability_zone'], 0, -1) != $vpcRegion)
-                        throw new Exception(sprintf("Only subnets from %s region are allowed according to VPC settings", $vpcRegion));
-                
-                    if ($vpcGovernance == 1) {
-                        // Check valid subnets
-                        if ($vpcGovernanceIds[$vpcId] && is_array($vpcGovernanceIds[$vpcId]) && !in_array($subnetId, $vpcGovernanceIds[$vpcId]))
-                            throw new Exception(sprintf("Only %s subnet(s) allowed by governance settings", implode (', ', $vpcGovernanceIds[$vpcId])));
-                
-                
-                        // Check if subnets types
-                        if ($vpcGovernanceIds[$vpcId] == "outbound-only") {
-                            if ($info['type'] != 'private')
-                                throw new Exception("Only private subnets allowed by governance settings");
+                if (isset($Configuration['aws.vpc_subnet_id']) && $DBFarmRole->GetSetting(DBFarmRole::SETTING_AWS_VPC_SUBNET_ID) != $Configuration['aws.vpc_subnet_id']) {
+                    $vpcRegion = $dbFarm->GetSetting(DBFarm::SETTING_EC2_VPC_REGION);
+                    $vpcGovernance = $governance->getValue('ec2', 'aws.vpc');
+                    $vpcGovernanceIds = $governance->getValue('ec2', 'aws.vpc', 'ids');
+                    
+                    $subnets = json_decode($Configuration['aws.vpc_subnet_id'], true);
+                    if (count($subnets) == 0)
+                        throw new Exception("Subnets list is empty or json is incorrect");
+                    
+                    $type = false;
+                    
+                    foreach ($subnets as $subnetId) {
+                    
+                        $platfrom = PlatformFactory::NewPlatform(SERVER_PLATFORMS::EC2);
+                        $info = $platfrom->listSubnets($this->Environment, $DBFarmRole->CloudLocation, $vpcId, true, $subnetId);
+                    
+                        if (substr($info['availability_zone'], 0, -1) != $vpcRegion)
+                            throw new Exception(sprintf("Only subnets from %s region are allowed according to VPC settings", $vpcRegion));
+                    
+                        if ($vpcGovernance == 1) {
+                            // Check valid subnets
+                            if ($vpcGovernanceIds[$vpcId] && is_array($vpcGovernanceIds[$vpcId]) && !in_array($subnetId, $vpcGovernanceIds[$vpcId]))
+                                throw new Exception(sprintf("Only %s subnet(s) allowed by governance settings", implode (', ', $vpcGovernanceIds[$vpcId])));
+                    
+                    
+                            // Check if subnets types
+                            if ($vpcGovernanceIds[$vpcId] == "outbound-only") {
+                                if ($info['type'] != 'private')
+                                    throw new Exception("Only private subnets allowed by governance settings");
+                            }
+                    
+                            if ($vpcGovernanceIds[$vpcId] == "full") {
+                                if ($info['type'] != 'public')
+                                    throw new Exception("Only public subnets allowed by governance settings");
+                            }
                         }
-                
-                        if ($vpcGovernanceIds[$vpcId] == "full") {
-                            if ($info['type'] != 'public')
-                                throw new Exception("Only public subnets allowed by governance settings");
+                    
+                        if (!$type)
+                            $type = $info['type'];
+                        else {
+                            if ($type != $info['type'])
+                                throw new Exception("Mix of public and private subnets are not allowed. Please specify only public or only private subnets.");
                         }
-                    }
-                
-                    if (!$type)
-                        $type = $info['type'];
-                    else {
-                        if ($type != $info['type'])
-                            throw new Exception("Mix of public and private subnets are not allowed. Please specify only public or only private subnets.");
                     }
                 }
             }

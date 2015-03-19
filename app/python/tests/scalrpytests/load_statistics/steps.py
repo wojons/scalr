@@ -12,7 +12,7 @@ sys.path.insert(0, scalrpytests_dir)
 
 import json
 import time
-import socket
+import shutil
 import psutil
 import rrdtool
 import requests
@@ -42,9 +42,6 @@ class LoadStatisticsScript(lib.Script):
         shutil.rmtree(self.app.config['rrd']['dir'], ignore_errors=True)
 
     def check_rrdcached(self):
-        sock_file = self.app.config['rrd']['rrdcached_sock_path']
-        sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-
         user = self.app.config['user'] or 'root'
         for proc in psutil.process_iter():
             info = proc.as_dict(attrs=['username', 'name'])
@@ -78,7 +75,7 @@ class LoadStatisticsScript(lib.Script):
             path = os.path.join(self.app.config['rrd']['dir'], x1x2, str(server['farm_id']))
             farm_path = os.path.join(path, 'FARM')
             role_path = os.path.join(path, 'FR_%s' % server['farm_roleid'])
-            server_path = os.path.join(path, 'INSTANCE_%s_%s' % ( server['farm_roleid'], server['index']))
+            server_path = os.path.join(path, 'INSTANCE_%s_%s' % (server['farm_roleid'], server['index']))
             if server['status'] != 'Running':
                 assert not os.path.isdir(server_path)
                 continue
@@ -88,7 +85,7 @@ class LoadStatisticsScript(lib.Script):
             assert os.path.isdir(os.path.join(role_path, 'SERVERS'))
             assert os.path.isdir(server_path), server_path
 
-            for metric in metrics: 
+            for metric in metrics:
                 if metric == 'snum':
                     continue
                 rrd_db_file = os.path.join(server_path, metrics_map[metric])
@@ -258,4 +255,3 @@ def after_scenario(scenario):
 
 before.each_scenario(before_scenario)
 after.each_scenario(after_scenario)
-

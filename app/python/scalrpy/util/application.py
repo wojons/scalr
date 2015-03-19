@@ -19,7 +19,6 @@ import sys
 import abc
 import time
 import yaml
-import gevent
 import atexit
 import docopt
 import psutil
@@ -43,25 +42,26 @@ class Application(object):
     __metaclass__ = abc.ABCMeta
 
     __doc__ = dedent(
-    """
-    {description}
+        """
+        {description}
 
-    Usage:
-      {name} [options] (start | stop)
-    {custom_usage}
+        Usage:
+          {name} [options] (start | stop)
+        {custom_usage}
 
-    Options:
-    {custom_options}
-      -d, --daemon                      daemonize application
-      -l <file>, --log-file=<file>      log file, default: /var/log/scalr.{name}.log
-      -p <file>, --pid-file=<file>      pid file, default: /var/run/scalr.{name}.pid
-      -u <user>, --user=<user>          user
-      -g <group>, --group=<group>       group
-      -v <level>, --verbosity=<level>   verbosity level ({log_levels}),
-                                            default: ERROR
-      -V, --version
-      -h, --help
-    """)
+        Options:
+        {custom_options}
+          -d, --daemon                      daemonize application
+          -l <file>, --log-file=<file>      log file, default: /var/log/scalr.{name}.log
+          -p <file>, --pid-file=<file>      pid file, default: /var/run/scalr.{name}.pid
+          -u <user>, --user=<user>          user
+          -g <group>, --group=<group>       group
+          -v <level>, --verbosity=<level>   verbosity level ({log_levels}),
+                                                default: ERROR
+          -V, --version
+          -h, --help
+        """
+    )
 
     name = os.path.basename(sys.argv[0]).rstrip('.pyc')
     description = "Base application"
@@ -69,7 +69,7 @@ class Application(object):
     config = {
         'user': False,
         'group': False,
-        'log_size': 1024*1024*10,
+        'log_size': 1024 * 1024 * 10,
         'log_file': '/var/log/scalr.%s.log' % name,
         'pid_file': '/var/run/scalr.%s.pid' % name,
     }
@@ -220,7 +220,7 @@ class ScalrApplication(Application):
         options = (
                 """  -c <file>, --config=<file>        Scalr config file\n"""
                 """\t\t\t\t\t[default: {scalr_dir}/app/etc/config.yml]"""
-                ).format(scalr_dir=self.scalr_dir)
+        ).format(scalr_dir=self.scalr_dir)
         self.add_options(options)
 
         super(ScalrApplication, self).__init__(argv=argv)
@@ -286,7 +286,18 @@ class ScalrIterationApplication(ScalrApplication):
 
     @helper.greenlet
     def _do_iteration(self):
-        self.do_iteration()
+        try:
+            self.do_iteration()
+        except exceptions.QuitError:
+            sys.exit(0)
+        except (SystemExit, KeyboardInterrupt):
+            raise
+        except exceptions.NothingToDoError:
+            time.sleep(self.nothing_to_do_sleep)
+        except:
+            LOG.error('Iteration failed, reason: {0}'.format(helper.exc_info()))
+            self.on_iteration_error()
+            time.sleep(self.error_sleep)
 
 
     @abc.abstractmethod
@@ -301,30 +312,14 @@ class ScalrIterationApplication(ScalrApplication):
     def __call__(self):
         self.change_permissions()
         while True:
+            self.iteration_timestamp = time.time()
+            g = self._do_iteration()
             try:
-                self.iteration_timestamp = time.time()
-                g = self._do_iteration()
-                try:
-                    g.get(timeout=self.iteration_timeout)
-                except gevent.Timeout:
-                    raise exceptions.IterationTimeoutError()
-                finally:
-                    if not g.ready():
-                        g.kill()
-            except (SystemExit, KeyboardInterrupt):
-                raise
-            except exceptions.NothingToDoError:
-                time_to_sleep = self.nothing_to_do_sleep
-            except exceptions.QuitError:
-                sys.exit(0)
-            except:
-                LOG.error('Iteration failed, reason: {0}'.format(helper.exc_info()))
-                self.on_iteration_error()
-                time_to_sleep = self.error_sleep
-            else:
-                time_to_sleep = 0.1
+                g.get(timeout=self.iteration_timeout)
+            finally:
+                if not g.ready():
+                    g.kill()
             LOG.debug('End iteration: {0:.1f} seconds'.format(time.time() - self.iteration_timestamp))
             if self.config['interval']:
-                time_to_sleep = self.iteration_timestamp + self.config['interval'] - time.time()
-            time.sleep(time_to_sleep)
-
+                next_iteration_time = self.iteration_timestamp + self.config['interval']
+                time.sleep(next_iteration_time - time.time())

@@ -198,8 +198,13 @@ class Scalr_Role_Behavior_Chef extends Scalr_Role_Behavior implements Scalr_Role
             case "Scalr_Messaging_Msg_HostInitResponse":
 
                 $config = $this->getConfiguration($dbServer);
-                if ($config->serverUrl || $config->cookbookUrl)
+                if ($config->serverUrl || $config->cookbookUrl) {
                     $message->chef = $config;
+                    
+                    $message->chef->scriptName = '[Scalr built-in] Chef bootstrap';
+                    $message->chef->executionId = Scalr::GenerateUID();
+                    $message->chef->eventName = 'HostInit';
+                }
 
                 break;
         }

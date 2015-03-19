@@ -11,8 +11,7 @@ class Scalr_Messaging_Msg
 
     public $handlers = array();
 
-    public $dbMessageId,
-        $behaviour,
+    public $behaviour,
         $roleName,
         $localIp,
         $remoteIp,

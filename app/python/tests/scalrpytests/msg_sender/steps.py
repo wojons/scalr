@@ -26,13 +26,14 @@ from lettuce import step, before, after
 CRYPTO_KEY = '8mYTcBxiE70DtXCBRjn7AMuTQNzBJJcTa5uFok24X40ePafq1gUyyg=='
 CRYPTO_ALGO = dict(name="des_ede3_cbc", key_size=24, iv_size=8)
 
+
 class MsgSenderScript(lib.Script):
 
     app_cls = MsgSender
     name = 'msg_sender'
 
 
-lib.ScriptCls = MsgSenderScript 
+lib.ScriptCls = MsgSenderScript
 
 
 def answer(environ, start_response):
@@ -40,7 +41,7 @@ def answer(environ, start_response):
     data = environ['wsgi.input'].readline()
     crypto_key = lib.world.server_properties[server_id]['scalarizr.key']
     msg = cryptotool.decrypt_scalarizr(CRYPTO_ALGO, data, cryptotool.decrypt_key(crypto_key))
-    if msg != 'Carrot': 
+    if msg != 'Carrot':
         start_response('400 NOT OK', [('Content-Type', 'text/html')])
     else:
         time.sleep(0.4)
@@ -72,7 +73,7 @@ def db_has_messages(step, count):
         # messages
         record['messageid'] = "'%s'" % str(uuid.uuid4())
         record['status'] = 0
-        record['handle_attempts'] = 0 
+        record['handle_attempts'] = 0
         record['dtlasthandleattempt'] = "'%s'" % datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         record['message'] = "'Carrot'"
         record['server_id'] = "'%s'" % lib.generate_server_id()
@@ -80,14 +81,14 @@ def db_has_messages(step, count):
         record['message_version'] = 2
         record['message_name'] = "''"
         record['message_format'] = "'json'"
-        record['event_id'] = "'%s'" % lib.generate_event_id()
+        record['event_id'] = "'%s'" % lib.generate_id()
 
         # servers
-        record['farm_id'] = lib.generate_farm_id()
-        record['farm_roleid'] = lib.generate_farm_role_id()
-        record['client_id'] = lib.generate_client_id()
-        record['env_id'] = lib.generate_env_id()
-        record['role_id'] = lib.generate_role_id()
+        record['farm_id'] = lib.generate_id()
+        record['farm_roleid'] = lib.generate_id()
+        record['client_id'] = lib.generate_id()
+        record['env_id'] = lib.generate_id()
+        record['role_id'] = lib.generate_id()
         record['platform'] = random.choice(["'ec2'", "'gce'", "'idcf'", "'openstack'"])
         record['status'] = "'running'"
         record['remote_ip'] = "'127.0.0.1'"
@@ -119,7 +120,7 @@ def db_has_messages(step, count):
 @step(u"^White Rabbit checks all messages has status (\d+)$")
 def check_messages_status(step, status):
     db = dbmanager.DB(lib.world.config['connections']['mysql'])
-    query = "SELECT count(id) AS count FROM messages WHERE status != {0}".format(int(status))
+    query = "SELECT count(messageid) AS count FROM messages WHERE status != {0}".format(int(status))
     result = db.execute(query)[0]
     assert result['count'] == 0
 

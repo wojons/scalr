@@ -262,7 +262,7 @@ class ScalarizrMessaging extends AbstractTask
         $rs = $this->db->Execute("
             SELECT m.* FROM messages m
             WHERE m.server_id = ? AND m.type = ? AND m.status = ?
-            ORDER BY m.id ASC
+            ORDER BY m.dtadded ASC
         ", [$serverId, "in", MESSAGE_STATUS::PENDING]);
 
         while ($row = $rs->FetchRow()) {
@@ -490,7 +490,7 @@ class ScalarizrMessaging extends AbstractTask
                         //Validate event
                         $isEventExist = $this->db->GetOne("
                             SELECT id FROM event_definitions
-                            WHERE name = ? AND ((env_id = ? AND account_id = ?) OR (env_id IS NULL AND account_id = ?))
+                            WHERE name = ? AND ((env_id = ? AND account_id = ?) OR (env_id IS NULL AND account_id = ?) OR (env_id IS NULL AND account_id IS NULL))
                             LIMIT 1
                         ", array(
                             $message->eventName,

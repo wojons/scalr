@@ -315,7 +315,7 @@ class UpgradeHandler
                 } else if (isset($this->stateBefore[$uuidhex])) {
                     /* @var $upgradeEntity \Scalr\Upgrade\Entity\AbstractUpgradeEntity */
                     $upgradeEntity = $this->stateBefore[$uuidhex];
-                    if ($updateEntity->status == AbstractUpgradeEntity::STATUS_OK) {
+                    if ($upgradeEntity->status == AbstractUpgradeEntity::STATUS_OK) {
                         //Relative update has already been applied
                         continue;
                     } else {

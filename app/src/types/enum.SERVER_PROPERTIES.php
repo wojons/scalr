@@ -40,6 +40,8 @@ class SERVER_PROPERTIES
 
     const SZR_IS_INIT_FAILED = 'scalarizr.is_init_failed';
     const SZR_IS_INIT_ERROR_MSG = 'scalarizr.init_error_msg';
+    const LAUNCH_LAST_TRY = 'system.launch.last_try';
+    const LAUNCH_ATTEMPT = 'system.launch.attempt';
     const LAUNCH_ERROR = 'system.launch.error';
     const LAUNCH_REASON = 'system.launch.reason';
     const LAUNCH_REASON_ID = 'system.launch.reason_id';

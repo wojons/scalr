@@ -91,7 +91,7 @@ class MsgSender(application.ScalrIterationApplication):
                 "AND messageid != '' "
                 "AND message_version = 2 "
                 "AND UNIX_TIMESTAMP(dtlasthandleattempt)+handle_attempts*{cratio}<UNIX_TIMESTAMP() "
-                "ORDER BY id ASC "
+                "ORDER BY dtadded ASC "
                 "LIMIT 250"
         ).format(cratio=self.config['cratio'])
         return self._db.execute(query)
@@ -265,4 +265,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-

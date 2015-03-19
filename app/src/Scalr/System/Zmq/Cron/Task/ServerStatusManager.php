@@ -1,12 +1,15 @@
 <?php
 namespace Scalr\System\Zmq\Cron\Task;
 
-use ArrayObject, DateTime, DateTimeZone, Exception, stdClass;
+use ArrayObject;
+use DBServer;
+use Exception;
 use Scalr\System\Zmq\Cron\AbstractTask;
-use \DBServer;
-use \SERVER_STATUS;
-use \Scalr_Account;
-use \Scalr_Environment;
+use Scalr_Account;
+use Scalr_Environment;
+use SERVER_PROPERTIES;
+use SERVER_STATUS;
+use stdClass;
 
 /**
  * Server status manager
@@ -18,34 +21,186 @@ class ServerStatusManager extends AbstractTask
 {
 
     /**
-     * {@inheritdoc}
-     * @see \Scalr\System\Zmq\Cron\TaskInterface::enqueue()
+     * Database handler
+     *
+     * @var \ADODB_mysqli
      */
-    public function enqueue()
+    private $db;
+
+    /**
+     * Intervals of attempts to run instances
+     *
+     * @var string[]
+     */
+    private $attemptConfig = [];
+
+    /**
+     * ADODB prepared statement to fetch servers that it's time to launch
+     *
+     * @var \SQL
+     */
+    private $stmt;
+
+    /**
+     * Prepared query params
+     *
+     * @var array
+     */
+    private $params;
+
+    /**
+     * Destructor
+     */
+    public function __destruct()
     {
-        $queue = new ArrayObject([]);
+        if (!empty($this->db)) {
+            $this->db->Execute("DROP TEMPORARY TABLE IF EXISTS `temporary_server_status_check_config`;");
+        }
+    }
 
-        $db = \Scalr::getDb();
+    /**
+     * Prepares client to enqueue
+     *
+     * @throws Exception
+     */
+    public function prepare()
+    {
+        if (empty($this->db)) {
+            $this->db = \Scalr::getDb();
+        }
 
-        $rs = $db->Execute("
-            SELECT server_id, status
-            FROM servers
-            WHERE status IN (?, ?) AND `dtadded` < NOW() - INTERVAL 1 DAY
+        if (empty($this->params)) {
+            $this->prepareTemporary($this->parseIntervals($this->config()->intervals_attempts));
+        }
 
-            UNION ALL
+        if (empty($this->stmt)) {
+            $this->prepareStatement();
+        }
+    }
 
-            SELECT s.server_id, s.status
-            FROM servers s
-            JOIN clients c ON c.id = s.client_id
-            JOIN client_environments ce ON ce.id = s.env_id
-            WHERE s.status = ? AND c.status = ? AND ce.status = ?
-        ", array(
+    /**
+     * Normalizes intervals representations
+     *
+     * @param string[] $intervals Intervals
+     *
+     * @return int Returns intervals representations strings max length
+     */
+    public function parseIntervals(array $intervals)
+    {
+        $maxLength = 0;
+
+        foreach ($intervals as $attempt => $interval) {
+            preg_match_all('/(?:(?P<days>\d+)d)|(?:(?P<hours>\d+)h)|(?:(?P<minutes>\d+)m)|(?:(?P<seconds>\d+)s)/', $interval, $matches);
+
+            $seconds = array_sum($matches['seconds']);
+            $minutes = (int) floor($seconds / 60);
+            $seconds = $seconds % 60;
+
+            $minutes += array_sum($matches['minutes']);
+            $hours = (int) floor($minutes / 60);
+            $minutes = $minutes % 60;
+
+            $hours += array_sum($matches['hours']);
+            $days = (int) floor($hours / 24);
+            $hours = $hours % 24;
+
+            $days += array_sum($matches['days']);
+
+            $interval = "{$days} {$hours}:{$minutes}:{$seconds}";
+
+            $length = strlen($interval);
+            if ($length > $maxLength) {
+                $maxLength = $length;
+            }
+
+            $this->attemptConfig[$attempt] = $interval;
+        }
+
+        return $maxLength;
+    }
+
+    /**
+     * Prepares temporary table
+     *
+     * @param int $maxLength Intervals representations strings max length
+     */
+    private function prepareTemporary($maxLength)
+    {
+        $maxLength = (int) $maxLength;
+
+        $this->db->Execute("
+        CREATE TEMPORARY TABLE IF NOT EXISTS `temporary_server_status_check_config` (
+          `attempt` TINYINT UNSIGNED NOT NULL,
+          `interval` CHAR({$maxLength}) NULL,
+          PRIMARY KEY (`attempt`));
+        ");
+
+        $this->db->Execute('TRUNCATE TABLE `temporary_server_status_check_config`');
+
+        $stmt = $this->db->Prepare("INSERT INTO `temporary_server_status_check_config` (`attempt`, `interval`) VALUES (?, ?)");
+
+        foreach ($this->attemptConfig as $attempt => $interval) {
+            $this->db->Execute($stmt, [$attempt, $interval]);
+        }
+    }
+
+    /**
+     * Prepares statement and params
+     */
+    private function prepareStatement()
+    {
+        $this->stmt = $this->db->Prepare("
+            SELECT
+              `s`.`server_id` AS `server_id`,
+              `s`.`status`    AS `status`
+            FROM `servers` AS `s`
+              LEFT JOIN `server_properties` AS `attempt`
+                ON `attempt`.`server_id` = `s`.`server_id` AND `attempt`.`name` = ?
+              LEFT JOIN `server_properties` AS `last_try`
+                ON `last_try`.`server_id` = `s`.`server_id` AND `last_try`.`name` = ?
+              LEFT JOIN `temporary_server_status_check_config` AS `config`
+                ON IF(`attempt`.`value` > ?, ?, `attempt`.`value`) = `config`.`attempt`
+              JOIN `clients` AS `c`
+                ON `c`.`id` = `client_id`
+              JOIN `client_environments` AS `e`
+                ON `e`.`id` = `env_id`
+            WHERE
+              `s`.`status` IN (?, ?) AND `s`.`dtadded` < NOW() - INTERVAL 1 DAY OR (
+                `s`.`status` = ? AND
+                `c`.`status` = ? AND
+                `e`.`status` = ? AND (
+                  `attempt`.`value` IS NULL OR
+                  `last_try`.`value` < NOW() - INTERVAL `config`.`interval` DAY_SECOND
+                )
+              )
+        ");
+
+        $maxAttempts = max(array_keys($this->attemptConfig));
+
+        $this->params = [
+            SERVER_PROPERTIES::LAUNCH_ATTEMPT,
+            SERVER_PROPERTIES::LAUNCH_LAST_TRY,
+            $maxAttempts,
+            $maxAttempts,
             SERVER_STATUS::IMPORTING,
             SERVER_STATUS::TEMPORARY,
             SERVER_STATUS::PENDING_LAUNCH,
             Scalr_Account::STATUS_ACTIVE,
             Scalr_Environment::STATUS_ACTIVE
-        ));
+        ];
+    }
+
+    /**
+     * {@inheritdoc}
+     * @see \Scalr\System\Zmq\Cron\TaskInterface::enqueue()
+     */
+    public function enqueue()
+    {
+        $this->prepare();
+
+        $queue = new ArrayObject([]);
+
+        $rs = $this->db->Execute($this->stmt, $this->params);
 
         while ($row = $rs->FetchRow()) {
             $obj = new stdClass;

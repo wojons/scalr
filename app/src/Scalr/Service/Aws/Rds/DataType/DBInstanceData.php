@@ -25,7 +25,7 @@ use \DateTime;
  * @property \Scalr\Service\Aws\Rds\DataType\DBSubnetGroupData $dBSubnetGroup
  *           Provides DB Subnet Group element
  *
- * @property \Scalr\Service\Aws\Rds\DataType\OptionGroupMembershipData $optionGroupMembership
+ * @property \Scalr\Service\Aws\Rds\DataType\OptionGroupMembershipList $optionGroupMembership
  *           Specifies the name and status of the option group that this instance belongs to.
  *
  * @property \Scalr\Service\Aws\Rds\DataType\PendingModifiedValuesData $pendingModifiedValues

@@ -138,12 +138,18 @@ Scalr.regPage('Scalr.ui.tools.aws.ec2.ebs.volumes.view', function (loadParams, m
 				},{
 					itemId: 'option.autosnap',
 					text: 'Auto-snapshot settings',
+					getVisibility: function() {
+                        return Scalr.flags['showDeprecatedFeatures'];
+                    },
 					iconCls: 'x-menu-icon-autosnapshotsettings',
 					menuHandler: function(data) {
 						document.location.href = '#/tools/aws/autoSnapshotSettings?type=ebs&objectId=' + data['volumeId'] + '&cloudLocation=' + store.proxy.extraParams.cloudLocation;
 					}
 				}, {
 					xtype: 'menuseparator',
+					getVisibility: function() {
+                        return Scalr.flags['showDeprecatedFeatures'];
+                    },
 					itemId: 'option.snapSep'
 				}, {
 					itemId: 'option.createSnap',
