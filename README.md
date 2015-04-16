@@ -9,6 +9,15 @@ CloudStack, and more) to provide users with a high-level and productive
 interface to their organization's cloud resources.
 
 
+Installation Instructions
+=========================
+
+[Installation instructions for Scalr][20] can be found on the Scalr Wiki.
+
+[Instructions to upgrade from an earlier Scalr version][21] can be found there
+too.
+
+
 Mission Statement
 =================
 
@@ -75,15 +84,6 @@ More Information
 ----------------
 
 Learn more about Scalr on the [Scalr Website][10].
-
-
-Installation Instructions
-=========================
-
-[Installation instructions for Scalr][20] can be found on the Scalr Wiki.
-
-[Instructions to upgrade from an earlier Scalr version][21] can be found there
-too.
 
 
 -- The Scalr Team
