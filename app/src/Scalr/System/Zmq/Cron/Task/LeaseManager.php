@@ -49,13 +49,13 @@ class LeaseManager extends AbstractTask
                 }
 
                 $dt = new DateTime();
-                $dt->sub(new DateInterval('P' . $period . 'D'));
+                $dt->add(new DateInterval('P' . $period . 'D'));
 
                 $fs = $db->GetAll("
                     SELECT fs.farmid, f.status
                     FROM farm_settings fs
                     JOIN farms f ON f.id = fs.farmid
-                    WHERE fs.name = ? AND f.status = ? AND f.env_id = ? AND fs.value > ?
+                    WHERE fs.name = ? AND f.status = ? AND f.env_id = ? AND fs.value < ? AND fs.value != ''
                 ", [
                     DBFarm::SETTING_LEASE_TERMINATE_DATE,
                     FARM_STATUS::RUNNING,
@@ -99,70 +99,73 @@ class LeaseManager extends AbstractTask
             $dbFarm = DBFarm::LoadByID($request->farmId);
 
             $curDate = new DateTime();
+            $tdValue = $dbFarm->GetSetting(DBFarm::SETTING_LEASE_TERMINATE_DATE);
 
-            $td = new DateTime($dbFarm->GetSetting(DBFarm::SETTING_LEASE_TERMINATE_DATE));
+            if ($tdValue) {
+                $td = new DateTime($tdValue);
 
-            if ($td > $curDate) {
-                // only inform user
-                $days = $td->diff($curDate)->days;
+                if ($td < $curDate) {
+                    //Terminates farm
+                    $event = new FarmTerminatedEvent(0, 1, false, 1);
 
-                $notifications = json_decode($dbFarm->GetSetting(DBFarm::SETTING_LEASE_NOTIFICATION_SEND), true);
+                    \Scalr::FireEvent($request->farmId, $event);
 
-                $governance = new Scalr_Governance($dbFarm->EnvID);
+                    $this->log('INFO', sprintf('Farm: %s [ID: %d] was terminated by lease manager', $dbFarm->Name, $dbFarm->ID));
+                } else {
+                    // only inform user
+                    $days = $td->diff($curDate)->days;
 
-                $settings = $governance->getValue(Scalr_Governance::CATEGORY_GENERAL, Scalr_Governance::GENERAL_LEASE, 'notifications');
+                    $notifications = json_decode($dbFarm->GetSetting(DBFarm::SETTING_LEASE_NOTIFICATION_SEND), true);
 
-                if (is_array($settings)) {
-                    foreach ($settings as $n) {
-                        if (!$notifications[$n['key']] && $n['period'] >= $days) {
-                            $mailer = \Scalr::getContainer()->mailer;
-                            $tdHuman = Scalr_Util_DateTime::convertDateTime($td, $dbFarm->GetSetting(DBFarm::SETTING_TIMEZONE), 'M j, Y');
+                    $governance = new Scalr_Governance($dbFarm->EnvID);
 
-                            if ($n['to'] == 'owner') {
-                                $user = new Scalr_Account_User();
-                                $user->loadById($dbFarm->createdByUserId);
+                    $settings = $governance->getValue(Scalr_Governance::CATEGORY_GENERAL, Scalr_Governance::GENERAL_LEASE, 'notifications');
 
-                                if (\Scalr::config('scalr.auth_mode') == 'ldap') {
-                                    $email = $user->getSetting(Scalr_Account_User::SETTING_LDAP_EMAIL);
-                                    if (!$email) {
+                    if (is_array($settings)) {
+                        foreach ($settings as $n) {
+                            if (!$notifications[$n['key']] && $n['period'] >= $days) {
+                                $mailer = \Scalr::getContainer()->mailer;
+                                $tdHuman = Scalr_Util_DateTime::convertDateTime($td, $dbFarm->GetSetting(DBFarm::SETTING_TIMEZONE), 'M j, Y');
+
+                                if ($n['to'] == 'owner') {
+                                    $user = new Scalr_Account_User();
+                                    $user->loadById($dbFarm->createdByUserId);
+
+                                    if (\Scalr::config('scalr.auth_mode') == 'ldap') {
+                                        $email = $user->getSetting(Scalr_Account_User::SETTING_LDAP_EMAIL);
+                                        if (!$email) {
+                                            $email = $user->getEmail();
+                                        }
+                                    } else {
                                         $email = $user->getEmail();
                                     }
+
+                                    $mailer->addTo($email);
                                 } else {
-                                    $email = $user->getEmail();
+                                    foreach (explode(',', $n['emails']) as $email) {
+                                        $mailer->addTo(trim($email));
+                                    }
                                 }
 
-                                $mailer->addTo($email);
-                            } else {
-                                foreach (explode(',', $n['emails']) as $email) {
-                                    $mailer->addTo(trim($email));
-                                }
+                                $mailer->sendTemplate(SCALR_TEMPLATES_PATH . '/emails/farm_lease_terminate.eml', array(
+                                    '{{terminate_date}}' => $tdHuman,
+                                    '{{farm}}' => $dbFarm->Name,
+                                    '{{envName}}' => $dbFarm->GetEnvironmentObject()->name,
+                                    '{{envId}}' => $dbFarm->GetEnvironmentObject()->id
+                                ));
+
+                                $notifications[$n['key']] = 1;
+
+                                $dbFarm->SetSetting(DBFarm::SETTING_LEASE_NOTIFICATION_SEND, json_encode($notifications));
+
+                                $this->log('INFO',
+                                    "Notification was sent by key: %s about farm: %s [ID: %d] by lease manager",
+                                    $n['key'], $dbFarm->Name, $dbFarm->ID
+                                );
                             }
-
-                            $mailer->sendTemplate(SCALR_TEMPLATES_PATH . '/emails/farm_lease_terminate.eml', array(
-                                '{{terminate_date}}' => $tdHuman,
-                                '{{farm}}'           => $dbFarm->Name,
-                                '{{envName}}'        => $dbFarm->GetEnvironmentObject()->name,
-                                '{{envId}}'          => $dbFarm->GetEnvironmentObject()->id
-                            ));
-
-                            $notifications[$n['key']] = 1;
-
-                            $dbFarm->SetSetting(DBFarm::SETTING_LEASE_NOTIFICATION_SEND, json_encode($notifications));
-
-                            $this->getLogger()->info(
-                                "Notification was sent by key: %s about farm: %s by lease manager",
-                                $n['key'], $dbFarm->Name
-                            );
                         }
                     }
                 }
-            } else {
-                //Terminates farm
-                $event = new FarmTerminatedEvent(0, 1, false, 1);
-
-                \Scalr::FireEvent($request->farmId, $event);
-
-                $this->getLogger()->info("Farm: " . $dbFarm->Name . " was terminated by lease manager");
             }
         } catch (Exception $e) {
             throw $e;
