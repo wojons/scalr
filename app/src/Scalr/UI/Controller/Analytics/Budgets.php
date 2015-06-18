@@ -71,7 +71,7 @@ class Scalr_UI_Controller_Analytics_Budgets extends Scalr_UI_Controller
                         "Invalid day (%02d) of month (%02d). Last day of this month is %d", $d, $m, $lastDayOfMonth
                     ));
 
-                } else if ($m == 2 && $d = 29) {
+                } else if ($m == 2 && $d == 29) {
                     throw new OutOfBoundsException(sprintf("You cannot specify Feb 29 as start date of the quarter."));
                 }
 
