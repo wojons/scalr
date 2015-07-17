@@ -4,10 +4,11 @@ Scalr.regPage('Scalr.ui.dashboard.admin', function (loadParams, moduleParams) {
 	//return Ext.create('Ext.container.Container', {
 	return Ext.create('Ext.panel.Panel', {
 		scalrOptions: {
-			'maximize': 'all',
-			'reload': false
+			maximize: 'all',
+			reload: false,
+            menuTitle: 'Admin Dashboard'
 		},
-		title: 'Dashboard',
+        stateId: 'panel-admin-dashboard',
 		bodyPadding: 20,
 		border: true,
 
@@ -15,7 +16,7 @@ Scalr.regPage('Scalr.ui.dashboard.admin', function (loadParams, moduleParams) {
 			type: 'column'
 		},*/
 		bodyStyle: 'font-size: 13px',
-		title: 'Welcome to Scalr Admin!',
+		//title: 'Welcome to Scalr Admin!',
 		html: "Scalr Admin"
 	})
 });

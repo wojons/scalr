@@ -72,6 +72,18 @@ class InstanceService extends AbstractService implements ServiceInterface
     {
         return $this->getApiHandler()->destroyVirtualMachine($id, $expunge);
     }
+    
+    /**
+     * Expunges a virtual machine. Once destroyed, only the administrator can recover it.
+     *
+     * @param string $id      The ID of the virtual machine
+     * @return VirtualMachineInstancesData
+     */
+    public function expunge($id)
+    {
+        return $this->getApiHandler()->expungeVirtualMachine($id);
+    }
+    
 
     /**
      * Reboots a virtual machine.

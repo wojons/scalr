@@ -5,8 +5,9 @@ use Scalr\Service\Aws\Elb\DataType\ListenerData;
 use Scalr\Service\Aws\Elb\DataType\LoadBalancerDescriptionData;
 use Scalr\Service\Aws\Elb\DataType\ListenerList;
 use Scalr\Service\Aws\Elb\DataType\HealthCheckData;
-use Scalr\Farm\Role\FarmRoleService;
+use Scalr\Model\Entity\CloudResource;
 use Scalr\Service\Aws\Elb\DataType\TagsList;
+use Scalr\Modules\PlatformFactory;
 use Scalr\Util\CryptoTool;
 
 class Scalr_UI_Controller_Tools_Aws_Ec2_Elb extends Scalr_UI_Controller
@@ -58,18 +59,21 @@ class Scalr_UI_Controller_Tools_Aws_Ec2_Elb extends Scalr_UI_Controller
             $DBFarmRole->SetSetting(DBFarmRole::SETTING_AWS_ELB_ENABLED, false);
             $DBFarmRole->SetSetting(DBFarmRole::SETTING_AWS_ELB_ID, false);
 
-            $service = FarmRoleService::findFarmRoleService($this->getEnvironmentId(), $this->getParam('elbName'));
-            if ($service)
-                $service->remove();
+            $farmRoleService = CloudResource::findPk(
+                $this->getParam('elbName'),
+                $this->getEnvironmentId(),
+                \SERVER_PLATFORMS::EC2,
+                $this->getParam('cloudLocation')
+            );
+            if ($farmRoleService)
+                $farmRoleService->delete();
         }
         $this->response->success("Selected Elastic Load Balancers successfully removed");
     }
 
     public function viewAction()
     {
-        $this->response->page('ui/tools/aws/ec2/elb/view.js', array(
-            'locations'	=> self::loadController('Platforms')->getCloudLocations(SERVER_PLATFORMS::EC2, false)
-        ));
+        $this->response->page('ui/tools/aws/ec2/elb/view.js', []);
     }
 
     public function createAction()
@@ -78,7 +82,7 @@ class Scalr_UI_Controller_Tools_Aws_Ec2_Elb extends Scalr_UI_Controller
         $this->response->page('ui/tools/aws/ec2/elb/create.js', array(
             'vpcLimits' => $governance->getValue(SERVER_PLATFORMS::EC2, Scalr_Governance::AWS_VPC, null),
             'zones' => self::loadController('Ec2', 'Scalr_UI_Controller_Platforms')->getAvailZones($this->getParam('cloudLocation'))
-        ), array('ux-boxselect.js'));
+        ));
     }
 
     public function xCreateAction()
@@ -123,21 +127,20 @@ class Scalr_UI_Controller_Tools_Aws_Ec2_Elb extends Scalr_UI_Controller
         //Creates a new ELB
         $dnsName = $elb->loadBalancer->create($elb_name, $listenersList, !empty($availZones) ? $availZones : null, !empty($subnets) ? $subnets : null, null, !empty($scheme) ? $scheme : null);
 
-        $tags = array(
-            array('key' => "scalr-env-id", 'value' => $this->environment->id),
-            array('key' => "scalr-owner", 'value' => $this->user->getEmail())
-        );
-        
+        $tags = [
+            ['key' => \Scalr_Governance::SCALR_META_TAG_NAME, 'value' => $this->environment->applyGlobalVarsToValue(\Scalr_Governance::SCALR_META_TAG_VALUE)]
+        ];
+
         //Tags governance
         $governance = new \Scalr_Governance($this->environment->id);
-        $gTags = (array)$governance->getValue('ec2', 'aws.tags');
+        $gTags = (array)$governance->getValue('ec2', \Scalr_Governance::AWS_TAGS);
         if (count($gTags) > 0) {
             foreach ($gTags as $tKey => $tValue)
                 $tags[] = array('key' => $tKey, 'value' => $this->environment->applyGlobalVarsToValue($tValue));
         }
-        
+
         $elb->loadBalancer->addTags($elb_name, $tags);
-        
+
         try {
             $elb->loadBalancer->configureHealthCheck($elb_name, $healthCheckType);
         } catch (Exception $e) {
@@ -249,8 +252,8 @@ class Scalr_UI_Controller_Tools_Aws_Ec2_Elb extends Scalr_UI_Controller
                 unset($member['cookieExpirationPeriod']);
                 $policies[] = $member;
             }
-        }        
-        
+        }
+
         $arrLb['policies'] = $policies;
 
         $this->response->page('ui/tools/aws/ec2/elb/details.js', array('elb' => $arrLb));
@@ -258,20 +261,44 @@ class Scalr_UI_Controller_Tools_Aws_Ec2_Elb extends Scalr_UI_Controller
 
     public function xListElasticLoadBalancersAction()
     {
+        $this->request->defineParams(array(
+            'filters' => array('type' => 'json')
+        ));
+
+        // We're using this method in dropdown in farm settings to get list of available ELBs
+        // We need to ignore limit, because otherwise only first 20 ELBs are available in farm
+        $ignoreLimit = (!$this->getParam('limit')) ? true : false;
+
+        $filters = (array)$this->getParam('filters');
+        $placement = $this->getParam('placement');
+        $vpcId = $this->getParam('vpcId');
+
         $elb = $this->getEnvironment()->aws($this->getParam('cloudLocation'))->elb;
+
+        if (empty($filters['vpcId']) && array_key_exists('vpcId', $filters)) {
+            $p = PlatformFactory::NewPlatform(SERVER_PLATFORMS::EC2);
+            $defaultVpc = $p->getDefaultVpc($this->environment, $this->getParam('cloudLocation'));
+            if ($defaultVpc)
+                $placement = $defaultVpc;
+        }
+
+        if (!empty($vpcId)) {
+            $placement = $vpcId;
+        }
+
 
         $rowz1 = array();
         /* @var $lb LoadBalancerDescriptionData */
         foreach ($elb->loadBalancer->describe() as $lb) {
 
-            if ($this->getParam('vpcId') && $this->getParam('vpcId') != $lb->vpcId)
+            if ($vpcId && $vpcId != $lb->vpcId)
                 continue;
 
-            if ($this->getParam('placement')) {
-                if ($this->getParam('placement') == 'ec2' && $lb->vpcId != null)
+            if ($placement) {
+                if ($placement == 'ec2' && $lb->vpcId != null)
                     continue;
 
-                if ($this->getParam('placement') != 'ec2' && $lb->vpcId != $this->getParam('placement'))
+                if ($placement != 'ec2' && $lb->vpcId != $placement)
                     continue;
             }
 
@@ -308,34 +335,27 @@ class Scalr_UI_Controller_Tools_Aws_Ec2_Elb extends Scalr_UI_Controller
                 "vpcId"      => $lb->vpcId
             );
 
-            $farmRoleService = FarmRoleService::findFarmRoleService($this->environment->id, $lb->loadBalancerName);
-            if ($farmRoleService) {
-                $info['used'] = true;
-                $info['farmRoleId'] = $farmRoleService->getFarmRole()->ID;
-                $info['farmId'] = $farmRoleService->getFarmRole()->FarmID;
-                $info['roleName'] = $farmRoleService->getFarmRole()->GetRoleObject()->name;
-                $info['farmName'] = $farmRoleService->getFarmRole()->GetFarmObject()->Name;
-            }
+            $farmRoleService = CloudResource::findPk(
+                $lb->loadBalancerName,
+                $this->getEnvironmentId(),
+                \SERVER_PLATFORMS::EC2,
+                $this->getParam('cloudLocation')
+            );
 
-            //OLD notation
-            try {
-                $farmRoleId = $this->db->GetOne("SELECT farm_roleid FROM farm_role_settings WHERE name='lb.name' AND value=? LIMIT 1", array(
-                    $lb->loadBalancerName
-                ));
-                if ($farmRoleId) {
-                    $dbFarmRole = DBFarmRole::LoadByID($farmRoleId);
-                    $info['used'] = true;
-                    $info['farmRoleId'] = $dbFarmRole->ID;
-                    $info['farmId'] = $dbFarmRole->FarmID;
-                    $info['roleName'] = $dbFarmRole->GetRoleObject()->name;
-                    $info['farmName'] = $dbFarmRole->GetFarmObject()->Name;
-                }
-            } catch (Exception $e) {}
+            if ($farmRoleService) {
+                $dbFarmRole = DBFarmRole::LoadByID($farmRoleService->farmRoleId);
+
+                $info['used'] = true;
+                $info['farmRoleId'] = $dbFarmRole->ID;
+                $info['farmId'] = $dbFarmRole->FarmID;
+                $info['roleName'] = $dbFarmRole->GetRoleObject()->name;
+                $info['farmName'] = $dbFarmRole->GetFarmObject()->Name;
+            }
 
             $rowz1[] = $info;
         }
 
-        $response = $this->buildResponseFromData($rowz1, array('name', 'dnsname', 'farmName', 'roleName'));
+        $response = $this->buildResponseFromData($rowz1, array('name', 'dnsname', 'farmName', 'roleName'), $ignoreLimit);
         foreach($response['data'] as $k => $row) {
             $response['data'][$k]['dtcreated'] = Scalr_Util_DateTime::convertTz($row['dtcreated']);
         }

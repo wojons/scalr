@@ -4,7 +4,6 @@ namespace Scalr\Upgrade;
 
 use DateTime;
 use DateTimeZone;
-use Scalr\DependencyInjection\Container;
 use Scalr\Exception;
 use Scalr\Model\Entity\InformationSchema\ColumnEntity;
 use Scalr\Model\Entity\InformationSchema\TableEntity;
@@ -23,8 +22,8 @@ use Scalr\Upgrade\Entity\MysqlUpgradeEntity;
  * @property-read array  $depends
  * @property-read string $version
  * @property-read string $type
- * @property-read \ADODB_mysqli $db
  * @property-read \Scalr\DependencyInjection\Container $container
+ * @property-read \ADODB_mysqli $db
  * @property-read \Scalr\Upgrade\Console $console
  * @property-read \SplFileInfo $fileInfo
  */
@@ -126,14 +125,14 @@ abstract class AbstractUpdate extends AbstractGetter implements UpdateInterface
     /**
      * DI Container
      *
-     * @var Container
+     * @var \Scalr\DependencyInjection\Container
      */
     protected $container;
 
     /**
      * Console Instance
      *
-     * @var  Console
+     * @var \Scalr\Upgrade\Console
      */
     public $console;
 
@@ -434,12 +433,18 @@ abstract class AbstractUpdate extends AbstractGetter implements UpdateInterface
      */
     public function hasTableCompatibleIndex($table, array $columns, $unique = false)
     {
+        $compatible = null;
+
+        //Columns may be provided without indexes like ['col1', 'col2', ..., 'colN'].
+        //In this case index should mutually start from 1 instead of specified 0.
+        $dx = isset($columns[0]) ? 1 : 0;
+
         $stmt = $this->db->Prepare("SHOW INDEX FROM `{$table}` WHERE `Column_name` = ? AND `Seq_in_index` = ? AND `Non_unique` = ?");
 
         foreach ($columns as $idx => $column) {
             $entries = $this->db->Execute($stmt, [
                 $column,
-                $idx,
+                $idx + $dx,
                 $unique ? 0 : 1
             ]);
 

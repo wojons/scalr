@@ -2,10 +2,11 @@
 
 namespace Scalr\Stats\CostAnalytics\Entity;
 
+use Scalr\DataType\AccessPermissionsInterface;
 use Scalr\Exception\AnalyticsException;
-use ArrayObject;
 use Scalr\Stats\CostAnalytics\Usage;
 use DateTime, DateTimeZone;
+use Scalr\Model\Collections\ArrayCollection;
 
 /**
  * ProjectEntity
@@ -15,10 +16,11 @@ use DateTime, DateTimeZone;
  * @Entity
  * @Table(name="projects")
  */
-class ProjectEntity extends \Scalr\Model\AbstractEntity
+class ProjectEntity extends \Scalr\Model\AbstractEntity implements AccessPermissionsInterface
 {
     /**
      * The project is accessible only for owner or financial admin
+     * @deprecated
      */
     const SHARED_TO_OWNER = 0;
 
@@ -34,6 +36,7 @@ class ProjectEntity extends \Scalr\Model\AbstractEntity
 
     /**
      * The same as WITHIN_ACCOUNT but additionally restricted by the environment
+     * @deprecated
      */
     const SHARED_WITHIN_ENV = 3;
 
@@ -51,7 +54,7 @@ class ProjectEntity extends \Scalr\Model\AbstractEntity
      * Project identifier (UUID)
      *
      * @Id
-     * @GeneratedValue("UUID")
+     * @GeneratedValue("CUSTOM")
      * @Column(type="uuid")
      * @var string
      */
@@ -134,7 +137,7 @@ class ProjectEntity extends \Scalr\Model\AbstractEntity
     /**
      * Array of the properties
      *
-     * @var \ArrayObject
+     * @var ArrayCollection
      */
     private $_properties;
 
@@ -181,7 +184,7 @@ class ProjectEntity extends \Scalr\Model\AbstractEntity
     public function setProperty($name, $value)
     {
         if ($this->_properties === null) {
-            $this->_properties = new ArrayObject(array());
+            $this->_properties = new ArrayCollection(array());
         }
 
         $property = new ProjectPropertyEntity();
@@ -215,7 +218,7 @@ class ProjectEntity extends \Scalr\Model\AbstractEntity
     /**
      * Gets all collection of the properties for this cost centre
      *
-     * @return \ArrayObject|null
+     * @return ArrayCollection|null
      */
     public function getProperties()
     {
@@ -227,7 +230,7 @@ class ProjectEntity extends \Scalr\Model\AbstractEntity
      */
     public function loadProperties()
     {
-        $this->_properties = new ArrayObject(array());
+        $this->_properties = new ArrayCollection([]);
         foreach (ProjectPropertyEntity::findByProjectId($this->projectId) as $item) {
             $this->_properties[$item->name] = $item;
         }
@@ -398,5 +401,31 @@ class ProjectEntity extends \Scalr\Model\AbstractEntity
             ));
         }
         return QuarterlyBudgetEntity::getProjectBudget($year, $this->projectId);
+    }
+
+
+    /**
+     * {@inheritdoc}
+     * @see AccessPermissionsInterface::hasAccessPermissions()
+     */
+    public function hasAccessPermissions($user, $environment = null, $modify = null)
+    {
+        if ($user->isFinAdmin() || $user->isScalrAdmin()) {
+            return true;
+        } else if ($modify) {
+            //FIXME CostCentreEntity::hasAccessPermissions() should be corrected according to logic
+            return false;
+        }
+
+        switch ($this->shared) {
+            case static::SHARED_WITHIN_ACCOUNT:
+                return $this->accountId == $user->getAccountId();
+
+            case static::SHARED_WITHIN_CC:
+                return $this->getCostCenter()->hasAccessPermissions($user, $environment, $modify);
+
+            default:
+                return false;
+        }
     }
 }

@@ -39,8 +39,19 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.pg.edit', function (loadParams, modulePara
 			xtype: 'fieldset',
 			title: 'User parameters',
 			itemId: 'user',
-			items: moduleParams.params['user']
+			items: moduleParams.params['user'],
+            defaults: {
+                defaults: {
+                    allowBlank: false
+                }
+            }
 		}],
+        getFirstInvalidField: function () {
+            return this.down('field{isValid()===false}');
+        },
+        scrollToField: function (field) {
+            field.inputEl.scrollIntoView(this.body.el, false, false);
+        },
 		dockedItems: [{
 			xtype: 'container',
 			dock: 'bottom',
@@ -53,17 +64,26 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.pg.edit', function (loadParams, modulePara
 				xtype: 'button',
 				text: 'Save',
 				handler: function() {
-					Scalr.Request({
-						processBox: {
-							type: 'save'
-						},
-						form: form.getForm(),
-						url: '/tools/aws/rds/pg/xSave',
-						params: loadParams,
-						success: function (data) {
-							Scalr.event.fireEvent('close');
-						}
-					});
+                    if (form.isValid()) {
+                        Scalr.Request({
+                            processBox: {
+                                type: 'save'
+                            },
+                            form: form.getForm(),
+                            url: '/tools/aws/rds/pg/xSave',
+                            params: loadParams,
+                            success: function (data) {
+                                Scalr.event.fireEvent('close');
+                            }
+                        });
+                    } else {
+                        var invalidField = form.getFirstInvalidField();
+
+                        if (!Ext.isEmpty(invalidField)) {
+                            form.scrollToField(invalidField);
+                            invalidField.focus();
+                        }
+                    }
 				}
 			},{
 				xtype: 'button',

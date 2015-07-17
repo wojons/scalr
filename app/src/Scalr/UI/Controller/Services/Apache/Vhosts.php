@@ -1,5 +1,6 @@
 <?php
 use Scalr\Acl\Acl;
+use Scalr\Model\Entity;
 
 class Scalr_UI_Controller_Services_Apache_Vhosts extends Scalr_UI_Controller
 {
@@ -67,7 +68,7 @@ class Scalr_UI_Controller_Services_Apache_Vhosts extends Scalr_UI_Controller
     public function editAction()
     {
         $params = array(
-            'sslCertificates' => self::loadController('Certificates', 'Scalr_UI_Controller_Services_Ssl')->getList()
+            'sslCertificates' => Entity\SslCertificate::getList($this->getEnvironmentId())
         );
 
         if ($this->getParam('vhostId')) {
@@ -195,8 +196,7 @@ class Scalr_UI_Controller_Services_Apache_Vhosts extends Scalr_UI_Controller
 
             //SSL stuff
             if ($isSslEnabled) {
-                $cert = new Scalr_Service_Ssl_Certificate();
-                $cert->loadById($this->getParam('sslCertId'));
+                $cert = Entity\SslCertificate::findPk($this->getParam('sslCertId'));
                 $this->user->getPermissions()->validate($cert);
 
                 $vHost->sslCertId = $cert->id;
@@ -243,18 +243,18 @@ class Scalr_UI_Controller_Services_Apache_Vhosts extends Scalr_UI_Controller
         $sql = 'SELECT * FROM `apache_vhosts` WHERE env_id = ? AND :FILTER:';
         $args = array($this->getEnvironmentId());
 
-        $allFarms = $this->request->isAllowed(Acl::RESOURCE_FARMS, Acl::PERM_FARMS_NOT_OWNED_FARMS);
+        if (!$this->request->isAllowed(Acl::RESOURCE_FARMS)) {
+            $farmSql = "SELECT id FROM farms WHERE env_id = ?";
+            $farmArgs = [$this->getEnvironmentId()];
+            list($farmSql, $farmArgs) = $this->request->prepareFarmSqlQuery($farmSql, $farmArgs);
+
+            $sql .= " AND `farm_id` IN (" . $farmSql . ")";
+            $args = array_merge($args, $farmArgs);
+        }
 
         if ($this->getParam('farmId')) {
             $sql .= ' AND farm_id = ?';
             $args[] = $this->getParam('farmId');
-        }
-
-        if (!$allFarms) {
-            $sql .= "
-                AND `farm_id` IN (
-                    SELECT `id` FROM `farms` WHERE `env_id` = " . intval($this->getEnvironmentId()) . " AND created_by_id = " . intval($this->user->getId()) . "
-                ) ";
         }
 
         if ($this->getParam('farmRoleId')) {

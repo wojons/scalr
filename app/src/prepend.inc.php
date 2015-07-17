@@ -26,7 +26,7 @@ define("SCALR_TEMPLATES_PATH", APPPATH . "/templates/en_US");
 $classpath = [
     $base,
     $base . "/externals/ZF-1.10.8",
-    $base . "/externals/google-api-php-client-git-03102014/src"
+    $base . "/externals/google-api-php-client-git-03162015/src"
 ];
 set_include_path(get_include_path() . PATH_SEPARATOR . join(PATH_SEPARATOR, $classpath));
 

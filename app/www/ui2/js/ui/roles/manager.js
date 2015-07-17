@@ -13,7 +13,7 @@ Scalr.regPage('Scalr.ui.roles.manager', function (loadParams, moduleParams) {
     };
 
     //category tabs
-    var categories = [{text: 'All categories', catId: 0}];
+    var categories = [{text: 'All categories', catId: 0, pressed: true}];
     categories.push.apply(categories, Ext.Array.map(moduleParams['categories'], function(item) {
         return {
             text: item.name,
@@ -22,19 +22,10 @@ Scalr.regPage('Scalr.ui.roles.manager', function (loadParams, moduleParams) {
     }));
 
     //clouds filter
-    var platformFilterItems = [{
-        text: 'All clouds',
-        value: null,
-        iconCls: 'x-icon-osfamily-small'
-    }];
-
+    var platforms = [];
     Ext.Object.each(Scalr.platforms, function(key, value) {
         if (value.enabled) {
-            platformFilterItems.push({
-                text: Scalr.utils.getPlatformName(key),
-                value: key,
-                iconCls: 'x-icon-platform-small x-icon-platform-small-' + key
-            });
+            platforms.push(key);
         }
     });
 
@@ -44,19 +35,19 @@ Scalr.regPage('Scalr.ui.roles.manager', function (loadParams, moduleParams) {
         value: null,
         iconCls: 'x-icon-osfamily-small'
     }];
-    Ext.Array.each(moduleParams['os'], function(value){
+    Ext.each(Scalr.utils.getOsFamilyList(), function(family){
         osFilterItems.push({
-            text: Scalr.utils.beautifyOsFamily(value),
-            value: value,
-            iconCls: 'x-icon-osfamily-small x-icon-osfamily-small-' + value
+            text: family.name,
+            value: family.id,
+            iconCls: 'x-icon-osfamily-small x-icon-osfamily-small-' + family.id
         });
     });
 
-	var rolesStore = Ext.create('store.store', {
+	var rolesStore = Ext.create('Scalr.ui.ContinuousStore', {
 		fields: [
 			{name: 'id', type: 'int'},
 			{name: 'client_id', type: 'int'},
-			'name', 'origin', 'behaviors', 'os', 'osFamily', 'dtAdded', 'dtLastUsed', 'platforms','used_servers','status',
+			'name', 'origin', 'behaviors', 'osId', 'dtAdded', 'dtLastUsed', 'platforms','used_servers','status',
             'images', 'description', 'usedBy'
 		],
 		proxy: {
@@ -64,142 +55,54 @@ Scalr.regPage('Scalr.ui.roles.manager', function (loadParams, moduleParams) {
 			url: '/roles/xListRoles/',
             reader: {
                 type: 'json',
-                root: 'data',
+                rootProperty: 'data',
                 totalProperty: 'total',
                 successProperty: 'success'
             }
 		},
-        leadingBufferZone: 0,
-        trailingBufferZone: 0,
-        pageSize: 100,
-        buffered: true,
-		remoteSort: true,
-        purgePageCount: 0,
         listeners: {
             beforeload: function() {
                 var selModel = grid.getSelectionModel();
                 selModel.deselectAll();
-                selModel.setLastFocused(null);
-            },
-            prefetch: function(store, records) {
-                if (records) {
-                    //console.log(this.getCount() + records.length + ' of ' + this.getTotalCount());
-                }
             }
-        },
-        updateParamsAndLoad: function(params, reset) {
-            if (reset) {
-                this.proxy.extraParams = {};
-            }
-            var proxyParams = this.proxy.extraParams;
-            Ext.Object.each(params, function(name, value) {
-                if (value === undefined) {
-                    delete proxyParams[name];
-                } else {
-                    proxyParams[name] = value;
-                }
-            });
-            this.removeAll();
-            this.load();
         },
         isFilteredByRoleId: function() {
             return !!this.proxy.extraParams.roleId;
         }
 	});
 
-    var resetFilterFields = function() {
-        panel.getDockedComponent('tabs').resetTabs();
-        grid.down('#filterfield').setValue(null).clearButton.hide();
-        grid.down('#location').setPlatform();
-        grid.down('#origin').setValue(null, true);
-        grid.down('#platform').setValue(null, true);
-        grid.down('#os').setValue(null, true);
-    };
-
-    var reconfigurePage = function(params) {
-        params = params || {};
-        cb = function(reconfigure){
-            if (params['roleId']) {
-                resetFilterFields();
-                grid.down('#filterfield').setValue('(roleId:' + params['roleId'] + ')').clearButton.show();
-                rolesStore.updateParamsAndLoad({roleId: params['roleId']}, true);
-                rolesStore.on('prefetch', function(store, records) {
-                        if (records.length) {
-                            grid.getSelectionModel().setLastFocused(records[0]);
-                        }
-                    },
-                    rolesStore,
-                    {single: true}
-                );
-            } else if (params['chefServerId']) {
-                resetFilterFields();
-                grid.down('#filterfield').setValue('(chefServerId:' + params['chefServerId'] + ')').clearButton.show();
-                rolesStore.updateParamsAndLoad({chefServerId: params['chefServerId']}, true);
-            } else if (params['imageId']) {
-                resetFilterFields();
-                grid.down('#platform').setValue(params['platform'], true);
-                grid.down('#location').suspendEvents();
-                grid.down('#location').setValue(params['cloudLocation']);
-                grid.down('#location').resumeEvents();
-                grid.down('#filterfield').setValue('(imageId:' + params['imageId'] + ')').clearButton.show();
-                rolesStore.updateParamsAndLoad({
-                    platform: params['platform'],
-                    cloudLocation: params['cloudLocation'],
-                    imageId: params['imageId']
-                }, true);
-                rolesStore.on('prefetch', function(store, records) {
-                        if (records.length) {
-                            grid.getSelectionModel().setLastFocused(records[0]);
-                        }
-                    },
-                    rolesStore,
-                    {single: true}
-                );
-
-            } else if (rolesStore.isFilteredByRoleId() || !reconfigure) {
-                resetFilterFields();
-                rolesStore.updateParamsAndLoad({roleId: undefined}, true);
-            }
-        };
-        if (grid.view.viewReady) {
-            cb(true);
-        } else {
-            grid.view.on('viewready', function(){cb();}, grid.view, {single: true});
-        }
-
-    };
-
     var grid = Ext.create('Ext.grid.Panel', {
         xtype: 'grid',
         itemId: 'roles',
-        flex: 1.2,
-        cls: 'x-grid-shadow x-grid-shadow-buffered x-panel-column-left',
+        cls: 'x-panel-column-left',
         store: rolesStore,
-        padding: '0 0 12 0',
+        flex: 1,
         maxWidth: 1000,
-        plugins: [
-            'focusedrowpointer',
 
-            {
-                ptype: 'bufferedrenderer',
-                scrollToLoadBuffer: 100,
-                synchronousRender: false
+        plugins: [ 'focusedrowpointer', {
+            ptype: 'applyparams',
+            loadStoreOnReturn: false,
+            hiddenParams: [ 'catId' ]
+        }, {
+            ptype: 'selectedrecord',
+            disableSelection: false,
+            clearOnRefresh: true,
+            getForm: function() {
+                return form;
             }
-        ],
-        forceFit: true,
+        }, {
+            ptype: 'continuousrenderer'
+        }],
+
         viewConfig: {
             emptyText: 'No roles found',
-            deferEmptyText: false,
+            //deferEmptyText: false,
             loadMask: false
         },
 
         columns: [
             {
-                header: '<img style="cursor: help" src="'+Ext.BLANK_IMAGE_URL+'" class="x-icon-info" data-qclass="x-tip-light" data-qtip="' +
-                Ext.String.htmlEncode('<div>Scopes:</div>' +
-                '<div><img src="' + Ext.BLANK_IMAGE_URL + '" class="scalr-scope-scalr">&nbsp;&nbsp;Scalr</div>' +
-                '<div><img src="' + Ext.BLANK_IMAGE_URL + '" class="scalr-scope-environment">&nbsp;&nbsp;Environment</div>') +
-                '" />&nbsp;Role',
+                text: 'Role',
                 dataIndex: 'name',
                 sortable: true,
                 flex: 2,
@@ -208,26 +111,31 @@ Scalr.regPage('Scalr.ui.roles.manager', function (loadParams, moduleParams) {
                     {
                         getScope: function(origin){
                             var scope = origin == 'SHARED' ? 'scalr' : 'environment';
-                            return '<img src="' + Ext.BLANK_IMAGE_URL + '" class="scalr-scope-'+scope+'" data-qtip="This Role is defined in the '+Ext.String.capitalize(scope)+' Scope"/>';
+                            return '<img src="' + Ext.BLANK_IMAGE_URL + '" class="scalr-scope-'+scope+'" data-qclass="x-tip-light" data-qtip="' + Scalr.utils.getScopeLegend('role') + '"/>';
                         }
                     }
                 )
             },
-            { header: "Clouds", flex: .5, minWidth: 110, dataIndex: 'platforms', sortable: false, xtype: 'templatecolumn', tpl:
+            { text: "Clouds", flex: .5, minWidth: 110, dataIndex: 'platforms', sortable: false, xtype: 'templatecolumn', tpl:
                 '<tpl for="platforms">'+
-                    '<img style="margin:0 3px"  class="x-icon-platform-small x-icon-platform-small-{.}" title="{[Scalr.utils.getPlatformName(values)]}" src="' + Ext.BLANK_IMAGE_URL + '"/>'+
+                    '<img style="margin:0 3px 0"  class="x-icon-platform-small x-icon-platform-small-{.}" title="{[Scalr.utils.getPlatformName(values)]}" src="' + Ext.BLANK_IMAGE_URL + '"/>'+
                 '</tpl>'
-            },
-            { header: 'OS', flex: .7, minWidth: 160, dataIndex: 'os', sortable: true, xtype: 'templatecolumn', tpl: '<img style="margin:0 3px"  class="x-icon-osfamily-small x-icon-osfamily-small-{osFamily}" src="' + Ext.BLANK_IMAGE_URL + '"/> {os}' },
-            { header: "Status", maxWidth: 100, dataIndex: 'status', sortable: false, xtype: 'statuscolumn', statustype: 'role', resizable: false}
+            },{
+                text: 'OS',
+                flex: .7,
+                minWidth: 160,
+                dataIndex: 'os_id',
+                sortable: true,
+                xtype: 'templatecolumn',
+                tpl: '{[this.getOsById(values.osId)]}'
+            },{ header: "Status", width: 100, minWidth: 100, dataIndex: 'status', sortable: false, xtype: 'statuscolumn', statustype: 'role', resizable: false}
         ],
 
-        multiSelect: true,
         selModel: {
             selType: 'selectedmodel',
             pruneRemoved: true,
             getVisibility: function(record) {
-                return isScalrAdmin || record.get('origin') === 'CUSTOM';
+                return (isScalrAdmin || record.get('origin') === 'CUSTOM') && record.get('status') !== 'In use';
             }
         },
 
@@ -238,6 +146,7 @@ Scalr.regPage('Scalr.ui.roles.manager', function (loadParams, moduleParams) {
         },
         dockedItems: [{
             xtype: 'toolbar',
+            ui: 'simple',
             dock: 'top',
             defaults: {
                 margin: '0 0 0 12'
@@ -248,104 +157,54 @@ Scalr.regPage('Scalr.ui.roles.manager', function (loadParams, moduleParams) {
                 store: rolesStore,
                 flex: 1,
                 minWidth: 100,
-                maxWidth: 200,
+                maxWidth: 300,
                 margin: 0,
                 form: {
                     items: [{
                         xtype: 'textfield',
                         name: 'imageId',
-                        fieldLabel: 'Image ID',
+                        fieldLabel: 'Cloud Image ID',
                         labelAlign: 'top'
                     }]
                 },
                 separatedParams: ['roleId', 'chefServerId']
             },{
-                xtype: 'cyclealt',
-                itemId: 'platform',
-                getItemIconCls: false,
-                flex: 1,
-                minWidth: 90,
-                maxWidth: 110,
-                hidden: platformFilterItems.length === 1,
-                cls: 'x-btn-compressed',
-                changeHandler: function(comp, item) {
-                    comp.next('#location').setPlatform(item.value);
-                    rolesStore.updateParamsAndLoad({platform: item.value, cloudLocation: undefined});
-                },
-                getItemText: function(item) {
-                    return item.value ? 'Cloud: <img src="' + Ext.BLANK_IMAGE_URL + '" class="' + item.iconCls + '" title="' + item.text + '" />' : item.text;
-                },
-                menu: {
-                    cls: 'x-menu-light x-menu-cycle-button-filter',
-                    minWidth: 200,
-                    items: platformFilterItems
+                xtype: 'hiddenfield',
+                name: 'catId',
+                listeners: {
+                    change: function (field, value) {
+                        panel.
+                            getDockedComponent('tabs').
+                            setTab(value);
+                    }
                 }
             },{
-                xtype: 'combo',
-                itemId: 'location',
-                matchFieldWidth: false,
-                flex: 2,
-                minWidth: 60,
-                maxWidth: 120,
-                editable: false,
-                store: {
-                    fields: [ 'id', 'name' ],
-                    proxy: 'object'
-                },
-                displayField: 'name',
-                emptyText: 'All locations',
-                valueField: 'id',
-                value: '',
-                queryMode: 'local',
-                platform: '',
-                locationsLoaded: false,
+                xtype: 'cloudlocationfield',
+                cls: 'x-btn-compressed',
+                platforms: platforms,
+                forceAllLocations: true,
                 listeners: {
-                    change: function(comp, value) {
-                        rolesStore.updateParamsAndLoad({cloudLocation: value});
-                    },
-                    beforequery: function() {
-                        var me = this;
-                        me.collapse();
-                        Scalr.loadCloudLocations(me.platform, function(data){
-                            var locations = {'': 'All locations'};
-                            Ext.Object.each(data, function(platform, loc){
-                                Ext.apply(locations, loc);
-                            });
-                            me.store.load({data: locations});
-                            me.locationsLoaded = true;
-                            me.expand();
-                        });
-                        return false;
-                    },
-                    afterrender: {
-                        fn: function() {
-                            this.setPlatform();
-                        },
-                        single: true
+                    change: function (me, value) {
+                        rolesStore.applyProxyParams(value);
                     }
-                },
-                setPlatform: function(platform) {
-                    this.platform = platform;
-                    this.locationsLoaded = false;
-                    this.store.removeAll();
-                    this.suspendEvents(false);
-                    this.reset();
-                    this.resumeEvents();
                 }
             },{
                 // TODO: replace scope within origin
                 xtype: 'cyclealt',
                 itemId: 'origin',
+                name: 'scope',
                 getItemIconCls: false,
                 flex: 1,
                 minWidth: 100,
                 maxWidth: 110,
                 cls: 'x-btn-compressed',
-                changeHandler: function(comp, item) {
-                    rolesStore.updateParamsAndLoad({scope: item.value});
+                changeHandler: function (comp, item) {
+                    rolesStore.applyProxyParams({
+                        scope: item.value
+                    });
                 },
                 getItemText: function(item) {
-                    return item.value ? 'Scope: <img src="' + Ext.BLANK_IMAGE_URL + '" class="' + item.iconCls + '" style="vertical-align: top; width: 14px; height: 14px;" title="' + item.text + '" />' : item.text;
+                    return item.value ? 'Scope: &nbsp;<img src="' + Ext.BLANK_IMAGE_URL + '" class="' + item.iconCls + '" title="' + item.text + '" />' : item.text;
                 },
                 menu: {
                     cls: 'x-menu-light x-menu-cycle-button-filter',
@@ -366,18 +225,21 @@ Scalr.regPage('Scalr.ui.roles.manager', function (loadParams, moduleParams) {
 
             }, {
                  xtype: 'cyclealt',
-                 itemId: 'os',
+                 itemId: 'osFamily',
+                 name: 'osFamily',
                  flex: 1,
                  minWidth: 80,
                  maxWidth: 110,
                  getItemIconCls: false,
                  cls: 'x-btn-compressed',
                  hidden: osFilterItems.length === 2,
-                 changeHandler: function(comp, item) {
-                    rolesStore.updateParamsAndLoad({osFamily: item.value});
-                 },
+                changeHandler: function (comp, item) {
+                    rolesStore.applyProxyParams({
+                        osFamily: item.value
+                    });
+                },
                  getItemText: function(item) {
-                     return item.value ? 'OS: <img src="' + Ext.BLANK_IMAGE_URL + '" class="' + item.iconCls + '" title="' + item.text + '"/>' : item.text;
+                     return item.value ? 'OS: &nbsp;<img src="' + Ext.BLANK_IMAGE_URL + '" class="' + item.iconCls + '" title="' + item.text + '"/>' : item.text;
                  },
                  menu: {
                      cls: 'x-menu-light x-menu-cycle-button-filter',
@@ -388,24 +250,23 @@ Scalr.regPage('Scalr.ui.roles.manager', function (loadParams, moduleParams) {
                 xtype: 'tbfill',
                 flex: .01
             },{
-                text: 'Add role',
+                text: 'New role',
                 margin: 0,
-                cls: 'x-btn-green-bg',
+                cls: 'x-btn-green',
                 handler: function() {
                     Scalr.event.fireEvent('redirect', '#/roles/' + (isScalrAdmin ? 'edit' : 'create'));
                 }
             },{
                 itemId: 'refresh',
-                ui: 'paging',
-                iconCls: 'x-tbar-loading',
+                iconCls: 'x-btn-icon-refresh',
                 tooltip: 'Refresh',
-                handler: function() {
-                    rolesStore.updateParamsAndLoad();
+                handler: function () {
+                    rolesStore.applyProxyParams();
                 }
             },{
                 itemId: 'delete',
-                ui: 'paging',
-                iconCls: 'x-tbar-delete',
+                cls: 'x-btn-red',
+                iconCls: 'x-btn-icon-delete',
                 tooltip: 'Delete selected roles',
                 disabled: true,
                 handler: function() {
@@ -413,7 +274,7 @@ Scalr.regPage('Scalr.ui.roles.manager', function (loadParams, moduleParams) {
                         confirmBox: {
                             msg: 'Remove selected role(s): %s ?',
                             type: 'delete',
-                            formWidth: 440,
+                            formWidth: 480,
                             form: deleteConfirmationForm
                         },
                         processBox: {
@@ -421,8 +282,12 @@ Scalr.regPage('Scalr.ui.roles.manager', function (loadParams, moduleParams) {
                                 type: 'delete'
                         },
                         url: '/roles/xRemove',
-                        success: function() {
-                            rolesStore.updateParamsAndLoad();
+                        success: function (response) {
+                            rolesStore.remove(Ext.Array.map(
+                                response.processed, function (id) {
+                                    return rolesStore.getById(id);
+                                }
+                            ));
                         }
                     }, records = grid.getSelectionModel().getSelection(), roles = [];
 
@@ -445,65 +310,51 @@ Scalr.regPage('Scalr.ui.roles.manager', function (loadParams, moduleParams) {
             align: 'stretch'
         },
         autoScroll: true,
-        teamsGridCollapsed: false,
         listeners: {
-            afterrender: function() {
-                var me = this;
-                grid.getSelectionModel().on('focuschange', function(gridSelModel, oldFocused, newFocused){
-                    if (newFocused) {
-                        if (me.getRecord() !== newFocused) {
-                            me.loadRoleInfo(newFocused);
-                        }
-                    } else {
-                        me.setVisible(false);
-                        me.getForm().reset(true);
-                    }
-                });
-            },
             beforedestroy: function() {
                 this.abortCurrentRequest();
-            }
-        },
-        abortCurrentRequest: function() {
-            if (this.currentRequest) {
-                Ext.Ajax.abort(this.currentRequest);
-                delete this.currentRequest;
-            }
-        },
-        loadRoleInfo: function(record) {
-            var me = this;
-            me.abortCurrentRequest();
-            me.up().mask('Loading...');
-            me.hide();
-            me.getForm()._record = record;
-            if (!record.get('images')) {
-                me.currentRequest = Scalr.Request({
-                    url: '/roles/xGetInfo',
-                    params: {roleId: record.get('id')},
-                    success: function (data) {
-                        delete me.currentRequest;
-                        if (data['role']['id'] == me.getRecord().get('id')) {
-                            me.getRecord().set(data['role']);
-                            me.showRoleInfo();
+            },
+            afterloadrecord: function(record) {
+                var me = this;
+                me.abortCurrentRequest();
+                if (!record.get('images')) {
+                    me.up().mask('');
+                    me.hide();
+                    me.currentRequest = Scalr.Request({
+                        url: '/roles/xGetInfo',
+                        params: {roleId: record.get('id')},
+                        success: function (data) {
+                            delete me.currentRequest;
+                            if (data['role']['id'] == record.get('id')) {
+                                record.set(data['role']);
+                                me.afterLoadRecord(record);
+                            }
                         }
-                    }
-                });
-            } else {
-                me.showRoleInfo();
+                    });
+                } else {
+                    me.afterLoadRecord(record);
+                }
+
             }
+
         },
-        showRoleInfo: function() {
-            var behaviors = [],
+        afterLoadRecord: function(record) {
+            var frm = this.getForm(),
                 images = [],
-                usedBy = [],
                 platformsAdded = {},
                 record = this.getRecord();
 
+            this.down('#main').setTitle(record.get('name'), record.get('description') || '<i>description is empty</i>');
+
+            //images
             Ext.Array.each(record.get('images'), function(value){
                 images.push(value);
                 platformsAdded[value['platform']] = true;
             });
 
+            this.down('#addToFarm').setDisabled(images.length == 0);
+
+            //add empty platforms
             if (!isScalrAdmin) {
                 Ext.Object.each(Scalr.platforms, function(key, value) {
                     if (platformsAdded[key] === undefined && value.enabled) {
@@ -511,183 +362,205 @@ Scalr.regPage('Scalr.ui.roles.manager', function (loadParams, moduleParams) {
                     }
                 });
             }
-            
-            Ext.Array.each(record.get('behaviors'), function(value){
-                if (value !== 'base') {
-                    behaviors.push('<span style="white-space:nowrap" data-qtip="' + Ext.htmlEncode(Scalr.utils.beautifyBehavior(value, true)) + '"><img class="x-icon-role-small x-icon-role-small-' + value + '" src="' + Ext.BLANK_IMAGE_URL + '" />&nbsp;' + Scalr.utils.beautifyBehavior(value) + '</span>');
-                }
-            });
-            if (record.get('usedBy')) {
-                Ext.Array.each(record.get('usedBy')['farms'], function(value) {
-                    usedBy.push('<a href="#/farms/' + value['id'] + '/view">' + value['name'] + '</a>');
-                });
-            }
-            this.down('#main').setTitle(record.get('name'), record.get('description') || '<i>description is empty</i>');
-            this.down('[name="id"]').setValue(record.get('id'));
-            this.down('[name="os"]').setValue('<img src="'+Ext.BLANK_IMAGE_URL+'" title="" class="x-icon-osfamily-small x-icon-osfamily-small-'+record.get('osFamily')+'" />&nbsp;' + record.get('os'));
-            this.down('[name="behaviors"]').setValue(behaviors.length > 0 ? behaviors.join(',&nbsp;&nbsp; ') : '-');
-            this.down('[name="usedBy"]').setValue(usedBy.length > 0 ? usedBy.join(', ') : '-').setFieldLabel(record.get('usedBy') ? ('Used by ' + record.get('usedBy')['cnt'] + ' farms') : 'Used by');
-            this.down('[name="dtAdded"]').setValue(record.get('dtAdded') || 'Unknown');
-            this.down('[name="dtLastUsed"]')[record.get('origin') == 'SHARED' && Scalr.user.type != 'ScalrAdmin' ? 'hide' : 'show']()
-                .setValue(record.get('dtLastUsed') || 'Unknown');
             this.down('#images').store.load({data: images});
-            this.down('#addToFarm').setDisabled(record.get('images').length == 0);
+
+
+            frm.findField('usedBy').setValue(record.get('usedBy')).setFieldLabel(record.get('usedBy') ? ('Used by ' + record.get('usedBy')['cnt'] + ' farms') : 'Used by');
+            frm.findField('dtLastUsed').setVisible(record.get('origin') !== 'SHARED' || Scalr.user.type === 'ScalrAdmin');
+
             this.down('#edit').setDisabled(record.get('origin') !== 'CUSTOM' && !isScalrAdmin).setHref('#/roles/' + record.get('id') + '/edit');
             this.down('#clone').setDisabled(!Scalr.isAllowed('FARMS_ROLES', 'clone'));
             this.down('#delete').setDisabled(!isScalrAdmin && record.get('origin') !== 'CUSTOM');
+
+
             this.up().unmask();
             this.show();
         },
+
+        abortCurrentRequest: function() {
+            if (this.currentRequest) {
+                Ext.Ajax.abort(this.currentRequest);
+                delete this.currentRequest;
+            }
+        },
+        items: [{
+            xtype: 'fieldset',
+            itemId: 'main',
+            cls: 'x-fieldset-separator-none x-fieldset-no-text-transform',
+            headerCls: 'x-fieldset-separator-bottom',
+            layout: {
+                type: 'vbox',
+                align: 'stretch'
+            },
+            flex: 1,
+            defaults: {
+                labelWidth: 150
+            },
             items: [{
-                xtype: 'fieldset',
-                itemId: 'main',
-                style: 'padding-bottom: 8px'
+                xtype: 'container',
+                style: 'z-index:2;',
+                items: {
+                    itemId: 'addToFarm',
+                    xtype: 'button',
+                    text: 'Add to farm',
+                    cls: 'x-btn-green',
+                    hidden: isScalrAdmin,
+                    style: 'position:absolute;right:0',
+                    maxWidth: 120,
+                    handler: function() {
+                        var me = this;
+
+                        Scalr.Confirm({
+                            formWidth: 950,
+                            alignTop: true,
+                            winConfig: {
+                                autoScroll: false
+                            },
+                            form: [{
+                                xtype: 'farmselect'
+                            }],
+                            ok: 'Add',
+                            disabled: true,
+                            success: function(field, button) {
+                                Scalr.event.fireEvent('redirect', '#/farms/designer?farmId=' + button.farmId, false, {roleId: me.up('form').getRecord().get('id')});
+                            }
+                        });
+                    }
+                }
             },{
-                xtype: 'fieldset',
-                cls: 'x-fieldset-separator-none',
-                layout: {
-                    type: 'vbox',
-                    align: 'stretch'
-                },
+                xtype: 'displayfield',
+                name: 'id',
+                fieldLabel: 'Role ID'
+            },{
+                xtype: 'displayfield',
+                name: 'osId',
+                fieldLabel: 'Operating system',
+                renderer: function(value) {
+                    var os = Scalr.utils.getOsById(value);
+                    return os ? '<img src="'+Ext.BLANK_IMAGE_URL+'" title="" class="x-icon-osfamily-small x-icon-osfamily-small-'+os.family+'" />&nbsp;' + os.name : value;
+                }
+            },{
+                xtype: 'displayfield',
+                name: 'behaviors',
+                fieldLabel: 'Built-in automation',
+                renderer: function(value) {
+                    var html = [];
+                    Ext.Array.each(value, function(value){
+                        if (value !== 'base') {
+                            html.push('<img style="float:left;margin:0 8px 8px 0" class="x-icon-role-small x-icon-role-small-' + value + '" src="' + Ext.BLANK_IMAGE_URL + '" data-qtip="' + Ext.htmlEncode(Scalr.utils.beautifyBehavior(value, true)) + '" />');
+                        }
+                    });
+                    return html.length > 0 ? html.join(' ') : '&ndash;';
+                }
+            }, {
+                xtype: 'displayfield',
+                fieldLabel: 'Used by',
+                name: 'usedBy',
+                renderer: function(value) {
+                    var html = [];
+                    if (value) {
+                        Ext.Array.each(value['farms'], function(value) {
+                            html.push('<a href="#/farms?farmId=' + value['id'] + '">' + value['name'] + '</a>');
+                        });
+                    }
+                    return html.length > 0 ? html.join(', ') : '&ndash;';
+                }
+            }, {
+                xtype: 'displayfield',
+                fieldLabel: 'Created on',
+                name: 'dtAdded',
+                renderer: function(value) {
+                    return value || 'Unknown';
+                }
+            }, {
+                xtype: 'displayfield',
+                fieldLabel: 'Last used on',
+                name: 'dtLastUsed',
+                renderer: function(value) {
+                    return value || 'Unknown';
+                }
+            }, {
+                xtype: 'label',
+                text: 'Images',
+                cls: 'x-form-item-label-default'
+            }, {
+                xtype: 'grid',
+                itemId: 'images',
+                trackMouseOver: false,
+                disableSelection: true,
+                margin: '6 0 0 0',
                 flex: 1,
-                defaults: {
-                    labelWidth: 120
+                store: {
+                    fields: [
+                        'platform', 'cloudLocation', 'imageId', 'extended',
+                        {
+                            name: 'ordering',
+                            convert: function(v, record){
+                                return record.data.imageId ? record.data.platform + record.data.cloudLocation : null;
+                            }
+                        }
+                    ],
+                    proxy: 'object'
                 },
-                items: [{
-                    xtype: 'container',
-                    layout: 'hbox',
-                    margin: '0 0 6 0',
-                    items: [{
-                        xtype: 'displayfield',
-                        labelWidth: 120,
-                        flex: 1,
-                        name: 'id',
-                        fieldLabel: 'Role ID'
-                    },{
-                        itemId: 'addToFarm',
-                        xtype: 'button',
-                        height: 26,
-                        text: 'Add to farm',
-                        cls: 'x-btn-default-small-green',
-                        hidden: isScalrAdmin,
-                        handler: function() {
-                            var me = this;
+                viewConfig: {
+                    emptyText: 'No images found',
+                    deferEmptyText: false,
+                    getRowClass: function (record) {
+                        return record.get('imageId') ? '' : 'x-grid-row-disabled';
+                    }
+                },
+                columns: [
+                    { header: "Location", flex: 0.6, dataIndex: 'ordering', sortable: true, renderer:
+                        function(value, meta, record) {
+                            var platform = record.get('platform'),
+                                platformName = Scalr.utils.getPlatformName(platform),
+                                cloudLocation = record.get('cloudLocation'),
+                                res = '';
 
-                            Scalr.Confirm({
-                                formWidth: 950,
-                                alignTop: true,
-                                winConfig: {
-                                    autoScroll: false
-                                },
-                                form: [{
-                                    xtype: 'farmselect'
-                                }],
-                                ok: 'Add',
-                                disabled: true,
-                                success: function(field, button) {
-                                    var record = me.up('form').getRecord();
-                                    var farmId = button.farmId;
-                                    var link = '#/farms/' + farmId + '/edit?roleId=' + record.get('id');
-
-                                    Scalr.event.fireEvent('redirect', link);
-                                }
-                            });
-                        }
-                    }]
-                },{
-                    xtype: 'displayfield',
-                    name: 'os',
-                    fieldLabel: 'Operating system'
-                },{
-                    xtype: 'displayfield',
-                    name: 'behaviors',
-                    fieldLabel: 'Built-in automation'
-                }, {
-                    xtype: 'displayfield',
-                    fieldLabel: 'Used by',
-                    name: 'usedBy'
-                }, {
-                    xtype: 'displayfield',
-                    fieldLabel: 'Created on',
-                    name: 'dtAdded'
-                }, {
-                    xtype: 'displayfield',
-                    fieldLabel: 'Last used on',
-                    name: 'dtLastUsed'
-                }, {
-                    margin: '5 0 0 0',
-                    xtype: 'label',
-                    text: 'Images:'
-                }, {
-                    xtype: 'grid',
-                    itemId: 'images',
-                    cls: 'x-grid-shadow x-grid-no-highlighting',
-                    margin: '12 0 0 0',
-                    flex: 1,
-                    //platforms: moduleParams['platforms'],
-                    store: {
-                        fields: [ 'platform', 'cloudLocation', 'imageId', 'extended'],
-                        proxy: 'object'
-                    },
-                    viewConfig: {
-                        emptyText: 'No images found',
-                        deferEmptyText: false,
-                        getRowClass: function (record) {
-                            return record.get('imageId') ? '' : 'x-grid-row-disabled';
-                        }
-                    },
-                    columns: [
-                        { header: "Cloud Location", flex: 0.6, dataIndex: 'platform', sortable: true, renderer:
-                            function(value, meta, record) {
-                                var platform = record.get('platform'),
-                                    cloudLocation = record.get('cloudLocation'),
-                                    res = '';
-
-                                res = '<img class="x-icon-platform-small x-icon-platform-small-' + platform + '" src="' + Ext.BLANK_IMAGE_URL + '"/>&nbsp;&nbsp;';
-                                if (record.get('imageId')) {
-                                    if (platform === 'gce' || platform === 'ecs') {
-                                        res += 'All regions';
-                                    } else if (location) {
-                                        if (Scalr.platforms[platform] && Scalr.platforms[platform]['locations'] && Scalr.platforms[platform]['locations'][cloudLocation]) {
-                                            res += Scalr.platforms[platform]['locations'][cloudLocation];
-                                        } else {
-                                            res += cloudLocation;
-                                        }
+                            res = '<img class="x-icon-platform-small x-icon-platform-small-' + platform + '" data-qtip="' + platformName + '" src="' + Ext.BLANK_IMAGE_URL + '"/>&nbsp;&nbsp;';
+                            if (record.get('imageId')) {
+                                if (platform === 'gce' || platform === 'ecs') {
+                                    res += 'All locations';
+                                } else if (location) {
+                                    if (Scalr.platforms[platform] && Scalr.platforms[platform]['locations'] && Scalr.platforms[platform]['locations'][cloudLocation]) {
+                                        res += Scalr.platforms[platform]['locations'][cloudLocation];
+                                    } else {
+                                        res += cloudLocation;
                                     }
-                                } else {
-                                    res += Scalr.utils.getPlatformName(platform) + '&nbsp;';
                                 }
-                                return res;
+                            } else {
+                                res += platformName + '&nbsp;';
                             }
-                        },
-                        { header: "Image", flex: 1, dataIndex: 'cloudLocation', sortable: true, renderer:
-                            function(value, meta, record) {
-                                var res = '', extended = record.get('extended');
-                                if (record.get('imageId')) {
-                                    var qtip = [];
-                                    if (extended['size'])
-                                        qtip.push('Size: ' + extended['size'] + 'Gb');
-                                    if (extended['software'])
-                                        qtip.push('Software: ' + extended['software']);
-                                    if (extended['type'] && (record.get('platform') == 'ec2'))
-                                        qtip.push('Type: ' + extended['type']);
-                                    if (qtip.length)
-                                        qtip = ' data-qtip="' + Ext.htmlEncode(qtip.join('<br>')) + '"';
-                                    else
-                                        qtip = '';
-
-                                    res = '<a href="#/images/view?platform=' + record.get('platform') + '&cloudLocation=' +
-                                        record.get('cloudLocation') + '&id=' + record.get('imageId') + '"' + qtip + '>' + extended['name'] + '</a>';
-                                } else {
-                                    res = '<i>No image has been added for this cloud</i>';
-                                }
-
-                                return res;
-                            }
+                            return res;
                         }
-                    ]
-                }]
-            }],
+                    },
+                    { header: "Image", flex: 1, dataIndex: 'imageId', sortable: false, renderer:
+                        function(value, meta, record) {
+                            var res = '', extended = record.get('extended');
+                            if (record.get('imageId')) {
+                                var qtip = [];
+                                if (extended['size'])
+                                    qtip.push('Size: ' + extended['size'] + 'Gb');
+                                if (extended['software'])
+                                    qtip.push('Software: ' + extended['software']);
+                                if (extended['type'] && (record.get('platform') == 'ec2'))
+                                    qtip.push('Type: ' + extended['type']);
+                                if (qtip.length)
+                                    qtip = ' data-qtip="' + Ext.htmlEncode(qtip.join('<br>')) + '"';
+                                else
+                                    qtip = '';
+
+                                res = '<a href="#/images?hash='+extended['hash']+'"' + qtip + '>' + extended['name'] + '</a>';
+                            } else {
+                                res = '<i>No image has been added for this cloud</i>';
+                            }
+
+                            return res;
+                        }
+                    }
+                ]
+            }]
+        }],
         dockedItems: [{
             xtype: 'container',
             dock: 'bottom',
@@ -716,19 +589,18 @@ Scalr.regPage('Scalr.ui.roles.manager', function (loadParams, moduleParams) {
                         confirmBox: {
                             type: 'action',
                             formValidate: true,
+                            formWidth: 500,
                             form: {
                                 xtype: 'fieldset',
                                 cls: 'x-fieldset-separator-none',
                                 items: [{
                                     xtype: 'textfield',
                                     fieldLabel: 'New role name',
-                                    editable: false,
-                                    queryMode: 'local',
                                     value: '',
                                     vtype: 'rolename',
                                     allowBlank: false,
                                     name: 'newRoleName',
-                                    labelWidth: 100,
+                                    labelWidth: 120,
                                     anchor: '100%'
                                 }]
                             },
@@ -741,8 +613,8 @@ Scalr.regPage('Scalr.ui.roles.manager', function (loadParams, moduleParams) {
                         url: '/roles/xClone/',
                         params: { roleId: record.get('id') },
                         success: function (data) {
-                            Scalr.message.Success("Role successfully cloned");
-                            Scalr.event.fireEvent('redirect', '#/roles/manager?roleId=' + data.newRoleId);
+                            record = rolesStore.add(data.role)[0];
+                            grid.view.focusRow(record);
                         }
                     });
                 }
@@ -750,14 +622,14 @@ Scalr.regPage('Scalr.ui.roles.manager', function (loadParams, moduleParams) {
                 itemId: 'delete',
                 xtype: 'button',
                 text: 'Delete',
-                cls: 'x-btn-default-small-red',
+                cls: 'x-btn-red',
                 handler: function() {
                     var record = this.up('form').getRecord();
                     Scalr.Request({
                         confirmBox: {
                             msg: 'Delete "' + record.get('name') + '" role?',
                             type: 'delete',
-                            formWidth: 440,
+                            formWidth: 480,
                             form: deleteConfirmationForm
                         },
                         params: {
@@ -768,8 +640,10 @@ Scalr.regPage('Scalr.ui.roles.manager', function (loadParams, moduleParams) {
                             type: 'delete'
                         },
                         url: '/roles/xRemove',
-                        success: function() {
-                            rolesStore.updateParamsAndLoad();
+                        success: function(request) {
+                            if (request.processed.length > 0) {
+                                rolesStore.remove(record);
+                            }
                         }
                     });
                 }
@@ -778,32 +652,26 @@ Scalr.regPage('Scalr.ui.roles.manager', function (loadParams, moduleParams) {
     });
 
     var panel = Ext.create('Ext.panel.Panel', {
-        title: 'Roles &raquo; Manager',
-        cls: 'scalr-ui-roles-manager',
         layout: {
             type: 'hbox',
             align: 'stretch'
         },
+        stateId: 'grid-roles-manager',
         scalrOptions: {
             reload: false,
-            maximize: 'all'
+            maximize: 'all',
+            menuHref: '#/roles',
+            menuTitle: 'Roles',
+            menuFavorite: Scalr.scope === 'environment',
         },
-        tools: [{
-            xtype: 'favoritetool',
-            favorite: {
-                text: 'Roles',
-                href: '#/roles/manager'
-            }
-        }],
-        listeners: {
-            applyparams: reconfigurePage
-        },
+        cls: 'scalr-ui-roles-manager',
+        resetOn: 'roleId',
         items: [
-            grid,
-        {
+            grid
+        ,{
             xtype: 'container',
             itemId: 'rightcol',
-            flex: .6,
+            flex: .5,
             layout: 'fit',
             cls: 'x-transparent-mask',
             items: form
@@ -814,7 +682,7 @@ Scalr.regPage('Scalr.ui.roles.manager', function (loadParams, moduleParams) {
             weight: 1,
             dock: 'left',
             cls: 'x-docked-tabs',
-            width: 160,
+            width: 170,
             autoScroll: true,
             defaults: {
                 xtype: 'button',
@@ -825,9 +693,16 @@ Scalr.regPage('Scalr.ui.roles.manager', function (loadParams, moduleParams) {
                 toggleGroup: 'rolesmanager-tabs',
                 toggleHandler: function(btn, pressed) {
                     if (pressed) {
-                        rolesStore.updateParamsAndLoad({catId: btn.catId});
+                        rolesStore.applyProxyParams({catId: btn.catId});
                     }
                 }
+            },
+            setTab: function (catId) {
+                var me = this;
+
+                me.down('[catId=' + catId + ']').toggle(true);
+
+                return me;
             },
             resetTabs: function() {
                 this.items.each(function(){
@@ -843,13 +718,14 @@ Scalr.regPage('Scalr.ui.roles.manager', function (loadParams, moduleParams) {
 
 	Scalr.event.on('update', function (type, role) {
 		if (type == '/roles/edit') {
-            if (form) {
-                var record = form.getRecord();
-                if (record && record.get('id') == role['id']) {
-                    record.set(role);
-                    form.loadRoleInfo(record);
-                }
+            var record = rolesStore.getById(role.id);
+            if (Ext.isEmpty(record)) {
+                record = rolesStore.add(role)[0];
+            } else {
+                record.set(role);
+                grid.clearSelectedRecord();
             }
+            Ext.defer(function(){grid.view.focusRow(record)}, 100);
 		}
 	}, form);
 
@@ -885,7 +761,6 @@ Ext.define('Scalr.ui.RolesManagerFarmSelect', {
 
         me.add([{
             xtype: 'grid',
-            cls: 'x-grid-shadow',
             store: store,
 
             plugins: {
@@ -893,8 +768,7 @@ Ext.define('Scalr.ui.RolesManagerFarmSelect', {
             },
 
             viewConfig: {
-                focusedItemCls: 'no-focus',
-                emptyText: "No farms found",
+                emptyText: 'No farms found',
                 deferEmptyText: false,
                 loadingText: 'Loading farms ...'
             },

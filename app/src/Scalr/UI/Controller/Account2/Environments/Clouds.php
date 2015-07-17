@@ -14,6 +14,7 @@ use Scalr\Modules\Platforms\Openstack\OpenstackPlatformModule;
 use Scalr\Modules\Platforms\Rackspace\RackspacePlatformModule;
 use Scalr\Service\CloudStack\CloudStack;
 use Scalr\Service\CloudStack\DataType\ListAccountsData;
+use Scalr\System\Config\Yaml;
 
 class Scalr_UI_Controller_Account2_Environments_Clouds extends Scalr_UI_Controller
 {
@@ -183,6 +184,8 @@ class Scalr_UI_Controller_Account2_Environments_Clouds extends Scalr_UI_Controll
                     $params[Ec2PlatformModule::SECRET_KEY] = $this->env->getPlatformConfigValue(Ec2PlatformModule::SECRET_KEY) != '' ? '******' : '';
                     $params[Ec2PlatformModule::PRIVATE_KEY] = $this->env->getPlatformConfigValue(Ec2PlatformModule::PRIVATE_KEY) != '' ? 'Uploaded' : '';
                     $params[Ec2PlatformModule::CERTIFICATE] = $this->env->getPlatformConfigValue(Ec2PlatformModule::CERTIFICATE) != '' ? 'Uploaded' : '';
+                    $params[Ec2PlatformModule::DETAILED_BILLING_BUCKET] = $this->env->getPlatformConfigValue(Ec2PlatformModule::DETAILED_BILLING_BUCKET);
+                    $params[Ec2PlatformModule::DETAILED_BILLING_ENABLED] = $this->env->getPlatformConfigValue(Ec2PlatformModule::DETAILED_BILLING_ENABLED);
 
                     try {
                         if ($params[Ec2PlatformModule::ACCOUNT_TYPE] == Ec2PlatformModule::ACCOUNT_TYPE_CN_CLOUD)
@@ -217,6 +220,11 @@ class Scalr_UI_Controller_Account2_Environments_Clouds extends Scalr_UI_Controll
                 case SERVER_PLATFORMS::ECS:
                 case SERVER_PLATFORMS::OCS:
                 case SERVER_PLATFORMS::NEBULA:
+                case SERVER_PLATFORMS::MIRANTIS:
+                case SERVER_PLATFORMS::VIO:
+                case SERVER_PLATFORMS::VERIZON:
+                case SERVER_PLATFORMS::CISCO:
+                case SERVER_PLATFORMS::HPCLOUD:
                     $params = $this->getOpenStackDetails($platform);
                     break;
                 case SERVER_PLATFORMS::RACKSPACE:
@@ -281,7 +289,7 @@ class Scalr_UI_Controller_Account2_Environments_Clouds extends Scalr_UI_Controll
         $enabled = false;
         $envAutoEnabled = false;
 
-        $bNew = !$this->env->isPlatformEnabled('ec2');
+        $bNew = !$this->env->isPlatformEnabled(SERVER_PLATFORMS::EC2);
 
         if ($this->getParam('ec2_is_enabled')) {
             $enabled = true;
@@ -292,6 +300,11 @@ class Scalr_UI_Controller_Account2_Environments_Clouds extends Scalr_UI_Controll
             $pars[Ec2PlatformModule::PRIVATE_KEY] = trim($this->checkVar(Ec2PlatformModule::PRIVATE_KEY, 'file'));
             $pars[Ec2PlatformModule::CERTIFICATE] = trim($this->checkVar(Ec2PlatformModule::CERTIFICATE, 'file'));
 
+            if ($this->getContainer()->analytics->enabled) {
+                $pars[Ec2PlatformModule::DETAILED_BILLING_BUCKET]  = $this->getParam(Ec2PlatformModule::DETAILED_BILLING_BUCKET) ?: null;
+                $pars[Ec2PlatformModule::DETAILED_BILLING_ENABLED] = 0;
+            }
+
             // user can mull certificate and private key, check it
             if (strpos($pars[Ec2PlatformModule::PRIVATE_KEY], 'BEGIN CERTIFICATE') !== FALSE &&
                 strpos($pars[Ec2PlatformModule::CERTIFICATE], 'BEGIN PRIVATE KEY') !== FALSE) {
@@ -299,6 +312,14 @@ class Scalr_UI_Controller_Account2_Environments_Clouds extends Scalr_UI_Controll
                 $key = $pars[Ec2PlatformModule::PRIVATE_KEY];
                 $pars[Ec2PlatformModule::PRIVATE_KEY] = $pars[Ec2PlatformModule::CERTIFICATE];
                 $pars[Ec2PlatformModule::CERTIFICATE] = $key;
+            }
+
+            if ($pars[Ec2PlatformModule::ACCOUNT_TYPE] == Ec2PlatformModule::ACCOUNT_TYPE_GOV_CLOUD) {
+                $region = \Scalr\Service\Aws::REGION_US_GOV_WEST_1;
+            } else if ($pars[Ec2PlatformModule::ACCOUNT_TYPE] == Ec2PlatformModule::ACCOUNT_TYPE_CN_CLOUD) {
+                $region = \Scalr\Service\Aws::REGION_CN_NORTH_1;
+            } else {
+                $region = \Scalr\Service\Aws::REGION_US_EAST_1;
             }
 
             if (!count($this->checkVarError)) {
@@ -309,14 +330,6 @@ class Scalr_UI_Controller_Account2_Environments_Clouds extends Scalr_UI_Controll
                     $pars[Ec2PlatformModule::PRIVATE_KEY] != $this->env->getPlatformConfigValue(Ec2PlatformModule::PRIVATE_KEY) or
                     $pars[Ec2PlatformModule::CERTIFICATE] != $this->env->getPlatformConfigValue(Ec2PlatformModule::CERTIFICATE)
                 ) {
-
-                    if ($pars[Ec2PlatformModule::ACCOUNT_TYPE] == Ec2PlatformModule::ACCOUNT_TYPE_GOV_CLOUD)
-                        $region = \Scalr\Service\Aws::REGION_US_GOV_WEST_1;
-                    elseif ($pars[Ec2PlatformModule::ACCOUNT_TYPE] == Ec2PlatformModule::ACCOUNT_TYPE_CN_CLOUD)
-                        $region = \Scalr\Service\Aws::REGION_CN_NORTH_1;
-                    else
-                        $region = \Scalr\Service\Aws::REGION_US_EAST_1;
-
                     $aws = $this->env->aws(
                         $region,
                         $pars[Ec2PlatformModule::ACCESS_KEY],
@@ -328,7 +341,7 @@ class Scalr_UI_Controller_Account2_Environments_Clouds extends Scalr_UI_Controll
                     //Validates private key and certificate if they are provided
                     if (!empty($pars[Ec2PlatformModule::CERTIFICATE]) || !empty($pars[Ec2PlatformModule::PRIVATE_KEY])) {
                         try {
-                            //! SOAP is not supported anymore
+                            //SOAP is not supported anymore
                             //$aws->validateCertificateAndPrivateKey();
                         } catch (Exception $e) {
                             throw new Exception(_("Incorrect format of X.509 certificate or private key. Make sure that you are using files downloaded from AWS profile. ({$e->getMessage()})"));
@@ -360,6 +373,38 @@ class Scalr_UI_Controller_Account2_Environments_Clouds extends Scalr_UI_Controll
             }
         }
 
+        if ($enabled && $this->getContainer()->analytics->enabled && !empty($pars[Ec2PlatformModule::DETAILED_BILLING_BUCKET])) {
+            try {
+                $aws = $this->env->aws($region, $pars[Ec2PlatformModule::ACCESS_KEY], $pars[Ec2PlatformModule::SECRET_KEY]);
+
+                $bucketObjects = $aws->s3->bucket->listObjects($pars[Ec2PlatformModule::DETAILED_BILLING_BUCKET]);
+
+                $objectName = 'aws-billing-detailed-line-items-with-resources-and-tags';
+
+                $objectExists = false;
+
+                foreach ($bucketObjects as $bucketObject) {
+                    /* @var $bucketObject Scalr\Service\Aws\S3\DataType\ObjectData */
+                    if (strpos($bucketObject->objectName, $objectName) !== false) {
+                        $pars[Ec2PlatformModule::DETAILED_BILLING_ENABLED] = 1;
+                        $objectExists = true;
+                        break;
+                    }
+                }
+
+                if (!$objectExists) {
+                    $this->response->failure();
+                    $this->response->data(['errors' => [Ec2PlatformModule::DETAILED_BILLING_BUCKET => "Object with name 'aws-billing-detailed-line-items-with-resources-and-tags' does not exist."]]);
+                    return;
+                }
+            } catch (Exception $e) {
+                $this->response->failure();
+                $this->response->data(['errors' => [Ec2PlatformModule::DETAILED_BILLING_BUCKET => sprintf("Cannot access billing bucket with name %s.", $pars[Ec2PlatformModule::DETAILED_BILLING_BUCKET])]]);
+                return;
+            }
+
+        }
+
         $this->db->BeginTrans();
         try {
             $this->env->enablePlatform(SERVER_PLATFORMS::EC2, $enabled);
@@ -388,7 +433,7 @@ class Scalr_UI_Controller_Account2_Environments_Clouds extends Scalr_UI_Controll
             throw new Exception(_("Failed to save AWS settings: {$e->getMessage()}"));
         }
 
-
+        
 
         $this->response->success('Cloud credentials have been ' . ($enabled ? 'saved' : 'removed from Scalr'));
         $this->response->data(array('enabled' => $enabled, 'demoFarm' => $demoFarm, 'envAutoEnabled' => $envAutoEnabled));
@@ -409,10 +454,14 @@ class Scalr_UI_Controller_Account2_Environments_Clouds extends Scalr_UI_Controll
                 $pars[GoogleCEPlatformModule::JSON_KEY] = $this->checkVar2(GoogleCEPlatformModule::JSON_KEY, 'file', 'JSON key required', false, false, $isJsonKeySaved);
                 if (!count($this->checkVarError)) {
                     $jsonKey = json_decode($pars[GoogleCEPlatformModule::JSON_KEY], true);
-                    $jsonKey['private_key'] = str_replace(' PRIVATE KEY-----', ' RSA PRIVATE KEY-----', $jsonKey['private_key']);//see google-api-php-client-git-03102014/src/Google/Signer/P12.php line 46
+                    //see google-api-php-client-git-03162015/src/Google/Signer/P12.php line 46
+                    $jsonKey['private_key'] = str_replace(' PRIVATE KEY-----', ' RSA PRIVATE KEY-----', $jsonKey['private_key']);
                     $pars[GoogleCEPlatformModule::CLIENT_ID] = $jsonKey['client_id'];
                     $pars[GoogleCEPlatformModule::SERVICE_ACCOUNT_NAME] = $jsonKey['client_email'];
                     $pars[GoogleCEPlatformModule::KEY] = base64_encode($jsonKey['private_key']);
+
+                    // We need to reset access token when changing credentials
+                    $pars[GoogleCEPlatformModule::ACCESS_TOKEN] = "";
                 }
             } else {
                 //p12 key
@@ -420,6 +469,9 @@ class Scalr_UI_Controller_Account2_Environments_Clouds extends Scalr_UI_Controll
                 $pars[GoogleCEPlatformModule::SERVICE_ACCOUNT_NAME] = $this->checkVar2(GoogleCEPlatformModule::SERVICE_ACCOUNT_NAME, 'string', 'GCE email (service account name) required');
                 $pars[GoogleCEPlatformModule::KEY] = $this->checkVar2(GoogleCEPlatformModule::KEY, 'file', 'GCE Private Key required', false, true, !$isJsonKeySaved);
                 $pars[GoogleCEPlatformModule::JSON_KEY] = false;
+
+                // We need to reset access token when changing credentials
+                $pars[GoogleCEPlatformModule::ACCESS_TOKEN] = "";
             }
             if (! count($this->checkVarError)) {
                 if (
@@ -484,13 +536,13 @@ class Scalr_UI_Controller_Account2_Environments_Clouds extends Scalr_UI_Controll
         $params["{$platform}.is_enabled"] = true;
         $params[CloudstackPlatformModule::API_URL] = $this->env->getPlatformConfigValue("{$platform}." . CloudstackPlatformModule::API_URL);
         $params[CloudstackPlatformModule::API_KEY] = $this->env->getPlatformConfigValue("{$platform}." . CloudstackPlatformModule::API_KEY);
-        $params[CloudstackPlatformModule::SECRET_KEY] = $this->env->getPlatformConfigValue("{$platform}." . CloudstackPlatformModule::SECRET_KEY);
+        $params[CloudstackPlatformModule::SECRET_KEY] = $this->env->getPlatformConfigValue("{$platform}." . CloudstackPlatformModule::SECRET_KEY)  != '' ? '******' : '';
 
         try {
             $cs = new CloudStack(
                 $params[CloudstackPlatformModule::API_URL],
                 $params[CloudstackPlatformModule::API_KEY],
-                $params[CloudstackPlatformModule::SECRET_KEY],
+                $this->env->getPlatformConfigValue("{$platform}." . CloudstackPlatformModule::SECRET_KEY),
                 $platform
             );
 
@@ -517,7 +569,7 @@ class Scalr_UI_Controller_Account2_Environments_Clouds extends Scalr_UI_Controll
 
             $pars["{$platform}." . CloudstackPlatformModule::API_URL] = $this->checkVar(CloudstackPlatformModule::API_URL, 'string', 'API URL required');
             $pars["{$platform}." . CloudstackPlatformModule::API_KEY] = $this->checkVar(CloudstackPlatformModule::API_KEY, 'string', 'API key required');
-            $pars["{$platform}." . CloudstackPlatformModule::SECRET_KEY] = $this->checkVar(CloudstackPlatformModule::SECRET_KEY, 'string', 'Secret key required');
+            $pars["{$platform}." . CloudstackPlatformModule::SECRET_KEY] = $this->checkVar(CloudstackPlatformModule::SECRET_KEY, 'password', 'Secret key required', '', false, $platform);
         }
 
         if (count($this->checkVarError)) {
@@ -609,6 +661,18 @@ class Scalr_UI_Controller_Account2_Environments_Clouds extends Scalr_UI_Controll
 
         $params['features'] = array();
 
+        /* @var $config Yaml */
+        $config = $this->env->getContainer()->config;
+
+        if (isset($platform) &&
+            $config->defined("scalr.{$platform}.use_proxy") &&
+            $config("scalr.{$platform}.use_proxy") &&
+            in_array($config('scalr.connections.proxy.use_on'), ['both', 'scalr'])) {
+            $params['proxySettings'] = $config('scalr.connections.proxy');
+        } else {
+            $params['proxySettings'] = null;
+        }
+
         if ($params[OpenstackPlatformModule::KEYSTONE_URL]) {
 
             try {
@@ -620,7 +684,9 @@ class Scalr_UI_Controller_Account2_Environments_Clouds extends Scalr_UI_Controll
                         null, // Closure callback for token
                         null, // Auth token. We should be assured about it right now
                         $this->env->getPlatformConfigValue("{$platform}." . OpenstackPlatformModule::PASSWORD),
-                        $this->env->getPlatformConfigValue("{$platform}." . OpenstackPlatformModule::TENANT_NAME)
+                        $this->env->getPlatformConfigValue("{$platform}." . OpenstackPlatformModule::TENANT_NAME),
+                        null,
+                        $params['proxySettings']
                 ));
 
                 //$os->setDebug(true);
@@ -637,7 +703,9 @@ class Scalr_UI_Controller_Account2_Environments_Clouds extends Scalr_UI_Controll
                                 null, // Closure callback for token
                                 null, // Auth token. We should be assured about it right now
                                 $this->env->getPlatformConfigValue("{$platform}." . OpenstackPlatformModule::PASSWORD),
-                                $this->env->getPlatformConfigValue("{$platform}." . OpenstackPlatformModule::TENANT_NAME)
+                                $this->env->getPlatformConfigValue("{$platform}." . OpenstackPlatformModule::TENANT_NAME),
+                                null,
+                                $params['proxySettings']
                         ));
 
                         $params['features'][$cloudLocation] = array(
@@ -702,6 +770,8 @@ class Scalr_UI_Controller_Account2_Environments_Clouds extends Scalr_UI_Controll
             $pars[$this->getOpenStackOption('PASSWORD')] = $this->checkVar(OpenstackPlatformModule::PASSWORD, 'password', '', '', false, $platform);
             $pars[$this->getOpenStackOption('API_KEY')] = $this->checkVar(OpenstackPlatformModule::API_KEY, 'string');
 
+            $pars[$this->getOpenStackOption('IDENTITY_VERSION')] = OpenStackConfig::parseIdentityVersion($pars[$this->getOpenStackOption('KEYSTONE_URL')]);
+
             if ($platform == SERVER_PLATFORMS::ECS) {
                 $pars[$this->getOpenStackOption('TENANT_NAME')] = $this->checkVar(OpenstackPlatformModule::TENANT_NAME, 'password', '', '', false, $platform);
             } else {
@@ -713,6 +783,18 @@ class Scalr_UI_Controller_Account2_Environments_Clouds extends Scalr_UI_Controll
                 empty($pars[$this->getOpenStackOption('API_KEY')])) {
                 $this->checkVarError['api_key'] = $this->checkVarError['password'] = 'Either API Key or password must be provided.';
             }
+        }
+
+        /* @var $config Yaml */
+        $config = $this->env->getContainer()->config;
+
+        if (isset($platform) &&
+            $config->defined("scalr.{$platform}.use_proxy") &&
+            $config("scalr.{$platform}.use_proxy") &&
+            in_array($config('scalr.connections.proxy.use_on'), ['both', 'scalr'])) {
+            $pars['proxySettings'] = $config('scalr.connections.proxy');
+        } else {
+            $pars['proxySettings'] = null;
         }
 
         if (count($this->checkVarError)) {
@@ -728,7 +810,9 @@ class Scalr_UI_Controller_Account2_Environments_Clouds extends Scalr_UI_Controll
                     null, // Closure callback for token
                     null, // Auth token. We should be assured about it right now
                     $pars[$this->getOpenStackOption('PASSWORD')],
-                    $pars[$this->getOpenStackOption('TENANT_NAME')]
+                    $pars[$this->getOpenStackOption('TENANT_NAME')],
+                    $pars[$this->getOpenStackOption('IDENTITY_VERSION')],
+                    $pars['proxySettings']
                 ));
 
                 //It throws an exception on failure
@@ -743,7 +827,9 @@ class Scalr_UI_Controller_Account2_Environments_Clouds extends Scalr_UI_Controll
                     null, // Closure callback for token
                     null, // Auth token. We should be assured about it right now
                     $pars[$this->getOpenStackOption('PASSWORD')],
-                    $pars[$this->getOpenStackOption('TENANT_NAME')]
+                    $pars[$this->getOpenStackOption('TENANT_NAME')],
+                    $pars[$this->getOpenStackOption('IDENTITY_VERSION')],
+                    $pars['proxySettings']
                 ));
 
                 // Check SG Extension
@@ -798,7 +884,7 @@ class Scalr_UI_Controller_Account2_Environments_Clouds extends Scalr_UI_Controll
         $enabled = false;
         $locations = array('rs-ORD1', 'rs-LONx');
 
-        if (! $this->getEnvironment()->isPlatformEnabled(SERVER_PLATFORMS::RACKSPACE))
+        if (! $this->env->isPlatformEnabled(SERVER_PLATFORMS::RACKSPACE))
             throw new Scalr_Exception_Core('Rackspace cloud has been deprecated. Please use Rackspace Open Cloud instead.');
 
         foreach ($locations as $location) {

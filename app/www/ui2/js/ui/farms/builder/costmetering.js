@@ -1,36 +1,212 @@
 Ext.define('Scalr.ui.FarmBuilderFarmCostMetering', {
 	extend: 'Ext.form.FieldSet',
 	alias: 'widget.farmcostmetering',
-    
+
     cls: 'x-fieldset-separator-none',
 
+    setValue: function(value) {
+        var me = this,
+            farmCostMeteringData, seriesList, comp;
+        me['analyticsData'] = value;
+        farmCostMeteringData = me['analyticsData']['farmCostMetering'];
+        seriesList = farmCostMeteringData ? Ext.Object.getKeys(farmCostMeteringData['farmroles']) : [];
+
+        me.down('#ccName').setValue(me['analyticsData'] ? me['analyticsData']['costCenterName'] : null);
+        me.down('#totalCost').update({cost: farmCostMeteringData ? farmCostMeteringData['totals']['cost'] : ''});
+        me.down('#noCostData').setVisible(!farmCostMeteringData);
+
+        comp = me.down('#projectId');
+        comp.store.load({data: me['analyticsData']['projects']});
+        comp.findPlugin('comboaddnew').setDisabled(!Scalr.isAllowed('ADMINISTRATION_ANALYTICS', 'manage-projects') || me['analyticsData']['costCenterLocked'] == 1);
+
+        comp = me.down('#chartWrap');
+        comp.remove(comp.down('#chart'));
+        if (farmCostMeteringData) {
+            me.down('#noCostData').hide();
+            comp.items.first().show();
+            comp.items.insert(comp.items.length - 1, Ext.widget({
+                xtype: 'cartesian',
+                itemId: 'chart',
+                height: 140,
+                theme: 'scalr',
+                insetPadding: '10 4 10 10',
+                store: Ext.create('Ext.data.ArrayStore', {
+                    fields: Ext.Array.merge([{
+                       name: 'datetime',
+                       type: 'date',
+                       convert: function(v, record) {
+                           return Scalr.utils.Quarters.getDate(v, true);
+                       }
+                    }, 'xLabel', 'label', 'cost', {name: 'growth', defaultValue: null}, {name: 'growthPct', defaultValue: null}, 'extrainfo'], seriesList),
+                    data: me.prepareDataForChartStore()
+                }),
+                axes: [{
+                    type: 'numeric',
+                    position: 'left',
+                    fields: Ext.Array.merge(seriesList, ['cost']),
+                    renderer: function(value, layout){
+                        return value > 0 ? Ext.util.Format.currency(value, null, layout.majorTicks.to > 3 ? 0 : 2) : '';
+                    },
+                    majorTickSteps: 3
+                },{
+                    type: 'category',
+                    position: 'bottom',
+                    fields: ['xLabel'],
+                    renderer: function(label, layout) {
+                        var index = Ext.Array.indexOf(layout.data, label);
+                        return index === 0 || index === layout.data.length - 1 ? label : '';
+                    }
+                }],
+                series: [{
+                    type: 'bar',
+                    axis: 'bottom',
+                    xField: 'xLabel',
+                    yField: seriesList,
+                    stacked: true,
+                    renderer: function(sprite, config, rendererData, index){
+                        var color = '#' + Scalr.utils.getColorById(sprite.getField());
+                        return  {
+                            fillStyle: color,
+                            strokeStyle: color
+                        };
+                    },
+                    tooltip: {
+                        cls: 'x-tip-light',
+                        trackMouse: true,
+                        hideDelay: 0,
+                        showDelay: 0,
+                        tpl:
+                            '{[this.itemCost(values, false)]}' +
+                            '<div class="x-costmetering-hours">' +
+                                '<tpl foreach="hours">' +
+                                    '<div class="title">{$}</div>' +
+                                    '<table>' +
+                                        '<tr><th>Hours</th><th>Min</th><th>Avg</th><th>Max</th></tr>' +
+                                        '<tr><td>{[values.hours]}</td><td>{[values.min]}</td><td>{[values.avg]}</td><td>{[values.max]}</td></tr>' +
+                                    '</table>' +
+                                '</tpl>' +
+                            '</div>',
+                        renderer: function(record, item) {
+                            var info = record.get('extrainfo')[item.field];
+                            this.update({
+                                id: item.yField,
+                                name: farmCostMeteringData['farmroles'][item.field]['name'],
+                                label: record.get('xLabel'),
+                                cost: info['cost'],
+                                costPct: info['costPct'],
+                                interval: 'day',
+                                hours: info['hours'],
+                                color: Scalr.utils.getColorById(item.field)
+                            });
+                        }
+                    }
+
+                },{
+                    type: 'line',
+                    selectionTolerance: 8,
+                    skipWithinBoxCheck: true,
+                    shadowAttributes: [],
+                    axis: 'left',
+                    xField: 'xLabel',
+                    yField: 'cost',
+                    style: {
+                        strokeStyle: '#00468c'
+                    },
+                    highlight: {
+                        fillStyle: '#00468c',
+                        strokeStyle: '#00468c'
+                    },
+                    //smooth: true,
+                    marker: {
+                        type: 'circle',
+                        radius: 3,
+                        fill: '#00468c'
+                    },
+                    tips: {
+                        cls: 'x-tip-light',
+                        trackMouse: true,
+                        hideDelay: 0,
+                        showDelay: 0,
+                        tpl:
+                            '<div style="text-align:center"><b>{label}</b></div>' +
+                            '<div class="x-costmetering-farmroles">' +
+                                '<table>' +
+                                    '<tr>'+
+                                        '<th>Total spend</th>' +
+                                        '<th>{[this.currency2(values.cost)]}</th>' +
+                                        '<th><tpl if="growth">{[this.pctLabel(values.growth, values.growthPct, null, false, \'invert\', false)]}</tpl></th>' +
+                                    '</tr>' +
+                                    '<tpl foreach="farmroles">' +
+                                        '<tr>' +
+                                            '<td><span class="x-semibold" style="color:#{color}">&nbsp;{name}&nbsp;</span></td>' +
+                                            '<td>{[this.currency2(values.cost)]} {[values.costPct > 0 ? \'(\'+values.costPct+\'%)\' : \'\']}</td>' +
+                                            '<td><tpl if="growth!=0">{[this.pctLabel(values.growth, values.growthPct, null, false, \'invert\', false)]}</tpl></td>'+
+                                        '</tr>' +
+                                    '</tpl>' +
+                                '</table>' +
+                            '</div>',
+                        renderer: function(record, item) {
+                            var farmroles = [];
+                            Ext.Object.each(record.get('extrainfo'), function(key, value){
+                                if (value && value.cost > 0) {
+                                    var farmrole = {
+                                        id: key,
+                                        name: farmCostMeteringData['farmroles'][key]['name'],
+                                        color: Scalr.utils.getColorById(key)
+                                    };
+                                    farmroles.push(Ext.apply(farmrole, value));
+                                }
+                            });
+                            var farmRolesSorted = new Ext.util.MixedCollection();
+                            farmRolesSorted.addAll(farmroles);
+                            farmRolesSorted.sort('cost', 'DESC');
+                            this.update({
+                                id: item.yField,
+                                label: record.get('xLabel'),
+                                cost: record.get('cost'),
+                                growth: record.get('growth'),
+                                growthPct: record.get('growthPct'),
+                                farmroles: farmRolesSorted.getRange()
+                            });
+                        }
+                    }
+                }]
+            }));
+        } else {
+            comp.items.first().hide();
+            me.down('#noCostData').show();
+        }
+    },
     initComponent: function() {
         var me = this,
-            data = me['analyticsData'],
-            farmCostMeteringData,
-            seriesList,
             items = [];
-        me.callParent();
+        me.callParent(arguments);
         if (Scalr.flags['analyticsEnabled']) {
-            farmCostMeteringData = data['farmCostMetering'];
-            seriesList = farmCostMeteringData ? Ext.Object.getKeys(farmCostMeteringData['farmroles']) : [];
-            me.setColorMap();
-            
             items.push({
                 xtype: 'container',
                 layout: 'hbox',
                 items: [{
                     xtype: 'combo',
                     store: {
-                        fields: [ 'projectId', 'name', 'budgetRemain', {name: 'description', convert: function(v, record) {
-                            return record.data.name + '  (' + (record.data.budgetRemain === null ? 'budget is not set' : 'Budget remain ' + Ext.util.Format.currency(record.data.budgetRemain)) + ')';
+                        fields: [ 'projectId', 'name', {name: 'budgetRemain', defaultValue: null}, {name: 'description', convert: function(v, record) {
+                            return record.data.name + '  (' + (record.data.budgetRemain === null ? 'budget is not set' : 'Remaining budget ' + Ext.util.Format.currency(record.data.budgetRemain)) + ')';
                         }} ],
-                        data: data ? data['projects'] : []
+                        proxy: 'object',
+                        sorters: [{
+                            property: 'name',
+                            transform: function(value){
+                                return value.toLowerCase();
+                            }
+                        }]
                     },
                     flex: 1,
-                    maxWidth: 370,
-                    editable: false,
+                    maxWidth: 580,
+                    editable: true,
+                    selectOnFocus: true,
+                    restoreValueOnBlur: true,
                     autoSetSingleValue: true,
+                    queryMode: 'local',
+                    anyMatch: true,
                     valueField: 'projectId',
                     displayField: 'description',
                     fieldLabel: 'Project',
@@ -40,24 +216,25 @@ Ext.define('Scalr.ui.FarmBuilderFarmCostMetering', {
                     plugins: [{
                         ptype: 'comboaddnew',
                         pluginId: 'comboaddnew',
-                        url: '/analytics/account/projects/add',
-                        disabled: !Scalr.isAllowed('ADMINISTRATION_ANALYTICS', 'manage-projects') || data['costCenterLocked'] == 1
+                        url: '/analytics/projects/add'
                     }],
                     listConfig: {
                         cls: 'x-boundlist-alt',
                         tpl:
                             '<tpl for=".">' +
                                 '<div class="x-boundlist-item" style="height: auto; width: auto; max-width: 900px;">' +
-                                    '<div><span style="font-weight: bold">{name}</span>' +
-                                        '&nbsp;&nbsp;<span style="color: #666; font-size: 11px;"><tpl if="budgetRemain!==null">Budget remain {[this.currency2(values.budgetRemain)]}<tpl else><i>Budget is not set</i></tpl></span>' +
+                                    '<div><span class="x-semibold">{name}</span>' +
+                                        '&nbsp;&nbsp;<span style="font-size: 11px;"><tpl if="budgetRemain!==null">Remaining budget {[this.currency2(values.budgetRemain)]}<tpl else><i>Budget is not set</i></tpl></span>' +
                                     '</div>' +
                                 '</div>' +
                             '</tpl>'
                     },
                 },{
                     xtype: 'displayfield',
+                    itemId: 'ccName',
+                    isFormField: false,
+                    hidden: true,
                     fieldLabel: 'Cost center',
-                    value: data ? data['costCenterName'] : null,
                     margin: '0 0 0 24',
                     labelWidth: 90
                 }]
@@ -67,6 +244,7 @@ Ext.define('Scalr.ui.FarmBuilderFarmCostMetering', {
                 xtype: 'displayfield',
                 itemId: 'unsupportedRoles',
                 hidden: true,
+                isFormField: false,
                 anchor: '100%',
                 maxWidth: 600,
                 margin: '12 0',
@@ -75,275 +253,75 @@ Ext.define('Scalr.ui.FarmBuilderFarmCostMetering', {
                 xtype: 'container',
                 flex: 1,
                 layout: 'hbox',
+                maxWidth: 580,
                 items: [{
                     xtype: 'container',
                     width: 180,
-                    margin: '18 0 0',
+                    margin: '22 28 12 0',
+                    itemId: 'currentRateWrapper',
                     items: [{
-                        xtype: 'component',
-                        html: '<label>Current spend rate</label>'
-                    },{
-                        xtype: 'chart',
-                        margin: '10 0 0 0',
-                        itemId: 'currentRateChart',
-                        width: 180,
-                        height: 100,
-                        store: Ext.create('Ext.data.ArrayStore', {
-                            fields: ['value']
-                        }),
-                        maxValue: 3,
-                        minLabelValue: 1,
-                        maxLabelValue: 2,
-                        insetPadding: 20,
-                        //insetPaddingTop: 20,
-                        axes: [{
-                            type: 'gaugeminmax',
-                            position: 'gauge',
-                            margin: 8
-                        }],
-                        series: [{
-                            type: 'gauge',
-                            field: 'value',
-                            donut: 75,
-                            colorSet: ['#F49D10', '#ddd']
-                        }]
+                        xtype: 'label',
+                        cls: 'x-form-item-label-default',
+                        text: 'Current spend rate'
                     },{
                         xtype: 'component',
                         itemId: 'currentRate',
-                        style: 'text-align:center',
-                        margin: '-50 0 0',
-                        tpl: '<div style="font-weight:bold;font-size:130%" data-qtip="{[this.currency2(values.hourlyRate)]} per hour">{[this.currency2(values.dailyRate, true)]}</div>per day'
+                        style: 'text-align:center;z-index:7',
+                        margin: '-74 0 8',
+                        tpl: '<div class="x-semibold" style="font-size:130%" data-qtip="{[this.currency2(values.hourlyRate)]} per hour">{[this.currency2(values.dailyRate, true)]}</div>per day'
                     },{
                         xtype: 'component',
                         itemId: 'minMaxRate',
-                        margin: '26 0 0',
-                        style: 'text-align:center;color:#444444',
+                        style: 'text-align:center',
                         tpl: 'min:&nbsp;<span data-qtip="{[this.currency2(values.min.hourlyRate)]} per hour">{[this.currency2(values.min.dailyRate)]}</span>, &nbsp;'+
                              'max:&nbsp;<span data-qtip="{[this.currency2(values.max.hourlyRate)]} per hour">{[this.currency2(values.max.dailyRate)]}</span>'
                     }]
                 },{
                     xtype: 'container',
                     flex: 1,
-                    margin: '18 0 0 28',
-                    maxWidth: 400,
+                    margin: '18 0 0 0',
                     layout: {
                         type: 'vbox',
                         align: 'stretch'
                     },
+                    itemId: 'chartWrap',
                     items: [{
                         xtype: 'container',
+                        hidden: true,
                         layout: 'hbox',
                         items: [{
-                            xtype: 'component',
-                            html: '<label>Last 7 days</label>'
+                            xtype: 'label',
+                            cls: 'x-form-item-label-default',
+                            text: 'Last 7 days'
                         },{
                             xtype: 'component',
+                            itemId: 'totalCost',
                             flex: 1,
-                            style: 'text-align:right;font-weight:bold;font-size:130%;margin-right:10px',
-                            tpl: '{[values.cost?this.currency2(values.cost, true):\'\']}',
-                            data: {cost: farmCostMeteringData ? farmCostMeteringData['totals']['cost'] : ''}
+                            cls: 'x-semibold',
+                            style: 'text-align:right;font-size:130%',
+                            tpl: '{[values.cost?this.currency2(values.cost, true):\'\']}'
                         }]
-                    },farmCostMeteringData ? {
-                        xtype: 'chart',
-                        itemId: 'chart',
-                        height: 140,
-                        insetPaddingTop: 18,
-                        store: Ext.create('Ext.data.ArrayStore', {
-                            fields: Ext.Array.merge([{
-                               name: 'datetime',
-                               type: 'date',
-                               convert: function(v, record) {
-                                   return Scalr.utils.Quarters.getDate(v, true);
-                               }
-                            }, 'xLabel', 'label', 'cost', 'growth', 'growthPct', 'extrainfo'], seriesList),
-                            data: me.prepareDataForChartStore()
-                        }),
-                        axes: [{
-                            type: 'Numeric',
-                            position: 'left',
-                            fields: seriesList,
-                            label: {
-                                renderer: function(value){return value > 0 ? Ext.util.Format.currency(value, null, value >= 5 ? 0 : 2) : 0}
-                            },
-                            style : {
-                                stroke : 'red'
-                            },
-                            minimum: 0,
-                            majorTickSteps: 3
-                        },{
-                            type: 'Category',
-                            position: 'bottom',
-                            dateFormat: 'M d',
-                            fields: ['xLabel']
-                        }],
-                        series: [{
-                            type: 'column',
-                            shadowAttributes: [],
-                            axis: 'bottom',
-                            gutter: 80,
-                            xField: 'xLabel',
-                            yField: seriesList,
-                            stacked: true,
-                            xPadding: 0,
-                            renderer: function(sprite, record, attr, index, store){
-                                var yField = sprite.surface.owner.series.getAt(0).yField,
-                                    name = yField[index%yField.length];
-                                Ext.apply(attr, {fill: '#' + me.getItemColor(name)});
-                                return attr;
-                            },
-                            tips: {
-                                cls: 'x-tip-light',
-                                trackMouse: true,
-                                hideDelay: 0,
-                                showDelay: 0,
-                                tpl:
-                                    '{[this.itemCost(values, false)]}' +
-                                    '<div class="scalr-ui-costmetering-hours">' +
-                                        '<tpl foreach="hours">' +
-                                            '<div class="title">{$}</div>' +
-                                            '<table>' +
-                                                '<tr><th>Hours</th><th>Min</th><th>Avg</th><th>Max</th></tr>' +
-                                                '<tr><td>{[values.hours]}</td><td>{[values.min]}</td><td>{[values.avg]}</td><td>{[values.max]}</td></tr>' +
-                                            '</table>' +
-                                        '</tpl>' +
-                                    '</div>',
-                                renderer: function(record, item) {
-                                    var info = record.get('extrainfo')[item.yField];
-                                    this.update({
-                                        id: item.yField,
-                                        name: farmCostMeteringData['farmroles'][item.yField]['name'],
-                                        label: record.get('xLabel'),
-                                        cost: info['cost'],
-                                        costPct: info['costPct'],
-                                        interval: 'day',
-                                        hours: info['hours'],
-                                        color: me.getItemColor(item.yField)
-                                    });
-                                }
-                            }
-
-                        },{
-                            type: 'line',
-                            selectionTolerance: 8,
-                            skipWithinBoxCheck: true,
-                            shadowAttributes: [],
-                            axis: 'left',
-                            xField: 'xLabel',
-                            yField: 'cost',
-                            //showMarkers: false,
-                            style: {
-                                radius: 4,
-                                stroke: '#00468c',
-                                opacity: 0.7,
-                                'stroke-width': 2
-                            },
-                            highlight: {
-                                radius: 4,
-                                fill: '#00468c',
-                                'stroke-width': 0
-                            },
-                            highlightLine: false,
-                            //smooth: true,
-                            markerConfig: {
-                                type: 'circle',
-                                radius: 3,
-                                fill: '#00468c',
-                                'stroke-width': 0,
-                                //cursor: 'pointer'
-                            },
-                            tips: {
-                                cls: 'x-tip-light',
-                                trackMouse: true,
-                                hideDelay: 0,
-                                showDelay: 0,
-                                tpl:
-                                    '<div style="text-align:center"><b>{label}</b></div>' +
-                                    '<div class="scalr-ui-costmetering-farmroles">' +
-                                        '<table>' +
-                                            '<tr>'+
-                                                '<th>Total spend</th>' +
-                                                '<th>{[this.currency2(values.cost)]}</th>' +
-                                                '<th><tpl if="growth!=0">{[this.pctLabel(values.growth, values.growthPct, null, false, \'invert\', false)]}</tpl></th>' +
-                                            '</tr>' +
-                                            '<tpl foreach="farmroles">' +
-                                                '<tr>' + 
-                                                    '<td><span style="font-weight:bold;color:#{color}">&nbsp;{name}&nbsp;</span></td>' +
-                                                    '<td>{[this.currency2(values.cost)]} {[values.costPct > 0 ? \'(\'+values.costPct+\'%)\' : \'\']}</td>' +
-                                                    '<td><tpl if="growth!=0">{[this.pctLabel(values.growth, values.growthPct, null, false, \'invert\', false)]}</tpl></td>'+
-                                                '</tr>' +
-                                            '</tpl>' +
-                                        '</table>' +
-                                    '</div>',
-                                renderer: function(record, item) {
-                                    var farmroles = [];
-                                    Ext.Object.each(record.get('extrainfo'), function(key, value){
-                                        if (value && value.cost > 0) {
-                                            var farmrole = {
-                                                id: key,
-                                                name: farmCostMeteringData['farmroles'][key]['name'],
-                                                color: me.getItemColor(key)
-                                            };
-                                            farmroles.push(Ext.apply(farmrole, value));
-                                        }
-                                    });
-                                    var farmRolesSorted = new Ext.util.MixedCollection();
-                                    farmRolesSorted.addAll(farmroles);
-                                    farmRolesSorted.sort('cost', 'DESC');
-                                    this.update({
-                                        id: item.yField,
-                                        label: record.get('xLabel'),
-                                        cost: record.get('cost'),
-                                        growth: record.get('growth'),
-                                        growthPct: record.get('growthPct'),
-                                        farmroles: farmRolesSorted.getRange()
-                                    });
-                                }
-                            }
-                        }]
-
-                    } : {
+                    },{
                         xtype: 'component',
+                        itemId: 'noCostData',
                         style: 'text-align:center;font-style:italic',
-                        margin: '48 0',
-                        html: 'No cost data'
+                        margin: '58 0',
+                        html: ''// 'No cost data'
                     }]
 
                 }]
             });
-        } else {
-            
         }
         me.add(items);
     },
 
-    setColorMap: function() {
-        var me = this,
-            data = me['analyticsData']['farmCostMetering'],
-            i = 0;
-        me.colorMap = {};
-        if (data) {
-            Ext.Object.each(data['farmroles'], function(key, value){
-                me.colorMap[key] = Scalr.utils.getColorById(i++, 'farms');
-            });
-        }
-    },
-
-    getItemColor: function(id) {
-        var colorMap = this.colorMap;
-        if (colorMap && colorMap[id] !== undefined) {
-            return colorMap[id];
-        } else {
-            return '000000';
-        }
-    },
-    
     prepareDataForChartStore: function() {
         var me = this,
             data = me['analyticsData']['farmCostMetering'],
             res = [];
         Ext.Array.each(data['timeline'], function(item, index){
             //datetime, onchart, label, cost, extrainfo, events, series1data, series2data....
-            var row = [item.datetime, item.onchart, item.label, item.cost, item.growth, item.growthPct, {}];
+            var row = [item.datetime, item.onchart || index, item.label, item.cost, item.growth, item.growthPct, {}];
             Ext.Object.each(data['farmroles'], function(key, value){
                 row[6][key] = value['data'][index];
                 row.push(value['data'][index] ? value['data'][index]['cost'] : undefined);
@@ -352,26 +330,51 @@ Ext.define('Scalr.ui.FarmBuilderFarmCostMetering', {
         });
         return res;
     },
-    
+
     getProjectId: function() {
         var f = this.down('#projectId');
         return f ? f.getValue() : '';
     },
-    
-    refresh: function() {
+
+    refresh: function(farmRoles) {
+        if (!Scalr.flags['analyticsEnabled']) return;
         var me = this,
             minInst = {hourlyRate: 0, dailyRate: 0, count: 0},
             maxInst = {hourlyRate: 0, dailyRate: 0, count: 0},
             runInst = {hourlyRate: 0, dailyRate: 0, count: 0},
             unsupportedRolesField = me.down('#unsupportedRoles'),
-            unsupportedRoles = [];
-        (this.farmRolesStore.snapshot || this.farmRolesStore.data).each(function(role){
-            var hourlyRate = role.get('hourly_rate'),
-                settings = role.get('settings', true),
-                runInstCount = role.get('running_servers'),
-                minInstCount = settings['scaling.min_instances'],
+            unsupportedRoles = [],
+            farmRolesCollection;
+        if (farmRoles) {
+            farmRolesCollection = new Ext.util.MixedCollection();
+            farmRolesCollection.addAll(farmRoles);
+        } else {
+            farmRolesCollection = this.up('#farmDesigner').moduleParams.tabParams.farmRolesStore.getUnfiltered();
+        }
+        farmRolesCollection.each(function(role){
+            var hourlyRate,
+                settings,
+                runInstCount,
+                minInstCount,
+                maxInstCount,
+                platform,
+                alias;
+            if (role.isModel) {
+                hourlyRate = role.get('hourly_rate');
+                settings = role.get('settings', true);
+                runInstCount = role.get('running_servers');
+                minInstCount = settings['scaling.min_instances'];
                 maxInstCount = settings['scaling.max_instances'];
-                
+                platform = role.data.platform;
+                alias = role.data.alias;
+            } else {
+                hourlyRate = role['hourly_rate'];
+                runInstCount = role['running_servers'];
+                minInstCount = role['scaling.min_instances'];
+                maxInstCount = role['scaling.max_instances'];
+                platform = role['platfor'];
+                alias = role['alias'];
+            }
             minInst['count'] += minInstCount*1;
             minInst['hourlyRate'] += Ext.isNumeric(hourlyRate) ? Ext.util.Format.round(hourlyRate*minInstCount, 2) : 0;
             minInst['dailyRate'] += Ext.isNumeric(hourlyRate) ? Ext.util.Format.round(hourlyRate*minInstCount*24, 2) : 0;
@@ -383,20 +386,61 @@ Ext.define('Scalr.ui.FarmBuilderFarmCostMetering', {
             runInst['count'] += runInstCount*1;
             runInst['hourlyRate'] += Ext.isNumeric(hourlyRate) ? Ext.util.Format.round(hourlyRate*runInstCount, 2) : 0;
             runInst['dailyRate'] += Ext.isNumeric(hourlyRate) ? Ext.util.Format.round(hourlyRate*runInstCount*24, 2) : 0;
-            if (Ext.Array.contains(me['analyticsData']['unsupportedClouds'], role.data.platform)) {
-                unsupportedRoles.push(role.data.alias);
+            if (Ext.Array.contains(me['analyticsData']['unsupportedClouds'], platform)) {
+                unsupportedRoles.push(alias);
             }
         });
+
+
+        var chartWrapper = this.down('#currentRateWrapper');
+        //chartWrapper.setVisible(farmRoles.length > 0);
         var chart = this.down('#currentRateChart');
+        if (chart) {
+            chartWrapper.remove(chart);
+        }
+        chart = chartWrapper.insert(1, {
+            xtype: 'polar',
+            theme: 'scalr',
+            itemId: 'currentRateChart',
+            height: 140,
+            insetPaddding: 0,
+            store: Ext.create('Ext.data.ArrayStore', {
+                fields: ['value']
+            }),
+            axes: [{
+                type: 'numeric',
+                position: 'gauge',
+                hidden: true
+            }],
+            series: [{
+                type: 'gauge',
+                field: 'value',
+                donut: 80,
+                totalAngle: Math.PI,
+                needleLength: 100,
+                colors: ['#F49D10', '#ddd']
+            }]
+        });
         chart.maxValue = Math.max(maxInst['dailyRate'], runInst['dailyRate']);
         if (chart.maxValue) {
             chart.minLabelValue = minInst['dailyRate'];
             chart.maxLabelValue = maxInst['dailyRate'];
         } else {
-            chart.maxValue = 3
+            chart.maxValue = 3;
             chart.minLabelValue = 1;
             chart.maxLabelValue = 2;
         }
+        Ext.apply(chart.getAxes()[0], {
+            customLabels: [{
+                value: chart.minLabelValue,
+                text: 'min'
+            },{
+                value: chart.maxLabelValue,
+                text: 'max'
+            }],
+            maxValue: chart.maxValue
+        });
+
         chart.store.loadData([[chart.maxValue > 0 ? runInst['dailyRate']*100/chart.maxValue : 0]]);
 
         this.down('#currentRate').update(runInst);
@@ -410,144 +454,13 @@ Ext.define('Scalr.ui.FarmBuilderFarmCostMetering', {
     }
 });
 
-Ext.define('Ext.chart.axis.GaugeMinMax', {
-    extend: 'Ext.chart.axis.Gauge',
-    alias: 'axis.gaugeminmax',
-    steps: 2,
-    minimum: 0,
-    maximum: 100,
-
-    drawLabel: function() {
-        var me = this,
-            chart = me.chart,
-            surface = chart.surface,
-            bbox = chart.chartBBox,
-            centerX = bbox.x + (bbox.width / 2),
-            centerY = bbox.y + bbox.height,
-            margin = me.margin || 10,
-            rho = Math.min(bbox.width, 2 * bbox.height) /2 + 2 * margin,
-            labelArray = [], label,
-            maxValue = chart.maxValue,
-            minLabelValue = chart.minLabelValue,
-            maxLabelValue = chart.maxLabelValue,
-            pi = Math.PI,
-            cos = Math.cos,
-            sin = Math.sin,
-            reverse = me.reverse,
-            labels = ['min', 'max'],
-            visibleLabels,
-            labelCfg = {
-                type: 'text',
-                'text-anchor': 'middle',
-                'stroke-width': 0.2,
-                zIndex: 10,
-                stroke: '#333'
-            };
-        if (maxLabelValue / maxValue - minLabelValue / maxValue < .1) {
-            visibleLabels = ['max'];
-        } else {
-            visibleLabels = ['min', 'max'];
-        }
-        if (!this.labelArray) {
-            Ext.each(labels, function(label){
-                var labelValue = label === 'min' ? minLabelValue : maxLabelValue;
-                label = surface.add(Ext.apply({
-                    text: label,
-                    x: centerX + rho * cos(labelValue / maxValue * pi - pi),
-                    y: centerY + rho * sin(labelValue / maxValue * pi - pi)
-                }, labelCfg));
-                label.setAttributes({
-                    hidden: !Ext.Array.contains(visibleLabels, label)
-                }, true);
-                labelArray.push(label);
-            });
-        }
-        else {
-            labelArray = this.labelArray;
-            Ext.each(labels, function(label, i){
-                var labelValue = label === 'min' ? minLabelValue : maxLabelValue;
-                labelArray[i].setAttributes({
-                    hidden: !Ext.Array.contains(visibleLabels, label),
-                    text: label,
-                    x: centerX + rho * cos(labelValue / maxValue * pi - pi),
-                    y: centerY + rho * sin(labelValue / maxValue * pi - pi)
-                }, true);
-            });
-        }
-        this.labelArray = labelArray;
-    },
-
-    drawAxis: function(init) {
-        var chart = this.chart,
-            surface = chart.surface,
-            bbox = chart.chartBBox,
-            centerX = bbox.x + (bbox.width / 2),
-            centerY = bbox.y + bbox.height,
-            margin = this.margin || 10,
-            rho = Math.min(bbox.width, 2 * bbox.height) /2 + margin,
-            sprites = [], sprite,
-            steps = this.steps,
-            i, pi = Math.PI,
-            cos = Math.cos,
-            sin = Math.sin,
-            maxValue = chart.maxValue,
-            minLabelValue = chart.minLabelValue,
-            maxLabelValue = chart.maxLabelValue;
-
-        if (this.margin >= 0) {
-            if (!this.sprites) {
-                //draw circles
-                Ext.each(['min', 'max'], function(label){
-                    var labelValue = label === 'min' ? minLabelValue : maxLabelValue;
-                    sprite = surface.add({
-                        type: 'path',
-                        path: ['M', centerX + (rho - margin) * cos(labelValue / maxValue * pi - pi),
-                                    centerY + (rho - margin) * sin(labelValue / maxValue * pi - pi),
-                                    'L', centerX + rho * cos(labelValue / maxValue * pi - pi),
-                                    centerY + rho * sin(labelValue / maxValue * pi - pi), 'Z'],
-                        stroke: '#ccc'
-                    });
-                    
-                    sprite.setAttributes({
-                        hidden: false
-                    }, true);
-                    sprites.push(sprite);
-                });
-            } else {
-                sprites = this.sprites;
-                //draw circles
-                Ext.each(['min', 'max'], function(label, i){
-                    var labelValue = label === 'min' ? minLabelValue : maxLabelValue;
-                    sprites[i].setAttributes({
-                        path: ['M', centerX + (rho - margin) * cos(labelValue / maxValue * pi - pi),
-                                    centerY + (rho - margin) * sin(labelValue / maxValue * pi - pi),
-                                    'L', centerX + rho * cos(labelValue / maxValue * pi - pi),
-                                    centerY + rho * sin(labelValue / maxValue * pi - pi), 'Z'],
-                        stroke: '#ccc'
-                    }, true);
-                });
-            }
-        }
-
-        this.sprites = sprites;
-        this.drawLabel();
-        if (this.title) {
-            this.drawTitle();
-        }
-    }
-
-});
 
 Ext.define('Scalr.ui.FarmBuilderRoleCostMetering', {
 	extend: 'Ext.container.Container',
 	alias: 'widget.farmrolecostmetering',
 
-    cls: 'x-container-fieldset',
-
     initComponent: function() {
         var me = this,
-            //data = me['analyticsData'],
-            //farmCostMeteringData = data['farmCostMetering'],
             items = [];
         me.callParent();
         items.push({
@@ -559,69 +472,127 @@ Ext.define('Scalr.ui.FarmBuilderRoleCostMetering', {
             xtype: 'container',
             anchor: '100%',
             layout: 'hbox',
-            items: [{
-                xtype: 'textfield',
-                fieldLabel: 'Min&nbsp;instances',
-                labelWidth: 90,
-                width: 132,
+            defaults: {
+                xtype: 'container',
+                width: 147,
                 margin: '0 18 0 0',
-                name: 'min_instances',
-                hideOnDisabled: true,
-                listeners: {
-                    change: function(comp, value) {
-                        comp.up('#maintab').onParamChange(comp.name, value);
-                        if (Scalr.flags['analyticsEnabled']) {
-                            this.up('#costmetering').updateRates();
-                        }
-                    }
-                }
-            },{
-                xtype: 'textfield',
-                fieldLabel: 'Max&nbsp;instances',
-                labelWidth: 90,
-                width: 132,
-                margin: '0 18 0 0',
-                name: 'max_instances',
-                hideOnDisabled: true,
-                listeners: {
-                    change: function(comp, value) {
-                        comp.up('#maintab').onParamChange(comp.name, value);
-                        if (Scalr.flags['analyticsEnabled']) {
-                            this.up('#costmetering').updateRates();
-                        }
-
-                    }
-                }
-            },{
-                xtype: 'displayfield',
-                fieldLabel: 'Running&nbsp;instances',
-                labelWidth: 110,
-                value: 0,
-                name: 'running_servers',
-                renderer: function(value) {
-                    var html, tip;
-                    if (value.suspended_servers > 0) {
-                        tip = 'Running servers: <span style="color:#00CC00; cursor:pointer;">' + (value.running_servers || 0) + '</span>' +
-                              (value.suspended_servers > 0 ? '<br/>' + (value['base.consider_suspended'] === 'running' ? 'Including' : 'Not including') + ' <span style="color:#4DA6FF;">' + value.suspended_servers + '</span> Suspended server(s)' : '');
-                    }
-                    html = '<span data-anchor="right" data-qalign="r-l" data-qtip="' + (tip ? Ext.String.htmlEncode(tip) : '') + '" data-qwidth="270">' +
-                           '<span style="color:#00CC00; cursor:pointer;">' + (value.running_servers || 0) + '</span>' +
-                           (value.suspended_servers > 0 ? ' (<span style="color:#4DA6FF;">' + (value.suspended_servers || 0) + '</span>)' : '')+
-                            '</span>';
-                    return value.running_servers > 0 ? '<a href="#">' + html + '</a>' : html;
+                layout: {
+                    type: 'vbox',
+                    align: 'middle'
                 },
-                listeners: {
-                    boxready: function() {
-                        this.inputEl.on('click', function(e) {
-                            var link = document.location.href.split('#'),
-                                farmRoleId = this.up('#maintab').currentRole.get('farm_role_id');
-                            if (farmRoleId) {
-                                window.open(link[0] + '#/servers/view?farmId=' + tabParams['farmId'] + '&farmRoleId=' + farmRoleId);
+            },
+            items: [{
+                items: [{
+                    xtype: 'label',
+                    cls: 'x-form-item-label-default',
+                    hideOnMinify: true,
+                    anchor: '100%',
+                    html: 'Min&nbsp;instances'
+                },{
+                    xtype: 'fieldcontainer',
+                    layout: 'fit',
+                    _fieldLabel: 'Min&nbsp;instances',
+                    labelWidth: 105,
+                    width: 42,
+                    showLabelOnMinify: true,
+                    items: [{
+                        xtype: 'textfield',
+                        name: 'min_instances',
+                        fieldStyle: 'text-align:center',
+                        hideOnDisabled: true,
+                        listeners: {
+                            change: function(comp, value) {
+                                comp.up('#maintab').onParamChange(comp.name, value);
+                                if (Scalr.flags['analyticsEnabled']) {
+                                    this.up('#costmetering').updateRates();
+                                }
                             }
-                            e.preventDefault();
-                        }, this);
+                        }
+                    },{
+                        xtype: 'component',
+                        hidden: true,
+                        showOnDisabled: true,
+                        style: 'text-align:center;margin-top:5px',
+                        html: 'N/A'
+                    }]
+                }]
+            },{
+                items: [{
+                    xtype: 'label',
+                    cls: 'x-form-item-label-default',
+                    hideOnMinify: true,
+                    anchor: '100%',
+                    html: 'Max&nbsp;instances'
+                },{
+                    xtype: 'fieldcontainer',
+                    layout: 'fit',
+                    _fieldLabel: 'Max&nbsp;instances',
+                    labelWidth: 105,
+                    width: 42,
+                    showLabelOnMinify: true,
+                    items: [{
+                        xtype: 'textfield',
+                        name: 'max_instances',
+                        fieldStyle: 'text-align:center',
+                        hideOnDisabled: true,
+                        listeners: {
+                            change: function(comp, value) {
+                                comp.up('#maintab').onParamChange(comp.name, value);
+                                if (Scalr.flags['analyticsEnabled']) {
+                                    this.up('#costmetering').updateRates();
+                                }
+                            }
+                        }
+                    },{
+                        xtype: 'component',
+                        hidden: true,
+                        showOnDisabled: true,
+                        style: 'text-align:center;margin-top:5px',
+                        html: 'N/A'
+                    }]
+                }]
+            },{
+                margin: 0,
+                items: [{
+                    xtype: 'label',
+                    cls: 'x-form-item-label-default',
+                    hideOnMinify: true,
+                    anchor: '100%',
+                    html: 'Running&nbsp;instances'
+                },{
+                    xtype: 'displayfield',
+                    _fieldLabel: 'Running&nbsp;instances',
+                    labelWidth: 130,
+                    value: 0,
+                    name: 'running_servers',
+                    fieldStyle: 'text-align:center',
+                    showLabelOnMinify: true,
+                    renderer: function(value) {
+                        var html, tip;
+                        if (value.suspended_servers > 0) {
+                            tip = 'Running servers: <span style="color:#00CC00; cursor:pointer;">' + (value.running_servers || 0) + '</span>' +
+                                  (value.suspended_servers > 0 ? '<br/>' + (value['base.consider_suspended'] === 'running' ? 'Including' : 'Not including') + ' <span style="color:#4DA6FF;">' + value.suspended_servers + '</span> Suspended server(s)' : '');
+                        }
+                        html = '<span data-anchor="right" data-qalign="r-l" data-qtip="' + (tip ? Ext.String.htmlEncode(tip) : '') + '" data-qwidth="270">' +
+                               '<span style="color:#00CC00; cursor:pointer;">' + (value.running_servers || 0) + '</span>' +
+                               (value.suspended_servers > 0 ? ' (<span style="color:#4DA6FF;">' + (value.suspended_servers || 0) + '</span>)' : '')+
+                                '</span>';
+                        return value.running_servers > 0 ? '<a href="#">' + html + '</a>' : html;
+                    },
+                    listeners: {
+                        boxready: function() {
+                            this.inputEl.on('click', function(e) {
+                                var link = document.location.href.split('#'),
+                                    tabParams = this.up('#farmDesigner').moduleParams.tabParams,
+                                    farmRoleId = this.up('#maintab').currentRole.get('farm_role_id');
+                                if (tabParams['farmId'] && farmRoleId) {
+                                    window.open(link[0] + '#/servers?farmId=' + tabParams['farmId'] + '&farmRoleId=' + farmRoleId);
+                                }
+                                e.preventDefault();
+                            }, this);
+                        }
                     }
-                }
+                }]
             }]
         });
         if (Scalr.flags['analyticsEnabled']) {
@@ -631,54 +602,33 @@ Ext.define('Scalr.ui.FarmBuilderRoleCostMetering', {
                 layout: 'hbox',
                 hideOnMinify: true,
                 items: [{
-                    xtype: 'component',
-                    itemId: 'minRate',
-                    width: 132,
-                    margin: '0 18 0 0',
-                    hideOnDisabled: true,
-                    tpl:
-                        '<tpl if="hourlyRate !== null">' +
-                            '<div class="daily-rate">{[this.currency2(values.dailyRate)]} <span class="small">per day</span></div><div class="hourly-rate">({[this.currency2(values.hourlyRate)]} per hour)</div>' +
-                        '<tpl else><div class="daily-rate"><span class="small">N/A</span></div>'+
-                        '</tpl>'
-                },{
-                    xtype: 'component',
-                    itemId: 'maxRate',
-                    width: 132,
-                    margin: '0 18 0 0',
-                    hideOnDisabled: true,
-                    tpl:
-                        '<tpl if="hourlyRate !== null">' +
-                            '<div class="daily-rate">{[this.currency2(values.dailyRate)]} <span class="small">per day</span></div><div class="hourly-rate">({[this.currency2(values.hourlyRate)]} per hour)</div>' +
-                        '<tpl else><div class="daily-rate"><span class="small">N/A</span></div>'+
-                        '</tpl>'
-                },{
                     xtype: 'container',
+                    layout: 'hbox',
+                    width: 320,
+                    margin: '0 18 0 0',
                     items: [{
-                        xtype: 'chart',
-                        width: 140,
-                        height: 70,
-                        animate: true,
-                        hidden: true,
-                        store: Ext.create('Ext.data.ArrayStore', {
-                            fields: ['value']
-                        }),
-                        insetPadding: 0,
-                        axes: [{
-                            type: 'gauge',
-                            position: 'gauge',
-                            minimum: 0,
-                            maximum: 100,
-                            steps: 1,
-                            margin: 7
-                        }],
-                        series: [{
-                            type: 'gauge',
-                            field: 'value',
-                            donut: 90,
-                            colorSet: ['#F49D10', '#ddd']
-                        }]
+                        xtype: 'component',
+                        itemId: 'minRate',
+                        flex: 1,
+                        margin: '0 18 0 0',
+                        hideOnDisabled: true,
+                        tpl:
+                            '<tpl if="hourlyRate !== null">' +
+                                '<div class="daily-rate">{[this.currency2(values.dailyRate)]} <span class="small">per day</span></div><div class="hourly-rate">({[this.currency2(values.hourlyRate)]} per hour)</div>' +
+                            '<tpl else><div class="daily-rate"><span class="small">N/A</span></div>'+
+                            '</tpl>'
                     },{
+                        xtype: 'component',
+                        itemId: 'maxRate',
+                        flex: 1,
+                        hideOnDisabled: true,
+                        tpl:
+                            '<tpl if="hourlyRate !== null">' +
+                                '<div class="daily-rate">{[this.currency2(values.dailyRate)]} <span class="small">per day</span></div><div class="hourly-rate">({[this.currency2(values.hourlyRate)]} per hour)</div>' +
+                            '<tpl else><div class="daily-rate"><span class="small">N/A</span></div>'+
+                            '</tpl>'
+                    }]
+                },{
                     xtype: 'component',
                     itemId: 'currentRate',
                     //margin: '-70 0 0',
@@ -688,7 +638,6 @@ Ext.define('Scalr.ui.FarmBuilderRoleCostMetering', {
                             '<div class="daily-rate">{[this.currency2(values.dailyRate)]} <span class="small">per day</span></div><div class="hourly-rate">({[this.currency2(values.hourlyRate)]} per hour)</div>' +
                         '<tpl else><div class="daily-rate"><span class="small">N/A</span></div>'+
                         '</tpl>'
-                    }]
                 }]
             });
         }
@@ -701,6 +650,9 @@ Ext.define('Scalr.ui.FarmBuilderRoleCostMetering', {
             item.setVisible(!disabled);
             item.forceHidden = disabled;
         });
+        Ext.Array.each(this.query('[showOnDisabled]'), function(item){
+            item.setVisible(disabled);
+        });
         this.resumeLayouts(true);
     },
     updateRates: function() {
@@ -709,7 +661,7 @@ Ext.define('Scalr.ui.FarmBuilderRoleCostMetering', {
             maxInstCount = this.down('[name="max_instances"]').getValue(),
             role = this.up('#maintab').currentRole,
             runInstCount = role.get('running_servers');
-        if (Ext.Array.contains(this.up('farmroleedit')['moduleParams']['analytics']['unsupportedClouds'], role.data.platform)) {
+        if (Ext.Array.contains(this.up('#farmDesigner').moduleParams['analytics']['unsupportedClouds'], role.data.platform)) {
             hourlyRate = null;
         }
         this.suspendLayouts();
@@ -726,8 +678,71 @@ Ext.define('Scalr.ui.FarmBuilderRoleCostMetering', {
             hourlyRate: Ext.isNumeric(hourlyRate) ? Ext.util.Format.round(hourlyRate*runInstCount, 2) : null,
             dailyRate: Ext.isNumeric(hourlyRate) ? Ext.util.Format.round(hourlyRate*runInstCount*24, 2) : null
         });
-        this.down('chart').store.loadData([[maxInstCount > 0 ? runInstCount*100/maxInstCount : 0]]);
         this.resumeLayouts(true);
     }
 
 });
+
+
+/*Ext.define(null, {
+    override: 'Ext.chart.axis.sprite.Axis',
+
+    renderTicks: function (surface, ctx, layout, clipRect) {
+        var me = this,
+            attr = me.attr,
+            customLabels = me.getAxis().customLabels,
+            maxValue = me.getAxis().maxValue,
+            majorTickSize = attr.majorTickSize;
+         if (me.attr.position === 'gauge' && customLabels && maxValue) {
+            var gaugeAngles = me.getGaugeAngles();
+            Ext.each(customLabels, function(lbl) {
+                var value = lbl.value * 100 / maxValue,
+                    position = (value - attr.min) / (attr.max - attr.min + 1) * attr.totalAngle - attr.totalAngle + gaugeAngles.start;
+                ctx.moveTo(attr.centerX + (attr.length) * Math.cos(position), attr.centerY + (attr.length) * Math.sin(position));
+                ctx.lineTo(attr.centerX + (attr.length + majorTickSize) * Math.cos(position), attr.centerY + (attr.length + majorTickSize) * Math.sin(position));
+            });
+        } else {
+            me.callParent(arguments);
+        }
+    },
+
+     renderLabels: function (surface, ctx, layout, clipRect) {
+        var me = this,
+            attr = me.attr,
+            customLabels = me.getAxis().customLabels,
+            maxValue = me.getAxis().maxValue,
+            label = me.getLabel(),
+            lastBBox = null, bbox,
+            majorTicks = layout.majorTicks;
+        if (majorTicks && label && !label.attr.hidden) {
+            if (me.attr.position === 'gauge' && customLabels && maxValue) {
+                var gaugeAngles = me.getGaugeAngles();
+                label.setAttributes({translationX: 0, translationY: 0}, true, true);
+                label.applyTransformations();
+                 label.setAttributes({
+                    translationY: attr.centerY
+                }, true, true);
+
+                Ext.each(customLabels, function(lbl) {
+                    var value = lbl.value * 100 / maxValue,
+                        angle = (value - attr.min) / (attr.max - attr.min + 1) * attr.totalAngle - attr.totalAngle + gaugeAngles.start;
+                    label.setAttributes({
+                        text: lbl.text,
+                        translationX: attr.centerX + (attr.length + 10) * Math.cos(angle) + 10,
+                        translationY: attr.centerY + (attr.length + 10) * Math.sin(angle) - 2
+                    }, true, true);
+                    label.applyTransformations();
+                    bbox = label.attr.matrix.transformBBox(label.getBBox(true));
+                    if (lastBBox && !Ext.draw.Draw.isBBoxIntersect(bbox, lastBBox)) {
+                        return;
+                    }
+                    surface.renderSprite(label);
+                    lastBBox = bbox;
+
+                });
+            } else {
+                me.callParent(arguments);
+            }
+        }
+    },
+})*/

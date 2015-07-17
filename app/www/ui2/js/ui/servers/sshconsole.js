@@ -2,15 +2,11 @@ Scalr.regPage('Scalr.ui.servers.sshconsole', function (loadParams, moduleParams)
     var panel = Ext.create('Ext.form.Panel', {
 		scalrOptions: {
 			maximize: 'all',
-            reload: false
+            reload: false,
+            menuTitle: 'Servers',
+            menuHref: '#/servers',
+            menuParentStateId: 'grid-servers-view'
 		},
-		title: 'Servers &raquo; ' + moduleParams['serverId'] + ' &raquo; SSH Launcher',
-		tools: [{
-			type: 'close',
-			handler: function () {
-				Scalr.event.fireEvent('close');
-			}
-		}],
         listeners: {
             hide: function() {
                 this.close();
@@ -30,27 +26,44 @@ Scalr.regPage('Scalr.ui.servers.sshconsole', function (loadParams, moduleParams)
 		},
 		items: [{
             xtype: 'container',
+            layout: 'anchor',
             margin: '6 0 0 12',
             defaults: {
                 margin: 0,
-                labelWidth: 70
+                labelWidth: 100
             },
             items: [{
-                xtype: 'displayfield',
-                fieldLabel: 'IP',
-                value: moduleParams['remoteIp']
-            },{
-                xtype: 'displayfield',
-                fieldLabel: 'Internal IP',
-                value: moduleParams['localIp']
+                xtype: 'fieldcontainer',
+                layout: 'hbox',
+                anchor: '100%',
+                items: [{
+                    xtype: 'displayfield',
+                    fieldLabel: 'Server ID',
+                    value: moduleParams['serverId']
+                },{
+                    xtype: 'tbfill'
+                },{
+                    xtype: 'button',
+                    ui: '',
+                    margin: '0 12 0 0',
+                    iconCls: 'x-tool-img x-tool-close',
+                    handler: function () {
+                        Scalr.event.fireEvent('close');
+                    }
+                }]
             },{
                 xtype: 'displayfield',
                 fieldLabel: 'Farm',
-                value: '<a href="#/farms/view?farmId='+moduleParams['farmId']+'">' + moduleParams['farmName'] + '</a> (ID: ' + moduleParams['farmId'] + ')'
+                value: '<a href="#/farms?farmId='+moduleParams['farmId']+'">' + moduleParams['farmName'] + '</a> (ID: ' + moduleParams['farmId'] + ')'
             },{
                 xtype: 'displayfield',
-                fieldLabel: 'Role',
-                value: moduleParams['roleName'] + ' #'+ moduleParams['serverIndex']
+                fieldLabel: 'Farm Role',
+                value: '<a href="#/farms/designer?farmId='+moduleParams['farmId']+'&farmRoleId='+moduleParams['farmRoleId']+'">' + moduleParams['farmRoleAlias'] + '</a> #'+ moduleParams['serverIndex']
+            },{
+                xtype: 'displayfield',
+                value: 'Using this Server\'s ' + (moduleParams['ssh.console.ip'] === 'public' ? 'External' : 'Internal') + ' IP <b>' + moduleParams['ip'] +
+                       '</b>, and logging in as <b>' + moduleParams['ssh.console.username'] + '</b>.' +
+                       ' Access <a href="#/core/settings?ssh"> SSH Launcher Settings</a> to use another IP or username.'
             }]
 		}, {
             xtype: 'component',
@@ -69,7 +82,7 @@ Scalr.regPage('Scalr.ui.servers.sshconsole', function (loadParams, moduleParams)
                         'width="100%" height="100%">' +
                             '<param name="cache_archive" VALUE="/ui2/java/ssh-launcher.jar">' +
                             '<param name="cache_version" VALUE="0.13.1">' +
-                            '<param name="host" value="' + params['remoteIp'] + '">' +
+                            '<param name="host" value="' + params['ip'] + '">' +
                             '<param name="port" value="' + params['ssh.console.port'] + '">' +
                             '<param name="user" value="' + params['ssh.console.username'] + '">' +
                             '<param name="sshKeyName" value="' + params['ssh.console.key_name'] + '">' +
@@ -96,7 +109,13 @@ Scalr.regPage('Scalr.ui.servers.sshconsole', function (loadParams, moduleParams)
 			xtype: 'displayfield',
             hidden: !Ext.isSafari,
 			cls: 'x-form-field-info x-form-field-info-fit',
-			value: 'Safari users need to allow applet to work with filesystem. <a target="_blank" href="https://scalr-wiki.atlassian.net/wiki/x/WYB1">More info</a>'
+			value: 'Safari users need to allow applet to work with filesystem. <a target="_blank" href="https://scalr-wiki.atlassian.net/wiki/x/WYB1">More information</a>'
+        }, {
+            dock: 'top',
+            xtype: 'displayfield',
+            hidden: !(Ext.isChrome && (parseInt(window.navigator.appVersion.match(/Chrome\/(\d+)\./)[1], 10) >= 42)),
+            cls: 'x-form-field-info x-form-field-info-fit',
+            value: 'Chrome 42 (and greater) users need to enable NPAPI Plugins for the SSH Launcher to function. <a target="_blank" href="https://scalr-wiki.atlassian.net/wiki/x/G4BPAQ">More information</a>'
         }]
 	});
 

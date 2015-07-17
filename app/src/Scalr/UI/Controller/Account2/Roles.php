@@ -1,5 +1,7 @@
 <?php
 use Scalr\Acl\Acl;
+use Scalr\UI\Request\JsonData;
+use Scalr\UI\Request\Validator;
 
 class Scalr_UI_Controller_Account2_Roles extends Scalr_UI_Controller
 {
@@ -21,61 +23,73 @@ class Scalr_UI_Controller_Account2_Roles extends Scalr_UI_Controller
         ), array('ui/account2/dataconfig.js'), array('ui/account2/roles/view.css'), array('account.roles', 'base.roles'));
     }
 
-    public function xRemoveAction()
+    /**
+     * Removes ACL
+     *
+     * @param string $id
+     * @throws InvalidArgumentException
+     */
+    public function xRemoveAction($id)
     {
         $acl = \Scalr::getContainer()->acl;
-        $acl->deleteAccountRole($this->getParam('id'), $this->request->getUser()->getAccountId());
+        $acl->deleteAccountRole($id, $this->request->getUser()->getAccountId());
         $this->response->success('ACL successfully deleted');
     }
 
-    public function xSaveAction()
+    /**
+     * Saves ACL
+     *
+     * @param string   $id
+     * @param string   $name
+     * @param int      $baseRoleId
+     * @param string   $color
+     * @param JsonData $resources
+     * @throws InvalidArgumentException
+     */
+    public function xSaveAction($id, $name, $baseRoleId, $color, JsonData $resources)
     {
+        $validator = new Validator();
+        $validator->validate($name, 'name', Validator::NOEMPTY);
+
+        if (!$validator->isValid($this->response))
+            return;
+
+
         $acl = \Scalr::getContainer()->acl;
 
-        $this->request->defineParams(array(
-            'id' => array('type' => 'string'),
-            'name' => array('type' => 'string'),
-            'baseRoleId' => array('type' => 'int'),
-            'color' => array('type' => 'string'),
-            'resources' => array('type' => 'json')
-        ));
-
-        $accountRoleId = $this->getParam('id');
-        $baseRoleId = $this->getParam('baseRoleId');
-        $accountId = $this->request->getUser()->getAccountId();
-        $name = $this->getParam('name');
-        $color = hexdec($this->getParam('color'));
-
-        $r = $this->getParam('resources');
-        $resources = array();
-        if (is_array($r)) {
-            foreach ($r as $v) {
-                $resources[$v['id']] = $v;
-            }
+        $r = [];
+        foreach ($resources as $v) {
+            $r[$v['id']] = $v;
         }
 
         try {
-            $accountRoleId = $acl->setAccountRole($accountId, $baseRoleId, $name, $color, $resources, $accountRoleId);
+            $id = $acl->setAccountRole($this->request->getUser()->getAccountId(), $baseRoleId, $name, hexdec($color), $r, $id);
         } catch (\Exception $e) {
             if ($e instanceof \Scalr\Acl\Exception\AclException) {
                 return $this->response->failure($e->getMessage());
             } else throw $e;
         }
 
-        $this->response->data(array('role' => $acl->getAccountRoleComputed($accountRoleId)));
+        $this->response->data(['role' => $acl->getAccountRoleComputed($id)]);
         $this->response->success('ACL successfully saved');
     }
 
-    public function usageAction()
+    /**
+     * Returns ACL usage
+     *
+     * @param string $accountRoleId
+     * @throws InvalidArgumentException
+     */
+    public function usageAction($accountRoleId)
     {
         $acl = \Scalr::getContainer()->acl;
-        $accountRole = $acl->getAccountRole($this->getParam('accountRoleId'));
+        $accountRole = $acl->getAccountRole($accountRoleId);
         $this->user->getPermissions()->validate($accountRole);
         $this->response->page('ui/account2/roles/usage.js', array(
-            'users' => array_values($acl->getUsersHaveAccountRole($this->getParam('accountRoleId'), $this->request->getUser()->getAccountId())),
+            'users' => array_values($acl->getUsersHaveAccountRole($accountRoleId, $this->request->getUser()->getAccountId())),
             'role' => array(
-                    'id' => $accountRole->getRoleId(),
-                    'name' => $accountRole->getName()
+                'id' => $accountRole->getRoleId(),
+                'name' => $accountRole->getName()
             )
         ));
     }

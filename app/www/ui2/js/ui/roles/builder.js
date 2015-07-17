@@ -1,5 +1,6 @@
 Scalr.regPage('Scalr.ui.roles.builder', function (loadParams, moduleParams) {
 	var platforms = moduleParams.platforms || {},
+        vpcLimits = Scalr.getGovernance('ec2', 'aws.vpc'),
 		rootDeviceTypeFilterEnabled = true,
 		chefFieldsetEnabled = true,//Scalr.flags['betaMode'],
 		advancedFieldsetEnabled = Scalr.flags['betaMode'],
@@ -10,12 +11,6 @@ Scalr.regPage('Scalr.ui.roles.builder', function (loadParams, moduleParams) {
 			behaviors: [],
 			addons: []
 		};
-
-	if (Ext.Object.getSize(platforms) == 0) {
-		Scalr.message.Error('The Role Builder does not support your enabled clouds. <br/>Please <a href="#/roles/import">Create a role from Non-Scalr server</a> instead.');
-		//Scalr.event.fireEvent('redirect', '#/roles/import', true);
-		return false;
-	}
 
 	behaviors = [
 		{name: 'mysql2', disable: {behavior: ['postgresql', 'redis', 'mongodb', 'percona','mariadb'], os:[{family: 'centos', version: /^7/i}]}},
@@ -28,8 +23,19 @@ Scalr.regPage('Scalr.ui.roles.builder', function (loadParams, moduleParams) {
 		{name: 'www', disable: {behavior:['app', 'haproxy']}},
 		{name: 'memcached'},
 		{name: 'redis', disable: {behavior: ['postgresql', 'mongodb', 'percona', 'mysql2']}},
-		{name: 'rabbitmq', disable: {os: ['rhel', 'oel']}},
-		{name: 'mongodb', disable: {platform: ['gce', 'rackspacengus', 'rackspacenguk'], behavior: ['postgresql', 'redis', 'percona', 'mysql2']}},
+		{name: 'rabbitmq', disable: {os: ['rhel', 'oel', 'redhat']}},
+		{name: 'mongodb', disable: {
+            platform: ['gce', 'rackspacengus', 'rackspacenguk'],
+            behavior: ['postgresql', 'redis', 'percona', 'mysql2'],
+            os: [
+                {family: 'debian', version: /^8/i},
+                {family: 'ubuntu', version: ['15.04']},
+                {family: 'centos', version: /^7/i},
+                {family: 'rhel', version: /^7/i},
+                {family: 'redhat', version: /^7/i},
+                {family: 'amazon', version: /^2015/i}
+            ]
+        }},
 		//{name: 'mysqlproxy', addon: true, disable: {os: ['centos', 'oel', 'rhel']}},//{family: 'ubuntu', version: ['10.04']}
 		{name: 'chef', addon: true, button: {pressed: true, toggle: Ext.emptyFn}}
 	];
@@ -67,7 +73,7 @@ Scalr.regPage('Scalr.ui.roles.builder', function (loadParams, moduleParams) {
                 this.setTooltip(enable?'':'Please select operating system.');
             }
 		});
-	}
+	};
 
 	var onSelectBehavior = function() {
 		if (this.pressed) {
@@ -97,9 +103,11 @@ Scalr.regPage('Scalr.ui.roles.builder', function (loadParams, moduleParams) {
 
 	var panel = Ext.create('Ext.panel.Panel', {
 		scalrOptions: {
-			maximize: 'all'
+			maximize: 'all',
+            menuTitle: 'Roles',
+            menuHref: '#/roles',
+            menuParentStateId: 'grid-roles-manager'
 		},
-        title: 'Roles &raquo; Builder',
 		layout: {
 			type: 'hbox',
 			align: 'stretch'
@@ -113,7 +121,7 @@ Scalr.regPage('Scalr.ui.roles.builder', function (loadParams, moduleParams) {
 			xtype: 'container',
             cls: 'x-panel-column-left',
             autoScroll: true,
-			width: 494,
+			width: 534,
 			layout: {
 				type: 'vbox',
 				align: 'stretch'
@@ -121,7 +129,7 @@ Scalr.regPage('Scalr.ui.roles.builder', function (loadParams, moduleParams) {
 			items: [{
 				xtype: 'fieldset',
 				itemId: 'leftcol',
-                cls: 'x-fieldset-separator-none',
+                cls: 'x-fieldset-separator-none x-fieldset-no-bottom-padding',
                 title: 'Location and operating system',
 				layout: {
 					type: 'vbox',
@@ -129,7 +137,8 @@ Scalr.regPage('Scalr.ui.roles.builder', function (loadParams, moduleParams) {
 				},
 				items: [{
 					xtype: 'label',
-					text: 'Location:'
+					text: 'Cloud Location',
+                    cls: 'x-form-item-label-default'
 				},{
 					xtype: 'container',
 					layout: {
@@ -162,9 +171,12 @@ Scalr.regPage('Scalr.ui.roles.builder', function (loadParams, moduleParams) {
 					store: {
 						fields: ['id', 'name']
 					},
-                    icons: {
-                        governance: true
-                    },
+                    plugins: [{
+                        ptype: 'fieldinnericoncloud'
+                    }, {
+                        ptype: 'fieldicons',
+                        icons: ['governance']
+                    }],
 					listeners: {
 						change: function(comp, value) {
                             if (value) {
@@ -183,12 +195,12 @@ Scalr.regPage('Scalr.ui.roles.builder', function (loadParams, moduleParams) {
                                     vpcIdField.getPlugin('comboaddnew').postUrl = '?cloudLocation=' + value;
                                     vpcIdFieldProxy.params = {cloudLocation: value};
                                     delete vpcIdFieldProxy.filterFn;
-                                    if (moduleParams['vpcLimits'] && moduleParams['vpcLimits']['value'] == 1 && moduleParams['vpcLimits']['regions'] && moduleParams['vpcLimits']['regions'][value]) {
-                                        if (moduleParams['vpcLimits']['regions'][value]['ids'] && moduleParams['vpcLimits']['regions'][value]['ids'].length > 0) {
+                                    if (vpcLimits && vpcLimits['regions'] && vpcLimits['regions'][value]) {
+                                        if (vpcLimits['regions'][value]['ids'] && vpcLimits['regions'][value]['ids'].length > 0) {
                                             vpcIdFieldProxy.filterFn = function(record) {
-                                                return Ext.Array.contains(moduleParams['vpcLimits']['regions'][value]['ids'], record.get('id'));
+                                                return Ext.Array.contains(vpcLimits['regions'][value]['ids'], record.get('id'));
                                             };
-                                            //vpcIdField.setValue(moduleParams['vpcLimits']['regions'][value]['ids'][0]);
+                                            //vpcIdField.setValue(vpcLimits['regions'][value]['ids'][0]);
                                             disableAddNew = true;
                                         }
                                     }
@@ -202,40 +214,39 @@ Scalr.regPage('Scalr.ui.roles.builder', function (loadParams, moduleParams) {
                     flex: 1,
                     name: 'vpcId',
                     itemId: 'vpcId',
-                    emptyText: 'Do not use VPC',
+                    emptyText: vpcLimits && vpcLimits['value'] == 1 ? 'Select VPC ID' : 'Do not use VPC',
+                    allowBlank: !vpcLimits || vpcLimits['value'] != 1,
                     editable: false,
 
                     queryCaching: false,
                     clearDataBeforeQuery: true,
                     store: {
-                        fields: [ 'id', 'name' ],
+                        fields: ['id', 'name' ],
                         proxy: {
                             type: 'cachedrequest',
                             crscope: 'rolebuilder',
                             url: '/platforms/ec2/xGetVpcList',
                             root: 'vpc',
-                            prependData: [{id: '', name: 'Do not use VPC'}]
+                            prependData: !vpcLimits || vpcLimits['value'] != 1 ? [{id: 0, name: 'Do not use VPC'}] : null
                         }
                     },
                     valueField: 'id',
                     displayField: 'name',
-                    icons: {
-                        governance: true
-                    },
                     plugins: [{
+                        ptype: 'fieldicons',
+                        icons: ['governance']
+                    },{
                         ptype: 'comboaddnew',
                         pluginId: 'comboaddnew',
                         url: '/tools/aws/vpc/create',
-                        applyNewValue: false
+                        applyNewValue: true
                     }],
                     hidden: loadParams['vpc'] != 1,
                     listeners: {
                         addnew: function(item) {
                             Scalr.CachedRequestManager.get('rolebuilder').setExpired({
                                 url: '/platforms/ec2/xGetVpcList',
-                                params: {
-                                    cloudLocation: this.prev('combo').getValue()
-                                }
+                                params: this.store.proxy.params
                             });
                         },
                         change: function(field, value) {
@@ -249,101 +260,33 @@ Scalr.regPage('Scalr.ui.roles.builder', function (loadParams, moduleParams) {
                                     extended: 1
                                 };
                                 vpcSubnetField.getPlugin('comboaddnew').postUrl = '?cloudLocation=' + result.cloudLocation + '&vpcId=' + value;
-                                vpcSubnetField.getPlugin('comboaddnew').setDisabled(moduleParams['vpcLimits'] && moduleParams['vpcLimits']['value'] == 1 && moduleParams['vpcLimits']['ids'] && Ext.isArray(moduleParams['vpcLimits']['ids'][value]));
+                                vpcSubnetField.getPlugin('comboaddnew').setDisabled(vpcLimits && vpcLimits['ids'] && Ext.isArray(vpcLimits['ids'][value]));
 
                             }
                         }
                     }
                 },{
-                    xtype: 'combo',
+                    xtype: 'vpcsubnetfield',
                     name: 'vpcSubnetId',
                     itemId: 'vpcSubnetId',
-                    displayField: 'description',
-                    valueField: 'id',
                     emptyText: 'Select VPC subnet',
-                    queryCaching: false,
-                    clearDataBeforeQuery: true,
                     allowBlank: false,
-                    minChars: 0,
-                    autoSearch: false,
-                    queryDelay: 10,
                     hidden: true,
-                    forceSelection: true,
-                    icons: {
-                        governance: true
-                    },
-                    filterFn: function(record) {
-                        var res = false,
-                            limits = moduleParams['vpcLimits'],
-                            vpcId = this.store.proxy.params.vpcId,
-                            fieldLimits, filterType;
-
-                        var type = record.get('type');
-                        if (limits && limits['ids'] && limits['ids'][vpcId]) {
-                            fieldLimits = limits['ids'][vpcId];
-                            filterType = Ext.isArray(fieldLimits) ? 'subnets' : 'iaccess';
-                            if (filterType === 'subnets' && Ext.Array.contains(fieldLimits, record.get('id'))) {
-                                res = true;
-                            } else if (filterType === 'iaccess') {
-                                res = type === 'private' && fieldLimits === 'outbound-only' || type === 'public' && fieldLimits === 'full';
-                            }
-                        } else {
-                            res = true;
-                        }
-                        return res;
-                    },
-                    store: {
-                        fields: ['id', 'name', 'description', 'ips_left', 'type', 'availability_zone', 'cidr'],
-                        proxy: {
-                            type: 'cachedrequest',
-                            crscope: 'rolebuilder',
-                            url: '/tools/aws/vpc/xListSubnets',
-                            filterFields: ['description']
-                        }
-                    },
-                    listConfig: {
-                        style: 'white-space:nowrap',
-                        cls: 'x-boundlist-alt',
-                        tpl:
-                            '<tpl for="."><div class="x-boundlist-item" style="height: auto; width: auto;line-height:20px">' +
-                                '<div><span style="font-weight: bold">{[values.name || \'<i>No name</i>\' ]} - {id}</span> <span style="font-style: italic;font-size:90%">(Type: <b>{type:capitalize}</b>)</span></div>' +
-                                '<div>{cidr} in {availability_zone} [IPs left: {ips_left}]</div>' +
-                            '</div></tpl>'
-                    },
-                    listeners: {
-                        afterrender: function() {
-                            Ext.apply(this.store.getProxy(), {
-                                filterFn: this.filterFn,
-                                filterFnScope: this
-                            });
-                        },
-                        addnew: function(item) {
-                            Scalr.CachedRequestManager.get('rolebuilder').setExpired({
-                                url: '/tools/aws/vpc/xListSubnets',
-                                params: this.store.proxy.params
-                            });
-                        }
-                    },
-                    plugins: [{
-                        ptype: 'comboaddnew',
-                        pluginId: 'comboaddnew',
-                        url: '/tools/aws/vpc/createSubnet',
-                        applyNewValue: false
-                    }],
+                    maxCount: 1
 				},{
 					xtype: 'buttongroupfield',
 					itemId: 'architecture',
 					fieldLabel: 'Architecture',
 					cls: 'hideoncustomimage',
 					margin: '10 0 0 0',
-					labelWidth: 110,
+					labelWidth: 120,
 					listeners: {
 						change: function(comp, value) {
 							panel.fireEvent('selectarchitecture', value);
 						}
 					},
 					defaults: {
-						width: 110
+						width: 140
 					},
 					items: [{
 						text: '64 bit',
@@ -363,15 +306,15 @@ Scalr.regPage('Scalr.ui.roles.builder', function (loadParams, moduleParams) {
 						xtype: 'buttongroupfield',
 						itemId: 'root_device_type',
 						fieldLabel: 'Root device type',
-						labelWidth: 110,
-                        width: 348,
+						labelWidth: 120,
+                        width: 412,
 						listeners: {
 							change: function(comp, value) {
 								panel.fireEvent('selectrootdevicetype', value);
 							}
 						},
 						defaults: {
-							width: 110
+							width: 140
 						},
 						items: [{
 							text: 'EBS',
@@ -391,11 +334,6 @@ Scalr.regPage('Scalr.ui.roles.builder', function (loadParams, moduleParams) {
 					}]
 				},{
 					xtype: 'label',
-					text: 'Operating system:',
-					margin: '10 0 0 0',
-					cls: 'hideoncustomimage'
-				},{
-					xtype: 'label',
 					text: 'Image ID:',
 					margin: '12 0 16 0',
 					cls: 'showoncustomimage'
@@ -404,6 +342,11 @@ Scalr.regPage('Scalr.ui.roles.builder', function (loadParams, moduleParams) {
 					itemId: 'imageId',
 					cls: 'showoncustomimage',
 					allowBlank: false
+				},{
+					xtype: 'label',
+					text: 'Operating system',
+					margin: '10 0 0 0',
+					cls: 'x-form-item-label-default hideoncustomimage'
 				}]
 			},{
 				xtype: 'container',
@@ -437,18 +380,20 @@ Scalr.regPage('Scalr.ui.roles.builder', function (loadParams, moduleParams) {
                     itemId: 'roleimage'
                 },{
                     xtype: 'label',
-                    text: 'Software:'
+                    text: 'Software',
+                    cls: 'x-form-item-label-default'
                 },{
                     xtype: 'container',
-                    margin: '10 0 10 -10',
+                    margin: '16 0 10 -10',
                     itemId: 'settings-behaviors',
                     defaults: {
                         xtype: 'button',
                         ui: 'simple',
                         disabled: true,
+                        disableMouseDownPressed: true,
                         enableToggle: true,
                         cls: 'x-btn-simple-large',
-                        iconAlign: 'above',
+                        iconAlign: 'top',
                         margin: '0 0 10 10',
                         tooltip: '',
                         listeners: {
@@ -458,7 +403,8 @@ Scalr.regPage('Scalr.ui.roles.builder', function (loadParams, moduleParams) {
                     items: buttons['behaviors']
                 },{
                     xtype: 'label',
-                    text: 'Addons:'
+                    text: 'Addons',
+                    cls: 'x-form-item-label-default'
                 }, {
                     xtype: 'container',
                     margin: '10 0 10 -10',
@@ -469,13 +415,13 @@ Scalr.regPage('Scalr.ui.roles.builder', function (loadParams, moduleParams) {
                         ui: 'simple',
                         enableToggle: true,
                         cls: 'x-btn-simple-large',
-                        iconAlign: 'above',
+                        iconAlign: 'top',
                         margin: '-10 10 0 0',
                         listeners: {
                             toggle: onSelectAddon
                         }
                     },
-                    items: Ext.Array.merge(buttons['addons'], [{xtype: 'component', html: '<br/><br/>Chef client will be included in this image', margin: 0, cls: '', style: 'vertical-align:top;display:inline-block;'}])
+                    items: Ext.Array.merge(buttons['addons'], [{xtype: 'component', html: 'Chef client will be included in this image', margin: '18 0 0', cls: '', style: 'vertical-align:top;display:inline-block;'}])
                 },{
                     xtype: 'displayfield',
                     itemId: 'softwarewarning',
@@ -495,7 +441,7 @@ Scalr.regPage('Scalr.ui.roles.builder', function (loadParams, moduleParams) {
                 defaults: {
                     maxWidth: 516,
                     anchor: '100%',
-                    labelWidth: 120
+                    labelWidth: 140
                 },
                 listeners: {
                     expand: function(){
@@ -505,6 +451,7 @@ Scalr.regPage('Scalr.ui.roles.builder', function (loadParams, moduleParams) {
                 items: [{
                     xtype: 'chefserveridcombo',
                     name: 'chef.server',
+
                     listeners: {
                         change: function(field, value) {
                             if (value) {
@@ -576,10 +523,6 @@ Scalr.regPage('Scalr.ui.roles.builder', function (loadParams, moduleParams) {
                             crscope: 'rolebuilder',
                             url: '/services/chef/xListRoles'
                         }
-                    },
-                    listeners: {
-                        change: function(field, value) {
-                        }
                     }
                 },{
                     xtype: 'textarea',
@@ -607,7 +550,7 @@ Scalr.regPage('Scalr.ui.roles.builder', function (loadParams, moduleParams) {
 				defaults: {
 					maxWidth: 516,
 					anchor: '100%',
-					labelWidth: 120
+					labelWidth: 140
 				},
 				listeners: {
 					expand: function(){
@@ -667,20 +610,24 @@ Scalr.regPage('Scalr.ui.roles.builder', function (loadParams, moduleParams) {
 					text: 'Create',
 					disabled: true,
 					handler: function() {
+                        var platformImages = panel.getPlatformImages(result.platform);
 						if (chefFieldsetEnabled) {
 							if (!panel.down('#chefattributes').isValid()) {
 								panel.down('#chefsettings').expand();
 								return;
 							}
 						}
-						if (!platforms[result.platform].images.length) {
+						if (!platformImages.length) {
 							if (!panel.down('#imageId').isValid()) {
 								panel.down('#imageId').focus();
 								return;
 							}
 						}
 
-                        if (loadParams['vpc'] == 1) {
+                        if (loadParams['vpc'] == 1 && result.platform === 'ec2') {
+                            if (!panel.down('#vpcId').isValid()) {
+                                return;
+                            }
                             if (panel.down('#vpcId').getValue() && !panel.down('#vpcSubnetId').isValid()) {
                                 return;
                             }
@@ -703,7 +650,7 @@ Scalr.regPage('Scalr.ui.roles.builder', function (loadParams, moduleParams) {
 							delete r.addons;
 
 							//imageId
-							if (platforms[r.platform].images.length) {
+							if (platformImages.length) {
 								r['imageId'] = panel.getImageId();
 							} else {
 								r['imageId'] = panel.down('#imageId').getValue();
@@ -719,7 +666,7 @@ Scalr.regPage('Scalr.ui.roles.builder', function (loadParams, moduleParams) {
 									}
 								});
 								//override imageId
-								if (platforms[r.platform].images.length && !Ext.isEmpty(r.advanced['overrideImageId'])) {
+								if (platformImages.length && !Ext.isEmpty(r.advanced['overrideImageId'])) {
 									r['imageId'] = r.advanced['overrideImageId'];
 								}
 								delete r.advanced['overrideImageId'];
@@ -754,7 +701,7 @@ Scalr.regPage('Scalr.ui.roles.builder', function (loadParams, moduleParams) {
 								url: '/roles/xBuild',
 								params: r,
 								success: function (data) {
-									Scalr.event.fireEvent('redirect', '#/roles/builder?serverId=' + data.serverId);
+									Scalr.event.fireEvent('redirect', '#/roles/builder?serverId=' + data.serverId + (loadParams['devel'] ? '&devel=1' : ''));
 								}
 							});
 						} else {
@@ -799,8 +746,7 @@ Scalr.regPage('Scalr.ui.roles.builder', function (loadParams, moduleParams) {
                 defaults: {
                     xtype: 'component',
                     flex: 1,
-                    cls: 'scalr-ui-progress-step',
-                    height: 26,
+                    cls: 'scalr-ui-progress-step x-semibold',
                     maxWidth: 300
                 },
                 resetProgress: function() {
@@ -915,7 +861,6 @@ Scalr.regPage('Scalr.ui.roles.builder', function (loadParams, moduleParams) {
                 },
                 items: [{
                     xtype: 'grid',
-                    cls: 'x-grid-shadow',
                     plugins: [{
                         ptype: 'gridstore'
                     }, {
@@ -936,7 +881,7 @@ Scalr.regPage('Scalr.ui.roles.builder', function (loadParams, moduleParams) {
                         focusedItemCls: 'x-noselection',
                         selectedItemCls: 'x-noselection',
                         getRowClass: function(record, rowIndex) {
-                            return rowIndex === 0 ? 'x-grid-row-new' : '';
+                            return rowIndex === 0 ? 'x-grid-row-color-new' : '';
                         }
                     },
                     columns: [
@@ -1005,7 +950,7 @@ Scalr.regPage('Scalr.ui.roles.builder', function (loadParams, moduleParams) {
 
                                         }
                                     });
-                                    Scalr.event.fireEvent('redirect', '#/roles/manager');
+                                    Scalr.event.fireEvent('redirect', '#/roles');
                                 }
                             });
                         }
@@ -1024,16 +969,16 @@ Scalr.regPage('Scalr.ui.roles.builder', function (loadParams, moduleParams) {
                         text: 'View ' + (moduleParams['server'] ? moduleParams['server']['object'] : ''),
                         handler: function() {
                             if (moduleParams['server']['object'] == 'role')
-                                Scalr.event.fireEvent('redirect', '#/roles/manager?roleId=' + panel.roleId);
+                                Scalr.event.fireEvent('redirect', '#/roles?roleId=' + panel.roleId);
                             else
-                                Scalr.event.fireEvent('redirect', '#/images/view?platform=' + panel.platform + '&id=' + panel.imageId);
+                                Scalr.event.fireEvent('redirect', '#/images?hash=' + panel.imageHash);
                         }
                     },{
                         xtype: 'button',
                         text: 'Build farm',
                         hidden: moduleParams['server'] ? moduleParams['server']['object'] == 'image' : false,
                         handler: function() {
-                            Scalr.event.fireEvent('redirect', '#/farms/build?roleId=' + panel.roleId);
+                            Scalr.event.fireEvent('redirect', '#/farms/designer?roleId=' + panel.roleId);
                         }
                     }]
                 },{
@@ -1049,7 +994,10 @@ Scalr.regPage('Scalr.ui.roles.builder', function (loadParams, moduleParams) {
                         xtype: 'button',
                         text: 'Try again',
                         handler: function() {
-                            Scalr.event.fireEvent('redirect', '#/roles/builder');
+                            var params = {};
+                            if (loadParams['devel']) params['devel'] = 1;
+                            if ('image' in loadParams) params['image'] = '';
+                            Scalr.event.fireEvent('redirect', '#/roles/builder?' + Ext.Object.toQueryString(params));
                         }
                     }]
                 }]
@@ -1060,15 +1008,15 @@ Scalr.regPage('Scalr.ui.roles.builder', function (loadParams, moduleParams) {
             itemId: 'platforms',
 			dock: 'left',
 			cls: 'x-docked-tabs',
-            width: 112 + Ext.getScrollbarSize().width,
-            overflowY: 'auto',
+            width: 110 + Ext.getScrollbarSize().width,
 			defaults: {
                 xtype: 'button',
                 ui: 'tab',
                 allowDepress: false,
-                iconAlign: 'above',
+                iconAlign: 'top',
                 disableMouseDownPressed: true,
                 toggleGroup: 'rolebuilder-tabs',
+                cls: 'x-btn-tab-no-text-transform',
                 toggleHandler: function (comp, state) {
                     if (state) {
                         panel.fireEvent('selectplatform', this.value);
@@ -1081,16 +1029,32 @@ Scalr.regPage('Scalr.ui.roles.builder', function (loadParams, moduleParams) {
 		suspendState: 0,
 		platformsState: {},
 		filters: {},
+        imagesCache: {},
+
+        getPlatformImages: function(platformId) {
+            var me = this,
+                platform = platforms[platformId];
+            if (!me.imagesCache[platformId]) {
+                me.imagesCache[platformId] = [];
+                //select images with supported osId
+                for (var i=0, len=platform.images.length; i<len; i++) {
+                    if (Scalr.utils.getOsById(platform.images[i].os_id)) {
+                        me.imagesCache[platformId].push(platform.images[i]);
+                    }
+                }
+            }
+            return me.imagesCache[platformId];
+        },
 
 		onSelectPlatform: function(platformId) {
-			var platform = platforms[platformId],
-                platformLocations = Scalr.platforms[platformId] ? Scalr.platforms[platformId].locations : null,
-				images = platform.images,
+			var platformLocations = Scalr.platforms[platformId] ? Scalr.platforms[platformId].locations : null,
+				images = this.getPlatformImages(platformId),
 				compImages = panel.down('#images'),
 				added = {},
 				locations = {},
 				compLocationData = [],
 				archs = {};
+
 
             panel.toggleRightColumn(images.length == 0);
 			if (result) {
@@ -1122,36 +1086,37 @@ Scalr.regPage('Scalr.ui.roles.builder', function (loadParams, moduleParams) {
 			if (images.length) {
 				for (var i=0, len=images.length; i<len; i++) {
 					var image = images[i],
-                        osFamily = Scalr.utils.beautifyOsFamily(image.os_family),
-						imageOS = osFamily + ' ' + image.os_version;
-					if (!added[imageOS]) {
-						compImages.add({
-							xtype: 'button',
-                            ui: 'simple',
-                            cls: 'x-btn-simple-large' + (osFamily.indexOf(' ') !== -1 ? ' x-btn-simple-large-small-text' : ''),
-                            iconAlign: 'above',
-                            iconCls: 'x-icon-osfamily-large x-icon-osfamily-large-' + image.os_family,
-							allowDepress: false,
-							toggleGroup: 'scalr-ui-roles-builder-image',
-                            text: imageOS,
-							osFamily: image.os_family,
-							osVersion: image.os_version,
-							margin: '0 0 10 10',
-							toggleHandler: function () {
-								panel.fireEvent('selectname', this.osFamily, this.osVersion, this.pressed);
-							}
-						});
+                        osId = image.os_id,
+                        os = Scalr.utils.getOsById(osId);
+                    if (os) {
+                        if (!added[osId]) {
+                            compImages.add({
+                                xtype: 'button',
+                                ui: 'simple',
+                                cls: 'x-btn-simple-large',
+                                iconAlign: 'top',
+                                iconCls: 'x-icon-osfamily-large x-icon-osfamily-large-' + os.family,
+                                allowDepress: false,
+                                disableMouseDownPressed: true,
+                                toggleGroup: 'scalr-ui-roles-builder-image',
+                                text: '<span class="small">'+os.name+'</span>',
+                                osId: osId,
+                                margin: '0 0 10 10',
+                                toggleHandler: function () {
+                                    panel.fireEvent('selectname', this.osId, this.pressed);
+                                }
+                            });
 
-						added[imageOS] = true;
-					}
+                            added[osId] = true;
+                        }
 
-					if (platformLocations && platformLocations[image.cloud_location]) {
-						locations[image.cloud_location] = Scalr.platforms[platformId].locations[image.cloud_location];
-					} else {
-                        locations[image.cloud_location] = image.cloud_location;
+                        if (platformLocations && platformLocations[image.cloud_location]) {
+                            locations[image.cloud_location] = Scalr.platforms[platformId].locations[image.cloud_location];
+                        } else {
+                            locations[image.cloud_location] = image.cloud_location;
+                        }
+                        archs[image.architecture] = true;
                     }
-					archs[image.architecture] = true;
-
 				}
 			} else {
 				locations = platformLocations ? Ext.clone(platformLocations) : {};
@@ -1171,7 +1136,10 @@ Scalr.regPage('Scalr.ui.roles.builder', function (loadParams, moduleParams) {
 			var compLocation = panel.down('#cloudLocation');
             compLocation.store.clearFilter();
             compLocation.reset();
+
             compLocation.toggleIcon('governance', false);
+            compLocation.getPlugin('fieldinnericoncloud').setPlatform(platformId);
+
 			if (result.platform == 'gce') {
 				compLocation.store.loadData([{id: 'all', name: 'GCE roles are automatically available in all regions.'}]);
 				compLocation.setValue('all');
@@ -1187,10 +1155,10 @@ Scalr.regPage('Scalr.ui.roles.builder', function (loadParams, moduleParams) {
 				compLocation.store.loadData(compLocationData);
 				compLocation.setDisabled(false);
 				compLocation.store.sort('name', 'desc');
-                if (loadParams['vpc'] == 1 && platformId == 'ec2' && moduleParams['vpcLimits'] && moduleParams['vpcLimits']['value'] != 0 && moduleParams['vpcLimits']['regions']) {
+                if (loadParams['vpc'] == 1 && platformId == 'ec2' && vpcLimits && vpcLimits['regions']) {
                     var defaultRegion;
                     compLocation.store.filter({filterFn: function(region){
-                        var r = moduleParams['vpcLimits']['regions'][region.get('id')];
+                        var r = vpcLimits['regions'][region.get('id')];
                         if (r !== undefined && r['default'] == 1) {
                             defaultRegion = region.get('id');
                         }
@@ -1206,7 +1174,7 @@ Scalr.regPage('Scalr.ui.roles.builder', function (loadParams, moduleParams) {
 			}
 
             if (loadParams['vpc'] == 1) {
-                this.down('#vpcId').setVisible(platformId == 'ec2' && (!moduleParams['vpcLimits'] || moduleParams['vpcLimits'] && moduleParams['vpcLimits']['value'] != 0));
+                this.down('#vpcId').setVisible(platformId == 'ec2');
                 this.down('#vpcSubnetId').setVisible(platformId == 'ec2' && this.down('#vpcId').getValue());
             }
 
@@ -1245,7 +1213,7 @@ Scalr.regPage('Scalr.ui.roles.builder', function (loadParams, moduleParams) {
 		getImageId: function() {
 			var me = this,
 				imageId,
-				images = moduleParams.platforms[result.platform].images,
+				images = this.getPlatformImages(result.platform),
 				hvm = panel.down('#hvm').pressed ? 1 : 0;
 
 			for (var j=0, len=images.length; j<len; j++) {
@@ -1260,7 +1228,7 @@ Scalr.regPage('Scalr.ui.roles.builder', function (loadParams, moduleParams) {
 						if (!match) break;
 					}
 				}
-				if (match && result.osfamily == image.os_family && result.osversion == image.os_version) {
+				if (match && result.osId == image.os_id) {
 					imageId = image.image_id;
 					break;
 				}
@@ -1271,7 +1239,7 @@ Scalr.regPage('Scalr.ui.roles.builder', function (loadParams, moduleParams) {
 		},
 
         findImageById: function(platform, imageId) {
-            var images = moduleParams.platforms[platform].images,
+            var images = this.getPlatformImages(platform),
                 image;
             Ext.Array.each(images, function(item){
                 if (item['image_id'] == imageId) {
@@ -1285,7 +1253,7 @@ Scalr.regPage('Scalr.ui.roles.builder', function (loadParams, moduleParams) {
 
 		getFiltersValues: function() {
 			var me = this,
-				images = moduleParams.platforms[result.platform].images,
+				images = this.getPlatformImages(result.platform),
 				state = {images: {}, filters: {}},
 				hvm = panel.down('#hvm').pressed ? 1 : 0;
 
@@ -1306,7 +1274,7 @@ Scalr.regPage('Scalr.ui.roles.builder', function (loadParams, moduleParams) {
 				}
 				if (match ) {
 					if (matchHvm) {
-						state.images[image.os_family+' '+image.os_version] = true;
+						state.images[image.os_id] = true;
 					}
 					if (result.platform == 'ec2' && result.root_device_type == 'ebs' && image.hvm) {
 						state.hvm = 1;
@@ -1345,7 +1313,7 @@ Scalr.regPage('Scalr.ui.roles.builder', function (loadParams, moduleParams) {
 			}
 
 			compImages.items.each(function() {
-				if (state.images[this.osFamily+' '+this.osVersion]) {
+				if (state.images[this.osId]) {
 					this.enable();
 				} else {
 					if (this.pressed) {
@@ -1379,11 +1347,12 @@ Scalr.regPage('Scalr.ui.roles.builder', function (loadParams, moduleParams) {
 
 		refreshBehaviors: function() {
 			var params = {platform: result.platform, behavior: result.behaviors},
-				image = panel.down('#images').down('[pressed=true]');
-			if (image) {
+				image = panel.down('#images').down('[pressed=true]'),
+                os = Scalr.utils.getOsById(image.osId);
+			if (os) {
 				params.os = {
-					family: image.osFamily,
-					version: image.osVersion
+					family: os.family,
+					version: os.version
 				}
 			}
 			for (var i=0, len=behaviors.length; i<len; i++) {
@@ -1402,9 +1371,11 @@ Scalr.regPage('Scalr.ui.roles.builder', function (loadParams, moduleParams) {
 										}
 									} else {
 										if (value.family == item.disable[key][j].family) {
-                                            if (Ext.isArray(item.disable[key][j].version) && Ext.Array.contains(item.disable[key][j].version, value.version)) {
-    											enabled = false;
-        										break;
+                                            if (Ext.isArray(item.disable[key][j].version)) {
+                                                if (Ext.Array.contains(item.disable[key][j].version, value.version)) {
+                                                    enabled = false;
+                                                    break;
+                                                }
                                             } else if (Ext.isString(value.version) && value.version.match(item.disable[key][j].version)){
     											enabled = false;
         										break;
@@ -1431,7 +1402,7 @@ Scalr.regPage('Scalr.ui.roles.builder', function (loadParams, moduleParams) {
 					btn.toggle(false).disable();
 					var message = '';
 					if (disableInfo.reason == 'os') {
-						message = '<b>' + Scalr.utils.beautifyBehavior(item.name) + '</b> cannot be used together with <b style="white-space:nowrap">' + Scalr.utils.beautifyOsFamily(result.osfamily) + ' ' + result.osversion + '</b>.';
+						message = '<b>' + Scalr.utils.beautifyBehavior(item.name) + '</b> cannot be used together with <b style="white-space:nowrap">' + Scalr.utils.beautifyOsFamily(Scalr.utils.getOsById(result.osId, 'family')) + ' ' + Scalr.utils.getOsById(result.osId, 'version') + '</b>.';
 					} else if (disableInfo.reason == 'platform') {
 						message = '<b>' + Scalr.utils.beautifyBehavior(item.name) + '</b> is not available on <b style="white-space:nowrap">' + platforms[result.platform].name + '</b>.';
 					} else if (disableInfo.reason == 'behavior') {
@@ -1468,7 +1439,7 @@ Scalr.regPage('Scalr.ui.roles.builder', function (loadParams, moduleParams) {
             panel.down('#root_device_type').setValue(image['root_device_type']).disable();
             panel.down('#hvm').toggle(image['hvm']==1).disable();
             panel.down('#images').items.each(function(item){
-                if (item.osFamily == image['os_family'] && item.osVersion == image['os_version']) {
+                if (item.osId == image.os_id) {
                     item.toggle(true);
                 }
                 item.disable();
@@ -1496,6 +1467,7 @@ Scalr.regPage('Scalr.ui.roles.builder', function (loadParams, moduleParams) {
             this.roleId = role['roleId'];
             this.platform = role['platform'];
             this.imageId = role['imageId'];
+            this.imageHash = role['imageHash'];
         },
         onBundleTaskFailed: function(failureReason) {
             var progresscol = this.getComponent('progresscol'),
@@ -1537,19 +1509,24 @@ Scalr.regPage('Scalr.ui.roles.builder', function (loadParams, moduleParams) {
                 defaultItem = defaultItem || items.first();
                 defaultItem.toggle(true);
 			},
-			selectplatform: function(value) {
+			selectplatform: function(platform) {
                 var me = this;
-                Scalr.loadCloudLocations(value, function(){
+                callback = function() {
                     me.suspendState++;
-                    me.onSelectPlatform(value);
+                    me.onSelectPlatform(platform);
                     me.initFilters();
                     me.suspendState--;
                     me.updateFiltersState();
-                    me.down('#availzone')[value=='ec2'?'show':'hide']();
-                    me.down('#region')[value=='gce' || value=='ecs'?'show':'hide']();
-                    me.down('#overrideImageId')[platforms[value].images.length && Scalr.flags['betaMode']?'show':'hide']();
+                    me.down('#availzone')[platform=='ec2'?'show':'hide']();
+                    me.down('#region')[platform=='gce' || platform=='ecs'?'show':'hide']();
+                    me.down('#overrideImageId')[me.getPlatformImages(platform).length && Scalr.flags['betaMode']?'show':'hide']();
                     me.fireEvent('afterselectplatform');
-                });
+                };
+                if (platform=='gce' || platform=='ecs') {
+                    callback();
+                } else {
+                    Scalr.loadCloudLocations(platform, callback);
+                }
 			},
 			selectlocation: function(value) {
 				result.cloudLocation = value;
@@ -1581,9 +1558,8 @@ Scalr.regPage('Scalr.ui.roles.builder', function (loadParams, moduleParams) {
 					panel.updateFiltersState();
 				}
 			},
-			selectname: function(osFamily, osVersion, select) {
-				result.osfamily = select ? osFamily : null;
-				result.osversion = select ? osVersion : null;
+			selectname: function(osId, select) {
+				result.osId = select ? osId : null;
                 panel.toggleRightColumn(select);
 				if (select) {
 					panel.refreshBehaviors();

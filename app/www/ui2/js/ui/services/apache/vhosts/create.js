@@ -98,15 +98,19 @@ Scalr.regPage('Scalr.ui.services.apache.vhosts.create', function (loadParams, mo
 				name: 'nonSslTemplate',
 				fieldLabel: 'Server non-SSL template',
 				grow: true,
-				icons: {
-                    globalvars: true
+                plugins: {
+                    ptype: 'fieldicons',
+                    position: 'outer',
+                    icons: ['globalvars']
                 },
 				growMax: 400
 			}, {
 				xtype: 'textarea',
 				name: 'sslTemplate',
-				icons: {
-                    globalvars: true
+                plugins: {
+                    ptype: 'fieldicons',
+                    position: 'outer',
+                    icons: ['globalvars']
                 },
 				hidden: !moduleParams['vhost']['isSslEnabled'],
 				fieldLabel: 'Server SSL template',
@@ -138,7 +142,7 @@ Scalr.regPage('Scalr.ui.services.apache.vhosts.create', function (loadParams, mo
 								//'vhostId': moduleParams['vhostId']
 							},
 							success: function () {
-								Scalr.event.fireEvent('redirect', '#/services/apache/vhosts/view');
+								Scalr.event.fireEvent('redirect', '#/services/apache/vhosts');
 							}
 						});
 				}

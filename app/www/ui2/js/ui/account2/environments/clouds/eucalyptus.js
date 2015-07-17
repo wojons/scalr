@@ -62,34 +62,34 @@ Scalr.regPage('Scalr.ui.account2.environments.clouds.eucalyptus', function (load
                 name: 'eucalyptus.secret_key.' + locationName,
                 value: values['eucalyptus.secret_key'] || ''
             }, {
-                xtype: 'fieldcontainer',
+                xtype: 'textfield',
                 fieldLabel: 'EC2 URL',
-                layout: 'hbox',
-                items: [{
-                    xtype: 'textfield',
-                    name: 'eucalyptus.ec2_url.' + locationName,
-                    value: values['eucalyptus.ec2_url'] || '',
-                    flex: 1
-                },{
-                    xtype: 'displayinfofield',
-                    margin: '0 7',
-                    value: 'ex: http://192.168.1.1:8773/services/Eucalyptus',
-                    width: 16
+                name: 'eucalyptus.ec2_url.' + locationName,
+                value: values['eucalyptus.ec2_url'] || '',
+                flex: 1,
+                plugins: [{
+                    ptype: 'fieldicons',
+                    align: 'right',
+                    position: 'outer',
+                    icons: {
+                        id: 'info',
+                        tooltip: 'ex: http://192.168.1.1:8773/services/Eucalyptus'
+                    }
                 }]
             }, {
-                xtype: 'fieldcontainer',
+                xtype: 'textfield',
                 fieldLabel: 'S3 URL',
-                layout: 'hbox',
-                items: [{
-                    xtype: 'textfield',
-                    name: 'eucalyptus.s3_url.' + locationName,
-                    value: values['eucalyptus.s3_url'] || '',
-                    flex: 1
-                },{
-                    xtype: 'displayinfofield',
-                    margin: '0 7',
-                    value: 'ex: http://192.168.1.1:8773/services/Walrus',
-                    width: 16
+                name: 'eucalyptus.s3_url.' + locationName,
+                value: values['eucalyptus.s3_url'] || '',
+                flex: 1,
+                plugins: [{
+                    ptype: 'fieldicons',
+                    align: 'right',
+                    position: 'outer',
+                    icons: {
+                        id: 'info',
+                        tooltip: 'ex: http://192.168.1.1:8773/services/Walrus'
+                    }
                 }]
             }, {
                 xtype: 'filefield',
@@ -171,7 +171,7 @@ Scalr.regPage('Scalr.ui.account2.environments.clouds.eucalyptus', function (load
                 layout: 'anchor',
 				defaults: {
 					anchor: '100%',
-					labelWidth: 170
+					labelWidth: 190
 				},
                 items: items
             });
@@ -200,8 +200,8 @@ Scalr.regPage('Scalr.ui.account2.environments.clouds.eucalyptus', function (load
                 },{
                     xtype: 'button',
                     text: 'Add location',
-                    cls: 'x-btn-green-bg',
-                    margin: '2 0 0 12',
+                    cls: 'x-btn-green',
+                    margin: '2 0 6 12',
                     handler: function() {
                         var tabs = this.up('#tabs'),
                             tab;

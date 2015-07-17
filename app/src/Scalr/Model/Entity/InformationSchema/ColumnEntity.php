@@ -14,6 +14,15 @@ use Scalr\Model\AbstractEntity;
  */
 class ColumnEntity extends AbstractEntity
 {
+    /**
+     * The column is nullable
+     */
+    const IS_NULLABLE_YES = 'YES';
+
+    /**
+     * The column is not nullable
+     */
+    const IS_NULLABLE_NO = 'NO';
 
     /**
      * @var string
@@ -114,4 +123,14 @@ class ColumnEntity extends AbstractEntity
      * @var string
      */
     public $columnComment;
+
+    /**
+     * Check whether the column is nullable
+     *
+     * @return  boolean  Returns TRUE if the column is nullable of FALSE otherwise
+     */
+    public function isNullable()
+    {
+        return $this->isNullable == static::IS_NULLABLE_YES;
+    }
 }

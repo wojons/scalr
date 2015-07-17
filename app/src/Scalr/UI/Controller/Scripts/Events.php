@@ -2,6 +2,7 @@
 use Scalr\Acl\Acl;
 use Scalr\UI\Request\JsonData;
 use Scalr\Model\Entity\EventDefinition;
+use Scalr\DataType\ScopeInterface;
 
 class Scalr_UI_Controller_Scripts_Events extends Scalr_UI_Controller
 {
@@ -12,48 +13,68 @@ class Scalr_UI_Controller_Scripts_Events extends Scalr_UI_Controller
         return $this->user->isScalrAdmin() || $this->request->isAllowed(Acl::RESOURCE_GENERAL_CUSTOM_EVENTS);
     }
 
-    public function accountAction()
+    public function defaultAction()
     {
-        $this->defaultAction('account');
-    }
-
-    /**
-     * @param string $scope
-     */
-    public function defaultAction($scope = '')
-    {
-        if ($this->user->isScalrAdmin())
-            $scope = 'scalr';
-        else if (! $scope)
-            $scope = 'environment';
-
         $this->response->page('ui/scripts/events/view.js', [
-            'scope' => $scope,
-            'events' => $this->getList($scope)
+            'scope' => $this->request->getScope(),
+            'events' => $this->getList()
         ]);
     }
 
+    /**
+     * @param   string  $scope  Filter for UI
+     * @return  array
+     * @throws  Scalr_Exception_Core
+     */
     public function getList($scope = '')
     {
         $criteria = [];
-        if ($this->user->isScalrAdmin()) {
-            $criteria[] = ['accountId' => NULL];
-        } else {
-            $criteria[] = ['$or' => [
-                ['accountId' => $this->user->getAccountId()],
-                ['accountId' => NULL]
-            ]];
+        switch ($this->request->getScope()) {
+            case ScopeInterface::SCOPE_SCALR:
+                $criteria[] = ['accountId' => NULL];
+                break;
 
-            if ($scope == 'account') {
+            case ScopeInterface::SCOPE_ACCOUNT:
+                $criteria[] = ['$or' => [
+                    ['accountId' => $this->user->getAccountId()],
+                    ['accountId' => NULL]
+                ]];
                 $criteria[] = ['envId' => NULL];
-            } else {
-                $criteria[] = ['$or' => [['envId' => NULL], ['envId' => $this->getEnvironmentId(true)]]];
-            }
+                break;
+
+            case ScopeInterface::SCOPE_ENVIRONMENT:
+                $criteria[] = ['$or' => [
+                    ['accountId' => $this->user->getAccountId()],
+                    ['accountId' => NULL]
+                ]];
+                $criteria[] = ['$or' => [
+                    ['envId' => NULL],
+                    ['envId' => $this->getEnvironmentId(true)]
+                ]];
+        }
+
+        /* Filter for UI */
+        switch ($scope) {
+            case ScopeInterface::SCOPE_SCALR:
+                $criteria[] = ['accountId' => NULL];
+                break;
+
+            case ScopeInterface::SCOPE_ACCOUNT:
+                $criteria[] = ['accountId' => $this->user->getAccountId()];
+                $criteria[] = ['envId' => NULL];
+                break;
+
+            case ScopeInterface::SCOPE_ENVIRONMENT:
+                $criteria[] = ['envId' => $this->getEnvironmentId(true)];
+                break;
+
+            default:
+                break;
         }
 
         $data = [];
         foreach (EventDefinition::find($criteria) as $event) {
-            /* @var EventDefinition $event */
+            /* @var $event EventDefinition */
             $s = get_object_vars($event);
             if ($event->envId) {
                 $s['scope'] = 'environment';
@@ -71,10 +92,9 @@ class Scalr_UI_Controller_Scripts_Events extends Scalr_UI_Controller
     }
 
     /**
-     * @param string $scope
-     * @throws Scalr_Exception_Core
+     * @param   string    $scope
      */
-    public function xListAction($scope = 'environment')
+    public function xListAction($scope = '')
     {
         $this->response->data([
             'data' => $this->getList($scope)
@@ -85,12 +105,11 @@ class Scalr_UI_Controller_Scripts_Events extends Scalr_UI_Controller
      * @param   integer $id
      * @param   string  $name
      * @param   string  $description
-     * @param   string  $scope
      * @param   bool    $replaceEvent
      * @throws  Exception
      * @throws  Scalr_Exception_Core
      */
-    public function xSaveAction($id = 0, $name, $description, $scope, $replaceEvent = false)
+    public function xSaveAction($id = 0, $name, $description, $replaceEvent = false)
     {
         $validator = new \Scalr\UI\Request\Validator();
         $validator->addErrorIf(!preg_match("/^[A-Za-z0-9]+$/si", $name), 'name', "Name should contain only alphanumeric characters");
@@ -98,6 +117,8 @@ class Scalr_UI_Controller_Scripts_Events extends Scalr_UI_Controller
         $validator->addErrorIf(in_array($name, array_keys(EVENT_TYPE::getScriptingEvents())), 'name',
             sprintf("'%' is reserved name for event. Please select another one.", $name)
         );
+
+        $scope = $this->request->getScope();
 
         if (! $id) {
             $criteria = [
@@ -113,6 +134,7 @@ class Scalr_UI_Controller_Scripts_Events extends Scalr_UI_Controller
                     $criteria[] = ['$or' => [['envId' => NULL], ['envId' => $this->getEnvironmentId(true)]]];
                 }
             }
+            //FIXME don't count the number of records in such way
             $validator->addErrorIf(EventDefinition::find($criteria)->count(), 'name', 'This name is already in use. Note that Event names are case-insensitive.');
 
             // check replacements
@@ -131,7 +153,7 @@ class Scalr_UI_Controller_Scripts_Events extends Scalr_UI_Controller
             }
         }
 
-        if (! $validator->isValid($this->response))
+        if (!$validator->isValid($this->response))
             return;
 
         if ($replacements && $replacements->count() && !$replaceEvent) {
@@ -142,7 +164,7 @@ class Scalr_UI_Controller_Scripts_Events extends Scalr_UI_Controller
 
         if ($id) {
             $event = EventDefinition::findPk($id);
-            /* @var EventDefinition $event */
+            /* @var $event EventDefinition */
             if (! $event)
                 throw new Exception('Event not found');
 
@@ -205,7 +227,7 @@ class Scalr_UI_Controller_Scripts_Events extends Scalr_UI_Controller
             throw new Exception('Empty id\'s list');
 
         foreach (EventDefinition::find(['id' => ['$in' => $ids]]) as $event) {
-            /* @var EventDefinition $event */
+            /* @var $event EventDefinition */
             if (
                 $this->user->isScalrAdmin() && $event->accountId == NULL && $event->envId == NULL ||
                 $this->user->isUser() && $event->accountId == $this->user->getAccountId() && ($event->envId == NULL || $event->envId == $this->getEnvironmentId(true))
@@ -217,7 +239,7 @@ class Scalr_UI_Controller_Scripts_Events extends Scalr_UI_Controller
                     $event->delete();
                 }
             } else {
-                $errors[] = 'Insufficient permissions to remove chef server';
+                $errors[] = 'Insufficient permissions to remove custom event';
             }
         }
 
@@ -252,7 +274,20 @@ class Scalr_UI_Controller_Scripts_Events extends Scalr_UI_Controller
 
         $data['eventName'] = $eventName;
         $data['events'] = array_map(
-            function($item) { return ['name' => $item->name, 'description' => $item->description ]; },
+            function($item) {
+                if ($item->envId) {
+                    $scope = 'environment';
+                } else if ($item->accountId) {
+                    $scope = 'account';
+                } else {
+                    $scope = 'scalr';
+                }
+                return [
+                    'name' => $item->name,
+                    'description' => $item->description,
+                    'scope' => $scope
+                ];
+            },
             EventDefinition::find([
                 ['$or' => [['accountId' => NULL], ['accountId' => $this->user->getAccountId()]]],
                 ['$or' => [['envId' => NULL], ['envId' => $this->getEnvironmentId()]]]
@@ -304,7 +339,7 @@ class Scalr_UI_Controller_Scripts_Events extends Scalr_UI_Controller
             throw new Exception("No running Servers found. Event was not fired.");
 
         foreach ($servers as $dbServer) {
-            /* @var DBServer $dbServer */
+            /* @var $dbServer DBServer */
             $event = new CustomEvent($dbServer, $eventName, (array)$eventParams);
             Scalr::FireEvent($dbServer->farmId, $event);
         }

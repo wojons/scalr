@@ -7,13 +7,6 @@ class Scalr_Limits extends Scalr_Model
     const ACCOUNT_USERS = 'account.users';
     const ACCOUNT_SERVERS = 'account.servers';
 
-    const FEATURE_2FA = 'feature.2fa';
-    const FEATURE_MONGODB_SHARDING = 'feature.mongodb.sharding';
-    const FEATURE_USERS_PERMISSIONS = 'feature.users.permissions';
-    const FEATURE_CHEF = 'feature.chef';
-    const FEATURE_RAID = 'feature.raid';
-    const FEATURE_MFS  = 'feature.mfs';
-
     const TYPE_SOFT = 'soft';
     const TYPE_HARD = 'hard';
 
@@ -45,52 +38,6 @@ class Scalr_Limits extends Scalr_Model
         $this->isBillingEnabled = \Scalr::config('scalr.billing.enabled');
     }
 
-    public static function getFeatures()
-    {
-        return array(
-            self::FEATURE_2FA => self::getFeatureName(self::FEATURE_2FA),
-            self::FEATURE_USERS_PERMISSIONS => self::getFeatureName(self::FEATURE_USERS_PERMISSIONS),
-            self::FEATURE_CHEF => self::getFeatureName(self::FEATURE_CHEF),
-            self::FEATURE_MONGODB_SHARDING => self::getFeatureName(self::FEATURE_MONGODB_SHARDING),
-            self::FEATURE_RAID => self::getFeatureName(self::FEATURE_RAID),
-            self::FEATURE_MFS => self::getFeatureName(self::FEATURE_MFS)
-        );
-    }
-
-    public static function getFeatureName($feature)
-    {
-        $retval = '*Undefined feature*';
-
-        switch ($feature)
-        {
-            case self::FEATURE_2FA:
-                $retval = 'Two-factor authentification';
-            break;
-
-            case self::FEATURE_MONGODB_SHARDING:
-                $retval = 'MongoDB sharding';
-            break;
-
-            case self::FEATURE_USERS_PERMISSIONS:
-                $retval = 'Permissions system';
-            break;
-
-            case self::FEATURE_CHEF:
-                $retval = 'Chef integration';
-            break;
-
-            case self::FEATURE_RAID:
-                $retval = 'RAID arrays';
-            break;
-
-            case self::FEATURE_MFS:
-                $retval = 'Different filesystems';
-                break;
-        }
-
-        return $retval;
-    }
-
     /**
      * @return Scalr_Limits
      */
@@ -98,9 +45,6 @@ class Scalr_Limits extends Scalr_Model
 
         $this->accountId = $accountId;
         $this->limitName = $limitName;
-
-        $features = self::getFeatures();
-        $this->isFeature = isset($features[$limitName]) ? (bool)($features[$limitName]) : false;
 
         $info = $this->db->GetRow("SELECT * FROM account_limits WHERE account_id=? AND limit_name=? LIMIT 1", array($accountId, $limitName));
         if ($info)
@@ -126,9 +70,6 @@ class Scalr_Limits extends Scalr_Model
 
         if (!$this->isBillingEnabled)
             return true;
-
-        if ($this->isFeature)
-            return ($this->limitValue == $value);
 
         if (is_null($this->limitValue) || $this->limitValue == -1)
             return true;

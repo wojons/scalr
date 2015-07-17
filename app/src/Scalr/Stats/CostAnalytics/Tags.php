@@ -86,6 +86,10 @@ class Tags
      */
     public function syncValue($accountId, $tagId, $valueId, $valueName)
     {
+        if ($accountId === null) {
+            $accountId = 0;
+        }
+
         $tag = AccountTagEntity::findPk($accountId, $tagId, $valueId);
         if (!($tag instanceof AccountTagEntity)) {
             $tag = new AccountTagEntity();

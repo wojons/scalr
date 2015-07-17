@@ -2,6 +2,7 @@
 namespace Scalr\Upgrade\Updates;
 
 use ArrayObject;
+use Exception;
 use ReflectionClass;
 use Scalr\Upgrade\SequenceInterface;
 use Scalr\Upgrade\AbstractUpdate;
@@ -27,6 +28,13 @@ class Update20150116130622 extends AbstractUpdate implements SequenceInterface
      * @var CryptoTool
      */
     private $source;
+
+    /**
+     * Global Variables decrypting tool
+     *
+     * @var CryptoTool
+     */
+    private $globals;
 
     /**
      * Encrypting tool
@@ -88,9 +96,17 @@ class Update20150116130622 extends AbstractUpdate implements SequenceInterface
             )
         );
 
-        set_error_handler([$this, 'rollback'], E_USER_ERROR | E_STRICT | E_RECOVERABLE_ERROR | E_ERROR);
+        set_error_handler(function ($code, $message, $file, $line, $context) {
+            \Scalr::errorHandler($code, $message, $file, $line, $context);
+
+            if ($code == E_STRICT) {
+                throw new Exception($message);
+            }
+        }, E_USER_ERROR | E_STRICT | E_RECOVERABLE_ERROR | E_ERROR);
 
         try {
+            $this->db->Execute('START TRANSACTION;');
+
             $this->recrypt('ssh_keys', ['private_key', 'public_key']);
             $this->recrypt('services_ssl_certs', ['ssl_pkey', 'ssl_pkey_password']);
             $this->recrypt('dm_sources', ['auth_info']);
@@ -110,8 +126,11 @@ class Update20150116130622 extends AbstractUpdate implements SequenceInterface
             $method->setAccessible(true);
 
             $this->recrypt('client_environment_properties', ['value'], "WHERE `name` IN ('" . implode("','", array_keys($method->invoke(null))) . "')");
+
+            $this->db->Execute("COMMIT;");
         } catch (\Exception $e) {
             $this->rollback($e->getCode(), $e->getMessage());
+            restore_error_handler();
             throw $e;
         }
 
@@ -151,7 +170,6 @@ class Update20150116130622 extends AbstractUpdate implements SequenceInterface
 
         $names = '`' . implode('`, `', array_merge($pks, $fields)) . '`';
 
-        $this->db->Execute('START TRANSACTION;');
         $data = $this->db->Execute("SELECT {$names} FROM `{$table}` {$where} FOR UPDATE;");
 
         $params = '`' . implode('` = ?, `', $fields) . '` = ?';
@@ -175,8 +193,6 @@ class Update20150116130622 extends AbstractUpdate implements SequenceInterface
 
             $affected += $this->db->Affected_Rows();
         }
-
-        $this->db->Execute("COMMIT;");
 
         $this->console->out("Updated {$affected} rows!\n");
 

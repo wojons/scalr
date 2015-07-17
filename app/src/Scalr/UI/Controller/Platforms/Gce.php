@@ -6,7 +6,8 @@ use Scalr\Modules\Platforms\GoogleCE\GoogleCEPlatformModule;
 class Scalr_UI_Controller_Platforms_Gce extends Scalr_UI_Controller
 {
     public function xGetFarmRoleStaticIpsAction($region, $cloudLocation, $farmRoleId) {
-        $gceClient = $this->getGceClient($this->environment);
+        $p = PlatformFactory::NewPlatform(SERVER_PLATFORMS::GCE);
+        $gceClient = $p->getClient($this->environment);
         $projectId = $this->environment->getPlatformConfigValue(GoogleCEPlatformModule::PROJECT_ID);
 
         $map = array();
@@ -78,37 +79,19 @@ class Scalr_UI_Controller_Platforms_Gce extends Scalr_UI_Controller
         $this->response->data(['data' => ['staticIps' => ['map' => $map, 'ips' => $ips]]]);
     }
 
-    private function getGceClient($environment)
-    {
-        $p = PlatformFactory::NewPlatform(SERVER_PLATFORMS::GCE);
-
-        $client = new Google_Client();
-        $client->setApplicationName("Scalr GCE");
-        $client->setScopes(array('https://www.googleapis.com/auth/compute'));
-
-        $key = base64_decode($environment->getPlatformConfigValue(GoogleCEPlatformModule::KEY));
-        $client->setAssertionCredentials(new Google_Auth_AssertionCredentials(
-            $environment->getPlatformConfigValue(GoogleCEPlatformModule::SERVICE_ACCOUNT_NAME),
-            array('https://www.googleapis.com/auth/compute'),
-            $key,
-            $environment->getPlatformConfigValue(GoogleCEPlatformModule::JSON_KEY) ? null : 'notasecret'
-        ));
-
-        $client->setClientId($environment->getPlatformConfigValue(GoogleCEPlatformModule::CLIENT_ID));
-
-        return new Google_Service_Compute($client);
-    }
-
     public function xGetOptionsAction()
     {
         $p = PlatformFactory::NewPlatform(SERVER_PLATFORMS::GCE);
-
-        $gceClient = $this->getGceClient($this->environment);
+        $gceClient = $p->getClient($this->environment);
         $projectId = $this->environment->getPlatformConfigValue(GoogleCEPlatformModule::PROJECT_ID);
 
         $data['zones'] = array();
         $zones = $gceClient->zones->listZones($projectId);
         foreach ($zones->items as $item) {
+            
+            if ($item->deprecated)
+                $item->description .= " (Deprecated)";
+            
             $data['zones'][] = array(
                 'name' => $item->name,
                 'description' => $item->description,
@@ -149,15 +132,28 @@ class Scalr_UI_Controller_Platforms_Gce extends Scalr_UI_Controller
                 'description' => $description
             );
         }
+        
+        $diskTypes = $gceClient->diskTypes->listDiskTypes($projectId, $data['zones'][0]['name']);
+        foreach ($diskTypes as $diskType) {
+            /* @var $diskType \Google_Service_Compute_DiskType */
+            $data['diskTypes'][] = [
+                'name'        => $diskType->name,
+                'description' => $diskType->description,
+                'defaultSize' => $diskType->defaultDiskSizeGb
+            ];
+        }
 
         $this->response->data(array('data' => $data));
     }
 
+    
+    // NOT USED. Should we remove this method?
     public function xGetMachineTypesAction()
     {
         $p = PlatformFactory::NewPlatform(SERVER_PLATFORMS::GCE);
 
         $data['types'] = [];
+        $data['diskTypes'] = [];
         $data['dbTypes'] = [];
 
         $items = $p->getInstanceTypes($this->environment, $this->getParam('cloudLocation'), true);
@@ -168,6 +164,7 @@ class Scalr_UI_Controller_Platforms_Gce extends Scalr_UI_Controller
                 'description' => $item['name'] . " (" . $item['description'] . ")"
             ];
         }
+        
 
         $this->response->data(['data' => $data]);
     }

@@ -11,26 +11,21 @@ Scalr.regPage('Scalr.ui.tools.openstack.snapshots.view', function (loadParams, m
 	});
 
 	return Ext.create('Ext.grid.Panel', {
-		title: Scalr.utils.getPlatformName(loadParams['platform']) + ' &raquo; Snapshots',
 		scalrOptions: {
-			'reload': true,
-			'maximize': 'all'
+			reload: true,
+			maximize: 'all',
+            menuTitle: Scalr.utils.getPlatformName(loadParams['platform']) + ' Snapshots',
+            //menuFavorite: true
 		},
 		store: store,
 		stateId: 'grid-tools-openstack-volumes-view',
 		stateful: true,
-		plugins: {
-			ptype: 'gridstore'
-		},
-		tools: [{
-			xtype: 'gridcolumnstool'
-		}, {
-			xtype: 'favoritetool',
-			favorite: {
-				text: 'Cloudstack Snapshots',
-				href: '#/tools/openstack/snapshots?platform=' + loadParams['platform']
-			}
-		}],
+        plugins: [{
+            ptype: 'gridstore'
+        }, {
+            ptype: 'applyparams',
+            filterIgnoreParams: [ 'platform' ]
+        }],
 
 		viewConfig: {
 			emptyText: 'No snapshots found',
@@ -48,11 +43,11 @@ Scalr.regPage('Scalr.ui.tools.openstack.snapshots.view', function (loadParams, m
             },
 			{ header: "Created at", flex: 1, dataIndex: 'createdAt', sortable: true },
 			{
-				xtype: 'optionscolumn2',
+				xtype: 'optionscolumn',
 				menu: [{
-					itemId: 'option.create',
 					text: 'Create new volume based on this snapshot',
 					iconCls: 'x-menu-icon-create',
+                    showAsQuickAction: true,
 					menuHandler: function(data) {
 						Scalr.event.fireEvent('redirect','#/tools/openstack/volumes/create?' +
 							Ext.Object.toQueryString({
@@ -63,40 +58,11 @@ Scalr.regPage('Scalr.ui.tools.openstack.snapshots.view', function (loadParams, m
 							})
 						);
 					}
-				}, {
-					itemId: 'option.delete',
-					text: 'Delete',
-					iconCls: 'x-menu-icon-delete',
-					request: {
-						confirmBox: {
-							type: 'delete',
-							msg: 'Are you sure want to delete Snapshot "{snapshotId}"?'
-						},
-						processBox: {
-							type: 'delete',
-							msg: 'Deleting volume(s) ...'
-						},
-						url: '/tools/openstack/snapshots/xRemove/',
-						dataHandler: function (data) {
-							return { 
-								snapshotId: Ext.encode([data['snapshotId']]),
-								cloudLocation: store.proxy.extraParams.cloudLocation,
-								platform: loadParams['platform']
-							};
-						},
-						success: function () {
-							store.load();
-						}
-					}
 				}]
 			}
 		],
 
-		multiSelect: true,
-		selModel: {
-			selType: 'selectedmodel'
-		},
-
+        selModel: 'selectedmodel',
 		listeners: {
 			selectionchange: function(selModel, selections) {
 				this.down('scalrpagingtoolbar').down('#delete').setDisabled(!selections.length);
@@ -105,13 +71,12 @@ Scalr.regPage('Scalr.ui.tools.openstack.snapshots.view', function (loadParams, m
 
 		dockedItems: [{
 			xtype: 'scalrpagingtoolbar',
-            ignoredLoadParams: ['platform'],
 			store: store,
 			dock: 'top',
 			afterItems: [{
-				ui: 'paging',
 				itemId: 'delete',
-				iconCls: 'x-tbar-delete',
+				iconCls: 'x-btn-icon-delete',
+                cls: 'x-btn-red',
 				tooltip: 'Select one or more snapshots to delete them',
 				disabled: true,
 				handler: function() {
@@ -142,15 +107,9 @@ Scalr.regPage('Scalr.ui.tools.openstack.snapshots.view', function (loadParams, m
 			items: [{
                 xtype: 'filterfield',
                 store: store
-            }, {
-				xtype: 'fieldcloudlocation',
-				itemId: 'cloudLocation',
-                margin: '0 0 0 12',
-				store: {
-					fields: [ 'id', 'name' ],
-					data: moduleParams.locations,
-					proxy: 'object'
-				},
+            }, ' ', {
+                xtype: 'cloudlocationfield',
+                platforms: [loadParams['platform']],
 				gridStore: store
 			}]
 		}]

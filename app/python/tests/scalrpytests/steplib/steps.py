@@ -29,26 +29,26 @@ def wait(step, seconds):
 @step(u"White Rabbit has config '(.*)'")
 def has_config(step, config):
     script = lib.ScriptCls('-c %s' % config)
-    lib.world.config = script.app.config
+    lib.world.config = script.app.config.copy()
 
 
 @step(u"White Rabbit drops scalr_test database")
-def drop_db(step):
+def drop_db_scalr(step):
     assert lib.drop_db(lib.world.config['connections']['mysql'])
 
 
 @step(u"White Rabbit creates scalr_test database")
-def create_db(step):
+def create_db_scalr(step):
     assert lib.create_db(lib.world.config['connections']['mysql'])
 
 
 @step(u"White Rabbit drops analytics_test database")
-def drop_db(step):
+def drop_db_analytics(step):
     assert lib.drop_db(lib.world.config['connections']['analytics'])
 
 
 @step(u"White Rabbit creates analytics_test database")
-def create_db(step):
+def create_db_analytics(step):
     assert lib.create_db(lib.world.config['connections']['analytics'])
 
 
@@ -85,7 +85,8 @@ def fill_messages(step):
         record['messageid'] = record.get('messageid', "'%s'" % str(uuid.uuid4()))
         record['status'] = record.get('status', 0)
         record['handle_attempts'] = record.get('handle_attempts', 0)
-        record['dtlasthandleattempt'] = record.get('dthandleattempt', "'%s'" % datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
+        record['dtlasthandleattempt'] = record.get(
+            'dthandleattempt', "'%s'" % datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
         record['message'] = "'Carrot'"
         record['server_id'] = record.get('server_id', "'%s'" % lib.generate_server_id())
         record['type'] = record.get('type', "'out'")
@@ -94,15 +95,16 @@ def fill_messages(step):
         record['message_format'] = record.get('message_format', "'json'")
         record['event_id'] = record.get('event_id', "'%s'" % lib.generate_id())
         query = (
-                "INSERT messages "
-                "(messageid, status, handle_attempts, dtlasthandleattempt, message, "
-                "server_id, type, message_version, message_name, message_format, event_id) "
-                "VALUES ({messageid}, {status}, {handle_attempts}, {dtlasthandleattempt}, "
-                "{message}, {server_id}, {type}, {message_version}, {message_name}, "
-                "{message_format}, {event_id})"
+            "INSERT messages "
+            "(messageid, status, handle_attempts, dtlasthandleattempt, message, "
+            "server_id, type, message_version, message_name, message_format, event_id) "
+            "VALUES ({messageid}, {status}, {handle_attempts}, {dtlasthandleattempt}, "
+            "{message}, {server_id}, {type}, {message_version}, {message_name}, "
+            "{message_format}, {event_id})"
         ).format(**record)
         db.execute(query)
-        message = db.execute('SELECT * FROM messages where messageid={0}'.format(record['messageid'].strip()))[0]
+        message = db.execute(
+            'SELECT * FROM messages where messageid={0}'.format(record['messageid'].strip()))[0]
         lib.world.messages[message['messageid']] = message
 
 
@@ -116,23 +118,26 @@ def fill_servers(step):
         record['farm_roleid'] = record.get('farm_roleid', lib.generate_id())
         record['client_id'] = record.get('client_id', lib.generate_id())
         record['env_id'] = record.get('env_id', lib.generate_id())
-        record['role_id'] = record.get('env_id', lib.generate_id())
-        record['platform'] = record.get('platform', random.choice(["'ec2'", "'gce'", "'idcf'", "'openstack'"]))
+        record['platform'] = record.get(
+            'platform', random.choice(["'ec2'", "'gce'", "'idcf'", "'openstack'"]))
+        record['cloud_location'] = record.get('cloud_location', "'us-east-1'")
         record['status'] = record.get('status', "'running'")
         record['remote_ip'] = record.get('remote_ip', 'NULL')
         record['local_ip'] = record.get('local_ip', 'NULL')
         record['index'] = record.get('index', 1)
         record['os_type'] = record.get('os_type', random.choice(["'linux'", "'windows'"]))
         query = (
-                "INSERT INTO servers "
-                "(server_id, farm_id, farm_roleid, client_id, env_id, role_id, platform, "
-                "status, remote_ip, local_ip, `index`, os_type) "
-                "VALUES ({server_id}, {farm_id}, {farm_roleid}, {client_id}, {env_id}, "
-                "{role_id}, {platform}, {status}, {remote_ip}, {local_ip}, {index}, {os_type})"
+            "INSERT INTO servers "
+            "(server_id, farm_id, farm_roleid, client_id, env_id, platform, cloud_location, "
+            "status, remote_ip, local_ip, `index`, os_type) "
+            "VALUES ({server_id}, {farm_id}, {farm_roleid}, {client_id}, {env_id}, "
+            "{platform}, {cloud_location}, {status}, {remote_ip}, {local_ip}, {index}, {os_type})"
         ).format(**record)
         db.execute(query)
-        server = db.execute("SELECT * FROM servers where server_id='%s'" % strip(record['server_id']))
-        server = db.execute("SELECT * FROM servers where server_id='%s'" % strip(record['server_id']))[0]
+        server = db.execute("SELECT * FROM servers where server_id='%s'" %
+                            strip(record['server_id']))
+        server = db.execute("SELECT * FROM servers where server_id='%s'" %
+                            strip(record['server_id']))[0]
         lib.world.servers[server['server_id']] = server
 
 
@@ -142,19 +147,19 @@ def fill_webhook_history(step):
     lib.world.webhook_history = {}
     for record in step.hashes:
         record['history_id'] = record.get('history_id', "'%s'" %
-                lib.generate_history_id()).replace('-', '').upper()
+                                          lib.generate_history_id()).replace('-', '').upper()
         record['webhook_id'] = record.get('webhook_id', "'%s'" %
-                lib.generate_webhook_id()).replace('-', '').upper()
+                                          lib.generate_webhook_id()).replace('-', '').upper()
         record['endpoint_id'] = record.get('endpoint_id', "'%s'" %
-                lib.generate_endpoint_id()).replace('-', '').upper()
+                                           lib.generate_endpoint_id()).replace('-', '').upper()
         record['event_id'] = record.get('event_id', "'%s'" % lib.generate_id())
         record['status'] = record.get('status', 0)
         record['payload'] = record.get('payload', "'This is text'")
         query = (
-                "INSERT INTO webhook_history "
-                "(history_id, webhook_id, endpoint_id, event_id, status, payload) "
-                "VALUES (UNHEX({history_id}), UNHEX({webhook_id}), UNHEX({endpoint_id}), "
-                "{event_id}, {status}, {payload})"
+            "INSERT INTO webhook_history "
+            "(history_id, webhook_id, endpoint_id, event_id, status, payload) "
+            "VALUES (UNHEX({history_id}), UNHEX({webhook_id}), UNHEX({endpoint_id}), "
+            "{event_id}, {status}, {payload})"
         ).format(**record)
         db.execute(query)
 
@@ -170,12 +175,12 @@ def fill_webhook_endpoints(step):
     lib.world.webhook_endpoints = {}
     for record in step.hashes:
         record['endpoint_id'] = record.get('endpoint_id', "'%s'" %
-                lib.generate_endpoint_id()).replace('-', '')
+                                           lib.generate_endpoint_id()).replace('-', '')
         record['url'] = record.get('url', 'http://localhost')
         query = (
-                "INSERT INTO webhook_endpoints "
-                "(endpoint_id, url) "
-                "VALUES (UNHEX({endpoint_id}), {url})"
+            "INSERT INTO webhook_endpoints "
+            "(endpoint_id, url) "
+            "VALUES (UNHEX({endpoint_id}), {url})"
         ).format(**record)
         db.execute(query)
 
@@ -191,13 +196,13 @@ def fill_server_properties(step):
     lib.world.server_properties = {}
     for record in step.hashes:
         query = (
-                "INSERT INTO server_properties "
-                "(server_id, name, value) "
-                "VALUES ({server_id}, {name}, {value})"
+            "INSERT INTO server_properties "
+            "(server_id, name, value) "
+            "VALUES ({server_id}, {name}, {value})"
         ).format(**record)
         db.execute(query)
         lib.world.server_properties.setdefault(strip(record['server_id']), {}).update(
-                {strip(record['name']): strip(record['value'])})
+            {strip(record['name']): strip(record['value'])})
 
 
 @step(u"Database has clients records")
@@ -208,9 +213,9 @@ def fill_clients(step):
         record['id'] = record.get('id', lib.generate_id())
         record['status'] = record.get('status', "'Active'")
         query = (
-                "INSERT INTO clients "
-                "(id, status) "
-                "VALUES ({id}, {status})"
+            "INSERT INTO clients "
+            "(id, status) "
+            "VALUES ({id}, {status})"
         ).format(**record)
         db.execute(query)
         client = db.execute('SELECT * FROM clients where id=%s' % record['id'])[0]
@@ -227,9 +232,9 @@ def fill_client_environments(step):
         record['status'] = record.get('status', 'Active')
         lib.world.client_environments[record['id']] = record
         query = (
-                "INSERT INTO client_environments "
-                "(id, client_id, status) "
-                "VALUES ({id}, {client_id}, {status})"
+            "INSERT INTO client_environments "
+            "(id, client_id, status) "
+            "VALUES ({id}, {client_id}, {status})"
         ).format(**record)
         db.execute(query)
 
@@ -241,9 +246,9 @@ def fill_client_environment_properties(step):
         record['group'] = record.get('group', "''")
         record['cloud'] = record.get('cloud', 'NULL')
         query = (
-                "INSERT INTO client_environment_properties "
-                "(env_id, name, value, `group`, cloud) "
-                "VALUES ({env_id}, {name}, {value}, {group}, {cloud})"
+            "INSERT INTO client_environment_properties "
+            "(env_id, name, value, `group`, cloud) "
+            "VALUES ({env_id}, {name}, {value}, {group}, {cloud})"
         ).format(**record)
         db.execute(query)
 
@@ -260,9 +265,9 @@ def fill_farms(step):
         record['status'] = record.get('status', "1")
         lib.world.farms[record['id']] = record
         query = (
-                "INSERT INTO farms "
-                "(id, clientid, env_id, hash, status) "
-                "VALUES ({id}, {clientid}, {env_id}, {hash}, {status})"
+            "INSERT INTO farms "
+            "(id, clientid, env_id, hash, status) "
+            "VALUES ({id}, {clientid}, {env_id}, {hash}, {status})"
         ).format(**record)
         db.execute(query)
 
@@ -272,9 +277,9 @@ def fill_farm_settings(step):
     db = dbmanager.DB(lib.world.config['connections']['mysql'])
     for record in step.hashes:
         query = (
-                "INSERT INTO farm_settings "
-                "(farmid, name, value) "
-                "VALUES ({farmid}, {name}, {value})"
+            "INSERT INTO farm_settings "
+            "(farmid, name, value) "
+            "VALUES ({farmid}, {name}, {value})"
         ).format(**record)
         db.execute(query)
 
@@ -284,9 +289,33 @@ def fill_farm_role_settings(step):
     db = dbmanager.DB(lib.world.config['connections']['mysql'])
     for record in step.hashes:
         query = (
-                "INSERT INTO farm_role_settings "
-                "(farm_roleid, name, value) "
-                "VALUES ({farm_roleid}, {name}, {value})"
+            "INSERT INTO farm_role_settings "
+            "(farm_roleid, name, value) "
+            "VALUES ({farm_roleid}, {name}, {value})"
+        ).format(**record)
+        db.execute(query)
+
+
+@step(u"Database has farm_roles records")
+def fill_farm_roles(step):
+    db = dbmanager.DB(lib.world.config['connections']['mysql'])
+    for record in step.hashes:
+        query = (
+            "INSERT INTO farm_roles "
+            "(id, role_id) "
+            "VALUES ({id}, {role_id})"
+        ).format(**record)
+        db.execute(query)
+
+
+@step(u"Database has roles records")
+def fill_roles(step):
+    db = dbmanager.DB(lib.world.config['connections']['mysql'])
+    for record in step.hashes:
+        query = (
+            "INSERT INTO roles "
+            "(id, os_id) "
+            "VALUES ({id}, {os_id})"
         ).format(**record)
         db.execute(query)
 
@@ -302,10 +331,10 @@ def fill_poller_sessions(step):
         record['url'] = record.get('url', "''")
         record['cloud_account'] = record.get('cloud_account', "''")
         query = (
-                "INSERT INTO poller_sessions "
-                "(sid, account_id, env_id, dtime, platform, url, cloud_location, cloud_account) "
-                "VALUES (UNHEX({sid}), {account_id}, {env_id}, {dtime}, {platform}, "
-                "{url}, {cloud_location}, {cloud_account})"
+            "INSERT INTO poller_sessions "
+            "(sid, account_id, env_id, dtime, platform, url, cloud_location, cloud_account) "
+            "VALUES (UNHEX({sid}), {account_id}, {env_id}, {dtime}, {platform}, "
+            "{url}, {cloud_location}, {cloud_account})"
         ).format(**record)
         db.execute(query)
 
@@ -315,29 +344,29 @@ def fill_managed(step):
     db = dbmanager.DB(lib.world.config['connections']['analytics'])
     for record in step.hashes:
         query = (
-                "SELECT platform "
-                "FROM poller_sessions "
-                "WHERE sid=UNHEX({sid}) "
-                "LIMIT 1"
+            "SELECT platform "
+            "FROM poller_sessions "
+            "WHERE sid=UNHEX({sid}) "
+            "LIMIT 1"
         ).format(**record)
 
         record['server_id'] = record['server_id'].replace('-', '')
         query = (
-                "INSERT INTO managed "
-                "(sid, server_id, instance_type, os) "
-                "VALUES (UNHEX({sid}), UNHEX({server_id}), {instance_type}, {os})"
+            "INSERT INTO managed "
+            "(sid, server_id, instance_type, os) "
+            "VALUES (UNHEX({sid}), UNHEX({server_id}), {instance_type}, {os})"
         ).format(**record)
         db.execute(query)
 
 
 @step(u"Analytics database has notmanaged records")
-def fill_not_managed(step):
+def fill_notmanaged(step):
     db = dbmanager.DB(lib.world.config['connections']['analytics'])
     for record in step.hashes:
         query = (
-                "INSERT INTO notmanaged "
-                "(sid, instance_id, instance_type, os) "
-                "VALUES (UNHEX({sid}), {instance_id}, {instance_type}, {os})"
+            "INSERT INTO notmanaged "
+            "(sid, instance_id, instance_type, os) "
+            "VALUES (UNHEX({sid}), {instance_id}, {instance_type}, {os})"
         ).format(**record)
         db.execute(query)
 
@@ -349,10 +378,10 @@ def fill_price_history(step):
         record['applied'] = record.get('applied', "'%s'" % dtime.split()[0])
         record['url'] = record.get('url', "''")
         query = (
-                "INSERT INTO price_history "
-                "(price_id, platform, url, cloud_location, account_id, applied) "
-                "VALUES (UNHEX({price_id}), {platform}, {url}, {cloud_location}, "
-                "{account_id}, {applied})"
+            "INSERT INTO price_history "
+            "(price_id, platform, url, cloud_location, account_id, applied) "
+            "VALUES (UNHEX({price_id}), {platform}, {url}, {cloud_location}, "
+            "{account_id}, {applied})"
         ).format(**record)
         db.execute(query)
 
@@ -362,9 +391,9 @@ def fill_prices(step):
     db = dbmanager.DB(lib.world.config['connections']['analytics'])
     for record in step.hashes:
         query = (
-                "INSERT INTO prices "
-                "(price_id, instance_type, os, cost) "
-                "VALUES (UNHEX({price_id}), {instance_type}, {os}, {cost})"
+            "INSERT INTO prices "
+            "(price_id, instance_type, os, cost) "
+            "VALUES (UNHEX({price_id}), {instance_type}, {os}, {cost})"
         ).format(**record)
         db.execute(query)
 
@@ -379,10 +408,10 @@ def fill_quarterly_budget(step):
         except ValueError:
             record['cumulativespend'] = 'NULL'
         query = (
-                "INSERT INTO quarterly_budget "
-                "(year, subject_type, subject_id, quarter, budget, cumulativespend, spentondate) "
-                "VALUES ({year}, {subject_type}, UNHEX({subject_id}), {quarter}, {budget}, "
-                "{cumulativespend}, {spentondate})"
+            "INSERT INTO quarterly_budget "
+            "(year, subject_type, subject_id, quarter, budget, cumulativespend, spentondate) "
+            "VALUES ({year}, {subject_type}, UNHEX({subject_id}), {quarter}, {budget}, "
+            "{cumulativespend}, {spentondate})"
         ).format(**record)
         db.execute(query)
 
@@ -392,8 +421,8 @@ def fill_settings(step):
     db = dbmanager.DB(lib.world.config['connections']['analytics'])
     for record in step.hashes:
         query = (
-                "INSERT INTO settings (id,value) "
-                "VALUES ('{id}', '{value}')"
+            "INSERT INTO settings (id,value) "
+            "VALUES ('{id}', '{value}')"
         ).format(**record)
         db.execute(query)
 
@@ -405,14 +434,14 @@ def fill_events(step):
         record['id'] = record.get('id', lib.generate_id())
         record['event_id'] = record.get('event_id', "'%s'" % lib.generate_id())
         query = (
-                "INSERT INTO events "
-                "(id, event_id) "
-                "VALUES ({id}, {event_id})"
+            "INSERT INTO events "
+            "(id, event_id) "
+            "VALUES ({id}, {event_id})"
         ).format(**record)
         db.execute(query)
 
 
-@step(u"White Rabbit checks messages")
+@step(u"White Rabbit checks messages table")
 def check_messages(step):
     db = dbmanager.DB(lib.world.config['connections']['mysql'])
     query = "SELECT count(*) AS count FROM messages"
@@ -420,17 +449,18 @@ def check_messages(step):
     assert int(result[0]['count']) == len(step.hashes), result[0]['count']
     for record in step.hashes:
         query = (
-                "SELECT * "
-                "FROM messages "
-                "WHERE messageid={messageid}"
+            "SELECT * "
+            "FROM messages "
+            "WHERE messageid={messageid}"
         ).format(**record)
         res = db.execute(query)
         assert res
         assert int(record['status']) == int(res[0]['status']), res[0]['status']
-        assert int(record['handle_attempts']) == int(res[0]['handle_attempts']), res[0]['handle_attempts']
+        assert int(record['handle_attempts']) == int(
+            res[0]['handle_attempts']), res[0]['handle_attempts']
 
 
-@step(u"White Rabbit checks webhook_history")
+@step(u"White Rabbit checks webhook_history table")
 def check_webhook_history(step):
     db = dbmanager.DB(lib.world.config['connections']['mysql'])
     query = "SELECT count(*) AS count FROM webhook_history"
@@ -439,9 +469,9 @@ def check_webhook_history(step):
     for record in step.hashes:
         record['history_id'] = record['history_id'].replace('-', '')
         query = (
-                "SELECT * "
-                "FROM webhook_history "
-                "WHERE history_id=UNHEX({history_id})"
+            "SELECT * "
+            "FROM webhook_history "
+            "WHERE history_id=UNHEX({history_id})"
         ).format(**record)
         res = db.execute(query)
         assert res
@@ -466,16 +496,22 @@ def check_usage_h(step):
         record['url'] = record.get('url', '')
         for k, v in record.iteritems():
             record[k] = strip(v)
+        query = (
+            "SELECT HEX(ui.id) id FROM usage_items ui JOIN usage_types ut ON ut.id=ui.usage_type "
+            "WHERE ut.cost_distr_type=1 AND ut.name='BoxUsage' AND ui.name='{name}'"
+        ).format(name=record['instance_type'])
+        result = db.execute(query)
+        record['usage_item'] = result[0]['id'].lower()
         usage_id = analytics.Usage_h(record)['usage_id']
         query = (
-                "SELECT * "
-                "FROM usage_h "
-                "WHERE usage_id=UNHEX('{usage_id}')"
+            "SELECT * "
+            "FROM usage_h "
+            "WHERE usage_id=UNHEX('{usage_id}')"
         ).format(usage_id=usage_id)
         res = db.execute(query)
-        assert res, record
+        assert res, usage_id
         assert int(record['num']) == int(res[0]['num'])
-        assert float(record['cost']) == float(res[0]['cost'])
+        assert float(record['cost']) == float(res[0]['cost']), float(res[0]['cost'])
 
 
 @step(u"White Rabbit checks nm_usage_h table")
@@ -492,14 +528,14 @@ def check_nm_usage_h(step):
             record[k] = strip(v)
         usage_id = analytics.NM_usage_h(record)['usage_id']
         query = (
-                "SELECT * "
-                "FROM nm_usage_h "
-                "WHERE usage_id=UNHEX('{usage_id}')"
+            "SELECT * "
+            "FROM nm_usage_h "
+            "WHERE usage_id=UNHEX('{usage_id}')"
         ).format(usage_id=usage_id)
         res = db.execute(query)
         assert res
         assert int(record['num']) == int(res[0]['num'])
-        assert float(record['cost']) == float(res[0]['cost'])
+        assert float(record['cost']) == float(res[0]['cost']), float(res[0]['cost'])
 
 
 @step(u"White Rabbit checks usage_d table")
@@ -513,14 +549,14 @@ def check_usage_d(step):
         record['cc_id'] = uuid.UUID(strip(record['cc_id'])).hex
         record['project_id'] = uuid.UUID(strip(record['project_id'])).hex
         query = (
-                "SELECT * "
-                "FROM usage_d "
-                "WHERE date={date} "
-                "AND platform={platform} "
-                "AND cc_id=UNHEX('{cc_id}') "
-                "AND project_id=UNHEX('{project_id}') "
-                "AND farm_id={farm_id} "
-                "AND cost={cost}"
+            "SELECT * "
+            "FROM usage_d "
+            "WHERE date={date} "
+            "AND platform={platform} "
+            "AND cc_id=UNHEX('{cc_id}') "
+            "AND project_id=UNHEX('{project_id}') "
+            "AND farm_id={farm_id} "
+            "AND cost={cost}"
         ).format(**record)
         assert db.execute(query)
 
@@ -535,13 +571,13 @@ def check_nm_usage_d(step):
         record['date'] = record.get('date', "'%s'" % dtime.split()[0])
         record['cc_id'] = uuid.UUID(strip(record['cc_id'])).hex
         query = (
-                "SELECT * "
-                "FROM nm_usage_d "
-                "WHERE date={date} "
-                "AND platform={platform} "
-                "AND cc_id=UNHEX('{cc_id}') "
-                "AND env_id={env_id} "
-                "AND cost={cost}"
+            "SELECT * "
+            "FROM nm_usage_d "
+            "WHERE date={date} "
+            "AND platform={platform} "
+            "AND cc_id=UNHEX('{cc_id}') "
+            "AND env_id={env_id} "
+            "AND cost={cost}"
         ).format(**record)
         assert db.execute(query)
 
@@ -553,8 +589,8 @@ def check_farm_usage_d(step):
     result = db.execute(query)
     assert int(result[0]['count']) == len(step.hashes)
     query = (
-            "SELECT * "
-            "FROM farm_usage_d")
+        "SELECT * "
+        "FROM farm_usage_d")
     results = db.execute(query)
     for record in step.hashes:
         record['date'] = record.get('date', "'%s'" % dtime.split()[0])
@@ -585,16 +621,86 @@ def check_quarterly_budget(step):
         if record['spentondate'] == '':
             record['spentondate'] = "'%s'" % dtime
         query = (
-                "SELECT * "
-                "FROM quarterly_budget "
-                "WHERE year={year} "
-                "AND subject_type={subject_type} "
-                "AND subject_id=UNHEX('{subject_id}') "
-                "AND quarter={quarter} "
-                "AND cumulativespend={cumulativespend} "
-                "AND DATE(spentondate)=DATE({spentondate})"
+            "SELECT * "
+            "FROM quarterly_budget "
+            "WHERE year={year} "
+            "AND subject_type={subject_type} "
+            "AND subject_id=UNHEX('{subject_id}') "
+            "AND quarter={quarter} "
+            "AND cumulativespend={cumulativespend} "
+            "AND DATE(spentondate)=DATE({spentondate})"
         ).format(**record)
         assert db.execute(query), query
+
+
+@step(u"White Rabbit checks poller_sessions table")
+def check_poller_sessions(step):
+    db = dbmanager.DB(lib.world.config['connections']['analytics'])
+    query = (
+        "SELECT * "
+        "FROM poller_sessions"
+    )
+    results = db.execute(query)
+    assert len(results) == len(step.hashes), len(results)
+    for record in step.hashes:
+        for k, v in record.iteritems():
+            record[k] = strip(v)
+        for result in results:
+            try:
+                for k, v in record.iteritems():
+                    assert record[k] == str(result[k])
+                break
+            except AssertionError:
+                continue
+        else:
+            assert False
+
+
+@step(u"White Rabbit checks managed table")
+def check_managed(step):
+    db = dbmanager.DB(lib.world.config['connections']['analytics'])
+    query = (
+        "SELECT * "
+        "FROM managed"
+    )
+    results = db.execute(query)
+    assert len(results) == len(step.hashes), len(results)
+    for record in step.hashes:
+        record['server_id'] = uuid.UUID(strip(record['server_id'])).bytes
+        for k, v in record.iteritems():
+            record[k] = strip(v)
+        for result in results:
+            try:
+                for k, v in record.iteritems():
+                    assert record[k] == str(result[k])
+                break
+            except AssertionError:
+                continue
+        else:
+            assert False
+
+
+@step(u"White Rabbit checks notmanaged table")
+def check_notmanaged(step):
+    db = dbmanager.DB(lib.world.config['connections']['analytics'])
+    query = (
+        "SELECT * "
+        "FROM notmanaged"
+    )
+    results = db.execute(query)
+    assert len(results) == len(step.hashes), len(results)
+    for record in step.hashes:
+        for k, v in record.iteritems():
+            record[k] = strip(v)
+        for result in results:
+            try:
+                for k, v in record.iteritems():
+                    assert record[k] == str(result[k])
+                break
+            except AssertionError:
+                continue
+        else:
+            assert False
 
 
 @step(u"Analytics database has new prices")
@@ -603,23 +709,23 @@ def update_prices(step):
     for record in step.hashes:
         record['price_id'] = uuid.UUID(strip(record['price_id'])).hex
         query = (
-                "UPDATE prices "
-                "SET cost={cost} "
-                "WHERE price_id=UNHEX('{price_id}') "
-                "AND instance_type={instance_type} "
-                "AND os={os}"
+            "UPDATE prices "
+            "SET cost={cost} "
+            "WHERE price_id=UNHEX('{price_id}') "
+            "AND instance_type={instance_type} "
+            "AND os={os}"
         ).format(**record)
         db.execute(query)
 
 
-@step(u"White Rabbit checks events")
+@step(u"White Rabbit checks events table")
 def check_events(step):
     db = dbmanager.DB(lib.world.config['connections']['mysql'])
     for record in step.hashes:
         query = (
-                "SELECT * "
-                "FROM events "
-                "WHERE event_id={event_id}"
+            "SELECT * "
+            "FROM events "
+            "WHERE event_id={event_id}"
         ).format(**record)
         res = db.execute(query)
         assert res

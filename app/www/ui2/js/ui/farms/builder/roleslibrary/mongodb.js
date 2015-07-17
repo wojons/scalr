@@ -42,12 +42,13 @@ Scalr.regPage('Scalr.ui.farms.builder.addrole.mongodb', function () {
             xtype: 'combo',
             name: 'mongodb.ssl.cert_id',
             fieldLabel: 'SSL certificate',
-            maxWidth: 470,
+            maxWidth: 760,
             anchor: '100%',
             emptyText: 'Choose certificate',
             valueField: 'id',
             displayField: 'name',
             allowBlank: false,
+            labelWidth: 120,
 
             forceSelection: true,
             queryCaching: false,
@@ -57,7 +58,7 @@ Scalr.regPage('Scalr.ui.farms.builder.addrole.mongodb', function () {
                 fields: [ 'id', 'name' ],
                 proxy: {
                     type: 'cachedrequest',
-                    crscope: 'farmbuilder',
+                    crscope: 'farmDesigner',
                     url: '/services/ssl/certificates/xListCertificates',
                     filterFields: ['name']
                 }
@@ -69,7 +70,7 @@ Scalr.regPage('Scalr.ui.farms.builder.addrole.mongodb', function () {
             }],
             listeners: {
                 addnew: function(item) {
-                    Scalr.CachedRequestManager.get('farmbuilder').setExpired({url: '/services/ssl/certificates/xListCertificates'});
+                    Scalr.CachedRequestManager.get('farmDesigner').setExpired({url: '/services/ssl/certificates/xListCertificates'});
                 }
             }
         }]

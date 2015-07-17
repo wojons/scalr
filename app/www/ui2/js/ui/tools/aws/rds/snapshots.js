@@ -9,49 +9,32 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.snapshots', function (loadParams, modulePa
 	});
 
 	return Ext.create('Ext.grid.Panel', {
-		title: 'Tools &raquo; Amazon Web Services &raquo; RDS &raquo; DB snapshots',
 		scalrOptions: {
-			'reload': false,
-			'maximize': 'all'
+			reload: false,
+			maximize: 'all',
+            menuTitle: 'RDS DB Snapshots'
 		},
+
 		store: store,
 		stateId: 'grid-tools-aws-rds-snapshots-view',
 		stateful: true,
-		plugins: {
-			ptype: 'gridstore'
-		},
-		tools: [{
-			xtype: 'gridcolumnstool'
-		}],
+
+        plugins: [{
+            ptype: 'gridstore'
+        }, {
+            ptype: 'applyparams'
+        }],
 
 		viewConfig: {
 			emptyText: 'No db snapshots found',
 			loadingText: 'Loading db snapshots ...'
 		},
 
-		columns: [
-			{ header: "Name", flex: 1, dataIndex: 'name', sortable: false },
-            { header: "Port", width: 70, dataIndex: 'port', sortable: false },
-            { header: "Status", minWidth: 160, width: 130, dataIndex: 'status', sortable: true, xtype: 'statuscolumn', statustype: 'rdsdbinstance' },
-			{ header: "Engine", width: 150, dataIndex: 'engine', sortable: false },
-            { header: "Storage", width: 75, dataIndex: 'storage', sortable: false },
-            { header: "Created at", width: 170, dataIndex: 'dtcreated', sortable: false },
-            { header: "Instance created at", width: 170, dataIndex: 'idtcreated', sortable: false },
-			{
-				xtype: 'optionscolumn2',
-				menu: [{
-					text: 'Restore',
-                    iconCls: 'x-menu-icon-reboot',
-					menuHandler: function (data) {
-						document.location.href = '#/tools/aws/rds/instances/restore?snapshot=' + data['name'] + '&cloudLocation=' + store.proxy.extraParams.cloudLocation;
-					}
-				}]
-			}
-		],
-
-        multiSelect: true,
         selModel: {
-            selType: 'selectedmodel'
+            selType: 'selectedmodel',
+            getVisibility: function (record) {
+                return record.get('type') !== 'automated';
+            }
         },
 
         listeners: {
@@ -60,21 +43,43 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.snapshots', function (loadParams, modulePa
             }
         },
 
+		columns: [
+			{ header: "DB Snapshot", flex: 1, dataIndex: 'name', sortable: false },
+            { header: "Port", width: 70, dataIndex: 'port', sortable: false },
+            { header: "Status", minWidth: 160, width: 130, dataIndex: 'status', sortable: true, xtype: 'statuscolumn', statustype: 'rdsdbinstance' },
+			{ header: "Engine", width: 150, dataIndex: 'engine', sortable: false },
+            { header: "Storage", width: 75, dataIndex: 'storage', sortable: false },
+            { header: "Created at", width: 170, dataIndex: 'dtcreated', sortable: false },
+            { header: "Instance created at", width: 170, dataIndex: 'idtcreated', sortable: false },
+			{
+				xtype: 'optionscolumn',
+                width: 120,
+				menu: [{
+					text: 'Restore',
+                    iconCls: 'x-menu-icon-restoredbinstance',
+                    showAsQuickAction: true,
+					menuHandler: function (data) {
+                        Scalr.event.fireEvent('redirect', '#/tools/aws/rds/instances/restore?snapshot=' + data['name'] + '&cloudLocation=' + store.proxy.extraParams.cloudLocation);
+					}
+				}]
+			}
+		],
+
         dockedItems: [{
             xtype: 'scalrpagingtoolbar',
             store: store,
             dock: 'top',
             beforeItems: [{
-                text: 'Add instance',
-                cls: 'x-btn-green-bg',
+                text: 'New DB Instance',
+                cls: 'x-btn-green',
                 handler: function() {
                     Scalr.event.fireEvent('redirect', '#/tools/aws/rds/instances/create');
                 }
             }],
             afterItems: [{
-                ui: 'paging',
                 itemId: 'delete',
-                iconCls: 'x-tbar-delete',
+                iconCls: 'x-btn-icon-delete',
+                cls: 'x-btn-red',
                 tooltip: 'Select one or more db snapshot(s) to delete them',
                 disabled: true,
                 handler: function() {
@@ -103,13 +108,8 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.snapshots', function (loadParams, modulePa
                 }
             }],
             items: [{
-                xtype: 'fieldcloudlocation',
-                itemId: 'cloudLocation',
-                store: {
-                    fields: [ 'id', 'name' ],
-                    data: moduleParams.locations,
-                    proxy: 'object'
-                },
+                xtype: 'cloudlocationfield',
+                platforms: ['ec2'],
                 gridStore: store
             }]
         }]

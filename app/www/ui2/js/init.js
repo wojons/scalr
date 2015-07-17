@@ -1,28 +1,35 @@
 // catch server error page (404, 403, timeOut and other)
 Ext.Ajax.on('requestexception', function(conn, response, options) {
-	if (options.hideErrorMessage == true)
+    if (options.hideErrorMessage == true)
 		return;
 
 	// this messages are used in window.onhashchange at ui.js
     if (response.status == 403) {
-		Scalr.state.userNeedLogin = true;
-		Scalr.event.fireEvent('redirect', '#/guest/login', true);
-	} else if (response.status == 404) {
+        Scalr.state.userNeedLogin = true;
+        Scalr.utils.authWindow.show();
+
+    } else if (response.status == 404) {
 		Scalr.message.Error('Page not found.');
+
 	} else if (response.timedout == true) {
 		Scalr.message.Error('Server didn\'t respond in time. Please try again in a few minutes.');
+
 	} else if (response.aborted == true) {
 		//Scalr.message.Error('Request was aborted by user.');
-	} else {
-		if (Scalr.timeoutHandler.enabled) {
-			Scalr.timeoutHandler.undoSchedule();
-			Scalr.timeoutHandler.run();
 
-			//Scalr.timeoutHandler.forceCheck = true;
-			//Scalr.timeoutHandler.restart();
-		}
+	} else {
+        Scalr.utils.timeoutHandler.schedule(true);
 		Scalr.message.Error('Cannot proceed with your request. Please try again later.');
 	}
+});
+
+Ext.Ajax.on('requestcomplete', function(conn, response, options) {
+    try {
+        response = Ext.decode(response.responseText);
+        if (response && response.success == false && response.errorMessage == 'Session expired. Please refresh page.') {
+            document.location.reload();
+        }
+    } catch (e) {}
 });
 
 (function() {
@@ -79,6 +86,16 @@ Scalr.storage = {
             storage.removeItem(this.getName(name));
         }
 	},
+    // replace all data in storage with new
+    apply: function(data, session) {
+        var storage = this.getStorage(session);
+        if (storage && data) {
+            storage.clear();
+            for (var i in data) {
+                storage.setItem(i, data[i]);
+            }
+        }
+    },
     // encoded = true | false | 'decode'
 	dump: function(encoded, ignoreHash) {
 		var storage = Scalr.storage.getStorage(), data = {}, decoded = false;
@@ -109,7 +126,6 @@ Scalr.storage = {
 };
 
 Ext.state.Manager.setProvider(new Ext.state.LocalStorageProvider({ prefix: 'scalr-' }));
-Ext.Ajax.extraParams = Ext.Ajax.extraParams || {};
 
 // this event triggers only when it was fired from another tabs
 window.addEventListener('storage', function (e) {
@@ -126,7 +142,9 @@ Ext.tip.QuickTipManager.init();
 Ext.getBody().setStyle('overflow', 'hidden');
 
 Scalr.event = new Ext.util.Observable();
-/*
+/**
+ * Scalr.event:
+ *
  * update - any content on page was changed (notify): function (type, arguments ...)
  * close - close current page and go back
  * redirect - redirect to link: function (href, force, params)
@@ -135,8 +153,9 @@ Scalr.event = new Ext.util.Observable();
  * lock - lock to switch current application (override only throw redirect with force = true)
  * unlock - unlock ...
  * clear - clear application from cache (close and reload)
+ * connectiondown
+ * connectionup
  */
-Scalr.event.addEvents('update', 'close', 'redirect', 'reload', 'refresh', 'resize', 'lock', 'unlock', 'maximize', 'clear');
 
 Scalr.event.on = Ext.Function.createSequence(Scalr.event.on, function (event, handler, scope) {
 	if (event == 'update' && scope)
@@ -204,7 +223,11 @@ Scalr.data = {
 	fireRefresh: function(names){
 		var stores = this.query(names);
 		for (var i=0, len=stores.length; i<len; i++) {
-			stores[i].fireEvent('refresh');
+            if (stores[i].observers) {
+                stores[i].observers.each(function(chainedStore){
+                    chainedStore.fireEvent('refresh');
+                });
+            }
 		}
 	},
 	load: function(names, callback, reload, lock) {
@@ -282,6 +305,11 @@ Scalr.event.on('close', function(force) {
 		document.location.href = "#/dashboard";
 });
 
+Scalr.event.on('modal', function(href) {
+    Scalr.state.pageOpenModalWindow = href;
+    window.onhashchange(true);
+});
+
 Scalr.event.on('redirect', function(href, force, params) {
 	Scalr.state.pageSuspendForce = Ext.isBoolean(force) ? force : false;
 	Scalr.state.pageRedirectParams = params || {};
@@ -293,12 +321,10 @@ Scalr.event.on('redirect', function(href, force, params) {
 
 Scalr.event.on('lock', function(hide) {
 	Scalr.state.pageSuspend = true;
-	Scalr.application.disabledDockedToolbars(true, hide);
 });
 
 Scalr.event.on('unlock', function() {
 	Scalr.state.pageSuspend = false;
-	Scalr.application.disabledDockedToolbars(false);
 });
 
 Scalr.event.on('reload', function () {
@@ -306,7 +332,15 @@ Scalr.event.on('reload', function () {
 });
 
 Scalr.event.on('refresh', function (forceReload) {
-	// @TODO: forceReload
+    if (forceReload) {
+        // TODO: test
+        var item = Scalr.application.layout.activeItem;
+        if (item.itemId != 'blank') {
+            Scalr.application.layout.setActiveItem(Scalr.application.getComponent('blank'));
+            item.close();
+        }
+    }
+
 	window.onhashchange(true);
 });
 
@@ -391,7 +425,7 @@ Scalr.message = {
                 }
             }, {
                 xtype: 'tool',
-                type: 'close',
+                type: 'close-white',
                 handler: function () {
                     this.up('tooltip').close();
                 }
@@ -414,6 +448,23 @@ Scalr.message = {
         this.Add(message, 'warning');
     },
     InfoTip: function(message, el, params) {
+        if (el) {
+            if (el.isComponent) {
+                if (! el.rendered) {
+                    el.on('afterrender', this.InfoTip, this, {
+                        args: [message, el, params],
+                        delay: 300
+                    });
+                    return;
+                } else {
+                    el = el.el;
+                }
+            }
+        } else {
+            Scalr.message.Error(message);
+            return;
+        }
+
         var config = {
             target: el,
             anchorToTarget: true,
@@ -421,11 +472,7 @@ Scalr.message = {
             html: message,
             autoShow: true,
             dismissDelay: 10000,
-            listeners: {
-                hide: function() {
-                    this.destroy();
-                }
-            }
+            hideAction: 'destroy'
         };
         if (params !== undefined) {
             Ext.apply(config, params);
@@ -433,10 +480,10 @@ Scalr.message = {
         new Ext.tip.ToolTip(config);
     },
     ErrorTip: function(message, el, params) {
-        this.InfoTip(message, el, Ext.apply({cls: 'x-tip-message x-tip-message-error'}, params));
+        this.InfoTip(message, el, Ext.apply({cls: 'x-tip-message x-tip-message-error x-tip-message-no-icon'}, params));
     },
     WarningTip: function(message, el, params) {
-        this.InfoTip(message, el, Ext.apply({cls: 'x-tip-message x-tip-message-warning'}, params));
+        this.InfoTip(message, el, Ext.apply({cls: 'x-tip-message x-tip-message-warning x-tip-message-no-icon'}, params));
     },
     Flush: function(force, message) {
         var i = this.queue.length - 1, dt = new Date();

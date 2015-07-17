@@ -11,6 +11,7 @@ use Scalr\Stats\CostAnalytics\Quarters;
 use Scalr\Stats\CostAnalytics\Entity\SettingEntity;
 use Scalr\Stats\CostAnalytics\Entity\ProjectEntity;
 use Scalr\Stats\CostAnalytics\Entity\AccountCostCenterEntity;
+use Scalr\Model\Entity;
 
 class Scalr_UI_Controller_Farms extends Scalr_UI_Controller
 {
@@ -21,57 +22,8 @@ class Scalr_UI_Controller_Farms extends Scalr_UI_Controller
         $this->viewAction();
     }
 
-    public function xSaveSzrUpdSettingsAction()
-    {
-        $dbFarm = DBFarm::LoadByID($this->getParam('farmId'));
-        $this->user->getPermissions()->validate($dbFarm);
-
-        $schedule = implode(" ", array($this->getParam("hh"), $this->getParam("dd"), $this->getParam("dw")));
-        $repo = $this->getParam("szrRepository");
-
-        $oldRepo = $dbFarm->GetSetting(DBFarm::SETTING_SZR_UPD_REPOSITORY);
-        if ($oldRepo == 'latest' && $repo == 'stable' && $dbFarm->Status == FARM_STATUS::RUNNING)
-            throw new Exception("Switching from 'latest' repository to 'stable' is not supported for running farms");
-
-        $dbFarm->SetSetting(DBFarm::SETTING_SZR_UPD_REPOSITORY, $repo);
-        $dbFarm->SetSetting(DBFarm::SETTING_SZR_UPD_SCHEDULE, $schedule);
-
-        $extendedMsg = false;
-        $servers = $dbFarm->GetServersByFilter(array('status' => array(SERVER_STATUS::INIT, SERVER_STATUS::RUNNING)));
-        foreach ($servers as $dbServer) {
-            if (!$dbServer->IsSupported('2.8.0')) {
-                try {
-                    $port = $dbServer->GetProperty(SERVER_PROPERTIES::SZR_UPDC_PORT);
-                    if (!$port)
-                        $port = 8008;
-
-                    $updClient = new Scalr_Net_Scalarizr_UpdateClient($dbServer, $port);
-                    $updClient->configure($repo, $schedule);
-                } catch (Exception $e) {
-                    Logger::getLogger('Farm')->error(new FarmLogMessage($dbFarm->ID, sprintf("Unable to update scalarizr update settings on server %s: %s",
-                        $dbServer->serverId, $e->getMessage()
-                    )));
-                    $err = true;
-                }
-            } else {
-                $extendedMsg = true;
-            }
-        }
-
-        if (!$err) {
-            if ($extendedMsg)
-                $this->response->success('Scalarizr auto-update settings successfully saved. Running servers will be updated according to schedule.');
-            else
-                $this->response->success('Scalarizr auto-update settings successfully saved');
-        }
-        else
-            $this->response->warning('Scalarizr auto-update settings successfully saved, but some servers were not updated. Please check "Logs -> System log" for more details.');
-    }
-
     public function extendedInfoAction()
     {
-        $this->request->restrictAccess(Acl::RESOURCE_FARMS);
-
         if (!$this->getParam('farmId'))
             throw new Exception(_('Server not found'));
 
@@ -82,53 +34,50 @@ class Scalr_UI_Controller_Farms extends Scalr_UI_Controller
 
         $form = array(
             array(
-                'xtype' => 'fieldset',
-                'title' => 'General',
-                'labelWidth' => 220,
+                'xtype' => 'container',
+                'layout' => array(
+                    'type' => 'hbox',
+                    'align' => 'stretch'
+                ),
+                'cls' => 'x-fieldset-separator-bottom',
                 'items' => array(
                     array(
-                        'xtype' => 'displayfield',
-                        'fieldLabel' => 'ID',
-                        'value' => $dbFarm->ID
-                    ),
-                    array(
-                        'xtype' => 'displayfield',
-                        'fieldLabel' => 'Name',
-                        'value' => $dbFarm->Name
-                    ),
-                    array(
-                        'xtype' => 'displayfield',
-                        'fieldLabel' => 'Hash',
-                        'value' => $dbFarm->Hash
-                    ),
-                    array(
-                        'xtype' => 'displayfield',
-                        'fieldLabel' => 'Timezone',
-                        'value' => ($tz) ? $tz : date_default_timezone_get()
+                        'xtype' => 'fieldset',
+                        'title' => 'General',
+                        'flex' => 1,
+                        'cls' => 'x-fieldset-separator-none',
+                        'defaults' => array(
+                            'labelWidth' => 130
+                        ),
+                        'items' => array(
+                            array(
+                                'xtype' => 'displayfield',
+                                'fieldLabel' => 'ID',
+                                'value' => $dbFarm->ID
+                            ),
+                            array(
+                                'xtype' => 'displayfield',
+                                'fieldLabel' => 'Name',
+                                'value' => $dbFarm->Name
+                            ),
+                            array(
+                                'xtype' => 'displayfield',
+                                'fieldLabel' => 'Hash',
+                                'value' => $dbFarm->Hash
+                            ),
+                            array(
+                                'xtype' => 'displayfield',
+                                'fieldLabel' => 'Timezone',
+                                'value' => ($tz) ? $tz : date_default_timezone_get()
+                            )
+                        )
                     )
                 )
             )
         );
 
-        if ($this->getContainer()->analytics->enabled) {
-            $projectId = $dbFarm->GetSetting(DBFarm::SETTING_PROJECT_ID);
-            if (empty($projectId)) {
-                $projectName = 'Unassigned resource';
-            } else {
-                $projectEntity = ProjectEntity::findPk($projectId);
-                $ccEntity = $projectEntity->getCostCenter();
-                $projectName = $projectEntity->name . " ({$ccEntity->name})";
-            }
-
-            $form[0]['items'][] = [
-                        'xtype' => 'displayfield',
-                        'fieldLabel' => 'Project (Cost Center)',
-                        'value' => $projectName
-                    ];
-        }
-
         ///Update settings
-        $scalarizrRepos = array_keys(Scalr::config('scalr.scalarizr_update.repos'));
+        //$scalarizrRepos = array_keys(Scalr::config('scalr.scalarizr_update.repos')); // never used in code
 
         $repo = $dbFarm->GetSetting(DBFarm::SETTING_SZR_UPD_REPOSITORY);
         if (!$repo)
@@ -140,53 +89,49 @@ class Scalr_UI_Controller_Farms extends Scalr_UI_Controller
 
         $sChunks = explode(" ", $schedule);
 
-        $store = new stdClass();
-        $store->fields = array('name', 'description');
-        $store->proxy = 'object';
-
         $itm = array(
             'xtype' => 'fieldset',
             'title' => 'Scalr agent update settings',
-            'labelWidth' => 220,
+            'flex' => 1,
+            'cls' => 'x-fieldset-separator-left',
+            'defaults' => array(
+                'labelWidth' => 150
+            ),
             'items' => array(
                 array(
-                    'xtype' => 'combo',
-                    'itemId' => 'repo',
-                    'editable' => false,
-                    'name' => 'szrRepository',
+                    'xtype' => 'displayfield',
                     'fieldLabel' => 'Repository',
-                    'queryMode' => 'local',
-                    'store' => $store,
-                    'value' => $repo,
-                    'valueField' => 'name',
-                    'displayField' => 'name'
+                    'value' => $repo
                 ),
                 array(
                     'xtype' => 'fieldcontainer',
                     'fieldLabel' => 'Schedule (UTC time)',
                     'layout' => 'hbox',
+                    'defaults' => array(
+                        'margin' => '0 6 0 0'
+                    ),
                     'items' => array(
                         array(
                             'xtype' => 'textfield',
                             'hideLabel' => true,
+                            'readOnly' => true,
                             'width' => 50,
-                            'margin' => '0 3 0 0',
                             'value' => $sChunks[0],
                             'name' => 'hh'
                         ), array(
                             'xtype' => 'textfield',
                             'hideLabel' => true,
+                            'readOnly' => true,
                             'value' => $sChunks[1],
                             'width' => 50,
-                            'margin' => '0 3 0 0',
                             'name' => 'dd'
                         ), array(
                             'xtype' => 'textfield',
                             'hideLabel' => true,
+                            'readOnly' => true,
                             'width' => 50,
                             'value' => $sChunks[2],
                             'name' => 'dw',
-                            'margin' => '0 3 0 0'
                         ), array(
                             'xtype' => 'displayinfofield',
                             'info' => '
@@ -199,17 +144,11 @@ class Scalr_UI_Controller_Farms extends Scalr_UI_Controller
 └───────── hour (0 - 23)<br>'
                         )
                     )
-                ),
-                array(
-                    'xtype' => 'button',
-                    'itemId' => 'updSettingsSave',
-                    'text' => 'Save',
-                    'flex' => 1
                 )
             )
         );
 
-        $form[] = $itm;
+        $form[0]['items'][] = $itm;
 
         $b = $this->db->GetAll("SELECT DISTINCT(behavior) FROM farm_roles
             INNER JOIN role_behaviors ON role_behaviors.role_id = farm_roles.role_id WHERE farmid=?", array(
@@ -256,8 +195,8 @@ class Scalr_UI_Controller_Farms extends Scalr_UI_Controller
             $it = array(
                 array(
                     'xtype' => 'displayfield',
-                    'fieldCls' => 'x-form-field-info',
                     'anchor' => '100%',
+                    'cls' => 'x-form-field-info',
                     'value' => 'Public - To connect to the service from the Internet<br / >Private - To connect to the service from another instance'
                 ),
                 array(
@@ -285,7 +224,9 @@ class Scalr_UI_Controller_Farms extends Scalr_UI_Controller
             $form[] = array(
                 'xtype' => 'fieldset',
                 'title' => "{$name} DNS endpoints",
-                'labelWidth' => 220,
+                'defaults' => array(
+                    'labelWidth' => 220
+                ),
                 'items' => $it
             );
         }
@@ -302,7 +243,9 @@ class Scalr_UI_Controller_Farms extends Scalr_UI_Controller
             $form[] = array(
                     'xtype' => 'fieldset',
                     'title' => "CloudFoundry connection information",
-                    'labelWidth' => 220,
+                    'defaults' => array(
+                        'labelWidth' => 220
+                    ),
                     'items' => $it
             );
         }
@@ -353,7 +296,9 @@ class Scalr_UI_Controller_Farms extends Scalr_UI_Controller
             $form[] = array(
                 'xtype' => 'fieldset',
                 'title' => "Lease information",
-                'labelWidth' => 220,
+                'defaults' => array(
+                    'labelWidth' => 220
+                ),
                 'itemId' => 'lease',
                 'params' => array(
                     'standardExtend' => $standardExtend,
@@ -368,13 +313,39 @@ class Scalr_UI_Controller_Farms extends Scalr_UI_Controller
             );
         }
 
-        $this->response->page('ui/farms/extendedinfo.js', array('scalarizr_repos' => $scalarizrRepos, 'id' => $dbFarm->ID, 'name' => $dbFarm->Name, 'info' => $form));
+        $moduleParams = array(
+            'id' => $dbFarm->ID,
+            'name' => $dbFarm->Name,
+            'info' => $form
+        );
+
+        if ($this->getContainer()->analytics->enabled && $this->getEnvironment()->getPlatformConfigValue(Scalr_Environment::SETTING_CC_ID)) {
+            $farmCostData = $this->getFarmCostData($dbFarm->ID);
+            $moduleParams['analytics'] = $farmCostData['analytics'];
+
+            $moduleParams['projectId'] = $farmCostData['projectId'];
+            $moduleParams['analytics']['farmCostMetering'] = $farmCostData['farmCostMetering'];
+
+            $c = self::loadController('Builder', 'Scalr_UI_Controller_Farms');
+            $moduleParams['roles'] = [];
+            foreach ($c->getFarm2($dbFarm->ID)['roles'] as $role) {
+                $moduleParams['roles'][] = [
+                    'platform' => $role['platform'],
+                    'alias' => $role['alias'],
+                    'running_servers' => $role['running_servers'],
+                    'hourly_rate' => $role['hourly_rate'],
+                    'scaling.min_instances' => $role['settings']['scaling.min_instances'],
+                    'scaling.max_instances' => $role['settings']['scaling.max_instances']
+                ];
+            }
+
+        }
+        $this->response->page('ui/farms/extendedinfo.js', $moduleParams,
+            array('ui/farms/builder/costmetering.js')/*, array('ui/analytics/analytics.css')*/);
     }
 
     public function xLeaseExtendAction()
     {
-        $this->request->restrictAccess(Acl::RESOURCE_FARMS);
-
         if (!$this->getParam('farmId'))
             throw new Exception(_('Server not found'));
 
@@ -402,6 +373,8 @@ class Scalr_UI_Controller_Farms extends Scalr_UI_Controller
                 $dbFarm->SetSetting(DBFarm::SETTING_LEASE_TERMINATE_DATE, $terminateDate->format('Y-m-d H:i:s'));
                 $dbFarm->SetSetting(DBFarm::SETTING_LEASE_NOTIFICATION_SEND, null);
 
+                Entity\SettingEntity::increase(Entity\SettingEntity::LEASE_STANDARD_REQUEST);
+
                 $this->response->success('Farm expiration date was changed');
             } else {
                 $this->response->failure('Limit of changes was reached');
@@ -427,6 +400,8 @@ class Scalr_UI_Controller_Farms extends Scalr_UI_Controller
                 } else {
                     throw new Scalr_Exception_Core('Invalid period format');
                 }
+
+                Entity\SettingEntity::increase(Entity\SettingEntity::LEASE_NOT_STANDARD_REQUEST);
 
                 $mailer = Scalr::getContainer()->mailer;
 
@@ -492,13 +467,7 @@ class Scalr_UI_Controller_Farms extends Scalr_UI_Controller
             }
         }
 
-        //If user has no permission to view farms which are not owned by him
-        //it imposes additional filter to the query.
-        if (!$this->request->isAllowed(Acl::RESOURCE_FARMS, Acl::PERM_FARMS_NOT_OWNED_FARMS)) {
-            $sql .= " AND created_by_id = ? ";
-            array_push($args, $this->request->getUser()->getId());
-        }
-
+        list($sql, $args) = $this->request->prepareFarmSqlQuery($sql, $args);
         $sql .= " ORDER BY name, id";
 
         $s = $this->db->execute($sql, $args);
@@ -564,7 +533,15 @@ class Scalr_UI_Controller_Farms extends Scalr_UI_Controller
 
     public function getFarmWidgetFarms($options)
     {
-        $farms = $this->db->GetAll('SELECT id, name FROM farms WHERE env_id = ? ORDER BY name', $this->getEnvironmentId());
+        $perm = in_array('permServers', $options) ? Acl::PERM_FARMS_SERVERS : null;
+        $sql = 'SELECT id, name FROM farms WHERE env_id = ?';
+        $args = [$this->getEnvironmentId()];
+
+        list($sql, $args) = $this->request->prepareFarmSqlQuery($sql, $args, '', $perm);
+
+        $sql .= ' ORDER BY name';
+        $farms = $this->db->GetAll($sql, $args);
+
         if (in_array('addAllFarm', $options))
             array_unshift($farms, array('id' => '0', 'name' => 'On all farms'));
 
@@ -662,7 +639,7 @@ class Scalr_UI_Controller_Farms extends Scalr_UI_Controller
 
     public function viewAction()
     {
-        $this->request->restrictAccess(Acl::RESOURCE_FARMS);
+        $this->request->restrictFarmAccess();
         $governance = new Scalr_Governance($this->getEnvironmentId());
 
         $this->response->page('ui/farms/view.js', array('leaseEnabled' => $governance->isEnabled(Scalr_Governance::CATEGORY_GENERAL, Scalr_Governance::GENERAL_LEASE)));
@@ -686,62 +663,70 @@ class Scalr_UI_Controller_Farms extends Scalr_UI_Controller
         self::loadController('Servers')->viewAction();
     }
 
-    public function xCloneAction()
+    /**
+     * @param   int     $farmId
+     */
+    public function xCloneAction($farmId)
     {
-        $this->request->restrictAccess(Acl::RESOURCE_FARMS, Acl::PERM_FARMS_CLONE);
-
-        $this->request->defineParams(array(
-            'farmId' => array('type' => 'int')
-        ));
-
-        $dbFarm = DBFarm::LoadByID($this->getParam('farmId'));
+        $dbFarm = DBFarm::LoadByID($farmId);
         $this->user->getPermissions()->validate($dbFarm);
+        $this->request->restrictFarmAccess($dbFarm, Acl::PERM_FARMS_CLONE);
 
         $newDbFarm = $dbFarm->cloneFarm(null, $this->user, $this->getEnvironmentId());
 
         $this->response->success("Farm successfully cloned. New farm: '{$newDbFarm->Name}'");
     }
 
-    public function xLockAction()
+    /**
+     * @param   int     $farmId
+     * @param   string  $comment
+     * @param   string  $restrict
+     */
+    public function xLockAction($farmId, $comment, $restrict = '')
     {
-        $this->request->restrictAccess(Acl::RESOURCE_FARMS);
-
-        $this->request->defineParams(array(
-            'farmId' => array('type' => 'int'),
-            'comment', 'restrict'
-        ));
-
-        if (! $this->getParam('comment')) {
+        if (! $comment) {
             $this->response->failure('Comment is required');
             return;
         }
 
-        $dbFarm = DBFarm::LoadByID($this->getParam('farmId'));
+        if (! in_array($restrict, ['', 'team', 'owner'])) {
+            $this->response->failure('Restrict should be owner, team or empty string');
+            return;
+        }
+
+        $dbFarm = DBFarm::LoadByID($farmId);
         $this->user->getPermissions()->validate($dbFarm);
+        $this->request->restrictFarmAccess($dbFarm, Acl::PERM_FARMS_MANAGE);
         $dbFarm->isLocked();
 
-        $dbFarm->lock($this->user->getId(), $this->getParam('comment'), !!$this->getParam('restrict'));
-
+        $dbFarm->lock($this->user->getId(), $comment, $restrict);
         $this->response->success('Farm successfully locked');
     }
 
-    public function xUnlockAction()
+    /**
+     * @param $farmId
+     * @throws Exception
+     */
+    public function xUnlockAction($farmId)
     {
-        $this->request->restrictAccess(Acl::RESOURCE_FARMS);
-
-        $this->request->defineParams(array(
-            'farmId' => array('type' => 'int')
-        ));
-
-        $dbFarm = DBFarm::LoadByID($this->getParam('farmId'));
+        $dbFarm = DBFarm::LoadByID($farmId);
         $this->user->getPermissions()->validate($dbFarm);
+        $this->request->restrictFarmAccess($dbFarm, Acl::PERM_FARMS_MANAGE);
+
         if ($dbFarm->isLocked(false)) {
-            if ($dbFarm->GetSetting(DBFarm::SETTING_LOCK_RESTRICT) &&
-                $dbFarm->createdByUserId != $this->user->getId() &&
-                $this->user->getType() != Scalr_Account_User::TYPE_ACCOUNT_OWNER
-            ) {
-                // farm lock restricted, user has no access
-                throw new Exception('You can\'t unlock farm. Only farm owner or account owner can do that.');
+            $restrict = $dbFarm->GetSetting(DBFarm::SETTING_LOCK_RESTRICT);
+            if ($restrict && !$this->user->isAccountOwner()) {
+                if ($restrict == 'owner') {
+                    if ($dbFarm->createdByUserId != $this->user->getId()) {
+                        throw new Exception('You can\'t unlock this Farm. Only the Farm Owner or an Account Owner may do so.');
+                    }
+                }
+
+                if ($restrict == 'team') {
+                    if (!$this->user->isInTeam($dbFarm->teamId)) {
+                        throw new Exception('You can\'t unlock this Farm. Only the members of the Farm\'s Team or an Account Owner may do so.');
+                    }
+                }
             }
 
             $dbFarm->unlock($this->user->getId());
@@ -751,42 +736,41 @@ class Scalr_UI_Controller_Farms extends Scalr_UI_Controller
         }
     }
 
-    public function xTerminateAction()
+    /**
+     * @param   int     $farmId
+     * @param   string  $deleteDNSZones
+     * @param   string  $deleteCloudObjects
+     * @param   string  $unTermOnFail
+     * @param   string  $forceTerminate
+     */
+    public function xTerminateAction($farmId, $deleteDNSZones = '', $deleteCloudObjects = '', $unTermOnFail = '', $forceTerminate = '')
     {
-        $this->request->restrictAccess(Acl::RESOURCE_FARMS, Acl::PERM_FARMS_TERMINATE);
-
-        $this->request->defineParams(array(
-            'farmId' => array('type' => 'int'),
-            'deleteDNSZones' => array('type' => 'string'),
-            'deleteCloudObjects' => array('type' => 'string'),
-            'unTermOnFail' => array('type' => 'string'),
-            'forceTerminate' => array('type' => 'string'),
-            'sync' => array('type' => 'array'),
-            'syncInstances' => array('type' => 'array'),
-        ));
-
-        $dbFarm = DBFarm::LoadByID($this->getParam('farmId'));
+        $dbFarm = DBFarm::LoadByID($farmId);
         $this->user->getPermissions()->validate($dbFarm);
+        $this->request->restrictFarmAccess($dbFarm, Acl::PERM_FARMS_LAUNCH_TERMINATE);
         $dbFarm->isLocked();
 
-        $removeZoneFromDNS = ($this->getParam('deleteDNSZones') == 'on') ? 1 : 0;
-        $keepCloudObjects = ($this->getParam('deleteCloudObjects') == 'on') ? 0 : 1;
-        $termOnFail = ($this->getParam('unTermOnFail') == 'on') ? 0 : 1;
-        $forceTerminate = ($this->getParam('forceTerminate') == 'on') ? 1 : 0;
+        $removeZoneFromDNS = ($deleteDNSZones == 'on') ? 1 : 0;
+        $keepCloudObjects = ($deleteCloudObjects == 'on') ? 0 : 1;
+        $termOnFail = ($unTermOnFail == 'on') ? 0 : 1;
+        $forceTerminate = ($forceTerminate == 'on') ? 1 : 0;
 
         $event = new FarmTerminatedEvent(
             $removeZoneFromDNS, $keepCloudObjects, $termOnFail, $keepCloudObjects, $forceTerminate, $this->user->id
         );
-        Scalr::FireEvent($this->getParam('farmId'), $event);
+        Scalr::FireEvent($farmId, $event);
 
         $this->response->success('Farm successfully terminated. Instances termination can take a few minutes.');
     }
 
-    public function xGetTerminationDetailsAction()
+    /**
+     * @param   int     $farmId
+     */
+    public function xGetTerminationDetailsAction($farmId)
     {
-        $this->request->restrictAccess(Acl::RESOURCE_FARMS, Acl::PERM_FARMS_TERMINATE);
-        $dbFarm = DBFarm::LoadByID($this->getParam('farmId'));
+        $dbFarm = DBFarm::LoadByID($farmId);
         $this->user->getPermissions()->validate($dbFarm);
+        $this->request->restrictFarmAccess($dbFarm, Acl::PERM_FARMS_LAUNCH_TERMINATE);
         $dbFarm->isLocked();
 
         $outdatedFarmRoles = $this->db->GetAll("SELECT id FROM farm_roles WHERE farmid=?",
@@ -848,16 +832,15 @@ class Scalr_UI_Controller_Farms extends Scalr_UI_Controller
         ));
     }
 
-    public function xLaunchAction()
+    /**
+     * @param   int     $farmId
+     */
+    public function xLaunchAction($farmId)
     {
-        $this->request->restrictAccess(Acl::RESOURCE_FARMS, Acl::PERM_FARMS_LAUNCH);
-
-        $this->request->defineParams(array(
-            'farmId' => array('type' => 'int')
-        ));
-
-        $dbFarm = DBFarm::LoadByID($this->getParam('farmId'));
+        $dbFarm = DBFarm::LoadByID($farmId);
         $this->user->getPermissions()->validate($dbFarm);
+        $this->request->restrictFarmAccess($dbFarm, Acl::PERM_FARMS_LAUNCH_TERMINATE);
+
         $dbFarm->isLocked();
 
         Scalr::FireEvent($dbFarm->ID, new FarmLaunchedEvent(true, $this->user->id));
@@ -865,16 +848,16 @@ class Scalr_UI_Controller_Farms extends Scalr_UI_Controller
         $this->response->success('Farm successfully launched');
     }
 
-    public function xRemoveAction()
+    /**
+     * @param   int     $farmId
+     * @throws Exception
+     * @throws Scalr_Exception_InsufficientPermissions
+     */
+    public function xRemoveAction($farmId)
     {
-        $this->request->restrictAccess(Acl::RESOURCE_FARMS, Acl::PERM_FARMS_MANAGE);
-
-        $this->request->defineParams(array(
-            'farmId' => array('type' => 'int')
-        ));
-
-        $dbFarm = DBFarm::LoadByID($this->getParam('farmId'));
+        $dbFarm = DBFarm::LoadByID($farmId);
         $this->user->getPermissions()->validate($dbFarm);
+        $this->request->restrictFarmAccess($dbFarm, Acl::PERM_FARMS_MANAGE);
         $dbFarm->isLocked();
 
         if ($dbFarm->Status != FARM_STATUS::TERMINATED)
@@ -938,7 +921,7 @@ class Scalr_UI_Controller_Farms extends Scalr_UI_Controller
 
     public function xListFarmsAction()
     {
-        $this->request->restrictAccess(Acl::RESOURCE_FARMS);
+        $this->request->restrictFarmAccess();
 
         $this->request->defineParams(array(
             'clientId' => array('type' => 'int'),
@@ -950,19 +933,19 @@ class Scalr_UI_Controller_Farms extends Scalr_UI_Controller
         $governance = new Scalr_Governance($this->getEnvironmentId());
         $leaseStatus = $governance->isEnabled(Scalr_Governance::CATEGORY_GENERAL, Scalr_Governance::GENERAL_LEASE);
 
-        $sql = 'SELECT f.clientid, f.id, f.name, f.status, f.dtadded, f.created_by_id, f.created_by_email FROM farms f WHERE env_id = ? AND :FILTER:';
+        $sql = 'SELECT f.clientid, f.id, f.name, f.status, f.dtadded, f.created_by_id, f.created_by_email, ats.name AS team_name, ats.id as team_id FROM farms f LEFT JOIN account_teams ats ON ats.id = f.team_id WHERE env_id = ? AND :FILTER:';
         $args = array($this->getEnvironmentId());
 
         if ($leaseStatus && $this->getParam('expirePeriod')) {
             $dt = new DateTime();
             $dt->add(new DateInterval('P' . $this->getParam('expirePeriod') . 'D'));
             $sql = str_replace('FROM farms f', 'FROM farms f LEFT JOIN farm_settings fs ON f.id = fs.farmid', $sql);
-            $sql = str_replace('WHERE', 'WHERE fs.name = ? AND fs.value < ? AND f.status = ? AND', $sql);
+            $sql = str_replace('WHERE', 'WHERE fs.name = ? AND fs.value < ? AND fs.value != "" AND f.status = ? AND', $sql);
             array_unshift($args, DBFarm::SETTING_LEASE_TERMINATE_DATE, $dt->format('Y-m-d H:i:s'), FARM_STATUS::RUNNING);
         }
 
         if ($this->getParam('farmId')) {
-            $sql .= ' AND id = ?';
+            $sql .= ' AND f.id = ?';
             $args[] = $this->getParam('farmId');
         }
 
@@ -976,9 +959,26 @@ class Scalr_UI_Controller_Farms extends Scalr_UI_Controller
             $args[] = $this->getParam('status');
         }
 
-        if ($this->getParam('showOnlyMy') || !$this->request->isAllowed(Acl::RESOURCE_FARMS, Acl::PERM_FARMS_NOT_OWNED_FARMS)) {
-            $sql .= ' AND created_by_id = ?';
-            $args[] = $this->user->getId();
+        $owner = $this->getParam('owner');
+        $allowedResourceFarms = $this->request->isAllowed(Acl::RESOURCE_FARMS);
+        if (!$allowedResourceFarms || $owner) {
+            $q = [];
+            if (($this->request->isAllowed(Acl::RESOURCE_TEAM_FARMS) || $allowedResourceFarms) && ($owner == '' || $owner == 'team')) {
+                $t = array_map(function($t) { return $t['id']; }, $this->user->getTeams());
+                if (count($t))
+                    $q[] = 'team_id IN(' . join(',', $t) . ')';
+            }
+
+            if (($this->request->isAllowed(Acl::RESOURCE_OWN_FARMS) || $allowedResourceFarms) && ($owner == '' || $owner == 'me')) {
+                $q[] = 'created_by_id = ?';
+                $args[] =  $this->request->getUser()->getId();
+            }
+
+            if (count($q)) {
+                $sql .= ' AND (' . join(' OR ', $q) . ')';
+            } else {
+                $sql .= ' AND false'; // no permissions
+            }
         }
 
         if ($this->getParam('chefServerId')) {
@@ -994,7 +994,18 @@ class Scalr_UI_Controller_Farms extends Scalr_UI_Controller
             $args[] = 1;
         }
 
-        $response = $this->buildResponseFromSql2($sql, array('id', 'name', 'dtadded', 'created_by_email', 'status'), array('name', 'id', 'comments'), $args);
+        if ($this->getContainer()->analytics->enabled) {
+            if ($this->getParam('projectId')) {
+                $sql .= " AND EXISTS (
+                    SELECT 1 FROM farm_settings
+                    WHERE farm_settings.farmid = f.id
+                    AND farm_settings.name = " . $this->db->qstr(DBFarm::SETTING_PROJECT_ID) . "
+                    AND farm_settings.value = ?) ";
+                $args[] = $this->getParam('projectId');
+            }
+        }
+
+        $response = $this->buildResponseFromSql2($sql, array('id', 'name', 'dtadded', 'created_by_email', 'status', 'team_name'), array('f.name', 'f.id', 'f.comments'), $args);
 
         foreach ($response["data"] as &$row) {
             $row["running_servers"] = $this->db->GetOne("SELECT COUNT(*) FROM servers WHERE farm_id='{$row['id']}' AND status IN ('Pending', 'Initializing', 'Running', 'Temporary','Resuming')");
@@ -1007,7 +1018,7 @@ class Scalr_UI_Controller_Farms extends Scalr_UI_Controller
             //TODO: Use Alerts class
             $row['alerts'] = $this->db->GetOne("SELECT COUNT(*) FROM server_alerts WHERE farm_id='{$row['id']}' AND status='failed'");
 
-            $row['dtadded'] = Scalr_Util_DateTime::convertTz($row["dtadded"]);
+            $row['dtadded'] = Scalr_Util_DateTime::convertTz($row["dtadded"], 'M j, Y H:i');
             $dbFarm = DBFarm::LoadByID($row['id']);
             $row['lock'] = $dbFarm->GetSetting(DBFarm::SETTING_LOCK);
             if ($row['lock'])
@@ -1057,26 +1068,22 @@ class Scalr_UI_Controller_Farms extends Scalr_UI_Controller
                     array('farmId' => $row['id']),
                     array('farmRoleId' => NULL)
                 )) as $shortcut) {
-                    /* @var \Scalr\Model\Entity\ScriptShortcut $shortcut */
+                    /* @var $shortcut \Scalr\Model\Entity\ScriptShortcut */
                     $row['shortcuts'][] = array(
                         'id' => $shortcut->id,
                         'name' => $shortcut->getScriptName()
                     );
                 }
             }
+
+            $row['teamIdPerm'] = $row['team_id'] && $this->user->isInTeam($row['team_id']);
+            $row['farmOwnerIdPerm'] = $row['created_by_id'] && $this->user->getId() == $row['created_by_id'];
         }
 
         $this->response->data($response);
     }
 
-    //backward compatibility
-    public function edit2Action()
-    {
-        $this->buildAction();
-    }
-
-    //backward compatibility
-    public function build2Action()
+    public function designerAction()
     {
         $this->buildAction();
     }
@@ -1086,209 +1093,11 @@ class Scalr_UI_Controller_Farms extends Scalr_UI_Controller
         $this->buildAction();
     }
 
-    public function buildAction()
+    public function calcFarmDesignerHash()
     {
-        $this->request->restrictAccess(Acl::RESOURCE_FARMS, Acl::PERM_FARMS_MANAGE);
-
-        $this->request->defineParams(array(
-            'farmId' => array('type' => 'int'),
-            'roleId' => array('type' => 'int')
-        ));
-
-        $farmId = $this->getParam('farmId');
-        $roleId = $this->getParam('roleId');
-
-        $moduleParams = array(
-            'farmId' => $farmId,
-            'roleId' => $roleId,
-            'behaviors' => ROLE_BEHAVIORS::GetName(null, true)
-        );
-
-        unset($moduleParams['behaviors'][ROLE_BEHAVIORS::CASSANDRA]);
-        unset($moduleParams['behaviors'][ROLE_BEHAVIORS::CUSTOM]);
-        unset($moduleParams['behaviors'][ROLE_BEHAVIORS::HAPROXY]);
-
-        //platforms list
-        $platforms = self::loadController('Platforms')->getEnabledPlatforms();
-        if (empty($platforms))
-            throw new Exception('Before building new farm you need to configure environment and setup cloud credentials');
-
-
-        //categories list
-        $categories = $this->db->GetAll(
-            "SELECT c.id, c.name, COUNT(DISTINCT r.id) AS total
-             FROM role_categories c
-             LEFT JOIN roles r ON c.id = r.cat_id AND r.env_id IN(0, ?) AND r.id IN (
-                SELECT role_id
-                FROM role_images
-                WHERE role_id = r.id
-                AND platform IN ('".implode("','", array_keys($platforms))."')
-             )
-             WHERE c.env_id IN (0, ?)
-             GROUP BY c.id
-            ",
-            array($this->environment->id, $this->environment->id)
-        );
-        $moduleParams['categories'] = array();
-        foreach ($categories as $g)
-            $moduleParams['categories'][$g['id']] = $g;
-
-        $moduleParams['farmVpcEc2Enabled'] = $this->getEnvironment()->isPlatformEnabled(SERVER_PLATFORMS::EC2);
-        if ($moduleParams['farmVpcEc2Enabled']) {
-            $moduleParams['farmVpcEc2Locations'] = self::loadController('Platforms')->getCloudLocations(SERVER_PLATFORMS::EC2, false);
-        }
-
-        if ($farmId) {
-            $c = self::loadController('Builder', 'Scalr_UI_Controller_Farms');
-            $moduleParams['farm'] = $c->getFarm2($farmId);
-        } else {
-            // TODO: remove hack, do better
-            $vars = new Scalr_Scripting_GlobalVariables($this->user->getAccountId(), $this->getEnvironmentId(), Scalr_Scripting_GlobalVariables::SCOPE_FARM);
-            $moduleParams['farmVariables'] = $vars->getValues();
-        }
-
-        $moduleParams['tabs'] = array(
-            'vpcrouter', 'dbmsr', 'mongodb', 'mysql', 'scaling', 'network', 'cloudfoundry', 'rabbitmq', 'haproxy', 'proxy',
-            'rds',   'scripting',
-            'ec2', 'openstack', 'gce', 'security', 'devel', 'storage', 'variables', 'advanced'
-        );
-
-        if ($this->user->getAccount()->isFeatureEnabled(Scalr_Limits::FEATURE_CHEF)) {
-            $moduleParams['tabs'][] = 'chef';
-        }
-        //deprecated tabs
-        if (\Scalr::config('scalr.ui.show_deprecated_features')) {
-            $moduleParams['tabs'][] = 'deployments';
-            $moduleParams['tabs'][] = 'ebs';
-            $moduleParams['tabs'][] = 'params';
-            $moduleParams['tabs'][] = 'servicesconfig';
-        }
-        $conf = $this->getContainer()->config->get('scalr.load_statistics.connections.plotter');
-        $moduleParams['tabParams'] = array(
-            'farmId'        => $farmId,
-            'farmHash'      => $moduleParams['farm'] ? $moduleParams['farm']['farm']['hash'] : '',
-            'accountId'     => $this->environment->getPlatformConfigValue(Ec2PlatformModule::ACCOUNT_ID),
-            'remoteAddress' => $this->request->getRemoteAddr(),
-            'monitoringHostUrl' => "{$conf['scheme']}://{$conf['host']}:{$conf['port']}",
-            'nginx'         => array(
-                'server_section' => @file_get_contents("../templates/services/nginx/server_section.tpl"),
-                'server_section_ssl' => @file_get_contents("../templates/services/nginx/server_section_ssl.tpl")
-            )
-        );
-
-        // TODO: Features
-        $moduleParams['tabParams']['featureRAID'] = $this->user->getAccount()->isFeatureEnabled(Scalr_Limits::FEATURE_RAID);
-        $moduleParams['tabParams']['featureMFS'] = $this->user->getAccount()->isFeatureEnabled(Scalr_Limits::FEATURE_MFS);
-        $moduleParams['tabParams']['scalr.dns.global.enabled'] = \Scalr::config('scalr.dns.global.enabled');
-        $moduleParams['tabParams']['scalr.instances_connection_policy'] = \Scalr::config('scalr.instances_connection_policy');
-        $moduleParams['tabParams']['scalr.scalarizr_update.repos'] = array_keys(\Scalr::config('scalr.scalarizr_update.repos'));
-        $moduleParams['tabParams']['scalr.scalarizr_update.devel_repos'] = is_array(\Scalr::config('scalr.scalarizr_update.devel_repos')) ? array_keys(\Scalr::config('scalr.scalarizr_update.devel_repos')) : [];
-        $moduleParams['tabParams']['scalr.scalarizr_update.default_repo'] = \Scalr::config('scalr.scalarizr_update.default_repo');
-
-        $moduleParams['metrics'] = self::loadController('Metrics', 'Scalr_UI_Controller_Scaling')->getList();
-        $moduleParams['timezones_list'] = Scalr_Util_DateTime::getTimezones();
-        $moduleParams['timezone_default'] = $this->user->getSetting(Scalr_Account_User::SETTING_UI_TIMEZONE);
-
-        if ($moduleParams['farm']['farm']['ownerEditable']) {
-            $moduleParams['usersList'] = Scalr_Account_User::getList($this->user->getAccountId());
-        }
-
-        $governance = new Scalr_Governance($this->getEnvironmentId());
-        $moduleParams['governance'] = $governance->getValues(true);
-
-        $defaultFarmRoleSecurityGroups = array('default');
-        if (\Scalr::config('scalr.aws.security_group_name')) {
-            $defaultFarmRoleSecurityGroups[] = \Scalr::config('scalr.aws.security_group_name');
-        }
-
-        $moduleParams['roleDefaultSettings'] = array(
-            'base.keep_scripting_logs_time' => \Scalr::config('scalr.system.scripting.default_instance_log_rotation_period'),
-            'security_groups.list' => json_encode($defaultFarmRoleSecurityGroups),
-            'base.abort_init_on_script_fail' => \Scalr::config('scalr.system.scripting.default_abort_init_on_script_fail') ? 1 : 0,
-            'base.disable_firewall_management' => \Scalr::config('scalr.system.default_disable_firewall_management') ? 1 : 0,
-        );
-
-        //cost analytics
-        if ($this->getContainer()->analytics->enabled && $this->getEnvironment()->getPlatformConfigValue(Scalr_Environment::SETTING_CC_ID)) {
-            $costCenter = $this->getContainer()->analytics->ccs->get($this->getEnvironment()->getPlatformConfigValue(Scalr_Environment::SETTING_CC_ID));
-
-            $currentYear = (new \DateTime('now', new \DateTimeZone('UTC')))->format('Y');
-            $quarters = new Quarters(SettingEntity::getQuarters());
-            $currentQuarter = $quarters->getQuarterForDate(new \DateTime('now', new \DateTimeZone('UTC')));
-
-            $projects = [];
-
-            if ($farmId) {
-                $farm = DBFarm::LoadByID($farmId);
-                $currentProjectId = $farm->GetSetting(DBFarm::SETTING_PROJECT_ID);
-                $currentProject = ProjectEntity::findPk($currentProjectId);
-
-                if (!empty($currentProject)) {
-                    $quarterBudget = QuarterlyBudgetEntity::findOne([['year' => $currentYear], ['subjectType' => QuarterlyBudgetEntity::SUBJECT_TYPE_PROJECT], ['subjectId' => $currentProject->projectId], ['quarter' => $currentQuarter]]);
-                    $projects[] = [
-                        'projectId' => $currentProject->projectId,
-                        'name' => $currentProject->name,
-                        'budgetRemain' => (!is_null($quarterBudget) && $quarterBudget->budget > 0)
-                            ? max(0, round($quarterBudget->budget - $quarterBudget->cumulativespend))
-                            : null,
-                    ];
-                }
-            }
-
-            if ($costCenter instanceof CostCentreEntity) {
-                $projectsIterator = new SharedProjectsFilterIterator($costCenter->getProjects(), $costCenter->ccId, $this->user, $this->getEnvironment());
-
-                foreach ($projectsIterator as $item) {
-                    /* @var $item Scalr\Stats\CostAnalytics\Entity\ProjectEntity */
-                    if (!empty($currentProjectId) && $item->projectId == $currentProjectId) {
-                        continue;
-                    }
-
-                    $quarterBudget = QuarterlyBudgetEntity::findOne([['year' => $currentYear], ['subjectType' => QuarterlyBudgetEntity::SUBJECT_TYPE_PROJECT], ['subjectId' => $item->projectId], ['quarter' => $currentQuarter]]);
-                    $projects[] = array(
-                        'projectId'     => $item->projectId,
-                        'name'          => $item->name,
-                        'budgetRemain'  => (!is_null($quarterBudget) && $quarterBudget->budget > 0)
-                                            ? max(0, round($quarterBudget->budget - $quarterBudget->cumulativespend))
-                                            : null,
-                    );
-                }
-                $costCentreName = $costCenter->name;
-                $isLocked = $costCenter->getProperty(CostCentrePropertyEntity::NAME_LOCKED);
-                $accountCcs = AccountCostCenterEntity::findOne([['accountId' => $this->environment->clientId], ['ccId' => $costCenter->ccId]]);
-
-                if ($isLocked || !($accountCcs instanceof AccountCostCenterEntity)) {
-                    $costCentreLocked = 1;
-                } else {
-                    $costCentreLocked = 0;
-                }
-
-            } else {
-                $costCentreName = '';
-                $costCentreLocked = 0;
-            }
-
-            $supportedClouds = $this->getContainer()->analytics->prices->getSupportedClouds();
-
-            $moduleParams['analytics'] = array(
-                'costCenterName'    => $costCentreName,
-                'costCenterLocked'  => $costCentreLocked,
-                'projects'          => $projects,
-                'unsupportedClouds' => array_values(array_diff($this->environment->getEnabledPlatforms(), $supportedClouds))
-            );
-
-            if ($farmId) {
-                $dbFarm = DBFarm::LoadByID($farmId);
-                $moduleParams['farm']['farm']['projectId'] = $dbFarm->GetSetting(DBFarm::SETTING_PROJECT_ID);
-                if ($moduleParams['farm']['farm']['projectId']) {
-                    $moduleParams['analytics']['farmCostMetering'] = $this->getContainer()->analytics->usage->getFarmCostMetering($this->user->getAccountId(), $farmId);
-                }
-            }
-        }
-
-        $this->response->page('ui/farms/builder.js', $moduleParams, array(
-            'ui/farms/builder/selroles.js',
-            'ui/farms/builder/roleedit.js',
+        return $this->response->calculateFilesHash([
+            'ui/farms/builder.js',
+            'ui/farms/builder/plugins.js',
             'ui/farms/builder/roleslibrary.js',
             'ui/farms/builder/costmetering.js',
             //tabs
@@ -1319,13 +1128,9 @@ class Scalr_UI_Controller_Farms extends Scalr_UI_Controller
             'ui/farms/builder/tabs/params.js',
             'ui/farms/builder/tabs/servicesconfig.js',
             //roleslibrary add role settings
-            'ui/farms/builder/roleslibrary/ec2.js',
             'ui/farms/builder/roleslibrary/vpc.js',
-            'ui/farms/builder/roleslibrary/euca.js',
-            'ui/farms/builder/roleslibrary/rackspace.js',
             'ui/farms/builder/roleslibrary/openstack.js',
             'ui/farms/builder/roleslibrary/cloudstack.js',
-            'ui/farms/builder/roleslibrary/gce.js',
             'ui/farms/builder/roleslibrary/mongodb.js',
             'ui/farms/builder/roleslibrary/dbmsr.js',
             'ui/farms/builder/roleslibrary/proxy.js',
@@ -1335,20 +1140,246 @@ class Scalr_UI_Controller_Farms extends Scalr_UI_Controller
             'codemirror/codemirror.js',
             'ui/core/variablefield.js',
             'ui/scripts/scriptfield.js',
-            'ux-boxselect.js',
+            'ui/monitoring/window.js',
+            'ui/services/chef/chefsettings.js',
+            'ui/security/groups/sgeditor.js',
+            'ui/farms/builder/builder.css',
+            'codemirror/codemirror.css',
+            'ui/scripts/scriptfield.css',
+            'ui/analytics/analytics.css'
+        ]);
+    }
+
+    public function buildAction()
+    {
+        $this->request->restrictFarmAccess(null, Acl::PERM_FARMS_MANAGE);
+
+        $platforms = self::loadController('Platforms')->getEnabledPlatforms();
+        if (empty($platforms)) {
+            throw new Exception('Before building new farm you need to configure environment and setup cloud credentials');
+        }
+
+        // all files should be listed in method calcFarmDesignerHash
+        $this->response->page(['ui/farms/builder.js', 'ui/farms/builder/plugins.js'], [
+            'scalrPageHash' => $this->calcFarmDesignerHash()
+        ], array(
+            'ui/farms/builder/roleslibrary.js',
+            'ui/farms/builder/costmetering.js',
+            //tabs
+            'ui/farms/builder/tabs/dbmsr.js',
+            'ui/farms/builder/tabs/cloudfoundry.js',
+            'ui/farms/builder/tabs/rabbitmq.js',
+            'ui/farms/builder/tabs/mongodb.js',
+            'ui/farms/builder/tabs/haproxy.js',
+            'ui/farms/builder/tabs/proxy.js',
+            'ui/farms/builder/tabs/mysql.js',
+            'ui/farms/builder/tabs/rds.js',
+            'ui/farms/builder/tabs/gce.js',
+            'ui/farms/builder/tabs/openstack.js',
+            'ui/farms/builder/tabs/scaling.js',
+            'ui/farms/builder/tabs/scripting.js',
+            'ui/farms/builder/tabs/advanced.js',
+            'ui/farms/builder/tabs/ec2.js',
+            'ui/farms/builder/tabs/security.js',
+            'ui/farms/builder/tabs/storage.js',
+            'ui/farms/builder/tabs/variables.js',
+            'ui/farms/builder/tabs/devel.js',
+            'ui/farms/builder/tabs/chef.js',
+            'ui/farms/builder/tabs/vpcrouter.js',
+            'ui/farms/builder/tabs/network.js',
+            //deprecated tabs
+            'ui/farms/builder/tabs/deployments.js',
+            'ui/farms/builder/tabs/ebs.js',
+            'ui/farms/builder/tabs/params.js',
+            'ui/farms/builder/tabs/servicesconfig.js',
+            //roleslibrary add role settings
+            'ui/farms/builder/roleslibrary/vpc.js',
+            'ui/farms/builder/roleslibrary/openstack.js',
+            'ui/farms/builder/roleslibrary/cloudstack.js',
+            'ui/farms/builder/roleslibrary/mongodb.js',
+            'ui/farms/builder/roleslibrary/dbmsr.js',
+            'ui/farms/builder/roleslibrary/proxy.js',
+            'ui/farms/builder/roleslibrary/haproxy.js',
+            'ui/farms/builder/roleslibrary/chef.js',
+            //other
+            'codemirror/codemirror.js',
+            'ui/core/variablefield.js',
+            'ui/scripts/scriptfield.js',
             'ui/monitoring/window.js',
             'ui/services/chef/chefsettings.js',
             'ui/security/groups/sgeditor.js'
         ), array(
-            'ui/farms/builder/selroles.css',
-            'ui/farms/builder/roleedit.css',
-            'ui/farms/builder/roleslibrary.css',
+            'ui/farms/builder/builder.css',
             'codemirror/codemirror.css',
-            'ui/core/variablefield.css',
             'ui/scripts/scriptfield.css',
-            'ui/farms/builder/tabs/scaling.css',
             'ui/analytics/analytics.css',
         ));
+    }
+
+    /**
+     * @param int $farmId optional
+     * @param int $roleId optional
+     * @param string $scalrPageHash optional
+     * @param string $scalrPageUiHash optional
+     * @throws Scalr_Exception_InsufficientPermissions
+     */
+    public function xGetFarmAction($farmId = null, $roleId = null, $scalrPageHash = null, $scalrPageUiHash = null)
+    {
+        if ($scalrPageHash && $scalrPageHash != $this->calcFarmDesignerHash()) {
+            $this->response->data([
+                'scalrPageHashMismatch' => true
+            ]);
+            return;
+        }
+
+        if ($scalrPageUiHash && $scalrPageUiHash != $this->response->pageUiHash()) {
+            $this->response->data([
+                'scalrPageUiHashMismatch' => true
+            ]);
+            return;
+        }
+
+        $moduleParams = array(
+            'farmId' => $farmId,
+            'roleId' => $roleId,
+            'behaviors' => ROLE_BEHAVIORS::GetName(null, true)
+        );
+
+        unset($moduleParams['behaviors'][ROLE_BEHAVIORS::CASSANDRA]);
+        unset($moduleParams['behaviors'][ROLE_BEHAVIORS::CUSTOM]);
+        unset($moduleParams['behaviors'][ROLE_BEHAVIORS::HAPROXY]);
+
+        //platforms list
+        $platforms = self::loadController('Platforms')->getEnabledPlatforms();
+        if (empty($platforms)) {
+            throw new Exception('Before building new farm you need to configure environment and setup cloud credentials');
+        }
+
+        //categories list
+        $categories = $this->db->GetAll(
+            "SELECT c.id, c.name, COUNT(DISTINCT r.id) AS total
+             FROM role_categories c
+             LEFT JOIN roles r ON c.id = r.cat_id AND (r.env_id IS NULL OR r.env_id = ?) AND r.id IN (
+                SELECT role_id
+                FROM role_images
+                WHERE role_id = r.id
+                AND platform IN ('".implode("','", array_keys($platforms))."')
+             )
+             WHERE c.env_id IS NULL OR c.env_id = ?
+             GROUP BY c.id
+            ",
+            array($this->environment->id, $this->environment->id)
+        );
+        $moduleParams['categories'] = array();
+        foreach ($categories as $g)
+            $moduleParams['categories'][$g['id']] = $g;
+
+        $moduleParams['farmVpcEc2Enabled'] = $this->getEnvironment()->isPlatformEnabled(SERVER_PLATFORMS::EC2);
+        if ($moduleParams['farmVpcEc2Enabled']) {
+            $moduleParams['farmVpcEc2Locations'] = self::loadController('Platforms')->getCloudLocations(SERVER_PLATFORMS::EC2, false);
+        }
+
+        if ($farmId) {
+            $this->request->restrictFarmAccess(DBFarm::LoadByID($farmId), Acl::PERM_FARMS_MANAGE);
+
+            $c = self::loadController('Builder', 'Scalr_UI_Controller_Farms');
+            $moduleParams['farm'] = $c->getFarm2($farmId);
+        } else {
+            $this->request->restrictFarmAccess(null, Acl::PERM_FARMS_MANAGE);
+
+            // TODO: remove hack, do better
+            $vars = new Scalr_Scripting_GlobalVariables($this->user->getAccountId(), $this->getEnvironmentId(), Scalr_Scripting_GlobalVariables::SCOPE_FARM);
+            $moduleParams['farmVariables'] = $vars->getValues();
+        }
+
+        $moduleParams['tabs'] = array(
+            'vpcrouter', 'dbmsr', 'mongodb', 'mysql', 'scaling', 'network', 'cloudfoundry', 'rabbitmq', 'haproxy', 'proxy',
+            'rds',   'scripting',
+            'ec2', 'openstack', 'gce', 'security', 'devel', 'storage', 'variables', 'advanced', 'chef'
+        );
+
+        //deprecated tabs
+        if (\Scalr::config('scalr.ui.show_deprecated_features')) {
+            $moduleParams['tabs'][] = 'deployments';
+            $moduleParams['tabs'][] = 'ebs';
+            $moduleParams['tabs'][] = 'params';
+            $moduleParams['tabs'][] = 'servicesconfig';
+        }
+        $conf = $this->getContainer()->config->get('scalr.load_statistics.connections.plotter');
+        $moduleParams['tabParams'] = array(
+            'farmId'        => $farmId,
+            'farmHash'      => $moduleParams['farm'] ? $moduleParams['farm']['farm']['hash'] : '',
+            'accountId'     => $this->environment->getPlatformConfigValue(Ec2PlatformModule::ACCOUNT_ID),
+            'remoteAddress' => $this->request->getRemoteAddr(),
+            'monitoringHostUrl' => "{$conf['scheme']}://{$conf['host']}:{$conf['port']}",
+            'nginx'         => array(
+                'server_section' => @file_get_contents("../templates/services/nginx/server_section.tpl"),
+                'server_section_ssl' => @file_get_contents("../templates/services/nginx/server_section_ssl.tpl")
+            )
+        );
+
+        $moduleParams['tabParams']['scalr.dns.global.enabled'] = \Scalr::config('scalr.dns.global.enabled');
+        $moduleParams['tabParams']['scalr.instances_connection_policy'] = \Scalr::config('scalr.instances_connection_policy');
+        $moduleParams['tabParams']['scalr.scalarizr_update.repos'] = array_keys(\Scalr::config('scalr.scalarizr_update.repos'));
+        $moduleParams['tabParams']['scalr.scalarizr_update.devel_repos'] = is_array(\Scalr::config('scalr.scalarizr_update.devel_repos')) ? array_keys(\Scalr::config('scalr.scalarizr_update.devel_repos')) : [];
+        $moduleParams['tabParams']['scalr.scalarizr_update.default_repo'] = \Scalr::config('scalr.scalarizr_update.default_repo');
+
+        $moduleParams['metrics'] = Entity\ScalingMetric::getList($this->getEnvironmentId());
+        $moduleParams['timezones_list'] = Scalr_Util_DateTime::getTimezones();
+        $moduleParams['timezone_default'] = $this->user->getSetting(Scalr_Account_User::SETTING_UI_TIMEZONE);
+
+        if ($moduleParams['farm']['farm']['ownerEditable']) {
+            $moduleParams['usersList'] = Scalr_Account_User::getList($this->user->getAccountId());
+        }
+
+        $defaultFarmRoleSecurityGroups = array('default');
+        if (\Scalr::config('scalr.aws.security_group_name')) {
+            $defaultFarmRoleSecurityGroups[] = \Scalr::config('scalr.aws.security_group_name');
+        }
+
+        $moduleParams['roleDefaultSettings'] = array(
+            'base.keep_scripting_logs_time' => \Scalr::config('scalr.system.scripting.default_instance_log_rotation_period'),
+            'security_groups.list' => json_encode($defaultFarmRoleSecurityGroups),
+            'base.abort_init_on_script_fail' => \Scalr::config('scalr.system.scripting.default_abort_init_on_script_fail') ? 1 : 0,
+            'base.disable_firewall_management' => \Scalr::config('scalr.system.default_disable_firewall_management') ? 1 : 0,
+        );
+
+        //cost analytics
+        if ($this->getContainer()->analytics->enabled && $this->getEnvironment()->getPlatformConfigValue(Scalr_Environment::SETTING_CC_ID)) {
+            $farmCostData = $this->getFarmCostData($farmId);
+            $moduleParams['analytics'] = $farmCostData['analytics'];
+
+            if ($farmId) {
+                $moduleParams['farm']['farm']['projectId'] = $farmCostData['projectId'];
+                $moduleParams['analytics']['farmCostMetering'] = $farmCostData['farmCostMetering'];
+           }
+        }
+
+        $moduleParams['farmLaunchPermission'] = $farmId ? $moduleParams['farm']['farm']['launchPermission'] : $this->request->isFarmAllowed(null, Acl::PERM_FARMS_LAUNCH_TERMINATE);
+
+        if ($moduleParams['farm']['farm']['teamOwnerEditable'] || !$farmId) {
+            if ($this->user->canManageAcl()) {
+                $teams = $this->db->getAll('SELECT id, name FROM account_teams WHERE account_id = ?', array($this->user->getAccountId()));
+            } else {
+                $teams = $this->user->getTeams();
+                $teamId = $moduleParams['farm']['farm']['teamOwner'];
+                $flag = !!$teamId;
+                foreach ($teams as $t) {
+                    if ($t['id'] == $teamId) {
+                        $flag = false;
+                        break;
+                    }
+                }
+                if ($flag) {
+                    // team is missed in list, add manually
+                    array_unshift($teams, ['id' => $teamId, 'name' => $this->db->GetOne('SELECT name FROM account_teams WHERE id = ?', [$teamId])]);
+                }
+            }
+            array_unshift($teams, ['id' => 0, 'name' => '']);
+            $moduleParams['teamsList'] = $teams;
+        }
+
+        $this->response->data($moduleParams);
     }
 
     /**
@@ -1357,10 +1388,9 @@ class Scalr_UI_Controller_Farms extends Scalr_UI_Controller
      */
     public function xGetOwnerHistoryAction($farmId)
     {
-        $this->request->restrictAccess(Acl::RESOURCE_FARMS, Acl::PERM_FARMS_MANAGE);
-
         $dbFarm = DBFarm::LoadByID($farmId);
         $this->user->getPermissions()->validate($dbFarm);
+        $this->request->restrictFarmAccess($dbFarm, Acl::PERM_FARMS_MANAGE);
 
         if ($dbFarm->createdByUserId == $this->user->getId() || $this->user->isAccountOwner()) {
             $history = $dbFarm->GetSetting(DBFarm::SETTING_OWNER_HISTORY);
@@ -1379,5 +1409,80 @@ class Scalr_UI_Controller_Farms extends Scalr_UI_Controller
         } else {
             throw new Scalr_Exception_InsufficientPermissions();
         }
+    }
+
+    private function getFarmCostData ($farmId) {
+        $result = [];
+        $costCenter = $this->getContainer()->analytics->ccs->get($this->getEnvironment()->getPlatformConfigValue(Scalr_Environment::SETTING_CC_ID));
+
+        $currentYear = (new \DateTime('now', new \DateTimeZone('UTC')))->format('Y');
+        $quarters = new Quarters(SettingEntity::getQuarters());
+        $currentQuarter = $quarters->getQuarterForDate(new \DateTime('now', new \DateTimeZone('UTC')));
+
+        $projects = [];
+
+        if ($farmId) {
+            $farm = DBFarm::LoadByID($farmId);
+            $currentProjectId = $farm->GetSetting(DBFarm::SETTING_PROJECT_ID);
+            $currentProject = ProjectEntity::findPk($currentProjectId);
+
+            if (!empty($currentProject)) {
+                $quarterBudget = QuarterlyBudgetEntity::findOne([['year' => $currentYear], ['subjectType' => QuarterlyBudgetEntity::SUBJECT_TYPE_PROJECT], ['subjectId' => $currentProject->projectId], ['quarter' => $currentQuarter]]);
+                $projects[] = [
+                    'projectId' => $currentProject->projectId,
+                    'name' => $currentProject->name,
+                    'budgetRemain' => (!is_null($quarterBudget) && $quarterBudget->budget > 0)
+                        ? max(0, round($quarterBudget->budget - $quarterBudget->cumulativespend))
+                        : null,
+                ];
+            }
+
+            $result['projectId'] = $farm->GetSetting(DBFarm::SETTING_PROJECT_ID);
+            $result['farmCostMetering'] = $result['projectId'] ? $this->getContainer()->analytics->usage->getFarmCostMetering($this->user->getAccountId(), $farmId) : null;
+
+        }
+
+        if ($costCenter instanceof CostCentreEntity) {
+            $projectsIterator = new SharedProjectsFilterIterator($costCenter->getProjects(), $costCenter->ccId, $this->user, $this->getEnvironment());
+
+            foreach ($projectsIterator as $item) {
+                /* @var $item Scalr\Stats\CostAnalytics\Entity\ProjectEntity */
+                if (!empty($currentProjectId) && $item->projectId == $currentProjectId) {
+                    continue;
+                }
+
+                $quarterBudget = QuarterlyBudgetEntity::findOne([['year' => $currentYear], ['subjectType' => QuarterlyBudgetEntity::SUBJECT_TYPE_PROJECT], ['subjectId' => $item->projectId], ['quarter' => $currentQuarter]]);
+                $projects[] = array(
+                    'projectId'     => $item->projectId,
+                    'name'          => $item->name,
+                    'budgetRemain'  => (!is_null($quarterBudget) && $quarterBudget->budget > 0)
+                                        ? max(0, round($quarterBudget->budget - $quarterBudget->cumulativespend))
+                                        : null,
+                );
+            }
+            $costCentreName = $costCenter->name;
+            $isLocked = $costCenter->getProperty(CostCentrePropertyEntity::NAME_LOCKED);
+            $accountCcs = AccountCostCenterEntity::findOne([['accountId' => $this->environment->clientId], ['ccId' => $costCenter->ccId]]);
+
+            if ($isLocked || !($accountCcs instanceof AccountCostCenterEntity)) {
+                $costCentreLocked = 1;
+            } else {
+                $costCentreLocked = 0;
+            }
+
+        } else {
+            $costCentreName = '';
+            $costCentreLocked = 0;
+        }
+
+        $supportedClouds = $this->getContainer()->analytics->prices->getSupportedClouds();
+
+        $result['analytics'] = array(
+            'costCenterName'    => $costCentreName,
+            'costCenterLocked'  => $costCentreLocked,
+            'projects'          => $projects,
+            'unsupportedClouds' => array_values(array_diff($this->environment->getEnabledPlatforms(), $supportedClouds))
+        );
+        return $result;
     }
 }

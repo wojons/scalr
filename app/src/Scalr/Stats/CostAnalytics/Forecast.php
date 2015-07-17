@@ -78,8 +78,6 @@ trait Forecast
         $growth = $usage - $prevusage;
         $growthPct = $prevusage == 0 ? null : abs($growth / $prevusage * 100);
 
-        $prevusagewhole = $data['prevusagewhole'];
-
         $ret['periodTotal'] = $usage;
 
         $ret['growth'] = $growth;
@@ -202,12 +200,10 @@ trait Forecast
                     $ret['budgetOverspendPct'] = round($ret['budgetOverspend'] / $ret['budget'] * 100);
                 }
 
-                $ret['budgetSpentPct'] = $ret['budget'] == 0 ? null :
-                    min(100, round($ret['budgetSpent'] / $ret['budget'] * 100));
+                $ret['budgetSpentPct'] = $ret['budget'] == 0 ? null : min(100, round($ret['budgetSpent'] / $ret['budget'] * 100));
 
                 if (isset($request['usage'])) {
-                    $ret['budgetSpentThisPeriodPct'] = $ret['budget'] == 0 ? null :
-                        min(100, round($request['usage'] / $ret['budget'] * 100));
+                    $ret['budgetSpentThisPeriodPct'] = $ret['budget'] == 0 ? null : min(100, round($request['usage'] / $ret['budget'] * 100));
                 }
 
                 $ret['budgetRemain'] = max(0, round($ret['budget'] - $ret['budgetSpent']));
@@ -292,7 +288,7 @@ trait Forecast
                 $spendByDay = $daysFromStart == 0 ? 0 : $budget['budgetSpent'] / $daysFromStart;
 
                 //Days need to exceed budget
-                $needDays = ceil($budget['budget'] / $spendByDay);
+                $needDays = $spendByDay == 0 ? 0 : ceil($budget['budget'] / $spendByDay);
 
                 $budgetRunOut = clone $quarterStartDate;
 
@@ -338,7 +334,7 @@ trait Forecast
      */
     private static function _getCurrentPeriod()
     {
-        static $period;
+        static $period = null;
 
         if ($period === null) {
             $quarters = new Quarters(SettingEntity::getQuarters());
@@ -365,6 +361,9 @@ trait Forecast
            'prevCostPct' => (isset($previousPeriod) ? $previousPeriod['cost_percentage'] : 0), // previous period percentage
         ];
 
+        //prev point usage
+        $prevPointUsage = !empty($previousPoint['cost']) ? round($previousPoint['cost'], 2) : 0;
+
         // growth from previous period cost
         $r['growth'] = $r['cost'] - $r['prevCost'];
 
@@ -372,10 +371,10 @@ trait Forecast
         $r['growthPct'] = $r['prevCost'] == 0 ? null : round(abs($r['growth'] / $r['prevCost'] * 100), 0);
 
         // growth from previous point amount
-        $r['growthPrevPoint'] = isset($previousPoint) ? $r['cost'] - round($previousPoint['cost'], 2) : $r['cost'];
+        $r['growthPrevPoint'] = $prevPointUsage == 0 ? $r['cost'] : $r['cost'] - $prevPointUsage;
 
         // percentage from previous point
-        $r['growthPrevPointPct'] = $previousPoint['cost'] == 0 ? null : round(abs(($r['growthPrevPoint'] / $previousPoint['cost']) * 100), 0);
+        $r['growthPrevPointPct'] = $prevPointUsage == 0 ? null : round(abs(($r['growthPrevPoint'] / $prevPointUsage) * 100), 0);
 
         return $r;
     }
@@ -400,7 +399,10 @@ trait Forecast
         ];
 
         //previous period amount
-        $prevUsage = (isset($prevPeriod) ? round($prevPeriod['cost'], 2) : 0);
+        $prevUsage = !empty($prevPeriod['cost']) ? round($prevPeriod['cost'], 2) : 0;
+
+        //previous point usage
+        $prevPointUsage = !empty($prevPointPeriod['cost']) ? round($prevPointPeriod['cost'], 2) : 0;
 
         //growth from previous period
         $pr['growth'] = $pr['cost'] - $prevUsage;
@@ -409,10 +411,10 @@ trait Forecast
         $pr['growthPct'] = $prevUsage == 0 ? null : round(abs($pr['growth'] / $prevUsage * 100), 0);
 
         //growth from previous point amount
-        $pr['growthPrevPoint'] = isset($prevPointPeriod) ? $pr['cost'] - round($prevPointPeriod['cost'], 2) : $pr['cost'];
+        $pr['growthPrevPoint'] = $prevPointUsage == 0 ? $pr['cost'] : $pr['cost'] - $prevPointUsage;
 
         //growth percentage from previous point
-        $pr['growthPrevPointPct'] = $prevPointPeriod['cost'] == 0 ? null : round(abs(($pr['growthPrevPoint'] / round($prevPointPeriod['cost'], 2)) * 100), 0);
+        $pr['growthPrevPointPct'] = $prevPointUsage == 0 ? null : round(abs(($pr['growthPrevPoint'] / $prevPointUsage) * 100), 0);
 
         return $pr;
     }
@@ -571,7 +573,7 @@ trait Forecast
                 if (!empty($arr['data'])) {
                     foreach ($arr['data'] as $id => $value) {
                         $itemsAverage[$itemName][$id] = [
-                            'rollingAverage'        => round($value['cost'] / $num, 2),
+                            'rollingAverage'        => round(($num == 0 ? 0 : $value['cost'] / $num), 2),
                             'rollingAverageMessage' => $info,
                             'rollingAverageDaily'   => round(($days == 0 ? 0 : $value['cost'] / $days), 2),
                         ];
@@ -581,7 +583,7 @@ trait Forecast
         }
 
         return [
-            'rollingAverage'        => round($usage['cost'] / $num, 2),
+            'rollingAverage'        => round(($num == 0 ? 0 : $usage['cost'] / $num), 2),
             'rollingAverageMessage' => $info,
             'rollingAverageDaily'   => round(($days == 0 ? 0 : $usage['cost'] / $days), 2),
         ] + $itemsAverage;

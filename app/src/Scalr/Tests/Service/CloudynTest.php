@@ -33,13 +33,10 @@ class CloudynTest extends TestCase
 
     /**
      * @test
+     * @functional
      */
     public function testFunctionalServiceActions ()
     {
-        if ($this->isSkipFunctionalTests()) {
-            $this->markTestSkipped();
-        }
-
         $cy = new Cloudyn('', '', \Scalr::config('scalr.cloudyn.environment'));
 
         $version = $cy->getVersion();

@@ -16,18 +16,19 @@ Scalr.regPage('Scalr.ui.scripts.events.fire', function (loadParams, moduleParams
                 xtype: 'combobox',
                 emptyText: 'Select an event',
 				store: {
-					fields: [ 'name', 'description'],
+					fields: [ 'name', 'description', 'scope'],
 					data: moduleParams['events'],
 					proxy: 'object'
 				},
+                plugins: {ptype: 'fieldinnericonscope', tooltipScopeType: 'event'},
                 displayField: 'name',
                 queryMode: 'local',
                 valueField: 'name',
                 editable: true,
                 anyMatch: true,
-                selectOnFocus: true,
-                forceSelection: true,
                 autoSearch: false,
+                selectOnFocus: true,
+                restoreValueOnBlur: true,
                 allowBlank: false,
                 readOnly: !!moduleParams['eventName'],
                 name: 'eventName',
@@ -47,7 +48,7 @@ Scalr.regPage('Scalr.ui.scripts.events.fire', function (loadParams, moduleParams
             },{
                 xtype: 'component',
                 itemId: 'eventDescription',
-                style: 'color:#666;font-style:italic',
+                style: 'font-style:italic',
                 html: '&nbsp;',
                 margin: '12 0 0'
             }]
@@ -61,104 +62,13 @@ Scalr.regPage('Scalr.ui.scripts.events.fire', function (loadParams, moduleParams
             title: 'Scripting parameters',
             cls: 'x-fieldset-separator-none',
             items: {
-                xtype: 'grid',
-                cls: 'x-grid-shadow x-grid-no-highlighting',
-                store: {
-                    fields: ['name', 'value'],
-                    proxy: 'object'
-                },
-                features: {
-                    ftype: 'addbutton',
-                    text: 'Add new param',
-                    handler: function(view) {
-                        view.up().store.add({});
-                    }
-                },
-                plugins: [{
-                    ptype: 'cellediting',
-                    pluginId: 'cellediting',
-                    clicksToEdit: 1
-                }],
+                xtype: 'namevaluelistfield',
+                itemId: 'eventParams',
+                itemName: 'parameter',
                 listeners: {
-                    viewready: function() {
-                        this.store.add({});
-                    },
-                    itemclick: function (view, record, item, index, e) {
-                        var selModel = view.getSelectionModel();
-                        if (e.getTarget('img.x-icon-action-delete')) {
-                            if (record === selModel.getLastFocused()) {
-                                selModel.deselectAll();
-                                selModel.setLastFocused(null);
-                            }
-                            view.store.remove(record);
-                            if (!view.store.getCount()) {
-                                view.up().store.add({});
-                            }
-                            return false;
-                        }
+                    boxready: function() {
+                       this.store.add({});
                     }
-                },
-                columns: [{
-                    header: 'Name',
-                    sortable: false,
-                    resizable: false,
-                    dataIndex: 'name',
-                    flex: 1,
-                    editor: {
-                        xtype: 'textfield',
-                        editable: false,
-                        margin: '0 12 0 13',
-                        fixWidth: -25,
-                        maxLength: 127,
-                        allowBlank: false
-                    },
-                    renderer: function(value, meta, record, rowIndex, colIndex, store, grid) {
-                        var column = grid.panel.columns[colIndex],
-                           valueEncoded = Ext.String.htmlEncode(value);
-                        return  '<div class="x-form-text" style="background:#fff;padding:2px 12px 3px 13px;text-overflow: ellipsis;overflow:hidden;cursor:text">'+
-                                    valueEncoded +
-                                '</div>';
-                    }
-                },{
-                    header: 'Value',
-                    sortable: false,
-                    resizable: false,
-                    dataIndex: 'value',
-                    flex: 2,
-                    editor: {
-                        xtype: 'textfield',
-                        editable: false,
-                        margin: '0 12 0 13',
-                        fixWidth: -25,
-                        maxLength: 255
-                    },
-                    renderer: function(value, meta, record, rowIndex, colIndex, store, grid) {
-                        var column = grid.panel.columns[colIndex],
-                            valueEncoded = Ext.String.htmlEncode(value);
-                        return  '<div class="x-form-text" style="background:#fff;padding:2px 12px 3px 13px;text-overflow: ellipsis;overflow:hidden;cursor:text"  data-qtip="'+valueEncoded+'">'+
-                                    valueEncoded +
-                                '</div>';
-                    }
-                },{
-                    renderer: function(value, meta, record, rowIndex, colIndex, store, grid) {
-                        return '<img style="cursor:pointer;margin-top:6px;" width="15" height="15" class="x-icon-action x-icon-action-delete" data-qtip="Delete param" src="'+Ext.BLANK_IMAGE_URL+'"/>';
-                    },
-                    width: 42,
-                    sortable: false,
-                    align:'left'
-
-                }],
-                getValue: function(){
-                    var me = this,
-                        result  = {};
-                    (me.store.snapshot || me.store.data).each(function(record){
-                        var name = record.get('name'),
-                            value = record.get('value');
-                        if (name) {
-                            result[name] = value;
-                        }
-                    });
-                    return result;
                 }
             }
         }],
@@ -183,7 +93,7 @@ Scalr.regPage('Scalr.ui.scripts.events.fire', function (loadParams, moduleParams
                             },
                             url: '/scripts/events/xFire/',
                             params: Ext.apply({
-                                eventParams: Ext.encode(form.down('grid').getValue())
+                                eventParams: Ext.encode(form.down('#eventParams').getValue())
                             },loadParams),
                             form: form.getForm(),
                             success: function () {

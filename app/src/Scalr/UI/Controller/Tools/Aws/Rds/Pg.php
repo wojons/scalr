@@ -11,6 +11,11 @@ class Scalr_UI_Controller_Tools_Aws_Rds_Pg extends Scalr_UI_Controller
         return parent::hasAccess() && $this->request->isAllowed(Acl::RESOURCE_AWS_RDS);
     }
 
+    public function defaultAction()
+    {
+        $this->viewAction();
+    }
+
     public function viewAction()
     {
         $this->response->page('ui/tools/aws/rds/pg/view.js', array(
@@ -93,9 +98,10 @@ class Scalr_UI_Controller_Tools_Aws_Rds_Pg extends Scalr_UI_Controller
             $itemField->name = $value['Source'] . '[' . $value['ParameterName'] . ']';
             $itemField->fieldLabel = $value['ParameterName'];
             $itemField->value = $value['ParameterValue'];
-            $itemField->labelWidth = 250;
+            $itemField->labelWidth = 300;
             $itemField->width = 790;
             $itemField->readOnly = ($value['IsModifiable'] === false && $itemField->xtype != 'displayfield') ? true : false;
+            $itemField->submitValue = $value['IsModifiable'] !== false;
 
             $itemDesc = new stdClass();
             $itemDesc->xtype = 'displayinfofield';
@@ -118,6 +124,12 @@ class Scalr_UI_Controller_Tools_Aws_Rds_Pg extends Scalr_UI_Controller
 
     public function xSaveAction()
     {
+        $this->request->defineParams(array(
+            'system' => array('type' => 'array'),
+            'user' => array('type' => 'array'),
+            'engine-default' => array('type' => 'array')
+        ));
+
         $aws = $this->getEnvironment()->aws($this->getParam('cloudLocation'));
 
         $params = $aws->rds->dbParameterGroup->describeParameters($this->getParam('name'));
@@ -170,7 +182,7 @@ class Scalr_UI_Controller_Tools_Aws_Rds_Pg extends Scalr_UI_Controller
                 if ($old->parameterName == $newParam->parameterName)
                     $found = true;
             }
-            if (!$found) {
+            if (!$found && $old->isModifiable) {
                 $old->parameterValue = 0;
                 $modifiedParameters->append($old);
             }

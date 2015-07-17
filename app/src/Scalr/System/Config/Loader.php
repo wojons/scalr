@@ -30,15 +30,24 @@ class Loader
             ));
         } else {
             $config = unserialize(file_get_contents(self::YAML_CACHE_FILE));
-            $refresh = false;
-            //Checks, if the files need to be refreshed.
-            foreach ($config->getImports(true) as $path => $time) {
-                if (!file_exists($path) || is_readable($path) && filemtime($path) > $time) {
-                    $refresh = true;
-                    break;
+
+            if ($config === false) {
+                //Content of the cached config is invalid and could not be unserialized
+                $refresh = true;
+            } else {
+                $refresh = false;
+
+                //Checks, if the files need to be refreshed.
+                foreach ($config->getImports(true) as $path => $time) {
+                    if (!file_exists($path) || is_readable($path) && filemtime($path) > $time) {
+                        $refresh = true;
+                        break;
+                    }
                 }
             }
+
             if ($refresh) {
+                //Reload config from the original file and refreshes a cache
                 $config = $this->refreshCache();
             }
         }

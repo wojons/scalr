@@ -19,13 +19,14 @@ register_shutdown_function(function () {
     if (is_writable($accessLogPath)) {
         global $response, $path;
         if (isset($path) && $response instanceof Scalr_UI_Response) {
-            error_log(
-                sprintf("%s,%s,\"%s\",%0.4f,%0.4f\n",
+            @error_log(
+                sprintf("%s,%s,\"%s\",%0.4f,%0.4f,%d\n",
                     date('M d H:i:s P'),
                     ($error && !empty($error['type']) ? $error['type'] : 'OK'),
                     str_replace('"', '""', $path),
                     $response->getHeader('X-Scalr-Inittime'),
-                    $response->getHeader('X-Scalr-Actiontime')
+                    $response->getHeader('X-Scalr-Actiontime'),
+                    \Scalr::getDb()->numberQueries + (\Scalr::getContainer()->analytics->enabled ? \Scalr::getContainer()->cadb->numberQueries : 0)
                 ),
                 3,
                 $accessLogPath
@@ -34,7 +35,16 @@ register_shutdown_function(function () {
     }
 });
 
-$path = trim(str_replace("?{$_SERVER['QUERY_STRING']}", "", $_SERVER['REQUEST_URI']), '/');
+//NOTE: Apache mod_rewrite sets REDIRECT_URL instead of REQUEST_URI environment variable, we need to get final overridden URI
+$path = trim(str_replace("?{$_SERVER['QUERY_STRING']}", "", isset($_SERVER['REDIRECT_URL']) ? $_SERVER['REDIRECT_URL'] : $_SERVER['REQUEST_URI']), '/');
+
+$logMysqlExcepton = function($e) {
+    \Scalr::logException($e);
+    Scalr_UI_Response::getInstance()->data(array('errorDB' => true));
+    Scalr_UI_Response::getInstance()->debugException($e);
+    Scalr_UI_Response::getInstance()->failure($e instanceof \Scalr\Exception\MysqlConnectionException ? 'Database connection issue' : 'Database error');
+    Scalr_UI_Response::getInstance()->sendResponse();
+};
 
 try {
     $startTime = microtime(true);
@@ -49,7 +59,7 @@ try {
     $time1 = microtime(true);
 
     try {
-        $request = Scalr_UI_Request::initializeInstance(Scalr_UI_Request::REQUEST_TYPE_UI, apache_request_headers(), $_SERVER, $_REQUEST, $_FILES, $session->getUserId(), $session->getEnvironmentId());
+        $request = Scalr_UI_Request::initializeInstance(Scalr_UI_Request::REQUEST_TYPE_UI, getallheaders(), $_SERVER, $_REQUEST, $_FILES, $session->getUserId(), null);
     } catch (Exception $e) {
         if ($path == 'guest/logout') {
             // hack
@@ -72,10 +82,6 @@ try {
     $time2 = microtime(true);
 
     $response = Scalr_UI_Response::getInstance();
-
-    if ($session->isAuthenticated()) {
-        $session->setEnvironmentId($request->getEnvironment()->id);
-    }
 
     $time3 = microtime(true);
 
@@ -127,11 +133,14 @@ try {
     }
 
 } catch (ADODB_Exception $e) {
-    Scalr_UI_Response::getInstance()->data(array('errorDB' => true));
-    Scalr_UI_Response::getInstance()->debugException($e);
-    Scalr_UI_Response::getInstance()->failure();
+    $logMysqlExcepton($e);
+} catch (\Scalr\Exception\MysqlConnectionException $e) {
+    $logMysqlExcepton($e);
+} catch (\Scalr\Exception\FileNotFoundException $e) {
+    Scalr_UI_Response::getInstance()->failure(sprintf("File '%s' not found", $e->getPath()));
+    Scalr_UI_Response::getInstance()->setHttpResponseCode(404);
     Scalr_UI_Response::getInstance()->sendResponse();
-} catch (Exception $e) {
+} catch (Exception $e) {;
     Scalr_UI_Response::getInstance()->failure($e->getMessage());
     Scalr_UI_Response::getInstance()->debugException($e);
     Scalr_UI_Response::getInstance()->sendResponse();

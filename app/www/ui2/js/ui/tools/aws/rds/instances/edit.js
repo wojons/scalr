@@ -4,9 +4,146 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.instances.edit', function (loadParams, mod
     var instance = moduleParams.instance;
     var requestsCount = 0;
 
+    var securityGroupsPolicy = function (params) {
+
+        var policy = {
+            enabled: !Ext.isEmpty(params)
+        };
+
+        if (policy.enabled) {
+
+            policy.defaultGroups = params.value.split(',');
+
+            policy.defaultGroupsList = '<b>' + policy.defaultGroups.join('</b>, <b>') + '</b>';
+
+            policy.allowAddingGroups = !!params['allow_additional_sec_groups'];
+
+            policy.message =
+                'A Security Group Policy is active in this Environment, ' +
+                'and requires that you attach the following Security Groups to your DB instance: ' +
+                policy.defaultGroupsList + '.' +
+                (!policy.allowAddingGroups ? '\nYou are not allowed to attach additional Security Groups.' : '');
+
+            policy.tip =
+                '<br>Your current Security Group configuration is not compliant with this Policy. To comply, ' +
+                'you can edit your Security Groups manually, or select ' +
+                '"Modify and automatically comply with Security Groups Policy" when saving your changes. ' +
+                'If you don\'t, your Security Groups will remain unchanged.';
+        }
+
+        return policy;
+
+    }( Scalr.getGovernance('ec2', 'aws.additional_security_groups') );
+
     var form = Ext.create('Ext.form.Panel', {
+
         title: 'Tools &raquo; Amazon Web Services &raquo; RDS &raquo; DB Instances &raquo; Modify',
         width: 700,
+        preserveScrollPosition: true,
+
+        showPolicyInfo: function (visible) {
+            var me = this;
+
+            me.down('#securityGroupsPolicyInfo').setVisible(visible);
+
+            return me;
+        },
+
+        extendModifyButton: function (extended) {
+            var me = this;
+
+            me.down('#modify').setVisible(!extended);
+            me.down('#extendedModify').setVisible(extended);
+
+            return me;
+        },
+
+        prepareMaintenanceParams: function () {
+            var me = this;
+
+            me.down('[name=PreferredMaintenanceWindow]').setValue(form.down('#FirstDay').value + ':' + form.down('#fhour').value + ':' + form.down('#fminute').value + '-' + form.down('#LastDay').value + ':' + form.down('#lhour').value + ':' + form.down('#lminute').value);
+            me.down('[name=PreferredBackupWindow]').setValue(form.down('#bfhour').value + ':' + form.down('#bfminute').value + '-' + form.down('#blhour').value + ':' + form.down('#blminute').value);
+
+            return me;
+        },
+
+        modifyDbInstance: function (params) {
+            var me = this,
+                baseForm = me.getForm();
+
+            me.prepareMaintenanceParams();
+
+            var securityGroups = me.down('[name=VpcSecurityGroups]');
+
+            if (!Ext.isEmpty(params) && !Ext.isEmpty(params.VpcSecurityGroups)) {
+                securityGroups.disable();
+            }
+
+            if (!form.getForm().isValid()) {
+                var invalidField = form.getFirstInvalidField();
+
+                if (!Ext.isEmpty(invalidField)) {
+                    form.scrollToField(invalidField);
+                    invalidField.focus();
+                }
+
+                securityGroups.enable();
+
+                return false;
+            }
+
+            Scalr.Request({
+                processBox: {
+                    type: 'save',
+                    msg: 'Modifying ...'
+                },
+                url: '/tools/aws/rds/instances/xModifyInstance',
+                form: baseForm,
+                params: params,
+                success: function() {
+                    Scalr.event.fireEvent('close');
+                },
+                failure: function() {
+                    securityGroups.enable();
+                }
+            });
+
+            return true;
+        },
+
+        acceptSecurityGroupsPolicy: function () {
+            var me = this;
+
+            var baseForm = me.getForm();
+
+            if (me.getForm().isValid()) {
+                Scalr.Request({
+                    processBox: {
+                        type: 'save',
+                        msg: 'Modifying ...'
+                    },
+                    url: '/platforms/ec2/xGetDefaultVpcSegurityGroups',
+                    params: {
+                        cloudLocation: cloudLocation,
+                        vpcId: instance['VpcId']
+                    },
+                    success: function (response) {
+                        var securityGrops = Ext.Array.map(response.data, function (securityGroup) {
+                            return {
+                                id: securityGroup.securityGroupId,
+                                name: securityGroup.securityGroupName
+                            };
+                        });
+
+                        me.modifyDbInstance({
+                            VpcSecurityGroups: Ext.encode(securityGrops)
+                        });
+                    }
+                });
+
+                return true;
+            }
+        },
 
         dockedItems: [{
             xtype: 'container',
@@ -16,27 +153,45 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.instances.edit', function (loadParams, mod
                 type: 'hbox',
                 pack: 'center'
             },
+            maxWidth: 700,
+            defaults: {
+                flex: 1,
+                maxWidth: 140
+            },
             items: [{
                 xtype: 'button',
+                itemId: 'modify',
                 text: 'Modify',
                 handler: function () {
-                    form.down('[name=PreferredMaintenanceWindow]').setValue(form.down('#FirstDay').value + ':' + form.down('#fhour').value + ':' + form.down('#fminute').value + '-' + form.down('#LastDay').value + ':' + form.down('#lhour').value + ':' + form.down('#lminute').value);
-                    form.down('[name=PreferredBackupWindow]').setValue(form.down('#bfhour').value + ':' + form.down('#bfminute').value + '-' + form.down('#blhour').value + ':' + form.down('#blminute').value);
-
-                    if (form.getForm().isValid()) {
-                        Scalr.Request({
-                            processBox: {
-                                type: 'save',
-                                msg: 'Modifying ...'
-                            },
-                            url: '/tools/aws/rds/instances/xModifyInstance',
-                            form: form.getForm(),
-                            success: function () {
-                                Scalr.event.fireEvent('close');
-                            }
+                    form.modifyDbInstance({
+                        ignoreGovernance: true
+                    });
+                }
+            }, {
+                xtype: 'splitbutton',
+                itemId: 'extendedModify',
+                text: 'Modify',
+                hidden: true,
+                handler: function () {
+                    form.modifyDbInstance();
+                },
+                menu: [{
+                    text: 'Modify and automatically comply with Security Groups Policy',
+                    iconCls: 'x-btn-icon-governance',
+                    handler: function () {
+                        form.acceptSecurityGroupsPolicy();
+                    }
+                }, {
+                    xtype: 'menuseparator'
+                }, {
+                    text: 'Modify and keep Security Groups as-is',
+                    iconCls: 'x-btn-icon-governance-ignore',
+                    handler: function () {
+                        form.modifyDbInstance({
+                            ignoreGovernance: true
                         });
                     }
-                }
+                }]
             }, {
                 xtype: 'button',
                 text: 'Cancel',
@@ -47,6 +202,15 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.instances.edit', function (loadParams, mod
         }],
 
         items: [{
+            xtype: 'displayfield',
+            itemId: 'securityGroupsPolicyInfo',
+            cls: 'x-form-field-governance x-form-field-governance-fit',
+            anchor: '100%',
+            hidden: true,
+            value: securityGroupsPolicy.enabled
+                ? securityGroupsPolicy.message + securityGroupsPolicy.tip
+                : ''
+        }, {
             xtype: 'fieldset',
             title: 'Location and VPC Settings',
             name: 'locationSettings',
@@ -54,15 +218,20 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.instances.edit', function (loadParams, mod
 
             defaults: {
                 xtype: 'combo',
+                labelWidth: 130,
                 editable: false,
                 width: 610,
                 padding: 5
             },
 
             items: [{
-                fieldLabel: 'Location',
+                fieldLabel: 'Cloud Location',
                 emptyText: 'Select location',
                 name: 'cloudLocation',
+                plugins: {
+                    ptype: 'fieldinnericoncloud',
+                    platform: 'ec2'
+                },
                 store: {
                     fields: [ 'id', 'name' ],
                     data: moduleParams.locations,
@@ -83,7 +252,8 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.instances.edit', function (loadParams, mod
                     fields: [ 'id', 'name', 'defaultSecurityGroupId', 'defaultSecurityGroupName' ]
                 },
                 valueField: 'id',
-                displayField: 'name'
+                displayField: 'name',
+                submitValue: false
             }, {
                 name: 'DBSubnetGroupName',
                 fieldLabel: 'Subnet Group',
@@ -96,7 +266,8 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.instances.edit', function (loadParams, mod
                     fields: [ 'dBSubnetGroupName', 'dBSubnetGroupDescription', 'subnets' ]
                 },
                 valueField: 'dBSubnetGroupName',
-                displayField: 'dBSubnetGroupName'
+                displayField: 'dBSubnetGroupName',
+                submitValue: false
             }]
         }, {
             xtype: 'fieldset',
@@ -104,7 +275,7 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.instances.edit', function (loadParams, mod
             name: 'instanceSettings',
             defaults: {
                 labelWidth: 200,
-                width: 455
+                width: 500
             },
             items: [{
                 xtype: 'textfield',
@@ -142,46 +313,43 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.instances.edit', function (loadParams, mod
                 allowBlank: false,
                 editable: false
             },*/{
-                xtype: 'container',
-                layout: 'hbox',
-                width: '100%',
-                items: [{
-                    xtype: 'combo',
-                    name: 'DBInstanceClass',
-                    fieldLabel: 'Type',
-                    labelWidth: 200,
-                    width: 455,
-                    store: [
-                        'db.t1.micro', 'db.m1.small', 'db.m1.medium',
-                        'db.m1.large', 'db.m1.xlarge', 'db.m2.2xlarge ',
-                        'db.m2.4xlarge' , 'db.m3.medium ', 'db.m3.large',
-                        'db.m3.xlarge', 'db.m3.2xlarge', 'db.r3.large',
-                        'db.r3.xlarge', 'db.r3.2xlarge', 'db.r3.4xlarge',
-                        'db.r3.8xlarge', 'db.t2.micro', 'db.t2.small',
-                        'db.t2.medium'
-                    ],
-                    queryMode: 'local',
-                    allowBlank: false,
-                    value: 'db.m1.small',
-                    editable: false
-                }, {
-                    xtype: 'displayfield',
-                    flex: 1,
-                    margin: '0 0 0 6',
-                    value:
-                        '<img class="tipHelp" src="/ui2/images/icons/warning_icon_16x16.png" data-qtip=\''
-                        + 'Instance type availability varies across AWS regions. ' +
+                xtype: 'combo',
+                name: 'DBInstanceClass',
+                fieldLabel: 'Type',
+                labelWidth: 200,
+                width: 500,
+                store: [
+                    'db.t1.micro', 'db.m1.small', 'db.m1.medium',
+                    'db.m1.large', 'db.m1.xlarge', 'db.m2.2xlarge ',
+                    'db.m2.4xlarge' , 'db.m3.medium ', 'db.m3.large',
+                    'db.m3.xlarge', 'db.m3.2xlarge', 'db.r3.large',
+                    'db.r3.xlarge', 'db.r3.2xlarge', 'db.r3.4xlarge',
+                    'db.r3.8xlarge', 'db.t2.micro', 'db.t2.small',
+                    'db.t2.medium'
+                ],
+                queryMode: 'local',
+                allowBlank: false,
+                value: 'db.m1.small',
+                editable: false,
+                plugins: [{
+                    ptype: 'fieldicons',
+                    align: 'right',
+                    position: 'outer',
+                    icons: {
+                        id: 'warning',
+                        tooltip:
+                        'Instance type availability varies across AWS regions. ' +
                         'Consult the AWS Documentation on ' +
                         '<a target="_blank" href="http://aws.amazon.com/rds/pricing/">current</a>' +
                         ' and ' +
                         '<a target="_blank" href="http://aws.amazon.com/rds/previous-generation/">legacy</a>' +
                         ' instance types for more information.'
-                        + '\' style="cursor: help; height: 16px;">'
+                    }
                 }]
             }, {
                 xtype: 'container',
                 layout: 'hbox',
-                width: 455,
+                width: 500,
                 items: [{
                     xtype: 'checkboxfield',
                     fieldLabel: 'Multi-AZ Deployment',
@@ -237,155 +405,348 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.instances.edit', function (loadParams, mod
                     value: '(Mirroring)'
                 }]
             }, {
-                xtype: 'combo',
+                xtype: 'textfield',
                 name: 'AvailabilityZone',
                 fieldLabel: 'Availability Zone',
-                store: {
-                    fields: ['id', 'name'],
-                    proxy: 'object'
-                },
-                queryMode: 'local',
                 editable: false,
-                emptyText: 'No preference',
-                valueField: 'id',
-                displayField: 'name',
                 readOnly: true,
-                hidden: !instance['AvailabilityZone']
+                emptyText: 'No preference'
             }, {
-                xtype: 'container',
+                xtype: 'fieldcontainer',
+                itemId: 'securityGroups',
+                fieldLabel: 'Security Groups',
                 layout: 'hbox',
-                width: '100%',
-                items: [{
-                    xtype: 'displayfield',
-                    fieldLabel: 'Security Groups',
-                    labelWidth: 200,
-                    maxWidth: 550,
-                    name: 'VpcSecurityGroupIds',
-                    submitValue: false,
-                    hidden: true,
-                    listeners: {
-                        change: function (me, newValue, oldValue) {
-                            if (newValue && !oldValue) {
-                                me.setFieldStyle('margin-right: 12px');
-                                me.updateLayout();
-                            }
+                width: 595,
+                /*
+                plugins: [{
+                    ptype: 'fieldicons',
+                    icons: [{
+                        id: 'governance',
+                        tooltip: securityGroupsPolicy.enabled
+                            ? securityGroupsPolicy.message
+                            : '',
+                        test: 'test text'
+                    }],
+                    position: 'outer',
+                    align: 'right'
+                }],
+                */
+                setIconVisible: function (visible) {
+                    var me = this;
 
-                            if (!newValue && oldValue) {
-                                me.setFieldStyle('margin-right: 0');
-                                me.updateLayout();
-                            }
-                        }
-                    },
-                    renderer: function (value) {
+                    me.setFieldLabel('Security Groups' + (!visible
+                        ? ''
+                        : '&nbsp;&nbsp;<img src="' + Ext.BLANK_IMAGE_URL +
+                            '" class="x-icon-governance" data-qtip="' +
+                            securityGroupsPolicy.message +
+                            '" />'
+                    ));
+
+                    /*me.getPlugin('fieldicons').
+                        toggleIcon('governance', visible);*/
+
+                    return me;
+                },
+                setButtonDisabled: function (disabled) {
+                    var me = this;
+
+                    me.down('button').
+                        setTooltip(disabled ? securityGroupsPolicy.message : '');
+                        //setDisabled(disabled);
+
+                    return me;
+                },
+                enablePolicy: function () {
+                    var me = this;
+
+                    var isPolicyEnabled = securityGroupsPolicy.enabled;
+
+                    me.
+                        setIconVisible(isPolicyEnabled);
+                        /*setButtonDisabled(
+                            isPolicyEnabled && !securityGroupsPolicy.allowAddingGroups
+                        );*/
+
+                    return isPolicyEnabled;
+                },
+                disablePolicy: function () {
+                    var me = this;
+
+                    me.
+                        setIconVisible(false).
+                        setButtonDisabled(false);
+
+                    return me;
+                },
+                listeners: {
+                    boxready: function (container) {
+                        container.down('[name=VpcSecurityGroupIds]').
+                            on({
+                                show: container.enablePolicy,
+                                hide: container.disablePolicy,
+                                scope: container
+                            });
+                    }
+                },
+                fieldDefaults: {
+                    width: 295
+                    //maxHeight: 50
+                },
+                items: [{
+                    xtype: 'hiddenfield',
+                    name: 'VpcSecurityGroups',
+                    submitValue: false,
+                    getSubmitValue: function () {
                         var me = this;
 
-                        var securityGroupIds = me.getSecurityGroupsIds();
+                        var vpcSecurityGroupsField = me.next();
+                        var securityGroupIds = vpcSecurityGroupsField.
+                            getSecurityGroupsIds();
+                        var securityGroupNames = vpcSecurityGroupsField.
+                            getSecurityGroupsNames();
 
-                        if (value && securityGroupIds.length) {
-                            var separator = ', ';
-                            var cloudLocation = form.down('[name=cloudLocation]').getValue();
-                            var securityGroupNames = value.split(separator);
-                            var renderedValues = [];
+                        return Ext.encode(
+                            Ext.Array.map(securityGroupIds, function (id, index) {
+                                return {
+                                    id: id,
+                                    name: securityGroupNames[index]
+                                };
+                            })
+                        );
+                    }
+                }, {
+                    xtype: 'taglistfield',
+                    name: 'VpcSecurityGroupIds',
+                    //cls: 'x-tagfield-force-item-hover',
+                    hidden: true,
+                    submitValue: false,
+                    readOnly: true,
+                    scrollable: true,
+                    defaultGroups: securityGroupsPolicy.enabled
+                        ? securityGroupsPolicy.defaultGroups
+                        : [],
+                    validator: function (values) {
+                        if (!securityGroupsPolicy.enabled) {
+                            return true;
+                        }
 
-                            Ext.Array.each(securityGroupNames, function (name, i) {
-                                renderedValues.push(
-                                    '<a href="#/security/groups/'
-                                    + securityGroupIds[i]
-                                    + '/edit?' + Ext.Object.toQueryString({
-                                        platform: 'ec2',
-                                        cloudLocation: cloudLocation
-                                    }) + '">' + name + '</a>'
-                                );
+                        if (Ext.isEmpty(values)) {
+                            return false;
+                        }
+
+                        values = Ext.Array.map(values, function (value) {
+                            var dataName = 'data-name=\'';
+                            var substring = value.substring(value.indexOf(dataName) + dataName.length);
+
+                            return substring.substring(0, substring.indexOf('\''));
+                        });
+
+                        var defaultGroups = securityGroupsPolicy.defaultGroups;
+                        var securityGroupsContainer = form.down('#securityGroups');
+
+                        securityGroupsContainer.setIconVisible(true);
+
+                        form.
+                            showPolicyInfo(false).
+                            extendModifyButton(false);
+
+                        if (!securityGroupsPolicy.allowAddingGroups) {
+                            var isGroupsEquals = Ext.Array.equals(
+                                Ext.Array.sort(defaultGroups),
+                                Ext.Array.sort(values)
+                            );
+
+                            if (!isGroupsEquals) {
+                                form.
+                                    showPolicyInfo(true).
+                                    extendModifyButton(true);
+                            }
+                        } else {
+                            var isSecurityGroupMissing = Ext.Array.some(defaultGroups, function (group) {
+                                return !Ext.Array.contains(values, group);
                             });
 
-                            value = renderedValues.join(separator);
+                            if (isSecurityGroupMissing) {
+                                form.
+                                    showPolicyInfo(true).
+                                    extendModifyButton(true);
+                            }
                         }
 
-                        return value;
+                        return true;
+
+                        /*return !Ext.Array.some(defaultGroups, function (group) {
+                            return !Ext.Array.contains(values, group);
+                        });*/
                     },
-                    setSecurityGroupsIds: function (value) {
+                    listeners: {
+                        afterrender: {
+                            fn: function (field) {
+                                field.getEl().on('click', function (event, target) {
+
+                                    target = Ext.get(target);
+
+                                    if (target.hasCls('scalr-ui-rds-tagfield-sg-name')) {
+
+                                        var link =
+                                            '#/security/groups/' + target.getAttribute('data-id') + '/edit?' +
+
+                                            Ext.Object.toQueryString({
+                                                platform: 'ec2',
+                                                cloudLocation: form.down('[name=cloudLocation]').getValue()
+                                            });
+
+                                        Scalr.event.fireEvent('redirect', link);
+                                    }
+                                });
+                            },
+
+                            single: true
+                        }
+                    },
+                    setSecurityGroupsIds: function (ids) {
                         var me = this;
 
-                        me.securityGroupIds = value;
+                        me.securityGroupIds = ids;
+
+                        return me;
+                    },
+                    setSecurityGroupsNames: function (names) {
+                        var me = this;
+
+                        me.securityGroupNames = names;
 
                         return me;
                     },
                     getSecurityGroupsIds: function () {
                         return this.securityGroupIds || [];
                     },
-                    getSubmitValue: function () {
+                    getSecurityGroupsNames: function () {
+                        return this.securityGroupNames || [];
+                    },
+                    getDefaultGroups: function () {
+                        return this.defaultGroups;
+                    },
+                    getSecurityGroups: function () {
                         var me = this;
 
-                        return Ext.encode(
-                            me.getSecurityGroupsIds()
-                        );
+                        var securityGroupIds = me.getSecurityGroupsIds();
+                        var securityGroupNames = me.getSecurityGroupsNames();
+
+                        return Ext.Array.map(securityGroupIds, function (id, index) {
+                            return {
+                                id: id,
+                                name: securityGroupNames[index]
+                            };
+                        });
+                    },
+                    setSecurityGroups: function (groups) {
+                        var me = this;
+
+                        var ids = Ext.Array.map(groups, function (group) {
+                            if (group.isModel) {
+                                return group.get('securityGroupId');
+                            }
+
+                            return Ext.isDefined(group.vpcSecurityGroupId)
+                                ? group.vpcSecurityGroupId
+                                : group.id;
+                        });
+
+                        var names = Ext.Array.map(groups, function (group) {
+                            if (group.isModel) {
+                                return group.get('name');
+                            }
+
+                            return Ext.isDefined(group.vpcSecurityGroupName)
+                                    ? group.vpcSecurityGroupName
+                                    : group.name;
+                        });
+
+                        me.
+                            setSecurityGroupsIds(ids).
+                            setSecurityGroupsNames(names).
+                            setValue(
+                                Ext.Array.map(ids, function(id, index) {
+                                    var name = names[index];
+
+                                    if (!Ext.isEmpty(id)) {
+                                        return '<span data-id=\'' + id + '\' data-name=\'' + name +
+                                            '\' class=\'scalr-ui-rds-tagfield-sg-name\' style=\'cursor:pointer\'>' +
+                                            name + '</span>';
+                                    }
+
+                                    var warningTooltip = 'A Security Group Policy is active in this Environment,\n' +
+                                        'and requires that you attach <b>' + name + '</b> Security Group to your DB instance.\n' +
+                                        'But <b>' + name + '</b> does not exist in current VPC.';
+
+                                    return '<div data-name=\'' + name + '\' data-qtip=\'' + warningTooltip + '\'' + ' >' +
+                                        '<img src=\'' + Ext.BLANK_IMAGE_URL +
+                                        '\' class=\'x-icon-warning\' style=\'vertical-align:middle;margin-right:6px\' />' +
+                                        name + '</div>';
+                                })
+                            );
+
+                        return me;
                     }
                 }, {
-                    xtype: 'displayfield',
-                    fieldLabel: 'Security Groups',
-                    labelWidth: 200,
-                    maxWidth: 550,
+                    xtype: 'taglistfield',
                     name: 'DBSecurityGroups',
-                    submitValue: true,
+                    cls: 'x-tagfield-force-item-hover',
+                    readOnly: true,
+                    scrollable: true,
                     listeners: {
-                        change: function (me, newValue, oldValue) {
-                            if (newValue && !oldValue) {
-                                me.setFieldStyle('margin-right: 12px');
-                                me.updateLayout();
-                            }
+                        afterrender: {
+                            fn: function (field) {
+                                field.getEl().on('click', function (event, target) {
 
-                            if (!newValue && oldValue) {
-                                me.setFieldStyle('margin-right: 0');
-                                me.updateLayout();
-                            }
+                                    target = Ext.get(target);
+
+                                    if (target.hasCls('x-tagfield-item-text')) {
+
+                                        var link = '#/tools/aws/rds/sg/edit?' +
+
+                                            Ext.Object.toQueryString({
+                                                dbSgName: target.getHtml(),
+                                                cloudLocation: form.down('[name=cloudLocation]').getValue()
+                                            });
+
+                                        Scalr.event.fireEvent('redirect', link);
+                                    }
+                                });
+                            },
+
+                            single: true
                         }
-                    },
-                    renderer: function (value) {
-                        if (value) {
-                            var separator = ', ';
-                            var cloudLocation = form.down('[name=cloudLocation]').getValue();
-                            var securityGroupNames = value.split(separator);
-                            var renderedValues = [];
-
-                            Ext.Array.each(securityGroupNames, function (name) {
-                                renderedValues.push(
-                                    '<a href="#/tools/aws/rds/sg/edit?' + Ext.Object.toQueryString({
-                                        dbSgName: name,
-                                        cloudLocation: cloudLocation
-                                    }) + '">' + name + '</a>'
-                                );
-                            });
-
-                            value = renderedValues.join(separator);
-                        }
-
-                        return value;
                     },
                     getSubmitValue: function () {
-                        var me = this;
-
-                        return Ext.encode(me.getRawValue().split(', '));
+                        return Ext.encode(
+                            this.getValue()
+                        );
                     }
                 }, {
                     xtype: 'button',
                     text: 'Change',
                     width: 80,
+                    margin: '0 0 0 12',
                     handler: function () {
                         var dBSubnetGroup = instance['VpcSecurityGroups'];
                         var vpcId = dBSubnetGroup ? instance['VpcId'] : null;
-                        var vpcIdFilter = vpcId ? {
-                            vpcId: vpcId
-                        } : null;
+                        var isVpcDefined = !!vpcId;
 
-                        var securityGroupField = !vpcIdFilter
+                        var field = !isVpcDefined
                             ? form.down('[name=DBSecurityGroups]')
                             : form.down('[name=VpcSecurityGroupIds]');
+
+                        var excludeGroups = isVpcDefined && securityGroupsPolicy.enabled
+                            ? field.getDefaultGroups()
+                            : [];
 
                         editSecurityGroups(
                             cloudLocation,
                             vpcId,
-                            vpcIdFilter,
-                            securityGroupField.getValue().split(', ')
+                            !isVpcDefined ? field.getValue() : field.getSecurityGroups(),
+                            excludeGroups
                         );
                     }
                 }]
@@ -438,13 +799,52 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.instances.edit', function (loadParams, mod
                         : true;
                 }
             }]
+        },{
+            xtype: 'displayfield',
+            itemId: 'noFarmIdInfo',
+            hidden: true,
+            anchor: '100%',
+            cls: 'x-form-field-info',
+            value: 'This database instance is not associated with a Farm.'
+        },{
+            xtype: 'fieldset',
+            title: 'Associate this database instance with a Farm',
+            itemId: 'associateFarmId',
+            collapsible: true,
+            collapsed: true,
+            checkboxToggle:  true,
+            defaults: {
+                labelWidth: 200,
+                width: 500
+            },
+            listeners: {
+                beforecollapse: function() {
+                    return !this.checkboxCmp.disabled;
+                },
+                beforeexpand: function() {
+                    return !this.checkboxCmp.disabled;
+                }
+            },
+            items: [{
+				xtype: 'textfield',
+				fieldLabel: 'Farm',
+                disabled: true,
+				name: 'farmName',
+                listeners: {
+                    change: function(comp, value) {
+                        if (value) {
+                            this.up().expand();
+                        }
+                    }
+                }
+            }]
         }, {
             xtype: 'fieldset',
             title: 'Database Engine',
             name: 'engineSettings',
             defaults: {
                 labelWidth: 200,
-                width: 455
+                width: 500
             },
             items: [{
                 xtype: 'combo',
@@ -492,6 +892,7 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.instances.edit', function (loadParams, mod
                 queryMode: 'local',
                 editable: false,
                 readOnly: true,
+                submitValue: false,
                 listeners: {
                     change: function (me, value) {
                         setMultiAzStatus(value);
@@ -683,7 +1084,7 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.instances.edit', function (loadParams, mod
             name: 'databaseSettings',
             defaults: {
                 labelWidth: 200,
-                width: 455
+                width: 500
             },
             items: [{
                 xtype: 'textfield',
@@ -695,7 +1096,8 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.instances.edit', function (loadParams, mod
             }, {
                 xtype: 'textfield',
                 name: 'MasterUserPassword',
-                fieldLabel: 'Master Password'
+                fieldLabel: 'Master Password',
+                emptyText: '******'
             }]
         }, {
             xtype: 'fieldset',
@@ -722,7 +1124,7 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.instances.edit', function (loadParams, mod
                 inputValue: true,
                 uncheckedValue: false
             }, {
-                xtype: 'container',
+                xtype: 'fieldcontainer',
                 layout: {
                     type: 'hbox'
                 },
@@ -795,14 +1197,19 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.instances.edit', function (loadParams, mod
                 },{
                     xtype: 'displayfield',
                     value: 'UTC',
-                    margin: '0 0 0 3'
-                },{
-                    xtype: 'displayinfofield',
-                    info: 'Format: hh24:mi - hh24:mi',
-                    margin: '0 0 0 6'
+                    margin: '0 0 0 3',
+                    plugins: [{
+                        ptype: 'fieldicons',
+                        align: 'right',
+                        position: 'outer',
+                        icons: {
+                            id: 'info',
+                            tooltip: 'Format: hh24:mi - hh24:mi'
+                        }
+                    }]
                 }]
             }, {
-                xtype: 'container',
+                xtype: 'fieldcontainer',
                 layout: {
                     type: 'hbox'
                 },
@@ -846,14 +1253,19 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.instances.edit', function (loadParams, mod
                 },{
                     xtype: 'displayfield',
                     value: 'UTC',
-                    margin: '0 0 0 6'
-                },{
-                    xtype: 'displayinfofield',
-                    info: 'Format: hh24:mi - hh24:mi',
-                    margin: '0 0 0 6'
+                    margin: '0 0 0 6',
+                    plugins: [{
+                        ptype: 'fieldicons',
+                        align: 'right',
+                        position: 'outer',
+                        icons: {
+                            id: 'info',
+                            tooltip: 'Format: hh24:mi - hh24:mi'
+                        }
+                    }]
                 }]
             }, {
-                xtype: 'container',
+                xtype: 'fieldcontainer',
                 layout: 'hbox',
                 items: [{
                     labelWidth: 200,
@@ -932,8 +1344,26 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.instances.edit', function (loadParams, mod
         return true;
     };
 
-    var updateSecurityGroups = function (selectedGroups, runOnVpc) {
-        var securityGroupField = !runOnVpc
+    var updateSecurityGroups = function (selectedGroups, isVpcDefined) {
+        if (isVpcDefined) {
+            form.down('[name=VpcSecurityGroupIds]').
+                setSecurityGroups(selectedGroups);
+            return true;
+        }
+
+        form.down('[name=DBSecurityGroups]').setValue(
+            Ext.Array.map(selectedGroups, function (group) {
+                return group.isModel
+                    ? group.get('name')
+                    : group.name;
+            })
+        );
+
+        return true;
+    };
+
+    /*var updateSecurityGroups = function (selectedGroups, isVpcDefined) {
+        var securityGroupField = !isVpcDefined
             ? form.down('[name=DBSecurityGroups]')
             : form.down('[name=VpcSecurityGroupIds]');
 
@@ -947,7 +1377,7 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.instances.edit', function (loadParams, mod
                     : record['vpcSecurityGroupName']
             );
 
-            if (runOnVpc) {
+            if (isVpcDefined) {
                 selectedGroupIds.push(
                     record.isModel
                         ? record.get('id')
@@ -956,18 +1386,27 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.instances.edit', function (loadParams, mod
             }
         });
 
-        if (runOnVpc) {
+        if (isVpcDefined) {
             securityGroupField.setSecurityGroupsIds(selectedGroupIds);
         }
 
         securityGroupField.setValue(
-            selectedGroupNames.join(', ')
+            selectedGroupNames.join(',')
         );
 
         return true;
-    };
+    };*/
 
-    var editSecurityGroups = function (cloudLocation, vpcId, vpcIdFilter, selected) {
+    var editSecurityGroups = function (cloudLocation, vpcId, selected, excludeGroups) {
+        var isVpcDefined = !!vpcId;
+
+        var filter = isVpcDefined
+            ? Ext.encode({
+                vpcId: vpcId,
+                considerGovernance: securityGroupsPolicy.enabled
+              })
+            : null;
+
         Scalr.Confirm({
             formWidth: 950,
             alignTop: true,
@@ -980,10 +1419,14 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.instances.edit', function (loadParams, mod
                 limit: 10,
                 minHeight: 200,
                 selection: selected,
+                defaultVpcGroups: excludeGroups,
+                governanceWarning: isVpcDefined && securityGroupsPolicy.enabled && !securityGroupsPolicy.allowAddingGroups
+                    ? securityGroupsPolicy.message
+                    : null,
                 storeExtraParams: {
-                    platform: !vpcIdFilter ? 'rds' : 'ec2',
+                    platform: !isVpcDefined ? 'rds' : 'ec2',
                     cloudLocation: cloudLocation,
-                    filters: Ext.encode(vpcIdFilter)
+                    filters: filter
                 },
                 accountId: moduleParams.accountId,
                 remoteAddress: moduleParams.remoteAddress,
@@ -998,7 +1441,7 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.instances.edit', function (loadParams, mod
             success: function (formValues, securityGroupForm) {
                 updateSecurityGroups(
                     securityGroupForm.down('rdssgmultiselect').selection,
-                    !!vpcIdFilter
+                    isVpcDefined
                 );
 
                 return true;
@@ -1021,9 +1464,11 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.instances.edit', function (loadParams, mod
         DBSecurityGroups.hide();
         DBSecurityGroups.submitValue = false;
 
-        var VpcSecurityGroupIds = form.down('[name=VpcSecurityGroupIds]');
-        VpcSecurityGroupIds.show();
-        VpcSecurityGroupIds.submitValue = true;
+        form.down('[name=VpcSecurityGroupIds]').show();
+
+        form.down('#securityGroups').enablePolicy();
+
+        form.down('[name=VpcSecurityGroups]').submitValue = true;
 
         return form;
     }
@@ -1031,6 +1476,16 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.instances.edit', function (loadParams, mod
     applySecurityGroups(
         instance['DBSecurityGroups']
     );
+
+    var fieldsetAssociateFarmId = form.down('#associateFarmId');
+    if (instance['farmName']) {
+        fieldsetAssociateFarmId.expand();
+        fieldsetAssociateFarmId.checkboxCmp.setDisabled(true);
+    } else {
+        fieldsetAssociateFarmId.hide();
+        form.down('#noFarmIdInfo').show();
+    }
+
 
     return form;
 

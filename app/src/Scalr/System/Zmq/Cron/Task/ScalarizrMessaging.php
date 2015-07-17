@@ -2,6 +2,7 @@
 namespace Scalr\System\Zmq\Cron\Task;
 
 use ArrayObject, Exception, stdClass;
+use \ADODB_Exception;
 use \DBServer;
 use \DBFarm;
 use \DBFarmRole;
@@ -88,7 +89,9 @@ use Scalr\System\Zmq\Cron\AbstractTask;
 use Scalr\Exception\ServerNotFoundException;
 use Scalr\Service\Aws\Ec2\DataType\VolumeFilterNameType;
 use Scalr\Modules\Platforms\Cloudstack\CloudstackPlatformModule;
+use Scalr\Modules\Platforms\Cloudstack\Helpers\CloudstackHelper;
 use Scalr\Modules\Platforms\Rackspace\RackspacePlatformModule;
+use Scalr\Db\ConnectionPool;
 
 /**
  * ServerTerminate
@@ -134,19 +137,27 @@ class ScalarizrMessaging extends AbstractTask
 
         $config = $this->config();
 
-        //Removing pending messages for terminated farms
-        $this->db->Execute("
-            DELETE m FROM `messages` m, `servers` s, `farms` f
-            WHERE s.`server_id` = m.`server_id` AND f.`id` = s.`farm_id`
-            AND m.`type`= ? AND m.`status` = ? AND f.`status` = ?
-        ", ["in", MESSAGE_STATUS::PENDING, FARM_STATUS::TERMINATED]);
+        try {
+            //Removing pending messages for terminated farms
+            $this->db->Execute("
+                DELETE m FROM `messages` m, `servers` s, `farms` f
+                WHERE s.`server_id` = m.`server_id` AND f.`id` = s.`farm_id`
+                AND m.`type`= ? AND m.`status` = ? AND f.`status` = ?
+            ", ["in", MESSAGE_STATUS::PENDING, FARM_STATUS::TERMINATED]);
 
-        //Removing pending messages for disappeared/terminated servers
-        $this->db->Execute("
-            DELETE m FROM `messages` m
-            WHERE m.`type`= ? AND m.`status` = ?
-            AND NOT EXISTS (SELECT 1 FROM `servers` s WHERE s.`server_id` = m.`server_id`)
-        ", ["in", MESSAGE_STATUS::PENDING]);
+            //Removing pending messages for disappeared/terminated servers
+            $this->db->Execute("
+                DELETE m FROM `messages` m
+                WHERE m.`type`= ? AND m.`status` = ?
+                AND NOT EXISTS (SELECT 1 FROM `servers` s WHERE s.`server_id` = m.`server_id`)
+            ", ["in", MESSAGE_STATUS::PENDING]);
+        } catch (ADODB_Exception $e) {
+            if ($e->getCode() == ConnectionPool::ER_LOCK_DEADLOCK) {
+                $this->getLogger()->warn("DEADLOCK happened while removing messages of terminated farms");
+            } else {
+                throw $e;
+            }
+        }
 
         $types = [];
         if (!empty($config->replicate['type'])) {
@@ -297,13 +308,6 @@ class ScalarizrMessaging extends AbstractTask
 
                 try {
                     if ($message instanceof Scalr_Messaging_Msg_OperationResult) {
-                        $this->db->Execute("
-                            UPDATE server_operations SET `status` = ? WHERE id = ?
-                        ", array(
-                            $message->status,
-                            $message->id
-                        ));
-
                         if ($message->status == 'ok' || $message->status == 'completed') {
                             if ($message->name == 'Grow MySQL/Percona data volume' || $message->name == 'mysql.grow-volume') {
                                 $volumeConfig = $message->data ? $message->data : $message->result;
@@ -353,29 +357,19 @@ class ScalarizrMessaging extends AbstractTask
                                         $dbserver->farmId, "Cannot save storage volume: {$e->getMessage()}"
                                     ));
                                 }
-                            } else {
-                                $this->db->Execute("DELETE FROM server_operations WHERE id = ?", array(
-                                    $message->id
-                                ));
                             }
                         } elseif ($message->status == 'error' || $message->status == 'failed') {
 
-                            if ($message->name == 'MySQL backup' || $message->name == 'MySQL data bundle') {
-                                $this->db->Execute("DELETE FROM server_operations WHERE id = ?", array(
-                                    $message->id
-                                ));
-                            } else {
-                                if ($message->name == 'Initialization' || $message->name == 'system.init') {
-                                    $dbserver->SetProperty(SERVER_PROPERTIES::SZR_IS_INIT_FAILED, 1);
-                                    if (is_object($message->error))
-                                    	$errorText = $message->error->message;
-                                    elseif ($message->error)
-                                    	$errorText = $message->error;
+                            if ($message->name == 'Initialization' || $message->name == 'system.init') {
+                                $dbserver->SetProperty(SERVER_PROPERTIES::SZR_IS_INIT_FAILED, 1);
+                                if (is_object($message->error))
+                                	$errorText = $message->error->message;
+                                elseif ($message->error)
+                                	$errorText = $message->error;
 
-                                    $dbserver->SetProperty(SERVER_PROPERTIES::SZR_IS_INIT_ERROR_MSG, $errorText);
+                                $dbserver->SetProperty(SERVER_PROPERTIES::SZR_IS_INIT_ERROR_MSG, $errorText);
 
-                                    $event = new HostInitFailedEvent($dbserver, $errorText);
-                                }
+                                $event = new HostInitFailedEvent($dbserver, $errorText);
                             }
                         }
                     } elseif ($message instanceof Scalr_Messaging_Msg_InitFailed) {
@@ -385,7 +379,9 @@ class ScalarizrMessaging extends AbstractTask
                     	$event = new HostInitFailedEvent($dbserver, $errorText);
                     } elseif ($message instanceof \Scalr_Messaging_Msg_RuntimeError) {
                         $logger->fatal(new FarmLogMessage(
-                            $dbserver->farmId, "Scalarizr failed to launch on server '{$dbserver->getNameByConvention()}' with runtime error: {$message->message}"
+                            $dbserver->farmId,
+                            "Scalarizr failed to launch on server '{$dbserver->getNameByConvention()}' with runtime error: {$message->message}",
+                            $dbserver->serverId
                         ));
                     } elseif ($message instanceof Scalr_Messaging_Msg_UpdateControlPorts) {
                         $apiPort = $message->api;
@@ -396,7 +392,7 @@ class ScalarizrMessaging extends AbstractTask
                         if (!$currentApiPort) $currentApiPort = 8010;
                         if ($apiPort && $apiPort != $currentApiPort) {
                             $logger->warn(new FarmLogMessage(
-                                $dbserver->farmId, "Scalarizr API port was changed from {$currentApiPort} to {$apiPort}"
+                                $dbserver->farmId, "Scalarizr API port was changed from {$currentApiPort} to {$apiPort}", $dbserver->serverId
                             ));
                             $dbserver->SetProperty(SERVER_PROPERTIES::SZR_API_PORT, $apiPort);
                         }
@@ -405,7 +401,7 @@ class ScalarizrMessaging extends AbstractTask
                         if (!$currentCtrlPort) $currentCtrlPort = 8013;
                         if ($ctrlPort && $ctrlPort != $currentCtrlPort) {
                             $logger->warn(new FarmLogMessage(
-                                $dbserver->farmId, "Scalarizr Control port was changed from {$currentCtrlPort} to {$ctrlPort}"
+                                $dbserver->farmId, "Scalarizr Control port was changed from {$currentCtrlPort} to {$ctrlPort}", $dbserver->serverId
                             ));
                             $dbserver->SetProperty(SERVER_PROPERTIES::SZR_CTRL_PORT, $ctrlPort);
                         }
@@ -414,7 +410,7 @@ class ScalarizrMessaging extends AbstractTask
                         if (!$currentSnmpPort) $currentSnmpPort = 8014;
                         if ($snmpPort && $snmpPort != $currentSnmpPort) {
                             $logger->warn(new FarmLogMessage(
-                                $dbserver->farmId, "Scalarizr SNMP port was changed from {$currentSnmpPort} to {$snmpPort}"
+                                $dbserver->farmId, "Scalarizr SNMP port was changed from {$currentSnmpPort} to {$snmpPort}", $dbserver->serverId
                             ));
                             $dbserver->SetProperty(SERVER_PROPERTIES::SZR_SNMP_PORT, $snmpPort);
                         }
@@ -427,7 +423,7 @@ class ScalarizrMessaging extends AbstractTask
                                 if (!$status->isTerminated()) {
                                     //Stopping
                                     $logger->error(new FarmLogMessage(
-                                        $dbserver->farmId, "Server is in '{$status->getName()}' state. Ignoring HostDown event."
+                                        $dbserver->farmId, "Server is in '{$status->getName()}' state. Ignoring HostDown event.", $dbserver->serverId
                                     ));
                                     $isStopping = true;
                                 }
@@ -543,26 +539,39 @@ class ScalarizrMessaging extends AbstractTask
 
                         try {
                             $dbserver->updateTimelog('ts_hu');
-                        } catch (Exception $e) {}
+                        } catch (Exception $e) {
+                        }
 
                     } elseif ($message instanceof Scalr_Messaging_Msg_HostDown) {
-                        $isMoving = false;
+                        $ignoreHostDown = false;
+
+                        $p = PlatformFactory::NewPlatform($dbserver->platform);
+                        $status = $p->GetServerRealStatus($dbserver);
+
                         if ($dbserver->isOpenstack()) {
-                            $p = PlatformFactory::NewPlatform($dbserver->platform);
-                            $status = $p->GetServerRealStatus($dbserver)->getName();
-                            if (stristr($status, 'REBOOT') || stristr($status, 'HARD_REBOOT')) {
+                            if (stristr($status->getName(), 'REBOOT') || stristr($status->getName(), 'HARD_REBOOT')) {
                                 $logger->error(new FarmLogMessage(
-                                    $dbserver->farmId, "Rackspace server is in {$status} state. Ignoring HostDown message."
+                                    $dbserver->farmId, "Rackspace server is in " . $status->getName() . " state. Ignoring HostDown message.", $dbserver->serverId
                                 ));
                                 $isRebooting = true;
                             }
-                        }
-                        if ($dbserver->platform == SERVER_PLATFORMS::EC2) {
-                            //TODO: Check is is stopping or shutting-down procedure.
-                            $p = PlatformFactory::NewPlatform($dbserver->platform);
-                            $status = $p->GetServerRealStatus($dbserver);
-                            if (!$status->isTerminated()) {
+                        } elseif ($dbserver->platform == \SERVER_PLATFORMS::GCE) {
+                            if ($status->getName() == 'STOPPING') {
+                                // We don't know is this shutdown or stop so let's ignore HostDown
+                                // and wait for status change
+                                $doNotProcessMessage = true;
+                                $ignoreHostDown = true;
+                            } elseif ($status->getName() == 'RUNNING') {
+                                $isRebooting = true;
+                            } elseif ($status->isSuspended() && $dbserver->status != \SERVER_STATUS::PENDING_TERMINATE) {
                                 $isStopping = true;
+                            }
+                        } else {
+                            if ($p->getResumeStrategy() == 'init') {
+                                //TODO: Check is is stopping or shutting-down procedure.
+                                if (!$status->isTerminated()) {
+                                    $isStopping = true;
+                                }
                             }
                         }
 
@@ -580,10 +589,10 @@ class ScalarizrMessaging extends AbstractTask
 
                             $event = new HostDownEvent($dbserver);
                             $event->isSuspended = true;
-                            
+
                         } elseif ($isRebooting) {
                             $event = new RebootBeginEvent($dbserver);
-                        } else {
+                        } elseif (!$ignoreHostDown) {
                             if ($dbserver->farmId) {
                                 $wasHostDownFired = $this->db->GetOne("SELECT id FROM events WHERE event_server_id = ? AND type = ? AND is_suspend = '0'", array(
                                     $dbserver->serverId, 'HostDown'
@@ -593,10 +602,15 @@ class ScalarizrMessaging extends AbstractTask
                                     $event = new HostDownEvent($dbserver);
                             }
                         }
-                        
+
                     } elseif ($message instanceof Scalr_Messaging_Msg_RebootStart) {
                         $event = new RebootBeginEvent($dbserver);
                     } elseif ($message instanceof Scalr_Messaging_Msg_RebootFinish) {
+                        if (!$dbserver->localIp && $message->localIp) {
+                            $dbserver->localIp = $message->localIp;
+                            $dbserver->Save();
+                        }
+
                         $event = new RebootCompleteEvent($dbserver);
                     } elseif ($message instanceof Scalr_Messaging_Msg_BeforeHostUp) {
                         $event = new BeforeHostUpEvent($dbserver);
@@ -816,16 +830,26 @@ class ScalarizrMessaging extends AbstractTask
                         $e->getMessage() . "({$e->getFile()}:{$e->getLine()})"
                     ));
                 }
-                $totalTime = microtime(true) - $startTime;
-                $this->db->Execute("
-                    UPDATE messages
-                    SET status = ?, processing_time = ?, dtlasthandleattempt = NOW()
-                    WHERE messageid = ?
-                ", array(
-                    $handle_status,
-                    $totalTime,
-                    $message->messageId
-                ));
+
+                if (!$doNotProcessMessage) {
+                    $totalTime = microtime(true) - $startTime;
+                    $this->db->Execute("
+                        UPDATE messages
+                        SET status = ?, processing_time = ?, dtlasthandleattempt = NOW()
+                        WHERE messageid = ?
+                    ", array(
+                        $handle_status,
+                        $totalTime,
+                        $message->messageId
+                    ));
+                } else {
+                    $logger->info(sprintf("Handle message '%s' (message_id: %s) " . "from server '%s' (server_id: %s) is postponed due to status transition",
+                        $message->getName(),
+                        $message->messageId,
+                        $dbserver->remoteIp ? $dbserver->remoteIp : '*no-ip*',
+                        $dbserver->serverId
+                    ));
+                }
 
                 if ($event) {
                     \Scalr::FireEvent($dbserver->farmId, $event);
@@ -851,20 +875,7 @@ class ScalarizrMessaging extends AbstractTask
             $bundleTask->osFamily = $message->dist->distributor;
             $bundleTask->osName = $message->dist->codename;
             $bundleTask->osVersion = $message->dist->release;
-
-            if (in_array($message->dist->distributor, array('redhat', 'oel', 'scientific')) &&
-            $dbserver->platform == SERVER_PLATFORMS::EC2) {
-                $bundleTask->bundleType = SERVER_SNAPSHOT_CREATION_TYPE::EC2_EBS_HVM;
-            }
-
-            if ($bundleTask->osFamily == 'centos' && strstr("7.", $bundleTask->osVersion) !== false && $dbserver->platform == SERVER_PLATFORMS::EC2) {
-                $bundleTask->bundleType = SERVER_SNAPSHOT_CREATION_TYPE::EC2_EBS_HVM;
-            }
-
-            if ($bundleTask->osFamily == 'amazon' && $bundleTask->osVersion == '2014.09' && $dbserver->platform == SERVER_PLATFORMS::EC2) {
-                $bundleTask->bundleType = SERVER_SNAPSHOT_CREATION_TYPE::EC2_EBS_HVM;
-            }
-
+            $bundleTask->designateType($dbserver->platform, $bundleTask->osFamily, null, $bundleTask->osVersion);
             $bundleTask->save();
         }
         if ($dbserver->status == SERVER_STATUS::IMPORTING) {
@@ -1033,18 +1044,7 @@ class ScalarizrMessaging extends AbstractTask
             $bundleTask->osFamily = $message->dist->distributor;
             $bundleTask->osName = $message->dist->codename;
             $bundleTask->osVersion = $message->dist->release;
-            if (in_array($message->dist->distributor, array('redhat', 'oel', 'scientific')) &&
-            $dbserver->platform == SERVER_PLATFORMS::EC2) {
-                $bundleTask->bundleType = SERVER_SNAPSHOT_CREATION_TYPE::EC2_EBS_HVM;
-            }
-
-            if ($bundleTask->osFamily == 'centos' && strstr("7.", $bundleTask->osVersion) !== false && $dbserver->platform == SERVER_PLATFORMS::EC2) {
-                $bundleTask->bundleType = SERVER_SNAPSHOT_CREATION_TYPE::EC2_EBS_HVM;
-            }
-
-            if ($bundleTask->osFamily == 'amazon' && $bundleTask->osVersion == '2014.09' && $dbserver->platform == SERVER_PLATFORMS::EC2) {
-                $bundleTask->bundleType = SERVER_SNAPSHOT_CREATION_TYPE::EC2_EBS_HVM;
-            }
+            $bundleTask->designateType($dbserver->platform, $bundleTask->osFamily, null, $bundleTask->osVersion);
 
             $bundleTask->setDate("started");
 
@@ -1074,34 +1074,7 @@ class ScalarizrMessaging extends AbstractTask
             }
             $srv_props[SERVER_PROPERTIES::SZR_SNMP_PORT] = $message->snmpPort;
             if ($dbserver->isCloudstack()) {
-                $ips = $platform->GetServerIPAddresses($dbserver);
-                if ($ips['remoteIp']) {
-                    $remoteIp = $ips['remoteIp'];
-                    $dbserver->GetFarmRoleObject()->SetSetting(DBFarmRole::SETTING_CLOUDSTACK_NETWORK_TYPE, 'Direct', DBFarmRole::TYPE_LCL);
-                }
-                else {
-                    if ($dbserver->farmRoleId) {
-                        $dbFarmRole = $dbserver->GetFarmRoleObject();
-                        $networkType = $dbFarmRole->GetSetting(DBFarmRole::SETTING_CLOUDSTACK_NETWORK_TYPE);
-                        if ($networkType == 'Direct') {
-                            $remoteIp = $message->localIp;
-                        } else {
-                            $useStaticNat = $dbFarmRole->GetSetting(DBFarmRole::SETIING_CLOUDSTACK_USE_STATIC_NAT);
-                            $networkId = $dbFarmRole->GetSetting(DBFarmRole::SETTING_CLOUDSTACK_NETWORK_ID);
-                            if (!$useStaticNat && $networkId != 'SCALR_MANUAL') {
-                                $sharedIp = $dbFarmRole->GetSetting(DBFarmRole::SETTING_CLOUDSTACK_SHARED_IP_ADDRESS);
-                                if (!$sharedIp) {
-                                    $env = $dbserver->GetEnvironmentObject();
-                                    $remoteIp = $platform->getConfigVariable(
-                                        CloudstackPlatformModule::SHARED_IP . "." . $dbserver->GetProperty(CLOUDSTACK_SERVER_PROPERTIES::CLOUD_LOCATION), $env, false
-                                    );
-                                } else {
-                                    $remoteIp = $sharedIp;
-                                }
-                            }
-                        }
-                    }
-                }
+                $remoteIp = CloudstackHelper::getSharedIP($dbserver);
             }
             if ($dbserver->isOpenstack()) {
                 if ($dbserver->farmRoleId) {
@@ -1293,7 +1266,7 @@ class ScalarizrMessaging extends AbstractTask
             }
             return $event;
         } else {
-            $logger->error(
+            $logger->info(
                 "Strange situation. Received HostUp message"
               . " from server '{$dbserver->serverId}' ('{$message->remoteIp})"
               . " with state {$dbserver->status}!"

@@ -24,7 +24,7 @@ class StatusAdapter implements \Scalr\Modules\Platforms\StatusAdapterInterface
 
     public function isRunning()
     {
-        return $this->platformStatus == 'RUNNING' ? true : false;
+        return $this->platformStatus == 'RUNNING' || $this->platformStatus == 'STOPPING' ? true : false;
     }
 
     public function isPending()
@@ -34,17 +34,17 @@ class StatusAdapter implements \Scalr\Modules\Platforms\StatusAdapterInterface
 
     public function isTerminated()
     {
-        return $this->platformStatus == 'TERMINATED' || $this->platformStatus == 'not-found'  ? true : false;
+        return $this->platformStatus == 'not-found'  ? true : false;
     }
 
     public function isSuspended()
     {
-        //
+        return $this->platformStatus == 'TERMINATED' ? true : false;
     }
 
     public function isPendingSuspend()
     {
-        //
+        
     }
 
     public function isPendingRestore()

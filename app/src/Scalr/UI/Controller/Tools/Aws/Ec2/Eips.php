@@ -62,9 +62,7 @@ class Scalr_UI_Controller_Tools_Aws_Ec2_Eips extends Scalr_UI_Controller
 
     public function viewAction()
     {
-        $this->response->page('ui/tools/aws/ec2/eips/view.js', array(
-            'locations'	=> self::loadController('Platforms')->getCloudLocations(SERVER_PLATFORMS::EC2, false)
-        ));
+        $this->response->page('ui/tools/aws/ec2/eips/view.js', []);
     }
 
     public function xListEipsAction()

@@ -8,20 +8,19 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.logs', function (loadParams, moduleParams)
 		remoteSort: true
 	});
 	return Ext.create('Ext.grid.Panel', {
-		title: 'Tools &raquo; Amazon Web Services &raquo; RDS &raquo; Event logs',
 		scalrOptions: {
-			'reload': false,
-			'maximize': 'all'
+			reload: false,
+			maximize: 'all',
+            menuTitle: 'RDS Event logs'
 		},
 		store: store,
 		stateId: 'grid-tools-aws-rds-logs',
 		stateful: true,
-		plugins: {
-			ptype: 'gridstore'
-		},
-		tools: [{
-			xtype: 'gridcolumnstool'
-		}],
+        plugins: [{
+            ptype: 'gridstore'
+        }, {
+            ptype: 'applyparams'
+        }],
 		viewConfig: {
 			deferEmptyText: false,
 			emptyText: 'No logs found',

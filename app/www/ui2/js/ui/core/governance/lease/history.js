@@ -20,12 +20,7 @@ Scalr.regPage('Scalr.ui.core.governance.lease.history', function () {
         },
         stateId: 'grid-core-governance-lease-history',
         stateful: true,
-        tools: [{
-            xtype: 'gridcolumnstool'
-        }],
-        plugins: {
-            ptype: 'gridstore'
-        },
+        plugins: [ 'gridstore', 'applyparams' ],
 
         viewConfig: {
             emptyText: 'No requests found',

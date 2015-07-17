@@ -4,6 +4,9 @@ use Scalr\Modules\Platforms\Cloudstack\Helpers\CloudstackHelper;
 use Scalr\Stats\CostAnalytics\Entity\ProjectEntity;
 use Scalr\Exception\AnalyticsException;
 use Scalr\Util\CryptoTool;
+use Scalr\Stats\CostAnalytics\Entity\CostCentreEntity;
+use Scalr\Stats\CostAnalytics\Entity\CostCentrePropertyEntity;
+use Scalr\Stats\CostAnalytics\Entity\ProjectPropertyEntity;
 
 class DBFarm
 {
@@ -47,8 +50,8 @@ class DBFarm
         $createdByUserId,
         $createdByUserEmail,
         $changedByUserId,
-        $changedTime
-    ;
+        $changedTime,
+        $teamId;
 
     private $DB,
             $environment;
@@ -70,7 +73,8 @@ class DBFarm
         'created_by_id' 	=> 'createdByUserId',
         'created_by_email'	=> 'createdByUserEmail',
         'changed_by_id'     => 'changedByUserId',
-        'changed_time'      => 'changedTime'
+        'changed_time'      => 'changedTime',
+        'team_id'     => 'teamId',
     );
 
     /**
@@ -147,24 +151,18 @@ class DBFarm
 
         if (!$name) {
             $template = "";
-            if (!stristr($definition->name, "clone")) {
-                $template = $definition->name . ' (clone #%s)';
-                $i = 1;
+            if (!preg_match('/^(.*?)\(clone \#([0-9]*)\)$/si', $definition->name)) {
+                $name = $definition->name;
             } else {
                 preg_match('/^(.*?)\(clone \#([0-9]*)\)$/si', $definition->name, $matches);
-                $template = trim($matches[1])." (clone #%s)";
-                $i = $matches[2]+1;
+                $name = trim($matches[1]);
             }
 
-            while (true) {
-                $name = sprintf($template, $i);
-                if (!$this->DB->GetOne("SELECT id FROM farms WHERE name = ? AND env_id = ? LIMIT 1", array($name, $this->EnvID))) {
-                    break;
-                }
-                else {
-                    $i++;
-                }
-            }
+            $name = preg_replace('/[^A-Za-z0-9_\. -]+/', '', $name);
+            $lastUsedIndex = $this->DB->GetOne('SELECT MAX(CAST((SUBSTR(@p:=SUBSTRING_INDEX(name, \'#\', -1), 1, LENGTH(@p) - 1)) AS UNSIGNED)) as lastUsedCloneNumber FROM farms WHERE name REGEXP \''. str_replace('.', '\.', $name) .' \\\\(clone #[0-9]+\\\\)\' AND env_id = ?', array(
+                $envId
+            ));
+            $name = $name . ' (clone #' . ($lastUsedIndex + 1) . ')';
         }
 
         $dbFarm = self::create($name, $user, $envId);
@@ -172,6 +170,7 @@ class DBFarm
         $dbFarm->createdByUserId = $user->id;
         $dbFarm->createdByUserEmail = $user->getEmail();
         $dbFarm->RolesLaunchOrder = $definition->rolesLaunchOrder;
+        $dbFarm->teamId = $definition->teamId;
 
         $dbFarm->SetSetting(DBFarm::SETTING_TIMEZONE, $definition->settings[DBFarm::SETTING_TIMEZONE]);
         $dbFarm->SetSetting(DBFarm::SETTING_EC2_VPC_ID, $definition->settings[DBFarm::SETTING_EC2_VPC_ID]);
@@ -189,9 +188,7 @@ class DBFarm
             $dbFarmRole->applyDefinition($role, true);
             $newSettings = $dbFarmRole->GetAllSettings();
 
-            Scalr_Helpers_Dns::farmUpdateRoleSettings($dbFarmRole, $oldRoleSettings, $newSettings);
-
-            // Platfrom specified updates
+            // Platform specified updates
             if ($dbFarmRole->Platform == SERVER_PLATFORMS::EC2) {
                 \Scalr\Modules\Platforms\Ec2\Helpers\EbsHelper::farmUpdateRoleSettings($dbFarmRole, $oldRoleSettings, $newSettings);
                 \Scalr\Modules\Platforms\Ec2\Helpers\EipHelper::farmUpdateRoleSettings($dbFarmRole, $oldRoleSettings, $newSettings);
@@ -206,18 +203,77 @@ class DBFarm
             $usedPlatforms[$role->platform] = 1;
         }
 
-        if ($usedPlatforms[SERVER_PLATFORMS::EC2])
-            \Scalr\Modules\Platforms\Ec2\Helpers\Ec2Helper::farmSave($dbFarm, $dbFarmRolesList);
-
-        if ($usedPlatforms[SERVER_PLATFORMS::EUCALYPTUS])
-            \Scalr\Modules\Platforms\Eucalyptus\Helpers\EucalyptusHelper::farmSave($dbFarm, $dbFarmRolesList);
-
-        if ($usedPlatforms[SERVER_PLATFORMS::CLOUDSTACK])
-            CloudstackHelper::farmSave($dbFarm, $dbFarmRolesList);
-
         $dbFarm->save();
 
         return $dbFarm;
+    }
+    
+    public function applyGlobalVarsToValue($value)
+    {
+        if (empty($this->globalVariablesCache)) {
+            $formats = \Scalr::config("scalr.system.global_variables.format");
+    
+            $systemVars = array(
+                'env_id'		=> $this->EnvID,
+                'env_name'		=> $this->GetEnvironmentObject()->name,
+                'farm_id'       => $this->ID,
+                'farm_name'     => $this->Name,
+                'farm_hash'     => $this->Hash,
+                'farm_owner_email' => $this->createdByUserEmail
+            );
+            
+            if (\Scalr::getContainer()->analytics->enabled) {
+                $projectId = $this->GetSetting(DBFarm::SETTING_PROJECT_ID);
+                if ($projectId) {
+                    $project = ProjectEntity::findPk($projectId);
+                    /* @var $project ProjectEntity */
+                    $systemVars['project_id'] = $projectId;
+                    $systemVars['project_bc'] = $project->getProperty(ProjectPropertyEntity::NAME_BILLING_CODE);
+                    $systemVars['project_name'] = $project->name;
+            
+                    $ccId = $project->ccId;
+                }
+            
+                if ($ccId) {
+                    $cc = CostCentreEntity::findPk($ccId);
+                    if ($cc) {
+                        /* @var $cc CostCentreEntity */
+                        $systemVars['cost_center_id'] = $ccId;
+                        $systemVars['cost_center_bc'] = $cc->getProperty(CostCentrePropertyEntity::NAME_BILLING_CODE);
+                        $systemVars['cost_center_name'] = $cc->name;
+                    } else
+                        throw new Exception("Cost center {$ccId} not found");
+                }
+            }
+    
+            // Get list of Server system vars
+            foreach ($systemVars as $name => $val) {
+                $name = "SCALR_".strtoupper($name);
+                $val = trim($val);
+    
+                if (isset($formats[$name]))
+                    $val = @sprintf($formats[$name], $val);
+    
+                $this->globalVariablesCache[$name] = $val;
+            }
+    
+            // Add custom variables
+            $gv = new Scalr_Scripting_GlobalVariables($this->ClientID, $this->EnvID, Scalr_Scripting_GlobalVariables::SCOPE_FARM);
+            $vars = $gv->listVariables(0, $this->ID);
+            foreach ($vars as $v)
+                $this->globalVariablesCache[$v['name']] = $v['value'];
+        }
+    
+        //Parse variable
+        $keys = array_keys($this->globalVariablesCache);
+        $f = create_function('$item', 'return "{".$item."}";');
+        $keys = array_map($f, $keys);
+        $values = array_values($this->globalVariablesCache);
+    
+        $retval = str_replace($keys, $values, $value);
+    
+        // Strip undefined variables & return value
+        return preg_replace("/{[A-Za-z0-9_-]+}/", "", $retval);
     }
 
     public function getDefinition()
@@ -225,6 +281,7 @@ class DBFarm
         $farmDefinition = new stdClass();
         $farmDefinition->name = $this->Name;
         $farmDefinition->rolesLaunchOrder = $this->RolesLaunchOrder;
+        $farmDefinition->teamId = $this->teamId;
 
         // Farm Roles
         $farmDefinition->roles = array();
@@ -253,6 +310,11 @@ class DBFarm
         return $this->environment;
     }
 
+    public function GetFarmRoleIdByAlias ($alias) {
+        $dbFarmRoleId = $this->DB->GetOne("SELECT id FROM farm_roles WHERE farmid=? AND alias=? LIMIT 1", array($this->ID, $alias));
+        return $dbFarmRoleId;
+    }
+
     /**
      *
      * @param integer $role_id
@@ -260,11 +322,11 @@ class DBFarm
      */
     public function GetFarmRoleByRoleID($role_id)
     {
-        $db_role = $this->DB->GetRow("SELECT id FROM farm_roles WHERE farmid=? AND role_id=? LIMIT 1", array($this->ID, $role_id));
-        if (!$db_role)
+        $dbFarmRoleId = $this->DB->GetOne("SELECT id FROM farm_roles WHERE farmid=? AND role_id=? LIMIT 1", array($this->ID, $role_id));
+        if (!$dbFarmRoleId)
             throw new Exception(sprintf(_("Role #%s not assigned to farm #%"), $role_id, $this->ID));
 
-        return DBFarmRole::LoadByID($db_role['id']);
+        return DBFarmRole::LoadByID($dbFarmRoleId);
     }
 
     /**
@@ -283,14 +345,17 @@ class DBFarm
 
 
     /**
-     * @return DBFarmRole[]
+     * Gets the list of the FarmRoles ordered by launch index.
+     *
+     * @return DBFarmRole[]  Returns the list of the FarmRoles
      */
     public function GetFarmRoles()
     {
-        $db_roles = $this->DB->GetAll("SELECT id FROM farm_roles WHERE farmid=? ORDER BY launch_index ASC", array($this->ID));
-        $retval = array();
-        foreach ($db_roles as $db_role)
-            $retval[] = DBFarmRole::LoadByID($db_role['id']);
+        $retval = [];
+
+        foreach ($this->DB->Execute("SELECT `id` FROM `farm_roles` WHERE `farmid` = ? ORDER BY `launch_index` ASC", [$this->ID]) as $row) {
+            $retval[] = DBFarmRole::LoadByID($row['id']);
+        }
 
         return $retval;
     }
@@ -300,12 +365,11 @@ class DBFarm
         $mysql_farm_role_id = $this->DB->GetOne("SELECT id FROM farm_roles WHERE role_id IN (SELECT role_id FROM role_behaviors WHERE behavior=?) AND farmid=? LIMIT 1",
             array(ROLE_BEHAVIORS::MYSQL, $this->ID)
         );
-        if ($mysql_farm_role_id)
-        {
+
+        if ($mysql_farm_role_id) {
             $servers = $this->GetServersByFilter(array('status' => array(SERVER_STATUS::RUNNING, SERVER_STATUS::INIT), 'farm_roleid' => $mysql_farm_role_id));
             $retval = array();
-            foreach ($servers as $DBServer)
-            {
+            foreach ($servers as $DBServer) {
                 if ($only_master && $DBServer->GetProperty(SERVER_PROPERTIES::DB_MYSQL_MASTER))
                     $retval[] = $DBServer;
                 elseif ($only_slaves && !$DBServer->GetProperty(SERVER_PROPERTIES::DB_MYSQL_MASTER))
@@ -313,9 +377,9 @@ class DBFarm
                 elseif (!$only_master && !$only_slaves)
                     $retval[] = $DBServer;
             }
-        }
-        else
+        } else {
             $retval = array();
+        }
 
         return $retval;
     }
@@ -323,35 +387,33 @@ class DBFarm
     public function GetServersByFilter($filter_args = array(), $ufilter_args = array())
     {
         $sql = "SELECT server_id FROM servers WHERE `farm_id`=?";
+
         $args = array($this->ID);
-        foreach ((array)$filter_args as $k=>$v)
-        {
-            if (is_array($v))
-            {
-                foreach ($v as $vv)
+
+        foreach ((array)$filter_args as $k => $v) {
+            if (is_array($v)) {
+                foreach ($v as $vv) {
                     array_push($args, $vv);
+                }
 
                 $sql .= " AND `{$k}` IN (".implode(",", array_fill(0, count($v), "?")).")";
-            }
-            else
-            {
+            } else {
                 $sql .= " AND `{$k}`=?";
+
                 array_push($args, $v);
             }
         }
 
-        foreach ((array)$ufilter_args as $k=>$v)
-        {
-            if (is_array($v))
-            {
-                foreach ($v as $vv)
+        foreach ((array)$ufilter_args as $k => $v) {
+            if (is_array($v)) {
+                foreach ($v as $vv) {
                     array_push($args, $vv);
+                }
 
                 $sql .= " AND `{$k}` NOT IN (".implode(",", array_fill(0, count($v), "?")).")";
-            }
-            else
-            {
+            } else {
                 $sql .= " AND `{$k}`!=?";
+
                 array_push($args, $v);
             }
         }
@@ -359,10 +421,11 @@ class DBFarm
         $res = $this->DB->GetAll($sql, $args);
 
         $retval = array();
-        foreach ((array)$res as $i)
-        {
-            if ($i['server_id'])
+
+        foreach ((array)$res as $i) {
+            if ($i['server_id']) {
                 $retval[] = DBServer::LoadByID($i['server_id']);
+            }
         }
 
         return $retval;
@@ -511,7 +574,7 @@ class DBFarm
                     //Assigns Project automatically only if it is the one withing the Cost Center
                     $projects = ProjectEntity::findByCcId($ccId);
                     if (count($projects) == 1) {
-                        $project = $projects[0];
+                        $project = $projects->getArrayCopy()[0];
                         $projectId = $project->projectId;
                     }
                 }
@@ -649,7 +712,7 @@ class DBFarm
         $this->SetSetting(DBFarm::SETTING_LOCK_UNLOCK_BY, '');
 
         if ($this->createdByUserId && $restrict)
-            $this->SetSetting(DBFarm::SETTING_LOCK_RESTRICT, 1);
+            $this->SetSetting(DBFarm::SETTING_LOCK_RESTRICT, $restrict);
     }
 
     /**
@@ -758,6 +821,7 @@ class DBFarm
                     created_by_email = ?,
                     changed_by_id = ?,
                     changed_time = ?,
+                    team_id = ?,
                     dtadded = NOW(),
                     farm_roles_launch_order = ?,
                     comments = ?
@@ -771,6 +835,7 @@ class DBFarm
                 $this->createdByUserEmail,
                 $this->changedByUserId,
                 $this->changedTime,
+                $this->teamId,
                 $this->RolesLaunchOrder,
                 $this->Comments
             ));
@@ -787,7 +852,8 @@ class DBFarm
                     created_by_id = ?,
                     created_by_email = ?,
                     changed_by_id = ?,
-                    changed_time = ?
+                    changed_time = ?,
+                    team_id = ?
                 WHERE id = ?
                 LIMIT 1
             ", array(
@@ -800,6 +866,7 @@ class DBFarm
                 $this->createdByUserEmail,
                 $this->changedByUserId,
                 $this->changedTime,
+                $this->teamId,
                 $this->ID
             ));
         }

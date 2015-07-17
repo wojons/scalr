@@ -117,41 +117,6 @@ class FarmRoleStorage
                 $volumeConfigTemplate->type = stristr($config->type, "raid.") ? FarmRoleStorageConfig::TYPE_RAID : $config->type;
                 $volumeConfigTemplate->fstype = $config->fs;
                 $volumeConfigTemplate->mpoint = ($config->mount == 1) ? $config->mountPoint : null;
-                
-                //Tags
-                try {
-                    $tags = array(
-                        "scalr-env-id"  => $dbServer->envId,
-                        "scalr-owner" => $dbServer->GetFarmObject()->createdByUserEmail,
-                        "scalr-farm-id" => $dbServer->farmId,
-                        "scalr-farm-role-id" => $dbServer->farmRoleId,
-                        "scalr-server-id" => $dbServer->serverId
-                    );
-                    
-                    $governance = new \Scalr_Governance($this->farmRole->GetFarmObject()->EnvID);
-                    $gTags = (array)$governance->getValue('ec2', 'aws.tags');
-                    if (count($gTags) > 0) {
-                        foreach ($gTags as $tKey => $tValue) {
-                            if ($tKey == 'Name')
-                                continue;
-                            $tags[$tKey] = $dbServer->applyGlobalVarsToValue($tValue);
-                        }
-                    } else {
-                        //Custom tags
-                        $cTags = $dbServer->GetFarmRoleObject()->GetSetting(\DBFarmRole::SETTING_AWS_TAGS_LIST);
-                        $tagsList = @explode("\n", $cTags);
-                        foreach ((array)$tagsList as $tag) {
-                            $tag = trim($tag);
-                            if ($tag && count($tags) < 10) {
-                                $tagChunks = explode("=", $tag);
-                                $tags[trim($tagChunks[0])] = $dbServer->applyGlobalVarsToValue(trim($tagChunks[1]));
-                            }
-                        }
-                    }
-                    
-                    $volumeConfigTemplate->tags = $tags;
-                } catch (\Exception $e) {}
-                //
 
                 switch ($config->type) {
                     case FarmRoleStorageConfig::TYPE_CINDER:
@@ -183,6 +148,8 @@ class FarmRoleStorage
                         break;
                     case FarmRoleStorageConfig::TYPE_GCE_PD:
                         $volumeConfigTemplate->size = $config->settings[FarmRoleStorageConfig::SETTING_GCE_PD_SIZE];
+                        if ($config->settings[FarmRoleStorageConfig::SETTING_GCE_PD_TYPE])
+                            $volumeConfigTemplate->diskType = $config->settings[FarmRoleStorageConfig::SETTING_GCE_PD_TYPE];
 
                         // SNAPSHOT
                         if ($config->settings[FarmRoleStorageConfig::SETTING_GCE_PD_SNAPSHOT] != '') {
@@ -194,11 +161,15 @@ class FarmRoleStorage
                     case FarmRoleStorageConfig::TYPE_EBS:
                         $volumeConfigTemplate->size = $config->settings[FarmRoleStorageConfig::SETTING_EBS_SIZE];
                         $volumeConfigTemplate->encrypted = (!empty($config->settings[FarmRoleStorageConfig::SETTING_EBS_ENCRYPTED])) ? 1 : 0;
-
+                        $volumeConfigTemplate->tags = $dbServer->getAwsTags();
+                        
                         // IOPS
                         $volumeConfigTemplate->volumeType = $config->settings[FarmRoleStorageConfig::SETTING_EBS_TYPE];
                         if ($volumeConfigTemplate->volumeType == 'io1')
                             $volumeConfigTemplate->iops = $config->settings[FarmRoleStorageConfig::SETTING_EBS_IOPS];
+                        
+                        if ($config->settings[FarmRoleStorageConfig::SETTING_EBS_KMS_KEY_ID])
+                            $volumeConfigTemplate->kmsKeyId = $config->settings[FarmRoleStorageConfig::SETTING_EBS_KMS_KEY_ID];
 
                         // SNAPSHOT
                         if ($config->settings[FarmRoleStorageConfig::SETTING_EBS_SNAPSHOT] != '') {
@@ -215,6 +186,7 @@ class FarmRoleStorage
                         $volumeConfigTemplate->level = $config->settings[FarmRoleStorageConfig::SETTING_RAID_LEVEL];
                         $volumeConfigTemplate->vg = $config->id;
                         $volumeConfigTemplate->disks = array();
+                        
                         for ($i = 1; $i <= $config->settings[FarmRoleStorageConfig::SETTING_RAID_VOLUMES_COUNT]; $i++) {
                             $disk = new \stdClass();
 
@@ -222,11 +194,15 @@ class FarmRoleStorage
                                 $disk->size = $config->settings[FarmRoleStorageConfig::SETTING_EBS_SIZE];
                                 $disk->encrypted = (!empty($config->settings[FarmRoleStorageConfig::SETTING_EBS_ENCRYPTED])) ? 1 : 0;
                                 $disk->type = FarmRoleStorageConfig::TYPE_EBS;
-
+                                $disk->tags = $dbServer->getAwsTags();
+                                
                                 // IOPS
                                 $disk->volumeType = $config->settings[FarmRoleStorageConfig::SETTING_EBS_TYPE];
                                 if ($disk->volumeType == 'io1')
                                     $disk->iops = $config->settings[FarmRoleStorageConfig::SETTING_EBS_IOPS];
+                                
+                                if ($config->settings[FarmRoleStorageConfig::SETTING_EBS_KMS_KEY_ID])
+                                    $disk->kmsKeyId = $config->settings[FarmRoleStorageConfig::SETTING_EBS_KMS_KEY_ID];
 
                             } elseif ($config->type == FarmRoleStorageConfig::TYPE_RAID_CSVOL) {
                                 $disk->diskOfferingId = $config->settings[FarmRoleStorageConfig::SETTING_CSVOL_DISK_OFFERING];

@@ -10,7 +10,8 @@ scalr:
       user: scalr
       pass: 'scalr'
 
-#    # Proxy settings that can be used with option scalr.aws.use_proxy = yes
+#    # Proxy settings that can be used with option scalr.%platform%.use_proxy = yes
+#    # Only aws and openstack-based platforms available
 #    # allowed types: 4 - socks4, 5 - socks5, 0 - http
 #    # allowed authtypes: 1 - Basic, Digest - 2, GSSNeg - 4, NTLM - 8, any - -1
 #    proxy:

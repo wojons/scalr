@@ -1,4 +1,4 @@
-<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<!DOCTYPE html>
 <html>
 <head>
 	<title>Scalr CMP</title>
@@ -29,7 +29,7 @@
             display: none;
         }
         ::-webkit-scrollbar-thumb {
-            background-color: rgba(107, 135, 156, 0.8);
+            background-color: rgba(71, 121, 171, 0.7);
             border-radius: 3px;
         }
         ::-webkit-scrollbar-corner {
@@ -50,23 +50,24 @@
 
         .x-grid-view::-webkit-scrollbar-track {
             background-color: #FFFFFF;
+            display: block;
         }
 
         .scalr-main-loader{position: absolute;left: 0px;right: 0px;top: 0px;bottom: 0px;background-color: #F0F1F4;z-index: 10000000;overflow: hidden;}
         .scalr-main-loader #loading-inner{position: absolute; top: 50%; left: 50%; width: 120px; height: 106px; margin: -100px 0 0 -59px; overflow: hidden;}
-        .scalr-main-loader #loading-bg{position: absolute; left: 0; bottom: 0; background: url(/ui2/images/main_logo_bg.png?2.0) no-repeat; width: 120px; height: 106px;}
+        .scalr-main-loader #loading-bg{position: absolute; left: 0; bottom: 0; background: url(/ui2/images/main-logo-bg.png?2.0) no-repeat; width: 120px; height: 106px;}
         .scalr-main-loader #loading-div{position: absolute; left: 0; bottom: 0; width: 120px; height: 0px; -webkit-transition: all 0.2s ease; -moz-transition: all 0.2s ease; overflow: hidden;}
-        .scalr-main-loader #loading-div-child{position: absolute; bottom: 0; width: 120px; height: 106px; background: url(/ui2/images/main_logo.png?2.0) no-repeat;}
+        .scalr-main-loader #loading-div-child{position: absolute; bottom: 0; width: 120px; height: 106px; background: url(/ui2/images/main-logo.png?2.1) no-repeat;}
         .scalr-main-loader #loading-text{position:absolute; top: 50%; left: 50%; width: 600px; margin-left: -300px; height: auto; margin-top: 30px; font: bold 18px arial, helvetica, sans-serif; color: #C93301; line-height: 28px; text-shadow: 0 1px #F8F9FA; text-align: center; display: none;}
-        .scalr-main-loader #loading-bg.error{background-image: url(/ui2/images/main_logo_error.png?1.1);}
+        .scalr-main-loader #loading-bg.error{background-image: url(/ui2/images/main-logo-error.png?1.2);}
         @media only screen and (-webkit-min-device-pixel-ratio: 1.5),
             only screen and (-o-min-device-pixel-ratio: 3/2),
             only screen and (min--moz-device-pixel-ratio: 1.5),
             only screen and (min-device-pixel-ratio: 1.5) {
 
-            .scalr-main-loader #loading-bg{background-image: url(/ui2/images/main_logo_bg_retina.png);background-size:120px 106px;}
-            .scalr-main-loader #loading-div-child{background-image: url(/ui2/images/main_logo_retina.png);background-size:120px 106px;}
-            .scalr-main-loader #loading-bg.error{background-image: url(/ui2/images/main_logo_error_retina.png);background-size:120px 106px;}
+            .scalr-main-loader #loading-bg{background-image: url(/ui2/images/main-logo-bg-retina.png);background-size:120px 106px;}
+            .scalr-main-loader #loading-div-child{background-image: url(/ui2/images/main-logo-retina.png);background-size:120px 106px;}
+            .scalr-main-loader #loading-bg.error{background-image: url(/ui2/images/main-logo-error-retina.png);background-size:120px 106px;}
         }
     </style>
 </head>
@@ -85,13 +86,11 @@
 
 	<div id="body-login-container" style="display: none">
 		<form method="post" action="/guest/xLogin/">
-            <input id="textfield-user-login-inputEl" type="text" size="1" name="scalrLogin" style="width:100%;" class="x-form-field x-form-text " autocomplete="on" aria-invalid="false" data-errorqtip="" />
-            <input id="textfield-user-password-inputEl" type="password" size="1" name="scalrPass" style="width:100%;" class="x-form-field x-form-text " autocomplete="on" aria-invalid="false" data-errorqtip="" />
+            <input id="textfield-user-login-inputEl" data-ref="inputEl" type="text" role="textbox" size="1" name="scalrLogin" class="x-form-field x-form-required-field x-form-text x-form-text-default  " autocomplete="on" />
+            <input id="textfield-user-password-inputEl" data-ref="inputEl" type="password" role="textbox" size="1" name="scalrPass" class="x-form-field x-form-required-field x-form-text x-form-text-default  " autocomplete="on" />
 			<input type="submit" />
         </form>
 	</div>
-
-    <iframe src='/login.html' style='width:0px;height:0px;border:0px;' id='hiddenChromeLoginForm' name='hiddenChromeLoginForm'></iframe>
 
     <script type="text/javascript">
         var head = document.head || document.getElementsByTagName('head')[0];
@@ -114,14 +113,14 @@
             div.parentNode.removeChild(div);
             document.getElementById('loading-bg').className += ' error';
         }
-        
+
         var _hsqTrackEvent;
         var _trackEvent;
         var _trackingUserEmail = '';
-        
+
         var setUpTracking = function () {
 	        // You probably want to set a variable to disable this on-demand
-	        
+
 	        try {
 	        	var hsTrackingURL = "https://track.hubspot.com/v1/event/",
 	            trackedEventsMap = {
@@ -133,21 +132,21 @@
 	                    "webhooks/endpoints/xValidate": "000000134494",
 	                    "webhooks/configs/xSave": "000000134495"
 	            };
-	            
+
 	            _trackEvent = function (eventId) {
 	            	if (_trackingUserEmail == '' || typeof hsHubId == 'undefined') return;
-	            	
+
 	                var params = {"_a": hsHubId, "_n": eventId, "email": _trackingUserEmail};
 	                var queryString = Ext.Object.toQueryString(params),
 	                fullUrl = hsTrackingURL + "?" + queryString;
-	    
+
 	                // Load the image for tracking (because we don't want CORS)
 	                Ext.DomHelper.append(document.body, {"tag": "img", "src": fullUrl}).remove();
 	            }
-	            
+
 	            _hsqTrackEvent = function(link) {
 	                if (typeof hsHubId == 'undefined') return;
-	                
+
 	                Ext.iterate(trackedEventsMap, function(path, eventId) {
 	                    if (link.indexOf(path) != -1)
 	                        _trackEvent(eventId);
@@ -164,15 +163,15 @@
             showError(errorMessage);
         } else {
             updateProgress(10);
-            
+
             var css = document.createElement('link');
             css.type = 'text/css';
             css.rel = 'stylesheet';
-            css.href = '/ui2/js/extjs-4.2/theme/ext-scalr-1.css';
+            css.href = '/ui2/js/extjs-5.0/theme/ext-scalr-1.css';
             head.appendChild(css);
-            
+
             script.type = 'text/javascript';
-            var p = 'extjs-4.2';
+            var p = 'extjs-5.0';
             var t = 1; // timestamp
             script.src = debugMode ? '/ui2/js/' + p + '/ext-all-debug-' + t + '.js' : '/ui2/js/' + p + '/ext-all-' + t + '.js';
             script.onload = function () {
@@ -181,14 +180,59 @@
                         updateProgress(30);
                         setUpTracking();
 
+                        Ext.define(null, {
+                            override: 'Ext.Loader',
+
+                            loadScalrScript: function(url, onLoad, scope) {
+                                var script = document.createElement('script');
+                                script.type = 'text/javascript';
+                                script.src = url;
+                                script.onload = onLoad && scope ? Ext.Function.bind(onLoad, scope) : (onLoad || Ext.emptyFn);
+
+                                Ext.getHead().appendChild(script);
+                            },
+                            loadScalrScriptList: function(sc, handler) {
+                                var scope = {
+                                    queue: Ext.Array.clone(sc),
+                                    handler: handler
+                                }, me = this;
+
+                                for (var i = 0; i < sc.length; i++) {
+                                    (function(script) {
+                                        me.loadScalrScript(script, function() {
+                                            var ind = this.queue.indexOf(script);
+                                            this.queue.splice(ind, 1);
+                                            if (! this.queue.length)
+                                                this.handler();
+                                        }, scope);
+                                    })(sc[i]);
+                                }
+                            }
+                        });
+
+                        // set fake path for correct 404 response if file not found
+                        Ext.Loader.setPath('Ext', '/ui2/js');
+                        Ext.Loader.setPath('Scalr', '/ui2/js');
+
                         if (! (Ext.isChrome || Ext.isGecko || Ext.isSafari)) {
                             showError(errorMessage);
                         } else {
-                            var tm = 0;
+                            var tm = 0, envId;
                             if (localStorage)
-                                tm = localStorage.getItem('scalr-system-time');
+                                tm = (new Ext.state.Provider()).decodeValue(localStorage.getItem('scalr-system-time'));
 
-                            Ext.Ajax.defaultHeaders = { 'X-Scalr-Interface': 'v2', 'X-Scalr-Token': 'key' };
+                            envId = (new Ext.state.Provider()).decodeValue(sessionStorage.getItem('scalr-system-environment-id'));
+                            if (! envId) {
+                                envId = (new Ext.state.Provider()).decodeValue(localStorage.getItem('scalr-system-environment-id'));
+                            }
+
+                            Ext.Ajax.setDefaultHeaders({
+                                'X-Scalr-Interface': 'v2',
+                                'X-Scalr-Token': 'key',
+                                'X-Scalr-EnvId': envId,
+                                'X-Scalr-Scope': window.location.hash.substring(1).substring(0, 9) == '/account/' ? 'account' : ''
+                            });
+                            Ext.Ajax.setExtraParams({});
                             Ext.Ajax.request({
                                 url: '/guest/xInit',
                                 params: { locationHash: document.location.hash, uiStorageTime: tm, 'X-Requested-Token': Ext.util.Cookies.get('scalr_token') },
@@ -205,7 +249,7 @@
                                             	_trackingUserEmail = Scalr.InitParams.context.user.userName;
                                             	_trackEvent("000000132973");
                                             }
-                                            
+
                                             // loading css
                                             (function () {
                                                 var onloadCss = function () {
@@ -262,7 +306,7 @@
                                                                 if (Scalr.InitParams.extjs.length > 0) {
                                                                     var p = Math.ceil((1 - Scalr.InitParams.extjs.length / len) * 50) + 50;
                                                                     updateProgress(p);
-                                                                    Ext.Loader.injectScriptElement(Scalr.InitParams.extjs.shift(), onloadJs);
+                                                                    Ext.Loader.loadScalrScript(Scalr.InitParams.extjs.shift(), onloadJs);
                                                                 } else {
                                                                     updateProgress(100);
                                                                     Scalr.state.pageUiHash = Scalr.InitParams.uiHash;

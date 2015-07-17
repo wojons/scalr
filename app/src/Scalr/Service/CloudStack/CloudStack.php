@@ -418,8 +418,9 @@ class CloudStack
      * List hypervisors
      *
      * @param string $zoneId the zone id for listing hypervisors.
-     * @param string $pagination Pagination
-     * @return HypervisorsList|null
+     * @param PaginationType $pagination Pagination
+     * @return null|HypervisorsList
+     * @throws Exception\RestClientException
      */
     public function listHypervisors($zoneId = null, PaginationType $pagination = null)
     {
@@ -437,7 +438,8 @@ class CloudStack
 
         if ($response->hasError() === false) {
             $resultObject = $response->getResult();
-            if (property_exists($resultObject, 'count') && $resultObject->count > 0) {
+
+            if (!empty($resultObject) && property_exists($resultObject, 'count') && $resultObject->count > 0) {
                 $result = $this->_loadHypervisorsList($resultObject->hypervisor);
             }
         }
@@ -448,8 +450,9 @@ class CloudStack
     /**
      * Lists capabilities
      *
-     * @param string $pagination Pagination
-     * @return CapabilityData|null
+     * @param PaginationType $pagination Pagination
+     * @return null|CapabilityData
+     * @throws Exception\RestClientException
      */
     public function listCapabilities(PaginationType $pagination = null)
     {
@@ -498,7 +501,8 @@ class CloudStack
 
         if ($response->hasError() === false) {
             $resultObject = $response->getResult();
-            if (property_exists($resultObject, 'count') && $resultObject->count > 0) {
+
+            if (!empty($resultObject) && property_exists($resultObject, 'count') && $resultObject->count > 0) {
                 $result = $this->_loadResourceLimitList($resultObject->resourcelimit);
             }
         }
@@ -588,7 +592,8 @@ class CloudStack
 
         if ($response->hasError() === false) {
             $resultObject = $response->getResult();
-            if (property_exists($resultObject, 'count') && $resultObject->count > 0) {
+
+            if (!empty($resultObject) && property_exists($resultObject, 'count') && $resultObject->count > 0) {
                 $result = $this->_loadIpAddressList($resultObject->publicipaddress);
             }
         }
@@ -648,7 +653,8 @@ class CloudStack
 
         if ($response->hasError() === false) {
             $resultObject = $response->getResult();
-            if (property_exists($resultObject, 'count') && $resultObject->count > 0) {
+
+            if (!empty($resultObject) && property_exists($resultObject, 'count') && $resultObject->count > 0) {
                 $result = $this->_loadJobResultList($resultObject->asyncjobs);
             }
         }
@@ -681,7 +687,8 @@ class CloudStack
 
         if ($response->hasError() === false) {
             $resultObject = $response->getResult();
-            if (property_exists($resultObject, 'count') && $resultObject->count > 0) {
+
+            if (!empty($resultObject) && property_exists($resultObject, 'count') && $resultObject->count > 0) {
                 $result = $this->_loadEventList($resultObject->event);
             }
         }
@@ -714,7 +721,8 @@ class CloudStack
 
         if ($response->hasError() === false) {
             $resultObject = $response->getResult();
-            if (property_exists($resultObject, 'count') && $resultObject->count > 0) {
+
+            if (!empty($resultObject) && property_exists($resultObject, 'count') && $resultObject->count > 0) {
                 $result = $this->_loadOsTypeList($resultObject->ostype);
             }
         }
@@ -747,7 +755,8 @@ class CloudStack
 
         if ($response->hasError() === false) {
             $resultObject = $response->getResult();
-            if (property_exists($resultObject, 'count') && $resultObject->count > 0) {
+
+            if (!empty($resultObject) && property_exists($resultObject, 'count') && $resultObject->count > 0) {
                 $result = $this->_loadOsCategoryList($resultObject->oscategory);
             }
         }
@@ -780,7 +789,8 @@ class CloudStack
 
         if ($response->hasError() === false) {
             $resultObject = $response->getResult();
-            if (property_exists($resultObject, 'count') && $resultObject->count > 0) {
+
+            if (!empty($resultObject) && property_exists($resultObject, 'count') && $resultObject->count > 0) {
                 $result = $this->_loadServiceOfferingList($resultObject->serviceoffering);
             }
         }
@@ -813,7 +823,8 @@ class CloudStack
 
         if ($response->hasError() === false) {
             $resultObject = $response->getResult();
-            if (property_exists($resultObject, 'count') && $resultObject->count > 0) {
+
+            if (!empty($resultObject) && property_exists($resultObject, 'count') && $resultObject->count > 0) {
                 $result = $this->_loadDiskOfferingList($resultObject->diskoffering);
             }
         }
@@ -846,7 +857,8 @@ class CloudStack
 
         if ($response->hasError() === false) {
             $resultObject = $response->getResult();
-            if (property_exists($resultObject, 'count') && $resultObject->count > 0) {
+
+            if (!empty($resultObject) && property_exists($resultObject, 'count') && $resultObject->count > 0) {
                 $result = $this->_loadAccountList($resultObject->account);
             }
         }
@@ -869,7 +881,8 @@ class CloudStack
 
         if ($response->hasError() === false) {
             $resultObject = $response->getResult();
-            if (property_exists($resultObject, 'count') && $resultObject->count > 0) {
+
+            if (!empty($resultObject) && property_exists($resultObject, 'count') && $resultObject->count > 0) {
                 $result = $this->_loadProductTypesList($resultObject->producttypes);
             }
         }

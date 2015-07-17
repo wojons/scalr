@@ -1,7 +1,7 @@
 Scalr.regPage('Scalr.ui.tools.aws.s3.distribution', function (loadParams, moduleParams) {
 	var form = Ext.create('Ext.form.Panel', {
 		title: 'Create new Distribution',
-		width: 650,
+		width: 750,
 		scalrOptions: {
 			'modal': true
 		},
@@ -13,7 +13,8 @@ Scalr.regPage('Scalr.ui.tools.aws.s3.distribution', function (loadParams, module
 			xtype: 'fieldset',
 			title: 'Distribution information',
 			defaults: {
-				labelWidth: 145
+				labelWidth: 165,
+                anchor: '100%'
 			},
 			items: [{
 				xtype: 'displayfield',
@@ -22,8 +23,7 @@ Scalr.regPage('Scalr.ui.tools.aws.s3.distribution', function (loadParams, module
 			},{
 				xtype: 'textarea',
 				fieldLabel: 'Comment',
-				name: 'comment',
-				width: 565
+				name: 'comment'
 			}]
 		},{
 			xtype: 'fieldset',
@@ -35,11 +35,11 @@ Scalr.regPage('Scalr.ui.tools.aws.s3.distribution', function (loadParams, module
 				},
 				items: [{
 					xtype: 'radiofield',
-					labelWidth: 130,
+					labelWidth: 150,
 					name: 'domain',
 					fieldLabel: 'Local domain name',
 					checked: true,
-					margin: '0 2 0 0',
+					margin: '0 5 0 0',
 					listeners: {
 						change: function(field, newValue, oldValue, opts){
 							if(newValue)
@@ -65,17 +65,16 @@ Scalr.regPage('Scalr.ui.tools.aws.s3.distribution', function (loadParams, module
 					xtype: 'combo',
 					name: 'zone',
 					itemId: 'comboZone',
-					width: 303,
+					flex: 1,
 					editable: false,
 					allowBlank: false,
-					name: 'zone',
 					store: {
 						fields: ['zone_name'],
 						proxy: {
 							type: 'ajax',
 							reader: {
 								type: 'json',
-								root: 'data'
+								rootProperty: 'data'
 							},
 							url: '/tools/aws/s3/xListZones'
 						}
@@ -91,9 +90,9 @@ Scalr.regPage('Scalr.ui.tools.aws.s3.distribution', function (loadParams, module
 				items: [{
 					xtype: 'radiofield',
 					name: 'domain',
-					labelWidth: 130,
+					labelWidth: 150,
 					fieldLabel: 'Remote domain name',
-					margin: '0 2 0 0',
+					margin: '0 5 0 0',
 					listeners: {
 						change: function(field, newValue, oldValue, opts){
 							if(newValue)
@@ -107,7 +106,7 @@ Scalr.regPage('Scalr.ui.tools.aws.s3.distribution', function (loadParams, module
 					itemId: 'remoteDomain',
 					name: 'remoteDomain',
 					disabled: true,
-					width: 460
+					flex: 1
 				}]
 			}]
 		}],

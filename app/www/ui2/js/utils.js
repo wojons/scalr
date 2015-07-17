@@ -24,15 +24,15 @@ Scalr.utils.CreateProcessBox = function (config) {
         }
 
         Ext.applyIf(progressBar, {
-            xtype: 'progressbar',
+            xtype: 'fieldprogressbar',
             margin: '0 0 24 24',
-            width: 265
+            width: 316
         });
     }
 
 	return Scalr.utils.Window({
 		title: config['msg'],
-		width: 313,
+		width: 364,
         zIndexPriority: 10,
 		items: progressBar || {
             xtype: 'component',
@@ -74,9 +74,9 @@ Scalr.utils.Confirm = function (config) {
 
 	if (config.objects) {
 		config.objects.sort();
-		var r = '<span style="font-weight: 700;">' + config.objects.shift() + '</span>';
+		var r = '<span style="font-family:OpenSansSemiBold">' + config.objects.shift() + '</span>';
 		if (config.objects.length)
-			r = r + ' and <span title="' + config.objects.join("\n") + '" style="font-weight: 700; border-bottom: 1px dashed #000080;">' + config.objects.length + ' others</span>';
+			r = r + ' and <span data-qtip="' + config.objects.join("<br/>") + '" style="font-family:OpenSansSemiBold; border-bottom: 1px dashed #000080;">' + config.objects.length + ' others</span>';
 
 		config.msg = config.msg.replace('%s', r);
 	}
@@ -99,7 +99,7 @@ Scalr.utils.Confirm = function (config) {
 			items: [{
 				xtype: 'button',
 				text: config['ok'] || 'OK',
-				width: 150,
+				minWidth: 150,
 				itemId: 'buttonOk',
                 cls: 'x-btn-defaultfocus',
 				disabled: config['disabled'] || false,
@@ -156,6 +156,9 @@ Scalr.utils.Confirm = function (config) {
         if (config.formSimple)
             form['bodyCls'] = 'x-container-fieldset';
 
+        if (config.formLayout)
+            form['layout'] = config.formLayout;
+
 		if (Ext.isDefined(config.formValidate)) {
 			form.listeners = {
 				validitychange: function (form, valid) {
@@ -178,7 +181,7 @@ Scalr.utils.Confirm = function (config) {
 
 	if (! Ext.isDefined(config.form)) {
 		c.keyMap.addBinding({
-			key: Ext.EventObject.ENTER,
+			key: Ext.event.Event.ENTER,
 			fn: function () {
 				var btn = this.down('#buttonOk');
 				btn.handler.call(btn);
@@ -207,7 +210,7 @@ Scalr.utils.Window = function(config) {
 
 	var c = Ext.widget(config);
 	c.keyMap = new Ext.util.KeyMap(Ext.getBody(), [{
-		key: Ext.EventObject.ESC,
+		key: Ext.event.Event.ESC,
 		fn: function (key, e) {
 			if (this.closeOnEsc && e.within(c.getEl()))
 				this.close();
@@ -217,7 +220,7 @@ Scalr.utils.Window = function(config) {
 
     var setSize = function () {
         if (! this.isDestroyed) {
-            this.maxHeight = Scalr.application.getHeight() - 55 - 5;
+            this.maxHeight = Ext.getBody().getHeight() - 55 - 5;
             this.updateLayout();
             setPosition.call(this);
         }
@@ -225,10 +228,10 @@ Scalr.utils.Window = function(config) {
 
     var setPosition = function() {
         if (!this.hidden && !this.isDestroyed) {
-            var windowSize = Scalr.application.getSize();
+            var windowSize = Ext.getBody().getSize();
             var size = this.getSize();
             var xPosition = (windowSize.width - size.width) / 2;
-            var yPosition = (windowSize.height - size.height) / 2;
+            var yPosition = (windowSize.height - size.height) / 2.2;
 
             if (this.alignTop) {
                 this.setY(55);
@@ -247,14 +250,16 @@ Scalr.utils.Window = function(config) {
     c.on('boxready', setSize);
     c.on('resize', setPosition);
     c.on('show', setPosition);
-    Ext.EventManager.onWindowResize(setSize, c);
+    Ext.on('resize', setSize, c);
 	c.on('destroy', function () {
 		this.keyMap.destroy();
-        Ext.EventManager.removeResizeListener(setSize, this);
+        Ext.un('resize', setSize, this);
 	});
 
-	c.show(config.animationTarget || null);
-    c.toFront();
+    if (! c.hidden) {
+        c.show(config.animationTarget || null);
+        c.toFront();
+    }
 
 	return c;
 };
@@ -381,7 +386,7 @@ Scalr.utils.Request = function (config) {
 };
 
 Scalr.utils.UserLoadFile = function(path) {
-    path = Ext.String.urlAppend(path, 'X-Requested-Token=' + Scalr.flags.specialToken);
+    path = Ext.String.urlAppend(path, Ext.Object.toQueryString(Scalr.application.getExtraParams()));
     var iframeEl = Ext.getBody().createChild({
         tag: 'iframe',
         src: path,
@@ -451,6 +456,13 @@ Scalr.utils.PostError = function(params) {
     } else
         return;
 
+    var plugins = [];
+    Ext.each(navigator.plugins, function(pl) {
+        plugins.push(pl.name);
+    });
+
+    params['message'] = params['message'] + "\n\nplugins:\n" + plugins.join(', ');
+
     Scalr.storage.set('debug-enable', true, true);
 	Scalr.Request({
 		url: '/guest/xPostError',
@@ -473,8 +485,8 @@ Scalr.utils.IsEqualValues = function (obj1, obj2) {
 
 Scalr.utils.getGravatarUrl = function (emailHash, size) {
 	size = size || 'small';
-	var sizes = {small: 48, large: 92},
-		defaultIcon = window.location.protocol + '//' + window.location.hostname + '/ui2/js/extjs-4.2/theme/images/topmenu/avatar_default_' + size + '.png';
+	var sizes = {small: 48, large: 102},
+		defaultIcon = window.location.protocol + '//' + window.location.hostname + '/ui2/js/extjs-5.0/theme/images/topmenu/avatar-default-' + size + '.png';
 	return emailHash ? 'https://gravatar.com/avatar/' + emailHash + '?d=' + encodeURIComponent(defaultIcon) + '&s=' + sizes[size] : defaultIcon;
 }
 
@@ -490,7 +502,7 @@ Scalr.utils.getStringHash = function(str){
 Scalr.utils.getColorById = function(id, colorSetName) {
     var colorSets = {
             default: ['D90000', '00B3D9', 'EC8200', '839A01', 'E916E3', '0000B9', 'B08500', '006C1C', '000000', '8B02F0'],
-            clouds: ['FD8D11', 'D316CF', '0069D2', 'B56F04', '0C7509', '65A615', '05A4D8', 'DD0202', '3691F3', '555555', '6262E8'],
+            clouds: ['FD8D11', 'D316CF', '0069D2', 'B56F04', '0C7509', '65A615', '05A4D8', 'DD0202', '3691F3', '555555', '6262E8', 'B2B200'],
             farms: ['FD8D11', 'D316CF', '0069D2', 'B56F04', '0C7509', '65A615', '05A4D8', 'DD0202', '3691F3', '555555', '6262E8', 'B2B200', '000000', '8F20FF', '00CC00', 'B25900', '816D01', 'FF4695', '009F9F', '0000FD', '6F0AC0', '00468C', '00C695', '016B7E', 'BF8BFE', 'D19B89', 'C4A702', 'A40045', 'AAAAAA', '8B8B8B']
         },
         cloudsColorMap = {
@@ -500,11 +512,16 @@ Scalr.utils.getColorById = function(id, colorSetName) {
             rackspacengus: 3,
             rackspacenguk: 3,
             ecs: 4,
+            vio: 4,
             eucalyptus: 5,
+            hpcloud: 5,
             cloudstack: 6,
             openstack: 7,
             ocs: 9,
-            nebula: 10
+            verizon: 9,
+            nebula: 10,
+            cisco: 10,
+            mirantis: 11
         },
         colorSet = colorSets[colorSetName || 'default'],
         color;
@@ -522,7 +539,7 @@ Scalr.utils.getColorById = function(id, colorSetName) {
     return color;
 }
 
-Scalr.utils.beautifyOsFamily = function(osfamily) {
+Scalr.utils.beautifyOsFamily = function(family) {
     var map = {
         unknown: 'Unknown',
         ubuntu: 'Ubuntu',
@@ -537,7 +554,39 @@ Scalr.utils.beautifyOsFamily = function(osfamily) {
         scientific: 'Scientific'
     };
 
-    return map[osfamily] || osfamily;
+    return map[family] || family;
+}
+
+Scalr.utils.getOsList = function(familyFilter) {
+    var list = [];
+    Ext.each(Scalr.os, function(os){
+        if (!familyFilter || familyFilter === os.family) {
+            list.push(os);
+        }
+    });
+    return list;
+}
+
+Scalr.utils.getOsFamilyList = function() {
+    var list = [];
+    Ext.each(Scalr.os, function(os){
+        Ext.Array.include(list, os.family);
+    });
+    return Ext.Array.map(list, function(family){
+        return {id: family, name: Scalr.utils.beautifyOsFamily(family)};
+    });
+}
+
+
+Scalr.utils.getOsById = function(osId, field) {
+    var result;
+    Ext.each(Scalr.os, function(os){
+        if (os.id === osId) {
+            result = field ? os[field] : os;
+            return false;
+        }
+    });
+    return result;
 }
 
 Scalr.utils.beautifySoftware = function(name) {
@@ -592,9 +641,28 @@ Scalr.utils.beautifyBehavior = function(name, full) {
     return map[name] || name;
 }
 
+Scalr.utils.beautifyEngineName = function (engineName) {
+    var map = {
+        'mysql': 'MySQL',
+        'oracle-se1': 'Oracle SE One',
+        'oracle-se': 'Oracle SE',
+        'oracle-ee': 'Oracle EE',
+        'sqlserver-ee': 'Microsoft SQL Server EE',
+        'sqlserver-se': 'Microsoft SQL Server SE',
+        'sqlserver-ex': 'Microsoft SQL Server EX',
+        'sqlserver-web': 'Microsoft SQL Server WEB',
+        'postgres': 'PostgreSQL'
+    };
+
+    var fullEngineName = map[engineName];
+
+    return !Ext.isEmpty(fullEngineName) ? fullEngineName : engineName;
+};
+
 //checks resource/permission against current context acl
 Scalr.utils.isAllowed = function(resource, permission){
     if (Scalr.user['type'] === 'AccountOwner') return true;
+    if (Scalr.user['type'] === 'ScalrAdmin') return true;
     var value = Scalr.acl[resource],
         access = value !== undefined;
     if (permission !== undefined && access) {
@@ -612,7 +680,7 @@ Scalr.utils.isAdmin = function(){
 }
 
 Scalr.utils.isOpenstack = function(platform, pureOnly) {
-    var list = ['openstack', 'ecs', 'ocs', 'nebula'];
+    var list = ['openstack', 'ecs', 'ocs', 'nebula', 'mirantis', 'vio', 'verizon', 'cisco', 'hpcloud'];
     if (!pureOnly) {
         list.push('rackspacengus', 'rackspacenguk');
     }
@@ -638,10 +706,24 @@ Scalr.utils.getPlatformName = function(platform, fix) {
     if (fix === true) {
         if (platform.indexOf('rackspacenguk') === 0) {
             name = '<span class="small">' + name.replace(' ', '<br/>') + '</span>';
+        } else if (platform === 'rackspace') {
+            name = '<span class="small">' + name.replace(' ', '<br/>') + '</span>';
         } else if (platform === 'ecs') {
             name = '<span class="small">' + name.replace(/\s(suite)$/i, '<br/>$1') + '</span>';
         } else if (platform === 'ocs') {
             name = '<span class="small">CloudScaling<br />OCS</span>';
+        } else if (platform === 'nebula') {
+            name = '<span class="small">Nebula<br />Openstack</span>';
+        } else if (platform === 'mirantis') {
+            name = '<span class="small">Mirantis<br />Openstack</span>';
+        } else if (platform === 'vio') {
+            name = '<span class="small">VMWare<br />VIO</span>';
+        } else if (platform === 'cisco') {
+            name = '<span class="small">Cisco<br />Openstack</span>';
+        } else if (platform === 'hpcloud') {
+            name = '<span class="small">HP Helion<br />Public Cloud</span>';
+        } else if (platform === 'verizon') {
+            name = '<span class="small">Verizon Cloud</span>';
         } else if (platform === 'gce') {
             name = '<span class="small">' + name.replace(/(Google)/i, '$1<br/>') + '</span>';
         }
@@ -667,57 +749,35 @@ Scalr.utils.loadInstanceTypes = function(platform, cloudLocation, callback) {
     );
 }
 
-Scalr.utils.loadCloudLocations = function(platforms, callback) {
-    var locations = {}, platformsToLoad = [];
-    if (!platforms) {
-        platforms = [];
-        Ext.Object.each(Scalr.platforms, function(key, value){
-            if (value.enabled) platforms.push(key);
-        });
-    } else if (Ext.isString(platforms)) {
-        platforms = [platforms];
-    }
+Scalr.utils.loadCloudLocations = function(platform, callback, progressBox) {
+    if (!Scalr.platforms[platform]) callback(false);
 
-    Ext.each(platforms, function(platform){
-        var data = Scalr.platforms[platform];
-        if (data) {
-            if (data.locations === undefined) {
-                platformsToLoad.push(platform);
+    Scalr.cachedRequest.load(
+        {
+            url: '/platforms/xGetLocations',
+            params: {platforms: Ext.encode([platform])}
+        },
+        function(data, status, cacheId){
+            if (status && data.locations[platform] !== undefined) {
+                Scalr.platforms[platform].locations = data.locations[platform];
+                callback(Ext.apply({}, Scalr.platforms[platform].locations));
             } else {
-                locations[platform] = data.locations;
+                callback(false);
             }
-        }
-    });
-
-    if (platformsToLoad.length > 0) {
-        Scalr.Request({
-            processBox: {type: 'action', msg: 'Loading locations...'},
-            url:  '/platforms/xGetLocations',
-            params: {platforms: Ext.encode(platformsToLoad)},
-            success: function (result, response) {
-                Ext.Object.each(result.locations, function(platform, value){
-                    if (Ext.isObject(Scalr.platforms[platform])) {
-                        Scalr.platforms[platform]['locations'] = value;
-                    }
-                });
-                callback(Ext.apply(locations, result.locations), true);
-            },
-            failure: function() {
-                callback(null, false);
-            }
-        });
-    } else {
-        callback(locations, true);
-    }
-}
+        },
+        this,
+        0,
+        progressBox
+    );
+};
 
 Scalr.utils.getMinStorageSizeByIops = function(iops) {
     var minSize = Math.ceil(iops/Scalr.constants.ebsMaxIopsSizeRatio);
-    return Scalr.constants.ebsMinProIopsStorageSize > minSize ? Scalr.constants.ebsMinProIopsStorageSize : minSize;
+    return Scalr.constants.ebsIo1MinStorageSize > minSize ? Scalr.constants.ebsIo1MinStorageSize : minSize;
 }
 
 Scalr.utils.getRoleCls = function(context) {
-    var b = context['behaviors'],
+    var b = context['behaviors'] || [],
         behaviors = [
             "cf_cchm", "cf_dea", "cf_router", "cf_service",
             "rabbitmq", "www",
@@ -728,6 +788,9 @@ Scalr.utils.getRoleCls = function(context) {
         ];
 
     if (b) {
+        if (Ext.isString(b)) {
+            b = b.split(',');
+        }
         //Handle CF all-in-one role
         if (Ext.Array.difference(['cf_router', 'cf_cloud_controller', 'cf_health_manager', 'cf_dea'], b).length === 0) {
             return 'cf-all-in-one';
@@ -873,14 +936,11 @@ Scalr.utils.Quarters = {
         }
 
         return period;
-
     }
-
 };
 
-
 Scalr.utils.saveSpecialToken = function(specialToken) {
-    Ext.Ajax.extraParams['X-Requested-Token'] = Scalr.flags.specialToken = specialToken;
+    Ext.Ajax.setExtraParams(Ext.apply(Ext.Ajax.getExtraParams(), {'X-Requested-Token' : Scalr.flags.specialToken = specialToken }));
 };
 
 Scalr.utils.ConfirmPassword = function(cb) {
@@ -927,7 +987,7 @@ Scalr.utils.ConfirmPassword = function(cb) {
                 } else {
                     this.close();
                 }
-            },
+            }
         },
         success: function(values, form) {
             cb(values['currentPassword']);
@@ -936,19 +996,916 @@ Scalr.utils.ConfirmPassword = function(cb) {
     });
 };
 
+Scalr.utils.getModel = function(config) {
+    return Ext.define(null, Ext.apply({
+        extend: 'Ext.data.ModelWithInternalId',
+        proxy: 'object'
+    }, config));
+};
+
+Scalr.utils.authWindow = function(flags) {
+    var submitOnEnter = function(field, e) {
+        if (e.getKey() == e.ENTER) {
+            field.up('form').down('#buttonSubmit').handler();
+        }
+    };
+
+    return Scalr.utils.Window({
+        xtype: 'form',
+        closeOnEsc: false,
+        closeAction: 'hide',
+        hidden: true,
+        width: 500,
+        layout: 'anchor',
+        fieldDefaults: {
+            anchor: '100%',
+            labelWidth: 80
+        },
+        items: {
+            xtype: 'fieldset',
+            title: '<img src="' + Ext.BLANK_IMAGE_URL + '" class="x-icon-scalr" style="vertical-align: middle">&nbsp;&nbsp;Welcome',
+            cls: 'x-fieldset-separator-none x-fieldset-no-bottom-padding',
+            items: [{
+                xtype: 'displayfield',
+                value: 'Your session has timed out. Please log back in.',
+                hidden: true,
+                itemId: 'warningReLogin'
+            }, {
+                xtype: 'textfield',
+                name: 'scalrLogin',
+                fieldLabel: flags['authMode'] == 'ldap' ? 'Login' : 'Email',
+                allowBlank: false,
+                listeners: {
+                    afterrender: function() {
+                        this.inputEl.destroy();
+                        this.inputEl = this.inputWrap.appendChild('textfield-user-login-inputEl');
+                    },
+                    specialkey: submitOnEnter
+                }
+            }, {
+                xtype: 'textfield',
+                inputType: 'password',
+                name: 'scalrPass',
+                fieldLabel: 'Password',
+                allowBlank: false,
+                listeners: {
+                    afterrender: function() {
+                        this.inputEl.destroy();
+                        this.inputEl = this.inputWrap.appendChild('textfield-user-password-inputEl');
+                    },
+                    specialkey: submitOnEnter
+                }
+            }, {
+                xtype: 'combobox',
+                store: {
+                    fields: [ 'id', 'name', 'org', 'dtadded', 'owner' ],
+                    proxy: 'object'
+                },
+                queryMode: 'local',
+                valueField: 'id',
+                displayField: 'name',
+                itemId: 'accountId',
+                name: 'accountId',
+                hidden: true,
+                disabled: true,
+                fieldLabel: 'Account',
+                editable: false,
+                allowBlank: false,
+                listConfig: {
+                    cls: 'x-boundlist-alt',
+                    getInnerTpl: function () {
+                        return '{name}<tpl if="org"> [{org}]</tpl><tpl if="owner"> [Owner: {owner}]</tpl> [Created on {dtadded}]'
+                    }
+                },
+                listeners: {
+                    specialkey: submitOnEnter
+                }
+            }, {
+                xtype: 'container',
+                layout: 'hbox',
+                itemId: 'tfaGglCode',
+                hidden: true,
+                disabled: true,
+                items: [{
+                    xtype: 'textfield',
+                    fieldLabel: '2FA Code',
+                    name: 'tfaGglCode',
+                    allowBlank: false,
+                    flex: 1,
+                    listeners: {
+                        specialkey: submitOnEnter
+                    }
+                }, {
+                    xtype: 'buttonfield',
+                    margin: '0 0 0 6',
+                    width: 100,
+                    enableToggle: true,
+                    text: 'Reset 2FA',
+                    name: 'tfaGglReset',
+                    toggleHandler: function(el, state) {
+                        if (state)
+                            Scalr.message.InfoTip('Please enter reset code to disable two-factor authentication', this.prev().el);
+
+                        this.prev().setFieldLabel(state ? 'Reset code' : '2FA Code');
+                    }
+                }]
+            }, {
+                xtype: 'checkbox',
+                name: 'scalrKeepSession',
+                checked: true,
+                hidden: flags['authMode'] == 'ldap',
+                boxLabel: 'Remember me'
+            }, {
+                xtype: 'component',
+                height: 67,
+                hidden: true,
+                html:
+                    '<div id="recaptcha_widget" style="margin-left: 75px;">' +
+                        '<div style="float: left; border-radius: 3px; width: 300px; overflow: hidden;">' +
+                            '<div id="recaptcha_image"></div>' +
+                            '<input type="text" id="recaptcha_response_field" style="display: none" />' +
+                        '</div>' +
+                        '<div style="float: left; margin-left: 4px; width: 24px; height: 100%;">' +
+                            '<a href="javascript:Recaptcha.reload()" style="background: url(/ui2/images/ui/guest/login/captcha.png) no-repeat 0px 0px; width: 24px; height: 23px; display: block; margin-top: 3px;" title="Get another CAPTCHA"></a>' +
+                            '<a href="javascript:Recaptcha.showhelp()" style="background: url(/ui2/images/ui/guest/login/captcha.png) no-repeat 0px -23px; width: 24px; height: 23px; display: block; margin-top: 7px;" title="Help"></a>' +
+                        '</div>' +
+                    '</div>',
+                listeners: {
+                    afterrender: function() {
+                        if (flags['recaptchaPublicKey']) {
+                            RecaptchaOptions = {
+                                theme: 'custom',
+                                custom_theme_widget: 'recaptcha_widget'
+                            };
+
+                            Ext.Loader.loadScalrScript('https://www.google.com/recaptcha/api/challenge?k=' + Scalr.flags['recaptchaPublicKey'], function() {
+                                Ext.Loader.loadScalrScript(RecaptchaState.server + 'js/recaptcha.js', Ext.emptyFn);
+                            });
+                        }
+                    }
+                }
+            }, {
+                xtype: 'textfield',
+                name: 'scalrCaptcha',
+                allowBlank: false,
+                fieldLabel: 'Captcha',
+                hidden: true,
+                disabled: true,
+                listeners: {
+                    show: function() {
+                        this.prev().show();
+                    },
+                    hide: function() {
+                        this.prev().hide();
+                    },
+                    specialkey: submitOnEnter
+                }
+            }, {
+                xtype: 'hiddenfield',
+                name: 'scalrCaptchaChallenge'
+            }, {
+                xtype: 'hiddenfield',
+                name: 'userTimezone',
+                value: (new Date()).getTimezoneOffset()
+            }]
+        },
+
+        dockedItems: [{
+            xtype: 'container',
+            dock: 'bottom',
+            cls: 'x-docked-buttons',
+            layout: {
+                type: 'hbox',
+                pack: 'center'
+            },
+            items: [{
+                xtype: 'button',
+                text: 'Login',
+                itemId: 'buttonSubmit',
+                handler: function () {
+                    var form = this.up('form');
+                    if (form.getForm().isValid()) {
+                        if (window.RecaptchaState)
+                            form.down('[name="scalrCaptchaChallenge"]').setValue(RecaptchaState.challenge);
+
+                        Scalr.Request({
+                            processBox: {
+                                type: 'action'
+                            },
+                            scope: this,
+                            form: form.getForm(),
+                            url: '/guest/xLogin',
+                            success: function (data) {
+                                form.hide();
+
+                                if (data.specialToken) {
+                                    Scalr.utils.saveSpecialToken(data.specialToken);
+                                }
+
+                                if (Scalr.user.userId) {
+                                    if (data.userId == Scalr.user.userId) {
+                                        if (Scalr.state.userNeedRefreshPageAfter) {
+                                            window.onhashchange(true);
+                                        } else if (Scalr.state.userNeedRefreshStoreAfter) {
+                                            if (Scalr.application.layout.activeItem) {
+                                                Scalr.application.layout.activeItem.fireEvent('reloadstore');
+                                            }
+                                        }
+                                    } else {
+                                        Scalr.application.updateContext(null, false, {
+                                            'X-Scalr-UserId': data.userId
+                                        });
+                                    }
+                                } else {
+                                    Scalr.application.updateContext();
+                                }
+
+                                Scalr.state.userNeedLogin = false;
+                                Scalr.state.userNeedRefreshPageAfter = false;
+                                Scalr.state.userNeedRefreshStoreAfter = false;
+
+                                form.down('#accountId').hide().disable().reset();
+                                form.down('#tfaGglCode').hide().child('[name="tfaGglCode"]').disable().reset();
+                                form.down('[name="scalrLogin"]').reset();
+                                form.down('[name="scalrPass"]').reset();
+                                form.down('#warningReLogin').hide();
+                            },
+                            failure: function (data) {
+                                if (data) {
+                                    if (data['loginattempts'] && data['loginattempts'] > 2) {
+                                        form.down('[name="scalrCaptcha"]').show().enable().reset();
+
+                                        if (Ext.isObject(Recaptcha))
+                                            Recaptcha.reload();
+                                    } else {
+                                        form.down('[name="scalrCaptcha"]').hide().disable();
+                                    }
+
+                                    if (data['accounts']) {
+                                        var field = this.up('form').down('#accountId');
+                                        field.store.loadData(data['accounts']);
+                                        field.reset();
+                                        field.show();
+                                        field.enable();
+                                    }
+
+                                    if (data['tfaGgl']) {
+                                        form.down('#tfaGglCode').enable().show().child('[name="tfaGglCode"]').focus();
+                                    }
+                                }
+                            }
+                        });
+                    }
+                }
+            }, {
+                xtype: 'button',
+                text: 'Forgot password?',
+                hidden: flags['authMode'] == 'ldap',
+                handler: function () {
+                    Scalr.Request({
+                        confirmBox: {
+                            title: 'Recover password',
+                            closeOnSuccess: true,
+                            ok: 'Reset my password',
+                            formWidth: 450,
+                            formValidate: true,
+                            form: [{
+                                xtype: 'fieldset',
+                                cls: 'x-fieldset-separator-none',
+                                defaults: {
+                                    anchor: '100%'
+                                },
+                                items: [{
+                                    xtype: 'textfield',
+                                    fieldLabel: 'E-mail',
+                                    labelWidth: 45,
+                                    anchor: '100%',
+                                    vtype: 'email',
+                                    name: 'email',
+                                    value: this.up('form').down('[name=scalrLogin]').getValue(),
+                                    allowBlank: false
+                                }]
+                            }]
+                        },
+                        processBox: {
+                            type: 'action',
+                            msg: 'Sending email ...'
+                        },
+                        url: '/guest/xResetPassword'
+                    });
+                }
+            }]
+        }],
+        listeners: {
+            boxready: function () {
+                if (Ext.get('body-login-container'))
+                    Ext.get('body-login-container').remove();
+            },
+            show: function () {
+                var o, me = this;
+
+                Scalr.state.pageSuspend = true;
+
+                if (window.location.search && (o = Ext.Object.fromQueryString(window.location.search)) && o['resetPasswordHash']) {
+                    Scalr.Request({
+                        processBox: {
+                            type: 'action'
+                        },
+                        params: {
+                            hash: o['resetPasswordHash']
+                        },
+                        url: '/guest/xUpdatePasswordValidate',
+                        success: function(data) {
+                            Scalr.Request({
+                                confirmBox: {
+                                    title: 'New password',
+                                    ok: 'Update my password',
+                                    formWidth: 450,
+                                    formValidate: true,
+                                    form: [{
+                                        xtype: 'fieldset',
+                                        cls: 'x-fieldset-separator-none',
+                                        defaults: {
+                                            labelWidth: 110,
+                                            anchor: '100%'
+                                        },
+                                        items: [{
+                                            xtype: 'displayfield',
+                                            fieldLabel: 'Email',
+                                            value: data['email']
+                                        }, {
+                                            xtype: 'textfield',
+                                            inputType: 'password',
+                                            fieldLabel: 'New password',
+                                            name: 'password',
+                                            allowBlank: false,
+                                            validator: function(value) {
+                                                if (value.length < 6)
+                                                    return "Password should be longer than 6 chars";
+
+                                                return true;
+                                            }
+                                        }, {
+                                            xtype: 'textfield',
+                                            fieldLabel: 'Confirm',
+                                            inputType: 'password',
+                                            name: 'password2',
+                                            allowBlank: false,
+                                            validator: function(value) {
+                                                if (value != this.prev('[name="password"]').getValue())
+                                                    return "Passwords doesn't match";
+
+                                                return true;
+                                            }
+                                        }]
+                                    }]
+                                },
+                                processBox: {
+                                    type: 'action',
+                                    msg: 'Sending email ...'
+                                },
+                                url: '/guest/xUpdatePassword',
+                                params: {
+                                    hash: o['resetPasswordHash']
+                                },
+                                success: function(data) {
+                                    var o = Ext.Object.fromQueryString(window.location.search), s;
+                                    delete o['resetPasswordHash'];
+                                    s = Ext.Object.toQueryString(o);
+                                    s = s ? '?' + s : '';
+
+                                    history.replaceState(null, null, document.location.pathname + s + document.location.hash);
+
+                                    me.down('[name="scalrPass"]').setValue('');
+                                    Scalr.message.InfoTip(data['message'], me.down('[name="scalrLogin"]').setValue(data['email']).focus());
+                                }
+                            });
+                        }
+                    });
+                } else {
+                    if (Scalr.state.userNeedLogin)
+                        me.down('#warningReLogin').show();
+
+                    me.down('[name="scalrLogin"]').focus();
+                }
+            },
+            hide: function() {
+                Scalr.state.pageSuspend = false;
+            }
+        }
+    });
+};
+
+Scalr.utils.timeoutHandler = {
+    defaultTimeout: 60000, // default delay between checks, default = 60000
+    timeoutRun: 60000, // delay before next check (changeable), default = 60000
+    timeoutRequest: 5000, // maximum time execution for ajax check request, default = 5000
+
+    schedule: function (runNow) {
+        var me = this;
+        clearTimeout(me.timeoutId);
+        if (runNow) {
+            me.run();
+        } else {
+            me.timeoutId = Ext.Function.defer(me.run, me.timeoutRun, me);
+        }
+    },
+
+    run: function() {
+        var checkAjax = Scalr.user.userId && !Scalr.state.userNeedLogin, params = {}, post = false;
+
+        if (checkAjax) {
+            params = Scalr.utils.CloneObject(Scalr.user);
+
+            var hash = Scalr.storage.hash(), time = (new Date()).getTime();
+            if (hash != Scalr.storage.get('system-hash')) {
+                Scalr.debug.dump++;
+                Scalr.storage.set('system-time', time);
+                Scalr.storage.set('system-hash', hash);
+                params['uiStorage'] = Ext.encode({
+                    dump: Scalr.storage.dump(true),
+                    time: time
+                });
+                post = true;
+                console.log('update storage data on server');
+            } else {
+                Scalr.debug.pass++;
+                delete params['uiStorage'];
+            }
+        }
+
+        Ext.Ajax.request({
+            url: checkAjax ? '/guest/xPerpetuumMobile' : '/ui2/js/connection.js',
+            params: params,
+            method: post ? 'POST' : 'GET',
+            timeout: this.timeoutRequest,
+            scope: this,
+            hideErrorMessage: true,
+            callback: function (options, success, response) {
+                if (success) {
+                    try {
+                        response = Ext.decode(response.responseText);
+
+                        if (response.success != true) {
+                            if (response.success == false && response.errorMessage != '') {
+                                Scalr.message.Error(response.errorMessage);
+                            } else if (response && response.s == 'Connected') {
+                                // connection.js
+                            } else {
+                                throw 'False';
+                            }
+                        }
+
+                        this.hidePopup();
+                        this.timeoutRun = this.defaultTimeout;
+
+                        if (! response.isAuthenticated) {
+                            Scalr.state.userNeedLogin = true;
+                            Scalr.utils.authWindow.show();
+                        } else if (! response.equal) {
+                            document.location.reload();
+                            return;
+                        } else {
+                            if (Scalr.state.pageSuspend) {
+                                Scalr.state.pageSuspend = false;
+                                Scalr.event.fireEvent('connectionup');
+
+                                if (Scalr.state.userNeedRefreshPageAfter) {
+                                    window.onhashchange(true);
+                                } else if (Scalr.state.userNeedRefreshStoreAfter) {
+                                    if (Scalr.application.layout.activeItem) {
+                                        Scalr.application.layout.activeItem.fireEvent('reloadstore');
+                                    }
+                                }
+
+                                Scalr.state.userNeedRefreshPageAfter = false;
+                                Scalr.state.userNeedRefreshStoreAfter = false;
+                            }
+
+                            Scalr.event.fireEvent('update', 'lifeCycle', response);
+                        }
+                    } catch (e) {
+                        console.log(e);
+                    }
+                }
+
+                if (success === true || response.aborted === true || response.timedout === true) {
+                    if (this.hasPopup())
+                        this.showPopup(); // update timer
+
+                } else {
+                    // lock page
+                    if (! Scalr.state.pageSuspend) {
+                        Scalr.state.pageSuspend = true;
+                        Scalr.event.fireEvent('connectiondown');
+                    }
+
+                    this.timeoutRun += 6000;
+                    if (this.timeoutRun > 60000)
+                        this.timeoutRun = 60000;
+
+                    if (! this.hasPopup())
+                        this.timeoutRun = 5000;
+
+                    this.showPopup();
+                }
+
+                this.schedule();
+            }
+        });
+    },
+
+    hasPopup: function() {
+        return !! this.popup;
+    },
+
+    showPopup: function() {
+        var me = this;
+
+        if (! me.popup) {
+            me.popup = Scalr.utils.Window({
+                xtype: 'form',
+                closeOnEsc: false,
+                width: 500,
+                layout: 'anchor',
+                alignTop: true,
+                items: [{
+                    xtype: 'fieldset',
+                    items: [{
+                        xtype: 'container',
+                        layout: 'hbox',
+                        items: [{
+                            xtype: 'displayfield',
+                            flex: 1,
+                            itemId: 'timer',
+                            value: this.timeoutRun/1000,
+                            renderer: function(value) {
+                                return value ? 'Not connected to Scalr. Connecting in ' + value + ' seconds' : 'Not connected. Trying now';
+                            }
+                        }, {
+                            xtype: 'button',
+                            text: 'Try now',
+                            handler: function() {
+                                this.prev().setValue(0);
+                                me.schedule(true);
+                            }
+                        }]
+                    }]
+                }],
+                createTimer: function (value) {
+                    var me = this, field = me.down('#timer');
+                    clearInterval(me.timerId);
+                    field.setValue(value);
+
+                    this.timerId = setInterval(function() {
+                        var value = field.getValue() - 1;
+                        if (value < 0)
+                            value = 0;
+
+                        field.setValue(value);
+                    }, 1000);
+                },
+                listeners: {
+                    destroy: function() {
+                        clearInterval(this.timerId);
+                    }
+                }
+            });
+            me.popup.show();
+        }
+
+        me.popup.createTimer(me.timeoutRun / 1000);
+    },
+
+    hidePopup: function() {
+        var me = this;
+        if (me.popup) {
+            me.popup.destroy();
+            me.popup = null;
+        }
+    }
+};
+
+Scalr.utils.getUrlPrefix = function() {
+    switch (Scalr.scope) {
+        case 'scalr':
+            return '/admin';
+            break;
+        case 'account':
+            return '/account';
+            break;
+        default:
+            return '';
+            break;
+    }
+};
+
+// added with ExtJS 5 release at March 2015. Remove after 6 months
+Scalr.utils.fillFavorites = function() {
+    if (Scalr.storage.get('system-favorites')) {
+        // we have old favorites, convert them before use
+        var result = [],
+            cache = {
+                '#/logs/api': { text: 'API Log', href:  '#/logs/api', stateId: 'grid-logs-api-view' },
+                '#/logs/events': { text: 'Event Log', href: '#/logs/events', stateId: 'grid-logs-events-view' },
+                '#/logs/scripting': { text: 'Scripting Log', href: '#/logs/scripting', stateId: 'grid-logs-scripting-view' },
+                '#/logs/system': { text: 'System Log', href: '#/logs/system', stateId: 'grid-logs-system-view' },
+                '#/roles/manager': { text: 'Roles', href: '#/roles', stateId: 'grid-roles-manager' },
+                '#/farms/view': { text: 'Farms', href: '#/farms', stateId: 'grid-farms-view' },
+                '#/dnszones/view': { text: 'DNS Zones', href: '#/dnszones', stateId: 'grid-dnszones-view' },
+                '#/schedulertasks/view': { text: 'Tasks Scheduler', href: '#/schedulertasks', stateId: 'grid-schedulertasks-view' },
+                '#/services/ssl/certificates/view': { text: 'SSL Certificates', href: '#/services/ssl/certificates', stateId: 'grid-services-ssl-certificates-view' },
+                '#/scaling/metrics/view': { text: 'Custom Scaling Metrics', href: '#/scaling/metrics', stateId: 'grid-scaling-metrics-view' },
+                '#/bundletasks/view': { text: 'Bundle Tasks', href: '#/bundletasks', stateId: 'grid-bundletasks-view' },
+                '#/sshkeys/view': { text: 'SSH Keys', href: '#/sshkeys', stateId: 'grid-sshkeys-view' },
+                '#/scripts/view': { text: 'Scripts', href: '#/scripts', stateId: 'grid-scripts-view' },
+                '#/servers/view': { text: 'Servers', href: '#/servers', stateId: 'grid-servers-view' },
+                '#/scripts/events/view': { text: 'Custom Events', href: '#/scripts/events', stateId: 'grid-scripts-events-view' },
+                '#/images/view': { text: 'Images', href: '#/images', stateId: 'grid-images-view' },
+                '#/db/backups': { text: 'DB Backups', href: '#/db/backups', stateId: 'grid-db-backups-view' },
+                '#/services/configurations/presets/view': { text: 'Server Config Presets', href: '#/services/configurations/presets', stateId: 'grid-services-configurations-presets-view' },
+                '#/services/apache/vhosts/view': { text: 'Apache Virtual Hosts', href: '#/services/apache/vhosts', stateId: 'grid-apache-vhosts-view' },
+
+                '#/tools/aws/ec2/ebs/snapshots': { text: 'EBS Snapshots', href: '#/tools/aws/ec2/ebs/snapshots', stateId: 'grid-tools-aws-ec2-ebs-snapshots' },
+                '#/tools/aws/ec2/ebs/volumes': { text: 'EBS volumes', href: '#/tools/aws/ec2/ebs/volumes', stateId: 'grid-tools-aws-ec2-ebs-volumes' },
+                '#/tools/aws/ec2/elb': { text: 'AWS ELB', href: '#/tools/aws/ec2/elb', stateId: 'grid-tools-aws-ec2-elb-view' },
+                '#/tools/aws/ec2/eips': { text: 'AWS EIPs', href: '#/tools/aws/ec2/eips', stateId: 'grid-tools-aws-ec2-eips-view' },
+                '#/tools/aws/rds/instances': { text: 'RDS instances', href: '#/tools/aws/rds/instances', stateId: 'grid-tools-aws-rds-instances-view' },
+                '#/tools/aws/route53': { text: 'Route 53', href: '#/tools/aws/route53', stateId: 'grid-tools-aws-route53-view' },
+                '#/tools/rackspace/limits': { text: 'Rackspace Limits', href: '#/tools/rackspace/limits', stateId: 'grid-tools-rackspace-limits' },
+                '#/tools/openstack/lb/members': { text: 'LB Monitors', href: '#/tools/openstack/lb/members', stateId: 'grid-tools-openstack-lb-members-view' },
+                '#/tools/openstack/lb/pools': { text: 'LB Pools', href: '#/tools/openstack/lb/pools', stateId: 'grid-tools-openstack-lb-pools-view' },
+                '#/tools/gce/disks': { text: 'GCE Persistent disks', href: '#/tools/gce/disks', stateId: 'grid-tools-gce-disks-view' },
+                '#/tools/gce/addresses': { text: 'GCE Static IPs', href: '#/tools/gce/addresses', stateId: 'grid-tools-gce-addresses-view' },
+                '#/tools/gce/snapshots': { text: 'GCE Snapshots', href: '#/tools/gce/snapshots', stateId: 'grid-tools-gce-snapshots-view' }
+            };
+
+        Ext.each(Scalr.storage.get('system-favorites'), function(item) {
+            if (item.href && item.href in cache) {
+                result.push(cache[item.href]);
+            }
+        });
+
+        Scalr.storage.set('system-favorites-environment', result);
+        Scalr.storage.clear('system-favorites');
+        Scalr.storage.clear('system-favorites-created');
+    }
+};
+
+Scalr.utils.getFavorites = function(scope) {
+    if (Scalr.user.type == 'FinAdmin') {
+        return [{
+            href: '#/admin/analytics/dashboard',
+            stateId: 'panel-admin-analytics',
+            text: 'Cost Analytics'
+        }];
+    }
+
+    var environment = [], account = [];
+    if (Scalr.isAllowed('FARMS') || Scalr.isAllowed('TEAM_FARMS') || Scalr.isAllowed('OWN_FARMS'))
+        environment.push({
+            href: '#/farms',
+            stateId: 'grid-farms-view',
+            text: 'Farms'
+        });
+
+    if (Scalr.isAllowed('FARMS_ROLES'))
+        environment.push({
+            href: '#/roles',
+            stateId: 'grid-roles-manager',
+            text: 'Roles'
+        });
+
+    if (Scalr.isAllowed('FARMS_IMAGES'))
+        environment.push({
+            href: '#/images',
+            stateId: 'grid-images-view',
+            text: 'Images'
+        });
+
+    if (Scalr.isAllowed('FARMS', 'servers') || Scalr.isAllowed('OWN_FARMS', 'servers') || Scalr.isAllowed('TEAM_FARMS', 'servers') || Scalr.isAllowed('FARMS_ROLES', 'create'))
+        environment.push({
+            href: '#/servers',
+            stateId: 'grid-servers-view',
+            text: 'Servers'
+        });
+
+    if (Scalr.isAllowed('ADMINISTRATION_SCRIPTS'))
+        environment.push({
+            href: '#/scripts',
+            stateId: 'grid-scripts-view',
+            text: 'Scripts'
+        });
+
+    if (Scalr.isAllowed('LOGS_SYSTEM_LOGS'))
+        environment.push({
+            href: '#/logs/system',
+            stateId: 'grid-logs-system-view',
+            text: 'System Log'
+        });
+
+    if (Scalr.isAllowed('LOGS_SCRIPTING_LOGS'))
+        environment.push({
+            href: '#/logs/scripting',
+            stateId: 'grid-logs-scripting-view',
+            text: 'Scripting Log'
+        });
+
+    // account scope
+    if (Scalr.utils.canManageAcl() || Scalr.isAllowed('ENVADMINISTRATION_ENV_CLOUDS'))
+        account.push({
+            href: '#/account/environments',
+            stateId: 'grid-account-environments',
+            text: 'Environments'
+        });
+
+    if (Scalr.utils.canManageAcl())
+        account.push({
+            href: '#/account/teams',
+            stateId: 'grid-account-teams',
+            text: 'Teams'
+        }, {
+            href: '#/account/users',
+            stateId: 'grid-account-users',
+            text: 'Users'
+        }, {
+            href: '#/account/roles',
+            stateId: 'grid-account-roles',
+            text: 'ACL'
+        });
+
+    if (Scalr.isAllowed('ADMINISTRATION_SCRIPTS'))
+        account.push({
+            href: '#/account/scripts',
+            stateId: 'grid-scripts-view',
+            text: 'Scripts'
+        });
+
+    var predefined = {
+        environment: environment,
+        account: account,
+        scalr: [{
+            href: '#/admin/accounts',
+            stateId: 'grid-admin-accounts-view',
+            text: 'Accounts'
+        }, {
+            href: '#/admin/users',
+            stateId: 'grid-admin-users-view',
+            text: 'Admins'
+        }, {
+            href: '#/admin/roles',
+            stateId: 'grid-roles-manager',
+            text: 'Roles'
+        }, {
+            href: '#/admin/images',
+            stateId: 'grid-images-view',
+            text: 'Images'
+        }, {
+            href: '#/admin/scripts',
+            stateId: 'grid-scripts-view',
+            text: 'Scripts'
+        }, {
+            href: '#/admin/analytics/dashboard',
+            stateId: 'panel-admin-analytics',
+            text: 'Cost Analytics'
+        }, {
+            href: '#/admin/webhooks/endpoints',
+            stateId: 'grid-webhooks-configs',
+            text: 'Webhooks'
+        }]
+    };
+
+    var result = Scalr.storage.get('system-favorites-' + scope);
+    if (!result) {
+        result = predefined[scope] || [];
+        if (scope == 'scalr') {
+            result.unshift({
+                href: '#/admin/dashboard',
+                stateId: 'panel-admin-dashboard',
+                text: 'Admin Dashboard'
+            });
+        } else if (scope == 'account') {
+            result.unshift({
+                href: '#/account/dashboard',
+                stateId: 'panel-account-dashboard',
+                text: 'Account Dashboard'
+            });
+        } else {
+            result.unshift({
+                href: '#/dashboard',
+                stateId: 'panel-dashboard',
+                text: 'Dashboard'
+            });
+        }
+    }
+    return result;
+};
+
+Scalr.utils.getForbiddenActionTip = function (entity, scope) {
+
+    var capitalizeFirstLetter = function (string) {
+        return string.charAt(0).toUpperCase() + string.substring(1);
+    };
+
+    entity = capitalizeFirstLetter(entity);
+
+    if (scope === 'scalr') {
+        return 'This Scalr-Scope ' + entity + ' can only be edited by administrators';
+    }
+
+    scope = capitalizeFirstLetter(scope);
+
+    return 'This ' + scope + '-Scope ' + entity
+        + ' can be edited in the ' + scope + ' interface';
+};
+
+Scalr.utils.getScopeLegend = function(type, raw) {
+    var result = [],
+        sclarEnv = ['scalr', 'env'],
+        scalrAccountEnv = ['scalr', 'account', 'env'],
+        typeScopes = {
+            variable: ['scalr', 'account', 'env', 'role', 'farm', 'farmrole'],
+            orchestration: ['account', 'role', 'farmrole'],
+            role: sclarEnv,
+            image: sclarEnv,
+            metric: sclarEnv,
+            event: scalrAccountEnv,
+            script: scalrAccountEnv,
+            chefserver: scalrAccountEnv,
+            webhook: scalrAccountEnv,
+            webhookendpoint: scalrAccountEnv
+        },
+        allScopes = {
+            scalr: 'Scalr',
+            account: 'Account',
+            env: 'Environment',
+            role: 'Role',
+            farm: 'Farm',
+            farmrole: 'Farm Role'
+        },
+        scopes = typeScopes[type] || Ext.Object.getKeys(allScopes);
+
+    Ext.each(scopes, function(scope){
+        scope = scope === 'environment' ? 'env' : scope;
+        result.push('<div style="line-height:24px;"><img src="' + Ext.BLANK_IMAGE_URL + '" class="scalr-scope-' + scope + '" /><span style="padding-left: 6px">' + allScopes[scope] + ' Scope</span></div>');
+    });
+    result = result.join('');
+    //result = '<div><div style="0 0 6px">Scopes:</div>' + result+ '</div>';
+    return !raw ? Ext.String.htmlEncode(result) : result;
+};
+
+Scalr.utils.getScopeInfo = function(type, scope, id) {
+    var info = [],
+        urls = {
+            script: {
+                account: '/account/scripts?scriptId='
+            },
+            'custom event': {
+                account: '/account/events?eventId='
+            },
+            endpoint: {
+                account: '/account/webhooks/endpoints?endpointId='
+            },
+            webhook: {
+                account: '/account/webhooks/configs?webhookId='
+            },
+            'chef server': {
+                account: '/account/services/chef/servers?chefServerId='
+            }
+        };
+    info.push('To make changes to this ' + Ext.String.capitalize(type)+ ', you need to ');
+    var s = 'access it from the ' + Ext.String.capitalize(scope) + ' Scope';
+    if (urls[type] && urls[type][scope]) {
+        info.push('<a href="#' + urls[type][scope] + id +'">'+s+'</a>');
+    } else {
+        info.push(s);
+    }
+    info.push('.<br/><i>Note: extra permissions may be required.</i>');
+    return info.join('');
+};
+
+Scalr.utils.getGovernance = function(category, name) {
+    var governance = Scalr.governance || {};
+    governance = governance[category] || {};
+    return name !== undefined ? governance[name] : governance;
+};
+
 Scalr.strings = {
     'aws.revoked_credentials': 'This environment\'s AWS access credentials have been revoked, and Scalr is no longer able to manage any of its infrastructure. Please <a href="#/account/environments/{envId}/clouds?platform=ec2">click here</a> to update environment with new and functional credentials.',
-    'deprecated_warning': 'This feature has been <b>Deprecated</b> and will be removed from Scalr in the future! Please limit your usage and DO NOT create major dependencies with this feature.',
+    'deprecated_warning': 'This feature has been <span class="x-semibold">Deprecated</span> and will be removed from Scalr in the future! Please limit your usage and DO NOT create major dependencies with this feature.',
     'farmbuilder.hostname_format.info': 'You can use global variables in the following format: {GLOBAL_VAR_NAME}<br />'+
-                                        '<b>For example:</b> {SCALR_FARM_NAME} -> {SCALR_ROLE_NAME} #{SCALR_INSTANCE_INDEX}',
-    'farmbuilder.available_variables.info':  '<b>You can use the following variables:</b> %image_id%, %external_ip%, %internal_ip%, %role_name%, %isdbmaster%, %instance_index%, ' +
+                                        '<span class="x-semibold">For example:</span> {SCALR_FARM_NAME} -> {SCALR_FARM_ROLE_ALIAS} #{SCALR_INSTANCE_INDEX}',
+    'farmbuilder.available_variables.info':  '<span class="x-semibold">You can use the following variables:</span> %image_id%, %external_ip%, %internal_ip%, %role_name%, %isdbmaster%, %instance_index%, ' +
                                              '%server_id%, %farm_id%, %farm_name%, %env_id%, %env_name%, %cloud_location%, %instance_id%, %avail_zone%',
     'farmbuilder.vpc.enforced': 'The account owner has enforced a specific policy on launching farms in a VPC.',
-    'account.need_env_config':  'Thank you for signing up to Scalr!<br><br>' +
-                                'The next step after signing up is to share your %platform% keys with us, or keys from any other infrastructure cloud. We use these keys to make the API calls to the cloud, on your behalf. These keys are stored encrypted on a secured, firewalled server.',
-    'account.cloud_access.info': 'Enable cloud access for this environment by entering the appropriate cloud credentials.<br/>You can create <b>hybrid cloud</b> infrastructure by <b>enabling multiple clouds.</b>',
+    'account.need_env_config':  'Your Scalr account was created.<br><br>' +
+                                'To start managing cloud resources in %platform%, you\'ll need to grant Scalr access to your cloud account by providing API Credentials. Scalr will use those credentials to make API Calls on your behalf.<br><br>' +
+                                'If you\'re unsure how to find those credentials, follow the tutorial below.',
+    'account.cloud_access.info': 'Enable cloud access for this environment by entering the appropriate cloud credentials.<br/>You can create <span class="x-semibold">hybrid cloud</span> infrastructure by <span class="x-semibold">enabling multiple clouds.</span>',
     'vpc.public_subnet.info': 'Public subnets are those that include a routing table entry which points traffic destined for 0.0.0.0/0 to an Internet Gateway. One Public IP will be automatically assigned per instance for public subnets. You can also optionally enable Elastic IP assignment.',
-    'vpc.private_subnet.info': 'Private networks have no direct access to the internet. Before launching instances in a private subnet, please make sure that a valid network route exists between the subnet and Scalr. As an alternative, you may use a VPC Router as a NAT Router for Scalr messages.  <br/>Please follow the instructions on the <a target="_blank" href="https://scalr-wiki.atlassian.net/wiki/x/PYB6">Scalr Wiki</a>'
+    'vpc.private_subnet.info': 'Private networks have no direct access to the internet. Before launching instances in a private subnet, please make sure that a valid network route exists between the subnet and Scalr. As an alternative, you may use a VPC Router as a NAT Router for Scalr messages.  <br/>Please follow the instructions on the <a target="_blank" href="https://scalr-wiki.atlassian.net/wiki/x/PYB6">Scalr Wiki</a>',
+
+    rdsDbInstanceVpcEnforced: 'A VPC Policy is active in this Environment, and restricts the location(s) and network(s) where DB instances can be launched.'
 };
 /*
  CryptoJS v3.1.2
@@ -977,3 +1934,5 @@ Scalr.isPlatformEnabled = Scalr.utils.isPlatformEnabled;
 Scalr.getPlatformConfigValue = Scalr.utils.getPlatformConfigValue;
 Scalr.loadInstanceTypes = Scalr.utils.loadInstanceTypes;
 Scalr.loadCloudLocations = Scalr.utils.loadCloudLocations;
+Scalr.getModel = Scalr.utils.getModel;
+Scalr.getGovernance = Scalr.utils.getGovernance;

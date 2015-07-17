@@ -6,6 +6,9 @@ use Scalr\Acl\Exception;
 use Scalr\Acl\Resource;
 use Scalr\Acl\Role;
 use Scalr\Modules\PlatformFactory;
+use Scalr\Model\Entity;
+use Scalr\Exception\NotYetImplementedException;
+use Scalr\DataType\AccessPermissionsInterface;
 
 /**
  * Scalr ACL class
@@ -22,7 +25,8 @@ class Acl
     const GROUP_ENVADMINISTRATION = 'Environment management';
     const GROUP_GENERAL = 'General';
     const GROUP_SECURITY = 'Security';
-    const GROUP_FARMS = 'Cloud management';
+    const GROUP_ROLES_IMAGES = 'Roles and Images';
+    const GROUP_FARMS_SERVERS = 'Farms and Servers';
     const GROUP_SERVICES = 'Services';
     const GROUP_LOGS = 'Logs';
     const GROUP_DNS = 'Dns';
@@ -41,10 +45,10 @@ class Acl
     // (acl_role_resources, acl_account_role_resources and acl_account_role_resource_permissions tables).
     // All defined constants must be referenced in the \Scalr\Acl\Resource\Definition class.
     const RESOURCE_FARMS = 0x100;
-    const RESOURCE_FARMS_ALERTS = 0x101;
+    const RESOURCE_TEAM_FARMS = 0x108;
+    const RESOURCE_OWN_FARMS = 0x109;
     const RESOURCE_FARMS_STATISTICS = 0x103;
     const RESOURCE_FARMS_ROLES = 0x104;
-    const RESOURCE_FARMS_SERVERS = 0x105;
     const RESOURCE_FARMS_IMAGES = 0x107;
 
     const RESOURCE_CLOUDSTACK_VOLUMES = 0x110;
@@ -119,13 +123,14 @@ class Acl
 
     // ID of the unique permissions of resources.
     // Values need to be defined in the lowercase less than 64 characters.
-    // These values have to be cynchronyzed with mysql data
+    // These values have to be synchronized with mysql data
     // (acl_role_resource_permissions, acl_account_role_resource_permissions tables)
     const PERM_FARMS_MANAGE = 'manage';
     const PERM_FARMS_CLONE = 'clone';
-    const PERM_FARMS_LAUNCH = 'launch';
-    const PERM_FARMS_TERMINATE = 'terminate';
-    const PERM_FARMS_NOT_OWNED_FARMS = 'not-owned-farms';
+    const PERM_FARMS_LAUNCH_TERMINATE = 'launch-terminate';
+    const PERM_FARMS_CHANGE_OWNERSHIP = 'change-ownership';
+    const PERM_FARMS_SERVERS = 'servers';
+    const PERM_FARMS_STATISTICS = 'statistics';
 
     const PERM_FARMS_ROLES_MANAGE = 'manage';
     const PERM_FARMS_ROLES_CLONE = 'clone';
@@ -134,8 +139,6 @@ class Acl
 
     const PERM_FARMS_IMAGES_MANAGE = 'manage';
     const PERM_FARMS_IMAGES_CREATE = 'create';
-
-    const PERM_FARMS_SERVERS_SSH_CONSOLE = 'ssh-console';
 
     const PERM_ADMINISTRATION_SCRIPTS_MANAGE = 'manage';
     const PERM_ADMINISTRATION_SCRIPTS_EXECUTE = 'execute';
@@ -942,16 +945,87 @@ class Acl
     }
 
     /**
+     * Gets account level roles superposition for the specified user
+     *
+     * @param   \Scalr_Account_User|int  $userId    The user
+     * @return  \Scalr\Acl\Role\AccountRoleSuperposition  Returns the list of the account level roles
+     */
+    public function getUserRoles($user)
+    {
+        $ret = new \Scalr\Acl\Role\AccountRoleSuperposition([]);
+
+        if ($user instanceof \Scalr_Account_User) {
+            $userId = $user->getId();
+            $ret->setUser($user);
+        } else {
+            $userId = $user;
+            $ret->setUser($userId);
+            $user = Entity\Account\User::findPk($userId);
+        }
+
+        //The teams in which user has ACL role
+        $teamsUserHasAcl = array();
+
+        //Selects User's ACLs
+        $res = $this->db->Execute("
+            SELECT atu.`team_id`, ar.*
+            FROM `acl_account_roles` ar
+            JOIN `account_team_user_acls` ua ON ua.`account_role_id` = ar.`account_role_id`
+            JOIN `account_team_users` atu ON atu.`id` = ua.`account_team_user_id`
+            JOIN `account_team_envs` te ON te.`team_id` = atu.`team_id`
+            JOIN `account_teams` at ON at.id = atu.`team_id`
+            WHERE atu.`user_id` = ? AND ar.`account_id` = ?
+            GROUP BY at.`id`, ar.`account_role_id`
+        ", [$userId, $user->getAccountId()]);
+
+        while ($rec = $res->FetchRow()) {
+            $teamsUserHasAcl[$rec['team_id']] = $rec['team_id'];
+            $role = $this->getAccountRoleByRow($rec);
+            $role->setTeamRole(false);
+            $ret[$role->getRoleId()] = $role;
+        }
+
+        //Selects Team's ACLs where user enters without defined ACL
+        $rs = $this->db->Execute("
+            SELECT ar.*
+            FROM `account_teams` at
+            JOIN `account_team_users` tu ON at.`id` = tu.`team_id`
+            JOIN `acl_account_roles` ar ON ar.`account_role_id` = at.`account_role_id` AND ar.`account_id` = at.`account_id`
+            JOIN `account_team_envs` te ON te.`team_id` = tu.`team_id`
+            WHERE tu.user_id = ? AND at.account_id = ?
+            AND at.`account_role_id` IS NOT NULL
+            " . (!empty($teamsUserHasAcl) ?
+            "AND at.id NOT IN('" . join("','", array_values($teamsUserHasAcl)) . "')" : "") . "
+        ", [$userId, $user->getAccountId()]);
+
+        while ($rec = $rs->FetchRow()) {
+            if (!isset($ret[$rec['account_role_id']])) {
+                $role = $this->getAccountRoleByRow($rec);
+                $role->setTeamRole(true);
+                $ret[$role->getRoleId()] = $role;
+            }
+        }
+
+        return $ret;
+    }
+
+    /**
      * Gets account roles superposition by specified ID of environment
      *
-     * @param   \Scalr_Account_User|int  $userId       The user's object or ID of the user
-     * @param   int                      $envId        The ID of the client's environment
-     * @param   int                      $accountId    The ID of the client's account
+     * @param   \Scalr_Account_User|int $user
+     *          The user's object or ID of the user
+     *
+     * @param   int $envId
+     *          The ID of the client's environment
+     *
+     * @param   int $accountId
+     *          The ID of the client's account
+     *
      * @return  \Scalr\Acl\Role\AccountRoleSuperposition Returns the list of the roles of account level by specified environment
      */
     public function getUserRolesByEnvironment($user, $envId, $accountId)
     {
-        $ret = new \Scalr\Acl\Role\AccountRoleSuperposition(array());
+        $ret = new \Scalr\Acl\Role\AccountRoleSuperposition([]);
 
         if ($user instanceof \Scalr_Account_User) {
             $userId = $user->getId();
@@ -1477,27 +1551,34 @@ class Acl
     /**
      * Checks wheter access to ACL resource or unique permission is allowed.
      *
-     * @param   \Scalr_Account_User $user                  The user
-     * @param   \Scalr_Environment  $environment           The client's environment
-     * @param   int                 $resourceId            The ID of the ACL resource or its symbolic name without "RESOURCE_" prefix.
-     * @param   string              $permissionId optional The ID of the uniqure permission which is
-     *                                            related to specified resource.
-     * @return  bool                Returns TRUE if access is allowed
+     * @param   \Scalr_Account_User|Entity\Account\User $user
+     *          The user
+     *
+     * @param   \Scalr_Environment|Entity\Account\Environment $environment
+     *          The client's environment
+     *
+     * @param   int $resourceId
+     *          The ID of the ACL resource or its symbolic name without "RESOURCE_" prefix.
+     *
+     * @param   string $permissionId optional
+     *          The ID of the uniqure permission which is related to specified resource.
+     *
+     * @return  bool Returns TRUE if access is allowed
      */
-    public function isUserAllowedByEnvironment(\Scalr_Account_User $user, $environment, $resourceId, $permissionId = null)
+    public function isUserAllowedByEnvironment($user, $environment, $resourceId, $permissionId = null)
     {
         //Checks wheter environment and user are from the same account.
-        if (!($user instanceof \Scalr_Account_User)) {
+        if (!($user instanceof \Scalr_Account_User) && !($user instanceof Entity\Account\User)) {
             throw new \InvalidArgumentException(sprintf(
-                'Argument 1 of the method %s should be Scalr_Account_User object, %s given.',
+                'Argument 1 of the method %s should be either Scalr_Account_User or Entity\Account\User object, %s given.',
                 __METHOD__, gettype($user)
             ));
         } elseif ($user->isScalrAdmin()) {
             return true;
-        } else if (!($environment instanceof \Scalr_Environment)) {
-            //If environment is not defined it will return false.
-            return false;
-        } else if ($environment->clientId != $user->getAccountId()) {
+        } else if (empty($environment) || !($environment instanceof \Scalr_Environment) && !($environment instanceof Entity\Account\Environment)) {
+            //Account level user permissions
+            $environment = null;
+        } else if ($environment->getAccountId() != $user->getAccountId()) {
             return false;
         }
 
@@ -1518,6 +1599,61 @@ class Acl
             }
         }
 
-        return (bool) $user->getAclRolesByEnvironment($environment->id)->isAllowed($resourceId, $permissionId);
+        return (bool) ($environment ? $user->getAclRolesByEnvironment($environment->id)->isAllowed($resourceId, $permissionId) :
+                                      $user->getAclRoles()->isAllowed($resourceId, $permissionId));
+    }
+
+    /**
+     * Check whether the user has either READ or WRITE access to the specified object
+     *
+     *
+     * @param     object $object
+     *            The object to check
+     *
+     * @param     Entity\Account\User|int $user
+     *            Either the User Entity or its identifier
+     *
+     * @param     Entity\Account\Environment|int $enviroment optional
+     *            Either the Environment Entity or its identifier
+     *
+     * @param     bool $modify optional
+     *            Whether it should check MODIFY permission. By default it checks READ permission.
+     *
+     * @return    bool Returns TRUE if the user has access to the specified object
+     * @throws    \InvalidArgumentException
+     * @throws    NotYetImplementedException
+     */
+    public function hasAccessTo($object, $user, $enviroment = null, $modify = null)
+    {
+        $modify = $modify ?: false;
+
+        if (is_int($user)) {
+            $user = Entity\Account\User::findPk($user);
+        }
+
+        if ($enviroment !== null && is_int($enviroment)) {
+            $enviroment = Entity\Account\Environment::findPk($enviroment);
+            if (!$enviroment) {
+                throw new \InvalidArgumentException(sprintf("Could not find the Environment by id: %d", func_get_arg(2)));
+            }
+        }
+
+        if (!($user instanceof Entity\Account\User)) {
+            throw new \InvalidArgumentException(sprintf('Second argument should be instance of \Scalr\Model\Entity\Account\User class.'));
+        }
+
+        if ($enviroment !== null && !($enviroment instanceof Entity\Account\Environment)) {
+            throw new \InvalidArgumentException(sprintf('Third argument should be instance of \Scalr\Model\Entity\Account\Environment class.'));
+        }
+
+        if (!is_object($object)) {
+            throw new \InvalidArgumentException(sprintf("The first argument must be an object."));
+        }
+
+        if ($object instanceof AccessPermissionsInterface) {
+            return $object->hasAccessPermissions($user, $enviroment, $modify);
+        }
+
+        throw new NotYetImplementedException(sprintf("%s nothing knows about %s class", __METHOD__, get_class($object)));
     }
 }

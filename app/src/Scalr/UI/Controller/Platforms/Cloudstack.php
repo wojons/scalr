@@ -164,6 +164,17 @@ class Scalr_UI_Controller_Platforms_Cloudstack extends Scalr_UI_Controller
             }
         }
 
+        $data['features'] = array(
+            'securityGroupsEnabled' => true
+        );
+        $zones = $cs->zone->describe(['name' => $this->getParam('cloudLocation')]);
+        if ($zones[0]) {
+            $data['features']['zoneDetails'] = $zones[0];
+            if (isset($zones[0]->securitygroupsenabled))
+                $data['features']['securityGroupsEnabled'] = (int)$zones[0]->securitygroupsenabled;
+        }
+
+
         $this->response->data(array('data' => $data));
     }
 
@@ -222,11 +233,13 @@ class Scalr_UI_Controller_Platforms_Cloudstack extends Scalr_UI_Controller
                 );
             }
 
-            foreach ($networks as $network) {
-                $data[$cl][] = array(
-                    'id' => (string)$network->id,
-                    'name' => "{$network->id}: {$network->name} ({$network->networkdomain})"
-                );
+            if (!empty($networks)) {
+                foreach ($networks as $network) {
+                    $data[$cl][] = array(
+                        'id' => (string)$network->id,
+                        'name' => "{$network->id}: {$network->name} ({$network->networkdomain})"
+                    );
+                }
             }
         }
 

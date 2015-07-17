@@ -21,12 +21,11 @@ Scalr.regPage('Scalr.ui.tools.openstack.lb.monitors.create', function (loadParam
         hideFields: function(typeFieldValue) {
             var visible = panel.isTypeHttpOrHttps(typeFieldValue),
                 httpMethodField = panel.down('#http-method'),
-                urlField = panel.down('#url-field'),
-                expectedCodesContainer = panel.down('#expected-codes-container');
+                urlField = panel.down('#url-field');
 
             httpMethodField.setVisible(visible);
             urlField.setVisible(visible);
-            expectedCodesContainer.setVisible(visible);
+            panel.down('#expected-codes-field').setVisible(visible);
             panel.updateLayout();
         },
 
@@ -123,28 +122,30 @@ Scalr.regPage('Scalr.ui.tools.openstack.lb.monitors.create', function (loadParam
                 },
                 name: 'url_path'
             }, {
-                xtype: 'fieldcontainer',
+                xtype: 'textfield',
                 fieldLabel: 'Expected HTTP status codes',
-                itemId: 'expected-codes-container',
-                layout: 'hbox',
-                items: [{
-                    xtype: 'textfield',
-                    itemId: 'expected-codes-field',
-                    width: 260,
-                    value: 200,
-                    validator: function (value) {
-                        if (panel.isTypeHttpOrHttps()) {
-                            return value ? true : 'URL required if type is HTTP or HTTPS';
-                        } else {
-                            return true;
-                        }
-                    },
-                    name: 'expected_codes'
-                }, {
-                    xtype: 'displayinfofield',
-                    margin: '0 0 0 5',
-                    info: 'The list of HTTP status codes expected in response from the member to declare it healthy.<br/>Expected codes can be represented as a single value (e.g. 200), list (e.g. 200, 202) or range (e.g. 200-204).'
-                }]
+                itemId: 'expected-codes-field',
+                width: 260,
+                value: 200,
+                plugins: [{
+                    ptype: 'fieldicons',
+                    align: 'right',
+                    position: 'outer',
+                    icons: {
+                        id: 'info',
+                        tooltip: 'The list of HTTP status codes expected in response from the member to ' +
+                        'declare it healthy.<br/>Expected codes can be represented as a single value (e.g. 200), ' +
+                        'list (e.g. 200, 202) or range (e.g. 200-204).'
+                    }
+                }],
+                validator: function (value) {
+                    if (panel.isTypeHttpOrHttps()) {
+                        return value ? true : 'URL required if type is HTTP or HTTPS';
+                    } else {
+                        return true;
+                    }
+                },
+                name: 'expected_codes'
             }, {
                 fieldLabel:'Admin state',
                 xtype: 'checkboxfield',

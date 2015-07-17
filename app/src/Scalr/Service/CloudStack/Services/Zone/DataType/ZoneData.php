@@ -13,6 +13,9 @@ use Scalr\Service\CloudStack\DataType\ResponseTagsList;
  * @property  \Scalr\Service\CloudStack\Services\Zone\DataType\CapacityList      $capacity
  * The capacity of the Zone
  *
+ * @property  object      $resourcedetails
+ * Meta data associated with the zone (key/value pairs)
+ *
  * @author    Vlad Dobrovolskiy   <v.dobrovolskiy@scalr.com>
  * @since     4.5.2
  *
@@ -26,7 +29,7 @@ class ZoneData extends AbstractDataType
      *
      * @var  array
      */
-    protected $_properties = array('capacity', 'tags');
+    protected $_properties = array('capacity', 'tags', 'resourcedetails');
 
     /**
      * Zone id
@@ -155,13 +158,6 @@ class ZoneData extends AbstractDataType
     public $networktype;
 
     /**
-     * Meta data associated with the zone (key/value pairs)
-     *
-     * @var string
-     */
-    public $resourcedetails;
-
-    /**
      * True if security groups support is enabled, false otherwise
      *
      * @var string
@@ -202,6 +198,17 @@ class ZoneData extends AbstractDataType
     public function setTags(ResponseTagsList $tags = null)
     {
         return $this->__call(__FUNCTION__, array($tags));
+    }
+
+    /**
+     * Sets resource details
+     *
+     * @param   object    $details
+     * @return  ZoneData
+     */
+    public function setResourcedetails($details = null)
+    {
+        return $this->__call(__FUNCTION__, array($details));
     }
 
 }

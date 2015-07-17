@@ -1,11 +1,13 @@
 Ext.define('Scalr.ui.monitoring.statistics', {
     extend: 'Ext.Component',
-    alias: 'widget.monitoring.statistics',
+    alias: 'widget.loadstatistics',
 
     autoScroll: true,
 
     cacheLifetime: 60000,
     autoRefreshTime: 60000,
+
+    unsetPanelLoading: false,
 
     initComponent: function () {
         var me = this;
@@ -33,11 +35,6 @@ Ext.define('Scalr.ui.monitoring.statistics', {
     },
 
     tpl: [
-        '<div class="scalr-ui-monitoring-loading-message">',
-        '<div>Loading...</div>',
-        '<div class="x-panel-confirm-loading"></div>',
-        '</div>',
-
         '<div class="scalr-ui-monitoring-main-container">',
 
         '<tpl if="this.compareMode">',
@@ -51,7 +48,7 @@ Ext.define('Scalr.ui.monitoring.statistics', {
         '<img src="{path}" alt="{watchername}">',
         '</div>',
         '<div class="scalr-ui-monitoring-add-to-dashboard-tool-container">',
-        '<div class="scalr-ui-monitoring-add-to-dashboard-tool" data-farmid="{farmId}" data-roleid="{farmRoleId}" data-index="{index}" data-title="{title}" data-metric="{metric}" data-hash="{hash}" data-disk="{disk}" data-graph="{graph}" title="Add to dashboard"></div>',
+        '<div class="scalr-ui-monitoring-add-to-dashboard-tool" data-farmid="{farmId}" data-roleid="{farmRoleId}" data-index="{index}" data-title="{title}" data-metric="{metric}" data-hash="{hash}" data-disk="{disk}" data-graph="{graph}" data-qtip="Add to dashboard"></div>',
         '</div>',
 
         '<tpl if="disk">',
@@ -65,7 +62,7 @@ Ext.define('Scalr.ui.monitoring.statistics', {
         '<div class="scalr-ui-monitoring-statistics-container">',
         '<div class="scalr-ui-monitoring-image-container scalr-ui-monitoring-refresh-this" data-metric="{metric}" data-disk="{disk}" data-graph="{graph}">{message}</div>',
         '<div class="scalr-ui-monitoring-add-to-dashboard-tool-container">',
-        '<div class="scalr-ui-monitoring-add-to-dashboard-tool" data-farmid="{farmId}" data-roleid="{farmRoleId}" data-index="{index}" data-title="{title}" data-metric="{metric}" data-hash="{hash}" data-disk="{disk}" data-graph="{graph}" title="Add to dashboard"></div>',
+        '<div class="scalr-ui-monitoring-add-to-dashboard-tool" data-farmid="{farmId}" data-roleid="{farmRoleId}" data-index="{index}" data-title="{title}" data-metric="{metric}" data-hash="{hash}" data-disk="{disk}" data-graph="{graph}" data-qtip="Add to dashboard"></div>',
         '</div>',
         '</div>',
         '</tpl>',
@@ -81,7 +78,7 @@ Ext.define('Scalr.ui.monitoring.statistics', {
         '<img class="scalr-ui-monitoring-statistics-image-compare-mode-off" src="{path}">',
         '</div>',
         '<div class="scalr-ui-monitoring-add-to-dashboard-tool-container">',
-        '<div class="scalr-ui-monitoring-add-to-dashboard-tool" data-farmid="{farmId}" data-roleid="{farmRoleId}" data-index="{index}" data-title="{title}" data-metric="{metric}" data-hash="{hash}" data-disk="{disk}" data-graph="{graph}" title="Add to dashboard"></div>',
+        '<div class="scalr-ui-monitoring-add-to-dashboard-tool" data-farmid="{farmId}" data-roleid="{farmRoleId}" data-index="{index}" data-title="{title}" data-metric="{metric}" data-hash="{hash}" data-disk="{disk}" data-graph="{graph}" data-qtip="Add to dashboard"></div>',
         '</div>',
 
         '<tpl if="disk">',
@@ -95,7 +92,7 @@ Ext.define('Scalr.ui.monitoring.statistics', {
         '<div class="scalr-ui-monitoring-statistics-container-compare-mode-off">',
         '<div class="scalr-ui-monitoring-image-container-compare-mode-off scalr-ui-monitoring-refresh-this" data-metric="{metric}" data-disk="{disk}" data-graph="{graph}"><div class="scalr-ui-monitoring-message">{message}</div></div>',
         '<div class="scalr-ui-monitoring-add-to-dashboard-tool-container">',
-        '<div class="scalr-ui-monitoring-add-to-dashboard-tool" data-farmid="{farmId}" data-roleid="{farmRoleId}" data-index="{index}" data-title="{title}" data-metric="{metric}" data-hash="{hash}" data-disk="{disk}" data-graph="{graph}" title="Add to dashboard"></div>',
+        '<div class="scalr-ui-monitoring-add-to-dashboard-tool" data-farmid="{farmId}" data-roleid="{farmRoleId}" data-index="{index}" data-title="{title}" data-metric="{metric}" data-hash="{hash}" data-disk="{disk}" data-graph="{graph}" data-qtip="Add to dashboard"></div>',
         '</div>',
         '</div>',
         '</tpl>',
@@ -104,6 +101,28 @@ Ext.define('Scalr.ui.monitoring.statistics', {
         '</div>'
     ],
 
+    setChartsLoading: function (isLoading) {
+        var me = this;
+
+        if (me.unsetPanelLoading) {
+            me.unsetPanelLoading = false;
+            me.up('panel').setLoading(false);
+        }
+
+        me.setLoading(!isLoading ? false : '');
+
+        if (!Ext.isEmpty(me.el)) {
+            me.el.setVisible(!isLoading);
+        } else {
+            var panel = me.up('panel');
+            panel.setLoading('', panel.body);
+
+            me.unsetPanelLoading = true;
+        }
+
+        return me;
+    },
+
     updateTpl: function (paramsForStatistics, statisticsType, compareMode, checkedNodesCount) {
         var me = this;
         var currentUpdateTime = new Date().getTime();
@@ -111,7 +130,7 @@ Ext.define('Scalr.ui.monitoring.statistics', {
         var loadedStatisticsCounter = 0;
 
         me.lastUpdateTime = currentUpdateTime;
-        me.showLoadingMessage();
+        me.setChartsLoading(true);
         me.data = [];
         me.cachedStatisticsLinksForRefreshing = {};
         me.statisticsType = statisticsType;
@@ -132,7 +151,7 @@ Ext.define('Scalr.ui.monitoring.statistics', {
                 me.doDiskLabelsHover();
 
                 if (compareMode && checkedNodesCount < me.checkedNodesCount) {
-                    me.showLoadingMessage();
+                    me.setChartsLoading(true);
                 }
 
                 me.setStatisticsWidth();
@@ -140,6 +159,8 @@ Ext.define('Scalr.ui.monitoring.statistics', {
                 me.monitoringRefreshTask.restart();
 
                 me.up('panel').down('treepanel').getView().restoreScrollState();
+
+                me.setChartsLoading(false);
             }
         };
 
@@ -154,11 +175,6 @@ Ext.define('Scalr.ui.monitoring.statistics', {
                 return index;
             };
 
-            var cacheCheck = function (metrics) {
-                var metricsNumber = metrics.split(',').length;
-                return cachedStatistic && cachedStatistic.length >= metricsNumber && me.cacheLifetime > currentTime - cachedStatisticCreationTime;
-            };
-
             var params = currentItemsParams.params;
             var metricException = currentItemsParams.isInstance ? 'snum' : 'io';
 
@@ -171,7 +187,26 @@ Ext.define('Scalr.ui.monitoring.statistics', {
             var cachedStatisticCreationTime = me.cachedStatistics.creationTime[itemIndexInCache];
             var currentTime = new Date().getTime();
 
-            if (cacheCheck(params.metrics)) {
+            var isCached = function (metrics) {
+                if (!Ext.isArray(cachedStatistic)) {
+                    return false;
+                }
+
+                var cachedMetrics = Ext.Array.map(cachedStatistic, function (statistic) {
+                    return statistic.metric;
+                });
+
+                var wereMetricsChanged = !Ext.Array.equals(
+                    Ext.Array.sort(metrics.split(',')),
+                    Ext.Array.sort(cachedMetrics)
+                );
+
+                var isCacheActual = me.cacheLifetime > (currentTime - cachedStatisticCreationTime);
+
+                return isCacheActual && !wereMetricsChanged;
+            };
+
+            if (isCached(params.metrics)) {
                 if (compareMode) {
                     me.data[itemIndex] = {title: title, statistics: cachedStatistic, itemIndex: itemIndexInCache};
                 } else {
@@ -229,6 +264,9 @@ Ext.define('Scalr.ui.monitoring.statistics', {
                                 }
                             } else {
                                 var message = metrics[metric].msg;
+                                message = message !== 'Unsupported metric \'\''
+                                    ? message
+                                    : '<div class="scalr-ui-monitoring-message-error">No graphs to view were selected.<br>Please select at least one graph in view\'s settings.</div>';
                                 if (!compareMode) {
                                     me.data.push({message: message, metric: metric});
                                 } else {
@@ -434,44 +472,6 @@ Ext.define('Scalr.ui.monitoring.statistics', {
         });
     },
 
-    setLoadingMessagePosition: function () {
-        var me = this;
-        var windowHeight = me.getHeight();
-        var windowWidth = me.getWidth();
-
-        var loadingMessage = me.el.down('.scalr-ui-monitoring-loading-message'),
-            loadingMessageHeight = 110,
-            loadingMessageWidth = 313;
-
-        var xPosition = windowWidth / 2 - loadingMessageWidth / 2;
-        var yPosition = windowHeight / 2 - loadingMessageHeight / 2;
-
-        loadingMessage.position('absolute', 100, xPosition, yPosition);
-    },
-
-    showLoadingMessage: function () {
-        var me = this;
-        if (me.el) {
-            me.hideScrolls(true);
-            var loadingMessage = me.el.down('.scalr-ui-monitoring-loading-message'),
-                mainContainer = me.el.down('.scalr-ui-monitoring-main-container');
-            if (!loadingMessage.isVisible()) {
-                mainContainer.setOpacity(0.5);
-                me.setLoadingMessagePosition();
-                loadingMessage.show();
-                me.hideAddToDashboardTools();
-            }
-        }
-    },
-
-    hideAddToDashboardTools: function () {
-        var me = this,
-            addToDashboardTools = me.el.query('.scalr-ui-monitoring-add-to-dashboard-tool-container');
-        Ext.each(addToDashboardTools, function (tool) {
-            Ext.get(tool).hide();
-        });
-    },
-
     hideScrolls: function (hidden) {
         var me = this,
             style = hidden ? 'hidden' : 'auto';
@@ -515,7 +515,7 @@ Ext.define('Scalr.ui.ChartPreview', {
     listeners: {
         boxready: function () {
             var me = this;
-            me.el.mask('Loading...');
+            me.el.mask('');
         }
     },
 
@@ -623,7 +623,7 @@ Ext.define('Scalr.ui.ChartPreview', {
                                                     var image = panel.down('#chartPreviewMaximizedImage');
 
                                                     if (!image.cache[value]) {
-                                                        image.el.mask('Loading...');
+                                                        image.el.mask('');
 
                                                         me.paramsForRequest.metrics = metric;
                                                         me.paramsForRequest.period = value;

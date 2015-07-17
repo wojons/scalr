@@ -65,9 +65,17 @@ class Scalr_Session
             self::$_session = new Scalr_Session();
             self::$_session->hashpwd = CryptoTool::hash(@file_get_contents(APPPATH."/etc/.cryptokey"));
             ini_set('session.cookie_httponly', true);
+
+            if (!preg_match('/^[-,a-zA-Z0-9]{1,128}$/', $_COOKIE[session_name()])) {
+                self::sessionLog('session is not valid, regenerate');
+                session_id(uniqid());
+                session_start();
+                session_regenerate_id();
+                session_write_close();
+            }
         }
 
-        if (! self::$_session->restored) {
+        if (!self::$_session->restored) {
             self::$_session->restored = true;
             self::restore();
 
@@ -81,6 +89,7 @@ class Scalr_Session
                             self::$_session->setToken($_COOKIE[self::SESSION_TOKEN]);
                     } else {
                         $id = session_id();
+                        self::sessionLog("session_id():84");
                         if (CryptoTool::hash("{$id}:{$hash}") === $_COOKIE[self::SESSION_TOKEN])
                             self::$_session->setToken($_COOKIE[self::SESSION_TOKEN]);
                     }
@@ -98,6 +107,7 @@ class Scalr_Session
     public static function create($userId, $virtual = false)
     {
         session_start();
+        self::sessionLog("session_start():101");
         $_SESSION[__CLASS__][self::SESSION_USER_ID] = $userId;
         $_SESSION[__CLASS__][self::SESSION_VIRTUAL] = $virtual;
 
@@ -107,12 +117,14 @@ class Scalr_Session
 
         if (! $virtual) {
             $id = session_id();
+            self::sessionLog("session_id():112");
             $hash = self::getInstance()->hashpwd;
             $token = CryptoTool::hash("{$id}:{$hash}");;
             $https = ($_SERVER['HTTPS']) ? true : false;
             $_SESSION[__CLASS__][self::SESSION_TOKEN] = $token;
             setcookie('scalr_token', $token, null, '/', null, $https, false);
             session_write_close();
+            self::sessionLog("session_write_close():119");
         }
 
         self::restore(false);
@@ -164,7 +176,12 @@ class Scalr_Session
     protected static function restore($checkKeepSessionCookie = true)
     {
         $session = self::getInstance();
-        session_start();
+        
+        if (session_status() != PHP_SESSION_ACTIVE) {
+            session_start();
+            self::sessionLog("session_start():171");
+        }
+        
         $refClass = self::getReflectionClass();
         foreach ($refClass->getConstants() as $constname => $constvalue) {
             if (substr($constname, 0, 8) !== 'SESSION_') continue;
@@ -183,6 +200,7 @@ class Scalr_Session
         }
 
         session_write_close();
+        self::sessionLog("session_write_close():190");
     }
 
     public static function isCookieKeepSession()
@@ -213,6 +231,7 @@ class Scalr_Session
     {
         session_start();
         session_destroy();
+        self::sessionLog("session_start/destroy():220");
 
         if (\Scalr::config('scalr.ui.tender_api_key') != '') {
             @setcookie("tender_email", "", time()-86400, "/");
@@ -249,8 +268,14 @@ class Scalr_Session
         }
 
         session_write_close();
+        self::sessionLog("session_write_close():258");
     }
 
+    public static function sessionLog($log) 
+    {
+        //@file_put_contents("/var/log/scalr/session.log", "[".microtime(true)."][{$_SERVER['REQUEST_URI']}]" . $log . "\n", FILE_APPEND);    
+    }
+    
     public static function keepSession()
     {
         $session = self::getInstance();
@@ -282,13 +307,6 @@ class Scalr_Session
         return $this->virtual;
     }
 
-    public function setEnvironmentId($envId)
-    {
-        session_start();
-        $_SESSION[__CLASS__][self::SESSION_ENV_ID] = $this->envId = $envId;
-        session_write_close();
-    }
-
     /**
      * This method is used to provide getters and setters for the session vars
      *
@@ -308,9 +326,11 @@ class Scalr_Session
                 } elseif ($m[1] == 'set') {
                     //set are expected to be here
                     session_start();
+                    self::sessionLog("session_start():311");
                     $this->{$property} = $params[0];
                     $_SESSION[__CLASS__][$property] = $this->{$property};
                     session_write_close();
+                    self::sessionLog("session_write_close():316");
                     return $this;
                 }
             }
@@ -328,16 +348,6 @@ class Scalr_Session
     public function getUserId()
     {
         return $this->userId;
-    }
-
-    /**
-     * Gets an Environment ID
-     *
-     * @return  int Returns an Environment ID
-     */
-    public function getEnvironmentId()
-    {
-        return $this->envId;
     }
 
     /**

@@ -57,63 +57,78 @@ class Scalr_UI_Controller_Tools_Aws_Route53_Recordsets extends Scalr_UI_Controll
                 if (!empty($weighted) && !property_exists($record, 'weight')) {
                     continue;
                 }
+
                 $result = self::loadRecordSetData($record);
                 $resultList[] = $result;
             }
         } while (!empty($recordListResponse->isTruncated));
 
-        $response = $this->buildResponseFromData($resultList, array('name', 'type'), true);
+        $response = $this->buildResponseFromData($resultList, ['name', 'type'], true);
         $this->response->data($response);
     }
 
     /**
      * @param object $record
+     * @return array
      */
     public static function loadRecordSetData($record)
     {
-        $resourceRecordList = array();
-        $result = array(
+        $resourceRecordList = [];
+
+        $result = [
             'name' => $record->name,
             'type' => $record->type
-        );
+        ];
+
         if (!empty($record->resourceRecord)) {
             foreach ($record->resourceRecord as $value) {
                 $resourceRecordList[] = $value->value;
             }
+
             $result['resourceRecord'] = $resourceRecordList;
             $result['ttl'] = $record->ttl;
             $result['alias'] = false;
         }
+
         if (!empty($record->aliasTarget)) {
             $result['alias'] = true;
             $result['aliasZoneId'] = $record->aliasTarget->zoneId;
             $result['dnsName'] = $record->aliasTarget->dnsName;
             $result['evaluateTargetHealth'] = $record->aliasTarget->evaluateTargetHealth;
         }
+
         if (property_exists($record, 'healthId')) {
             $result['healthId'] = $record->healthId;
         }
+
         if (property_exists($record, 'setIdentifier')) {
             $result['setIdentifier'] = $record->setIdentifier;
         }
+
         if (property_exists($record, 'weight')) {
             $result['weight'] = $record->weight;
+
             if (!empty($record->weight)) {
                 $result['policy'] = 'weight';
             }
         }
+
         if (property_exists($record, 'region')) {
             $result['region'] = $record->region;
+
             if (!empty($record->region)) {
                 $result['policy'] = 'region';
             }
         }
+
         if (property_exists($record, 'failover')) {
             $result['failover'] = strtolower($record->failover);
+
             if (!empty($record->failover)) {
                 $result['policy'] = 'failover';
             }
         }
+
         if (empty($result['policy'])) {
             $result['policy'] = 'simple';
         }
@@ -162,35 +177,40 @@ class Scalr_UI_Controller_Tools_Aws_Route53_Recordsets extends Scalr_UI_Controll
             $alias->dnsName = $dnsName;
             $alias->evaluateTargetHealth = strtolower($evaluateTargetHealth);
             $rrsData->setAliasTarget($alias);
-        }
-        else {
+        } else {
             $rrsData->ttl = $ttl;
             $recordList = new RecordList();
+
             foreach ($resourceRecord as $value) {
                 $recordData = new RecordData($value);
                 $recordList->append($recordData);
             }
+
             $rrsData->setResourceRecord($recordList);
         }
 
         if ('weight' == $policy) {
             $rrsData->weight = $weight;
         }
+
         if ('simple' != $policy) {
             $rrsData->setIdentifier = $setIdentifier;
         }
+
         if ('region' == $policy) {
             $rrsData->region = $region;
         }
+
         if ('failover' == $policy) {
             $rrsData->failover = strtoupper($failover);
         }
+
         $rrsCnahgeListData->setRecordSet($rrsData);
         $rrsCnahgeList->append($rrsCnahgeListData);
         $rrsRequest->setChange($rrsCnahgeList);
 
         $response = $this->environment->aws($cloudLocation)->route53->record->update($zoneId, $rrsRequest);
-        $this->response->data(array('data' => $response));
+        $this->response->data(['data' => $response]);
     }
 
     /**
@@ -210,7 +230,7 @@ class Scalr_UI_Controller_Tools_Aws_Route53_Recordsets extends Scalr_UI_Controll
         }
 
         $response = $this->environment->aws($cloudLocation)->route53->record->update($zoneId, $rrsRequest);
-        $this->response->data(array('data' => $response));
+        $this->response->data(['data' => $response]);
     }
 
     /**
@@ -220,17 +240,18 @@ class Scalr_UI_Controller_Tools_Aws_Route53_Recordsets extends Scalr_UI_Controll
      */
     public function xGetAliasTargetsAction($zoneId, $name, $cloudLocation)
     {
-        $result = array();
+        $result = [];
+
         $name = rtrim($name, '.');
 
         $result['data'] = array_filter(
-                array_merge(
-                    $this->listLoadBalancerDomains($cloudLocation),
-                    $this->listCloudFrontDomains($name, $cloudLocation),
-                    $this->listRecordSetDomains($zoneId, $cloudLocation, $name),
-                    $this->listS3Websites($name, $cloudLocation)
-                )
-            );
+            array_merge(
+                $this->listLoadBalancerDomains($cloudLocation),
+                $this->listCloudFrontDomains($name, $cloudLocation),
+                $this->listRecordSetDomains($zoneId, $cloudLocation, $name),
+                $this->listS3Websites($name, $cloudLocation)
+            )
+        );
 
         $this->response->data($result);
     }
@@ -241,7 +262,8 @@ class Scalr_UI_Controller_Tools_Aws_Route53_Recordsets extends Scalr_UI_Controll
      */
     public function xGetS3TargetsAction($name, $cloudLocation)
     {
-        $result = array();
+        $result = [];
+
         $name = rtrim($name, '.');
 
         $result['data'] = $this->listS3Websites($name, $cloudLocation);
@@ -251,12 +273,13 @@ class Scalr_UI_Controller_Tools_Aws_Route53_Recordsets extends Scalr_UI_Controll
 
     /**
      * @param string $cloudLocation
-     * @param string $healthId          optional
+     * @param string $healthId optional
+     * @return array
      */
     protected function listHealthChecks($cloudLocation, $healthId = null)
     {
         $marker = null;
-        $healthChecks = array();
+        $healthChecks = [];
 
         do {
             if (isset($checkList)) {
@@ -265,27 +288,27 @@ class Scalr_UI_Controller_Tools_Aws_Route53_Recordsets extends Scalr_UI_Controll
             $checkList = $this->environment->aws($cloudLocation)->route53->health->describe($marker);
 
             foreach ($checkList as $check) {
-                $checkResult = array();
-
                 if (property_exists($check, 'healthId')) {
-                    $checkResult = array(
+                    $checkResult = [
                         'healthId'      => $check->healthId,
                         'protocol'      => $check->healthConfig->type,
                         'ipAddress'     => $check->healthConfig->ipAddress,
                         'port'          => $check->healthConfig->port,
                         'resourcePath'  => ltrim($check->healthConfig->resourcePath, '/')
-                    );
+                    ];
+
                     if ($healthId == $check->healthId) {
                         $currentHealthCheck = $checkResult;
                         continue;
                     }
+
                     $healthChecks[] = $checkResult;
                 }
             }
         } while ($checkList->marker !== null);
 
         if (isset($currentHealthCheck)) {
-            $healthChecks = array_merge(array($currentHealthCheck), $healthChecks);
+            $healthChecks = array_merge([$currentHealthCheck], $healthChecks);
         }
 
         return $healthChecks;
@@ -293,19 +316,20 @@ class Scalr_UI_Controller_Tools_Aws_Route53_Recordsets extends Scalr_UI_Controll
 
     /**
      * @param string $cloudLocation
+     * @return array
      */
     protected function listLoadBalancerDomains($cloudLocation)
     {
-        $result = array();
+        $result = [];
 
         $elbList = $this->environment->aws($cloudLocation)->elb->loadBalancer->describe();
 
         foreach ($elbList as $elb) {
-            $result[] = array(
+            $result[] = [
                 'domainName' => $elb->dnsName,
                 'aliasZoneId'=> $elb->canonicalHostedZoneNameId,
                 'title'      => self::ELB_ALIAS_TARGET_TITLE
-            );
+            ];
         }
 
         return $result;
@@ -314,16 +338,18 @@ class Scalr_UI_Controller_Tools_Aws_Route53_Recordsets extends Scalr_UI_Controll
     /**
      * @param string $name
      * @param string $cloudLocation
+     * @return array
      */
     protected function listCloudFrontDomains($name, $cloudLocation)
     {
-        $result = array();
+        $result = [];
         $marker = null;
 
         do {
             if (isset($distributionList)) {
                 $marker = new MarkerType($distributionList->marker);
             }
+
             $distributionList = $this->environment->aws($cloudLocation)->cloudFront->distribution->describe($marker);
 
             foreach ($distributionList as $distribution) {
@@ -333,6 +359,7 @@ class Scalr_UI_Controller_Tools_Aws_Route53_Recordsets extends Scalr_UI_Controll
                         break;
                     }
                 }
+
                 if (!empty($cname)) {
                     $result[] = array(
                         'domainName' => $cname,
@@ -351,6 +378,7 @@ class Scalr_UI_Controller_Tools_Aws_Route53_Recordsets extends Scalr_UI_Controll
      * @param string $zoneId
      * @param string $cloudLocation
      * @param string $name
+     * @return array
      */
     protected function listRecordSetDomains($zoneId, $cloudLocation, $name)
     {
@@ -372,11 +400,12 @@ class Scalr_UI_Controller_Tools_Aws_Route53_Recordsets extends Scalr_UI_Controll
                 if ('NS' == $record->type || 'SOA' == $record->type || $name . '.' == $record->name) {
                     continue;
                 }
-                $result[] = array(
+
+                $result[] = [
                     'domainName' => $record->name,
                     'aliasZoneId'=> $zoneId,
                     'title'      => self::RECORD_SETS_ALIAS_TARGET_TITLE
-                );
+                ];
             }
         } while (!empty($rrsList->isTruncated));
 
@@ -386,16 +415,20 @@ class Scalr_UI_Controller_Tools_Aws_Route53_Recordsets extends Scalr_UI_Controll
     /**
      * @param string $name
      * @param string $cloudLocation
+     * @return array
      */
     protected function listS3Websites($name, $cloudLocation)
     {
-        $result = array();
+        $result = [];
         $buckets = $this->environment->aws($cloudLocation)->s3->bucket->getWebsite($name);
+
         if ($buckets) {
             $location = $this->environment->aws($cloudLocation)->s3->bucket->getLocation($name);
+
             if (empty($location)) {
                 $location = 'us-east-1';
             }
+
             $zoneIds = Aws::getCloudLocationsZoneIds();
 
             $result[] = array(
@@ -410,6 +443,7 @@ class Scalr_UI_Controller_Tools_Aws_Route53_Recordsets extends Scalr_UI_Controll
 
     /**
      * @param array $recordSet
+     * @return ChangeRecordSetData
      */
     public static function getRecordDeleteXml($recordSet)
     {
@@ -423,10 +457,12 @@ class Scalr_UI_Controller_Tools_Aws_Route53_Recordsets extends Scalr_UI_Controll
         if (!empty($recordSet['resourceRecord'])) {
             $rrsData->ttl = $recordSet['ttl'];
             $recordList = new RecordList();
+
             foreach ($recordSet['resourceRecord'] as $value) {
                 $recordData = new RecordData($value);
                 $recordList->append($recordData);
             }
+
             $rrsData->setResourceRecord($recordList);
         }
         else {
@@ -439,12 +475,15 @@ class Scalr_UI_Controller_Tools_Aws_Route53_Recordsets extends Scalr_UI_Controll
 
         if ($recordSet['policy'] != 'simple') {
             $rrsData->setIdentifier = $recordSet['setIdentifier'];
+
             if ($recordSet['policy'] == 'region') {
                 $rrsData->region = $recordSet['region'];
             }
+
             if ($recordSet['policy'] == 'failover') {
                 $rrsData->failover = strtoupper($recordSet['failover']);
             }
+
             if ($recordSet['policy'] == 'weight') {
                 $rrsData->weight = $recordSet['weight'];
             }

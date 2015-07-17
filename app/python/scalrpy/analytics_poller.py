@@ -1,6 +1,6 @@
 # vim: tabstop=4 shiftwidth=4 softtabstop=4
 #
-# Copyright 2013, 2014 Scalr Inc.
+# Copyright 2013, 2014, 2015 Scalr Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License"); you may
 # not use this file except in compliance with the License. You may obtain
@@ -24,12 +24,14 @@ cwd = os.path.dirname(os.path.abspath(__file__))
 scalrpy_dir = os.path.join(cwd, '..')
 sys.path.insert(0, scalrpy_dir)
 
+import ssl
 import time
 import uuid
 import json
 import socket
 import gevent
 import urllib2
+import greenlet
 import urlparse
 import binascii
 
@@ -37,10 +39,13 @@ import boto.ec2
 import boto.exception
 import boto.ec2.regioninfo
 
+import oauth2client.client
+
 import libcloud.common.types
 from libcloud.compute.types import Provider, NodeState
 from libcloud.compute.providers import get_driver
 import libcloud.security
+
 libcloud.security.VERIFY_SSL_CERT = False
 
 import httplib2
@@ -54,7 +59,6 @@ from scalrpy.util import analytics
 from scalrpy.util import cryptotool
 from scalrpy.util import exceptions
 from scalrpy.util import application
-from scalrpy.util.analytics import platforms
 
 from scalrpy import LOG
 
@@ -62,30 +66,10 @@ from scalrpy import LOG
 helper.patch_gevent()
 
 
-url_map = {
-    'cloudstack': 'api_url',
-    'ec2': None,
-    'ecs': 'keystone_url',
-    'eucalyptus': 'ec2_url',
-    'gce': None,
-    'idcf': 'api_url',
-    'openstack': 'keystone_url',
-    'rackspacenguk': 'keystone_url',
-    'rackspacengus': 'keystone_url',
-    'ocs': 'keystone_url',
-    'nebula': 'keystone_url',
-}
-
-
-os_map = {
-    'linux': 0,
-    'windows': 1,
-    None: 0
-}
-
-
 app = None
 
+
+os.environ['EC2_USE_SIGV4'] = 'TRUE'
 
 
 @helper.retry(1, 5, urllib2.URLError, socket.timeout)
@@ -93,11 +77,9 @@ def _libcloud_list_locations(driver):
     return driver.list_locations()
 
 
-
 @helper.retry(1, 5, urllib2.URLError, socket.timeout)
 def _libcloud_list_nodes(driver):
     return driver.list_nodes()
-
 
 
 @helper.retry(1, 5, urllib2.URLError, socket.timeout)
@@ -105,63 +87,72 @@ def _ec2_get_only_instances(ec2conn):
     return ec2conn.get_only_instances(filters={'instance-state-name': 'running'})
 
 
-
 @helper.retry(1, 5, urllib2.URLError, socket.timeout)
 def _libcloud_get_service_catalog(driver):
-    return driver.connection.get_service_catalog().get_catalog()
-
+    return driver.connection.get_service_catalog()
 
 
 def _handle_exception(e, msg):
-    if type(e) == boto.exception.EC2ResponseError and e.status in [401, 403]:
+    if isinstance(e, boto.exception.EC2ResponseError) and e.status in (401, 403):
         LOG.warning(msg)
-    elif type(e) in [
-            libcloud.common.types.InvalidCredsError,
-            libcloud.common.types.LibcloudError,
-            libcloud.common.types.MalformedResponseError,
-            gevent.timeout.Timeout,
-            socket.timeout,
-            socket.gaierror]:
+    elif isinstance(e, (libcloud.common.types.InvalidCredsError,
+                        libcloud.common.types.LibcloudError,
+                        libcloud.common.types.MalformedResponseError,
+                        oauth2client.client.AccessTokenRefreshError,
+                        gevent.timeout.Timeout,
+                        socket.timeout,
+                        socket.gaierror)):
         LOG.warning(msg)
-    elif type(e) == socket.error and e.errno in [111, 113]:
+    elif isinstance(e, socket.error) and e.errno in (110, 111, 113):
         LOG.warning(msg)
-    elif type(e) == googleapiclient.errors.HttpError and e.resp['status'] in ['403']:
+    elif isinstance(e, googleapiclient.errors.HttpError) and e.resp['status'] in ('403'):
+        LOG.warning(msg)
+    elif isinstance(e, ssl.SSLError):
+        LOG.warning(msg)
+    elif isinstance(e, greenlet.GreenletExit):
+        pass
+    elif 'userDisabled' in str(e):
         LOG.warning(msg)
     else:
-        LOG.error(msg)
-
+        LOG.exception(msg)
 
 
 def _ec2_region(region, cred):
-    access_key = cryptotool.decrypt_scalr(app.crypto_key, cred['access_key'])
-    secret_key = cryptotool.decrypt_scalr(app.crypto_key, cred['secret_key'])
-    kwds = {
-        'aws_access_key_id': access_key,
-        'aws_secret_access_key': secret_key
-    }
-    if app.scalr_config.get('aws', {}).get('use_proxy', False) in [True, 'yes']:
-        if app.scalr_config['connections'].get('proxy', {}).get('use_on', 'both') in ['both', 'scalr']:
-            kwds['proxy'] = app.scalr_config['connections']['proxy']['host']
-            kwds['proxy_port'] = app.scalr_config['connections']['proxy']['port']
-            kwds['proxy_user'] = app.scalr_config['connections']['proxy']['user']
-            kwds['proxy_pass'] = app.scalr_config['connections']['proxy']['pass']
-    conn = boto.ec2.connect_to_region(region, **kwds)
-    cloud_nodes = _ec2_get_only_instances(conn)
-    timestamp = int(time.time())
-    nodes = list()
-    for cloud_node in cloud_nodes:
-        node = {
-            'instance_id': cloud_node.id,
-            'instance_type': cloud_node.instance_type,
-            'os': cloud_node.platform if cloud_node.platform else 'linux'
+    try:
+        access_key = cryptotool.decrypt_scalr(app.crypto_key, cred['access_key'])
+        secret_key = cryptotool.decrypt_scalr(app.crypto_key, cred['secret_key'])
+        kwds = {
+            'aws_access_key_id': access_key,
+            'aws_secret_access_key': secret_key
         }
-        nodes.append(node)
-    return {
-        'region': region,
-        'timestamp': timestamp,
-        'nodes': nodes
-    } if nodes else dict()
+        proxy_settings = app.proxy_settings[cred.platform]
+        kwds['proxy'] = proxy_settings.get('host', None)
+        kwds['proxy_port'] = proxy_settings.get('port', None)
+        kwds['proxy_user'] = proxy_settings.get('user', None)
+        kwds['proxy_pass'] = proxy_settings.get('pass', None)
 
+        conn = boto.ec2.connect_to_region(region, **kwds)
+        cloud_nodes = _ec2_get_only_instances(conn)
+        timestamp = int(time.time())
+        nodes = list()
+        for cloud_node in cloud_nodes:
+            node = {
+                'instance_id': cloud_node.id,
+                'instance_type': cloud_node.instance_type,
+                'os': cloud_node.platform if cloud_node.platform else 'linux'
+            }
+            nodes.append(node)
+        return {
+            'region': region,
+            'timestamp': timestamp,
+            'nodes': nodes
+        } if nodes else dict()
+    except:
+        e = sys.exc_info()[1]
+        msg = 'platform: {platform}, region: {region}, env_id: {env_id}, reason: {error}'
+        msg = msg.format(platform=cred.platform, region=region, env_id=cred.env_id,
+                         error=helper.exc_info(where=False))
+        _handle_exception(e, msg)
 
 
 def ec2(cred):
@@ -175,8 +166,8 @@ def ec2(cred):
     if cred['account_type'] == 'regular':
         regions = [
             'us-east-1',
-            'us-west-2',
             'us-west-1',
+            'us-west-2',
             'eu-west-1',
             'eu-central-1',
             'ap-southeast-1',
@@ -202,130 +193,67 @@ def ec2(cred):
         for region in regions
     )
     gevent.sleep(0)  # force switch
-    timeout = app.config['cloud_connection_timeout'] + 1
+    timeout = app.config['cloud_connection_timeout']
     for region, async_result in async_results.iteritems():
         try:
             region_nodes = async_result.get(timeout=timeout)
             if region_nodes:
                 result.append(region_nodes)
-        except:
+        except gevent.timeout.Timeout:
             async_result.kill()
-            e = sys.exc_info()[1]
-            msg = 'platform: {platform}, region: {region}, env_id: {env_id}, reason: {error}'
-            msg = msg.format(
-                    platform=cred.platform, region=region,
-                    env_id=cred.env_id, error=helper.exc_info())
-            _handle_exception(e, msg)
+            msg = 'platform: {platform}, region: {region}, env_id: {env_id}, reason: timeout'
+            msg = msg.format(platform=cred.platform, region=region, env_id=cred.env_id)
+            LOG.warning(msg)
     return result
-
-
-
-def _eucalyptus(cred):
-    access_key = cryptotool.decrypt_scalr(app.crypto_key, cred['access_key'])
-    secret_key = cryptotool.decrypt_scalr(app.crypto_key, cred['secret_key'])
-    ec2_url = cryptotool.decrypt_scalr(app.crypto_key, cred['ec2_url'])
-    url = urlparse.urlparse(ec2_url)
-    splitted_netloc = url.netloc.split(':')
-    host = splitted_netloc[0]
-    try:
-        port = splitted_netloc[1]
-    except:
-        port = None
-    path = url.path
-    region = 'eucalyptus'
-    region_info = boto.ec2.regioninfo.RegionInfo(name=region, endpoint=host)
-    conn = boto.connect_ec2(
-        aws_access_key_id=access_key,
-        aws_secret_access_key=secret_key,
-        is_secure=False,
-        port=port,
-        path=path,
-        region=region_info
-    )
-    cloud_nodes = _ec2_get_only_instances(conn)
-    timestamp = int(time.time())
-    nodes = list()
-    for cloud_node in cloud_nodes:
-        node = {
-            'instance_id': cloud_node.id,
-            'instance_type': cloud_node.instance_type,
-            'os': cloud_node.platform if cloud_node.platform else 'linux'
-        }
-        nodes.append(node)
-    return {
-        'region': cred['group'],
-        'timestamp': timestamp,
-        'nodes': nodes
-    } if nodes else dict()
-
-
-
-def eucalyptus(cred):
-    """
-    :returns: list
-        [{'region': str, 'timestamp': int, 'nodes': list}]
-    """
-
-    result = list()
-
-    app.pool.wait()
-    async_result = app.pool.apply_async(_eucalyptus, args=(cred,))
-    gevent.sleep(0)  # force switch
-    try:
-        cloud_nodes = async_result.get(timeout=app.config['cloud_connection_timeout'] + 1)
-        if cloud_nodes:
-            result.append(cloud_nodes)
-    except:
-        async_result.kill()
-        e = sys.exc_info()[1]
-        msg = 'platform: {platform}, env_id: {env_id}, reason: {error}'
-        msg = msg.format(platform=cred.platform, env_id=cred.env_id, error=helper.exc_info())
-        _handle_exception(e, msg)
-    return result
-
 
 
 def _cloudstack(cred):
-    result = list()
-    api_key = cryptotool.decrypt_scalr(app.crypto_key, cred['api_key'])
-    secret_key = cryptotool.decrypt_scalr(app.crypto_key, cred['secret_key'])
-    api_url = cryptotool.decrypt_scalr(app.crypto_key, cred['api_url'])
-    url = urlparse.urlparse(api_url)
-    splitted_netloc = url.netloc.split(':')
-    host = splitted_netloc[0]
     try:
-        port = splitted_netloc[1]
-    except:
-        port = 443 if url.scheme == 'https' else None
-    path = url.path
-    secure = url.scheme == 'https'
+        result = list()
+        api_key = cryptotool.decrypt_scalr(app.crypto_key, cred['api_key'])
+        secret_key = cryptotool.decrypt_scalr(app.crypto_key, cred['secret_key'])
+        api_url = cryptotool.decrypt_scalr(app.crypto_key, cred['api_url'])
+        url = urlparse.urlparse(api_url)
+        splitted_netloc = url.netloc.split(':')
+        host = splitted_netloc[0]
+        try:
+            port = splitted_netloc[1]
+        except:
+            port = 443 if url.scheme == 'https' else None
+        path = url.path
+        secure = url.scheme == 'https'
 
-    cls = get_driver(Provider.CLOUDSTACK)
-    driver = cls(key=api_key, secret=secret_key, host=host, port=port, path=path, secure=secure)
-    locations = driver.list_locations()
-    cloud_nodes = _libcloud_list_nodes(driver)
-    timestamp = int(time.time())
-    for location in locations:
-        nodes = list()
-        for cloud_node in cloud_nodes:
-            if cloud_node.state != NodeState.RUNNING or cloud_node.extra['zone_id'] != location.id:
-                continue
-            node = {
-                'instance_id': cloud_node.id,
-                'instance_type': cloud_node.extra['size_id'],
-                'os': None
-            }
-            nodes.append(node)
-        if nodes:
-            result.append(
-                {
-                    'region': location.name,
-                    'timestamp': timestamp,
-                    'nodes': nodes
+        cls = get_driver(Provider.CLOUDSTACK)
+        driver = cls(key=api_key, secret=secret_key, host=host, port=port, path=path, secure=secure)
+        locations = driver.list_locations()
+        cloud_nodes = _libcloud_list_nodes(driver)
+        timestamp = int(time.time())
+        for location in locations:
+            nodes = list()
+            for cloud_node in cloud_nodes:
+                if cloud_node.state != NodeState.RUNNING or cloud_node.extra['zone_id'] != location.id:
+                    continue
+                node = {
+                    'instance_id': cloud_node.id,
+                    'instance_type': cloud_node.extra['size_id'],
+                    'os': None
                 }
-            )
-    return result
-
+                nodes.append(node)
+            if nodes:
+                result.append(
+                    {
+                        'region': location.name,
+                        'timestamp': timestamp,
+                        'nodes': nodes
+                    }
+                )
+        return result
+    except:
+        e = sys.exc_info()[1]
+        msg = 'platform: {platform}, env_id: {env_id}, reason: {error}'
+        msg = msg.format(platform=cred.platform, env_id=cred.env_id,
+                         error=helper.exc_info(where=False))
+        _handle_exception(e, msg)
 
 
 def cloudstack(cred):
@@ -340,15 +268,13 @@ def cloudstack(cred):
     async_result = app.pool.apply_async(_cloudstack, args=(cred,))
     gevent.sleep(0)  # force switch
     try:
-        result = async_result.get(timeout=app.config['cloud_connection_timeout'] + 1)
-    except:
+        result = async_result.get(timeout=app.config['cloud_connection_timeout'])
+    except gevent.timeout.Timeout:
         async_result.kill()
-        e = sys.exc_info()[1]
-        msg = 'platform: {platform}, env_id: {env_id}, reason: {error}'
-        msg = msg.format(platform=cred.platform, env_id=cred.env_id, error=helper.exc_info())
-        _handle_exception(e, msg)
+        msg = 'platform: {platform}, env_id: {env_id}, reason: timeout'
+        msg = msg.format(platform=cred.platform, env_id=cred.env_id)
+        LOG.warning(msg)
     return result
-
 
 
 def idcf(cred):
@@ -360,8 +286,7 @@ def idcf(cred):
     return cloudstack(cred)
 
 
-def _gce_conn(cred):
-    service_account_name = cryptotool.decrypt_scalr(app.crypto_key, cred['service_account_name'])
+def _gce_key(cred):
     if 'json_key' in cred:
         key = json.loads(cryptotool.decrypt_scalr(app.crypto_key, cred['json_key']))['private_key']
     else:
@@ -373,6 +298,13 @@ def _gce_conn(cred):
             shell=True
         )
         key = out.strip()
+    return key
+
+
+def _gce_conn(cred, key=None):
+    service_account_name = cryptotool.decrypt_scalr(app.crypto_key, cred['service_account_name'])
+    if key is None:
+        key = _gce_key(cred)
 
     signed_jwt_assert_cred = SignedJwtAssertionCredentials(
         service_account_name,
@@ -384,33 +316,46 @@ def _gce_conn(cred):
     return build('compute', 'v1', http=http), http
 
 
-
-def _gce_zone(zone, cred):
-    conn, http = _gce_conn(cred)
-    project_id = cryptotool.decrypt_scalr(app.crypto_key, cred['project_id'])
-    request = conn.instances().list(
-        project=project_id,
-        zone=zone,
-        filter='status eq RUNNING'
-    )
-    resp = request.execute(http=http)
-    timestamp = int(time.time())
-    cloud_nodes = resp['items'] if 'items' in resp else []
-    nodes = list()
-    for cloud_node in cloud_nodes:
-        node = {
-            'instance_id': cloud_node['id'],
-            'server_name': cloud_node['name'],
-            'instance_type': cloud_node['machineType'].split('/')[-1],
-            'os': None
-        }
-        nodes.append(node)
-    return {
-        'region': zone,
-        'timestamp': timestamp,
-        'nodes': nodes
-    } if nodes else dict()
-
+def _gce_zone(zone, key, cred):
+    try:
+        conn, http = _gce_conn(cred, key=key)
+        project_id = cryptotool.decrypt_scalr(app.crypto_key, cred['project_id'])
+        request = conn.instances().list(
+            project=project_id,
+            zone=zone,
+            filter='status eq RUNNING'
+        )
+        resp = request.execute(http=http)
+        timestamp = int(time.time())
+        cloud_nodes = resp['items'] if 'items' in resp else []
+        nodes = list()
+        for cloud_node in cloud_nodes:
+            node = {
+                'instance_id': cloud_node['id'],
+                'server_name': cloud_node['name'],
+                'instance_type': cloud_node['machineType'].split('/')[-1],
+                'os': None,
+            }
+            for item in cloud_node['metadata'].get('items', []):
+                meta = dict(tuple(element.split('=', 1))
+                            for element in item['value'].split(';') if '=' in element)
+                if 'serverid' in meta:
+                    node['server_id'] = meta['serverid']
+                if 'env_id' in meta:
+                    node['env_id'] = int(meta['env_id'])
+                    break
+            nodes.append(node)
+        return {
+            'region': zone,
+            'timestamp': timestamp,
+            'nodes': nodes
+        } if nodes else dict()
+    except:
+        e = sys.exc_info()[1]
+        msg = 'platform: {platform}, zone: {zone}, env_id: {env_id}, reason: {error}'
+        msg = msg.format(platform=cred.platform, zone=zone, env_id=cred.env_id,
+                         error=helper.exc_info(where=False))
+        _handle_exception(e, msg)
 
 
 def gce(cred):
@@ -422,22 +367,15 @@ def gce(cred):
     result = list()
 
     project_id = cryptotool.decrypt_scalr(app.crypto_key, cred['project_id'])
-    try:
-        conn, http = _gce_conn(cred)
-        request = conn.zones().list(project=project_id)
-        resp = request.execute(http=http)
-    except:
-        e = sys.exc_info()[1]
-        msg = 'platform: {platform}, env_id: {env_id}, reason: {error}'
-        msg = msg.format(platform=cred.platform, env_id=cred.env_id, error=helper.exc_info())
-        _handle_exception(e, msg)
-        return result
-
+    key = _gce_key(cred)
+    conn, http = _gce_conn(cred, key=key)
+    request = conn.zones().list(project=project_id)
+    resp = request.execute(http=http)
     zones = [_['name'] for _ in resp['items']] if 'items' in resp else []
 
     app.pool.wait()
     async_results = dict(
-        (zone, app.pool.apply_async(_gce_zone, args=(zone, cred,)))
+        (zone, app.pool.apply_async(_gce_zone, args=(zone, key, cred,)))
         for zone in zones
     )
     gevent.sleep(0)  # force switch
@@ -446,14 +384,12 @@ def gce(cred):
             zone_nodes = async_result.get(timeout=app.config['cloud_connection_timeout'] + 1)
             if zone_nodes:
                 result.append(zone_nodes)
-        except:
+        except gevent.timeout.Timeout:
             async_result.kill()
-            e = sys.exc_info()[1]
-            msg = 'platform: GCE, zone: {zone}, env_id: {env_id}, reason: {error}'
-            msg = msg.format(zone=zone, env_id=cred.env_id, error=helper.exc_info())
-            _handle_exception(e, msg)
+            msg = 'platform: {platform}, zone: {zone}, env_id: {env_id}, reason: timeout'
+            msg = msg.format(platform=cred.platform, zone=zone, env_id=cred.env_id)
+            LOG.warning(msg)
     return result
-
 
 
 def _openstack_cred(cred):
@@ -474,41 +410,57 @@ def _openstack_cred(cred):
     return username, password, auth_version, keystone_url, tenant_name
 
 
-
 def _openstack_region(provider, service_name, region, cred):
-    username, password, auth_version, keystone_url, tenant_name = _openstack_cred(cred)
-    url = urlparse.urlparse(keystone_url)
-    service_type = 'compute'
+    try:
+        username, password, auth_version, keystone_url, tenant_name = _openstack_cred(cred)
+        url = urlparse.urlparse(keystone_url)
+        service_type = 'compute'
 
-    cls = get_driver(provider)
-    driver = cls(
-        username,
-        password,
-        ex_force_auth_url=url.geturl(),
-        ex_tenant_name=tenant_name,
-        ex_force_auth_version=auth_version,
-        ex_force_service_region=region,
-        ex_force_service_type=service_type,
-        ex_force_service_name=service_name,
-    )
-    cloud_nodes = _libcloud_list_nodes(driver)
-    timestamp = int(time.time())
-    nodes = list()
-    for cloud_node in cloud_nodes:
-        if cloud_node.state != NodeState.RUNNING:
-            continue
-        node = {
-            'instance_id': cloud_node.id,
-            'instance_type': cloud_node.extra['flavorId'],
-            'os': None
-        }
-        nodes.append(node)
-    return {
-        'region': region,
-        'timestamp': timestamp,
-        'nodes': nodes
-    } if nodes else dict()
-
+        cls = get_driver(provider)
+        driver = cls(
+            username,
+            password,
+            ex_force_auth_url=url.geturl(),
+            ex_tenant_name=tenant_name,
+            ex_force_auth_version=auth_version,
+            ex_force_service_region=region,
+            ex_force_service_type=service_type,
+            ex_force_service_name=service_name,
+        )
+        driver.connection.set_http_proxy(proxy_url=app.proxy_url[cred.platform])
+        cloud_nodes = _libcloud_list_nodes(driver)
+        try:
+            cloud_nodes = [node for node in cloud_nodes
+                           if node.driver.region.upper() == region.upper()]
+        except AttributeError:
+            pass
+        timestamp = int(time.time())
+        nodes = list()
+        for cloud_node in cloud_nodes:
+            if cloud_node.state != NodeState.RUNNING:
+                continue
+            node = {
+                'instance_id': cloud_node.id,
+                'instance_type': cloud_node.extra['flavorId'],
+                'os': None
+            }
+            nodes.append(node)
+        return {
+            'region': region,
+            'timestamp': timestamp,
+            'nodes': nodes
+        } if nodes else dict()
+    except:
+        e = sys.exc_info()[1]
+        msg = (
+            'platform: {platform}, env_id: {env_id}, url: {url}, '
+            'tenant_name: {tenant_name}, service_name={service_name}, '
+            'region: {region}, auth_version: {auth_version}, reason: {error}')
+        msg = msg.format(
+            platform=cred.platform, env_id=cred.env_id, url=url, tenant_name=tenant_name,
+            service_name=service_name, region=region, auth_version=auth_version,
+            error=helper.exc_info(where=False))
+        _handle_exception(e, msg)
 
 
 def _openstack(provider, cred):
@@ -526,25 +478,13 @@ def _openstack(provider, cred):
         ex_tenant_name=tenant_name,
         ex_force_auth_version=auth_version,
     )
+    driver.connection.set_http_proxy(proxy_url=app.proxy_url[cred.platform])
 
-    try:
-        service_catalog = _libcloud_get_service_catalog(driver)
-    except:
-        e = sys.exc_info()[1]
-        msg = (
-                'platform: {platform}, env_id: {env_id}, url: {url}, tenant_name: {tenant_name}, '
-                'auth_version: {auth_version}, reason: {error}')
-        msg = msg.format(
-                platform=cred.platform, env_id=cred.env_id, url=url, tenant_name=tenant_name,
-                auth_version=auth_version, error=helper.exc_info())
-        _handle_exception(e, msg)
-        return result
-
-    service_type = 'compute'
-    service_names = service_catalog[service_type].keys()
+    service_catalog = _libcloud_get_service_catalog(driver)
+    service_names = service_catalog.get_service_names(service_type='compute')
+    regions = service_catalog.get_regions(service_type='compute')
 
     for service_name in service_names:
-        regions = service_catalog[service_type][service_name].keys()
         app.pool.wait()
         async_results = dict(
             (
@@ -561,20 +501,17 @@ def _openstack(provider, cred):
                 region_nodes = async_result.get(timeout=app.config['cloud_connection_timeout'] + 1)
                 if region_nodes:
                     result.append(region_nodes)
-            except:
+            except gevent.timeout.Timeout:
                 async_result.kill()
-                e = sys.exc_info()[1]
                 msg = (
-                        'platform: {platform}, env_id: {env_id}, url: {url}, '
-                        'tenant_name: {tenant_name}, service_name={service_name}, '
-                        'region: {region}, auth_version: {auth_version}, reason: {error}')
+                    'platform: {platform}, env_id: {env_id}, url: {url}, '
+                    'tenant_name: {tenant_name}, service_name={service_name}, '
+                    'region: {region}, auth_version: {auth_version}, reason: timeout')
                 msg = msg.format(
-                        platform=cred.platform, env_id=cred.env_id, url=url, tenant_name=tenant_name,
-                        service_name=service_name, region=region, auth_version=auth_version,
-                        error=helper.exc_info())
-                _handle_exception(e, msg)
+                    platform=cred.platform, env_id=cred.env_id, url=url, tenant_name=tenant_name,
+                    service_name=service_name, region=region, auth_version=auth_version)
+                LOG.warning(msg)
     return result
-
 
 
 def openstack(cred):
@@ -586,7 +523,6 @@ def openstack(cred):
     return _openstack(Provider.OPENSTACK, cred)
 
 
-
 def ecs(cred):
     """
     :returns: list
@@ -594,7 +530,6 @@ def ecs(cred):
     """
 
     return _openstack(Provider.OPENSTACK, cred)
-
 
 
 def rackspacenguk(cred):
@@ -606,7 +541,6 @@ def rackspacenguk(cred):
     return _openstack(Provider.RACKSPACE, cred)
 
 
-
 def rackspacengus(cred):
     """
     :returns: list
@@ -614,7 +548,6 @@ def rackspacengus(cred):
     """
 
     return _openstack(Provider.RACKSPACE, cred)
-
 
 
 def ocs(cred):
@@ -626,7 +559,6 @@ def ocs(cred):
     return _openstack(Provider.OPENSTACK, cred)
 
 
-
 def nebula(cred):
     """
     :returns: list
@@ -636,25 +568,39 @@ def nebula(cred):
     return _openstack(Provider.OPENSTACK, cred)
 
 
+def mirantis(cred):
+    """
+    :returns: list
+        [{'region': str, 'timestamp': int, 'nodes': list}]
+    """
 
-def _url_key_and_cloud_location_key(cred):
-    platform = cred.platform
-    if platform in ['cloudstack', 'idcf']:
-        cloud_location_key = 'cloudstack.cloud_location'
-        url_key = 'api_url'
-    elif platform in ['openstack', 'ecs', 'rackspacenguk', 'rackspacengus', 'ocs', 'nebula']:
-        cloud_location_key = 'openstack.cloud_location'
-        url_key = 'keystone_url'
-    elif platform == 'eucalyptus':
-        cloud_location_key = 'euca.region'
-        url_key = 'ec2_url'
-    elif platform == 'ec2':
-        cloud_location_key = 'ec2.region'
-        url_key = None
-    else:
-        url_key = None
-    return url_key, cloud_location_key
+    return _openstack(Provider.OPENSTACK, cred)
+    
+def vio(cred):
+    """
+    :returns: list
+        [{'region': str, 'timestamp': int, 'nodes': list}]
+    """
 
+    return _openstack(Provider.OPENSTACK, cred)
+
+
+def verizon(cred):
+    """
+    :returns: list
+        [{'region': str, 'timestamp': int, 'nodes': list}]
+    """
+
+    return _openstack(Provider.OPENSTACK, cred)
+
+
+def cisco(cred):
+    """
+    :returns: list
+        [{'region': str, 'timestamp': int, 'nodes': list}]
+    """
+
+    return _openstack(Provider.OPENSTACK, cred)
 
 
 def sort_nodes(cloud_data, cred, envs_ids):
@@ -662,26 +608,20 @@ def sort_nodes(cloud_data, cred, envs_ids):
 
     # gce
     if platform == 'gce':
+        query = (
+            "SELECT EXISTS "
+            "(SELECT 1 FROM servers s "
+            "JOIN servers_history h "
+            "ON s.server_id=h.server_id "
+            "WHERE s.server_id='{server_id}') AS value"
+        )
         for region_data in cloud_data:
             region_data['managed'] = list()
             region_data['not_managed'] = list()
             for node in region_data['nodes']:
-                query = (
-                        "SELECT server_id, env_id "
-                        "FROM servers "
-                        "WHERE server_id='{server_id}'"
-                ).format(server_id=node['server_name'])
-                result = app.scalr_db.execute(query, retries=1)
-                if not result:
-                    query = (
-                            "SELECT server_id, env_id "
-                            "FROM servers_history "
-                            "WHERE server_id='{server_id}'"
-                    ).format(server_id=node['server_name'])
-                    result = app.scalr_db.execute(query, retries=1)
-                if result and result[0]['env_id'] in envs_ids:
-                    node['env_id'] = result[0]['env_id']
-                    node['server_id'] = node['server_name']
+                if node.get('server_id', '') and \
+                        app.scalr_db.execute(query.format(**node))[0]['value'] and \
+                        node['env_id'] in envs_ids:
                     region_data['managed'].append(node)
                 else:
                     region_data['not_managed'].append(node)
@@ -689,154 +629,55 @@ def sort_nodes(cloud_data, cred, envs_ids):
         return cloud_data
 
     # all platforms exclude gce
-    envs_ids = list(set(_ for _ in envs_ids if _ or _ == 0))
-    if not envs_ids:
-        return tuple()
-
-    url_key, cloud_location_key = _url_key_and_cloud_location_key(cred)
+    url_key = analytics.url_key_map[platform]
     url = cred[url_key] if url_key else ''
-
     for region_data in cloud_data:
         cloud_location = region_data['region']
-        instances_ids = list(set(
-            str(node['instance_id'])
-            for node in region_data['nodes'] if node['instance_id'] or node['instance_id'] == 0))
-        if not instances_ids:
-            continue
-        results = tuple()
-        i, chunk_size = 0, 200
-        while True:
-            chunk_ids = instances_ids[i * chunk_size:(i + 1) * chunk_size]
-            if not chunk_ids:
-                break
-            if url:
-                query1 = (
-                        "SELECT sp.server_id, sp.value AS instance_id, s.env_id "
-                        "FROM server_properties sp "
-                        "JOIN servers s ON sp.server_id=s.server_id "
-                        "JOIN client_environment_properties cep ON s.env_id=cep.env_id "
-                        "WHERE sp.name='{name}' "
-                        "AND s.platform='{platform}' "
-                        "AND s.cloud_location='{cloud_location}' "
-                        "AND cep.name='{platform}.{url_key}' "
-                        "AND cep.value='{url}' "
-                        "AND sp.value IN ({value})"
-                ).format(
-                        name=analytics.Analytics.server_id_map[platform],
-                        platform=platform,
-                        cloud_location=cloud_location,
-                        url_key=url_key,
-                        url=url,
-                        value=str(chunk_ids)[1:-1])
-                query2 = (
-                        "SELECT sp1.server_id, sp1.value AS instance_id, s.env_id "
-                        "FROM server_properties sp1 "
-                        "JOIN server_properties sp2 ON sp1.server_id=sp2.server_id "
-                        "JOIN servers_history s ON sp1.server_id=s.server_id "
-                        "JOIN client_environment_properties cep ON s.env_id=cep.env_id "
-                        "WHERE s.platform='{platform}' "
-                        "AND sp1.name='{name1}' "
-                        "AND sp1.value IN ({value1}) "
-                        "AND sp2.name='{name2}' "
-                        "AND sp2.value='{value2}' "
-                        "AND cep.name='{platform}.{url_key}' "
-                        "AND cep.value='{url}'"
-                ).format(
-                        name1=analytics.Analytics.server_id_map[platform],
-                        value1=str(chunk_ids)[1:-1],
-                        name2=cloud_location_key,
-                        value2=cloud_location,
-                        platform=platform,
-                        url_key=url_key,
-                        url=url)
-            else:
-                query1 = (
-                        "SELECT sp.server_id, sp.value AS instance_id, s.env_id "
-                        "FROM server_properties sp "
-                        "JOIN servers s ON sp.server_id=s.server_id "
-                        "WHERE sp.name='{name}' "
-                        "AND s.platform='{platform}' "
-                        "AND s.cloud_location='{cloud_location}' "
-                        "AND sp.value IN ({value})"
-                ).format(
-                        name=analytics.Analytics.server_id_map[platform],
-                        platform=platform,
-                        cloud_location=cloud_location,
-                        value=str(chunk_ids)[1:-1])
-                query2 = (
-                        "SELECT sp1.server_id, sp1.value AS instance_id, s.env_id "
-                        "FROM server_properties sp1 "
-                        "JOIN server_properties sp2 ON sp1.server_id=sp2.server_id "
-                        "JOIN servers_history s ON sp1.server_id=s.server_id "
-                        "WHERE s.platform='{platform}' "
-                        "AND sp1.name='{name1}' "
-                        "AND sp1.value IN ({value1}) "
-                        "AND sp2.name='{name2}' "
-                        "AND sp2.value='{value2}'"
-                ).format(
-                        name1=analytics.Analytics.server_id_map[platform],
-                        value1=str(chunk_ids)[1:-1],
-                        name2=cloud_location_key,
-                        value2=cloud_location,
-                        platform=platform)
-            chunk_results = app.scalr_db.execute(query1, retries=1)
-            chunk_results_ids = [_['instance_id'] for _ in chunk_results]
-            missing_ids = [_ for _ in chunk_ids if _ not in chunk_results_ids]
-            if missing_ids:
-                chunk_results = chunk_results + app.scalr_db.execute(query2, retries=1)
-            if not chunk_results:
-                break
-            results += chunk_results
-            i += 1
-
-        managed = dict(
-            (result['instance_id'], {'env_id': result['env_id'], 'server_id': result['server_id']})
-            for result in results)
-
+        for chunk in helper.chunks(region_data['nodes'], 200):
+            app.analytics.get_server_id_by_instance_id(chunk, envs_ids, platform,
+                                                       cloud_location, url)
         region_data['managed'] = list()
         region_data['not_managed'] = list()
         for node in region_data['nodes']:
-            instance_id = node['instance_id']
-            if instance_id in managed:
-                if managed[instance_id]['env_id'] in envs_ids:
-                    node.update({
-                        'env_id': managed[instance_id]['env_id'],
-                        'server_id': managed[instance_id]['server_id'],
-                    })
-                    region_data['managed'].append(node)
+            if 'server_id' in node:
+                region_data['managed'].append(node)
             else:
                 region_data['not_managed'].append(node)
         del region_data['nodes']
-    return cloud_data
 
+    return cloud_data
 
 
 def sorted_data_update(sorted_data):
     for region_data in sorted_data:
         for server in region_data['managed']:
-            if server['os'] is not None:
+            if server.get('os', None) is not None:
                 continue
             query = (
-                    "SELECT os_type "
-                    "FROM servers "
-                    "WHERE server_id='{server_id}'"
+                "SELECT os_type os "
+                "FROM servers "
+                "WHERE server_id='{server_id}'"
             ).format(server_id=server['server_id'])
             result = app.scalr_db.execute(query, retries=1)
             if not result:
                 query = (
-                        "SELECT value AS os_type "
-                        "FROM server_properties "
-                        "WHERE server_id='{server_id}' "
-                        "AND name='os_type'"
+                    "SELECT value AS os "
+                    "FROM server_properties "
+                    "WHERE server_id='{server_id}' "
+                    "AND name='os_type'"
                 ).format(server_id=server['server_id'])
                 result = app.scalr_db.execute(query, retries=1)
             if not result:
                 server['os'] = 'linux'
-                msg = "Can't detect os_type for server: {0}, set 'linux'".format(server['server_id'])
+                msg = "Can't detect OS type for server: {0}, set 'linux'".format(
+                    server['server_id'])
                 LOG.warning(msg)
             else:
-                server['os'] = result[0]['os_type']
-
+                server['os'] = result[0]['os']
+        for server in region_data['managed']:
+            server['os'] = analytics.os_map[server.get('os', None)]
+        for server in region_data['not_managed']:
+            server['os'] = analytics.os_map[server.get('os', None)]
 
 
 def db_update(sorted_data, envs_ids, cred):
@@ -851,30 +692,31 @@ def db_update(sorted_data, envs_ids, cred):
                 else:
                     cloud_account = None
 
-                if url_map[platform]:
+                if analytics.url_key_map[platform]:
                     url = urlparse.urlparse(cryptotool.decrypt_scalr(
-                            app.crypto_key, cred[url_map[platform]]).rstrip('/'))
+                        app.crypto_key, cred[analytics.url_key_map[platform]]).rstrip('/'))
                     url = '%s%s' % (url.netloc, url.path)
                 else:
                     url = ''
 
                 query = (
-                        "SELECT client_id "
-                        "FROM client_environments "
-                        "WHERE id={env_id}"
+                    "SELECT client_id "
+                    "FROM client_environments "
+                    "WHERE id={env_id}"
                 ).format(env_id=env_id)
                 results = app.scalr_db.execute(query, retries=1)
                 account_id = results[0]['client_id']
 
                 query = (
-                        "INSERT IGNORE INTO poller_sessions "
-                        "(sid, account_id, env_id, dtime, platform, url, cloud_location, cloud_account) "
-                        "VALUES "
-                        "(UNHEX('{sid}'), {account_id}, {env_id}, '{dtime}', '{platform}', '{url}',"
-                        "'{cloud_location}', '{cloud_account}')"
+                    "INSERT IGNORE INTO poller_sessions "
+                    "(sid, account_id, env_id, dtime, platform, url, cloud_location, cloud_account) "
+                    "VALUES "
+                    "(UNHEX('{sid}'), {account_id}, {env_id}, '{dtime}', '{platform}', '{url}',"
+                    "'{cloud_location}', '{cloud_account}')"
                 ).format(
                     sid=sid.hex, account_id=account_id, env_id=env_id,
-                    dtime=time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime(region_data['timestamp'])),
+                    dtime=time.strftime(
+                        "%Y-%m-%d %H:%M:%S", time.gmtime(region_data['timestamp'])),
                     platform=platform, url=url, cloud_location=region_data['region'],
                     cloud_account=cloud_account
                 )
@@ -885,45 +727,46 @@ def db_update(sorted_data, envs_ids, cred):
                     if managed['env_id'] != env_id:
                         continue
                     query = (
-                            "INSERT IGNORE INTO managed "
-                            "(sid, server_id, instance_type, os) VALUES "
-                            "(UNHEX('{sid}'), UNHEX('{server_id}'), '{instance_type}', {os})"
+                        "INSERT IGNORE INTO managed "
+                        "(sid, server_id, instance_type, os) VALUES "
+                        "(UNHEX('{sid}'), UNHEX('{server_id}'), '{instance_type}', {os})"
                     ).format(
-                            sid=sid.hex,
-                            server_id=uuid.UUID(managed['server_id']).hex,
-                            instance_type=managed['instance_type'],
-                            os=os_map[managed['os']])
+                        sid=sid.hex,
+                        server_id=uuid.UUID(managed['server_id']).hex,
+                        instance_type=managed['instance_type'],
+                        os=managed['os'])
+                    LOG.debug(query)
                     app.analytics_db.execute(query, retries=1)
 
-                # not_managed
-                if region_data['not_managed']:
-                    base_query = (
-                            "INSERT IGNORE INTO notmanaged "
-                            "(sid, instance_id, instance_type, os) VALUES %s")
-                    values_template = "(UNHEX('{sid}'), '{instance_id}', '{instance_type}', {os})"
-                    i, chunk_size = 0, 20
-                    while True:
-                        chunk_not_managed = region_data['not_managed'][i * chunk_size:(i + 1) * chunk_size]
-                        if not chunk_not_managed:
-                            break
-                        query = base_query % ','.join(
-                            [
-                                values_template.format(
-                                    sid=sid.hex,
-                                    instance_id=_['instance_id'],
-                                    instance_type=_['instance_type'],
-                                    os=os_map[_['os']]
-                                )
-                                for _ in chunk_not_managed
-                            ]
-                        )
-                        app.analytics_db.execute(query, retries=1)
-                        i += 1
+                ## not_managed
+                #if region_data['not_managed']:
+                #    base_query = (
+                #        "INSERT IGNORE INTO notmanaged "
+                #        "(sid, instance_id, instance_type, os) VALUES %s")
+                #    values_template = "(UNHEX('{sid}'), '{instance_id}', '{instance_type}', {os})"
+                #    i, chunk_size = 0, 20
+                #    while True:
+                #        chunk_not_managed = region_data['not_managed'][
+                #            i * chunk_size:(i + 1) * chunk_size]
+                #        if not chunk_not_managed:
+                #            break
+                #        query = base_query % ','.join(
+                #            [
+                #                values_template.format(
+                #                    sid=sid.hex,
+                #                    instance_id=not_managed['instance_id'],
+                #                    instance_type=not_managed['instance_type'],
+                #                    os=not_managed['os']
+                #                )
+                #                for not_managed in chunk_not_managed
+                #            ]
+                #        )
+                #        app.analytics_db.execute(query, retries=1)
+                #        i += 1
             except:
                 msg = 'Database update failed, reason: {0}'
                 msg = msg.format(helper.exc_info())
-                LOG.warning(msg)
-
+                LOG.exception(msg)
 
 
 def process_credential(cred, envs_ids=None):
@@ -937,10 +780,10 @@ def process_credential(cred, envs_ids=None):
             sorted_data_update(sorted_data)
             db_update(sorted_data, envs_ids, cred)
     except:
+        e = sys.exc_info()[1]
         msg = 'platform: {platform}, environments: {envs}, reason: {error}'
-        msg = msg.format(platform=cred.platform, envs=envs_ids, error=helper.exc_info())
-        LOG.error(msg)
-
+        msg = msg.format(platform=cred.platform, envs=envs_ids, error=helper.exc_info(where=False))
+        _handle_exception(e, msg)
 
 
 class AnalyticsPoller(application.ScalrIterationApplication):
@@ -971,7 +814,24 @@ class AnalyticsPoller(application.ScalrIterationApplication):
         self.analytics = None
         self.pool = None
         self.crypto_key = None
+        self.proxy_settings = {}
+        self.proxy_url = {}
 
+    def set_proxy(self):
+        for platform in analytics.platforms:
+            if platform == 'ec2':
+                use_proxy = self.scalr_config.get('aws', {}).get('use_proxy', False)
+            else:
+                use_proxy = self.scalr_config.get(platform, {}).get('use_proxy', False)
+            use_on = self.scalr_config['connections'].get('proxy', {}).get('use_on', 'both')
+            if use_proxy in [True, 'yes'] and use_on in ['both', 'scalr']:
+                proxy_settings = self.scalr_config['connections']['proxy']
+                proxy_url = 'http://{user}:{pass}@{host}:{port}'.format(**proxy_settings)
+                self.proxy_settings[platform] = proxy_settings
+                self.proxy_url[platform] = proxy_url
+            else:
+                self.proxy_settings[platform] = {}
+                self.proxy_url[platform] = None
 
     def configure(self):
         enabled = self.scalr_config.get('analytics', {}).get('enabled', False)
@@ -979,47 +839,52 @@ class AnalyticsPoller(application.ScalrIterationApplication):
             sys.stdout.write('Analytics is disabled. Exit\n')
             sys.exit(0)
         helper.update_config(
-                self.scalr_config.get('analytics', {}).get('connections', {}).get('scalr', {}),
-                self.config['connections']['mysql'])
+            self.scalr_config.get('analytics', {}).get('connections', {}).get('scalr', {}),
+            self.config['connections']['mysql'])
         helper.update_config(
-                self.scalr_config.get('analytics', {}).get('connections', {}).get('analytics', {}),
-                self.config['connections']['analytics'])
+            self.scalr_config.get('analytics', {}).get('connections', {}).get('analytics', {}),
+            self.config['connections']['analytics'])
         helper.update_config(
-                self.scalr_config.get('analytics', {}).get('poller', {}),
-                self.config)
+            self.scalr_config.get('analytics', {}).get('poller', {}),
+            self.config)
         helper.validate_config(self.config)
 
         self.config['pool_size'] = max(11, self.config['pool_size'])
-        self.iteration_timeout = self.config['interval'] - 5
+        self.iteration_timeout = self.config['interval'] - self.error_sleep
 
-        crypto_key_path = os.path.join(self.scalr_dir, 'app/etc/.cryptokey')
+        crypto_key_path = os.path.join(os.path.dirname(self.args['--config']), '.cryptokey')
         self.crypto_key = cryptotool.read_key(crypto_key_path)
         self.scalr_db = dbmanager.ScalrDB(self.config['connections']['mysql'])
         self.analytics_db = dbmanager.ScalrDB(self.config['connections']['analytics'])
         self.analytics = analytics.Analytics(self.scalr_db, self.analytics_db)
         self.pool = helper.GPool(pool_size=self.config['pool_size'])
 
+        self.set_proxy()
+
         socket.setdefaulttimeout(self.config['instances_connection_timeout'])
 
-
     def do_iteration(self):
-        for envs in self.analytics.load_envs(limit=500):
-            creds = self.analytics.load_creds(envs, platforms)
-            unique_creds = self.analytics.filter_creds(creds)
-            for _ in unique_creds:
-                envs_ids = _['env_id']
-                cred = _['cred']
+        for envs in self.analytics.load_envs():
+            unique = {}
+            for env in envs:
+                creds = self.analytics.get_creds([env])
+                for cred in creds:
+                    if cred.platform == 'ec2' and env.get('ec2.detailed_billing.enabled', '0') == '1':
+                        continue
+                    unique.setdefault(cred.unique, {'envs_ids': [], 'cred': cred})
+                    unique[cred.unique]['envs_ids'].append(env['id'])
+
+            for data in unique.values():
                 while len(self.pool) > self.config['pool_size'] * 5 / 10:
                     gevent.sleep(0.1)
-                self.pool.apply_async(
-                    process_credential,
-                    args=(cred,), kwds={'envs_ids': envs_ids})
+                self.pool.apply_async(process_credential,
+                                      args=(data['cred'],),
+                                      kwds={'envs_ids': data['envs_ids']})
                 gevent.sleep(0)  # force switch
         self.pool.join()
 
     def on_iteration_error(self):
         self.pool.kill()
-
 
 
 def main():
@@ -1035,7 +900,6 @@ def main():
         pass
     except:
         LOG.exception('Oops')
-
 
 
 if __name__ == '__main__':

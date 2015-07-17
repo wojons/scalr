@@ -27,9 +27,9 @@ Scalr.regPage('Scalr.ui.account2.users.view', function (loadParams, moduleParams
     var reconfigurePage = function(params) {
         if (!firstReconfigure && params.userId) {
             var selModel = grid.getSelectionModel();
-            selModel.deselectAll()
+            selModel.deselectAll();
             if (params.userId == 'new') {
-                panel.down('#add').handler();
+                panel.down('#add').toggle(true);
             } else {
                 panel.down('#usersLiveSearch').reset();
                 var record = store.getById(params.userId);
@@ -41,8 +41,8 @@ Scalr.regPage('Scalr.ui.account2.users.view', function (loadParams, moduleParams
         firstReconfigure = false;
     };
 
-    var store = Ext.create('Scalr.ui.ChildStore', {
-        parentStore: storeUsers,
+    var store = Ext.create('Ext.data.ChainedStore', {
+        source: storeUsers,
         filterOnLoad: true,
         sortOnLoad: true
     });
@@ -82,13 +82,12 @@ Scalr.regPage('Scalr.ui.account2.users.view', function (loadParams, moduleParams
         listeners: {
             update: function() {
                 var teams = [];
-                this.data.each(function() {
-                    if (this.get('checked')) {
-                        var teamName = this.get('name');
-                        teams.push('<a href="#/account/teams?teamId='+this.get('id')+'">'+teamName+'</a>');
+                this.getUnfiltered().each(function(record) {
+                    if (record.get('checked')) {
+                        teams.push('<a href="#/account/teams?teamId=' + record.get('id') + '">' + record.get('name') + '</a>');
                     }
                 });
-                form.down('#userTeams').setValue(teams.join(', ') + ' <a href="#" class="user-teams-edit">Change</a>');
+                form.down('#userTeams').setValue(teams.join(', ') + ' <a href="#" class="x-semibold user-teams-edit">Change</a>');
             }
         }
     });
@@ -98,7 +97,7 @@ Scalr.regPage('Scalr.ui.account2.users.view', function (loadParams, moduleParams
         setTeam: function(btnEl, teamRecord){
             var items = [],
                 userRoles = teamRecord.get('roles') || [];
-            (storeRoles.snapshot || storeRoles.data).each(function(role){
+            storeRoles.getUnfiltered().each(function(role){
                 var checked,
                     roleId = role.get('id');
                 Ext.Array.each(userRoles, function(id){
@@ -143,15 +142,13 @@ Scalr.regPage('Scalr.ui.account2.users.view', function (loadParams, moduleParams
     });
     menuUserRoles.doAutoRender();
 
-
     var grid = Ext.create('Ext.grid.Panel', {
-        cls: 'x-grid-shadow x-panel-column-left',
+        cls: 'x-panel-column-left',
         flex: 1,
-        multiSelect: true,
         selType: 'selectedmodel',
         store: store,
         stateId: 'grid-account-users-view',
-        plugins: ['focusedrowpointer'],
+        plugins: ['focusedrowpointer', {ptype: 'selectedrecord', disableSelection: false, clearOnRefresh: true}],
         listeners: {
             viewready: function() {
                 reconfigurePage(loadParams);
@@ -165,39 +162,29 @@ Scalr.regPage('Scalr.ui.account2.users.view', function (loadParams, moduleParams
         viewConfig: {
             preserveScrollOnRefresh: true,
             markDirty: false,
-            plugins: {
-                ptype: 'dynemptytext',
-                emptyText: '<div class="title">No users were found to match your search.</div>Try modifying your search criteria or <a class="add-link" href="#">creating a new user</a>',
-                onAddItemClick: function() {
-                    grid.down('#add').handler();
-                }
-            },
+            emptyText: '<div class="x-semibold">No users were found to match your search.</div>Try modifying your search criteria or creating a new user',
             loadingText: 'Loading users ...',
-            deferEmptyText: false,
-            listeners: {
-                refresh: function(view){
-                    view.getSelectionModel().setLastFocused(null);
-                }
-            }
+            deferEmptyText: false
         },
 
         columns: [
-            {text: 'Name', flex: 1, dataIndex: 'fullname', sortable: true},
+            {width: 40, dataIndex: 'type', sortable: false, resizable: false,
+                xtype: 'templatecolumn',
+                tpl:
+                    '<tpl if="type==\'AccountOwner\'">'+
+                        '<img title="Account owner" src="/ui2/images/ui/account/owner.png" />' +
+                    '<tpl elseif="type==\'AccountAdmin\'">' +
+                        '<img title="Account admin" src="/ui2/images/ui/account/admin.png" />'+
+                    '<tpl elseif="type==\'AccountSuperAdmin\'">' +
+                        '<img title="Account admin with access to manage environments" src="/ui2/images/ui/account/super-admin.png" />'+
+                    '</tpl>'
+            },
+            {text: 'User', flex: 1, dataIndex: 'fullname', sortable: true},
             {
                 text: Scalr.flags['authMode'] == 'ldap' ? 'LDAP login' : 'Email',
                 flex: 1,
                 dataIndex: 'email',
-                sortable: true,
-                xtype: 'templatecolumn',
-                tpl:
-                    '{email}&nbsp;' +
-                    '<tpl if="type==\'AccountOwner\'">'+
-                        '<img style="vertical-align:top" title="Account owner" src="/ui2/images/ui/account/owner.png" />' +
-                    '<tpl elseif="type==\'AccountAdmin\'">' +
-                        '<img style="vertical-align:top" title="Account admin" src="/ui2/images/ui/account/admin.png" />'+
-                    '<tpl elseif="type==\'AccountSuperAdmin\'">' +
-                        '<img style="vertical-align:top" title="Account admin with access to manage environments" src="/ui2/images/ui/account/super-admin.png" />'+
-                    '</tpl>'
+                sortable: true
             },
             {text: 'Teams', flex: 1, dataIndex: 'id', sortable: false, xtype: 'templatecolumn', hidden: (Scalr.flags['authMode'] == 'ldap'), tpl:
                 new Ext.XTemplate(
@@ -209,15 +196,16 @@ Scalr.regPage('Scalr.ui.account2.users.view', function (loadParams, moduleParams
                 }
             )},
             { text: '2FA',  width: 70, align: 'center', dataIndex: 'is2FaEnabled', sortable: true, xtype: 'templatecolumn',
-                tpl: '<img src="' + Ext.BLANK_IMAGE_URL + '" class="x-icon-<tpl if="is2FaEnabled">ok<tpl else>minus</tpl>"/>'
+                tpl: '<tpl if="is2FaEnabled"><div class="x-grid-icon x-grid-icon-simple x-grid-icon-ok"></div><tpl else>&mdash;</tpl>'
             },
             { text: 'Last login',  width: 150, dataIndex: 'dtlastlogin', sortable: true, xtype: 'templatecolumn', tpl: '{dtlastloginhr}' },
-            { text: 'Status', width: 100, minWidth: 100, dataIndex: 'status', sortable: true, xtype: 'statuscolumn', statustype: 'user', qtipConfig: {width: 280}}
+            { text: 'Status', width: 90, minWidth: 90, dataIndex: 'status', sortable: true, xtype: 'statuscolumn', statustype: 'user', qtipConfig: {width: 280}}
 
         ],
         dockedItems: [{
             xtype: 'toolbar',
             dock: 'top',
+            ui: 'simple',
             defaults: {
                 margin: '0 0 0 12',
                 handler: function() {
@@ -265,10 +253,10 @@ Scalr.regPage('Scalr.ui.account2.users.view', function (loadParams, moduleParams
                                             selModel.deselect(recordsToDelete[i]);
                                         }
                                         store.remove(recordsToDelete);
+                                        grid.view.refresh();
                                     break;
                                 }
                             }
-                            selModel.refreshLastFocused();
                         }
                     };
                     request.url = '/account/users/xGroupActionHandler';
@@ -289,37 +277,45 @@ Scalr.regPage('Scalr.ui.account2.users.view', function (loadParams, moduleParams
                 xtype: 'tbfill'
             },{
                 itemId: 'add',
-                text: 'Add user',
-                cls: 'x-btn-green-bg',
+                text: 'New user',
+                cls: 'x-btn-green',
                 hidden: Scalr.flags['authMode'] == 'ldap',
-                handler: function() {
-                    grid.getSelectionModel().setLastFocused(null);
-                    form.loadRecord(store.createModel({status: 'Active', password: false}));
+                enableToggle: true,
+                handler: Ext.emptyFn,
+                toggleHandler: function (button, state) {
+                    if (state) {
+                        grid.clearSelectedRecord();
+                        form.loadRecord(storeUsers.createModel({id: 0, status: 'Active', password: false}));
+                        form.down('[name=fullname]').focus();
+
+                        return;
+                    }
+
+                    form.hide();
                 }
             },{
                 itemId: 'refresh',
-                ui: 'paging',
-                iconCls: 'x-tbar-loading',
+                iconCls: 'x-btn-icon-refresh',
                 tooltip: 'Refresh',
                 handler: function() {
                     Scalr.data.reload('account.*');
+                    grid.down('#add').toggle(false, true);
+                    form.hide();
                 }
             },{
                 itemId: 'activate',
-                ui: 'paging',
-                iconCls: 'x-tbar-activate',
+                iconCls: 'x-btn-icon-activate',
                 disabled: true,
                 tooltip: 'Activate selected users'
             },{
                 itemId: 'deactivate',
-                ui: 'paging',
-                iconCls: 'x-tbar-suspend',
+                iconCls: 'x-btn-icon-suspend',
                 disabled: true,
                 tooltip: 'Deactivate selected users'
             },{
                 itemId: 'delete',
-                ui: 'paging',
-                iconCls: 'x-tbar-delete',
+                iconCls: 'x-btn-icon-delete',
+                cls: 'x-btn-red',
                 disabled: true,
                 tooltip: 'Delete selected users'
             }]
@@ -327,58 +323,38 @@ Scalr.regPage('Scalr.ui.account2.users.view', function (loadParams, moduleParams
     });
 
     var form = Ext.create('Ext.form.Panel', {
-        //cls: 'scalr-ui-account2-edituser-form',
         hidden: true,
         fieldDefaults: {
             anchor: '100%',
-            labelWidth: 120
+            labelWidth: 135
         },
         autoScroll: true,
         teamsGridCollapsed: false,
         listeners: {
-            hide: function() {
-                grid.down('#add').setDisabled(false);
+            hide: function () {
+                grid.down('#add').toggle(false, true);
             },
-            afterrender: function() {
-                var me = this;
-                grid.getSelectionModel().on('focuschange', function(gridSelModel){
-                    if (gridSelModel.lastFocused) {
-                        me.loadRecord(gridSelModel.lastFocused);
-                    } else {
-                        me.setVisible(false);
-                    }
-                });
-            },
-            beforeloadrecord: function(record) {
+            loadrecord: function(record) {
                 var form = this.getForm(),
-                    isNewRecord = !record.get('id'),
+                    isNewRecord = !record.store,
                     userType = record.get('type'),
-                    currentRecord = form.getRecord(),
-                    wasNewRecord = currentRecord ? !currentRecord.get('id') : true,
                     gridTeams = this.down('#userTeamsGrid');
-                if (!wasNewRecord || gridTeams.collapsed) {
-                    this.teamsGridCollapsed = gridTeams.collapsed;
-                }
-                form.reset();
+
                 var c = this.query('component[cls~=hideoncreate], #delete');
                 for (var i=0, len=c.length; i<len; i++) {
                     c[i].setVisible(!isNewRecord);
                 }
                 this.down('#formtitle').setText(!isNewRecord?record.get(!Ext.isEmpty(record.get('fullname'))?'fullname':'email'):'New user', false);
-                grid.down('#add').setDisabled(isNewRecord);
+                grid.down('#add').toggle(isNewRecord, true);
 
                 gridTeams.setVisible(Scalr.flags['authMode'] != 'ldap');
                 if (Scalr.flags['authMode'] == 'scalr') {
-                    if (isNewRecord) {
-                        if (this.layout.done) {
+                    if (isNewRecord || !this.teamsGridCollapsed) {
+                        this.on('show', function(){
                             gridTeams.expand();
-                        } else {
-                            this.on('afterlayout', function(){
-                                gridTeams.expand();
-                            }, gridTeams, {single: true});
-                        }
+                        }, gridTeams, {single: true});
                     } else {
-                        gridTeams[this.teamsGridCollapsed ? 'collapse' : 'expand']();
+                        gridTeams.collapse();
                     }
                 } else if (Scalr.flags['authMode'] == 'ldap') {
                     if (isNewRecord)
@@ -391,17 +367,21 @@ Scalr.regPage('Scalr.ui.account2.users.view', function (loadParams, moduleParams
                 form.findField('isAccountAdmin').setValue(userType == 'AccountAdmin' || userType == 'AccountSuperAdmin' ? '1' : '0');
                 form.findField('isAccountSuperAdmin').setValue(userType == 'AccountSuperAdmin');
                 this.down('#save').setText(isNewRecord ? 'Add user' : 'Save');
-            },
-            loadrecord: function(record) {
-                if (!this.isVisible()) {
-                    this.setVisible(true);
-                }
+
+
                 this.down('#userTeams').setValue(getUserTeamsList(record.get('id'), true)+ (Scalr.flags['authMode'] == 'scalr' ? ' <a href="#" class="user-teams-edit">Change</a>' : ''));
                 storeUserTeams.loadUser(record);
 
                 this.down('#avatar').setSrc();
                 if (record.get('gravatarhash')) {
                     this.down('#avatar').setSrc(Scalr.utils.getGravatarUrl(record.get('gravatarhash'), 'large'));
+                }
+            },
+            resetrecord: function(record) {
+                var isNewRecord = record ? !record.store : true,
+                    gridTeams = this.down('#userTeamsGrid');
+                if (!isNewRecord || gridTeams.collapsed) {
+                    this.teamsGridCollapsed = gridTeams.collapsed;
                 }
             }
         },
@@ -411,15 +391,11 @@ Scalr.regPage('Scalr.ui.account2.users.view', function (loadParams, moduleParams
             items: [{
                 itemId: 'formtitle',
                 xtype: 'label',
-                cls: 'x-fieldset-header-text',
-                style: 'display:block;float:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin:0 50px 5px 0',
+                cls: 'x-fieldset-subheader x-form-title',
                 text: '&nbsp;'
             },{
                 xtype: 'image',
-                cls: 'hideoncreate',
-                style: 'position:absolute;right:32px;top:16px;border-radius:4px',
-                width: 46,
-                height: 46,
+                cls: 'hideoncreate x-gravatar',
                 itemId: 'avatar'
             },{
                 xtype: 'displayfield',
@@ -459,7 +435,7 @@ Scalr.regPage('Scalr.ui.account2.users.view', function (loadParams, moduleParams
                     items: [{
                         xtype: 'component',
                         style: 'color:#C00000',
-                        html: '<b>Admin access to user management</b><br/>Allow this user to create, modify and remove all account users, teams and ACL\'s.'
+                        html: '<span class="x-bold">Admin access to user management</span><br/>Allow this user to create, modify and remove all account users, teams and ACL\'s.'
                     },{
                         xtype: 'checkbox',
                         name: 'isAccountSuperAdmin',
@@ -503,14 +479,14 @@ Scalr.regPage('Scalr.ui.account2.users.view', function (loadParams, moduleParams
                     }
                 }
             }, {
-				xtype: 'textfield',
-				name: 'cpassword',
+                xtype: 'textfield',
+                name: 'cpassword',
                 itemId: 'cpassword',
-				inputType: 'password',
-				fieldLabel: 'Password confirm',
+                inputType: 'password',
+                fieldLabel: 'Password confirm',
                 hidden: true,
                 disabled: true,
-				allowBlank: false,
+                allowBlank: false,
                 selectOnFocus: true,
                 submitValue: false,
                 vtype: 'password',
@@ -537,15 +513,16 @@ Scalr.regPage('Scalr.ui.account2.users.view', function (loadParams, moduleParams
                 }
             },{
                 xtype: 'grid',
-                cls: 'x-grid-shadow x-panel-collapsible-mini x-grid-no-selection',
+                cls: 'x-panel-collapsible-mini x-grid-no-selection',
                 collapsible: true,
                 collapsed: false,
                 collapseMode: 'mini',
                 animCollapse: false,
                 header: false,
+                disableSelection: true,
                 itemId: 'userTeamsGrid',
                 store: storeUserTeams,
-                margin: '0 0 10 0',
+                margin: '0 0 12',
                 viewConfig: {
                     focusedItemCls: '',
                     plugins: {
@@ -575,14 +552,16 @@ Scalr.regPage('Scalr.ui.account2.users.view', function (loadParams, moduleParams
                     xtype: 'templatecolumn',
                     resizable: false,
                     sortable: false,
-                    tpl: '<div class="<tpl if="checked">x-form-cb-checked</tpl><tpl if="readonly"> x-item-disabled</tpl>" style="text-align: center"><input type="button" class="x-form-field x-form-checkbox x-form-cb team-member" style="margin:0;position:relative" /></div>'
-                },{
+                    tpl: '<div class="<tpl if="checked">x-form-cb-checked</tpl><tpl if="readonly"> x-item-disabled</tpl>" style="text-align: center">' +
+                             '<input type="button" class="x-form-field x-form-checkbox x-form-checkbox-default x-form-cb x-form-cb-default team-member" style="margin:4px 0 0;position:relative" />' +
+                         '</div>'
+                }, {
                     text: 'Name',
                     flex: 1,
                     resizable: false,
                     sortable: false,
                     dataIndex: 'name'
-                },{
+                }, {
                     text: 'ACL',
                     flex: 2,
                     resizable: false,
@@ -592,7 +571,7 @@ Scalr.regPage('Scalr.ui.account2.users.view', function (loadParams, moduleParams
                         '<tpl if="!readonly">',
                             '<div class="x-grid-row-options"><div class="x-grid-row-options-icon"></div></div>',
                         '</tpl>',
-                        '<div data-qtip="{[Ext.htmlEncode(this.getRolesList(values))]}" style="text-overflow:ellipsis;overflow:hidden">{[this.getRolesList(values)]}&nbsp;</div>',
+                        '<div data-qclass="x-tip-light" data-qtip="{[Ext.htmlEncode(this.getRolesList(values))]}" style="text-overflow:ellipsis;overflow:hidden">{[this.getRolesList(values)]}&nbsp;</div>',
                     {
                         getRolesList: function(team){
                             var html = [];
@@ -600,7 +579,7 @@ Scalr.regPage('Scalr.ui.account2.users.view', function (loadParams, moduleParams
                                 for (var i=0, len=team.roles.length; i<len; i++) {
                                     var role = storeRoles.getById(team.roles[i]);
                                     if (role) {
-                                        html.push('<a href="#/account/roles?roleId=' + role.get('id') + '" class="user-permission" style="color:#' + role.get('color') + '">' + role.get('name') + '</a>');
+                                        html.push('<a href="#/account/roles?roleId=' + role.get('id') + '" class="x-semibold user-permission" style="color:#' + role.get('color') + '">' + role.get('name') + '</a>');
                                     }
                                 }
                             }
@@ -608,7 +587,7 @@ Scalr.regPage('Scalr.ui.account2.users.view', function (loadParams, moduleParams
                                 if (team.account_role_id) {
                                     var defaultRoleRecord = storeRoles.getById(team.account_role_id);
                                     if (defaultRoleRecord) {
-                                        html.push('<span style="font-weight:bold;color:#'+defaultRoleRecord.get('color')+'">' + defaultRoleRecord.get('name')+'</span> (team\'s default ACL)');
+                                        html.push('<span class="x-semibold" style="color:#'+defaultRoleRecord.get('color')+'">' + defaultRoleRecord.get('name')+'</span> (team\'s default ACL)');
                                     }
                                 }
                             }
@@ -648,7 +627,7 @@ Scalr.regPage('Scalr.ui.account2.users.view', function (loadParams, moduleParams
                 },
                 dockedItems: [{
                     xtype: 'toolbar',
-                    ui: 'simple',
+                    ui: 'inline',
                     dock: 'top',
                     overlay: true,
                     layout: {
@@ -656,10 +635,11 @@ Scalr.regPage('Scalr.ui.account2.users.view', function (loadParams, moduleParams
                         pack: 'end'
                     },
                     margin: 0,
-                    padding: '6 12 6 0',
+                    padding: '6 8 6 0',
                     style: 'z-index:2',
                     items: {
-                        style: 'background:transparent;box-shadow:none',
+                        //style: 'background:transparent',
+                        ui: 'other',
                         iconCls: 'x-tool-img x-tool-close',
                         tooltip: 'Close',
                         handler: function() {
@@ -723,13 +703,13 @@ Scalr.regPage('Scalr.ui.account2.users.view', function (loadParams, moduleParams
                 handler: function () {
                     var frm = form.getForm(),
                         record = frm.getRecord(),
-                        isNewRecord = !record.get('id'),
+                        isNewRecord = !record.store,
                         confirmBox;
                     sendRequest = function(currentPassword) {
                         var teams = {};
-                        storeUserTeams.data.each(function(){
-                            if (this.get('checked')) {
-                                teams[this.get('id')] = this.get('roles');
+                        storeUserTeams.getUnfiltered().each(function(record){
+                            if (record.get('checked')) {
+                                teams[record.get('id')] = record.get('roles');
                             }
                         });
                         Scalr.Request({
@@ -743,25 +723,23 @@ Scalr.regPage('Scalr.ui.account2.users.view', function (loadParams, moduleParams
                                 currentPassword: currentPassword
                             },
                             success: function (data) {
-                                var scrollTop = grid.view.el.getScroll().top;
                                 if (confirmBox) {
                                     confirmBox.close();
                                 }
                                 if (data.specialToken) {
                                     Scalr.utils.saveSpecialToken(data.specialToken);
                                 }
-                                grid.getSelectionModel().setLastFocused(null);
-                                form.setVisible(false);
+
                                 if (isNewRecord) {
                                     record = store.add(data.user)[0];
                                 } else {
                                     record.set(data.user);
                                 }
                                 storeTeams.suspendEvents();
-                                storeTeams.data.each(function(){
-                                    var teamUsers = this.get('users'),
+                                storeTeams.each(function(teamRecord){
+                                    var teamUsers = teamRecord.get('users'),
                                         newTeamUsers = [],
-                                        teamId = this.get('id'),
+                                        teamId = teamRecord.get('id'),
                                         userId = record.get('id');
                                     if (teamUsers) {
                                         for (var i=0, len=teamUsers.length; i<len; i++) {
@@ -776,16 +754,11 @@ Scalr.regPage('Scalr.ui.account2.users.view', function (loadParams, moduleParams
                                             roles: data.teams[teamId].roles
                                         });
                                     }
-                                    this.set('users', newTeamUsers);
+                                    teamRecord.set('users', newTeamUsers);
                                 });
                                 storeTeams.resumeEvents();
                                 Scalr.data.fireRefresh(['account.users', 'account.teams']);
-                                grid.view.el.scrollTo('top', scrollTop);
-                                if (isNewRecord) {
-                                    grid.getSelectionModel().select(record);
-                                } else {
-                                    grid.getSelectionModel().setLastFocused(record);
-                                }
+                                grid.setSelectedRecord(record);
                             },
                             failure: function(data) {
                                 if (confirmBox) {
@@ -809,14 +782,12 @@ Scalr.regPage('Scalr.ui.account2.users.view', function (loadParams, moduleParams
                 xtype: 'button',
                 text: 'Cancel',
                 handler: function() {
-                    grid.getSelectionModel().setLastFocused(null);
-                    form.setVisible(false);
-                    form.down('grid').collapse();
+                    grid.clearSelectedRecord();
                 }
             }, {
                 itemId: 'delete',
                 xtype: 'button',
-                cls: 'x-btn-default-small-red',
+                cls: 'x-btn-red',
                 text: 'Delete',
                 handler: function() {
                     var record = form.getForm().getRecord();
@@ -833,8 +804,8 @@ Scalr.regPage('Scalr.ui.account2.users.view', function (loadParams, moduleParams
                         url: '/account/users/xRemove',
                         params: {userId: record.get('id')},
                         success: function (data) {
-                            record.store.remove(record);
-                            grid.getSelectionModel().setLastFocused(null);
+                            store.remove(record);
+                            grid.view.refresh();
                         }
                     });
                 }
@@ -850,7 +821,9 @@ Scalr.regPage('Scalr.ui.account2.users.view', function (loadParams, moduleParams
             align: 'stretch'
         },
         scalrOptions: {
-            title: 'Users',
+            menuTitle: 'Users',
+            menuHref: '#/account/users',
+            menuFavorite: true,
             reload: false,
             maximize: 'all',
             leftMenu: {
@@ -858,6 +831,7 @@ Scalr.regPage('Scalr.ui.account2.users.view', function (loadParams, moduleParams
                 itemId: 'users'
             }
         },
+        stateId: 'grid-account-users',
         listeners: {
             applyparams: reconfigurePage
         },
@@ -867,7 +841,7 @@ Scalr.regPage('Scalr.ui.account2.users.view', function (loadParams, moduleParams
             xtype: 'container',
             itemId: 'rightcol',
             flex: .6,
-            maxWidth: 520,
+            maxWidth: 560,
             minWidth: 400,
             layout: 'fit',
             items: [

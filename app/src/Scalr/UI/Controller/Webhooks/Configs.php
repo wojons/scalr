@@ -7,40 +7,17 @@ use Scalr\Model\Entity\WebhookConfigEvent;
 use Scalr\Model\Entity\WebhookConfigFarm;
 use Scalr\UI\Request\JsonData;
 use Scalr\UI\Request\Validator;
+use Scalr\DataType\ScopeInterface;
 
 class Scalr_UI_Controller_Webhooks_Configs extends Scalr_UI_Controller
 {
     const CALL_PARAM_NAME = 'webhookId';
 
-    private static $levelMap = [
-        'environment' => WebhookConfig::LEVEL_ENVIRONMENT,
-        'account'     => WebhookConfig::LEVEL_ACCOUNT,
-        'scalr'       => WebhookConfig::LEVEL_SCALR
-    ];
-
-    var $level = null;
-    
     public function hasAccess()
     {
-        return $this->level == WebhookConfig::LEVEL_ENVIRONMENT && $this->request->isAllowed(Acl::RESOURCE_ENVADMINISTRATION_WEBHOOKS) && !$this->user->isScalrAdmin() ||
-               $this->level == WebhookConfig::LEVEL_ACCOUNT && $this->request->isAllowed(Acl::RESOURCE_ADMINISTRATION_WEBHOOKS) && !$this->user->isScalrAdmin() ||
-               $this->level == WebhookConfig::LEVEL_SCALR && $this->user->isScalrAdmin();
-    }
-
-    public function init()
-    {
-        if ($this->user->isScalrAdmin()) {
-            $level = 'scalr';
-        } else {
-            $level = $this->getParam('level') ? $this->getParam('level') : 'environment';
-        }
-        if (isset(self::$levelMap[$level])) {
-            $this->level = self::$levelMap[$level];
-        } elseif (in_array($level, [WebhookConfig::LEVEL_ENVIRONMENT, WebhookConfig::LEVEL_ACCOUNT, WebhookConfig::LEVEL_SCALR])) {
-            $this->level = (int)$level;
-        } else {
-            throw new Scalr_Exception_Core('Invalid webhook scope');
-        }
+        return ($this->request->getScope() == WebhookConfig::SCOPE_ENVIRONMENT && $this->request->isAllowed(Acl::RESOURCE_ENVADMINISTRATION_WEBHOOKS) && !$this->user->isScalrAdmin() ||
+               $this->request->getScope() == WebhookConfig::SCOPE_ACCOUNT && $this->request->isAllowed(Acl::RESOURCE_ADMINISTRATION_WEBHOOKS) && !$this->user->isScalrAdmin() ||
+               $this->request->getScope() == WebhookConfig::SCOPE_SCALR && $this->user->isScalrAdmin());
     }
 
     /**
@@ -49,28 +26,27 @@ class Scalr_UI_Controller_Webhooks_Configs extends Scalr_UI_Controller
      */
     private function canEditWebhook($webhook)
     {
-        return $this->level == $webhook->level &&
-               ($webhook->level == WebhookConfig::LEVEL_SCALR && empty($webhook->accountId) && empty($webhook->envId) ||
-                $webhook->level == WebhookConfig::LEVEL_ACCOUNT && $webhook->accountId == $this->user->getAccountId() && empty($webhook->envId) ||
-                $webhook->level == WebhookConfig::LEVEL_ENVIRONMENT && $webhook->envId == $this->getEnvironmentId() && $webhook->accountId == $this->user->getAccountId());
+        return $this->request->getScope() == $webhook->getScope() &&
+               ($webhook->getScope() == WebhookConfig::SCOPE_SCALR ||
+                $webhook->getScope() == WebhookConfig::SCOPE_ACCOUNT && $webhook->accountId == $this->user->getAccountId() ||
+                $webhook->getScope() == WebhookConfig::SCOPE_ENVIRONMENT && $webhook->envId == $this->getEnvironmentId() && $webhook->accountId == $this->user->getAccountId());
     }
 
     public function defaultAction()
     {
         $farms = [];
-        if ($this->getEnvironmentId(true) && $this->level == WebhookConfig::LEVEL_ENVIRONMENT) {
+        if ($this->getEnvironmentId(true) && $this->request->getScope() == WebhookConfig::SCOPE_ENVIRONMENT) {
             $farms = $this->db->getAll('SELECT id, name FROM farms WHERE env_id = ? ORDER BY name', array($this->getEnvironmentId()));
         }
         $this->response->page('ui/webhooks/configs/view.js',
             array(
-                'level' => $this->level,
-                'levelMap' => array_flip(self::$levelMap),
+                'scope' => $this->request->getScope(),
                 'configs' => $this->getList(),
                 'events' => $this->getEventsList(),
                 'farms'  => $farms,
                 'endpoints' => $this->getEndpoints()
             ),
-            array('ux-boxselect.js', 'ui/webhooks/webhooks.js')
+            array('ui/webhooks/webhooks.js')
         );
     }
 
@@ -105,13 +81,7 @@ class Scalr_UI_Controller_Webhooks_Configs extends Scalr_UI_Controller
     {
         if (!$webhookId) {
             $webhook = new WebhookConfig();
-            $webhook->level = $this->level;
-            if ($this->level == WebhookConfig::LEVEL_ENVIRONMENT) {
-                $webhook->accountId = $this->user->getAccountId();
-                $webhook->envId = $this->getEnvironmentId();
-            } elseif ($this->level == WebhookConfig::LEVEL_ACCOUNT) {
-                $webhook->accountId = $this->user->getAccountId();
-            }
+            $webhook->setScope($this->request->getScope(), $this->user->getAccountId(), $this->getEnvironmentId(true));
         } else {
             $webhook = WebhookConfig::findPk($webhookId);
             if (!$this->canEditWebhook($webhook)) {
@@ -135,7 +105,7 @@ class Scalr_UI_Controller_Webhooks_Configs extends Scalr_UI_Controller
 
         //save endpoints
         $endpoints = (array)$endpoints;
-        foreach(WebhookConfigEndpoint::findByWebhookId($webhook->webhookId) as $webhookConfigEndpoint) {
+        foreach (WebhookConfigEndpoint::findByWebhookId($webhook->webhookId) as $webhookConfigEndpoint) {
             $index = array_search($webhookConfigEndpoint->endpointId, $endpoints);
             if ($index === false) {
                 $webhookConfigEndpoint->delete();
@@ -146,19 +116,29 @@ class Scalr_UI_Controller_Webhooks_Configs extends Scalr_UI_Controller
         if (!empty($endpoints)) {
             $criteria = [];
             $criteria[] = ['endpointId'  => ['$in' => $endpoints]];
-            $criteria[] = ['level' => $this->level];
-            if ($this->level == WebhookEndpoint::LEVEL_ENVIRONMENT) {
-                $criteria[] = ['envId' => $this->getEnvironmentId()];
-                $criteria[] = ['accountId' => $this->user->getAccountId()];
-            } elseif ($this->level == WebhookEndpoint::LEVEL_ACCOUNT) {
-                $criteria[] = ['envId' => null];
-                $criteria[] = ['accountId' => $this->user->getAccountId()];
-            } elseif ($this->level == WebhookEndpoint::LEVEL_SCALR) {
-                $criteria[] = ['envId' => null];
-                $criteria[] = ['accountId' => null];
+            switch ($this->request->getScope()) {
+                case WebhookConfig::SCOPE_ENVIRONMENT:
+                    $criteria[] = ['$or' => [
+                        ['$and' => [['accountId' => $this->user->getAccountId()], ['envId' => $this->getEnvironmentId()], ['level' => WebhookConfig::LEVEL_ENVIRONMENT]]],
+                        ['$and' => [['accountId' => $this->user->getAccountId()], ['envId' => null], ['level' => WebhookConfig::LEVEL_ACCOUNT]]],
+                        ['$and' => [['accountId' => null], ['envId' => null], ['level' => WebhookConfig::LEVEL_SCALR]]]
+                    ]];
+                    break;
+                case WebhookConfig::SCOPE_ACCOUNT:
+                    $criteria[] = ['$or' => [
+                        ['$and' => [['accountId' => $this->user->getAccountId()], ['envId' => null], ['level' => WebhookConfig::LEVEL_ACCOUNT]]],
+                        ['$and' => [['accountId' => null], ['envId' => null], ['level' => WebhookConfig::LEVEL_SCALR]]]
+                    ]];
+                    break;
+                case WebhookConfig::SCOPE_SCALR:
+                    $criteria[] = ['level' => WebhookConfig::LEVEL_SCALR];
+                    $criteria[] = ['envId' => null];
+                    $criteria[] = ['accountId' => null];
+                    break;
+
             }
-            
-            foreach(WebhookEndpoint::find($criteria) as $endpoint) {
+
+            foreach (WebhookEndpoint::find($criteria) as $endpoint) {
                 $configEndpoint = new WebhookConfigEndpoint();
                 $configEndpoint->webhookId = $webhook->webhookId;
                 $configEndpoint->setEndpoint($endpoint);
@@ -169,7 +149,7 @@ class Scalr_UI_Controller_Webhooks_Configs extends Scalr_UI_Controller
         //save events
         $allEvents = $this->getEventsList();
         $events = (array)$events;
-        foreach(WebhookConfigEvent::findByWebhookId($webhook->webhookId) as $event) {
+        foreach (WebhookConfigEvent::findByWebhookId($webhook->webhookId) as $event) {
             $index = array_search($event->eventType, $events);
             if ($index === false) {
                 if (isset($allEvents[$event->eventType])) {//20486-rebundlecomplete-emails - we shouldn't remove some events(RebundleComplete...)
@@ -227,6 +207,9 @@ class Scalr_UI_Controller_Webhooks_Configs extends Scalr_UI_Controller
                 $farms[] = $farm->farmId;
             }
         }
+
+        $this->response->success('Webhook successfully saved');
+
         $this->response->data(array(
             'webhook' => array(
                 'webhookId'     => $webhook->webhookId,
@@ -238,14 +221,17 @@ class Scalr_UI_Controller_Webhooks_Configs extends Scalr_UI_Controller
                 'endpoints'     => $endpoints,
                 'events'        => $events,
                 'farms'         => $farms,
-                'level'         => $webhook->level
+                'scope'         => $webhook->getScope()
             )
         ));
     }
 
-    public function xListAction()
+    /**
+     * @param   string  $scope
+     */
+    public function xListAction($scope = '')
     {
-        $this->response->data(array('configs' => $this->getList()));
+        $this->response->data(array('configs' => $this->getList($scope)));
     }
 
     /**
@@ -258,7 +244,7 @@ class Scalr_UI_Controller_Webhooks_Configs extends Scalr_UI_Controller
         $errors = array();
         if (!empty($webhookIds)) {
             $webhooks = WebhookConfig::find([['webhookId'  => ['$in' => $webhookIds]]]);
-            foreach($webhooks as $webhook) {
+            foreach ($webhooks as $webhook) {
                 if (!$this->canEditWebhook($webhook)) {
                     $errors[] = 'Insufficient permissions to remove webhook';
                 } else {
@@ -282,7 +268,7 @@ class Scalr_UI_Controller_Webhooks_Configs extends Scalr_UI_Controller
     {
         $events = EVENT_TYPE::getScriptingEventsWithScope();
         $envId = null;
-        if ($this->level == WebhookConfig::LEVEL_ENVIRONMENT) {
+        if ($this->request->getScope() == WebhookConfig::SCOPE_ENVIRONMENT) {
             $envId = (int)$this->getEnvironmentId(true);
         }
 
@@ -304,58 +290,75 @@ class Scalr_UI_Controller_Webhooks_Configs extends Scalr_UI_Controller
 
     }
 
-    private function getList()
+    /**
+     * @param   string      $scope
+     * @return  array
+     * @throws Scalr_Exception_Core
+     */
+    private function getList($scope = '')
     {
         $criteria = [];
 
-        if ($this->level == WebhookConfig::LEVEL_ENVIRONMENT) {
-            $criteria[] = ['$or' => [
-                ['$and' => [['accountId' => $this->user->getAccountId()], ['envId' => $this->getEnvironmentId()], ['level' => WebhookConfig::LEVEL_ENVIRONMENT]]],
-                ['$and' => [['accountId' => $this->user->getAccountId()], ['envId' => null], ['level' => WebhookConfig::LEVEL_ACCOUNT]]],
-                ['$and' => [['accountId' => null], ['envId' => null], ['level' => WebhookConfig::LEVEL_SCALR]]]
-            ]];
-        } elseif ($this->level == WebhookConfig::LEVEL_ACCOUNT) {
-            $criteria[] = ['$or' => [
-                ['$and' => [['accountId' => $this->user->getAccountId()], ['envId' => null], ['level' => WebhookConfig::LEVEL_ACCOUNT]]],
-                ['$and' => [['accountId' => null], ['envId' => null], ['level' => WebhookConfig::LEVEL_SCALR]]]
-            ]];
-        } elseif ($this->level == WebhookConfig::LEVEL_SCALR) {
-            $criteria[] = ['level' => WebhookConfig::LEVEL_SCALR];
-            $criteria[] = ['envId' => null];
-            $criteria[] = ['accountId' => null];
+        switch ($this->request->getScope()) {
+            case WebhookConfig::SCOPE_ENVIRONMENT:
+                $criteria[] = ['$or' => [
+                    ['$and' => [['accountId' => $this->user->getAccountId()], ['envId' => $this->getEnvironmentId()], ['level' => WebhookConfig::LEVEL_ENVIRONMENT]]],
+                    ['$and' => [['accountId' => $this->user->getAccountId()], ['envId' => null], ['level' => WebhookConfig::LEVEL_ACCOUNT]]],
+                    ['$and' => [['accountId' => null], ['envId' => null], ['level' => WebhookConfig::LEVEL_SCALR]]]
+                ]];
+                break;
+            case WebhookConfig::SCOPE_ACCOUNT:
+                $criteria[] = ['$or' => [
+                    ['$and' => [['accountId' => $this->user->getAccountId()], ['envId' => null], ['level' => WebhookConfig::LEVEL_ACCOUNT]]],
+                    ['$and' => [['accountId' => null], ['envId' => null], ['level' => WebhookConfig::LEVEL_SCALR]]]
+                ]];
+                break;
+            case WebhookConfig::SCOPE_SCALR:
+                $criteria[] = ['level' => WebhookConfig::LEVEL_SCALR];
+                $criteria[] = ['envId' => null];
+                $criteria[] = ['accountId' => null];
+                break;
+        }
+
+        $scopeLinking = [
+            ScopeInterface::SCOPE_SCALR => WebhookConfig::LEVEL_SCALR,
+            ScopeInterface::SCOPE_ACCOUNT => WebhookConfig::LEVEL_ACCOUNT,
+            ScopeInterface::SCOPE_ENVIRONMENT => WebhookConfig::LEVEL_ENVIRONMENT
+        ];
+
+        if ($scope && array_key_exists($scope, $scopeLinking)) {
+            $criteria[] = ['level' => $scopeLinking[$scope]];
         }
 
         foreach (WebhookConfig::find($criteria) as $entity) {
             $webhook = [
                 'webhookId' => $entity->webhookId,
                 'name'      => $entity->name,
-                'level'     => $entity->level
+                'scope'     => $entity->getScope()
             ];
-            if ($this->level == $entity->level) {
-                $endpoints = [];
-                foreach ($entity->getEndpoints() as $endpoint) {
-                    $endpoints[] = $endpoint->endpointId;
-                }
-
-                $events = [];
-                foreach ($entity->getEvents() as $event) {
-                    $events[] = $event->eventType;
-                }
-
-                $farms = array();
-                foreach ($entity->getFarms() as $farm) {
-                    if ($farm->farmId) {
-                        $farms[] =$farm->farmId;
-                    }
-                }
-                $webhook['postData'] = $entity->postData;
-                $webhook['timeout'] = $entity->timeout;
-                $webhook['attempts'] = $entity->attempts;
-                $webhook['skipPrivateGv'] = $entity->skipPrivateGv;
-                $webhook['endpoints'] = $endpoints;
-                $webhook['events'] = $events;
-                $webhook['farms'] = $farms;
+            $endpoints = [];
+            foreach ($entity->getEndpoints() as $endpoint) {
+                $endpoints[] = $endpoint->endpointId;
             }
+
+            $events = [];
+            foreach ($entity->getEvents() as $event) {
+                $events[] = $event->eventType;
+            }
+
+            $farms = array();
+            foreach ($entity->getFarms() as $farm) {
+                if ($farm->farmId) {
+                    $farms[] =$farm->farmId;
+                }
+            }
+            $webhook['postData'] = $this->request->getScope() == $entity->getScope() ? $entity->postData : '';
+            $webhook['timeout'] = $entity->timeout;
+            $webhook['attempts'] = $entity->attempts;
+            $webhook['skipPrivateGv'] = $entity->skipPrivateGv;
+            $webhook['endpoints'] = $endpoints;
+            $webhook['events'] = $events;
+            $webhook['farms'] = $farms;
             $list[] = $webhook;
         }
 
@@ -368,14 +371,26 @@ class Scalr_UI_Controller_Webhooks_Configs extends Scalr_UI_Controller
 
         $criteria = [];
 
-        if ($this->level == WebhookEndpoint::LEVEL_ENVIRONMENT) {
-            $criteria = [['accountId' => $this->user->getAccountId()], ['envId' => $this->getEnvironmentId()], ['level' => WebhookEndpoint::LEVEL_ENVIRONMENT]];
-        } elseif ($this->level == WebhookEndpoint::LEVEL_ACCOUNT) {
-            $criteria = [['accountId' => $this->user->getAccountId()], ['envId' => null], ['level' => WebhookEndpoint::LEVEL_ACCOUNT]];
-        } elseif ($this->level == WebhookEndpoint::LEVEL_SCALR) {
-            $criteria[] = ['level' => WebhookEndpoint::LEVEL_SCALR];
-            $criteria[] = ['envId' => null];
-            $criteria[] = ['accountId' => null];
+        switch ($this->request->getScope()) {
+            case WebhookEndpoint::SCOPE_ENVIRONMENT:
+                $criteria[] = ['$or' => [
+                ['$and' => [['accountId' => $this->user->getAccountId()], ['envId' => $this->getEnvironmentId()], ['level' => WebhookEndpoint::LEVEL_ENVIRONMENT]]],
+                ['$and' => [['accountId' => $this->user->getAccountId()], ['envId' => null], ['level' => WebhookEndpoint::LEVEL_ACCOUNT]]],
+                ['$and' => [['accountId' => null], ['envId' => null], ['level' => WebhookEndpoint::LEVEL_SCALR]]]
+                ]];
+                break;
+            case WebhookEndpoint::SCOPE_ACCOUNT:
+                $criteria[] = ['$or' => [
+                ['$and' => [['accountId' => $this->user->getAccountId()], ['envId' => null], ['level' => WebhookEndpoint::LEVEL_ACCOUNT]]],
+                ['$and' => [['accountId' => null], ['envId' => null], ['level' => WebhookEndpoint::LEVEL_SCALR]]]
+                ]];
+                break;
+            case WebhookEndpoint::SCOPE_SCALR:
+                $criteria[] = ['level' => WebhookEndpoint::LEVEL_SCALR];
+                $criteria[] = ['envId' => null];
+                $criteria[] = ['accountId' => null];
+                break;
+
         }
 
         foreach (WebhookEndpoint::find($criteria) as $entity) {

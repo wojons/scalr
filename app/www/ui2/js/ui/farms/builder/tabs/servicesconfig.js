@@ -1,103 +1,103 @@
-Scalr.regPage('Scalr.ui.farms.builder.tabs.servicesconfig', function () {
-	return Ext.create('Scalr.ui.FarmsBuilderTab', {
-		tabTitle: 'Services config',
-        deprecated: true,
-		tabData: {},
-        layout: 'anchor',
-        
-		isEnabled: function (record) {
-			return record.get('platform') != 'rds';
-		},
+Ext.define('Scalr.ui.FarmRoleEditorTab.Servicesconfig', {
+    extend: 'Scalr.ui.FarmRoleEditorTab',
+    tabTitle: 'Services config',
+    itemId: 'servicesconfig',
+    isDeprecated: true,
+    tabData: {},
+    layout: 'anchor',
+    cls: 'x-panel-column-left-with-tabs',
 
-		beforeShowTab: function (record, handler) {
-			var me = this, 
-                beh = [];
+    isEnabled: function (record) {
+        return this.callParent(arguments) && record.get('platform') != 'rds';
+    },
 
-			Ext.Array.each(record.get('behaviors').split(','), function (behavior) {
-                if (me.tabData[behavior] === undefined) {
-                    beh.push(behavior);
-                }
-			});
+    beforeShowTab: function (record, handler) {
+        var me = this,
+            beh = [];
 
-			if (! beh.length) {
-				handler();
-            } else {
-				Scalr.Request({
-					processBox: {
-						type: 'action'
-					},
-					params: {
-						behaviors: Ext.encode(beh)
-					},
-					url: '/services/configurations/presets/xGetList',
-					scope: this,
-					success: function (response) {
-						for (var i in response.data) {
-							response.data[i].unshift({ id: 0, name: 'Service defaults' });
-                            me.tabData[i] = response.data[i];
-						}
-
-						handler();
-					},
-					failure: function () {
-						this.deactivateTab();
-					}
-				});
+        Ext.Array.each(record.get('behaviors').split(','), function (behavior) {
+            if (me.tabData[behavior] === undefined) {
+                beh.push(behavior);
             }
-		},
+        });
 
-		showTab: function (record) {
-			var me = this,
-                behaviors = record.get('behaviors').split(','), 
-                config_presets = record.get('config_presets') || {}, 
-                fieldset = me.down('#servicesconfig');
+        if (! beh.length) {
+            handler();
+        } else {
+            Scalr.Request({
+                processBox: {
+                    type: 'action'
+                },
+                params: {
+                    behaviors: Ext.encode(beh)
+                },
+                url: '/services/configurations/presets/xGetList',
+                scope: this,
+                success: function (response) {
+                    for (var i in response.data) {
+                        response.data[i].unshift({ id: 0, name: 'Service defaults' });
+                        me.tabData[i] = response.data[i];
+                    }
 
-			Ext.Array.each(behaviors, function (behavior) {
-				fieldset.add({
-					xtype: 'combo',
-					store: {
-						fields: [ 'id', 'name' ],
-						proxy: 'object',
-						data: me.tabData[behavior]
-					},
-					fieldLabel: behavior,
-					valueField: 'id',
-					displayField: 'name',
-					//disabled: !config_presets[behavior],
-					editable: false,
-					queryMode: 'local',
-					behavior: behavior,
-					value: config_presets[behavior] || 0
-				});
-			});
-		},
+                    handler();
+                },
+                failure: function () {
+                    this.deactivateTab();
+                }
+            });
+        }
+    },
 
-		hideTab: function (record) {
-			var config_presets = {}, fieldset = this.down('#servicesconfig');
+    showTab: function (record) {
+        var me = this,
+            behaviors = record.get('behaviors').split(','), 
+            config_presets = record.get('config_presets') || {}, 
+            fieldset = me.down('#servicesconfig');
 
-			fieldset.items.each(function (item) {
-				var value = item.getValue();
-				if (value != '0')
-					config_presets[item.behavior] = value;
-			});
+        Ext.Array.each(behaviors, function (behavior) {
+            fieldset.add({
+                xtype: 'combo',
+                store: {
+                    fields: [ 'id', 'name' ],
+                    proxy: 'object',
+                    data: me.tabData[behavior]
+                },
+                fieldLabel: behavior,
+                valueField: 'id',
+                displayField: 'name',
+                editable: false,
+                queryMode: 'local',
+                behavior: behavior,
+                value: config_presets[behavior] || 0
+            });
+        });
+    },
 
-			fieldset.removeAll();
-			record.set('config_presets', config_presets);
-		},
+    hideTab: function (record) {
+        var config_presets = {}, fieldset = this.down('#servicesconfig');
 
-		items: [{
-			xtype: 'displayfield',
-			cls: 'x-form-field-warning x-form-field-warning-fit',
-            anchor: '100%',
-			value: 'Services config is deprecated.'
-		}, {
-			xtype: 'fieldset',
-			itemId: 'servicesconfig',
-            cls: 'x-fieldset-separator-none',
-			defaults: {
-				labelWidth: 100,
-				width: 400
-			}
-		}]
-	});
+        fieldset.items.each(function (item) {
+            var value = item.getValue();
+            if (value != '0')
+                config_presets[item.behavior] = value;
+        });
+
+        fieldset.removeAll();
+        record.set('config_presets', config_presets);
+    },
+
+    __items: [{
+        xtype: 'displayfield',
+        cls: 'x-form-field-warning x-form-field-warning-fit',
+        anchor: '100%',
+        value: 'Services config is deprecated.'
+    }, {
+        xtype: 'fieldset',
+        itemId: 'servicesconfig',
+        cls: 'x-fieldset-separator-none',
+        defaults: {
+            labelWidth: 100,
+            width: 400
+        }
+    }]
 });

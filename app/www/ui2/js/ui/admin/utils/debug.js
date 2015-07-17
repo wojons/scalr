@@ -10,6 +10,7 @@ Scalr.regPage('Scalr.ui.admin.utils.debug', function (loadParams, moduleParams) 
         }],
         items: [{
             xtype: 'fieldset',
+            cls: 'x-fieldset-separator-none x-fieldset-no-bottom-padding',
             items: [{
                 xtype: 'checkbox',
                 name: 'enabled',
@@ -35,10 +36,7 @@ Scalr.regPage('Scalr.ui.admin.utils.debug', function (loadParams, moduleParams) 
                         url: '/admin/utils/xSaveDebug',
                         form: this.up('form').getForm(),
                         success: function (data) {
-                            if (data['js'])
-                                Ext.Loader.loadScripts([data['js']], Ext.emptyFn);
-
-                            Scalr.event.fireEvent('close');
+                            Scalr.event.fireEvent('reload');
                         }
                     });
                 }

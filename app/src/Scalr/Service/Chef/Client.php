@@ -38,6 +38,12 @@
             return $this->request("/cookbooks/{$name}", "GET");
         }
 
+        public function listEnvironmentRecipes($env = '')
+        {
+            $env = ($env == '') ? "_default" : $env;
+            return $this->request("/environments/{$env}/recipes", "GET");
+        }
+        
         public function listRecipes($cookbookName, $cookbookVersion = '_latest')
         {
             return $this->request("/cookbooks/{$cookbookName}/{$cookbookVersion}", "GET");

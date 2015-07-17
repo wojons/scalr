@@ -288,6 +288,21 @@ class ErrorData
     const ERR_EC2_INSTANCE_ID_MALFORMED = 'InvalidInstanceID.Malformed';
 
     /**
+     * The request was rejected because the specified entity or resource could not be found.
+     */
+    const ERR_NOT_FOUND = 'NotFound';
+
+    /**
+     * The request was rejected because a specified ARN was not valid.
+     */
+    const ERR_INVALID_ARN = 'InvalidArn';
+
+    /**
+     * The input fails to satisfy the constraints specified by an AWS service.
+     */
+    const ERR_VALIDATION_ERROR = 'ValidationError';
+
+    /**
      * Error type
      * @var string
      */

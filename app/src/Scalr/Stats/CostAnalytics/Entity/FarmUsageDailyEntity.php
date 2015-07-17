@@ -46,11 +46,12 @@ class FarmUsageDailyEntity extends AbstractEntity
     public $cloudLocation;
 
     /**
-     * The type of the instance
+     * Identifier of the Usage Item
      *
+     * @Column(type="bin4")
      * @var string
      */
-    public $instanceType;
+    public $usageItem;
 
     /**
      * The identifier of the environment associated with the node
@@ -98,7 +99,7 @@ class FarmUsageDailyEntity extends AbstractEntity
      * @Column(type="integer")
      * @var int
      */
-    public $minInstances;
+    public $minUsage;
 
     /**
      * Max instances count
@@ -106,7 +107,7 @@ class FarmUsageDailyEntity extends AbstractEntity
      * @Column(type="integer")
      * @var int
      */
-    public $maxInstances;
+    public $maxUsage;
 
     /**
      * Total instance hours
@@ -114,7 +115,7 @@ class FarmUsageDailyEntity extends AbstractEntity
      * @Column(type="integer")
      * @var int
      */
-    public $instanceHours;
+    public $usageHours;
 
     /**
      * Hours when farm is running

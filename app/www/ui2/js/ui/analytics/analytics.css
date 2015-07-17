@@ -1,3 +1,7 @@
+.x-draw-container .x-panel-body-default {
+    background: transparent;
+}
+
 /*currency*/
 .scalr-ui-analytics-currency .small{
     /*font-size: 70%;*/
@@ -5,13 +9,13 @@
 
 /*pct label*/
 .x-label-pct{
-    text-align: center;
-    font-weight: bold;
-    line-height: 18px;
+    text-align: left;
+    font-family: OpenSansSemiBold;
+    line-height: 24px;
     padding: 0 6px;
-    min-width: 40px;
+    min-width: 50px;
     color: #fff;
-    border-radius: 2px;
+    border-radius: 1px;
     display: inline-block;
     vertical-align: top;
 }
@@ -30,20 +34,13 @@
     background-color: #f76040;
 }
 
-.x-label-pct .x-costanalytics-icon-increase-small{
-    width: 8px;
-    height: 12px;
-    background: url(/ui2/images/ui/analytics/increase-small-white.png) 0 0 no-repeat;
-    position: relative;
-    top: 1px;
-}
-
 .x-label-pct .x-costanalytics-icon-increase{
-    width: 11px;
-    height: 15px;
+    width: 12px;
+    height: 12px;
     background: url(/ui2/images/ui/analytics/increase-white.png) 0 0 no-repeat;
     position: relative;
-    top: 1px;
+    top: -1px;
+    vertical-align: middle;
 }
 
 
@@ -51,60 +48,22 @@
     background-color: #2ba446;
 }
 
-.x-label-pct .x-costanalytics-icon-decrease-small{
-    width: 8px;
-    height: 12px;
-    background: url(/ui2/images/ui/analytics/decrease-small-white.png) 0 0 no-repeat;
-    position: relative;
-    top: 2px;
-}
-
 .x-label-pct .x-costanalytics-icon-decrease{
-    width: 11px;
-    height: 15px;
-    background: url(/ui2/images/ui/analytics/decrease-white.png) 0 0 no-repeat;
+    width: 12px;
+    height: 12px;
+    background: url(/ui2/images/ui/analytics/decrease-white.png?1.1) 0 0 no-repeat;
     position: relative;
-    top: 2px;
-}
-/*arrow icons for buttons*/
-.x-costanalytics-icon-arrow{
-    width: 29px;
-    height: 26px;
-    background-image: url(/ui2/images/ui/analytics/arrows.png);
-    background-repeat: no-repeat;
-}
-
-.x-costanalytics-icon-arrow-left{
-    background-position: 0 0;
-}
-
-.x-costanalytics-icon-arrow-left.x-btn-pressed{
-    background-position: 0 -26px;
-}
-
-.x-costanalytics-icon-arrow-left.x-btn-disabled{
-    background-position: 0 -52px;
-}
-
-.x-costanalytics-icon-arrow-right{
-    background-position: -29px 0;
-}
-
-.x-costanalytics-icon-arrow-right.x-btn-pressed{
-    background-position: -29px -26px;
-}
-
-.x-costanalytics-icon-arrow-right.x-btn-disabled{
-    background-position: -29px -52px;
+    top: -1px;
+    vertical-align: middle;
 }
 
 /*custom pickers*/
 .x-monthpicker .x-item-disabled a,
 .x-quarterpicker .x-item-disabled a,
 .x-yearpicker .x-item-disabled a{
-    background-color: #eee;
+    background-color: #eee!important;
     cursor: default;
-    color: #bbb;
+    color: #bbb!important;
 }
 
 .x-quarterpicker .x-monthpicker-months .x-monthpicker-item {
@@ -167,6 +126,11 @@
     background-position: 0 -6px;
 }
 
+.scalr-ui-analytics-link:hover {
+    cursor: pointer;
+    text-decoration: underline;
+}
+
 
 @media only screen and (-webkit-min-device-pixel-ratio: 1.5),
     only screen and (-o-min-device-pixel-ratio: 3/2),
@@ -174,28 +138,13 @@
     only screen and (min-device-pixel-ratio: 1.5) {
 
     .x-label-pct .x-costanalytics-icon-decrease{
-        background-size: 11px 15px;
-        background-image: url(/ui2/images/ui/analytics/decrease-white-retina.png);
-    }
-
-    .x-label-pct .x-costanalytics-icon-decrease-small{
-        background-size: 8px 12px;
-        background-image: url(/ui2/images/ui/analytics/decrease-small-white-retina.png);
+        background-size: 12px 12px;
+        background-image: url(/ui2/images/ui/analytics/decrease-white-retina.png?1.1);
     }
 
     .x-label-pct .x-costanalytics-icon-increase{
-        background-size: 11px 15px;
+        background-size: 12px 12px;
         background-image: url(/ui2/images/ui/analytics/increase-white-retina.png);
-    }
-
-    .x-label-pct .x-costanalytics-icon-increase-small{
-        background-size: 8px 12px;
-        background-image: url(/ui2/images/ui/analytics/increase-small-white-retina.png);
-    }
-    
-    .x-costanalytics-icon-arrow{
-        background-size: 58px 78px;
-        background-image: url(/ui2/images/ui/analytics/arrows-retina.png);
     }
 
     .x-costanalytics-icon-event{

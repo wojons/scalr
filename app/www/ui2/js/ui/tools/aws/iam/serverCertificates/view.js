@@ -9,20 +9,19 @@ Scalr.regPage('Scalr.ui.tools.aws.iam.serverCertificates.view', function (loadPa
 	});
 
 	return Ext.create('Ext.grid.Panel', {
-		title: 'Server Certificates &raquo; View',
 		scalrOptions: {
-			'reload': false,
-			'maximize': 'all'
+			reload: false,
+			maximize: 'all',
+            menuTitle: 'AWS Server Certificates'
 		},
 		store: store,
 		stateId: 'grid-tools-aws-iam-serverCertificates-view',
 		stateful: true,
-		plugins: {
-			ptype: 'gridstore'
-		},
-		tools: [{
-			xtype: 'gridcolumnstool'
-		}],
+        plugins: [{
+            ptype: 'gridstore'
+        }, {
+            ptype: 'applyparams'
+        }],
 		viewConfig: {
 			emptyText: 'No server certificates found',
 			loadingText: 'Loading certificates ...'
@@ -30,7 +29,7 @@ Scalr.regPage('Scalr.ui.tools.aws.iam.serverCertificates.view', function (loadPa
 
 		columns: [
 			{ header: "ID", width: 250, dataIndex: 'id', sortable: false },
-			{ header: "Name", flex: 1, dataIndex: 'name', sortable: false },
+			{ header: "Certificate", flex: 1, dataIndex: 'name', sortable: false },
 			{ header: "Path", flex: 1, dataIndex: 'path', sortable: false },
 			{ header: "Arn", flex: 1, dataIndex: 'arn', sortable: false },
 			{ header: "Upload date", width: 200, dataIndex: 'upload_date', sortable: false }
@@ -41,8 +40,8 @@ Scalr.regPage('Scalr.ui.tools.aws.iam.serverCertificates.view', function (loadPa
 			store: store,
 			dock: 'top',
 			beforeItems: [{
-                text: 'Add certificate',
-                cls: 'x-btn-green-bg',
+                text: 'New certificate',
+                cls: 'x-btn-green',
 				handler: function() {
 					Scalr.event.fireEvent('redirect', '#/tools/aws/iam/servercertificates/create');
 				}

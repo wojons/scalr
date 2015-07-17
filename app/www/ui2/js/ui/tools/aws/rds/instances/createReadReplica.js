@@ -50,10 +50,15 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.instances.createReadReplica', function (lo
             title: 'Location and VPC Settings',
             items: [{
                 padding: 5,
+                labelWidth: 130,
                 xtype: 'combo',
-                fieldLabel: 'Location',
+                fieldLabel: 'Cloud Location',
                 emptyText: 'Select location',
                 name: 'cloudLocation',
+                plugins: {
+                    ptype: 'fieldinnericoncloud',
+                    platform: 'ec2'
+                },
                 store: {
                     fields: [ 'id', 'name' ],
                     data: moduleParams.locations,
@@ -107,6 +112,7 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.instances.createReadReplica', function (lo
                 submitValue: false,
                 xtype: 'combo',
                 name: 'VpcId',
+                labelWidth: 130,
                 padding: 5,
                 fieldLabel: 'VPC',
                 editable: false,
@@ -143,6 +149,7 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.instances.createReadReplica', function (lo
                 }
             }, {
                 submitValue: false,
+                labelWidth: 130,
                 padding: 5,
                 xtype: 'combo',
                 name: 'DBSubnetGroupName',

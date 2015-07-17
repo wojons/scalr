@@ -3,8 +3,8 @@ Scalr.regPage('Scalr.ui.servers.view', function (loadParams, moduleParams) {
 		fields: [
 			'cloud_location', 'flavor', 'instance_type_name', 'cloud_server_id', 'excluded_from_dns', 'server_id', 'remote_ip', 'role_alias',
 			'local_ip', 'status', 'platform', 'farm_name', 'role_name', 'index', 'role_id', 'farm_id', 'farm_roleid',
-			'uptime', 'ismaster', 'os_family', 'has_eip', 'is_szr', 'cluster_position', 'agent_version', 'agent_update_needed', 'agent_update_manual',
-			'initDetailsSupported', 'isInitFailed', 'la_server', 'launch_error', 'alerts', 'cluster_role', 'is_locked', 'hostname', 'termination_error'
+			'uptime', 'ismaster', 'os_family', { name: 'has_eip', defaultValue: false }, 'is_szr', 'cluster_position', 'agent_version', 'agent_update_needed', 'agent_update_manual',
+			'initDetailsSupported', 'isInitFailed', 'la_server', 'launch_error', 'alerts', 'cluster_role', 'is_locked', 'hostname', 'termination_error', 'isScalarized'
 		],
 		proxy: {
 			type: 'scalr.paging',
@@ -98,11 +98,11 @@ Scalr.regPage('Scalr.ui.servers.view', function (loadParams, moduleParams) {
 			for (var i = 0; i < store.getCount(); i++) {
 				var r = store.getAt(i);
 
-				if (r.get('status') == 'Running') {
+				if (r.get('status') == 'Running' && r.get('isScalarized') == 1) {
 					var la = laStore.findRecord('server_id', r.get('server_id'));
 
 					if (!la || (la.get('time') > dt)) {
-						r.set('la_server', '<img src="/ui2/images/icons/anim/snake_16x16.gif">');
+						r.set('la_server', '<img src="'+Ext.BLANK_IMAGE_URL+'" class="x-icon-colored-status-running" />');
 						r.commit();
 						if (! la)
 							la = laStore.add({ server_id: r.get('server_id') })[0];
@@ -124,7 +124,7 @@ Scalr.regPage('Scalr.ui.servers.view', function (loadParams, moduleParams) {
 							},
 							failure: function (data) {
 								r.set({
-									'la_server': '<img src="/ui2/images/icons/warning_icon_16x16.png" title="' + (data && data.errorMessage || 'Cannot proceed request') + '">'
+									'la_server': '<img src="'+Ext.BLANK_IMAGE_URL+'" class="x-grid-icon-warning" title="' + (data && data.errorMessage || 'Cannot proceed request') + '">'
 								});
 								r.commit();
 								la.set({
@@ -142,7 +142,7 @@ Scalr.regPage('Scalr.ui.servers.view', function (loadParams, moduleParams) {
 						r.commit();
 					}
 				} else {
-					r.set('la_server', '-');
+					r.set('la_server', r.get('isScalarized') == 1 ? '-' : 'N/A');
 					r.commit();
 				}
 			}
@@ -152,34 +152,24 @@ Scalr.regPage('Scalr.ui.servers.view', function (loadParams, moduleParams) {
 	store.on('load', laHandler.updateEvent, laHandler);
 
 	return Ext.create('Ext.grid.Panel', {
-		title: 'Servers &raquo; View',
 		scalrOptions: {
-			'reload': false,
-			'maximize': 'all'
+			reload: false,
+			maximize: 'all',
+            menuTitle: 'Servers',
+            menuHref: '#/servers',
+            menuFavorite: true
 		},
 		store: store,
 		stateId: 'grid-servers-view',
 		stateful: true,
-		plugins: {
-			ptype: 'gridstore'
-		},
-
-		tools: [{
-			xtype: 'gridcolumnstool'
-		}, {
-			xtype: 'favoritetool',
-			favorite: {
-				text: 'Servers',
-				href: '#/servers/view'
-			}
-		}],
+        plugins: [ 'gridstore', 'applyparams' ],
 
 		viewConfig: {
 			emptyText: 'No servers found',
 			loadingText: 'Loading servers ...',
 			getRowClass: function (record, rowIndex, rowParams) {
 				//TODO: replace == 9999 with > 0 when ready
-				return (!record.get('is_szr') && record.get('status') == 'Running') || (record.get('alerts') > 0) ? 'x-grid-row-red' : '';
+				return (!record.get('is_szr') && record.get('status') == 'Running') || (record.get('alerts') > 0) ? 'x-grid-row-color-red' : '';
 			},
 			listeners: {
 				itemclick: function (view, record, item, index, e) {
@@ -214,25 +204,24 @@ Scalr.regPage('Scalr.ui.servers.view', function (loadParams, moduleParams) {
 		},
 
 		columns: [
-			{ header: "Cloud", width: 80, dataIndex: 'platform', sortable: true, align: 'left', xtype: 'templatecolumn', tdCls: 'scalr-ui-servers-view-column-platform', tpl:
-                '<img class="x-icon-platform-small x-icon-platform-small-{platform}" title="{platform}" src="' + Ext.BLANK_IMAGE_URL + '"/>'
+			{ header: "Cloud", width: 85, dataIndex: 'platform', sortable: true, align: 'left', xtype: 'templatecolumn', tpl:
+                '<img class="x-icon-platform-small x-icon-platform-small-{platform}" style="margin-bottom: 2px" title="{platform}" src="' + Ext.BLANK_IMAGE_URL + '"/>'
             },
 			{ header: "Farm & role", flex: 2, dataIndex: 'farm_name', sortable: true, xtype: 'templatecolumn',
-			    doSort: function (state) {
-			        var ds = this.up('tablepanel').store;
-			        ds.sort([{
-			            property: 'farm_name',
-			            direction: state
-			        }, {
-			            property: 'role_alias',
-			            direction: state
-			        }, {
-			            property: 'index',
-			            direction: state
-			        }]);
-			    }, tpl:
+			    multiSort: function(store, direction) {
+                    store.sort([{
+                        property: 'farm_name',
+                        direction: direction
+                    }, {
+                        property: 'role_alias',
+                        direction: direction
+                    }, {
+                        property: 'index',
+                        direction: direction
+                    }]);
+                }, tpl:
 				'<tpl if="farm_id">' +
-					'<a href="#/farms/view?farmId={farm_id}" title="Farm {farm_name}">{farm_name}</a>' +
+					'<a href="#/farms?farmId={farm_id}" title="Farm {farm_name}">{farm_name}</a>' +
 					'<tpl if="role_alias">' +
                         '&nbsp;&rarr;&nbsp;<a href="#/farms/{farm_id}/roles/{farm_roleid}/view" title="Role {role_alias}">{role_alias}</a> ' +
                     '</tpl>' +
@@ -242,18 +231,18 @@ Scalr.regPage('Scalr.ui.servers.view', function (loadParams, moduleParams) {
 					'<tpl if="!role_name && !role_alias">' +
 						'&nbsp;&rarr;&nbsp;*removed role*&nbsp;' +
 					'</tpl>' +
-					'#<a href="#/servers/{server_id}/view">{index}</a>'+
+					'#<a href="#/servers?serverId={server_id}">{index}</a>'+
 				'</tpl>' +
 				'<tpl if="cluster_role"> ({cluster_role})</tpl>' +
 				'<tpl if="cluster_position"> ({cluster_position})</tpl>' +
-				'<tpl if="! farm_id"><img src="' + Ext.BLANK_IMAGE_URL + '" class="x-icon-minus" /></tpl>'
+				'<tpl if="! farm_id">&mdash;</tpl>'
 			},
-			{ header: "Server ID", flex: 1, dataIndex: 'server_id', sortable: true, xtype: 'templatecolumn', tpl: new Ext.XTemplate(
+			{ header: "Server ID", flex: 1, dataIndex: 'server_id', sortable: false, xtype: 'templatecolumn', tpl: new Ext.XTemplate(
 				'<tpl if="!is_szr && status == \'Running\'">' +
-                    '<a href="http://blog.scalr.com/post/53324376570/ami-scripts" target="_blank"><img src="' + Ext.BLANK_IMAGE_URL + '" class="x-icon-error"  title="This server using old (deprecated) scalr agent. Please click here for more informating about how to upgrade it." /></a>&nbsp;' +
+                    '<a href="http://blog.scalr.com/post/53324376570/ami-scripts" target="_blank"><div class="x-grid-icon x-grid-icon-error x-grid-icon-simple"  title="This server using old (deprecated) scalr agent. Please click here for more informating about how to upgrade it."></div></a>&nbsp;' +
                 '</tpl>' +
                 '<tpl if="alerts &gt; 0">' +
-                    '<a href="#/alerts?serverId={server_id}"><img src="' + Ext.BLANK_IMAGE_URL + '" class="x-icon-error" title="{alerts} alert(s). Click for more information." /></a>&nbsp;' +
+                    '<a href="#/alerts?serverId={server_id}"><div class="x-grid-icon x-grid-icon-error x-grid-icon-simple" title="{alerts} alert(s). Click for more information."></div></a>&nbsp;' +
                 '</tpl>' +
 				'<a href="#/servers/{server_id}/dashboard">{[this.serverId(values.server_id)]}</a>'
                 ,{
@@ -264,14 +253,14 @@ Scalr.regPage('Scalr.ui.servers.view', function (loadParams, moduleParams) {
 				})
 			},
             { header: "Hostname", flex: 1, dataIndex: 'hostname', sortable: false, hidden: true, xtype: 'templatecolumn',
-				tpl: '<tpl if="hostname">{hostname}<tpl else><img src="' + Ext.BLANK_IMAGE_URL + '" class="x-icon-minus" /></tpl>'
+				tpl: '<tpl if="hostname">{hostname}<tpl else>&mdash;</tpl>'
 			},
 			{ header: "Cloud Server ID", width: 100, dataIndex: 'cloud_server_id', sortable: false, hidden: true, xtype:'templatecolumn',  tpl:
 				'<tpl if="cloud_server_id">{cloud_server_id}' +
-				'<tpl else><img src="' + Ext.BLANK_IMAGE_URL + '" class="x-icon-minus" /></tpl>'
+				'<tpl else>&mdash;</tpl>'
 			},
 			{ header: "Cloud Location", width: 100, dataIndex: 'cloud_location', sortable: false, hidden: true },
-			{ header: "Status", minWidth: 160, width: 160, dataIndex: 'status', sortable: true, xtype: 'statuscolumn', statustype: 'server', qtipConfig: {width: 300}},
+			{ header: "Status", minWidth: 160, width: 160, dataIndex: 'status', sortable: true, xtype: 'statuscolumn', statustype: 'server', qtipConfig: {width: 320}},
 			{ header: 'Type', width: 100, dataIndex: 'flavor', sortable: false, hidden: true, xtype: 'templatecolumn', tpl: '{[values.instance_type_name||values.flavor]}' },
 			{ header: "Public IP", width: 120, dataIndex: 'remote_ip', sortable: true, xtype: 'templatecolumn', tpl:
 				'<tpl if="remote_ip">' +
@@ -282,10 +271,10 @@ Scalr.regPage('Scalr.ui.servers.view', function (loadParams, moduleParams) {
 				'<tpl if="local_ip">{local_ip}</tpl>'
 			},
 			{ header: "Uptime", width: 200, dataIndex: 'uptime', sortable: false },
-			{ header: "DNS", width: 38, dataIndex: 'excluded_from_dns', sortable: false, xtype: 'templatecolumn', align: 'center', tpl:
-				'<img src="' + Ext.BLANK_IMAGE_URL + '" class="x-icon-<tpl if="excluded_from_dns">minus<tpl else>ok</tpl>"/>'
+			{ header: "DNS", width: 48, dataIndex: 'excluded_from_dns', sortable: false, xtype: 'templatecolumn', align: 'center', tpl:
+				'<tpl if="excluded_from_dns">&mdash;<tpl else><div class="x-grid-icon x-grid-icon-simple x-grid-icon-ok"></div></tpl>'
 			},
-			{ header: "LA", width: 50, dataIndex: 'la_server', itemId: 'la', sortable: false, hidden: true, align: 'center',
+			{ header: "LA", width: 60, dataIndex: 'la_server', itemId: 'la', sortable: false, hidden: true, align: 'center',
 				listeners: {
 					hide: function () {
 						laHandler.schedule(false);
@@ -299,37 +288,40 @@ Scalr.regPage('Scalr.ui.servers.view', function (loadParams, moduleParams) {
 				}
 			},
 			{ header: "Agent", width: 80, dataIndex: 'agent_version', sortable: false, xtype: 'templatecolumn',  align: 'center', tpl:
-				'<tpl if="(status == &quot;Running&quot; || status == &quot;Initializing&quot;)">' +
+				'<tpl if="isScalarized == 1 && (status == &quot;Running&quot; || status == &quot;Initializing&quot;)">' +
                     '<tpl if="agent_update_needed">' +
-                        '<a class="updateAgent" href="/servers/{server_id}/xUpdateAgent"><img src="/ui2/images/icons/warning_16x16.png" width="12" title="Your scalr agent version is too old. Please click here to update it to the latest version."></a> {agent_version}' +
+                        '<img src="'+Ext.BLANK_IMAGE_URL+'" class="x-grid-icon x-grid-icon-warning" data-qtip="Your Scalr Agent version <b>{agent_version}</b> is too old" style="cursor:default" />' +
+                    '<tpl elseif="agent_update_manual">' +
+                        '<a href="http://blog.scalr.com/post/53324376570/ami-scripts" target="_blank"><img src="'+Ext.BLANK_IMAGE_URL+'" class="x-grid-icon x-grid-icon-error" data-qwidth="420" data-qtip="This server using old (deprecated) Scalr Agent <b>{agent_version}</b>. Please click for more informating about how to upgrade it."></a> ' +
+                    '<tpl else>'+
+                        '{agent_version}' +
                     '</tpl>'+
-                    '<tpl if="agent_update_manual">' +
-                        '<a href="http://blog.scalr.com/post/53324376570/ami-scripts" target="_blank"><img src="/ui2/images/icons/error_icon_16x16.png" width="12" title="This server using old (deprecated) scalr agent. Please click here for more informating about how to upgrade it."></a> {agent_version}' +
-                     '</tpl>'+
-                    '<tpl if="!agent_update_needed && !agent_update_manual">{agent_version}</tpl>' +
-				'</tpl>' + 
-                '<tpl if="!(status == &quot;Running&quot; || status == &quot;Initializing&quot;)"><img src="' + Ext.BLANK_IMAGE_URL + '" class="x-icon-minus" /></tpl>'
-			},
-			{ header: "Actions", width: 96, minWidth: 96, fixed: true, dataIndex: 'id', sortable: false, hideable: false, align: 'center', xtype: 'templatecolumn', tpl: new Ext.XTemplate(
-                '<div style="position: relative; height: 16px;">' +
-                    '<tpl if="(status == \'Running\' || status == \'Initializing\') && index != \'0\'">' +
-                        ( moduleParams['mindtermEnabled'] ? '<tpl if="os_family != \'windows\'">' +
-                            '<a title="SSH Launcher" href="#/servers/{server_id}/sshConsole" style="float:left"><img src="' + Ext.BLANK_IMAGE_URL + '" class="x-icon-server-action x-icon-server-action-console" /></a>' +
-                        '</tpl>' : '<img src="' + Ext.BLANK_IMAGE_URL + '" style="width: 16px; float: left">') +
-                        '<a title="Monitoring" href="#/monitoring/view?farmId={farm_id}&farmRoleId={farm_roleid}&index={index}" style="float:left;margin:0 6px"><img src="' + Ext.BLANK_IMAGE_URL + '" class="x-icon-server-action x-icon-server-action-statsusage" /></a>' +
-                        '<a title="Execute script" href="#/scripts/execute?serverId={server_id}" style="float:left"><img src="' + Ext.BLANK_IMAGE_URL + '" class="x-icon-server-action x-icon-server-action-execute" /></a>' +
-                    '</tpl>' +
-                    '<tpl if="is_locked == 1">' +
-                        '<img src="' + Ext.BLANK_IMAGE_URL + '" class="x-icon-server-action x-icon-server-action-lock lock" title="disableAPITermination flag is set to ON. Click to remove." style="cursor:pointer;margin-left:6px" />' +
-                    '</tpl>' +
-                    '<tpl if="is_locked != 1 && !((status == \'Running\' || status == \'Initializing\') && index != \'0\')">' +
-                        '<img src="' + Ext.BLANK_IMAGE_URL + '" class="x-icon-minus"/>' +
-                    '</tpl>' +
-                '</div>')
-            },{
-				xtype: 'optionscolumn2',
+				'<tpl else>' +
+                    '&mdash;' +
+                '</tpl>'
+			}, {
+				xtype: 'optionscolumn',
+                fillEmptyIcons: true,
+                listeners: {
+                    boxready: {
+                        fn: function() {
+                            var me = this,
+                                grid = this.up('grid');
+                            if (grid) {
+                                grid.on('applyparams', function(params) {
+                                    if (me.menu) {
+                                        me.menu.loadParams = params;
+                                    }
+                                });
+                            }
+                        },
+                        single: true
+                    }
+                },
                 menu: {
                     xtype: 'servermenu',
+                    moduleParams: moduleParams,
+                    loadParams: loadParams,
                     listeners: {
                         actioncomplete: function() {
                             store.load();
@@ -339,7 +331,6 @@ Scalr.regPage('Scalr.ui.servers.view', function (loadParams, moduleParams) {
 			}
 		],
 
-		multiSelect: true,
 		selModel: {
 			selType: 'selectedmodel',
 			getVisibility: function(record) {
@@ -359,7 +350,7 @@ Scalr.regPage('Scalr.ui.servers.view', function (loadParams, moduleParams) {
 			selectionchange: function(selModel, selections) {
 				this.down('scalrpagingtoolbar').down('#reboot').setDisabled(!selections.length);
 				this.down('scalrpagingtoolbar').down('#terminate').setDisabled(!selections.length);
-			}
+            }
 		},
 
 		dockedItems: [{
@@ -367,9 +358,8 @@ Scalr.regPage('Scalr.ui.servers.view', function (loadParams, moduleParams) {
 			store: store,
 			dock: 'top',
 			afterItems: [{
-				ui: 'paging',
 				itemId: 'reboot',
-				iconCls: 'x-tbar-reboot',
+				iconCls: 'x-btn-icon-reboot',
 				tooltip: 'Select one or more servers to reboot them',
 				disabled: true,
 				handler: function() {
@@ -385,9 +375,9 @@ Scalr.regPage('Scalr.ui.servers.view', function (loadParams, moduleParams) {
                     });
 				}
 			}, {
-				ui: 'paging',
 				itemId: 'terminate',
-				iconCls: 'x-tbar-terminate',
+				iconCls: 'x-btn-icon-terminate',
+                cls: 'x-btn-red',
 				tooltip: 'Select one or more servers to terminate them',
 				disabled: true,
 				handler: function() {
@@ -440,13 +430,15 @@ Scalr.regPage('Scalr.ui.servers.view', function (loadParams, moduleParams) {
 				},
 				store: store
 			}, ' ', {
-				xtype: 'button',
+				xtype: 'buttonfield',
+				name: 'showTerminated',
 				enableToggle: true,
 				width: 200,
 				text: 'Show terminated servers',
-				toggleHandler: function (field, checked) {
-					store.proxy.extraParams.hideTerminated = checked ? 'false' : 'true';
-					store.loadPage(1);
+				toggleHandler: function (me) {
+					store.applyProxyParams({
+						showTerminated: me.getValue()
+					});
 				}
 			}]
 		}]

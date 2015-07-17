@@ -1,21 +1,4 @@
 Scalr.regPage('Scalr.ui.scripts.events.view', function (loadParams, moduleParams) {
-    var scalrOptions;
-    if (moduleParams['scope'] == 'account') {
-        scalrOptions = {
-            title: 'Account management &raquo; Custom events',
-            maximize: 'all',
-            leftMenu: {
-                menuId: 'settings',
-                itemId: 'events',
-                showPageTitle: true
-            }
-        };
-    } else {
-        scalrOptions = {
-            maximize: 'all'
-        };
-    }
-
     var store = Ext.create('store.store', {
         fields: [
             'id',
@@ -29,12 +12,9 @@ Scalr.regPage('Scalr.ui.scripts.events.view', function (loadParams, moduleParams
         proxy: {
             type: 'ajax',
             url: '/scripts/events/xList/',
-            extraParams: {
-                scope: moduleParams['scope']
-            },
             reader: {
                 type: 'json',
-                root: 'data',
+                rootProperty: 'data',
                 successProperty: 'success'
             }
         },
@@ -43,8 +23,29 @@ Scalr.regPage('Scalr.ui.scripts.events.view', function (loadParams, moduleParams
         }]
     });
 
+	var reconfigurePage = function(params) {
+        if (params.eventId) {
+            cb = function() {
+                if (params.eventId === 'new') {
+                    panel.down('#add').toggle(true);
+                } else {
+                    panel.down('#liveSearch').reset();
+                    var record = store.getById(params.eventId);
+                    if (record) {
+                        grid.setSelectedRecord(record);
+                    }
+                }
+            };
+            if (grid.view.viewReady) {
+                cb();
+            } else {
+                grid.view.on('viewready', cb, grid.view, {single: true});
+            }
+        }
+    };
+
     var grid = Ext.create('Ext.grid.Panel', {
-        cls: 'x-grid-shadow x-panel-column-left',
+        cls: 'x-panel-column-left',
         store: store,
         flex: 1,
         selModel: {
@@ -53,14 +54,13 @@ Scalr.regPage('Scalr.ui.scripts.events.view', function (loadParams, moduleParams
                 return moduleParams['scope'] == record.get('scope') && !record.get('used');
             }
         },
-        plugins: ['focusedrowpointer'],
+        plugins: [ 'focusedrowpointer', {
+            ptype: 'selectedrecord',
+            disableSelection: false,
+            clearOnRefresh: true
+        }],
         columns: [{
-            header: '<img style="cursor: help" src="' + Ext.BLANK_IMAGE_URL + '" class="x-icon-info" data-qclass="x-tip-light" data-qtip="' +
-            Ext.String.htmlEncode('<div>Scopes:</div>' +
-            '<div><img src="' + Ext.BLANK_IMAGE_URL + '" class="scalr-scope-scalr">&nbsp;&nbsp;Scalr</div>' +
-            '<div><img src="' + Ext.BLANK_IMAGE_URL + '" class="scalr-scope-account">&nbsp;&nbsp;Account</div>' +
-            '<div><img src="' + Ext.BLANK_IMAGE_URL + '" class="scalr-scope-environment">&nbsp;&nbsp;Environment</div>') +
-            '" />&nbsp;Name',
+            text: 'Event',
             flex: 1,
             dataIndex: 'name',
             resizable: false,
@@ -68,8 +68,8 @@ Scalr.regPage('Scalr.ui.scripts.events.view', function (loadParams, moduleParams
             xtype: 'templatecolumn',
             tpl: new Ext.XTemplate('{[this.getScope(values.scope)]}&nbsp;&nbsp;{name}',
                 {
-                    getScope: function (scope) {
-                        return '<img src="' + Ext.BLANK_IMAGE_URL + '" class="scalr-scope-' + scope + '" data-qtip="' + Ext.String.capitalize(scope) + ' scope"/>';
+                    getScope: function(scope){
+                        return '<img src="' + Ext.BLANK_IMAGE_URL + '" class="scalr-scope-'+scope+'" data-qclass="x-tip-light" data-qtip="' + Scalr.utils.getScopeLegend('event') + '"/>';
                     }
                 }
             )
@@ -86,10 +86,10 @@ Scalr.regPage('Scalr.ui.scripts.events.view', function (loadParams, moduleParams
             header: 'Actions',
             width: 90,
             minWidth: 90,
-            hidden: Scalr.user.type == 'ScalrAdmin',
+            hidden: moduleParams['scope'] != 'environment',
             sortable: false,
             align: 'center', xtype: 'templatecolumn', tpl:
-            '<a title="Fire event" href="#/scripts/events/fire?eventName={name}"><img src="' + Ext.BLANK_IMAGE_URL + '" class="x-icon-server-action x-icon-server-action-execute" /></a>'
+            '<a data-qtip="Fire event" href="#/scripts/events/fire?eventName={name}"><img src="' + Ext.BLANK_IMAGE_URL + '" class="x-grid-icon x-grid-icon-execute" /></a>'
         }],
         viewConfig: {
             preserveScrollOnRefresh: true,
@@ -100,13 +100,7 @@ Scalr.regPage('Scalr.ui.scripts.events.view', function (loadParams, moduleParams
                 emptyTextNoItems: 'You have no custom events added yet.'
             },
             loadingText: 'Loading custom events ...',
-            deferEmptyText: false,
-            listeners: {
-                refresh: function(view){
-                    view.getSelectionModel().setLastFocused(null);
-                    view.getSelectionModel().deselectAll();
-                }
-            }
+            deferEmptyText: false
         },
         listeners: {
             selectionchange: function(selModel, selected) {
@@ -116,8 +110,99 @@ Scalr.regPage('Scalr.ui.scripts.events.view', function (loadParams, moduleParams
         dockedItems: [{
             xtype: 'toolbar',
             dock: 'top',
+            ui: 'simple',
             defaults: {
-                margin: '0 0 0 12',
+                margin: '0 0 0 12'
+            },
+            items: [{
+                xtype: 'filterfield',
+                itemId: 'liveSearch',
+                margin: 0,
+                minWidth: 60,
+                maxWidth: 200,
+                flex: 1,
+                filterFields: ['name'],
+                handler: null,
+                store: store
+            },{
+                xtype: 'cyclealt',
+                name: 'scope',
+                getItemIconCls: false,
+                hidden: Scalr.user.type === 'ScalrAdmin',
+                width: 130,
+                changeHandler: function (me, menuItem) {
+                    store.applyProxyParams({
+                        scope: menuItem.value
+                    });
+                },
+                getItemText: function (item) {
+                    return item.value
+                        ? 'Scope: &nbsp;<img src="'
+                            + Ext.BLANK_IMAGE_URL
+                            + '" class="' + item.iconCls
+                            + '" title="' + item.text + '" />'
+                        : item.text;
+                },
+                menu: {
+                    cls: 'x-menu-light x-menu-cycle-button-filter',
+                    minWidth: 200,
+                    items: [{
+                        text: 'All scopes',
+                        value: null
+                    }, {
+                        text: 'Scalr scope',
+                        value: 'scalr',
+                        iconCls: 'scalr-scope-scalr'
+                    }, {
+                        text: 'Account scope',
+                        value: 'account',
+                        iconCls: 'scalr-scope-account'
+                    }, {
+                        text: 'Environment scope',
+                        value: 'environment',
+                        iconCls: 'scalr-scope-environment',
+                        hidden: Scalr.scope !== 'environment',
+                        disabled: Scalr.scope !== 'environment'
+                    }]
+                }
+            },{
+                xtype: 'tbfill',
+                flex: .1,
+                margin: 0
+            },{
+                xtype: 'tbfill',
+                flex: .1,
+                margin: 0
+            },{
+                itemId: 'add',
+                text: 'New custom event',
+                cls: 'x-btn-green',
+                enableToggle: true,
+                toggleHandler: function (button, state) {
+                    if (state) {
+                        grid.clearSelectedRecord();
+                        form.loadRecord(grid.store.createModel({scope: moduleParams['scope']}));
+                        form.down('[name=name]').focus();
+
+                        return;
+                    }
+
+                    form.hide();
+                }
+            },{
+                itemId: 'refresh',
+                iconCls: 'x-btn-icon-refresh',
+                tooltip: 'Refresh',
+                handler: function() {
+                    store.load();
+                    grid.down('#add').toggle(false, true);
+                }
+            },{
+                itemId: 'delete',
+                iconCls: 'x-btn-icon-delete',
+                cls: 'x-btn-red',
+                disabled: true,
+                tooltip: 'Delete custom event ',
                 handler: function() {
                     var action = this.getItemId(),
                         actionMessages = {
@@ -154,7 +239,6 @@ Scalr.regPage('Scalr.ui.scripts.events.view', function (loadParams, moduleParams
                                         break;
                                 }
                             }
-                            selModel.refreshLastFocused();
                         }
                     };
                     request.url = '/scripts/events/xGroupActionHandler';
@@ -162,110 +246,97 @@ Scalr.regPage('Scalr.ui.scripts.events.view', function (loadParams, moduleParams
 
                     Scalr.Request(request);
                 }
-            },
-            items: [{
-                xtype: 'filterfield',
-                itemId: 'liveSearch',
-                margin: 0,
-                minWidth: 60,
-                maxWidth: 200,
-                flex: 1,
-                filterFields: ['name'],
-                handler: null,
-                store: store
-            },{
-                xtype: 'tbfill',
-                flex: .1,
-                margin: 0
-            },{
-                xtype: 'tbfill',
-                flex: .1,
-                margin: 0
-            },{
-                itemId: 'add',
-                text: 'New custom event',
-                cls: 'x-btn-green-bg',
-                handler: function() {
-                    grid.getSelectionModel().setLastFocused(null);
-                    form.loadRecord(grid.store.createModel({scope: moduleParams['scope']}));
-                }
-            },{
-                itemId: 'refresh',
-                ui: 'paging',
-                iconCls: 'x-tbar-loading',
-                tooltip: 'Refresh',
-                handler: function() {
-                    store.load();
-                }
-            },{
-                itemId: 'delete',
-                ui: 'paging',
-                iconCls: 'x-tbar-delete',
-                disabled: true,
-                tooltip: 'Delete custom event '
             }]
         }]
     });
 
     var form = 	Ext.create('Ext.form.Panel', {
         hidden: true,
+
         layout: {
             type: 'vbox',
             align: 'stretch'
         },
+
+        disableButtons: function (disabled, scope, isEventUsed) {
+            var me = this;
+
+            var tooltip = !disabled
+                ? ''
+                : Scalr.utils.getForbiddenActionTip('event', scope);
+
+            Ext.Array.each(
+                me.getDockedComponent('buttons').query('#save, #delete'),
+                function (button) {
+                    button.
+                        setTooltip(tooltip).
+                        setDisabled(
+                            button.getItemId() !== 'delete'
+                                ? disabled
+                                : disabled || isEventUsed
+                    );
+                }
+            );
+
+            return me;
+        },
+
+        toggleScopeInfo: function(record) {
+            var me = this,
+                scopeInfoField = me.down('#scopeInfo');
+            if (Scalr.scope != record.get('scope')) {
+                scopeInfoField.setValue(Scalr.utils.getScopeInfo('custom event', record.get('scope'), record.get('id')));
+                scopeInfoField.show();
+            } else {
+                scopeInfoField.hide();
+            }
+            return me;
+        },
+
         listeners: {
-            hide: function() {
-                grid.down('#add').setDisabled(false);
-            },
-            afterrender: function() {
-                var me = this;
-                grid.getSelectionModel().on('focuschange', function(gridSelModel){
-                    if (gridSelModel.lastFocused) {
-                        me.loadRecord(gridSelModel.lastFocused);
-                    } else {
-                        me.hide();
-                    }
-                });
-            },
             beforeloadrecord: function(record) {
                 var frm = this.getForm(),
-                    isNewRecord = !record.get('id');
+                    isNewRecord = !record.store,
+                    scope = record.get('scope'),
+                    isEventUsed = !!record.get('used');
 
-                frm.reset(true);
+                this.down('#save').setText(isNewRecord ? 'Create' : 'Save');
 
-                if (moduleParams['scope'] == record.get('scope')) {
-                    this.getDockedComponent('buttons').show();
+                if (moduleParams['scope'] === scope) {
+                    this.disableButtons(false, scope, isEventUsed);
                     frm.findField('name').setReadOnly(!isNewRecord);
                     frm.findField('description').setReadOnly(false);
                     this.down('#formtitle').setTitle(isNewRecord ? 'New custom event' : 'Edit custom event');
                 } else {
-                    this.getDockedComponent('buttons').hide();
+                    this.disableButtons(true, scope, isEventUsed);
                     frm.findField('name').setReadOnly(true);
                     frm.findField('description').setReadOnly(true);
-                    this.down('#formtitle').setTitle('View custom event');
+                    this.down('#formtitle').setTitle('Edit custom event');
                 }
-                this.down('#delete').setDisabled(!!record.get('used'));
 
                 var c = this.query('component[cls~=hideoncreate], #delete');
                 for (var i=0, len=c.length; i<len; i++) {
                     c[i].setVisible(!isNewRecord);
                 }
-                grid.down('#add').setDisabled(isNewRecord);
-            },
-            loadrecord: function() {
-                if (!this.isVisible()) {
-                    this.show();
-                }
+
+                grid.down('#add').toggle(isNewRecord, true);
+                this.toggleScopeInfo(record);
             }
         },
         fieldDefaults: {
             anchor: '100%',
-            labelWidth: 70,
-            allowBlank: false,
-            validateOnChange: false
+            labelWidth: 90,
+            allowBlank: false
         },
         items: [{
+            xtype: 'displayfield',
+            itemId: 'scopeInfo',
+            cls: 'x-form-field-info x-form-field-info-fit',
+            anchor: '100%',
+            hidden: true
+        },{
             xtype: 'fieldset',
+            cls: 'x-fieldset-separator-none',
             itemId: 'formtitle',
             title: '&nbsp;',
             items: [{
@@ -287,7 +358,7 @@ Scalr.regPage('Scalr.ui.scripts.events.view', function (loadParams, moduleParams
                 renderer: function(value) {
                     var record = this.up('form').getForm().getRecord(),
                         used,
-                        text;
+                        text = '';
                     if (record) {
                         used = record.get('used');
                         if (used) {
@@ -336,8 +407,7 @@ Scalr.regPage('Scalr.ui.scripts.events.view', function (loadParams, moduleParams
                         record = frm.getRecord();
                     if (frm.isValid()) {
                         params = {
-                            id: record.get('id'),
-                            scope: moduleParams['scope']
+                            id: record.store ? record.get('id') : null
                         };
 
                         var fn = function(replace) {
@@ -361,21 +431,13 @@ Scalr.regPage('Scalr.ui.scripts.events.view', function (loadParams, moduleParams
                                 form: frm,
                                 params: params,
                                 success: function (data) {
-                                    var isNewRecord = !record.get('id');
-                                    grid.getSelectionModel().setLastFocused(null);
-                                    form.setVisible(false);
-                                    if (isNewRecord) {
+                                    if (!record.store) {
                                         record = store.add(data.event)[0];
-                                        grid.getSelectionModel().select(record);
                                     } else {
                                         record.set(data.event);
-                                        form.loadRecord(record);
                                     }
-                                    if (isNewRecord) {
-                                        grid.getSelectionModel().select(record);
-                                    } else {
-                                        grid.getSelectionModel().setLastFocused(record);
-                                    }
+                                    grid.clearSelectedRecord();
+                                    grid.setSelectedRecord(record);
                                     Scalr.CachedRequestManager.get().setExpired({url: '/scripts/events/xList'});
                                 },
                                 failure: function(data) {
@@ -395,13 +457,13 @@ Scalr.regPage('Scalr.ui.scripts.events.view', function (loadParams, moduleParams
                 xtype: 'button',
                 text: 'Cancel',
                 handler: function() {
-                    grid.getSelectionModel().setLastFocused(null);
-                    form.setVisible(false);
+                    grid.clearSelectedRecord();
+                    grid.down('#add').toggle(false, true);
                 }
             }, {
                 itemId: 'delete',
                 xtype: 'button',
-                cls: 'x-btn-default-small-red',
+                cls: 'x-btn-red',
                 text: 'Delete',
                 handler: function() {
                     var record = form.getForm().getRecord();
@@ -427,13 +489,20 @@ Scalr.regPage('Scalr.ui.scripts.events.view', function (loadParams, moduleParams
     });
 
     var panel = Ext.create('Ext.panel.Panel', {
-        cls: 'scalr-ui-panel-webhooks-ebndpoints',
         layout: {
             type: 'hbox',
             align: 'stretch'
         },
-        scalrOptions: scalrOptions,
-        title: moduleParams['scope'] == 'account' ? '' : Ext.String.capitalize(moduleParams['scope']) + ' custom events',
+        scalrOptions: {
+            maximize: 'all',
+            menuTitle: 'Custom events',
+            menuHref: '#' + (Scalr.scope == 'environment' ? '/scripts/events' : Scalr.utils.getUrlPrefix() + '/events'),
+            menuFavorite: Ext.Array.contains(['account', 'environment'], Scalr.scope),
+        },
+        stateId: 'grid-scripts-events-view',
+        listeners: {
+            applyparams: reconfigurePage
+        },
         items: [
             grid
             ,{
@@ -448,5 +517,4 @@ Scalr.regPage('Scalr.ui.scripts.events.view', function (loadParams, moduleParams
     });
 
     return panel;
-
 });

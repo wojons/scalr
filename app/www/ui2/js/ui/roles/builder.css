@@ -1,16 +1,15 @@
-.x-btn-simple-large-small-text .x-btn-inner{
-    font-size: 11px;
-    white-space: normal;
-}
-
 .x-rolebuilder-addons .x-btn-simple-large{
     background: transparent;
     box-shadow: none;
-    width: 70px;
+    width: 80px;
     height: 70px;
     cursor: default;
 }
 
 .x-rolebuilder-addons .x-btn-simple-large .x-btn-inner{
     display: none;
+}
+
+.x-rolebuilder-addons .x-btn-simple-large .x-btn-icon-el{
+    margin: 0 auto;
 }

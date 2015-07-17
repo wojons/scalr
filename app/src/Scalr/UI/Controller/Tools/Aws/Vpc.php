@@ -227,8 +227,8 @@ class Scalr_UI_Controller_Tools_Aws_Vpc extends Scalr_UI_Controller
         $this->response->success('VPC successfully created');
         $this->response->data(array(
             'vpc' => array(
-                'id' => $vpc->vpcId,
-                'name' => $vpc->vpcId
+                'id'   => $vpc->vpcId,
+                'name' => "{$this->getParam('name')} - {$vpc->vpcId} ({$vpc->cidrBlock}, Tenancy: {$vpc->instanceTenancy})"
             )
         ));
     }

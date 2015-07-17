@@ -1,7 +1,7 @@
 Scalr.regPage('Scalr.ui.roles.create', function (loadParams, moduleParams) {
 	return Ext.create('Ext.panel.Panel', {
         title: 'Choose a role creation method',
-        width: 380,
+        width: 415,
         layout: 'hbox',
 
         scalrOptions: {
@@ -20,7 +20,7 @@ Scalr.regPage('Scalr.ui.roles.create', function (loadParams, moduleParams) {
             ui: 'simple',
             cls: 'x-btn-simple-large',
             margin: '20 0 20 20',
-            iconAlign: 'above'
+            iconAlign: 'top'
         },
 
         items: [{
@@ -32,15 +32,14 @@ Scalr.regPage('Scalr.ui.roles.create', function (loadParams, moduleParams) {
             tooltip: 'Create a new empty Role, and manually add Images, Orchestration, and Global Variables.'
         }, {
             xtype: 'button',
-            text: "Role from\n" +
-                "non-Scalr server",
+            text: '<span class="small">Role from <br/>non-Scalr server</span>',
             href: '#/roles/import',
             hrefTarget: '_self',
             iconCls: 'x-icon-behavior-large x-icon-behavior-large-wizard',
             tooltip: 'Snapshot an existing Server that is not currently managed by Scalr, and use the snapshot as an Image for your new Role.',
             listeners: {
                 boxready: function() {
-                    this.btnInnerEl.applyStyles('margin-top: 68px; white-space: pre;');
+                    this.btnInnerEl.applyStyles('margin-top: -6px;');
                 }
             }
         }, {

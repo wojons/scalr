@@ -9,27 +9,17 @@ Scalr.regPage('Scalr.ui.services.configurations.presets.view', function (loadPar
 	});
 
 	return Ext.create('Ext.grid.Panel', {
-		title: 'Services &raquo; Configurations &raquo; Presets',
 		scalrOptions: {
-			'reload': false,
-			'maximize': 'all'
+			reload: false,
+			maximize: 'all',
+            menuTitle: 'Services Configurations Presets',
+            menuHref: '#/services/configurations/presets',
+            menuFavorite: true
 		},
 		store: store,
 		stateId: 'grid-services-configurations-presets-view',
 		stateful: true,
-		plugins: {
-			ptype: 'gridstore'
-		},
-
-		tools: [{
-			xtype: 'gridcolumnstool'
-		}, {
-			xtype: 'favoritetool',
-			favorite: {
-				text: 'Server config presets',
-				href: '#/services/configurations/presets/view'
-			}
-		}],
+        plugins: [ 'gridstore', 'applyparams' ],
 
 		viewConfig: {
 			emptyText: "No presets found",
@@ -43,7 +33,7 @@ Scalr.regPage('Scalr.ui.services.configurations.presets.view', function (loadPar
 			{ header: "Added at", flex: 1, dataIndex: 'dtadded', sortable: false },
 			{ header: "Last time modified", flex: 1, dataIndex: 'dtlastmodified', sortable: false },
 			{
-				xtype: 'optionscolumn2',
+				xtype: 'optionscolumn',
 				menu: [{
 					text: 'Edit',
 					iconCls: 'x-menu-icon-edit',
@@ -73,9 +63,9 @@ Scalr.regPage('Scalr.ui.services.configurations.presets.view', function (loadPar
             store: store,
             dock: 'top',
             afterItems: [{
-                ui: 'paging',
                 itemId: 'delete',
-                iconCls: 'x-tbar-delete',
+                iconCls: 'x-btn-icon-delete',
+                cls: 'x-btn-red',
                 tooltip: 'Select one or more configuration preset(s) to delete them',
                 disabled: true,
                 handler: function() {

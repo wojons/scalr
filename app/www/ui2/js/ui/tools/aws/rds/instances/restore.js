@@ -1,6 +1,37 @@
 Scalr.regPage('Scalr.ui.tools.aws.rds.instances.restore', function (loadParams, moduleParams) {
 
+    var cloudLocation = loadParams.cloudLocation;
+
     var snapshot = moduleParams['snapshot'];
+
+    var vpcPolicy = function (params) {
+
+        var policy = {
+            enabled: !Ext.isEmpty(params)
+        };
+
+        if (policy.enabled) {
+            Ext.apply(policy, {
+                launchWithVpcOnly: !!params.value,
+                regions: Ext.Object.getKeys(params.regions),
+                vpcs: params.regions,
+                subnets: params.ids
+            });
+        }
+
+        return policy;
+
+    }( Scalr.getGovernance('ec2', 'aws.vpc') );
+
+    var isCurrentRegionAllowed = true;
+
+    if (vpcPolicy.enabled) {
+
+        var allowedRegions = vpcPolicy.regions;
+
+        isCurrentRegionAllowed = Ext.isEmpty(allowedRegions)
+            || Ext.Array.contains(allowedRegions, cloudLocation);
+    }
 
     var form = Ext.create('Ext.form.Panel', {
         title: 'Tools &raquo; Amazon Web Services &raquo; RDS &raquo; DB Instances &raquo; Restore',
@@ -13,6 +44,11 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.instances.restore', function (loadParams, 
             layout: {
                 type: 'hbox',
                 pack: 'center'
+            },
+            maxWidth: 700,
+            defaults: {
+                flex: 1,
+                maxWidth: 140
             },
             items: [{
                 xtype: 'button',
@@ -46,17 +82,35 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.instances.restore', function (loadParams, 
 
         items: [{
             xtype: 'fieldset',
-            title: 'Location and VPC Settings',
+            title: 'Location and VPC Settings' + (
+                vpcPolicy.enabled
+                    ? '&nbsp;&nbsp;<img src="' + Ext.BLANK_IMAGE_URL + '" data-qtip="'
+                        + Ext.String.htmlEncode(Scalr.strings.rdsDbInstanceVpcEnforced) + '" class="x-icon-governance" />'
+                    : ''
+            ),
             items: [{
                 padding: 5,
+                labelWidth: 130,
                 xtype: 'combo',
-                fieldLabel: 'Location',
+                fieldLabel: 'Cloud Location',
                 emptyText: 'Select location',
                 name: 'cloudLocation',
+                plugins: {
+                    ptype: 'fieldinnericoncloud',
+                    platform: 'ec2'
+                },
                 store: {
                     fields: [ 'id', 'name' ],
                     data: moduleParams.locations,
-                    proxy: 'object'
+                    proxy: 'object',
+                    filters: [{
+                        id: 'governancePolicyFilter',
+                        filterFn: function (record) {
+                            return vpcPolicy.enabled
+                                ? Ext.Array.contains(vpcPolicy.regions, record.get('id'))
+                                : true;
+                        }
+                    }]
                 },
                 editable: false,
                 width: 610,
@@ -66,6 +120,11 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.instances.restore', function (loadParams, 
                 readOnly: true,
                 listeners: {
                     change: function (field, value) {
+
+                        if (!isCurrentRegionAllowed || (vpcPolicy.enabled && !vpcPolicy.launchWithVpcOnly)) {
+                            return;
+                        }
+
                         Scalr.Request({
                             processBox: {
                                 type: 'load'
@@ -80,7 +139,7 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.instances.restore', function (loadParams, 
 
                                 if (!defaultVpc) {
                                     vpc.unshift({
-                                        id: null,
+                                        id: 0,
                                         name: ''
                                     });
                                 }
@@ -99,6 +158,7 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.instances.restore', function (loadParams, 
                 }
             }, {
                 xtype: 'combo',
+                labelWidth: 130,
                 name: 'VpcId',
                 padding: 5,
                 fieldLabel: 'VPC',
@@ -107,12 +167,32 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.instances.restore', function (loadParams, 
                 queryMode: 'local',
                 width: 610,
                 store: {
-                    fields: [ 'id', 'name', 'defaultSecurityGroupId', 'defaultSecurityGroupName' ]
+                    fields: [ 'id', 'name', 'defaultSecurityGroupId', 'defaultSecurityGroupName' ],
+                    filters: [{
+                        id: 'governancePolicyFilter',
+                        filterFn: function (record) {
+                            if (!vpcPolicy.enabled) {
+                                return true;
+                            }
+
+                            var allowedVpcs = vpcPolicy.vpcs[
+                                form.down('[name=cloudLocation]').getValue()
+                                ].ids;
+
+                            return !Ext.isEmpty(allowedVpcs)
+                                ? Ext.Array.contains(allowedVpcs, record.get('id'))
+                                : true;
+                        }
+                    }]
                 },
                 valueField: 'id',
                 displayField: 'name',
                 listeners: {
                     change: function (field, value) {
+                        if (!isCurrentRegionAllowed) {
+                            return;
+                        }
+
                         var cloudLocation = loadParams['cloudLocation'];
 
                         var subnetGroupField = field.next();
@@ -136,14 +216,16 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.instances.restore', function (loadParams, 
                 }
             }, {
                 padding: 5,
+                labelWidth: 130,
                 xtype: 'combo',
                 name: 'DBSubnetGroupName',
                 fieldLabel: 'Subnet Group',
                 emptyText: 'Select Subnet Group',
                 editable: false,
                 width: 610,
-                queryCaching: false,
-                clearDataBeforeQuery: true,
+                queryMode: 'local',
+                //queryCaching: false,
+                //clearDataBeforeQuery: true,
                 hidden: true,
                 store: {
                     fields: [ 'dBSubnetGroupName', 'dBSubnetGroupDescription', 'subnets' ],
@@ -160,7 +242,36 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.instances.restore', function (loadParams, 
                                 setValue(store.first()).
                                 validate();
                         }
-                    }
+                    },
+                    filters: [{
+                        id: 'governancePolicyFilter',
+                        filterFn: function (record) {
+                            if (!vpcPolicy.enabled) {
+                                return true;
+                            }
+
+                            var subnetsPolicy = vpcPolicy.subnets[
+                                form.down('[name=VpcId]').getValue()
+                            ];
+
+                            if (Ext.isEmpty(subnetsPolicy)) {
+                                return true;
+                            }
+
+                            return !Ext.Array.some(record.get('subnets'), function (subnet) {
+
+                                var policy = subnetsPolicy;
+
+                                if (Ext.isArray(policy)) {
+                                    return !Ext.Array.contains(policy, subnet.subnetIdentifier);
+                                }
+
+                                policy = policy === 'full' ? 'public' : 'private';
+
+                                return policy !== subnet.type;
+                            });
+                        }
+                    }]
                 },
                 valueField: 'dBSubnetGroupName',
                 displayField: 'dBSubnetGroupName',
@@ -172,11 +283,19 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.instances.restore', function (loadParams, 
                 }],
                 listeners: {
                     change: function (me, value) {
+                        if (!isCurrentRegionAllowed) {
+                            return;
+                        }
+
                         var availabilityZoneField = form.down('[name=AvailabilityZone]');
                         availabilityZoneField.reset();
 
                         var availabilityZoneStore = availabilityZoneField.getStore();
                         availabilityZoneStore.clearFilter();
+
+                        availabilityZoneField.setValue(
+                            availabilityZoneStore.first()
+                        );
 
                         if (value) {
                             var store = me.getStore();
@@ -196,7 +315,8 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.instances.restore', function (loadParams, 
 
                                 availabilityZoneStore.addFilter({
                                     filterFn: function (record) {
-                                        return availabilityZoneNames.indexOf(record.get('name')) !== -1;
+                                        var name = record.get('name');
+                                        return name === '' || availabilityZoneNames.indexOf(name) !== -1;
                                     }
                                 });
                             }
@@ -209,6 +329,38 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.instances.restore', function (loadParams, 
                         });
                     }
                 }
+            }, {
+                xtype: 'hiddenfield',
+                name: 'SubnetIds',
+                submitValue: vpcPolicy.enabled,
+                getSubmitValue: function () {
+                    var me = this;
+
+                    var vpcField = form.down('[name=VpcId]');
+
+                    if (!Ext.isEmpty(vpcField.getValue())) {
+                        var subnetGroupField = me.prev();
+
+                        var record = subnetGroupField.findRecord(
+                            'dBSubnetGroupName',
+                            subnetGroupField.getValue()
+                        );
+
+                        if (Ext.isObject(record) && record.isModel) {
+                            var subnets = record.get('subnets');
+
+                            if (Ext.isArray(subnets)) {
+                                return Ext.encode(
+                                    Ext.Array.map(record.get('subnets'), function (subnet) {
+                                        return subnet.subnetIdentifier;
+                                    })
+                                );
+                            }
+                        }
+                    }
+
+                    return null;
+                }
             }]
         }, {
             xtype: 'fieldset',
@@ -216,7 +368,7 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.instances.restore', function (loadParams, 
             name: 'instanceSettings',
             defaults: {
                 labelWidth: 200,
-                width: 455
+                width: 500
             },
             items: [{
                 xtype: 'displayfield',
@@ -259,41 +411,36 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.instances.restore', function (loadParams, 
                 allowBlank: false,
                 editable: false
             },*/{
-                xtype: 'container',
-                layout: 'hbox',
-                width: '100%',
-                items: [{
-                    xtype: 'combo',
-                    name: 'DBInstanceClass',
-                    fieldLabel: 'Type',
-                    labelWidth: 200,
-                    width: 455,
-                    store: [
-                        'db.t1.micro', 'db.m1.small', 'db.m1.medium',
-                        'db.m1.large', 'db.m1.xlarge', 'db.m2.2xlarge ',
-                        'db.m2.4xlarge' , 'db.m3.medium ', 'db.m3.large',
-                        'db.m3.xlarge', 'db.m3.2xlarge', 'db.r3.large',
-                        'db.r3.xlarge', 'db.r3.2xlarge', 'db.r3.4xlarge',
-                        'db.r3.8xlarge', 'db.t2.micro', 'db.t2.small',
-                        'db.t2.medium'
-                    ],
-                    queryMode: 'local',
-                    allowBlank: false,
-                    value: 'db.m1.small',
-                    editable: false
-                }, {
-                    xtype: 'displayfield',
-                    flex: 1,
-                    margin: '0 0 0 6',
-                    value:
-                        '<img class="tipHelp" src="/ui2/images/icons/warning_icon_16x16.png" data-qtip=\''
-                        + 'Instance type availability varies across AWS regions. ' +
+                xtype: 'combo',
+                name: 'DBInstanceClass',
+                fieldLabel: 'Type',
+                store: [
+                    'db.t1.micro', 'db.m1.small', 'db.m1.medium',
+                    'db.m1.large', 'db.m1.xlarge', 'db.m2.2xlarge ',
+                    'db.m2.4xlarge' , 'db.m3.medium ', 'db.m3.large',
+                    'db.m3.xlarge', 'db.m3.2xlarge', 'db.r3.large',
+                    'db.r3.xlarge', 'db.r3.2xlarge', 'db.r3.4xlarge',
+                    'db.r3.8xlarge', 'db.t2.micro', 'db.t2.small',
+                    'db.t2.medium'
+                ],
+                queryMode: 'local',
+                allowBlank: false,
+                value: 'db.m1.small',
+                editable: false,
+                plugins: [{
+                    ptype: 'fieldicons',
+                    align: 'right',
+                    position: 'outer',
+                    icons: {
+                        id: 'warning',
+                        tooltip:
+                        'Instance type availability varies across AWS regions. ' +
                         'Consult the AWS Documentation on ' +
                         '<a target="_blank" href="http://aws.amazon.com/rds/pricing/">current</a>' +
                         ' and ' +
                         '<a target="_blank" href="http://aws.amazon.com/rds/previous-generation/">legacy</a>' +
                         ' instance types for more information.'
-                        + '\' style="cursor: help; height: 16px;">'
+                    }
                 }]
             }, {
                 xtype: 'checkboxfield',
@@ -316,9 +463,14 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.instances.restore', function (loadParams, 
                 fieldLabel: 'Availability Zone',
                 emptyText: 'No preference',
                 store: {
-                    fields: ['id', 'name'],
+                    model: Scalr.getModel({
+                        fields: [ 'id', 'name' ]
+                    }),
                     proxy: 'object',
-                    data: moduleParams.zones
+                    data: Ext.Array.merge(
+                        [ { id: '', name: 'No preference' } ],
+                        moduleParams.zones
+                    )
                 },
                 queryMode: 'local',
                 editable: false,
@@ -373,7 +525,7 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.instances.restore', function (loadParams, 
             title: 'Database Engine',
             defaults: {
                 labelWidth: 200,
-                width: 455
+                width: 500
             },
             items: [{
                 xtype: 'combo',
@@ -442,6 +594,10 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.instances.restore', function (loadParams, 
                         var licenseModelStore = licenseModelField.getStore();
                         licenseModelStore.loadData(me.licenseModels[value]);
                         licenseModelField.setValue(licenseModelStore.first());
+
+                        if (!isCurrentRegionAllowed) {
+                            return;
+                        }
 
                         if (value) {
                             Scalr.Request({
@@ -521,21 +677,19 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.instances.restore', function (loadParams, 
             name: 'databaseSettings',
             hidden: snapshot['Engine'] === 'mysql',
             items: [{
+                xtype: 'textfield',
                 fieldLabel: 'Initial Database Name',
-                xtype: 'fieldcontainer',
-                labelWidth: 200,
-                width: 481,
-                layout: 'hbox',
-                items: [{
-                    xtype: 'textfield',
-                    flex: 1,
-                    name: 'DBName',
-                    submitValue: snapshot['Engine'] !== 'mysql'
-                }, {
-                    xtype: 'displayinfofield',
-                    margin: '0 0 0 6',
-                    width: 20,
-                    info: 'If you leave this empty, no initial database will be created'
+                flex: 1,
+                name: 'DBName',
+                submitValue: snapshot['Engine'] !== 'mysql',
+                plugins: [{
+                    ptype: 'fieldicons',
+                    align: 'right',
+                    position: 'outer',
+                    icons: {
+                        id: 'info',
+                        tooltip: 'If you leave this empty, no initial database will be created'
+                    }
                 }]
             }]
         }, {
@@ -557,7 +711,7 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.instances.restore', function (loadParams, 
     form.getForm().setValues(snapshot);
 
     form.down('[name=cloudLocation]').
-        setValue(loadParams.cloudLocation);
+        setValue(cloudLocation);
 
     form.down('[name=StorageType]').getStore().addFilter({
         filterFn: function (record) {
@@ -579,6 +733,17 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.instances.restore', function (loadParams, 
     */
 
     form.getForm().isValid();
+
+    if (!isCurrentRegionAllowed) {
+
+        form.disable();
+
+        Scalr.message.Warning(
+            'You can\'t restore a DB instance from this snapshot,'
+            + ' because the VPC Policy active in your Environment doesn\'t allow you to launch new DB instances in <b>'
+            + moduleParams.locations[cloudLocation] + '</b>.'
+        );
+    }
 
     return form;
 });

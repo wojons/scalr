@@ -108,7 +108,7 @@ abstract class StringType
      */
     private function validate()
     {
-        if (!in_array($this->value, $this::getAllowedValues())) {
+        if (!in_array($this->value, static::getAllowedValues())) {
             return false;
         }
         return true;

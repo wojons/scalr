@@ -28,9 +28,10 @@ Scalr.regPage('Scalr.ui.account2.roles.usage', function (loadParams, moduleParam
             padding: '0 0 12',
             margin: '6 0 0',
             itemId: 'resources',
-            cls: 'x-grid-shadow x-grid-no-highlighting',
             flex: 1,
             store: storeUsers,
+            trackMouseOver: false,
+            disableSelection: true,
             viewConfig: {
                 deferEmptyText: false,
                 emptyText: 'ACL &laquo;' + moduleParams['role']['name'] + '&raquo; is not assigned to users'

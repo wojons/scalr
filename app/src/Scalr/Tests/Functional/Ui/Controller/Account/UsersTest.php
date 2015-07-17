@@ -81,7 +81,7 @@ class UsersTest extends WebTestCase
     public function removeUser($userId)
     {
         $r = $this->internalRequest('/account/users/xRemove?userId=' . $userId);
-        $this->assertArrayHas(true, 'success', $r);
+        $this->assertTrue(isset($r['success']) && $r['success']);
     }
 
     /**
@@ -102,7 +102,7 @@ class UsersTest extends WebTestCase
             'fullname' => $username,
         ));
 
-        $this->assertArrayHas(true, 'success', $response, 'Cannot create user');
+        $this->assertTrue(isset($response['success']) && $response['success'], 'Cannot create user');
         $this->assertTrue(isset($response['user']['id']));
         $this->assertEquals($userEmail, $response['user']['email']);
 

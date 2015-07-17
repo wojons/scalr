@@ -9,6 +9,8 @@ use Scalr\Model\AbstractEntity;
 /**
  * ArrayCollection
  *
+ * This is the collection of the AbstractEntity objects
+ *
  * @author   Vitaliy Demidov  <vitaliy@scalr.com>
  * @since    4.5.2 (13.03.2014)
  */

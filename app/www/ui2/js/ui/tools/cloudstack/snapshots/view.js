@@ -11,26 +11,21 @@ Scalr.regPage('Scalr.ui.tools.cloudstack.snapshots.view', function (loadParams, 
 	});
 
 	return Ext.create('Ext.grid.Panel', {
-		title: Scalr.utils.getPlatformName(loadParams['platform']) + ' &raquo; Snapshots',
 		scalrOptions: {
-			'reload': true,
-			'maximize': 'all'
+			reload: true,
+			maximize: 'all',
+            menuTitle: Scalr.utils.getPlatformName(loadParams['platform']) + ' &raquo; Snapshots',
+            //menuFavorite: true
 		},
 		store: store,
 		stateId: 'grid-tools-cloudstack-volumes-view',
 		stateful: true,
-		plugins: {
-			ptype: 'gridstore'
-		},
-		tools: [{
-			xtype: 'gridcolumnstool'
-		}, {
-			xtype: 'favoritetool',
-			favorite: {
-				text: 'Cloudstack Snapshots',
-				href: '#/tools/cloudstack/snapshots'
-			}
-		}],
+        plugins: [{
+            ptype: 'gridstore'
+        }, {
+            ptype: 'applyparams',
+            filterIgnoreParams: [ 'platform' ]
+        }],
 
 		viewConfig: {
 			emptyText: 'No snapshots found',
@@ -43,39 +38,10 @@ Scalr.regPage('Scalr.ui.tools.cloudstack.snapshots.view', function (loadParams, 
 			{ header: "Volume ID", width: 90, dataIndex: 'volumeId', sortable: true },
 			{ header: "Volume type", width: 180, dataIndex: 'volumeType', sortable: true },
 			{ header: "Status", flex: 1, dataIndex: 'state', sortable: true },
-			{ header: "Created at", flex: 1, dataIndex: 'createdAt', sortable: true },
-			{
-				xtype: 'optionscolumn2',
-				menu: [{
-					itemId: 'option.delete',
-					text: 'Delete',
-					iconCls: 'x-menu-icon-delete',
-					request: {
-						confirmBox: {
-							type: 'delete',
-							msg: 'Are you sure want to delete Snapshot "{snapshotId}"?'
-						},
-						processBox: {
-							type: 'delete',
-							msg: 'Deleting volume(s) ...'
-						},
-						url: '/tools/cloudstack/snapshots/xRemove/',
-						dataHandler: function (data) {
-							return { snapshotId: Ext.encode([data['snapshotId']]), cloudLocation: store.proxy.extraParams.cloudLocation, platform: store.proxy.extraParams.platform };
-						},
-						success: function () {
-							store.load();
-						}
-					}
-				}]
-			}
+			{ header: "Created at", flex: 1, dataIndex: 'createdAt', sortable: true }
 		],
 
-		multiSelect: true,
-		selModel: {
-			selType: 'selectedmodel'
-		},
-
+        selModel: 'selectedmodel',
 		listeners: {
 			selectionchange: function(selModel, selections) {
 				this.down('scalrpagingtoolbar').down('#delete').setDisabled(!selections.length);
@@ -84,14 +50,13 @@ Scalr.regPage('Scalr.ui.tools.cloudstack.snapshots.view', function (loadParams, 
 
 		dockedItems: [{
 			xtype: 'scalrpagingtoolbar',
-            ignoredLoadParams: ['platform'],
 			store: store,
 			dock: 'top',
 			afterItems: [{
-				ui: 'paging',
 				itemId: 'delete',
-				iconCls: 'x-tbar-delete',
-				tooltip: 'Select one or more events to delete them',
+				iconCls: 'x-btn-icon-delete',
+                cls: 'x-btn-red',
+				tooltip: 'Select one or more snapshot(s) to delete them',
 				disabled: true,
 				handler: function() {
 					var request = {
@@ -121,15 +86,9 @@ Scalr.regPage('Scalr.ui.tools.cloudstack.snapshots.view', function (loadParams, 
 			items: [{
                 xtype: 'filterfield',
                 store: store
-            }, {
-				xtype: 'fieldcloudlocation',
-				itemId: 'cloudLocation',
-                margin: '0 0 0 12',
-				store: {
-					fields: [ 'id', 'name' ],
-					data: moduleParams.locations,
-					proxy: 'object'
-				},
+            }, ' ', {
+                xtype: 'cloudlocationfield',
+                platforms: [loadParams['platform']],
 				gridStore: store
 			}]
 		}]

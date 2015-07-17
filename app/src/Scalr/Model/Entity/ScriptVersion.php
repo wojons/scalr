@@ -1,7 +1,11 @@
 <?php
 namespace Scalr\Model\Entity;
 
+use DateTime;
+use Scalr\DataType\AccessPermissionsInterface;
+use Scalr\DataType\ScopeInterface;
 use Scalr\Model\AbstractEntity;
+use Scalr\Model\Entity\Script;
 
 /**
  * Script revisions entity
@@ -12,13 +16,14 @@ use Scalr\Model\AbstractEntity;
  * @Entity
  * @Table(name="script_versions")
  */
-class ScriptVersion extends AbstractEntity
+class ScriptVersion extends AbstractEntity implements ScopeInterface, AccessPermissionsInterface
 {
     /**
      * Script's ID
      *
      * @Id
      * @Column(type="integer")
+     *
      * @var integer
      */
     public $scriptId;
@@ -28,6 +33,7 @@ class ScriptVersion extends AbstractEntity
      *
      * @Id
      * @Column(type="integer")
+     *
      * @var integer
      */
     public $version;
@@ -59,6 +65,7 @@ class ScriptVersion extends AbstractEntity
     /**
      *
      * @Column(type="integer")
+     *
      * @var integer
      */
     public $changedById;
@@ -75,23 +82,61 @@ class ScriptVersion extends AbstractEntity
      */
     public function __construct()
     {
-        $this->dtCreated = new \DateTime();
+        $this->dtCreated = new DateTime();
     }
 
     public function save()
     {
         $this->variables = [];
-        $matches = [];
+        $variables = Script::fetchVariables($this->content);
 
-        $text = preg_replace('/(\\\%)/si', '$$scalr$$', $this->content);
-        preg_match_all("/\%([^\%\s]+)\%/si", $text, $matches);
-
-        $builtin = array_keys(\Scalr_Scripting_Manager::getScriptingBuiltinVariables());
-        foreach ($matches[1] as $var) {
-            if (! in_array($var, $builtin))
-                $this->variables[$var] = ucwords(str_replace("_", " ", $var));
+        if (!empty($variables)) {
+            $builtin = array_keys(\Scalr_Scripting_Manager::getScriptingBuiltinVariables());
+            foreach ($variables as $var) {
+                if (! in_array($var, $builtin))
+                    $this->variables[$var] = ucwords(str_replace("_", " ", $var));
+            }
         }
 
         parent::save();
+    }
+
+    /**
+     * Gets scope
+     *
+     * @return   string  Returns scope
+     */
+    public function getScope()
+    {
+        /* @var $script Script */
+        $script = Script::findPk($this->scriptId);
+
+        return $script->getScope();
+    }
+
+    /**
+     * {@inheritdoc}
+     * @see \Scalr\DataType\AccessPermissionsInterface::hasAccessPermissions()
+     */
+    public function hasAccessPermissions($user, $environment = null, $modify = null)
+    {
+        /* @var $script Script */
+        $script = Script::findPk($this->scriptId);
+
+        switch ($script->getScope()) {
+            case static::SCOPE_ACCOUNT:
+                return $script->accountId == $user->accountId && (empty($environment) || !$modify);
+
+            case static::SCOPE_ENVIRONMENT:
+                return $environment
+                    ? $script->envId == $environment->id
+                    : $user->hasAccessToEnvironment($script->envId);
+
+            case static::SCOPE_SCALR:
+                return !$modify;
+
+            default:
+                return false;
+        }
     }
 }

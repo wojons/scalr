@@ -241,8 +241,6 @@ class ScalrAPI_2_0_0 extends ScalrAPICore
 
     public function FarmTerminate($FarmID, $KeepEBS, $KeepEIP, $KeepDNSZone)
     {
-        $this->restrictAccess(Acl::RESOURCE_FARMS, Acl::PERM_FARMS_TERMINATE);
-
         $response = $this->CreateInitialResponse();
         try {
             $DBFarm = DBFarm::LoadByID($FarmID);
@@ -252,6 +250,7 @@ class ScalrAPI_2_0_0 extends ScalrAPICore
         }
 
         $this->user->getPermissions()->validate($DBFarm);
+        $this->restrictFarmAccess($DBFarm, Acl::PERM_FARMS_LAUNCH_TERMINATE);
 
         if ($DBFarm->Status != FARM_STATUS::RUNNING)
             throw new Exception(sprintf("Farm already terminated", $FarmID));
@@ -273,8 +272,6 @@ class ScalrAPI_2_0_0 extends ScalrAPICore
 
     public function FarmLaunch($FarmID)
     {
-        $this->restrictAccess(Acl::RESOURCE_FARMS, Acl::PERM_FARMS_LAUNCH);
-
         $response = $this->CreateInitialResponse();
 
         try {
@@ -285,6 +282,7 @@ class ScalrAPI_2_0_0 extends ScalrAPICore
         }
 
         $this->user->getPermissions()->validate($DBFarm);
+        $this->restrictFarmAccess($DBFarm, Acl::PERM_FARMS_LAUNCH_TERMINATE);
 
         if ($DBFarm->Status == FARM_STATUS::RUNNING)
             throw new Exception(sprintf("Farm already running", $FarmID));
@@ -298,8 +296,6 @@ class ScalrAPI_2_0_0 extends ScalrAPICore
 
     public function FarmGetStats($FarmID, $Date = null)
     {
-        $this->restrictAccess(Acl::RESOURCE_FARMS_STATISTICS);
-
         $response = $this->CreateInitialResponse();
         $response->StatisticsSet = new stdClass();
         $response->StatisticsSet->Item = array();
@@ -317,6 +313,7 @@ class ScalrAPI_2_0_0 extends ScalrAPICore
         }
 
         $this->user->getPermissions()->validate($DBFarm);
+        $this->restrictFarmAccess($DBFarm, Acl::PERM_FARMS_STATISTICS);
 
         $rows = $this->DB->Execute("
             SELECT SUM(`usage`) AS `usage`, instance_type, cloud_location, month, year
@@ -343,7 +340,7 @@ class ScalrAPI_2_0_0 extends ScalrAPICore
 
     public function FarmsList()
     {
-        $this->restrictAccess(Acl::RESOURCE_FARMS);
+        $this->restrictFarmAccess();
 
         $response = $this->CreateInitialResponse();
         $response->FarmSet = new stdClass();
@@ -352,10 +349,24 @@ class ScalrAPI_2_0_0 extends ScalrAPICore
         $options = array($this->Environment->id);
         $stmt = "SELECT id, name, status, comments FROM farms WHERE env_id = ?";
 
-        if (!$this->isAllowed(Acl::RESOURCE_FARMS, Acl::PERM_FARMS_NOT_OWNED_FARMS)) {
-            //Filters not owned farms
-            $stmt .= " AND created_by_id = ? ";
-            array_push($options, $this->user->getId());
+        if (!$this->isAllowed(Acl::RESOURCE_FARMS)) {
+            $q = [];
+            if ($this->isAllowed(Acl::RESOURCE_TEAM_FARMS)) {
+                $t = array_map(function($t) { return $t['id']; }, $this->user->getTeams());
+                if (count($t))
+                    $q[] = 'team_id IN(' . join(',', $t) . ')';
+            }
+
+            if ($this->isAllowed(Acl::RESOURCE_OWN_FARMS)) {
+                $q[] = 'created_by_id = ?';
+                $options[] =  $this->user->getId();
+            }
+
+            if (count($q)) {
+                $stmt .= ' AND (' . join(' OR ', $q) . ')';
+            } else {
+                $stmt .= ' AND false'; // no permissions
+            }
         }
 
         $farms = $this->DB->Execute($stmt, $options);
@@ -374,8 +385,6 @@ class ScalrAPI_2_0_0 extends ScalrAPICore
 
     public function FarmGetDetails($FarmID)
     {
-        $this->restrictAccess(Acl::RESOURCE_FARMS);
-
         $response = $this->CreateInitialResponse();
 
         try {
@@ -434,6 +443,7 @@ class ScalrAPI_2_0_0 extends ScalrAPICore
                 $iitm->{"Status"} = $DBServer->status;
 
                 $iitm->{"IsInitFailed"} = $DBServer->GetProperty(SERVER_PROPERTIES::SZR_IS_INIT_FAILED);
+                $iitm->{"IsRebooting"} = $DBServer->GetProperty(SERVER_PROPERTIES::REBOOTING);
 
                 $iitm->{"Index"} = $DBServer->index;
                 $iitm->{"ScalarizrVersion"} = $DBServer->GetProperty(SERVER_PROPERTIES::SZR_VESION);
@@ -483,14 +493,29 @@ class ScalrAPI_2_0_0 extends ScalrAPICore
 
     public function EventsList($FarmID, $StartFrom = 0, $RecordsLimit = 20)
     {
-        $this->restrictAccess(Acl::RESOURCE_FARMS);
+        $this->restrictFarmAccess();
 
         $stmt = "SELECT id FROM farms WHERE id=? AND env_id=?";
         $args = array($FarmID, $this->Environment->id);
 
-        if (!$this->isAllowed(Acl::RESOURCE_FARMS, Acl::PERM_FARMS_NOT_OWNED_FARMS)) {
-            $stmt .= " AND created_by_id = ? ";
-            array_push($args, $this->user->getId());
+        if (!$this->isAllowed(Acl::RESOURCE_FARMS)) {
+            $q = [];
+            if ($this->isAllowed(Acl::RESOURCE_TEAM_FARMS)) {
+                $t = array_map(function($t) { return $t['id']; }, $this->user->getTeams());
+                if (count($t))
+                    $q[] = 'team_id IN(' . join(',', $t) . ')';
+            }
+
+            if ($this->isAllowed(Acl::RESOURCE_OWN_FARMS)) {
+                $q[] = 'created_by_id = ?';
+                $args[] =  $this->user->getId();
+            }
+
+            if (count($q)) {
+                $stmt .= ' AND (' . join(' OR ', $q) . ')';
+            } else {
+                $stmt .= ' AND false'; // no permissions
+            }
         }
 
         $farminfo = $this->DB->GetRow($stmt, $args);
@@ -534,10 +559,27 @@ class ScalrAPI_2_0_0 extends ScalrAPICore
 
         $stmt = "SELECT clientid FROM farms WHERE id=? AND env_id=?";
         $args = array($FarmID, $this->Environment->id);
-        if (!$this->isAllowed(Acl::RESOURCE_FARMS, Acl::PERM_FARMS_NOT_OWNED_FARMS)) {
-            $stmt .= " AND created_by_id = ? ";
-            array_push($args, $this->user->getId());
+
+        if (!$this->isAllowed(Acl::RESOURCE_FARMS)) {
+            $q = [];
+            if ($this->isAllowed(Acl::RESOURCE_TEAM_FARMS)) {
+                $t = array_map(function($t) { return $t['id']; }, $this->user->getTeams());
+                if (count($t))
+                    $q[] = 'team_id IN(' . join(',', $t) . ')';
+            }
+
+            if ($this->isAllowed(Acl::RESOURCE_OWN_FARMS)) {
+                $q[] = 'created_by_id = ?';
+                $args[] =  $this->user->getId();
+            }
+
+            if (count($q)) {
+                $stmt .= ' AND (' . join(' OR ', $q) . ')';
+            } else {
+                $stmt .= ' AND false'; // no permissions
+            }
         }
+
         $farminfo = $this->DB->GetRow($stmt, $args);
 
         if (!$farminfo)
@@ -582,7 +624,7 @@ class ScalrAPI_2_0_0 extends ScalrAPICore
     {
         $this->restrictAccess(Acl::RESOURCE_ADMINISTRATION_SCRIPTS);
 
-        /* @var Script $script */
+        /* @var $script Script */
         $script = Script::findPk($ScriptID);
 
         if (! $script)
@@ -599,7 +641,7 @@ class ScalrAPI_2_0_0 extends ScalrAPICore
         $response->RevisionsNum = 0;
 
         foreach (array_reverse($script->getVersions()->getArrayCopy()) as $rev ) {
-            /* @var ScriptVersion $rev */
+            /* @var $rev ScriptVersion */
             $response->RevisionsNum++;
             if ($response->RevisionsNum >= 10)
                 continue;
@@ -645,9 +687,24 @@ class ScalrAPI_2_0_0 extends ScalrAPICore
         $stmt = "SELECT * FROM farms WHERE id=? AND env_id=?";
         $args = array($FarmID, $this->Environment->id);
 
-        if (!$this->isAllowed(Acl::RESOURCE_FARMS, Acl::PERM_FARMS_NOT_OWNED_FARMS)) {
-            $stmt .= " AND created_by_id = ? ";
-            array_push($args, $this->user->getId());
+        if (!$this->isAllowed(Acl::RESOURCE_FARMS)) {
+            $q = [];
+            if ($this->isAllowed(Acl::RESOURCE_TEAM_FARMS)) {
+                $t = array_map(function($t) { return $t['id']; }, $this->user->getTeams());
+                if (count($t))
+                    $q[] = 'team_id IN(' . join(',', $t) . ')';
+            }
+
+            if ($this->isAllowed(Acl::RESOURCE_OWN_FARMS)) {
+                $q[] = 'created_by_id = ?';
+                $args[] =  $this->user->getId();
+            }
+
+            if (count($q)) {
+                $stmt .= ' AND (' . join(' OR ', $q) . ')';
+            } else {
+                $stmt .= ' AND false'; // no permissions
+            }
         }
 
         $farminfo = $this->DB->GetRow($stmt, $args);
@@ -770,19 +827,22 @@ class ScalrAPI_2_0_0 extends ScalrAPICore
         $response->RoleSet = new stdClass();
         $response->RoleSet->Item = array();
 
-        $sql = "SELECT * FROM roles WHERE (env_id='0' OR env_id='{$this->Environment->id}')";
+        $sql = "SELECT roles.*, os.family as os_family, os.version as os_version, os.generation as os_generation
+                  FROM roles
+                  INNER JOIN os ON os.id = roles.os_id
+                  WHERE (roles.env_id IS NULL OR roles.env_id='{$this->Environment->id}')";
 
         if ($ImageID)
-            $sql .= " AND id IN (SELECT role_id FROM role_images WHERE image_id = {$this->DB->qstr($ImageID)})";
+            $sql .= " AND roles.id IN (SELECT role_id FROM role_images WHERE image_id = {$this->DB->qstr($ImageID)})";
 
         if ($Name)
-            $sql .= " AND name = {$this->DB->qstr($Name)}";
+            $sql .= " AND roles.name = {$this->DB->qstr($Name)}";
 
         if ($Prefix)
-            $sql .= " AND name LIKE{$this->DB->qstr("%{$Prefix}%")}";
+            $sql .= " AND roles.name LIKE{$this->DB->qstr("%{$Prefix}%")}";
 
         if ($Platform)
-            $sql .= " AND id IN (SELECT role_id FROM role_images WHERE platform = {$this->DB->qstr($Platform)})";
+            $sql .= " AND roles.id IN (SELECT role_id FROM role_images WHERE platform = {$this->DB->qstr($Platform)})";
 
         $rows = $this->DB->Execute($sql);
         while ($row = $rows->FetchRow()) {
@@ -802,6 +862,8 @@ class ScalrAPI_2_0_0 extends ScalrAPICore
             $itm->{"Architecture"} = $row['architecture'];
             $itm->{"OsFamily"} = $row['os_family'];
             $itm->{"OsVersion"} = $row['os_version'];
+            $itm->{"OsGeneration"} = $row['os_generation'];
+            $itm->{"OsID"} = $row['os_id'];
             $itm->{"CreatedAt"} = $row['dtadded'];
             $itm->{"CreatedBy"} = $row['added_by_email'];
 
@@ -838,7 +900,7 @@ class ScalrAPI_2_0_0 extends ScalrAPICore
                 array('accountId' => $this->user->getAccountId())
             )
         )) as $script) {
-            /* @var Script $script */
+            /* @var $script Script */
             $itm = new stdClass();
             $itm->{"ID"} = $script->id;
             $itm->{"Name"} = $script->name;
@@ -1024,8 +1086,6 @@ class ScalrAPI_2_0_0 extends ScalrAPICore
 
     public function ServerReboot($ServerID)
     {
-        $this->restrictAccess(Acl::RESOURCE_FARMS_SERVERS);
-
         $DBServer = DBServer::LoadByID($ServerID);
         if ($DBServer->envId != $this->Environment->id)
             throw new Exception(sprintf("Server ID #%s not found", $ServerID));
@@ -1043,8 +1103,6 @@ class ScalrAPI_2_0_0 extends ScalrAPICore
 
     public function ServerLaunch($FarmRoleID, $IncreaseMaxInstances = false)
     {
-        $this->restrictAccess(Acl::RESOURCE_FARMS_SERVERS);
-
         try {
             $DBFarmRole = DBFarmRole::LoadByID($FarmRoleID);
             $DBFarm = DBFarm::LoadByID($DBFarmRole->FarmID);
@@ -1059,6 +1117,7 @@ class ScalrAPI_2_0_0 extends ScalrAPICore
             throw new Exception(sprintf("Farm ID #%s is not running", $DBFarm->ID));
 
         $this->user->getPermissions()->validate($DBFarm);
+        $this->restrictFarmAccess($DBFarm, Acl::PERM_FARMS_SERVERS);
 
         $isSzr = true;
 
@@ -1089,7 +1148,11 @@ class ScalrAPI_2_0_0 extends ScalrAPICore
         try {
             $DBServer = Scalr::LaunchServer($ServerCreateInfo, null, false, DBServer::LAUNCH_REASON_MANUALLY_API, $this->user);
 
-            Logger::getLogger(LOG_CATEGORY::FARM)->info(new FarmLogMessage($DBFarm->ID, sprintf("Starting new instance (API). ServerID = %s.", $DBServer->serverId)));
+            Logger::getLogger(LOG_CATEGORY::FARM)->info(new FarmLogMessage(
+                $DBFarm->ID, 
+                sprintf("Starting new instance (API). ServerID = %s.", $DBServer->serverId),
+                $DBServer->serverId
+            ));
         } catch (Exception $e) {
             Logger::getLogger(LOG_CATEGORY::API)->error($e->getMessage());
         }
@@ -1102,8 +1165,6 @@ class ScalrAPI_2_0_0 extends ScalrAPICore
 
     public function ServerTerminate($ServerID, $DecreaseMinInstancesSetting = false)
     {
-        $this->restrictAccess(Acl::RESOURCE_FARMS_SERVERS);
-
         $DBServer = DBServer::LoadByID($ServerID);
         if ($DBServer->envId != $this->Environment->id) {
             throw new Exception(sprintf("Server ID #%s not found", $ServerID));

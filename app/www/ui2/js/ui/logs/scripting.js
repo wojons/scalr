@@ -1,18 +1,18 @@
 Scalr.regPage('Scalr.ui.logs.scripting', function (loadParams, moduleParams) {
 	var store = Ext.create('store.store', {
 		fields: [ 'id', 'event', 'dtadded', 'message', 'script_name', 'exec_time', 'exec_exitcode', 'event_id',
-			'target_server_id', 
-			'target_farm_name', 
-			'target_farm_id', 
-			'target_role_id', 
-			'target_farm_roleid',			 
+			'target_server_id',
+			'target_farm_name',
+			'target_farm_id',
+			'target_role_id',
+			'target_farm_roleid',
 			'target_server_index',
 			'target_role_name',
-			 
-			'event_server_id', 
-			'event_farm_name', 
-			'event_farm_id', 
-			'event_role_id', 
+
+			'event_server_id',
+			'event_farm_name',
+			'event_farm_id',
+			'event_role_id',
 			'event_farm_roleid',
 			'event_role_name',
 			'event_server_index',
@@ -26,22 +26,26 @@ Scalr.regPage('Scalr.ui.logs.scripting', function (loadParams, moduleParams) {
 	});
 
 	var panel = Ext.create('Ext.grid.Panel', {
-		title: 'Logs &raquo; Scripting Log',
 		scalrOptions: {
 			reload: false,
-			maximize: 'all'
+			maximize: 'all',
+            menuTitle: 'Scripting Log',
+            menuHref: '#/logs/scripting',
+            menuFavorite: true
 		},
 		store: store,
-		stateId: 'grid-scripting-view',
+		stateId: 'grid-logs-scripting-view',
 		stateful: true,
 		plugins: [{
 			ptype: 'gridstore',
             highlightNew: true
 		}, {
+            ptype: 'applyparams'
+        }, {
 			ptype: 'rowexpander',
             pluginId: 'rowexpander',
 			rowBodyTpl: [
-				'<tpl if="message">' + 
+				'<tpl if="message">' +
                     '<p><b>Message:</b><br/><br/>{[values.message.replace(\'STDERR:\',\'<b>STDERR:</b>\').replace(\'STDOUT:\',\'<b>STDOUT:</b>\')]}</p>' +
                 '<tpl elseif="execution_id">' +
                     '<p>Loading...</p>' +
@@ -51,27 +55,18 @@ Scalr.regPage('Scalr.ui.logs.scripting', function (loadParams, moduleParams) {
 			]
 		}],
 
-		tools: [{
-			xtype: 'gridcolumnstool'
-		}, {
-			xtype: 'favoritetool',
-			favorite: {
-				text: 'Scripting Log',
-				href: '#/logs/scripting'
-			}
-		}],
+        disableSelection: true,
 		viewConfig: {
 			emptyText: 'Nothing found',
 			loadingText: 'Loading...',
-			disableSelection: true,
-			getRowClass: function (record, rowIndex, rowParams) {
+			getRowClass: function (record) {
                 var exitCode = record.get('exec_exitcode');
                 if (exitCode == '130') {
-                    return 'x-grid-row-orange';
+                    return 'x-grid-row-color-orange';
                 } else if (exitCode != '0') {
-                    return 'x-grid-row-red';
+                    return 'x-grid-row-color-red';
                 }
-			},
+            },
             listeners: {
                 beforerefresh: function(){//since we load message dynamically, we must to collapse all expanded rows before refresh
                     var key,
@@ -96,14 +91,14 @@ Scalr.regPage('Scalr.ui.logs.scripting', function (loadParams, moduleParams) {
                                 success: function (data) {
                                     var node = Ext.fly(rowNode).down('.x-grid-rowbody');
                                     if (node) {
-                                        node.setHTML('<p><b>Message:</b><br/><br/>' + (data.message+'').replace('STDERR:','<b>STDERR:</b>').replace('STDOUT:','<b>STDOUT:</b>') + '</p>');
+                                        node.setHtml('<p><b>Message:</b><br/><br/>' + (data.message+'').replace('STDERR:','<b>STDERR:</b>').replace('STDOUT:','<b>STDOUT:</b>') + '</p>');
                                         record.set('message', data.message);
                                     }
                                 },
                                 failure: function(data) {
                                     var node = Ext.fly(rowNode).down('.x-grid-rowbody');
                                     if (node) {
-                                        node.setHTML('<p>' + (data.errorMessage || '') + '</p>');
+                                        node.setHtml('<p>' + (data.errorMessage || '') + '</p>');
                                     }
                                 },
                                 scope: this
@@ -115,8 +110,8 @@ Scalr.regPage('Scalr.ui.logs.scripting', function (loadParams, moduleParams) {
 		},
 
 		columns: [
-			{ header: 'Date', width: 160, dataIndex: 'dtadded', sortable: true },
-			{ header: 'Event', width: 200, dataIndex: 'event', sortable: false, xtype: 'templatecolumn', tpl: 
+			{ header: 'Date', width: 175, dataIndex: 'dtadded', sortable: true },
+			{ header: 'Event', width: 200, dataIndex: 'event', sortable: false, xtype: 'templatecolumn', tpl:
 				'<tpl if="!event_id || !event_farm_id">'+
 				'{event}'+
 				'<tpl else><a href="#/logs/events?eventId={event_id}">{event}</a></tpl>'
@@ -124,9 +119,9 @@ Scalr.regPage('Scalr.ui.logs.scripting', function (loadParams, moduleParams) {
 			{ header: 'Fired by', flex: 1, dataIndex: 'event_server_id', sortable: false, xtype: 'templatecolumn', tpl:
 				'<tpl if="event_farm_id">' +
 					'<tpl if="event_role_name">' +
-						'<a href="#/farms/{event_farm_id}/view" title="Farm {event_farm_name}">{event_farm_name}</a>' +
+						'<a href="#/farms?farmId={event_farm_id}" title="Farm {event_farm_name}">{event_farm_name}</a>' +
 						'&nbsp;&rarr;&nbsp;<a href="#/farms/{event_farm_id}/roles/{event_farm_roleid}/view" title="Role {event_role_name}">{event_role_name}</a> ' +
-						'&nbsp;#<a href="#/servers/{event_server_id}/view">{event_server_index}</a>'+
+						'&nbsp;#<a href="#/servers?serverId={event_server_id}">{event_server_index}</a>'+
 					'</tpl>' +
 					'<tpl if="!event_role_name">' +
 						'{event_server_id}' +
@@ -136,9 +131,9 @@ Scalr.regPage('Scalr.ui.logs.scripting', function (loadParams, moduleParams) {
 			{ header: 'Executed on', flex: 2, dataIndex: 'server_id', sortable: false, xtype: 'templatecolumn', tpl:
 				'<tpl if="target_farm_id">' +
 					'<tpl if="target_role_name">' +
-						'<a href="#/farms/{target_farm_id}/view" title="Farm {target_farm_name}">{target_farm_name}</a>' +
+						'<a href="#/farms?farmId={target_farm_id}" title="Farm {target_farm_name}">{target_farm_name}</a>' +
 						'&nbsp;&rarr;&nbsp;<a href="#/farms/{target_farm_id}/roles/{target_farm_roleid}/view" title="Role {target_role_name}">{target_role_name}</a> ' +
-						'&nbsp;#<a href="#/servers/{target_server_id}/view">{target_server_index}</a>'+
+						'&nbsp;#<a href="#/servers?serverId={target_server_id}">{target_server_index}</a>'+
 					'</tpl>' +
 					'<tpl if="!target_role_name">' +
 						'{target_server_id}' +
@@ -262,6 +257,7 @@ Scalr.regPage('Scalr.ui.logs.scripting', function (loadParams, moduleParams) {
 			}, ' ', {
 				xtype: 'combo',
 				fieldLabel: 'Farm',
+                name: 'farmId',
 				labelWidth: 34,
 				width: 250,
 				store: {
@@ -272,7 +268,7 @@ Scalr.regPage('Scalr.ui.logs.scripting', function (loadParams, moduleParams) {
 				editable: false,
 				queryMode: 'local',
 				itemId: 'farmId',
-				value: loadParams['farmId'] || '0',
+				value: '0',
 				valueField: 'id',
 				displayField: 'name',
 				iconCls: 'no-icon',
@@ -290,7 +286,7 @@ Scalr.regPage('Scalr.ui.logs.scripting', function (loadParams, moduleParams) {
                 value: loadParams['status'] || '',
                 forceSelection: true,
                 fieldLabel: 'Result',
-                labelWidth: 40,
+                labelWidth: 45,
                 width: 180,
 				listeners: {
 					change: function (comp, value) {

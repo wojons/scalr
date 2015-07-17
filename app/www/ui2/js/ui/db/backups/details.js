@@ -45,7 +45,7 @@ Scalr.regPage( 'Scalr.ui.db.backups.details', function ( loadParams, moduleParam
 			cls: 'x-docked-buttons',
 			items: {
 				xtype: 'button',
-				cls: 'x-btn-default-small-red',
+				cls: 'x-btn-red',
 				text: 'Remove backup',
 				handler: function () {
 					Scalr.Request({
@@ -83,7 +83,7 @@ Scalr.regPage( 'Scalr.ui.db.backups.details', function ( loadParams, moduleParam
 
 		form.down('[name="size"]').setValue(moduleParams['backup']['size'] ? moduleParams['backup']['size'] + 'Mb' : 'unknown');
 		form.down('[name="farm"]').setValue(
-			'<a href="#/farms/' + moduleParams['backup']['farm_id'] + '/view">'
+			'<a href="#/farms?farmId=' + moduleParams['backup']['farm_id'] + '">'
 			+ moduleParams['backup']['farmName']
 			+ ' (' + moduleParams['backup']['farm_id']
 			+ ')</a>'

@@ -13,7 +13,7 @@ class Update20140812134140 extends AbstractUpdate implements SequenceInterface
 
     protected $description = 'Add missing accountId property to tags';
 
-    protected $ignoreChanges = true;
+    protected $ignoreChanges = false;
 
     protected $dbservice = 'adodb';
 

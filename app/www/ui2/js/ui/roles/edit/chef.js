@@ -1,7 +1,7 @@
 Ext.define('Scalr.ui.RoleDesignerTabChef', {
     extend: 'Ext.container.Container',
     alias: 'widget.roleeditchef',
-    cls: 'x-panel-column-left',
+    cls: 'x-panel-column-left x-panel-column-left-with-tabs',
     items: [{
         xtype: 'chefsettings'
     }],
@@ -11,10 +11,9 @@ Ext.define('Scalr.ui.RoleDesignerTabChef', {
         this.addListener({
             showtab: {
                 fn: function(params){
-                    var field = this.down('chefsettings'),
-                        governance = params['governance'] || {};
-                    field.limits = governance['general.chef'] || undefined;
+                    var field = this.down('chefsettings');
                     field.disableDaemonize = false;
+                    field.roleOsFamily = Scalr.utils.getOsById(params['role']['osId'], 'family');
                     Ext.each(params['role']['scripts'] || [], function(script){
                         if (script['script_type'] === 'chef' && script['params'] && !script['params']['chef.cookbook_url']) {
                             field.disableDaemonize = true;

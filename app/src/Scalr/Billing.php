@@ -245,6 +245,7 @@ class Scalr_Billing
             't2.micro'  => 0.25,
             't2.small'  => 0.5,
             't2.medium'  => 0.75,
+            't2.large'  => 1,
 
             'c1.medium' => 1.75,
             'c1.xlarge'	=> 7.25,
@@ -254,7 +255,7 @@ class Scalr_Billing
             'c3.2xlarge' => 8,
             'c3.4xlarge' => 16,
             'c3.8xlarge' => 32,
-            
+
             'c4.large' => 2.25,
             'c4.xlarge' => 4.5,
             'c4.2xlarge' => 9,
@@ -281,6 +282,12 @@ class Scalr_Billing
             'm3.xlarge' => 6,
             'm3.2xlarge' => 12,
 
+            'm4.large'  => 3,
+            'm4.xlarge' => 6,
+            'm4.2xlarge' => 12,
+            'm4.4xlarge' => 16,
+            'm4.10xlarge' => 44,
+
             'cc1.4xlarge' => 16,
             'cc2.8xlarge' => 30,
             'cr1.8xlarge' => 44,
@@ -289,11 +296,17 @@ class Scalr_Billing
             'hs1.8xlarge' => 58,
 
             'g2.2xlarge' => 8,
+            'g2.8xlarge' => 32,
 
             'i2.xlarge' => 4,
             'i2.2xlarge' => 8,
             'i2.4xlarge' => 16,
-            'i2.8xlarge' => 32
+            'i2.8xlarge' => 32,
+
+            'd2.xlarge' => 4,
+            'd2.2xlarge' => 8,
+            'd2.4xlarge' => 16,
+            'd2.8xlarge' => 32
         );
 
         $scu[SERVER_PLATFORMS::RACKSPACENG_US] = array(
@@ -304,18 +317,61 @@ class Scalr_Billing
             '4'	=> 3,
             '5'	=> 6,
             '6'	=> 12,
-            '7'	=> 15
+            '7'	=> 15,
+            
+            'general1-1' => 0.25,
+            'general1-2' => 0.5,
+            'general1-4' => 1,
+            'general1-8' => 2,
+            
+            'io1-15' => 3,
+            'io1-30' => 6,
+            'io1-60' => 12,
+            'io1-90' => 24,
+            'io1-120' => 48,
+            
+            'performance1-1' => 3.25,
+            'performance1-2' => 6.5,
+            'performance1-4' => 13,
+            'performance1-8' => 26,
+            
+            'performance2-15' => 6,
+            'performance2-30' => 12,
+            'performance2-60' => 24,
+            'performance2-90' => 48,
+            'performance2-120' => 64
           );
 
         $scu[SERVER_PLATFORMS::RACKSPACENG_UK] = array(
                // Rackspace
-               '1'	=> 0.25,
-               '2'	=> 0.75,
-               '3'	=> 1.5,
-               '4'	=> 3,
-               '5'	=> 6,
-            '6'	=> 12,
-            '7'	=> 15
+                '1'	=> 0.25,
+                '2'	=> 0.75,
+                '3'	=> 1.5,
+                '4'	=> 3,
+                '5'	=> 6,
+                '6'	=> 12,
+                '7'	=> 15,
+                'general1-1' => 0.25,
+                'general1-2' => 0.5,
+                'general1-4' => 1,
+                'general1-8' => 2,
+                
+                'io1-15' => 3,
+                'io1-30' => 6,
+                'io1-60' => 12,
+                'io1-90' => 24,
+                'io1-120' => 48,
+                
+                'performance1-1' => 3.25,
+                'performance1-2' => 6.5,
+                'performance1-4' => 13,
+                'performance1-8' => 26,
+                
+                'performance2-15' => 6,
+                'performance2-30' => 12,
+                'performance2-60' => 24,
+                'performance2-90' => 48,
+                'performance2-120' => 64
         );
 
         $scu[SERVER_PLATFORMS::GCE] = array(
@@ -523,57 +579,25 @@ class Scalr_Billing
             case self::PACKAGE_ANGEL:
                 $l = array(
                     Scalr_Limits::ACCOUNT_SERVERS => 10,
-                    Scalr_Limits::FEATURE_RAID => 1
                 );
                 break;
             case self::PACKAGE_VC:
                 $l = array(
                     Scalr_Limits::ACCOUNT_SERVERS => 20,
-                    Scalr_Limits::FEATURE_MONGODB_SHARDING => 1,
-                    Scalr_Limits::FEATURE_RAID => 1,
-                    Scalr_Limits::FEATURE_CHEF => 1
                 );
                 break;
             case self::PACKAGE_IPO:
                 $l = array(
                     Scalr_Limits::ACCOUNT_SERVERS => 40,
-                    Scalr_Limits::FEATURE_2FA => 1,
-                    Scalr_Limits::FEATURE_USERS_PERMISSIONS => 1,
-                    Scalr_Limits::FEATURE_CHEF => 1,
-                    Scalr_Limits::FEATURE_MONGODB_SHARDING => 1,
-                    Scalr_Limits::FEATURE_RAID => 1
                 );
                 break;
             case self::PACKAGE_MONOPOLY:
                 $l = array(
                     Scalr_Limits::ACCOUNT_SERVERS => 80,
-                    Scalr_Limits::FEATURE_2FA => 1,
-                    Scalr_Limits::FEATURE_USERS_PERMISSIONS => 1,
-                    Scalr_Limits::FEATURE_CHEF => 1,
-                    Scalr_Limits::FEATURE_MONGODB_SHARDING => 1,
-                    Scalr_Limits::FEATURE_RAID => 1,
-                    Scalr_Limits::FEATURE_MFS => 1
                 );
                 break;
             case self::PACKAGE_WD:
-                $l = array(
-                    Scalr_Limits::FEATURE_2FA => 1,
-                    Scalr_Limits::FEATURE_USERS_PERMISSIONS => 1,
-                    Scalr_Limits::FEATURE_CHEF => 1,
-                    Scalr_Limits::FEATURE_MONGODB_SHARDING => 1,
-                    Scalr_Limits::FEATURE_RAID => 1,
-                    Scalr_Limits::FEATURE_MFS => 1
-                );
-                break;
             case self::PAY_AS_YOU_GO:
-                $l = array(
-                    Scalr_Limits::FEATURE_2FA => 1,
-                    Scalr_Limits::FEATURE_USERS_PERMISSIONS => 1,
-                    Scalr_Limits::FEATURE_CHEF => 1,
-                    Scalr_Limits::FEATURE_MONGODB_SHARDING => 1,
-                    Scalr_Limits::FEATURE_RAID => 1,
-                    Scalr_Limits::FEATURE_MFS => 1
-                );
                 break;
             case self::PACKAGE_DEVELOPMENT_LEGACY:
                 $l = array(

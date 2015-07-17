@@ -126,8 +126,7 @@ class S3QueryClient extends QueryClient
 
         $httpRequest->addHeaders($options);
 
-        //Signature version 4 sign for China region
-        if (preg_match('/^(cn|eu\-central)\-/', ($extraOptions['region'] ?: $this->getAws()->getRegion() ?: ''))) {
+        if (true) {
             $this->signRequestV4($httpRequest, (!empty($extraOptions['region']) ? $extraOptions['region'] : null));
         } else {
             $this->signRequestV3($httpRequest, (isset($extraOptions['subdomain']) ? $extraOptions['subdomain'] : null));
@@ -202,7 +201,7 @@ class S3QueryClient extends QueryClient
 
                 $allowed = $this->getAllowedSubResources();
 
-                foreach ($subresources as $k => $v) {
+                foreach($subresources as $k => $v) {
                     if (in_array($k, $allowed)) {
                         $canonPath .= $k . ($v !== '' ? '=' . $v : '' ) . '&';
                     }
@@ -211,18 +210,19 @@ class S3QueryClient extends QueryClient
                 $canonPath = substr($canonPath, 0, -1);
             }
 
-            $canonicalizedResource = (isset($subdomain) ? '/' . strtolower($subdomain) : '')
-              . (isset($canonPath) ? $canonPath :
-                 $components['path']
-                 . (!empty($components['query']) ? '?' . $components['query'] : '')
-                 . (!empty($components['fragment']) ? '#' . $components['fragment'] : ''));
+            $canonicalizedResource =
+                (isset($subdomain) ? '/' . strtolower($subdomain) : '')
+              . (isset($canonPath) ? $canonPath : $components['path']
+              . (!empty($components['query']) ? '?' . $components['query'] : '')
+              . (!empty($components['fragment']) ? '#' . $components['fragment'] : ''));
 
             $stringToSign =
                 $httpMethod . "\n"
               . (!empty($options['Content-Md5']) ? $options['Content-Md5'] . '' : '') . "\n"
               . (!empty($options['Content-Type']) ? $options['Content-Type'] . '' : '') . "\n"
               . (isset($amzHeaders['x-amz-date']) ? '' : $options['Date'] . "\n")
-              . $canonicalizedAmzHeaders . $canonicalizedResource
+              . $canonicalizedAmzHeaders
+              . $canonicalizedResource
             ;
 
             $options['Authorization'] = "AWS " . $this->awsAccessKeyId . ":"

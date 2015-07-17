@@ -167,7 +167,7 @@ class QuarterlyBudgetEntity extends \Scalr\Model\AbstractEntity
      */
     public static function getBudgetForCostCentres($year, $quarter)
     {
-        return self::find([['year' => $year], ['quarter' => $quarter], ['subjectType' => self::SUBJECT_TYPE_CC]]);
+        return self::result(self::RESULT_ENTITY_COLLECTION)->find([['year' => $year], ['quarter' => $quarter], ['subjectType' => self::SUBJECT_TYPE_CC]]);
     }
 
     /**
@@ -180,7 +180,7 @@ class QuarterlyBudgetEntity extends \Scalr\Model\AbstractEntity
      */
     public static function getBudgetForProjects($year, $quarter)
     {
-        return self::find([['year' => $year], ['quarter' => $quarter], ['subjectType' => self::SUBJECT_TYPE_PROJECT]]);
+        return self::result(self::RESULT_ENTITY_COLLECTION)->find([['year' => $year], ['quarter' => $quarter], ['subjectType' => self::SUBJECT_TYPE_PROJECT]]);
     }
 
     /**
@@ -193,7 +193,7 @@ class QuarterlyBudgetEntity extends \Scalr\Model\AbstractEntity
      */
     public static function getCcBudget($year, $ccId)
     {
-        return self::find([['year' => $year], ['subjectType' => self::SUBJECT_TYPE_CC], ['subjectId' => $ccId]]);
+        return self::result(self::RESULT_ENTITY_COLLECTION)->find([['year' => $year], ['subjectType' => self::SUBJECT_TYPE_CC], ['subjectId' => $ccId]]);
     }
 
     /**
@@ -206,6 +206,6 @@ class QuarterlyBudgetEntity extends \Scalr\Model\AbstractEntity
      */
     public static function getProjectBudget($year, $projectId)
     {
-        return self::find([['year' => $year], ['subjectType' => self::SUBJECT_TYPE_PROJECT], ['subjectId' => $projectId]]);
+        return self::result(self::RESULT_ENTITY_COLLECTION)->find([['year' => $year], ['subjectType' => self::SUBJECT_TYPE_PROJECT], ['subjectId' => $projectId]]);
     }
 }

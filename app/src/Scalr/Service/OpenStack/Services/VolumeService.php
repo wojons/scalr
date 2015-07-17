@@ -22,6 +22,8 @@ class VolumeService extends AbstractService implements ServiceInterface
 
     const VERSION_V1 = 'V1';
 
+    const VERSION_V2 = 'V2';
+
     const VERSION_DEFAULT = self::VERSION_V1;
 
     /**
@@ -32,20 +34,20 @@ class VolumeService extends AbstractService implements ServiceInterface
 
     /**
      * {@inheritdoc}
+     * @see \Scalr\Service\OpenStack\Services\AbstractService::getSupportedVersions()
+     */
+    public function getSupportedVersions()
+    {
+        return [self::VERSION_V1, self::VERSION_V2];
+    }
+
+    /**
+     * {@inheritdoc}
      * @see Scalr\Service\OpenStack\Services.ServiceInterface::getType()
      */
     public static function getType()
     {
         return OpenStack::SERVICE_VOLUME;
-    }
-
-    /**
-     * {@inheritdoc}
-     * @see Scalr\Service\OpenStack\Services.ServiceInterface::getVersion()
-     */
-    public function getVersion()
-    {
-        return self::VERSION_DEFAULT;
     }
 
     /**

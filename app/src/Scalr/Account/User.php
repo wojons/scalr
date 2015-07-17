@@ -5,6 +5,10 @@ use Scalr\Stats\CostAnalytics\Entity\CostCentreEntity;
 use Scalr\Stats\CostAnalytics\Entity\ProjectPropertyEntity;
 use Scalr\Stats\CostAnalytics\Entity\CostCentrePropertyEntity;
 
+/**
+ * @deprecated  This class has been deprecated since version 5.4.0. Please use new Scalr\Model\Entity\Account\User entity.
+ * @see         \Scalr\Model\Entity\Account\User
+ */
 class Scalr_Account_User extends Scalr_Model
 {
     protected $dbTableName = 'account_users';
@@ -25,16 +29,16 @@ class Scalr_Account_User extends Scalr_Model
     const SETTING_API_SECRET_KEY 	= 'api.secret_key';
     const SETTING_API_ENABLED 		= 'api.enabled';
 
-    const SETTING_RSS_LOGIN 	= 'rss.login';
-    const SETTING_RSS_PASSWORD 	= 'rss.password';
-
     const SETTING_UI_ENVIRONMENT = 'ui.environment'; // last used
     const SETTING_UI_TIMEZONE = 'ui.timezone';
     const SETTING_UI_STORAGE_TIME = 'ui.storage.time';
     const SETTING_UI_CHANGELOG_TIME = 'ui.changelog.time';
 
     const SETTING_GRAVATAR_EMAIL = 'gravatar.email';
+    
     const SETTING_LDAP_EMAIL = 'ldap.email';
+    const SETTING_LDAP_USERNAME = 'ldap.username';
+    
     const SETTING_LEAD_VERIFIED = 'lead.verified';
     const SETTING_LEAD_HASH = 'lead.hash';
 
@@ -46,7 +50,9 @@ class Scalr_Account_User extends Scalr_Model
     const VAR_SECURITY_IP_WHITELIST = 'security.ip.whitelist';
     const VAR_API_IP_WHITELIST = 'api.ip.whitelist';
 
+    const VAR_SSH_CONSOLE_LAUNCHER = 'ssh.console.launcher';
     const VAR_SSH_CONSOLE_USERNAME = 'ssh.console.username';
+    const VAR_SSH_CONSOLE_IP = 'ssh.console.ip';
     const VAR_SSH_CONSOLE_PORT = 'ssh.console.port';
     const VAR_SSH_CONSOLE_KEY_NAME = 'ssh.console.key_name';
     const VAR_SSH_CONSOLE_DISABLE_KEY_AUTH = 'ssh.console.disable_key_auth';
@@ -221,9 +227,28 @@ class Scalr_Account_User extends Scalr_Model
         return $this->type;
     }
 
+    /**
+     * Gets email address of the User
+     *
+     * @return string Returns user email address
+     */
     public function getEmail()
     {
         return $this->email;
+    }
+    
+    /**
+     * Gets LDAP username of the User
+     *
+     * @return string Returns user LDAP username
+     */
+    public function getLdapUsername()
+    {
+        $ldapUsername = $this->getSetting(self::SETTING_LDAP_USERNAME);
+        if (!$ldapUsername)
+            $ldapUsername = strtok($this->getEmail(), '@');
+        
+        return $ldapUsername;
     }
 
     public function getGravatarHash()
@@ -334,9 +359,15 @@ class Scalr_Account_User extends Scalr_Model
      */
     public function getDashboard($envId)
     {
-        $obj = unserialize($this->db->GetOne("SELECT value FROM account_user_dashboard WHERE `user_id` = ? AND `env_id` = ? LIMIT 1",
-            array($this->id, $envId)
-        ));
+        if ($envId) {
+            $obj = unserialize($this->db->GetOne("SELECT value FROM account_user_dashboard WHERE `user_id` = ? AND `env_id` = ? LIMIT 1",
+                array($this->id, $envId)
+            ));
+        } else {
+            $obj = unserialize($this->db->GetOne("SELECT value FROM account_user_dashboard WHERE `user_id` = ? AND `env_id` IS NULL LIMIT 1",
+                array($this->id)
+            ));
+        }
 
         if (! is_array($obj)) {
             $obj = array('configuration' => array(), 'flags' => array(), 'widgets' => array());
@@ -368,7 +399,12 @@ class Scalr_Account_User extends Scalr_Model
                     $column = array();
                     foreach ($col as $wid) {
                         if (is_array($wid) && isset($wid['name'])) {
-                            if ($wid['name'] == 'dashboard.uservoice')
+
+                            // deprecated widgets
+                            if (in_array($wid['name'], [
+                                'dashboard.usagelaststat',
+                                'dashboard.uservoice'
+                            ]))
                                 continue;
 
                             $usedWidgets[] = $wid['name'];
@@ -387,6 +423,11 @@ class Scalr_Account_User extends Scalr_Model
 
         $srlvalue = serialize($value);
         //UNIQUE KEY `user_id` (`user_id`,`env_id`)
+        if (! $envId) {
+            // if envId is NULL, foreign key doesn't work, remove possible record (todo: refactor)
+            $this->db->Execute('DELETE FROM account_user_dashboard WHERE user_id = ? AND env_id IS NULL', [$this->id]);
+        }
+
         $this->db->Execute("
             INSERT account_user_dashboard
             SET `user_id` = ?, `env_id` = ?, `value` = ?
@@ -457,6 +498,7 @@ class Scalr_Account_User extends Scalr_Model
 
     public function isEmailExists($email)
     {
+        //TODO please use unique key (account_id,email)
         return $this->db->getOne('SELECT * FROM `account_users` WHERE email = ? AND account_id = ? LIMIT 1', array($email, $this->accountId)) ? true : false;
     }
 
@@ -471,6 +513,19 @@ class Scalr_Account_User extends Scalr_Model
     }
 
     /**
+     * Check if user is included in team
+     *
+     * @param   int     $teamId
+     * @return  bool
+     */
+    public function isInTeam($teamId)
+    {
+        return !!$this->db->getOne('
+            SELECT 1 FROM account_team_users WHERE user_id = ? AND team_id = ?
+        ', [$this->id, $teamId]);
+    }
+
+    /**
      * Gets roles by specified ID of environment
      *
      * @param   int   $envId       The ID of the client's environment
@@ -480,10 +535,27 @@ class Scalr_Account_User extends Scalr_Model
     public function getAclRolesByEnvironment($envId, $ignoreCache = false)
     {
         $cid = 'roles.env';
+
         if (!isset($this->_cache[$cid][$envId]) || $ignoreCache) {
             $this->_cache[$cid][$envId] = \Scalr::getContainer()->acl->getUserRolesByEnvironment($this, $envId, $this->accountId);
         }
+
         return $this->_cache[$cid][$envId];
+    }
+
+    /**
+     * Gets account level roles for the user
+     *
+     * @param    bool   $ignoreCache
+     * @return   \Scalr\Acl\Role\AccountRoleSuperposition Returns the list of the roles of account level
+     */
+    public function getAclRoles($ignoreCache = false)
+    {
+        if (!isset($this->_cache['roles.account'])) {
+            $this->_cache['roles.account'] = \Scalr::getContainer()->acl->getUserRoles($this);
+        }
+
+        return $this->_cache['roles.account'];
     }
 
     /**
@@ -606,35 +678,23 @@ class Scalr_Account_User extends Scalr_Model
      */
     public function getDefaultEnvironment($envId = 0)
     {
-        try {
-            if ($envId) {
+        if ($envId || ($envId = (int)$this->getSetting(Scalr_Account_User::SETTING_UI_ENVIRONMENT))) {
+            try {
                 $environment = Scalr_Environment::init()->loadById($envId);
-
-                if (! $this->getPermissions()->check($environment)) {
-                    $envId = 0;
-                }
-
-            } else {
-                $envId = (int) $this->getSetting(Scalr_Account_User::SETTING_UI_ENVIRONMENT);
-
-                if ($envId) {
-                    $environment = Scalr_Environment::init()->loadById($envId);
-                    if (! $this->getPermissions()->check($environment)) {
-                        $envId = 0;
-                    }
-                }
+                $this->getPermissions()->validate($environment);
+            } catch (Exception $e) {
+                $environment = null;
             }
-        } catch (Exception $e) {
-            $envId = 0;
         }
 
-        if (! $envId) {
+        if (empty($environment)) {
             $envs = $this->getEnvironments();
-
             if (count($envs)) {
-                $environment = Scalr_Environment::init()->loadById($envs[0]['id']);
-            } else
+                $envId = $envs[0]['id'];
+                $environment = Scalr_Environment::init()->loadById($envId);
+            } else {
                 throw new Scalr_Exception_Core('You don\'t have access to any environment.');
+            }
         }
 
         $this->getPermissions()->validate($environment);
@@ -865,7 +925,9 @@ class Scalr_Account_User extends Scalr_Model
     public function setSshConsoleSettings($settings)
     {
         $list = array(
+            Scalr_Account_User::VAR_SSH_CONSOLE_LAUNCHER,
             Scalr_Account_User::VAR_SSH_CONSOLE_USERNAME,
+            Scalr_Account_User::VAR_SSH_CONSOLE_IP,
             Scalr_Account_User::VAR_SSH_CONSOLE_PORT,
             Scalr_Account_User::VAR_SSH_CONSOLE_KEY_NAME,
             Scalr_Account_User::VAR_SSH_CONSOLE_DISABLE_KEY_AUTH,
@@ -882,7 +944,9 @@ class Scalr_Account_User extends Scalr_Model
     {
         $result = array();
         $list = array(
+            Scalr_Account_User::VAR_SSH_CONSOLE_LAUNCHER,
             Scalr_Account_User::VAR_SSH_CONSOLE_USERNAME,
+            Scalr_Account_User::VAR_SSH_CONSOLE_IP,
             Scalr_Account_User::VAR_SSH_CONSOLE_PORT,
             Scalr_Account_User::VAR_SSH_CONSOLE_KEY_NAME,
             Scalr_Account_User::VAR_SSH_CONSOLE_DISABLE_KEY_AUTH,

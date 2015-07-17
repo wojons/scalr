@@ -1,14 +1,20 @@
 <?php
 namespace Scalr\Model\Entity;
 
+use DateTime;
 use Scalr\Model\AbstractEntity;
 use Scalr\Model\Entity\ImageSoftware;
+use Scalr\Model\Entity\Os;
 use Scalr_Environment;
 use SERVER_PLATFORMS;
 use Exception;
+use DomainException;
 use Scalr\Modules\PlatformFactory;
 use Scalr\Modules\Platforms\GoogleCE\GoogleCEPlatformModule;
 use Scalr\Modules\Platforms\Rackspace\RackspacePlatformModule;
+use Scalr\DataType\ScopeInterface;
+use Scalr\DataType\AccessPermissionsInterface;
+use Scalr\Exception\NotEnabledPlatformException;
 
 /**
  * Image entity
@@ -19,7 +25,7 @@ use Scalr\Modules\Platforms\Rackspace\RackspacePlatformModule;
  * @Entity
  * @Table(name="images")
  */
-class Image extends AbstractEntity
+class Image extends AbstractEntity implements ScopeInterface, AccessPermissionsInterface
 {
     const STATUS_ACTIVE = 'active';
     const STATUS_DELETE = 'delete';
@@ -27,6 +33,8 @@ class Image extends AbstractEntity
 
     const SOURCE_MANUAL = 'Manual';
     const SOURCE_BUNDLE_TASK = 'BundleTask';
+
+    const NULL_YEAR = '1971';
 
     /**
      * Hash (primary key)
@@ -76,38 +84,20 @@ class Image extends AbstractEntity
     public $name;
 
     /**
-     * @Column(type="string",nullable=true)
+     * @Column(type="string")
      * @var string
      */
-    public $os;
-
-    /**
-     * @Column(type="string",nullable=true)
-     * @var string
-     */
-    public $osFamily;
-
-    /**
-     * @Column(type="string",nullable=true)
-     * @var string
-     */
-    public $osGeneration;
-
-    /**
-     * @Column(type="string",nullable=true)
-     * @var string
-     */
-    public $osVersion;
+    public $osId;
 
     /**
      * @Column(type="datetime",nullable=true)
-     * @var \DateTime
+     * @var DateTime
      */
     public $dtAdded;
-    
+
     /**
      * @Column(type="datetime",nullable=true)
-     * @var \DateTime
+     * @var DateTime
      */
     public $dtLastUsed;
 
@@ -136,8 +126,8 @@ class Image extends AbstractEntity
     public $size;
 
     /**
-     * @Column(type="integer")
-     * @var integer
+     * @Column(type="boolean")
+     * @var bool
      */
     public $isDeprecated;
 
@@ -176,11 +166,49 @@ class Image extends AbstractEntity
      */
     protected $_environment = null;
 
+    /**
+     * @var Os
+     */
+    private $_os;
+
     public function __construct()
     {
         // first records don't have dtAdded, we keep it null
-        $this->dtAdded = new \DateTime();
-        $this->isDeprecated = 0;
+        $this->dtAdded = new DateTime();
+        $this->isDeprecated = false;
+    }
+
+    /**
+     * Gets normalized dtAdded
+     *
+     * @return DateTime|null
+     */
+    public function getDtAdded()
+    {
+        return ($this->dtAdded !== null && $this->dtAdded->format('Y') == static::NULL_YEAR) ? null : $this->dtAdded;
+    }
+
+    /**
+     * {@inheritdoc}
+     * @see \Scalr\DataType\ScopeInterface::getScope()
+     */
+    public function getScope()
+    {
+        return !empty($this->envId) ? self::SCOPE_ENVIRONMENT : self::SCOPE_SCALR;
+    }
+
+    /**
+     * @return Os
+     * @throws \Exception
+     */
+    public function getOs()
+    {
+        if (!$this->_os)
+            $this->_os = Os::findOne([
+                ['id' => $this->osId]
+            ]);
+
+        return $this->_os;
     }
 
     public function save()
@@ -224,30 +252,46 @@ class Image extends AbstractEntity
     /**
      * Get image's usage in this environment (servers, roles)
      *
+     * @param int $envId optional
      * @return array|false
      * @throws \Scalr\Exception\ModelException
      */
-    public function getUsed()
+    public function getUsed($envId = null)
     {
         $status = [];
-        $status['rolesCount'] = $this->db()->GetOne('SELECT count(*) FROM role_images ri JOIN roles r ON r.id = ri.role_id ' .
-            'WHERE ri.image_id = ? AND ri.platform = ? AND ri.cloud_location = ? AND r.env_id = ?',
-            [$this->id, $this->platform, $this->cloudLocation, $this->envId == NULL ? 0 : $this->envId]
-        );
+
+        $s1 = (empty($this->envId) ? " AND r.env_id IS NULL " : " AND r.env_id = " . intval($this->envId) . " ");
+
+        $status['rolesCount'] = $this->db()->GetOne("
+            SELECT count(*) FROM role_images ri JOIN roles r ON r.id = ri.role_id
+            WHERE ri.image_id = ? AND ri.platform = ? AND ri.cloud_location = ? " . $s1 . "
+        ", [$this->id, $this->platform, $this->cloudLocation]);
+
+        if ($envId && !$this->envId) {
+            // check usage of scalr image in this environment
+            $status['rolesCount'] += $this->db()->GetOne("
+                SELECT count(*) FROM role_images ri JOIN roles r ON r.id = ri.role_id
+                WHERE ri.image_id = ? AND ri.platform = ? AND ri.cloud_location = ? AND r.env_id = " . intval($envId) . "
+            ", [$this->id, $this->platform, $this->cloudLocation]);
+        }
 
         if ($status['rolesCount'] == 1) {
-            $status['roleName'] = $this->db()->GetOne('SELECT r.name FROM role_images ri JOIN roles r ON r.id = ri.role_id ' .
-                'WHERE ri.image_id = ? AND ri.platform = ? AND ri.cloud_location = ? AND r.env_id = ?',
-                [$this->id, $this->platform, $this->cloudLocation, $this->envId == NULL ? 0 : $this->envId]
-            );
+            $status['roleName'] = $this->db()->GetOne("
+                SELECT r.name FROM role_images ri JOIN roles r ON r.id = ri.role_id
+                WHERE ri.image_id = ? AND ri.platform = ? AND ri.cloud_location = ? " . $s1 . "
+            ", [$this->id, $this->platform, $this->cloudLocation]);
         }
 
         if ($this->platform == \SERVER_PLATFORMS::GCE || $this->platform == \SERVER_PLATFORMS::ECS) {
-            $status['serversCount'] = $this->db()->GetOne('SELECT COUNT(*) FROM servers WHERE image_id = ? AND platform = ? AND env_id = ?',
-                    [$this->id, $this->platform, $this->envId]);
+            $status['serversCount'] = $this->db()->GetOne("
+                SELECT COUNT(*) FROM servers r WHERE r.image_id = ? AND r.platform = ? " . $s1,
+                [$this->id, $this->platform]
+            );
         } else {
-            $status['serversCount'] = $this->db()->GetOne('SELECT COUNT(*) FROM servers WHERE image_id = ? AND platform = ? AND cloud_location = ? AND env_id = ?',
-                    [$this->id, $this->platform, $this->cloudLocation, $this->envId]);
+            $status['serversCount'] = $this->db()->GetOne("
+                SELECT COUNT(*) FROM servers r WHERE r.image_id = ? AND r.platform = ? AND r.cloud_location = ? " . $s1,
+                [$this->id, $this->platform, $this->cloudLocation]
+            );
         }
 
         return $status['rolesCount'] == 0 && $status['serversCount'] == 0 ? false : $status;
@@ -297,7 +341,7 @@ class Image extends AbstractEntity
     {
         $result = [];
         foreach (ImageSoftware::find([['imageHash' => $this->hash]]) as $rec) {
-            /* @var ImageSoftware $rec */
+            /* @var $rec ImageSoftware */
             $result[$rec->name] = $rec->version;
         }
 
@@ -310,7 +354,7 @@ class Image extends AbstractEntity
     public function setSoftware($props)
     {
         foreach (ImageSoftware::find([['imageHash' => $this->hash]]) as $rec) {
-            /* @var ImageSoftware $rec */
+            /* @var $rec ImageSoftware */
             $rec->delete();
         }
 
@@ -427,10 +471,15 @@ class Image extends AbstractEntity
                     $ind = strpos($this->id, '/global/');
                     if ($ind !== FALSE) {
                         $projectId = substr($this->id, 0, $ind);
-                        $id = str_replace("$projectId/global/images/", '', $this->id);
+                        $id = str_replace("{$projectId}/global/images/", '', $this->id);
                     } else {
-                        $projectId = $env->getPlatformConfigValue(GoogleCEPlatformModule::PROJECT_ID);
-                        $id = str_replace("$projectId/images/", '', $this->id);
+                        $ind = strpos($this->id, '/images/');
+                        if ($ind !== false) {
+                            $projectId = substr($this->id, 0, $ind);
+                        } else
+                            $projectId = $env->getPlatformConfigValue(GoogleCEPlatformModule::PROJECT_ID);
+
+                        $id = str_replace("{$projectId}/images/", '', $this->id);
                     }
 
                     $snap = $client->images->get($projectId, $id);
@@ -505,8 +554,79 @@ class Image extends AbstractEntity
         return true;
     }
 
+    /**
+     * Migrates an Image to another Cloud Location
+     *
+     * @param  string $cloudLocation The cloud location
+     * @param  \Scalr_Account_User|\Scalr\Model\Entity\Account\User $user The user object
+     * @return Image
+     * @throws NotEnabledPlatformException
+     * @throws DomainException
+     */
+    public function migrateEc2Location($cloudLocation, $user)
+    {
+        if (!$this->getEnvironment()->isPlatformEnabled(SERVER_PLATFORMS::EC2)) {
+            throw new NotEnabledPlatformException("You can migrate image between regions only on EC2 cloud");
+        }
+
+        if ($this->cloudLocation == $cloudLocation) {
+            throw new DomainException('Destination region is the same as source one');
+        }
+
+        $this->checkImage(); // re-check properties
+        $aws = $this->getEnvironment()->aws($cloudLocation);
+        $newImageId = $aws->ec2->image->copy(
+            $this->cloudLocation,
+            $this->id,
+            $this->name,
+            "Image was copied by Scalr from image: {$this->name}, cloudLocation: {$this->cloudLocation}, id: {$this->id}",
+            null,
+            $cloudLocation
+        );
+
+        $newImage = new Image();
+        $newImage->platform = $this->platform;
+        $newImage->cloudLocation = $cloudLocation;
+        $newImage->id = $newImageId;
+        $newImage->name = $this->name;
+        $newImage->architecture = $this->architecture;
+        $newImage->size = $this->size;
+        $newImage->envId = $this->envId;
+        $newImage->osId = $this->osId;
+        $newImage->source = Image::SOURCE_MANUAL;
+        $newImage->type = $this->type;
+        $newImage->agentVersion = $this->agentVersion;
+        $newImage->createdById = $user->getId();
+        $newImage->createdByEmail = $user->getEmail();
+        $newImage->status = Image::STATUS_ACTIVE;
+        $newImage->save();
+        $newImage->setSoftware($this->getSoftware());
+
+        return $newImage;
+    }
+
     public function deleteCloudImage()
     {
         return PlatformFactory::NewPlatform($this->platform)->RemoveServerSnapshot($this);
+    }
+
+    /**
+     * {@inheritdoc}
+     * @see \Scalr\DataType\AccessPermissionsInterface::hasAccessPermissions()
+     */
+    public function hasAccessPermissions($user, $environment = null, $modify = null)
+    {
+        switch ($this->getScope()) {
+            case static::SCOPE_ENVIRONMENT:
+                return $environment
+                     ? $this->envId == $environment->id
+                     : $user->hasAccessToEnvironment($this->envId);
+
+            case static::SCOPE_SCALR:
+                return !$modify;
+
+            default:
+                return false;
+        }
     }
 }

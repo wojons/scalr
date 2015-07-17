@@ -23,6 +23,7 @@ use Scalr\Service\Aws\Ec2\DataType\RegionInfoList;
  * @property-read  \Scalr\Service\Aws\CloudFront $cloudFront Amazon CloudFront service interface instance
  * @property-read  \Scalr\Service\Aws\Rds        $rds        Amazon Relational Database Service (RDS) interface instance
  * @property-read  \Scalr\Service\Aws\Route53    $route53    Amazon Route53 service interface instance
+ * @property-read  \Scalr\Service\Aws\Kms        $kms        Amazon KMS interface instance
  */
 class Aws
 {
@@ -182,6 +183,11 @@ class Aws
     const SERVICE_INTERFACE_RDS = 'rds';
 
     /**
+     * Amazon Key Management Service interface
+     */
+    const SERVICE_INTERFACE_KMS = 'kms';
+
+    /**
      * Access Key Id
      * @var string
      */
@@ -265,12 +271,46 @@ class Aws
      */
     private $environment;
 
+    /**
+     * The number of AWS Account
+     *
+     * @var string
+     */
     private $awsAccountNumber;
 
+    /**
+     * Proxy Host
+     *
+     * @var string
+     */
     private $proxyHost;
+
+    /**
+     * Proxy Port
+     *
+     * @var int
+     */
     private $proxyPort;
+
+    /**
+     * The username that is used for proxy
+     *
+     * @var string
+     */
     private $proxyUser;
+
+    /**
+     * Proxy password
+     *
+     * @var string
+     */
     private $proxyPass;
+
+    /**
+     * The type of the proxy
+     *
+     * @var int
+     */
     private $proxyType;
 
     /**
@@ -413,6 +453,7 @@ class Aws
             self::SERVICE_INTERFACE_EC2,
             self::SERVICE_INTERFACE_RDS,
             self::SERVICE_INTERFACE_ROUTE53,
+            self::SERVICE_INTERFACE_KMS,
         ];
     }
 
@@ -630,12 +671,16 @@ class Aws
     {
         $prevClient = $this->ec2->getApiClientType();
         $this->ec2->setApiClientType(self::CLIENT_SOAP);
+
         try {
+            $exc = null;
             $this->ec2->availabilityZone->describe();
         } catch (\Exception $e) {
             $exc = $e;
         }
+
         $this->ec2->setApiClientType($prevClient);
+
         if (isset($exc)) throw $exc;
 
         return true;

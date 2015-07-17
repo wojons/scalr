@@ -5,7 +5,7 @@ Scalr.regPage('Scalr.ui.admin.users.create', function (loadParams, moduleParams)
 		title: (moduleParams['user']) ? 'Admin &raquo; Users &raquo; Edit' : 'Admin &raquo; Users &raquo; Create',
 		fieldDefaults: {
 			anchor: '100%',
-            labelWidth: 120
+            labelWidth: 140
 		},
 
 		items: [{
@@ -50,11 +50,11 @@ Scalr.regPage('Scalr.ui.admin.users.create', function (loadParams, moduleParams)
                 items: [{
                     text: 'Active',
                     value: 'Active',
-                    width: 130
+                    width: 150
                 }, {
                     text: 'Inactive',
                     value: 'Inactive',
-                    width: 130
+                    width: 150
                 }]
 			}, {
                 xtype: 'buttongroupfield',
@@ -64,11 +64,11 @@ Scalr.regPage('Scalr.ui.admin.users.create', function (loadParams, moduleParams)
                 items: [{
                     text: 'Global admin',
                     value: 'ScalrAdmin',
-                    width: 130
+                    width: 150
                 }, {
                     text: 'Financial admin',
                     value: 'FinAdmin',
-                    width: 130
+                    width: 150
                 }],
                 listeners: {
                     change: function(comp, value) {

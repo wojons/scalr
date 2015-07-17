@@ -7,40 +7,16 @@ use Scalr\Model\Entity\ChefServer;
 
 class Scalr_UI_Controller_Services_Chef_Servers extends Scalr_UI_Controller
 {
-    private static $levelMap = [
-        'environment' => ChefServer::LEVEL_ENVIRONMENT,
-        'account'     => ChefServer::LEVEL_ACCOUNT,
-        'scalr'       => ChefServer::LEVEL_SCALR
-    ];
-
-    var $level = null;
-
     public function hasAccess()
     {
         return true;
     }
-    
-    public function init()
-    {
-        if ($this->user->isScalrAdmin()) {
-            $level = 'scalr';
-        } else {
-            $level = $this->getParam('level') ? $this->getParam('level') : 'environment';
-        }
-        if (isset(self::$levelMap[$level])) {
-            $this->level = self::$levelMap[$level];
-        } elseif (in_array($level, [ChefServer::LEVEL_ENVIRONMENT, ChefServer::LEVEL_ACCOUNT, ChefServer::LEVEL_SCALR])) {
-            $this->level = (int)$level;
-        } else {
-            throw new Scalr_Exception_Core('Invalid chef servers scope');
-        }
-    }
 
     private function canManageServers()
     {
-        return ($this->level == ChefServer::LEVEL_ENVIRONMENT && $this->request->isAllowed(Acl::RESOURCE_SERVICES_ENVADMINISTRATION_CHEF) && !$this->user->isScalrAdmin() ||
-               $this->level == ChefServer::LEVEL_ACCOUNT && $this->request->isAllowed(Acl::RESOURCE_SERVICES_ADMINISTRATION_CHEF) && !$this->user->isScalrAdmin() ||
-               $this->level == ChefServer::LEVEL_SCALR && $this->user->isScalrAdmin());
+        return ($this->request->getScope() == ChefServer::SCOPE_ENVIRONMENT && $this->request->isAllowed(Acl::RESOURCE_SERVICES_ENVADMINISTRATION_CHEF) && !$this->user->isScalrAdmin() ||
+               $this->request->getScope() == ChefServer::SCOPE_ACCOUNT && $this->request->isAllowed(Acl::RESOURCE_SERVICES_ADMINISTRATION_CHEF) && !$this->user->isScalrAdmin() ||
+               $this->request->getScope() == ChefServer::SCOPE_SCALR && $this->user->isScalrAdmin());
     }
 
     /**
@@ -48,12 +24,12 @@ class Scalr_UI_Controller_Services_Chef_Servers extends Scalr_UI_Controller
      */
     private function canEditServer($server)
     {
-        return $this->level == $server->level &&
-               ($server->level == ChefServer::LEVEL_ENVIRONMENT && $server->envId == $this->getEnvironmentId() && $server->accountId == $this->user->getAccountId() ||
-               $server->level == ChefServer::LEVEL_ACCOUNT && $server->accountId == $this->user->getAccountId() && empty($server->envId) ||
-               $server->level == ChefServer::LEVEL_SCALR && empty($server->accountId) && empty($server->envId));
+        return $this->request->getScope() == $server->getScope() &&
+               ($server->getScope() == ChefServer::SCOPE_SCALR ||
+                $server->getScope() == ChefServer::SCOPE_ACCOUNT && $server->accountId == $this->user->getAccountId() ||
+                $server->getScope() == ChefServer::SCOPE_ENVIRONMENT && $server->envId == $this->getEnvironmentId() && $server->accountId == $this->user->getAccountId());
     }
-    
+
     public function defaultAction()
     {
         $this->viewAction();
@@ -66,9 +42,7 @@ class Scalr_UI_Controller_Services_Chef_Servers extends Scalr_UI_Controller
         }
 
         $this->response->page('ui/services/chef/servers/view.js', [
-            'servers' => $this->getList(),
-            'level' => $this->level,
-            'levelMap' => array_flip(self::$levelMap)
+            'servers' => $this->getList()
         ]);
     }
 
@@ -77,7 +51,7 @@ class Scalr_UI_Controller_Services_Chef_Servers extends Scalr_UI_Controller
         if (!$this->canManageServers()) {
             throw new Scalr_Exception_InsufficientPermissions();
         }
-    
+
         $this->response->data([
             'servers' => $this->getList()
         ]);
@@ -91,14 +65,13 @@ class Scalr_UI_Controller_Services_Chef_Servers extends Scalr_UI_Controller
             $limits = $governance->getValue(Scalr_Governance::CATEGORY_GENERAL, Scalr_Governance::GENERAL_CHEF, null);
         }
         $list = [];
-        $levelMap = array_flip(self::$levelMap);
         foreach ($this->getList() as $server) {
             if (!$limits || isset($limits['servers'][(string)$server['id']])) {
                 $list[] = [
                     'id'       => (string)$server['id'],
                     'url'      => $server['url'],
                     'username' => $server['username'],
-                    'level'    => $levelMap[$server['level']]
+                    'scope'    => $server['scope']
                 ];
             }
         }
@@ -116,9 +89,9 @@ class Scalr_UI_Controller_Services_Chef_Servers extends Scalr_UI_Controller
         if (!$this->canManageServers()) {
             throw new Scalr_Exception_InsufficientPermissions();
         }
-        
+
         $server = ChefServer::findPk($id);
-        
+
         if (!$this->canEditServer($server)) {
             throw new Scalr_Exception_Core('Insufficient permissions to remove chef server.');
         }
@@ -126,7 +99,7 @@ class Scalr_UI_Controller_Services_Chef_Servers extends Scalr_UI_Controller
         if ($server->isInUse()) {
             throw new Scalr_Exception_Core('Chef server is in use and can\'t be removed.');
         }
-        
+
         $server->delete();
         $this->response->success("Chef server successfully removed.");
     }
@@ -145,16 +118,10 @@ class Scalr_UI_Controller_Services_Chef_Servers extends Scalr_UI_Controller
         if (!$this->canManageServers()) {
             throw new Scalr_Exception_InsufficientPermissions();
         }
-        
+
         if (!$id) {
             $server = new ChefServer();
-            $server->level = $this->level;
-            if ($this->level == ChefServer::LEVEL_ENVIRONMENT) {
-                $server->accountId = $this->user->getAccountId();
-                $server->envId = $this->getEnvironmentId();
-            } elseif ($this->level == ChefServer::LEVEL_ACCOUNT) {
-                $server->accountId = $this->user->getAccountId();
-            }
+            $server->setScope($this->request->getScope(), $this->user->getAccountId(), $this->getEnvironmentId(true));
         } else {
             $server = ChefServer::findPk($id);
             if (!$this->canEditServer($server)) {
@@ -165,22 +132,28 @@ class Scalr_UI_Controller_Services_Chef_Servers extends Scalr_UI_Controller
         $validator = new Validator();
         $validator->validate($url, 'url', Validator::NOEMPTY);
 
-        //check url unique within current level
+        //check url unique within current scope
         $criteria = [];
         $criteria[] = ['url' => $url];
-        $criteria[] = ['level' => $this->level];
         if ($server->id) {
             $criteria[] = ['id' => ['$ne' => $server->id]];
         }
-        if ($this->level == ChefServer::LEVEL_ENVIRONMENT) {
-            $criteria[] = ['envId' => $server->envId];
-            $criteria[] = ['accountId' => $server->accountId];
-        } elseif ($this->level == ChefServer::LEVEL_ACCOUNT) {
-            $criteria[] = ['envId' => null];
-            $criteria[] = ['accountId' => $server->accountId];
-        } elseif ($this->level == ChefServer::LEVEL_SCALR) {
-            $criteria[] = ['envId' => null];
-            $criteria[] = ['accountId' => null];
+        switch ($this->request->getScope()) {
+            case ChefServer::SCOPE_ENVIRONMENT:
+                $criteria[] = ['level' => ChefServer::LEVEL_ENVIRONMENT];
+                $criteria[] = ['envId' => $server->envId];
+                $criteria[] = ['accountId' => $server->accountId];
+                break;
+            case ChefServer::SCOPE_ACCOUNT:
+                $criteria[] = ['level' => ChefServer::LEVEL_ACCOUNT];
+                $criteria[] = ['envId' => null];
+                $criteria[] = ['accountId' => $server->accountId];
+                break;
+            case ChefServer::SCOPE_SCALR:
+                $criteria[] = ['level' => ChefServer::LEVEL_SCALR];
+                $criteria[] = ['envId' => null];
+                $criteria[] = ['accountId' => null];
+                break;
         }
 
         if (ChefServer::findOne($criteria)) {
@@ -224,15 +197,11 @@ class Scalr_UI_Controller_Services_Chef_Servers extends Scalr_UI_Controller
         if (!$this->canManageServers()) {
             throw new Scalr_Exception_InsufficientPermissions();
         }
-        
+
         $processed = array();
         $errors = array();
         if (!empty($serverIds)) {
-            $servers = ChefServer::find(array(
-                array(
-                    'id'  => array('$in' => $serverIds)
-                )
-            ));
+            $servers = ChefServer::find([['id' => ['$in' => $serverIds]]]);
             foreach($servers as $server) {
                 if (!$this->canEditServer($server)) {
                     $errors[] = 'Insufficient permissions to remove chef server';
@@ -259,7 +228,7 @@ class Scalr_UI_Controller_Services_Chef_Servers extends Scalr_UI_Controller
 
     private function getList()
     {
-        $list = ChefServer::getList($this->user->getAccountId(), $this->getEnvironmentId(true), $this->level);
+        $list = ChefServer::getList($this->user->getAccountId(), $this->getEnvironmentId(true), $this->request->getScope());
         $data = [];
         foreach ($list as $entity) {
             $data[] = $this->getServerData($entity);
@@ -268,16 +237,19 @@ class Scalr_UI_Controller_Services_Chef_Servers extends Scalr_UI_Controller
         return $data;
     }
 
+    /**
+     * @param ChefServer $server
+     */
     private function getServerData($server)
     {
         $data = [
             'id'       => $server->id,
             'url'      => $server->url,
             'username' => $server->username,
-            'status'   => $server->isInUse($this->user->getAccountId(), $this->getEnvironmentId(true), $this->level),
-            'level'    => $server->level
+            'status'   => $server->isInUse($this->user->getAccountId(), $this->getEnvironmentId(true), $this->request->getScope()),
+            'scope'    => $server->getScope()
         ];
-        if ($this->level == $server->level) {
+        if ($this->request->getScope() == $server->getScope()) {
             $data['authKey'] = $this->getCrypto()->decrypt($server->authKey);
             $data['vUsername'] = $server->vUsername;
             $data['vAuthKey'] = $this->getCrypto()->decrypt($server->vAuthKey);

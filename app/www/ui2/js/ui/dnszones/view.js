@@ -13,27 +13,17 @@ Scalr.regPage('Scalr.ui.dnszones.view', function (loadParams, moduleParams) {
 	});
 
 	return Ext.create('Ext.grid.Panel', {
-		title: 'DNS Zones &raquo; View',
 		scalrOptions: {
-			'reload': false,
-			'maximize': 'all'
+			reload: false,
+			maximize: 'all',
+            menuTitle: 'DNS Zones',
+            menuHref: '#/dnszones',
+            menuFavorite: true
 		},
 		store: store,
 		stateId: 'grid-dnszones-view',
 		stateful: true,
-		plugins: {
-			ptype: 'gridstore'
-		},
-
-		tools: [{
-			xtype: 'gridcolumnstool'
-		},  {
-			xtype: 'favoritetool',
-			favorite: {
-				text: 'DNS zones',
-				href: '#/dnszones/view'
-			}
-		}],
+        plugins: [ 'gridstore', 'applyparams' ],
 
 		viewConfig: {
 			emptyText: 'No DNS zones found',
@@ -45,25 +35,27 @@ Scalr.regPage('Scalr.ui.dnszones.view', function (loadParams, moduleParams) {
 				tpl: '<a target="_blank" href="http://{zone_name}">{zone_name}</a>'
 			},
 			{ text: "Assigned to", flex: 1, dataIndex: 'role_name', sortable: false, xtype: 'templatecolumn', tpl:
-				'<tpl if="farm_id &gt; 0"><a href="#/farms/{farm_id}/view" title="Farm {farm_name}">{farm_name}</a>' +
+				'<tpl if="farm_id &gt; 0"><a href="#/farms?farmId={farm_id}" title="Farm {farm_name}">{farm_name}</a>' +
 					'<tpl if="farm_roleid &gt; 0">&nbsp;&rarr;&nbsp;<a href="#/farms/{farm_id}/roles/{farm_roleid}/view" ' +
 					'title="Role {role_name}">{role_name}</a></tpl>' +
 				'</tpl>' +
-				'<tpl if="farm_id == 0"><img src="/ui2/images/icons/false.png" /></tpl>'
+				'<tpl if="farm_id == 0">&mdash;</tpl>'
 			},
 			{ text: "Last modified", width: 200, dataIndex: 'dtlastmodified', sortable: true, xtype: 'templatecolumn',
 				tpl: '<tpl if="dtlastmodified">{dtlastmodified}</tpl><tpl if="! dtlastmodified">Never</tpl>'
 			},
 			{ text: "Status", minWidth: 130, width: 130, dataIndex: 'status', sortable: true, xtype: 'statuscolumn', statustype: 'dnszone'},
             {
-				xtype: 'optionscolumn2',
+				xtype: 'optionscolumn',
 				menu: [{
 					text: 'Edit DNS Zone',
 					iconCls: 'x-menu-icon-edit',
+                    showAsQuickAction: true,
 					href: '#/dnszones/{id}/edit'
 				}, {
 					text: 'Settings',
 					iconCls: 'x-menu-icon-settings',
+                    showAsQuickAction: true,
 					href: '#/dnszones/{id}/settings'
 				}],
 				getVisibility: function (record) {
@@ -72,7 +64,6 @@ Scalr.regPage('Scalr.ui.dnszones.view', function (loadParams, moduleParams) {
 			}
 		],
 
-		multiSelect: true,
 		selModel: {
 			selType: 'selectedmodel',
 			getVisibility: function (record) {
@@ -91,20 +82,21 @@ Scalr.regPage('Scalr.ui.dnszones.view', function (loadParams, moduleParams) {
 			store: store,
 			dock: 'top',
 			beforeItems: [{
-                text: 'Add DNS zone',
-                cls: 'x-btn-green-bg',
+                text: 'New DNS zone',
+                cls: 'x-btn-green',
 				handler: function() {
 					Scalr.event.fireEvent('redirect', '#/dnszones/create');
 				}
 			}],
 			afterItems: [{
-				ui: 'paging',
 				itemId: 'delete',
-				iconCls: 'x-tbar-delete',
+				iconCls: 'x-btn-icon-delete',
+                cls: 'x-btn-red',
 				tooltip: 'Select one or more zones to delete them',
 				disabled: true,
 				handler: function() {
-					var request = {
+                    var grid = this.up('grid'),
+                        request = {
 						confirmBox: {
 							msg: 'Remove selected zone(s): %s ?',
 							type: 'delete'
@@ -115,9 +107,10 @@ Scalr.regPage('Scalr.ui.dnszones.view', function (loadParams, moduleParams) {
 						},
 						url: '/dnszones/xRemoveZones',
 						success: function() {
+                            grid.getSelectionModel().deselectAll();
 							store.load();
 						}
-					}, records = this.up('grid').getSelectionModel().getSelection(), zones = [];
+					}, records = grid.getSelectionModel().getSelection(), zones = [];
 
 					request.confirmBox.objects = [];
 					for (var i = 0, len = records.length; i < len; i++) {
@@ -133,7 +126,6 @@ Scalr.regPage('Scalr.ui.dnszones.view', function (loadParams, moduleParams) {
 				store: store
 			}, ' ', {
 				text: 'Default Records',
-				width: 120,
 				tooltip: 'Manage Default DNS records',
 				handler: function() {
 					Scalr.event.fireEvent('redirect', '#/dnszones/defaultRecords');

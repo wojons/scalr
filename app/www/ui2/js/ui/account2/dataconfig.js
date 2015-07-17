@@ -34,8 +34,9 @@ Scalr.data.add([{
 		add: function(){
 			Scalr.data.fireRefresh('account.teams');
 		},
-		remove: function(store, record){
-			var userId = record.get('id'),
+		remove: function(store, records){
+            if (!records.length) return;
+			var userId = records[0].get('id'),
 				teams = Scalr.data.get('account.teams');
 			if (teams) {
 				teams.each(function(teamRecord){
@@ -65,8 +66,9 @@ Scalr.data.add([{
 		add: function(){
 			Scalr.data.fireRefresh('account.users');
 		},
-		remove: function(store, record){
-			var teamId = record.get('id'),
+		remove: function(store, records){
+            if (!records.length) return;
+			var teamId = records[0].get('id'),
 				environments = Scalr.data.get('account.environments');
 
 			//update team environments
@@ -110,9 +112,10 @@ Scalr.data.add([{
 		add: function(){
 			Scalr.data.fireRefresh('account.teams');
 		},
-		remove: function(store, record){
-			var roleId = record.get('id'),
-				team = Scalr.data.get('account.teams').getById(record.get('teamId')),
+		remove: function(store, records){
+            if (!records.length) return;
+			var roleId = records[0].get('id'),
+				team = Scalr.data.get('account.teams').getById(records[0].get('teamId')),
 				teamUsers = team ? team.get('users') : null;
 			if (teamUsers) {
 				for (var i=0, len=teamUsers; i<len; i++) {

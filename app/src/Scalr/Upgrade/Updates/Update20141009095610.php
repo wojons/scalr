@@ -14,7 +14,7 @@ class Update20141009095610 extends AbstractUpdate implements SequenceInterface
 
     protected $description = 'Update table images';
 
-    protected $ignoreChanges = true;
+    protected $ignoreChanges = false;
 
     protected $dbservice = 'adodb';
 
@@ -60,10 +60,7 @@ class Update20141009095610 extends AbstractUpdate implements SequenceInterface
                 $imObj->platform = $i['platform'];
                 $imObj->cloudLocation = $i['cloud_location'];
                 $imObj->architecture = $i['architecture'] ? $i['architecture'] : 'x84_64';
-                $imObj->osFamily = $i['os_family'];
-                $imObj->osVersion = $i['os_version'];
-                $imObj->os = $i['os_name'];
-                $imObj->agentVersion = $i['agent_version'];
+                $imObj->osId = $i['os_id'];
                 $imObj->isDeprecated = 0;
                 $imObj->dtAdded = NULL;
                 $imObj->source = Image::SOURCE_MANUAL;

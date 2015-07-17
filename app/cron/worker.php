@@ -114,12 +114,37 @@ while (!$interrupt) {
         $payload = new ErrorPayload($payload);
         $payload->message = sprintf('Unexpected request: %s', $request->getLast());
     } else {
+        $start = microtime(true);
         try {
+            $strRequestPayload = @json_encode($payload->body);
             $payload->setBody($task->worker($payload->body));
             $payload->code = 200;
         } catch (Exception $e) {
             $task->log('ERROR', "Worker %s failed with exception:%s - %s", $task->getName(), get_class($e), $e->getMessage());
             $payload = $payload->error(500, $e->getMessage());
+        }
+        $executionTime = microtime(true) - $start;
+
+        $statPath = '/var/log/scalr/worker.log';
+        if (is_writable($statPath)) {
+            @error_log(
+                sprintf("%s,%d,\"%s\",%0.4f,%d,\"%s\"\n",
+                    date('M d H:i:s P'),
+                    isset($payload->code) ? $payload->code : 500,
+                    $service,
+                    $executionTime,
+                    \Scalr::getDb()->numberQueries + (\Scalr::getContainer()->analytics->enabled ? \Scalr::getContainer()->cadb->numberQueries : 0),
+                    str_replace('"', '""', $strRequestPayload)
+                ),
+                3,
+                $statPath
+            );
+        }
+
+        //Resets the number of the queries
+        \Scalr::getDb()->numberQueries = 0;
+        if (\Scalr::getContainer()->analytics->enabled) {
+            \Scalr::getContainer()->cadb->numberQueries = 0;
         }
     }
 

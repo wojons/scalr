@@ -58,10 +58,7 @@ class Scalr_UI_Controller_Tools_Openstack_Lb_Monitors extends Scalr_UI_Controlle
 
     public function viewAction()
     {
-        $locations = self::loadController('Platforms')->getCloudLocations($this->platform, false);
-        $this->response->page('ui/tools/openstack/lb/monitors/view.js', array(
-            'locations'	=> $locations
-        ));
+        $this->response->page('ui/tools/openstack/lb/monitors/view.js');
     }
 
     public function createAction()

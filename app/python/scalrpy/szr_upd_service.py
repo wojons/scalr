@@ -51,7 +51,7 @@ helper.patch_gevent()
 
 
 app = None
-
+eol_os = ['ubuntu-10-04']
 
 
 class SzrUpdClient(rpc.HttpServiceProxy):
@@ -78,10 +78,9 @@ class SzrUpdService(application.ScalrIterationApplication):
         self._db = None
         self._pool = None
 
-
     def configure(self):
         helper.update_config(
-                self.scalr_config.get('scalarizr_update', {}).get('service', {}), self.config)
+            self.scalr_config.get('scalarizr_update', {}).get('service', {}), self.config)
         helper.validate_config(self.config)
         if self.config['interval']:
             self.iteration_timeout = int(self.config['interval'])
@@ -90,13 +89,88 @@ class SzrUpdService(application.ScalrIterationApplication):
         self._db = dbmanager.ScalrDB(self.config['connections']['mysql'])
         self._pool = helper.GPool(pool_size=self.config['pool_size'])
 
-
     def clear_cache(self):
         if hasattr(self.get_szr_ver_from_repo.im_func, 'cache'):
             delattr(self.get_szr_ver_from_repo.im_func, 'cache')
         if hasattr(self.get_szr_ver_from_repo.im_func, 'devel_cache'):
             delattr(self.get_szr_ver_from_repo.im_func, 'devel_cache')
 
+    deb_pattern = re.compile('Package: scalarizr\n.*?Version:([ A-Za-z0-9.]*)-?.*\n.*?', re.DOTALL)
+
+    def ver_from_deb_repo(self, repo, branch=None):
+        out = {}
+        deb_repo_url_template = repo['deb_repo_url']
+        if deb_repo_url_template:
+            deb_repo_url_template = deb_repo_url_template.strip()
+            if branch:
+                deb_repo_url_template = deb_repo_url_template % branch
+            deb_repo_url = '/'.join(deb_repo_url_template.split())
+            url = os.path.join(deb_repo_url, 'Packages')
+            try:
+                r = requests.get(url)
+                r.raise_for_status()
+                out[deb_repo_url_template] = self.deb_pattern.findall(r.text)[0].strip()
+            except (requests.exceptions.HTTPError, requests.exceptions.InvalidSchema):
+                msg = 'Deb repository {0} failed, file: {1} not found'.format(repo['deb_repo_url'], url)
+                LOG.warning(msg)
+        return out
+
+    rpm_pattern_1 = re.compile(
+            '<package type="rpm"><name>scalarizr-base</name>.*?ver="([A-Za-z0-9.]*)-?.*".*?</package>',
+            re.DOTALL)
+    rpm_pattern_2 = re.compile(
+            '<package type="rpm"><name>scalarizr</name>.*?ver="([ A-Za-z0-9.]*)-?.*".*?</package>',
+            re.DOTALL)
+
+    def ver_from_rpm_repo(self, repo, branch=None):
+        out = {}
+        rpm_repo_url_template = repo['rpm_repo_url']
+        if rpm_repo_url_template:
+            rpm_repo_url_template = rpm_repo_url_template.strip()
+            if branch:
+                rpm_repo_url_template = rpm_repo_url_template % branch
+            for release in ['5', '6']:
+                rpm_repo_url = rpm_repo_url_template.replace('$releasever', release)
+                rpm_repo_url = rpm_repo_url.replace('$basearch', 'x86_64')
+                url = os.path.join(rpm_repo_url, 'repodata/primary.xml.gz')
+                try:
+                    r = requests.get(url)
+                    r.raise_for_status()
+                except (requests.exceptions.HTTPError, requests.exceptions.InvalidSchema):
+                    msg = 'RPM repository {0} failed, file: {1} not found'.format(repo['rpm_repo_url'], url)
+                    LOG.warning(msg)
+                    return out
+                s = StringIO.StringIO(r.content)
+                f = gzip.GzipFile(fileobj=s, mode='r')
+                f.seek(0)
+                xml = minidom.parse(f)
+                try:
+                    out[rpm_repo_url_template] = self.rpm_pattern_1.findall(xml.toxml())[0].strip()
+                except:
+                    out[rpm_repo_url_template] = self.rpm_pattern_2.findall(xml.toxml())[0].strip()
+            return out
+
+    win_pattern = re.compile('scalarizr *scalarizr_(.*).exe*', re.DOTALL)
+
+    def ver_from_win_repo(self, repo, branch=None):
+        out = {}
+        win_repo_url_template = repo['win_repo_url']
+        if win_repo_url_template:
+            win_repo_url_template = win_repo_url_template.strip()
+            if branch:
+                win_repo_url = win_repo_url_template % branch
+            else:
+                win_repo_url = win_repo_url_template
+            url = os.path.join(win_repo_url, 'x86_64/index')
+            try:
+                r = requests.get(url)
+                r.raise_for_status()
+            except (requests.exceptions.HTTPError, requests.exceptions.InvalidSchema):
+                msg = 'Win repository {0} failed, file: {1} not found'.format(repo['win_repo_url'], url)
+                LOG.warning(msg)
+                return out
+            out[win_repo_url] = self.win_pattern.findall(r.text)[0].split('-')[0]
+        return out
 
     def get_szr_ver_from_repo(self, devel_branch=None, force=False):
         out = {}
@@ -119,91 +193,22 @@ class SzrUpdService(application.ScalrIterationApplication):
                     return self.get_szr_ver_from_repo.im_func.cache
                 except AttributeError:
                     pass
+            norm_branch = None
             repos = self.scalr_config['scalarizr_update']['repos']
 
         for repo_type, repo in repos.iteritems():
-            try:
-                # deb
+            for k, func in {
+                    'deb': self.ver_from_deb_repo,
+                    'rpm': self.ver_from_rpm_repo,
+                    'win': self.ver_from_win_repo}.iteritems():
                 try:
-                    deb_repo_url_template = repo['deb_repo_url']
-                    if deb_repo_url_template:
-                        deb_repo_url_template = deb_repo_url_template.strip()
-                        if devel_branch:
-                            deb_repo_url_template = deb_repo_url_template % norm_branch
-                        try:
-                            # try old style deb repo
-                            deb_repo_url = '/'.join(deb_repo_url_template.split())
-                            r = requests.get('%s/Packages' % deb_repo_url)
-                            r.raise_for_status()
-                        except requests.exceptions.HTTPError as e:
-                            if e.response.status_code != 404:
-                                raise
-                            # try new style deb repo
-                            deb_repo_url = '%s/dists/%s/%s/binary-amd64' % tuple(deb_repo_url_template.split())
-                            r = requests.get('%s/Packages' % deb_repo_url)
-                            r.raise_for_status()
-                        out[deb_repo_url_template] = re.findall(
-                                'Package: scalarizr\n.*?Version:([ A-Za-z0-9.]*)-?.*\n.*?\n',
-                                r.text,
-                                re.DOTALL)[0].strip()
+                    data = func(repo, branch=norm_branch)
+                    if data:
+                        out.update(data)
+                        out.setdefault(repo_type, {})[k] = data.values()[0]
                 except:
-                    msg = 'Deb repository {0} failed, reason: {1}'
-                    msg = msg.format(repo_type, helper.exc_info())
-                    LOG.error(msg)
-
-                # rpm
-                try:
-                    rpm_repo_url_template = repo['rpm_repo_url']
-                    if rpm_repo_url_template:
-                        rpm_repo_url_template = rpm_repo_url_template.strip()
-                        if devel_branch:
-                            rpm_repo_url_template = rpm_repo_url_template % norm_branch
-                        for release in ['5', '6']:
-                            rpm_repo_url = rpm_repo_url_template.replace('$releasever', release)
-                            rpm_repo_url = rpm_repo_url.replace('$basearch', 'x86_64')
-                            r = requests.get('%s/repodata/primary.xml.gz' % rpm_repo_url)
-                            r.raise_for_status()
-                            s = StringIO.StringIO(r.content)
-                            f = gzip.GzipFile(fileobj=s, mode='r')
-                            f.seek(0)
-                            xml = minidom.parse(f)
-                            try:
-                                out[rpm_repo_url_template] = re.findall(
-                                        '<package type="rpm"><name>scalarizr-base</name>.*?ver="([ A-Za-z0-9.]*)-?.*".*?</package>\n',
-                                        xml.toxml(),
-                                        re.DOTALL)[0].strip()
-                            except:
-                                out[rpm_repo_url_template] = re.findall(
-                                        '<package type="rpm"><name>scalarizr</name>.*?ver="([ A-Za-z0-9.]*)-?.*".*?</package>\n',
-                                        xml.toxml(),
-                                        re.DOTALL)[0].strip()
-                except:
-                    msg = 'RPM repository {0} failed, reason: {1}'
-                    msg = msg.format(repo_type, helper.exc_info())
-                    LOG.error(msg)
-
-                # win
-                try:
-                    win_repo_url_template = repo['win_repo_url']
-                    if win_repo_url_template:
-                        win_repo_url_template = win_repo_url_template.strip()
-                        if devel_branch:
-                            win_repo_url = win_repo_url_template % norm_branch
-                        win_repo_url = win_repo_url_template
-                        r = requests.get('%s/x86_64/index' % win_repo_url)
-                        r.raise_for_status()
-                        out[win_repo_url_template] = re.findall(
-                                'scalarizr *scalarizr_(.*).x86_64.exe*\n',
-                                r.text,
-                                re.DOTALL)[0].split('-')[0]
-                except:
-                    msg = 'Win repository {0} failed, reason: {1}'
-                    msg = msg.format(repo_type, helper.exc_info())
-                    LOG.error(msg)
-            except:
-                msg = 'Repository {0} failed, reason: {1}'
-                msg = msg.format(repo_type, helper.exc_info())
-                LOG.error(msg)
+                    msg = '{0} repository {1} failed'.format(k, repo_type)
+                    LOG.exception(msg)
 
         if devel_branch:
             self.get_szr_ver_from_repo.im_func.devel_cache[devel_branch] = out
@@ -211,8 +216,7 @@ class SzrUpdService(application.ScalrIterationApplication):
             self.get_szr_ver_from_repo.im_func.cache = out
         return out
 
-
-    def _update_scalr_repo_data(self):
+    def update_scalr_repo_data(self):
         info = {}
         vers = self.get_szr_ver_from_repo()
         repos = self.scalr_config['scalarizr_update']['repos']
@@ -225,19 +229,29 @@ class SzrUpdService(application.ScalrIterationApplication):
             return
 
         query = (
-                "INSERT INTO settings "
-                "(id, value) "
-                "VALUES ('szr.repo.{name}', '{value}') "
-                "ON DUPLICATE KEY "
-                "UPDATE value = '{value}'"
+            "INSERT INTO settings "
+            "(id, value) "
+            "VALUES ('szr.repo.{name}', '{value}') "
+            "ON DUPLICATE KEY "
+            "UPDATE value = '{value}'"
         )
         for repo, vers in info.iteritems():
             repo = pymysql.escape_string(repo)
             self._db.execute(query.format(name=repo, value=vers))
 
-
     def _get_db_servers(self):
-        query = (
+        if eol_os:
+            query = (
+                "SELECT s.server_id, s.farm_id, s.farm_roleid, s.remote_ip, s.local_ip, "
+                "s.platform, r.os_id "
+                "FROM servers s "
+                "JOIN farm_roles fr ON s.farm_roleid=fr.id "
+                "JOIN roles r ON fr.role_id=r.id "
+                "WHERE r.os_id NOT IN ({}) "
+                "AND s.status IN ('Running') "
+                "ORDER BY s.server_id".format(str(eol_os)[1:-1]))
+        else:
+            query = (
                 "SELECT server_id, farm_id, farm_roleid, "
                 "remote_ip, local_ip, platform "
                 "FROM servers "
@@ -245,24 +259,22 @@ class SzrUpdService(application.ScalrIterationApplication):
                 "ORDER BY server_id")
         return self._db.execute_with_limit(query, 500, retries=1)
 
-
     def _get_szr_upd_client(self, server):
         key = cryptotool.decrypt_key(server['scalarizr.key'])
         headers = {'X-Server-Id': server['server_id']}
         instances_connection_policy = self.scalr_config.get(server['platform'], {}).get(
-                'instances_connection_policy', self.scalr_config['instances_connection_policy'])
-        ip, port, proxy_headers = helper.get_szr_updc_conn_info(server, instances_connection_policy)
+            'instances_connection_policy', self.scalr_config['instances_connection_policy'])
+        ip, port, proxy_headers = helper.get_szr_updc_conn_info(
+            server, instances_connection_policy)
         headers.update(proxy_headers)
         szr_upd_client = SzrUpdClient(ip, port, key, headers=headers)
         return szr_upd_client
-
 
     def _get_status(self, server):
         szr_upd_client = self._get_szr_upd_client(server)
         timeout = self.config['instances_connection_timeout']
         status = szr_upd_client.status(cached=True, timeout=timeout)
         return status
-
 
     def _get_statuses(self, servers):
         async_results = {}
@@ -275,7 +287,8 @@ class SzrUpdService(application.ScalrIterationApplication):
                 api_port = self.scalr_config['scalarizr_update'].get('api_port', 8008)
                 server['scalarizr.updc_port'] = api_port
             self._pool.wait()
-            async_results[server['server_id']] = self._pool.apply_async(self._get_status, (server,))
+            async_results[server['server_id']] = self._pool.apply_async(
+                self._get_status, (server,))
             gevent.sleep(0)  # force switch
 
         statuses = {}
@@ -290,13 +303,12 @@ class SzrUpdService(application.ScalrIterationApplication):
                 LOG.warning(msg)
         return statuses
 
-
     def _load_servers_data(self, servers):
-        props = ['scalarizr.key', 'scalarizr.updc_port', 'scalarizr.version']
+        props = ('scalarizr.key', 'scalarizr.updc_port', 'scalarizr.version')
         self._db.load_server_properties(servers, props)
 
         farms = [{'id': __} for __ in set(_['farm_id'] for _ in servers)]
-        props = ['szr.upd.schedule']
+        props = ('szr.upd.schedule',)
         self._db.load_farm_settings(farms, props)
         farms_map = dict((_['id'], _) for _ in farms)
 
@@ -307,27 +319,26 @@ class SzrUpdService(application.ScalrIterationApplication):
 
         for server in servers:
             schedule = farms_roles_map.get(
-                    server['farm_roleid'], {}).get('base.upd.schedule', None)
+                server['farm_roleid'], {}).get('base.upd.schedule', None)
             if not schedule:
                 schedule = farms_map.get(
-                        server['farm_id'], {}).get('szr.upd.schedule', '* * *')
+                    server['farm_id'], {}).get('szr.upd.schedule', '* * *')
             server['schedule'] = schedule
             server['scheduled_on'] = str(farms_roles_map.get(
-                    server['farm_roleid'], {}).get('scheduled_on', None))
+                server['farm_roleid'], {}).get('scheduled_on', None))
             server['user-data.scm_branch'] = farms_roles_map.get(
-                    server['farm_roleid'], {}).get('user-data.scm_branch', None)
+                server['farm_roleid'], {}).get('user-data.scm_branch', None)
         return servers
-
 
     def _set_next_update_dt(self, servers):
         for server in servers:
             next_update_dt = str(self._scheduled_on(server['schedule']))
             if next_update_dt != server['scheduled_on']:
                 query = (
-                        """INSERT INTO farm_role_settings """
-                        """(farm_roleid, name, value) """
-                        """VALUES ({0}, 'scheduled_on', '{1}') """
-                        """ON DUPLICATE KEY UPDATE value='{1}'"""
+                    """INSERT INTO farm_role_settings """
+                    """(farm_roleid, name, value) """
+                    """VALUES ({0}, 'scheduled_on', '{1}') """
+                    """ON DUPLICATE KEY UPDATE value='{1}'"""
                 ).format(server['farm_roleid'], next_update_dt)
                 msg = "Set next update datetime for server: {0} to: {1}"
                 msg = msg.format(server['server_id'], next_update_dt)
@@ -338,7 +349,6 @@ class SzrUpdService(application.ScalrIterationApplication):
                     msg = 'Unable to update next update datetime for server: {0}, reason: {1}'
                     msg = msg.format(server['server_id'], helper.exc_info())
                     LOG.warning(msg)
-
 
     def _get_servers_scheduled_for_update(self, servers):
         servers_scheduled_for_update = []
@@ -356,11 +366,16 @@ class SzrUpdService(application.ScalrIterationApplication):
                 continue
         return servers_scheduled_for_update
 
-
     def _is_server_for_update(self, server, status):
         repo_url = status['repo_url']
         devel_branch = server.get('user-data.scm_branch', None)
-        szr_ver_repo = self.get_szr_ver_from_repo(devel_branch=devel_branch)[repo_url]
+        ver_info = self.get_szr_ver_from_repo(devel_branch=devel_branch)
+
+        try:
+            szr_ver_repo = ver_info[repo_url]
+        except KeyError:
+            pkg_type = helper.pkg_type_by_name(status['dist'].split()[0])
+            szr_ver_repo = ver_info[status['repository']][pkg_type]
 
         if parse_version(server['scalarizr.version']) >= parse_version(szr_ver_repo):
             return False
@@ -369,16 +384,16 @@ class SzrUpdService(application.ScalrIterationApplication):
             return False
         if status['executed_at']:
             last_update_dt = datetime.datetime.strptime(
-                    status['executed_at'], '%a %d %b %Y %H:%M:%S %Z')
+                status['executed_at'], '%a %d %b %Y %H:%M:%S %Z')
             last_update_dt = last_update_dt.replace(minute=0, second=0, microsecond=0)
             utcnow_dt = datetime.datetime.utcnow()
             utcnow_dt = utcnow_dt.replace(minute=0, second=0, microsecond=0)
             if last_update_dt == utcnow_dt and status['state'] == 'error':
                 # skip failed server
-                LOG.debug('Skip server: {0}, reason: server in error state'.format(server['server_id']))
+                LOG.debug(
+                    'Skip server: {0}, reason: server in error state'.format(server['server_id']))
                 return False
         return True
-
 
     def _scheduled_on(self, schedule):
         dt = datetime.datetime.utcnow()
@@ -387,7 +402,6 @@ class SzrUpdService(application.ScalrIterationApplication):
             dt = dt + delta
             if schedule_parser.Schedule(schedule).intime(now=dt.timetuple()):
                 return dt.replace(minute=0, second=0, microsecond=0)
-
 
     def get_servers_for_update(self):
         servers_for_update_high_pri = []
@@ -427,13 +441,12 @@ class SzrUpdService(application.ScalrIterationApplication):
 
         return servers_for_update
 
-
     def update_server(self, server):
         try:
             szr_upd_client = self._get_szr_upd_client(server)
             timeout = self.config['instances_connection_timeout']
             msg = "Trying to update server: {0}, version: {1}".format(
-                    server['server_id'], server['scalarizr.version'])
+                server['server_id'], server['scalarizr.version'])
             LOG.debug(msg)
             try:
                 result_id = szr_upd_client.update(async=True, timeout=timeout)
@@ -445,11 +458,14 @@ class SzrUpdService(application.ScalrIterationApplication):
             msg = "Server failed: {0}, reason: {1}".format(server['server_id'], helper.exc_info())
             LOG.warning(msg)
 
+    def before_iteration(self):
+        self.load_config()
+        self.configure()
+        self.clear_cache()
 
     def do_iteration(self):
-        self.clear_cache()
-        servers_for_update = self.get_servers_for_update()
-        for server in servers_for_update:
+        servers = self.get_servers_for_update()
+        for server in servers:
             try:
                 self._pool.wait()
                 self._pool.apply_async(self.update_server, (server,))
@@ -458,15 +474,13 @@ class SzrUpdService(application.ScalrIterationApplication):
                 LOG.warning(helper.exc_info())
         self._pool.join()
         try:
-            self._update_scalr_repo_data()
+            self.update_scalr_repo_data()
         except:
             msg = 'Unable to update scalr.settings table, reason: {0}'.format(helper.exc_info())
             LOG.error(msg)
 
-
-    def on_iteration_error(self):
+    def after_iteration(self):
         self._pool.kill()
-
 
 
 def main():
@@ -482,7 +496,6 @@ def main():
         pass
     except:
         LOG.exception('Oops')
-
 
 
 if __name__ == '__main__':

@@ -88,7 +88,11 @@ class EntityPropertiesIterator implements Iterator
 
         $fieldsIterator = array();
         $pos = 0;
-        foreach ($this->refl->getProperties(ReflectionProperty::IS_PROTECTED | ReflectionProperty::IS_PUBLIC) as $refProp) {
+
+        $properties = $this->refl->getProperties(ReflectionProperty::IS_PROTECTED | ReflectionProperty::IS_PUBLIC);
+        $staticProperties = $this->refl->getProperties(ReflectionProperty::IS_STATIC);
+
+        foreach (array_diff($properties, $staticProperties) as $refProp) {
             /* @var $refProp \ReflectionProperty */
             /* @var $field \Scalr\Model\Loader\Field */
             if (substr($refProp->name, 0, 1) != '_') {

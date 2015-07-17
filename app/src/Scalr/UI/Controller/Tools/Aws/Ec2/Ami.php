@@ -17,9 +17,7 @@ class Scalr_UI_Controller_Tools_Aws_Ec2_Ami extends Scalr_UI_Controller
 
     public function viewAction()
     {
-        $this->response->page('ui/tools/aws/ec2/ami/view.js', array(
-            'locations'	=> self::loadController('Platforms')->getCloudLocations(SERVER_PLATFORMS::EC2, false)
-        ));
+        $this->response->page('ui/tools/aws/ec2/ami/view.js', []);
     }
 
     /**
@@ -34,7 +32,7 @@ class Scalr_UI_Controller_Tools_Aws_Ec2_Ami extends Scalr_UI_Controller
             ['cloudLocation' => $cloudLocation],
             ['envId' => $this->getEnvironmentId()]
         ]) as $i) {
-            /* @var Image $i */
+            /* @var $i Image */
             $existedImages[$i->id] = $i;
         }
 
@@ -60,7 +58,7 @@ class Scalr_UI_Controller_Tools_Aws_Ec2_Ami extends Scalr_UI_Controller
         }
 
         foreach ($existedImages as $i) {
-            /* @var Image $i */
+            /* @var $i Image */
             $images[] = [
                 'name' => $i->name,
                 'id' => $i->id,

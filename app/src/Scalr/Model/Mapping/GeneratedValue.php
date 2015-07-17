@@ -16,7 +16,6 @@ final class GeneratedValue implements Annotation
     const STRATEGY_TABLE = 'TABLE';
     const STRATEGY_IDENTITY = 'IDENTITY';
     const STRATEGY_NONE = 'NONE';
-    const STRATEGY_UUID = 'UUID';
     const STRATEGY_CUSTOM = 'CUSTOM';
 
     /**
@@ -24,7 +23,7 @@ final class GeneratedValue implements Annotation
      *
      * @var string
      *
-     * @Enum({"AUTO", "SEQUENCE", "TABLE", "IDENTITY", "NONE", "UUID", "CUSTOM"})
+     * @Enum({"AUTO", "SEQUENCE", "TABLE", "IDENTITY", "NONE", "CUSTOM"})
      */
     public $strategy = 'AUTO';
 

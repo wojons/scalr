@@ -19,6 +19,8 @@ class Scalr_UI_Controller_Services_Chef extends Scalr_UI_Controller
         $chefClient = $this->getChefClient($servId);
 
         $recipes = [];
+        
+        /*
         $response = (array)$chefClient->listCookbooks($chefEnv || $chefEnv == '_default' ? '' : $chefEnv);
 
         foreach ($response as $key => $value) {
@@ -35,6 +37,23 @@ class Scalr_UI_Controller_Services_Chef extends Scalr_UI_Controller
                 }
             }
         }
+        */
+        $response = (array)$chefClient->listEnvironmentRecipes($chefEnv);
+        foreach ($response as $recipe) {
+            $chunks = explode("::", $recipe);
+            if (count($chunks) == 1) {
+                $recipes[] = [
+                    'cookbook' => $chunks[0],
+                    'name' => "default"
+                ];
+            } else {
+                $recipes[] = [
+                    'cookbook' => $chunks[0],
+                    'name' => $chunks[1]
+                ];
+            }
+        }
+        
         sort($recipes);
 
         $this->response->data(array(
@@ -53,10 +72,10 @@ class Scalr_UI_Controller_Services_Chef extends Scalr_UI_Controller
         $response = (array)$chefClient->listRoles();
 
         foreach ($response as $key => $value) {
-            $role = $chefClient->getRole($key);
+            //$role = $chefClient->getRole($key);
             $roles[] = [
-                'name' => $role->name,
-                'chef_type' => $role->chef_type
+                'name' => $key,
+                'chef_type' => 'role'
             ];
         }
         sort($roles);

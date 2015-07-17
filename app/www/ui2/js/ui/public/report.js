@@ -1,8 +1,29 @@
 //Ext.getHead().createChild('<style type="text/css" media="print">.x-panel-cost-report{left:0!important;width:100%!important;}.x-panel-cost-report .x-panel-body-default{border:0;width:100%!important}</style>');
 Scalr.regPage('Scalr.ui.public.report', function (loadParams, moduleParams) {
-    Scalr.application.disabledDockedToolbars(true, true);
-    Scalr.application.addCls('x-panel-white-background');
+    var disabledDockedToolbars = function (hide) {
+        Ext.each(Scalr.application.getDockedItems(), function (item) {
+            if (hide) {
+                item.disable();
 
+                if (hide) {
+                    item.wasHiddenBefore = item.isHidden();
+                    if (!item.wasHiddenBefore) {
+                        item.hide();
+                    }
+                }
+            } else {
+                if (item.wasHiddenBefore !== undefined) {
+                    item.setVisible(!item.wasHiddenBefore);
+                    delete item.wasHiddenBefore;
+                }
+
+                item.enable();
+            }
+        });
+    };
+
+    disabledDockedToolbars(true);
+    Scalr.application.addCls('x-panel-white-background');
 
     var totals = moduleParams['totals'],
         startDate = Scalr.utils.Quarters.getDate(moduleParams['startDate']),
@@ -38,7 +59,6 @@ Scalr.regPage('Scalr.ui.public.report', function (loadParams, moduleParams) {
         break;
     }
 
-
 	var panel = Ext.create('Ext.panel.Panel', {
 		scalrOptions: {
             maximize: 'all',
@@ -66,7 +86,7 @@ Scalr.regPage('Scalr.ui.public.report', function (loadParams, moduleParams) {
                    '<table style="width:100%;border-collapse:collapse">'+
                    '<tr>' +
                        '<td style="width:60%">' +
-                           '<div class="x-title1">Total spent</div>' +
+                           '<div class="x-title1">Total spend</div>' +
                            '<span class="x-title2" style="font-size:34px">{[this.currency(values.totals.cost)]}</span>' +
                            '<tpl if="totals.growth!=0">' +
                                ' &nbsp;&nbsp;{[this.pctLabel(values.totals.growth, values.totals.growthPct, \'large\', false, \'noqtip\')]}' +
@@ -95,13 +115,10 @@ Scalr.regPage('Scalr.ui.public.report', function (loadParams, moduleParams) {
                margin: '32 32 0',
                html: '&nbsp;'
            },{
-               xtype: 'chart',
-               theme: 'Scalr',
-               animate: true,
+               xtype: 'cartesian',
+               theme: 'scalr',
                height: 120,
-               anchor: '100%',
                margin: '10 32 0',
-               style: 'background:#f4fafe',
                insetPadding: 3,
                store: Ext.create('Ext.data.ArrayStore', {
                    fields: [{
@@ -111,30 +128,32 @@ Scalr.regPage('Scalr.ui.public.report', function (loadParams, moduleParams) {
                            return Scalr.utils.Quarters.getDate(v,  true);
                        }
                    }, 'xLabel', 'label', 'cost'],
-                   data: Ext.Array.map(moduleParams['timeline'], function(item){
-                       return [item.datetime, item.onchart, item.label, item.cost || 0];
+                   data: Ext.Array.map(moduleParams['timeline'], function(item, index){
+                       return [item.datetime, item.onchart || index, item.label, item.cost || 0];
                    })
                }),
 
                 axes: [{
-                    type: 'Numeric',
+                    type: 'numeric',
                     position: 'left',
                     fields: ['cost'],
-                    minimum: 0,
+                    hidden: true
+                },{
+                    type: 'category',
+                    position: 'bottom',
+                    fields: ['xLabel'],
                     hidden: true
                 }],
 
                series: [{
                    type: 'line',
-                   shadowAttributes: [],
-                   axis: 'left',
                    xField: 'xLabel',
                    yField: 'cost',
                    style: {
-                       'stroke-width': 1,
-                       fill: '#98c2ea'
+                       strokeWidth: 1,
+                       strokeStyle: '#98c2ea'
                    },
-                   markerConfig: {
+                   marker: {
                        type: 'circle',
                        radius: 1,
                        fill: '#327ac2'
@@ -170,7 +189,7 @@ Scalr.regPage('Scalr.ui.public.report', function (loadParams, moduleParams) {
             },{
                 xtype: 'component',
                 cls: 'x-footer',
-                html: '<a href="https://my.scalr.com#/analytics/dashboard">View detailed statistics</a>'
+                html: '<a href="#/admin/analytics/dashboard">View detailed statistics</a>'
             }]
         }],
         listeners: {
@@ -178,10 +197,9 @@ Scalr.regPage('Scalr.ui.public.report', function (loadParams, moduleParams) {
                 var ct = panel.down();
                 ct.insert(ct.items.length - 1, table);
             },
-            hide: function() {
+            deactivate: function() {
                 Scalr.application.removeCls('x-panel-white-background');
-                Scalr.application.disabledDockedToolbars(false);
-                this.close();
+                disabledDockedToolbars(false);
             }
         }
     });
@@ -195,7 +213,7 @@ Scalr.regPage('Scalr.ui.public.report', function (loadParams, moduleParams) {
     prepareDataForChartStore = function(type, id) {
         var res = [];
         Ext.Array.each(moduleParams['timeline'], function(item, index){
-            var row = [item.datetime, item.onchart, item.label];
+            var row = [item.datetime, item.onchart || index, item.label];
             if (moduleParams[type][id]) {
                 row.push(moduleParams[type][id]['data'][index] ? moduleParams[type][id]['data'][index]['cost'] : 0);
             }
@@ -240,9 +258,9 @@ Scalr.regPage('Scalr.ui.public.report', function (loadParams, moduleParams) {
                     data: item,
                     style: 'white-space:nowrap;overflow:hidden;text-overflow:ellipsis',
                     padding: '0 20 0 0',
-                    width: 170,
+                    width: 220,
                     tdAttrs: {
-                        width: 170
+                        width: 220
                     }
                 },{
                     xtype: 'component',
@@ -259,16 +277,14 @@ Scalr.regPage('Scalr.ui.public.report', function (loadParams, moduleParams) {
                         '</tpl>',
                     data: item
                 },{
-                    xtype: 'chart',
-                    theme: 'Scalr',
-                    animate: false,
+                    xtype: 'cartesian',
+                    theme: 'scalr',
                     tdAttrs: {
-                        width: 180
+                        width: 150
                     },
-                    width: 180,
-                    height: 32,
+                    width: 150,
+                    height: 42,
                     margin: '-8 0 0',
-                    //insetPadding: 3,
                     store: Ext.create('Ext.data.ArrayStore', {
                         fields: [{
                             name: 'datetime',
@@ -282,22 +298,31 @@ Scalr.regPage('Scalr.ui.public.report', function (loadParams, moduleParams) {
 
                     series: [{
                         type: 'line',
-                        shadowAttributes: [],
-                        axis: 'left',
                         xField: 'xLabel',
                         yField: 'cost',
-                        smooth: true,
+                        //smooth: true,
                         style: {
-                            'stroke-width': .4,
-                            fill: '#327ac2'
+                            strokeWidth: .4,
+                            strokeStyle: '#327ac2'
                         },
-                        markerConfig: {
+                        marker: {
                             type: 'circle',
                             radius: 0,
-                            fill: '#327ac2'
+                            fillStyle: '#327ac2'
                         }
 
-                    }]
+                    }],
+                    axes: [{
+                        type: 'numeric',
+                        position: 'left',
+                        fields: ['cost'],
+                        hidden: true
+                    },{
+                        type: 'category',
+                        position: 'bottom',
+                        fields: ['xLabel'],
+                        hidden: true
+                    }],
             });
             if (type !== 'clouds' && i === 4){
                 return false;

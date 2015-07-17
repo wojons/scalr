@@ -122,7 +122,8 @@ class VpnApi extends AbstractApi
 
         if ($response->hasError() === false) {
             $resultObject = $response->getResult();
-            if (property_exists($resultObject, 'count') && $resultObject->count > 0) {
+
+            if (!empty($resultObject) && property_exists($resultObject, 'count') && $resultObject->count > 0) {
                 $result = $this->_loadRemoteAccessList($resultObject->remoteaccessvpn);
             }
         }
@@ -200,7 +201,8 @@ class VpnApi extends AbstractApi
 
         if ($response->hasError() === false) {
             $resultObject = $response->getResult();
-            if (property_exists($resultObject, 'count') && $resultObject->count > 0) {
+
+            if (!empty($resultObject) && property_exists($resultObject, 'count') && $resultObject->count > 0) {
                 $result = $this->_loadVpnUserList($resultObject->vpnuser);
             }
         }

@@ -22,7 +22,7 @@ class RawData implements ObjectInitializingInterface
      */
     public function __construct($value)
     {
-        $this->value = $value;
+        $this->value = is_null($value) ? '' : $value;
     }
 
     /**

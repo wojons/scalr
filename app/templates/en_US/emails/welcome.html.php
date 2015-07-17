@@ -19,7 +19,7 @@
 		<ol>
 			<li><a href="<?= $siteUrl ?>">Login</a> to your Scalr account using your email address and the password above.</li>
 			<li>Add your cloud credentials to link Scalr with your cloud provider.</li>
-			<li><a href="<?= $siteUrl ?>/#/farms/build">Create</a> your first farm and begin to set up your infrastructure!</li>
+			<li><a href="<?= $siteUrl ?>/#/farms/designer">Create</a> your first farm and begin to set up your infrastructure!</li>
 		</ol>
 	</p>
 

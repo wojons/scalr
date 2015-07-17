@@ -1,8 +1,8 @@
 Scalr.regPage('Scalr.ui.tools.aws.ec2.ebs.volumes.view', function (loadParams, moduleParams) {
 	var store = Ext.create('store.store', {
 		fields: [
-			'farmId', 'farmRoleId', 'farmName', 'roleName', 'mysql_master_volume', 'mountStatus', 'serverIndex', 'serverId',
-			'volumeId', 'size', 'snapshotId', 'availZone', 'status', 'attachmentStatus', 'device', 'instanceId', 'autoSnaps', 'autoAttach', 'type'
+			{name: 'farmId', defaultValue: null}, 'farmRoleId', 'farmName', 'roleName', 'mysql_master_volume', {name: 'mountStatus', defaultValue: null}, 'serverIndex', 'serverId',
+			'volumeId', 'size', 'snapshotId', 'availZone', 'status', 'attachmentStatus', 'device', 'instanceId', 'autoSnaps', {name: 'autoAttach', defaultValue: null}, 'type'
 		],
 		proxy: {
 			type: 'scalr.paging',
@@ -12,26 +12,21 @@ Scalr.regPage('Scalr.ui.tools.aws.ec2.ebs.volumes.view', function (loadParams, m
 	});
 
 	return Ext.create('Ext.grid.Panel', {
-		title: 'Tools &raquo; Amazon Web Services &raquo; EC2 &raquo; EBS &raquo; Volumes',
 		scalrOptions: {
-			'reload': false,
-			'maximize': 'all'
+			reload: false,
+			maximize: 'all',
+            menuTitle: 'EBS Volumes',
+            menuHref: '#/tools/aws/ec2/ebs/volumes',
+            menuFavorite: true
 		},
 		store: store,
 		stateId: 'grid-tools-aws-ec2-ebs-volumes-view',
 		stateful: true,
-		plugins: {
-			ptype: 'gridstore'
-		},
-		tools: [{
-			xtype: 'gridcolumnstool'
-		}, {
-			xtype: 'favoritetool',
-			favorite: {
-				text: 'EBS Volumes',
-				href: '#/tools/aws/ec2/ebs/volumes'
-			}
-		}],
+        plugins: [{
+            ptype: 'gridstore'
+        }, {
+            ptype: 'applyparams'
+        }],
 
 		viewConfig: {
 			emptyText: 'No volumes found',
@@ -40,31 +35,30 @@ Scalr.regPage('Scalr.ui.tools.aws.ec2.ebs.volumes.view', function (loadParams, m
 
 		columns: [
 			{ header: "Used by", flex: 1, dataIndex: 'id', sortable: true, xtype: 'templatecolumn',
-				doSort: function (state) {
-					var ds = this.up('tablepanel').store;
-						ds.sort([{
-							property: 'farmId',
-							direction: state
-						}, {
-							property: 'farmRoleId',
-							direction: state
-						}, {
-							property: 'serverIndex',
-							direction: state
-						}]);
-					}, tpl:
+				multiSort: function (st, direction) {
+                    st.sort([{
+                        property: 'farmId',
+                        direction: direction
+                    }, {
+                        property: 'farmRoleId',
+                        direction: direction
+                    }, {
+                        property: 'serverIndex',
+                        direction: direction
+                    }]);
+                }, tpl:
 				'<tpl if="farmId">' +
-					'<a href="#/farms/{farmId}/view" title="Farm {farmName}">{farmName}</a>' +
+					'<a href="#/farms?farmId={farmId}" title="Farm {farmName}">{farmName}</a>' +
 					'<tpl if="roleName">' +
 						'&nbsp;&rarr;&nbsp;<a href="#/farms/{farmId}/roles/{farmRoleId}/view" title="Role {roleName}">' +
-						'{roleName}</a> #<a href="#/servers/{serverId}/view">{serverIndex}</a>' +
+						'{roleName}</a> #<a href="#/servers?serverId={serverId}">{serverIndex}</a>' +
 					'</tpl>' +
 				'</tpl>' +
-				'<tpl if="!farmId"><img src="/ui2/images/icons/false.png" /></tpl>'
+				'<tpl if="!farmId">&mdash;</tpl>'
 			},
 			{ header: "Volume ID", width: 120, dataIndex: 'volumeId', sortable: true },
 			{ header: "Size (GB)", width: 110, dataIndex: 'size', sortable: true },
-			{ header: "Type", width: 80, dataIndex: 'type', sortable: true },
+			{ header: "Type", width: 100, dataIndex: 'type', sortable: true },
 			{ header: "Snapshot ID", width: 35, dataIndex: 'snapshotId', sortable: true, hidden: true },
 			{ header: "Placement", width: 110, dataIndex: 'availZone', sortable: true },
 			{ header: "Status", width: 250, dataIndex: 'status', sortable: true, xtype: 'templatecolumn', tpl:
@@ -74,43 +68,44 @@ Scalr.regPage('Scalr.ui.tools.aws.ec2.ebs.volumes.view', function (loadParams, m
 			},
 			{ header: "Mount status", width: 110, dataIndex: 'mountStatus', sortable: false, xtype: 'templatecolumn', tpl:
 				'<tpl if="mountStatus">{mountStatus}</tpl>' +
-				'<tpl if="!mountStatus"><img src="/ui2/images/icons/false.png" /></tpl>'
+				'<tpl if="!mountStatus">&mdash;</tpl>'
 			},
 			{ header: "Instance ID", width: 120, dataIndex: 'instanceId', sortable: true, xtype: 'templatecolumn', tpl:
 				'<tpl if="instanceId">{instanceId}</tpl>'
 			},
 			{ header: "Auto-snaps", width: 110, dataIndex: 'autoSnaps', sortable: false, align:'center', xtype: 'templatecolumn', tpl:
-				'<tpl if="autoSnaps"><img src="/ui2/images/icons/true.png" /></tpl>' +
-				'<tpl if="!autoSnaps"><img src="/ui2/images/icons/false.png" /></tpl>'
+				'<tpl if="autoSnaps"><div class="x-grid-icon x-grid-icon-simple x-grid-icon-ok"></div></tpl>' +
+				'<tpl if="!autoSnaps">&mdash;</tpl>'
 			},
 			{ header: "Auto-attach", width: 130, dataIndex: 'autoAttach', sortable: false, align:'center', xtype: 'templatecolumn', tpl:
-				'<tpl if="autoAttach"><img src="/ui2/images/icons/true.png" /></tpl>' +
-				'<tpl if="!autoAttach"><img src="/ui2/images/icons/false.png" /></tpl>'
+				'<tpl if="autoAttach"><div class="x-grid-icon x-grid-icon-simple x-grid-icon-ok"></div></tpl>' +
+				'<tpl if="!autoAttach">&mdash;</tpl>'
 			}, {
-				xtype: 'optionscolumn2',
+				xtype: 'optionscolumn',
 				getVisibility: function (record) {
 					return record.get('status') !== 'deleting' && record.get('status') !== 'deleted'
 				},
 				menu: [{
 					text: 'CloudWatch statistics',
 					iconCls: 'x-menu-icon-statsload',
+                    showAsQuickAction: true,
 					menuHandler: function (data) {
-						document.location.href = '#/tools/aws/ec2/cloudwatch/view?objectId=' + data['volumeId'] + '&object=VolumeId&namespace=AWS/EBS&region=' + store.proxy.extraParams.cloudLocation;
+                        Scalr.event.fireEvent('redirect', '#/tools/aws/ec2/cloudwatch/view?objectId=' + data['volumeId'] + '&object=VolumeId&namespace=AWS/EBS&region=' + store.proxy.extraParams.cloudLocation);
 					}
 				},{
-					itemId: 'option.attach',
 					iconCls: 'x-menu-icon-attach',
 					text: 'Attach',
+                    showAsQuickAction: true,
 					menuHandler: function(data) {
-						document.location.href = "#/tools/aws/ec2/ebs/volumes/" + data['volumeId'] + "/attach?cloudLocation=" + store.proxy.extraParams.cloudLocation;
+						Scalr.event.fireEvent('redirect', "#/tools/aws/ec2/ebs/volumes/" + data['volumeId'] + "/attach?cloudLocation=" + store.proxy.extraParams.cloudLocation);
 					},
                     getVisibility: function(data) {
                         return !data['mysqMasterVolume'] && !data['instanceId'];
                     }
 				},{
-					itemId: 'option.detach',
 					iconCls: 'x-menu-icon-detach',
 					text: 'Detach',
+                    showAsQuickAction: true,
                     getVisibility: function(data) {
                         return !data['mysqMasterVolume'] && data['instanceId'];
                     },
@@ -133,26 +128,21 @@ Scalr.regPage('Scalr.ui.tools.aws.ec2.ebs.volumes.view', function (loadParams, m
 						}
 					}
 				},{
-					xtype: 'menuseparator',
-					itemId: 'option.attachSep'
+					xtype: 'menuseparator'
 				},{
-					itemId: 'option.autosnap',
 					text: 'Auto-snapshot settings',
+					/*
 					getVisibility: function() {
                         return Scalr.flags['showDeprecatedFeatures'];
                     },
+                    */
 					iconCls: 'x-menu-icon-autosnapshotsettings',
 					menuHandler: function(data) {
-						document.location.href = '#/tools/aws/autoSnapshotSettings?type=ebs&objectId=' + data['volumeId'] + '&cloudLocation=' + store.proxy.extraParams.cloudLocation;
+                        Scalr.event.fireEvent('redirect', '#/tools/aws/autoSnapshotSettings?type=ebs&objectId=' + data['volumeId'] + '&cloudLocation=' + store.proxy.extraParams.cloudLocation);
 					}
 				}, {
-					xtype: 'menuseparator',
-					getVisibility: function() {
-                        return Scalr.flags['showDeprecatedFeatures'];
-                    },
-					itemId: 'option.snapSep'
+					xtype: 'menuseparator'
 				}, {
-					itemId: 'option.createSnap',
 					text: 'Create snapshot',
 					iconCls: 'x-menu-icon-create',
 					request: {
@@ -169,21 +159,19 @@ Scalr.regPage('Scalr.ui.tools.aws.ec2.ebs.volumes.view', function (loadParams, m
 							return { volumeId: data['volumeId'], cloudLocation: store.proxy.extraParams.cloudLocation };
 						},
 						success: function (data) {
-							document.location.href = '#/tools/aws/ec2/ebs/snapshots/' + data.data.snapshotId + '/view?cloudLocation=' + store.proxy.extraParams.cloudLocation;
+                            Scalr.event.fireEvent('redirect', '#/tools/aws/ec2/ebs/snapshots/' + data.data.snapshotId + '/view?cloudLocation=' + store.proxy.extraParams.cloudLocation);
 						}
 					}
 				}, {
-					itemId: 'option.viewSnaps',
-					text: 'View snapshots',
-					iconCls: 'x-menu-icon-view',
+					text: 'Snapshots',
+                    showAsQuickAction: true,
+					iconCls: 'x-menu-icon-createserversnapshot',
 					menuHandler: function(data) {
-						document.location.href = '#/tools/aws/ec2/ebs/snapshots/view?volumeId=' + data['volumeId'] + '&cloudLocation=' + store.proxy.extraParams.cloudLocation;
+                        Scalr.event.fireEvent('redirect', '#/tools/aws/ec2/ebs/snapshots?volumeId=' + data['volumeId'] + '&cloudLocation=' + store.proxy.extraParams.cloudLocation);
 					}
 				}, {
-					xtype: 'menuseparator',
-					itemId: 'option.vsnapSep'
+					xtype: 'menuseparator'
 				}, {
-					itemId: 'option.delete',
 					text: 'Delete',
 					iconCls: 'x-menu-icon-delete',
 					request: {
@@ -207,7 +195,6 @@ Scalr.regPage('Scalr.ui.tools.aws.ec2.ebs.volumes.view', function (loadParams, m
 			}
 		],
 
-		multiSelect: true,
 		selModel: {
 			selType: 'selectedmodel',
 			getVisibility: function(record) {
@@ -227,17 +214,17 @@ Scalr.regPage('Scalr.ui.tools.aws.ec2.ebs.volumes.view', function (loadParams, m
 			store: store,
 			dock: 'top',
 			beforeItems: [{
-                text: 'Add volume',
-                cls: 'x-btn-green-bg',
+                text: 'New volume',
+                cls: 'x-btn-green',
 				handler: function() {
 					Scalr.event.fireEvent('redirect', '#/tools/aws/ec2/ebs/volumes/create');
 				}
 			}],
 			afterItems: [{
-				ui: 'paging',
 				itemId: 'delete',
 				disabled: true,
-				iconCls: 'x-tbar-delete',
+				iconCls: 'x-btn-icon-delete',
+                cls: 'x-btn-red',
 				tooltip: 'Delete',
 				handler: function() {
 					var request = {
@@ -267,13 +254,8 @@ Scalr.regPage('Scalr.ui.tools.aws.ec2.ebs.volumes.view', function (loadParams, m
 				xtype: 'filterfield',
 				store: store
 			}, ' ', {
-				xtype: 'fieldcloudlocation',
-				itemId: 'cloudLocation',
-				store: {
-					fields: [ 'id', 'name' ],
-					data: moduleParams.locations,
-					proxy: 'object'
-				},
+                xtype: 'cloudlocationfield',
+                platforms: ['ec2'],
 				gridStore: store
 			}]
 		}]

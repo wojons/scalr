@@ -2,9 +2,12 @@
 
 namespace Scalr\Stats\CostAnalytics\Entity;
 
+use Scalr\DataType\AccessPermissionsInterface;
 use Scalr\Exception\AnalyticsException;
 use Scalr\Stats\CostAnalytics\Usage;
 use DateTime, DateTimeZone;
+use Scalr\Model\Collections\ArrayCollection;
+use Scalr_Environment;
 
 /**
  * CostCentreEntity
@@ -14,7 +17,7 @@ use DateTime, DateTimeZone;
  * @Entity
  * @Table(name="ccs")
  */
-class CostCentreEntity extends \Scalr\Model\AbstractEntity
+class CostCentreEntity extends \Scalr\Model\AbstractEntity implements AccessPermissionsInterface
 {
     /**
      * The cost center is archived
@@ -30,7 +33,7 @@ class CostCentreEntity extends \Scalr\Model\AbstractEntity
      * Cost centre identifier (UUID)
      *
      * @Id
-     * @GeneratedValue("UUID")
+     * @GeneratedValue("CUSTOM")
      * @Column(type="uuid")
      * @var string
      */
@@ -87,7 +90,7 @@ class CostCentreEntity extends \Scalr\Model\AbstractEntity
     /**
      * Array of the properties
      *
-     * @var \ArrayObject
+     * @var ArrayCollection
      */
     private $_properties;
 
@@ -133,7 +136,7 @@ class CostCentreEntity extends \Scalr\Model\AbstractEntity
     public function setProperty($name, $value)
     {
         if ($this->_properties === null) {
-            $this->_properties = new \ArrayObject(array());
+            $this->_properties = new ArrayCollection(array());
         }
 
         $property = new CostCentrePropertyEntity();
@@ -167,7 +170,7 @@ class CostCentreEntity extends \Scalr\Model\AbstractEntity
     /**
      * Gets all collection of the properties for this cost centre
      *
-     * @return \ArrayObject|null
+     * @return ArrayCollection|null
      */
     public function getProperties()
     {
@@ -179,7 +182,7 @@ class CostCentreEntity extends \Scalr\Model\AbstractEntity
      */
     public function loadProperties()
     {
-        $this->_properties = new \ArrayObject(array());
+        $this->_properties = new ArrayCollection(array());
         foreach (CostCentrePropertyEntity::findByCcId($this->ccId) as $item) {
             $this->_properties[$item->name] = $item;
         }
@@ -188,11 +191,11 @@ class CostCentreEntity extends \Scalr\Model\AbstractEntity
     /**
      * Gets all projects associated with the cost centre
      *
-     * @return  \ArrayObject  Returns collection of the ProjectEntity objects
+     * @return  ArrayCollection  Returns collection of the ProjectEntity objects
      */
     public function getProjects()
     {
-        return ProjectEntity::findByCcId($this->ccId);
+        return ProjectEntity::result(self::RESULT_ENTITY_COLLECTION)->findByCcId($this->ccId);
     }
 
     /**
@@ -416,5 +419,25 @@ class CostCentreEntity extends \Scalr\Model\AbstractEntity
             ));
         }
         return QuarterlyBudgetEntity::getCcBudget($year, $this->ccId);
+    }
+
+    /**
+     * {@inheritdoc}
+     * @see AccessPermissionsInterface::hasAccessPermissions()
+     */
+    public function hasAccessPermissions($user, $environment = null, $modify = null)
+    {
+        if ($user->isFinAdmin() || $user->isScalrAdmin()) {
+            return true;
+        } else if ($modify) {
+            //FIXME CostCentreEntity::hasAccessPermissions() should be corrected according to logic
+            return false;
+        }
+
+        if ($environment) {
+            return $this->ccId == Scalr_Environment::init()->loadById($environment->id)->getPlatformConfigValue(Scalr_Environment::SETTING_CC_ID);
+        }
+
+        return false;
     }
 }

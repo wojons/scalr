@@ -1,6 +1,9 @@
 <?php
 namespace Scalr\Model\Loader;
 
+use Scalr\Model\Mapping\Column;
+use Scalr\Model\Mapping\GeneratedValue;
+use Scalr\Model\Mapping\Id;
 use Scalr\Model\Type\AbstractType;
 
 /**
@@ -19,17 +22,17 @@ class Field
     public $name;
 
     /**
-     * @var \Scalr\Model\Mapping\Column
+     * @var Column
      */
     public $column;
 
     /**
-     * @var \Scalr\Model\Mapping\GeneratedValue
+     * @var GeneratedValue
      */
     public $generatedValue;
 
     /**
-     * @var \Scalr\Model\Mapping\Id
+     * @var Id
      */
     public $id;
 
@@ -41,7 +44,7 @@ class Field
     /**
      * The entity this field corresponds to
      *
-     * @var Scalr\Model\Loader\Entity
+     * @var Entity
      */
     private $_entity;
 
@@ -49,7 +52,7 @@ class Field
      * Sets type
      *
      * @param   AbstractType $type  The type object
-     * @return  \Scalr\Model\Loader\Field
+     * @return  Field
      */
     public function setType(AbstractType $type)
     {
@@ -71,7 +74,7 @@ class Field
      * Sets the entity this field corresponds to
      *
      * @param   Entity $entity
-     * @return  \Scalr\Model\Loader\Field
+     * @return  Field
      */
     public function setEntityAnnotation(Entity $entity)
     {

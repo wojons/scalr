@@ -2,6 +2,8 @@
 
 namespace Scalr\System\Zmq\Cron\Task
 {
+    use Scalr\Stats\CostAnalytics\Entity\UsageItemEntity;
+    use Scalr\Stats\CostAnalytics\Entity\UsageTypeEntity;
     use Scalr\System\Zmq\Cron\Task\AnalyticsDemo\stdCc;
     use Scalr\System\Zmq\Cron\Task\AnalyticsDemo\stdEnv;
     use Scalr\System\Zmq\Cron\Task\AnalyticsDemo\stdFarm;
@@ -176,6 +178,35 @@ namespace Scalr\System\Zmq\Cron\Task
                                 PriceEntity::OS_LINUX
                             );
 
+                            $type = UsageTypeEntity::NAME_COMPUTE_BOX_USAGE;
+                            $costDistType = UsageTypeEntity::COST_DISTR_TYPE_COMPUTE;
+
+                            $usageTypeEntity = UsageTypeEntity::findOne([
+                                ['costDistrType' => $costDistType],
+                                ['name'          => $type]
+                            ]);
+                            /* @var $usageTypeEntity UsageTypeEntity */
+
+                            if ($usageTypeEntity === null) {
+                                $usageTypeEntity = new UsageTypeEntity();
+                                $usageTypeEntity->costDistrType = $costDistType;
+                                $usageTypeEntity->name = $type;
+                                $usageTypeEntity->displayName = 'Compute instances';
+                                $usageTypeEntity->save();
+                            }
+
+                            $item = $fro->getInstanceType();
+
+                            $usageItemEntity = UsageItemEntity::findOne([['usageType' => $usageTypeEntity->id], ['name' => $item]]);
+                            /* @var $usageItemEntity UsageItemEntity */
+
+                            if ($usageItemEntity === null) {
+                                $usageItemEntity = new UsageItemEntity();
+                                $usageItemEntity->usageType = $usageTypeEntity->id;
+                                $usageItemEntity->name = $item;
+                                $usageItemEntity->save();
+                            }
+
                             //Hourly usage
                             $rec = new UsageHourlyEntity();
                             $rec->usageId = \Scalr::GenerateUID();
@@ -187,7 +218,7 @@ namespace Scalr\System\Zmq\Cron\Task
                             $rec->envId = $fo->farm->EnvID;
                             $rec->farmId = $fo->farm->ID;
                             $rec->farmRoleId = $fro->farmRole->ID;
-                            $rec->instanceType = $fro->getInstanceType();
+                            $rec->usageItem = $usageItemEntity->id;
                             $rec->platform = $fro->farmRole->Platform;
                             $rec->url = $fo->env->getUrl($fro->farmRole->Platform);
                             $rec->os = PriceEntity::OS_LINUX;
@@ -198,12 +229,12 @@ namespace Scalr\System\Zmq\Cron\Task
 
                             $logger->log(
                                 (static::PAST_HOURS_INIT > 0 ? 'DEBUG' : 'INFO'),
-                                "-- role:'%s':%d platform:%s, min:%d - max:%d, cloudLocation:'%s', instanceType:'%s', "
+                                "-- role:'%s':%d platform:%s, min:%d - max:%d, cloudLocation:'%s', usageItem:'%s', "
                                 . "cost:%0.4f * %d = %0.3f",
                                 $fro->farmRole->Alias, $fro->farmRole->ID, $fro->farmRole->Platform,
                                 $fro->min, $fro->max,
                                 $fro->farmRole->CloudLocation,
-                                $fro->getInstanceType(),
+                                $usageItemEntity->id,
                                 $cost, $countInstances,
                                 $rec->cost
                             );
@@ -291,7 +322,7 @@ namespace Scalr\System\Zmq\Cron\Task
                     INSERT INTO `farm_usage_d` (
                         `account_id`,
                         `farm_role_id`,
-                        `instance_type`,
+                        `usage_item`,
                         `cc_id`,
                         `project_id`,
                         `date`,
@@ -301,14 +332,14 @@ namespace Scalr\System\Zmq\Cron\Task
                         `farm_id`,
                         `role_id`,
                         `cost`,
-                        `min_instances`,
-                        `max_instances`,
-                        `instance_hours`,
+                        `min_usage`,
+                        `max_usage`,
+                        `usage_hours`,
                         `working_hours`)
                     SELECT
                         `account_id`,
                         IFNULL(`farm_role_id`, 0) `farm_role_id`,
-                        `instance_type`,
+                        `usage_item`,
                         IFNULL(`cc_id`, '') `cc_id`,
                         IFNULL(`project_id`, '') `project_id`,
                         ? `date`,
@@ -318,20 +349,20 @@ namespace Scalr\System\Zmq\Cron\Task
                         IFNULL(`farm_id`, 0) `farm_id`,
                         IFNULL(`role_id`, 0) `role_id`,
                         SUM(`cost`) `cost`,
-                        (CASE WHEN COUNT(`dtime`) >= ? THEN MIN(`num`) ELSE 0 END) `min_instances`,
-                        MAX(`num`) `max_instances`,
-                        SUM(`num`) `instance_hours`,
+                        (CASE WHEN COUNT(`dtime`) >= ? THEN MIN(`num`) ELSE 0 END) `min_usage`,
+                        MAX(`num`) `max_usage`,
+                        SUM(`num`) `usage_hours`,
                         COUNT(`dtime`) `working_hours`
                     FROM `usage_h` `uh`
                     WHERE `uh`.`dtime` BETWEEN ? AND ?
                     AND `uh`.`farm_id` > 0
                     AND `uh`.`farm_role_id` > 0
-                    GROUP BY `uh`.`account_id` , `uh`.`farm_role_id` , `uh`.`instance_type`
+                    GROUP BY `uh`.`account_id` , `uh`.`farm_role_id` , `uh`.`usage_item`
                     ON DUPLICATE KEY UPDATE
                         `cost` = VALUES(`cost`),
-                        `min_instances` = VALUES(`min_instances`),
-                        `max_instances` = VALUES(`max_instances`),
-                        `instance_hours` = VALUES(`instance_hours`),
+                        `min_usage` = VALUES(`min_usage`),
+                        `max_usage` = VALUES(`max_usage`),
+                        `usage_hours` = VALUES(`usage_hours`),
                         `working_hours` = VALUES(`working_hours`)
                 ", ["{$date} 00:00:00", $hours, "{$date} 00:00:00", "{$date} 23:00:00"]);
 
@@ -588,6 +619,7 @@ namespace Scalr\System\Zmq\Cron\Task\AnalyticsDemo
         /**
          * Gets a normalized url for an each platform
          *
+         * @param    string $platform Cloud platform
          * @return   string Returns url
          */
         public function getUrl($platform)

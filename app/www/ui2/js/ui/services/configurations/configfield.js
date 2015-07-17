@@ -40,7 +40,7 @@ Ext.define('Scalr.ui.ConfigField',{
         margin: '0 0 0 8',
         items: {
             xtype: 'displayfield',
-            value: '<img src="'+Ext.BLANK_IMAGE_URL+'" class="x-icon-action x-icon-action-delete" style="cursor:pointer"/>',
+            value: '<img src="'+Ext.BLANK_IMAGE_URL+'" class="x-grid-icon x-grid-icon-delete" />',
             width: 20,
             margin: 0,
             disabled: true,
@@ -62,15 +62,6 @@ Ext.define('Scalr.ui.ConfigField',{
         }
 	}],
 
-	plugins: {
-		ptype: 'addfield',
-        padding: '6px 28px 0 0',
-		handler: function () {
-			this.getPlugin('addfield').hide();
-			this.addNewConfigfield();
-		}
-	},
-	
 	markInvalid: function (msg) {
 		Ext.each(this.items.getRange(), function (item) {
 			if(item.xtype != 'displayfield'){
@@ -88,21 +79,9 @@ Ext.define('Scalr.ui.ConfigField',{
 		this.setValue(this.value);
 		this.setReadOnly(this.readOnly);
 		this.suspendLayout = false;
-		if(this.showRemoveButton)
-			this.plugins[0].hide();
 		
 		if (this.notEditable)
 			this.down('#key').setReadOnly(true);
-	},
-
-	addNewConfigfield: function (){
-		if(this.up()) {
-			this.up().add({
-				xtype: 'configfield',
-				configFile: this.configFile
-			});
-			this.down('#remove').enable().show();
-		}
 	},
 
 	setReadOnly: function(readOnly) {

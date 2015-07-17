@@ -173,6 +173,8 @@ class ScalrEnvironment20120701 extends ScalrEnvironment20120417
 
     private function serialize($object, $behavior, $doc)
     {
+        $this->debugObject->{$behavior} = $object;      
+        
         $bodyEl = $doc->createElement($behavior);
         $body = array();
         if (is_object($object)) {
@@ -201,9 +203,11 @@ class ScalrEnvironment20120701 extends ScalrEnvironment20120417
             } else {
                 // Assoc arrays and objects
                 foreach ($value as $k => $v) {
-                    $itemEl = $doc->createElement($this->under_scope($k));
-                    $el->appendChild($itemEl);
-                    $this->walkSerialize($v, $itemEl, $doc);
+                    if (!stristr($k, ":")) {
+                        $itemEl = $doc->createElement($this->under_scope($k));
+                        $el->appendChild($itemEl);
+                        $this->walkSerialize($v, $itemEl, $doc);
+                    }
                 }
             }
         } else {
@@ -218,6 +222,9 @@ class ScalrEnvironment20120701 extends ScalrEnvironment20120417
 
     private function under_scope ($name)
     {
+        if (preg_match("/^[A-Z]+$/", $name))
+            return $name;
+        
         $parts = preg_split("/[A-Z]/", $name, -1, PREG_SPLIT_OFFSET_CAPTURE | PREG_SPLIT_NO_EMPTY);
         $ret = "";
         foreach ($parts as $part) {

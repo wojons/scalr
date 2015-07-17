@@ -1,5 +1,6 @@
 <?php
 
+use Scalr\Exception\FileNotFoundException;
 use Scalr\UI\Request\ObjectInitializingInterface;
 use Scalr\Util\CryptoTool;
 
@@ -86,11 +87,10 @@ class Scalr_UI_Controller
     {
         if ($this->environment) {
             return $this->environment->id;
+        } else if ($silent) {
+            return NULL;
         } else {
-            if ($silent)
-                return NULL;
-            else
-                throw new Scalr_Exception_Core("No environment defined for current session");
+            throw new Scalr_Exception_Core("No environment defined for current session");
         }
     }
 
@@ -229,8 +229,12 @@ class Scalr_UI_Controller
             $response['total'] = $this->db->GetOne('SELECT COUNT(*) FROM (' . $sql. ') c_sub', $args);
         }
 
-        if (is_array($this->getParam('sort'))) {
-            $sort = $this->getParam('sort');
+        $sort = $this->getParam('sort');
+        if ($sort && !is_array($sort)) {
+            $sort = json_decode($sort, true);
+        }
+
+        if (is_array($sort)) {
             $sortSql = array();
             if (count($sort) && (!isset($sort[0]) || !is_array($sort[0])))
                 $sort = array($sort);
@@ -428,7 +432,7 @@ class Scalr_UI_Controller
 
                 if ($className) {
                     if (is_subclass_of($className, 'Scalr\UI\Request\ObjectInitializingInterface')) {
-                        /* @var ObjectInitializingInterface $className */
+                        /* @var $className ObjectInitializingInterface */
                         $params[] = $className::initFromRequest($className == 'Scalr\UI\Request\FileUploadData' ? $this->request->getFileName($parameter->name) : $value);
                     } else {
                         throw new Scalr\Exception\Http\BadRequestException(sprintf('%s is invalid class in argument', $className));
@@ -497,17 +501,14 @@ class Scalr_UI_Controller
                 $user->getAccountId() &&
                 $user->getAccount()->status != Scalr_Account::STATUS_ACTIVE &&
                 $user->getType() == Scalr_Account_User::TYPE_ACCOUNT_OWNER &&
-                $class != 'Scalr_UI_Controller_Billing' &&
+                $class != 'Scalr_UI_Controller_Account2' &&
                 $class != 'Scalr_UI_Controller_Core' &&
+                $class != 'Scalr_UI_Controller_Dashboard' &&
                 $class != 'Scalr_UI_Controller_Guest' &&
-                $class != 'Scalr_UI_Controller_Public' &&
-                $class != 'Scalr_UI_Controller_Environments'
+                $class != 'Scalr_UI_Controller_Public'
             ) {
                 // suspended account, user = owner, replace controller with billing or allow billing action/guest action
-                $controller = self::loadController('Billing', 'Scalr_UI_Controller', true);
-                $r = explode('_', get_class($controller));
-                $controller->addUiCacheKeyPatternChunk(strtolower((array_pop($r))));
-                $controller->call();
+                throw new Exception('Your account has been suspended.');
             } else {
                 $r = explode('_', $class);
                 $controller->addUiCacheKeyPatternChunk(strtolower((array_pop($r))));
@@ -528,13 +529,14 @@ class Scalr_UI_Controller
             Scalr_UI_Response::getInstance()->setHttpResponseCode(404);
 
         } catch (ADODB_Exception $e) {
+            \Scalr::logException($e);
             Scalr_UI_Response::getInstance()->debugException($e);
-            @error_log($e->getMessage() . "\n" . $e->getTraceAsString());
             Scalr_UI_Response::getInstance()->failure('Database error');
+        } catch (FileNotFoundException $e) {
+            Scalr_UI_Response::getInstance()->failure(sprintf("File '%s' not found", $e->getPath()));
+            Scalr_UI_Response::getInstance()->setHttpResponseCode(404);
         } catch (Exception $e) {
-            $rawHtml = false;
-            if (get_class($e) == 'Scalr_Exception_LimitExceeded')
-                $rawHtml = true;
+            $rawHtml = get_class($e) == 'Scalr_Exception_LimitExceeded';
 
             Scalr_UI_Response::getInstance()->debugException($e);
             Scalr_UI_Response::getInstance()->failure($e->getMessage(), $rawHtml);

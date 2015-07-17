@@ -5,7 +5,7 @@ Scalr.regPage('Scalr.ui.farms.builder.addrole.dbmsr', function () {
         isExtraSettings: true,
         hidden: true,
         suspendUpdateEvent: 0,
-        
+
         layout: 'anchor',
         /*defaults: {
             anchor: '100%',
@@ -55,7 +55,7 @@ Scalr.regPage('Scalr.ui.farms.builder.addrole.dbmsr', function () {
                 }
             }
             field.setValue(currentValue);
-            
+
         },
 
         refreshStorageDisks: function(record) {
@@ -85,22 +85,22 @@ Scalr.regPage('Scalr.ui.farms.builder.addrole.dbmsr', function () {
 
         refreshDisksCheckboxes: function(record, itemId) {
             var ephemeralDevicesMap = record.getEphemeralDevicesMap() || {};
-            
+
             var platform = record.get('platform'),
                 settings = record.get('settings'),
                 cont = this.down('#' + itemId),
                 instanceType;
-                
+
 			if (platform === 'gce') {
 				instanceType = settings['gce.machine-type'];
 			} else if (platform === 'ec2') {
 				instanceType = settings['aws.instance_type'];
-			} 
-			
+			}
+
             cont.suspendLayouts();
             cont.removeAll();
 			if (instanceType !== undefined && ephemeralDevicesMap[instanceType] !== undefined) {
-				var devices = ephemeralDevicesMap[instanceType], 
+				var devices = ephemeralDevicesMap[instanceType],
                     size = 0;
 
 				for (var d in devices) {
@@ -121,54 +121,54 @@ Scalr.regPage('Scalr.ui.farms.builder.addrole.dbmsr', function () {
             }
             cont.resumeLayouts(true);
         },
-        
+
         setRole: function(record) {
-            var moduleTabParams = this.up('roleslibrary').moduleParams['tabParams'],
-                field,
+            var field,
                 platform = record.get('platform'),
                 instType,
                 result = true;
-                
+
             //fs
             field = this.down('[name="db.msr.data_storage.fstype"]');
             field.suspendLayouts();
             field.removeAll();
-            field.add(record.getAvailableStorageFs(moduleTabParams['featureMFS']));
+            field.add(record.getAvailableStorageFs());
 			field.setValue('ext3');
             field.resumeLayouts(true);
 
 			//storage engine
             this.refreshStorageEngine(record);
-            
+
             //disks
             this.refreshStorageDisks(record);
-            
+
             //raid
 			field = this.down('[name="db.msr.data_storage.raid.level"]');
 			field.store.load({
 				data: record.getAvailableStorageRaids()
 			});
 			field.setValue('10');
-            
+
             //lvm
             this.refreshDisksCheckboxes(record, 'lvm_settings');
-            
+
 			if (Ext.Array.contains(record.get('behaviors', true), 'redis')) {
 				this.down('[name="db.msr.redis.persistence_type"]').setValue('snapshotting');
 				this.down('[name="db.msr.redis.use_password"]').setValue('1');
 				this.down('[name="db.msr.redis.num_processes"]').setValue(1);
-				
+
 				this.down('#redis_settings').show();
 			} else {
 				this.down('#redis_settings').hide();
 			}
-            
+
             this.down('[name="db.msr.redis.num_processes"]').setValue(1);
             this.down('[name="db.msr.data_storage.ebs.iops"]').setValue(100);
             this.down('[name="db.msr.data_storage.ebs.size"]').setValue(10);
             this.down('[name="db.msr.data_storage.ebs.encrypted"]').setValue(false);
             this.down('[name="db.msr.data_storage.cinder.size"]').setValue(100);
             this.down('[name="db.msr.data_storage.gced.size"]').setValue(100);
+            this.down('[name="db.msr.data_storage.gced.type"]').setValue('pd-standard');
 
             this.down('[name="db.msr.data_storage.ebs.type"]').setDisabled(platform === 'eucalyptus');
             this.down('[name="db.msr.data_storage.raid.ebs.type"]').setDisabled(platform === 'eucalyptus');
@@ -185,7 +185,7 @@ Scalr.regPage('Scalr.ui.farms.builder.addrole.dbmsr', function () {
                 }
             }
             if (platform === 'ec2') {
-                if (instType = this.up('form').getForm().findField('aws.instance_type').getValue()) {
+                if (instType = this.up('form').getForm().findField('instanceType').getValue()) {
                     this.refreshEbsEncrypted(record, instType);
                 }
             }
@@ -227,7 +227,7 @@ Scalr.regPage('Scalr.ui.farms.builder.addrole.dbmsr', function () {
                     'db.msr.data_storage.engine': this.down('[name="db.msr.data_storage.engine"]').getValue(),
                     'db.msr.data_storage.fstype': this.down('[name="db.msr.data_storage.fstype"]').getValue()
                 };
-            
+
 			if (settings['db.msr.data_storage.engine'] === 'eph') {
                 if (record.isMultiEphemeralDevicesEnabled()) {
                     settings['db.msr.data_storage.eph.disks'] = this.getDisksCheckboxesValues('eph_checkboxes');
@@ -240,7 +240,7 @@ Scalr.regPage('Scalr.ui.farms.builder.addrole.dbmsr', function () {
 				settings['db.msr.data_storage.raid.level'] = this.down('[name="db.msr.data_storage.raid.level"]').getValue();
 				settings['db.msr.data_storage.raid.volume_size'] = this.down('[name="db.msr.data_storage.raid.volume_size"]').getValue();
 				settings['db.msr.data_storage.raid.volumes_count'] = this.down('[name="db.msr.data_storage.raid.volumes_count"]').getValue();
-				
+
                 if (settings['db.msr.data_storage.engine'] === 'raid.ebs') {
                     settings['db.msr.data_storage.raid.ebs.type'] = this.down('[name="db.msr.data_storage.raid.ebs.type"]').getValue();
                     settings['db.msr.data_storage.raid.ebs.iops'] = this.down('[name="db.msr.data_storage.raid.ebs.iops"]').getValue();
@@ -249,20 +249,21 @@ Scalr.regPage('Scalr.ui.farms.builder.addrole.dbmsr', function () {
 				settings['db.msr.data_storage.cinder.size'] = this.down('[name="db.msr.data_storage.cinder.size"]').getValue();
 			} else if (settings['db.msr.data_storage.engine'] == 'gce_persistent') {
 				settings['db.msr.data_storage.gced.size'] = this.down('[name="db.msr.data_storage.gced.size"]').getValue();
+				settings['db.msr.data_storage.gced.type'] = this.down('[name="db.msr.data_storage.gced.type"]').getValue();
 			} else if (Ext.Array.contains(['ebs', 'csvol'], settings['db.msr.data_storage.engine'])) {
                 settings['db.msr.data_storage.ebs.size'] = this.down('[name="db.msr.data_storage.ebs.size"]').getValue();
                 settings['db.msr.data_storage.ebs.type'] = this.down('[name="db.msr.data_storage.ebs.type"]').getValue();
                 settings['db.msr.data_storage.ebs.iops'] = this.down('[name="db.msr.data_storage.ebs.iops"]').getValue();
                 settings['db.msr.data_storage.ebs.encrypted'] = this.down('[name="db.msr.data_storage.ebs.encrypted"]').getValue() ? 1 : 0;
             }
-            
+
 			if (Ext.Array.contains(record.get('behaviors', true), 'redis')) {
 				settings['db.msr.redis.persistence_type'] = this.down('[name="db.msr.redis.persistence_type"]').getValue();
 				settings['db.msr.redis.use_password'] = this.down('[name="db.msr.redis.use_password"]').getValue();
 				settings['db.msr.redis.num_processes'] = this.down('[name="db.msr.redis.num_processes"]').getValue();
 			}
-            
-            
+
+
             return settings;
         },
 
@@ -272,8 +273,8 @@ Scalr.regPage('Scalr.ui.farms.builder.addrole.dbmsr', function () {
             title: 'Redis settings',
             hidden: true,
             layout: 'anchor',
-            items: [{ 
-                xtype: 'container',
+            items: [{
+                xtype: 'fieldcontainer',
                 layout: 'hbox',
                 maxWidth: 760,
                 items: [{
@@ -286,14 +287,14 @@ Scalr.regPage('Scalr.ui.farms.builder.addrole.dbmsr', function () {
                     displayField: 'name',
                     value: 'snapshotting',
                     flex: 1,
-                    labelWidth: 130,
+                    labelWidth: 125,
                     queryMode: 'local',
-                    margin: '0 64 0 0'
+                    margin: '0 32 0 0'
                 }, {
                     xtype: 'buttongroupfield',
                     name: 'db.msr.redis.use_password',
                     fieldLabel: 'Password auth',
-                    labelWidth: 95,
+                    labelWidth: 110,
                     flex: 1,
                     defaults: {
                         width: 50
@@ -309,14 +310,14 @@ Scalr.regPage('Scalr.ui.farms.builder.addrole.dbmsr', function () {
             }, {
                 xtype: 'sliderfield',
                 name: 'db.msr.redis.num_processes',
-                fieldLabel: 'Number of processes',
+                fieldLabel: 'Num. of processes',
                 minValue: 1,
                 maxValue: 16,
                 increment: 1,
-                labelWidth: 130,
+                labelWidth: 128,
                 anchor: '50%',
-                maxWidth: 350,
-                margin: '12 32 24 0',
+                maxWidth: 380,
+                margin: '0 16 20 0',
                 useTips: false,
                 showValue: true
             }]
@@ -333,16 +334,16 @@ Scalr.regPage('Scalr.ui.farms.builder.addrole.dbmsr', function () {
             itemId: 'dataStorageSettings',
             title: 'Data storage settings',
             items: [{
-                xtype: 'container',
+                xtype: 'fieldcontainer',
                 layout: 'hbox',
                 maxWidth: 760,
                 items: [{
                     xtype: 'combo',
                     name: 'db.msr.data_storage.engine',
                     flex: 1,
-                    margin: '0 64 0 0',
+                    margin: '0 32 0 0',
                     fieldLabel: 'Storage engine',
-                    labelWidth: 100,
+                    labelWidth: 120,
                     allowChangeable: false,
                     editable: false,
                     queryMode: 'local',
@@ -355,7 +356,7 @@ Scalr.regPage('Scalr.ui.farms.builder.addrole.dbmsr', function () {
                     listeners:{
                         change: function(comp, value){
                             var tab = this.up('#dbmsr'),
-                                moduleTabParams = tab.up('roleslibrary').moduleParams['tabParams'],
+                                moduleTabParams = tab.up('#farmDesigner').moduleParams['tabParams'],
                                 isRaid = value === 'raid.ebs',
                                 field, xfsBtn;
                             tab.suspendLayouts();
@@ -368,8 +369,7 @@ Scalr.regPage('Scalr.ui.farms.builder.addrole.dbmsr', function () {
 
                             tab.down('#cinder_settings').setVisible(value === 'cinder');
                             tab.down('#gced_settings').setVisible(value === 'gce_persistent');
-                            tab.down('#raid_settings_not_available').setVisible(isRaid && !moduleTabParams['featureRAID']);
-                            tab.down('#raid_settings').setVisible(isRaid && moduleTabParams['featureRAID']);
+                            tab.down('#raid_settings').setVisible(isRaid);
                             if (isRaid) {
                                 var raidEbsTypeField = tab.down('[name="db.msr.data_storage.raid.ebs.type"]');
                                 raidEbsTypeField.setVisible(value === 'raid.ebs');
@@ -384,7 +384,7 @@ Scalr.regPage('Scalr.ui.farms.builder.addrole.dbmsr', function () {
                                 }
                                 xfsBtn.setDisabled(isRaid);
                             }
-                            
+
                             tab.resumeLayouts(true);
                             if (value && tab.suspendUpdateEvent === 0) {
                                 tab.up('form').updateRecordSettings(comp.name, value);
@@ -395,7 +395,7 @@ Scalr.regPage('Scalr.ui.farms.builder.addrole.dbmsr', function () {
                     xtype: 'buttongroupfield',
                     name: 'db.msr.data_storage.fstype',
                     flex: 1,
-                    minWidth: 240,
+                    minWidth: 200,
                     fieldLabel: 'Filesystem',
                     labelWidth: 80,
                     layout: 'hbox',
@@ -454,24 +454,26 @@ Scalr.regPage('Scalr.ui.farms.builder.addrole.dbmsr', function () {
                     itemId: 'ebs_settings',
                     cls: 'inner-container',
                     hidden: true,
+                    layout: 'anchor',
                     items: [{
-                        xtype: 'container',
+                        xtype: 'fieldcontainer',
                         layout: {
                             type: 'hbox'
                         },
+                        anchor: '100%',
                         items: [{
                             xtype: 'container',
                             itemId: 'ebs_settings_type',
                             layout: 'hbox',
                             flex: 1,
-                            maxWidth: 362,
-                            margin: '0 32 12 0',
+                            //maxWidth: 362,
+                            margin: '0 20 0 0',
                             items: [{
                                 xtype: 'combo',
                                 store: Scalr.constants.ebsTypes,
                                 allowChangeable: false,
                                 fieldLabel: 'EBS type',
-                                labelWidth: 80,
+                                labelWidth: 102,
                                 valueField: 'id',
                                 displayField: 'name',
                                 editable: false,
@@ -479,7 +481,7 @@ Scalr.regPage('Scalr.ui.farms.builder.addrole.dbmsr', function () {
                                 value: 'standard',
                                 name: 'db.msr.data_storage.ebs.type',
                                 flex: 1,
-                                maxWidth: 330,
+                                maxWidth: 380,
                                 listeners: {
                                     change: function (comp, value) {
                                         var iopsField = comp.next();
@@ -494,7 +496,7 @@ Scalr.regPage('Scalr.ui.farms.builder.addrole.dbmsr', function () {
                                 }
                             },{
                                 xtype: 'textfield',
-                                itemId: 'db.msr.data_storage.ebs.iops',
+                                //itemId: 'db.msr.data_storage.ebs.iops',
                                 name: 'db.msr.data_storage.ebs.iops',
                                 allowChangeable: false,
                                 vtype: 'iops',
@@ -520,24 +522,17 @@ Scalr.regPage('Scalr.ui.farms.builder.addrole.dbmsr', function () {
                             name: 'db.msr.data_storage.ebs.size',
                             allowChangeable: false,
                             fieldLabel: 'Storage size',
-                            width: 140,
-                            vtype: 'num',
-                            validator: function(value){
-                                var minValue = 1,
-                                    container = this.up('container');
-                                if (container.down('[name="db.msr.data_storage.ebs.type"]').getValue() === 'io1') {
-                                    minValue = Scalr.utils.getMinStorageSizeByIops(container.down('[name="db.msr.data_storage.ebs.iops"]').getValue());
-                                }
-                                if (value*1 > Scalr.constants.ebsMaxStorageSize) {
-                                    return 'Maximum value is ' + Scalr.constants.ebsMaxStorageSize + '.';
-                                } else if (value*1 < minValue) {
-                                    return 'Minimum value is ' + minValue + '.';
-                                }
-                                return true;
+                            width: 145,
+                            vtype: 'ebssize',
+                            getEbsType: function() {
+                                return this.up('container').down('[name="db.msr.data_storage.ebs.type"]').getValue();
                             },
-                            labelWidth: 80,
+                            getEbsIops: function() {
+                                return this.up('container').down('[name="db.msr.data_storage.ebs.iops"]').getValue();
+                            },
+                            labelWidth: 90,
                             allowBlank: false,
-                            margin: '0 6 12 0'
+                            margin: '0 6 0 0'
                         },{
                             xtype: 'label',
                             cls: 'x-label-grey',
@@ -553,11 +548,13 @@ Scalr.regPage('Scalr.ui.farms.builder.addrole.dbmsr', function () {
                         },
                         value: '0',
                         hidden: true,
-                        icons: {
-                            question: true,
-                            szrversion: {tooltipData: {version: '2.9.25'}}
+                        plugins: {
+                            ptype: 'fieldicons',
+                            icons: [
+                                {id: 'question', tooltip: 'EBS encryption is not supported by selected instance type'},
+                                {id: 'szrversion', tooltipData: {version: '2.9.25'}}
+                            ]
                         },
-                        questionTooltip: 'EBS encryption is not supported by selected instance type',
                         listeners: {
                             writeablechange: function(comp, readOnly) {
                                 this.toggleIcon('question', readOnly);
@@ -590,24 +587,45 @@ Scalr.regPage('Scalr.ui.farms.builder.addrole.dbmsr', function () {
                     hidden: true,
                     layout: 'anchor',
                     items: [{
-                        xtype: 'textfield',
-                        name: 'db.msr.data_storage.gced.size',
+                        xtype: 'fieldcontainer',
+                        layout: {
+                            type: 'hbox',
+                            align: 'middle'
+                        },
+                        items: [{
+                            xtype: 'textfield',
+                            name: 'db.msr.data_storage.gced.size',
+                            allowChangeable: false,
+                            fieldLabel: 'Disk size',
+                            vtype: 'num',
+                            allowBlank: false,
+                            width: 215,
+                            value: 100
+                        },{
+                            xtype: 'label',
+                            text: 'GB',
+                            margin: '0 0 0 6'
+                        }]
+                    }, {
+                        xtype: 'combo',
+                        store: Scalr.constants.gceDiskTypes,
+                        width: 215,
+                        valueField: 'id',
+                        displayField: 'name',
                         allowChangeable: false,
-                        fieldLabel: 'Disk size',
-                        vtype: 'num',
-                        allowBlank: false,
-                        labelWidth: 100,
-                        anchor: '100%',
-                        maxWidth: 200,
-                        value: 100
+                        fieldLabel: 'Disk type',
+                        editable: false,
+                        queryMode: 'local',
+                        value: 'pd-standard',
+                        name: 'db.msr.data_storage.gced.type',
+                        plugins: {
+                            ptype: 'fieldicons',
+                            position: 'outer',
+                            icons: [
+                                {id: 'szrversion', tooltipData: {version: '3.5.19'}}
+                            ]
+                        }
                     }]
-                },{
-                    xtype: 'displayfield',
-                    itemId: 'raid_settings_not_available',
-                    cls: 'x-form-field-warning',
-                    margin: '18 0 0 0',
-                    hidden: true,
-                    value: 'RAID arrays are not available for your pricing plan. <a href="#/billing">Please upgrade your account to be able to use this feature.</a>'
                 },{
                     xtype: 'container',
                     itemId: 'raid_settings',
@@ -630,7 +648,7 @@ Scalr.regPage('Scalr.ui.farms.builder.addrole.dbmsr', function () {
                             valueField: 'name',
                             displayField: 'description',
                             flex: 1,
-                            margin: '0 32 0 0',
+                            margin: '0 20 0 0',
                             value: '',
                             labelWidth: 80,
                             queryMode: 'local',
@@ -669,8 +687,8 @@ Scalr.regPage('Scalr.ui.farms.builder.addrole.dbmsr', function () {
                             valueField: 'id',
                             displayField: 'name',
                             flex: 1,
-                            labelWidth: 120,
-                            maxWidth: 200,
+                            labelWidth: 135,
+                            maxWidth: 210,
                             queryMode: 'local'
                         }]
                     },{
@@ -708,7 +726,7 @@ Scalr.regPage('Scalr.ui.farms.builder.addrole.dbmsr', function () {
                                 }
                             }, {
                                 xtype: 'textfield',
-                                itemId: 'db.msr.data_storage.raid.ebs.iops',
+                                //itemId: 'db.msr.data_storage.raid.ebs.iops',
                                 allowChangeable: false,
                                 name: 'db.msr.data_storage.raid.ebs.iops',
                                 vtype: 'iops',
@@ -735,27 +753,17 @@ Scalr.regPage('Scalr.ui.farms.builder.addrole.dbmsr', function () {
                             allowChangeable: false,
                             fieldLabel: 'Each volume size',
                             allowBlank: false,
-                            labelWidth: 120,
+                            labelWidth: 135,
                             flex: 1,
-                            maxWidth: 176,
-                            margin: '0 6 0 32',
-                            vtype: 'num',
+                            maxWidth: 186,
+                            margin: '0 6 0 20',
                             value: 10,
-                            validator: function(value){
-                                var minValue = 1,
-                                    container = this.up('container'),
-                                    ebsTypeField = container.down('[name="db.msr.data_storage.raid.ebs.type"]');
-                                if (ebsTypeField.isVisible()) {
-                                    if (ebsTypeField.getValue() === 'io1') {
-                                        minValue = Scalr.utils.getMinStorageSizeByIops(container.down('[name="db.msr.data_storage.raid.ebs.iops"]').getValue());
-                                    }
-                                    if (value*1 > Scalr.constants.ebsMaxStorageSize) {
-                                        return 'Maximum value is ' + Scalr.constants.ebsMaxStorageSize + '.';
-                                    } else if (value*1 < minValue) {
-                                        return 'Minimum value is ' + minValue + '.';
-                                    }
-                                }
-                                return true;
+                            vtype: 'ebssize',
+                            getEbsType: function() {
+                                return this.up('container').down('[name="db.msr.data_storage.raid.ebs.type"]').getValue();
+                            },
+                            getEbsIops: function() {
+                                return this.up('container').down('[name="db.msr.data_storage.raid.ebs.iops"]').getValue();
                             }
                         },{
                             xtype: 'label',

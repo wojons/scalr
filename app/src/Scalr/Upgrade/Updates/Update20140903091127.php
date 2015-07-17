@@ -13,7 +13,7 @@ class Update20140903091127 extends AbstractUpdate implements SequenceInterface
 
     protected $description = 'Create table role_image_history';
 
-    protected $ignoreChanges = true;
+    protected $ignoreChanges = false;
 
     protected $dbservice = 'adodb';
 

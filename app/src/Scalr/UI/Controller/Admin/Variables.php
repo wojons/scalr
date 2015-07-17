@@ -17,7 +17,7 @@ class Scalr_UI_Controller_Admin_Variables extends Scalr_UI_Controller
     public function viewAction()
     {
         $vars = new Scalr_Scripting_GlobalVariables(0, 0, Scalr_Scripting_GlobalVariables::SCOPE_SCALR);
-        $this->response->page('ui/admin/variables/view.js', array('variables' => json_encode($vars->getValues())), array('ui/core/variablefield.js'), array('ui/core/variablefield.css'));
+        $this->response->page('ui/admin/variables/view.js', array('variables' => json_encode($vars->getValues())), array('ui/core/variablefield.js'));
     }
 
     /**

@@ -19,7 +19,7 @@ class UsageHourlyEntity extends AbstractEntity
      * The unique identifier of the record
      *
      * @Id
-     * @GeneratedValue("UUID")
+     * @GeneratedValue("CUSTOM")
      * @Column(type="uuid")
      * @var string
      */
@@ -63,11 +63,12 @@ class UsageHourlyEntity extends AbstractEntity
     public $cloudLocation;
 
     /**
-     * The type of the instance (flavor)
+     * Identifier of the Usage Item
      *
+     * @Column(type="bin4")
      * @var string
      */
-    public $instanceType;
+    public $usageItem;
 
     /**
      * The identifier of the operating system platform (0-linux, 1-windows)

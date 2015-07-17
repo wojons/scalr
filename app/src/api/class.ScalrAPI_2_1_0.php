@@ -1,6 +1,7 @@
 <?php
 
 use Scalr\Acl\Acl;
+use Scalr\Model\Entity;
 
 class ScalrAPI_2_1_0 extends ScalrAPI_2_0_0
 {
@@ -68,22 +69,30 @@ class ScalrAPI_2_1_0 extends ScalrAPI_2_0_0
 
         $vHost->templateOptions = $options;
 
-        //SSL stuff
-        if ($vHost->isSslEnabled) {
-            $cert = new Scalr_Service_Ssl_Certificate();
-            $cert->envId = $DBFarm->EnvID;
-            $cert->name = $DomainName;
-            $cert->privateKey = base64_decode($SSLPrivateKey);
-            $cert->certificate = base64_decode($SSLCertificate);
-            $cert->save();
+        $this->DB->BeginTrans();
+        try {
+            //SSL stuff
+            if ($vHost->isSslEnabled) {
+                $cert = new Entity\SslCertificate;
+                $cert->envId = $DBFarm->EnvID;
+                $cert->name = $DomainName;
+                $cert->privateKey = base64_decode($SSLPrivateKey);
+                $cert->certificate = base64_decode($SSLCertificate);
+                $cert->save();
 
-            $vHost->sslCertId = $cert->id;
-            $vHost->httpdConfSsl = $httpConfigTemplateSSL;
-        } else {
-            $vHost->sslCertId = 0;
+                $vHost->sslCertId = $cert->id;
+                $vHost->httpdConfSsl = $httpConfigTemplateSSL;
+            } else {
+                $vHost->sslCertId = 0;
+            }
+
+            $vHost->save();
+            $this->DB->CommitTrans();
+
+        } catch (\Exception $e) {
+            $this->DB->RollbackTrans();
+            throw new Exception('Error saving VHost. ' . $e->getMessage(), $e->getCode(), $e);
         }
-
-        $vHost->save();
 
         $servers = $DBFarm->GetServersByFilter(array('status' => array(SERVER_STATUS::INIT, SERVER_STATUS::RUNNING)));
         foreach ($servers as $DBServer) {
@@ -110,10 +119,25 @@ class ScalrAPI_2_1_0 extends ScalrAPI_2_0_0
         $stmtWhere = "WHERE v.client_id=?";
         $args = array($this->user->getAccountId());
 
-        $allFarms = $this->isAllowed(Acl::RESOURCE_FARMS, Acl::PERM_FARMS_NOT_OWNED_FARMS);
-        if (!$allFarms) {
+        if (!$this->isAllowed(Acl::RESOURCE_FARMS)) {
             $stmt .= " JOIN farms f ON f.id = v.farm_id ";
-            $stmtWhere .= " AND f.created_by_id = " . $this->DB->qstr($this->user->getId());
+
+            $q = [];
+            if ($this->isAllowed(Acl::RESOURCE_TEAM_FARMS)) {
+                $t = array_map(function($t) { return $t['id']; }, $this->user->getTeams());
+                if (count($t))
+                    $q[] = 'f.team_id IN(' . join(',', $t) . ')';
+            }
+
+            if ($this->isAllowed(Acl::RESOURCE_OWN_FARMS)) {
+                $q[] = 'f.created_by_id = ' . $this->DB->qstr($this->user->getId());
+            }
+
+            if (count($q)) {
+                $stmtWhere .= ' AND (' . join(' OR ', $q) . ')';
+            } else {
+                $stmtWhere .= ' AND false'; // no permissions
+            }
         }
 
         $rows = $this->DB->Execute($stmt . $stmtWhere, $args);

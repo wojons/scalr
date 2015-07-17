@@ -41,7 +41,6 @@ helper.patch_gevent()
 app = None
 
 
-
 class LoadStatisticsCleaner(application.ScalrApplication):
 
     def __init__(self, argv=None):
@@ -54,7 +53,6 @@ class LoadStatisticsCleaner(application.ScalrApplication):
         self.config.update({'rrd_dir': None})
         self._db = None
 
-
     def configure(self):
         try:
             rrd_dir = self.scalr_config['stats_poller']['rrd_db_dir']
@@ -65,11 +63,9 @@ class LoadStatisticsCleaner(application.ScalrApplication):
 
         self._db = dbmanager.ScalrDB(self.config['connections']['mysql'])
 
-
     def _is_farm_exists(self, farm):
         query = "SELECT id FROM farms WHERE id={id}".format(**farm)
         return bool(self._db.execute(query))
-
 
     def clean(self):
         for directory in os.listdir(self.config['rrd_dir']):
@@ -91,10 +87,8 @@ class LoadStatisticsCleaner(application.ScalrApplication):
                 except:
                     LOG.warning(helper.exc_info())
 
-
     def __call__(self):
         self.clean()
-
 
 
 def main():
@@ -110,7 +104,6 @@ def main():
         pass
     except:
         LOG.exception('Oops')
-
 
 
 if __name__ == '__main__':

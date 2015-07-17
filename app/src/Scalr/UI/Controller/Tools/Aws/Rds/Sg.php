@@ -21,6 +21,11 @@ class Scalr_UI_Controller_Tools_Aws_Rds_Sg extends Scalr_UI_Controller
         return $this->getEnvironment()->aws($this->getParam('cloudLocation'));
     }
 
+    public function defaultAction()
+    {
+        $this->viewAction();
+    }
+
     public function viewAction()
     {
         $this->response->page('ui/tools/aws/rds/sg/view.js', array(

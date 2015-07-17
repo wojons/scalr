@@ -5,7 +5,7 @@ Scalr.regPage('Scalr.ui.account2.environments.view', function (loadParams, modul
 		storeEnvironments = Scalr.data.get('account.environments'),
         readOnlyAccess = !Scalr.utils.canManageAcl() && !Scalr.isAllowed('ENVADMINISTRATION_ENV_CLOUDS');
 
-	var getTeamNames = function(teams, links) {
+    var getTeamNames = function(teams, links) {
 		var list = [];
 		if (teams) {
             if (Scalr.flags['authMode'] === 'ldap') {
@@ -28,10 +28,8 @@ Scalr.regPage('Scalr.ui.account2.environments.view', function (loadParams, modul
 		}
 		return list.join(', ');
 	};
-	var store = Ext.create('Scalr.ui.ChildStore', {
-		parentStore: storeEnvironments,
-		filterOnLoad: true,
-		sortOnLoad: true,
+	var store = Ext.create('Ext.data.ChainedStore', {
+		source: storeEnvironments,
 		sorters: [{
 			property: 'name',
 			transform: function(value){
@@ -40,9 +38,8 @@ Scalr.regPage('Scalr.ui.account2.environments.view', function (loadParams, modul
 		}]
 	});
 
-	var envTeamsStore = Ext.create('Scalr.ui.ChildStore', {
-		parentStore: storeTeams,
-		sortOnLoad: true,
+	var envTeamsStore = Ext.create('Ext.data.ChainedStore', {
+		source: storeTeams,
 		sorters: [{
 			property: 'name',
 			transform: function(value){
@@ -59,10 +56,10 @@ Scalr.regPage('Scalr.ui.account2.environments.view', function (loadParams, modul
             envId = Scalr.user.envId;
         }
 		if (envId) {
-			dataview.deselect(form.getForm().getRecord());
+			dataview.deselectAndClearLastSelected();
 			if (envId === 'new') {
 				if (isAccountOwner || isAccountSuperAdmin) {
-					panel.down('#add').handler();
+					panel.down('#add').toggle(true);
 				}
 			} else {
 				panel.down('#envLiveSearch').reset();
@@ -80,9 +77,13 @@ Scalr.regPage('Scalr.ui.account2.environments.view', function (loadParams, modul
         store: store,
 		listeners: {
             refresh: function(view){
-                var record = view.getSelectionModel().getLastSelected();
+                var selModel = view.getSelectionModel(),
+                    record = selModel.getLastSelected();
                 if (record) {
-                    form.loadRecord(view.store.getById(record.get('id')));
+                    dataview.deselectAndClearLastSelected();
+                    if (dataview.getNode(record)) {
+                        selModel.select(view.store.getById(record.get('id')));
+                    }
                 }
             }
 		},
@@ -102,18 +103,18 @@ Scalr.regPage('Scalr.ui.account2.environments.view', function (loadParams, modul
                         '</tr>',
                         '<tr>',
                             '<td width="50">',
-                                '<span class="x-dataview-tab-param-title">ID: </span>',
+                                '<span class="x-form-item-label-default">ID </span>',
                             '</td>',
                             '<td width="120">',
                                 '<span class="x-dataview-tab-param-value">{id}</span>',
                             '</td>',
-                            '<td>',
-                                '<div class="x-dataview-tab-param-title x-dataview-tab-status-{[values.status == "Active" ? "active" : "inactive"]}">{[values.status == \'Active\' ? \'Managed\' : \'Suspended\']}</div>',
+                            '<td colspan="2">',
+                                '<div class="x-form-item-label-default x-dataview-tab-status-{[values.status == "Active" ? "active" : "inactive"]}">{[values.status == \'Active\' ? \'Managed\' : \'Suspended\']}</div>',
                             '</td>',
                         '</tr>',
                         '<tr>',
                             '<td>',
-                                '<span class="x-dataview-tab-param-title">Teams: </span>',
+                                '<span class="x-form-item-label-default">Teams </span>',
                             '</td>',
                             '<td>',
                                 '<tpl if="values.teams && values.teams.length">',
@@ -121,8 +122,10 @@ Scalr.regPage('Scalr.ui.account2.environments.view', function (loadParams, modul
                                 '</tpl>',
                             '</td>',
                             '<td>',
-                                '<span class="x-dataview-tab-param-title" style="float:left">Enabled clouds: </span>',
-                                '<span style="float:left;width:100px;">{[this.getPlatformNames(values.platforms)]}</span>',
+                                '<span class="x-form-item-label-default">Enabled clouds </span>',
+                            '</td>',
+                            '<td style="width:100px;">',
+                                '{[this.getPlatformNames(values.platforms)]}',
                             '</td>',
                         '</tr>',
                     '</table>',
@@ -148,10 +151,7 @@ Scalr.regPage('Scalr.ui.account2.environments.view', function (loadParams, modul
         ),
 		plugins: {
 			ptype: 'dynemptytext',
-			emptyText: '<div class="title">No environments were found<br/> to match your search.</div>Try modifying your search criteria'+ (!isAccountOwner && !isAccountSuperAdmin ? '.' : '<br/>or <a class="add-link" href="#">creating a new environment</a>.'),
-			onAddItemClick: function() {
-				panel.down('#add').handler();
-			}
+			emptyText: '<div class="x-semibold title">No environments were found to match your search.</div>Try modifying your search criteria'+ (!isAccountOwner && !isAccountSuperAdmin ? '.' : ' or creating a new environment.')
 		},
 		loadingText: 'Loading environments ...',
 		deferEmptyText: true
@@ -167,33 +167,32 @@ Scalr.regPage('Scalr.ui.account2.environments.view', function (loadParams, modul
         overflowX: 'hidden',
         overflowY: 'auto',
 		listeners: {
-			hide: function() {
+			/*hide: function() {
 				if (isAccountOwner || isAccountSuperAdmin) {
 					dataview.up('panel').down('#add').setDisabled(false);
 				}
-			},
+			},*/
 			afterrender: function() {
 				var me = this;
 				dataview.on('selectionchange', function(dataview, selection){
 					if (selection.length) {
 						me.loadRecord(selection[0]);
 					} else {
-						me.setVisible(false);
+                        me.resetRecord();
 					}
 				});
 			},
 			beforeloadrecord: function(record) {
 				var frm = this.getForm(),
-					isNewRecord = !record.get('id');
+					isNewRecord = !record.store;
 
-				frm.reset(true);
-                this.down('#formtitle').setTitle(isNewRecord ? 'New environment' : '');
+                this.down('#formtitle').setTitle(isNewRecord ? 'New environment' : 'Edit environment');
 				var c = this.query('component[cls~=hideoncreate], #delete, #clone');
 				for (var i=0, len=c.length; i<len; i++) {
 					c[i].setVisible(!isNewRecord);
 				}
 				if (isAccountOwner || isAccountSuperAdmin) {
-					dataview.up('panel').down('#add').setDisabled(isNewRecord);
+                    dataview.up('panel').down('#add').toggle(isNewRecord, true);
                     this.down('#delete').setDisabled(storeEnvironments.getCount()>1?false:true);
                 }
 				if (this.down('#envTeamNames')) {
@@ -201,12 +200,12 @@ Scalr.regPage('Scalr.ui.account2.environments.view', function (loadParams, modul
 				}
 
                 this.down('#teamstitle').setTitle(
-                    Scalr.flags['authMode'] == 'ldap' ? 'Accessible by LDAP groups (comma separated)' : 'Team access' + (!isNewRecord && Scalr.utils.canManageAcl() ? ' (<a href="#/account/environments/accessmap?envId=' + record.get('id') + '">view summary</a>)' : '')
+                    Scalr.flags['authMode'] == 'ldap' ? 'Accessible by LDAP groups' : 'Team access' + (!isNewRecord && Scalr.utils.canManageAcl() ? ' (<a href="#/account/environments/accessmap?envId=' + record.get('id') + '">view summary</a>)' : '')
                 , false);
 
                 var rackspaceBtn = this.down('button[platform="rackspace"]');
                 if (rackspaceBtn) {
-                    rackspaceBtn.setVisible(Ext.Array.contains(record.get('platforms'), 'rackspace'));
+                    rackspaceBtn.setVisible(Ext.Array.contains(record.get('platforms') || [], 'rackspace'));
                 }
 
                 if (moduleParams['ccs']) {
@@ -218,19 +217,13 @@ Scalr.regPage('Scalr.ui.account2.environments.view', function (loadParams, modul
                 }
 			},
 			loadrecord: function(record) {
-				envTeamsStore.loadData(storeTeams.getRange());
-
                 var platforms = record.get('platforms') || [],
                     platformCt = form.down('#platforms');
                 Ext.Array.each(platformCt.query('[xtype="button"]'), function(btn){
                     var platformEnabled = Ext.Array.contains(platforms, btn.platform);
                     this[(platformEnabled ? 'removeCls' : 'addCls')]('scalr-ui-environment-cloud-disabled');
                 });
-                platformCt.setDisabled(platforms.length === 0);
-
-				if (!this.isVisible()) {
-					this.setVisible(true);
-				}
+                platformCt.toggleMask(platforms.length === 0);
 			}
 		},
 		items: [{
@@ -250,19 +243,19 @@ Scalr.regPage('Scalr.ui.account2.environments.view', function (loadParams, modul
                     readOnly: !isAccountOwner && !isAccountSuperAdmin,
                     name: 'name',
                     fieldLabel: 'Environment',
-                    labelWidth: 80,
+                    labelWidth: 110,
                     allowBlank: false
                 }, {
                     xtype: 'buttongroupfield',
                     fieldLabel: 'Scalr management',
                     readOnly: !Scalr.utils.canManageAcl(),
                     margin: '0 0 0 40',
-                    labelWidth: 120,
+                    labelWidth: 150,
                     name: 'status',
                     value: 'Active',
                     layout: 'hbox',
                     defaults: {
-                        maxWidth: 100,
+                        maxWidth: 120,
                         flex: 1
                     },
                     items: [{
@@ -281,7 +274,7 @@ Scalr.regPage('Scalr.ui.account2.environments.view', function (loadParams, modul
                 },
                 anchor: '50%',
                 maxWidth: 370,
-                margin: '0 20 0 0',
+                margin: '12 20 0 0',
                 editable: false,
                 autoSetSingleValue: true,
                 hidden: !Scalr.flags['analyticsEnabled'],
@@ -289,7 +282,7 @@ Scalr.regPage('Scalr.ui.account2.environments.view', function (loadParams, modul
                 valueField: 'ccId',
                 displayField: 'name',
                 fieldLabel: 'Cost center',
-                labelWidth: 80,
+                labelWidth: 110,
                 name: 'ccId',
                 readOnly: !isAccountOwner && !isAccountSuperAdmin,
                 listeners: {
@@ -312,8 +305,39 @@ Scalr.regPage('Scalr.ui.account2.environments.view', function (loadParams, modul
 		}, {
 			xtype: 'container',
 			itemId: 'platforms',
-			cls: 'x-fieldset-separator-top',
-            maxWidth: 1100,
+			cls: 'x-fieldset-separator-top x-container-platform',
+            maxWidth: 930,
+            toggleMask: function(mask) {
+                if (mask) {
+                    this.mask();
+                    var el = this.getMaskTarget() || this.el;
+                    if (this.credEl) {
+                        this.credEl.remove();
+                    }
+
+                    if (el) {
+                        var record = this.up('form').getForm().getRecord(),
+                            envId = record.store ? record.get('id') : null;
+                        this.credEl = Ext.DomHelper.append(el.dom,
+                            '<div class="scalr-add-credentials-wrap">' +
+                                (envId ?
+                                    '<div class="scalr-add-credentials-info"><div class="inner"><img src="'+Ext.BLANK_IMAGE_URL+'" class="x-icon-info" />&nbsp;&nbsp;' +
+                                        'Start building cloud infrastructure in this environment, by adding all of your cloud credentials.</div>' +
+                                    '</div>' +
+                                    '<div class="inner"><a href="#/account/environments/' + envId + '/clouds" class="x-btn x-btn-green scalr-add-credentials-button">Add cloud credentials</a></div>'
+                                :   '<div class="scalr-add-credentials-info">' +
+                                        '<div class="inner"><img src="'+Ext.BLANK_IMAGE_URL+'" class="x-icon-info" />&nbsp;&nbsp;Please save your environment to start adding cloud credentials.</div>' +
+                                    '</div>'
+                                ) +
+                            '</div>',
+                        true);
+                    }
+                } else if (this.credEl) {
+                    this.credEl.remove();
+                    this.unmask();
+                }
+
+            },
             layout: {
                 type: 'hbox',
                 align: 'stretch'
@@ -322,7 +346,7 @@ Scalr.regPage('Scalr.ui.account2.environments.view', function (loadParams, modul
                 xtype: 'fieldset',
                 title: 'Public&nbsp;clouds',
                 itemId: 'publicPlatforms',
-                cls: 'x-fieldset-separator-none x-fieldset-clouds',
+                cls: 'x-fieldset-separator-none x-fieldset-clouds'
             },{
                 xtype: 'fieldset',
                 title: 'Private&nbsp;clouds',
@@ -339,74 +363,61 @@ Scalr.regPage('Scalr.ui.account2.environments.view', function (loadParams, modul
                                             var leftcol = this.prev(),
                                                 container = leftcol.ownerCt,
                                                 width = container.getWidth(),
-                                                extraWidth = 54,
-                                                itemWidth = 110,
-                                                colCount = Math.floor(((width > container.maxWidth ? container.maxWidth : width) - extraWidth*2)/110),
-                                                rowsCount = Math.ceil((leftcol.items.length + this.items.length)/colCount);
-                                            colCount = Math.ceil(leftcol.items.length/rowsCount);
-                                            if (colCount > leftcol.items.length) {
-                                                colCount = leftcol.items.length;
+                                                padding = 40,
+                                                itemWidth = 120,
+                                                leftcolCount = 0,
+                                                rightcolCount = 0,
+                                                totalColumnsCount,
+                                                totalRowsCount,
+                                                leftcolColumnsCount;
+                                            leftcol.items.each(function(item) {if (!item.hidden)leftcolCount++;});
+                                            this.items.each(function(item) {if (!item.hidden)rightcolCount++;});
+                                            totalColumnsCount = Math.floor(((width > container.maxWidth ? container.maxWidth : width) - padding*1.5)/itemWidth);
+                                            totalRowsCount = Math.ceil((leftcolCount + rightcolCount)/totalColumnsCount);
+
+                                            leftcolColumnsCount = Math.ceil(leftcolCount/totalRowsCount);
+                                            if (leftcolColumnsCount > leftcolCount) {
+                                                leftcolColumnsCount = leftcolCount;
                                             }
                                             this.resizeInProgress = true;
-                                            leftcol.setWidth(colCount*itemWidth + extraWidth);
+                                            leftcol.setWidth(leftcolColumnsCount*itemWidth+padding);
                                             this.resizeInProgress = false;
                                         }
                                     }
                                 });
+                                this.fireEvent('resize');
                             }
                         },
                         sigle: true
                     }
                 }
-            }],
-            listeners: {
-                disable: function() {
-                    var el = this.getMaskTarget();
-                    if (this.credEl) {
-                        this.credEl.remove();
-                    }
-                    if (el) {
-                        var envId = this.up('form').getForm().getRecord().get('id');
-                        this.credEl = Ext.DomHelper.append(el.dom,
-                            '<div class="scalr-add-credentials-wrap">' +
-                                (envId ?
-                                    '<div class="scalr-add-credentials-info">' +
-                                        'Start building cloud infrastructure in this environment, by adding all of your cloud credentials.' +
-                                    '</div>' +
-                                    '<a href="#/account/environments/' + envId + '/clouds" class="scalr-add-credentials-button">Add cloud credentials</a>'
-                                :   '<div class="scalr-add-credentials-info" style="width:450px">' +
-                                        'Please save your environment to start adding cloud credentials.' +
-                                    '</div>'
-                                ) +
-                            '</div>',
-                        true);
-                    }
-                },
-                enable: function() {
-                    if (this.credEl) {
-                        this.credEl.remove();
-                    }
-                }
-            }
+            }]
 		},{
 			xtype: 'fieldset',
             cls: 'x-fieldset-separator-top',
             itemId: 'teamstitle',
 			items: [
                 Scalr.utils.canManageAcl() ? Scalr.flags['authMode'] == 'ldap' ? {
-                xtype: 'accountauthldapfield',
-                name: 'teams'
+                    xtype: 'taglistfield',
+                    name: 'teams',
+                    hideTrigger: false,
+                    store: storeTeams,
+                    valueField: 'name',
+                    displayField: 'name',
+                    getSubmitData: function() {
+                        var me = this,
+                            data = null;
+                        if (!me.disabled && me.submitValue) {
+                            data = {};
+                            data[me.getName()] = Ext.encode(me.getValue());
+                        }
+                        return data;
+                    }
             } : {
 				xtype: 'gridfield',
 				name: 'teams',
-				flex: 1,
-				cls: 'x-grid-shadow x-grid-no-selection',
 				maxWidth: 1100,
-				listeners: {
-					viewready: function(){
-						this.reconfigure(envTeamsStore);
-					}
-				},
+                store: envTeamsStore,
 				viewConfig: {
 					focusedItemCls: '',
 					plugins: {
@@ -415,8 +426,8 @@ Scalr.regPage('Scalr.ui.account2.environments.view', function (loadParams, modul
 					}
 				},
 				columns: [
-					{text: 'Team name', flex: 1, dataIndex: 'name', sortable: true, xtype: 'templatecolumn', tpl: '<a href="#/account/teams?teamId={id}">{name}</a>'},
-					{text: 'Users', width: 120, dataIndex: 'users', sortable: false, xtype: 'templatecolumn', tpl: '<tpl if="users.length"><a href="#/account/teams?teamId={id}">{users.length}</a></tpl>'},
+					{text: 'Team', flex: 1, dataIndex: 'name', sortable: true, xtype: 'templatecolumn', tpl: '<a href="#/account/teams?teamId={id}">{name}</a>'},
+					{text: 'Users', width: 120, dataIndex: 'users', sortable: false, xtype: 'templatecolumn', tpl: '<tpl if="values.users && users.length"><a href="#/account/teams?teamId={id}">{users.length}</a></tpl>'},
 					{
 						text: 'Other environments',
 						flex: 1,
@@ -474,9 +485,9 @@ Scalr.regPage('Scalr.ui.account2.environments.view', function (loadParams, modul
 							},
 							url: '/account/environments/xSave',
 							form: frm,
-							params: !record.get('id')?{}:{envId: record.get('id')},
+							params: !record.store?{}:{envId: record.get('id')},
 							success: function (data) {
-								if (!record.get('id')) {
+								if (!record.store) {
 									record = store.add(data.env)[0];
 									dataview.getSelectionModel().select(record);
 									Scalr.event.fireEvent('update', '/account/environments/create', data.env);
@@ -497,8 +508,9 @@ Scalr.regPage('Scalr.ui.account2.environments.view', function (loadParams, modul
 				xtype: 'button',
 				text: 'Cancel',
 				handler: function() {
-					dataview.deselect(form.getForm().getRecord());
-					form.setVisible(false);
+                    form.hide();
+                    dataview.deselectAndClearLastSelected();
+                    panel.down('#add').toggle(false, true);
 				}
 			},{
 				itemId: 'clone',
@@ -508,8 +520,8 @@ Scalr.regPage('Scalr.ui.account2.environments.view', function (loadParams, modul
                     var record = form.getForm().getRecord();
                     Scalr.Confirm({
                         msg: 'Clone "' + record.get('name') + '" environment?',
-                        ok: 'Confirm & clone',
-                        formWidth: 680,
+                        ok: 'Clone',
+                        formWidth: 750,
                         form: {
                             xtype: 'fieldset',
                             title: 'Clone "' + record.get('name') + '" environment',
@@ -523,7 +535,7 @@ Scalr.regPage('Scalr.ui.account2.environments.view', function (loadParams, modul
                                 fieldLabel: 'New environment name',
                                 value: '',
                                 name: 'name',
-                                labelWidth: 150,
+                                labelWidth: 180,
                                 allowBlank: false,
                                 anchor: '100%'
                             },{
@@ -566,7 +578,7 @@ Scalr.regPage('Scalr.ui.account2.environments.view', function (loadParams, modul
 			}, {
 				itemId: 'delete',
 				xtype: 'button',
-				cls: 'x-btn-default-small-red',
+				cls: 'x-btn-red',
 				text: 'Delete',
 				disabled: !isAccountOwner && !isAccountSuperAdmin,
                 tooltip: isAccountOwner || isAccountSuperAdmin ? '' : 'Only <b>Account owner</b> can delete environments',
@@ -603,8 +615,7 @@ Scalr.regPage('Scalr.ui.account2.environments.view', function (loadParams, modul
             xtype: 'button',
             ui: 'simple',
 			cls: 'x-btn-simple-large',
-            margin: '10 0 0 10',
-            iconAlign: 'above',
+            iconAlign: 'top',
             iconCls: 'x-icon-platform-large x-icon-platform-large-' + key,
             text: Scalr.utils.getPlatformName(key, true),
 			platform: key,
@@ -613,7 +624,7 @@ Scalr.regPage('Scalr.ui.account2.environments.view', function (loadParams, modul
                 if (readOnlyAccess) {
                     Scalr.message.InfoTip('Insufficient permissions to configure cloud.', this.el);
                 } else {
-                    Scalr.event.fireEvent('redirect', '#/account/environments/' + form.getForm().getRecord().get('id') + '/clouds?platform=' + this.platform, true);
+                    Scalr.event.fireEvent('redirect', '#/account/environments/' + form.getForm().getRecord().get('id') + '/clouds', true, {platform: this.platform});
                 }
 			}
 		});
@@ -665,14 +676,13 @@ Scalr.regPage('Scalr.ui.account2.environments.view', function (loadParams, modul
 			align: 'stretch'
 		},
 		scalrOptions: {
-			title: 'Environments',
+			menuTitle: 'Environments',
+            menuHref: '#/account/environments',
+            menuFavorite: true,
 			reload: false,
-			maximize: 'all',
-			leftMenu: {
-				menuId: 'account',
-				itemId: 'environments'
-			}
+			maximize: 'all'
 		},
+        stateId: 'grid-account-environments',
         listeners: {
             applyparams: reconfigurePage
         },
@@ -684,6 +694,7 @@ Scalr.regPage('Scalr.ui.account2.environments.view', function (loadParams, modul
 				autoScroll: true,
 				dockedItems: [{
 					xtype: 'toolbar',
+                    ui: 'simple',
 					dock: 'top',
 					defaults: {
 						margin: '0 0 0 10'
@@ -692,29 +703,36 @@ Scalr.regPage('Scalr.ui.account2.environments.view', function (loadParams, modul
 						xtype: 'filterfield',
 						itemId: 'envLiveSearch',
 						margin: 0,
-                        width: 200,
+                        flex: 1,
 						filterFields: ['name'],
 						store: store
 					},{
-						xtype: 'tbfill'
-					},{
 						itemId: 'add',
-                        text: 'Add environment',
-                        cls: 'x-btn-green-bg',
+                        text: 'New environment',
+                        cls: 'x-btn-green',
 						tooltip: isAccountOwner || isAccountSuperAdmin ? '' : 'Only <b>Account owner</b> can create environments',
 						disabled: !isAccountOwner && !isAccountSuperAdmin,
                         hidden: readOnlyAccess,
-						handler: function(){
-							dataview.deselect(form.getForm().getRecord());
-							form.loadRecord(store.createModel({status: 'Active'}));
-						}
+                        enableToggle: true,
+                        toggleHandler: function (button, state) {
+                            if (state) {
+                                dataview.deselectAndClearLastSelected();
+                                form.loadRecord(storeEnvironments.createModel({status: 'Active'}));
+                                form.down('[name=name]').focus();
+
+                                return;
+                            }
+
+                            form.hide();
+                        }
 					},{
 						itemId: 'refresh',
-                        ui: 'paging',
-						iconCls: 'x-tbar-loading',
-						tooltip: 'Refresh',
+                        iconCls: 'x-btn-icon-refresh',
+                        tooltip: 'Refresh',
 						handler: function() {
 							Scalr.data.reload('account.*');
+                            panel.down('#add').toggle(false, true);
+                            form.hide();
 						}
 					}]
 				}]
@@ -728,28 +746,4 @@ Scalr.regPage('Scalr.ui.account2.environments.view', function (loadParams, modul
 		}]
 	});
 	return panel;
-});
-
-Ext.define('Scalr.ui.AccountEnvironmentAuthLdap', {
-    extend: 'Ext.form.field.TextArea',
-    alias: 'widget.accountauthldapfield',
-
-    setValue: function(value) {
-        return this.callParent([ Ext.isArray(value) ? value.join(', ') : value ]);
-    },
-
-    getValue: function() {
-        var value = this.callParent(arguments);
-        return value.split(',');
-    },
-
-    getSubmitData: function() {
-        var me = this,
-            data = null;
-        if (!me.disabled && me.submitValue) {
-            data = {};
-            data[me.getName()] = Ext.encode(me.getValue());
-        }
-        return data;
-    }
 });

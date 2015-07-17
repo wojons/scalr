@@ -1,348 +1,484 @@
+// ready for extjs 5
+Ext.define('Scalr.ui.FilterFieldPicker', {
+	extend: 'Ext.form.Panel',
+	alias: 'trigger.filterfieldpicker',
+
+	cls: 'x-panel-shadow x-form-filterfield-picker-form',
+
+	floating: true,
+	focusable: true,
+	tabIndex: 0,
+	hidden: true,
+
+	fieldDefaults: {
+		anchor: '100%'
+	},
+
+	initEvents: function () {
+		var me = this;
+
+		me.callParent();
+
+		var filterField = me.pickerField;
+
+		me.getForm().getFields().each(function (field) {
+			field.on('specialkey', function (field, e) {
+				var key = e.getKey();
+
+				if (key === e.ESC) {
+					filterField.collapse();
+				}
+
+				if (key === e.ENTER) {
+					filterField.collapse();
+					filterField.doForceChange();
+				}
+			});
+		});
+	}
+});
+
+// ready for extjs 5
 Ext.define('Scalr.ui.FormFilterField', {
 	extend: 'Ext.form.field.Picker',
 	alias: 'widget.filterfield',
 
-	hideTrigger: true,
-	separatedParams: [],
-	hideFilterIcon: false,
-	hideTriggerButton: false,
-	hideSearchButton: false,
-	cls: 'x-filterfield',
-    filterId: 'filterfield',
-    width: 240, //fast solution: missing width cause overlapping with the next control of the toolbar
+    isFilterField: true,
 
-	initComponent: function() {
-		var me = this;
-		me.callParent(arguments);
+	cls: 'x-form-filterfield',
 
-		if (!me.form && !me.menu) {
-			me.hideTriggerButton = true;
-		} else {
-			me.on({
-				expand: function() {
-                    if (me.form) {
-                        var picker = this.getPicker(), values = this.getParseValue();
-                        picker.getForm().reset();
-                        picker.getForm().setValues(values);
-                    }
-					this.triggerButton.addCls('x-btn-default-small-pressed');
+	filterId: 'filterfield',
+
+	width: 250,
+
+	hideTrigger: false,
+
+	enableKeyEvents: true,
+
+	filterFields: [],
+
+	remoteSort: false,
+
+    checkChangeBuffer: 300,
+
+    forceSearchButonVisibility: false,
+
+	config: {
+		triggers: {
+			cancelButton: {
+				cls: 'x-form-filterfield-trigger-cancel-button',
+				hidden: true,
+				handler: 'resetFilter',
+				toggleVisibility: function () {
+					var me = this;
+
+					me.setVisible(!me.isVisible());
+
+					return me;
 				},
-				collapse: function() {
-                    if (me.form) {
-                        var picker = this.getPicker(), values = this.getParseValue(true);
-                        Ext.Object.merge(values, picker.getForm().getValues());
-                        this.setParseValue(values);
-                    }
-					this.triggerButton.removeCls('x-btn-default-small-pressed');
-				}
-			});
-		}
-
-		// in createPicker we re-enter list of params, find better solution
-        if (this.form && this.form.items) {
-			Ext.each(this.form.items, function(item) {
-				if (item.name)
-					me.separatedParams.push(item.name);
-			});
-		}
-
-		if (this.store && (this.store.remoteSort || this.forceRemoteSearch)) {
-			this.emptyText = 'Search';
-
-			if (this.store.proxy.extraParams['query'] != '')
-				this.value = this.store.proxy.extraParams['query'];
-		} else {
-			this.emptyText = this.emptyText || 'Filter';
-			this.hideSearchButton = true;
-			if (! this.hideFilterIcon)
-				this.fieldCls = this.fieldCls + ' x-form-field-livesearch';
-		}
-
-		if (Ext.isFunction(this.handler)) {
-            // TODO: remove or make adjustable
-			this.on('change', this.handler, this, { buffer: 300 });
+				scope: 'this'
+			},
+			picker: {
+				cls: 'x-form-filterfield-trigger-picker-button',
+				weight: 1,
+				handler: 'onTriggerClick',
+				scope: 'this'
+			},
+			searchButton: {
+				cls: 'x-form-filterfield-trigger-search-button',
+				weight: 2,
+				handler: 'doForceChange',
+				scope: 'this'
+			}
 		}
 	},
 
-	clearFilter: function() {
-		this.collapse();
-		this.reset();
-        this.applyFilter(this, this.getValue());
-		if (! this.hideSearchButton)
-			this.storeHandler();
-		this.focus();
+	hasStore: function () {
+		return Ext.isDefined(this.store);
 	},
 
-    clearParams: function (params) {
-        var me = this;
-        var store = me.store;
+	getStore: function () {
+		return this.store;
+	},
 
-        if (params && !store.isLoading()) {
-            var storeExtraParams = store.proxy.extraParams;
+	getRemoteSort: function () {
+		return this.getStore().remoteSort;
+	},
 
-            Ext.Object.each(params, function (param) {
-                delete storeExtraParams[param];
-            });
-        }
+    getRemoteFilter: function () {
+        return this.getStore().remoteFilter;
     },
 
-	applyFilter: function(field, value) {
+	getFilterFields: function () {
+		return this.filterFields;
+	},
+
+	hasForm: function () {
+		return Ext.isDefined(this.form);
+	},
+
+	getForm: function () {
+		return this.form;
+	},
+
+	createForm: function () {
 		var me = this;
 
-		value = Ext.String.trim(value);
-
-		if (this.hideSearchButton)
-			me.clearButton[value != '' ? 'show' : 'hide' ]();
-
-		if (this.store !== undefined && (me.filterFn || me.filterFields)) {
-            var filters = [];
-            this.store.filters.each(function(filter){
-                if (filter.id !== me.filterId) {
-                    filters.push(filter);
-                }
-            });
-            this.store.clearFilter();
-			var filterFn = function(record) {
-				var result = false,
-					r = new RegExp(Ext.String.escapeRegex(value), 'i');
-				for (var i = 0, length = me.filterFields.length; i < length; i++) {
-					var fieldValue = Ext.isFunction(me.filterFields[i]) ? me.filterFields[i](record) : record.get(me.filterFields[i]);
-					result = (fieldValue+'').match(r);
-					if (result) {
-						break;
-					}
-				}
-				return result;
-			};
-
-			if (value != '') {
-				filters.push({
-                    id: this.filterId,
-					filterFn: me.filterFn || filterFn
-				});
-            }
-            this.fireEvent('beforefilter');
-            this.store.filter(filters);
-			this.fireEvent('afterfilter');
-		}
+		return new Scalr.ui.FilterFieldPicker(Ext.apply(me.getForm(), {
+			pickerField: me
+		}));
 	},
 
-	onRender: function() {
-		this.callParent(arguments);
-
-		this.clearButton = this.bodyEl.down('tr').createChild({
-			tag: 'td',
-			width: 26,
-			html: '<div class="x-filterfield-reset"></div>'
-		});
-        this.clearButton.setVisibilityMode(Ext.dom.AbstractElement.DISPLAY);
-		this.clearButton[ this.getValue() != '' ? 'show' : 'hide' ]();
-		this.applyFilter(this, this.getValue());
-		this.clearButton.on('click', this.clearFilter, this);
-		this.on('change', this.applyFilter, this, { buffer: 300 });
-
-		this.on('specialkey', function(f, e) {
-			if(e.getKey() == e.ESC){
-				e.stopEvent();
-				this.clearFilter();
-			}
-		}, this);
-
-		if (! this.hideTriggerButton) {
-			this.triggerButton = this.bodyEl.down('tr').createChild({
-				tag: 'td',
-				width: 32,
-				html: '<div class="x-filterfield-trigger x-btn-default-small"><div class="x-filterfield-trigger-inner"></div></div>'
-			}).down('div');
-            this.triggerButton.addClsOnOver('x-btn-default-small-over');
-			this.triggerButton.on('click', this.onTriggerClick, this);
-
-			if (this.hideSearchButton) {
-				this.triggerButton.addCls('x-filterfield-trigger-alone');
-			}
-		}
-
-		if (! this.hideSearchButton) {
-			this.searchButton = this.bodyEl.up('tr').createChild({
-				tag: 'td',
-				width: this.hideTriggerButton ? 30 : 42,
-				html: '<div class="x-filterfield-btn x-btn-default-small"><div class="x-filterfield-btn-inner"></div></div>'
-			}).down('div');
-            this.searchButton.addClsOnOver('x-btn-default-small-over');
-            this.searchButton.addClsOnClick('x-btn-default-small-pressed');
-			this.searchButton.on('click', this.storeHandler, this);
-			this.on('specialkey', function(f, e) {
-				if(e.getKey() == e.ENTER){
-					e.stopEvent();
-					this.storeHandler();
-				}
-			}, this);
-			this.triggerWrap.applyStyles('border-radius: 3px 0 0 3px');
-			if (this.hideTriggerButton) {
-				this.searchButton.addCls('x-filterfield-btn-alone');
-			}
-		}
+	hasMenu: function () {
+		return Ext.isDefined(this.menu);
 	},
 
-	createPicker: function() {
-        var me = this;
-        if (me.form) {
-            var formDefaults = {
-                    // TODO: move to class, remove bodyCls
-                    style: 'margin-top:1px',
-                    cls: 'x-panel-shadow',
-                    fieldDefaults: {
-                        anchor: '100%'
-                    },
-                    bodyCls: 'x-fieldset-separator-none',
-                    focusOnToFront: false,
-                    padding: 12,
-                    pickerField: me,
-                    floating: true,
-                    hidden: true,
-                    ownerCt: this.ownerCt
-                };
+	getMenu: function () {
+		return this.menu;
+	},
 
-            var form = Ext.create('Ext.form.Panel', Ext.apply(formDefaults, this.form));
-            form.keepVisibleEls = [];
-            me.separatedParams = []; // re-fill because of nested elements in form
-            form.getForm().getFields().each(function() {
-                if (this.name)
-                    me.separatedParams.push(this.name);
+	createMenu: function () {
+		var me = this;
 
-                if (this instanceof Ext.form.field.Picker) {
-                    this.on('expand', function(c) {
-                        this.keepVisibleEls.push(c.getPicker().el);
-                    }, form, { single: true });
-                } else if (this.xtype == 'textfield') {
-                    this.on('specialkey', function(f, e) {
-                        if(e.getKey() == e.ENTER){
-                            e.stopEvent();
-                            me.collapse();
-                            me.storeHandler();
-                        }
-                    });
-                }
-            });
-            return form;
-        } else if (me.menu) {
-            var menu = Ext.widget(me.menu);
-            menu.keepVisibleEls = [];
-            menu.on('hide', function(c) {
+		return Ext.widget(me.getMenu(), {
+			keepVisibleEls: []
+		}).
+            on('hide', function () {
                 me.collapse();
             });
-            return menu;
-        }
 	},
 
-    getParseValue: function () {
-        var me = this;
-
-        me.clearParams(me.loadParams);
-        me.clearParams(me.parsedParams);
-
-        var filterValue = me.getValue();
-
-        var getStringParams = function (filterValue) {
-            var regex = /\(([^)]+)\)/g;
-            var usefulParams = [];
-            var found;
-            var query = filterValue;
-
-            while (found = regex.exec(filterValue)) {
-                usefulParams.push(found[1]);
-
-                query = query.replace(found[0], '');
-            }
-
-            return { params: usefulParams, query: query.trim().replace(/\s+/g, ' ') };
-        };
-
-        var getSeparatorPosition = function (string) {
-            return string.indexOf(':');
-        };
-
-        var getParsedParams = function (stringParams) {
-            var params = {};
-
-            Ext.Array.each(stringParams, function (string) {
-                var separator = getSeparatorPosition(string);
-                var key = string.substring(0, separator).trim();
-
-                params[key] = string.substring(separator + 1).trim();
-            });
-
-            return params;
-        };
-
-        var stringParams = getStringParams(filterValue);
-        var parsedParams = getParsedParams(stringParams.params);
-        parsedParams.query = stringParams.query;
-
-        me.parsedParams = parsedParams;
-
-        return parsedParams;
-    },
-
-	setParseValue: function(params) {
-		var s = params['query'] || '';
-		delete params['query'];
-		for (var i in params) {
-			if (params[i])
-				s += ' (' + i + ':' + params[i] + ')';
-		}
-
-		this.setValue(s.trim());
+	hasHandler: function () {
+		return Ext.isFunction(this.handler);
 	},
 
-	isElNested: function(e) {
-        var flag = false, i;
-        for (i = 0; i < this.picker.keepVisibleEls.length; i++)
-            flag = flag || e.within(this.picker.keepVisibleEls[i], false, true);
-
-        return flag;
-    },
-
-    collapseIf: function(e) {
+	applyTriggers: function (triggers) {
 		var me = this;
 
-		if (!me.isElNested(e) && !me.isDestroyed && !e.within(me.bodyEl, false, true) && !e.within(me.picker.el, false, true) && !me.isEventWithinPickerLoadMask(e)) {
-			me.collapse();
+		var picker = triggers.picker;
+		picker.hidden = !me.hasForm() && !me.hasMenu();
+
+		var searchButton = triggers.searchButton;
+		searchButton.hidden = !(me.hasStore() && (me.getRemoteSort() || me.getRemoteFilter()))
+            && !me.forceSearchButonVisibility;
+
+		return me.callParent([triggers]);
+	},
+
+	initComponent: function () {
+		var me = this;
+
+		me.callParent();
+
+		if (me.hasStore()) {
+			me.remoteSort = me.remoteSort || me.getRemoteSort() || me.getRemoteFilter();
+
+			if (me.remoteSort) {
+				me.addCls('x-form-filterfield-remote');
+			}
+		}
+
+		if (!Ext.isDefined(me.emptyText)) {
+			me.emptyText = me.remoteSort ? 'Search' : 'Filter';
 		}
 	},
 
-    triggerBlur: function(e) {
-        var picker = this.picker;
+	initEvents: function () {
+		var me = this;
 
-        Ext.form.field.Picker.superclass.triggerBlur.apply(this, arguments);
+		me.callParent();
 
-        if (picker && picker.isVisible() && !this.isElNested(e)) { // exclude nested picker elements
-            picker.hide();
+        me.on('change', function (me, value, oldValue) {
+
+            if (!me.hasHandler()) {
+                me.applyFilter(value);
+            } else {
+                me.handler(me, value, oldValue);
+            }
+
+            if (me.isValueInverted(value, oldValue)) {
+                me.toggleFocusCls().
+                    getTrigger('cancelButton').toggleVisibility();
+            }
+
+        }, me);
+
+		me.on('specialkey', function (me, e) {
+			var key = e.getKey();
+
+			if (key === e.ESC) {
+				me.resetFilter();
+			}
+
+			if (key === e.ENTER && (me.remoteSort || me.forceSearchButonVisibility)) {
+				me.doForceChange();
+			}
+		});
+	},
+
+    onTriggerClick: function () {
+        var me = this;
+
+        if (me.hasForm() || me.hasMenu()) {
+            me.callParent();
         }
     },
 
-	storeHandler: function() {
-		this.clearButton[this.getValue() != '' ? 'show' : 'hide' ]();
+	checkChange: function () {
+		var me = this;
 
-		for (var i = 0; i < this.separatedParams.length; i++) {
-			delete this.store.proxy.extraParams[this.separatedParams[i]];
+        if (!me.remoteSort) {
+			me.callParent();
 		}
 
-		Ext.apply(this.store.proxy.extraParams, this.getParseValue());
-        if (this.store.buffered) {
-            this.store.removeAll();
-        }
-        if (this.store.loadPage) {//there is no loadPage in treestore
-            this.store.loadPage(1);
-        } else {
-            this.store.load();
+		return me;
+	},
+
+	doForceChange: function () {
+		var me = this;
+
+		if (!me.isDestroyed) {
+			var newValue = me.getValue();
+			var oldValue = me.lastValue;
+
+			me.lastValue = newValue;
+
+			me.fireEvent('change', me, newValue, oldValue);
+			me.onChange(newValue, oldValue);
+		}
+
+		return me;
+	},
+
+	createPicker: function () {
+		var me = this;
+
+		return me.hasForm() ? me.createForm() : me.createMenu();
+	},
+
+	onExpand: function () {
+		var me = this;
+
+        if (me.hasForm()) {
+            var form = me.getPicker().getForm();
+            form.reset();
+            form.setValues(me.getParsedValue());
         }
 	},
 
-    bindStore: function(store) {
-        this.store = store;
-        this.applyFilter(this, this.getValue());
-    }
+	onCollapse: function () {
+		var me = this;
+
+        if (me.hasForm()) {
+            me.setValue(me.compileValue(
+                Ext.apply(
+                    me.getParsedValue(),
+                    me.getPicker().getForm().getValues()
+                )
+            ));
+        }
+	},
+
+	toggleFocusCls: function () {
+		var me = this;
+
+		var className = 'x-form-filterfield-has-value';
+
+		if (!me.hasCls(className)) {
+			me.addCls(className);
+			return me;
+		}
+
+		me.removeCls(className);
+		return me;
+	},
+
+	isValueInverted: function (value, oldValue) {
+		var isValueEmpty = Ext.isEmpty(value);
+		var isOldValueEmpty = Ext.isEmpty(oldValue);
+
+		return (!isValueEmpty && isOldValueEmpty)
+			|| (isValueEmpty && !isOldValueEmpty);
+	},
+
+	parseValue: function (array) {
+		var params = {};
+
+		Ext.Array.each(array, function (string) {
+			var separator = string.indexOf(':');
+			var key = string.substring(0, separator).trim();
+
+			params[key] = string.substring(separator + 1).trim();
+		});
+
+		return params;
+	},
+
+	compileValue: function (object) {
+		var string = object.query || '';
+
+		Ext.Object.each(object, function (key, value) {
+			if (value && key !== 'query') {
+				string = string + ' (' + key + ':' + value + ')';
+			}
+		});
+
+		return string.trim();
+	},
+
+	formatQuery: function (string) {
+		return string.trim().replace(/\s+/g, ' ');
+	},
+
+	getParsedValue: function () {
+		var me = this;
+
+		var value = me.getValue();
+		var usefulParams = [];
+		var query = value;
+		var regex = /\(([^)]+)\)/g;
+		var found;
+
+		while (found = regex.exec(value)) {
+			usefulParams.push(found[1]);
+			query = query.replace(found[0], '');
+		}
+
+		return Ext.Object.merge(
+			me.parseValue(usefulParams), {
+				query: me.formatQuery(query)
+			}
+		);
+	},
+
+	resetFilter: function () {
+		var me = this;
+
+		me.reset();
+		me.doForceChange();
+
+		return me;
+	},
+
+    isRecordMatched: function (record) {
+		var me = this;
+
+        var value = me.getValue().toLowerCase();
+
+		return me.getFilterFields().some(function (field) {
+			var fieldValue = !Ext.isFunction(field)
+				? record.get(field)
+				: field(record);
+
+            return !Ext.isEmpty(fieldValue)
+                && fieldValue.toLowerCase().indexOf(value) !== -1;
+		});
+	},
+
+	clearTreeFilter: function () {
+		var me = this;
+
+		var store = me.getStore();
+		store.removeFilter(me.filterId);
+
+		store.each(function (record) {
+			record.set('isVisible', false);
+		});
+
+		return store;
+	},
+
+	isNodeVisible: function (record) {
+		var me = this;
+
+		var value = me.getValue();
+		var isNodeVisible = !record.get('isVisible')
+            ? me.getFilterField().isRecordMatched(record, value)
+            : true;
+		var parentNode = record.parentNode;
+
+		if (isNodeVisible && !Ext.isEmpty(parentNode) && !parentNode.get('isVisible')) {
+			parentNode.set('isVisible', isNodeVisible);
+		}
+
+		return isNodeVisible || record.get('isVisible');
+	},
+
+	filterTreeLocally: function (value) {
+		var me = this;
+
+		me.clearTreeFilter().
+			addFilter({
+				id: me.filterId,
+				value: value,
+				filterFn: me.isNodeVisible,
+				getFilterField: function () {
+					return me;
+				}
+			});
+
+		return me;
+	},
+
+	filterGridLocally: function (value) {
+		var me = this;
+
+		var store = me.getStore();
+		store.removeFilter(me.filterId);
+
+		store.addFilter({
+			id: me.filterId,
+			value: value,
+			filterFn: me.isRecordMatched,
+            scope: me
+		});
+
+		return me;
+	},
+
+	doLocalSort: function (value) {
+		var me = this;
+
+		if (me.getStore().isTreeStore) {
+			me.filterTreeLocally(value);
+			return me;
+		}
+
+		me.filterGridLocally(value);
+		return me;
+	},
+
+	doRemoteSort: function () {
+		var me = this;
+
+		var parsedValue = me.getParsedValue();
+
+		me.getStore().
+			clearProxyParams(me.appliedParamKeys).
+			applyProxyParams(parsedValue);
+
+		me.appliedParamKeys = Ext.Object.getKeys(parsedValue);
+
+		return me;
+	},
+
+	applyFilter: function (value) {
+		var me = this;
+
+		if (me.hasStore()) {
+			me.fireEvent('beforefilter', me);
+
+            if (me.getRemoteSort() || me.getRemoteFilter()) {
+				me.doRemoteSort();
+			} else {
+				me.doLocalSort(value);
+			}
+
+			me.fireEvent('afterfilter', me);
+		}
+
+		return me;
+	}
 });
 
 Ext.define('Scalr.ui.FormFieldButtonGroup', {
@@ -355,6 +491,9 @@ Ext.define('Scalr.ui.FormFieldButtonGroup', {
 	baseCls: 'x-form-buttongroupfield',
 	allowBlank: false,
     readOnly: false,
+    labelSeparator: '',
+    defaultBindProperty: 'value',
+    maskOnDisable: false,
 
 	initComponent: function() {
 		var me = this, defaults;
@@ -375,15 +514,12 @@ Ext.define('Scalr.ui.FormFieldButtonGroup', {
 			toggleHandler: function(button, state){
 				button.ownerCt.setValue(state ? button.value : null);
 			},
-			onMouseDown: function(e) {
-				var me = this;
-				if (!me.disabled && e.button === 0) {
-					/* Changed */
-					//me.addClsWithUI(me.pressedCls);
-					/* End */
-					me.doc.on('mouseup', me.onMouseUp, me);
-				}
-			}
+            onMouseDown: function(e) {
+                var me = this;
+                if (!me.disabled && e.button === 0) {
+                    Ext.button.Manager.onButtonMousedown(me, e);
+                }
+            }
 		};
 		me.defaults = me.initialConfig.defaults ? Ext.clone(me.initialConfig.defaults) : {};
 		Ext.applyIf(me.defaults, defaults);
@@ -447,12 +583,22 @@ Ext.define('Scalr.ui.FormFieldButtonGroup', {
         var me = this;
         readOnly = !!readOnly;
         me.readOnly = readOnly;
-		me.items.each(function(){
-			if (me.rendered) {
-				this.setDisabled(readOnly);
-			}
+		me.items.each(function(btn){
+    		btn.setDisabled(readOnly);
 		});
         me.fireEvent('writeablechange', me, readOnly);
+    },
+
+    //fix extjs 5.1.0 children masking bug
+    onEnable: function() {
+        if (this.rendered) {
+            this.items.each(function(item){
+                if (item.rendered) {
+                    item.unmask();
+                }
+            });
+        }
+        this.callParent(arguments);
     }
 
 });
@@ -482,13 +628,32 @@ Ext.define('Scalr.ui.FormButtonField', {
     }
 });
 
+Ext.define('Scalr.ui.FormCheckButtonField', {
+	alias: 'widget.checkbuttonfield',
+	extend: 'Scalr.ui.FormButtonField',
+
+	setValue: function (value) {
+		var me = this;
+
+		if (value) {
+			value = value.split('-');
+
+			Ext.Array.each(me.menu.items.items, function (field, index) {
+				field.checked = parseInt(value[index]);
+			});
+		}
+
+		return me;
+	}
+});
+
 Ext.define('Scalr.ui.FormFieldInfoTooltip', {
 	extend: 'Ext.form.DisplayField',
 	alias: 'widget.displayinfofield',
 	initComponent: function () {
 		// should use value for message
 		var info = this.value || this.info;
-		this.value = '<img class="tipHelp" src="/ui2/images/icons/info_icon_16x16.png" data-qtip=\'' + info + '\' style="cursor: help; height: 16px;">';
+		this.value = '<img class="x-icon-info" src="'+Ext.BLANK_IMAGE_URL+'" data-qtip=\'' + info + '\'/>';
 
 		this.callParent(arguments);
 	},
@@ -496,7 +661,7 @@ Ext.define('Scalr.ui.FormFieldInfoTooltip', {
     setInfo: function (text) {
         var me = this;
 
-        me.setValue('<img class="tipHelp" src="/ui2/images/icons/info_icon_16x16.png" data-qtip=\'' + text + '\' style="cursor: help; height: 16px;">');
+        me.setValue('<img class="x-icon-info" src="'+Ext.BLANK_IMAGE_URL+'" data-qtip=\'' + text + '\' />');
     }
 });
 
@@ -550,8 +715,7 @@ Ext.define('Scalr.ui.FormFieldFarmRoles', {
 		hideLabel: true,
 		name: 'farmId',
 		store: {
-			fields: [ 'id', 'name' ],
-			proxy: 'object'
+            model: Scalr.getModel({fields: [ 'id', 'name' ]})
 		},
 		valueField: 'id',
 		displayField: 'name',
@@ -575,6 +739,9 @@ Ext.define('Scalr.ui.FormFieldFarmRoles', {
 
 				var successHandler = function(data) {
 					var field = fieldset.down('[name="farmRoleId"]');
+                    if (Ext.isEmpty(field)) {
+                        return;
+                    }
 					field.show();
 					if (data['dataFarmRoles']) {
 						field.emptyText = 'Select a role';
@@ -628,8 +795,7 @@ Ext.define('Scalr.ui.FormFieldFarmRoles', {
 		hidden: true,
 		name: 'farmRoleId',
 		store: {
-			fields: [ 'id', 'name', 'platform', 'role_id' ],
-			proxy: 'object'
+            model: Scalr.getModel({fields: [ 'id', 'name', 'platform', 'role_id' ]})
 		},
 		valueField: 'id',
 		displayField: 'name',
@@ -695,8 +861,7 @@ Ext.define('Scalr.ui.FormFieldFarmRoles', {
 		hidden: true,
 		name: 'serverId',
 		store: {
-			fields: [ 'id', 'name' ],
-			proxy: 'object'
+            model: Scalr.getModel({fields: [ 'id', 'name' ]})
 		},
 		valueField: 'id',
 		displayField: 'name',
@@ -740,6 +905,8 @@ Ext.define('Scalr.ui.FormFieldFarmRoles', {
 
 		this.fixWidth();
 		this.updateLayout();
+
+        return this;
 	},
 
 	syncItems: function () {
@@ -992,16 +1159,12 @@ Ext.define('Scalr.ui.CloudLocationMap', {
 		}
 	},
 	renderTpl: [
-		'<div class="map map-{mapCls}" style="{mapStyle}"><div class="title"></div></div>'
+		'<div id="{id}-mapEl" data-ref="mapEl" class="map map-{mapCls}" style="{mapStyle}"><div id="{id}-titleEl" data-ref="titleEl" class="title x-semibold"></div></div>'
 	],
-	renderSelectors: {
-		titleEl: '.title',
-		mapEl: '.map'
-	},
-    renderData: {},
+	childEls: ['mapEl', 'titleEl'],
 
 	constructor: function(config) {
-		this.callParent([config]);
+		this.callParent(arguments);
 		this.locations.rds = this.locations.ec2;
         this.locations.ecs = this.locations.openstack;
         this.locations.ecs_world = this.locations.openstack_world;
@@ -1016,37 +1179,45 @@ Ext.define('Scalr.ui.CloudLocationMap', {
         var me = this,
             locationFound = false,
             platformMap = platform !== 'idcf' && platform !== 'ecs' && (me.locations[platform + '_' + map] !== undefined) ? platform + '_' + map : platform;
-        me.suspendLayouts();
-		allLocations = allLocations || [];
-		me.reset();
-		if (selectedLocations === 'all') {
-			me.mapEl.setStyle('background-position', this.getRegionPosition('all'));
-            locationFound = true;
-            if (platform === 'gce') {
-                Ext.Object.each(me.locations[platformMap], function(key, value) {
-                    me.addLocation(platform, key, value, true, true);
-                });
-            }
-		} else if (me.locations[platformMap]) {
-            selectedLocations = Ext.isArray(selectedLocations) ? selectedLocations : [selectedLocations];
-            var selectedLocation = this.locations[platformMap][selectedLocations[0]];
-            if (selectedLocation) {
-                me.mapEl.setStyle('background-position', me.getRegionPosition(selectedLocation.region));
-                if (selectedLocation.region != 'unknown') {
-                    locationFound = true;
+        fn = function() {
+            me.suspendLayouts();
+            allLocations = allLocations || [];
+            me.reset();
+            if (selectedLocations === 'all') {
+                me.mapEl.setStyle('background-position', me.getRegionPosition('all'));
+                locationFound = true;
+                if (platform === 'gce') {
                     Ext.Object.each(me.locations[platformMap], function(key, value) {
-                        var selected = Ext.Array.contains(selectedLocations, key);
-                        if (selected || Ext.Array.contains(allLocations, key)) {
-                            me.addLocation(platform, key, value, selected);
-                        }
+                        me.addLocation(platform, key, value, true, true);
                     });
                 }
+            } else if (me.locations[platformMap]) {
+                selectedLocations = Ext.isArray(selectedLocations) ? selectedLocations : [selectedLocations];
+                var selectedLocation = me.locations[platformMap][selectedLocations[0]];
+                if (selectedLocation) {
+                    me.mapEl.setStyle('background-position', me.getRegionPosition(selectedLocation.region));
+                    if (selectedLocation.region != 'unknown') {
+                        locationFound = true;
+                        Ext.Object.each(me.locations[platformMap], function(key, value) {
+                            var selected = Ext.Array.contains(selectedLocations, key);
+                            if (selected || Ext.Array.contains(allLocations, key)) {
+                                me.addLocation(platform, key, value, selected);
+                            }
+                        });
+                    }
+                }
             }
-		}
-        if (!locationFound) {
-			me.mapEl.setStyle('background-position', me.getRegionPosition('unknown'));
-		}
-        me.resumeLayouts(true);
+            if (!locationFound) {
+                me.mapEl.setStyle('background-position', me.getRegionPosition('unknown'));
+            }
+            me.resumeLayouts(true);
+        };
+
+        if (me.rendered) {
+            fn();
+        } else {
+            me.on('afterrender', fn, me, {single: true});
+        }
 	},
 
     addLocation: function(platform, name, data, selected, silent) {
@@ -1073,7 +1244,7 @@ Ext.define('Scalr.ui.CloudLocationMap', {
             });
         }
         if (me.mode == 'single' && platform === 'ec2' && selected) {
-            me.titleEl.setHTML(title);
+            me.titleEl.setHtml(title);
             me.fixTitlePosition();
         }
     },
@@ -1102,11 +1273,12 @@ Ext.define('Scalr.ui.CloudLocationMap', {
 	},
 
 	reset: function() {
+        if (!this.rendered) return;
 		var loc = this.mapEl.query('.location');
 		for (var i=0, len=loc.length; i<len; i++) {
 			Ext.removeNode(loc[i]);
 		}
-        this.titleEl.setHTML('');
+        this.titleEl.setHtml('');
 	},
 
 	getRegionPosition: function(region) {
@@ -1162,9 +1334,10 @@ Ext.define('Scalr.ui.FormTextCodeMirror', {
                 break;
         }
     },
+
     afterRender: function () {
         this.callParent(arguments);
-        this.codeMirror = CodeMirror(this.inputEl, {
+        this.codeMirror = new CodeMirror(this.inputEl, {
             value: this.getRawValue(),
             readOnly: this.readOnly
         });
@@ -1210,19 +1383,22 @@ Ext.define('Scalr.ui.FormTextCodeMirror', {
             });
         }
     },
+
     getRawValue: function () {
         var me = this,
-            v = (me.codeMirror ? me.codeMirror.getValue() : Ext.value(me.rawValue, ''));
+            v = (me.codeMirror ? me.codeMirror.getValue() : (me.rawValue || ''));
         me.rawValue = v;
         return v;
     },
+
     setRawValue: function (value) {
         var me = this;
-        value = Ext.value(me.transformRawValue(value), '');
+        value = me.transformRawValue(value) || '';
         me.rawValue = value;
 
         return value;
     },
+
     setValue: function(value) {
         var me = this;
         me.setRawValue(me.valueToRaw(value));
@@ -1231,6 +1407,35 @@ Ext.define('Scalr.ui.FormTextCodeMirror', {
             me.codeMirror.setValue(value);
 
         return me.mixins.field.setValue.call(me, value);
+    },
+
+    setReadOnly: function (readOnly) {
+        var me = this;
+
+        me.codeMirror.setOption('readOnly', readOnly);
+
+        me.callParent(arguments);
+    },
+
+    getErrors: function (value) {
+        var me = this;
+
+        var errors = [];
+
+        if (Ext.isDefined(value)) {
+            errors = me.callParent([value]);
+            var validator = me.validator;
+
+            if (Ext.isFunction(validator)) {
+                var message = validator.call(me, value);
+
+                if (message !== true) {
+                    errors.push(message);
+                }
+            }
+        }
+
+        return errors;
     }
 });
 
@@ -1238,6 +1443,10 @@ Ext.define('Scalr.ui.CycleButtonAlt', {
     alias: 'widget.cyclealt',
 
     extend: 'Ext.button.Split',
+
+	mixins: {
+		field: 'Ext.form.field.Field'
+	},
 
     showText: true,
     getItemIconCls: false,
@@ -1288,7 +1497,7 @@ Ext.define('Scalr.ui.CycleButtonAlt', {
             } else {
                 text = text.join(me.selectedItemsSeparator);
             }
-            
+
             if (me.multiselect) {
                 text = '<span class="x-btn-split-multiselect">' + text + '</span>';
             }
@@ -1297,12 +1506,12 @@ Ext.define('Scalr.ui.CycleButtonAlt', {
             } else {
                 me.setText(text);
             }
-            
+
             if (item.checked != checked) {
                 item.setChecked(checked, false);
             }
             me.suspendChangeEvent--;
-            
+
             if (!suppressEvent && me.suspendChangeEvent === 0) {
                 me.fireEvent('change', me, item, me.multiselect ?  me.activeItems : me.activeItems[0]);
             }
@@ -1355,6 +1564,7 @@ Ext.define('Scalr.ui.CycleButtonAlt', {
 
         me.itemCount = me.menu.items.length;
         me.callParent(arguments);
+		me.initField();
         if (!me.multiselect) {
             me.on('click', me.toggleSelected, me);
         }
@@ -1391,7 +1601,7 @@ Ext.define('Scalr.ui.CycleButtonAlt', {
                     value.push(value);
                 }
             });
-        } else {
+        } else if (me.activeItems[0]) {
             value = me.activeItems[0].value;
         }
        return value;
@@ -1438,178 +1648,182 @@ Ext.define('Scalr.ui.CycleButtonAlt', {
     }
 });
 
-Ext.define('Scalr.ui.FormFieldColor', {
-    extend: 'Ext.Component',
-    mixins: {
-        labelable: 'Ext.form.Labelable',
-        field: 'Ext.form.field.Field'
-    },
+/* todo: fix colorfield css */
+Ext.define('Ext.form.field.Color', {
+    extend: 'Ext.form.field.Picker',
     alias: 'widget.colorfield',
-	cls: 'x-form-colorpicker',
-    fieldSubTpl: [],
 
-	allowBlank: false,
-	componentLayout: 'field',
-	button:null,
-	backgroundColor: '#000000',
+    cls: 'x-field-colorpicker',
+    editable: false,
+    colors: ['333333', 'DF2200', 'AA00AA', '1A4D99', '3D690C', '006666', '6F8A02', '0C82C0', 'CA4B00', '671F92'],
+    emptyColor: 'eeeeee',
 
-    initComponent : function() {
+    createPicker: function() {
         var me = this;
-		me.callParent();
-        me.initLabelable();
-        me.initField();
-        if (!me.name) {
-            me.name = me.getInputId();
+
+        return new Ext.picker.Color({
+            cls: 'x-field-colorpicker-menu',
+            pickerField: me,
+            floating: true,
+            hidden: true,
+            height: 'auto',
+            colors: me.colors,
+            listeners: {
+                scope: me,
+                select: me.onSelect
+            }
+        });
+    },
+
+    onSelect: function(m, d) {
+        var me = this;
+        me.setValue(d);
+        me.fireEvent('select', me, d);
+        me.collapse();
+    },
+
+    onExpand: function() {
+        var value = this.getValue();
+        if (value) {
+        this.picker.select(value, true);
         }
     },
 
-	afterRender: function() {
+    onFocusLeave: Ext.emptyFn,
+
+    setRawValue: function(value) {
 		var me = this;
-		me.button = Ext.create('Ext.Button', {
-			renderTo: this.bodyEl,
-			pressedCls: '',
-			menuActiveCls: '',
-			menu: {
-				xtype: 'colormenu',
-				cls: 'x-form-colorpicker-menu',
-				allowReselect: true,
-				colors: ['333333', 'DF2200', 'AA00AA', '1A4D99', '3D690C', '006666', '6F8A02', '0C82C0', 'CA4B00', '671F92'],
-				listeners: {
-					select: function(picker, color){
-						me.setValue(color);
-					}
-				}
-			}
-		});
-		this.fieldReady = true;
-	},
-
-    getInputId: function() {
-        return this.inputId || (this.inputId = this.id + '-inputEl');
+        me.callParent(arguments);
+        me.setRawColor(value);
     },
 
-    initRenderTpl: function() {
-        var me = this;
-        me.renderTpl = me.getTpl('labelableRenderTpl');
-        return me.callParent();
-    },
-
-    initRenderData: function() {
-        return Ext.applyIf(this.callParent(), this.getLabelableRenderData());
-    },
-
-	setRawValue: function(value) {
-		if (this.fieldReady) {
-			var color = this.backgroundColor;
-			if (!Ext.isEmpty(value)) {
-				color = '#'+value;
-			}
-			this.button.el.down('.x-btn-inner').setStyle('background', color);
+    setRawColor: function(value) {
+		var me = this,
+            color = me.emptyColor;
+		if (!Ext.isEmpty(value)) {
+			color = value;
 		}
-	},
-
-	setValue: function(value) {
-		this.value = value;
-		this.setRawValue(value);
-		this.fireEvent('change', this, this.value);
-	},
-
-    getRawValue: function() {
-		return this.value || '';
+        if (me.inputEl) {
+		    me.inputEl.setStyle({'background': '#' + color});
+        }
     },
 
-	getValue: function() {
-		return this.getRawValue();
-	},
-
-    setReadOnly: function(readOnly) {
+    afterRender: function(){
         var me = this;
-        readOnly = !!readOnly;
-        me.readOnly = readOnly;
-		if (this.fieldReady) {
-		}
+        me.callParent(arguments);
+        me.setRawColor(me.value);
     }
 
 });
 
-Ext.define('Scalr.ui.VpcIdField', {
-	extend: 'Ext.form.field.ComboBox',
-	alias: 'widget.vpcidfield',
-    
-    name: 'vpcId',
-    editable: false,
-    hideInputOnReadOnly: true,
+Ext.define('Scalr.ui.VpcSubnetField', {
+	extend: 'Ext.form.field.Tag',
+	alias: 'widget.vpcsubnetfield',
+
+    displayField: 'description',
+    valueField: 'id',
+
+    forceSelection: false,
     queryCaching: false,
     clearDataBeforeQuery: true,
-    valueField: 'id',
-    displayField: 'name',
-    icons: {
-        governance: true
+    editable: true,
+    minChars: 0,
+    queryDelay: 10,
+
+    requireSameSubnetType: false,
+    maxCount: 0,
+
+    iconAlign: 'left',
+    iconPosition: 'inner',
+
+    store: {
+        fields: ['id', 'name', 'description', 'ips_left', 'type', 'availability_zone', 'cidr'],
+        proxy: {
+            type: 'cachedrequest',
+            url: '/tools/aws/vpc/xListSubnets',
+            filterFields: ['name', 'description']
+        }
+    },
+    listConfig: {
+        style: 'white-space:nowrap',
+        cls: 'x-boundlist-alt',
+        tpl:
+            '<tpl for="."><div class="x-boundlist-item" style="height: auto; width: auto;line-height:20px">' +
+                '<div><b>{[values.name || \'<i>No name</i>\' ]} - {id}</b> <span style="font-style: italic;font-size:90%">(Type: <b>{type:capitalize}</b>)</span></div>' +
+                '<div>{cidr} in {availability_zone} [IPs left: {ips_left}]</div>' +
+            '</div></tpl>'
     },
 
     initComponent: function() {
-        this.plugins = this.plugins || [];
-        this.plugins.push({
+        var me = this;
+        me.plugins = me.plugins || [];
+        me.plugins.push({
             ptype: 'comboaddnew',
             pluginId: 'comboaddnew',
-            url: '/tools/aws/vpc/create'
+            url: '/tools/aws/vpc/createSubnet',
+            disabled: true
+        }, {
+            ptype: 'fieldicons',
+            icons: ['governance'],
+            align: me.iconAlign,
+            position: me.iconPosition
         });
 
-        if (this.store === undefined) {
-            this.store = {
-                fields: [ 'id', 'name', 'info' ],
-                proxy: Ext.applyIf(this.proxyConfig || {}, {
-                    type: 'cachedrequest',
-                    url: '/platforms/ec2/xGetVpcList',
-                    root: 'vpc'
-                })
-            };
-        }
-        this.callParent(arguments);
-        
-        this.on({
-            addnew: function(item) {
-                Scalr.CachedRequestManager.get().setExpired({
-                    url: this.store.proxy.url,
-                    params: this.store.proxy.params
-                });
+        me.on('addnew', function(item) {
+            Scalr.CachedRequestManager.get().setExpired({
+                url: '/tools/aws/vpc/xListSubnets',
+                params: me.store.proxy.params
+            });
+        });
+
+        me.on('beforeselect', function(comp, record) {
+            var subnets = this.getValue(),
+                rec;
+            if (subnets.length > 0) {
+                if (this.maxCount && subnets.length >= this.maxCount) {
+                    Scalr.message.InfoTip('Single subnet is required', comp.bodyEl, {anchor: 'bottom'});
+                    return false;
+                }
+                if (this.requireSameSubnetType) {
+                    rec = comp.findRecordByValue(subnets[0]);
+                    if (rec && rec.get('type') == record.get('type')) {
+                        return true;
+                    } else {
+                        Scalr.message.InfoTip('Only subnets of the <b>same type</b> can be selected.', comp.bodyEl, {anchor: 'bottom'});
+                        return false;
+                    }
+                }
             }
+            return true;
         });
-    },
 
-    setCloudLocation: function(cloudLocation) {
-        var proxy = this.store.proxy,
-            disableAddNewPlugin = false,
-            vpcLimits = this.vpcLimits;
-        this.reset();
-        this.getPlugin('comboaddnew').postUrl = '?cloudLocation=' + cloudLocation;
-        proxy.params = {cloudLocation: cloudLocation};
-        delete proxy.data;
-        this.setReadOnly(false, false);
-        if (Ext.isObject(vpcLimits)) {
-            this.toggleIcon('governance', true);
-            if (vpcLimits['value'] == 1) {
-                this.allowBlank = false;
-                if (vpcLimits['regions'] && vpcLimits['regions'][cloudLocation]) {
-                    if (vpcLimits['regions'][cloudLocation]['ids'] && vpcLimits['regions'][cloudLocation]['ids'].length > 0) {
-                        var vpcList = Ext.Array.map(vpcLimits['regions'][cloudLocation]['ids'], function(vpcId){
-                            return {id: vpcId, name: vpcId};
-                        });
-                        proxy.data = vpcList;
-                        this.store.load();
-                        this.setValue(this.store.first());
-                        disableAddNewPlugin = true;
+        me.callParent(arguments);
+
+        Ext.apply(me.getStore().getProxy(), {
+            filterFn: function(record) {
+                var res = false,
+                    limits = this.ignoreGovernance ? undefined : Scalr.getGovernance('ec2', 'aws.vpc'),
+                    vpcId = this.store.proxy.params.vpcId,
+                    fieldLimits, filterType;
+
+                var type = record.get('type');
+                if (type === 'private' && this.isVpcRouter) {
+                    res = false;
+                } else if (limits && limits['ids'] && limits['ids'][vpcId]) {
+                    fieldLimits = limits['ids'][vpcId];
+                    filterType = Ext.isArray(fieldLimits) ? 'subnets' : 'iaccess';
+                    if (filterType === 'subnets' && Ext.Array.contains(fieldLimits, record.get('id'))) {
+                        res = true;
+                    } else if (filterType === 'iaccess') {
+                        res = type === 'private' && fieldLimits === 'outbound-only' || type === 'public' && fieldLimits === 'full';
                     }
                 } else {
-                    this.allowBlank = true;
-                    this.setReadOnly(true);
+                    res = true;
                 }
-            } else {
-                this.allowBlank = true;
-                this.setReadOnly(true);
-            }
-        }
-        this.getPlugin('comboaddnew').setDisabled(disableAddNewPlugin);
+                return res;
+            },
+            filterFnScope: me
+        });
     }
 });
 
@@ -1622,19 +1836,24 @@ Ext.define('Scalr.ui.FormScriptField', {
     editable: true,
     anyMatch: true,
     autoSearch: false,
-    forceSelection: true,
-    hideInputOnReadOnly: true,
+    restoreValueOnBlur: true,
+    selectOnFocus: true,
+    expandOnClick: true,
     queryMode: 'local',
 
     valueField: 'id',
     displayField: 'name',
 
+    plugins: {
+        ptype: 'fieldinnericonscope',
+        tooltipScopeType: 'script'
+    },
     listConfig: {
         cls: 'x-boundlist-alt',
         tpl:
             '<tpl for=".">' +
                 '<div class="x-boundlist-item" style="height: auto; width: auto; max-width: 900px;">' +
-                    '<div><img src="'+Ext.BLANK_IMAGE_URL+'" class="scalr-scope-{scope}" data-qtip="{scope:capitalize} scope" />&nbsp; <span style="font-weight: bold">{name}</span>' +
+                    '<div>{[this.getInnerIcon(values)]}&nbsp;&nbsp;<b>{name}</b>' +
                         '<tpl if="createdByEmail"><span style="color: #666; font-size: 11px;">&nbsp;(created by {createdByEmail})</span></tpl>' +
                         '<img src="/ui2/images/ui/scripts/{os}.png" style="float: right; opacity: 0.6">' +
                     '</div>' +
@@ -1647,82 +1866,36 @@ Ext.define('Scalr.ui.FormScriptField', {
             '</tpl>'
     },
 
-    initComponent: function() {
-        var me = this;
-
-        me.callParent(arguments);
-
-        me.on('specialkey', function (field, e) {
-            if(e.getKey() === e.ESC){
-                field.reset();
-            }
-        });
-    },
-
     onRender: function() {
         var me = this;
 
         me.callParent(arguments);
 
-        me.inputEl.on('click', function() {
-            me.expand();
-        });
-
         me.inputImgEl = me.inputCell.createChild({
             tag: 'img',
-            style: 'position: absolute; top: 6px; right: 22px; opacity: 0.8',
+            style: 'position: absolute; top: 8px; right: 26px; opacity: 0.8',
             width: 15,
             height: 15
         });
 
-        me.inputImgElScope = me.inputCell.createChild({
-            tag: 'img',
-            src: Ext.BLANK_IMAGE_URL,
-            style: 'position:absolute;top:8px;left:6px;'
-        });
-
-
         me.inputImgEl.setVisibilityMode(Ext.Element.DISPLAY);
-        me.inputImgElScope.setVisibilityMode(Ext.Element.DISPLAY);
         me.setInputImgElType(me.getValue());
     },
 
     setInputImgElType: function(value, oldValue) {
-        var me = this, 
-            rec = me.findRecordByValue(value),
-            oldRec = me.findRecordByValue(oldValue),
-            scope;
+        var me = this,
+            rec = me.findRecordByValue(value);
         if (rec) {
             this.inputImgEl.dom.src = '/ui2/images/ui/scripts/' + rec.get('os') + '.png';
             this.inputImgEl.show();
         } else {
             this.inputImgEl.hide();
         }
-
-        if (oldRec) {
-            this.inputImgElScope.removeCls('scalr-scope-' + oldRec.get('scope'));
-        }
-        if (rec) {
-            scope = rec.get('scope');
-            if (scope) {
-                this.inputImgElScope.addCls('scalr-scope-' + scope);
-                this.inputImgElScope.set({'data-qtip': Ext.String.capitalize(scope) + ' scope'});
-                this.inputImgElScope.show();
-                this.inputEl.setStyle('padding-left', '20px');
-            } else {
-                this.inputEl.setStyle('padding-left', '7px');
-                this.inputImgElScope.hide();
-            }
-        } else {
-            this.inputEl.setStyle('padding-left', '7px');
-            this.inputImgElScope.hide();
-        }
-
     },
 
     onChange: function(newValue, oldValue) {
         var me = this;
-        if (me.inputImgEl && me.inputImgElScope) {
+        if (me.inputImgEl) {
             me.setInputImgElType(newValue, oldValue);
         }
 
@@ -1730,23 +1903,186 @@ Ext.define('Scalr.ui.FormScriptField', {
     }
 });
 
-Ext.define('Scalr.ui.Ec2TagsField', {
+Ext.define('Scalr.ui.NameValueListField', {
     extend: 'Ext.grid.Panel',
+    alias: 'widget.namevaluelistfield',
+    cls: 'x-grid-with-formfields',
+    trackMouseOver: false,
+    disableSelection: true,
+
+    store: {
+        fields: [{name: 'name', defaultValue: ''}, {name: 'value', defaultValue: ''}],
+        proxy: 'object'
+    },
+    features: {
+        ftype: 'addbutton',
+        text: 'Add',
+        handler: function(view) {
+            var grid = view.up(),
+                record = grid.store.add({})[0],
+                field = grid.columns[0].getWidget(record);
+            view.scrollBy(0, 9000);
+            field.focus();
+            field.clearInvalid();
+        }
+    },
+
+    listeners: {
+        itemclick: function (view, record, item, index, e) {
+            if (e.getTarget('img.x-grid-icon-delete')) {
+                view.store.remove(record);
+                /*if (!view.store.getCount()) {
+                    view.up().store.add({});
+                }*/
+                return false;
+            }
+        }
+    },
+
+    initComponent: function() {
+        if (this.itemName) {
+            this.on('viewready', function() {
+                this.view.findFeature('addbutton').setText('Add ' + this.itemName);
+            }, this, {single: true});
+        }
+        this.callParent(arguments);
+    },
+
+    setReadOnly: function(readOnly) {
+        this.readOnly = !!readOnly;
+        this.view.refresh();
+    },
+
+    setValue: function(value){
+        var me = this,
+            data = [];
+        value = value || {};
+        Ext.Object.each(value, function(name, value){
+            data.push({
+                name: name,
+                value: value
+            });
+        });
+        me.store.loadData(data);
+    },
+
+    getValue: function(){
+        var me = this,
+            result  = {};
+        me.store.getUnfiltered().each(function(record){
+            var name = record.get('name'),
+                value = record.get('value');
+            if (name) {
+                result[name] = value;
+            }
+        });
+        return result;
+    },
+
+    isRowReadOnly: function(record) {
+        return this.readOnly;
+    },
+
+    isNameValid: function(name, record) {
+        return true;
+    },
+
+    deleteColumnRenderer: function(record) {
+        var result = '<img style="cursor:pointer;margin-top:6px;';
+        if (!this.readOnly) {
+            result += '" class="x-grid-icon x-grid-icon-delete" data-qtip="Delete"';
+        }
+        return result += ' src="'+Ext.BLANK_IMAGE_URL+'"/>';
+    },
+
+    columns: [{
+        header: 'Name',
+        sortable: false,
+        resizable: false,
+        dataIndex: 'name',
+        flex: .8,
+        xtype: 'widgetcolumn',
+        onWidgetAttach: function(column, widget, record) {
+            widget.setReadOnly(widget.up('grid').isRowReadOnly(record));
+            if (record.get('name')) {
+                widget.isValid();
+            }
+        },
+        widget: {
+            xtype: 'textfield',
+            allowBlank: false,
+            listeners: {
+                change: function(comp, value){
+                    var record = comp.getWidgetRecord();
+                    if (record) {
+                        record.set('name', value);
+                    }
+                }
+            },
+            validator: function(value) {
+                var column = this.getWidgetColumn(),
+                    record = this.getWidgetRecord();
+                if (column && record) {
+                    return column.ownerCt.grid.isNameValid(value, record);
+                } else {
+                    return true;
+                }
+            }
+        }
+    },{
+        header: 'Value',
+        sortable: false,
+        resizable: false,
+        dataIndex: 'value',
+        flex: 2,
+        xtype: 'widgetcolumn',
+        onWidgetAttach: function(column, widget, record) {
+            widget.setReadOnly(widget.up('grid').isRowReadOnly(record));
+        },
+        widget: {
+            xtype: 'textfield',
+            listeners: {
+                change: function(comp, value){
+                    var record = comp.getWidgetRecord();
+                    if (record) {
+                        record.set('value', value);
+                    }
+                    cb = function() {
+                        comp.inputEl.set({'data-qtip': comp.readOnly ? Ext.String.htmlEncode(value) : ''});
+                    }
+                    if (comp.inputEl) {
+                        cb();
+                    } else {
+                        comp.on('afterrender', cb, comp, {single: true})
+                    }
+                }
+            }
+        }
+    },{
+        renderer: function(value, meta, record, rowIndex, colIndex, store, grid) {
+            return grid.up().deleteColumnRenderer(record);
+        },
+        width: 42,
+        sortable: false,
+        align:'left'
+
+    }],
+
+});
+
+
+Ext.define('Scalr.ui.Ec2TagsField', {
+    extend: 'Scalr.ui.NameValueListField',
     alias: 'widget.ec2tagsfield',
 
-    cls: 'x-grid-shadow x-grid-no-highlighting',
-    allowNameTag: true,
+    allowNameTag: false,
     tagsLimit: 10,
     cloud: 'ec2',
 
     initComponent: function() {
         this.reservedNames = [];
         this.systemTags = {
-            'scalr-env-id': '{SCALR_ENV_ID}',
-            'scalr-owner': '{SCALR_FARM_OWNER_EMAIL}',
-            'scalr-farm-id': '{SCALR_FARM_ID}',
-            'scalr-farm-role-id': '{SCALR_FARM_ROLE_ID}',
-            'scalr-server-id': '{SCALR_SERVER_ID}'
+            'scalr-meta': 'v1:{SCALR_ENV_ID}:{SCALR_FARM_ID}:{SCALR_FARM_ROLE_ID}:{SCALR_SERVER_ID}'
         };
         this.on('viewready', function() {
             this.setCloud(this.cloud);
@@ -1755,47 +2091,27 @@ Ext.define('Scalr.ui.Ec2TagsField', {
     },
 
     setCloud: function(cloud) {
-        var itemName, subjectName, reservedNames;
         this.cloud = cloud;
         if (cloud === 'ec2') {
             this.itemName = 'tag';
             this.subjectName = 'Tagging';
-            this.reservedNames = [];
+            this.reservedNames = ['scalr-meta', 'Name'];
         } else if (cloud === 'openstack') {
             this.itemName = 'name-value pair';
             this.subjectName = 'Metadata';
-            this.reservedNames = ['farmid',  'role',  'httpproto',  'region',  'hash',  'realrolename', 'szr_key',  'serverid',  'p2p_producer_endpoint',  'queryenv_url', 'behaviors',  'farm_roleid',  'roleid',  'env_id',  'platform', 'server_index',  'cloud_server_id',  'cloud_location_zone',  'owner_email'];
+            this.reservedNames = ['scalr-meta', 'farmid',  'role',  'httpproto',  'region',  'hash',  'realrolename', 'szr_key',  'serverid',  'p2p_producer_endpoint',  'queryenv_url', 'behaviors',  'farm_roleid',  'roleid',  'env_id',  'platform', 'server_index',  'cloud_server_id',  'cloud_location_zone',  'owner_email'];
         }
         this.governanceTooltip = 'This Environment\'s '+this.subjectName+' Policy does not allow you to add custom '+this.itemName+'s.',
-        this.view.findFeature('addbutton').text = 'Add ' + this.itemName;
+        this.governanceTooltip2 = 'This Environment\'s '+this.subjectName+' Policy does not allow you to edit this '+this.itemName+'.',
+        this.view.findFeature('addbutton').setText('Add ' + this.itemName);
     },
     setSubjectName: function(subjectName) {
         this.subjectName = subjectName;
     },
     store: {
-        fields: ['name', 'value', 'system'],
+        fields: [{name: 'name', defaultValue: ''}, {name: 'value', defaultValue: ''}, {name: 'system', defaultValue: false}, {name: 'ignoreOnSave', defaultValue: false}, {name: 'addedByGovernance', defaultValue: false}],
         proxy: 'object'
     },
-    features: {
-        ftype: 'addbutton',
-        text: 'Add',
-        handler: function(view) {
-            view.up().store.add({});
-        }
-    },
-    plugins: [{
-        ptype: 'cellediting',
-        pluginId: 'cellediting',
-        clicksToEdit: 1,
-        listeners: {
-            beforeedit: function(editor, o) {
-                if (o.grid.readOnly) return false;
-                if (o.column.isEditable) {
-                    return o.column.isEditable(o.record);
-                }
-            }
-        }
-    }],
     listeners: {
         viewready: function() {
             this.store.on({
@@ -1805,121 +2121,34 @@ Ext.define('Scalr.ui.Ec2TagsField', {
                 scope: this
             });
             this.applyTagsLimit();
-        },
-        itemclick: function (view, record, item, index, e) {
-            var selModel = view.getSelectionModel();
-            if (e.getTarget('img.x-icon-action-delete')) {
-                if (record === selModel.getLastFocused()) {
-                    selModel.deselectAll();
-                    selModel.setLastFocused(null);
-                }
-                view.store.remove(record);
-                if (!view.store.getCount()) {
-                    view.up().store.add({});
-                }
-                return false;
-            }
         }
     },
-    columns: [{
-        header: 'Name',
-        sortable: false,
-        resizable: false,
-        dataIndex: 'name',
-        flex: 1,
-        editor: {
-            xtype: 'textfield',
-            editable: false,
-            margin: '0 12 0 13',
-            fixWidth: -25,
-            maxLength: 127,
-            //allowBlank: false,
-            validateOnChange: false,
-            listeners: {
-                focus: function() {
-                    var isValid = this.column.isValid(this.getValue());
-                    if (isValid !== true) {
-                        this.markInvalid(isValid);
-                    }
-                },
-                change: function(comp, value) {
-                    var isValid = comp.column.isValid(value);
-                    if (isValid !== true) {
-                        comp.markInvalid(isValid);
-                    } else {
-                        comp.clearInvalid();
-                    }
-                }
-            }
-        },
-        isValid: function(value, allowEmpty) {
-            var value = Ext.String.trim(value||'');
-            if (!value && !allowEmpty) {
-                return 'Required field';
+    isRowReadOnly: function(record) {
+        return this.callParent(arguments) || record.get('system') || record.get('addedByGovernance');
+    },
+    isNameValid: function(name, record) {
+        name = Ext.String.trim(name);
+        return !Ext.Array.contains(this.reservedNames, name) || !!record.get('system') || (name === 'Name' ? 'Use the separate Instance Name Pattern option.' : 'Reserved name');
+    },
+    deleteColumnRenderer: function(record) {
+        var result = '<img style="cursor:pointer;margin-top:6px;';
+        if (record.get('system')) {
+            result += 'cursor:default;opacity:.4" class="x-grid-icon x-grid-icon-lock" data-qwidth="440" data-qtip="System '+this.itemName+'s cannot be modified or removed, and will be added to instances and volumes regardless of whether you enforce a '+this.subjectName+' policy"';
+        } else {
+            if (this.readOnly || record.get('addedByGovernance')) {
+                result += '" class="x-icon-governance" data-qtip="' + this.governanceTooltip2 + '"';
             } else {
-                return !Ext.Array.contains(this.ownerCt.grid.reservedNames, value) || 'Reserved name';
+                result += '" class="x-grid-icon x-grid-icon-delete" data-qtip="Delete"';
             }
-        },
-        isEditable: function(record) {
-            return !record.get('system');
-        },
-        renderer: function(value, meta, record, rowIndex, colIndex, store, grid) {
-            var column = grid.panel.columns[colIndex],
-               valueEncoded = Ext.String.htmlEncode(value),
-               isValid = column.isValid(value, true);
-            return  '<div data-qtip="'+(isValid===true?'':isValid)+'" class="x-form-text" style="background:'+(isValid===true?'#fff':'#ffb2a3')+';padding:2px 12px 3px 13px;text-overflow: ellipsis;overflow:hidden;cursor:text">'+
-                        (record.get('system') || grid.up().readOnly ? '<span style="color:#999">' + valueEncoded + '</span>' : valueEncoded) +
-                    '</div>';
         }
-    },{
-        header: 'Value',
-        sortable: false,
-        resizable: false,
-        dataIndex: 'value',
-        flex: 2,
-        editor: {
-            xtype: 'textfield',
-            editable: false,
-            margin: '0 12 0 13',
-            fixWidth: -25,
-            maxLength: 255
-        },
-        isEditable: function(record) {
-            return !record.get('system');
-        },
-        renderer: function(value, meta, record, rowIndex, colIndex, store, grid) {
-            var column = grid.panel.columns[colIndex],
-                valueEncoded = Ext.String.htmlEncode(value);
-            return  '<div class="x-form-text" style="background:#fff;padding:2px 12px 3px 13px;text-overflow: ellipsis;overflow:hidden;cursor:text"  data-qtip="'+Ext.String.htmlEncode(valueEncoded)+'">'+
-                        (record.get('system') || grid.up().readOnly ? '<span style="color:#999">' + valueEncoded + '</span>' : valueEncoded) +
-                    '</div>';
-        }
-    },{
-        renderer: function(value, meta, record, rowIndex, colIndex, store, grid) {
-            var result = '<img style="cursor:pointer;margin-top:6px;',
-                panel = grid.up();
-            if (record.get('system')) {
-                result += 'cursor:default;opacity:.4" width="16" height="16" class="x-icon-server-action x-icon-lock" data-qwidth="440" data-qtip="System '+panel.itemName+'s cannot be modified or removed, and will be added to instances and volumes regardless of whether you enforce a '+panel.subjectName+' policy"';
-            } else {
-                if (panel.readOnly) {
-                    result += '" class="x-icon-governance" data-qtip="' + panel.governanceTooltip + '"';
-                } else {
-                    result += '" width="15" height="15" class="x-icon-action x-icon-action-delete" data-qtip="Delete"';
-                }
-            }
-            result += ' src="'+Ext.BLANK_IMAGE_URL+'"/>';
-            return result;
-        },
-        width: 42,
-        sortable: false,
-        align:'left'
-
-    }],
-
-    setValue: function(value){
+        result += ' src="'+Ext.BLANK_IMAGE_URL+'"/>';
+        return result;
+    },
+    setValue: function(value, limits){
         var me = this,
             data = [];
         value = value || {};
+        limits = limits || {};
         Ext.Object.each(me.systemTags, function(tagName, tagValue){
             data.push({
                 name: tagName,
@@ -1927,11 +2156,19 @@ Ext.define('Scalr.ui.Ec2TagsField', {
                 system: true
             });
         });
-        Ext.Object.each(value, function(name, value){
-            if (me.systemTags[name] === undefined) {
+        Ext.Object.each(limits, function(tagName, tagValue){
+            data.push({
+                name: tagName,
+                value: tagValue,
+                addedByGovernance: true,
+                ignoreOnSave: value[tagName] !== undefined ? false : true
+            });
+        });
+        Ext.Object.each(value, function(tagName, tagValue){
+            if (me.systemTags[tagName] === undefined && limits[tagName] === undefined) {
                 data.push({
-                    name: name,
-                    value: value
+                    name: tagName,
+                    value: tagValue
                 });
             }
         });
@@ -1940,16 +2177,13 @@ Ext.define('Scalr.ui.Ec2TagsField', {
 
     isValid: function(){
         var me = this,
-            isValid = true,
-            cellEditing = me.getPlugin('cellediting');
-        (me.store.snapshot || me.store.data).each(function(record){
+            isValid = true;
+        me.store.getUnfiltered().each(function(record){
             var name = Ext.String.trim(record.get('name'));
-            if (!name || Ext.Array.contains(me.reservedNames, name)) {
-                cellEditing.startEdit(record, 0);
-                if (!name) {
-                    cellEditing.context.column.field.validate();
-                }
-                isValid = false;
+            if (!name || Ext.Array.contains(me.reservedNames, name) && !record.get('system')) {
+                var widget = me.columns[0].getWidget(record);
+                isValid = widget.validate();
+                widget.focus();
                 return false;
             }
         });
@@ -1959,18 +2193,14 @@ Ext.define('Scalr.ui.Ec2TagsField', {
     getValue: function(){
         var me = this,
             result  = {};
-        (me.store.snapshot || me.store.data).each(function(record){
+        me.store.getUnfiltered().each(function(record){
             var name = record.get('name'),
                 value = record.get('value');
-            if (name && !me.systemTags[name]) {
+            if (name && !me.systemTags[name] && !record.get('ignoreOnSave')) {
                 result[name] = value;
             }
         });
         return result;
-    },
-
-    setReadOnly: function(readOnly) {
-        this.readOnly = !!readOnly;
     },
 
     setTagsLimit: function(tagsLimit) {
@@ -1994,9 +2224,9 @@ Ext.define('Scalr.ui.Ec2TagsField', {
     }
 });
 
-Ext.define('Scalr.ui.ProgressBar', {
+Ext.define('Scalr.ui.FieldProgressBar', {
     extend: 'Scalr.ui.FormFieldProgress',
-    alias: 'widget.progressbar',
+    alias: 'widget.fieldprogressbar',
 
     warningPercentage: 0,
     alertPercentage: 0,
@@ -2046,8 +2276,10 @@ Ext.define('Scalr.ui.ProgressBar', {
         return me;
     },
 
-    onBoxReady: function () {
+    onRender: function () {
         var me = this;
+
+        me.callParent(arguments);
 
         new Ext.util.DelayedTask(function () {
             if (me.rendered) {
@@ -2060,4 +2292,699 @@ Ext.define('Scalr.ui.ProgressBar', {
         var me = this;
         me.setValue(1);
     }
+});
+
+Ext.define('Scalr.ui.form.field.TagList', {
+    extend: 'Ext.form.field.Tag',
+    alias: 'widget.taglistfield',
+
+    createNewOnEnter: true,
+
+    anyMatch: true,
+
+    hideTrigger: true,
+
+    //createNewOnBlur: true,
+
+    queryMode: 'local',
+
+    displayField: 'tag',
+
+    valueField: 'tag',
+
+    delimiter: ',',
+
+    suspendCollapse: false,
+
+    cls: 'scalr-ui-form-field-tag',
+
+    lastQuery: '',
+
+    initComponent: function () {
+        var me = this;
+
+        me.store = me.store || Ext.create('Ext.data.Store', {
+            proxy: 'object',
+            fields: ['tag']
+        });
+
+        me.plugins = {
+            ptype: 'addnewtag',
+            pluginId: 'addnewtag'
+        };
+
+        me.callParent(arguments);
+    },
+
+    initEvents: function () {
+        var me = this;
+
+        me.on('change', function (me, value, oldValue) {
+            var removedTag = Ext.Array.difference(
+                oldValue, value
+            )[0];
+
+            if (removedTag) {
+                var record = me.valueStore.findRecord('tag', removedTag);
+
+                if (record) {
+                    me.getPicker().refresh();
+                }
+            }
+        });
+
+        me.on('beforequery', function (queryPlan) {
+            me.enteredValue = queryPlan.query;
+        });
+
+        me.callParent(arguments);
+    },
+
+    onFieldMutation: function(e) {
+        var me = this,
+            key = e.getKey(),
+            isDelete = key === e.BACKSPACE || key === e.DELETE,
+            rawValue = me.inputEl.dom.value,
+            len = rawValue.length;
+
+        // Do not process two events for the same mutation.
+        // For example an input event followed by the keyup that caused it.
+        // We must process delete keyups.
+        // Also, do not process TAB event which fires on arrival.
+        if (!me.readOnly && (rawValue !== me.lastMutatedValue || isDelete) && key !== e.TAB) {
+            me.lastMutatedValue = rawValue;
+            me.lastKey = key;
+
+            /** Changed **/
+            //if (len && (e.type !== 'keyup' || (!e.isSpecialKey() || isDelete))) {
+            if (e.type !== 'keyup' || (!e.isSpecialKey() || isDelete)) {
+            /** Changed **/
+                me.doQueryTask.delay(me.queryDelay);
+            } else {
+                // We have *erased* back to empty if key is a delete, or it is a non-key event (cut/copy)
+                if (!len && (!key || isDelete)) {
+                    // Essentially a silent setValue.
+                    // Clear our value, and the tplData used to construct a mathing raw value.
+                    if (!me.multiSelect) {
+                        me.value = null;
+                        me.displayTplData = undefined;
+                    }
+                    // Just erased back to empty. Hide the dropdown.
+                    me.collapse();
+
+                    // There may have been a local filter if we were querying locally.
+                    // Clear the query filter and suppress the consequences (we do not want a list refresh).
+                    if (me.queryFilter) {
+                        // Must set changingFilters flag for this.checkValueOnChange.
+                        // the suppressEvents flag does not affect the filterchange event
+                        me.changingFilters = true;
+                        me.store.removeFilter(me.queryFilter, true);
+                        me.changingFilters = false;
+                    }
+                }
+                me.callParent([e]);
+            }
+        }
+    },
+
+    doLocalQuery: function(queryPlan) {
+        var me = this,
+            queryString = queryPlan.query,
+            store = me.getStore(),
+            filter = me.queryFilter;
+
+        me.queryFilter = null;
+
+        // Must set changingFilters flag for this.checkValueOnChange.
+        // the suppressEvents flag does not affect the filterchange event
+        me.changingFilters = true;
+        if (filter) {
+            store.removeFilter(filter, true);
+        }
+
+        // Querying by a string...
+        if (queryString) {
+            filter = me.queryFilter = new Ext.util.Filter({
+                id: me.id + '-filter',
+                anyMatch: me.anyMatch,
+                caseSensitive: me.caseSensitive,
+                root: 'data',
+                property: me.displayField,
+                value: me.enableRegEx ? new RegExp(queryString) : queryString
+            });
+            /** Changed **/
+            //store.addFilter(filter, true);
+            store.addFilter(filter);
+            /** Changed **/
+        }
+        me.changingFilters = false;
+
+        // Expand after adjusting the filter if there are records or if emptyText is configured.
+        if (me.store.getCount() || me.getPicker().emptyText) {
+            // The filter changing was done with events suppressed, so
+            // refresh the picker DOM while hidden and it will layout on show.
+            me.getPicker().refresh();
+            me.expand();
+        } else {
+            /** Changed **/
+            //me.collapse();
+            if (!me.suspendCollapse) {
+                me.collapse();
+            }
+            /** Changed **/
+        }
+
+        me.afterQuery(queryPlan);
+    },
+
+    applyRawValue: function () {
+        var me = this;
+
+        var inputEl = me.inputEl;
+        var rawValue = inputEl.dom.value;
+
+        inputEl.dom.value = '';
+
+        rawValue = Ext.Array.clean(
+            rawValue.split(me.delimiterRegexp)
+        );
+
+        me.setValue(
+            me.valueStore.
+                getRange().concat(rawValue)
+        );
+
+        inputEl.focus();
+
+        me.collapse();
+
+        return me;
+    },
+
+    onKeyUp: function(e, t) {
+        var me = this,
+            inputEl = me.inputEl,
+            rawValue = inputEl.dom.value,
+            preventKeyUpEvent = me.preventKeyUpEvent;
+
+        if (me.preventKeyUpEvent) {
+            e.stopEvent();
+            if (preventKeyUpEvent === true || e.getKey() === preventKeyUpEvent) {
+                delete me.preventKeyUpEvent;
+            }
+            return;
+        }
+
+        if (me.multiSelect && me.delimiterRegexp && me.delimiterRegexp.test(rawValue) ||
+            (me.createNewOnEnter && e.getKey() === e.ENTER)) {
+            /** Changed **/
+            me.applyRawValue();
+            /** Changed **/
+        }
+
+        me.callParent([e,t]);
+    },
+
+    setValue: function (value, add, skipLoad) {
+        var me = this;
+
+        if (!Ext.isEmpty(value)) {
+
+            value = typeof value === 'string'
+                ? value.split(me.delimiter)
+                : value;
+
+            var lastValue = value[value.length - 1];
+
+            if (!lastValue || lastValue.isModel) {
+                return me;
+            }
+
+            if (!me.isTagValid(lastValue)) {
+                value.pop();
+                if (me.rendered && me.tagRegexText) {
+                    Scalr.message.InfoTip(me.tagRegexText, me.el, {anchor: 'bottom'});
+                }
+            }
+        }
+
+        return me.callParent([value, add, skipLoad]);
+    },
+
+    isTagValid: function (value) {
+        if (!value || !this.tagRegex) {
+            return true;
+        }
+
+        var values = value.split(',');
+        var newValue = values[values.length - 1];
+
+        return this.tagRegex.exec(newValue);
+    },
+
+    getSubmitValue: function () {
+        var me = this;
+        return me.getValue().join(',');
+    },
+
+    // temp fix
+    reset: function () {
+        var me = this;
+
+        me.setValue();
+
+        me.callParent();
+    }
+});
+
+Ext.define('Scalr.ui.form.field.Tag', {
+    extend: 'Scalr.ui.form.field.TagList',
+    alias: 'widget.scalrtagfield',
+
+    hideTrigger: false,
+
+    tagRegex: /^[a-zA-Z0-9-]{3,10}$/,
+    tagRegexText: 'Tag name can only contain letters and numbers, and must be between 3 and 10 characters long.',
+
+    initComponent: function () {
+        var me = this;
+
+        me.callParent(arguments);
+
+        me.tags = Scalr.tags;
+        me.cachedTags = Ext.clone(me.tags);
+
+        me.saveTagsOn = me.saveTagsOn || 'submit';
+        me.store.load({data: me.loadTags()})
+
+    },
+
+    beforeRender: function () {
+        var me = this;
+
+        me.initTagsSaving();
+
+        me.callParent();
+    },
+
+    loadTags: function () {
+        var me = this;
+        var tags = me.tags;
+        var tagsModel = [];
+
+        Ext.each(tags, function (tag) {
+            tagsModel.push({
+                tag: tag
+            });
+        });
+
+        return tagsModel;
+    },
+
+    addTagToStore: function (tag) {
+        var me = this;
+        var tagExists = me.isTagExist(tag, me.cachedTags);
+        var store = me.getStore();
+
+        if (tag && !tagExists) {
+            store.add({tag: tag});
+            me.cachedTags.push(tag);
+        }
+    },
+
+    isTagExist: function (enteredValue, tags) {
+        var me = this;
+
+        tags = tags || me.tags;
+
+        return tags.some(function (tag) {
+            return tag === enteredValue;
+        });
+    },
+
+    saveTags: function () {
+        var me = this;
+        var enteredTags = me.getRawValue().split(',');
+        var existingTags = me.tags;
+
+        Ext.each(existingTags, function (tag, i, tags) {
+            if (!tag) {
+                tags.splice(i, 1);
+            }
+        });
+
+        Ext.each(enteredTags, function (tag) {
+            if (tag && !me.isTagExist(tag)) {
+                existingTags.push(tag);
+            }
+        });
+    },
+
+    initTagsSaving: function () {
+        var me = this;
+        var saveEvents = me.tagsSavingEvents;
+        var event = me.saveTagsOn;
+
+        if (saveEvents.hasOwnProperty(event)) {
+            saveEvents[event](me);
+        }
+    },
+
+    // this is valid values ​​for saveTagsOn flag
+    tagsSavingEvents: {
+        submit: function (tagBox) {
+            var form = tagBox.up('form');
+
+            form.on('actioncomplete', function () {
+                tagBox.saveTags();
+            });
+        }
+    },
+
+    setValue: function (value, add, skipLoad) {
+        var me = this;
+
+        if (!Ext.isEmpty(value)) {
+
+            value = typeof value === 'string'
+                ? value.split(me.delimiter)
+                : value;
+
+            var lastValue = value[value.length - 1];
+
+            if (!lastValue || lastValue.isModel) {
+                return me;
+                //return me.callParent([null, add, skipLoad]);
+            }
+
+            if (me.isTagValid(lastValue)) {
+                me.addTagToStore(lastValue);
+            } else {
+                value.pop();
+                Scalr.message.InfoTip(me.tagRegexText, me.el);
+            }
+        }
+
+        return me.callParent([value, add, skipLoad]);
+    }
+
+
+});
+
+Ext.define('Scalr.ui.CloudLocationField', {
+    extend: 'Ext.form.FieldContainer',
+    alias: 'widget.cloudlocationfield',
+
+    mode: 'clouds',
+    allCloudsText: '&nbsp;All locations',
+    localLocationParamName: 'grid-ui-default-cloud-location',
+    config: {
+        platforms: []
+    },
+
+    initComponent: function() {
+        var me = this;
+        me.callParent(arguments);
+        me.on('change', function(field, value){
+            if (this.gridStore) {
+                this.gridStore.applyProxyParams(value);
+            }
+        });
+        me.add([{
+            xtype: 'hiddenfield',
+            itemId: 'platform',
+            name: 'platform',
+            allowBlank: false,
+            listeners: {
+                change: function(field, value) {
+                    var field = this.up('cloudlocationfield');
+                    this.next('#cloudLocation').setValue(field.initialCloudLocation || '');
+                    delete field.initialCloudLocation;
+                    field.updateButtonText();
+                    field.fireEvent('change', field, {platform: value});
+                }
+            }
+        },{
+            xtype: 'hiddenfield',
+            itemId: 'cloudLocation',
+            name: 'cloudLocation',
+            allowBlank: false,
+            listeners: {
+                change: function(field, value) {
+                    var field = this.up('cloudlocationfield');
+                    field.updateButtonText();
+                    if (field.mode === 'locations' && value) {
+                        Ext.state.Manager.set(me.localLocationParamName, value);
+                    }
+                    field.fireEvent('change', field, {
+                        platform: this.prev('#platform').getValue(),
+                        cloudLocation: value
+                    });
+                }
+            }
+        },{
+            xtype: 'button',
+            text: me.allCloudsText,
+            menu: {
+                cls: 'x-menu-light x-menu-cycle-button-filter',
+                enableKeyNav: false,
+                items: [{
+                    text: me.allCloudsText,
+                    value: ''
+                }],
+                defaults: {
+                    handler: function(item) {
+                        me.onCloudLocationSelect.apply(me, me.mode === 'clouds' ? [item.value] : [me.down('#platform').getValue(), item.value]);
+                    },
+                    listeners: {
+                        afterrender: function() {
+                            if (me.mode === 'clouds') {
+                                this.el.on({
+                                    mouseover: function(){
+                                        if (this.value) me.onPlatformMouseOver(this.value);
+                                    },
+                                    mouseleave: function(){
+                                        if (this.value) me.onPlatformMouseLeave(this.value);
+                                    },
+                                    scope: this
+                                });
+                            }
+                        }
+                    }
+                },
+                listeners: {
+                    activate: function() {
+                        var value = me.down(me.mode === 'clouds' ? '#platform' : '#cloudLocation').getValue() || '';
+                        this.items.each(function(item){
+                            item.removeCls('x-menu-item-checked');
+                        });
+                        var item = value ? this.down('[value="'+value+'"]') : this.items.first();
+                        if (item) item.addCls('x-menu-item-checked');
+                    }
+                }
+            }
+        }]);
+    },
+
+    updateButtonText: function() {
+        var platform = this.down('#platform').getValue(),
+            cloudLocation = this.down('#cloudLocation').getValue(),
+            text;
+        text = platform ? '<img src="'+Ext.BLANK_IMAGE_URL+'" class="x-icon-platform-small x-icon-platform-small-'+platform+'" style="position:relative;top:-2px" />' : this.allCloudsText;
+        if (platform && cloudLocation) {
+            text += '&nbsp;&nbsp;' + cloudLocation;
+        } else if (platform) {
+            text += '&nbsp;&nbsp;' + Scalr.utils.getPlatformName(platform);
+        }
+        this.down('button').setText(text);
+    },
+    updatePlatforms: function(newPlatforms, oldPlatforms) {
+        if (this.rendered) {
+            this.onUpdatePlatforms();
+        } else {
+            this.on('boxready', this.onUpdatePlatforms, this, {single: true});
+        }
+    },
+
+    onUpdatePlatforms: function() {
+        var me = this,
+            platforms = this.getPlatforms(),
+            menu = me.down('button').menu,
+            menuItems = [];
+        if (platforms.length !== 1) {
+            me.mode = 'clouds';
+            menuItems.push({
+                text: me.allCloudsText,
+                value: ''
+            });
+            menu.removeAll();
+            Ext.each(platforms, function(platform){
+                menuItems.push({
+                    style: 'padding-right:30px',
+                    text: '&nbsp;' + Scalr.utils.getPlatformName(platform) + '<img src="'+Ext.BLANK_IMAGE_URL+'" class="x-tool-img x-tool-expand-small x-menuitem-expander" />',
+                    value: platform,
+                    iconCls: 'x-icon-platform-small x-icon-platform-small-' + platform
+                });
+            });
+            menu.add(menuItems);
+        } else {
+            me.mode = 'locations';
+            if (me.forceAllLocations) {
+                menuItems.push({
+                    text: me.allCloudsText,
+                    value: ''
+                });
+            }
+            menu.addCls('x-menu-light-no-icon');
+            me.loadingLocations = true;
+            cb = function(locations) {
+                if (locations) {
+                    Ext.Object.each(locations, function(key, value){
+                        menuItems.push({
+                            text: value,
+                            value: key
+                        });
+                    });
+                    me.initialCloudLocation = '';
+                    if (!me.forceAllLocations) {
+                        var location = Ext.state.Manager.get(me.localLocationParamName);
+                        if (locations[location] !== undefined) {
+                            me.initialCloudLocation = location;
+                        } else {
+                            me.initialCloudLocation = menuItems.length ? menuItems[0].value : '';
+                        }
+                    }
+                    me.down('#platform').setValue(platforms[0]);
+                    //me.down('#cloudLocation').setValue();
+                }
+
+                menu.removeAll();
+                menu.add(menuItems);
+
+                if (me.loadingLocationsCallback) {
+                    me.loadingLocationsCallback();
+                    delete me.loadingLocationsCallback;
+                }
+                me.loadingLocations = false;
+
+            }
+            if (me.locations) {
+                cb(me.locations);
+            } else {
+                Scalr.loadCloudLocations(platforms[0], cb);
+            }
+        }
+    },
+
+    onCloudLocationSelect: function(platform, cloudLocation) {
+        var field = this.down('#platform');
+        field.suspendEvents(false);
+        field.setValue(platform);
+        field.resumeEvents();
+
+        field = this.down('#cloudLocation');
+        field.suspendEvents(false);
+        field.setValue(' ');
+        field.resumeEvents();
+        field.setValue(cloudLocation || '');
+
+        this.down('button').menu.hide();
+    },
+
+    loadCloudLocationsBuffered: function(platform) {
+        var me = this;
+        clearTimeout(me.loadLocationTimer);
+        me.loadLocationTimer = Ext.defer(function(){
+            var parentMenuItem = me.down('button').menu.down('[value="'+platform+'"]');
+            if (!parentMenuItem.menu) {
+                parentMenuItem.setMenu({
+                    cls: 'x-menu-light x-menu-cycle-button-filter',
+                    enableKeyNav: false,
+                    loading: true,
+                    items: {
+                        text: '&nbsp;Loading locations',
+                        iconCls: 'x-icon-loading-list',
+                        hideOnClick: false
+                    },
+                }, true);
+            }
+            parentMenuItem.doExpandMenu();
+
+            Scalr.loadCloudLocations(platform, function(locations) {me.onLoadCloudLocations(platform, locations);}, false);
+        }, Scalr.platforms[platform] && Scalr.platforms[platform].locations ? 0 : 100);
+    },
+
+    onPlatformMouseOver: function(platform) {
+        var me = this;
+        me.currentPlatform = platform;
+        me.loadCloudLocationsBuffered(platform);
+    },
+
+    onShowLocations: function(platform, cloudLocations) {
+        var me = this,
+            parentMenuItem = me.down('button').menu.down('[value="'+platform+'"]'),
+            menuItems = [];
+        if (!parentMenuItem.menu || parentMenuItem.menu.loading || !parentMenuItem.menu.isVisible()) {
+            menuItems.push({
+                text: 'All locations',
+                value: ''
+            });
+            if (cloudLocations) {
+                Ext.Object.each(cloudLocations, function(key, value){
+                    menuItems.push({
+                        text: value,
+                        value: key
+                    });
+                });
+            }
+            parentMenuItem.setMenu({
+                cls: 'x-menu-light x-menu-cycle-button-filter',
+                enableKeyNav: false,
+                items: menuItems,
+                defaults: {
+                    handler: function(item) {
+                        me.onCloudLocationSelect(platform, item.value);
+                    }
+                },
+                listeners: {
+                    activate: function() {
+                        var cloudLocation = me.down('#cloudLocation').getValue() || '';
+                        this.items.each(function(item){
+                            item.removeCls('x-menu-item-checked');
+                        });
+                        if (parentMenuItem .value == me.down('#platform').getValue()) {
+                            var item = cloudLocation ? this.down('[value="'+cloudLocation+'"]') : this.items.first();
+                            if (item) item.addCls('x-menu-item-checked');
+                        }
+                    }
+                }
+            }, true);
+            parentMenuItem.doExpandMenu();
+        }
+    },
+
+    onPlatformMouseLeave: function() {
+        if (this.currentPlatform) {
+            this.down('button').menu.down('[value="'+this.currentPlatform+'"]').el.down('.x-menuitem-expander').removeCls('x-icon-loading-list');
+            delete this.currentPlatform;
+            clearTimeout(this.loadLocationTimer);
+        }
+    },
+
+    onLoadCloudLocations: function(platform, cloudLocations) {
+        if (this.currentPlatform === platform) {
+            this.down('button').menu.down('[value="'+this.currentPlatform+'"]').el.down('.x-menuitem-expander').removeCls('x-icon-loading-list');
+            this.onShowLocations(platform, cloudLocations);
+        }
+    },
+
+    beforeApplyParams: function(callback) {
+        if (this.loadingLocations) {
+            this.loadingLocationsCallback = callback;
+        } else {
+            callback();
+        }
+    },
+
+
 });

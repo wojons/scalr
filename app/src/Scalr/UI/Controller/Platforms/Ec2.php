@@ -1,17 +1,14 @@
 <?php
 
-use Scalr\Acl\Acl;
-use Scalr\Service\Aws\Ec2\DataType\SecurityGroupFilterNameType;
+use Scalr\Service\Aws\Ec2\DataType\SecurityGroupList;
 use Scalr\Service\Aws\Ec2\DataType\SnapshotFilterNameType;
 use Scalr\Service\Aws\Ec2\DataType\AddressFilterNameType;
 use Scalr\Service\Aws\Ec2\DataType\SnapshotData;
 use Scalr\Service\Aws\Ec2\DataType\SubnetFilterNameType;
-use Scalr\Farm\Role\FarmRoleService;
+use Scalr\Model\Entity\CloudResource;
 use Scalr\Service\Aws\Ec2\DataType\RouteTableFilterNameType;
 use Scalr\Modules\Platforms\Ec2\Ec2PlatformModule;
 use Scalr\Modules\PlatformFactory;
-use \SERVER_PLATFORMS;
-
 
 class Scalr_UI_Controller_Platforms_Ec2 extends Scalr_UI_Controller
 {
@@ -27,13 +24,19 @@ class Scalr_UI_Controller_Platforms_Ec2 extends Scalr_UI_Controller
                 'hostname' => $elb->dnsName
             );
 
-            $farmRoleService = FarmRoleService::findFarmRoleService($this->environment->id, $elb->loadBalancerName);
+            $farmRoleService = CloudResource::findPk(
+                $elb->loadBalancerName,
+                $this->environment->id,
+                \SERVER_PLATFORMS::EC2,
+                $this->getParam('cloudLocation')
+            );
             if ($farmRoleService) {
+                $dbFarmRole = DBFarmRole::LoadByID($farmRoleService->farmRoleId);
                 $info['used'] = true;
-                $info['farmRoleId'] = $farmRoleService->getFarmRole()->ID;
-                $info['farmId'] = $farmRoleService->getFarmRole()->FarmID;
-                $info['roleName'] = $farmRoleService->getFarmRole()->GetRoleObject()->name;
-                $info['farmName'] = $farmRoleService->getFarmRole()->GetFarmObject()->Name;
+                $info['farmRoleId'] = $dbFarmRole->ID;
+                $info['farmId'] = $dbFarmRole->FarmID;
+                $info['roleName'] = $dbFarmRole->GetRoleObject()->name;
+                $info['farmName'] = $dbFarmRole->GetFarmObject()->Name;
             }
 
             //OLD notation
@@ -71,13 +74,6 @@ class Scalr_UI_Controller_Platforms_Ec2 extends Scalr_UI_Controller
                 'state' => (string)$zone->zoneState,
             );
         }
-        /*
-        if ($this->getParam('roleId')) {
-            $dbRole = DBRole::loadById($this->getParam('roleId'));
-            $locations = $dbRole->getCloudLocations($this->getParam('platform'));
-            $data['locations'] = $locations;
-        }
-        */
 
         return $data;
     }
@@ -170,9 +166,11 @@ class Scalr_UI_Controller_Platforms_Ec2 extends Scalr_UI_Controller
         $vpcSglist = $aws->ec2->securityGroup->describe();
 
         $rows = array();
-        /* @var $vpcData Scalr\Service\Aws\Ec2\DataType\VpcData */
+
         foreach ($vpcList as $vpcData) {
+            /* @var $vpcData Scalr\Service\Aws\Ec2\DataType\VpcData */
             $name = 'No name';
+
             foreach ($vpcData->tagSet as $tag) {
                 if ($tag->key == 'Name') {
                     $name = $tag->value;
@@ -180,33 +178,81 @@ class Scalr_UI_Controller_Platforms_Ec2 extends Scalr_UI_Controller
                 }
             }
 
-            $defaultSecurityGroupId = null;
-            $defaultSecurityGroupName = null;
-
-            foreach ($vpcSglist as $vpcSg) {
-                /* @var $vpcSg Scalr\Service\Aws\Ec2\DataType\SecurityGroupData */
-                if ($vpcSg->vpcId == $vpcData->vpcId && $vpcSg->groupName == 'default') {
-                    $defaultSecurityGroupId = $vpcSg->groupId;
-                    $defaultSecurityGroupName = $vpcSg->groupName;
-                    break;
-                }
-            }
-
             $rows[] = array(
                 'id'                        => $vpcData->vpcId,
                 'name'                      => "{$name} - {$vpcData->vpcId} ({$vpcData->cidrBlock}, Tenancy: {$vpcData->instanceTenancy})",
-                'defaultSecurityGroupId'    => $defaultSecurityGroupId,
-                'defaultSecurityGroupName'  => $defaultSecurityGroupName
+                'defaultSecurityGroups'     => $this->getDefaultSgRow($vpcSglist, $vpcData->vpcId)
             );
         }
 
-        $platform = PlatformFactory::NewPlatform(SERVER_PLATFORMS::EC2);
+        $platform = PlatformFactory::NewPlatform(\SERVER_PLATFORMS::EC2);
         $default = $platform->getDefaultVpc($this->getEnvironment(), $cloudLocation);
 
         $this->response->data(array(
             'vpc'     => $rows,
             'default' => !empty($default) ? $default : null
         ));
+    }
+
+    public function xGetDefaultVpcSegurityGroupsAction($cloudLocation, $vpcId)
+    {
+        $aws = $this->getEnvironment()->aws($cloudLocation);
+        $vpcSglist = $aws->ec2->securityGroup->describe();
+
+        $this->response->data(['data' => $this->getDefaultSgRow($vpcSglist, $vpcId)]);
+    }
+
+    /**
+     * Gets default vpc security group list
+     *
+     * @param SecurityGroupList   $vpcSglist
+     * @param string    $vpcId
+     * @return array
+     */
+    private function getDefaultSgRow($vpcSglist, $vpcId)
+    {
+        $governance = new Scalr_Governance($this->getEnvironmentId());
+        $values = $governance->getValues(true);
+
+        if (!empty($values['ec2']['aws.additional_security_groups']->value)) {
+            $sgDefaultNames = explode(',', $values['ec2']['aws.additional_security_groups']->value);
+        }
+
+        $defaultSecurityGroups = [];
+        $vpcSgNames = [];
+
+        foreach ($vpcSglist as $vpcSg) {
+            /* @var $vpcSg Scalr\Service\Aws\Ec2\DataType\SecurityGroupData */
+            if (!empty($sgDefaultNames)) {
+                if ($vpcSg->vpcId == $vpcId && in_array($vpcSg->groupName, $sgDefaultNames)) {
+                    $defaultSecurityGroups[] = [
+                        'securityGroupId'   => $vpcSg->groupId,
+                        'securityGroupName' => $vpcSg->groupName
+                    ];
+                }
+                $vpcSgNames[] = $vpcSg->groupName;
+            } else if ($vpcSg->vpcId == $vpcId && $vpcSg->groupName == 'default') {
+                $defaultSecurityGroups[] = [
+                    'securityGroupId'   => $vpcSg->groupId,
+                    'securityGroupName' => $vpcSg->groupName
+                ];
+
+                break;
+            }
+        }
+
+        if (!empty($sgDefaultNames)) {
+            $missingSgs = array_diff($sgDefaultNames, $vpcSgNames);
+
+            foreach ($missingSgs as $missingSg) {
+                $defaultSecurityGroups[] = [
+                    'securityGroupId'   => null,
+                    'securityGroupName' => $missingSg
+                ];
+            }
+        }
+
+        return $defaultSecurityGroups;
     }
 
     public function xGetPlatformDataAction(){
@@ -356,4 +402,21 @@ class Scalr_UI_Controller_Platforms_Ec2 extends Scalr_UI_Controller
         return $list;
     }
 
+    /**
+     * @param string $cloudLocation
+     */
+    public function xGetKmsKeysListAction($cloudLocation)
+    {
+        $aws = $this->getEnvironment()->aws($cloudLocation);
+        $keys = [];
+        foreach ($aws->kms->alias->list() as $key) {
+            $keys[] = [
+                'id' => $key->targetKeyId,
+                'alias' => $key->aliasName,
+            ];
+        }
+        $this->response->data([
+            'keys' => $keys
+        ]);
+    }
 }

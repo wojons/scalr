@@ -14,7 +14,7 @@ class Update20141020093250 extends AbstractUpdate implements SequenceInterface
 
     protected $description = 'Refactoring tables images, role_images';
 
-    protected $ignoreChanges = true;
+    protected $ignoreChanges = false;
 
     protected $dbservice = 'adodb';
 
@@ -135,12 +135,7 @@ class Update20141020093250 extends AbstractUpdate implements SequenceInterface
                     else if (!$image->architecture)
                         $image->architecture = 'i386';
 
-                    if ($role['os_family']) {
-                        $image->os = $role['os'];
-                        $image->osFamily = $role['os_family'];
-                        $image->osVersion = $role['os_version'];
-                        $image->osGeneration = $role['os_generation'];
-                    }
+                    $image->osId = $role['osId'];
 
                     if ($image->name == $image->id && $role['name'])
                         $image->name = $role['name'];

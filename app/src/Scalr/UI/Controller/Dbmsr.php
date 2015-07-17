@@ -346,38 +346,10 @@ class Scalr_UI_Controller_Dbmsr extends Scalr_UI_Controller
                 {
                     $data['isBundleRunning'] = $dbFarmRole->GetSetting(DBFarmRole::SETTING_MYSQL_IS_BUNDLE_RUNNING);
                     $data['bundleServerId'] = $dbFarmRole->GetSetting(DBFarmRole::SETTING_MYSQL_BUNDLE_SERVER_ID);
-
-                    if ($data['isBundleRunning']) {
-                        $opId = $this->db->GetOne("SELECT id FROM server_operations WHERE server_id = ? AND name = ? AND status = ? ORDER BY timestamp DESC LIMIT 1", array(
-                            $data['bundleServerId'], 'MySQL data bundle', 'running'
-                        ));
-                    } elseif ($data['bundleServerId']) {
-                        $opId = $this->db->GetOne("SELECT id FROM server_operations WHERE server_id = ? AND name = ? ORDER BY timestamp DESC LIMIT 1", array(
-                            $data['bundleServerId'], 'MySQL data bundle'
-                        ));
-                    }
-
-                    if ($opId)
-                        $data['bundleOperationId'] = $opId;
                 }
 
-                   $data['isBackupRunning'] = $dbFarmRole->GetSetting(DBFarmRole::SETTING_MYSQL_IS_BCP_RUNNING);
+                $data['isBackupRunning'] = $dbFarmRole->GetSetting(DBFarmRole::SETTING_MYSQL_IS_BCP_RUNNING);
                 $data['backupServerId'] = $dbFarmRole->GetSetting(DBFarmRole::SETTING_MYSQL_BCP_SERVER_ID);
-
-                if (!$data['backupOperationId']) {
-                    if ($data['isBackupRunning']) {
-                        $opId = $this->db->GetOne("SELECT id FROM server_operations WHERE server_id = ? AND name = ? AND status = ? ORDER BY timestamp DESC LIMIT 1", array(
-                            $data['backupServerId'], 'MySQL backup', 'running'
-                        ));
-                    } elseif ($data['backupServerId']) {
-                        $opId = $this->db->GetOne("SELECT id FROM server_operations WHERE server_id = ? AND name = ? ORDER BY timestamp DESC LIMIT 1", array(
-                            $data['backupServerId'], 'MySQL backup'
-                        ));
-                    }
-
-                    if ($opId)
-                        $data['backupOperationId'] = $opId;
-                }
 
                 try
                    {
@@ -558,38 +530,10 @@ class Scalr_UI_Controller_Dbmsr extends Scalr_UI_Controller
                 if ($dbServer->GetProperty(Scalr_Db_Msr::REPLICATION_MASTER) == 1) {
                     $data['isBundleRunning'] = $dbFarmRole->GetSetting(Scalr_Db_Msr::DATA_BUNDLE_IS_RUNNING);
                     $data['bundleServerId'] = $dbFarmRole->GetSetting(Scalr_Db_Msr::DATA_BUNDLE_SERVER_ID);
-
-                    if ($data['isBundleRunning']) {
-                        $opId = $this->db->GetOne("SELECT id FROM server_operations WHERE server_id = ? AND name = ? AND status = ? ORDER BY timestamp DESC LIMIT 1", array(
-                            $data['bundleServerId'], "{$name} data bundle", 'running'
-                        ));
-                    } elseif ($data['bundleServerId']) {
-                        $opId = $this->db->GetOne("SELECT id FROM server_operations WHERE server_id = ? AND name = ? ORDER BY timestamp DESC LIMIT 1", array(
-                            $data['bundleServerId'], "{$name} data bundle"
-                        ));
-                    }
-
-                    if ($opId)
-                        $data['bundleOperationId'] = $opId;
                 }
 
-                   $data['isBackupRunning'] = $dbFarmRole->GetSetting(Scalr_Db_Msr::DATA_BACKUP_IS_RUNNING);
+                $data['isBackupRunning'] = $dbFarmRole->GetSetting(Scalr_Db_Msr::DATA_BACKUP_IS_RUNNING);
                 $data['backupServerId'] = $dbFarmRole->GetSetting(Scalr_Db_Msr::DATA_BACKUP_SERVER_ID);
-
-                if (!$data['backupOperationId']) {
-                    if ($data['isBackupRunning']) {
-                        $opId = $this->db->GetOne("SELECT id FROM server_operations WHERE server_id = ? AND name = ? AND status = ? ORDER BY timestamp DESC LIMIT 1", array(
-                            $data['backupServerId'], "{$name} backup", 'running'
-                        ));
-                    } elseif ($data['backupServerId']) {
-                        $opId = $this->db->GetOne("SELECT id FROM server_operations WHERE server_id = ? AND name = ? ORDER BY timestamp DESC LIMIT 1", array(
-                            $data['backupServerId'], "{$name} backup"
-                        ));
-                    }
-
-                    if ($opId)
-                        $data['backupOperationId'] = $opId;
-                }
 
                 try {
 

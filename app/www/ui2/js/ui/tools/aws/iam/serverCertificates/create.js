@@ -4,11 +4,12 @@ Scalr.regPage('Scalr.ui.tools.aws.iam.serverCertificates.create', function (load
 		title: 'Server Certificates &raquo; Add',
 		fieldDefaults: {
 			anchor: '100%',
-            labelWidth: 110
+            labelWidth: 130
 		},
 		items: [{
 			xtype: 'fieldset',
 			title: 'General information',
+            cls: 'x-fieldset-separator-none',
 			items: [{
 				xtype: 'textfield',
 				name: 'name',

@@ -42,7 +42,7 @@ class Scalr_Scaling_Sensors_Custom extends Scalr_Scaling_Sensor
                 //TODO Think about global cache
 
                 $this->snmpClient->connect($DBServer->remoteIp, $port ? $port : 161, $dbFarm->Hash, 7, null, true);
-                $res = $this->snmpClient->getFullTree(".1.3.6.1.4.1.36632.5");
+                $res = (array)$this->snmpClient->getFullTree(".1.3.6.1.4.1.36632.5");
                 $result = array();
                 foreach ($res as $oid => $value) {
                     preg_match("/^(.*?)\.36632\.5\.1\.([0-9]+)\.([0-9]+)$/", $oid, $matches);

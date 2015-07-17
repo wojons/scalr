@@ -66,23 +66,24 @@ class Scalr_Permissions
             case 'Scalr_Dm_Application':
             case 'Scalr_Dm_Source':
             case 'Scalr_Dm_DeploymentTask':
-            case 'Scalr_Scaling_Metric':
+            case 'Scalr\Model\Entity\ScalingMetric':
             case 'Scalr_ServiceConfiguration':
             case 'Scalr_Service_Apache_Vhost':
             case 'Scalr_SshKey':
             case 'Scalr_SchedulerTask':
-            case 'Scalr_Service_Ssl_Certificate':
+            case 'Scalr\Model\Entity\SslCertificate':
             case 'Scalr_Db_Backup':
             case 'DBEBSVolume':
-            case 'Scalr\\Role\\Role':
-            case 'Scalr\\Model\\Entity\\Image':
+            case 'Scalr\Model\Entity\Role':
+            case 'Scalr\Model\Entity\Image':
+            case 'Scalr\Model\Entity\SshKey':
                 return $this->hasAccessEnvironment($object->envId) &&
                        (method_exists($object, 'getFarmObject') ? $this->hasAccessFarm($object->getFarmObject()) : true);
 
             case 'DBFarmRole':
                 return $this->hasAccessFarm($object->GetFarmObject());
 
-            case 'Scalr\\Acl\\Role\\AccountRoleObject':
+            case 'Scalr\Acl\Role\AccountRoleObject':
                 return $this->user->canManageAcl() &&
                        $object->getAccountId() == $this->user->getAccountId();
         }
@@ -115,33 +116,47 @@ class Scalr_Permissions
     {
         $access = $this->hasAccessEnvironment($dbServer->envId);
 
-        if ($access && !empty($dbServer->farmId) && ($dbFarm = $dbServer->GetFarmObject()) instanceof \DBFarm) {
-            $access = $this->hasAccessFarm($dbFarm);
+        if ($access) {
+            if (!empty($dbServer->farmId)) {
+                if (($dbFarm = $dbServer->GetFarmObject()) instanceof \DBFarm) {
+                    $access = $this->hasAccessFarm($dbFarm, Acl::PERM_FARMS_SERVERS);
+                }
+            } else {
+                $access = $this->user->getAclRolesByEnvironment($this->envId)->isAllowed(Acl::RESOURCE_FARMS_ROLES, Acl::PERM_FARMS_ROLES_CREATE);
+            }
         }
 
         return $access;
     }
 
-
     /**
      * Checks whether current dbFarm object can be accessed by user
      *
      * @param    \DBFarm               $dbFarm   DbFarm object
+     * @param    string                $perm
      * @throws   Scalr_Exception_Core
      * @return   boolean         Returns true if access is granted
      */
-    public function hasAccessFarm($dbFarm)
+    public function hasAccessFarm($dbFarm, $perm = null)
     {
         //It may not be provided in several cases
         if (!($dbFarm instanceof \DBFarm)) {
             return true;
         }
 
-        $access = $this->hasAccessEnvironment($dbFarm->EnvID) && (
-            ($dbFarm->createdByUserId == $this->user->getId()) ||
-            $this->user->getAclRolesByEnvironment($this->envId)->isAllowed(Acl::RESOURCE_FARMS, Acl::PERM_FARMS_NOT_OWNED_FARMS)
-        );
+        if (!$this->hasAccessEnvironment($dbFarm->EnvID))
+            return false;
 
-        return $access;
+        $superposition = $this->user->getAclRolesByEnvironment($this->envId);
+        $result = $superposition->isAllowed(Acl::RESOURCE_FARMS, $perm);
+        if (!$result && $dbFarm->teamId && $this->user->isInTeam($dbFarm->teamId)) {
+            $result = $superposition->isAllowed(Acl::RESOURCE_TEAM_FARMS, $perm);
+        }
+
+        if (!$result && $dbFarm->createdByUserId && $this->user->id == $dbFarm->createdByUserId) {
+            $result = $superposition->isAllowed(Acl::RESOURCE_OWN_FARMS, $perm);
+        }
+
+        return $result;
     }
 }

@@ -32,7 +32,7 @@ class SzrUpdServiceScript(lib.Script):
     name = 'szr_upd_service'
 
 
-lib.ScriptCls = SzrUpdServiceScript 
+lib.ScriptCls = SzrUpdServiceScript
 
 
 def answer(environ, start_response):
@@ -53,12 +53,12 @@ def answer(environ, start_response):
 
             repos = {
                 'latest': {
-                    'linux': 'http://apt.scalr.net/debian scalr/',
-                    'windows': 'http://win.scalr.net',
+                    'linux': 'http://repo.scalr.net/apt-plain latest/',
+                    'windows': 'http://repo.scalr.net/win/latest',
                 },
                 'stable': {
-                    'linux': 'http://apt-delayed.scalr.net/debian scalr/',
-                    'windows': 'http://win-delayed.scalr.net',
+                    'linux': 'http://repo.scalr.net/apt-plain stable/',
+                    'windows': 'http://repo.scalr.net/win/stable',
                 }
             }
 
@@ -147,12 +147,12 @@ def answer_error(environ, start_response):
 
             repos = {
                 'latest': {
-                    'linux': 'http://apt.scalr.net/debian scalr/',
-                    'windows': 'http://win.scalr.net',
+                    'linux': 'http://repo.scalr.net/apt-plain latest/',
+                    'windows': 'http://repo.scalr.net/win/latest',
                 },
                 'stable': {
-                    'linux': 'http://apt-delayed.scalr.net/debian scalr/',
-                    'windows': 'http://win-delayed.scalr.net',
+                    'linux': 'http://repo.scalr.net/apt-plain stable/',
+                    'windows': 'http://repo.scalr.net/win/stable',
                 }
             }
 

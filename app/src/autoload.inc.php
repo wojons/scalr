@@ -123,7 +123,6 @@ function __autoload($class_name)
         'BehaviorEventObserver' => APPPATH . '/observers/class.BehaviorEventObserver.php',
         /******************** Logger (mostly deprecated classes) *******************************/
         'FarmLogMessage' => SRCPATH . '/class.FarmLogMessage.php',
-        'ScriptingLogMessage' => SRCPATH . '/class.ScriptingLogMessage.php',
         'LoggerAppenderScalr' => SRCPATH . '/class.LoggerAppenderScalr.php',
         'LoggerFilterCategoryMatch' => SRCPATH . '/class.LoggerFilterCategoryMatch.php',
     );

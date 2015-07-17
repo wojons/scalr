@@ -27,18 +27,21 @@ abstract class AbstractGetter
         if ($this->reflection === null) {
             $this->reflection = new ReflectionClass(get_class($this));
         }
+
         return $this->reflection;
     }
 
     public function __get($prop)
     {
         $refl = $this->_getReflectionClass();
+
         if ($refl->hasProperty($prop) && ($refProp = $refl->getProperty($prop)) &&
             $refProp->class == $refl->getName() &&
             ($refProp->isProtected() || $refProp->isPublic())) {
             return $refProp->getValue($this);
         }
-        throw new Exception\UpgradeException(sprintf(
+
+        throw new \InvalidArgumentException(sprintf(
             'Property "%s" does not exist for the class "%s".',
             $prop, get_class($this)
         ));
@@ -47,11 +50,13 @@ abstract class AbstractGetter
     public function __isset($prop)
     {
         $refl = $this->_getReflectionClass();
+
         if ($refl->hasProperty($prop) && ($refProp = $refl->getProperty($prop)) &&
             $refProp->class == $refl->getName() &&
             ($refProp->isProtected() || $refProp->isPublic())) {
             return $refProp->getValue($this) !== null;
         }
+
         return false;
     }
 }

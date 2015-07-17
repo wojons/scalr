@@ -21,10 +21,14 @@ Ext.define('Scalr.ui.CoreGovernanceLease', {
                 me.down('#nonStandardRequests').store.loadData(data);
             }
         );
-
     },
     getValues: function() {
         return this.isValidFields() ? this.getFieldValues(true) : null;
+    },
+    listeners: {
+        statuschanged: function(enabled) {
+            this.down('#enableLease')[enabled != 1 ? 'show' : 'hide']();
+        }
     },
     items: [{
         xtype: 'fieldset',
@@ -33,34 +37,36 @@ Ext.define('Scalr.ui.CoreGovernanceLease', {
         padding: '14 0 10',
         items: [{
             xtype: 'checkbox',
-            boxLabel: '<b>Enable the default lease duration for all currently running farms</b>',
+            boxLabel: '<b>Enable the default lease duration for all existing farms</b>',
             name: 'enableDefaultLeaseDuration'
         }]
     }, {
         xtype: 'fieldset',
-        padding: '14 0 10',
         items: [{
             xtype: 'fieldcontainer',
             layout: 'hbox',
             items: [{
                 xtype: 'textfield',
                 fieldLabel: 'Running farm lifetime',
-                labelWidth: 140,
-                width: 195,
+                labelWidth: 160,
+                width: 215,
                 name: 'defaultLifePeriod',
                 allowBlank: false,
                 value: 30,
                 vtype: 'num'
             }, {
                 xtype: 'displayfield',
-                value: 'days',
+                value: 'day(s)',
                 submitValue: false,
-                margin: '0 0 0 5'
-            }, {
-                xtype: 'displayinfofield',
-                value: 'Limit on how long a farm can be run before automatic termination',
-                submitValue: false,
-                margin: '0 0 0 5'
+                margin: '0 6',
+                plugins: [{
+                    ptype: 'fieldicons',
+                    align: 'right',
+                    icons: {
+                        id: 'info',
+                        tooltip: 'Limit on how long a farm can be run before automatic termination'
+                    }
+                }]
             }]
         }]
     }, {
@@ -81,16 +87,18 @@ Ext.define('Scalr.ui.CoreGovernanceLease', {
         },
         getValue: function() {
             var ct = this.next('fieldset'), values = [];
-            ct.items.each(function(c) {
-                var em = c.child('[name="emails"]');
-                values.push({
-                    key: c.child('[name="key"]').getValue(),
-                    to: c.child('[name="to"]').getValue(),
-                    emails: !em.readOnly ? c.child('[name="emails"]').getValue() : '',
-                    period: c.child('[name="period"]').getValue()
+            //fixme extjs5
+            if (ct) {
+                ct.items.each(function(c) {
+                    var em = c.child('[name="emails"]');
+                    values.push({
+                        key: c.child('[name="key"]').getValue(),
+                        to: c.child('[name="to"]').getValue(),
+                        emails: !em.readOnly ? c.child('[name="emails"]').getValue() : '',
+                        period: c.child('[name="period"]').getValue()
+                    });
                 });
-            });
-
+            }
             return values;
         }
     }, {
@@ -101,30 +109,34 @@ Ext.define('Scalr.ui.CoreGovernanceLease', {
         addNotification: function(notif) {
             notif = notif || {};
             this.add({
-                xtype: 'container',
-                layout: 'hbox',
+                xtype: 'fieldcontainer',
+                layout: {
+                    type: 'hbox',
+                    align: 'middle'
+                },
                 items: [{
                     xtype: 'hidden',
                     name: 'key',
                     submitValue: false,
                     value: notif['key'] || Scalr.utils.getRandomString(8)
                 }, {
-                    xtype: 'displayfield',
-                    value: 'Send notification to'
+                    xtype: 'label',
+                    text: 'Send notification to'
                 }, {
                     xtype: 'buttongroupfield',
                     name: 'to',
                     value: notif['to'] || 'owner',
                     submitValue: false,
                     margin: '0 0 0 8',
+                    defaults: {
+                        width: 120
+                    },
                     items: [{
                         text: 'Farm owner',
-                        value: 'owner',
-                        width: 100
+                        value: 'owner'
                     }, {
                         text: 'Email',
-                        value: 'email',
-                        width: 100
+                        value: 'email'
                     }],
                     listeners: {
                         change: function(field, value) {
@@ -135,7 +147,7 @@ Ext.define('Scalr.ui.CoreGovernanceLease', {
                 }, {
                     xtype: 'textfield',
                     flex: 1,
-                    maxWidth: 300,
+                    maxWidth: 320,
                     name: 'emails',
                     emptyText: 'Enter one or more emails (comma separated)',
                     value: notif['emails'],
@@ -167,8 +179,8 @@ Ext.define('Scalr.ui.CoreGovernanceLease', {
                     allowBlank: false,
                     regex: /^[0-9]+$/
                 }, {
-                    xtype: 'displayfield',
-                    value: 'days prior to termination',
+                    xtype: 'label',
+                    text: 'days prior to termination',
                     margin: '0 0 0 8'
                 }, {
                     xtype: 'button',
@@ -184,11 +196,11 @@ Ext.define('Scalr.ui.CoreGovernanceLease', {
                 }]
             })
         },
-
+        //fixme extjs5
         plugins: {
             ptype: 'addfield',
-            targetEl: '.x-fieldset-body span',
-            width: '549px',
+            targetEl: '.x-fieldset-body div',
+            width: '610px',
             handler: function() {
                 this.addNotification();
             }
@@ -213,20 +225,23 @@ Ext.define('Scalr.ui.CoreGovernanceLease', {
     }, {
         xtype: 'fieldset',
         title: 'Extension settings',
+        defaults: {
+            labelWidth: 285
+        },
         items: [{
             xtype: 'buttongroupfield',
-            labelWidth: 240,
             fieldLabel: 'Lease extension',
             name: 'leaseExtension',
             value: 'allow',
+            defaults: {
+                width: 100
+            },
             items: [{
                 text: 'Allow',
-                value: 'allow',
-                width: 80
+                value: 'allow'
             }, {
                 text: 'Disallow',
-                value: 'disallow',
-                width: 80
+                value: 'disallow'
             }],
             listeners: {
                 change: function(c, value) {
@@ -237,26 +252,25 @@ Ext.define('Scalr.ui.CoreGovernanceLease', {
                 }
             }
         }, {
-            xtype: 'fieldcontainer',
-            layout: 'hbox',
+            xtype: 'textfield',
             fieldLabel: 'Maximum number of extensions allowed',
-            labelWidth: 240,
-            items: [{
-                xtype: 'textfield',
-                width: 50,
-                name: 'leaseExtensionStandardNumber',
-                allowBlank: false,
-                value: 12,
-                regex: /^[0-9]+$/
-            }, {
-                xtype: 'displayinfofield',
-                value: 'Limit on the number of times a farm can have its lifetime extended',
-                margin: '0 0 0 5'
+            width: 340,
+            name: 'leaseExtensionStandardNumber',
+            allowBlank: false,
+            value: 12,
+            regex: /^[0-9]+$/,
+            plugins: [{
+                ptype: 'fieldicons',
+                align: 'right',
+                position: 'outer',
+                icons: {
+                    id: 'info',
+                    tooltip: 'Limit on the number of times a farm can have its lifetime extended'
+                }
             }]
         }, {
             xtype: 'fieldcontainer',
             layout: 'hbox',
-            labelWidth: 240,
             fieldLabel: 'Standard extension term length',
             items: [{
                 xtype: 'textfield',
@@ -268,7 +282,7 @@ Ext.define('Scalr.ui.CoreGovernanceLease', {
             }, {
                 xtype: 'displayfield',
                 value: 'days',
-                margin: '0 0 0 5'
+                margin: '0 6'
             }]
         }, {
             xtype: 'checkbox',
@@ -296,13 +310,16 @@ Ext.define('Scalr.ui.CoreGovernanceLease', {
                     this.next().hide();
                 }
             }
-        }, {
+        },{
+            xtype: 'label',
+            text: 'Notify the following users (comma separated, email addresses) about non-standard extension requests'
+        },{
             xtype: 'textarea',
-            fieldLabel: 'Notify the following users (comma separated, email addresses) about non-standard extension requests',
             labelAlign: 'top',
             height: 100,
             anchor: '100%',
             maxWidth: 820,
+            margin: '6 0 0',
             name: 'leaseExtensionNonStandardNotifyEmails',
             validateOnChange: false,
             validateOnBlur: true,
@@ -326,7 +343,6 @@ Ext.define('Scalr.ui.CoreGovernanceLease', {
         items: {
             xtype: 'grid',
             itemId: 'nonStandardRequests',
-            cls: 'x-grid-shadow',
 
             store: {
                 fields: [ 'id', 'name', 'request_days', 'request_comment', 'terminate_date' ]
@@ -354,11 +370,7 @@ Ext.define('Scalr.ui.CoreGovernanceLease', {
                 { text: 'Comment', flex: 3, dataIndex: 'request_comment', sortable: true }
             ],
 
-            multiSelect: true,
-            selModel: {
-                selType: 'selectedmodel'
-            },
-
+            selModel: 'selectedmodel',
             listeners: {
                 selectionchange: function(selModel, selections) {
                     this.down('toolbar').down('#approve').setDisabled(!selections.length);
@@ -368,7 +380,7 @@ Ext.define('Scalr.ui.CoreGovernanceLease', {
 
             dockedItems: [{
                 xtype: 'toolbar',
-                ui: 'simple',
+                ui: 'inline',
                 items: [{
                     xtype: 'button',
                     text: 'Show history of requests',
@@ -376,9 +388,8 @@ Ext.define('Scalr.ui.CoreGovernanceLease', {
                         Scalr.event.fireEvent('redirect', '#/core/governance/lease/history');
                     }
                 }, '->', {
-                    ui: 'paging',
                     itemId: 'approve',
-                    iconCls: 'x-tbar-approve',
+                    iconCls: 'x-btn-icon-approve',
                     margin: '0 9 0 0',
                     disabled: true,
                     handler: function() {
@@ -418,9 +429,8 @@ Ext.define('Scalr.ui.CoreGovernanceLease', {
                         Scalr.Request(request);
                     }
                 }, {
-                    ui: 'paging',
                     itemId: 'decline',
-                    iconCls: 'x-tbar-decline',
+                    iconCls: 'x-btn-icon-decline',
                     disabled: true,
                     handler: function() {
                         var request = {

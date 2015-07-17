@@ -2,14 +2,17 @@
 
 namespace Scalr\Model;
 
-use Scalr\Model\Type\UuidType;
+use ADORecordSet_mysqli;
+use InvalidArgumentException;
 use Scalr\Exception\ModelException;
-use Scalr\Model\Type\UuidStringType;
 use Scalr\Model\Collections\ArrayCollection;
+use Scalr\Model\Collections\EntityIterator;
 use Scalr\Model\Loader\Entity;
 use Scalr\Model\Loader\Field;
 use BadMethodCallException;
 use IteratorAggregate;
+use Scalr\Model\Type\GeneratedValueTypeInterface;
+use Scalr\Model\Mapping\GeneratedValue;
 
 /**
  * AbstractEntity
@@ -17,20 +20,72 @@ use IteratorAggregate;
  * @author   Vitaliy Demidov  <vitaliy@scalr.com>
  * @since    4.5.0 (10.10.2013)
  *
+ * @property-read string $column{FieldName} Returns column like `table`.`column_name`
+ *
  * @method  \Scalr\Model\AbstractEntity findPk()
  *          findPk($keys, $_)
  *          Find record in database by primary key. Loads the record into self.
  *
- * @method  \Scalr\Model\Collections\ArrayCollection find()
+ * @method  \Scalr\Model\Collections\EntityIterator find()
  *          find(array $criteria = null, array $order = null, int $limit = null, int $offset = null, bool $countRecords = null)
  *          Searches by criteria
  *
  * @method  \Scalr\Model\AbstractEntity findOne()
  *          findOne(array $criteria = null, array $order = null)
  *          Searches one record by given criteria
+ *
+ * @method  \Scalr\Model\Collections\EntityIterator findBy{FieldName}()
+ *          findBy{FieldName}(mixed $fieldValue)
+ *          Searches by the specified field
+ *
+ * @method  \Scalr\Model\AbstractEntity  findOneBy{FieldName}()
+ *          findOneBy{FieldName}(mixed $fieldValue)
+ *          Searches by the specified field
+ *
+ * @method  string column()
+ *          column(string $fieldName, string $tableAlias = null, string $alias = null)
+ *          Returns the column as `table`.`column_name`[ AS `alias`] for the specified field.
+ *          If the tableAlias is specified it will return `table_alias`.`column_name`[ AS `alias`].
+ *          It is also possible to invoke this method as
+ *          column{FieldName}(string $tableAlias = null, string $alias = null)
+ *
  */
 abstract class AbstractEntity extends AbstractGetter implements IteratorAggregate
 {
+    /**
+     * EntityIterator result type
+     */
+    const RESULT_ENTITY_ITERATOR = 1;
+
+    /**
+     * ArrayCollection result type
+     */
+    const RESULT_ENTITY_COLLECTION = 2;
+
+    /**
+     * ADORecordSet_mysqli result type
+     */
+    const RESULT_RAW = 3;
+
+    /**
+     * Default result type
+     */
+    const DEFAULT_RESULT_TYPE = self::RESULT_ENTITY_ITERATOR;
+
+    /**
+     * Query magic property that can be used in the search criteria
+     */
+    const STMT_FROM = '__FROM__';
+
+    /**
+     * Query magic property that can be used in the search criteria
+     */
+    const STMT_WHERE = '__WHERE__';
+
+    /**
+     * @var int
+     */
+    private $resultType = self::DEFAULT_RESULT_TYPE;
 
     /**
      * Properties iterator
@@ -133,18 +188,23 @@ abstract class AbstractEntity extends AbstractGetter implements IteratorAggregat
      * @return  AbstractEntity|null Loads the entity to intself on success or returns null if nothing found
      * @throws  ModelException
      */
-    private function _findPk(array $args = array())
+    private function _findPk(array $args = [])
     {
         $iterator = $this->getIterator();
         $pk = $iterator->getPrimaryKey();
+
         if (empty($pk)) {
-            throw new ModelException(sprintf("Primary key has not been defined with @Id tag for %s", get_class($this)));
+            throw new ModelException(sprintf(
+                "Primary key has not been defined with @Id tag for %s",
+                get_class($this)
+            ));
         }
 
         if (count($args) != count($pk)) {
-            throw new \InvalidArgumentException(sprintf(
-                "The number of arguments passed does not match the primary key fields (%s)."
-            ), join(', ', $pk));
+            throw new InvalidArgumentException(sprintf(
+                "The number of arguments passed does not match the primary key fields (%s)",
+                join(', ', $pk)
+            ));
         }
 
         $pkValues = array_combine($pk, $args);
@@ -191,21 +251,54 @@ abstract class AbstractEntity extends AbstractGetter implements IteratorAggregat
     private function _findOne(array $criteria = null, array $order = null)
     {
         $list = $this->_find($criteria, $order, 1);
-        if (count($list)) {
-            $ret = reset($list);
+
+        switch (true) {
+            case $list instanceof EntityIterator:
+                if (count($list)) {
+                    $list->rewind();
+                    $ret = $list->current();
+                } else {
+                    $ret = null;
+                }
+                break;
+
+            case $list instanceof ArrayCollection:
+                $ret = count($list) ? reset($list) : null;
+                break;
+
+            case $list instanceof \ADORecordSet:
+                if (($ret = $list->FetchRow()) === false) {
+                    $ret = null;
+                }
         }
-        return isset($ret) ? $ret : null;
+
+        return $ret;
+    }
+
+    /**
+     * Gets column name for the specified field
+     *
+     * @param    string   $fieldName  The name of the field in the Entity
+     * @param    string   $tableAlias optional The table alias
+     * @param    string   $alias      optional The column alias
+     * @return   stirng   Returns the column as (`table` | `table_alias`).`column_name`[ AS `alias`]
+     */
+    private function _column($fieldName, $tableAlias = null, $alias = null)
+    {
+        return $this->getIterator()->getField($fieldName)->getColumnName($tableAlias, $alias);
     }
 
     /**
      * Finds collection of the values by any key
      *
      * @param    array        $criteria     optional The search criteria.
-     * @param    array        $order        optional The results order
+     * @param    array        $order        optional The results order looks like [[property1 => true|false], ...]
      * @param    int          $limit        optional The records limit
      * @param    int          $offset       optional The offset
-     * @param    bool         $countRecords optional True to calculate totat number of the records without limit
-     * @return   ArrayCollection Returns collection of the entities
+     * @param    bool         $countRecords optional True to calculate total number of the records without limit
+     * @return   ArrayCollection|EntityIterator|ADORecordSet_mysqli Returns collection of the entities. The type
+     *           of the result depends on resultType property of the class which can be set as
+     *           FooEntity::result(FooEntity::RESULT_ARRAY_COLLECTION)->find()
      */
     private function _find(array $criteria = null, array $order = null, $limit = null, $offset = null, $countRecords = null)
     {
@@ -214,6 +307,21 @@ abstract class AbstractEntity extends AbstractGetter implements IteratorAggregat
 
         $stmtFields = '';
         $arguments = array();
+
+        if (is_array($criteria) && array_key_exists(static::STMT_FROM, $criteria)) {
+            $stmtFrom = "FROM " . $criteria[static::STMT_FROM];
+            unset($criteria[static::STMT_FROM]);
+        } else {
+            $stmtFrom = "FROM {$this->table()}";
+        }
+
+        if (is_array($criteria) && array_key_exists(static::STMT_WHERE, $criteria)) {
+            $stmtWhere = "WHERE " . $criteria[static::STMT_WHERE];
+            $rawWhere = !empty($criteria[static::STMT_WHERE]);
+            unset($criteria[static::STMT_WHERE]);
+        } else {
+            $stmtWhere = "WHERE";
+        }
 
         if (!empty($criteria)) {
             $built = $this->_buildQuery($criteria);
@@ -224,7 +332,7 @@ abstract class AbstractEntity extends AbstractGetter implements IteratorAggregat
             foreach ($order as $k => $v) {
                 $field = $iterator->getField($k);
                 if (!$field) {
-                    throw new \InvalidArgumentException(sprintf(
+                    throw new InvalidArgumentException(sprintf(
                         "Property %s does not exist in %s",
                         $k, $class
                     ));
@@ -236,16 +344,32 @@ abstract class AbstractEntity extends AbstractGetter implements IteratorAggregat
 
         $bcnt = $countRecords && isset($limit);
 
+        $builtWhere = (!empty($built['where']) ? $built['where'] : '1=1');
+
         $stmt = "
-            SELECT " . ($bcnt ? 'SQL_CALC_FOUND_ROWS ' : '') . $this->fields() . " FROM {$this->table()}
-            WHERE " . (!empty($built['where']) ? $built['where'] : '1=1') . "
+            SELECT " . ($bcnt ? 'SQL_CALC_FOUND_ROWS ' : '') . $this->fields() . " {$stmtFrom}
+            {$stmtWhere} " . (!empty($rawWhere) ? "AND (" . $builtWhere . ")" : $builtWhere) . "
             " . (!empty($sOrder) ? $sOrder : "") . "
             " . (isset($limit) ? "LIMIT " . ($offset ? intval($offset) . ',' : '') . intval($limit) : "") . "
         ";
 
         $res = $this->db()->Execute($stmt);
 
-        $ret = new ArrayCollection();
+        if ($this->resultType === self::RESULT_ENTITY_COLLECTION) {
+            $ret = new ArrayCollection();
+
+            while ($item = $res->FetchRow()) {
+                $obj = new $class();
+                $obj->load($item);
+                $ret->append($obj);
+                unset($obj);
+            }
+        } else if ($this->resultType === self::RESULT_ENTITY_ITERATOR) {
+            $ret = new EntityIterator($class, $res);
+        } else if ($this->resultType === self::RESULT_RAW) {
+            $this->resultType = self::DEFAULT_RESULT_TYPE;
+            return $res;
+        }
 
         if ($bcnt) {
             $ret->totalNumber = $this->db()->getOne('SELECT FOUND_ROWS()');
@@ -253,12 +377,8 @@ abstract class AbstractEntity extends AbstractGetter implements IteratorAggregat
             $ret->totalNumber = $res->RowCount();
         }
 
-        while ($item = $res->FetchRow()) {
-            $obj = new $class();
-            $obj->load($item);
-            $ret->append($obj);
-            unset($obj);
-        }
+        //Restores default result type
+        $this->resultType = self::DEFAULT_RESULT_TYPE;
 
         return $ret;
     }
@@ -277,32 +397,34 @@ abstract class AbstractEntity extends AbstractGetter implements IteratorAggregat
         $iterator = $this->getIterator();
         $class = get_class($this);
 
-        $built = array(
-            'where' => array(),
-        );
+        foreach ([static::STMT_FROM, static::STMT_WHERE] as $uk) {
+            if (array_key_exists($uk, $criteria)) unset($criteria[$uk]);
+        }
 
-        $conj = array(
+        $built = ['where' => []];
+
+        $conj = [
             '$and' => 'AND',
             '$or'  => 'OR',
-        );
+        ];
 
-        $cmp = array(
+        $cmp = [
             '$lt'  => '<',
             '$gt'  => '>',
             '$gte' => '>=',
             '$lte' => '<=',
             '$ne'  => '<>',
-        );
+        ];
 
-        $func = array(
+        $func = [
             '$in'   => 'IN(%)',
             '$nin'  => 'NOT IN(%)',
             '$like' => 'LIKE(%)',
-        );
+        ];
 
         foreach ($criteria as $k => $v) {
             if (!is_array($v)) {
-                throw new \InvalidArgumentException(sprintf("Array is expected as argument for %s in %s", $k, $class));
+                throw new InvalidArgumentException(sprintf("Array is expected as argument for %s in %s", $k, $class));
             }
 
             if (isset($conj[$k])) {
@@ -322,8 +444,8 @@ abstract class AbstractEntity extends AbstractGetter implements IteratorAggregat
 
             $field = $iterator->getField($k);
 
-            if (!$field) {
-                throw new \InvalidArgumentException(sprintf(
+            if (empty($field)) {
+                throw new InvalidArgumentException(sprintf(
                     'Field "%s" is not defined for object %s', $k, $class
                 ));
             };
@@ -346,7 +468,7 @@ abstract class AbstractEntity extends AbstractGetter implements IteratorAggregat
                               . str_replace('%', substr($tmp, 2), $func[$t]);
                         }
                     } else {
-                        throw new \InvalidArgumentException(sprintf(
+                        throw new InvalidArgumentException(sprintf(
                             "Comparison function '%s' is not defined", $t
                         ));
                     }
@@ -394,10 +516,16 @@ abstract class AbstractEntity extends AbstractGetter implements IteratorAggregat
 
         foreach ($iterator->fields() as $field) {
             if ($this->{$field->name} === null && isset($field->generatedValue)) {
-                if ($field->type instanceof UuidType || $field->type instanceof UuidStringType ||
-                    $field->generatedValue->strategy == 'UUID') {
-                    $this->{$field->name} = \Scalr::GenerateUID();
-                } else if ($field->generatedValue->strategy == 'AUTO') {
+                if ($field->generatedValue->strategy == GeneratedValue::STRATEGY_CUSTOM) {
+                    if (!($field->type instanceof GeneratedValueTypeInterface)) {
+                        throw new ModelException(sprintf(
+                            "Unable to generate value for %s field. Type %s should implement "
+                          . "Scalr\\Model\\Type\\GeneratedValueTypeInterface",
+                            $field->name, get_class($field->type)
+                        ));
+                    }
+                    $this->{$field->name} = $field->getType()->generateValue($this);
+                } else if ($field->generatedValue->strategy == GeneratedValue::STRATEGY_AUTO) {
                     //Generated automatically by mysql
                     if (isset($field->id)) {
                         $postInsertField = $field;
@@ -645,6 +773,24 @@ abstract class AbstractEntity extends AbstractGetter implements IteratorAggregat
         return $this->db;
     }
 
+    public function __get($prop)
+    {
+        if (strpos($prop, 'column') === 0) {
+            $field = lcfirst(substr($prop, 6));
+
+            if (!property_exists($this, $field)) {
+                throw new BadMethodCallException(sprintf(
+                    'Property "%s" does not exist in the class "%s".',
+                    $prop, get_class($this)
+                ));
+            }
+
+            return $this->_column($field);
+        }
+
+        return parent::__get($prop);
+    }
+
     public function __set($prop, $value)
     {
         if (property_exists($this, $prop)) {
@@ -672,8 +818,8 @@ abstract class AbstractEntity extends AbstractGetter implements IteratorAggregat
 
     public static function __callStatic($name, $arguments)
     {
-        $class = get_called_class();
-        $entity = new $class();
+        $entity = new static;
+
         if ($name == 'findPk' || $name == 'find' || $name == 'findOne' || $name == 'all') {
             return $entity->__call($name, $arguments);
         } else if (strpos($name, 'findBy') === 0 || strpos($name, 'findOneBy') === 0) {
@@ -682,7 +828,7 @@ abstract class AbstractEntity extends AbstractGetter implements IteratorAggregat
 
         throw new BadMethodCallException(sprintf(
             'Could not find method "%s" for the class "%s".',
-            $name, $class
+            $name, get_called_class()
         ));
     }
 
@@ -716,6 +862,10 @@ abstract class AbstractEntity extends AbstractGetter implements IteratorAggregat
             $field = lcfirst(substr($method, 9));
             return empty($field) ? call_user_func_array(array($this, '_findOne'), $args) :
                    $this->_findOne([["$field" => (isset($args[0]) ? $args[0] : null)]]);
+        } else if (strpos($method, 'column') === 0) {
+            $field = lcfirst(substr($method, 6));
+            if (!empty($field)) array_unshift($args, $field);
+            return call_user_func_array([$this, '_column'], $args);
         } else {
             throw new BadMethodCallException(sprintf(
                 'Could not find method "%s" for the class "%s".',
@@ -760,5 +910,22 @@ abstract class AbstractEntity extends AbstractGetter implements IteratorAggregat
     public function type($field)
     {
         return $this->getIterator()->getField($field)->type;
+    }
+
+    /**
+     * Instantiate an object and sets the type of the result
+     *
+     * @param    int    $resultType  The type of the result
+     * @return   \Scalr\Model\AbstractEntity
+     */
+    public static function result($resultType)
+    {
+        $entity = new static;
+
+        $resultProp = new \ReflectionProperty(__CLASS__, 'resultType');
+        $resultProp->setAccessible(true);
+        $resultProp->setValue($entity, $resultType);
+
+        return $entity;
     }
 }

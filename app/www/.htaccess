@@ -57,7 +57,6 @@ RewriteRule .htaccess - [F]
 
 RewriteRule \.svn - [F]
 
-
 RewriteRule ^storage/keys/([0-9]+)/(.*)\.pem$ farms_view.php?id=$1&task=download_private_key [NE,L]
 
 #Farm events RSS
@@ -66,7 +65,6 @@ RewriteRule ^storage/events/([0-9]+)/rss\.xml$ rss.xml.php?farmid=$1 [NE,L]
 #Environment
 RewriteRule ^query-env/([0-9-]+)/(.*)$ environment.php?version=$1&operation=$2&%{QUERY_STRING} [NE,L]
 
-
 # New UI Controler
 RewriteRule ^ui/js/(.*)-[0-9]+\.js ui/js/$1.js [NE,L]
 RewriteRule ^ui/js/(.*)-[0-9]+\.css ui/js/$1.css [NE,L]
@@ -74,10 +72,21 @@ RewriteRule ^ui/js/(.*)-[0-9]+\.css ui/js/$1.css [NE,L]
 RewriteRule ^ui2/js/(.*)-[0-9]+\.js ui2/js/$1.js [NE,L]
 RewriteRule ^ui2/js/(.*)-[0-9]+\.css ui2/js/$1.css [NE,L]
 
+# Show standard 404 error for not-found files
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteRule ^ui2/ - [L,R=404]
+
 RewriteCond %{REQUEST_FILENAME} !-f
 RewriteCond %{REQUEST_FILENAME} !-d
 #RewriteCond %{REQUEST_URI} ^[^\.]+$
 RewriteRule ^(v[0-9]+)/.*$ /api.php?version=$1&%{QUERY_STRING}  [L]
+
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteRule ^api/(user|account|admin)\.(.+?)\.(yml|yaml)$ /public/describeApiSpec?service=$1&version=$2&%{QUERY_STRING}  [L]
+RewriteRule ^api/(user|account|admin)/.*$ /restapi.php  [L]
+
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteRule ^api/(.+?)\.(yml|yaml)$ /public/describeApiSpec?version=$1%{QUERY_STRING}  [L]
 
 RewriteCond %{REQUEST_FILENAME} !-f
 RewriteCond %{REQUEST_FILENAME} !-d

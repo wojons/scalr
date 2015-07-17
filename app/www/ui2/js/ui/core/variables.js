@@ -1,9 +1,12 @@
 Scalr.regPage('Scalr.ui.core.variables', function (loadParams, moduleParams) {
 	return Ext.create('Ext.form.Panel', {
         scalrOptions: {
-            'maximize': 'all'
+            maximize: 'all',
+            menuTitle: 'Global Variables',
+            menuHref: '#/core/variables',
+            menuFavorite: true
         },
-		title: 'Environment global variables',
+        stateId: 'grid-variables-view',
 		fieldDefaults: {
 			labelWidth: 110
 		},
@@ -12,12 +15,13 @@ Scalr.regPage('Scalr.ui.core.variables', function (loadParams, moduleParams) {
             xtype: 'variablefield',
             name: 'variables',
             currentScope: 'env',
+            cls: 'x-panel-column-left',
             value: moduleParams.variables
         },
 		dockedItems: [{
 			xtype: 'container',
 			dock: 'bottom',
-			cls: 'x-docked-buttons',
+			cls: 'x-docked-buttons-mini',
 			layout: {
 				type: 'hbox',
 				pack: 'center'

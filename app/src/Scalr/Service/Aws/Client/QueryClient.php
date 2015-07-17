@@ -193,8 +193,7 @@ class QueryClient extends AbstractClient implements ClientInterface
 
         $httpRequest->addPostFields($options);
 
-        //Signature version 4 sign for China region
-        if (preg_match('/^(cn|eu\-central)\-/', ($region ?: $this->getAws()->getRegion() ?: ''))) {
+        if (true) {
             $this->signRequestV4($httpRequest, $region);
         } else {
             $this->signRequestV2($httpRequest);
@@ -259,14 +258,18 @@ class QueryClient extends AbstractClient implements ClientInterface
         //Calculating payload
         $payload = '';
         if ($httpMethod == 'POST') {
-            $pars = $request->getPostFields();
+            if ($request->getBody() != '') {
+                $payload = $request->getBody();
+            } else {
+                $pars = $request->getPostFields();
 
-            foreach ($pars as $k => $v) {
-                //We do not use rawurlencode because httpRequest does not do this, and we need to hash payload
-                $payload .= '&' . urlencode($k) . '=' . urlencode($v);
+                foreach ($pars as $k => $v) {
+                    //We do not use rawurlencode because httpRequest does not do this, and we need to hash payload
+                    $payload .= '&' . urlencode($k) . '=' . urlencode($v);
+                }
+
+                $payload = ltrim($payload, '&');
             }
-
-            $payload = ltrim($payload, '&');
         } elseif ($httpMethod == 'PUT') {
             $payload = $request->getPutData();
 
@@ -390,6 +393,7 @@ class QueryClient extends AbstractClient implements ClientInterface
             case 'HmacSHA256':
                 $algo = strtolower(substr($common['SignatureMethod'], 4));
                 break;
+
             default:
                 throw new QueryClientException(
                     'Unknown SignatureMethod ' . $common['SignatureMethod']
@@ -401,7 +405,7 @@ class QueryClient extends AbstractClient implements ClientInterface
         ]);
 
         $request->addHeaders([
-            'X-Amz-Date'    => gmdate(\DateTime::ISO8601, $time),
+            'X-Amz-Date' => gmdate(\DateTime::ISO8601, $time),
         ]);
     }
 
@@ -438,7 +442,7 @@ class QueryClient extends AbstractClient implements ClientInterface
             if ($proxySettings['user']) {
                 $q->setOptions([
                     'proxyauth'     => "{$proxySettings['user']}:{$proxySettings['pass']}",
-                    'proxyauthtype' => HTTP_AUTH_BASIC
+                    'proxyauthtype' => $proxySettings['authtype']
                 ]);
             }
         }

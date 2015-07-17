@@ -441,6 +441,7 @@ class Scalr_UI_Controller_Dnszones extends Scalr_UI_Controller
                 $row['farm_name'] = $DBFarm->Name;
                 $row['farm_id'] = $DBFarm->ID;
             }
+            $row['dtlastmodified'] = Scalr_Util_DateTime::convertTz($row['dtlastmodified'], 'M j, Y H:i');
         }
 
         $this->response->data($response);

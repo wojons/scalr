@@ -106,10 +106,11 @@ class LoggerAppenderScalr extends LoggerAppender
                     $message = $event->message->Message;
                     $tm = date('YmdH');
                     $hash = md5(":{$message}:{$event->message->FarmID}:{$event->getLoggerName()}:{$tm}", true);
+                    $serverId = $event->message->ServerID;
 
                     $query = "INSERT DELAYED INTO logentries SET
                         `id` = ?,
-                        `serverid`	= '',
+                        `serverid`	= ?,
                         `message`	= ?,
                         `severity`	= ?,
                         `time`		= ?,
@@ -120,6 +121,7 @@ class LoggerAppenderScalr extends LoggerAppender
 
                     $this->db->Execute($query, array(
                         $hash,
+                        $serverId,
                         $message,
                         $severity,
                         time(),
@@ -131,73 +133,12 @@ class LoggerAppenderScalr extends LoggerAppender
                     $event->message = "[FarmID: {$event->message->FarmID}] {$event->message->Message}";
 
                     return;
-                } elseif ($event->message instanceof ScriptingLogMessage) {
-                    $message = $this->db->qstr($event->message->Message);
-
-                    $query = "INSERT DELAYED INTO scripting_log SET
-                        `farmid` 		= ?,
-                        `event`		    = ?,
-                        `server_id` 	= ?,
-                        `dtadded`		= NOW(),
-                        `message`		= ?
-                    ";
-
-                    $this->db->Execute($query, array($event->message->FarmID, $event->message->EventName, $event->message->ServerID, $message));
-
-                    $event->message = "[Farm: {$event->message->FarmID}] {$event->message->Message}";
-
-                    return;
-
                 } else {
-                    if (stristr($event->message, "AWS was not able to validate the provided access credentials") ||
-                        stristr($event->message, "The X509 Certificate you provided does not exist in our records"))
-                        return;
+                    // No longer log stuff in syslog table
+                    return;
                 }
-
-                $level = $event->getLevel()->toString();
-
-                // Redeclare threadName
-                $event->threadName = TRANSACTION_ID;
-
-                $event->subThreadName = defined("SUB_TRANSACTIONID") ? SUB_TRANSACTIONID
-                        : (isset($GLOBALS["SUB_TRANSACTIONID"]) ? $GLOBALS["SUB_TRANSACTIONID"] : TRANSACTION_ID);
-
-                $event->farmID = defined("LOGGER_FARMID") ? LOGGER_FARMID
-                        : (isset($GLOBALS["LOGGER_FARMID"]) ? $GLOBALS["LOGGER_FARMID"] : null);
-
-                if (defined('TRANSACTION_ID')) {
-                    if ($level == "FATAL" || $level == "ERROR") {
-                        // Set meta information
-                        $this->db->Execute("
-                            INSERT DELAYED INTO syslog_metadata
-                            SET transactionid='" . TRANSACTION_ID . "', errors='1', warnings='0'
-                            ON DUPLICATE KEY UPDATE errors=errors+1
-                        ");
-                    } else {
-                        if ($level == "WARN") {
-                            // Set meta information
-                            $this->db->Execute("
-                                INSERT DELAYED INTO syslog_metadata
-                                SET transactionid='" . TRANSACTION_ID . "', errors='0', warnings='1'
-                                ON DUPLICATE KEY UPDATE warnings=warnings+1
-                            ");
-                        }
-                    }
-                }
-
-                $msg = $event->message;
-                $event->message = $this->db->qstr($event->message);
-
-                $query = $this->layout->format($event);
-
-                $this->db->Execute($query);
-
-                $event->message = $msg;
             }
-            catch(Exception $e)
-            {
-
-            }
+            catch(Exception $e) {}
         }
     }
 

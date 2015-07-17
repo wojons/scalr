@@ -10,11 +10,17 @@ class Scalr_UI_Controller_Monitoring extends Scalr_UI_Controller
      */
     public function hasAccess()
     {
-        return parent::hasAccess() && $this->request->isAllowed(Acl::RESOURCE_FARMS_STATISTICS);
+        return parent::hasAccess() && $this->request->isFarmAllowed(null, Acl::PERM_FARMS_STATISTICS);
+    }
+
+    public function defaultAction()
+    {
+        $this->viewAction();
     }
 
     public function viewAction()
     {
+        // TODO: acl
         $farms = self::loadController('Farms')->getList(array('status' => FARM_STATUS::RUNNING));
         $conf = $this->getContainer()->config->get('scalr.load_statistics.connections.plotter');
 
@@ -105,6 +111,9 @@ class Scalr_UI_Controller_Monitoring extends Scalr_UI_Controller
 
             $children[] = $item;
             $hasRoles = false;
+        }
+        if (empty($children)) {
+            throw new Exception('No Farms in running state found.');
         }
         $this->response->page('ui/monitoring/view.js', array('children' => $children, 'hostUrl' => "{$conf['scheme']}://{$conf['host']}:{$conf['port']}"), array('ui/monitoring/window.js'), array('ui/monitoring/view.css'));
     }

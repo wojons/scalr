@@ -1,18 +1,19 @@
 Scalr.regPage('Scalr.ui.core.about', function (loadParams, moduleParams) {
 	var params = moduleParams;
-	
+
 	return Ext.create('Ext.form.Panel', {
 		width: 700,
 		title: 'About Scalr',
+        scalrOptions: {
+            modal: true
+        },
 		fieldDefaults: {
-			labelWidth: 110
+			labelWidth: 130,
+            anchor: '100%'
 		},
         layout: 'auto',
 		items: [{
 			xtype: 'fieldset',
-            defaults:{
-                anchor: '100%'
-            },
 			items: [{
                 xtype: 'displayfield',
                 fieldLabel: 'Installation ID',
@@ -32,7 +33,18 @@ Scalr.regPage('Scalr.ui.core.about', function (loadParams, moduleParams) {
                 fieldLabel: 'Full Revision Hash',
                 hidden: (!params['gitFullHash']),
                 value: (params['gitFullHash']) ? params['gitFullHash'] : " - "
+            },{
+                xtype: 'displayfield',
+                fieldLabel: 'Current branch',
+                hidden: !params['branch'],
+                value: params['branch']
             }]
+		}],
+		tools: [{
+			type: 'close',
+			handler: function () {
+				Scalr.event.fireEvent('close');
+			}
 		}]
 	});
 });

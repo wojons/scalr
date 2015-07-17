@@ -2,8 +2,6 @@
 
 require __DIR__ . "/../../src/prepend.inc.php";
 
-define("MSG_DEBUG", false);
-
 $logger = Logger::getLogger("Messaging");
 $logger->info("Messaging server received request");
 

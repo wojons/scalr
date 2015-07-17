@@ -17,26 +17,28 @@ class Scalr_UI_Controller_Tools_Aws_Route53_Hostedzones extends \Scalr_UI_Contro
     public function xListAction($cloudLocation)
     {
         $marker = null;
-        $result = array();
+        $result = [];
 
         do {
             if (isset($zonesList)) {
                 $marker = new MarkerType($zonesList->marker);
             }
+
             $zonesList = $this->environment->aws($cloudLocation)->route53->zone->describe($marker);
 
             foreach ($zonesList as $zone) {
-                $zoneResult = array(
+                /* @var $zone ZoneData */
+                $zoneResult = [
                     'zoneId'            => $zone->zoneId,
                     'name'              => $zone->name,
                     'recordSetCount'    => $zone->resourceRecordSetCount,
                     'comment'           => !empty($zone->zoneConfig->comment) ? $zone->zoneConfig->comment : ''
-                );
+                ];
                 $result[] = $zoneResult;
             }
         } while ($zonesList->marker !== null);
 
-        $response = $this->buildResponseFromData($result, array('name', 'comment'), true);
+        $response = $this->buildResponseFromData($result, ['name', 'comment'], true);
         $this->response->data($response);
     }
 
@@ -47,21 +49,23 @@ class Scalr_UI_Controller_Tools_Aws_Route53_Hostedzones extends \Scalr_UI_Contro
     public function infoAction($cloudLocation, $zoneId)
     {
         $zone = $this->environment->aws($cloudLocation)->route53->zone->fetch($zoneId);
-        $delegationSet = array();
+
+        $delegationSet = [];
+
         foreach ($zone->delegationSet as $set) {
+            /* @var $set \Scalr\Service\Aws\Route53\DataType\ZoneServerData */
             $delegationSet[] = $set->nameServer;
         }
-        $zoneResult = array(
-                'zoneId'            => $zone->zoneId,
-                'name'              => $zone->name,
-                'recordSetCount'    => $zone->resourceRecordSetCount,
-                'comment'           => !empty($zone->zoneConfig->comment) ? $zone->zoneConfig->comment : '',
-                'delegationSet'     => $delegationSet
-            );
 
-        $this->response->page('ui/tools/aws/route53/hostedzones/info.js', array(
-            'data' => $zoneResult
-        ));
+        $zoneResult = [
+            'zoneId'            => $zone->zoneId,
+            'name'              => $zone->name,
+            'recordSetCount'    => $zone->resourceRecordSetCount,
+            'comment'           => !empty($zone->zoneConfig->comment) ? $zone->zoneConfig->comment : '',
+            'delegationSet'     => $delegationSet
+        ];
+
+        $this->response->page('ui/tools/aws/route53/hostedzones/info.js', ['data' => $zoneResult]);
     }
 
     /**
@@ -74,25 +78,31 @@ class Scalr_UI_Controller_Tools_Aws_Route53_Hostedzones extends \Scalr_UI_Contro
         $config = new ZoneData($domainName);
         $zoneConfig = new ZoneConfigData($description);
         $config->setZoneConfig($zoneConfig);
+
         $zone = $this->environment->aws($cloudLocation)->route53->zone->create($config);
-        $delegationSet = array();
+
+        $delegationSet = [];
+
         foreach ($zone->delegationSet as $set) {
             $delegationSet[] = $set->nameServer;
         }
-        $changeInfo = array(
+
+        $changeInfo = [
             'changeId'    => !empty($zone->changeInfo->id) ? $zone->changeInfo->id : '',
             'status'      => !empty($zone->changeInfo->status) ? $zone->changeInfo->status : '',
             'submittedAt' => !empty($zone->changeInfo->submittedAt) ? $zone->changeInfo->submittedAt : '',
-        );
-        $zoneResult = array(
-                'zoneId'            => $zone->zoneId,
-                'name'              => $zone->name,
-                'recordSetCount'    => $zone->resourceRecordSetCount,
-                'comment'           => !empty($zone->zoneConfig->comment) ? $zone->zoneConfig->comment : '',
-                'delegationSet'     => $delegationSet,
-                'changeInfo'        => $changeInfo
-            );
-        $this->response->data(array('data' => $zoneResult));
+        ];
+
+        $zoneResult = [
+            'zoneId'            => $zone->zoneId,
+            'name'              => $zone->name,
+            'recordSetCount'    => $zone->resourceRecordSetCount,
+            'comment'           => !empty($zone->zoneConfig->comment) ? $zone->zoneConfig->comment : '',
+            'delegationSet'     => $delegationSet,
+            'changeInfo'        => $changeInfo
+        ];
+
+        $this->response->data(['data' => $zoneResult]);
     }
 
     /**
@@ -127,6 +137,7 @@ class Scalr_UI_Controller_Tools_Aws_Route53_Hostedzones extends \Scalr_UI_Contro
             if (!empty($customRecordSets)) {
                 $this->deleteCustomRecordsets($customRecordSets, $id, $cloudLocation);
             }
+
             $aws->route53->zone->delete($id);
         }
 

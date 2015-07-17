@@ -3,50 +3,72 @@ Scalr.regPage('Scalr.ui.dashboard.view', function (loadParams, moduleParams) {
 	var dashBoardUp = Scalr.storage.get('dashboard');
 	var addWidgetForm = function () {// function for add Widget panel
 		var widgetForm = new Ext.form.FieldSet({
-			title: 'Widgets list'
+            cls: 'x-fieldset-separator-none x-fieldset-no-bottom-padding',
+            items: [{
+                xtype: 'checkboxgroup',
+                allowBlank: false,
+                vertical: true,
+                columns: 1,
+                blankText: ''
+            }]
 		});
 		var widgets = [
 			{name: 'dashboard.announcement', title: 'From the Scalr blog', desc: 'Displays last 10 news from The Official Scalr blog'},
-			{name: 'dashboard.lasterrors', title: 'Last errors', desc: 'Displays last 10 errors from system logs'},
-			{name: 'dashboard.usagelaststat', title: 'Usage statistic', desc: 'Displays total spent money for this and last months'},
-			{name: 'dashboard.status', title: 'AWS health status', desc: 'Display most up-to-the-minute information on service availability of Amazon Web Services'}
+            {name: 'dashboard.newuser', title: 'New user checklist', desc: ''}
 		];
 
-		if (moduleParams.flags['cloudynEnabled'] && Scalr.isPlatformEnabled('ec2'))
-			widgets.push({
-				name: 'dashboard.cloudyn',
-				title: 'Cloudyn',
-				desc: 'Integration with Cloudyn'
-			});
+        if (Scalr.isAllowed('ADMINISTRATION_BILLING') && moduleParams.flags['billingEnabled'])
+            widgets.push({name: 'dashboard.billing', title: 'Billing', desc: 'Displays your current billing parameters'});
 
-		if(Scalr.user.type == 'AccountOwner' && moduleParams.flags['billingEnabled'])
-			widgets.push({name: 'dashboard.billing', title: 'Billing', desc: 'Displays your current billing parameters'});
+        if (Scalr.scope == 'account') {
+            widgets.push({name: 'dashboard.environments', title: 'Environments in this account', desc: 'Displays environments in this account'});
+        }
+
+        if (Scalr.scope == 'environment') {
+            widgets.push({name: 'dashboard.status', title: 'AWS health status', desc: 'Display most up-to-the-minute information on service availability of Amazon Web Services'});
+
+            if (Scalr.isAllowed('LOGS_SYSTEM_LOGS')) {
+                widgets.push({name: 'dashboard.lasterrors', title: 'Last errors', desc: 'Displays last 10 errors from system logs'});
+            }
+
+            if (Scalr.isAllowed('FARMS', 'manage') || Scalr.isAllowed('TEAM_FARMS', 'manage') || Scalr.isAllowed('OWN_FARMS', 'manage')) {
+                widgets.push({name: 'dashboard.addfarm', title: 'Create new Farm', desc: ''});
+            }
+
+            if (Scalr.flags['analyticsEnabled'] && Scalr.isAllowed('ENVADMINISTRATION_ANALYTICS')) {
+                widgets.push({name: 'dashboard.costanalytics', title: 'Cost Analytics', desc: 'Cost Analytics'});
+            }
+
+            if (moduleParams.flags['cloudynEnabled'] && Scalr.isPlatformEnabled('ec2'))
+                widgets.push({
+                    name: 'dashboard.cloudyn',
+                    title: 'Cloudyn',
+                    desc: 'Integration with Cloudyn'
+                });
+        }
 
 		for (var i = 0; i < widgets.length; i++) {   //all default widgets
 			if (moduleParams['panel']['widgets'].indexOf(widgets[i]['name']) == -1) {
-				widgetForm.add({
-					xtype: 'container',
-					layout: 'hbox',
-					items: [{
-						xtype: 'checkbox',
-						boxLabel: widgets[i]['title'],
-						name: 'widgets',
-						inputValue: widgets[i]['name']
-					}, {
-						xtype: 'displayinfofield',
-						margin: '0 0 0 5',
-						info: widgets[i]['desc']
+				widgetForm.down('checkboxgroup').add({
+					xtype: 'checkbox',
+					boxLabel: widgets[i]['title'],
+					name: 'widgets',
+					inputValue: widgets[i]['name'],
+					plugins: [{
+						ptype: 'fieldicons',
+						align: 'right',
+						position: 'outer',
+						icons: {
+							id: 'info',
+							tooltip: widgets[i]['desc']
+						}
 					}]
 				});
 			}
 		}
-		if (!widgetForm.items.length) {
-			//widgetForm.down('checkboxgroup').hide();
-			widgetForm.add({xtype: 'displayfield', value: 'All default widgets are used'});
-		}
-		else{
-			//widgetForm.down('checkboxgroup').show();
-			widgetForm.remove('displayfield');
+		if (!widgetForm.down('checkboxgroup').items.length) {
+			widgetForm.down('checkboxgroup').hide();
+			widgetForm.add({xtype: 'displayfield', anchor: '100%', fieldStyle: 'text-align:center', value: 'All available widgets are already in use'});
 		}
 		widgetForm.doLayout();
 		return widgetForm;
@@ -62,18 +84,21 @@ Scalr.regPage('Scalr.ui.dashboard.view', function (loadParams, moduleParams) {
 			if (this.running)
 				this.id = Ext.Function.defer(this.start, this.timeout, this);
 		},
-		start: function () {
+		start: function (force) {
 			var list = [];
 			var widgets = {};
-			var widgetCount = 0;
+			var widgetCount = 0,
+                time = (new Date()).getTime();
 			panel.items.each(function (column) {  /*get all widgets in columns*/
 				column.items.each(function (widget) {
-					widgetCount++;
-					if (widget.widgetType == 'local')
+					if (widget.widgetType == 'local') {
+                        if (!force && widget.updateTimeout && widget.lastUpdateTime + widget.updateTimeout > time) return true;
+    					widgetCount++;
 						widgets[widget.id] = {
 							name: widget.xtype,
 							params: widget.params || {}
 						};
+                    }
 				});
 			}); 								/*end*/
 			if(widgetCount)
@@ -103,15 +128,18 @@ Scalr.regPage('Scalr.ui.dashboard.view', function (loadParams, moduleParams) {
 	var panel = Ext.create('Scalr.ui.dashboard.Panel',{
 		defaultType: 'dashboard.column',
 		scalrOptions: {
-			'maximize': 'all',
-			'reload': false
+			maximize: 'all',
+			reload: false,
+            menuTitle: Scalr.scope == 'account' ? 'Account Dashboard' : 'Dashboard'
 		},
 		style: {
 			overflowY: 'visible',
-			overflowX: 'hidden'
+			overflowX: 'hidden',
+            minHeight: '100%'
 		},
+        stateId: Scalr.scope == 'account' ? 'panel-account-dashboard' : 'panel-dashboard',
 
-        bodyStyle: 'background-color: transparent', // should be padding: 12px, but extjs goes into recursion in 4.2.2
+        bodyStyle: 'background-color: transparent;', // should be padding: 12px, but extjs goes into recursion in 4.2.2
 
 		isSaving: false,
 		savingPanel: 0,
@@ -127,9 +155,9 @@ Scalr.regPage('Scalr.ui.dashboard.view', function (loadParams, moduleParams) {
                         if (! configuration[i][j])
                             continue;
 
-					    if (configuration[i][j]['name'] == 'dashboard.billing' && !moduleParams.flags['billingEnabled'])
+					    if (configuration[i][j]['name'] == 'dashboard.billing' && (!moduleParams.flags['billingEnabled'] || !Scalr.isAllowed('ADMINISTRATION_BILLING')))
                             continue;
-					
+
 						try {
                             var widget = this.items.getAt(i).add(
                                 panel.newWidget(
@@ -152,7 +180,7 @@ Scalr.regPage('Scalr.ui.dashboard.view', function (loadParams, moduleParams) {
 			this.resumeLayouts(true);
 		},
 
-		savePanel: function (refill) {
+		savePanel: function (refill, cb) {
 			if (!this.isSaving) { /*if saving not in process*/
 				this.isSaving = true;
 				var me = this;
@@ -186,13 +214,16 @@ Scalr.regPage('Scalr.ui.dashboard.view', function (loadParams, moduleParams) {
 						if (me.savingPanel)
 							me.savingPanel.hide();
 						me.isSaving = false;
+                        if (Ext.isFunction(cb)) {
+                            cb();
+                        }
 					},
 					failure: function () {
 						me.isSaving = false;
 					}
 				});
 				if (refill)
-					updateHandler.start();
+					updateHandler.start(true);
 			}
 		},
 		listeners: {
@@ -212,58 +243,41 @@ Scalr.regPage('Scalr.ui.dashboard.view', function (loadParams, moduleParams) {
 			afterrender: function() {
 				var panelContainer = Ext.DomHelper.insertFirst(panel.el, {id:'editpanel-div'}, true);   /*create panel for indicate Saving*/
 				this.savingPanel = Ext.DomHelper.append (panelContainer,
-					'<div style="z-index: 999; left: 48%; position: absolute; top: 10px;">'+
-						'<img src="/ui2/images/ui/dashboard/loader.gif" />' +
-					'</div>', true);
+                    '<div class="x-mask-msg" style="z-index: 999; left: 48%; position: absolute; top: 10px;">' +
+                        '<div class="x-mask-loading x-mask-msg-inner ">' +
+                            '<div class="x-mask-msg-text"></div>' +
+                        '</div>' +
+                    '</div>', true);
 				this.savingPanel.hide();													/*end*/
-				panel.body.on('mouseover', function(e, el, obj) {
-                    // TODO: move to column's code
-                    var column = e.getTarget('.scalr-ui-dashboard-container');
-                    if (column) {
-                        column = Ext.fly(column).child('span');
-                        if (column) {
-                            column = column.child('div');
-                            if (column)
-                                column = column.dom;
-                        }
-                    }
-
-					if (
-							column == e.target ||
-							e.getTarget('div.editpanel') == e.target ||
-							e.getTarget('div.remove') == e.target ||
-							e.getTarget('div.add') == e.target ||
-							e.getTarget('div.scalr-ui-dashboard-icon-add-widget') == e.target ||
-							e.getTarget('div.scalr-ui-dashboard-icon-remove-column') == e.target
-						) {
-						if (panel.down('[id='+e.getTarget('.scalr-ui-dashboard-container').getAttribute('id')+']').items.length)
-							Ext.fly(e.getTarget('.scalr-ui-dashboard-container')).addCls('scalr-ui-dashboard-container-over');
-						else
-							Ext.fly(e.getTarget('.scalr-ui-dashboard-container')).addCls('scalr-ui-dashboard-container-over-empty');
-					}
-				});
-				panel.body.on('mouseout', function(e, el, obj) {
-					if (e.getTarget('.scalr-ui-dashboard-container')) {
-						Ext.fly(e.getTarget('.scalr-ui-dashboard-container')).removeCls('scalr-ui-dashboard-container-over');
-						Ext.fly(e.getTarget('.scalr-ui-dashboard-container')).removeCls('scalr-ui-dashboard-container-over-empty');
-					}
-				});
 				panel.body.on('click', function(e, el, obj) {
 					if (e.getTarget('div.remove')) {
-						Scalr.Confirm ({
-							title: 'Remove column',
-							msg: 'Are you sure you want to remove this column from dashboard?',
-							type: 'delete',
-							scope: panel.down('[id='+e.getTarget('.scalr-ui-dashboard-container').id+']'),
-							success: function(data) {
-								if (!this.items.length) {
-									panel.remove(this);
-									panel.savePanel(0);
-									panel.updateColWidth();
-									panel.doLayout();
-								}
-							}
-						});
+                        if (panel.items.length === 1) {
+                            Scalr.Confirm ({
+                                msg: 'After removing last column default dashboard configuration will be restored. Are you sure you want to continue?',
+                                type: 'delete',
+                                scope: panel.down('[id='+e.getTarget('.scalr-ui-dashboard-container').id+']'),
+                                success: function(data) {
+                                    if (!this.items.length) {
+                                        panel.remove(this);
+                                        panel.savePanel(0, function(){Scalr.event.fireEvent('refresh', true);});
+                                    }
+                                }
+                            });
+                        } else {
+                            Scalr.Confirm ({
+                                msg: 'Are you sure you want to remove this column from dashboard?',
+                                type: 'delete',
+                                scope: panel.down('[id='+e.getTarget('.scalr-ui-dashboard-container').id+']'),
+                                success: function(data) {
+                                    if (!this.items.length) {
+                                        panel.remove(this);
+                                        panel.savePanel(0);
+                                        panel.updateColWidth();
+                                        panel.doLayout();
+                                    }
+                                }
+                            });
+                        }
 					}
 					if (e.getTarget('div.add')) {
 						var index = e.getTarget('div.add').getAttribute('index'); // in which column to add
@@ -271,6 +285,7 @@ Scalr.regPage('Scalr.ui.dashboard.view', function (loadParams, moduleParams) {
 							title: 'Select widgets to add',
 							form: addWidgetForm(),
 							ok: 'Add',
+                            formValidate: true,
 							scope: this,
 							success: function(formValues) {
 								if(formValues.widgets){

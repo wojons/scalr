@@ -12,25 +12,28 @@ Scalr.regPage('Scalr.ui.tools.openstack.details.view', function (loadParams, mod
 		}],
 		proxy: {
             type: 'cachedrequest',
-            crscope: 'tools-openstack-details',
-			url: '/tools/openstack/details/xListDetails/',
+            crscope: 'grid-openstack-details',
+			url: '/tools/openstack/details/xListDetails',
             root: 'details'
 		}
 	});
 
 	return Ext.create('Ext.grid.Panel', {
-		title: Scalr.utils.getPlatformName(loadParams['platform']) + ' &raquo; Details',
-        plugins: {
+        plugins: [{
             ptype: 'localcachedrequest',
-            crscope: 'farmbuilder'
-		},
+            crscope: 'grid-openstack-details'
+        }, {
+            ptype: 'applyparams',
+            filterIgnoreParams: [ 'platform' ]
+		}],
 		scalrOptions: {
-			'reload': true,
-			'maximize': 'all'
+			reload: true,
+			maximize: 'all',
+            menuTitle: Scalr.utils.getPlatformName(loadParams['platform']) + ' details'
 		},
 		store: store,
-		//stateId: 'grid-tools-openstack-details-view',
-		//stateful: true,
+		stateId: 'grid-openstack-details-view',
+		stateful: true,
         features: [{
             id: 'grouping',
             ftype: 'grouping',
@@ -49,15 +52,6 @@ Scalr.regPage('Scalr.ui.tools.openstack.details.view', function (loadParams, mod
             )
         }],
 
-
-		tools: [{
-			xtype: 'favoritetool',
-			favorite: {
-				text: 'Openstack details',
-				href: '#/tools/openstack/details?platform=' + loadParams['platform']
-			}
-		}],
-
 		viewConfig: {
 			emptyText: 'No details loaded',
 			loadingText: 'Loading details ...',
@@ -68,7 +62,8 @@ Scalr.regPage('Scalr.ui.tools.openstack.details.view', function (loadParams, mod
                 emptyTextNoItems: 'No details loaded'
             }
 		},
-        cls: 'x-grid-with-formfields x-grid-no-highlighting',
+        cls: 'x-grid-with-formfields',
+        disableSelection: true,
         hideHeaders: true,
 		columns: [
 			{header: 'Name', width: 320, dataIndex: 'name'},
@@ -78,61 +73,16 @@ Scalr.regPage('Scalr.ui.tools.openstack.details.view', function (loadParams, mod
 
 		dockedItems: [{
             xtype: 'toolbar',
+            margin: '0 0 1 0',
 			items: [{
                 xtype: 'filterfield',
                 store: store,
-                filterFields: ['name', 'alias', 'service'],
-                listeners: {
-                    afterfilter1: function(){
-                        //workaround of the extjs grouped store/grid bug
-                        var grid = this.up('grid'),
-                            grouping = grid.getView().getFeature('grouping');
-                        if (grid.headerCt.rendered) {
-                            grid.suspendLayouts();
-                            grouping.disable();
-                            grouping.enable();
-                            grid.resumeLayouts(true);
-                        }
-                    }
-                }
-            }, {
-				xtype: 'combo',
-                margin: '0 0 0 12',
-                fieldLabel: 'Location',
-                labelWidth: 53,
-                width: 358,
-                matchFieldWidth: false,
-                listConfig: {
-                    width: 'auto',
-                    minWidth: 300
-                },
-                iconCls: 'no-icon',
-                displayField: 'name',
-                valueField: 'id',
-                editable: false,
-                queryMode: 'local',
-				store: {
-					fields: [ 'id', 'name' ],
-					data: moduleParams.locations,
-					proxy: 'object'
-				},
-                listeners: {
-                    change: function(comp, value) {
-                        Ext.apply(store.getProxy(), {
-                            params: {
-                                platform: loadParams['platform'],
-                                cloudLocation: value
-                            }
-                        });
-                        store.load();
-                    },
-                    added: function() {
-                        if (this.store.getCount()) {
-                            this.setValue(this.store.getAt(0).get('id'));
-                        }
-                    }
-                }
-			}]
+                filterFields: ['name', 'alias', 'service']
+            }, ' ', {
+                xtype: 'cloudlocationfield',
+                platforms: [loadParams['platform']],
+				gridStore: store
+            }]
 		}]
 	});
 });

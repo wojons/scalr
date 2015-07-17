@@ -32,7 +32,27 @@ class Scalr_UI_Controller_Platforms_Openstack extends Scalr_UI_Controller
 
                 //TODO: Add support for extra-specs
             }
-        } catch (Exception $e) {}
+        } catch (Exception $e) {
+            \Scalr::logException($e);
+        }
+        
+        try {
+            if ($client->servers->isExtensionSupported(ServersExtension::EXT_AVAILABILITY_ZONE)) {
+                $availZones = $client->servers->listAvailabilityZones();
+                $data['availabilityZones'] = array();
+                foreach ($availZones as $zone) {
+                    if ($zone->zoneState->available == true) {
+                        $data['availabilityZones'][] = [
+                            'id'    => (string)$zone->zoneName,
+                            'name'  => (string)$zone->zoneName,
+                            'state' => (string)$zone->zoneState->available ? 'available' : 'unavailable'
+                        ];
+                    }
+                }
+            }
+        } catch (Exception $e) {
+            \Scalr::logException($e);
+        }
 
         if ($client->hasService('network') && !in_array($this->getParam('platform'), array(SERVER_PLATFORMS::RACKSPACENG_US, SERVER_PLATFORMS::RACKSPACENG_UK))) {
             $data['ipPools'] = array(array('id' =>'', 'name' => ''));
@@ -238,10 +258,12 @@ class Scalr_UI_Controller_Platforms_Openstack extends Scalr_UI_Controller
         foreach ($cloudLocations as $cloudLocation) {
             $client = $this->environment->openstack($this->getParam('platform'), $cloudLocation);
             if ($client->hasService('network')) {
+                
+                $tenantId = $client->getConfig()->getAuthToken()->getTenantId();
                 $networks = $client->network->listNetworks();
                 foreach ($networks as $network) {
                     if ($network->status == 'ACTIVE') {
-                        if ($network->{"router:external"} != true) {
+                        if ($tenantId == $network->tenant_id || $network->shared == true) {
                             $data[$cloudLocation][] = array(
                                 'id' => $network->id,
                                 'name' => $network->name
@@ -249,6 +271,18 @@ class Scalr_UI_Controller_Platforms_Openstack extends Scalr_UI_Controller
                         }
                     }
                 }
+                
+                if ($this->getParam('platform') == SERVER_PLATFORMS::RACKSPACENG_US && count($data[$cloudLocation]) > 0) {
+                    $data[$cloudLocation][] = array(
+                        'id' => '00000000-0000-0000-0000-000000000000',
+                        'name' => 'PublicNet'
+                    );
+                    $data[$cloudLocation][] = array(
+                        'id' => '11111111-1111-1111-1111-111111111111',
+                        'name' => 'ServiceNet'
+                    );
+                }
+                
             } else {
                 if ($client->servers->isExtensionSupported(ServersExtension::EXT_NETWORKS)) {
                     $novaNetworks = $client->servers->listNetworks();

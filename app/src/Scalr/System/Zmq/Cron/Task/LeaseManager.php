@@ -9,6 +9,7 @@ use \Scalr_Util_DateTime;
 use \Scalr_Account_User;
 use \DBFarm;
 use \FARM_STATUS;
+use Scalr\Model\Entity\SettingEntity;
 
 /**
  * LeaseManager
@@ -108,6 +109,7 @@ class LeaseManager extends AbstractTask
                     //Terminates farm
                     $event = new FarmTerminatedEvent(0, 1, false, 1);
 
+                    SettingEntity::increase(SettingEntity::LEASE_TERMINATE_FARM);
                     \Scalr::FireEvent($request->farmId, $event);
 
                     $this->log('INFO', sprintf('Farm: %s [ID: %d] was terminated by lease manager', $dbFarm->Name, $dbFarm->ID));

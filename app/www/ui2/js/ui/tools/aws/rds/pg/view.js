@@ -10,41 +10,45 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.pg.view', function (loadParams, modulePara
 		remoteSort: true
 	});
 	var panel = Ext.create('Ext.grid.Panel', {
-		title: 'Tools &raquo; Amazon Web Services &raquo; Amazon RDS &raquo; Manage parameter groups',
 		scalrOptions: {
-			'reload': false,
-			'maximize': 'all'
+			reload: false,
+			maximize: 'all',
+            menuTitle: 'RDS Parameter groups'
 		},
 		store: store,
-		plugins: {
-			ptype: 'gridstore'
-		},
+        plugins: [{
+            ptype: 'gridstore'
+        }, {
+            ptype: 'applyparams'
+        }],
 		viewConfig: {
 			emptyText: 'No parameter groups found',
 			loadingText: 'Loading parameter groups ...'
 		},
+        disableSelection: true,
 		columns: [
-			{ flex: 2, text: "Name", dataIndex: 'DBParameterGroupName', sortable: true },
+			{ flex: 2, text: "Parameter group", dataIndex: 'DBParameterGroupName', sortable: true },
 			{ flex: 2, text: "Description", dataIndex: 'Description', sortable: true },
 			{
-				xtype: 'optionscolumn2',
+				xtype: 'optionscolumn',
 				menu: [{
 					text: 'Edit',
 					iconCls: 'x-menu-icon-edit',
+                    showAsQuickAction: true,
 					menuHandler: function(data) {
 						Scalr.event.fireEvent('redirect', '#/tools/aws/rds/pg/edit?name=' + data['DBParameterGroupName'] + '&cloudLocation=' + store.proxy.extraParams.cloudLocation);
 					}
 				},{
 					text: 'Events log',
 					iconCls: 'x-menu-icon-logs',
+                    showAsQuickAction: true,
 					menuHandler: function(data) {
 						Scalr.event.fireEvent('redirect', '#/tools/aws/rds/logs?name=' + data['DBParameterGroupName'] + '&type=db-instance&cloudLocation=' + store.proxy.extraParams.cloudLocation);
 					}
 				},{
-					xtype: 'menuseparator'
-				},{
 					text: 'Delete',
 					iconCls: 'x-menu-icon-delete',
+                    showAsQuickAction: true,
 					menuHandler: function(data) {
 						Scalr.Request({
 							confirmBox: {
@@ -72,7 +76,7 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.pg.view', function (loadParams, modulePara
 			dock: 'top',
 			beforeItems: [{
                 text: 'Add group',
-                cls: 'x-btn-green-bg',
+                cls: 'x-btn-green',
 				handler: function() {
 					Scalr.Request({
 						confirmBox: {
@@ -83,22 +87,29 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.pg.view', function (loadParams, modulePara
                                 defaults: {
                                     anchor: '100%'
                                 },
+                                fieldDefaults: {
+                                    labelWidth: 120
+                                },
                                 items: [{
                                     xtype: 'combo',
                                     name: 'cloudLocation',
+                                    plugins: {
+                                        ptype: 'fieldinnericoncloud',
+                                        platform: 'ec2'
+                                    },
                                     store: {
                                         fields: [ 'id', 'name' ],
                                         data: moduleParams.locations,
                                         proxy: 'object'
                                     },
                                     editable: false,
-                                    fieldLabel: 'Location',
+                                    fieldLabel: 'Cloud Location',
                                     queryMode: 'local',
                                     displayField: 'name',
                                     valueField: 'id',
                                     value: panel.down('#cloudLocation').value,
                                     listeners: {
-                                        boxready: function (me) {
+                                        beforerender: function (me) {
                                             me.fireEvent('change', me, me.getValue());
                                         },
                                         change: function (me, value) {
@@ -162,13 +173,8 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.pg.view', function (loadParams, modulePara
 				}
 			}],
 			items: [{
-				xtype: 'fieldcloudlocation',
-				itemId: 'cloudLocation',
-				store: {
-					fields: [ 'id', 'name' ],
-					data: moduleParams.locations,
-					proxy: 'object'
-				},
+                xtype: 'cloudlocationfield',
+                platforms: ['ec2'],
 				gridStore: store
 			}]
 		}]

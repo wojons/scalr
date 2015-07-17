@@ -130,7 +130,7 @@ class Scalr_UI_Controller_Admin_Accounts extends Scalr_UI_Controller
                 'featureCsm' => '1'
             ),
             'ccs' => $this->getCostCenters()
-        ), array('ux-boxselect.js'));
+        ));
     }
 
     public function getAccount()
@@ -166,7 +166,7 @@ class Scalr_UI_Controller_Admin_Accounts extends Scalr_UI_Controller
             'account' => $account,
             'ccs'     => $this->getCostCenters($account['ccs']),
 
-        ), array('ux-boxselect.js'));
+        ));
     }
 
     public function xGetInfoAction()

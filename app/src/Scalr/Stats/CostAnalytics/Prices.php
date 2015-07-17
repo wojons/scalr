@@ -199,7 +199,7 @@ class Prices
      * @param   PriceHistoryEntity|string  $price
      *          The PriceHistoryEntity or identifier of the price.
      *          Identifier must be provided as UUID without hyphens.
-     * @return  \ArrayObject        Returns all prices which are associated with this price history ID
+     * @return  ArrayCollection Returns all prices which are associated with this price history ID
      */
     public function getDetails($price)
     {
@@ -212,7 +212,7 @@ class Prices
             $priceId = (string) $price;
         }
 
-        return PriceEntity::findByPriceId($priceId);
+        return PriceEntity::result(PriceEntity::RESULT_ENTITY_COLLECTION)->findByPriceId($priceId);
     }
 
 
@@ -223,14 +223,14 @@ class Prices
      * @param   string       $cloudLocation The cloud location
      * @param   string       $url           optional The keystone url for the private cloud
      * @param   string       $accountId     optional The identifier of the account for overridden price
-     * @return  \ArrayObject Returns collection of the PriceHistoryEntity objects
+     * @return  ArrayCollection Returns collection of the PriceHistoryEntity objects
      */
     public function getHistory($platform, $cloudLocation, $url = null, $accountId = null)
     {
         $accountId = $accountId ?: 0;
         $url = $url ?: '';
 
-        return PriceHistoryEntity::find([
+        return PriceHistoryEntity::result(PriceHistoryEntity::RESULT_ENTITY_COLLECTION)->find([
             ['platform'      => $platform],
             ['cloudLocation' => $cloudLocation],
             ['url'           => $url],

@@ -17,7 +17,7 @@ class Scalr_UI_Controller_Account2_Variables extends Scalr_UI_Controller
     public function viewAction()
     {
         $vars = new Scalr_Scripting_GlobalVariables($this->user->getAccountId(), 0, Scalr_Scripting_GlobalVariables::SCOPE_ACCOUNT);
-        $this->response->page('ui/account2/variables/view.js', array('variables' => json_encode($vars->getValues())), array('ui/core/variablefield.js'), array('ui/core/variablefield.css'));
+        $this->response->page('ui/account2/variables/view.js', array('variables' => json_encode($vars->getValues())), array('ui/core/variablefield.js'));
     }
 
     /**

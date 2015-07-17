@@ -16,10 +16,10 @@ class Scalr_Net_Scalarizr_Services_Image extends Scalr_Net_Scalarizr_Client
         return $this->request("create", $params)->result;
     }
 
-    public function prepare($platformAccessData, $async = false) {
+    public function prepare($name, $async = false) {
         $params = new stdClass();
         $params->async = $async;
-        $params->_platform_access_data = $platformAccessData;
+        $params->name = $name;
 
         return $this->request("prepare", $params)->result;
     }

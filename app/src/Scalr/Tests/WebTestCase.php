@@ -201,17 +201,24 @@ abstract class WebTestCase extends TestCase
     protected function assertResponseDataHasKeys($keys, $responseData, $checkAll = false, $dataColumnName = 'data')
     {
         $this->assertInternalType('array', $responseData);
-        if (isset($responseData['success']) && $responseData['success'] === false &&
-            isset($responseData['errorMessage'])) {
-            echo "\n" . $responseData['errorMessage'] . "\n";
+
+        if (isset($responseData['success']) && $responseData['success'] === false && isset($responseData['errorMessage'])) {
+            $this->assertTrue(false, "Server responded with error: " . $responseData['errorMessage']);
         }
-        $this->assertArrayHas(true, 'success', $responseData);
+
+        $this->assertTrue(isset($responseData['success']), 'There are not success data set in the response');
+
+        $this->assertTrue($responseData['success'], 'success is not true');
+
         $this->assertArrayHasKey($dataColumnName, $responseData);
+
         if (!empty($responseData[$dataColumnName])) {
             $this->assertInternalType('array', $responseData[$dataColumnName]);
+
             foreach ($responseData[$dataColumnName] as $obj) {
                 $this->assertNotEmpty($obj);
                 $this->assertInternalType('array', $obj);
+
                 foreach ($keys as $key => $val) {
                     if (is_numeric($key)) {
                         $this->assertArrayHasKey($val, $obj);
@@ -220,6 +227,7 @@ abstract class WebTestCase extends TestCase
                         $this->assertThat($obj[$key], $val);
                     }
                 }
+
                 if (!$checkAll) break;
             }
         }

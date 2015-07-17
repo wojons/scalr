@@ -15,7 +15,7 @@ class Update20141029152128 extends AbstractUpdate implements SequenceInterface
 
     protected $description = 'Refactor table servers';
 
-    protected $ignoreChanges = true;
+    protected $ignoreChanges = false;
 
     protected $dbservice = 'adodb';
 

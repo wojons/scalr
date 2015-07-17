@@ -55,16 +55,14 @@ class MsgSender(application.ScalrIterationApplication):
         self._db = None
         self._pool = None
 
-
     def configure(self):
         helper.update_config(
-                self.scalr_config.get('msg_sender', {}), self.config)
+            self.scalr_config.get('msg_sender', {}), self.config)
         helper.validate_config(self.config)
         socket.setdefaulttimeout(self.config['instances_connection_timeout'])
 
         self._db = dbmanager.ScalrDB(self.config['connections']['mysql'])
         self._pool = helper.GPool(pool_size=self.config['pool_size'])
-
 
     def _encrypt(self, server_id, crypto_key, data, headers=None):
         assert server_id, 'server_id'
@@ -79,23 +77,21 @@ class MsgSender(application.ScalrIterationApplication):
         LOG.debug(msg)
         return data, headers
 
-
     def get_messages(self):
         query = (
-                "SELECT messageid, server_id, event_id, message_format, "
-                "handle_attempts ,message, message_name, status "
-                "FROM messages "
-                "WHERE type = 'out' "
-                "AND status = 0 "
-                "AND messageid IS NOT NULL "
-                "AND messageid != '' "
-                "AND message_version = 2 "
-                "AND UNIX_TIMESTAMP(dtlasthandleattempt)+handle_attempts*{cratio}<UNIX_TIMESTAMP() "
-                "ORDER BY dtadded ASC "
-                "LIMIT 250"
+            "SELECT messageid, server_id, event_id, message_format, "
+            "handle_attempts ,message, message_name, status "
+            "FROM messages "
+            "WHERE type = 'out' "
+            "AND status = 0 "
+            "AND messageid IS NOT NULL "
+            "AND messageid != '' "
+            "AND message_version = 2 "
+            "AND UNIX_TIMESTAMP(dtlasthandleattempt)+handle_attempts*{cratio}<UNIX_TIMESTAMP() "
+            "ORDER BY dtadded ASC "
+            "LIMIT 250"
         ).format(cratio=self.config['cratio'])
         return self._db.execute(query)
-
 
     def get_servers(self, messages):
         servers = ()
@@ -111,9 +107,9 @@ class MsgSender(application.ScalrIterationApplication):
             'Pending suspend',
         ]
         query = (
-                "SELECT server_id, farm_id, farm_roleid, remote_ip, local_ip, platform "
-                "FROM servers "
-                "WHERE server_id IN ({0}) AND status IN ({1})"
+            "SELECT server_id, farm_id, farm_roleid, remote_ip, local_ip, platform "
+            "FROM servers "
+            "WHERE server_id IN ({0}) AND status IN ({1})"
         ).format(str(servers_id)[1:-1], str(statuses)[1:-1])
         servers = self._db.execute(query)
 
@@ -127,15 +123,15 @@ class MsgSender(application.ScalrIterationApplication):
         self._db.load_vpc_settings(servers)
         return servers
 
-
     def make_request(self, message, server):
         data, headers = self._encrypt(
-                server['server_id'],
-                server['scalarizr.key'],
-                message['message'])
+            server['server_id'],
+            server['scalarizr.key'],
+            message['message'])
         instances_connection_policy = self.scalr_config.get(server['platform'], {}).get(
-                'instances_connection_policy', self.scalr_config['instances_connection_policy'])
-        ip, port, proxy_headers = helper.get_szr_ctrl_conn_info(server, instances_connection_policy)
+            'instances_connection_policy', self.scalr_config['instances_connection_policy'])
+        ip, port, proxy_headers = helper.get_szr_ctrl_conn_info(
+            server, instances_connection_policy)
         headers.update(proxy_headers)
         if not ip:
             msg = "Unable to determine ip"
@@ -150,14 +146,13 @@ class MsgSender(application.ScalrIterationApplication):
         }
         return request
 
-
     def update(self, message):
         if message['status'] == 1:
             if message['event_id']:
                 query = (
-                        "UPDATE events "
-                        "SET msg_sent = msg_sent + 1 "
-                        "WHERE event_id = '{0}'"
+                    "UPDATE events "
+                    "SET msg_sent = msg_sent + 1 "
+                    "WHERE event_id = '{0}'"
                 ).format(message['event_id'])
                 self._db.execute(query, retries=1)
             if message['message_name'] == 'ExecScript':
@@ -165,12 +160,11 @@ class MsgSender(application.ScalrIterationApplication):
                 self._db.execute(query, retries=1)
                 return
         query = (
-                "UPDATE messages "
-                "SET status = {0}, handle_attempts = handle_attempts + 1, dtlasthandleattempt = NOW() "
-                "WHERE messageid = '{1}'"
+            "UPDATE messages "
+            "SET status = {0}, handle_attempts = handle_attempts + 1, dtlasthandleattempt = NOW() "
+            "WHERE messageid = '{1}'"
         ).format(message['status'], message['messageid'])
         self._db.execute(query, retries=1)
-
 
     def process_message(self, message, server):
         try:
@@ -186,15 +180,15 @@ class MsgSender(application.ScalrIterationApplication):
                 raise Exception(msg)
             msg = "Send message: {message_id}, request: {request}"
             msg = msg.format(
-                    message_id=message['messageid'],
-                    request={'url': request['url'], 'headers': request['headers']})
+                message_id=message['messageid'],
+                request={'url': request['url'], 'headers': request['headers']})
             LOG.debug(msg)
 
             r = requests.post(
-                    request['url'],
-                    data=request['data'],
-                    headers=request['headers'],
-                    timeout=self.config['instances_connection_timeout'])
+                request['url'],
+                data=request['data'],
+                headers=request['headers'],
+                timeout=self.config['instances_connection_timeout'])
 
             if r.status_code != 201:
                 msg = "Bad response code: {code}".format(code=r.status_code)
@@ -208,10 +202,10 @@ class MsgSender(application.ScalrIterationApplication):
                 message['status'] = 3
             msg = "Delivery failed, message: {message_id}, server: {server}, reason: {error}"
             server['scalarizr.key'] = '******'
-            msg = msg.format(message_id=message['messageid'], server=server, error=helper.exc_info())
+            msg = msg.format(
+                message_id=message['messageid'], server=server, error=helper.exc_info())
             LOG.warning(msg)
         self.update(message)
-
 
     def do_iteration(self):
         messages = self.get_messages()
@@ -242,10 +236,8 @@ class MsgSender(application.ScalrIterationApplication):
                 LOG.warning(msg)
         self._pool.join()
 
-
     def on_iteration_error(self):
         self._pool.kill()
-
 
 
 def main():

@@ -1,6 +1,8 @@
 <?php
 
 use Scalr\Stats\CostAnalytics\Entity\ReportPayloadEntity;
+use Scalr\Util\Api\Describer;
+use Scalr\Util\Api\Mutators\AnalyticsSubtractor;
 
 /**
  * Class Scalr_UI_Controller_Public
@@ -29,6 +31,19 @@ class Scalr_UI_Controller_Public extends Scalr_UI_Controller
             throw new Scalr_UI_Exception_NotFound();
         }
 
-        $this->response->page('ui/public/report.js', json_decode($data->payload, true), array(), array('ui/analytics/analytics.css', 'ui/analytics/admin/admin.css', 'ui/public/report.css'));
+        $this->response->page('ui/public/report.js', json_decode($data->payload, true), array(), array('ui/analytics/analytics.css', 'ui/admin/analytics/admin.css', 'ui/public/report.css'));
+    }
+
+    /**
+     * Describes API specifications
+     *
+     * @param   string  $version    API version
+     * @param   string  $service    API service
+     */
+    public function describeApiSpecAction($version, $service) {
+        $describer = new Describer($version, $service, \Scalr::getContainer()->config());
+
+        $describer->mutate(new AnalyticsSubtractor())
+                  ->describe($this->response);
     }
 }

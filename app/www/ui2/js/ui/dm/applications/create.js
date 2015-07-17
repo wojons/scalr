@@ -108,7 +108,7 @@ Scalr.regPage('Scalr.ui.dm.applications.create', function (loadParams, modulePar
 						url: '/dm/applications/save/',
 						params: loadParams,
 						success: function (data) {
-                            Scalr.event.fireEvent('update', '/farms/build', data.app, 'create');
+                            Scalr.event.fireEvent('update', '/farms/designer', data.app, 'create');
 							Scalr.event.fireEvent('close');
 						}
 					});

@@ -1,57 +1,78 @@
-Scalr.regPage('Scalr.ui.farms.builder.tabs.proxy', function (moduleTabParams) {
-	return Ext.create('Scalr.ui.FarmsBuilderTab', {
-		tabTitle: 'Proxy settings',
-		itemId: 'proxy',
-        tabData: null,
+Ext.define('Scalr.ui.FarmRoleEditorTab.Proxy', {
+    extend: 'Scalr.ui.FarmRoleEditorTab',
+    tabTitle: 'Proxy settings',
+    itemId: 'proxy',
+    tabData: null,
 
-        layout: 'fit',
+    layout: 'fit',
 
-        cls: 'scalr-ui-farmbuilder-roleedit-tab',
-        
-        /*settings: {
-            'nginx.proxies': undefined
-        },*/
+    settings: {
+        'nginx.proxies': undefined
+    },
 
-		isEnabled: function (record) {
-			return record.get('behaviors').match("www");
-		},
+    isEnabled: function (record) {
+        return this.callParent(arguments) && record.get('behaviors').match("www");
+    },
 
-		showTab: function (record) {
-			var me = this,
-                settings = record.get('settings'),
-                p = me.down('proxysettings');
-
-            me.roles = [];
-			moduleTabParams.farmRolesStore.each(function(r){
-				if (r != record) {
-                    var location = r.get('cloud_location');
-					me.roles.push({id: r.get('farm_role_id'), name: r.get('alias') + (location ? ' (' + location + ')' : '')});
-                }
-			});
-
-            p.setValue({
-                'nginx.proxies': Ext.decode(settings['nginx.proxies']) || []
-            });
-		},
-
-		hideTab: function (record) {
-			var settings = record.get('settings');
-
-            Ext.apply(settings, this.down('proxysettings').getValue());
-            settings['nginx.proxies'] = Ext.encode(settings['nginx.proxies']);
-			record.set('settings', settings);
-		},
-
-		items: [{
-            xtype: 'proxysettings',
-            proxyDefaults: moduleTabParams['nginx'],
-            formConfig: {
-                overflowY: 'auto',
-                overflowX: 'hidden',
-                hidden: true
+    showTab: function (record) {
+        var me = this,
+            tabParams = this.up('#farmDesigner').moduleParams.tabParams,
+            settings = record.get('settings'),
+            nginxSettings = Ext.decode(settings['nginx.proxies']),
+            errors = record.get('errors', true) || {},
+            invalidIndex,
+            p = me.down('proxysettings');
+        if (Ext.isObject(errors) && Ext.isObject(errors['nginx.proxies'])) {
+            invalidIndex = errors['nginx.proxies'].invalidIndex;
+        }
+        me.roles = [];
+        tabParams.farmRolesStore.each(function(r){
+            if (r != record) {
+                var location = r.get('cloud_location');
+                me.roles.push({id: r.get('farm_role_id'), alias: r.get('alias'), name: r.get('alias') + (location ? ' (' + location + ')' : '')});
             }
-		}]
-	});
+        });
+
+        //convert deprecated configurations farm_role_id->farm_role_alias
+        Ext.each(nginxSettings || [], function(nginx){
+            Ext.each(nginx['backends'] || [], function(backend){
+                if (backend['farm_role_id']) {
+                    var farmRoleAlias = null;
+                    Ext.each(me.roles, function(role){
+                        if (role.id == backend['farm_role_id']) {
+                            farmRoleAlias = role.alias;
+                            return false;
+                        }
+                    });
+                    if (farmRoleAlias) {
+                        backend['farm_role_alias'] = farmRoleAlias;
+                        delete backend['farm_role_id'];
+                    }
+                }
+            });
+        });
+        p.proxyDefaults = tabParams['nginx'];
+        p.setValue({
+            'nginx.proxies': nginxSettings
+        }, invalidIndex);
+    },
+
+    hideTab: function (record) {
+        var settings = record.get('settings'),
+            proxySettings = this.down('proxysettings').getValue();
+        settings['nginx.proxies'] = Ext.encode(proxySettings['nginx.proxies']);
+        record.set('settings', settings);
+    },
+
+    __items: [{
+        xtype: 'proxysettings',
+        formConfig: {
+            overflowY: 'auto',
+            overflowX: 'hidden',
+            preserveScrollPosition: true,
+            hidden: true
+        }
+    }]
 });
 
 Ext.define('Scalr.ui.ProxySettingsField', {
@@ -95,8 +116,8 @@ Ext.define('Scalr.ui.ProxySettingsField', {
 
     getValue: function(){
         var list = [];
-        this.down('#form').deselectRecord(this.mode === 'edit');
-        (this.store.snapshot || this.store.data).each(function(record){
+        this.down('#form').saveRecord();
+        this.store.getUnfiltered().each(function(record){
             var data = record.getData();
             delete data.id;
             list.push(data);
@@ -118,20 +139,18 @@ Ext.define('Scalr.ui.ProxySettingsField', {
             proxy['backends'] = backends;
             proxy['templates'] = Ext.Object.getValues(templates);
             proxy['templates'].push({content: proxy['server_template'], server: true});
-            
+
             delete proxy['server_template'];
         });
         if (this.mode === 'edit') {
-            var selModel = this.down('grid').getSelectionModel();
-            selModel.setLastFocused(null);
-            selModel.deselectAll();
+            this.down('#grid').clearSelectedRecord();
         }
         return {
             'nginx.proxies': list
         };
     },
 
-    setValue: function(value){
+    setValue: function(value, selectedIndex){
         var data = [];
         //some data conversion for scalarizr
         Ext.Array.each(value['nginx.proxies'] || [], function(proxy, pindex){
@@ -162,11 +181,14 @@ Ext.define('Scalr.ui.ProxySettingsField', {
             }
         });
 
-        this.store.loadData(value['nginx.proxies']);
+        this.store.loadData(value['nginx.proxies'] || []);
         if (this.mode === 'add') {
-            var form = this.down('#form');
-            delete form._record;
-            form.loadRecord(this.store.createModel({}));
+            this.down('#form').loadRecord(this.store.createModel({}));
+        }
+
+        if (Ext.isNumeric(selectedIndex)) {
+            this.down('#grid').setSelectedRecord(this.store.getAt(selectedIndex));
+            this.down('#form').isValid();
         }
     },
 
@@ -174,9 +196,7 @@ Ext.define('Scalr.ui.ProxySettingsField', {
         return Ext.apply({
             xtype: 'grid',
             itemId: 'grid',
-            cls: 'x-panel-column-left x-grid-shadow',
-            bodyStyle: 'box-shadow: none',
-            multiSelect: true,
+            cls: 'x-panel-column-left x-panel-column-left-with-tabs',
             enableColumnResize: false,
             maxWidth: 600,
             minWidth: 300,
@@ -186,17 +206,19 @@ Ext.define('Scalr.ui.ProxySettingsField', {
                 ftype: 'addbutton',
                 text: 'Add proxy',
                 handler: function(view) {
-                    var grid = view.up('grid'),
-                        selModel = grid.getSelectionModel(),
-                        form = grid.up('proxysettings').down('#form');
-                    selModel.setLastFocused(null);
-                    selModel.deselectAll();
-                    form.loadRecord(grid.getStore().createModel({}));
+                    var grid = view.up('grid');
+                    grid.clearSelectedRecord();
+                    grid.up('proxysettings').down('#form').loadRecord(grid.getStore().createModel({}));
                 }
             },
             plugins: [{
                 ptype: 'focusedrowpointer',
-                thresholdOffset: 26,
+                thresholdOffset: 26
+            },{
+                ptype: 'selectedrecord',
+                getForm: function() {
+                    return this.grid.up('proxysettings').down('#form');
+                }
             }],
             columns: [{
                 text: 'Hostname',
@@ -212,39 +234,15 @@ Ext.define('Scalr.ui.ProxySettingsField', {
                 width: 80
             }, {
                 xtype: 'templatecolumn',
-                tpl: '<img style="cursor:pointer" width="15" height="15" class="x-icon-action x-icon-action-delete" title="Delete proxy" src="'+Ext.BLANK_IMAGE_URL+'"/>',
+                tpl: '<img class="x-grid-icon x-grid-icon-delete" title="Delete proxy" src="'+Ext.BLANK_IMAGE_URL+'"/>',
                 width: 42,
                 sortable: false,
                 dataIndex: 'id',
                 align:'left'
             }],
-            viewConfig: {
-                overflowY: 'auto',
-                overflowX: 'hidden'
-            },
             listeners: {
-                viewready: function() {
-                    var me = this,
-                        form = me.up('proxysettings').down('#form');
-                    me.getSelectionModel().on('focuschange', function(gridSelModel, oldFocused, newFocused){
-                        if (oldFocused != newFocused) {
-                            if (gridSelModel.lastFocused) {
-                                if (gridSelModel.lastFocused != form.getRecord()) {
-                                    form.loadRecord(gridSelModel.lastFocused);
-                                }
-                            } else {
-                                form.deselectRecord(true);
-                            }
-                        }
-                    });
-                },
                 itemclick: function (view, record, item, index, e) {
-                    if (e.getTarget('img.x-icon-action-delete')) {
-                        var selModel = view.getSelectionModel();
-                        if (record === selModel.getLastFocused()) {
-                            selModel.deselectAll();
-                            selModel.setLastFocused(null);
-                        }
+                    if (e.getTarget('img.x-grid-icon-delete')) {
                         view.store.remove(record);
                         return false;
                     }
@@ -254,49 +252,50 @@ Ext.define('Scalr.ui.ProxySettingsField', {
     },
     getFormConfig: function(){
         return Ext.apply({
-            xtype: 'container',
+            xtype: 'form',
             itemId: 'form',
             layout: 'anchor',
             defaults: {
                 anchor: '100%'
             },
-            getRecord: function(){
-                return this._record;
-            },
-            loadRecord: function(record){
-                var p = this.up('proxysettings'),
-                    mode = p.mode,
-                    defaults = p.proxyDefaults || {},
-                    sslCertId = record.get('ssl_certificate_id');
-                this.isLoading = true;
-                this.saveRecord();
-                this._record = record;
-                if (sslCertId) {//preload cert list only if necessary
-                    this.down('[name="proxy.ssl_certificate_id"]').store.load();
-                }
+            listeners: {
+                resetrecord: function(record) {
+                    this.saveRecord(record);
+                },
+                loadrecord: function(record){
+                    var p = this.up('proxysettings'),
+                        mode = p.mode,
+                        defaults = p.proxyDefaults || {},
+                        sslCertId = record.get('ssl_certificate_id');
+                    if (sslCertId) {//preload cert list only if necessary
+                        this.down('[name="proxy.ssl_certificate_id"]').store.load();
+                    }
 
-                this.setFieldValues({
-                    'proxy.hostname': record.get('hostname'),
-                    'proxy.port': record.get('port') || '',
-                    'proxy.backend_ip_hash': record.get('backend_ip_hash'),
-                    'proxy.backend_least_conn': record.get('backend_least_conn'),
-                    'proxy.server_template': record.get('server_template') || (defaults['server_section'] + '\n' + defaults['server_section_ssl']),
-                    'proxy.ssl': record.get('ssl'),
-                    'proxy.ssl_certificate_id': sslCertId,
-                    'proxy.ssl_port': record.get('ssl_port') || 443,
-                    'proxy.http': record.get('http') != 1
-                });
-                this.down('#backends').setValue(record.get('backends'));
-                this.down('#options').setVisible(mode === 'edit' ? record.store !== undefined : true);
-                if (mode === 'edit') {
-                    this.show();
-                    this.down('[name="proxy.hostname"]').focus();
+                    this.setFieldValues({
+                        'proxy.hostname': record.get('hostname'),
+                        'proxy.port': record.get('port') || '',
+                        'proxy.backend_ip_hash': record.get('backend_ip_hash'),
+                        'proxy.backend_least_conn': record.get('backend_least_conn'),
+                        'proxy.server_template': record.get('server_template') || (defaults['server_section'] + '\n' + defaults['server_section_ssl']),
+                        'proxy.ssl': record.get('ssl'),
+                        'proxy.ssl_certificate_id': sslCertId,
+                        'proxy.ssl_port': record.get('ssl_port') || 443,
+                        'proxy.http': record.get('http') != 1
+                    });
+                    this.down('#backends').setValue(record.get('backends'));
+                    this.down('#options').setVisible(mode === 'edit' ? record.store !== undefined : true);
+                    if (mode === 'edit') {
+                        this.show();
+                        if (!record.store) {
+                            this.down('[name="proxy.hostname"]').focus();
+                        }
+                    }
+                    this.checkIpHashVsBackup();
                 }
-                this.checkIpHashVsBackup();
-                this.isLoading = false;
             },
-            saveRecord: function(removeEmpty){
-                if (this._record !== undefined) {
+            saveRecord: function(record){
+                record = record || this.getRecord();
+                if (record) {
                     var p = this.up('proxysettings'),
                         mode = p.mode,
                         defaults = p.proxyDefaults || {},
@@ -307,49 +306,42 @@ Ext.define('Scalr.ui.ProxySettingsField', {
                             'backend_least_conn': this.down('[name="proxy.backend_least_conn"]').getValue() ? '1' : '0',
                             'server_template': this.down('[name="proxy.server_template"]').getValue() || (defaults['server_section'] + '\n' + defaults['server_section_ssl']),
                             'ssl': this.down('[name="proxy.ssl"]').getValue() ? '1' : '0'
-                        },
-                        sslCertId = this.down('[name="proxy.ssl_certificate_id"]').getValue();
-                    if (values.ssl == '1' && sslCertId) {
+                        };
+                    if (values.ssl == '1') {
                         Ext.apply(values, {
-                            'ssl_certificate_id': sslCertId,
+                            'ssl_certificate_id': this.down('[name="proxy.ssl_certificate_id"]').getValue(),
                             'ssl_port': this.down('[name="proxy.ssl_port"]').getValue(),
                             'http': this.down('[name="proxy.http"]').getValue() ? '0' : '1'
                         });
-                    } else {
-                        values.ssl = '0';
                     }
                     values.backends = this.down('#backends').getValue();
                     if (values.hostname && values.port) {
-                        this._record.set(values);
-                        if (mode === 'add') {
-                            if (!this._record.store) {
-                                p.store.add(this._record);
-                            }
-
+                        record.set(values);
+                        if (mode === 'add' && !record.store) {
+                            p.store.add(record);
                         }
-                    } else if (removeEmpty && this._record.store){
-                        this._record.store.remove(this._record);
                     }
 
                 }
             },
             updateRecord: function() {
-                if (this.isLoading) return;
+                if (this.isRecordLoading) return;
                 var isValid = this.validateRecord();
                 if (isValid === true) {
                     var hp = this.up('proxysettings'),
+                        record = this.getRecord(),
                         mode = hp.mode;
                     if (mode === 'edit') {
                         var grid = hp.down('#grid');
-                        this._record.set({
+                        record.set({
                             hostname: this.down('[name="proxy.hostname"]').getValue(),
                             port: this.down('[name="proxy.port"]').getValue()
                         });
-                        if (this._record.store === undefined) {
-                            grid.getStore().add(this._record);
+                        if (record.store === undefined) {
+                            grid.getStore().add(record);
                             this.down('#backends').setValue();
                             this.down('#options').show();
-                            grid.getSelectionModel().setLastFocused(this._record, true);
+                            grid.setSelectedRecord(record);
                         }
                     }
                 } else if (Ext.isString(isValid)){
@@ -357,7 +349,7 @@ Ext.define('Scalr.ui.ProxySettingsField', {
                 }
 
             },
-            
+
             checkIpHashVsBackup: function(){
                 var ipHashBtn = this.down('[name="proxy.backend_ip_hash"]'),
                     backupExists = false;
@@ -379,30 +371,30 @@ Ext.define('Scalr.ui.ProxySettingsField', {
             validateRecord: function(){
                 var portField = this.down('[name="proxy.port"]'),
                     hostnameField = this.down('[name="proxy.hostname"]'),
+                    backends = this.down('#backends'),
                     res = true;
                 if (this.up('proxysettings').mode === 'edit') {
-                    if (!hostnameField.validate() || !portField.validate()) {
+                    if (!hostnameField.validate() || !portField.validate() || (this.down('#options').isVisible() && backends.validate() !== true)) {
                         res = false;
                     }
                 } else {
-                    if (Ext.String.trim(hostnameField.getValue()) || Ext.String.trim(portField.getValue()) || this.down('#backends').hasNonEmptyItems()) {
+                    if (Ext.String.trim(hostnameField.getValue()) || Ext.String.trim(portField.getValue()) || backends.hasNonEmptyItems()) {
                         res = hostnameField.validate() || {comp: hostnameField};
                         if (res === true) {
                             res = portField.validate() || {comp: portField};
                             if (res === true) {
-                                res = this.down('#backends').validate();
+                                res = backends.validate();
+                            }
+                        }
+                        if (res === true) {
+                            if (this.down('[name="proxy.ssl"]').getValue() == 1) {
+                                var certIdField = this.down('[name="proxy.ssl_certificate_id"]');
+                                res = certIdField.validate() || {comp: certIdField};
                             }
                         }
                     }
                 }
                 return res;
-            },
-            deselectRecord: function(hide){
-                this.saveRecord();
-                delete this._record;
-                if (hide) {
-                    this.hide();
-                }
             },
             items: [{
                 xtype: 'fieldset',
@@ -445,7 +437,9 @@ Ext.define('Scalr.ui.ProxySettingsField', {
                     listeners: {
                         change: {
                             fn: function(comp, value){
-                                this.up('#form').updateRecord();
+                                var form = this.up('#form');
+                                form.updateRecord();
+                                form.down('[name="proxy.ssl_port"]').validate();
                             },
                             buffer: 300
                         }
@@ -458,11 +452,11 @@ Ext.define('Scalr.ui.ProxySettingsField', {
                 hidden: true,
                 items: [{
                     xtype: 'container',
-                    cls: 'x-container-fieldset x-grid-shadow',
-                    padding: '0 32',
+                    cls: 'x-container-fieldset',
+                    padding: '0 24',
                     layout: 'anchor',
                     defaults: {
-                        maxWidth: 760,
+                        maxWidth: 766,
                         anchor: '100%'
                     },
                     items: [{
@@ -471,24 +465,9 @@ Ext.define('Scalr.ui.ProxySettingsField', {
                         cls: 'x-not-a-grid-header x-grid-header-ct',
                         items: [{
                             xtype: 'component',
-                            html: '<div class="x-column-header-inner"><span class="x-column-header-text">URI</span></div>',
+                            html: '<div class="x-column-header-inner"><span class="x-column-header-text">Backends</span></div>',
                             cls: 'x-column-header x-column-header-first',
-                            flex: .46
-                        },{
-                            xtype: 'component',
-                            html: '<div class="x-column-header-inner"><span class="x-column-header-text">Destination</span></div>',
-                            cls: 'x-column-header',
-                            minWidth: 260,
                             flex: 1
-                        },{
-                            xtype: 'component',
-                            html: '<div class="x-column-header-inner"><span class="x-column-header-text">Flags</span></div>',
-                            width: 76,
-                            cls: 'x-column-header'
-                        },{
-                            xtype: 'component',
-                            cls: 'x-column-header x-column-header-last',
-                            width: 58
                         }]
                     },{
                         xtype: 'container',
@@ -525,16 +504,27 @@ Ext.define('Scalr.ui.ProxySettingsField', {
                                             location = {}, field, network;
                                         location[type] = destination.down('[name="proxy.' + type + '"]').getValue();
                                         location['port'] = destination.down('[name="proxy.port"]').getValue();
+
+                                        // OLD WAY USE farm_role_id
                                         if (type === 'farm_role_id') {
                                             network = destination.down('[name="proxy.network"]').getValue();
                                             if (network) {
                                                 location['network'] = network;
                                             }
                                         }
+
+                                        // NEW WAY USE farm_role_alias
+                                        if (type === 'farm_role_alias') {
+                                            network = destination.down('[name="proxy.network"]').getValue();
+                                            if (network) {
+                                                location['network'] = network;
+                                            }
+                                        }
+
                                         if (locationsCount > 1) {
                                             location['weight'] = destination.down('[name="proxy.weight"]').getValue();
                                         }
-                                        if (location[type] && location['port']) {
+                                        if (/*location[type] && */location['port']) {
                                             field = destination.down('[name="proxy.backup"]');
                                             if (field) {
                                                 location['backup'] = field.getValue() ? '1' : '0';
@@ -620,14 +610,14 @@ Ext.define('Scalr.ui.ProxySettingsField', {
                     },{
                         xtype: 'button',
                         cls: 'x-not-a-grid-button-add',
-                        text: '<img src="' + Ext.BLANK_IMAGE_URL + '" class="x-icon-grid-add-item" />&nbsp;&nbsp;Add backend',
+                        text: 'Add backend',
                         handler: function() {
                             this.up('#form').down('#backends').addItem();
                         }
                     }]
                 },{
                     xtype: 'container',
-                    cls: 'x-container-fieldset',
+                    cls: 'x-container-fieldset x-fieldset-separator-bottom',
                     layout: 'hbox',
                     items: [{
                         xtype: 'checkbox',
@@ -642,11 +632,11 @@ Ext.define('Scalr.ui.ProxySettingsField', {
                         }
                     },{
                         xtype: 'container',
-                        itemId: 'proxy.ssloptions',
+                        //itemId: 'proxy.ssloptions',
                         layout: 'hbox',
                         hidden: true,
                         flex: 1,
-                        maxWidth: 660,
+                        maxWidth: 652,
                         defaults: {
                             margin: '0 13 0 0'
                         },
@@ -667,7 +657,7 @@ Ext.define('Scalr.ui.ProxySettingsField', {
                                 fields: [ 'id', 'name' ],
                                 proxy: {
                                     type: 'cachedrequest',
-                                    crscope: 'farmbuilder',
+                                    crscope: 'farmDesigner',
                                     url: '/services/ssl/certificates/xListCertificates',
                                     filterFields: ['name']
                                 }
@@ -683,7 +673,7 @@ Ext.define('Scalr.ui.ProxySettingsField', {
                             },
                             listeners: {
                                 addnew: function(item) {
-                                    Scalr.CachedRequestManager.get('farmbuilder').setExpired({url: '/services/ssl/certificates/xListCertificates'});
+                                    Scalr.CachedRequestManager.get('farmDesigner').setExpired({url: '/services/ssl/certificates/xListCertificates'});
                                 }
                             }
                         },{
@@ -692,7 +682,14 @@ Ext.define('Scalr.ui.ProxySettingsField', {
                             submitValue: false,
                             fieldLabel: 'HTTPS port',
                             labelWidth: 80,
-                            width: 135
+                            width: 135,
+                            validator: function(value) {
+                                if (value && this.up('form').down('[name="proxy.port"]').getValue() == value) {
+                                    return 'HTTP and HTTPS ports cannot be the same';
+                                } else {
+                                    return true;
+                                }
+                            }
                         },{
                             xtype: 'buttonfield',
                             name: 'proxy.http',
@@ -713,7 +710,7 @@ Ext.define('Scalr.ui.ProxySettingsField', {
                     collapsed: true,
                     layout: 'anchor',
                     items: [{
-                        xtype: 'container',
+                        xtype: 'fieldcontainer',
                         layout: 'hbox',
                         items: [{
                             xtype: 'buttonfield',
@@ -732,7 +729,7 @@ Ext.define('Scalr.ui.ProxySettingsField', {
                             name: 'proxy.backend_least_conn',
                             text: 'Least connections',
                             inputValue: 1,
-                            width: 150,
+                            width: 160,
                             enableToggle: true,
                             submitValue: false
                         }]
@@ -754,7 +751,7 @@ Ext.define('Scalr.ui.ProxySettingsField', {
 Ext.define('Scalr.ui.ProxySettingsBackend', {
 	extend: 'Ext.container.Container',
     alias: 'widget.proxysettingsbackend',
-    layout: 'hbox',
+    //layout: 'hbox',
 
     reminder: {
         fn: function(comp, value){
@@ -770,7 +767,7 @@ Ext.define('Scalr.ui.ProxySettingsBackend', {
                         message = 'Don\'t forget to enter proxy port.';
                     }
                 }
-                
+
                 if (message) {
                     Scalr.message.InfoTip(message, field.getEl());
                 }
@@ -782,33 +779,88 @@ Ext.define('Scalr.ui.ProxySettingsBackend', {
 		var me = this;
         me.callParent();
         me.add([{
-            xtype: 'hiddenfield',
-            name: 'proxy.template',
-            value: me.values['template'],
-            submitValue: false
+            xtype: 'container',
+            layout: 'hbox',
+            items: [{
+                xtype: 'hiddenfield',
+                name: 'proxy.template',
+                value: me.values['template'],
+                submitValue: false
+            },{
+                xtype: 'textfield',
+                name: 'proxy.location',
+                fieldLabel: 'URI&nbsp;&nbsp;&nbsp;&nbsp;/',
+                labelSeparator: '',
+                labelWidth: 40,
+                submitValue: false,
+                flex: 1,
+                padding: '0 8 0 0',
+                value: me.values['location'],
+                listeners: {
+                    change: me.reminder
+                }
+            },{
+                xtype: 'button',
+                ui: '',
+                iconCls: 'x-grid-icon x-grid-icon-edit',
+                tooltip: 'Edit template',
+                minWidth: 32,
+                margin: '4 0 0 12',
+                handler: function() {
+                    var tmplField = this.up().down('[name="proxy.template"]');
+                    Scalr.Confirm({
+                        form: {
+                            xtype: 'container',
+                            cls: 'x-container-fieldset',
+                            layout: 'anchor',
+                            items: [{
+                                xtype: 'textarea',
+                                name: 'template',
+                                anchor: '100%',
+                                height: 180,
+                                value: tmplField.getValue()
+                            }]
+                        },
+                        formWidth: 500,
+                        ok: 'Save',
+                        title: 'Edit template',
+                        //formValidate: true,
+                        closeOnSuccess: true,
+                        success: function (formValues) {
+                            tmplField.setValue(formValues['template']);
+                            return true;
+                        }
+                    });
+                }
+            },{
+                xtype: 'button',
+                itemId: 'delete',
+                ui: '',
+                iconCls: 'x-grid-icon x-grid-icon-delete',
+                margin: '4 0 0 4',
+                minWidth: 32,
+                handler: function() {
+                    var item = this.up('proxysettingsbackend');
+                    item.ownerCt.remove(item);
+                }
+            }]
         },{
-            xtype: 'textfield',
-            name: 'proxy.location',
-            fieldLabel: '/',
-            labelSeparator: '',
-            labelWidth: 6,
-            submitValue: false,
-            flex: .36,
-            padding: '0 8 0 0',
-            value: me.values['location'],
-            listeners: {
-                change: me.reminder
-            }
+            xtype: 'component',
+            cls: 'x-form-item-label-default',
+            margin: '12 0 0',
+            html: 'Destinations'
         },{
             xtype: 'container',
             itemId: 'locations',
-            layout: 'anchor',
+            //layout anchor here causes [E] Layout run failed
+            //layout: 'anchor',
+            //margin: '0 18 0 0',
             defaults: {
                 anchor: '100%'
             },
-            flex: 1,
-            minWidth: 330,
-            padding: '0 0 0 8',
+            //flex: 1,
+            //minWidth: 330,
+            //padding: '0 0 0 8',
             updateItems: function(){
                 var me = this;
                 me.items.each(function(item, index){
@@ -824,48 +876,6 @@ Ext.define('Scalr.ui.ProxySettingsBackend', {
                 remove: function() {
                     this.updateItems();
                 }
-            }
-        },{
-            xtype: 'button',
-            ui: 'action',
-            cls: 'x-btn-action-tmpl',
-            tooltip: 'Edit template',
-            margin: '0 0 0 12',
-            handler: function() {
-                var tmplField = this.up().down('[name="proxy.template"]');
-                Scalr.Confirm({
-                    form: {
-                        xtype: 'container',
-                        cls: 'x-container-fieldset',
-                        layout: 'anchor',
-                        items: [{
-                            xtype: 'textarea',
-                            name: 'template',
-                            anchor: '100%',
-                            height: 180,
-                            value: tmplField.getValue()
-                        }]
-                    },
-                    formWidth: 500,
-                    ok: 'Save',
-                    title: 'Edit template',
-                    //formValidate: true,
-                    closeOnSuccess: true,
-                    success: function (formValues) {
-                        tmplField.setValue(formValues['template']);
-                        return true;
-                    }
-                });
-            }
-        },{
-            xtype: 'button',
-            itemId: 'delete',
-            ui: 'action',
-            cls: 'x-btn-action-delete',
-            margin: '0 0 0 12',
-            handler: function() {
-                var item = this.up('proxysettingsbackend');
-                item.ownerCt.remove(item);
             }
         }]);
 
@@ -888,7 +898,7 @@ Ext.define('Scalr.ui.ProxySettingsBackend', {
         item = ct.add({
             xtype: 'container',
             layout: 'anchor',
-            margin: '0 0 10 0',
+            //margin: '0 0 10 0',
             items: [{
                 xtype: 'container',
                 layout: 'hbox',
@@ -898,36 +908,37 @@ Ext.define('Scalr.ui.ProxySettingsBackend', {
                     name: 'proxy.type',
                     value: 'host',
                     defaults: {
-                        width: 45
+                        width: 50,
+                        style: 'padding-left:0;padding-right:0'
                     },
                     items: [{
                         value: 'host',
                         text: 'Host'
                     },{
-                        value: 'farm_role_id',
+                        value: 'farm_role_alias',
                         text: 'Role',
                         disabled: !this.roles.length,
                         tooltip: !this.roles.length ? 'No roles available' : ''
                     }],
-                    margin: '0 5 0 3',
+                    margin: '0 5 0 0',
                     listeners: {
                         change: function(comp, value) {
                             var ct = comp.up('container');
                             ct.suspendLayouts();
                             ct.down('[name="proxy.host"]').setVisible(value === 'host');
-                            ct.down('[name="proxy.farm_role_id"]').setVisible(value === 'farm_role_id');
-                            ct.up().down('#network').setVisible(value === 'farm_role_id');
+                            ct.down('[name="proxy.farm_role_alias"]').setVisible(value === 'farm_role_alias');
+                            ct.up().down('#network').setVisible(value === 'farm_role_alias');
                             ct.resumeLayouts(true);
                         }
                     }
                 },{
                     xtype: 'combo',
-                    name: 'proxy.farm_role_id',
+                    name: 'proxy.farm_role_alias',
                     emptyText: 'Select role',
-                    valueField: 'id',
+                    valueField: 'alias',
                     displayField: 'name',
                     store: {
-                        fields: [ 'id', 'name' ],
+                        fields: [ 'id', 'alias', 'name' ],
                         proxy: 'object',
                         data: this.roles
                     },
@@ -964,24 +975,26 @@ Ext.define('Scalr.ui.ProxySettingsBackend', {
                     name: 'proxy.weight',
                     emptyText: 'weight',
                     margin: '0 4',
-                    maxWidth: 50,
+                    maxWidth: 60,
                     hidden: true,
                     value: ''
                 },{
                     xtype: 'button',
                     itemId: 'add',
-                    ui: 'action',
-                    cls: 'x-btn-action-add',
-                    margin: '0 12 0 4',
+                    ui: '',
+                    iconCls: 'x-grid-icon x-grid-icon-addgridline',
+                    margin: '6 0 0 4',
+                    minWidth: 0,
                     handler: function() {
                         this.up('proxysettingsbackend').addDestination();
                     }
                 },{
                     xtype: 'button',
                     itemId: 'delete',
-                    ui: 'action',
-                    cls: 'x-btn-action-remove',
-                    margin: '0 12 0 4',
+                    ui: '',
+                    iconCls: 'x-grid-icon x-grid-icon-removegridline',
+                    margin: '6 0 0 4',
+                    minWidth: 0,
                     handler: function() {
                         item.ownerCt.remove(item);
                     }
@@ -990,7 +1003,7 @@ Ext.define('Scalr.ui.ProxySettingsBackend', {
                 xtype: 'container',
                 itemId: 'network',
                 hidden: true,
-                padding: '0 0 0 68',
+                padding: '0 0 8 56',
                 layout: {
                     type: 'hbox',
                     align: 'middle'
@@ -1003,11 +1016,13 @@ Ext.define('Scalr.ui.ProxySettingsBackend', {
                     name: 'proxy.network',
                     editable: false,
                     width: 100,
-                    margin: '0 6',
+                    margin: '0 6 0 28',
                     value: '',
                     store: [['','Auto'],['public','Public'],['private','Private']],
-                    icons: {
-                        szrversion: {tooltipData: {version: '2.11.6'}}
+                    plugins: {
+                        ptype: 'fieldicons',
+                        position: 'outer',
+                        icons: [{id: 'szrversion', tooltipData: {version: '2.11.6'}}]
                     }
                 },{
                     xtype: 'label',
@@ -1017,10 +1032,11 @@ Ext.define('Scalr.ui.ProxySettingsBackend', {
         });
         item.down('container').add([{
             xtype: 'buttonfield',
-            ui: 'flag',
-            cls: 'x-btn-flag-backup',
+            iconCls: 'x-btn-icon-backup',
             tooltip: 'Backup',
-            margin: '0 0 0 8',
+            margin: '0 0 0 4',
+            minWidth: 32,
+            padding: 2,
             name: 'proxy.backup',
             inputValue: 1,
             enableToggle: true,
@@ -1030,10 +1046,11 @@ Ext.define('Scalr.ui.ProxySettingsBackend', {
             }
         },{
             xtype: 'buttonfield',
-            ui: 'flag',
-            cls: 'x-btn-flag-down',
+            iconCls: 'x-btn-icon-down',
             tooltip: 'Down',
-            margin: '0 0 0 6',
+            padding: 2,
+            minWidth: 32,
+            margin: '0 0 0 4',
             name: 'proxy.down',
             inputValue: 1,
             enableToggle: true,
@@ -1041,8 +1058,8 @@ Ext.define('Scalr.ui.ProxySettingsBackend', {
         }])
         if (data) {
             item.setFieldValues({
-                'proxy.type': data.farm_role_id !== undefined && item.down('[name="proxy.farm_role_id"]').findRecordByValue(data.farm_role_id) ? 'farm_role_id' : 'host',
-                'proxy.farm_role_id': data.farm_role_id,
+                'proxy.type': data.farm_role_alias !== undefined ? 'farm_role_alias' : 'host',
+                'proxy.farm_role_alias': data.farm_role_alias,
                 'proxy.host': data.host,
                 'proxy.port': data.port || 80,
                 'proxy.network': data.network || '',
@@ -1050,6 +1067,12 @@ Ext.define('Scalr.ui.ProxySettingsBackend', {
                 'proxy.backup': data.backup,
                 'proxy.down': data.down
             });
+
+            var farmRoleAliasField = item.down('[name="proxy.farm_role_alias"]');
+            if (data.farm_role_alias !== undefined && !farmRoleAliasField.findRecordByValue(data.farm_role_alias)) {
+                farmRoleAliasField.markInvalid('Selected Farm role not exists');
+            }
+
         }
     }
 });

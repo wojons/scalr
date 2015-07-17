@@ -30,6 +30,26 @@ class EBSManagerProcess implements \Scalr\System\Pcntl\ProcessInterface
     }
 
     /**
+     * Removes storage snapshot from the database
+     *
+     * @param   int   $id  The identifier of the storage snapshot
+     */
+    private function deleteStorageSnapshot($id)
+    {
+        \Scalr::getDb()->Execute("DELETE FROM storage_snapshots WHERE id=?", [$id]);
+    }
+
+    /**
+     * Removes EBS snapshot information from the database
+     *
+     * @param   int   $id  The identifier of the EBS snapshot information
+     */
+    private function deleteEbsSnapshotInfo($id)
+    {
+        \Scalr::getDb()->Execute("DELETE FROM ebs_snaps_info WHERE id=?", [$id]);
+    }
+
+    /**
      * {@inheritdoc}
      * @see \Scalr\System\Pcntl\ProcessInterface::OnEndForking()
      */
@@ -38,7 +58,7 @@ class EBSManagerProcess implements \Scalr\System\Pcntl\ProcessInterface
         $db = \Scalr::getDb();
 
         Logger::getLogger(__CLASS__)->warn("OnEndForking: start");
-        
+
         $list = $db->GetAll("
             SELECT farm_roleid
             FROM farm_role_settings
@@ -77,10 +97,10 @@ class EBSManagerProcess implements \Scalr\System\Pcntl\ProcessInterface
                             $snapinfo = array_shift($old_snapshots);
                             try {
                                 $aws->ec2->snapshot->delete($snapinfo['id']);
-                                $db->Execute("DELETE FROM storage_snapshots WHERE id=?", array($snapinfo['id']));
+                                $this->deleteStorageSnapshot($snapinfo['id']);
                             } catch (Exception $e) {
                                 if (stristr($e->getMessage(), "does not exist")) {
-                                    $db->Execute("DELETE FROM storage_snapshots WHERE id=?", array($snapinfo['id']));
+                                    $this->deleteStorageSnapshot($snapinfo['id']);
                                 } else throw $e;
                             }
                         }
@@ -89,8 +109,8 @@ class EBSManagerProcess implements \Scalr\System\Pcntl\ProcessInterface
                         unset($aws);
                     } catch (Exception $e) {
                         $this->logger->warn(sprintf(
-                                _("Cannot delete old snapshot ({$snapinfo['id']}): %s"),
-                                $e->getMessage()
+                            _("Cannot delete old snapshot ({$snapinfo['id']}): %s"),
+                            $e->getMessage()
                         ));
                     }
                 }
@@ -98,15 +118,13 @@ class EBSManagerProcess implements \Scalr\System\Pcntl\ProcessInterface
         }
 
         Logger::getLogger(__CLASS__)->warn("OnEndForking: rotate mysql snapshots");
-        
+
         // Rotate MySQL master snapshots.
         $list = $db->GetAll("
             SELECT farm_roleid
             FROM farm_role_settings
             WHERE name=? AND value='1'
-        ", array(
-            DBFarmRole::SETTING_MYSQL_EBS_SNAPS_ROTATION_ENABLED
-        ));
+        ", [DBFarmRole::SETTING_MYSQL_EBS_SNAPS_ROTATION_ENABLED]);
         foreach ($list as $list_item) {
             try {
                 $DBFarmRole = DBFarmRole::LoadByID($list_item['farm_roleid']);
@@ -128,41 +146,22 @@ class EBSManagerProcess implements \Scalr\System\Pcntl\ProcessInterface
                     AND farm_roleid=?
                     AND `type`='ebs'
                     ORDER BY dtcreated ASC
-                ", array(
-                    $DBFarmRole->ID
-                ));
+                ", [$DBFarmRole->ID]);
 
                 if (count($old_snapshots) > $DBFarmRole->GetSetting(DBFarmRole::SETTING_MYSQL_EBS_SNAPS_ROTATE)) {
                     try {
-
                         $aws = $DBFarm->GetEnvironmentObject()->aws($DBFarmRole);
 
                         while (count($old_snapshots) > $DBFarmRole->GetSetting(DBFarmRole::SETTING_MYSQL_EBS_SNAPS_ROTATE)) {
                             $snapinfo = array_shift($old_snapshots);
                             try {
                                 $aws->ec2->snapshot->delete($snapinfo['id']);
-                                $db->Execute("
-                                    DELETE FROM ebs_snaps_info WHERE snapid=?
-                                ", array(
-                                    $snapinfo['id']
-                                ));
-                                $db->Execute("
-                                    DELETE FROM storage_snapshots WHERE id=?
-                                ", array(
-                                    $snapinfo['id']
-                                ));
+                                $this->deleteEbsSnapshotInfo($snapinfo['id']);
+                                $this->deleteStorageSnapshot($snapinfo['id']);
                             } catch (Exception $e) {
                                 if (stristr($e->getMessage(), "does not exist")) {
-                                    $db->Execute("
-                                        DELETE FROM ebs_snaps_info WHERE snapid=?
-                                    ", array(
-                                        $snapinfo['id']
-                                    ));
-                                    $db->Execute("
-                                        DELETE FROM storage_snapshots WHERE id=?
-                                    ", array(
-                                        $snapinfo['id']
-                                    ));
+                                    $this->deleteEbsSnapshotInfo($snapinfo['id']);
+                                    $this->deleteStorageSnapshot($snapinfo['id']);
                                 } else {
                                     throw $e;
                                 }
@@ -182,30 +181,30 @@ class EBSManagerProcess implements \Scalr\System\Pcntl\ProcessInterface
         }
 
         Logger::getLogger(__CLASS__)->warn("OnEndForking: auto-snapshot volumes");
-        
-        // Auto - snapshoting
+
+        // Auto - snapshotting
         $snapshots_settings = $db->Execute("
             SELECT * FROM autosnap_settings
             WHERE (`dtlastsnapshot` < NOW() - INTERVAL `period` HOUR OR `dtlastsnapshot` IS NULL)
             AND objectid != '0' AND object_type = ?",
             array(AUTOSNAPSHOT_TYPE::EBSSnap)
         );
-        
+
         Logger::getLogger(__CLASS__)->warn(sprintf("OnEndForking: found %s volumes", $snapshots_settings->RecordCount()));
-        
+
         while ($snapshot_settings = $snapshots_settings->FetchRow()) {
             try {
                 $environment = Scalr_Environment::init()->loadById($snapshot_settings['env_id']);
-                
+
                 $account = Scalr_Account::init()->loadById($environment->clientId);
                 if ($account->status != Scalr_Account::STATUS_ACTIVE)
                     continue;
-                
+
                 $aws = $environment->aws($snapshot_settings['region']);
 
                 // Check volume
                 try {
-                    $aws->ec2->volume->describe($snapshot_settings['objectid']);
+                    $volume = $aws->ec2->volume->describe($snapshot_settings['objectid'])->get(0);
                 } catch (Exception $e) {
                     if (stristr($e->getMessage(), "does not exist")) {
                         $db->Execute("DELETE FROM autosnap_settings WHERE id=?", array(
@@ -231,29 +230,37 @@ class EBSManagerProcess implements \Scalr\System\Pcntl\ProcessInterface
                             $farmName = DBFarm::LoadByID($info['farm_id'])->Name;
                             $roleName = DBFarmRole::LoadByID($info['farm_roleid'])->GetRoleObject()->name;
                             $serverIndex = $info['server_index'];
-                        } catch (Exception $e) {}
+                        } catch (Exception $e) {
+                        }
                     }
 
                     if ($farmName) {
-                        $description = sprintf("Auto snapshot created by Scalr: %s -> %s #%s",
-                            $farmName, $roleName, $serverIndex);
+                        $description = sprintf("Auto snapshot created by Scalr: %s -> %s #%s", $farmName, $roleName, $serverIndex);
                     }
                 }
 
                 //Creates a new snapshot
-                $snapshot_id = $aws->ec2->snapshot->create($snapshot_settings['objectid'], $description)->snapshotId;
+                $snapshot = $aws->ec2->snapshot->create($snapshot_settings['objectid'], $description);
+
+                if (!empty($volume->tagSet) && $volume->tagSet->count()) {
+                    try {
+                        //We need to do sleep due to eventual consistency on EC2
+                        sleep(2);
+                        //Set tags (copy them from the original EBS volume)
+                        $snapshot->createTags($volume->tagSet);
+                    } catch (Exception $e) {
+                        //We want to hear from the cases when it cannot set tag to snapshot
+                        trigger_error(sprintf("Could not set tag to snapshot: %s", $e->getMessage()), E_USER_WARNING);
+                    }
+                }
 
                 $db->Execute("
                     UPDATE autosnap_settings SET last_snapshotid=?, dtlastsnapshot=NOW() WHERE id=?
-                ", array(
-                    $snapshot_id, $snapshot_settings['id']
-                ));
+                ", [$snapshot->snapshotId, $snapshot_settings['id']]);
 
                 $db->Execute("
                     INSERT INTO ebs_snaps_info SET snapid=?, comment=?, dtcreated=NOW(), region=?, autosnapshotid=?
-                ", array(
-                    $snapshot_id, _("Auto-snapshot"), $snapshot_settings['region'], $snapshot_settings['id']
-                ));
+                ", [$snapshot->snapshotId, _("Auto-snapshot"), $snapshot_settings['region'], $snapshot_settings['id']]);
 
                 // Remove old snapshots
                 if ($snapshot_settings['rotate'] != 0) {
@@ -261,25 +268,18 @@ class EBSManagerProcess implements \Scalr\System\Pcntl\ProcessInterface
                         SELECT * FROM ebs_snaps_info
                         WHERE autosnapshotid=?
                         ORDER BY id ASC
-                    ", array(
-                        $snapshot_settings['id']
-                    ));
+                    ", [$snapshot_settings['id']]);
+
                     if (count($old_snapshots) > $snapshot_settings['rotate']) {
                         try {
                             while (count($old_snapshots) > $snapshot_settings['rotate']) {
                                 $snapinfo = array_shift($old_snapshots);
                                 try {
                                     $aws->ec2->snapshot->delete($snapinfo['snapid']);
-                                    $db->Execute("
-                                        DELETE FROM ebs_snaps_info WHERE id=?
-                                    ", array(
-                                        $snapinfo['id']
-                                    ));
+                                    $this->deleteEbsSnapshotInfo($snapinfo['id']);
                                 } catch (Exception $e) {
                                     if (stristr($e->getMessage(), "does not exist")) {
-                                        $db->Execute("DELETE FROM ebs_snaps_info WHERE id=?", array(
-                                            $snapinfo['id']
-                                        ));
+                                        $this->deleteEbsSnapshotInfo($snapinfo['id']);
                                     }
                                     throw $e;
                                 }
@@ -327,7 +327,6 @@ class EBSManagerProcess implements \Scalr\System\Pcntl\ProcessInterface
         }
 
         switch ($DBEBSVolume->attachmentStatus) {
-
             case EC2_EBS_ATTACH_STATUS::DELETING:
                 if ($DBEBSVolume->volumeId) {
                     try {
@@ -351,9 +350,7 @@ class EBSManagerProcess implements \Scalr\System\Pcntl\ProcessInterface
                 break;
 
             case EC2_EBS_ATTACH_STATUS::ATTACHING:
-
                 switch ($volumeinfo->status) {
-
                     case AMAZON_EBS_STATE::IN_USE:
                         $volumeInstanceId = $volumeinfo->attachmentSet->get(0)->instanceId;
                         $DBServer = DBServer::LoadByID($DBEBSVolume->serverId);
@@ -493,7 +490,7 @@ class EBSManagerProcess implements \Scalr\System\Pcntl\ProcessInterface
             }
             if ($DBServer) {
                 //NOT supported
-                if ($DBServer->GetOsFamily() == 'windows') return;
+                if ($DBServer->GetOsType() == 'windows') return;
                 try {
                     $device = $DBServer->GetFreeDeviceName();
                     $result = $aws->ec2->volume->attach(

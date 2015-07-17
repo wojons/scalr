@@ -190,62 +190,6 @@ class AuthToken implements \Serializable
     }
 
     /**
-     * Creates new instance of the AuthToken using this JSON
-     *
-     * @param   string $jsonString JSON document that is received from authenticate responce
-     * @return  AuthToken
-     */
-    public static function loadJson($jsonString)
-    {
-        $d = json_decode($jsonString);
-
-        if (!isset($d->access->token)) {
-            $invalid = true;
-        }
-        if (isset($invalid) || !isset($d->access->token->expires) || !isset($d->access->token->id)) {
-            throw new \InvalidArgumentException("Malformed JSON document " . (string) $jsonString);
-        }
-
-        $services = array();
-        $regions = array();
-        if (!empty($d->access->serviceCatalog)) {
-            foreach ($d->access->serviceCatalog as $srv) {
-                foreach ($srv->endpoints as $srvEndpoint) {
-                    $srvVersion = isset($srvEndpoint->versionId) ? $srvEndpoint->versionId . '' : '';
-                    if (isset($srvEndpoint->region)) {
-                        $regions[$srvEndpoint->region] = true;
-                        $endpointRegion = $srvEndpoint->region;
-                    } else {
-                        $endpointRegion = '';
-                    }
-                    if (!isset($services[$srv->type][$endpointRegion][$srvVersion])) {
-                        $services[$srv->type][$endpointRegion][$srvVersion] = array();
-                    }
-                    $services[$srv->type][$endpointRegion][$srvVersion][] = $srvEndpoint;
-                }
-            }
-        }
-        $regions = array_keys($regions);
-
-        $ret = new AuthToken();
-        $ret
-            ->setExpires(new \DateTime($d->access->token->expires))
-            ->setId($d->access->token->id)
-            ->setAuthDocument($d)
-            ->setRegionEndpoints($services)
-            ->setZones($regions)
-        ;
-        if (isset($d->access->token->tenant->id)) {
-            $ret->setTenantId($d->access->token->tenant->id);
-        }
-        if (isset($d->access->token->tenant->name)) {
-            $ret->setTenantName($d->access->token->tenant->name);
-        }
-
-        return $ret;
-    }
-
-    /**
      * Checks whether the token is expired.
      *
      * @return  bool Returns true if token is expired or false otherwise
@@ -311,20 +255,22 @@ class AuthToken implements \Serializable
     public function getEndpointUrl($type, $region, $version)
     {
         if (isset($this->regionEndpoints[$type][$region])) {
-            $data = isset($this->regionEndpoints[$type][$region][$version]) ?
-                $this->regionEndpoints[$type][$region][$version] :
-                (isset($this->regionEndpoints[$type][$region]['']) ? $this->regionEndpoints[$type][$region][''] : null);
+            $data = isset($this->regionEndpoints[$type][$region][$version]) ? $this->regionEndpoints[$type][$region][$version] :
+                        (isset($this->regionEndpoints[$type][$region][$version . '.0']) ? $this->regionEndpoints[$type][$region][$version . '.0'] :
+                            (isset($this->regionEndpoints[$type][$region]['']) ? $this->regionEndpoints[$type][$region][''] : null));
         } else {
             throw new OpenStackException(sprintf(
                 'Cannot obtain endpoint url. Unavailable service "%s" or region "%s"', $type, $region
             ));
         }
+
         if (!isset($data[0]->publicURL)) {
             throw new OpenStackException(sprintf(
                 'Cannot obtain endpoint url. Unavailable service "%s" of "%s" version for the region "%s".',
                 $type, $version, $region
             ));
         }
+
         return trim($data[0]->publicURL);
     }
 

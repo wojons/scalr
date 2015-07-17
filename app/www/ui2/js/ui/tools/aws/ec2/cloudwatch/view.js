@@ -25,17 +25,17 @@ Scalr.regPage('Scalr.ui.tools.aws.ec2.cloudwatch.view', function (loadParams, mo
 	}
 	function createWindows() {
 		Ext.each (moduleParams.metric,function(item){
-			panel.add({
+			panel.child('fieldset').add({
 				xtype: 'panel',
 				title: item.name,
 				width: 700,
 				height: 400,
 				itemId: item.name,
-				margin: 10,
+				margin: '0 20 20 0',
 				items: [{
 		    		xtype: 'chart',
-		    		width: 680,
-		   			height: 350,
+		    		width: 700,
+		   			height: 400,
 		   			animate: true,
 		   			shadow: true,
 		            store: {
@@ -44,7 +44,7 @@ Scalr.regPage('Scalr.ui.tools.aws.ec2.cloudwatch.view', function (loadParams, mo
 							type: 'ajax',
 							reader: {
 								type: 'json',
-								root: 'data'
+								rootProperty: 'data'
 							},
 							extraParams: {
 								metricName: item.name, 
@@ -64,7 +64,7 @@ Scalr.regPage('Scalr.ui.tools.aws.ec2.cloudwatch.view', function (loadParams, mo
 		            },
 		         	axes: [{
 			            title: item.unit,
-			            type: 'Numeric',
+			            type: 'numeric',
 			            position: 'left',
 			            fields: 'value',
 			            minimum: 0,
@@ -76,7 +76,7 @@ Scalr.regPage('Scalr.ui.tools.aws.ec2.cloudwatch.view', function (loadParams, mo
 		               }
 			        },{
 			            title: 'Time',
-			            type: 'Category',
+			            type: 'category',
 			            position: 'bottom',
 			            fields: 'time'
 			        }],
@@ -95,7 +95,7 @@ Scalr.regPage('Scalr.ui.tools.aws.ec2.cloudwatch.view', function (loadParams, mo
 			        	afterrender: function(component, opt){
 			        		component.setLoading(true);
 			        	},
-	        			refresh: function (chart, eOpts ){
+	        			redraw: function (chart, eOpts ){
 	        				var task = new Ext.util.DelayedTask(function(){
     							chart.setLoading(false);
 							});
@@ -155,11 +155,20 @@ Scalr.regPage('Scalr.ui.tools.aws.ec2.cloudwatch.view', function (loadParams, mo
 		
 	}
 	var panel = Ext.create('Ext.panel.Panel', {
-		title: 'Tools &raquo; Amazon Web Services &raquo; Cloud Watch Statistics ('+ title + loadParams['objectId'] + ')',
-		layout: {
-			type: 'table',
-			columns: 2
-		}
+        scalrOptions: {
+            maximize: 'all',
+            menuTitle: 'AWS Cloud Watch'
+        },
+        stateId: 'grid-tools-aws-ec2-cloudwatch-view',
+        autoScroll: true,
+        items: [{
+            xtype: 'fieldset',
+            title: 'Cloud Watch Statistics ('+ title + loadParams['objectId'] + ')',
+            layout: {
+                type: 'table',
+                columns: 2
+            }
+        }]
 	});
 	createWindows();
 	return panel;

@@ -24,6 +24,7 @@ import gevent
 import ctypes
 import logging
 import smtplib
+import datetime
 import traceback
 import threading
 import subprocess
@@ -57,7 +58,6 @@ def patch_gevent():
     hub.Hub.handle_error = handle_error
 
 
-
 log_level_map = {
     'CRITICAL': logging.CRITICAL,
     'ERROR': logging.ERROR,
@@ -67,24 +67,22 @@ log_level_map = {
 }
 
 
-
 def configure_log(log_level=logging.INFO, log_file=None, log_size=1024 * 10):
     if log_file:
         if not os.path.exists(os.path.dirname(log_file)):
             os.makedirs(os.path.dirname(log_file), mode=0o755)
         prompt = dedent(
-                "[%(asctime)15s][%(module)20s][{version}][%(process)d] %(levelname)10s %(message)s"
+            "[%(asctime)15s][%(module)20s][{version}][%(process)d] %(levelname)10s %(message)s"
         ).format(version=__version__)
         file_frmtr = logging.Formatter(prompt, datefmt='%d/%b/%Y %H:%M:%S')
         file_hndlr = logging.handlers.RotatingFileHandler(
-                log_file,
-                mode='a',
-                maxBytes=log_size)
+            log_file,
+            mode='a',
+            maxBytes=log_size)
         file_hndlr.setFormatter(file_frmtr)
         file_hndlr.setLevel(log_level)
         LOG.addHandler(file_hndlr)
     LOG.setLevel(log_level)
-
 
 
 def check_pid(pid_file):
@@ -96,13 +94,11 @@ def check_pid(pid_file):
     return False
 
 
-
 def kill(pid):
     msg = 'Kill process: %s' % pid
     LOG.debug(msg)
     ps = psutil.Process(pid)
     ps.kill()
-
 
 
 def kill_children(pid):
@@ -113,16 +109,15 @@ def kill_children(pid):
         child.kill()
 
 
-
 def exc_info(where=True):
     exc_type, exc_obj, exc_tb = sys.exc_info()
     file_name, line_num, func_name, text = traceback.extract_tb(exc_tb)[-1]
     if where:
-        msg = '%s %s\n    file: %s, line: %s' % (exc_type, exc_obj, os.path.normpath(file_name), line_num)
+        msg = '%s %s\n    file: %s, line: %s' % (
+            exc_type, exc_obj, os.path.normpath(file_name), line_num)
     else:
         msg = '%s %s' % (exc_type, exc_obj)
     return msg
-
 
 
 def validate_config(config, key=None):
@@ -137,8 +132,7 @@ def validate_config(config, key=None):
             validate_config(config[k], key='%s:%s' % (key, k) if key else k)
     else:
         value = config
-        assert config is not None, "Wrong config value '%s:%s'" % (key, value)
-
+        assert config is not None, "Wrong config value '%s: %s'" % (key, value)
 
 
 def update_config(config_from=None, config_to=None, args=None):
@@ -174,7 +168,6 @@ def update_config(config_from=None, config_to=None, args=None):
             config_to.update({k: v})
 
 
-
 class Pool(object):
 
     def __init__(self, factory, validator, size):
@@ -184,7 +177,6 @@ class Pool(object):
         self._factory = factory
         self._validator = validator
         self._lock = threading.Lock()
-
 
     def get(self, timeout=None):
         if timeout:
@@ -202,10 +194,9 @@ class Pool(object):
                     return o
             if timeout and time.time() >= time_until:
                 msg = "Pool get timeout, used: {used}, free: {free}".format(
-                        used=len(self._used), free=len(self._free))
+                    used=len(self._used), free=len(self._free))
                 raise Exception(msg)
             time.sleep(0.2)
-
 
     def put(self, o):
         with self._lock:
@@ -215,14 +206,12 @@ class Pool(object):
             if self._validator(o):
                 self._free.append(o)
 
-
     def remove(self, o):
         with self._lock:
             if o in self._used:
                 self._used.remove(o)
             if o in self._free:
                 self._free.remove(o)
-
 
 
 def x1x2(farm_id):
@@ -236,13 +225,11 @@ def x1x2(farm_id):
     return 'x%sx%s' % (x1, x2)
 
 
-
 def apply_async(f):
     def wrapper(*args, **kwds):
         pool = kwds.pop('pool')
         return pool.apply_async(f, args=args, kwds=kwds)
     return wrapper
-
 
 
 def process(daemon=False, name=None):
@@ -256,7 +243,6 @@ def process(daemon=False, name=None):
     return wrapper1
 
 
-
 def thread(daemon=False, name=None):
     def wrapper1(f):
         def wrapper2(*args, **kwds):
@@ -268,14 +254,12 @@ def thread(daemon=False, name=None):
     return wrapper1
 
 
-
 def greenlet(f):
     def wrapper(*args, **kwds):
         g = gevent.spawn(f, *args, **kwds)
         gevent.sleep(0)
         return g
     return wrapper
-
 
 
 def retry_f(f, args=None, kwds=None, retries=1, retry_timeout=10, excs=None):
@@ -292,7 +276,6 @@ def retry_f(f, args=None, kwds=None, retries=1, retry_timeout=10, excs=None):
             time.sleep(retry_timeout)
 
 
-
 def retry(retries, retry_timeout, *excs):
     def wrapper1(f):
         def wrapper2(*args, **kwds):
@@ -304,7 +287,6 @@ def retry(retries, retry_timeout, *excs):
     return wrapper1
 
 
-
 def create_pid_file(pid_file):
     pid = str(os.getpid())
     msg = "Creating pid file: %s" % pid_file
@@ -312,7 +294,6 @@ def create_pid_file(pid_file):
     if not os.path.exists(os.path.dirname(pid_file)):
         os.makedirs(os.path.dirname(pid_file), mode=0o755)
     file(pid_file, 'w+').write('%s\n' % pid)
-
 
 
 def delete_file(file_path):
@@ -323,7 +304,6 @@ def delete_file(file_path):
             os.remove(file_path)
         except:
             LOG.warning(exc_info())
-
 
 
 def daemonize(stdin='/dev/null', stdout='/dev/null', stderr='/dev/null'):
@@ -354,7 +334,6 @@ def daemonize(stdin='/dev/null', stdout='/dev/null', stderr='/dev/null'):
     os.dup2(se.fileno(), sys.stderr.fileno())
 
 
-
 def get_uid(user):
     if type(user) is int:
         uid = user
@@ -364,7 +343,6 @@ def get_uid(user):
         except KeyError:
             raise Exception("User '{0}' not found".format(user))
     return uid
-
 
 
 def get_gid(group):
@@ -378,12 +356,10 @@ def get_gid(group):
     return gid
 
 
-
 def set_uid(user):
     uid = get_uid(user)
     os.setuid(uid)
     LOG.debug("Set uid: {0}".format(uid))
-
 
 
 def set_gid(group):
@@ -392,12 +368,10 @@ def set_gid(group):
     LOG.debug("Set gid: {0}".format(gid))
 
 
-
 def chown(path, user=None, group=None):
     uid = get_uid(user) if user else -1
     gid = get_gid(group) if group else -1
     os.chown(path, uid, gid)
-
 
 
 def chunks(data, chunk_size):
@@ -410,7 +384,6 @@ def chunks(data, chunk_size):
         yield data[i:i + chunk_size]
 
 
-
 def send_email(email_from, email_to, subject, message):
     mail = MIMEText(message.encode('utf-8'), _charset='utf-8')
     mail['From'] = email_from
@@ -418,7 +391,6 @@ def send_email(email_from, email_to, subject, message):
     mail['Subject'] = subject
     server = smtplib.SMTP('localhost')
     server.sendmail(mail['From'], mail['To'], mail.as_string())
-
 
 
 def _get_szr_conn_info(server, port, instances_connection_policy):
@@ -441,31 +413,25 @@ def _get_szr_conn_info(server, port, instances_connection_policy):
     return ip, port, headers
 
 
-
 def get_szr_ctrl_conn_info(server, instances_connection_policy='public'):
     return _get_szr_conn_info(server, server['scalarizr.ctrl_port'], instances_connection_policy)
-
 
 
 def get_szr_api_conn_info(server, instances_connection_policy='public'):
     return _get_szr_conn_info(server, server['scalarizr.api_port'], instances_connection_policy)
 
 
-
 def get_szr_updc_conn_info(server, instances_connection_policy='public'):
     return _get_szr_conn_info(server, server['scalarizr.updc_port'], instances_connection_policy)
-
 
 
 def colorize(color, text):
     return color + text + Color.ENDC
 
 
-
 def set_proc_name(name):
     libc = ctypes.CDLL(find_library('c'))
     libc.prctl(15, ctypes.c_char_p(name), 0, 0, 0)
-
 
 
 class Color(object):
@@ -477,7 +443,6 @@ class Color(object):
     ENDC = '\033[0m'
 
 
-
 class StdOutStreamHandler(logging.StreamHandler):
 
     def __init__(self):
@@ -485,12 +450,10 @@ class StdOutStreamHandler(logging.StreamHandler):
         logging.StreamHandler.__init__(self, sys.stdout)
         self.setLevel(logging.DEBUG)
 
-
     def emit(self, record):
         if record.levelno > logging.INFO:
             return
         logging.StreamHandler.emit(self, record)
-
 
 
 class StdErrStreamHandler(logging.StreamHandler):
@@ -500,12 +463,10 @@ class StdErrStreamHandler(logging.StreamHandler):
         logging.StreamHandler.__init__(self, sys.stderr)
         self.setLevel(logging.WARNING)
 
-
     def emit(self, record):
         if record.levelno < logging.WARNING:
             return
         logging.StreamHandler.emit(self, record)
-
 
 
 def call(cmd, input=None, **kwds):
@@ -532,7 +493,6 @@ def call(cmd, input=None, **kwds):
     return stdout, stderr, p.returncode
 
 
-
 class GPool(gevent.pool.Group):
 
     def __init__(self, *args, **kwds):
@@ -542,22 +502,9 @@ class GPool(gevent.pool.Group):
             self.pool_size = None
         super(GPool, self).__init__(*args, **kwds)
 
-
     def wait(self):
         while self.pool_size and len(self) >= self.pool_size:
-            gevent.sleep(0.2)
-
-
-
-class Singleton(type):
-
-    _instances = {}
-
-    def __call__(cls, *args, **kwargs):
-        if cls not in cls._instances:
-            cls._instances[cls] = super(Singleton, cls).__call__(*args, **kwargs)
-        return cls._instances[cls]
-
+            gevent.sleep(0.1)
 
 
 import ssl
@@ -567,6 +514,7 @@ from requests.packages.urllib3.poolmanager import PoolManager
 
 
 class HttpsAdapter(HTTPAdapter):
+
     """"Transport adapter" that allows to use TLS v1"""
 
     def init_poolmanager(self, connections, maxsize, block=False):
@@ -574,3 +522,22 @@ class HttpsAdapter(HTTPAdapter):
                                        maxsize=maxsize,
                                        block=block,
                                        ssl_version=ssl.PROTOCOL_TLSv1)
+
+
+def new_month(dtime):
+    one_day = datetime.timedelta(days=1)
+    new_dtime = dtime + one_day
+    while dtime.month == new_dtime.month:
+        new_dtime += one_day
+    new_dtime.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    return new_dtime
+
+
+def pkg_type_by_name(name):
+    if name.lower() in ('windows'):
+        return 'win'
+    if name.lower() in ('debian', 'ubuntu'):
+        return 'deb'
+    if name.lower() in ('fedora', 'oracle', 'oel', 'centos', 'redhat'):
+        return 'rpm'
+    return None

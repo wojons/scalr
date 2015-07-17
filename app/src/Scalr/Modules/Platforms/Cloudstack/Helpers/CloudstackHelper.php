@@ -18,6 +18,42 @@ class CloudstackHelper
         
     }
 
+    public static function getSharedIP(\DBServer $dbServer)
+    {
+        $remoteIp = null;
+        $platform = PlatformFactory::NewPlatform($dbServer->platform);
+        $ips = $platform->GetServerIPAddresses($dbServer);
+        if ($ips['remoteIp']) {
+            $remoteIp = $ips['remoteIp'];
+            $dbServer->GetFarmRoleObject()->SetSetting(DBFarmRole::SETTING_CLOUDSTACK_NETWORK_TYPE, 'Direct', DBFarmRole::TYPE_LCL);
+        }
+        else {
+            if ($dbServer->farmRoleId) {
+                $dbFarmRole = $dbServer->GetFarmRoleObject();
+                $networkType = $dbFarmRole->GetSetting(DBFarmRole::SETTING_CLOUDSTACK_NETWORK_TYPE);
+                if ($networkType == 'Direct') {
+                    $remoteIp = $ips['localIp'];
+                } else {
+                    $useStaticNat = $dbFarmRole->GetSetting(DBFarmRole::SETIING_CLOUDSTACK_USE_STATIC_NAT);
+                    $networkId = $dbFarmRole->GetSetting(DBFarmRole::SETTING_CLOUDSTACK_NETWORK_ID);
+                    if (!$useStaticNat && $networkId != 'SCALR_MANUAL') {
+                        $sharedIp = $dbFarmRole->GetSetting(DBFarmRole::SETTING_CLOUDSTACK_SHARED_IP_ADDRESS);
+                        if (!$sharedIp) {
+                            $env = $dbServer->GetEnvironmentObject();
+                            $remoteIp = $platform->getConfigVariable(
+                                CloudstackPlatformModule::SHARED_IP . "." . $dbServer->GetProperty(\CLOUDSTACK_SERVER_PROPERTIES::CLOUD_LOCATION), $env, false
+                            );
+                        } else {
+                            $remoteIp = $sharedIp;
+                        }
+                    }
+                }
+            }
+        }
+        
+        return $remoteIp;
+    }
+    
     /**
      * Associates IP Address to the server
      *
@@ -174,12 +210,6 @@ class CloudstackHelper
         }
 
         if ($ip && $ip['ipaddress'] == $dbServer->remoteIp) {
-            /*
-            \Logger::getLogger(\LOG_CATEGORY::FARM)->fatal(new FarmLogMessage($dbServer->farmId, sprintf(
-                _("Cannot allocate elastic ip address for instance %s on farm %s (1)"),
-                $dbServer->serverId, $dbFarm->Name
-            )));
-            */
             return $ip['ipaddress'];
         }
 

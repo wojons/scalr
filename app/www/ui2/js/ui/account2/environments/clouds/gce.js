@@ -1,11 +1,11 @@
 Scalr.regPage('Scalr.ui.account2.environments.clouds.gce', function (loadParams, moduleParams) {
-	var params = moduleParams['params'],
-        hideJsonKey = !Scalr.flags['betaMode'] && !params['gce.json_key'];
+	var params = moduleParams['params'];
 	
 	var form = Ext.create('Ext.form.Panel', {
         bodyCls: 'x-container-fieldset',
         fieldDefaults: {
-			anchor: '100%'
+			anchor: '100%',
+            labelWidth: 110
         },
         autoScroll: true,
         items: [{
@@ -22,7 +22,6 @@ Scalr.regPage('Scalr.ui.account2.environments.clouds.gce', function (loadParams,
             layout: 'hbox',
             name: 'mode',
             submitValue: false,
-            hidden: hideJsonKey,
             defaults: {
                 flex: 1
             },

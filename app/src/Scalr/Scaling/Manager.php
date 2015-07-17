@@ -8,6 +8,8 @@ class Scalr_Scaling_Manager
 
     public $decisonInfo;
 
+    public $logger;
+
     /**
      * Constructor
      * @param $DBFarmRole
@@ -129,7 +131,7 @@ class Scalr_Scaling_Manager
 
         $maxInstances = $this->dbFarmRole->GetSetting(DBFarmRole::SETTING_SCALING_MAX_INSTANCES);
         $minInstances = $this->dbFarmRole->GetSetting(DBFarmRole::SETTING_SCALING_MIN_INSTANCES);
-        
+
         if ($roleTotalInstances < $minInstances) {
             if ($needOneByOneLaunch) {
                 $pendingTerminateInstances = count($this->dbFarmRole->GetServersByFilter(array('status' => SERVER_STATUS::PENDING_TERMINATE)));

@@ -8,7 +8,7 @@ Scalr.regPage('Scalr.ui.images.create', function (loadParams, moduleParams) {
 
 	return Ext.create('Ext.form.Panel', {
         title: 'Choose a image creation method',
-        width: 450,
+        width: 500,
         layout: 'anchor',
 
         scalrOptions: {
@@ -33,7 +33,7 @@ Scalr.regPage('Scalr.ui.images.create', function (loadParams, moduleParams) {
                 ui: 'simple',
                 cls: 'x-btn-simple-large',
                 margin: '20 0 20 20',
-                iconAlign: 'above'
+                iconAlign: 'top'
             },
             items: [{
                 xtype: 'button',
@@ -45,7 +45,7 @@ Scalr.regPage('Scalr.ui.images.create', function (loadParams, moduleParams) {
                 tooltip: 'Register existing Image manually.',
                 listeners: {
                     boxready: function() {
-                        this.btnInnerEl.applyStyles('margin-top: 69px; white-space: pre;');
+                        this.btnInnerEl.applyStyles('white-space: pre; padding: 0px;');
 
                         if ('register' in loadParams)
                             this.toggle(true);
@@ -65,7 +65,7 @@ Scalr.regPage('Scalr.ui.images.create', function (loadParams, moduleParams) {
                 tooltip: 'Snapshot an existing Server that is not currently managed by Scalr, and use the snapshot as an Image.',
                 listeners: {
                     boxready: function() {
-                        this.btnInnerEl.applyStyles('margin-top: 69px; white-space: pre;');
+                        this.btnInnerEl.applyStyles('white-space: pre; padding: 0px;');
                     }
                 }
             }, {
@@ -85,7 +85,7 @@ Scalr.regPage('Scalr.ui.images.create', function (loadParams, moduleParams) {
             hidden: true,
             defaults: {
                 anchor: '100%',
-                labelWidth: 80
+                labelWidth: 110
             },
             showLocationAsText: function (platform) {
                 return Scalr.user['type'] === 'ScalrAdmin' && (Scalr.isCloudstack(platform) || Scalr.isOpenstack(platform));
@@ -155,11 +155,7 @@ Scalr.regPage('Scalr.ui.images.create', function (loadParams, moduleParams) {
                         var me = this;
                         me.collapse();
                         Scalr.loadCloudLocations(me.platform, function(data){
-                            var locations = {};
-                            Ext.Object.each(data, function(platform, loc){
-                                Ext.apply(locations, loc);
-                            });
-                            me.store.load({data: locations});
+                            me.store.load({data: data});
                             me.locationsLoaded = true;
                             me.expand();
                         });
@@ -175,7 +171,7 @@ Scalr.regPage('Scalr.ui.images.create', function (loadParams, moduleParams) {
                 name: 'cloudLocationText'
             }, {
                 xtype: 'textfield',
-                fieldLabel: 'Image ID',
+                fieldLabel: 'Cloud Image ID',
                 hidden: true,
                 allowBlank: false,
                 name: 'imageId',
@@ -219,24 +215,24 @@ Scalr.regPage('Scalr.ui.images.create', function (loadParams, moduleParams) {
                     disabled: true
                 }
             , {
-                xtype: 'fieldcontainer',
-                itemId: 'name',
+                xtype: 'textfield',
+                fieldLabel: 'Name',
+                vtype: 'rolename',
+                minLength: 3,
+                allowBlank: false,
+                disabled: true,
+                flex: 1,
+                name: 'name',
                 hidden: true,
-                layout: 'hbox',
-                items: [{
-                    xtype: 'textfield',
-                    fieldLabel: 'Name',
-                    vtype: 'rolename',
-                    minLength: 3,
-                    labelWidth: 80,
-                    allowBlank: false,
-                    disabled: true,
-                    flex: 1,
-                    name: 'name'
-                }, {
-                    xtype: 'displayinfofield',
-                    margin: '0 0 0 8',
-                    value: "This name will only be used in Scalr, and this Image's name in your Cloud will not be changed."
+                plugins: [{
+                    ptype: 'fieldicons',
+                    align: 'left',
+                    position: 'outer',
+                    icons: {
+                        id: 'info',
+                        tooltip: 'This name will only be used in Scalr, ' +
+                        'and this Image\'s name in your Cloud will not be changed.'
+                    }
                 }]
             }, {
                 xtype: 'fieldcontainer',
@@ -248,49 +244,53 @@ Scalr.regPage('Scalr.ui.images.create', function (loadParams, moduleParams) {
                 items: [{
                     xtype: 'combo',
                     name: 'osFamily',
-                    width: 150,
-                    displayField: 'title',
-                    valueField: 'osFamily',
+                    flex: 1,
+                    displayField: 'name',
+                    valueField: 'id',
                     editable: false,
                     allowBlank: false,
-                    store: Ext.create('Ext.data.ArrayStore', {
-                        fields: ['osFamily', 'versions', {
-                            name: 'title', convert: function (v, record) {
-                                return Scalr.utils.beautifyOsFamily(record.data.osFamily);
-                            }
-                        }],
-                        data: Scalr.constants.osFamily
-                    }),
+                    emptyText: 'Family',
+                    submitValue: false,
+                    plugins: {
+                        ptype: 'fieldinnericon',
+                        field: 'id',
+                        iconClsPrefix: 'x-icon-osfamily-small x-icon-osfamily-small-'
+                    },
+                    store: {
+                        fields: ['id', 'name'],
+                        proxy: 'object',
+                        data: Scalr.utils.getOsFamilyList()
+                    },
                     listeners: {
-                        change: function (comp, value) {
-                            var record = comp.findRecordByValue(value);
-                            if (record) {
-                                var version = comp.next(),
-                                    store = version.store;
-                                store.getProxy().data = record.get('versions');
-                                store.load();
-                                version.setValue(store.last());
-                                version.show();
-                            }
+                        change: function(comp, value) {
+                            var osIdField = comp.next();
+                            osIdField.store.load({data: value ? Scalr.utils.getOsList(value) : []});
+                            osIdField.reset();
                         }
                     }
                 }, {
                     xtype: 'combo',
-                    name: 'osVersion',
+                    name: 'osId',
                     displayField: 'title',
-                    valueField: 'osVersion',
+                    valueField: 'id',
                     editable: false,
                     allowBlank: false,
-                    hidden: true,
-                    flex: 1,
-                    store: Ext.create('Ext.data.ArrayStore', {
-                        fields: ['osVersion', 'osGeneration', 'suffix', {
-                            name: 'title', convert: function (v, record) {
-                                return record.data.osVersion + ' ' + record.data.suffix;
+                    flex: .6,
+                    autoSetSingleValue: true,
+                    emptyText: 'Version',
+                    store: {
+                        fields: ['id', {name: 'title', convert: function(v, record){return record.data.version || record.data.generation || record.data.id}}],
+                        proxy: 'object'
+                    },
+                    margin: '0 0 0 12',
+                    listeners: {
+                        beforequery: function() {
+                            var osFamilyField = this.prev();
+                            if (!osFamilyField.getValue()) {
+                                Scalr.message.InfoTip('Select OS family first.', osFamilyField.inputEl, {anchor: 'bottom'});
                             }
-                        }]
-                    }),
-                    margin: '0 0 0 12'
+                        }
+                    }
                 }]
             }, {
                 xtype: 'fieldset',
@@ -304,7 +304,6 @@ Scalr.regPage('Scalr.ui.images.create', function (loadParams, moduleParams) {
                 cls: 'x-fieldset-separator-none',
                 listeners: {
                     boxready: function() {
-                        console.log(this);
                         this.legend.el.applyStyles('padding-left: 0px; padding-right: 0px');
                         this.body.el.applyStyles('padding-left: 0px; padding-right: 0px');
                     }
@@ -390,7 +389,7 @@ Scalr.regPage('Scalr.ui.images.create', function (loadParams, moduleParams) {
                     xtype: 'buttongroupfield',
                     name: 'ec2Type',
                     defaults: {
-                        width: 120
+                        width: 140
                     },
                     items: [{
                         text: 'EBS',
@@ -423,8 +422,7 @@ Scalr.regPage('Scalr.ui.images.create', function (loadParams, moduleParams) {
                             platform = form.down('[name="platform"]'),
                             cloudLocation = form.down('[name="cloudLocation"]'),
                             cloudLocationText = form.down('[name="cloudLocationText"]'),
-                            imageId = form.down('[name="imageId"]'),
-                            osField = form.down('[name="osVersion"]');
+                            imageId = form.down('[name="imageId"]');
 
                         if (form.getForm().isValid()) {
                             var values = form.getForm().getValues();
@@ -433,13 +431,6 @@ Scalr.regPage('Scalr.ui.images.create', function (loadParams, moduleParams) {
                             }
 
                             if (platform.readOnly) {
-                                var os = osField.findRecordByValue(values['osVersion']);
-                                if (os) {
-                                    os = os.getData();
-                                    values.osGeneration = os.osGeneration;
-                                    values.os = Scalr.utils.beautifyOsFamily(values.osFamily) + ' ' + os.title;
-                                }
-
                                 Scalr.Request({
                                     processBox: {
                                         type: 'action'
@@ -451,8 +442,8 @@ Scalr.regPage('Scalr.ui.images.create', function (loadParams, moduleParams) {
                                     },
                                     params: values,
                                     url: '/images/xSave',
-                                    success: function() {
-                                        Scalr.event.fireEvent('redirect', '#/images/view?platform=' + values['platform'] + '&cloudLocation=' + values['cloudLocation'] + '&id=' + values['imageId']);
+                                    success: function(data) {
+                                        Scalr.event.fireEvent('redirect', '#/images?hash=' + data.hash);
                                     }
                                 });
 
@@ -479,8 +470,8 @@ Scalr.regPage('Scalr.ui.images.create', function (loadParams, moduleParams) {
                                         }
                                     }
 
-                                    form.down('#name').show();
                                     form.down('[name="name"]').
+                                        show().
                                         enable().
                                         setValue(data['name']);
                                     me.setText('Register');
@@ -517,9 +508,7 @@ Scalr.regPage('Scalr.ui.images.create', function (loadParams, moduleParams) {
                         form.down('[name="imageId"]').setReadOnly(false);
                         form.down('#os').hide().disable();
                         form.down('#software').hide().disable();
-                        form.down('[name="osVersion"]').hide();
-                        form.down('[name="name"]').disable();
-                        form.down('#name').hide();
+                        form.down('[name="name"]').hide().disable();
                         form.down('[name="size"]').hide().disable();
                         form.down('[name="architecture"]').hide().disable();
                         form.down('#ec2Type').hide().disable();

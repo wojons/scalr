@@ -6,6 +6,7 @@ Scalr.regPage('Scalr.ui.admin.accounts.edit', function (loadParams, moduleParams
 			anchor: '100%',
 			labelWidth: 130
 		},
+        preserveScrollPosition: true,
 		items: [{
 			xtype: 'fieldset',
 			title: 'General information',
@@ -61,12 +62,7 @@ Scalr.regPage('Scalr.ui.admin.accounts.edit', function (loadParams, moduleParams
             layout: 'anchor',
             hidden: !Scalr.flags['analyticsEnabled'] || (Scalr.flags['hostedScalr'] && !moduleParams['account']['id']),
             items: [{
-                xtype: 'displayfield',
-                cls: 'x-form-field-warning',
-                itemId: 'removedCcsInfo',
-                hidden: true
-            },{
-                xtype: 'comboboxselect',
+                xtype: 'tagfield',
                 name: 'ccs',
                 store: {
                     fields: [ 'ccId', 'name' ],
@@ -82,6 +78,11 @@ Scalr.regPage('Scalr.ui.admin.accounts.edit', function (loadParams, moduleParams
                 disabled: !Scalr.flags['analyticsEnabled'] || Scalr.flags['hostedScalr'],
                 submitValue: false,
                 allowBlank: false
+            },{
+                xtype: 'displayfield',
+                cls: 'x-form-field-warning',
+                itemId: 'removedCcsInfo',
+                hidden: true
             }]
         }],
 

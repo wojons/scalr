@@ -6,16 +6,20 @@ class Scalr_Governance
         $envId,
         $db;
 
+    const SCALR_META_TAG_NAME = 'scalr-meta';
+    const SCALR_META_TAG_VALUE = 'v1:{SCALR_ENV_ID}:{SCALR_FARM_ID}:{SCALR_FARM_ROLE_ID}:{SCALR_SERVER_ID}';
+
     const AWS_KEYPAIR = 'aws.ssh_key_pair';
     const AWS_SECURITY_GROUPS = 'aws.additional_security_groups';
     const AWS_IAM = 'aws.iam';
     const AWS_VPC = 'aws.vpc';
     const AWS_TAGS = 'aws.tags';
+    const AWS_INSTANCE_NAME_FORMAT = 'aws.instance_name_format';
 
     const OPENSTACK_SECURITY_GROUPS = 'openstack.additional_security_groups';
     const OPENSTACK_INSTANCE_NAME_FORMAT = 'openstack.instance_name_format';
     const OPENSTACK_TAGS = 'openstack.tags';
-    
+
     const CLOUDSTACK_SECURITY_GROUPS = 'cloudstack.additional_security_groups';
 
     const EUCALYPTUS_KEYPAIR = 'euca.ssh_key_pair';
@@ -64,6 +68,9 @@ class Scalr_Governance
         );
         foreach ($list as $var) {
             if ($enabledOnly) {
+                if ($var['name'] == self::AWS_KEYPAIR) {//do not expose
+                    continue;
+                }
                 $result[$var['category']][$var['name']] = json_decode($var['value']);
             } else {
                 $result[$var['category']][$var['name']] = array(

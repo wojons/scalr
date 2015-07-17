@@ -19,9 +19,7 @@ Scalr.regPage('Scalr.ui.dm.tasks.logs', function (loadParams, moduleParams) {
 		store: store,
 		stateId: 'grid-dm-tasks-logs-view',
 		stateful: true,
-		plugins: {
-			ptype: 'gridstore'
-		},
+        plugins: [ 'gridstore', 'applyparams' ],
 
 		viewConfig: {
 			emptyText: 'Log is empty for selected deployment task',

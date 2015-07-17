@@ -1,16 +1,26 @@
 <?php
+
 namespace Scalr\DataType;
 
 /**
  * ScopeInterface
  *
+ * @author  Igor Savchenko
+ * @since   5.4.0   (07.03.2015)
  */
 interface ScopeInterface
 {
-    CONST SCOPE_SCALR       = 'scalr';
-    CONST SCOPE_ACCOUNT     = 'account';
-    CONST SCOPE_ENVIRONMENT = 'environment';
-    CONST SCOPE_FARM        = 'farm';
-    CONST SCOPE_ROLE        = 'role';
-    CONST SCOPE_FARMROLE    = 'farmrole';
+    const SCOPE_SCALR       = 'scalr';
+    const SCOPE_ACCOUNT     = 'account';
+    const SCOPE_ENVIRONMENT = 'environment';
+    const SCOPE_FARM        = 'farm';
+    const SCOPE_ROLE        = 'role';
+    const SCOPE_FARMROLE    = 'farmrole';
+
+    /**
+     * Gets scope
+     *
+     * @return   string  Returns scope
+     */
+    public function getScope();
 }

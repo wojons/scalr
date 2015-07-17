@@ -12,7 +12,7 @@ use Scalr\Service\OpenStack\Services\AbstractServiceHandler;
  * @since    14.12.2012
  *
  * @method   \Scalr\Service\OpenStack\Type\DefaultPaginationList list()
- *           list($serverId = null)
+ *           list($securityGroupId = null)
  *           Gets the list of Security Groups.
  *
  * @method   object create()     create($name, $description)   Creates a new secrurity group.

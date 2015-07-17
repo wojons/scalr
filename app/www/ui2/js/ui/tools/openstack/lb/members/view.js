@@ -10,12 +10,13 @@ Scalr.regPage('Scalr.ui.tools.openstack.lb.members.view', function (loadParams, 
 
     var panel = Ext.create('Ext.grid.Panel', {
 
-        title: Scalr.utils.getPlatformName(loadParams['platform']) + ' &raquo; Load balancers &raquo; Members',
         itemId: 'lbMembersGrid',
 
         scalrOptions: {
             //'reload': false,
-            'maximize': 'all'
+            maximize: 'all',
+            menuTitle: Scalr.utils.getPlatformName(loadParams['platform']) + ' LB Members',
+            //menuFavorite: true
         },
 
         store: store,
@@ -23,17 +24,11 @@ Scalr.regPage('Scalr.ui.tools.openstack.lb.members.view', function (loadParams, 
         stateId: 'grid-tools-openstack-lb-members-view',
         stateful: true,
 
-        plugins: {
+        plugins: [{
             ptype: 'gridstore'
-        },
-        tools: [{
-            xtype: 'gridcolumnstool'
         }, {
-            xtype: 'favoritetool',
-            favorite: {
-                text: 'LB Members',
-                href: '#/tools/openstack/lb/members'
-            }
+            ptype: 'applyparams',
+            filterIgnoreParams: [ 'platform' ]
         }],
 
         viewConfig: {
@@ -57,11 +52,7 @@ Scalr.regPage('Scalr.ui.tools.openstack.lb.members.view', function (loadParams, 
             { header: "Protocol port", flex: 0.5, dataIndex: 'protocol_port', sortable: true }
         ],
 
-        multiSelect: true,
-        selModel: {
-            selType: 'selectedmodel'
-        },
-
+        selModel: 'selectedmodel',
         listeners: {
             selectionchange: function(selModel, selections) {
                 var toolbar = this.down('scalrpagingtoolbar');
@@ -71,12 +62,11 @@ Scalr.regPage('Scalr.ui.tools.openstack.lb.members.view', function (loadParams, 
 
         dockedItems: [{
             xtype: 'scalrpagingtoolbar',
-            ignoredLoadParams: ['platform'],
             store: store,
             dock: 'top',
             beforeItems: [{
-                text: 'Add member',
-                cls: 'x-btn-green-bg',
+                text: 'New member',
+                cls: 'x-btn-green',
                 handler: function() {
                     var platform = 'platform=' + store.proxy.extraParams.platform,
                         cloudLocation = '&cloudLocation=' + store.proxy.extraParams.cloudLocation,
@@ -88,10 +78,10 @@ Scalr.regPage('Scalr.ui.tools.openstack.lb.members.view', function (loadParams, 
                 }
             }],
             afterItems: [{
-                ui: 'paging',
                 itemId: 'delete',
                 disabled: true,
-                iconCls: 'x-tbar-delete',
+                iconCls: 'x-btn-icon-delete',
+                cls: 'x-btn-red',
                 tooltip: 'Delete',
                 handler: function() {
                     var request = {
@@ -130,14 +120,9 @@ Scalr.regPage('Scalr.ui.tools.openstack.lb.members.view', function (loadParams, 
                 xtype: 'filterfield',
                 store: store
             }, ' ', {
-                xtype: 'fieldcloudlocation',
-                itemId: 'cloudLocation',
-                store: {
-                    fields: [ 'id', 'name' ],
-                    data: moduleParams.locations,
-                    proxy: 'object'
-                },
-                gridStore: store
+                xtype: 'cloudlocationfield',
+                platforms: [loadParams['platform']],
+				gridStore: store
             }]
         }]
     });

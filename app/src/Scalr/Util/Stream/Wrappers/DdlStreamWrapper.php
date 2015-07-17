@@ -87,7 +87,7 @@ class DdlStreamWrapper extends StreamAdapter
                     $this->resource->Execute("USE {$this->pathComponents[0]};");
                     $this->entries = $this->resource->Execute("SHOW TABLES;");
                 } catch (ADODB_Exception $e) {
-                    throw new FileNotFoundException($path, $e->getCode(), $e);
+                    throw new FileNotFoundException($path, $e->getMessage(), $e->getCode(), $e);
                 }
                 break;
             case 2:
@@ -113,7 +113,7 @@ class DdlStreamWrapper extends StreamAdapter
                         "SHOW COLUMNS `{$this->pathComponents[0]}`.`{$this->pathComponents[1]}`;"
                     );
                 } catch (ADODB_Exception $e) {
-                    throw new FileNotFoundException($path, $e->getCode(), $e);
+                    throw new FileNotFoundException($path, $e->getMessage(), $e->getCode(), $e);
                 }
                 break;
             case 3:

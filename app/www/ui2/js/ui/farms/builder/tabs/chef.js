@@ -1,73 +1,75 @@
-Scalr.regPage('Scalr.ui.farms.builder.tabs.chef', function (tabParams) {
-    return Ext.create('Scalr.ui.FarmsBuilderTab', {
-        tabTitle: 'Bootstrap with Chef',
-        tab: 'chef',
+Ext.define('Scalr.ui.FarmRoleEditorTab.Chef', {
+    extend: 'Scalr.ui.FarmRoleEditorTab',
+    tabTitle: 'Bootstrap with Chef',
+    //tab: 'chef',
+    itemId: 'chef',
 
-        settings: {
-            'chef.bootstrap': undefined,
-            'chef.cookbook_url': undefined,
-            'chef.cookbook_url_type': undefined,
-            'chef.relative_path': undefined,
-            'chef.ssh_private_key': undefined,
-            'chef.server_id': undefined,
-            'chef.role_name': undefined,
-            'chef.environment': undefined,
-            'chef.runlist': '',
-            'chef.attributes': undefined,
-            'chef.node_name_tpl' : undefined,
-            'chef.daemonize': undefined,
-            'chef.log_level': undefined
-        },
+    cls: 'x-panel-column-left-with-tabs',
 
-        isEnabled: function (record) {
-            return record.hasBehavior('chef');
-        },
+    settings: {
+        'chef.bootstrap': undefined,
+        'chef.cookbook_url': undefined,
+        'chef.cookbook_url_type': undefined,
+        'chef.relative_path': undefined,
+        'chef.ssh_private_key': undefined,
+        'chef.server_id': undefined,
+        'chef.role_name': undefined,
+        'chef.environment': undefined,
+        'chef.runlist': '',
+        'chef.attributes': undefined,
+        'chef.node_name_tpl' : undefined,
+        'chef.daemonize': undefined,
+        'chef.log_level': undefined
+    },
 
-        beforeShowTab: function(record, handler) {
-            var me = this,
-                field = me.down('chefsettings');
+    isEnabled: function (record) {
+        return this.callParent(arguments) && record.hasBehavior('chef');
+    },
 
-            record.loadRoleChefSettings(function(data, status){
-                if (status) {
-                    if (!data.roleChefSettings) {
-                        field.disableDaemonize = false;
-                        Ext.each(record.get('scripting', true) || [], function(script){
-                            if (script['script_type'] === 'chef' && script['params'] && !script['params']['chef.cookbook_url']) {
-                                field.disableDaemonize = true;
-                                return false;
-                            }
-                        });
-                    }
-                    field.limits = me.up('#farmbuilder').getLimits('general', 'general.chef');
-                    field.setReadOnly(data.roleChefSettings);
-                    field.roleChefSettings = data.roleChefSettings;
-                    field.farmRoleChefSettings = data.farmRoleChefSettings;
-                    field.setValue(data.chefSettings, function(success){
-                        success ? handler() : me.deactivateTab();
+    beforeShowTab: function(record, handler) {
+        var me = this,
+            field = me.down('chefsettings');
+
+        record.loadRoleChefSettings(function(data, status){
+            if (status) {
+                if (!data.roleChefSettings) {
+                    field.disableDaemonize = false;
+                    Ext.each(record.get('scripting', true) || [], function(script){
+                        if (script['script_type'] === 'chef' && script['params'] && !script['params']['chef.cookbook_url']) {
+                            field.disableDaemonize = true;
+                            return false;
+                        }
                     });
-
-                } else {
-                    me.deactivateTab();
                 }
-            });
-            field.clearInvalid();
-        },
+                field.setReadOnly(data.roleChefSettings);
+                field.roleChefSettings = data.roleChefSettings;
+                field.farmRoleChefSettings = data.farmRoleChefSettings;
+                field.roleOsFamily = Scalr.utils.getOsById(record.get('osId'), 'family');
+                field.setValue(data.chefSettings, function(success){
+                    success ? handler() : me.deactivateTab();
+                });
 
-        showTab: function (record) {
-        },
+            } else {
+                me.deactivateTab();
+            }
+        });
+        field.clearInvalid();
+    },
 
-        hideTab: function (record) {
-            var me = this,
-                settings = record.get('settings');
-            Ext.Object.each(me.settings, function(key, value){
-                delete settings[key];
-            });
-            Ext.apply(settings, this.down('chefsettings').getValue());
-            
-            record.set('settings', settings);
-        },
-        items: [{
-            xtype: 'chefsettings'
-        }]
-    });
+    showTab: function (record) {
+    },
+
+    hideTab: function (record) {
+        var me = this,
+            settings = record.get('settings');
+        Ext.Object.each(me.settings, function(key, value){
+            delete settings[key];
+        });
+        Ext.apply(settings, this.down('chefsettings').getValue());
+
+        record.set('settings', settings);
+    },
+    __items: [{
+        xtype: 'chefsettings'
+    }]
 });

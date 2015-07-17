@@ -35,12 +35,14 @@ class ElbObserver extends \EventObserver
                     sprintf(_("Instance '%s' deregistered from '%s' load balancer"),
                         $DBServer->GetProperty(\EC2_SERVER_PROPERTIES::INSTANCE_ID),
                         $elbId
-                    )
+                    ),
+                    $DBServer->serverId
                 ));
             }
         } catch(\Exception $e) {
             \Logger::getLogger(\LOG_CATEGORY::FARM)->info(new \FarmLogMessage($this->FarmID,
-                sprintf(_("Cannot deregister instance from the load balancer: %s"), $e->getMessage())
+                sprintf(_("Cannot deregister instance from the load balancer: %s"), $e->getMessage()),
+                $DBServer->serverId
             ));
         }
     }
@@ -96,7 +98,8 @@ class ElbObserver extends \EventObserver
                     sprintf(_("Instance '%s' registered on '%s' load balancer"),
                         $event->DBServer->GetProperty(\EC2_SERVER_PROPERTIES::INSTANCE_ID),
                         $elbId
-                    )
+                    ),
+                    $event->DBServer->serverId
                 ));
             }
         } catch(\Exception $e) {

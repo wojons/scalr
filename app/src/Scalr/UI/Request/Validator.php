@@ -14,6 +14,7 @@ namespace Scalr\UI\Request;
 class Validator
 {
     const NOEMPTY = 'notEmpty';
+    const URL     = 'url';
 
     protected $errors = [];
 
@@ -116,11 +117,32 @@ class Validator
         return $message;
     }
 
-    /*
-     * Validator functions
+    /**
+     * Checks if the value is not empty
+     *
+     * @param     string     $value    The url
+     * @param     array      $options  optional   Options
+     * @return    bool|string Returns true if value is valid or error message if failures
      */
     public function validateNotEmpty($value, $options = null)
     {
         return !empty($value) ?: 'This value should be provided.';
+    }
+
+    /**
+     * Checks if the value is valid HTTP(S) URL
+     *
+     * @param     string     $value    The url
+     * @param     array      $options  optional   Options
+     * @return    bool|string Returns true if value is valid or error message if failures
+     */
+    public function validateUrl($value, $options = null)
+    {
+        if (($url = filter_var($value, FILTER_SANITIZE_URL)) === false) {
+            return "This value should be valid URL";
+        }
+
+        //We should forbid local resources!
+        return (bool)preg_match('/^https?/i', parse_url($url, PHP_URL_SCHEME)) ?: "Invalid URL scheme";
     }
 }

@@ -12,29 +12,34 @@ Scalr.regPage('Scalr.ui.bundletasks.logs', function (loadParams, moduleParams) {
 	});
 
 	return Ext.create('Ext.grid.Panel', {
-		title: 'Bundle task &raquo; Log',
 		scalrOptions: {
-			'reload': false,
-			'maximize': 'all'
+			reload: false,
+			maximize: 'all',
+            menuTitle: 'Bundle Tasks',
+            menuHref: '#/bundletasks',
+            menuFavorite: true,
+            menuParentStateId: 'grid-bundletasks-view'
 		},
 		store: store,
 		stateId: 'grid-bundletasks-logs-view',
 		stateful: true,
-		plugins: [{
-			ptype: 'gridstore'
-		}, {
-			ptype: 'rowexpander',
-			rowBodyTpl: [
-				'<p><b>Message:</b> <span style="white-space: pre">{message}</span></p>'
-			]
-		}],
+        plugins: [ 'gridstore', {
+            ptype: 'applyparams',
+            hiddenParams: [ 'bundleTaskId' ],
+            filterIgnoreParams: [ 'bundleTaskId' ]
+        }, {
+            ptype: 'rowexpander',
+            rowBodyTpl: [
+                '<p><b>Message:</b> <span style="white-space: pre">{message}</span></p>'
+            ]
+        }],
 
-		tools: [{
-			id: 'close',
+		/*tools: [{
+			type: 'close',
 			handler: function () {
 				Scalr.event.fireEvent('close');
 			}
-		}],
+		}],*/
 
 		viewConfig: {
 			emptyText: 'Log is empty for selected bundle task',
@@ -48,7 +53,6 @@ Scalr.regPage('Scalr.ui.bundletasks.logs', function (loadParams, moduleParams) {
 
 		dockedItems: [{
 			xtype: 'scalrpagingtoolbar',
-            ignoredLoadParams: ['bundleTaskId'],
 			store: store,
 			dock: 'top',
             items: [{

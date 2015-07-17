@@ -836,7 +836,7 @@ class NetworkApi
      * @return  object   Returns allocated floating ip details
      * @throws  RestClientException
      */
-    public function createFloatingIp($floatingNetworkId, $portId = null)
+    public function createFloatingIp($floatingNetworkId, $portId = null, $fixedIpAddress = null)
     {
         $result = null;
         $options = array();
@@ -845,6 +845,10 @@ class NetworkApi
         }
         if (isset($portId)) {
             $options['port_id'] = (string)$portId;
+        }
+        
+        if (isset($fixedIpAddress)) {
+            $options['fixed_ip_address'] = (string)$fixedIpAddress;
         }
 
         $options = array('floatingip' => $options);

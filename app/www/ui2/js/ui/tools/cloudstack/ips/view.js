@@ -12,25 +12,20 @@ Scalr.regPage('Scalr.ui.tools.cloudstack.ips.view', function (loadParams, module
     });
 
     return Ext.create('Ext.grid.Panel', {
-        title: Scalr.utils.getPlatformName(loadParams['platform']) + ' &raquo; Public IPs',
         scalrOptions: {
-            'reload': true,
-            'maximize': 'all'
+            reload: true,
+            maximize: 'all',
+            menuTitle: Scalr.utils.getPlatformName(loadParams['platform']) + ' &raquo; Public IPs',
+            //menuFavorite: true
         },
         store: store,
         stateId: 'grid-tools-cloudstack-ips-view',
         stateful: true,
-        plugins: {
+        plugins: [{
             ptype: 'gridstore'
-        },
-        tools: [{
-            xtype: 'gridcolumnstool'
         }, {
-            xtype: 'favoritetool',
-            favorite: {
-                text: 'Cloudstack Public IPs',
-                href: '#/tools/cloudstack/ips'
-            }
+            ptype: 'applyparams',
+            filterIgnoreParams: [ 'platform' ]
         }],
 
         viewConfig: {
@@ -41,53 +36,24 @@ Scalr.regPage('Scalr.ui.tools.cloudstack.ips.view', function (loadParams, module
         columns: [
             { header: "Used by", flex: 1, dataIndex: 'id', sortable: false, xtype: 'templatecolumn', tpl:
                 '<tpl if="farmId">' +
-                    '<a href="#/farms/{farmId}/view" title="Farm {farmName}">{farmName}</a>' +
+                    '<a href="#/farms?farmId={farmId}" title="Farm {farmName}">{farmName}</a>' +
                     '<tpl if="roleName">' +
                         '&nbsp;&rarr;&nbsp;<a href="#/farms/{farmId}/roles/{farmRoleId}/view" title="Role {roleName}">' +
-                        '{roleName}</a> #<a href="#/servers/{serverId}/view">{serverIndex}</a>' +
+                        '{roleName}</a> #<a href="#/servers?serverId={serverId}">{serverIndex}</a>' +
                     '</tpl>' +
                 '</tpl>' +
 				'<tpl if="instanceId && ! farmId">' +
 				    'Non scalr server: {instanceId}' +
 				'</tpl>' +
-                '<tpl if="!farmId && !instanceId"><img src="/ui2/images/icons/false.png" /></tpl>'
+                '<tpl if="!farmId && !instanceId">&mdash;</tpl>'
             },
 			{ header: "IP Address", width: 120, dataIndex: 'ip', sortable: true },
             { header: "Network", width: 150, dataIndex: 'networkName', sortable: true },
             { header: "Purpose", width: 150, dataIndex: 'purpose', sortable: true},
-            { header: "State", width: 120, dataIndex: 'state', sortable: true },
-            {
-                xtype: 'optionscolumn2',
-                menu: [{
-                    itemId: 'option.delete',
-                    text: 'Delete',
-                    iconCls: 'x-menu-icon-delete',
-                    request: {
-                        confirmBox: {
-                            type: 'delete',
-                            msg: 'Are you sure want to delete Public IP "{ip}"?'
-                        },
-                        processBox: {
-                            type: 'delete',
-                            msg: 'Deleting IP(s) ...'
-                        },
-                        url: '/tools/cloudstack/ips/xRemove/',
-                        dataHandler: function (data) {
-                            return { ipId: Ext.encode([data['ipId']]), cloudLocation: store.proxy.extraParams.cloudLocation };
-                        },
-                        success: function () {
-                            store.load();
-                        }
-                    }
-                }]
-            }
+            { header: "State", width: 120, dataIndex: 'state', sortable: true }
         ],
 
-        multiSelect: true,
-        selModel: {
-            selType: 'selectedmodel'
-        },
-
+        selModel: 'selectedmodel',
         listeners: {
             selectionchange: function(selModel, selections) {
                 this.down('scalrpagingtoolbar').down('#delete').setDisabled(!selections.length);
@@ -96,13 +62,12 @@ Scalr.regPage('Scalr.ui.tools.cloudstack.ips.view', function (loadParams, module
 
         dockedItems: [{
             xtype: 'scalrpagingtoolbar',
-            ignoredLoadParams: ['platform'],
             store: store,
             dock: 'top',
             afterItems: [{
-                ui: 'paging',
                 itemId: 'delete',
-                iconCls: 'x-tbar-delete',
+                iconCls: 'x-btn-icon-delete',
+                cls: 'x-btn-red',
                 tooltip: 'Select one or more IP(s) to delete them',
                 disabled: true,
                 handler: function() {
@@ -133,16 +98,10 @@ Scalr.regPage('Scalr.ui.tools.cloudstack.ips.view', function (loadParams, module
             items: [{
                 xtype: 'filterfield',
                 store: store
-            }, {
-                xtype: 'fieldcloudlocation',
-                itemId: 'cloudLocation',
-                margin: '0 0 0 12',
-                store: {
-                    fields: [ 'id', 'name' ],
-                    data: moduleParams.locations,
-                    proxy: 'object'
-                },
-                gridStore: store
+            }, ' ', {
+                xtype: 'cloudlocationfield',
+                platforms: [loadParams['platform']],
+				gridStore: store
             }]
         }]
     });

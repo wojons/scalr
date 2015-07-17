@@ -13,6 +13,7 @@ class Scalr_SchedulerTask extends Scalr_Model
     const SCRIPT_EXEC = 'script_exec';
     const TERMINATE_FARM = 'terminate_farm';
     const LAUNCH_FARM = 'launch_farm';
+    const FIRE_EVENT = 'fire_event';
 
     const STATUS_ACTIVE = "Active";
     const STATUS_SUSPENDED = "Suspended";
@@ -36,7 +37,6 @@ class Scalr_SchedulerTask extends Scalr_Model
         'last_start_time'       => array('property' => 'lastStartTime'),
         'restart_every'         => array('property' => 'restartEvery'),
         'config'                => array('property' => 'config', 'type' => 'serialize'),
-        'order_index'           => array('property' => 'orderIndex'),
         'timezone'              => 'timezone',
         'status'                => 'status',
         'account_id'            => array('property' => 'accountId'),
@@ -57,7 +57,6 @@ class Scalr_SchedulerTask extends Scalr_Model
         $lastStartTime,
         $restartEvery,
         $config,
-        $orderIndex,
         $timezone,
         $status,
         $accountId,
@@ -81,6 +80,8 @@ class Scalr_SchedulerTask extends Scalr_Model
                 return "Terminate farm";
             case self::LAUNCH_FARM:
                 return "Launch farm";
+            case self::FIRE_EVENT:
+                return "Fire event";
         }
     }
 
@@ -160,6 +161,45 @@ class Scalr_SchedulerTask extends Scalr_Model
                 }
                 break;
 
+            case self::FIRE_EVENT:
+                
+                switch($this->targetType) {
+                    case self::TARGET_FARM:
+                        $DBFarm = DBFarm::LoadByID($this->targetId);
+                        $farmId = $DBFarm->ID;
+                        $farmRoleId = null;
+
+                        $servers = $this->db->GetAll("SELECT server_id FROM servers WHERE `status` IN (?,?) AND farm_id = ?",
+                            array(SERVER_STATUS::INIT, SERVER_STATUS::RUNNING, $farmId)
+                        );
+                        break;
+
+                    case self::TARGET_ROLE:
+                        $farmRoleId = $this->targetId;
+                        $servers = $this->db->GetAll("SELECT server_id FROM servers WHERE `status` IN (?,?) AND farm_roleid = ?",
+                            array(SERVER_STATUS::INIT, SERVER_STATUS::RUNNING, $farmRoleId)
+                        );
+                        break;
+
+                    case self::TARGET_INSTANCE:
+                        $servers = $this->db->GetAll("SELECT server_id FROM servers WHERE `status` IN (?,?) AND farm_roleid = ? AND `index` = ? ",
+                            array(SERVER_STATUS::INIT, SERVER_STATUS::RUNNING, $this->targetId, $this->targetServerIndex)
+                        );
+                        break;
+                }
+                
+                if (count($servers) == 0)
+                    throw new Exception("No running Servers found. Event was not fired.");
+                
+                foreach ($servers as $server) {
+                    $dbServer = DBServer::LoadByID($server['server_id']);
+                    /* @var $dbServer DBServer */
+                    $event = new CustomEvent($dbServer, $this->config['eventName'], (array)$this->config['eventParams']);
+                    Scalr::FireEvent($dbServer->farmId, $event);
+                }
+                
+                break;
+                
             case self::SCRIPT_EXEC:
                 // generate event name
                 $eventName = "Scheduler (TaskID: {$this->id})";

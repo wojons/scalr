@@ -72,7 +72,8 @@ class FirewallApi extends AbstractApi
 
         if ($response->hasError() === false) {
             $resultObject = $response->getResult();
-            if (property_exists($resultObject, 'count') && $resultObject->count > 0) {
+
+            if (!empty($resultObject) && property_exists($resultObject, 'count') && $resultObject->count > 0) {
                 $result = $this->_loadPortForwardingRulesList($resultObject->portforwardingrule);
             }
         }
@@ -228,7 +229,8 @@ class FirewallApi extends AbstractApi
 
         if ($response->hasError() === false) {
             $resultObject = $response->getResult();
-            if (property_exists($resultObject, 'count') && $resultObject->count > 0) {
+
+            if (!empty($resultObject) &&  property_exists($resultObject, 'count') && $resultObject->count > 0) {
                 $result = $this->_loadPortForwardingRulesList($resultObject->ipforwardingrule);
             }
         }

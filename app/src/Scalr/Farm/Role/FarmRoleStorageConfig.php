@@ -39,6 +39,7 @@ class FarmRoleStorageConfig
     const SETTING_CSVOL_DISK_OFFERING_TYPE = 'csvol.disk_offering_type';
 
     const SETTING_GCE_PD_SIZE = 'gce_persistent.size';
+    const SETTING_GCE_PD_TYPE = 'gce_persistent.type';
     const SETTING_GCE_PD_SNAPSHOT = 'gce_persistent.snapshot';
 
     const SETTING_CINDER_SIZE = 'cinder.size';
@@ -50,6 +51,7 @@ class FarmRoleStorageConfig
     const SETTING_EBS_IOPS = 'ebs.iops';
     const SETTING_EBS_SNAPSHOT = 'ebs.snapshot';
     const SETTING_EBS_ENCRYPTED = 'ebs.encrypted';
+    const SETTING_EBS_KMS_KEY_ID = 'ebs.kms_key_id';
 
     const STATE_PENDING_DELETE = 'Pending delete';
     const STATE_PENDING_CREATE = 'Pending create';
@@ -134,6 +136,14 @@ class FarmRoleStorageConfig
 
             $settings[self::SETTING_GCE_PD_SNAPSHOT] = $config['settings'][self::SETTING_GCE_PD_SNAPSHOT];
             $settings[self::SETTING_GCE_PD_SIZE] = $volSize;
+
+            if (isset($config['settings'][self::SETTING_GCE_PD_TYPE])) {
+                if (!in_array($config['settings'][self::SETTING_GCE_PD_TYPE], array('pd-standard', 'pd-ssd')))
+                    throw new FarmRoleStorageException('Invalid GCE disk type');
+
+                $settings[self::SETTING_GCE_PD_TYPE] = $config['settings'][self::SETTING_GCE_PD_TYPE];
+            }
+
         } elseif ($type == self::TYPE_EBS || $type == self::TYPE_RAID_EBS) {
             $ebsSize = intval($config['settings'][self::SETTING_EBS_SIZE]);
             $ebsType = $config['settings'][self::SETTING_EBS_TYPE];
@@ -163,6 +173,9 @@ class FarmRoleStorageConfig
 
             if ($type == self::TYPE_EBS) {
                 $settings[self::SETTING_EBS_ENCRYPTED] = !empty($config['settings'][self::SETTING_EBS_ENCRYPTED]) ? 1 : 0;
+                if ($settings[self::SETTING_EBS_ENCRYPTED] && !empty($config['settings'][self::SETTING_EBS_KMS_KEY_ID])) {
+                    $settings[self::SETTING_EBS_KMS_KEY_ID] = $config['settings'][self::SETTING_EBS_KMS_KEY_ID];
+                }
             }
         }
 

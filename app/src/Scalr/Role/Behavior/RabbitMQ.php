@@ -281,6 +281,7 @@
 
                     default:
                         $volumeConfig->size = $dbFarmRole->GetSetting(static::ROLE_DATA_STORAGE_EBS_SIZE);
+                        $volumeConfig->tags = $dbServer->getAwsTags();
                         break;
                 }
             }

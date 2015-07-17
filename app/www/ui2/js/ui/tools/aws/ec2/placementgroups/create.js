@@ -1,11 +1,12 @@
 Scalr.regPage('Scalr.ui.tools.aws.ec2.placementgroups.create', function (loadParams, moduleParams) {
-	var form = Ext.create('Ext.form.Panel', {
-		title: 'Tools &raquo; Amazon Web Services &raquo; Placement group &raquo; Create',
+	var form = Scalr.utils.Window({
+        xtype: 'form',
+		title: 'Create Placement Group',
 		fieldDefaults: {
 			anchor: '100%'
 		},
 		scalrOptions: {
-			modal: true
+			modalWindow: true
 		},
 		width: 500,
         defaults: {

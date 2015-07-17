@@ -14,13 +14,10 @@ class TableEntityTest extends TestCase
 {
     /**
      * @test
+     * @functional
      */
     public function testFunctional()
     {
-        if ($this->isSkipFunctionalTests()) {
-            $this->markTestSkipped();
-        }
-
         $db = \Scalr::getDb();
 
         $entity = new TableEntity();
@@ -29,7 +26,7 @@ class TableEntityTest extends TestCase
         $tableInfo = $entity->findOne([['tableSchema' => $schema]]);
 
         $this->assertInstanceOf('Scalr\\Model\\Entity\\InformationSchema\\TableEntity', $tableInfo);
-        /* @var TableEntity $tableInfo */
+        /* @var $tableInfo TableEntity */
         $this->assertNotEmpty($tableInfo->engine);
         $this->assertNotEmpty($tableInfo->tableName);
         $this->assertNotEmpty($tableInfo->createTime);

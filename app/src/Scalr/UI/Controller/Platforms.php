@@ -2,6 +2,8 @@
 
 use Scalr\Modules\PlatformFactory;
 use Scalr\UI\Request\JsonData;
+use Scalr\Farm\Role\FarmRoleStorageConfig;
+use Scalr\Modules\Platforms\GoogleCE\GoogleCEPlatformModule;
 
 class Scalr_UI_Controller_Platforms extends Scalr_UI_Controller
 {
@@ -53,6 +55,88 @@ class Scalr_UI_Controller_Platforms extends Scalr_UI_Controller
                 $lPlatforms[$platform];
 
         return $platforms;
+    }
+
+    /**
+     * @param  string    $platform
+     * @param  string    $cloudLocation
+     * @param  int    $roleId
+     * @throws Exception
+     */
+    public function xGetRootDeviceInfoAction($platform, $cloudLocation, $roleId)
+    {
+        if (!in_array($platform, $this->getEnvironment()->getEnabledPlatforms())) {
+            throw new Exception(sprintf('Platform "%s" is not enabled', $platform));
+        }
+
+        $role = DBRole::loadById($roleId)->__getNewRoleObject();
+        $image = $role->getImage($platform, $cloudLocation)->getImage();
+
+        $data = ['readOnly' => true, 'mountPoint' => ($role->getOs()->family == 'windows') ? 'C:\ (ROOT)' : '/ (ROOT)'];
+        $settings = [];
+
+        switch ($platform) {
+            case SERVER_PLATFORMS::CLOUDSTACK:
+                $data['type'] = 'csvol';
+                $data['readOnly'] = true;
+            break;
+            
+            case SERVER_PLATFORMS::GCE:
+                // Get default size
+                $p = PlatformFactory::NewPlatform(SERVER_PLATFORMS::GCE);
+                $gceClient = $p->getClient($this->environment);
+
+                /* @var $gceClient Google_Service_Compute */
+
+                $ind = strpos($image->id, '/global/');
+                if ($ind !== FALSE) {
+                    $projectId = substr($image->id, 0, $ind);
+                    $id = str_replace("{$projectId}/global/images/", '', $image->id);
+                } else {
+                    $ind = strpos($image->id, '/images/');
+                    if ($ind !== false) {
+                        $projectId = substr($image->id, 0, $ind);
+                    } else
+                        $projectId = $this->environment->getPlatformConfigValue(GoogleCEPlatformModule::PROJECT_ID);
+
+                    $id = str_replace("{$projectId}/images/", '', $image->id);
+                }
+
+                $imageInfo = $gceClient->images->get($projectId, $id);
+                $settings = [
+                    FarmRoleStorageConfig::SETTING_GCE_PD_TYPE => 'pd-standard',
+                    FarmRoleStorageConfig::SETTING_GCE_PD_SIZE => $imageInfo->diskSizeGb
+                ];
+
+                $data['type'] = 'gce_persistent';
+                $data['readOnly'] = false;
+            break;
+            case SERVER_PLATFORMS::EC2:
+                if ($image->isEc2EbsImage()) {
+                    $data['type'] = 'ebs';
+                    $aws = $this->getEnvironment()->aws($cloudLocation);
+                    $cloudImageInfo = $aws->ec2->image->describe($image->id)[0];
+                    if ($cloudImageInfo->blockDeviceMapping) {
+                        foreach ($cloudImageInfo->blockDeviceMapping as $blockDeviceMapping) {
+                            if (stristr($blockDeviceMapping->deviceName, $cloudImageInfo->rootDeviceName)) {
+                                $data['readOnly'] = false;
+                                $settings[FarmRoleStorageConfig::SETTING_EBS_TYPE] = $blockDeviceMapping->ebs->volumeType;
+                                $settings[FarmRoleStorageConfig::SETTING_EBS_SIZE] = $blockDeviceMapping->ebs->volumeSize;
+                                $settings[FarmRoleStorageConfig::SETTING_EBS_SNAPSHOT] = $blockDeviceMapping->ebs->snapshotId;
+                                $settings[FarmRoleStorageConfig::SETTING_EBS_IOPS] = $blockDeviceMapping->ebs->iops;
+                            }
+                        }
+                    }
+                } else {
+                    $data['type'] = 'instance-store';
+                    $settings['size'] = '10';
+                }
+            break;
+        }
+
+        $data['settings'] = $settings;
+
+        $this->response->data(array('data' => $data));
     }
 
     /**

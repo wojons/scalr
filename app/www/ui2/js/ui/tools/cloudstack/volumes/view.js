@@ -12,26 +12,21 @@ Scalr.regPage('Scalr.ui.tools.cloudstack.volumes.view', function (loadParams, mo
 	});
 
 	return Ext.create('Ext.grid.Panel', {
-		title: Scalr.utils.getPlatformName(loadParams['platform']) + ' &raquo; Volumes',
 		scalrOptions: {
-			'reload': true,
-			'maximize': 'all'
+			reload: true,
+			maximize: 'all',
+            menuTitle: Scalr.utils.getPlatformName(loadParams['platform']) + ' &raquo; Volumes',
+            //menuFavorite: true
 		},
 		store: store,
 		stateId: 'grid-tools-cloudstack-volumes-view',
 		stateful: true,
-		plugins: {
-			ptype: 'gridstore'
-		},
-		tools: [{
-			xtype: 'gridcolumnstool'
-		}, {
-			xtype: 'favoritetool',
-			favorite: {
-				text: 'Cloudstack Volumes',
-				href: '#/tools/cloudstack/volumes'
-			}
-		}],
+        plugins: [{
+            ptype: 'gridstore'
+        }, {
+            ptype: 'applyparams',
+            filterIgnoreParams: [ 'platform' ]
+        }],
 
 		viewConfig: {
 			emptyText: 'No volumes found',
@@ -41,13 +36,13 @@ Scalr.regPage('Scalr.ui.tools.cloudstack.volumes.view', function (loadParams, mo
 		columns: [
 			{ header: "Used by", flex: 1, dataIndex: 'id', sortable: false, xtype: 'templatecolumn', tpl:
 				'<tpl if="farmId">' +
-					'<a href="#/farms/{farmId}/view" title="Farm {farmName}">{farmName}</a>' +
+					'<a href="#/farms?farmId={farmId}" title="Farm {farmName}">{farmName}</a>' +
 					'<tpl if="roleName">' +
 						'&nbsp;&rarr;&nbsp;<a href="#/farms/{farmId}/roles/{farmRoleId}/view" title="Role {roleName}">' +
-						'{roleName}</a> #<a href="#/servers/{serverId}/view">{serverIndex}</a>' +
+						'{roleName}</a> #<a href="#/servers?serverId={serverId}">{serverIndex}</a>' +
 					'</tpl>' +
 				'</tpl>' +
-				'<tpl if="!farmId"><img src="/ui2/images/icons/false.png" /></tpl>'
+				'<tpl if="!farmId">&mdash;</tpl>'
 			},
 			{ header: "Volume ID", width: 110, dataIndex: 'volumeId', sortable: true },
 			{ header: "Size (GB)", width: 110, dataIndex: 'size', sortable: true },
@@ -60,50 +55,22 @@ Scalr.regPage('Scalr.ui.tools.cloudstack.volumes.view', function (loadParams, mo
 			},
 			{ header: "Mount status", width: 110, dataIndex: 'mountStatus', sortable: false, xtype: 'templatecolumn', tpl:
 				'<tpl if="mountStatus">{mountStatus}</tpl>' +
-				'<tpl if="!mountStatus"><img src="/ui2/images/icons/false.png" /></tpl>'
+				'<tpl if="!mountStatus">&mdash;</tpl>'
 			},
 			{ header: "Instance ID", width: 115, dataIndex: 'instanceId', sortable: true, xtype: 'templatecolumn', tpl:
 				'<tpl if="instanceId">{instanceId}</tpl>'
 			},
 			{ header: "Auto-snaps", width: 110, dataIndex: 'autoSnaps', sortable: false, align:'center', xtype: 'templatecolumn', tpl:
-				'<tpl if="autoSnaps"><img src="/ui2/images/icons/true.png" /></tpl>' +
-				'<tpl if="!autoSnaps"><img src="/ui2/images/icons/false.png" /></tpl>'
+				'<tpl if="autoSnaps"><div class="x-grid-icon x-grid-icon-simple x-grid-icon-ok"></div></tpl>' +
+				'<tpl if="!autoSnaps">&mdash;</tpl>'
 			},
 			{ header: "Auto-attach", width: 130, dataIndex: 'autoAttach', sortable: false, align:'center', xtype: 'templatecolumn', tpl:
-				'<tpl if="autoAttach"><img src="/ui2/images/icons/true.png" /></tpl>' +
-				'<tpl if="!autoAttach"><img src="/ui2/images/icons/false.png" /></tpl>'
-			}, {
-				xtype: 'optionscolumn2',
-				menu: [{
-					itemId: 'option.delete',
-					text: 'Delete',
-					iconCls: 'x-menu-icon-delete',
-					request: {
-						confirmBox: {
-							type: 'delete',
-							msg: 'Are you sure want to delete Volume "{volumeId}"?'
-						},
-						processBox: {
-							type: 'delete',
-							msg: 'Deleting volume(s) ...'
-						},
-						url: '/tools/cloudstack/volumes/xRemove/',
-						dataHandler: function (data) {
-							return { volumeId: Ext.encode([data['volumeId']]), cloudLocation: store.proxy.extraParams.cloudLocation, platform: store.proxy.extraParams.platform };
-						},
-						success: function () {
-							store.load();
-						}
-					}
-				}]
+				'<tpl if="autoAttach"><div class="x-grid-icon x-grid-icon-simple x-grid-icon-ok"></div></tpl>' +
+				'<tpl if="!autoAttach">&mdash;</tpl>'
 			}
 		],
 
-        multiSelect: true,
-        selModel: {
-            selType: 'selectedmodel'
-        },
-
+        selModel: 'selectedmodel',
         listeners: {
             selectionchange: function(selModel, selections) {
                 this.down('scalrpagingtoolbar').down('#delete').setDisabled(!selections.length);
@@ -112,13 +79,12 @@ Scalr.regPage('Scalr.ui.tools.cloudstack.volumes.view', function (loadParams, mo
 
         dockedItems: [{
             xtype: 'scalrpagingtoolbar',
-            ignoredLoadParams: ['platform'],
             store: store,
             dock: 'top',
             afterItems: [{
-                ui: 'paging',
                 itemId: 'delete',
-                iconCls: 'x-tbar-delete',
+                iconCls: 'x-btn-icon-delete',
+                cls: 'x-btn-red',
                 tooltip: 'Select one or more volume(s) to delete them',
                 disabled: true,
                 handler: function() {
@@ -149,16 +115,10 @@ Scalr.regPage('Scalr.ui.tools.cloudstack.volumes.view', function (loadParams, mo
             items: [{
                 xtype: 'filterfield',
                 store: store
-            }, {
-                xtype: 'fieldcloudlocation',
-                itemId: 'cloudLocation',
-                margin: '0 0 0 12',
-                store: {
-                    fields: [ 'id', 'name' ],
-                    data: moduleParams.locations,
-                    proxy: 'object'
-                },
-                gridStore: store
+            }, ' ', {
+                xtype: 'cloudlocationfield',
+                platforms: [loadParams['platform']],
+				gridStore: store
             }]
         }]
 	});

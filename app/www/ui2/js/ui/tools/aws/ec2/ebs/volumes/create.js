@@ -5,18 +5,22 @@ Scalr.regPage('Scalr.ui.tools.aws.ec2.ebs.volumes.create', function (loadParams,
 		width: 700,
 		title: 'Tools &raquo; Amazon Web Services &raquo; EBS &raquo; Volumes &raquo; Create',
 		fieldDefaults: {
-			anchor: '100%'
+			anchor: '100%',
+            labelWidth: 150
 		},
 
 		items: [{
 			xtype: 'fieldset',
-			title: 'Placement information',
-			labelWidth: 130,
+			title: 'Placement',
 			items: [{
 				fieldLabel: 'Cloud location',
 				xtype: 'combo',
 				allowBlank: false,
 				editable: false,
+				plugins: {
+                	ptype: 'fieldinnericoncloud',
+                	platform: 'ec2'
+                },
 				store: {
 					fields: [ 'id', 'name' ],
 					data: moduleParams.locations,
@@ -47,7 +51,7 @@ Scalr.regPage('Scalr.ui.tools.aws.ec2.ebs.volumes.create', function (loadParams,
 						url: '/platforms/ec2/xGetAvailZones',
 						reader: {
 							type: 'json',
-							root: 'data'
+							rootProperty: 'data'
 						}
 					}
 				},
@@ -60,7 +64,6 @@ Scalr.regPage('Scalr.ui.tools.aws.ec2.ebs.volumes.create', function (loadParams,
 		}, {
 			xtype: 'fieldset',
 			title: 'Volume information',
-			labelWidth: 130,
 			items: [{
 				xtype:'fieldcontainer',
 				fieldLabel: 'Size',
@@ -85,7 +88,7 @@ Scalr.regPage('Scalr.ui.tools.aws.ec2.ebs.volumes.create', function (loadParams,
 				xtype: 'textfield',
 				fieldLabel: 'Snapshot',
 				readOnly: true,
-				hidden: !(loadParams['snapshotId']), 
+				hidden: !(loadParams['snapshotId']),
 				name: 'snapshotId',
 				value: loadParams['snapshotId'] || ''
 			}]

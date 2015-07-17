@@ -31,4 +31,30 @@ class SettingEntity extends AbstractSettingEntity
      * @var string
      */
     public $value;
+
+    /**
+     * Constants for statistics
+     */
+    const LEASE_STANDARD_REQUEST = 'statistic.lease.standard.request';
+    const LEASE_NOT_STANDARD_REQUEST = 'statistic.lease.not.standard.request';
+    const LEASE_DECLINED_REQUEST = 'statistic.lease.declined.request';
+    const LEASE_TERMINATE_FARM = 'statistic.lease.terminate.farm';
+
+    /**
+     * Increase count for event
+     *
+     * @param $name
+     */
+    public static function increase($name)
+    {
+        $setting = SettingEntity::findPk($name);
+
+        if (! $setting) {
+            $setting = new SettingEntity();
+            $setting->id = $name;
+        }
+
+        $setting->value = intval($setting->value) + 1;
+        $setting->save();
+    }
 }

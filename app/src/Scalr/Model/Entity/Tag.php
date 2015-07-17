@@ -51,7 +51,7 @@ class Tag extends AbstractEntity
     {
         $names = [];
         foreach (TagLink::find([['resource' => $resource],['resourceId' => $resourceId]]) as $l) {
-            /* @var TagLink $l */
+            /* @var $l TagLink */
             $names[] = $l->getName();
         }
 
@@ -93,7 +93,7 @@ class Tag extends AbstractEntity
         }
 
         foreach (TagLink::find([['resource' => $resource],['resourceId' => $resourceId]]) as $l) {
-            /* @var TagLink $l */
+            /* @var $l TagLink */
             if (! in_array($l->tagId, $tagId)) {
                 $l->delete();
             } else {
@@ -119,7 +119,7 @@ class Tag extends AbstractEntity
     public static function deleteTags($resource, $resourceId)
     {
         foreach (TagLink::find([['resource' => $resource],['resourceId' => $resourceId]]) as $l) {
-            /* @var TagLink $l */
+            /* @var $l TagLink */
             $l->delete();
         }
 

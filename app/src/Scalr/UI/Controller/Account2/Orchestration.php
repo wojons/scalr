@@ -14,7 +14,7 @@ class Scalr_UI_Controller_Account2_Orchestration extends Scalr_UI_Controller
         $this->response->page('ui/account2/orchestration/view.js', array(
             'orchestrationRules' => $this->getOrchestrationRules(),
             'scriptData' => \Scalr\Model\Entity\Script::getScriptingData($this->user->getAccountId(), null)
-        ), array( 'ui/scripts/scriptfield.js', 'ui/services/chef/chefsettings.js', 'ux-boxselect.js'), array( 'ui/scripts/scriptfield.css'));
+        ), array( 'ui/scripts/scriptfield.js', 'ui/services/chef/chefsettings.js'), array( 'ui/scripts/scriptfield.css'));
     }
 
     /**

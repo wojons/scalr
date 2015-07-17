@@ -10,40 +10,44 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.sg.view', function (loadParams, modulePara
 		remoteSort: true
 	});
 	var panel = Ext.create('Ext.grid.Panel', {
-		title: 'Tools &raquo; Amazon Web Services &raquo; Amazon RDS &raquo; Manage security groups',
 		scalrOptions: {
-			'reload': false,
-			'maximize': 'all'
+			reload: false,
+			maximize: 'all',
+            menuTitle: 'RDS Security groups'
 		},
 		store: store,
-		plugins: {
-			ptype: 'gridstore'
-		},
+        plugins: [{
+            ptype: 'gridstore'
+        }, {
+            ptype: 'applyparams'
+        }],
 		viewConfig: {
 			emptyText: 'No security groups found',
 			loadingText: 'Loading security groups ...'
 		},
+        disableSelection: true,
 		columns: [
-			{ flex: 2, text: "Name", dataIndex: 'DBSecurityGroupName', sortable: true },
+			{ flex: 2, text: "Security group", dataIndex: 'DBSecurityGroupName', sortable: true },
 			{ flex: 2, text: "Description", dataIndex: 'DBSecurityGroupDescription', sortable: true },
 			{
-				xtype: 'optionscolumn2',
+				xtype: 'optionscolumn',
 				menu: [{
 					text: 'Edit',
 					iconCls: 'x-menu-icon-edit',
+                    showAsQuickAction: true,
 					menuHandler: function(data) {
 						Scalr.event.fireEvent('redirect', '#/tools/aws/rds/sg/edit?dbSgName=' + data['DBSecurityGroupName'] + '&cloudLocation=' + store.proxy.extraParams.cloudLocation);
 					}
 				},{
 					text: 'Events log',
+                    showAsQuickAction: true,
 					iconCls: 'x-menu-icon-logs',
 					menuHandler: function(data) {
 						Scalr.event.fireEvent('redirect', '#/tools/aws/rds/logs?name=' + data['DBSecurityGroupName'] + '&type=db-security-group&cloudLocation=' + store.proxy.extraParams.cloudLocation);
 					}
 				},{
-					xtype: 'menuseparator'
-				},{
 					text: 'Delete',
+                    showAsQuickAction: true,
 					iconCls: 'x-menu-icon-delete',
 					menuHandler: function(data) {
 						Scalr.Request({
@@ -72,7 +76,7 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.sg.view', function (loadParams, modulePara
 			dock: 'top',
 			beforeItems: [{
                 text: 'Add group',
-                cls: 'x-btn-green-bg',
+                cls: 'x-btn-green',
 				handler: function() {
 					Scalr.Request({
 						confirmBox: {
@@ -83,16 +87,23 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.sg.view', function (loadParams, modulePara
                                 defaults: {
                                     anchor: '100%'
                                 },
+                                fieldDefaults: {
+                                    labelWidth: 120
+                                },
                                 items: [{
                                     xtype: 'combo',
                                     name: 'cloudLocation',
+                                    plugins: {
+                                        ptype: 'fieldinnericoncloud',
+                                        platform: 'ec2'
+                                    },
                                     store: {
                                         fields: [ 'id', 'name' ],
                                         data: moduleParams.locations,
                                         proxy: 'object'
                                     },
                                     editable: false,
-                                    fieldLabel: 'Location',
+                                    fieldLabel: 'Cloud Location',
                                     queryMode: 'local',
                                     displayField: 'name',
                                     valueField: 'id',
@@ -128,13 +139,8 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.sg.view', function (loadParams, modulePara
 				xtype: 'filterfield',
 				store: store
 			}, ' ', {
-				xtype: 'fieldcloudlocation',
-				itemId: 'cloudLocation',
-				store: {
-					fields: [ 'id', 'name' ],
-					data: moduleParams.locations,
-					proxy: 'object'
-				},
+                xtype: 'cloudlocationfield',
+                platforms: ['ec2'],
 				gridStore: store
 			}]
 		}]

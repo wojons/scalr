@@ -1,5 +1,7 @@
 <?php
 
+use Scalr\Model\Entity;
+
 class Scalr_Scaling_FarmRoleMetric extends Scalr_Model
 {
     protected $dbTableName = 'farm_role_scaling_metrics';
@@ -67,7 +69,7 @@ class Scalr_Scaling_FarmRoleMetric extends Scalr_Model
 
     function getScalingDecision()
     {
-        $algo = Scalr_Scaling_Algorithm::get($this->getMetric()->algorithm);
+        $algo = Entity\ScalingMetric::getAlgorithm($this->getMetric()->algorithm);
         $sensor = Scalr_Scaling_Sensor::get($this->getMetric()->alias);
 
         $dbFarmRole = DBFarmRole::LoadByID($this->farmRoleId);
@@ -105,6 +107,9 @@ class Scalr_Scaling_FarmRoleMetric extends Scalr_Model
                 case "sum":
                     $value = @array_sum($sensorValue);
                     break;
+                case "max":
+                    $value = @max($sensorValue);
+                    break;
             }
 
             $this->lastValue = round($value, 5);
@@ -132,12 +137,12 @@ class Scalr_Scaling_FarmRoleMetric extends Scalr_Model
 
     /**
      *
-     * @return Scalr_Scaling_Metric
+     * @return Entity\ScalingMetric
      */
     function getMetric()
     {
         if (!$this->metric)
-            $this->metric = Scalr_Model::init(Scalr_Model::SCALING_METRIC)->loadById($this->metricId);
+            $this->metric = Entity\ScalingMetric::findPk($this->metricId);
 
         return $this->metric;
     }

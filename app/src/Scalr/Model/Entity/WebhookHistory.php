@@ -23,7 +23,7 @@ class WebhookHistory extends AbstractEntity
      * The identifier of the webhook config
      *
      * @Id
-     * @GeneratedValue("UUID")
+     * @GeneratedValue("CUSTOM")
      * @Column(type="uuid")
      * @var string
      */

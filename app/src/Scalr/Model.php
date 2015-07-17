@@ -13,7 +13,6 @@ abstract class Scalr_Model
 
     const ENVIRONMENT				= 'Scalr_Environment';
     const SERVICE_CONFIGURATION 	= 'Scalr_ServiceConfiguration';
-    const SCALING_METRIC			= 'Scalr_Scaling_Metric';
     const SCALING_FARM_ROLE_METRIC	= 'Scalr_Scaling_FarmRoleMetric';
     const SSH_KEY					= 'Scalr_SshKey';
 

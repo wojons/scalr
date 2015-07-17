@@ -78,7 +78,7 @@ class SettingEntity extends AbstractSettingEntity
      */
     public static function getQuarters($ignoreCache = false)
     {
-        static $days;
+        static $days = null;
 
         if ($days === null || $ignoreCache) {
             $entity = self::findPk(self::ID_BUDGET_DAYS);

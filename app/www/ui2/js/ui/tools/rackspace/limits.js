@@ -11,26 +11,19 @@ Scalr.regPage('Scalr.ui.tools.rackspace.limits', function (loadParams, modulePar
 	});
 
 	return Ext.create('Ext.grid.Panel', {
-		title: 'Tools &raquo; Rackspace &raquo; Limits',
 		scalrOptions: {
-			'reload': false,
-			'maximize': 'all'
+			reload: false,
+			maximize: 'all',
+            menuTitle: 'Rackspace Limits'
 		},
 		store: store,
 		stateId: 'grid-tools-rackspace-limits',
 		stateful: true,
-		plugins: {
-			ptype: 'gridstore'
-		},
-		tools: [{
-			xtype: 'gridcolumnstool'
-		}, {
-			xtype: 'favoritetool',
-			favorite: {
-				text: 'Tackspace Limits',
-				href: '#/tools/rackspace/limits'
-			}
-		}],
+        plugins: [{
+            ptype: 'gridstore'
+        }, {
+            ptype: 'applyparams'
+        }],
 
 		viewConfig: {
 			emptyText: 'No limits found',
@@ -54,15 +47,9 @@ Scalr.regPage('Scalr.ui.tools.rackspace.limits', function (loadParams, modulePar
 			items: [{
                 xtype: 'filterfield',
                 store: store
-            }, {
-				xtype: 'fieldcloudlocation',
-				itemId: 'cloudLocation',
-                margin: '0 0 0 12',
-				store: {
-					fields: [ 'id', 'name' ],
-					data: moduleParams.locations,
-					proxy: 'object'
-				},
+            }, ' ', {
+                xtype: 'cloudlocationfield',
+                platforms: [loadParams['platform']],
 				gridStore: store
 			}]
 		}]

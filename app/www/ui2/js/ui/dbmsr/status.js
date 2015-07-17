@@ -64,23 +64,8 @@ Scalr.regPage('Scalr.ui.dbmsr.status', function (loadParams, moduleParams) {
 		};
 	}
 	
-	if (moduleParams['bundleOperationId']) {
-		if (moduleParams['dtLastBundle'] != 'Never')
-			var dataBundleStatus = '<a href="#/operations/' + moduleParams['bundleOperationId'] + '/details">' + ((moduleParams['isBundleRunning'] == 1) ? 'In progress...' : moduleParams['dtLastBundle']) + "</a>";
-		else
-			var dataBundleStatus = 'Never';
-	} else {
-		var dataBundleStatus = (moduleParams['isBundleRunning'] == 1) ? 'In progress...' : moduleParams['dtLastBundle'];
-	}
-	
-	if (moduleParams['backupOperationId']) {
-		if (moduleParams['dtLastBackup'] != 'Never')
-			var backupStatus = '<a href="#/operations/' + moduleParams['backupOperationId'] + '/details">' + ((moduleParams['isBackupRunning'] == 1) ? 'In progress...' : moduleParams['dtLastBackup']) + "</a>";
-		else
-			var backupStatus = 'Never';
-	} else {
-		var backupStatus = (moduleParams['isBackupRunning'] == 1) ? 'In progress...' : moduleParams['dtLastBackup'];
-	}
+	var dataBundleStatus = (moduleParams['isBundleRunning'] == 1) ? 'In progress...' : moduleParams['dtLastBundle'];
+	var backupStatus = (moduleParams['isBackupRunning'] == 1) ? 'In progress...' : moduleParams['dtLastBackup'];
 	
 	if ((moduleParams['dbType'] == 'percona' || moduleParams['dbType'] == 'mysql2') && (moduleParams['storage'] && moduleParams['storage']['engine'] == 'lvm')) {
 		var confirmationDataBundleOptions = {
@@ -574,7 +559,7 @@ Scalr.regPage('Scalr.ui.dbmsr.status', function (loadParams, moduleParams) {
 			params: {farmRoleId: moduleParams['farmRoleId']},
 			success: function(data){
 				Scalr.message.Success("Storage grow successfully initiated");
-				Scalr.event.fireEvent('redirect', '#/operations/' + data['operationId'] + '/details');
+				Scalr.event.fireEvent('redirect', '#/operations/details?' + Ext.Object.toQueryString(data));
 			}
 		});
 	});

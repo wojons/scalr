@@ -78,11 +78,62 @@ Ext.define('Scalr.ui.aws.RdsHelper', {
 
 });
 
-Ext.define('Scalr.ui.RdsSecurityGroupMultiSelect', {
+Ext.define('Scalr.ui.rds.SecurityGroupMultiSelect', {
     extend: 'Scalr.ui.SecurityGroupMultiSelect',
     alias: 'widget.rdssgmultiselect',
 
-    selectOnLoad: function (store) {
+    isRdsSecurityGroupMultiSelect: true,
+
+    governanceWarning: null,
+
+    initComponent: function () {
+        var me = this;
+
+        me.callParent(arguments);
+
+        var store = me.down('grid').getStore();
+
+        me.selection = Ext.Array.map(me.selection, function (item) {
+            if (Ext.isObject(item)) {
+                return store.createModel(item);
+            }
+
+            return store.createModel({
+                name: item.trim()
+            });
+        });
+
+        store.on('load', function () {
+            me.updateButtonState(me.selection.length);
+        }, me, { single: true });
+
+        var title = 'Add Security Groups to DB Instance';
+
+        me.setTitle(!Ext.isString(me.governanceWarning)
+            ? title
+            : title + '&nbsp;&nbsp;<img src="' + Ext.BLANK_IMAGE_URL +
+                         '" class="x-icon-governance" data-qtip="' +
+                        me.governanceWarning +
+                        '" />'
+        );
+
+        me.defaultVpcGroups = me.defaultVpcGroups || [];
+    },
+
+    initEvents: function () {
+        var me = this;
+
+        me.callParent(arguments);
+
+        if (me.storeExtraParams.platform === 'ec2') {
+            me.down('grid').
+                on('beforedeselect', function (rowModel, record) {
+                    return !Ext.Array.contains(me.defaultVpcGroups, record.get('name'));
+                });
+        }
+    },
+
+    /*selectOnLoad: function (store) {
         var me = this;
 
         var selectedRecords = [];
@@ -102,10 +153,26 @@ Ext.define('Scalr.ui.RdsSecurityGroupMultiSelect', {
             }
         });
 
-        me.selection = selectedRecords;
+        //me.selection = selectedRecords;
         me.down('grid').getView().getSelectionModel().select(selectedRecords);
 
         return me;
+    },*/
+
+    selectOnLoad: function (store) {
+        var me = this;
+
+        var records = [];
+
+        Ext.Array.each(me.selection, function (item) {
+            var record = store.findRecord('name', item.get('name'));
+
+            if (!Ext.isEmpty(record)) {
+                records.push(record);
+            }
+        });
+
+        me.down('grid').getView().getSelectionModel().select(records);
     },
 
     updateButtonState: function (count) {

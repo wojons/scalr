@@ -1,8 +1,7 @@
 <?php
 
-use Scalr\Modules\PlatformFactory;
-use Scalr\Role\Role;
-use Scalr\Model\Entity\Image;
+use Scalr\Model\Entity\Role;
+use Scalr\Model\Entity\Os;
 use Scalr\Util\CryptoTool;
 
 class DBRole
@@ -22,10 +21,7 @@ class DBRole
         $addedByUserId,
         $dtLastUsed,
         $addedByEmail,
-        $os,
-        $osFamily,
-        $osGeneration,
-        $osVersion;
+        $osId;
 
     private
         $db,
@@ -35,6 +31,11 @@ class DBRole
         $behaviorsRaw,
         $environment,
         $__newRoleObject; // temp
+
+    /**
+     * @var Os
+     */
+    private $__os;
 
     /*Temp*/
     public $instanceType;
@@ -49,17 +50,12 @@ class DBRole
         'description'	=> 'description',
         'is_devel'		=> 'isDevel',
         'generation'	=> 'generation',
-        'os'			=> 'os',
+        'os_id'			=> 'osId',
 
         'dtadded'         => 'dateAdded',
         'dt_last_used'    => 'dtLastUsed',
         'added_by_userid' => 'addedByUserId',
         'added_by_email'  => 'addedByEmail',
-
-        'os_family'      => 'osFamily',
-        'os_generation'  => 'osGeneration',
-        'os_version'     => 'osVersion',
-
         'behaviors'		=> 'behaviorsRaw'
     );
 
@@ -71,11 +67,19 @@ class DBRole
         $this->db = \Scalr::getDb();
     }
 
+    /**
+     * @return \Scalr\Model\Entity\Os
+     */
+    public function getOs()
+    {
+        return $this->__os;
+    }
+
     public function setBehaviors($behaviors)
     {
         //TODO: validation
 
-        $this->behaviorsRaw = implode(",", $behaviors);
+        $this->behaviorsRaw = implode(",", array_unique($behaviors));
         $this->behaviors = null;
     }
 
@@ -161,8 +165,9 @@ class DBRole
 
     public function getBehaviors()
     {
-        if (!$this->behaviors)
-            $this->behaviors = explode(",", $this->behaviorsRaw);
+        if (!$this->behaviors) {
+            $this->behaviors = array_unique(explode(",", $this->behaviorsRaw));
+        }
 
         return $this->behaviors;
     }
@@ -207,8 +212,11 @@ class DBRole
     }
 
     /**
+     * @param int $id
+     *
      * @return DBRole
-     * @param unknown_type $id
+     *
+     * @throws Exception
      */
     public static function loadById($id)
     {
@@ -226,10 +234,17 @@ class DBRole
                 $DBRole->{$v} = $roleinfo[$k];
         }
 
+        if (!$DBRole->__os) {
+            $DBRole->__os = Os::findOne([
+                ['id' => $DBRole->osId]
+            ]);
+        }
+
         return $DBRole;
     }
 
-    private function getVersionInfo($v) {
+    private function getVersionInfo($v)
+    {
         if (preg_match("/^([0-9]+)\.([0-9]+)[-\.]?([0-9]+)?$/si", $v, $matches)) {
             $verInfo = array_map("intval", array_slice($matches, 1));
             while (count($verInfo) < 3) {
@@ -258,34 +273,44 @@ class DBRole
                 added_by_userid = ?,
                 added_by_email = ?,
 
-                os			= ?,
-                os_family   = ?,
-                os_generation = ?,
-                os_version  = ?
-            ", array($this->name, $this->description, $this->generation,
-                $this->origin, $this->envId, $this->catId, $this->clientId, $this->behaviorsRaw,
-                $this->addedByUserId, $this->addedByEmail,
-                $this->os, $this->osFamily, $this->osGeneration, $this->osVersion
+                os_id		= ?
+            ", array(
+                $this->name,
+                $this->description,
+                $this->generation,
+                $this->origin,
+                (empty($this->envId) ? null : $this->envId),
+                $this->catId,
+                (empty($this->clientId) ? null : $this->clientId),
+                $this->behaviorsRaw,
+
+                $this->addedByUserId,
+                $this->addedByEmail,
+
+                $this->osId
             ));
 
             $this->id = $this->db->Insert_ID();
 
             $this->db->Execute("DELETE FROM role_behaviors WHERE role_id = ?", array($this->id));
             foreach ($this->getBehaviors() as $behavior)
-                $this->db->Execute("INSERT INTO role_behaviors SET role_id = ?, behavior = ?", array($this->id, $behavior));
+                $this->db->Execute("INSERT IGNORE INTO role_behaviors SET role_id = ?, behavior = ?", array($this->id, $behavior));
 
         } else {
-            $this->db->Execute("UPDATE roles SET
-                name		= ?,
-                description	= ?,
-                behaviors	= ?,
-                dt_last_used = ?
-            WHERE id =?
+            $this->db->Execute("
+                UPDATE roles SET
+                    name		= ?,
+                    description	= ?,
+                    behaviors	= ?,
+                    dt_last_used = ?
+                WHERE id =?
             ", array($this->name, $this->description, $this->behaviorsRaw, $this->dtLastUsed, $this->id));
 
             $this->db->Execute("DELETE FROM role_behaviors WHERE role_id = ?", array($this->id));
-            foreach ($this->getBehaviors() as $behavior)
-                $this->db->Execute("INSERT INTO role_behaviors SET role_id = ?, behavior = ?", array($this->id, $behavior));
+
+            foreach ($this->getBehaviors() as $behavior) {
+                $this->db->Execute("INSERT IGNORE INTO role_behaviors SET role_id = ?, behavior = ?", array($this->id, $behavior));
+            }
 
         }
 
@@ -323,7 +348,7 @@ class DBRole
     }
 
     /**
-     * @return \Scalr\Role\Role
+     * @return \Scalr\Model\Entity\Role
      * @throws Exception
      */
     public function __getNewRoleObject()
@@ -496,10 +521,18 @@ class DBRole
         }
     }
 
-    public function cloneRole($newRoleName, $accountId, $envId)
+    /**
+     * @param   string              $newRoleName
+     * @param   Scalr_Account_User  $user
+     * @param   int                 $envId
+     * @return  int
+     * @throws Exception
+     */
+    public function cloneRole($newRoleName, $user, $envId)
     {
         $this->db->BeginTrans();
 
+        $accountId = $user->getAccountId();
         try {
             $this->db->Execute("INSERT INTO roles SET
                 name            = ?,
@@ -510,30 +543,29 @@ class DBRole
                 description     = ?,
                 behaviors       = ?,
                 generation      = ?,
-                os              = ?,
-                os_family       = ?,
-                os_version      = ?,
-                os_generation   = ?
+                os_id           = ?,
+                dtadded         = NOW(),
+                added_by_userid = ?,
+                added_by_email  = ?
             ", array(
                 $newRoleName,
-                ROLE_TYPE::CUSTOM,
-                $accountId,
-                $envId,
+                $accountId ? ROLE_TYPE::CUSTOM : ROLE_TYPE::SHARED,
+                empty($accountId) ? null : intval($accountId),
+                empty($envId) ? null : intval($envId),
                 $this->catId,
                 $this->description,
                 $this->behaviorsRaw,
                 2,
-                $this->os,
-                $this->osFamily,
-                $this->osVersion,
-                $this->osGeneration
+                $this->osId,
+                $user->getId(),
+                $user->getEmail()
             ));
 
             $newRoleId = $this->db->Insert_Id();
 
             //Set behaviors
             foreach ($this->getBehaviors() as $behavior)
-                $this->db->Execute("INSERT INTO role_behaviors SET role_id = ?, behavior = ?", array($newRoleId, $behavior));
+                $this->db->Execute("INSERT IGNORE INTO role_behaviors SET role_id = ?, behavior = ?", array($newRoleId, $behavior));
 
             // Set images
             $rsr7 = $this->db->Execute("SELECT * FROM role_images WHERE role_id = ?", array($this->id));
@@ -629,18 +661,14 @@ class DBRole
                 $BundleTask->cloudLocation = $DBServer->GetCloudLocation();
         }
 
-        $osInfo = $BundleTask->getOsDetails();
+        $osId = $BundleTask->osId;
         $meta = $BundleTask->getSnapshotDetails();
 
-        if (!$osInfo->family || !$osInfo->generation) {
-            $osInfo = new stdClass();
-
+        if (!$osId) {
             if ($proto_role) {
-                $osInfo->name = $proto_role['os'];
-                $osInfo->family = $proto_role['os_family'];
-                $osInfo->generation = $proto_role['os_generation'];
-                $osInfo->version = $proto_role['os_version'];
+                $osId = $proto_role['os_id'];
             } elseif ($meta['os'] && $meta['os']->version) {
+                /*
                 if ($meta['os']->version == '2008Server') {
                     $osInfo->name = 'Windows 2008 Server';
                     $osInfo->family = 'windows';
@@ -651,7 +679,8 @@ class DBRole
                     $osInfo->family = 'windows';
                     $osInfo->generation = '2008';
                     $osInfo->version = '2008ServerR2';
-                }
+                }*/
+                //TODO:
             }
         }
 
@@ -672,10 +701,7 @@ class DBRole
             generation		= ?,
             added_by_email  = ?,
             added_by_userid = ?,
-            os				= ?,
-            os_family       = ?,
-            os_version      = ?,
-            os_generation   = ?
+            os_id			= ?
         ", array(
             $BundleTask->roleName,
             ROLE_TYPE::CUSTOM,
@@ -687,10 +713,7 @@ class DBRole
             2,
             $BundleTask->createdByEmail,
             $BundleTask->createdById,
-            $osInfo->name,
-            $osInfo->family,
-            $osInfo->version,
-            $osInfo->generation
+            $osId
         ));
 
         $role_id = $db->Insert_Id();
@@ -706,7 +729,7 @@ class DBRole
 
         $behaviors = explode(",", $proto_role['behaviors']);
         foreach ($behaviors as $behavior) {
-            $db->Execute("INSERT INTO role_behaviors SET
+            $db->Execute("INSERT IGNORE INTO role_behaviors SET
                 role_id			= ?,
                 behavior		= ?
             ", array(
@@ -718,7 +741,7 @@ class DBRole
         // Set image
         $role->__getNewRoleObject()->setImage(
             $BundleTask->platform,
-            (!in_array($BundleTask->platform, array(SERVER_PLATFORMS::GCE, SERVER_PLATFORMS::ECS))) ? $BundleTask->cloudLocation : "",
+            $BundleTask->cloudLocation,
             $BundleTask->snapshotId,
             $BundleTask->createdById,
             $BundleTask->createdByEmail

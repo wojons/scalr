@@ -47,6 +47,7 @@ use \SERVER_STATUS;
 use Scalr\Service\Aws;
 use Scalr\Service\Aws\Ec2\DataType\EbsBlockDeviceData;
 use Scalr\Service\Aws\Ec2\DataType\BlockDeviceMappingList;
+use Scalr\Farm\Role\FarmRoleStorageConfig;
 
 class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modules\PlatformModuleInterface
 {
@@ -58,9 +59,13 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
     const CERTIFICATE	= 'ec2.certificate';
     const ACCOUNT_TYPE  = 'ec2.account_type';
 
-    const DEFAULT_VPC_ID = 'ec2.vpc.default';
-    const ACCOUNT_TYPE_GOV_CLOUD = 'gov-cloud';
-    const ACCOUNT_TYPE_CN_CLOUD = 'cn-cloud';
+    const DETAILED_BILLING_BUCKET   = 'ec2.detailed_billing.bucket';
+    const DETAILED_BILLING_ENABLED  = 'ec2.detailed_billing.enabled';
+
+    const DEFAULT_VPC_ID            = 'ec2.vpc.default';
+
+    const ACCOUNT_TYPE_GOV_CLOUD    = 'gov-cloud';
+    const ACCOUNT_TYPE_CN_CLOUD     = 'cn-cloud';
 
     /**
      * @var array
@@ -75,31 +80,52 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
         $this->instancesListCache = array();
     }
 
-    public function getPropsList()
-    {
-        return array(
-            self::ACCOUNT_ID	=> 'AWS Account ID',
-            self::ACCESS_KEY	=> 'AWS Access Key',
-            self::SECRET_KEY	=> 'AWS Secret Key',
-            self::CERTIFICATE	=> 'AWS x.509 Certificate',
-            self::PRIVATE_KEY	=> 'AWS x.509 Private Key'
-        );
-    }
-
     /**
      * {@inheritdoc}
      * @see \Scalr\Modules\PlatformModuleInterface::getInstanceTypes()
      */
     public function getInstanceTypes(\Scalr_Environment $env = null, $cloudLocation = null, $details = false)
     {
+        //http://aws.amazon.com/amazon-linux-ami/instance-type-matrix/
+        //http://docs.aws.amazon.com/AWSEC2/latest/UserGuide/instance-types.html
+        //http://docs.aws.amazon.com/AWSEC2/latest/UserGuide/EBSOptimized.html
+        $restrictions = [
+            't1' => ['ebs' => true, 'hvm' => false],
+            't2' => ['ebs' => true, 'hvm' => true, 'vpc' => true, 'x64' => true],
+            'm1' => [
+                'm1.small' =>  ['hvm' => false],
+                'm1.medium' => ['hvm' => false],
+                'm1.large' =>  ['hvm' => false, 'x64' => true],
+                'm1.xlarge' => ['hvm' => false, 'x64' => true],
+            ],
+            'm2' => ['hvm' => false, 'x64' => true],
+            'm3' => ['x64' => true],
+            'm4' => ['ebs' => true, 'x64' => true, 'vpc' => true, 'hvm' => true],
+            'c1' => [
+                'c1.medium' =>  ['hvm' => false],
+                'c1.xlarge' =>  ['hvm' => false, 'x64' => true],
+            ],
+            'c4' => ['ebs' => true, 'hvm' => true, 'vpc' => true, 'x64' => true],
+            'c3' => ['x64' => true],
+            'd2' => ['hvm' => true, 'x64' => true],
+            'r3' => ['hvm' => true, 'x64' => true],
+            'i2' => ['hvm' => true, 'x64' => true],
+            'g2' => ['ebs' => true, 'hvm' => true, 'x64' => true],
+            'hs1' => ['x64' => true],
+            'cc2' => ['hvm' => true, 'x64' => true],
+            'cg1' => ['hvm' => true, 'x64' => true],
+            'hi1' => ['x64' => true],
+            'cr1' => ['ebs' => true, 'hvm' => true, 'x64' => true],
+        ];
+
         $definition = array(
             't1.micro' => array(
-               'name' => 't1.micro',
-               'ram' => '625',
-               'vcpus' => '1',
-               'disk' => '',
-               'type' => '',
-               'note' => 'SHARED CPU'
+                'name' => 't1.micro',
+                'ram' => '625',
+                'vcpus' => '1',
+                'disk' => '',
+                'type' => '',
+                'note' => 'SHARED CPU'
             ),
 
             't2.micro' => array(
@@ -129,112 +155,176 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
                 'note' => 'SHARED CPU'
             ),
 
+            't2.large' => array(
+                'name' => 't2.large',
+                'ram' => '8192',
+                'vcpus' => '2',
+                'disk' => '',
+                'type' => '',
+                'note' => 'SHARED CPU'
+            ),
+
             'm1.small' => array(
-               'name' => 'm1.small',
-               'ram' => '1740',
-               'vcpus' => '1',
-               'disk' => '160',
-               'type' => 'HDD'
+                'name' => 'm1.small',
+                'ram' => '1740',
+                'vcpus' => '1',
+                'disk' => '160',
+                'type' => 'HDD'
             ),
             'm1.medium' => array(
-               'name' => 'm1.medium',
-               'ram' => '3840',
-               'vcpus' => '1',
-               'disk' => '410',
-               'type' => 'HDD'
+                'name' => 'm1.medium',
+                'ram' => '3840',
+                'vcpus' => '1',
+                'disk' => '410',
+                'type' => 'HDD'
             ),
             'm1.large' => array(
-               'name' => 'm1.large',
-               'ram' => '7680',
-               'vcpus' => '2',
-               'disk' => '840',
-               'type' => 'HDD'
+                'name' => 'm1.large',
+                'ram' => '7680',
+                'vcpus' => '2',
+                'disk' => '840',
+                'type' => 'HDD',
+                'ebsoptimized' => true
             ),
             'm1.xlarge' => array(
-               'name' => 'm1.xlarge',
-               'ram' => '15360',
-               'vcpus' => '4',
-               'disk' => '1680',
-               'type' => 'HDD'
+                'name' => 'm1.xlarge',
+                'ram' => '15360',
+                'vcpus' => '4',
+                'disk' => '1680',
+                'type' => 'HDD',
+                'ebsoptimized' => true
             ),
 
             'm2.xlarge' => array(
-               'name' => 'm2.xlarge',
-               'ram' => '17510',
-               'vcpus' => '2',
-               'disk' => '420',
-               'type' => 'HDD'
+                'name' => 'm2.xlarge',
+                'ram' => '17510',
+                'vcpus' => '2',
+                'disk' => '420',
+                'type' => 'HDD'
             ),
             'm2.2xlarge' => array(
-               'name' => 'm2.2xlarge',
-               'ram' => '35021',
-               'vcpus' => '4',
-               'disk' => '850',
-               'type' => 'HDD'
+                'name' => 'm2.2xlarge',
+                'ram' => '35021',
+                'vcpus' => '4',
+                'disk' => '850',
+                'type' => 'HDD',
+                'ebsoptimized' => true
             ),
             'm2.4xlarge' => array(
-               'name' => 'm2.4xlarge',
-               'ram' => '66355',
-               'vcpus' => '8',
-               'disk' => '1680',
-               'type' => 'HDD'
+                'name' => 'm2.4xlarge',
+                'ram' => '66355',
+                'vcpus' => '8',
+                'disk' => '1680',
+                'type' => 'HDD',
+                'ebsoptimized' => true
             ),
 
             'm3.medium' => array(
-               'name' => 'm3.medium',
-               'ram' => '3840',
-               'vcpus' => '1',
-               'disk' => '4',
-               'type' => 'SSD',
-               'ebsencryption' => true
+                'name' => 'm3.medium',
+                'ram' => '3840',
+                'vcpus' => '1',
+                'disk' => '4',
+                'type' => 'SSD',
+                'ebsencryption' => true
             ),
             'm3.large' => array(
-               'name' => 'm3.large',
-               'ram' => '7680',
-               'vcpus' => '2',
-               'disk' => '32',
-               'type' => 'SSD',
-               'ebsencryption' => true
+                'name' => 'm3.large',
+                'ram' => '7680',
+                'vcpus' => '2',
+                'disk' => '32',
+                'type' => 'SSD',
+                'ebsencryption' => true
             ),
             'm3.xlarge' => array(
-               'name' => 'm3.xlarge',
-               'ram' => '15360',
-               'vcpus' => '4',
-               'disk' => '80',
-               'type' => 'SSD',
-               'ebsencryption' => true
+                'name' => 'm3.xlarge',
+                'ram' => '15360',
+                'vcpus' => '4',
+                'disk' => '80',
+                'type' => 'SSD',
+                'ebsencryption' => true,
+                'ebsoptimized' => true
             ),
             'm3.2xlarge' => array(
-               'name' => 'm3.2xlarge',
-               'ram' => '30720',
-               'vcpus' => '8',
-               'disk' => '160',
-               'type' => 'SSD',
-               'ebsencryption' => true
+                'name' => 'm3.2xlarge',
+                'ram' => '30720',
+                'vcpus' => '8',
+                'disk' => '160',
+                'type' => 'SSD',
+                'ebsencryption' => true,
+                'ebsoptimized' => true
+            ),
+
+            ///
+            'm4.large' => array(
+                'name' => 'm4.large',
+                'ram' => '8192',
+                'vcpus' => '2',
+                'disk' => '',
+                'type' => '',
+                'ebsencryption' => true
+            ),
+            'm4.xlarge' => array(
+                'name' => 'm4.xlarge',
+                'ram' => '16384',
+                'vcpus' => '4',
+                'disk' => '',
+                'type' => '',
+                'ebsencryption' => true,
+                'ebsoptimized' => true
+            ),
+            'm4.2xlarge' => array(
+                'name' => 'm4.2xlarge',
+                'ram' => '32768',
+                'vcpus' => '8',
+                'disk' => '',
+                'type' => '',
+                'ebsencryption' => true,
+                'ebsoptimized' => true
+            ),
+            'm4.4xlarge' => array(
+                'name' => 'm4.4xlarge',
+                'ram' => '65536',
+                'vcpus' => '16',
+                'disk' => '',
+                'type' => '',
+                'ebsencryption' => true,
+                'ebsoptimized' => true
+            ),
+            'm4.10xlarge' => array(
+                'name' => 'm4.10xlarge',
+                'ram' => '163840',
+                'vcpus' => '40',
+                'disk' => '',
+                'type' => '',
+                'ebsencryption' => true,
+                'ebsoptimized' => true
             ),
 
             'c1.medium' => array(
-               'name' => 'c1.medium',
-               'ram' => '1741',
-               'vcpus' => '2',
-               'disk' => '350',
-               'type' => 'HDD'
+                'name' => 'c1.medium',
+                'ram' => '1741',
+                'vcpus' => '2',
+                'disk' => '350',
+                'type' => 'HDD'
             ),
             'c1.xlarge' => array(
-               'name' => 'c1.xlarge',
-               'ram' => '7168',
-               'vcpus' => '8',
-               'disk' => '1680',
-               'type' => 'HDD'
+                'name' => 'c1.xlarge',
+                'ram' => '7168',
+                'vcpus' => '8',
+                'disk' => '1680',
+                'type' => 'HDD',
+                'ebsoptimized' => true
             ),
-            
+
             'c4.large' => array(
                 'name' => 'c4.large',
                 'ram' => '3840',
                 'vcpus' => '2',
                 'disk' => '32',
                 'type' => 'SSD',
-                'ebsencryption' => true
+                'ebsencryption' => true,
+                'ebsoptimized' => 'default',
+                'placementgroups' => true
             ),
             'c4.xlarge' => array(
                 'name' => 'c4.xlarge',
@@ -242,7 +332,9 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
                 'vcpus' => '4',
                 'disk' => '80',
                 'type' => 'SSD',
-                'ebsencryption' => true
+                'ebsencryption' => true,
+                'ebsoptimized' => 'default',
+                'placementgroups' => true
             ),
             'c4.2xlarge' => array(
                 'name' => 'c4.2xlarge',
@@ -250,7 +342,9 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
                 'vcpus' => '8',
                 'disk' => '160',
                 'type' => 'SSD',
-                'ebsencryption' => true
+                'ebsencryption' => true,
+                'ebsoptimized' => 'default',
+                'placementgroups' => true
             ),
             'c4.4xlarge' => array(
                 'name' => 'c4.4xlarge',
@@ -258,7 +352,9 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
                 'vcpus' => '16',
                 'disk' => '320',
                 'type' => 'SSD',
-                'ebsencryption' => true
+                'ebsencryption' => true,
+                'ebsoptimized' => 'default',
+                'placementgroups' => true
             ),
             'c4.8xlarge' => array(
                 'name' => 'c4.8xlarge',
@@ -266,132 +362,212 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
                 'vcpus' => '36',
                 'disk' => '640',
                 'type' => 'SSD',
-                'ebsencryption' => true
+                'ebsencryption' => true,
+                'ebsoptimized' => 'default',
+                'placementgroups' => true
             ),
 
             'c3.large' => array(
-               'name' => 'c3.large',
-               'ram' => '3840',
-               'vcpus' => '2',
-               'disk' => '32',
-               'type' => 'SSD',
-               'ebsencryption' => true
+                'name' => 'c3.large',
+                'ram' => '3840',
+                'vcpus' => '2',
+                'disk' => '32',
+                'type' => 'SSD',
+                'ebsencryption' => true,
+                'placementgroups' => true
             ),
             'c3.xlarge' => array(
-               'name' => 'c3.xlarge',
-               'ram' => '7680',
-               'vcpus' => '4',
-               'disk' => '80',
-               'type' => 'SSD',
-               'ebsencryption' => true
+                'name' => 'c3.xlarge',
+                'ram' => '7680',
+                'vcpus' => '4',
+                'disk' => '80',
+                'type' => 'SSD',
+                'ebsencryption' => true,
+                'ebsoptimized' => true,
+                'placementgroups' => true
             ),
             'c3.2xlarge' => array(
-               'name' => 'c3.2xlarge',
-               'ram' => '15360',
-               'vcpus' => '8',
-               'disk' => '160',
-               'type' => 'SSD',
-               'ebsencryption' => true
+                'name' => 'c3.2xlarge',
+                'ram' => '15360',
+                'vcpus' => '8',
+                'disk' => '160',
+                'type' => 'SSD',
+                'ebsencryption' => true,
+                'ebsoptimized' => true,
+                'placementgroups' => true
             ),
             'c3.4xlarge' => array(
-               'name' => 'c3.4xlarge',
-               'ram' => '30720',
-               'vcpus' => '16',
-               'disk' => '320',
-               'type' => 'SSD',
-               'ebsencryption' => true
+                'name' => 'c3.4xlarge',
+                'ram' => '30720',
+                'vcpus' => '16',
+                'disk' => '320',
+                'type' => 'SSD',
+                'ebsencryption' => true,
+                'ebsoptimized' => true,
+                'placementgroups' => true
             ),
             'c3.8xlarge' => array(
-               'name' => 'c3.8xlarge',
-               'ram' => '61440',
-               'vcpus' => '32',
-               'disk' => '640',
-               'type' => 'SSD',
-               'ebsencryption' => true
+                'name' => 'c3.8xlarge',
+                'ram' => '61440',
+                'vcpus' => '32',
+                'disk' => '640',
+                'type' => 'SSD',
+                'ebsencryption' => true,
+                'placementgroups' => true
             ),
 
             'r3.large' => array(
-               'name' => 'r3.large',
-               'ram' => '15360',
-               'vcpus' => '2',
-               'disk' => '32',
-               'type' => 'SSD',
-               'ebsencryption' => true
+                'name' => 'r3.large',
+                'ram' => '15360',
+                'vcpus' => '2',
+                'disk' => '32',
+                'type' => 'SSD',
+                'ebsencryption' => true,
+                'placementgroups' => true
             ),
             'r3.xlarge' => array(
-               'name' => 'r3.xlarge',
-               'ram' => '31232',
-               'vcpus' => '4',
-               'disk' => '80',
-               'type' => 'SSD',
-               'ebsencryption' => true
+                'name' => 'r3.xlarge',
+                'ram' => '31232',
+                'vcpus' => '4',
+                'disk' => '80',
+                'type' => 'SSD',
+                'ebsencryption' => true,
+                'ebsoptimized' => true,
+                'placementgroups' => true
             ),
             'r3.2xlarge' => array(
-               'name' => 'r3.2xlarge',
-               'ram' => '62464',
-               'vcpus' => '8',
-               'disk' => '160',
-               'type' => 'SSD',
-               'ebsencryption' => true
+                'name' => 'r3.2xlarge',
+                'ram' => '62464',
+                'vcpus' => '8',
+                'disk' => '160',
+                'type' => 'SSD',
+                'ebsencryption' => true,
+                'ebsoptimized' => true,
+                'placementgroups' => true
             ),
             'r3.4xlarge' => array(
-               'name' => 'r3.4xlarge',
-               'ram' => '124928',
-               'vcpus' => '16',
-               'disk' => '320',
-               'type' => 'SSD',
-               'ebsencryption' => true
+                'name' => 'r3.4xlarge',
+                'ram' => '124928',
+                'vcpus' => '16',
+                'disk' => '320',
+                'type' => 'SSD',
+                'ebsencryption' => true,
+                'ebsoptimized' => true,
+                'placementgroups' => true
             ),
             'r3.8xlarge' => array(
-               'name' => 'r3.8xlarge',
-               'ram' => '249856',
-               'vcpus' => '32',
-               'disk' => '640',
-               'type' => 'SSD',
-               'ebsencryption' => true
+                'name' => 'r3.8xlarge',
+                'ram' => '249856',
+                'vcpus' => '32',
+                'disk' => '640',
+                'type' => 'SSD',
+                'ebsencryption' => true,
+                'placementgroups' => true
             ),
 
             'i2.xlarge' => array(
-               'name' => 'i2.xlarge',
-               'ram' => '31232',
-               'vcpus' => '4',
-               'disk' => '800',
-               'type' => 'SSD',
-               'ebsencryption' => true
+                'name' => 'i2.xlarge',
+                'ram' => '31232',
+                'vcpus' => '4',
+                'disk' => '800',
+                'type' => 'SSD',
+                'ebsencryption' => true,
+                'ebsoptimized' => true,
+                'placementgroups' => true
             ),
             'i2.2xlarge' => array(
-               'name' => 'i2.2xlarge',
-               'ram' => '62464',
-               'vcpus' => '8',
-               'disk' => '1600',
-               'type' => 'SSD',
-               'ebsencryption' => true
+                'name' => 'i2.2xlarge',
+                'ram' => '62464',
+                'vcpus' => '8',
+                'disk' => '1600',
+                'type' => 'SSD',
+                'ebsencryption' => true,
+                'ebsoptimized' => true,
+                'placementgroups' => true
             ),
             'i2.4xlarge' => array(
-               'name' => 'i2.4xlarge',
-               'ram' => '124928',
-               'vcpus' => '16',
-               'disk' => '3200',
-               'type' => 'SSD',
-               'ebsencryption' => true
+                'name' => 'i2.4xlarge',
+                'ram' => '124928',
+                'vcpus' => '16',
+                'disk' => '3200',
+                'type' => 'SSD',
+                'ebsencryption' => true,
+                'ebsoptimized' => true,
+                'placementgroups' => true
             ),
             'i2.8xlarge' => array(
-               'name' => 'i2.8xlarge',
-               'ram' => '249856',
-               'vcpus' => '32',
-               'disk' => '6400',
-               'type' => 'SSD',
-               'ebsencryption' => true
+                'name' => 'i2.8xlarge',
+                'ram' => '249856',
+                'vcpus' => '32',
+                'disk' => '6400',
+                'type' => 'SSD',
+                'ebsencryption' => true,
+                'placementgroups' => true
+            ),
+
+            'd2.xlarge' => array(
+                'name' => 'd2.xlarge',
+                'ram' => '31232',
+                'vcpus' => '4',
+                'disk' => '4000',
+                'type' => 'HDD',
+                'ebsencryption' => true,
+                'ebsoptimized' => 'default',
+                'placementgroups' => true
+            ),
+            'd2.2xlarge' => array(
+                'name' => 'd2.2xlarge',
+                'ram' => '62464',
+                'vcpus' => '8',
+                'disk' => '6000',
+                'type' => 'HDD',
+                'ebsencryption' => true,
+                'ebsoptimized' => 'default',
+                'placementgroups' => true
+            ),
+            'd2.4xlarge' => array(
+                'name' => 'd2.4xlarge',
+                'ram' => '124928',
+                'vcpus' => '16',
+                'disk' => '24000',
+                'type' => 'HDD',
+                'ebsencryption' => true,
+                'ebsoptimized' => 'default',
+                'placementgroups' => true
+            ),
+            'd2.8xlarge' => array(
+                'name' => 'd2.8xlarge',
+                'ram' => '249856',
+                'vcpus' => '36',
+                'disk' => '48000',
+                'type' => 'HDD',
+                'ebsencryption' => true,
+                'ebsoptimized' => 'default',
+                'placementgroups' => true
             ),
 
             'g2.2xlarge' => array(
-               'name' => 'g2.2xlarge',
-               'ram' => '15360',
-               'vcpus' => '8',
-               'disk' => '60',
-               'type' => 'SSD',
-               'note' => 'GPU',
-               'ebsencryption' => true
+                'name' => 'g2.2xlarge',
+                'ram' => '15360',
+                'vcpus' => '8',
+                'disk' => '60',
+                'type' => 'SSD',
+                'note' => 'GPU',
+                'ebsencryption' => true,
+                'ebsoptimized' => true,
+                'placementgroups' => true
+            ),
+
+            'g2.8xlarge' => array(
+                'name' => 'g2.8xlarge',
+                'ram' => '61440',
+                'vcpus' => '32',
+                'disk' => '240',
+                'type' => 'SSD',
+                'note' => 'GPU',
+                'ebsencryption' => true,
+                'ebsoptimized' => true,
+                'placementgroups' => true
             ),
 
             'hs1.8xlarge' => array(
@@ -399,46 +575,54 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
                 'ram' => '119808',
                 'vcpus' => '16',
                 'disk' => '49152',
-                'type' => 'SSD'
+                'type' => 'SSD',
+                'placementgroups' => true
             ),
 
             'cc2.8xlarge' => array(
-               'name' => 'cc2.8xlarge',
-               'ram' => '61952',
-               'vcpus' => '32',
-               'disk' => '3360',
-               'type' => 'HDD'
+                'name' => 'cc2.8xlarge',
+                'ram' => '61952',
+                'vcpus' => '32',
+                'disk' => '3360',
+                'type' => 'HDD',
+                'placementgroups' => true
             ),
             'cg1.4xlarge' => array(
-               'name' => 'cg1.4xlarge',
-               'ram' => '23040',
-               'vcpus' => '16',
-               'disk' => '1680',
-               'type' => 'HDD',
-               'note' => 'GPU'
+                'name' => 'cg1.4xlarge',
+                'ram' => '23040',
+                'vcpus' => '16',
+                'disk' => '1680',
+                'type' => 'HDD',
+                'note' => 'GPU',
+                'placementgroups' => true
             ),
             'hi1.4xlarge' => array(
-               'name' => 'hi1.4xlarge',
-               'ram' => '61952',
-               'vcpus' => '16',
-               'disk' => '2048',
-               'type' => 'SSD'
+                'name' => 'hi1.4xlarge',
+                'ram' => '61952',
+                'vcpus' => '16',
+                'disk' => '2048',
+                'type' => 'SSD',
+                'placementgroups' => true
             ),
             'cr1.8xlarge' => array(
-               'name' => 'cr1.8xlarge',
-               'ram' => '249856',
-               'vcpus' => '32',
-               'disk' => '240',
-               'type' => 'SSD',
-               'ebsencryption' => true
+                'name' => 'cr1.8xlarge',
+                'ram' => '249856',
+                'vcpus' => '32',
+                'disk' => '240',
+                'type' => 'SSD',
+                'ebsencryption' => true,
+                'placementgroups' => true
             )
         );
 
         // New region supports only new instance types
-        if ($cloudLocation == Aws::REGION_EU_CENTRAL_1) {
-            foreach ($definition as $key => $value) {
-                if (!in_array(substr($key, 0, 2), array('t2','m3','c3','r3','i2')))
-                    unset($definition[$key]);
+        foreach ($definition as $key => $value) {
+            $family = substr($key, 0, strpos($key, '.'));
+            $definition[$key]['family'] = $family;
+            if ($cloudLocation == Aws::REGION_EU_CENTRAL_1 && !in_array($family, array('t2','m3','m4','c3','r3','i2'))) {
+                unset($definition[$key]);
+            } else if (isset($restrictions[$family])) {
+                $definition[$key]['restrictions'] = isset($restrictions[$family][$key]) ? $restrictions[$family][$key] : $restrictions[$family];
             }
         }
 
@@ -683,7 +867,7 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
                     }
                     $results = $aws->ec2->instance->describe(null, null, $nextToken);
                 } catch (Exception $e) {
-                    throw new Exception(sprintf("Cannot get list of servers for platfrom ec2: %s", $e->getMessage()));
+                    throw new Exception(sprintf("Cannot get list of servers for platform ec2: %s", $e->getMessage()));
                 }
 
                 if (count($results)) {
@@ -815,7 +999,7 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
 
             //$ami variable is expected to be defined here
 
-            $platfrom = $ami->platform;
+            $platform = $ami->platform;
             $rootDeviceType = $ami->rootDeviceType;
 
             if ($rootDeviceType == 'ebs') {
@@ -932,8 +1116,8 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
         $aws = $DBServer->GetEnvironmentObject()->aws($DBServer);
 
         if (!$BundleTask->prototypeRoleId) {
+            //FIXME $proto_image_id is never used
             $proto_image_id = $DBServer->GetProperty(EC2_SERVER_PROPERTIES::AMIID);
-
         } else {
             $protoRole = DBRole::loadById($BundleTask->prototypeRoleId);
 
@@ -944,23 +1128,13 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
             $proto_image_id = $image->imageId;
 
             //Bundle EC2 in AWS way
-            if (in_array($image->getImage()->osFamily, array('oel', 'redhat', 'scientific'))) {
-                $BundleTask->bundleType = SERVER_SNAPSHOT_CREATION_TYPE::EC2_EBS_HVM;
-            }
-           
-            if ($image->getImage()->osFamily == 'centos' && $image->getImage()->osGeneration == '7') {
-                $BundleTask->bundleType = SERVER_SNAPSHOT_CREATION_TYPE::EC2_EBS_HVM;
-            }
-        
-            if ($image->getImage()->osFamily == 'amazon' && $image->getImage()->osVersion == '2014.09') {
-                $BundleTask->bundleType = SERVER_SNAPSHOT_CREATION_TYPE::EC2_EBS_HVM;
-            }
+            $BundleTask->designateType(\SERVER_PLATFORMS::EC2, $image->getImage()->getOs()->family, $image->getImage()->getOs()->generation);
         }
 
         $callEc2CreateImage = false;
         $reservationSet = $aws->ec2->instance->describe($DBServer->GetCloudServerID())->get(0);
         $ec2Server = $reservationSet->instancesSet->get(0);
-        
+
         if ($ec2Server->platform == 'windows') {
             if ($ec2Server->rootDeviceType != 'ebs') {
                 $BundleTask->SnapshotCreationFailed("Only EBS root filesystem supported for Windows servers.");
@@ -968,9 +1142,9 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
             }
             if ($BundleTask->status == SERVER_SNAPSHOT_CREATION_STATUS::PENDING) {
                 $BundleTask->bundleType = SERVER_SNAPSHOT_CREATION_TYPE::EC2_EBS_HVM;
-                $BundleTask->Log(sprintf(_("Selected platfrom snapshoting type: %s"), $BundleTask->bundleType));
+                $BundleTask->Log(sprintf(_("Selected platform snapshotting type: %s"), $BundleTask->bundleType));
                 $BundleTask->status = SERVER_SNAPSHOT_CREATION_STATUS::PREPARING;
-                
+
                 $msg = $DBServer->SendMessage(new \Scalr_Messaging_Msg_Win_PrepareBundle($BundleTask->id));
                 $BundleTask->Log(sprintf(
                     _("PrepareBundle message sent. MessageID: %s. Bundle task status changed to: %s"),
@@ -984,10 +1158,10 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
             if ($image) {
                 $BundleTask->Log(sprintf(
                     _("Image OS: %s %s"),
-                    $image->getImage()->osFamily, $image->getImage()->osGeneration
+                    $image->getImage()->getOs()->family, $image->getImage()->getOs()->generation
                 ));
             }
-            
+
             $BundleTask->status = SERVER_SNAPSHOT_CREATION_STATUS::IN_PROGRESS;
             if (!$BundleTask->bundleType) {
                 if ($ec2Server->rootDeviceType == 'ebs') {
@@ -999,11 +1173,11 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
                 } else {
                     $BundleTask->bundleType = SERVER_SNAPSHOT_CREATION_TYPE::EC2_S3I;
                 }
-                
-                $BundleTask->Log(sprintf(_("Selected platfrom snapshoting type: %s"), $BundleTask->bundleType));
+
+                $BundleTask->Log(sprintf(_("Selected platform snapshotting type: %s"), $BundleTask->bundleType));
             }
             $BundleTask->Save();
-            
+
             if ($BundleTask->bundleType == SERVER_SNAPSHOT_CREATION_TYPE::EC2_EBS_HVM) {
                 $callEc2CreateImage = true;
             } else {
@@ -1015,20 +1189,20 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
                 } else if ($metaData['rootBlockDeviceProperties']) {
                     $msg->volumeSize = $metaData['rootBlockDeviceProperties']['size'];
                 }
-                
+
                 $DBServer->SendMessage($msg);
-                    
+
                 $BundleTask->Log(sprintf(
                     _("Snapshot creation started (MessageID: %s). Bundle task status changed to: %s"),
                     $msg->messageId, $BundleTask->status
                 ));
             }
         }
-        
+
         if ($callEc2CreateImage) {
             try {
                 $metaData = $BundleTask->getSnapshotDetails();
-            
+
                 $ebs = new EbsBlockDeviceData();
                 $bSetEbs = false;
                 if ($metaData['rootBlockDeviceProperties']) {
@@ -1036,23 +1210,23 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
                         $ebs->volumeSize = $metaData['rootBlockDeviceProperties']['size'];
                         $bSetEbs = true;
                     }
-            
+
                     if ($metaData['rootBlockDeviceProperties']['volume_type']) {
                         $ebs->volumeType = $metaData['rootBlockDeviceProperties']['volume_type'];
                         $bSetEbs = true;
                     }
-            
+
                     if ($metaData['rootBlockDeviceProperties']['iops']) {
                         $ebs->iops = $metaData['rootBlockDeviceProperties']['iops'];
                         $bSetEbs = true;
                     }
                 }
-            
+
                 $blockDeviceMapping = new BlockDeviceMappingList();
-                
+
                 if ($bSetEbs)
                     $blockDeviceMapping->append(new BlockDeviceMappingData($ec2Server->rootDeviceName, null, null, $ebs));
-                
+
                 //TODO: Remove all attached devices other than root device from blockDeviceMapping
                 $currentMapping = $ec2Server->blockDeviceMapping;
                 $BundleTask->Log(sprintf(
@@ -1061,7 +1235,7 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
                 ));
                 foreach ($currentMapping as $blockDeviceMappingData) {
                     /* @var $blockDeviceMappingData \Scalr\Service\Aws\Ec2\DataType\InstanceBlockDeviceMappingResponseData */
-                    
+
                     if ($blockDeviceMappingData->deviceName != $ec2Server->rootDeviceName) {
                         $blockDeviceMapping->append(['deviceName' => $blockDeviceMappingData->deviceName, 'noDevice' => '']);
                     } else {
@@ -1073,12 +1247,12 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
                             $ebs->encrypted = $ebsInfo->encrypted;
                             if ($ebsInfo->volumeType == 'io1')
                                 $ebs->iops = $ebsInfo->iops;
-                            
+
                             $blockDeviceMapping->append(new BlockDeviceMappingData($ec2Server->rootDeviceName, null, null, $ebs));
                         }
                     }
                 }
-                
+
                 if ($blockDeviceMapping->count() == 0)
                     $blockDeviceMapping = null;
                 else {
@@ -1089,18 +1263,18 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
                     ));
                     */
                 }
-                
+
                 $request = new CreateImageRequestData(
                     $DBServer->GetProperty(EC2_SERVER_PROPERTIES::INSTANCE_ID),
                     $BundleTask->roleName . "-" . date("YmdHi"),
                     $blockDeviceMapping
                 );
-            
+
                 $request->description = $BundleTask->roleName;
                 $request->noReboot = false;
-            
+
                 $imageId = $aws->ec2->image->create($request);
-            
+
                 $BundleTask->status = SERVER_SNAPSHOT_CREATION_STATUS::IN_PROGRESS;
                 $BundleTask->snapshotId = $imageId;
                 $BundleTask->Log(sprintf(
@@ -1113,7 +1287,7 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
                 return;
             }
         }
-        
+
         $BundleTask->setDate('started');
         $BundleTask->Save();
     }
@@ -1162,20 +1336,20 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
                         'name'  => VolumeFilterNameType::attachmentInstanceId(),
                         'value' => $iid,
                     ));
-                    
+
                     $ebs = $aws->ec2->volume->describe(null, $filter);
                     foreach ($ebs as $volume) {
-                        /* @var $volume \Scalr\Service\Aws\Ec2\DataType\VolumeData */                    
-                        
+                        /* @var $volume \Scalr\Service\Aws\Ec2\DataType\VolumeData */
+
                         $blockStorage[] = $volume->attachmentSet->get(0)->device . " - {$volume->size} Gb"
                         . " (<a href='#/tools/aws/ec2/ebs/volumes/" . $volume->volumeId . "/view"
                             . "?cloudLocation=" . $DBServer->GetCloudLocation()
                             . "&platform=ec2'>" . $volume->volumeId . "</a>)";
-                        
+
                         //array('id' => $volume->volumeId, 'size' => $volume->size, 'device' => $volume->attachmentSet->get(0)->device);
                     }
                 }
-                
+
                 $instanceData = $iinfo->instancesSet->get(0);
 
                 if (isset($iinfo->groupSet[0]->groupId)) {
@@ -1238,16 +1412,16 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
                     'Security groups'         => implode(', ', $groups),
                     'Tags'                    => implode(', ', $tags)
                 );
-                
+
                 if ($extended) {
                     try {
                         $statusInfo = $aws->ec2->instance->describeStatus(
                             $DBServer->GetProperty(EC2_SERVER_PROPERTIES::INSTANCE_ID)
                         )->get(0);
                     } catch (Exception $e) {}
-                
+
                     if (!empty($statusInfo)) {
-                
+
                         if ($statusInfo->systemStatus->status == 'ok') {
                             $systemStatus = '<span style="color:green;">OK</span>';
                         } else {
@@ -1263,7 +1437,7 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
                                 . $statusInfo->systemStatus->status
                                 . "</span> ({$txtDetails})";
                         }
-                
+
                         if ($statusInfo->instanceStatus->status == 'ok') {
                             $iStatus = '<span style="color:green;">OK</span>';
                         } else {
@@ -1280,15 +1454,15 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
                         $systemStatus = "Unknown";
                         $iStatus = "Unknown";
                     }
-                    
+
                     $retval['AWS System Status'] = $systemStatus;
                     $retval['AWS Instance Status'] = $iStatus;
                 }
-                
+
                 if ($blockStorage) {
                     $retval['Block storage'] = implode(', ', $blockStorage);
                 }
-                
+
                 if ($instanceData->subnetId) {
                     $retval['VPC ID'] = $instanceData->vpcId;
                     $retval['Subnet ID'] = $instanceData->subnetId;
@@ -1452,7 +1626,7 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
             $launchOptions->imageId = $image->imageId;
 
             // Need OS Family to get block device mapping for OEL roles
-            $launchOptions->osFamily = $image->getImage()->osFamily;
+            $launchOptions->osFamily = $image->getImage()->getOs()->family;
             $launchOptions->cloudLocation = $dbFarmRole->CloudLocation;
 
             $akiId = $DBServer->GetProperty(EC2_SERVER_PROPERTIES::AKIID);
@@ -1481,19 +1655,12 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
                         $iType
                     ));
             }
-            /*
-            $iamProfileName = $governance->getValue(SERVER_PLATFORMS::EC2, \Scalr_Governance::AWS_IAM, 'iam_instance_profile_arn');
-            if ($iamProfileName) {
-                $iamInstanceProfile = new IamInstanceProfileRequestData(null, $iamProfileName);
+
+            $iamProfileArn = $dbFarmRole->GetSetting(\DBFarmRole::SETTING_AWS_IAM_INSTANCE_PROFILE_ARN);
+            if ($iamProfileArn) {
+                $iamInstanceProfile = new IamInstanceProfileRequestData($iamProfileArn);
                 $runInstanceRequest->setIamInstanceProfile($iamInstanceProfile);
-            } else {
-            */
-                $iamProfileArn = $dbFarmRole->GetSetting(\DBFarmRole::SETTING_AWS_IAM_INSTANCE_PROFILE_ARN);
-                if ($iamProfileArn) {
-                    $iamInstanceProfile = new IamInstanceProfileRequestData($iamProfileArn);
-                    $runInstanceRequest->setIamInstanceProfile($iamInstanceProfile);
-                }
-            //}
+            }
 
             if ($dbFarmRole->GetSetting(\DBFarmRole::SETTING_AWS_EBS_OPTIMIZED) == 1)
                 $runInstanceRequest->ebsOptimized = true;
@@ -1501,16 +1668,20 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
                 $runInstanceRequest->ebsOptimized = false;
 
             // Custom user-data (base.custom_user_data)
-            foreach ($DBServer->GetCloudUserData() as $k => $v)
+            $u_data = '';
+
+            foreach ($DBServer->GetCloudUserData() as $k => $v) {
                 $u_data .= "{$k}={$v};";
+            }
+
             $u_data = trim($u_data, ";");
 
             $customUserData = $dbFarmRole->GetSetting('base.custom_user_data');
             if ($customUserData) {
                 $repos = $DBServer->getScalarizrRepository();
-                
+
                 $userData = str_replace(array(
-                    '{SCALR_USER_DATA}', 
+                    '{SCALR_USER_DATA}',
                     '{RPM_REPO_URL}',
                     '{DEB_REPO_URL}'
                 ), array(
@@ -1651,7 +1822,14 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
                         throw new Exception("Unable to define subnetId for role in VPC");
                 }
             }
+
+            $rootDevice = json_decode($DBServer->GetFarmRoleObject()->GetSetting(\Scalr_Role_Behavior::ROLE_BASE_ROOT_DEVICE_CONFIG), true);
+            if ($rootDevice && $rootDevice['settings'])
+                $rootDeviceSettings = $rootDevice['settings'];
+
+            $instanceInitiatedShutdownBehavior = $dbFarmRole->GetSetting(\DBFarmRole::SETTING_AWS_SHUTDOWN_BEHAVIOR);
         } else {
+            $instanceInitiatedShutdownBehavior = null;
             $runInstanceRequest->userData = base64_encode(trim($launchOptions->userData));
         }
 
@@ -1663,10 +1841,9 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
         // Set AMI, AKI and ARI ids
         $runInstanceRequest->imageId = $launchOptions->imageId;
 
-        $runInstanceRequest->instanceInitiatedShutdownBehavior = 'terminate';
+        $runInstanceRequest->instanceInitiatedShutdownBehavior = $instanceInitiatedShutdownBehavior ?: 'terminate';
 
         if (!$noSecurityGroups) {
-
             foreach ($this->GetServerSecurityGroupsList($DBServer, $aws->ec2, $vpcId, $governance) as $sgroup) {
                 $runInstanceRequest->appendSecurityGroupId($sgroup);
             }
@@ -1690,9 +1867,24 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
         // Set instance type
         $runInstanceRequest->instanceType = $launchOptions->serverType;
 
+        if ($rootDeviceSettings) {
+            $ebs = new EbsBlockDeviceData(
+                $rootDeviceSettings[FarmRoleStorageConfig::SETTING_EBS_SIZE],
+                null,//$rootDeviceSettings[FarmRoleStorageConfig::SETTING_EBS_SNAPSHOT],
+                $rootDeviceSettings[FarmRoleStorageConfig::SETTING_EBS_TYPE],
+                $rootDeviceSettings[FarmRoleStorageConfig::SETTING_EBS_IOPS],
+                true,
+                null
+            );
+            $rootBlockDevice = new BlockDeviceMappingData('/dev/sda1', null, null, $ebs);
+            $runInstanceRequest->appendBlockDeviceMapping($rootBlockDevice);
+        }
+
         if (substr($launchOptions->serverType, 0, 2) == 'm3' ||
+            substr($launchOptions->serverType, 0, 2) == 'm4' ||
             substr($launchOptions->serverType, 0, 2) == 'i2' ||
             substr($launchOptions->serverType, 0, 2) == 'r3' ||
+            substr($launchOptions->serverType, 0, 2) == 'd2' ||
             $launchOptions->serverType == 'hi1.4xlarge' ||
             $launchOptions->serverType == 'cc2.8xlarge' ||
             $launchOptions->serverType == 'hs1.8xlarge' ||
@@ -1704,9 +1896,10 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
 
         if (in_array($runInstanceRequest->instanceType, array(
             'c3.large', 'c3.xlarge', 'c3.2xlarge', 'c3.4xlarge', 'c3.8xlarge', 'cc2.8xlarge',
-            'cg1.4xlarge', 'g2.2xlarge',
+            'cg1.4xlarge', 'g2.2xlarge', 'g2.8xlarge',
             'cr1.8xlarge', 'r3.large', 'r3.xlarge', 'r3.2xlarge', 'r3.4xlarge', 'r3.8xlarge',
-            'hi1.4xlarge', 'hs1.8xlarge', 'i2.xlarge', 'i2.2xlarge', 'i2.4xlarge', 'i2.8xlarge'
+            'hi1.4xlarge', 'hs1.8xlarge', 'i2.xlarge', 'i2.2xlarge', 'i2.4xlarge', 'i2.8xlarge',
+            'd2.xlarge', 'd2.2xlarge', 'd2.4xlarge', 'd2.8xlarge'
             ))) {
 
             $placementGroup = $DBServer->GetFarmRoleObject()->GetSetting(\DBFarmRole::SETTING_AWS_CLUSTER_PG);
@@ -1728,7 +1921,7 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
             $keyName = "SCALR-ROLESBUILDER-" . SCALR_ID;
             if (!$sshKey->loadGlobalByName($keyName, $launchOptions->cloudLocation, $DBServer->envId, SERVER_PLATFORMS::EC2))
                 $keyName = "SCALR-ROLESBUILDER-" . SCALR_ID . "-{$DBServer->envId}";
-                
+
             $farmId = NULL;
         } else {
             $keyName = $governance->getValue(SERVER_PLATFORMS::EC2, \Scalr_Governance::AWS_KEYPAIR);
@@ -1807,6 +2000,8 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
             $DBServer->cloudLocation = $launchOptions->cloudLocation;
             $DBServer->cloudLocationZone = $result->instancesSet->get(0)->placement->availabilityZone;
             $DBServer->imageId = $launchOptions->imageId;
+            // we set server history here
+            $DBServer->getServerHistory();
 
             return $DBServer;
         } else {
@@ -1872,6 +2067,7 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
                 'm2.xlarge', 'm2.2xlarge', 'm2.4xlarge',
                 'm3.large', 'm3.xlarge', 'm3.2xlarge',
                 'i2.xlarge', 'i2.2xlarge', 'i2.4xlarge', 'i2.8xlarge',
+                'd2.xlarge', 'd2.2xlarge', 'd2.4xlarge', 'd2.8xlarge',
                 'c3.large', 'c3.xlarge', 'c3.2xlarge', 'c3.4xlarge', 'c3.8xlarge',
                 'r3.large', 'r3.xlarge', 'r3.2xlarge', 'r3.4xlarge', 'r3.8xlarge',
                 'c1.xlarge', 'cc1.4xlarge', 'cc2.8xlarge', 'cr1.8xlarge',
@@ -1887,43 +2083,52 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
                 'c3.large', 'c3.xlarge', 'c3.2xlarge', 'c3.4xlarge', 'c3.8xlarge',
                 'cc2.8xlarge', 'cc1.4xlarge',
                 'i2.2xlarge','i2.4xlarge','i2.8xlarge',
+                'd2.xlarge', 'd2.2xlarge', 'd2.4xlarge', 'd2.8xlarge',
                 'r3.8xlarge',
                 'c1.xlarge', 'cr1.8xlarge', 'hi1.4xlarge', 'm2.2xlarge', 'cr1.8xlarge', 'hs1.8xlarge'))) {
             $retval[] = new BlockDeviceMappingData("{$prefix}c", 'ephemeral1');
         }
 
         //e
-        if (in_array($instanceType, array('m1.xlarge', 'c1.xlarge', 'cc2.8xlarge', 'i2.4xlarge', 'i2.8xlarge', 'hs1.8xlarge'))) {
+        if (in_array($instanceType, array('m1.xlarge', 'c1.xlarge', 'cc2.8xlarge', 'i2.4xlarge', 'i2.8xlarge', 'hs1.8xlarge', 'd2.xlarge', 'd2.2xlarge', 'd2.4xlarge', 'd2.8xlarge'))) {
              $retval[] = new BlockDeviceMappingData("{$prefix}e", 'ephemeral2');
         }
 
         //f
-        if (in_array($instanceType, array('m1.xlarge', 'c1.xlarge', 'cc2.8xlarge', 'i2.4xlarge', 'i2.8xlarge', 'hs1.8xlarge'))) {
+        if (in_array($instanceType, array('m1.xlarge', 'c1.xlarge', 'cc2.8xlarge', 'i2.4xlarge', 'i2.8xlarge', 'hs1.8xlarge', 'd2.2xlarge', 'd2.4xlarge', 'd2.8xlarge'))) {
             $retval[] = new BlockDeviceMappingData("{$prefix}f", 'ephemeral3');
         }
 
 
         //g
-        if (in_array($instanceType, array('i2.8xlarge', 'hs1.8xlarge'))) {
+        if (in_array($instanceType, array('i2.8xlarge', 'hs1.8xlarge', 'd2.2xlarge', 'd2.4xlarge', 'd2.8xlarge'))) {
             $retval[] = new BlockDeviceMappingData("{$prefix}g", 'ephemeral4');
         }
 
         //h
-        if (in_array($instanceType, array('i2.8xlarge', 'hs1.8xlarge'))) {
+        if (in_array($instanceType, array('i2.8xlarge', 'hs1.8xlarge', 'd2.2xlarge', 'd2.4xlarge', 'd2.8xlarge'))) {
             $retval[] = new BlockDeviceMappingData("{$prefix}h", 'ephemeral5');
         }
 
         //i
-        if (in_array($instanceType, array('i2.8xlarge', 'hs1.8xlarge'))) {
+        if (in_array($instanceType, array('i2.8xlarge', 'hs1.8xlarge', 'd2.4xlarge', 'd2.8xlarge'))) {
             $retval[] = new BlockDeviceMappingData("{$prefix}i", 'ephemeral6');
         }
 
         //j
-        if (in_array($instanceType, array('i2.8xlarge', 'hs1.8xlarge'))) {
+        if (in_array($instanceType, array('i2.8xlarge', 'hs1.8xlarge', 'd2.4xlarge', 'd2.8xlarge'))) {
             $retval[] = new BlockDeviceMappingData("{$prefix}j", 'ephemeral7');
         }
-        
+
         //k
+        if (in_array($instanceType, array('d2.4xlarge'))) {
+            $retval[] = new BlockDeviceMappingData("{$prefix}k1", 'ephemeral8');
+            $retval[] = new BlockDeviceMappingData("{$prefix}k2", 'ephemeral9');
+            $retval[] = new BlockDeviceMappingData("{$prefix}k3", 'ephemeral10');
+            $retval[] = new BlockDeviceMappingData("{$prefix}k4", 'ephemeral11');
+            $retval[] = new BlockDeviceMappingData("{$prefix}k5", 'ephemeral12');
+        }
+
         if (in_array($instanceType, array('hs1.8xlarge'))) {
             $retval[] = new BlockDeviceMappingData("{$prefix}k1", 'ephemeral8');
             $retval[] = new BlockDeviceMappingData("{$prefix}k2", 'ephemeral9');
@@ -1941,6 +2146,25 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
             $retval[] = new BlockDeviceMappingData("{$prefix}l5", 'ephemeral21');
             $retval[] = new BlockDeviceMappingData("{$prefix}l6", 'ephemeral22');
             $retval[] = new BlockDeviceMappingData("{$prefix}l7", 'ephemeral23');
+        }
+
+        if (in_array($instanceType, array('d2.8xlarge'))) {
+            $retval[] = new BlockDeviceMappingData("{$prefix}k", 'ephemeral8');
+            $retval[] = new BlockDeviceMappingData("{$prefix}l", 'ephemeral9');
+            $retval[] = new BlockDeviceMappingData("{$prefix}m", 'ephemeral10');
+            $retval[] = new BlockDeviceMappingData("{$prefix}n", 'ephemeral11');
+            $retval[] = new BlockDeviceMappingData("{$prefix}o", 'ephemeral12');
+            $retval[] = new BlockDeviceMappingData("{$prefix}p", 'ephemeral13');
+            $retval[] = new BlockDeviceMappingData("{$prefix}q", 'ephemeral14');
+            $retval[] = new BlockDeviceMappingData("{$prefix}r", 'ephemeral15');
+            $retval[] = new BlockDeviceMappingData("{$prefix}s", 'ephemeral16');
+            $retval[] = new BlockDeviceMappingData("{$prefix}t", 'ephemeral17');
+            $retval[] = new BlockDeviceMappingData("{$prefix}u", 'ephemeral18');
+            $retval[] = new BlockDeviceMappingData("{$prefix}v", 'ephemeral19');
+            $retval[] = new BlockDeviceMappingData("{$prefix}w", 'ephemeral20');
+            $retval[] = new BlockDeviceMappingData("{$prefix}x", 'ephemeral21');
+            $retval[] = new BlockDeviceMappingData("{$prefix}y", 'ephemeral22');
+            $retval[] = new BlockDeviceMappingData("{$prefix}d", 'ephemeral23');
         }
 
         return $retval;

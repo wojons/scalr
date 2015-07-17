@@ -24,8 +24,9 @@ class SqsTest extends SqsTestCase
     protected function setUp()
     {
         parent::setUp();
+
         if (!$this->isSkipFunctionalTests()) {
-            $this->sqs = $this->getContainer()->aws(self::REGION)->sqs;
+            $this->sqs = $this->getEnvironment()->aws(self::REGION)->sqs;
             $this->sqs->enableEntityManager();
         }
     }

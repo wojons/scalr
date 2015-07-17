@@ -9,6 +9,7 @@ class Scalr_Role_Behavior_Chef extends Scalr_Role_Behavior implements Scalr_Role
     const ROLE_CHEF_ENVIRONMENT         = 'chef.environment';
     const ROLE_CHEF_ATTRIBUTES          = 'chef.attributes';
     const ROLE_CHEF_NODENAME_TPL        = 'chef.node_name_tpl';
+    const ROLE_CHEF_SSL_VERIFY_MODE     = 'chef.ssl_verify_mode';
     const ROLE_CHEF_RUNLIST             = 'chef.runlist';
     const ROLE_CHEF_COOKBOOK_URL        = 'chef.cookbook_url';
     const ROLE_CHEF_COOKBOOK_URL_TYPE   = 'chef.cookbook_url_type';
@@ -80,18 +81,21 @@ class Scalr_Role_Behavior_Chef extends Scalr_Role_Behavior implements Scalr_Role
             if ($status) {
                 Logger::getLogger(LOG_CATEGORY::FARM)->warn(new FarmLogMessage(
                     $dbServer->farmId,
-                    sprintf("Chef node '%s' removed from chef server", $nodeName)
+                    sprintf("Chef node '%s' removed from chef server", $nodeName),
+                    $dbServer->serverId
                 ));
             } else {
                 Logger::getLogger(LOG_CATEGORY::FARM)->error(new FarmLogMessage(
                     $dbServer->farmId,
-                    sprintf("Unable to remove chef node '%s' from chef server: %s", $nodeName, $status)
+                    sprintf("Unable to remove chef node '%s' from chef server: %s", $nodeName, $status),
+                    $dbServer->serverId
                 ));
             }
         } catch (Exception $e) {
             Logger::getLogger(LOG_CATEGORY::FARM)->error(new FarmLogMessage(
                 $dbServer->farmId,
-                sprintf("Unable to remove chef node '%s' from chef server: %s", $nodeName, $e->getMessage())
+                sprintf("Unable to remove chef node '%s' from chef server: %s", $nodeName, $e->getMessage()),
+                $dbServer->serverId
             ));
         }
 
@@ -100,18 +104,21 @@ class Scalr_Role_Behavior_Chef extends Scalr_Role_Behavior implements Scalr_Role
             if ($status2) {
                 Logger::getLogger(LOG_CATEGORY::FARM)->warn(new FarmLogMessage(
                     $dbServer->farmId,
-                    sprintf("Chef client '%s' removed from chef server", $nodeName)
+                    sprintf("Chef client '%s' removed from chef server", $nodeName),
+                    $dbServer->serverId
                 ));
             } else {
                 Logger::getLogger(LOG_CATEGORY::FARM)->error(new FarmLogMessage(
                     $dbServer->farmId,
-                    sprintf("Unable to remove chef client '%s' from chef server: %s", $nodeName, $status2)
+                    sprintf("Unable to remove chef client '%s' from chef server: %s", $nodeName, $status2),
+                    $dbServer->serverId
                 ));
             }
         } catch (Exception $e) {
             Logger::getLogger(LOG_CATEGORY::FARM)->error(new FarmLogMessage(
                 $dbServer->farmId,
-                sprintf("Unable to remove chef node '%s' from chef server: %s", $nodeName, $e->getMessage())
+                sprintf("Unable to remove chef node '%s' from chef server: %s", $nodeName, $e->getMessage()),
+                $dbServer->serverId
             ));
         }
     }
@@ -166,6 +173,10 @@ class Scalr_Role_Behavior_Chef extends Scalr_Role_Behavior implements Scalr_Role
                 $nodeNameTpl = $chefSettings[self::ROLE_CHEF_NODENAME_TPL];
                 if ($nodeNameTpl)
                     $configuration->nodeName = $dbServer->applyGlobalVarsToValue($nodeNameTpl);
+            }
+
+            if (!empty($chefSettings[self::ROLE_CHEF_SSL_VERIFY_MODE])) {
+                $configuration->sslVerifyMode = $chefSettings[self::ROLE_CHEF_SSL_VERIFY_MODE];
             }
 
             $configuration->serverUrl = $chefServerInfo['url'];

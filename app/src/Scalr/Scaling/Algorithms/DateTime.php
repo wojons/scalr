@@ -38,7 +38,7 @@ class Scalr_Scaling_Algorithms_DateTime
 
         if ($scaling_period)
         {
-            $this->logger->info("TimeScalingAlgo({$dbFarmRole->FarmID}, {$dbFarmRole->AMIID}) Found scaling period. Total {$scaling_period['instances_count']} instances should be running.");
+            $this->logger->info("TimeScalingAlgo({$dbFarmRole->FarmID}, {$dbFarmRole->ID}) Found scaling period. Total {$scaling_period['instances_count']} instances should be running.");
             $this->instancesNumber = $scaling_period['instances_count'];
             $this->lastValue = "(" . implode(' / ', $currentDate) . ") {$scaling_period['start_time']} - {$scaling_period['end_time']} = {$scaling_period['instances_count']}";
 

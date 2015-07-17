@@ -57,14 +57,6 @@ class RackspacePlatformModule extends AbstractPlatformModule implements \Scalr\M
         return $retval;
     }
 
-    public function getPropsList()
-    {
-        return array(
-            self::USERNAME	=> 'Username',
-            self::API_KEY	=> 'API Key',
-        );
-    }
-
     /**
      * {@inheritdoc}
      * @see \Scalr\Modules\PlatformModuleInterface::GetServerCloudLocation()
@@ -327,7 +319,9 @@ class RackspacePlatformModule extends AbstractPlatformModule implements \Scalr\M
 
             $launchOptions->imageId = $DBRole->__getNewRoleObject()->getImage(\SERVER_PLATFORMS::RACKSPACE, $DBServer->GetProperty(\RACKSPACE_SERVER_PROPERTIES::DATACENTER))->imageId;
             $launchOptions->serverType = $DBServer->GetFarmRoleObject()->GetSetting(\DBFarmRole::SETTING_RS_FLAVOR_ID);
-               $launchOptions->cloudLocation = $DBServer->GetFarmRoleObject()->CloudLocation;
+            $launchOptions->cloudLocation = $DBServer->GetFarmRoleObject()->CloudLocation;
+
+            $u_data = '';
 
             foreach ($DBServer->GetCloudUserData() as $k=>$v)
                 $u_data .= "{$k}={$v};";
@@ -369,6 +363,8 @@ class RackspacePlatformModule extends AbstractPlatformModule implements \Scalr\M
                 \RACKSPACE_SERVER_PROPERTIES::DATACENTER       => $launchOptions->cloudLocation,
             ]);
             $DBServer->imageId = $launchOptions->imageId;
+            // we set server history here
+            $DBServer->getServerHistory();
 
             return $DBServer;
         } else {

@@ -126,10 +126,11 @@ class Ec2 extends AbstractService implements ServiceInterface
             }
         }
 
-        if ($region == Aws::REGION_CN_NORTH_1)
+        if (strpos($region, 'cn-') === 0) {
             return 'ec2.' . $region . '.amazonaws.com.cn';
-        else
+        } else {
             return 'ec2' . (empty($region) ? '' : '.' . $region) . '.amazonaws.com';
+        }
     }
 
     /**

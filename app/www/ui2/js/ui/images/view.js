@@ -1,17 +1,9 @@
 Scalr.regPage('Scalr.ui.images.view', function (loadParams, moduleParams) {
-    var platformFilterItems = [{
-        text: 'All clouds',
-        value: null,
-        iconCls: 'x-icon-osfamily-small'
-    }];
+    var platforms = [];
 
     Ext.Object.each(Scalr.platforms, function(key, value) {
         if (value.enabled || (moduleParams['platforms'].indexOf(key) != -1)) {
-            platformFilterItems.push({
-                text: Scalr.utils.getPlatformName(key),
-                value: key,
-                iconCls: 'x-icon-platform-small x-icon-platform-small-' + key
-            });
+            platforms.push(key);
         }
     });
 
@@ -34,7 +26,7 @@ Scalr.regPage('Scalr.ui.images.view', function (loadParams, moduleParams) {
         }, {
             xtype: 'displayfield',
             cls: 'x-form-field-warning',
-            value: 'The cloud image deletion process is asynchronous; if an error occurs, it will be reported here.',
+            value: 'The cloud image deletion process is asynchronous.<br/> If an error occurs, it will be reported here.',
             hidden: true
         }]
     };
@@ -45,66 +37,40 @@ Scalr.regPage('Scalr.ui.images.view', function (loadParams, moduleParams) {
         value: null,
         iconCls: 'x-icon-osfamily-small'
     }];
-    Ext.Array.each(moduleParams['os'], function(value){
+    Ext.each(Scalr.utils.getOsFamilyList(), function(family){
         osFilterItems.push({
-            text: Scalr.utils.beautifyOsFamily(value),
-            value: value,
-            iconCls: 'x-icon-osfamily-small x-icon-osfamily-small-' + value
+            text: family.name,
+            value: family.id,
+            iconCls: 'x-icon-osfamily-small x-icon-osfamily-small-' + family.id
         });
     });
 
-    var imagesStore = Ext.create('store.store', {
-        fields: ['id', 'platform', 'cloudLocation', 'name', 'os', 'osFamily', 'osGeneration', 'osVersion', 'size',
+    var imagesStore = Ext.create('Scalr.ui.ContinuousStore', {
+        model: Ext.define(null, {
+            extend: 'Ext.data.Model',
+            idProperty: 'hash',
+            fields: [
+                'hash', 'id', 'platform', 'cloudLocation', 'name', 'osId', 'size',
             'architecture', 'source', 'type', 'createdByEmail', 'status', 'statusError', 'used', 'status', 'dtAdded', 'dtLastUsed', 'bundleTaskId',
             'envId', 'software'
-        ],
+            ]
+        }),
         proxy: {
             type: 'ajax',
             url: '/images/xList/',
             reader: {
                 type: 'json',
-                root: 'data',
+                rootProperty: 'data',
                 totalProperty: 'total',
                 successProperty: 'success'
             }
         },
-        leadingBufferZone: 0,
-        trailingBufferZone: 0,
-        pageSize: 100,
-        buffered: true,
-        remoteSort: true,
-        purgePageCount: 0,
         listeners: {
-            beforeload: function() {
-                var selModel = grid.getSelectionModel();
-                selModel.deselectAll();
-                selModel.setLastFocused(null);
-            },
-            prefetch: function(store, records) {
-                if (records) {
-                    //console.log(this.getCount() + records.length + ' of ' + this.getTotalCount());
-                }
-            },
             load: function(store, records, successful) {
                 if (successful && records.length == 1) {
-                    grid.getSelectionModel().select(records[0]);
+                    grid.setSelectedRecord(records[0]);
                 }
             }
-        },
-        updateParamsAndLoad: function(params, reset) {
-            if (reset) {
-                this.proxy.extraParams = {};
-            }
-            var proxyParams = this.proxy.extraParams;
-            Ext.Object.each(params, function(name, value) {
-                if (value === undefined) {
-                    delete proxyParams[name];
-                } else {
-                    proxyParams[name] = value;
-                }
-            });
-            this.removeAll();
-            this.load();
         },
         isFilteredByRoleId: function() {
             return !!this.proxy.extraParams.roleId;
@@ -114,32 +80,30 @@ Scalr.regPage('Scalr.ui.images.view', function (loadParams, moduleParams) {
     var grid = Ext.create('Ext.grid.Panel', {
         xtype: 'grid',
         itemId: 'roles',
-        flex: 1.2,
-        cls: 'x-grid-shadow x-grid-shadow-buffered x-panel-column-left',
+        flex: 1,
+        cls: 'x-panel-column-left',
         store: imagesStore,
-        padding: '0 0 12 0',
-        plugins: [
+        plugins: [{
+            ptype: 'applyparams',
+            loadStoreOnReturn: false,
+        },
             'focusedrowpointer',
-
-            {
-                ptype: 'bufferedrenderer',
-                scrollToLoadBuffer: 100,
-                synchronousRender: false
+        {
+            ptype: 'selectedrecord',
+            disableSelection: false,
+            clearOnRefresh: true,
+            getForm: function() {
+                return form;
             }
-        ],
-        forceFit: true,
+        },{
+            ptype: 'continuousrenderer'
+        }],
         viewConfig: {
-            emptyText: 'No images found',
-            deferEmptyText: false,
-            loadMask: false
+            emptyText: 'No images found'
         },
 
         columns: [{
-                header: '<img style="cursor: help" src="'+Ext.BLANK_IMAGE_URL+'" class="x-icon-info" data-qclass="x-tip-light" data-qtip="' +
-                Ext.String.htmlEncode('<div>Scopes:</div>' +
-                '<div><img src="' + Ext.BLANK_IMAGE_URL + '" class="scalr-scope-scalr">&nbsp;&nbsp;Scalr</div>' +
-                '<div><img src="' + Ext.BLANK_IMAGE_URL + '" class="scalr-scope-environment">&nbsp;&nbsp;Environment</div>') +
-                '" />&nbsp;Name',
+                text: 'Image',
                 dataIndex: 'name',
                 sortable: true,
                 flex: 1,
@@ -148,39 +112,44 @@ Scalr.regPage('Scalr.ui.images.view', function (loadParams, moduleParams) {
                     {
                         getScope: function(envId){
                             var scope = envId ? 'environment' : 'scalr';
-                            return '<img src="' + Ext.BLANK_IMAGE_URL + '" class="scalr-scope-'+scope+'" data-qtip="This Image is defined in the '+Ext.String.capitalize(scope)+' Scope"/>';
+                            return '<img src="' + Ext.BLANK_IMAGE_URL + '" class="scalr-scope-'+scope+'" data-qclass="x-tip-light" data-qtip="' + Scalr.utils.getScopeLegend('image') + '"/>';
                         }
                     }
                 )
             }, {
-                header: 'Location',
+                text: 'Location',
                 minWidth: 110,
                 flex: 1,
                 dataIndex: 'platform',
                 sortable: true,
                 renderer: function (value, meta, record) {
                     var platform = record.get('platform'), location = record.get('cloudLocation');
-                    return '<img class="x-icon-platform-small x-icon-platform-small-' + platform + '" title="' + Scalr.utils.getPlatformName(platform) + '" src="' + Ext.BLANK_IMAGE_URL + '"/>&nbsp;<span style="line-height: 18px;">' + (location ? location : 'All locations') + '</span>';
+                    return '<img class="x-icon-platform-small x-icon-platform-small-' + platform + '" data-qtip="' + Scalr.utils.getPlatformName(platform) + '" src="' + Ext.BLANK_IMAGE_URL + '"/>&nbsp;<span style="line-height: 18px;">' + (location ? location : 'All locations') + '</span>';
                 },
-                doSort: function (state) {
-                    var ds = this.up('tablepanel').store;
-                    ds.sort([{
+                multiSort: function (st, direction) {
+                    st.sort([{
                         property: 'platform',
-                        direction: state
+                        direction: direction
                     }, {
                         property: 'cloudLocation',
-                        direction: state
+                        direction: direction
                     }]);
                 }
             },
-            { header: 'OS', flex: 1, maxWidth: 170, dataIndex: 'os', sortable: true, xtype: 'templatecolumn', tpl: '<img style="margin:0 3px"  class="x-icon-osfamily-small x-icon-osfamily-small-{osFamily}" src="' + Ext.BLANK_IMAGE_URL + '"/> {os}' },
+            {
+                text: 'OS',
+                flex: .8,
+                dataIndex: 'osId',
+                sortable: true,
+                xtype: 'templatecolumn',
+                tpl: '{[this.getOsById(values.osId)]}'
+            },
             { header: 'Created by', dataIndex: 'createdByEmail', flex: 0.5, maxWidth: 150, sortable: false },
             { header: 'Created on', dataIndex: 'dtAdded', flex: 0.5, maxWidth: 170, sortable: true },
-            { header: "Status", maxWidth: 100, dataIndex: 'status', sortable: false, xtype: 'statuscolumn', statustype: 'image', resizable: false },
+            { header: 'Status', width: 100, minWidth: 100, dataIndex: 'status', sortable: false, xtype: 'statuscolumn', statustype: 'image', resizable: false },
 
         ],
 
-        multiSelect: true,
         selModel: {
             selType: 'selectedmodel',
             pruneRemoved: true,
@@ -199,6 +168,7 @@ Scalr.regPage('Scalr.ui.images.view', function (loadParams, moduleParams) {
         dockedItems: [{
             xtype: 'toolbar',
             dock: 'top',
+            ui: 'simple',
             defaults: {
                 margin: '0 0 0 12'
             },
@@ -216,98 +186,42 @@ Scalr.regPage('Scalr.ui.images.view', function (loadParams, moduleParams) {
                     items: [{
                         xtype: 'textfield',
                         name: 'id',
+                        fieldLabel: 'Cloud Image ID',
+                        labelAlign: 'top'
+                    },{
+                        xtype: 'textfield',
+                        name: 'hash',
                         fieldLabel: 'Image ID',
                         labelAlign: 'top'
                     }]
                 }
             }, {
-                xtype: 'cyclealt',
-                margin: '0 0 0 12',
-                itemId: 'platform',
-                name: 'platform',
-                getItemIconCls: false,
-                width: 110,
-                hidden: platformFilterItems.length === 2,
+                xtype: 'cloudlocationfield',
                 cls: 'x-btn-compressed',
-                changeHandler: function(comp, item) {
-                    comp.next('#location').setPlatform(item.value);
-                    imagesStore.updateParamsAndLoad({platform: item.value, cloudLocation: undefined});
-                },
-                getItemText: function(item) {
-                    return item.value ? 'Cloud: <img src="' + Ext.BLANK_IMAGE_URL + '" class="' + item.iconCls + '" title="' + item.text + '" />' : item.text;
-                },
-                menu: {
-                    cls: 'x-menu-light x-menu-cycle-button-filter',
-                    minWidth: 200,
-                    items: platformFilterItems
-                }
-            }, {
-                xtype: 'combo',
-                itemId: 'location',
-                name: 'cloudLocation',
-                matchFieldWidth: false,
-                flex: 2,
-                minWidth: 90,
-                maxWidth: 220,
-                editable: false,
-                store: {
-                    fields: ['id', 'name'],
-                    proxy: 'object'
-                },
-                displayField: 'name',
-                emptyText: 'All locations',
-                valueField: 'id',
-                value: '',
-                queryMode: 'local',
-                platform: '',
-                locationsLoaded: false,
+                platforms: platforms,
+                forceAllLocations: true,
                 listeners: {
-                    change: function (comp, value) {
-                        imagesStore.updateParamsAndLoad({cloudLocation: value});
-                    },
-                    beforequery: function () {
-                        var me = this;
-                        me.collapse();
-                        Scalr.loadCloudLocations(me.platform, function (data) {
-                            var locations = {'': 'All locations'};
-                            Ext.Object.each(data, function (platform, loc) {
-                                Ext.apply(locations, loc);
-                            });
-                            me.store.load({data: locations});
-                            me.locationsLoaded = true;
-                            me.expand();
-                        });
-                        return false;
-                    },
-                    afterrender: {
-                        fn: function () {
-                            this.setPlatform();
-                        },
-                        single: true
+                    change: function (me, value) {
+                        imagesStore.applyProxyParams(value);
                     }
-                },
-                setPlatform: function (platform) {
-                    this.platform = platform;
-                    this.locationsLoaded = false;
-                    this.store.removeAll();
-                    this.suspendEvents(false);
-                    this.reset();
-                    this.resumeEvents();
                 }
             }, {
                 xtype: 'cyclealt',
                 itemId: 'scope',
+                name: 'scope',
                 getItemIconCls: false,
                 flex: 1,
                 minWidth: 100,
                 maxWidth: 110,
                 hidden: Scalr.user.type == 'ScalrAdmin',
                 cls: 'x-btn-compressed',
-                changeHandler: function(comp, item) {
-                    imagesStore.updateParamsAndLoad({scope: item.value});
+                changeHandler: function (comp, item) {
+                    imagesStore.applyProxyParams({
+                        scope: item.value
+                    });
                 },
                 getItemText: function(item) {
-                    return item.value ? 'Scope: <img src="' + Ext.BLANK_IMAGE_URL + '" class="' + item.iconCls + '" style="vertical-align: top; width: 14px; height: 14px;" title="' + item.text + '" />' : item.text;
+                    return item.value ? 'Scope: &nbsp;<img src="' + Ext.BLANK_IMAGE_URL + '" class="' + item.iconCls + '" title="' + item.text + '" />' : item.text;
                 },
                 menu: {
                     cls: 'x-menu-light x-menu-cycle-button-filter',
@@ -327,15 +241,18 @@ Scalr.regPage('Scalr.ui.images.view', function (loadParams, moduleParams) {
                 }
             }, {
                 xtype: 'cyclealt',
-                itemId: 'os',
+                itemId: 'osFamily',
+                name: 'osFamily',
                 flex: 1,
                 minWidth: 80,
                 maxWidth: 110,
                 getItemIconCls: false,
                 cls: 'x-btn-compressed',
                 hidden: osFilterItems.length === 2,
-                changeHandler: function(comp, item) {
-                    imagesStore.updateParamsAndLoad({osFamily: item.value});
+                changeHandler: function (comp, item) {
+                    imagesStore.applyProxyParams({
+                        osFamily: item.value
+                    });
                 },
                 getItemText: function(item) {
                     return item.value ? 'OS: <img src="' + Ext.BLANK_IMAGE_URL + '" class="' + item.iconCls + '" title="' + item.text + '"/>' : item.text;
@@ -349,24 +266,23 @@ Scalr.regPage('Scalr.ui.images.view', function (loadParams, moduleParams) {
                 xtype: 'tbfill',
                 flex: .01
             }, {
-                text: 'Add image',
+                text: 'New image',
                 disabled: !Scalr.isAllowed('FARMS_IMAGES', 'create') && Scalr.user.type != 'ScalrAdmin',
-                cls: 'x-btn-green-bg',
+                cls: 'x-btn-green',
                 handler: function() {
-                    Scalr.event.fireEvent('redirect', '#/images/create');
+                    Scalr.event.fireEvent('redirect', '#' + Scalr.utils.getUrlPrefix() + '/images/create');
                 }
             }, {
                 itemId: 'refresh',
-                ui: 'paging',
-                iconCls: 'x-tbar-loading',
+                iconCls: 'x-btn-icon-refresh',
                 tooltip: 'Refresh',
-                handler: function() {
-                    imagesStore.updateParamsAndLoad();
+                handler: function () {
+                    imagesStore.applyProxyParams();
                 }
             }, {
-                ui: 'paging',
                 itemId: 'delete',
-                iconCls: 'x-tbar-delete',
+                iconCls: 'x-btn-icon-delete',
+                cls: 'x-btn-red',
                 tooltip: 'Select one or more images to delete them',
                 disabled: true,
                 handler: function() {
@@ -374,7 +290,7 @@ Scalr.regPage('Scalr.ui.images.view', function (loadParams, moduleParams) {
                         confirmBox: {
                             msg: 'Remove selected image(s): %s ?',
                             type: 'delete',
-                            formWidth: 440,
+                            formWidth: 460,
                             form: deleteConfirmationForm
                         },
                         processBox: {
@@ -382,8 +298,12 @@ Scalr.regPage('Scalr.ui.images.view', function (loadParams, moduleParams) {
                             type: 'delete'
                         },
                         url: '/images/xRemove',
-                        success: function() {
-                            imagesStore.updateParamsAndLoad();
+                        success: function (response) {
+                            imagesStore.remove(Ext.Array.map(
+                                response.processed, function (id) {
+                                    return imagesStore.getById(id);
+                                }
+                            ));
                         }
                     }, records = this.up('grid').getSelectionModel().getSelection(), data = [];
 
@@ -406,25 +326,9 @@ Scalr.regPage('Scalr.ui.images.view', function (loadParams, moduleParams) {
     var form = Ext.create('Ext.form.Panel', {
         hidden: true,
         autoScroll: true,
-        trackResetOnLoad: true,
         listeners: {
-            afterrender: function() {
-                var me = this;
-                grid.getSelectionModel().on('focuschange', function(gridSelModel, oldFocused, newFocused){
-                    if (newFocused) {
-                        if (me.getRecord() !== newFocused) {
-                            me.loadRecord(newFocused);
-                        }
-                    } else {
-                        me.setVisible(false);
-                        me.getForm().reset(true);
-                    }
-                });
-            },
-            beforeloadrecord: function(record) {
+            loadrecord: function(record) {
                 var frm = this.getForm();
-
-                frm.reset(true);
 
                 this.down('#main').setTitle(record.get('name'));
                 this.down('#delete').setDisabled(!(
@@ -451,27 +355,16 @@ Scalr.regPage('Scalr.ui.images.view', function (loadParams, moduleParams) {
                 frm.findField('statusError')[record.get('status') == 'failed' ? 'show' : 'hide']();
                 frm.findField('type')[record.get('platform') == 'ec2' ? 'show' : 'hide']();
                 frm.findField('dtLastUsed')[Scalr.user.type == 'ScalrAdmin' && !record.get('envId') || record.get('envId') ? 'show' : 'hide']();
-            },
-            loadrecord: function() {
-                if (!this.isVisible()) {
-                    this.show();
-                }
             }
         },
         items: [{
             xtype: 'fieldset',
+            cls: 'x-fieldset-separator-none x-fieldset-no-text-transform',
+            headerCls: 'x-fieldset-separator-bottom',
             itemId: 'main',
-            style: 'padding-bottom: 8px'
-        }, {
-            xtype: 'fieldset',
-            cls: 'x-fieldset-separator-none',
-            layout: {
-                type: 'vbox',
-                align: 'stretch'
-            },
-            flex: 1,
             defaults: {
-                labelWidth: 120
+                labelWidth: 140,
+                anchor: '100%'
             },
             items: [{
                 xtype: 'container',
@@ -479,98 +372,109 @@ Scalr.regPage('Scalr.ui.images.view', function (loadParams, moduleParams) {
                 margin: '0 0 6 0',
                 items: [{
                     xtype: 'displayfield',
-                    labelWidth: 120,
+                    name: 'cloudLocation',
+                    fieldLabel: 'Location',
+                    labelWidth: 140,
                     flex: 1,
-                    name: 'platform',
-                    fieldLabel: 'Platform'
+                    renderer: function (value) {
+                        var record = form.getRecord();
+                        var cloudLocation = !Ext.isEmpty(value) ? value : 'All locations';
+
+                        if (!Ext.isEmpty(record)) {
+                            var platform = record.get('platform');
+                            var platformName = Scalr.utils.getPlatformName(platform);
+
+                            return '<img class="x-icon-platform-small x-icon-platform-small-' + platform +
+                                '" data-qtip="' + platformName + '" src="' + Ext.BLANK_IMAGE_URL +
+                                '"/> ' + cloudLocation;
+                        }
+
+                        return cloudLocation;
+                    }
                 }, {
                     itemId: 'addTo',
                     xtype: 'splitbutton',
-                    //height: 26,
-                    width: 90,
+                    width: 80,
                     text: 'Use',
-                    cls: 'x-btn-default-small-green',
+                    cls: 'x-btn-green',
                     handler: function() {
                         this.maybeShowMenu();
                     },
-                    menu: [{
-                        text: 'in new Role',
-                        handler: function() {
-                            // redirect
-                            Scalr.event.fireEvent('redirect', '#/roles/edit', false, {
-                                image: this.up('form').getForm().getRecord().getData()
-                            });
-                        }
-                    }, {
-                        text: 'in existing Role',
-                        handler: function () {
-                            var data = this.up('form').getForm().getRecord().getData();
-                            Scalr.Confirm({
-                                formWidth: 950,
-                                alignTop: true,
-                                winConfig: {
-                                    autoScroll: false
-                                },
-                                form: [{
-                                    xtype: 'roleselect',
-                                    image: data
-                                }],
-                                ok: 'Add',
-                                disabled: true,
-                                success: function (field, button) {
-                                    Scalr.event.fireEvent('redirect', '#/roles/' + button.roleId + '/edit', false, {
+                    menu: {
+                        xtype: 'menu',
+                        cls: 'x-topmenu-farms',
+                        items: [{
+                            text: 'in new Role',
+                            handler: function() {
+                                // redirect
+                                Scalr.event.fireEvent('redirect', '#/roles/edit', false, {
+                                    image: this.up('form').getForm().getRecord().getData()
+                                });
+                            }
+                        }, {
+                            text: 'in existing Role',
+                            handler: function () {
+                                var data = this.up('form').getForm().getRecord().getData();
+                                Scalr.Confirm({
+                                    formWidth: 950,
+                                    alignTop: true,
+                                    winConfig: {
+                                        autoScroll: false
+                                    },
+                                    form: [{
+                                        xtype: 'roleselect',
                                         image: data
-                                    });
-                                }
-                            });
+                                    }],
+                                    ok: 'Add',
+                                    disabled: true,
+                                    success: function (field, button) {
+                                        Scalr.event.fireEvent('redirect', '#/roles/' + button.roleId + '/edit', false, {
+                                            image: data
+                                        });
+                                    }
+                                });
 
-                        }
-                    }]
+                            }
+                        }]
+                    }
                 }]
-            }, {
-                xtype: 'displayfield',
-                name: 'cloudLocation',
-                fieldLabel: 'Cloud Location',
-                renderer: function (value) {
-                    return value ? value : 'All locations';
-                }
             }, {
                 xtype: 'displayfield',
                 name: 'id',
-                fieldLabel: 'Image ID'
+                fieldLabel: 'Cloud Image ID'
             }, {
-                xtype: 'fieldcontainer',
+                xtype: 'textfield',
                 fieldLabel: 'Name',
-                layout: 'hbox',
-                items: [{
-                    xtype: 'textfield',
-                    vtype: 'rolename',
-                    name: 'name',
-                    flex: 1,
-                    listeners: {
-                        focus: function() {
-                            this.up('form').down('#edit').setDisabled(this.readOnly);
-                        },
-                        blur: function() {
-                            this.up('form').down('#edit').setDisabled(!this.isDirty());
-                        }
+                vtype: 'rolename',
+                name: 'name',
+                flex: 1,
+                plugins: [{
+                    ptype: 'fieldicons',
+                    align: 'right',
+                    icons: {
+                        id: 'info',
+                        tooltip: 'Updating this Name in Scalr will not update the name of this image in your cloud'
                     }
-                }, {
-                    xtype: 'displayinfofield',
-                    margin: '0 0 0 6',
-                    value: 'Updating this Name in Scalr will not update the name of this image in your cloud'
-                }]
-
+                }],
+                listeners: {
+                    focus: function() {
+                        this.up('form').down('#edit').setDisabled(this.readOnly);
+                    },
+                    blur: function() {
+                        this.up('form').down('#edit').setDisabled(!this.isDirty());
+                    }
+                }
             }, {
                 xtype: 'displayfield',
                 name: 'architecture',
                 fieldLabel: 'Architecture'
             }, {
                 xtype: 'displayfield',
-                name: 'os',
+                name: 'osId',
                 fieldLabel: 'Operating system',
                 renderer: function(value) {
-                    return value ? value : 'Unknown';
+                    var os = Scalr.utils.getOsById(value);
+                    return os ? '<img src="'+Ext.BLANK_IMAGE_URL+'" title="" class="x-icon-osfamily-small x-icon-osfamily-small-'+os.family+'" />&nbsp;' + os.name : value;
                 }
             },{
                 xtype: 'displayfield',
@@ -600,7 +504,7 @@ Scalr.regPage('Scalr.ui.images.view', function (loadParams, moduleParams) {
                 renderer: function(value) {
                     var record = this.up('form').getForm().getRecord();
                     if (value == 'BundleTask' && record) {
-                        return '<a href="#/bundletasks/view?id=' + record.get('bundleTaskId') + '">BundleTask</a>';
+                        return '<a href="#/bundletasks?id=' + record.get('bundleTaskId') + '">BundleTask</a>';
                     } else {
                         return value;
                     }
@@ -638,10 +542,10 @@ Scalr.regPage('Scalr.ui.images.view', function (loadParams, moduleParams) {
                         if (used) {
                             text = ['This <b>Image</b> is currently used by '];
                             if (used['rolesCount'] > 0) {
-                                text.push('<a href="#/roles/manager?imageId=' + record.get('id') + '">' + (used['roleName'] ? used['roleName'] : (used['rolesCount'] + '&nbsp;Role(s)')) + '</a>');
+                                text.push('<a href="#/roles?imageId=' + record.get('id') + '">' + (used['roleName'] ? used['roleName'] : (used['rolesCount'] + '&nbsp;Role(s)')) + '</a>');
                             }
                             if (used['serversCount'] > 0) {
-                                text.push((used['rolesCount'] > 0 ? ' and ' : '') + '<a href="#/servers/view?imageId=' + record.get('id') + '">' + used['serversCount'] + '&nbsp;Server(s)</a>');
+                                text.push((used['rolesCount'] > 0 ? ' and ' : '') + '<a href="#/servers?imageId=' + record.get('id') + '">' + used['serversCount'] + '&nbsp;Server(s)</a>');
                             }
                             text = text.join('');
                         } else {
@@ -712,9 +616,10 @@ Scalr.regPage('Scalr.ui.images.view', function (loadParams, moduleParams) {
                                     form: [{
                                         xtype: 'fieldset',
                                         title: 'Copy image across regions',
+                                        cls: 'x-fieldset-separator-none',
                                         defaults: {
                                             anchor: '100%',
-                                            labelWidth: 120
+                                            labelWidth: 140
                                         },
                                         items: [{
                                             xtype: 'displayfield',
@@ -750,8 +655,7 @@ Scalr.regPage('Scalr.ui.images.view', function (loadParams, moduleParams) {
                                     cloudLocation: record.get('cloudLocation')
                                 },
                                 success: function (data) {
-                                    grid.down('filterfield').setValue('(id:' + data['id'] + ')').storeHandler();
-
+                                    Scalr.event.fireEvent('redirect', '#/images?hash=' + data.hash);
                                 }
                             });
                         }
@@ -764,28 +668,30 @@ Scalr.regPage('Scalr.ui.images.view', function (loadParams, moduleParams) {
                 disabled: true,
                 handler: function () {
                     var record = this.up('form').getForm().getRecord(), name = this.up('form').down('[name="name"]').getValue(), me = this;
-                    Scalr.Request({
-                        processBox: {
-                            action: 'save'
-                        },
-                        url: '/images/xUpdateName',
-                        params: {
-                            id: record.get('id'),
-                            platform: record.get('platform'),
-                            cloudLocation: record.get('cloudLocation'),
-                            name: name
-                        },
-                        success: function() {
-                            record.set('name', name);
-                            me.disable();
-                        }
-                    });
+                    if (this.up('form').down('[name="name"]').isValid())
+                        Scalr.Request({
+                            processBox: {
+                                action: 'save'
+                            },
+                            url: '/images/xUpdateName',
+                            params: {
+                                id: record.get('id'),
+                                platform: record.get('platform'),
+                                cloudLocation: record.get('cloudLocation'),
+                                name: name
+                            },
+                            success: function(data) {
+                                record.set('name', data.name);
+                                record.commit();
+                                me.disable();
+                            }
+                        });
                 }
             }, {
                 itemId: 'delete',
                 xtype: 'button',
                 text: 'Delete',
-                cls: 'x-btn-default-small-red',
+                cls: 'x-btn-red',
                 handler: function() {
                     var record = this.up('form').getForm().getRecord();
 
@@ -793,23 +699,30 @@ Scalr.regPage('Scalr.ui.images.view', function (loadParams, moduleParams) {
                         confirmBox: {
                             msg: 'Delete "' + record.get('id') + '" image?',
                             type: 'delete',
-                            formWidth: 440,
+                            formWidth: 460,
                             form: deleteConfirmationForm
                         },
                         params: {
-                            images: Ext.encode([{
-                                id: record.get('id'),
-                                platform: record.get('platform'),
-                                cloudLocation: record.get('cloudLocation')
-                            }])
+                            images: Ext.encode([record.get('hash')])
                         },
                         processBox: {
                             msg: 'Deleting image ...',
                             type: 'delete'
                         },
                         url: '/images/xRemove',
-                        success: function() {
-                            imagesStore.updateParamsAndLoad();
+                        success: function (response) {
+                            imagesStore.remove(Ext.Array.map(
+                                response.processed, function (hash) {
+                                    return imagesStore.getById(hash);
+                                }
+                            ));
+                            Ext.each(response.pending, function(hash){
+                                var image = imagesStore.getById(hash);
+                                if (image) {
+                                    image.set('status', 'delete');
+                                    record.commit();
+                                }
+                            });
                         }
                     });
                 }
@@ -818,45 +731,45 @@ Scalr.regPage('Scalr.ui.images.view', function (loadParams, moduleParams) {
     });
 
     var panel = Ext.create('Ext.panel.Panel', {
-        title: 'Images &raquo; Manager',
         layout: {
             type: 'hbox',
             align: 'stretch'
         },
         scalrOptions: {
             reload: false,
-            maximize: 'all'
+            maximize: 'all',
+            menuTitle: 'Images',
+            menuHref: '#/images',
+            menuFavorite: true
         },
-        tools: [{
-            xtype: 'favoritetool',
-            favorite: {
-                text: 'Images',
-                href: '#/images/view'
-            }
-        }],
+        stateId: 'grid-images-view',
         items: [
-            grid,
-            {
-                xtype: 'container',
-                itemId: 'rightcol',
-                flex: .4,
-                minWidth: 400,
-                maxWidth: 600,
-                layout: 'fit',
-                cls: 'x-transparent-mask',
-                items: form
-        }],
-        listeners: {
-            afterrender: function() {
-                // temp fix: applyFilters should be called before updateParamsAndLoad
-                grid.on('applyparams', function() {
-                    imagesStore.updateParamsAndLoad();
-                });
-            }
-        }
+            grid
+        ,{
+            xtype: 'container',
+            itemId: 'rightcol',
+            flex: .4,
+            minWidth: 400,
+            maxWidth: 600,
+            layout: 'fit',
+            cls: 'x-transparent-mask',
+            items: form
+        }]
     });
 
-    grid.relayEvents(panel, ['applyparams']);
+	Scalr.event.on('update', function (type, image) {
+		if (type == '/images/create') {
+            var record = imagesStore.getById(image.hash);
+            if (Ext.isEmpty(record)) {
+                record = imagesStore.add(image)[0];
+            } else {
+                record.set(image);
+                grid.clearSelectedRecord();
+            }
+            Ext.defer(function(){grid.view.focusRow(record)}, 100);
+		}
+	}, panel);
+
 
     return panel;
 });
@@ -873,8 +786,8 @@ Ext.define('Scalr.ui.ImagesViewRoleSelect', {
         var me = this;
 
         me.title = 'Select role to add an image';
-        if (me.image.osFamily && me.image.osVersion) {
-            me.title = me.title + '<br><span style="font-size: 11px">Showing only Roles matching Image properties: ' + Scalr.utils.beautifyOsFamily(me.image.osFamily) + ' ' + me.image.osVersion+ '</span>';
+        if (me.image.osId) {
+            me.title = me.title + '<br><span style="font-size: 11px">Showing only Roles matching Image OS: ' + Scalr.utils.getOsById(me.image.osId, 'name') + '</span>';
         }
 
         me.callParent(arguments);
@@ -882,7 +795,7 @@ Ext.define('Scalr.ui.ImagesViewRoleSelect', {
         var store = Ext.create('store.store', {
             fields: [
                 {name: 'id', type: 'int'},
-                'name', 'os', 'osName', 'osFamily', 'platforms', 'status', 'canAddImage'
+                'name', 'osId', 'platforms', 'status', 'canAddImage'
             ],
             autoLoad: true,
             proxy: {
@@ -899,7 +812,6 @@ Ext.define('Scalr.ui.ImagesViewRoleSelect', {
 
         me.add([{
             xtype: 'grid',
-            cls: 'x-grid-shadow',
             store: store,
 
             plugins: {
@@ -915,17 +827,27 @@ Ext.define('Scalr.ui.ImagesViewRoleSelect', {
 
             columns: [
                 { header: "", width: 38, dataIndex: 'canAddImage', sortable: false, xtype: 'templatecolumn', align: 'center', tpl:
-                    '<img src="' + Ext.BLANK_IMAGE_URL + '" class="x-icon-<tpl if="canAddImage">ok<tpl else>fail</tpl>"' +
-                        'data-qtip="<tpl if="canAddImage">You can add this image<tpl else>You can\'t add this Image to this Role because it already has an Image configured for this Cloud Platform and Location.</tpl>"/>'
+                    '<div class="x-grid-icon x-grid-icon-simple x-grid-icon-<tpl if="canAddImage">ok<tpl else>fail</tpl>"' +
+                        'data-qtip="<tpl if="canAddImage">You can add this image<tpl else>You can\'t add this Image to this Role because it already has an Image configured for this Cloud Platform and Location.</tpl>"</div>'
                 },
                 { text: "ID", width: 80, dataIndex: 'id'},
                 { text: "Role name", flex: 1, dataIndex: 'name'},
                 { text: "Clouds", flex: .5, minWidth: 110, dataIndex: 'platforms', sortable: false, xtype: 'templatecolumn', tpl:
                     '<tpl for="platforms">'+
-                        '<img style="margin:0 3px"  class="x-icon-platform-small x-icon-platform-small-{.}" title="{[Scalr.utils.getPlatformName(values)]}" src="' + Ext.BLANK_IMAGE_URL + '"/>'+
+                        '<img style="margin:0 3px 0"  class="x-icon-platform-small x-icon-platform-small-{.}" title="{[Scalr.utils.getPlatformName(values)]}" src="' + Ext.BLANK_IMAGE_URL + '"/>'+
                     '</tpl>'
                 },
-                { text: 'OS', flex: .7, minWidth: 160, dataIndex: 'os', align: 'left', sortable: true, hidden: !!(me.image.osFamily && me.image.osVersion), xtype: 'templatecolumn', tpl: '<img style="margin:0 3px"  class="x-icon-osfamily-small x-icon-osfamily-small-{osFamily}" src="' + Ext.BLANK_IMAGE_URL + '"/> {os}' },
+                {
+                    text: 'OS',
+                    flex: .7,
+                    minWidth: 160,
+                    dataIndex: 'osId',
+                    align: 'left',
+                    sortable: true,
+                    hidden: !me.image.osId,
+                    xtype: 'templatecolumn',
+                    tpl: '{[this.getOsById(values.osId)]}'
+                },
                 { text: "Status", width: 120, minWidth: 120, dataIndex: 'status', sortable: true, xtype: 'statuscolumn', statustype: 'role' }
             ],
 

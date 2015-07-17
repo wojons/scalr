@@ -12,56 +12,60 @@ use Scalr\Model\AbstractEntity;
 abstract class AbstractSettingEntity extends AbstractEntity
 {
     /**
-     * Misc cache
-     *
-     * @var array
+     * The field name for the value property
      */
-    private static $cache = [];
+    const ENTITY_VALUE_FIELD_NAME = 'value';
 
     /**
      * Gets a value from setting
      *
-     * @param   string    $id        The identifier of the setting
-     * @param   string    $useCache  optional Whether it should use cache
-     * @return  string    Returns a value from setting
+     * @param   string|array $pk        The primary key
+     * @return  string       Returns a value from setting
      */
-    public static function getValue($id, $useCache = true)
+    public static function getValue($pk)
     {
-        $class = get_called_class();
+        $pk = is_array($pk) ? $pk : [$pk];
 
-        if (empty(self::$cache[$class]) || !array_key_exists($id, self::$cache[$class]) || !$useCache) {
-            $entity = static::findPk($id);
+        $entity = call_user_func_array("static::findPk", $pk);
 
-            if ($entity === null) {
-                self::$cache[$class][$id] = null;
-            } else {
-                self::$cache[$class][$id] = $entity->value;
-            }
-        }
-
-        return self::$cache[$class][$id];
+        return $entity !== null ? $entity->{static::ENTITY_VALUE_FIELD_NAME} : null;
     }
 
     /**
      * Sets a value to setting
      *
-     * @param   string    $id     The identifier of the setting
-     * @param   string    $value  The value
+     * @param   string|array $pk     The primary key of the setting
+     * @param   string       $value  The value
+     * @return  AbstractSettingEntity|null Returns the entity object or NULL if it has been removed
      */
-    public static function setValue($id, $value)
+    public static function setValue($pk, $value)
     {
-        $class = get_called_class();
+        $pk = is_array($pk) ? $pk : [$pk];
 
-        self::$cache[$class][$id] = $value;
+        $entity = new static;
 
-        $entity = new $class;
-        $entity->id = $id;
+        $iterator = $entity->getIterator();
 
-        if ($value === null) {
-            $entity->delete();
+        foreach ($iterator->getPrimaryKey() as $name) {
+            $entity->$name = array_shift($pk);
+        }
+
+        $entity->{static::ENTITY_VALUE_FIELD_NAME} = $value;
+        $entity->save();
+
+        return $entity->{static::ENTITY_VALUE_FIELD_NAME} === null ? null : $entity;
+    }
+
+    /**
+     * {@inheritdoc}
+     * @see \Scalr\Model\AbstractEntity::save()
+     */
+    public function save()
+    {
+        if ($this->{static::ENTITY_VALUE_FIELD_NAME} === null) {
+            $this->delete();
         } else {
-            $entity->value = $value;
-            $entity->save();
+            parent::save();
         }
     }
 }

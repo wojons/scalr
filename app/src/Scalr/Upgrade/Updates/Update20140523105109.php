@@ -194,9 +194,6 @@ class Update20140523105109 extends AbstractUpdate implements SequenceInterface
                         $image->bundleTaskId = $t['bundle_task_id'];
                         $image->platform = $t['platform'];
                         $image->cloudLocation = $t['cloud_location'];
-                        $image->osFamily = $t['os_family'];
-                        $image->osVersion = $t['os_version'];
-                        $image->os = $t['os_name'];
                         $image->createdById = $t['created_by_id'];
                         $image->createdByEmail = $t['created_by_email'];
                         $image->architecture = $t['architecture'] ? $t['architecture'] : 'x86_64';

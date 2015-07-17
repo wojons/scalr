@@ -1,11 +1,9 @@
 Scalr.regPage('Scalr.ui.tools.aws.vpc.createNetworkInterface', function (loadParams, moduleParams) {
     var subnet = moduleParams['subnet'];
-	var form = Ext.create('Ext.form.Panel', {
-		fieldDefaults: {
-			anchor: '100%'
-		},
+	var form = Scalr.utils.Window({
+        xtype: 'form',
 		scalrOptions: {
-			modal: true
+			modalWindow: true
 		},
 		width: 600,
         defaults: {
@@ -53,7 +51,7 @@ Scalr.regPage('Scalr.ui.tools.aws.vpc.createNetworkInterface', function (loadPar
                             if (data['ni']) {
                                 Scalr.event.fireEvent('update', '/tools/aws/vpc/createNetworkInterface', data['ni']);
                             }
-                            Scalr.event.fireEvent('close');
+                            form.close();
                         }
                     });
 				}
@@ -61,7 +59,7 @@ Scalr.regPage('Scalr.ui.tools.aws.vpc.createNetworkInterface', function (loadPar
 				xtype: 'button',
 				text: 'Cancel',
 				handler: function() {
-					Scalr.event.fireEvent('close');
+					form.close();
 				}
 			}]
 		}]

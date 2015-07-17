@@ -10,7 +10,7 @@ Scalr.regPage('Scalr.ui.farms.builder.addrole.openstack', function () {
          
         layout: 'fit',
         defaults: {
-            maxWidth: 762
+            maxWidth: 760
         },
 
         isVisibleForRole: function(record) {
@@ -41,17 +41,11 @@ Scalr.regPage('Scalr.ui.farms.builder.addrole.openstack', function () {
         },
 
         isValid: function() {
-            var res = true,
-                field;
-            field = this.down('[name="openstack.flavor-id"]');
-            res = field.validate() || {comp: field, message: 'Instance type is required'};
-            return res;
+            return true;
         },
 
         getSettings: function() {
-            var settings = {
-                'openstack.flavor-id': this.down('[name="openstack.flavor-id"]').getValue()
-            };
+            var settings = {};
             if (Scalr.getPlatformConfigValue( this.currentRole.get('platform'), 'ext.floating_ips_enabled') == 1) {
                 settings['openstack.ip-pool'] = this.down('[name="openstack.ip-pool"]').getValue();
             }
@@ -59,31 +53,20 @@ Scalr.regPage('Scalr.ui.farms.builder.addrole.openstack', function () {
         },
 
         items: [{
-            xtype: 'container',
-            layout: 'hbox',
-            items: [{
-                xtype: 'instancetypefield',
-                name: 'openstack.flavor-id',
-                labelWidth: 90,
-                flex: 1,
-                allowBlank: false
-            },{
-                xtype: 'combo',
-                name: 'openstack.ip-pool',
-                flex: 1,
-                fieldLabel: 'Floating IPs pool',
-                labelWidth: 110,
-                editable: false,
-                hidden: true,
-                margin: '0 0 0 64',
-                queryMode: 'local',
-                store: {
-                    fields: [ 'id', 'name' ],
-                    proxy: 'object'
-                },
-                valueField: 'id',
-                displayField: 'name'
-            }]
+            xtype: 'combo',
+            name: 'openstack.ip-pool',
+            flex: 1,
+            fieldLabel: 'Floating IPs pool',
+            labelWidth: 120,
+            editable: false,
+            hidden: true,
+            queryMode: 'local',
+            store: {
+                model: Scalr.getModel({fields: [ 'id', 'name' ]}),
+                proxy: 'object'
+            },
+            valueField: 'id',
+            displayField: 'name'
         }]
-    }
+    };
 });

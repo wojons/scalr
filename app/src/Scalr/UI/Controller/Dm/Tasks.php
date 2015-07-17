@@ -106,15 +106,12 @@ class Scalr_UI_Controller_Dm_Tasks extends Scalr_UI_Controller
             LEFT JOIN roles ON servers.farm_roleid = roles.id
             WHERE dt.`status` != ? AND dt.env_id = ?
         ";
+        $args = array(Scalr_Dm_DeploymentTask::STATUS_ARCHIVED, $this->getEnvironmentId());
 
-        $allFarms = $this->request->isAllowed(Acl::RESOURCE_FARMS, Acl::PERM_FARMS_NOT_OWNED_FARMS);
-        if (!$allFarms) {
-            //join becomes inner
-            $sql .= " AND farms.created_by_id = " . $this->db->qstr($this->user->getId()) . " ";
-        }
+        list($sql, $args) = $this->request->prepareFarmSqlQuery($sql, $args, 'farms');
 
         $response = $this->buildResponseFromSql2($sql, array('id', 'application_name', 'farm_name', 'role_name', 'server_index', 'status', 'dtadded', 'dtdeployed'),
-            array(), array(Scalr_Dm_DeploymentTask::STATUS_ARCHIVED, $this->getEnvironmentId()));
+            array(), $args);
 
         foreach ($response["data"] as $k => $row) {
             $data = false;

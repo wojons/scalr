@@ -177,7 +177,7 @@ class Ec2Api extends AbstractApi
     }
 
     /**
-     * Loads RouteList from simple xml object
+     * Loads lists from simple xml object
      *
      * @param   string            $name The name of the ListDataType extended object without suffix "List"
      * @param   \SimpleXMLElement $sxml The simplexmlelement object

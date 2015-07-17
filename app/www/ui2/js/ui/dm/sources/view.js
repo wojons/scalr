@@ -11,27 +11,15 @@ Scalr.regPage('Scalr.ui.dm.sources.view', function (loadParams, moduleParams) {
 	});
 
 	return Ext.create('Ext.grid.Panel', {
-		title: 'Deployments &raquo; Sources',
 		scalrOptions: {
-			'reload': false,
-			'maximize': 'all'
+			reload: false,
+			maximize: 'all',
+            menuTitle: 'Deployments Sources'
 		},
 		store: store,
 		stateId: 'grid-dm-sources-view',
 		stateful: true,
-		plugins: {
-			ptype: 'gridstore'
-		},
-
-		tools: [{
-			xtype: 'gridcolumnstool'
-		}, {
-			xtype: 'favoritetool',
-			favorite: {
-				text: 'Deployment Sources',
-				href: '#/dm/sources/view'
-			}
-		}],
+        plugins: [ 'gridstore', 'applyparams' ],
 
 		viewConfig: {
 			emptyText: 'No sources found',
@@ -44,19 +32,19 @@ Scalr.regPage('Scalr.ui.dm.sources.view', function (loadParams, moduleParams) {
 			{ header: "Type", width: 120, dataIndex: 'type', sortable: true },
 			{ header: "Auth type", width: 120, dataIndex: 'auth_type', sortable: false },
 			{
-				xtype: 'optionscolumn2',
+				xtype: 'optionscolumn',
 				menu: [{
 					text: 'Edit',
 					iconCls: 'x-menu-icon-edit',
+                    showAsQuickAction: true,
 					href: '#/dm/sources/{id}/edit'
-				}, {
-					xtype: 'menuseparator'
 				}, {
 					text: 'Delete',
 					iconCls: 'x-menu-icon-delete',
+                    showAsQuickAction: true,
 					request: {
 						confirmBox: {
-							msg: 'Are you sure want to remove demployment source "{url}"?',
+							msg: 'Are you sure want to remove deployment source "{url}"?',
 							type: 'delete'
 						},
 						processBox: {
@@ -88,7 +76,7 @@ Scalr.regPage('Scalr.ui.dm.sources.view', function (loadParams, moduleParams) {
 			dock: 'top',
 			beforeItems: [{
                 text: 'Add source',
-                cls: 'x-btn-green-bg',
+                cls: 'x-btn-green',
 				handler: function() {
 					Scalr.event.fireEvent('redirect', '#/dm/sources/create');
 				}

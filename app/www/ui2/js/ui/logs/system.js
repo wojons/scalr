@@ -1,25 +1,21 @@
 Scalr.regPage('Scalr.ui.logs.system', function (loadParams, moduleParams) {
-	Ext.applyIf(moduleParams['params'], loadParams);
+
 	var store = Ext.create('store.store', {
 		fields: [ 'serverid','message','severity','time','source','farmid','servername','farm_name', 's_severity', 'cnt' ],
 		proxy: {
 			type: 'scalr.paging',
-			extraParams: moduleParams['params'],
 			url: '/logs/xListLogs/'
 		},
 		remoteSort: true
 	});
 
-	var filterSeverity = function (combo, checked) {
-		store.proxy.extraParams['severity[' + combo.severityLevel + ']'] = checked ? 1 : 0;
-		store.load();
-	};
-
 	var panel = Ext.create('Ext.grid.Panel', {
-		title: 'Logs &raquo; System Log',
 		scalrOptions: {
-			'reload': false,
-			'maximize': 'all'
+			reload: false,
+            menuTitle: 'System Log',
+            menuHref: '#/logs/system',
+            menuFavorite: true,
+			maximize: 'all'
 		},
 		store: store,
 		stateId: 'grid-logs-system-view',
@@ -28,46 +24,43 @@ Scalr.regPage('Scalr.ui.logs.system', function (loadParams, moduleParams) {
 			ptype: 'gridstore',
             highlightNew: true
 		}, {
+            ptype: 'applyparams',
+            hiddenParams: ['severity']
+        }, {
 			ptype: 'rowexpander',
 			rowBodyTpl: [
-				'<p><b>Caller:</b> <a href="#/servers/{servername}/view">{servername}</a>/{source}</p>',
+				'<p><b>Caller:</b> <a href="#/servers?serverId={servername}">{servername}</a>/{source}</p>',
 				'<p><b>Message:</b> {message}</p>'
 			]
-		}],
+        }],
 
-		tools: [{
-			xtype: 'gridcolumnstool'
-		}, {
-			xtype: 'favoritetool',
-			favorite: {
-				text: 'System Log',
-				href: '#/logs/system'
-			}
-		}],
-
+        disableSelection: true,
 		viewConfig: {
 			emptyText: 'Nothing found',
 			loadingText: 'Loading...',
-			disableSelection: true,
 			getRowClass: function (record) {
                 if (record.get('severity') > 3) {
-                    return 'x-grid-row-red';
+                    return 'x-grid-row-color-red';
                 }
 			}
 		},
 
 		columns: [
-			{ header: '', width: 40, dataIndex: 'severity', sortable: false, resizable: false, hideable: false, align:'center', xtype: 'templatecolumn', tpl:
-				'<img src="' + Ext.BLANK_IMAGE_URL + '" class="x-icon-severity x-icon-severity-{severity}" />'
+			{ header: 'Type', width: 50, dataIndex: 'severity', sortable: false, resizable: false, hideable: false, align:'center', xtype: 'templatecolumn', tpl: new Ext.XTemplate(
+                '<div class="x-grid-icon x-grid-icon-simple x-grid-icon-{[this.getName(values.severity)]}"></div>', {
+                    getName: function(severity) {
+                        return { 1: 'bug', 2: 'info', 3: 'warning', 4: 'error', 5: 'fatalerror'}[severity];
+                    }
+                })
 			},
-			{ header: 'Time', width: 156, dataIndex: 'time', sortable: true },
-			{ header: 'Farm', width: 120, dataIndex: 'farm_name', itemId: 'farm_name', sortable: false, xtype: 'templatecolumn', tpl:
-				'<a href="#/farms/{farmid}/view">{farm_name}</a>'
+			{ header: 'Time', width: 180, dataIndex: 'time', sortable: true },
+			{ header: 'Farm', flex: 1, dataIndex: 'farm_name', name: 'farmName', itemId: 'farm_name', sortable: false, xtype: 'templatecolumn', tpl:
+				'<a href="#/farms?farmId={farmid}">{farm_name}</a>'
 			},
 			{ header: 'Caller', flex: 1, dataIndex: 'source', sortable: false, xtype: 'templatecolumn', tpl:
-				'<a href="#/servers/{servername}/view">{servername}</a>/{source}'
+				'<a href="#/servers?serverId={servername}">{servername}</a>/{source}'
 			},
-			{ header: 'Message', flex: 2, dataIndex: 'message', sortable: false, xtype: 'templatecolumn', tpl:
+			{ header: 'Message', flex: 3, dataIndex: 'message', sortable: false, xtype: 'templatecolumn', tpl:
 				'{[values.message.replace(/<br.*?>/g, "")]}' },
             { header: 'Count', width: 80, dataIndex: 'cnt', sortable: false, align: 'center' }
 		],
@@ -136,65 +129,73 @@ Scalr.regPage('Scalr.ui.logs.system', function (loadParams, moduleParams) {
 				},
 				editable: false,
 				queryMode: 'local',
-				itemId: 'farmId',
-				value: loadParams['farmId'] || 0,
+				name: 'farmId',
+				value: 0,
 				valueField: 'id',
 				displayField: 'name',
 				listeners: {
-					select: function () {
-						if (this.getValue() != 0)
-							panel.headerCt.items.getAt(3).hide();
-						else
-							panel.headerCt.items.getAt(3).show();
+					select: function (me) {
+						var value = me.getValue();
 
-						panel.store.proxy.extraParams['farmId'] = this.getValue();
-						panel.store.loadPage(1);
+						panel.down('[name=farmName]').setVisible(value === 0);
+
+						store.applyProxyParams({
+							farmId: value
+						});
 					}
 				}
             }, ' ', {
+                xtype: 'buttonfield',
 				text: 'Severity',
-				width: 100,
-				menu: {
+                name: 'severity',
+                arrowCls: 'split',
+                getValue: function () {
+                    var me = this;
+
+                    var value = [];
+
+                    Ext.Array.each(me.getMenu().query(), function (menuItem) {
+                        if (menuItem.checked) {
+                            value.push(menuItem.severityLevel);
+                        }
+                    });
+
+                    return value.join(',');
+                },
+                menu: {
+                    defaults: {
+                        checked: true,
+                        listeners: {
+                            checkchange: function (menuItem) {
+                                store.applyProxyParams({
+                                    'severity': menuItem.up('buttonfield').getValue()
+                                });
+                            }
+                        }
+                    },
 					items: [{
 						text: 'Fatal error',
-						checked: true,
-						severityLevel: 5,
-						listeners: {
-							checkchange: filterSeverity
-						}
+						severityLevel: 5
 					}, {
 						text: 'Error',
-						checked: true,
-						severityLevel: 4,
-						listeners: {
-							checkchange: filterSeverity
-						}
+						severityLevel: 4
 					}, {
 						text: 'Warning',
-						checked: true,
-						severityLevel: 3,
-						listeners: {
-							checkchange: filterSeverity
-						}
+						severityLevel: 3
 					}, {
 						text: 'Information',
-						checked: true,
-						severityLevel: 2,
-						listeners: {
-							checkchange: filterSeverity
-						}
+						severityLevel: 2
 					}, {
 						text: 'Debug',
 						checked: false,
-						severityLevel: 1,
-						listeners: {
-							checkchange: filterSeverity
-						}
+						severityLevel: 1
 					}]
 				}
 			}, ' ', {
-				text: '<img src="' + Ext.BLANK_IMAGE_URL + '" class="x-icon-download" />&nbsp;Download Log',
-				width: 160,
+                cls: 'x-btn-with-icon-and-text',
+                iconCls: 'x-btn-icon-download',
+                text: 'Download log',
+                width: 165,
 				handler: function () {
 					var params = Scalr.utils.CloneObject(store.proxy.extraParams);
 					params['action'] = 'download';

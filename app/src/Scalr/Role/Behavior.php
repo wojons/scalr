@@ -11,10 +11,12 @@ class Scalr_Role_Behavior
 
     const ROLE_BASE_KEEP_SCRIPTING_LOGS_TIME    = 'base.keep_scripting_logs_time';
     const ROLE_BASE_ABORT_INIT_ON_SCRIPT_FAIL   = 'base.abort_init_on_script_fail';
+    const ROLE_BASE_REBOOT_AFTER_HOSTINIT_PHASE = 'base.reboot_after_hostinit_phase';
     const ROLE_BASE_DISABLE_FIREWALL_MANAGEMENT = 'base.disable_firewall_management';
     const ROLE_BASE_HOSTNAME_FORMAT             = 'base.hostname_format';
     const ROLE_BASE_CUSTOM_TAGS                 = 'base.custom_tags';
     const ROLE_INSTANCE_NAME_FORMAT             = 'base.instance_name_format';
+    const ROLE_BASE_ROOT_DEVICE_CONFIG          = 'base.root_device_config';
 
     const ROLE_BASE_TERMINATE_STRATEGY =       'base.terminate_strategy';
     const ROLE_BASE_CONSIDER_SUSPENDED =       'base.consider_suspended';
@@ -172,7 +174,8 @@ class Scalr_Role_Behavior
                 if ($message->base->apiPort) {
                     $currentApiPort = $dbServer->getPort(DBServer::PORT_API);
                     $this->logger->warn(new FarmLogMessage(
-                        $dbServer->farmId, "Scalarizr API port was changed from {$currentApiPort} to {$message->base->apiPort}"
+                        $dbServer->farmId, "Scalarizr API port was changed from {$currentApiPort} to {$message->base->apiPort}",
+                        $dbServer->serverId
                     ));
                     $dbServer->SetProperty(SERVER_PROPERTIES::SZR_API_PORT, $message->base->apiPort);
                 }
@@ -180,7 +183,8 @@ class Scalr_Role_Behavior
                 if ($message->base->messagingPort) {
                     $currentCtrlPort = $dbServer->getPort(DBServer::PORT_CTRL);
                     $this->logger->warn(new FarmLogMessage(
-                        $dbServer->farmId, "Scalarizr CTRL port was changed from {$currentCtrlPort} to {$message->base->messagingPort}"
+                        $dbServer->farmId, "Scalarizr CTRL port was changed from {$currentCtrlPort} to {$message->base->messagingPort}",
+                        $dbServer->serverId
                     ));
                     $dbServer->SetProperty(SERVER_PROPERTIES::SZR_CTRL_PORT, $message->base->messagingPort);
                 }
@@ -195,7 +199,7 @@ class Scalr_Role_Behavior
                         $storage->setVolumes($dbServer, $message->volumes);
                     }
                 } catch (Exception $e) {
-                    $this->logger->error(new FarmLogMessage($dbServer->farmId, "Error in role message handler: {$e->getMessage()}"));
+                    $this->logger->error(new FarmLogMessage($dbServer->farmId, "Error in role message handler: {$e->getMessage()}", $dbServer->serverId));
                 }
 
                 if (isset($message->base) && isset($message->base->hostname))
@@ -231,21 +235,23 @@ class Scalr_Role_Behavior
         return array();
     }
 
-    public function getBaseConfiguration(DBServer $dbServer, $isHostInit = false)
+    public function getBaseConfiguration(DBServer $dbServer, $isHostInit = false, $onlyBase = false)
     {
         $configuration = new stdClass();
         $dbFarmRole = $dbServer->GetFarmRoleObject();
 
         //Storage
-        try {
-            if ($dbFarmRole) {
-                $storage = new FarmRoleStorage($dbFarmRole);
-                $volumes = $storage->getVolumesConfigs($dbServer, $isHostInit);
-                if (!empty($volumes))
-                    $configuration->volumes = $volumes;
+        if (!$onlyBase) {
+            try {
+                if ($dbFarmRole) {
+                    $storage = new FarmRoleStorage($dbFarmRole);
+                    $volumes = $storage->getVolumesConfigs($dbServer, $isHostInit);
+                    if (!empty($volumes))
+                        $configuration->volumes = $volumes;
+                }
+            } catch (Exception $e) {
+                $this->logger->error(new FarmLogMessage($dbServer->farmId, "Cannot init storage: {$e->getMessage()}"));
             }
-        } catch (Exception $e) {
-            $this->logger->error(new FarmLogMessage($dbServer->farmId, "Cannot init storage: {$e->getMessage()}"));
         }
 
         // Base
@@ -259,9 +265,15 @@ class Scalr_Role_Behavior
                 $configuration->base->keepScriptingLogsTime = $scriptingLogTimeout;
                 $configuration->base->abortInitOnScriptFail = (int)$dbFarmRole->GetSetting(self::ROLE_BASE_ABORT_INIT_ON_SCRIPT_FAIL);
                 $configuration->base->disableFirewallManagement = (int)$dbFarmRole->GetSetting(self::ROLE_BASE_DISABLE_FIREWALL_MANAGEMENT);
+                $configuration->base->rebootAfterHostinitPhase = (int)$dbFarmRole->GetSetting(self::ROLE_BASE_REBOOT_AFTER_HOSTINIT_PHASE);
 
                 $configuration->base->resumeStrategy = PlatformFactory::NewPlatform($dbFarmRole->Platform)->getResumeStrategy();
 
+                //Dev falgs for our
+                if (Scalr::isHostedScalr() && $dbServer->envId == 3414) {
+                    $configuration->base->unionScriptExecutor = 1;
+                }
+                
                 $governance = new Scalr_Governance($dbFarmRole->GetFarmObject()->EnvID);
                 if ($governance->isEnabled(Scalr_Governance::CATEGORY_GENERAL, Scalr_Governance::GENERAL_HOSTNAME_FORMAT)) {
                     $hostNameFormat = $governance->getValue(Scalr_Governance::CATEGORY_GENERAL, Scalr_Governance::GENERAL_HOSTNAME_FORMAT);
@@ -269,9 +281,17 @@ class Scalr_Role_Behavior
                     $hostNameFormat = $dbFarmRole->GetSetting(self::ROLE_BASE_HOSTNAME_FORMAT);
                 }
                 $configuration->base->hostname = (!empty($hostNameFormat)) ? $dbServer->applyGlobalVarsToValue($hostNameFormat) : '';
+                if ($configuration->base->hostname != '')
+                    $dbServer->SetProperty(self::SERVER_BASE_HOSTNAME, $configuration->base->hostname);
+                
 
-                $apiPort = $dbFarmRole->GetSetting(self::ROLE_BASE_API_PORT);
-                $messagingPort = $dbFarmRole->GetSetting(self::ROLE_BASE_MESSAGING_PORT);
+                $apiPort = null;
+                $messagingPort = null;
+                if (!PlatformFactory::isCloudstack($dbFarmRole->Platform)) {
+                    $apiPort = $dbFarmRole->GetSetting(self::ROLE_BASE_API_PORT);
+                    $messagingPort = $dbFarmRole->GetSetting(self::ROLE_BASE_MESSAGING_PORT);
+                }
+                
                 $configuration->base->apiPort = ($apiPort) ? $apiPort : 8010;
                 $configuration->base->messagingPort = ($messagingPort) ? $messagingPort : 8013;
             }
@@ -312,6 +332,13 @@ class Scalr_Role_Behavior
                     $this->logger->error(new FarmLogMessage($dbServer->farmId, "Cannot init storage: {$e->getMessage()}"));
                 }
 
+                break;
+                
+            case "Scalr_Messaging_Msg_HostInit":
+            
+                $configuration = $this->getBaseConfiguration($dbServer, true, true);                
+                $message->base = $configuration->base;
+            
                 break;
 
             case "Scalr_Messaging_Msg_HostInitResponse":

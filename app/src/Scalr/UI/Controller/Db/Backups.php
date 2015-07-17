@@ -68,11 +68,7 @@ class Scalr_UI_Controller_Db_Backups extends Scalr_UI_Controller
             $args[] = $this->getParam('farmId');
         }
 
-        if (!$this->request->isAllowed(Acl::RESOURCE_FARMS, Acl::PERM_FARMS_NOT_OWNED_FARMS)) {
-            $query .= " AND f.created_by_id = ?";
-            $args[] = $this->user->getId();
-        }
-
+        list($query, $args) = $this->request->prepareFarmSqlQuery($query, $args, 'f');
         $dbBackupResult = $this->db->GetAll($query, $args);
         foreach ($dbBackupResult as $row) {
             $dt = new DateTime($row['time']);

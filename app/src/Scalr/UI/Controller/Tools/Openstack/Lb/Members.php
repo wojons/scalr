@@ -59,10 +59,7 @@ class Scalr_UI_Controller_Tools_Openstack_Lb_Members extends Scalr_UI_Controller
 
     public function viewAction()
     {
-        $locations = self::loadController('Platforms')->getCloudLocations($this->platform, false);
-        $this->response->page('ui/tools/openstack/lb/members/view.js', array(
-            'locations'	=> $locations
-        ));
+        $this->response->page('ui/tools/openstack/lb/members/view.js');
     }
 
     public function createAction()

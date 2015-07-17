@@ -5,6 +5,7 @@ use Scalr\UI\Request\RawData;
 use Scalr\UI\Request\JsonData;
 use Scalr\UI\Request\Validator;
 use Scalr\Util\CryptoTool;
+use Scalr\Model\Entity\Account\User\ApiKeyEntity;
 
 class Scalr_UI_Controller_Core extends Scalr_UI_Controller
 {
@@ -19,7 +20,10 @@ class Scalr_UI_Controller_Core extends Scalr_UI_Controller
     public function xGetChangeLogAction($resetCounter = false)
     {
         if ($resetCounter) {
-            $this->user->setSetting(Scalr_Account_User::SETTING_UI_CHANGELOG_TIME, time());
+            if (! Scalr_Session::getInstance()->isVirtual()) {
+                $this->user->setSetting(Scalr_Account_User::SETTING_UI_CHANGELOG_TIME, time());
+            }
+
             $this->response->success();
         } else {
             $rssCachePath = CACHEPATH."/rss.changelog.cxml";
@@ -69,7 +73,7 @@ class Scalr_UI_Controller_Core extends Scalr_UI_Controller
                     $countNew++;
             }
 
-            $this->response->data(array('data' => $data, 'countNew' => $countNew));
+            $this->response->data(array('data' => $data, 'countNew' => $countNew, 'tm' => time()));
         }
     }
 
@@ -79,7 +83,7 @@ class Scalr_UI_Controller_Core extends Scalr_UI_Controller
             'version' => @file_get_contents(APPPATH . '/etc/version')
         );
 
-        if (!Scalr::isHostedScalr() || $this->request->getHeaderVar('Interface-Beta')) {
+        if (!Scalr::isHostedScalr() || $this->user->isScalrAdmin() || $this->request->getHeaderVar('Interface-Beta')) {
             $manifest = @file_get_contents(APPPATH . '/../manifest.json');
             if ($manifest) {
                 $info = @json_decode($manifest, true);
@@ -88,33 +92,38 @@ class Scalr_UI_Controller_Core extends Scalr_UI_Controller
                         $data['edition'] = 'Enterprise Edition';
                     else
                         $data['edition'] = 'Open Source Edition';
-                    
+
                     $data['gitFullHash'] = $info['full_revision'];
                     $data['gitDate'] = $info['date'];
                     $data['gitRevision'] = $info['revision'];
                 }
             }
-            
+
             if (!$data['edition']) {
                 @exec("git show --format='%h|%ci|%H' HEAD", $output);
                 $info = @explode("|", $output[0]);
                 $data['gitRevision'] = trim($info[0]);
                 $data['gitDate'] = trim($info[1]);
                 $data['gitFullHash'] = trim($info[2]);
-                
+
                 @exec("git remote -v", $output2);
                 if (stristr($output2[0], 'int-scalr'))
                     $data['edition'] = 'Enterprise Edition';
                 else
                     $data['edition'] = 'Open Source Edition';
             }
-            
+
+            if ($this->user->isScalrAdmin() || $this->request->getHeaderVar('Interface-Beta')) {
+                @exec("git rev-parse --abbrev-ref HEAD", $branch);
+                $data['branch'] = trim($branch[0]);
+            }
+
             $data['id'] = SCALR_ID;
         }
-        
+
         $this->response->page('ui/core/about.js', $data);
     }
-    
+
     public function supportAction()
     {
         if ($this->user->isAdmin())
@@ -158,6 +167,147 @@ class Scalr_UI_Controller_Core extends Scalr_UI_Controller
 
         $this->response->page('ui/core/api.js', $params);
     }
+
+    public function api2Action()
+    {
+        if ($this->user->isAdmin() || !\Scalr::config('scalr.system.api.enabled')) {
+            throw new Scalr_Exception_InsufficientPermissions();
+        }
+
+        $this->response->page('ui/core/api2.js');
+    }
+
+    public function xListApiKeysAction()
+    {
+        if ($this->user->isAdmin() || !\Scalr::config('scalr.system.api.enabled')) {
+            throw new Scalr_Exception_InsufficientPermissions();
+        }
+
+        $keys = [];
+
+        foreach (ApiKeyEntity::findByUserId($this->user->getId()) as $apiKeyEntity) {
+            /* @var $apiKeyEntity ApiKeyEntity */
+            $row = get_object_vars($apiKeyEntity);
+            $row['secretKey'] = '******';
+            $row['created'] = Scalr_Util_DateTime::convertTz($apiKeyEntity->created);
+            $row['lastUsed'] = $apiKeyEntity->lastUsed ? Scalr_Util_DateTime::convertTz($apiKeyEntity->lastUsed) : 'Never';
+            $row['createdHr'] = $apiKeyEntity->created  ? Scalr_Util_DateTime::getFuzzyTimeString($apiKeyEntity->created) : '';
+            $row['lastUsedHr'] = $apiKeyEntity->lastUsed ? Scalr_Util_DateTime::getFuzzyTimeString($apiKeyEntity->lastUsed) : 'Never';
+
+            $keys[] = $row;
+        }
+
+        $this->response->data(['data' => $keys]);
+    }
+
+
+    public function xGenerateApiKeyAction()
+    {
+        if ($this->user->isAdmin() || !\Scalr::config('scalr.system.api.enabled')) {
+            throw new Scalr_Exception_InsufficientPermissions();
+        }
+
+        $apiKeyEntity = new ApiKeyEntity($this->user->getId());
+        $apiKeyEntity->save();
+
+        $row = get_object_vars($apiKeyEntity);
+        $row['created'] = Scalr_Util_DateTime::convertTz($apiKeyEntity->created);
+        $row['lastUsed'] = $apiKeyEntity->lastUsed ? Scalr_Util_DateTime::convertTz($apiKeyEntity->lastUsed) : 0;
+        $row['createdHr'] = $apiKeyEntity->created ? Scalr_Util_DateTime::getFuzzyTimeString($apiKeyEntity->created) : '';
+        $row['lastUsedHr'] = $apiKeyEntity->lastUsed ? Scalr_Util_DateTime::getFuzzyTimeString($apiKeyEntity->lastUsed) : 'Never';
+
+        $this->response->data(['key' => $row]);
+    }
+
+    /**
+     * Saves api key name
+     *
+     * @param string    $keyId     Api key id
+     * @param string    $name      Api key name to save
+     * @throws Scalr_Exception_Core
+     * @throws Scalr_Exception_InsufficientPermissions
+     */
+    public function xSaveApiKeyNameAction($keyId, $name)
+    {
+        if ($this->user->isAdmin() || !\Scalr::config('scalr.system.api.enabled')) {
+            throw new Scalr_Exception_InsufficientPermissions();
+        }
+
+        if (!preg_match('/^[a-z0-9 _-]*$/i', $name)) {
+            throw new Scalr_Exception_Core("Name should contain only letters, numbers, spaces and dashes");
+        }
+
+        try {
+            $apiKeyEntity = ApiKeyEntity::findPk($keyId);
+            /* @var $apiKeyEntity ApiKeyEntity */
+            if ($apiKeyEntity->userId != $this->user->getId()) {
+                throw new Scalr_Exception_Core('Insufficient permissions to modify API key');
+            }
+
+            $apiKeyEntity->name = $name;
+            $apiKeyEntity->save();
+            $this->response->data(['name' => $name]);
+        } catch (Exception $e) {
+            $this->response->failure($e->getMessage());
+            return;
+        }
+
+        $this->response->success();
+    }
+
+    /**
+     * @param string    $action Action
+     * @param JsonData  $keyIds JSON encoded structure
+     * @throws Scalr_Exception_InsufficientPermissions
+     */
+    public function xApiKeysActionHandlerAction($action, JsonData $keyIds)
+    {
+        if ($this->user->isAdmin() || !\Scalr::config('scalr.system.api.enabled')) {
+            throw new Scalr_Exception_InsufficientPermissions();
+        }
+
+        $processed = [];
+        $errors = [];
+
+        foreach($keyIds as $keyId) {
+            try {
+                $apiKeyEntity = ApiKeyEntity::findPk($keyId);
+                /* @var $apiKeyEntity ApiKeyEntity */
+                if ($apiKeyEntity->userId != $this->user->getId()) {
+                    throw new Scalr_Exception_Core('Insufficient permissions to modify API key');
+                }
+
+                switch($action) {
+                    case 'delete':
+                        $apiKeyEntity->delete();
+                        $processed[] = $keyId;
+                        break;
+
+                    case 'activate':
+                    case 'deactivate':
+                        $apiKeyEntity->active = $action == 'activate';
+                        $apiKeyEntity->save();
+                        $processed[] = $keyId;
+                        break;
+                }
+            } catch (Exception $e) {
+                $errors[] = $e->getMessage();
+            }
+        }
+
+        $num = count($keyIds);
+
+        if (count($processed) == $num) {
+            $this->response->success('All API keys processed');
+        } else {
+            array_walk($errors, function(&$item) { $item = '- ' . $item; });
+            $this->response->warning(sprintf("Successfully processed only %d from %d API KEYS. \nFollowing errors occurred:\n%s", count($processed), $num, join($errors, '')));
+        }
+
+        $this->response->data(['processed' => $processed]);
+    }
+
+
 
     public function disasterAction()
     {
@@ -208,10 +358,11 @@ class Scalr_UI_Controller_Core extends Scalr_UI_Controller
         }
 
         $params = array(
-            'security2fa' => $this->user->getAccountId() ? $this->user->getAccount()->isFeatureEnabled(Scalr_Limits::FEATURE_2FA) : true,
+            'security2fa' => true,
             'security2faGgl' => $this->user->getSetting(Scalr_Account_User::SETTING_SECURITY_2FA_GGL) ? '1' : '',
             'security2faCode' => Scalr_Util_Google2FA::generateSecretKey(),
-            'securityIpWhitelist' => join(', ', $whitelist)
+            'securityIpWhitelist' => join(', ', $whitelist),
+            'currentIp' => $this->request->getRemoteAddr()
         );
 
         $this->response->page('ui/core/security.js', $params, ['ux-qrext.js']);
@@ -257,7 +408,7 @@ class Scalr_UI_Controller_Core extends Scalr_UI_Controller
             if ($password != '******') {
                 $this->user->updatePassword($password);
                 $updateSession = true;
-                
+
                 // Send notification E-mail
                 $this->getContainer()->mailer->sendTemplate(
                     SCALR_TEMPLATES_PATH . '/emails/password_change_notification.eml',
@@ -352,7 +503,7 @@ class Scalr_UI_Controller_Core extends Scalr_UI_Controller
         if ($this->user->isAdmin())
             throw new Scalr_Exception_InsufficientPermissions();
 
-        $panel = $this->user->getDashboard($this->getEnvironmentId());
+        $panel = $this->user->getDashboard($this->getEnvironmentId(true));
 
         $params = array_merge(
             $this->user->getSshConsoleSettings(),
@@ -378,7 +529,9 @@ class Scalr_UI_Controller_Core extends Scalr_UI_Controller
 
         $this->request->defineParams(array(
             'rss_login', 'rss_pass', 'default_environment',
+            Scalr_Account_User::VAR_SSH_CONSOLE_LAUNCHER,
             Scalr_Account_User::VAR_SSH_CONSOLE_USERNAME,
+            Scalr_Account_User::VAR_SSH_CONSOLE_IP,
             Scalr_Account_User::VAR_SSH_CONSOLE_PORT,
             Scalr_Account_User::VAR_SSH_CONSOLE_KEY_NAME,
             Scalr_Account_User::VAR_SSH_CONSOLE_DISABLE_KEY_AUTH,
@@ -404,7 +557,7 @@ class Scalr_UI_Controller_Core extends Scalr_UI_Controller
             return;
         }
 
-        $panel = $this->user->getDashboard($this->getEnvironmentId());
+        $panel = $this->user->getDashboard($this->getEnvironmentId(true));
         if ($this->getParam('dashboard_columns') > count($panel['configuration'])) {
             while ($this->getParam('dashboard_columns') > count($panel['configuration'])) {
                 $panel['configuration'][] = array();
@@ -418,7 +571,7 @@ class Scalr_UI_Controller_Core extends Scalr_UI_Controller
                 unset($panel['configuration'][$i-1]);
             }
         }
-        $this->user->setDashboard($this->getEnvironmentId(), $panel);
+        $this->user->setDashboard($this->getEnvironmentId(true), $panel);
 
         $panel = self::loadController('Dashboard')->fillDash($panel);
 
@@ -426,10 +579,7 @@ class Scalr_UI_Controller_Core extends Scalr_UI_Controller
 
         $gravatarEmail = $this->getParam('gravatar_email');
         $this->user->setSetting(Scalr_Account_User::SETTING_GRAVATAR_EMAIL, $gravatarEmail);
-
-        if ($this->request->isAllowed(Acl::RESOURCE_FARMS_SERVERS, Acl::PERM_FARMS_SERVERS_SSH_CONSOLE)) {
-            $this->user->setSshConsoleSettings($this->request->getParams());
-        }
+        $this->user->setSshConsoleSettings($this->request->getParams());
 
         $this->user->fullname = $this->getParam('user_fullname');
         $this->user->save();
@@ -445,7 +595,7 @@ class Scalr_UI_Controller_Core extends Scalr_UI_Controller
 
         $this->request->restrictAccess(Acl::RESOURCE_ENVADMINISTRATION_GLOBAL_VARIABLES);
         $vars = new Scalr_Scripting_GlobalVariables($this->user->getAccountId(), $this->getEnvironmentId(), Scalr_Scripting_GlobalVariables::SCOPE_ENVIRONMENT);
-        $this->response->page('ui/core/variables.js', array('variables' => json_encode($vars->getValues())), array('ui/core/variablefield.js'), array('ui/core/variablefield.css'));
+        $this->response->page('ui/core/variables.js', array('variables' => json_encode($vars->getValues())), array('ui/core/variablefield.js'));
     }
 
     /**
@@ -470,31 +620,5 @@ class Scalr_UI_Controller_Core extends Scalr_UI_Controller
                 )
             ));
         }
-    }
-
-    /**
-     * @param int $envId
-     * @throws Scalr_Exception_InsufficientPermissions
-     */
-    public function xChangeEnvironmentAction($envId)
-    {
-        if ($this->user->isAdmin())
-            throw new Scalr_Exception_InsufficientPermissions();
-
-        $env = Scalr_Environment::init()->loadById($envId);
-
-        foreach ($this->user->getEnvironments() as $e) {
-            if ($env->id == $e['id']) {
-                Scalr_Session::getInstance()->setEnvironmentId($e['id']);
-
-                if (! Scalr_Session::getInstance()->isVirtual())
-                    $this->user->setSetting(Scalr_Account_User::SETTING_UI_ENVIRONMENT, $e['id']);
-
-                $this->response->success();
-                return;
-            }
-        }
-
-        throw new Scalr_Exception_InsufficientPermissions();
     }
 }

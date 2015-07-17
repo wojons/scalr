@@ -95,42 +95,48 @@ class Scalr_UI_Controller_Account2_Users extends Scalr_UI_Controller
         $user = Scalr_Account_User::init();
         $validator = new Scalr_Validator();
 
-        if (! $this->getParam('email'))
-            throw new Scalr_Exception_Core('Email cannot be null');
-
-        if ($validator->validateEmail($this->getParam('email'), null, true) !== true)
-            throw new Scalr_Exception_Core('Email should be correct');
-
         if ($this->getParam('id')) {
             $user->loadById((int)$this->getParam('id'));
+        } else {
+            if ($this->getContainer()->config->get('scalr.auth_mode') == 'ldap')
+                throw new Exception("Adding new users is not supported with LDAP user management");
+        }
+        
+        if ($this->getContainer()->config->get('scalr.auth_mode') != 'ldap') {
+            if (! $this->getParam('email'))
+                throw new Scalr_Exception_Core('Email cannot be null');
+    
+            if ($validator->validateEmail($this->getParam('email'), null, true) !== true)
+                throw new Scalr_Exception_Core('Email should be correct');
 
-            if (!$this->user->canEditUser($user)) {
-                throw new Scalr_Exception_InsufficientPermissions();
+            if ($this->getParam('id')) {
+                if (!$this->user->canEditUser($user)) {
+                    throw new Scalr_Exception_InsufficientPermissions();
+                }
+                $user->updateEmail($this->getParam('email'));
+            } else {
+                $this->user->getAccount()->validateLimit(Scalr_Limits::ACCOUNT_USERS, 1);
+                $user->create($this->getParam('email'), $this->user->getAccountId());
+    
+                $user->type = Scalr_Account_User::TYPE_TEAM_USER;
+                $newUser = true;
             }
 
-            $user->updateEmail($this->getParam('email'));
-        } else {
-            $this->user->getAccount()->validateLimit(Scalr_Limits::ACCOUNT_USERS, 1);
-            $user->create($this->getParam('email'), $this->user->getAccountId());
-
-            $user->type = Scalr_Account_User::TYPE_TEAM_USER;
-            $newUser = true;
-        }
-
-        $password = $this->getParam('password');
-        if (!$newUser && $password) {
-            $existingPasswordChanged = true;
-        } else if (!$password && ($this->request->hasParam('password') || $newUser)) {
-            $password = $this->getCrypto()->sault(10);
-            $sendResetLink = true;
-        }
-        if (($existingPasswordChanged || !$newUser && $sendResetLink) && !$this->user->checkPassword($this->getParam('currentPassword'))) {
-            $this->response->data(['errors' => ['currentPassword' => 'Invalid password']]);
-            $this->response->failure();
-            return;
-        }
-        if ($password) {
-            $user->updatePassword($password);
+            $password = $this->getParam('password');
+            if (!$newUser && $password) {
+                $existingPasswordChanged = true;
+            } else if (!$password && ($this->request->hasParam('password') || $newUser)) {
+                $password = $this->getCrypto()->sault(10);
+                $sendResetLink = true;
+            }
+            if (($existingPasswordChanged || !$newUser && $sendResetLink) && !$this->user->checkPassword($this->getParam('currentPassword'))) {
+                $this->response->data(['errors' => ['currentPassword' => 'Invalid password']]);
+                $this->response->failure();
+                return;
+            }
+            if ($password) {
+                $user->updatePassword($password);
+            }
         }
 
         if ($user->getId() != $this->user->getId() &&
@@ -178,6 +184,8 @@ class Scalr_UI_Controller_Account2_Users extends Scalr_UI_Controller
                     'password'	=> $password,
                 );
 
+                $url = Scalr::config('scalr.endpoint.scheme') . "://" . Scalr::config('scalr.endpoint.host');
+                
                 $res = $this->getContainer()->mailer->sendTemplate(
                     SCALR_TEMPLATES_PATH . '/emails/referral.eml.php',
                     array(
@@ -185,7 +193,7 @@ class Scalr_UI_Controller_Account2_Users extends Scalr_UI_Controller
                         "clientFirstname" => $clientinfo['firstname'],
                         "email"           => $clientinfo['email'],
                         "password"        => $clientinfo['password'],
-                        "siteUrl"         => "http://{$_SERVER['HTTP_HOST']}",
+                        "siteUrl"         => $url,
                         "wikiUrl"         => \Scalr::config('scalr.ui.wiki_url'),
                         "supportUrl"      => \Scalr::config('scalr.ui.support_url'),
                         "isUrl"           => (preg_match('/^http(s?):\/\//i', \Scalr::config('scalr.ui.support_url'))),
@@ -228,7 +236,7 @@ class Scalr_UI_Controller_Account2_Users extends Scalr_UI_Controller
         }
 
         $userTeams = array();
-        $troles = $this->environment->acl->getUserRoleIdsByTeam(
+        $troles = $this->getContainer()->acl->getUserRoleIdsByTeam(
             $user->id, array_map(create_function('$v', 'return $v["id"];'), $user->getTeams()), $user->getAccountId()
         );
         foreach ($troles as $teamId => $roles) {

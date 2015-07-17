@@ -26,15 +26,18 @@ class Scalr_UI_Controller_Security_Groups extends Scalr_UI_Controller
         return parent::hasAccess() && $this->request->isAllowed(Acl::RESOURCE_SECURITY_SECURITY_GROUPS);
     }
 
+    public function defaultAction()
+    {
+        $this->viewAction();
+    }
+
     public function viewAction()
     {
         if (!$this->getParam('platform')) {
             throw new Exception ('Platform should be specified');
         }
 
-        $this->response->page('ui/security/groups/view.js', array(
-            'locations' => self::loadController('Platforms')->getCloudLocations(array($this->getParam('platform')), false)
-        ));
+        $this->response->page('ui/security/groups/view.js', []);
     }
 
     public function createAction()
@@ -46,8 +49,7 @@ class Scalr_UI_Controller_Security_Groups extends Scalr_UI_Controller
             'cloudLocation'     => $this->getParam('cloudLocation'),
             'cloudLocationName' => $this->getCloudLocationName($this->getParam('platform'), $this->getParam('cloudLocation')),
             'accountId'         => $this->environment->getPlatformConfigValue(Ec2PlatformModule::ACCOUNT_ID),
-            'vpcLimits'         => $governance->getValue(SERVER_PLATFORMS::EC2, Scalr_Governance::AWS_VPC, null),
-            'remoteAddress'     => $this->request->getRemoteAddr(true)
+            'remoteAddress'     => $this->request->getRemoteAddr()
         ),array('ui/security/groups/sgeditor.js'));
     }
 
@@ -57,7 +59,7 @@ class Scalr_UI_Controller_Security_Groups extends Scalr_UI_Controller
 
         $data['cloudLocationName'] = $this->getCloudLocationName($this->getParam('platform'), $this->getParam('cloudLocation'));
         $data['accountId'] = $this->environment->getPlatformConfigValue(Ec2PlatformModule::ACCOUNT_ID);
-        $data['remoteAddress'] = $this->request->getRemoteAddr(true);
+        $data['remoteAddress'] = $this->request->getRemoteAddr();
 
         $this->response->page('ui/security/groups/edit.js', $data, array('ui/security/groups/sgeditor.js'));
     }
@@ -90,6 +92,14 @@ class Scalr_UI_Controller_Security_Groups extends Scalr_UI_Controller
 
         if (count($invalidRules)) {
             throw new Scalr_Exception_Core(sprintf('Not valid CIDR(s): "%s"', join(', ', $invalidRules)));
+        }
+
+        foreach ($groupData['rules'] as &$rule) {
+            $rule['comment'] = $this->request->stripValue($rule['comment']);
+        }
+
+        foreach ($groupData['sgRules'] as &$rule) {
+            $rule['comment'] = $this->request->stripValue($rule['comment']);
         }
 
         if (!$groupData['id']) {
@@ -166,7 +176,7 @@ class Scalr_UI_Controller_Security_Groups extends Scalr_UI_Controller
             'filters' => array('type' => 'json')
         ));
 
-        $result = $this->listGroups($this->getParam('platform'), $this->getParam('cloudLocation'), $this->getParam('filters'));
+        $result = $this->listGroups($this->getParam('platform'), $this->getParam('cloudLocation'), (array)$this->getParam('filters'));
         $this->response->data($result);
     }
 
@@ -708,7 +718,10 @@ class Scalr_UI_Controller_Security_Groups extends Scalr_UI_Controller
     private function listGroupsEc2($platform, $cloudLocation, $filters)
     {
         $sgFilter = null;
-        $result = array();
+        $result = [];
+
+        if (!is_array($filters))
+            $filters = [];
 
         if (!empty($filters['sgIds'])) {
             $sgFilter = is_null($sgFilter) ? array() : $sgFilter;
@@ -718,13 +731,13 @@ class Scalr_UI_Controller_Security_Groups extends Scalr_UI_Controller
             );
         }
 
-        if (empty($filters['vpcId'])) {
+        if (empty($filters['vpcId']) && array_key_exists('vpcId', $filters)) {
             $p = PlatformFactory::NewPlatform(SERVER_PLATFORMS::EC2);
             $defaultVpc = $p->getDefaultVpc($this->environment, $cloudLocation);
             if ($defaultVpc)
                 $filters['vpcId'] = $defaultVpc;
         }
-        
+
         if (!empty($filters['vpcId'])) {
             $sgFilter = is_null($sgFilter) ? array() : $sgFilter;
             $sgFilter[] = array(
@@ -735,18 +748,56 @@ class Scalr_UI_Controller_Security_Groups extends Scalr_UI_Controller
 
         $sgList = $this->getPlatformService($platform, $cloudLocation)->describe(null, null, $sgFilter);
         /* @var $sg SecurityGroupData */
-        foreach ($sgList as $sg) {
-            
-            if (is_array($filters) && array_key_exists('vpcId', $filters) && $filters['vpcId'] == null && $sg->vpcId)
-                continue;
 
-            $result[] = array(
+        $considerGovernance = $filters['considerGovernance'];
+
+        if ($considerGovernance) {
+            $governance = new Scalr_Governance($this->getEnvironmentId());
+            $values = $governance->getValues(true);
+
+            if(!empty($values['ec2']['aws.additional_security_groups']->value)) {
+                $sgDefaultNames = explode(',', $values['ec2']['aws.additional_security_groups']->value);
+            }
+        }
+
+        $sgNames = [];
+
+        foreach ($sgList as $sg) {
+            if (is_array($filters) && array_key_exists('vpcId', $filters) && $filters['vpcId'] == null && $sg->vpcId) {
+                continue;
+            }
+
+            if ($considerGovernance
+                && empty($values['ec2']['aws.additional_security_groups']->allow_additional_sec_groups)
+                && !empty($sgDefaultNames)
+                && !in_array($sg->groupName, $sgDefaultNames)
+            ) {
+                continue;
+            }
+
+            $result[] = [
                 'id'          => $sg->groupId,
                 'name'        => $sg->groupName,
                 'description' => $sg->groupDescription,
                 'vpcId'       => $sg->vpcId,
                 'owner'       => $sg->ownerId
-            );
+            ];
+
+            $sgNames[] = $sg->groupName;
+        }
+
+        if ($considerGovernance && !empty($sgDefaultNames)) {
+            foreach ($sgDefaultNames as $sgDefaultName) {
+                if (!in_array($sgDefaultName, $sgNames)) {
+                    $result[] = [
+                        'id'          => null,
+                        'name'        => $sgDefaultName,
+                        'description' => null,
+                        'vpcId'       => null,
+                        'owner'       => null
+                    ];
+                }
+            }
         }
 
         return $result;

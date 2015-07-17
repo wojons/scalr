@@ -191,7 +191,7 @@ class LdapClient
         if (!$this->conn) {
             $this->conn = ldap_connect($this->config->host, $this->config->port);
 
-            $this->log('Create connection host:%s port:%s - %s', $this->config->host,
+            $this->log('LDAP Server is:%s port:%s - %s', $this->config->host,
                 ($this->config->port ? $this->config->port : 'default'),
                 ($this->conn ? 'OK' : 'Failed'));
 
@@ -390,7 +390,12 @@ class LdapClient
 
         //It is not enough only successfull bind.
         //It should find the user with the specified credentials.
-        if ($ret) {
+        if ($ret === false) {
+            $this->log(sprintf(
+                "Could not bind LDAP. %s",
+                $this->getLdapError()
+            ));
+        } else {
             $attrs = array('dn', 'memberof');
             if ($this->config->mailAttribute) {
                 $mailAttribute = strtolower($this->config->mailAttribute);

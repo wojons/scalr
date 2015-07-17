@@ -1,6 +1,8 @@
 <?php
 namespace Scalr\Model\Entity;
 
+use Scalr\Model\AbstractEntity;
+
 /**
  * ServerTerminationError entity
  *
@@ -9,7 +11,7 @@ namespace Scalr\Model\Entity;
  * @Entity
  * @Table(name="server_termination_errors")
  */
-class ServerTerminationError extends AbstractSettingEntity
+class ServerTerminationError extends AbstractEntity
 {
 
     /**

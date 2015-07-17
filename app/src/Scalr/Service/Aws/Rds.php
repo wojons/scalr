@@ -94,7 +94,11 @@ class Rds extends AbstractService implements ServiceInterface
     {
         $region = $this->getAws()->getRegion();
 
-        return 'rds.' . $region . '.amazonaws.com';
+        if (strpos($region, 'cn-') === 0) {
+            return 'rds.' . $region . '.amazonaws.com.cn';
+        } else {
+            return 'rds.' . $region . '.amazonaws.com';
+        }
     }
 
     /**

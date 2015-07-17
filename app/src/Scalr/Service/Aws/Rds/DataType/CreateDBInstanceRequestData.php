@@ -16,6 +16,9 @@ use Scalr\Service\Aws\Rds\AbstractRdsDataType;
  *
  * @property \Scalr\Service\Aws\DataType\ListDataType $vpcSecurityGroupIds
  *           A list of EC2 VPC Security Groups to associate with this DB Instance.
+ *
+ * @property \Scalr\Service\Aws\Rds\DataType\TagsList $tags
+ *           A list of tags to associate with this DB Instance.
  */
 class CreateDBInstanceRequestData extends AbstractRdsDataType
 {
@@ -26,7 +29,7 @@ class CreateDBInstanceRequestData extends AbstractRdsDataType
      *
      * @var  array
      */
-    protected $_properties = array('dBSecurityGroups', 'vpcSecurityGroupIds');
+    protected $_properties = array('dBSecurityGroups', 'vpcSecurityGroupIds', 'tags');
 
     /**
      * Specifies the allocated storage size specified in gigabytes.
@@ -384,4 +387,20 @@ class CreateDBInstanceRequestData extends AbstractRdsDataType
         }
         return $this->__call(__FUNCTION__, array($vpcSecurityGroupIds));
     }
+
+    /**
+     * Sets Tags list
+     *
+     * @param   TagsList|array|string $tags
+     *          A list of tags to associate with this DB Instance.
+     * @return  CreateDBInstanceRequestData
+     */
+    public function setTags($tags = null)
+    {
+        if ($tags !== null && !($tags instanceof TagsList)) {
+            $tags = new TagsList($tags);
+        }
+        return $this->__call(__FUNCTION__, array($tags));
+    }
+
 }

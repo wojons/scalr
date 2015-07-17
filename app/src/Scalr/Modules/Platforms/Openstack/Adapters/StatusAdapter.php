@@ -52,7 +52,7 @@ class StatusAdapter implements \Scalr\Modules\Platforms\StatusAdapterInterface
 
     public function isPending()
     {
-        return (in_array($this->platformStatus, array('BUILD', 'ERROR')) !== false);
+        return (in_array($this->platformStatus, array('BUILD', 'ERROR', 'BUILDING')) !== false);
     }
 
     public function isTerminated()

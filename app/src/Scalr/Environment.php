@@ -7,7 +7,6 @@ use Scalr\Modules\Platforms\GoogleCE\GoogleCEPlatformModule;
 use Scalr\Modules\Platforms\Idcf\IdcfPlatformModule;
 use Scalr\Modules\Platforms\Openstack\OpenstackPlatformModule;
 use Scalr\Modules\Platforms\Rackspace\RackspacePlatformModule;
-use \DBServer;
 use Scalr\Stats\CostAnalytics\Entity\AccountCostCenterEntity;
 
 /**
@@ -15,11 +14,8 @@ use Scalr\Stats\CostAnalytics\Entity\AccountCostCenterEntity;
  *
  * Following phpdocumentor comments have been derived from Scalr\DependencyInjection class:
  *
- * @property string $awsRegion
- *           The AWS region derived from user's environment.
- *
  * @property string $awsSecretAccessKey
- *           The AWS sercret access key taken from user's environment.
+ *           The AWS secret access key taken from user's environment.
  *
  * @property string $awsAccessKeyId
  *           The Aws access key id taken from user's environment.
@@ -28,7 +24,7 @@ use Scalr\Stats\CostAnalytics\Entity\AccountCostCenterEntity;
  *           The Aws account number.
  *
  * @property \Scalr_Session $session
- *           The Scalr Session isntance.
+ *           The Scalr Session instance.
  *
  * @property \Scalr\Service\Cloudyn $cloudyn
  *           The Cloudyn instance for the current user
@@ -289,6 +285,16 @@ class Scalr_Environment extends Scalr_Model
         return parent::init();
     }
 
+    /**
+     * Gets identifier of the Account
+     *
+     * @return   int Returns identifier of the Account
+     */
+    public function getAccountId()
+    {
+        return $this->clientId;
+    }
+
     public function create($name, $clientId)
     {
         $this->id = 0;
@@ -417,47 +423,47 @@ class Scalr_Environment extends Scalr_Model
 
         return $this->cache['locations'];
     }
-    
+
     public function applyGlobalVarsToValue($value)
     {
         if (empty($this->globalVariablesCache)) {
             $formats = \Scalr::config("scalr.system.global_variables.format");
-        
+
             $systemVars = array(
                 'env_id'		=> $this->id,
                 'env_name'		=> $this->name,
             );
-            
+
             // Get list of Server system vars
             foreach ($systemVars as $name => $val) {
                 $name = "SCALR_".strtoupper($name);
                 $val = trim($val);
-        
+
                 if (isset($formats[$name]))
                     $val = @sprintf($formats[$name], $val);
-        
+
                 $this->globalVariablesCache[$name] = $val;
             }
-        
+
             // Add custom variables
             $gv = new Scalr_Scripting_GlobalVariables($this->clientId, $this->id, Scalr_Scripting_GlobalVariables::SCOPE_ENVIRONMENT);
             $vars = $gv->listVariables();
             foreach ($vars as $v)
                 $this->globalVariablesCache[$v['name']] = $v['value'];
         }
-        
+
         //Parse variable
         $keys = array_keys($this->globalVariablesCache);
         $f = create_function('$item', 'return "{".$item."}";');
         $keys = array_map($f, $keys);
         $values = array_values($this->globalVariablesCache);
-        
+
         $retval = str_replace($keys, $values, $value);
-        
+
         // Strip undefined variables & return value
         return preg_replace("/{[A-Za-z0-9_-]+}/", "", $retval);
     }
-    
+
     public function enablePlatform($platform, $enabled = true)
     {
         $props = array($platform . '.is_enabled' => $enabled ? 1 : 0);
@@ -569,10 +575,10 @@ class Scalr_Environment extends Scalr_Model
             $this->db->Execute("DELETE FROM farms WHERE env_id=?", array($this->id));
             $this->db->Execute("DELETE FROM roles WHERE env_id=?", array($this->id));
 
-            $servers = DBServer::listByFilter(['envId' => $this->id]);
+            $servers = \DBServer::listByFilter(['envId' => $this->id]);
 
             foreach ($servers as $server) {
-                /* @var DBServer $server */
+                /* @var $server \DBServer */
                 $server->Remove();
             }
 
@@ -651,6 +657,46 @@ class Scalr_Environment extends Scalr_Model
                 SERVER_PLATFORMS::NEBULA . "." . OpenstackPlatformModule::TENANT_NAME,
                 SERVER_PLATFORMS::NEBULA . "." . OpenstackPlatformModule::USERNAME,
                 SERVER_PLATFORMS::NEBULA . "." . OpenstackPlatformModule::SSL_VERIFYPEER,
+
+                SERVER_PLATFORMS::MIRANTIS . "." . OpenstackPlatformModule::API_KEY,
+                SERVER_PLATFORMS::MIRANTIS . "." . OpenstackPlatformModule::AUTH_TOKEN,
+                SERVER_PLATFORMS::MIRANTIS . "." . OpenstackPlatformModule::KEYSTONE_URL,
+                SERVER_PLATFORMS::MIRANTIS . "." . OpenstackPlatformModule::PASSWORD,
+                SERVER_PLATFORMS::MIRANTIS . "." . OpenstackPlatformModule::TENANT_NAME,
+                SERVER_PLATFORMS::MIRANTIS . "." . OpenstackPlatformModule::USERNAME,
+                SERVER_PLATFORMS::MIRANTIS . "." . OpenstackPlatformModule::SSL_VERIFYPEER,
+                
+                SERVER_PLATFORMS::VIO . "." . OpenstackPlatformModule::API_KEY,
+                SERVER_PLATFORMS::VIO . "." . OpenstackPlatformModule::AUTH_TOKEN,
+                SERVER_PLATFORMS::VIO . "." . OpenstackPlatformModule::KEYSTONE_URL,
+                SERVER_PLATFORMS::VIO . "." . OpenstackPlatformModule::PASSWORD,
+                SERVER_PLATFORMS::VIO . "." . OpenstackPlatformModule::TENANT_NAME,
+                SERVER_PLATFORMS::VIO . "." . OpenstackPlatformModule::USERNAME,
+                SERVER_PLATFORMS::VIO . "." . OpenstackPlatformModule::SSL_VERIFYPEER,
+
+                SERVER_PLATFORMS::VERIZON . "." . OpenstackPlatformModule::API_KEY,
+                SERVER_PLATFORMS::VERIZON . "." . OpenstackPlatformModule::AUTH_TOKEN,
+                SERVER_PLATFORMS::VERIZON . "." . OpenstackPlatformModule::KEYSTONE_URL,
+                SERVER_PLATFORMS::VERIZON . "." . OpenstackPlatformModule::PASSWORD,
+                SERVER_PLATFORMS::VERIZON . "." . OpenstackPlatformModule::TENANT_NAME,
+                SERVER_PLATFORMS::VERIZON . "." . OpenstackPlatformModule::USERNAME,
+                SERVER_PLATFORMS::VERIZON . "." . OpenstackPlatformModule::SSL_VERIFYPEER,
+
+                SERVER_PLATFORMS::CISCO . "." . OpenstackPlatformModule::API_KEY,
+                SERVER_PLATFORMS::CISCO . "." . OpenstackPlatformModule::AUTH_TOKEN,
+                SERVER_PLATFORMS::CISCO . "." . OpenstackPlatformModule::KEYSTONE_URL,
+                SERVER_PLATFORMS::CISCO . "." . OpenstackPlatformModule::PASSWORD,
+                SERVER_PLATFORMS::CISCO . "." . OpenstackPlatformModule::TENANT_NAME,
+                SERVER_PLATFORMS::CISCO . "." . OpenstackPlatformModule::USERNAME,
+                SERVER_PLATFORMS::CISCO . "." . OpenstackPlatformModule::SSL_VERIFYPEER,
+
+                SERVER_PLATFORMS::HPCLOUD . "." . OpenstackPlatformModule::API_KEY,
+                SERVER_PLATFORMS::HPCLOUD . "." . OpenstackPlatformModule::AUTH_TOKEN,
+                SERVER_PLATFORMS::HPCLOUD . "." . OpenstackPlatformModule::KEYSTONE_URL,
+                SERVER_PLATFORMS::HPCLOUD . "." . OpenstackPlatformModule::PASSWORD,
+                SERVER_PLATFORMS::HPCLOUD . "." . OpenstackPlatformModule::TENANT_NAME,
+                SERVER_PLATFORMS::HPCLOUD . "." . OpenstackPlatformModule::USERNAME,
+                SERVER_PLATFORMS::HPCLOUD . "." . OpenstackPlatformModule::SSL_VERIFYPEER,
 
                 SERVER_PLATFORMS::ECS . "." . OpenstackPlatformModule::API_KEY,
                 SERVER_PLATFORMS::ECS . "." . OpenstackPlatformModule::AUTH_TOKEN,
@@ -763,6 +809,7 @@ class Scalr_Environment extends Scalr_Model
                            SERVER_PLATFORMS::ECS,
                            SERVER_PLATFORMS::OCS,
                            SERVER_PLATFORMS::NEBULA,
+                           SERVER_PLATFORMS::MIRANTIS,
                            SERVER_PLATFORMS::RACKSPACENG_UK,
                            SERVER_PLATFORMS::RACKSPACENG_US) as $platform) {
                 $ret[$platform] = array(
@@ -783,4 +830,15 @@ class Scalr_Environment extends Scalr_Model
         }
         return $linkid !== null ? (isset($ret[$linkid]) ? $ret[$linkid] : null) : $rev;
     }
+
+    public function getFarmsCount()
+    {
+        return $this->db->GetOne("SELECT count(id) FROM `farms` WHERE env_id = ?", [$this->id]);
+    }
+
+    public function getRunningServersCount()
+    {
+        return $this->db->GetOne("SELECT count(id) FROM `servers` WHERE env_id = ? AND status = ?", [$this->id, SERVER_STATUS::RUNNING]);
+    }
+
 }

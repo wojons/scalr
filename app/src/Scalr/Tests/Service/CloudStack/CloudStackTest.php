@@ -310,7 +310,8 @@ class CloudStackTest extends CloudStackTestCase
             $this->assertEquals(true, $zone->localstorageenabled);
             $this->assertEquals("jp-east-t1v", $zone->name);
             $this->assertEquals("Advanced", $zone->networktype);
-            $this->assertEquals("key/value", $zone->resourcedetails);
+            $this->assertEquals("0.9", $zone->resourcedetails->{"pool.storage.capacity.disablethreshold"});
+            $this->assertEquals("1.0", $zone->resourcedetails->{"storage.overprovisioning.factor"});
             $this->assertEquals(false, $zone->securitygroupsenabled);
             $this->assertEquals(42, $zone->vlan);
             $this->assertEquals("Enabled", $zone->allocationstate);
@@ -566,12 +567,14 @@ class CloudStackTest extends CloudStackTestCase
     /**
      * @test
      * @dataProvider providerRs
+     * @functional
      */
     public function testFunctionalCloudStack($platform, $cloudLocation, $templateId, $serviceId)
     {
-        if ($this->isSkipFunctionalTests() || $platform === self::EMPTY_CONFIG) {
+        if ($platform === self::EMPTY_CONFIG) {
             $this->markTestSkipped();
         }
+
         /* @var $cs CloudStack */
         if ($this->getContainer()->environment->isPlatformEnabled($platform)) {
             $cs = $this->getContainer()->cloudstack($platform);
@@ -634,7 +637,6 @@ class CloudStackTest extends CloudStackTestCase
         $capabilities = $cs->listCapabilities();
 
         $events = $cs->listEvents(array('listall' => true));
-        $this->assertInstanceOf('Scalr\Service\CloudStack\DataType\EventResponseList', $events);
 
         $osTypes = $cs->listOsTypes();
         $this->assertInstanceOf('Scalr\Service\CloudStack\DataType\OsTypeList', $osTypes);

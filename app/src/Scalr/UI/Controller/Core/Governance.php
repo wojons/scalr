@@ -25,7 +25,13 @@ class Scalr_UI_Controller_Core_Governance extends Scalr_UI_Controller
             SERVER_PLATFORMS::ECS,
             SERVER_PLATFORMS::OPENSTACK,
             SERVER_PLATFORMS::NEBULA,
-            SERVER_PLATFORMS::OCS
+            SERVER_PLATFORMS::MIRANTIS,
+            SERVER_PLATFORMS::VIO,
+            SERVER_PLATFORMS::VERIZON,
+            SERVER_PLATFORMS::CISCO,
+            SERVER_PLATFORMS::HPCLOUD,
+            SERVER_PLATFORMS::OCS,
+            SERVER_PLATFORMS::RACKSPACENG_US
         );
         //intersection of enabled platforms and supported by governance
         foreach (array_intersect($this->getEnvironment()->getEnabledPlatforms(), $governanceEnabledPlatforms) as $platform) {
@@ -38,10 +44,10 @@ class Scalr_UI_Controller_Core_Governance extends Scalr_UI_Controller
             $chefServers[] = [
                 'id'    => $chefServer->id,
                 'url'   => $chefServer->url,
-                'level' => $chefServer->level == 1 ? 'scalr' : ($chefServer->level == 2 ? 'account' : 'environment')
+                'scope' => $chefServer->getScope()
             ];
         }
-        
+
         $governance = new Scalr_Governance($this->getEnvironmentId());
         $this->response->page('ui/core/governance/edit.js', array(
             'platforms' => $platforms,
@@ -49,7 +55,7 @@ class Scalr_UI_Controller_Core_Governance extends Scalr_UI_Controller
             'chef' => [
                 'servers' => $chefServers
             ]
-        ), array('ux-boxselect.js', 'ui/core/governance/lease.js'), array('ui/core/governance/edit.css'));
+        ), array('ui/core/governance/lease.js'), array('ui/core/governance/edit.css'));
     }
 
     public function xSaveAction()
@@ -72,19 +78,22 @@ class Scalr_UI_Controller_Core_Governance extends Scalr_UI_Controller
             if (! $governance->isEnabled(Scalr_Governance::CATEGORY_GENERAL, Scalr_Governance::GENERAL_LEASE) && $value['enabled'] == 1 && $enabled) {
                 $dt = new DateTime();
                 $dt->add(new DateInterval('P' . $value['limits']['defaultLifePeriod'] . 'D'));
-                $farms = $this->db->GetCol('SELECT id FROM farms WHERE env_id = ? AND status = ?', array($this->getEnvironmentId(), FARM_STATUS::RUNNING));
+                $farms = $this->db->GetCol('SELECT id FROM farms WHERE env_id = ?', array($this->getEnvironmentId()));
                 foreach ($farms as $farmId) {
                     $farm = DBFarm::LoadByID($farmId);
-
                     $farm->SetSetting(DBFarm::SETTING_LEASE_STATUS, 'Active');
-                    $farm->SetSetting(DBFarm::SETTING_LEASE_TERMINATE_DATE, $dt->format('Y-m-d H:i:s'));
-                    $farm->SetSetting(DBFarm::SETTING_LEASE_NOTIFICATION_SEND, '');
-                    $farm->SetSetting(DBFarm::SETTING_LEASE_EXTEND_CNT, 0);
+
+                    if ($farm->Status == FARM_STATUS::RUNNING) {
+                        $farm->SetSetting(DBFarm::SETTING_LEASE_TERMINATE_DATE, $dt->format('Y-m-d H:i:s'));
+                        $farm->SetSetting(DBFarm::SETTING_LEASE_NOTIFICATION_SEND, '');
+                        $farm->SetSetting(DBFarm::SETTING_LEASE_EXTEND_CNT, 0);
+                    }
                 }
             }
         }
 
         $governance->setValue($category, $name, $value);
+        $this->response->data(['governance' => $governance->getValues(true)]);
         $this->response->success('Successfully saved');
     }
 }

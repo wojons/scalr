@@ -76,7 +76,7 @@ class EucalyptusPlatformModule extends AbstractPlatformModule implements \Scalr\
         }
 
         foreach ($this->getLocations($env) as $location => $desc) {
-            $url = $env->getPlatformConfigValue($this::EC2_URL, false, $location);
+            $url = $env->getPlatformConfigValue(static::EC2_URL, false, $location);
 
             if (empty($url)) {
                 continue;
@@ -154,7 +154,7 @@ class EucalyptusPlatformModule extends AbstractPlatformModule implements \Scalr\
             try {
                 $results = $environment->eucalyptus($region)->ec2->instance->describe();
             } catch (\Exception $e) {
-                throw new \Exception(sprintf("Cannot get list of servers for platfrom euca: %s", $e->getMessage()));
+                throw new \Exception(sprintf("Cannot get list of servers for platform euca: %s", $e->getMessage()));
             }
             if (count($results)) {
                 foreach ($results as $reservation) {
@@ -256,7 +256,7 @@ class EucalyptusPlatformModule extends AbstractPlatformModule implements \Scalr\
 
             //$ami variable is expected to be defined here
 
-            $platfrom = $ami->platform;
+            $platform = $ami->platform;
             $rootDeviceType = $ami->rootDeviceType;
 
             if ($rootDeviceType == 'ebs') {
@@ -346,20 +346,20 @@ class EucalyptusPlatformModule extends AbstractPlatformModule implements \Scalr\
         }
 
         $ami = $euca->ec2->image->describe($protoImageId)->get(0);
-        $platfrom = $ami->platform;
+        $platform = $ami->platform;
         $rootDeviceType = $ami->rootDeviceType;
 
         if ($rootDeviceType == 'ebs') {
             $BundleTask->bundleType = \SERVER_SNAPSHOT_CREATION_TYPE::EUCA_EBS;
-            $BundleTask->Log(sprintf(_("Selected platfrom snapshoting type: %s"), $BundleTask->bundleType));
+            $BundleTask->Log(sprintf(_("Selected platform snapshotting type: %s"), $BundleTask->bundleType));
             $BundleTask->SnapshotCreationFailed("Not supported yet");
             return;
         }
         else {
-            if ($platfrom == 'windows') {
-                //TODO: Windows platfrom is not supported yet.
+            if ($platform == 'windows') {
+                //TODO: Windows platform is not supported yet.
                 $BundleTask->bundleType = \SERVER_SNAPSHOT_CREATION_TYPE::EUCA_WIN;
-                $BundleTask->Log(sprintf(_("Selected platfrom snapshoting type: %s"), $BundleTask->bundleType));
+                $BundleTask->Log(sprintf(_("Selected platform snapshotting type: %s"), $BundleTask->bundleType));
                 $BundleTask->SnapshotCreationFailed("Not supported yet");
                 return;
             } else {
@@ -368,7 +368,7 @@ class EucalyptusPlatformModule extends AbstractPlatformModule implements \Scalr\
 
                 $BundleTask->Save();
 
-                $BundleTask->Log(sprintf(_("Selected platfrom snapshoting type: %s"), $BundleTask->bundleType));
+                $BundleTask->Log(sprintf(_("Selected platform snapshotting type: %s"), $BundleTask->bundleType));
 
                 $msg = new \Scalr_Messaging_Msg_Rebundle(
                     $BundleTask->id,
@@ -598,6 +598,8 @@ class EucalyptusPlatformModule extends AbstractPlatformModule implements \Scalr\
 
             $launchOptions->serverType = $dbFarmRole->GetSetting(DBFarmRole::SETTING_EUCA_INSTANCE_TYPE);
 
+            $u_data = '';
+
             foreach ($DBServer->GetCloudUserData() as $k => $v) {
                 $u_data .= "{$k}={$v};";
             }
@@ -724,6 +726,8 @@ class EucalyptusPlatformModule extends AbstractPlatformModule implements \Scalr\
             $DBServer->cloudLocation = $launchOptions->cloudLocation;
             $DBServer->cloudLocationZone = $result->instancesSet->get(0)->placement->availabilityZone;
             $DBServer->imageId = $launchOptions->imageId;
+            // we set server history here
+            $DBServer->getServerHistory();
 
             return $DBServer;
         } else {
@@ -1158,7 +1162,7 @@ class EucalyptusPlatformModule extends AbstractPlatformModule implements \Scalr\
         $detailed = [];
 
         //Trying to retrieve instance types from the cache
-        $url = $this->getConfigVariable($this::EC2_URL, $env, false, $cloudLocation);
+        $url = $this->getConfigVariable(static::EC2_URL, $env, false, $cloudLocation);
         $collection = $this->getCachedInstanceTypes(\SERVER_PLATFORMS::EUCALYPTUS, $url, $cloudLocation);
 
         if ($collection === false || $collection->count() == 0) {

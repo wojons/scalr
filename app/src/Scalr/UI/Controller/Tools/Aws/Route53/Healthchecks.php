@@ -13,7 +13,7 @@ class Scalr_UI_Controller_Tools_Aws_Route53_Healthchecks extends Scalr_UI_Contro
      */
     public function xListAction($cloudLocation)
     {
-        $result = array();
+        $result = [];
         $marker = null;
 
         do {
@@ -23,10 +23,8 @@ class Scalr_UI_Controller_Tools_Aws_Route53_Healthchecks extends Scalr_UI_Contro
             $checkList = $this->environment->aws($cloudLocation)->route53->health->describe($marker);
 
             foreach ($checkList as $check) {
-                $checkResult = array();
-
                 if (property_exists($check, 'healthId')) {
-                    $checkResult = array(
+                    $checkResult = [
                         'healthId'          =>  $check->healthId,
                         'ipAddress'         => $check->healthConfig->ipAddress,
                         'port'              => $check->healthConfig->port,
@@ -37,13 +35,13 @@ class Scalr_UI_Controller_Tools_Aws_Route53_Healthchecks extends Scalr_UI_Contro
                         'requestInterval'   => $check->healthConfig->requestInterval,
                         'failureThreshold'  => $check->healthConfig->failureThreshold,
                         'resourcePath'      => ltrim($check->healthConfig->resourcePath, '/')
-                    );
+                    ];
                     $result[] = $checkResult;
                 }
             }
         } while ($checkList->marker !== null);
 
-        $response = $this->buildResponseFromData($result, array('hostName', 'resourcePath', 'searchString', 'ipAddress'), true);
+        $response = $this->buildResponseFromData($result, ['hostName', 'resourcePath', 'searchString', 'ipAddress'], true);
         $this->response->data($response);
     }
 
@@ -54,10 +52,11 @@ class Scalr_UI_Controller_Tools_Aws_Route53_Healthchecks extends Scalr_UI_Contro
     public function infoAction($cloudLocation, $healthId)
     {
         $check = $this->environment->aws($cloudLocation)->route53->health->fetch($healthId);
-        $checkResult = array();
+
+        $checkResult = [];
 
         if (property_exists($check, 'healthId')) {
-            $checkResult = array(
+            $checkResult = [
                 'healthId'          =>  $check->healthId,
                 'ipAddress'         => $check->healthConfig->ipAddress,
                 'port'              => $check->healthConfig->port,
@@ -68,12 +67,10 @@ class Scalr_UI_Controller_Tools_Aws_Route53_Healthchecks extends Scalr_UI_Contro
                 'requestInterval'   => $check->healthConfig->requestInterval,
                 'failureThreshold'  => $check->healthConfig->failureThreshold,
                 'resourcePath'      => ltrim($check->healthConfig->resourcePath, '/')
-            );
+            ];
         }
 
-        $this->response->page('ui/tools/aws/route53/healthchecks/info.js', array(
-            'data' => $checkResult
-        ));
+        $this->response->page('ui/tools/aws/route53/healthchecks/info.js', ['data' => $checkResult]);
     }
 
     /**
@@ -94,28 +91,31 @@ class Scalr_UI_Controller_Tools_Aws_Route53_Healthchecks extends Scalr_UI_Contro
         $healthData = new HealthData();
         $protocol = strtoupper($protocol);
         $healthConfig = new HealthConfigData(
-                $ipAddress,
-                $port,
-                null,
-                null,
-                null,
-                null,
-                $requestInterval,
-                $failureThreshold
-            );
+            $ipAddress,
+            $port,
+            null,
+            null,
+            null,
+            null,
+            $requestInterval,
+            $failureThreshold
+        );
+
         if ('TCP' != $protocol) {
             $healthConfig->domainName = !empty($hostName) ? $hostName : null;
             $healthConfig->resourcePath = !empty($resourcePath) ? $resourcePath : null;
         }
+
         if (('HTTP' == $protocol || 'HTTPS' == $protocol) && !empty($searchString)) {
             $healthConfig->searchString = $searchString;
             $protocol .= '_STR_MATCH';
         }
+
         $healthConfig->type = $protocol;
         $healthData->setHealthConfig($healthConfig);
         $response = $this->environment->aws($cloudLocation)->route53->health->create($healthData);
 
-        $this->response->data(array('data' => $response));
+        $this->response->data(['data' => $response]);
     }
 
     /**

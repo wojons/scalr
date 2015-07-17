@@ -41,7 +41,7 @@ class GroupsTest extends WebTestCase
             //Performs edit action call
             $edit = $this->request('/security/groups/' . $obj['id'] . '/edit', $pars);
             $this->assertInternalType('array', $edit);
-            $this->assertArrayHas(true, 'success', $edit);
+            $this->assertTrue(isset($edit['success']) && $edit['success']);
             $this->assertArrayHasKey('moduleParams', $edit);
             if (!empty($edit['moduleParams']['rules'])) {
                 $obj = reset($edit['moduleParams']['rules']);

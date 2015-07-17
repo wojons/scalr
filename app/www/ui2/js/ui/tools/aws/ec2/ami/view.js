@@ -8,7 +8,7 @@ Scalr.regPage('Scalr.ui.tools.aws.ec2.ami.view', function (loadParams, modulePar
             url: '/tools/aws/ec2/ami/xList/',
             reader: {
                 type: 'json',
-                root: 'data'
+                rootProperty: 'data'
             }
         },
         autoLoad: true
@@ -16,26 +16,19 @@ Scalr.regPage('Scalr.ui.tools.aws.ec2.ami.view', function (loadParams, modulePar
 	});
 
 	return Ext.create('Ext.grid.Panel', {
-		title: 'Tools &raquo; Amazon Web Services &raquo; EC2 &raquo; AMI',
 		scalrOptions: {
-			'reload': false,
-			'maximize': 'all'
+			reload: false,
+			maximize: 'all',
+            menuTitle: 'AWS EC2 AMI'
 		},
 		store: store,
 		stateId: 'grid-tools-aws-ec2-ami-view',
 		stateful: true,
-		plugins: {
-			ptype: 'gridstore'
-		},
-		tools: [{
-			xtype: 'gridcolumnstool'
-		}, {
-			xtype: 'favoritetool',
-			favorite: {
-				text: 'AMI',
-				href: '#/tools/aws/ec2/ami'
-			}
-		}],
+        plugins: [{
+            ptype: 'gridstore'
+        }, {
+            ptype: 'applyparams'
+        }],
 
 		viewConfig: {
 			emptyText: 'No images found',
@@ -44,7 +37,7 @@ Scalr.regPage('Scalr.ui.tools.aws.ec2.ami.view', function (loadParams, modulePar
 
 		columns: [
 			{ header: "ID", flex: 1, dataIndex: 'id', sortable: true, xtype: 'templatecolumn', tpl:
-                '<tpl if="status != &quot;none&quot;"><a href="#/images/view?id={id}">{id}</a><tpl else>{id}</tpl>'
+                '<tpl if="status != &quot;none&quot;"><a href="#/images?id={id}">{id}</a><tpl else>{id}</tpl>'
             },
 			{ header: "Name", flex: 1, dataIndex: 'name', sortable: true },
 			{ header: "Status", flex: 1, dataIndex: 'status', sortable: true },
@@ -53,7 +46,7 @@ Scalr.regPage('Scalr.ui.tools.aws.ec2.ami.view', function (loadParams, modulePar
             { header: "is Public", flex: 1, dataIndex: 'imageIsPublic', sortable: true },
 			{ header: "Image state", flex: 1, dataIndex: 'imageState', sortable: true
 			}, {
-				xtype: 'optionscolumn2',
+				xtype: 'optionscolumn',
                 hidden: true,
 				getVisibility: function (record) {
 					return record.get('status') !== 'deleting' && record.get('status') !== 'deleted'
@@ -62,20 +55,18 @@ Scalr.regPage('Scalr.ui.tools.aws.ec2.ami.view', function (loadParams, modulePar
 					text: 'CloudWatch statistics',
 					iconCls: 'x-menu-icon-statsload',
 					menuHandler: function (data) {
-						document.location.href = '#/tools/aws/ec2/cloudwatch/view?objectId=' + data['volumeId'] + '&object=VolumeId&namespace=AWS/EBS&region=' + store.proxy.extraParams.cloudLocation;
+                        Scalr.event.fireEvent('redirect', '#/tools/aws/ec2/cloudwatch?objectId=' + data['volumeId'] + '&object=VolumeId&namespace=AWS/EBS&region=' + store.proxy.extraParams.cloudLocation);
 					}
 				},{
-					itemId: 'option.attach',
 					iconCls: 'x-menu-icon-attach',
 					text: 'Attach',
 					menuHandler: function(data) {
-						document.location.href = "#/tools/aws/ec2/ebs/volumes/" + data['volumeId'] + "/attach?cloudLocation=" + store.proxy.extraParams.cloudLocation;
+                        Scalr.event.fireEvent('redirect', "#/tools/aws/ec2/ebs/volumes/" + data['volumeId'] + "/attach?cloudLocation=" + store.proxy.extraParams.cloudLocation);
 					},
                     getVisibility: function(data) {
                         return !data['mysqMasterVolume'] && !data['instanceId'];
                     }
 				},{
-					itemId: 'option.detach',
 					iconCls: 'x-menu-icon-detach',
 					text: 'Detach',
                     getVisibility: function(data) {
@@ -100,20 +91,16 @@ Scalr.regPage('Scalr.ui.tools.aws.ec2.ami.view', function (loadParams, modulePar
 						}
 					}
 				},{
-					xtype: 'menuseparator',
-					itemId: 'option.attachSep'
+					xtype: 'menuseparator'
 				},{
-					itemId: 'option.autosnap',
 					text: 'Auto-snapshot settings',
 					iconCls: 'x-menu-icon-autosnapshotsettings',
 					menuHandler: function(data) {
-						document.location.href = '#/tools/aws/autoSnapshotSettings?type=ebs&objectId=' + data['volumeId'] + '&cloudLocation=' + store.proxy.extraParams.cloudLocation;
+                        Scalr.event.fireEvent('redirect', '#/tools/aws/autoSnapshotSettings?type=ebs&objectId=' + data['volumeId'] + '&cloudLocation=' + store.proxy.extraParams.cloudLocation);
 					}
 				}, {
-					xtype: 'menuseparator',
-					itemId: 'option.snapSep'
+					xtype: 'menuseparator'
 				}, {
-					itemId: 'option.createSnap',
 					text: 'Create snapshot',
 					iconCls: 'x-menu-icon-create',
 					request: {
@@ -130,21 +117,18 @@ Scalr.regPage('Scalr.ui.tools.aws.ec2.ami.view', function (loadParams, modulePar
 							return { volumeId: data['volumeId'], cloudLocation: store.proxy.extraParams.cloudLocation };
 						},
 						success: function (data) {
-							document.location.href = '#/tools/aws/ec2/ebs/snapshots/' + data.data.snapshotId + '/view?cloudLocation=' + store.proxy.extraParams.cloudLocation;
+                            Scalr.event.fireEvent('redirect', '#/tools/aws/ec2/ebs/snapshots/' + data.data.snapshotId + '/view?cloudLocation=' + store.proxy.extraParams.cloudLocation);
 						}
 					}
 				}, {
-					itemId: 'option.viewSnaps',
 					text: 'View snapshots',
 					iconCls: 'x-menu-icon-view',
 					menuHandler: function(data) {
-						document.location.href = '#/tools/aws/ec2/ebs/snapshots/view?volumeId=' + data['volumeId'] + '&cloudLocation=' + store.proxy.extraParams.cloudLocation;
+                        Scalr.event.fireEvent('redirect', '#/tools/aws/ec2/ebs/snapshots?volumeId=' + data['volumeId'] + '&cloudLocation=' + store.proxy.extraParams.cloudLocation);
 					}
 				}, {
-					xtype: 'menuseparator',
-					itemId: 'option.vsnapSep'
+					xtype: 'menuseparator'
 				}, {
-					itemId: 'option.delete',
 					text: 'Delete',
 					iconCls: 'x-menu-icon-delete',
 					request: {
@@ -168,7 +152,6 @@ Scalr.regPage('Scalr.ui.tools.aws.ec2.ami.view', function (loadParams, modulePar
 			}
 		],
 
-		multiSelect: true,
 		selModel: {
 			selType: 'selectedmodel',
 			getVisibility: function(record) {
@@ -192,20 +175,15 @@ Scalr.regPage('Scalr.ui.tools.aws.ec2.ami.view', function (loadParams, modulePar
 				store: store,
                 filterFields: [ 'id' ]
 			}, ' ', {
-				xtype: 'fieldcloudlocation',
-				itemId: 'cloudLocation',
-				store: {
-					fields: [ 'id', 'name' ],
-					data: moduleParams.locations,
-					proxy: 'object'
-				},
+                xtype: 'cloudlocationfield',
+                platforms: ['ec2'],
 				gridStore: store
 			}, '->', {
-                ui: 'paging',
                 itemId: 'delete',
                 disabled: true,
                 hidden: true,
-                iconCls: 'x-tbar-delete',
+                iconCls: 'x-btn-icon-delete',
+                cls: 'x-btn-red',
                 tooltip: 'Delete',
                 handler: function() {
                     var request = {

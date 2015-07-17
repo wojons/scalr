@@ -24,7 +24,7 @@ Feature: DBQueueEvent
         White Rabbit stops script with options '-c ../../../tests/etc/config.yml -v DEBUG'
         White Rabbit stops wsgi server on port 80
 
-        White Rabbit checks webhook_history
+        White Rabbit checks webhook_history table
             | history_id                             | status | response_code | handle_attempts | error_msg         |
             | 'a0000000-0000-0000-0000-000000000001' | 1      | 200           | 1               |                   |
             | 'a0000000-0000-0000-0000-000000000002' | 0      | NULL          | 1               | 'ConnectionError' |
@@ -53,7 +53,7 @@ Feature: DBQueueEvent
         White Rabbit stops script with options '-c ../../../tests/etc/config.yml -v DEBUG'
         White Rabbit stops wsgi server on port 444
 
-        White Rabbit checks webhook_history
+        White Rabbit checks webhook_history table
             | history_id                             | status | response_code | handle_attempts | error_msg         |
             | 'a0000000-0000-0000-0000-000000000001' | 1      | 200           | 1               |                   |
             | 'a0000000-0000-0000-0000-000000000002' | 0      | NULL          | 1               | 'ConnectionError' |
@@ -84,7 +84,7 @@ Feature: DBQueueEvent
         White Rabbit stops wsgi server on port 80
         White Rabbit stops wsgi server on port 8080
 
-        White Rabbit checks webhook_history
+        White Rabbit checks webhook_history table
             | history_id                             | status | response_code | handle_attempts | error_msg         |
             | 'a0000000-0000-0000-0000-000000000001' | 1      | 200           | 1               |                   |
             | 'a0000000-0000-0000-0000-000000000002' | 0      | NULL          | 1               | 'ConnectionError' |
@@ -109,7 +109,7 @@ Feature: DBQueueEvent
         White Rabbit starts script with options '-c ../../../tests/etc/config.yml -v DEBUG'
         White Rabbit waits 3 seconds
 
-        White Rabbit checks webhook_history
+        White Rabbit checks webhook_history table
             | history_id                             | status | response_code | handle_attempts | error_msg               |
             | 'a0000000-0000-0000-0000-000000000001' | 0      | 500           | 1               | 'Internal Server Error' |
 
@@ -137,7 +137,7 @@ Feature: DBQueueEvent
         White Rabbit starts script with options '-c ../../../tests/etc/config.yml -v DEBUG'
         White Rabbit waits 3 seconds
 
-        White Rabbit checks webhook_history
+        White Rabbit checks webhook_history table
             | history_id                             | status | response_code | handle_attempts | error_msg               |
             | 'a0000000-0000-0000-0000-000000000001' | 0      | 500           | 1               | 'Internal Server Error' |
 
@@ -145,14 +145,14 @@ Feature: DBQueueEvent
 
         White Rabbit waits 172 seconds
 
-        White Rabbit checks webhook_history
+        White Rabbit checks webhook_history table
             | history_id                             | status | response_code | handle_attempts | error_msg               |
             | 'a0000000-0000-0000-0000-000000000001' | 0      | 500           | 1               | 'Internal Server Error' |
 
         White Rabbit starts wsgi server on port 80
         White Rabbit waits 10 seconds
 
-        White Rabbit checks webhook_history
+        White Rabbit checks webhook_history table
             | history_id                             | status | response_code | handle_attempts | error_msg               |
             | 'a0000000-0000-0000-0000-000000000001' | 1      | 200           | 2               | 'Internal Server Error' |
 
@@ -179,25 +179,25 @@ Feature: DBQueueEvent
         White Rabbit starts script with options '-c ../../../tests/etc/config.yml -v DEBUG'
         White Rabbit waits 10 seconds
 
-        White Rabbit checks webhook_history
+        White Rabbit checks webhook_history table
             | history_id                             | status | response_code | handle_attempts | error_msg     |
             | 'a0000000-0000-0000-0000-000000000001' | 0      | NULL          | 1               | 'ReadTimeout' |
 
         White Rabbit waits 180 seconds
 
-        White Rabbit checks webhook_history
+        White Rabbit checks webhook_history table
             | history_id                             | status | response_code | handle_attempts | error_msg     |
             | 'a0000000-0000-0000-0000-000000000001' | 0      | NULL          | 2               | 'ReadTimeout' |
 
         White Rabbit waits 180 seconds
 
-        White Rabbit checks webhook_history
+        White Rabbit checks webhook_history table
             | history_id                             | status | response_code | handle_attempts | error_msg     |
             | 'a0000000-0000-0000-0000-000000000001' | 0      | NULL          | 2               | 'ReadTimeout' |
 
         White Rabbit waits 190 seconds
 
-        White Rabbit checks webhook_history
+        White Rabbit checks webhook_history table
             | history_id                             | status | response_code | handle_attempts | error_msg     |
             | 'a0000000-0000-0000-0000-000000000001' | 2      | NULL          | 3               | 'ReadTimeout' |
 
@@ -233,12 +233,12 @@ Feature: DBQueueEvent
         White Rabbit stops script with options '-c ../../../tests/etc/config.yml -v DEBUG'
         White Rabbit stops wsgi server on port 80
 
-        White Rabbit checks webhook_history
+        White Rabbit checks webhook_history table
             | history_id                             | status | response_code | handle_attempts | error_msg         |
             | 'a0000000-0000-0000-0000-000000000001' | 1      | 200           | 1               |                   |
             | 'a0000000-0000-0000-0000-000000000002' | 2      | NULL          | 3               | 'ConnectionError' |
 
-        White Rabbit checks events
+        White Rabbit checks events table
             | event_id                               | wh_completed | wh_failed |
             | 'e0000000-0000-0000-0000-000000000001' | 1            | 0         |
             | 'e0000000-0000-0000-0000-000000000002' | 0            | 1         |

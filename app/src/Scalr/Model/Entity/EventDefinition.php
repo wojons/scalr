@@ -1,8 +1,10 @@
 <?php
 namespace Scalr\Model\Entity;
 
+use Scalr\DataType\AccessPermissionsInterface;
 use Scalr\Model\AbstractEntity;
 use Scalr\DataType\ScopeInterface;
+use DateTime;
 /**
  * Event definition
  *
@@ -12,8 +14,13 @@ use Scalr\DataType\ScopeInterface;
  * @Entity
  * @Table(name="event_definitions")
  */
-class EventDefinition extends AbstractEntity implements ScopeInterface
+class EventDefinition extends AbstractEntity implements ScopeInterface, AccessPermissionsInterface
 {
+    /**
+     * Regex for name validation
+     */
+    const NAME_REGEXP = '[[:alnum:]]+';
+
     /**
      * ID
      *
@@ -57,6 +64,31 @@ class EventDefinition extends AbstractEntity implements ScopeInterface
     public $envId;
 
     /**
+     * Time when the record is created
+     *
+     * @Column(type="datetime")
+     * @var \DateTime
+     */
+    public $created;
+
+    /**
+     * Constructor
+     */
+    public function __construct()
+    {
+        $this->created = new DateTime();
+    }
+
+    /**
+     * {@inheritdoc}
+     * @see \Scalr\DataType\ScopeInterface::getScope()
+     */
+    public function getScope()
+    {
+        return !empty($this->envId) ? self::SCOPE_ENVIRONMENT : (!empty($this->accountId) ? self::SCOPE_ACCOUNT : self::SCOPE_SCALR);
+    }
+
+    /**
      * @param $name
      * @param $accountId
      * @param $envId
@@ -83,7 +115,7 @@ class EventDefinition extends AbstractEntity implements ScopeInterface
             ['$or' => [['accountId' => NULL], ['accountId' => $accountId]]],
             ['$or' => [['envId' => NULL], ['envId' => $envId]]]
         ]) as $ev) {
-            /* @var EventDefinition $ev */
+            /* @var $ev EventDefinition */
             $retval[$ev->name] = [
                 'name'        => $ev->name,
                 'description' => $ev->description,
@@ -103,13 +135,24 @@ class EventDefinition extends AbstractEntity implements ScopeInterface
     public function getUsed($accountId)
     {
         $used = [];
-        $used['rolesCount'] = $this->db()->GetOne('SELECT COUNT(*) FROM role_scripts rs ' .
-            'JOIN roles r ON r.id = rs.role_id WHERE r.client_id = ? AND rs.event_name = ?',
-            [$accountId == NULL ? 0 : $accountId, $this->name]);
+
+        $query = "SELECT COUNT(*) FROM role_scripts rs
+                  JOIN roles r ON r.id = rs.role_id
+                  WHERE rs.event_name = ?";
+        $params[] = $this->name;
+
+        if (empty($accountId)) {
+            $query .= " AND r.client_id IS NULL";
+        } else {
+            $query .= " AND r.client_id = ?";
+            $params[] = $accountId;
+        }
+
+        $used['rolesCount'] = $this->db()->GetOne($query, $params);
 
         $used['farmRolesCount'] = $this->db()->GetOne('SELECT COUNT(*) FROM farm_role_scripts frs ' .
             'JOIN farms f ON f.id = frs.farmid WHERE f.clientid = ? AND frs.event_name = ?',
-            [$accountId == NULL ? 0 : $accountId, $this->name]);
+            [empty($accountId) ? 0 : $accountId, $this->name]);
 
         $used['webhooksCount'] = $this->db()->GetOne('SELECT COUNT(*) FROM webhook_configs wh ' .
             'JOIN webhook_config_events wce ON wce.webhook_id = wh.webhook_id WHERE wh.account_id = ? AND wce.event_type = ?',
@@ -117,4 +160,35 @@ class EventDefinition extends AbstractEntity implements ScopeInterface
 
         return $used['rolesCount'] == 0 && $used['farmRolesCount'] == 0 && $used['webhooksCount'] == 0 ? false : $used;
     }
+
+    /**
+     * {@inheritdoc}
+     * @see \Scalr\DataType\AccessPermissionsInterface::hasAccessPermissions()
+     */
+    public function hasAccessPermissions($user, $environment = null, $modify = null)
+    {
+        $scope = $this->getScope();
+
+        if ($modify) {
+            if (!$environment) {
+                $result = $scope === $this::SCOPE_ACCOUNT && $this->accountId == $user->accountId ||
+                    $scope === $this::SCOPE_ENVIRONMENT && $user->hasAccessToEnvironment($this->envId);
+            } else {
+                $result = $scope === $this::SCOPE_ENVIRONMENT && $this->envId == $environment->id;
+            }
+        } else {
+            if (!$environment) {
+                $result = $scope === $this::SCOPE_SCALR ||
+                    $scope === $this::SCOPE_ACCOUNT && $this->accountId == $user->accountId ||
+                    $scope === $this::SCOPE_ENVIRONMENT && $user->hasAccessToEnvironment($this->envId);
+            } else {
+                $result = $scope === $this::SCOPE_SCALR ||
+                    $scope === $this::SCOPE_ACCOUNT && $this->accountId == $user->accountId ||
+                    $scope === $this::SCOPE_ENVIRONMENT && $this->envId == $environment->id;
+            }
+        }
+
+        return $result;
+    }
+
 }

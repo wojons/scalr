@@ -3,7 +3,8 @@ Scalr.regPage('Scalr.ui.scripts.execute', function (loadParams, moduleParams) {
         width: 900,
         title: loadParams['edit'] ? 'Edit shortcut' : 'Execute script',
         fieldDefaults: {
-            anchor: '100%'
+            anchor: '100%',
+            labelWidth: 120
         },
 
         items: [{
@@ -38,7 +39,6 @@ Scalr.regPage('Scalr.ui.scripts.execute', function (loadParams, moduleParams) {
                 itemId: 'tabs',
                 cls: 'x-tabs-dark',
                 margin: '0 0 18 0',
-                height: 100,
                 defaults: {
                     listeners: {
                         activate: function(tab) {
@@ -74,7 +74,7 @@ Scalr.regPage('Scalr.ui.scripts.execute', function (loadParams, moduleParams) {
                             },
                             allowBlank: false,
                             flex: 1,
-                            labelWidth: 50,
+                            labelWidth: 60,
                             listeners: {
                                 change: function (field) {
                                     var record = field.findRecordByValue(field.getValue());
@@ -106,8 +106,8 @@ Scalr.regPage('Scalr.ui.scripts.execute', function (loadParams, moduleParams) {
                             editable: false,
                             queryMode: 'local',
                             width: 140,
-                            labelWidth: 50,
-                            margin: '0 0 0 12',
+                            labelWidth: 60,
+                            margin: '0 0 0 24',
                             name: 'scriptVersion',
                             fieldLabel: 'Version',
                             listeners: {
@@ -161,12 +161,15 @@ Scalr.regPage('Scalr.ui.scripts.execute', function (loadParams, moduleParams) {
                         name: 'scriptPath',
                         disabled: true,
                         fieldLabel: 'Path',
-                        icons: {
-                            globalvars: true
+                        plugins: {
+                            ptype: 'fieldicons',
+                            position: 'outer',
+                            icons: ['globalvars']
                         },
                         allowBlank: false,
                         emptyText: '/path/to/the/script',
-                        labelWidth: 50
+                        labelWidth: 60,
+                        margin: 0
                     }]
                 }]
             }, {
@@ -174,7 +177,7 @@ Scalr.regPage('Scalr.ui.scripts.execute', function (loadParams, moduleParams) {
                 fieldLabel: 'Execution mode',
                 name: 'scriptIsSync',
                 defaults: {
-                    width: 110
+                    width: 130
                 },
                 items: [{
                     text: 'Blocking',
@@ -211,16 +214,15 @@ Scalr.regPage('Scalr.ui.scripts.execute', function (loadParams, moduleParams) {
             layout: 'hbox',
             items: [{
                 xtype: 'checkbox',
-                hideLabel: true,
-                boxLabel: 'Add a shortcut in Options menu for roles. It will allow me to execute this script with the above parameters with a single click.',
+                boxLabel: 'Add a shortcut in Options menu for roles.',
                 name: 'shortcutId',
                 inputValue: moduleParams['shortcutId'] || -1,
                 checked: !!moduleParams['shortcutId'],
-                readOnly: !!loadParams['edit']
-            }, {
-                xtype: 'displayfield',
-                margin: '0 0 0 6',
-                value: '<a href="https://scalr-wiki.atlassian.net/wiki/x/qQIb" target="_blank"><img class="tipHelp" src="/ui2/images/icons/info_icon_16x16.png" /></a>'
+                readOnly: !!loadParams['edit'],
+                plugins: {
+                    ptype: 'fieldicons',
+                    icons: [{id: 'info', tooltip: 'It will allow me to execute this script with the above parameters with a single click. <a href="https://scalr-wiki.atlassian.net/wiki/x/qQIb" target="_blank">Read more</a>'}]
+                }
             }]
         }],
 
@@ -304,7 +306,9 @@ Scalr.regPage('Scalr.ui.scripts.execute', function (loadParams, moduleParams) {
     if (moduleParams) {
         if (moduleParams['scriptPath'])
             form.down('#tabs').setActiveTab('localscript');
-
+        if (moduleParams.scriptId == 0) {
+            delete moduleParams.scriptId;
+        }
         form.getForm().setValues(moduleParams);
     }
 

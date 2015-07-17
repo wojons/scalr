@@ -18,7 +18,7 @@ class PollerSessionEntity extends AbstractEntity
      * The unique identifier of the record
      *
      * @Id
-     * @GeneratedValue("UUID")
+     * @GeneratedValue("CUSTOM")
      * @Column(type="uuid")
      * @var string
      */

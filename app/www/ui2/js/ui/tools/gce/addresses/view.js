@@ -1,8 +1,15 @@
 Scalr.regPage('Scalr.ui.tools.gce.addresses.view', function (loadParams, moduleParams) {
 	var store = Ext.create('store.store', {
 		fields: [
-			'id','ip', 'description','status','createdAt','serverIndex','serverId',
-			'instanceId','farmName','farmId','roleName','farmRoleId'
+			'id','ip', 'description','status','createdAt',
+            {name: 'serverId', defaultValue: null},
+            {name: 'serverIndex', defaultValue: null},
+            {name: 'instanceId', defaultValue: null},
+            {name: 'farmId', defaultValue: null},
+            {name: 'farmName', defaultValue: null},
+            {name: 'roleName', defaultValue: null},
+            {name: 'farmRoleId', defaultValue: null},
+
 		],
 		proxy: {
 			type: 'scalr.paging',
@@ -12,26 +19,22 @@ Scalr.regPage('Scalr.ui.tools.gce.addresses.view', function (loadParams, moduleP
 	});
 
 	return Ext.create('Ext.grid.Panel', {
-		title: 'Tools &raquo; GCE &raquo; Static IPs',
 		scalrOptions: {
-			'reload': true,
-			'maximize': 'all'
+			reload: true,
+			maximize: 'all',
+            menuTitle: 'GCE Static IPs',
+            menuHref: '#/tools/gce/addresses',
+            menuFavorite: true
 		},
 		store: store,
 		stateId: 'grid-tools-gce-addresses-view',
 		stateful: true,
-		plugins: {
-			ptype: 'gridstore'
-		},
-		tools: [{
-			xtype: 'gridcolumnstool'
-		}, {
-			xtype: 'favoritetool',
-			favorite: {
-				text: 'GCE Static IPs',
-				href: '#/tools/gce/addresses'
-			}
-		}],
+        plugins: [{
+            ptype: 'gridstore'
+        }, {
+            ptype: 'applyparams',
+            forbiddenFilters: ['platform']
+        }],
 
 		viewConfig: {
 			emptyText: 'No static ips found',
@@ -40,59 +43,28 @@ Scalr.regPage('Scalr.ui.tools.gce.addresses.view', function (loadParams, moduleP
 
 		columns: [
 			{ header: "Used By", flex: 1, dataIndex: 'farmName', sortable: true, xtype: 'templatecolumn', tpl:
-				'<tpl if="farmId"><a href="#/farms/{farmId}/view" title="Farm {farmName}">{farmName}</a>' +
+				'<tpl if="farmId"><a href="#/farms?farmId={farmId}" title="Farm {farmName}">{farmName}</a>' +
 					'<tpl if="roleName">&nbsp;&rarr;&nbsp;<a href="#/farms/{farmId}/roles/{farmRoleId}/view"' +
 						'title="Role {roleName}">{roleName}</a> #{serverIndex}' +
 					'</tpl>' +
 				'</tpl>' +
-				'<tpl if="! farmId"><img src="/ui2/images/icons/false.png" /></tpl>'
+				'<tpl if="! farmId">&mdash;</tpl>'
 			},
 			{ header: "Name", width: 150, dataIndex: 'id', sortable: true },
 			{ header: "IP", width: 140, dataIndex: 'ip', sortable: true },
 			{ header: "Description", width: 200, dataIndex: 'description', sortable: true },
-			{ header: "Date", width: 170, dataIndex: 'createdAt', sortable: true },
+			{ header: "Date", width: 175, dataIndex: 'createdAt', sortable: true },
 			{ header: "Status", width: 100, dataIndex: 'status', sortable: true, xtype: 'templatecolumn', tpl:
 				'{status}'
 			},
 			{ header: "Server", flex: 1, dataIndex: 'serverId', sortable: true, xtype: 'templatecolumn', tpl:
-				'<tpl if="serverId"><a href="#/servers/{serverId}/view">{serverId}</a></tpl>' +
+				'<tpl if="serverId"><a href="#/servers?serverId={serverId}">{serverId}</a></tpl>' +
 				'<tpl if="!serverId">{instanceId}</tpl>'
-			},
-			{
-				xtype: 'optionscolumn2',
-				menu: [{
-					itemId: 'option.delete',
-					text: 'Delete',
-					iconCls: 'x-menu-icon-delete',
-					request: {
-						confirmBox: {
-							type: 'delete',
-							msg: 'Are you sure want to delete static IP "{ip}"?'
-						},
-						processBox: {
-							type: 'delete',
-							msg: 'Deleting static ip(s) ...'
-						},
-						url: '/tools/gce/addresses/xRemove/',
-						dataHandler: function (data) {
-							return { 
-								addressId: Ext.encode([data['id']]),
-								cloudLocation: store.proxy.extraParams.cloudLocation
-							};
-						},
-						success: function () {
-							store.load();
-						}
-					}
-				}]
 			}
 		],
 
-		multiSelect: true,
-		selModel: {
-			selType: 'selectedmodel'
-		},
-		listeners: {
+        selModel: 'selectedmodel',
+        listeners: {
 			selectionchange: function(selModel, selections) {
 				this.down('scalrpagingtoolbar').down('#delete').setDisabled(!selections.length);
 			}
@@ -103,9 +75,9 @@ Scalr.regPage('Scalr.ui.tools.gce.addresses.view', function (loadParams, moduleP
 			store: store,
 			dock: 'top',
 			afterItems: [{
-				ui: 'paging',
 				itemId: 'delete',
-				iconCls: 'x-tbar-delete',
+				iconCls: 'x-btn-icon-delete',
+                cls: 'x-btn-red',
 				tooltip: 'Select one or more IPs to delete them',
 				disabled: true,
 				handler: function() {
@@ -136,15 +108,10 @@ Scalr.regPage('Scalr.ui.tools.gce.addresses.view', function (loadParams, moduleP
 			items: [{
                 xtype: 'filterfield',
                 store: store
-            }, {
-				xtype: 'fieldcloudlocation',
-				itemId: 'cloudLocation',
-                margin: '0 0 0 12',
-				store: {
-					fields: [ 'id', 'name' ],
-					data: moduleParams.locations,
-					proxy: 'object'
-				},
+            }, ' ', {
+                xtype: 'cloudlocationfield',
+                platforms: ['gce'],
+                locations: moduleParams.locations,
 				gridStore: store
 			}]
 		}]

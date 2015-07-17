@@ -77,6 +77,8 @@ class ServersApi
         return $result;
     }
 
+    
+    
     /**
      * Detach volume to the server
      *
@@ -790,6 +792,25 @@ class ServersApi
     }
 
     /**
+     * List Availability Zones
+     *
+     * Lists nova availability zones
+     *
+     * @return  array Returns the list nova availability zones
+     * @throws  RestClientException
+     */
+    public function listAvailabilityZones()
+    {
+        $result = null;
+        $response = $this->getClient()->call($this->service, '/os-availability-zone');
+        if ($response->hasError() === false) {
+            $result = json_decode($response->getContent());
+            $result = $result->availabilityZoneInfo;
+        }
+        return $result;
+    }
+    
+    /**
      * List Nova Networks
      *
      * Lists nova networks that are available to the tenant.
@@ -983,16 +1004,16 @@ class ServersApi
     /**
      * List security groups.
      *
-     * @param   string     $serverId   optional The server ID (UUID) of interest to you.
+     * @param   string     $securityGroupId   optional The server ID (UUID) of interest to you.
      * @return  DefaultPaginationList|object  Returns the list of the security groups
      * @throws  RestClientException
      */
-    public function listSecurityGroups($serverId = null)
+    public function listSecurityGroups($securityGroupId = null)
     {
         $result = null;
         $response = $this->getClient()->call(
             $this->service,
-            ($serverId === null ? '/os-security-groups' : sprintf('/os-security-groups/%s', (string)$serverId))
+            ($securityGroupId === null ? '/os-security-groups' : sprintf('/os-security-groups/%s', (string)$securityGroupId))
         );
 
         if ($response->hasError() === false) {

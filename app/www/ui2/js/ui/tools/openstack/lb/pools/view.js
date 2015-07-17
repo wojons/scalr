@@ -10,13 +10,13 @@ Scalr.regPage('Scalr.ui.tools.openstack.lb.pools.view', function (loadParams, mo
     });
 
     var panel = Ext.create('Ext.grid.Panel', {
-
-        title: Scalr.utils.getPlatformName(loadParams['platform']) + ' &raquo; Load balancers &raquo; Pools',
         itemId: 'lbPoolsGrid',
 
         scalrOptions: {
             //'reload': false,
-            'maximize': 'all'
+            maximize: 'all',
+            menuTitle: Scalr.utils.getPlatformName(loadParams['platform']) + ' LB Pools',
+            //menuFavorite: true
         },
 
         store: store,
@@ -24,17 +24,11 @@ Scalr.regPage('Scalr.ui.tools.openstack.lb.pools.view', function (loadParams, mo
         stateId: 'grid-tools-openstack-lb-pools-view',
         stateful: true,
 
-        plugins: {
+        plugins: [{
             ptype: 'gridstore'
-        },
-        tools: [{
-            xtype: 'gridcolumnstool'
         }, {
-            xtype: 'favoritetool',
-            favorite: {
-                text: 'LB Pools',
-                href: '#/tools/openstack/lb/pools'
-            }
+            ptype: 'applyparams',
+            filterIgnoreParams: [ 'platform' ]
         }],
 
         viewConfig: {
@@ -43,7 +37,7 @@ Scalr.regPage('Scalr.ui.tools.openstack.lb.pools.view', function (loadParams, mo
         },
 
         columns: [
-            { header: "Name", xtype: 'templatecolumn', flex: 1, sortable: true,
+            { header: "LB Pool", xtype: 'templatecolumn', flex: 1, sortable: true,
                 tpl: new Ext.XTemplate(
                     '<a href="#/tools/openstack/lb/pools/info?{[this.getParams()]}&poolId={id}">{name}</a>', {
                         getParams: function() {
@@ -59,13 +53,13 @@ Scalr.regPage('Scalr.ui.tools.openstack.lb.pools.view', function (loadParams, mo
             { header: "Virtual IP", width: 125, itemId: 'vipId', dataIndex: 'vip_id', sortable: true, align: 'center', xtype: 'templatecolumn',
                 tpl: [
                     '<tpl if="vip_id">',
-                        '<img src="' + Ext.BLANK_IMAGE_URL + '" class="x-icon-ok" />',
+                        '<div class="x-grid-icon x-grid-icon-simple x-grid-icon-ok"></div>',
                     '<tpl else>',
-                        '<img src="' + Ext.BLANK_IMAGE_URL + '" class="x-icon-minus" />',
+                        '&mdash;',
                     '</tpl>'
                 ]
             },
-            { xtype: 'optionscolumn2',
+            { xtype: 'optionscolumn',
                 menu: [{
                     text:'Add Vip',
                     iconCls: 'x-menu-icon-create',
@@ -165,7 +159,6 @@ Scalr.regPage('Scalr.ui.tools.openstack.lb.pools.view', function (loadParams, mo
             }
         ],
 
-        multiSelect: true,
         selModel: {
             selType: 'selectedmodel',
             getVisibility: function(record) {
@@ -193,12 +186,11 @@ Scalr.regPage('Scalr.ui.tools.openstack.lb.pools.view', function (loadParams, mo
 
         dockedItems: [{
             xtype: 'scalrpagingtoolbar',
-            ignoredLoadParams: ['platform'],
             store: store,
             dock: 'top',
             beforeItems: [{
-                text: 'Add pool',
-                cls: 'x-btn-green-bg',
+                text: 'New pool',
+                cls: 'x-btn-green',
                 handler: function() {
                     var platform = 'platform=' + store.proxy.extraParams.platform,
                         cloudLocation = '&cloudLocation=' + store.proxy.extraParams.cloudLocation,
@@ -210,10 +202,10 @@ Scalr.regPage('Scalr.ui.tools.openstack.lb.pools.view', function (loadParams, mo
                 }
             }],
             afterItems: [{
-                ui: 'paging',
                 itemId: 'delete',
                 disabled: true,
-                iconCls: 'x-tbar-delete',
+                iconCls: 'x-btn-icon-delete',
+                cls: 'x-btn-red',
                 tooltip: 'Delete',
                 handler: function() {
                     var request = {
@@ -249,14 +241,9 @@ Scalr.regPage('Scalr.ui.tools.openstack.lb.pools.view', function (loadParams, mo
                 xtype: 'filterfield',
                 store: store
             }, ' ', {
-                xtype: 'fieldcloudlocation',
-                itemId: 'cloudLocation',
-                store: {
-                    fields: [ 'id', 'name' ],
-                    data: moduleParams.locations,
-                    proxy: 'object'
-                },
-                gridStore: store
+                xtype: 'cloudlocationfield',
+                platforms: [loadParams['platform']],
+				gridStore: store
             }]
         }]
     });

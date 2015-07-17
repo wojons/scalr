@@ -244,6 +244,10 @@ Scalr.regPage('Scalr.ui.core.security', function (loadParams, moduleParams) {
 				growMax: 200,
 				emptyText: 'Leave blank to disable',
 				anchor: '100%'
+            }, {
+                xtype: 'displayfield',
+                fieldLabel: 'Current IP',
+                name: 'currentIp'
 			}]
 		}],
 

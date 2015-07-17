@@ -1,24 +1,24 @@
 Scalr.regPage('Scalr.ui.logs.events', function (loadParams, moduleParams) {
     var firedByTpl =
         '<tpl if="event_farm_id">' +
-            '<a href="#/farms/{event_farm_id}/view" title="Farm {event_farm_name}">{event_farm_name}</a>' +
+            '<a href="#/farms?farmId={event_farm_id}" title="Farm {event_farm_name}">{event_farm_name}</a>' +
             '<tpl if="event_role_name">' +
                 '&nbsp;&rarr;&nbsp;<a href="#/farms/{event_farm_id}/roles/{event_farm_roleid}/view" title="Role {event_role_name}">{event_role_name}</a> ' +
             '</tpl>' +
             '<tpl if="!event_role_name">' +
                 '&nbsp;&rarr;&nbsp;*removed role*&nbsp;' +
             '</tpl>' +
-            '#<a href="#/servers/{event_server_id}/view">{event_server_index}</a>'+
+            '#<a href="#/servers?serverId={event_server_id}">{event_server_index}</a>'+
         '<tpl else>{event_server_id}</tpl>';
 
 	var store = Ext.create('store.store', {
 		fields: [
 			'id','dtadded', 'type', 'message', 'event_id', 'scripts',
-			
-			'event_server_id', 
-			'event_farm_name', 
-			'event_farm_id', 
-			'event_role_id', 
+
+			'event_server_id',
+			'event_farm_name',
+			'event_farm_id',
+			'event_role_id',
 			'event_farm_roleid',
 			'event_role_name',
 			'event_server_index',
@@ -28,14 +28,20 @@ Scalr.regPage('Scalr.ui.logs.events', function (loadParams, moduleParams) {
 			type: 'scalr.paging',
 			url: '/logs/xListEventLogs'
 		},
+        sorters: {
+            property: 'dtadded',
+            direction: 'DESC'
+        },
 		remoteSort: true
 	});
 
 	var panel = Ext.create('Ext.grid.Panel', {
-		title: 'Logs &raquo; Event Log',
 		scalrOptions: {
             reload: false,
-			maximize: 'all'
+			maximize: 'all',
+            menuTitle: 'Event Log',
+            menuHref: '#/logs/events',
+            menuFavorite: true
 		},
 		store: store,
 		stateId: 'grid-farms-events-view',
@@ -43,6 +49,8 @@ Scalr.regPage('Scalr.ui.logs.events', function (loadParams, moduleParams) {
 		plugins: [{
 			ptype: 'gridstore',
             highlightNew: true
+        },{
+            ptype: 'applyparams'
         },{
 			ptype: 'rowexpander',
             pluginId: 'rowexpander',
@@ -56,34 +64,25 @@ Scalr.regPage('Scalr.ui.logs.events', function (loadParams, moduleParams) {
                 '</tpl>'
 			]
 		}],
-		tools: [{
-			xtype: 'gridcolumnstool'
-		}, {
-			xtype: 'favoritetool',
-			favorite: {
-				text: 'Event Log',
-				href: '#/logs/events'
-			}
-		}],
 
+        disableSelection: true,
 		viewConfig: {
 			emptyText: 'Nothing found',
 			loadingText: 'Loading...',
-        	disableSelection: true,
 			getRowClass: function (record, rowIndex, rowParams) {
                 var errorsCount = record.get('scripts')['failed'] + record.get('webhooks')['failed'];
                 if (errorsCount > 0) {
-                    return 'x-grid-row-red';
+                    return 'x-grid-row-color-red';
                 }
 			}
         },
 
 		columns: [
-			{ header: "Date", width: 160, dataIndex: 'dtadded', sortable: false },
+			{ header: "Date", width: 175, dataIndex: 'dtadded', sortable: true },
 			{ header: "Event", width: 200, dataIndex: 'type', sortable: false },
 			{ header: 'Fired by', flex: 1, dataIndex: 'event_server_id', sortable: false, xtype: 'templatecolumn', tpl: firedByTpl},
 			{ header: "Details", flex: 3, dataIndex: 'message', sortable: false },
-			{ header: "Orchestration rules", width: 150, dataIndex: 'scripts', sortable: false, xtype: 'templatecolumn',
+			{ header: "Orchestration rules", width: 160, dataIndex: 'scripts', sortable: false, xtype: 'templatecolumn',
 				tpl: new Ext.XTemplate(
                     '<tpl if="scripts.total &gt; 0">'+
                         '<span data-anchor="right" data-qalign="r-l" data-qtip="{[this.getTooltipHtml(values)]}" data-qwidth="270">' +
@@ -94,7 +93,7 @@ Scalr.regPage('Scalr.ui.logs.events', function (loadParams, moduleParams) {
                         '</span>'+
                         '&nbsp;[<a href="#/logs/scripting?eventId={event_id}">View</a>]'+
                     '<tpl else>'+
-                        '<img src="'+Ext.BLANK_IMAGE_URL+'" class="x-icon-minus" />'+
+                        '&mdash;'+
                     '</tpl>',
                     {
                         getTooltipHtml: function(values) {
@@ -121,7 +120,7 @@ Scalr.regPage('Scalr.ui.logs.events', function (loadParams, moduleParams) {
                         '</span>'+
                         '&nbsp;[<a href="#/webhooks/history?eventId={event_id}">View</a>]'+
                     '<tpl else>'+
-                        '<img src="'+Ext.BLANK_IMAGE_URL+'" class="x-icon-minus" />'+
+                        '&mdash;'+
                     '</tpl>',
                     {
                         getTooltipHtml: function(values) {
@@ -136,12 +135,11 @@ Scalr.regPage('Scalr.ui.logs.events', function (loadParams, moduleParams) {
                         }
                     }
                 )
-			},
+			}
 		],
 
 		dockedItems: [{
 			xtype: 'scalrpagingtoolbar',
-            //ignoredLoadParams: ['farmId', 'eventServerId', 'eventId'],
 			store: store,
 			dock: 'top',
 			items: [{
@@ -149,6 +147,7 @@ Scalr.regPage('Scalr.ui.logs.events', function (loadParams, moduleParams) {
 				store: store
 			}, ' ', {
 				xtype: 'combo',
+                name: 'farmId',
 				fieldLabel: 'Farm',
 				labelWidth: 34,
 				width: 250,
@@ -174,7 +173,7 @@ Scalr.regPage('Scalr.ui.logs.events', function (loadParams, moduleParams) {
 				xtype: 'button',
 				text: 'Configure event notifications',
 				handler: function () {
-					document.location.href = '#/farms/events/configure?farmId=' + store.proxy.extraParams.farmId;
+                    Scalr.event.fireEvent('redirect', '#/farms/events/configure?farmId=' + store.proxy.extraParams.farmId);
 				}
 			}*/]
 		}]

@@ -41,21 +41,42 @@ Scalr.regPage('Scalr.ui.tools.aws.route53.view', function (loadParams, modulePar
             type: 'scalr.paging',
             url: '/tools/aws/route53/hostedzones/xList'
         },
-        autoLoad: true,
         remoteSort: true,
         listeners: {
             load: function () {
+                zonesForm.hide();
                 recordsGrid.hide();
+                recordsForm.hide();
+                recordsGridContainer.getDockedItems('container')[0].hide();
             }
         }
     });
 
     var recordsStore = Ext.create('store.store', {
-        fields: ['name', 'type', 'resourceRecord', 'evaluateTargetHealth', 'healthId', 'ttl', 'region', 'weight', 'setIdentifier', 'dnsName', 'aliasZoneId', 'policy', 'alias', 'failover'],
+        model: Scalr.getModel({
+            fields: [
+                'name',
+                'type',
+                'resourceRecord',
+                'evaluateTargetHealth',
+                'healthId',
+                'ttl',
+                'region',
+                'weight',
+                'setIdentifier',
+                'dnsName',
+                'aliasZoneId',
+                'policy',
+                'alias',
+                'failover'
+            ]
+        }),
+
         proxy: {
             type: 'scalr.paging',
             url: '/tools/aws/route53/recordsets/xList'
         },
+
         remoteSort: true,
 
         listeners: {
@@ -68,12 +89,12 @@ Scalr.regPage('Scalr.ui.tools.aws.route53.view', function (loadParams, modulePar
                     recordsGrid.recordsCache[zoneId] = records;
                 }
 
-                recordsGrid.down('[name=saveZoneButton]').disable();
+                recordsGridContainer.down('[name=saveZoneButton]').disable();
             },
 
             datachanged: function () {
-                recordsGrid.getSelectionModel().clearSelections();
-                recordsGrid.down('[name=saveZoneButton]').enable();
+                recordsGrid.getSelectionModel().deselectAll();
+                recordsGridContainer.down('[name=saveZoneButton]').enable();
             },
 
             update: function (store, record, operation, modifiedFieldNames) {
@@ -81,8 +102,8 @@ Scalr.regPage('Scalr.ui.tools.aws.route53.view', function (loadParams, modulePar
                     return;
                 }
 
-                recordsGrid.getSelectionModel().clearSelections();
-                recordsGrid.down('[name=saveZoneButton]').enable();
+                recordsGrid.getSelectionModel().deselectAll();
+                recordsGridContainer.down('[name=saveZoneButton]').enable();
             }
         }
     });
@@ -123,29 +144,69 @@ Scalr.regPage('Scalr.ui.tools.aws.route53.view', function (loadParams, modulePar
 
     var zonesGrid = Ext.create('Ext.grid.Panel', {
         flex: 1.2,
-        cls: 'x-grid-shadow x-grid-shadow-buffered x-panel-column-left',
+        cls: 'x-panel-column-left',
         store: zonesStore,
         padding: '12 0 12 0',
-        minWidth: 540,
+        minWidth: 565,
 
-        multiSelect: true,
-        selModel: {
-            selType: 'selectedmodel'
-        },
-
-        plugins: [
-            'gridstore',
-            'focusedrowpointer',
-            {
-                ptype: 'bufferedrenderer',
-                scrollToLoadBuffer: 100,
-                synchronousRender: false
-            }
-        ],
+        plugins: [{
+            ptype: 'gridstore'
+        }, {
+            ptype: 'focusedrowpointer'
+        }, {
+            ptype: 'selectedrecord',
+            disableSelection: false,
+            clearOnRefresh: true
+        }],
 
         viewConfig: {
             emptyText: 'No hosted zones found',
             loadingText: 'Loading hosted zones...'
+        },
+
+        selModel: {
+            selType: 'selectedmodel',
+
+            listeners: {
+                focuschange: function (selectionModel, oldFocused, newFocused) {
+                    return;
+                    //console.log('oldFocused', oldFocused, 'newFocused', newFocused);
+
+                    if (newFocused) {
+                        var zoneData = newFocused.data;
+
+                        var domainName = recordsGrid.down('[name=zoneName]');
+                        domainName.setValue(zoneData.name).disable();
+
+                        var comment = zonesForm.down('[name=comment]');
+                        comment.setValue(zoneData['comment']).disable();
+
+                        recordsGrid.down('[name=zoneId]').setValue(zoneData.zoneId).show();
+
+                        recordsGrid.down('#refresh').enable();
+                        recordsGrid.down('[name=addRecordButton]').enable();
+
+                        var zoneId = zoneData.zoneId;
+                        var cache = recordsGrid.recordsCache[zoneId];
+
+                        recordsStore.getProxy().extraParams = {
+                            cloudLocation: zonesGrid.down('#cloudLocation').getValue(),
+                            zoneId: zoneId
+                        };
+
+                        if (!cache) {
+                            recordsStore.load();
+                        } else {
+                            recordsStore.loadData(cache);
+                        }
+
+                        recordsGrid.show();
+                    } else if (!oldFocused) {
+                        recordsGrid.hide();
+                        recordsGrid.getSelectionModel().clearSelections();
+                    }
+                }
+            }
         },
 
         listeners: {
@@ -225,15 +286,15 @@ Scalr.regPage('Scalr.ui.tools.aws.route53.view', function (loadParams, modulePar
         },
 
         columns: [
-            { header: "Domain name", flex: 1, dataIndex: 'name', sortable: true },
+            { header: "Hosted zone", flex: 1, dataIndex: 'name', sortable: true },
             { header: "Comment", flex: 1, dataIndex: 'comment', sortable: true }
         ],
 
         dockedItems: [{
             xtype: 'toolbar',
-            style: 'box-shadow: none;',
             dock: 'top',
-            padding: '0 0 12 0',
+            padding: '0 12 12 12',
+            style: 'background-color: inherit',
             layout: 'hbox',
             width: 160,
             defaults: {
@@ -245,61 +306,55 @@ Scalr.regPage('Scalr.ui.tools.aws.route53.view', function (loadParams, modulePar
                 width: 110,
                 margin: 0
             }, {
-                xtype: 'fieldcloudlocation',
-                itemId: 'cloudLocation',
-                fieldLabel: null,
-                width: 220,
-                margin: '0 0 0 12',
-                store: {
-                    fields: [ 'id', 'name' ],
-                    data: moduleParams.locations,
-                    proxy: 'object'
-                },
-                gridStore: zonesStore
+                xtype: 'cloudlocationfield',
+                platforms: [ 'ec2' ],
+                gridStore: zonesStore,
+                listeners: {
+                    change: function () {
+                        zonesGrid.getSelectionModel().deselectAll();
+                    }
+                }
             }, {
                 xtype: 'tbfill',
-                flex: .01
+                flex: 0.01
             }, {
-                text: 'Add zone',
+                text: 'New zone',
                 name: 'addZoneButton',
-                cls: 'x-btn-green-bg',
+                cls: 'x-btn-green',
                 margin: '0 12 0 0',
                 handler: function() {
-                    zonesGrid.getSelectionModel().clearSelections();
+                    zonesGrid.clearSelectedRecord();
+
+                    zonesForm.enable().show();
 
                     recordsGrid.down('#refresh').disable();
+                    recordsGrid.down('filterfield').disable();
 
-                    var domainName = recordsGrid.down('[name=zoneName]');
-                    domainName.setValue('').enable();
-
-                    var comment = recordsGrid.down('[name=zoneComment]');
-                    comment.setValue('').enable();
-
-                    recordsGrid.down('[name=zoneId]').setValue('').hide();
+                    zonesForm.down('[name=zoneId]').disable().hide();
+                    zonesForm.down('[name=name]').enable();
+                    zonesForm.down('[name=comment]').enable();
 
                     recordsGrid.down('[name=addRecordButton]').disable();
 
                     recordsStore.removeAll();
 
-                    //recordsGrid.getPlugin('recordsBufferedRenderer').cancelLoad();
-
-                    recordsGrid.down('[name=saveZoneButton]').disable();
+                    recordsGridContainer.down('[name=saveZoneButton]').disable();
 
                     recordsGrid.show();
+                    recordsGridContainer.getDockedItems('container')[0].show();
                 }
             }, {
                 itemId: 'refresh',
-                ui: 'paging',
-                iconCls: 'x-tbar-loading',
+                iconCls: 'x-btn-icon-refresh',
                 margin: '0 12 0 0',
                 tooltip: 'Refresh',
                 handler: function() {
                     zonesStore.load();
                 }
             }, {
-                ui: 'paging',
                 itemId: 'delete',
-                iconCls: 'x-tbar-delete',
+                iconCls: 'x-btn-icon-delete',
+                cls: 'x-btn-red',
                 margin: '0 12 0 0',
                 tooltip: 'Select one or more hosted zone(s) to delete them',
                 disabled: true,
@@ -311,61 +366,145 @@ Scalr.regPage('Scalr.ui.tools.aws.route53.view', function (loadParams, modulePar
         }]
     });
 
+    var zonesForm = Ext.create('Ext.form.Panel', {
+        listeners: {
+            afterloadrecord: function (record) {
+                var me = this;
+
+                me.disable();
+                me.down('[name=zoneId]').enable().show();
+
+                recordsGrid.down('#refresh').enable();
+                recordsGrid.down('filterfield').enable();
+                recordsGrid.down('[name=addRecordButton]').enable();
+
+                var zoneId = record.get('zoneId');
+                var cache = recordsGrid.recordsCache[zoneId];
+
+                recordsStore.getProxy().extraParams = {
+                    cloudLocation: zonesGrid.down('#cloudLocation').getValue(),
+                    zoneId: record.get('zoneId')
+                };
+
+                if (!cache) {
+                    recordsStore.load();
+                } else {
+                    recordsStore.loadData(cache);
+                }
+
+                recordsGrid.show();
+                recordsGridContainer.getDockedItems('container')[0].show();
+            }
+        },
+
+        items: [{
+            xtype: 'fieldset',
+            title: 'Hosted zone details',
+            cls: 'x-fieldset-separator-none',
+            defaults: {
+                anchor: '100%',
+                labelWidth: 120
+            },
+            items: [{
+                xtype: 'hiddenfield',
+                name: 'id',
+                submitValue: false
+            }, {
+                xtype: 'displayfield',
+                fieldLabel: 'Zone ID',
+                name: 'zoneId'
+            }, {
+                xtype: 'textfield',
+                fieldLabel: 'Domain name',
+                allowBlank: false,
+                regex: /^(?!:\/\/)([a-zA-Z0-9]+\.)?[a-zA-Z0-9][a-zA-Z0-9-]+\.[a-zA-Z]{2,6}?$/i,
+                name: 'name',
+                listeners: {
+                    validitychange: function (field, isValid) {
+                        var addRecordButton = recordsGrid.down('[name=addRecordButton]');
+                        var saveZoneButton = recordsGridContainer.down('[name=saveZoneButton]');
+                        saveZoneButton.enable();
+
+                        if (!isValid) {
+                            addRecordButton.disable();
+                            saveZoneButton.disable();
+                            return;
+                        }
+
+                        addRecordButton.enable();
+                        saveZoneButton.enable();
+                    }
+                }
+            }, {
+                xtype: 'textfield',
+                fieldLabel: 'Comment',
+                name: 'comment'
+            }, {
+                xtype: 'displayfield',
+                fieldLabel: 'Record sets'
+            }]
+        }]
+    });
+
     var recordsGrid = Ext.create('Ext.grid.Panel', {
-        //flex: 0.8,
-        //cls: 'x-grid-shadow x-grid-shadow-buffered x-fieldset-separator-right',
-        cls: 'x-grid-shadow x-grid-shadow-buffered',
         store: recordsStore,
-        padding: '12 32 12 32',
+        padding: '0 24',
+
+        height: 500,
+        scrollable: true,
 
         hidden: true,
 
-        multiSelect: true,
-        selModel: {
-            selType: 'selectedmodel'
-        },
-
-        plugins: [
-            'gridstore',
-            {
-                ptype: 'focusedrowpointer',
-                addCls: 'x-panel-row-pointer-light'
+        plugins: [{
+            ptype: 'gridstore'
+        }, {
+            ptype: 'focusedrowpointer',
+            addCls: 'x-panel-row-pointer-light'
+        }, {
+            ptype: 'selectedrecord',
+            disableSelection: false,
+            clearOnRefresh: true,
+            getForm: function () {
+                return recordsForm;
             }
-            //TODO
-            /*{
-                ptype: 'bufferedrenderer',
-                pluginId: 'recordsBufferedRenderer',
-                scrollToLoadBuffer: 100,
-                synchronousRender: false
-            }*/
-        ],
+        }],
 
         viewConfig: {
             emptyText: 'No record sets',
             loadingText: 'Loading record sets...'
         },
 
+        selModel: {
+            selType: 'selectedmodel',
+
+            getVisibility: function (record) {
+                return recordsGrid.isRecordSetRemovable(record.get('type'), record.get('name'));
+            }
+        },
+
         recordsCache: {},
         recordsSnapshot: {},
 
         isRecordSetRemovable: function (recordSetType, recordSetName) {
-            var me = this;
-
-            return !(recordSetType === 'SOA' || (recordSetType === 'NS' && recordSetName === me.down('[name=zoneName]').getValue()));
+            return !(
+                recordSetType === 'SOA'
+                || (recordSetType === 'NS' && recordSetName === zonesForm.down('[name=name]').getValue())
+            );
         },
 
         listeners: {
             afterrender: function () {
                 var me = this;
 
-                zonesGrid.getSelectionModel().on('focuschange', function(gridSelModel, oldFocused, newFocused){
+                zonesGrid.getSelectionModel().on('focuschange', function (gridSelModel, oldFocused, newFocused) {
+                    return;//qwerty
                     if (newFocused) {
                         var zoneData = newFocused.data;
 
                         var domainName = me.down('[name=zoneName]');
                         domainName.setValue(zoneData.name).disable();
 
-                        var comment = me.down('[name=zoneComment]');
+                        var comment = me.down('[name=comment]');
                         comment.setValue(zoneData['comment']).disable();
 
                         me.down('[name=zoneId]').setValue(zoneData.zoneId).show();
@@ -388,10 +527,10 @@ Scalr.regPage('Scalr.ui.tools.aws.route53.view', function (loadParams, modulePar
                         }
 
                         me.show();
-                    } else {
+                    } /*else {
                         me.hide();
                         me.getSelectionModel().clearSelections();
-                    }
+                    }*/
                 });
             },
 
@@ -400,13 +539,15 @@ Scalr.regPage('Scalr.ui.tools.aws.route53.view', function (loadParams, modulePar
 
                 var toolbar = me.down('toolbar');
                 toolbar.down('#delete').setDisabled(!selections.length);
-            },
+            }
 
+            /*
             beforeselect: function (grid, record) {
                 var me = this;
 
                 return me.isRecordSetRemovable(record.get('type'), record.get('name'));
             }
+            */
         },
 
         getRecordSetParams: function (recordSetData) {
@@ -463,21 +604,38 @@ Scalr.regPage('Scalr.ui.tools.aws.route53.view', function (loadParams, modulePar
             var oldRecordSet = recordParams.snapshot;
             var oldRecordSetParams = oldRecordSet ? Ext.encode(me.getRecordSetParams(oldRecordSet)) : null;
 
+            var action = function () {
+                var action = '';
+
+                if (recordParams.name === zonesForm.down('[name=name]').getValue()) {
+                    action = 'UPSERT';
+                } else {
+                    action = !oldRecordSet ? 'CREATE' : 'UPSERT';
+                }
+
+                return action;
+            }();
+
             var request = {
                 processBox: {
                     type: 'save'
                 },
                 scope: this,
                 params: {
+                    dnsName: null,
                     cloudLocation: zonesGrid.down('#cloudLocation').getValue(),
                     zoneId: recordsStore.getProxy().extraParams.zoneId,
-                    action: !oldRecordSet ? 'CREATE' : 'UPSERT',
+                    action: action,
                     oldRecordSet: oldRecordSetParams
                 },
                 url: '/tools/aws/route53/recordsets/xSave',
                 success: function () {
                     recordsStore.load();
-                    zonesGrid.getSelectionModel().clearSelections();
+
+                    zonesGrid.clearSelectedRecord();
+                    recordsGrid.hide();
+                    recordsForm.hide();
+                    recordsGridContainer.getDockedItems('container')[0].hide();
 
                     recordsGrid.recordsSnapshot = {};
                 }
@@ -516,36 +674,33 @@ Scalr.regPage('Scalr.ui.tools.aws.route53.view', function (loadParams, modulePar
                             recordsGrid.saveRecordSet(Ext.clone(record.data));
                         });
                     } else {
-                        zonesGrid.getSelectionModel().clearSelections();
+                        zonesGrid.clearSelectedRecord();
+                        recordsGrid.hide();
+                        recordsForm.hide();
+                        recordsGridContainer.getDockedItems('container')[0].hide();
                     }
                 }
             });
         },
 
         columns: [
-            { header: "Name", flex: 1, dataIndex: 'name', sortable: true },
+            { header: "Record set", flex: 1, dataIndex: 'name', sortable: true },
             { header: "Type", width: 75, dataIndex: 'type', sortable: true },
             { header: "Alias", width: 75, align: 'center', xtype: 'templatecolumn',
                 tpl: [
                     '<tpl if="alias">',
-                        '<img src="' + Ext.BLANK_IMAGE_URL + '" class="x-icon-ok" />',
+                        '<div class="x-grid-icon x-grid-icon-simple x-grid-icon-ok"></div>',
                     '<tpl else>',
-                        '<img src="' + Ext.BLANK_IMAGE_URL + '" class="x-icon-minus" />',
+                        '&mdash;',
                     '</tpl>'
                 ]
             }
         ],
 
         dockedItems: [{
-            xtype: 'component',
-            cls: 'x-fieldset-header scalr-analytics-pricing-header',
-            style: 'padding: 0;',
-            margin: '0 0 12 0',
-            html: '<div class="x-fieldset-header-text" style="float:none">' +
-                'Hosted zone details</div>'
-        }, {
             xtype: 'container',
             dock: 'top',
+            autoScroll: true,
 
             layout: 'vbox',
             width: '100%',
@@ -553,40 +708,8 @@ Scalr.regPage('Scalr.ui.tools.aws.route53.view', function (loadParams, modulePar
                 width: '100%'
             },
             items: [{
-                xtype: 'displayfield',
-                fieldLabel: 'Zone ID',
-                name: 'zoneId'
-            }, {
-                xtype: 'textfield',
-                fieldLabel: 'Domain name',
-                allowBlank: false,
-                regex: /^(?!:\/\/)([a-zA-Z0-9]+\.)?[a-zA-Z0-9][a-zA-Z0-9-]+\.[a-zA-Z]{2,6}?$/i,
-                name: 'zoneName',
-                listeners: {
-                    validitychange: function (field, isValid) {
-                        var addRecordButton = recordsGrid.down('[name=addRecordButton]');
-                        var saveZoneButton = recordsGrid.down('[name=saveZoneButton]').enable();
-
-                        if (!isValid) {
-                            addRecordButton.disable();
-                            saveZoneButton.disable();
-                            return;
-                        }
-
-                        addRecordButton.enable();
-                        saveZoneButton.enable();
-                    }
-                }
-            }, {
-                xtype: 'textfield',
-                fieldLabel: 'Comment',
-                name: 'zoneComment'
-            }, {
-                xtype: 'displayfield',
-                fieldLabel: 'Record sets'
-            }, {
                 xtype: 'toolbar',
-                style: 'box-shadow: none;',
+                style: 'box-shadow: none; background-color: inherit',
                 padding: '0 0 12 0',
                 layout: 'hbox',
                 width: '100%',
@@ -604,29 +727,30 @@ Scalr.regPage('Scalr.ui.tools.aws.route53.view', function (loadParams, modulePar
                 }, {
                     text: 'Add record',
                     name: 'addRecordButton',
-                    cls: 'x-btn-green-bg',
+                    cls: 'x-btn-green',
                     margin: '0 12 0 0',
                     handler: function() {
-                        var zoneNameField = recordsGrid.down('[name=zoneName]');
+                        var zoneNameField = zonesForm.down('[name=name]');
 
-                        recordsGrid.getSelectionModel().clearSelections();
+                        recordsGrid.clearSelectedRecord();
 
-                        recordsForm.getForm().reset(true);
-                        recordsForm.disableFields(false);
+                        //recordsForm.getForm().reset(true);
+                        //recordsForm.disableFields(false);
                         recordsForm.down('[name=hostedZoneName]').setValue(zoneNameField.getValue());
                         recordsForm.down('[name=recordsFormSaveButton]').setText('Add');
                         recordsForm.show();
 
                         if (!zoneNameField.isDisabled()) {
                             zoneNameField.disable();
-
-                            recordsForm.down('[name=aliasContainer]').hide();
                         }
+
+                        recordsForm.down('[name=name]').enable();
+                        recordsForm.down('[name=type]').enable();
+                        recordsForm.down('[name=alias]').setVisible(zoneNameField.isDisabled());
                     }
                 }, {
                     itemId: 'refresh',
-                    ui: 'paging',
-                    iconCls: 'x-tbar-loading',
+                    iconCls: 'x-btn-icon-refresh',
                     margin: '0 12 0 0',
                     tooltip: 'Refresh',
                     handler: function() {
@@ -635,12 +759,13 @@ Scalr.regPage('Scalr.ui.tools.aws.route53.view', function (loadParams, modulePar
                         recordsForm.hide();
                         recordsForm.getForm().reset(true);
 
+
                         recordsStore.load();
                     }
                 }, {
-                    ui: 'paging',
                     itemId: 'delete',
-                    iconCls: 'x-tbar-delete',
+                    iconCls: 'x-btn-icon-delete',
+                    cls: 'x-btn-red',
                     margin: '0 12 0 0',
                     tooltip: 'Select one or more record set(s) to delete them',
                     disabled: true,
@@ -653,14 +778,27 @@ Scalr.regPage('Scalr.ui.tools.aws.route53.view', function (loadParams, modulePar
                     }
                 }]
             }]
-        }, {
-            xtype: 'panel',
+        }]
+    });
+
+    var recordsGridContainer = Ext.create('Ext.panel.Panel', {
+        flex: .8,
+        minWidth: 500,
+        maxWidth: 900,
+        cls: 'x-transparent-mask',
+        items: [ zonesForm, recordsGrid ],
+        dockedItems: [{
+            xtype: 'container',
             dock: 'bottom',
             cls: 'x-docked-buttons',
-            //weight: 10,
+            hidden: true,
             layout: {
                 type: 'hbox',
                 pack: 'center'
+            },
+            defaults: {
+                flex: 1,
+                maxWidth: 140
             },
             items: [
                 {
@@ -668,10 +806,10 @@ Scalr.regPage('Scalr.ui.tools.aws.route53.view', function (loadParams, modulePar
                     name: 'saveZoneButton',
                     text: 'Save',
                     handler: function () {
-                        var zoneCommentField = recordsGrid.down('[name=zoneComment]');
+                        var zoneCommentField = zonesForm.down('[name=comment]');
 
                         if (!zoneCommentField.isDisabled()) {
-                            var zoneNameField = recordsGrid.down('[name=zoneName]');
+                            var zoneNameField = zonesForm.down('[name=name]');
 
                             if (zoneNameField.isValid()) {
                                 zonesGrid.saveHostedZone(zoneNameField.getValue(), zoneCommentField.getValue());
@@ -698,49 +836,33 @@ Scalr.regPage('Scalr.ui.tools.aws.route53.view', function (loadParams, modulePar
                     xtype: 'button',
                     text: 'Cancel',
                     handler: function () {
-                        zonesGrid.getSelectionModel().clearSelections();
-
-                        if (recordsGrid.down('#refresh').isDisabled()) {
-                            recordsGrid.hide();
-                        }
+                        zonesGrid.clearSelectedRecord();
+                        recordsGrid.hide();
+                        recordsForm.hide();
+                        recordsGridContainer.getDockedItems('container')[0].hide();
                     }
                 }
             ]
         }]
     });
 
-    var recordsGridContainer = {
-        xtype: 'container',
-        flex: .8,
-        minWidth: 475,
-        maxWidth: 900,
-        layout: 'fit',
-        cls: 'x-transparent-mask',
-        items: recordsGrid
-    };
-
     var healthChecksGrid = Ext.create('Ext.grid.Panel', {
         flex: 1.2,
-        cls: 'x-grid-shadow x-grid-shadow-buffered x-panel-column-left',
+        cls: 'x-panel-column-left',
         store: healthChecksStore,
-        padding: '12 0 12 0',
-        forceFit: true,
+        padding: '0 0 12 0',
 
-        multiSelect: true,
-        selModel: {
-            selType: 'selectedmodel',
-            allowDeselect: true
-        },
+        selModel: 'selectedmodel',
 
-        plugins: [
-            'gridstore',
-            'focusedrowpointer',
-            {
-                ptype: 'bufferedrenderer',
-                scrollToLoadBuffer: 100,
-                synchronousRender: false
-            }
-        ],
+        plugins: [{
+            ptype: 'gridstore'
+        }, {
+            ptype: 'focusedrowpointer'
+        }, {
+            ptype: 'selectedrecord',
+            disableSelection: false,
+            clearOnRefresh: true
+        }],
 
         viewConfig: {
             emptyText: 'No health checks found',
@@ -827,7 +949,7 @@ Scalr.regPage('Scalr.ui.tools.aws.route53.view', function (loadParams, modulePar
         },
 
         columns: [
-            { header: "Url", flex: 1, itemId: 'healthUrl', xtype: 'templatecolumn',
+            { header: "Url", flex: 1, itemId: 'healthUrl', xtype: 'templatecolumn', sortable: false,
                 tpl: [
                     '<tpl>',
                     '{[this.getUrl(values.protocol, values.ipAddress, values.port, values.resourcePath)]}',
@@ -847,78 +969,64 @@ Scalr.regPage('Scalr.ui.tools.aws.route53.view', function (loadParams, modulePar
                     }
                 ]
             },
-            { header: "Host name", flex: 1, xtype: 'templatecolumn',
+            { header: "Host name", flex: 1, xtype: 'templatecolumn', dataIndex: 'hostName', sortable: true,
                 tpl: [
                     '<tpl if="hostName">',
-                    '{hostName}',
+                        '{hostName}',
                     '<tpl else>',
-                    '<img src="' + Ext.BLANK_IMAGE_URL + '" class="x-icon-minus" />',
+                        '&mdash;',
                     '</tpl>'
                 ]
             },
-            { header: "ID", flex: 1, dataIndex: 'healthId', sortable: true }
+            { header: "ID", flex: 1, dataIndex: 'healthId', sortable: false }
         ],
 
         dockedItems: [{
             xtype: 'toolbar',
-            style: 'box-shadow: none;',
             dock: 'top',
-            padding: '0 0 12 0',
-            layout: 'hbox',
-            width: 160,
+            ui: 'simple',
             defaults: {
                 margin: '0 0 0 12'
             },
             items: [{
                 xtype: 'filterfield',
                 store: healthChecksStore,
-                width: 220,
+                flex: 1,
+                maxWidth: 220,
                 margin: 0
             }, {
-                xtype: 'fieldcloudlocation',
-                itemId: 'cloudLocation',
-                fieldLabel: null,
-                width: 220,
-                margin: '0 0 0 12',
-                store: {
-                    fields: [ 'id', 'name' ],
-                    data: moduleParams.locations,
-                    proxy: 'object'
-                },
-                gridStore: healthChecksStore
+                xtype: 'cloudlocationfield',
+                platforms: [ 'ec2' ],
+                gridStore: healthChecksStore,
+                listeners: {
+                    change: function () {
+                        healthChecksGrid.getSelectionModel().deselectAll();
+                    }
+                }
             }, {
                 xtype: 'tbfill',
-                flex: .01
+                flex: 0.01
             }, {
-                text: 'Add health check',
-                cls: 'x-btn-green-bg',
-                margin: '0 12 0 0',
+                text: 'New health check',
+                cls: 'x-btn-green',
                 handler: function() {
-                    healthChecksGrid.getSelectionModel().clearSelections();
+                    healthChecksGrid.clearSelectedRecord();
 
-                    healthChecksForm.getForm().reset(true);
-                    healthChecksForm.enable();
-                    healthChecksForm.show();
+                    healthChecksForm
+                        .setReadOnly(false)
+                        .show();
                 }
             }, {
                 itemId: 'refresh',
-                ui: 'paging',
-                iconCls: 'x-tbar-loading',
-                margin: '0 12 0 0',
+                iconCls: 'x-btn-icon-refresh',
                 tooltip: 'Refresh',
                 handler: function() {
-                    healthChecksGrid.getSelectionModel().clearSelections();
-
-                    healthChecksForm.hide();
-                    healthChecksForm.getForm().reset(true);
-
                     healthChecksStore.load();
                 }
             }, {
-                ui: 'paging',
                 itemId: 'delete',
-                iconCls: 'x-tbar-delete',
-                margin: '0 12 0 0',
+                iconCls: 'x-btn-icon-delete',
+                cls: 'x-btn-red',
                 tooltip: 'Select one or more health check(s) to delete them',
                 disabled: true,
                 handler: function () {
@@ -940,9 +1048,16 @@ Scalr.regPage('Scalr.ui.tools.aws.route53.view', function (loadParams, modulePar
         autoScroll: true,
         hidden: true,
 
-        layout: {
-            type: 'vbox',
-            align: 'stretch'
+        setReadOnly: function (readOnly) {
+            var me = this;
+
+            me.getForm().getFields().each(function (field) {
+                field.setReadOnly(readOnly);
+            });
+
+            me.down('#save').setDisabled(readOnly);
+
+            return me;
         },
 
         updateUrl: function () {
@@ -1023,26 +1138,8 @@ Scalr.regPage('Scalr.ui.tools.aws.route53.view', function (loadParams, modulePar
                 me.updateUrl();
             },
 
-            afterrender: function () {
-                var me = this;
-
-                healthChecksGrid.getSelectionModel().on('focuschange', function(gridSelModel, oldFocused, newFocused){
-                    if (newFocused) {
-                        if (me.getRecord() !== newFocused) {
-                            me.loadRecord(newFocused);
-                            me.disable();
-                            me.show();
-                        }
-                    } else {
-                        me.hide();
-                        me.getForm().reset(true);
-                    }
-                });
-            },
-
-            beforedestroy: function () {
-                //TODO
-                //this.abortCurrentRequest();
+            afterloadrecord: function () {
+                this.setReadOnly(true);
             }
         },
 
@@ -1050,9 +1147,9 @@ Scalr.regPage('Scalr.ui.tools.aws.route53.view', function (loadParams, modulePar
             xtype: 'fieldset',
             title: 'Health check details',
             defaults: {
-                labelWidth: 115
+                labelWidth: 120,
+                margin: '0 20 8 0'
             },
-
             items: [{
                 fieldLabel: 'Protocol',
                 xtype: 'buttongroupfield',
@@ -1134,7 +1231,8 @@ Scalr.regPage('Scalr.ui.tools.aws.route53.view', function (loadParams, modulePar
         }, {
             xtype: 'fieldset',
             defaults: {
-                labelWidth: 115
+                labelWidth: 120,
+                margin: '0 20 8 0'
             },
 
             items: [{
@@ -1162,68 +1260,69 @@ Scalr.regPage('Scalr.ui.tools.aws.route53.view', function (loadParams, modulePar
                 },
                 name: 'requestInterval'
             }, {
+                xtype: 'numberfield',
                 fieldLabel: 'Failure threshold',
-                xtype: 'fieldcontainer',
-                layout: 'hbox',
-                items: [{
-                    xtype: 'numberfield',
-                    flex: 1,
-                    value: 3,
-                    minValue: 1,
-                    maxValue: 10,
-                    editable: false,
-                    name: 'failureThreshold'
-                }, {
-                    xtype: 'displayinfofield',
-                    margin: '0 0 0 6',
-                    width: 20,
-                    info: healthTooltips.failureThreshold
+                flex: 1,
+                value: 3,
+                minValue: 1,
+                maxValue: 10,
+                editable: false,
+                name: 'failureThreshold',
+                plugins: [{
+                    ptype: 'fieldicons',
+                    align: 'right',
+                    position: 'outer',
+                    icons: {
+                        id: 'info',
+                        tooltip: healthTooltips.failureThreshold
+                    }
                 }]
             }]
         }, {
             xtype: 'fieldset',
             defaults: {
-                labelWidth: 275
+                labelWidth: 275,
+                margin: '0 20 8 0'
             },
             name: 'stringMatchingSet',
             items: [{
+                xtype: 'buttongroupfield',
                 fieldLabel: 'Enable string matching',
-                xtype: 'fieldcontainer',
-                layout: 'hbox',
-                items: [{
-                    xtype: 'buttongroupfield',
-                    flex: 1,
-                    value: false,
-                    defaults: {
-                        width: '50%'
+                flex: 1,
+                value: false,
+                defaults: {
+                    width: '50%'
+                },
+                plugins: [{
+                    ptype: 'fieldicons',
+                    align: 'right',
+                    position: 'outer',
+                    icons: {
+                        id: 'info',
+                        tooltip: healthTooltips.failureThreshold
+                    }
+                }],
+                items: [
+                    {
+                        xtype: 'button',
+                        text: 'Yes',
+                        value: true
                     },
-                    items: [
-                        {
-                            xtype: 'button',
-                            text: 'Yes',
-                            value: true
-                        },
-                        {
-                            xtype: 'button',
-                            text: 'No',
-                            value: false
-                        }
-                    ],
-                    listeners: {
-                        change: function (field, value) {
-                            healthChecksForm.toggleFields('searchStringContainer');
-                            healthChecksForm.updateType();
+                    {
+                        xtype: 'button',
+                        text: 'No',
+                        value: false
+                    }
+                ],
+                listeners: {
+                    change: function (field, value) {
+                        healthChecksForm.toggleFields('searchStringContainer');
+                        healthChecksForm.updateType();
 
-                            Ext.apply(healthChecksForm.down('[name=searchString]'), {allowBlank: !value});
-                        }
-                    },
-                    name: 'stringMatching'
-                }, {
-                    xtype: 'displayinfofield',
-                    margin: '0 0 0 6',
-                    width: 20,
-                    info: healthTooltips.failureThreshold
-                }]
+                        Ext.apply(healthChecksForm.down('[name=searchString]'), {allowBlank: !value});
+                    }
+                },
+                name: 'stringMatching'
             }, {
                 xtype: 'container',
                 hidden: true,
@@ -1243,7 +1342,8 @@ Scalr.regPage('Scalr.ui.tools.aws.route53.view', function (loadParams, modulePar
             xtype: 'fieldset',
             defaults: {
                 xtype: 'displayfield',
-                labelWidth: 120
+                labelWidth: 120,
+                margin: '0 20 8 0'
             },
 
             items: [{
@@ -1264,8 +1364,13 @@ Scalr.regPage('Scalr.ui.tools.aws.route53.view', function (loadParams, modulePar
                 type: 'hbox',
                 pack: 'center'
             },
+            defaults: {
+                flex: 1,
+                maxWidth: 140
+            },
             items: [{
                 xtype: 'button',
+                itemId: 'save',
                 text: 'Save',
                 handler: function() {
                     healthChecksForm.saveHealthCheck();
@@ -1274,7 +1379,7 @@ Scalr.regPage('Scalr.ui.tools.aws.route53.view', function (loadParams, modulePar
                 xtype: 'button',
                 text: 'Cancel',
                 handler: function() {
-                    Scalr.event.fireEvent('close');
+                    healthChecksGrid.clearSelectedRecord();
                 }
             }]
         }]
@@ -1303,7 +1408,7 @@ Scalr.regPage('Scalr.ui.tools.aws.route53.view', function (loadParams, modulePar
     });
 
     var recordsForm = Ext.create('Ext.form.Panel', {
-        bodyStyle: 'background-color: #f9fafb;',
+        bodyStyle: 'background-color: white',
         fieldDefaults: {
             anchor: '100%'
         },
@@ -1322,7 +1427,7 @@ Scalr.regPage('Scalr.ui.tools.aws.route53.view', function (loadParams, modulePar
 
             me.down('[name=hostedZoneName]').setVisible(!disable);
             me.down('[name=type]').setDisabled(disable);
-            me.down('[name=aliasContainer]').setVisible(!disable);
+            me.down('[name=alias]').setVisible(!disable);
         },
 
         setName: function (name, hostedZoneName) {
@@ -1411,7 +1516,7 @@ Scalr.regPage('Scalr.ui.tools.aws.route53.view', function (loadParams, modulePar
             var me = this;
 
             var hostedZoneNameField = me.down('[name=hostedZoneName]');
-            var hostedZoneName = recordsGrid.down('[name=zoneName]').getValue();
+            var hostedZoneName = zonesForm.down('[name=name]').getValue();
 
             if (name) {
                 hostedZoneNameField.setValue(name + '.' + hostedZoneName);
@@ -1423,8 +1528,10 @@ Scalr.regPage('Scalr.ui.tools.aws.route53.view', function (loadParams, modulePar
         updateSetId: function (name) {
             var me = this;
 
-            if (me.down('[name=failoverContainer]').isVisible()) {
-                var failoverType = me.down('[name=failover]').getValue();
+            var failoverField = me.down('[name=failover]');
+
+            if (failoverField.isVisible()) {
+                var failoverType = failoverField.getValue();
 
                 me.down('[name=setIdentifier]').setValue(
                     name ? name + '-' + failoverType : failoverType
@@ -1499,79 +1606,84 @@ Scalr.regPage('Scalr.ui.tools.aws.route53.view', function (loadParams, modulePar
             },
 
             items: [{
+                xtype: 'hiddenfield',
+                name: 'id',
+                submitValue: false
+            }, {
+                xtype: 'textfield',
                 fieldLabel: 'Name',
-                xtype: 'fieldcontainer',
-                layout: 'hbox',
-                items: [{
-                    xtype: 'textfield',
-                    flex: 1,
-                    name: 'name',
-                    listeners: {
-                        change: function (field, value) {
-                            value = Ext.String.htmlEncode(value);
-                            recordsForm.updateNamePreview(value);
-                            recordsForm.updateSetId(value);
-                        }
-                    },
-                    getSubmitValue: function () {
-                        var me = this;
-
-                        return recordsForm.isRecordSetRemovable ? recordsForm.down('[name=hostedZoneName]').getValue() : me.getValue();
+                cls: 'x-grid-editor',
+                flex: 1,
+                name: 'name',
+                plugins: [{
+                    ptype: 'fieldicons',
+                    align: 'right',
+                    position: 'outer',
+                    icons: {
+                        id: 'info',
+                        tooltip: recordsTooltips.name
                     }
-                }, {
-                    xtype: 'displayinfofield',
-                    margin: '0 0 0 6',
-                    width: 20,
-                    info: recordsTooltips.name
-                }]
+                }],
+                listeners: {
+                    change: function (field, value) {
+                        value = Ext.String.htmlEncode(value);
+                        recordsForm.updateNamePreview(value);
+                        recordsForm.updateSetId(value);
+                    }
+                },
+                getSubmitValue: function () {
+                    var me = this;
+
+                    return recordsForm.isRecordSetRemovable ? recordsForm.down('[name=hostedZoneName]').getValue() : me.getValue();
+                }
             }, {
                 xtype: 'displayfield',
                 margin: '0 26 6 126',
                 fieldStyle: 'text-align: right',
-                //value: recordsGrid.down('[name=zoneName]').getValue(),
                 name: 'hostedZoneName'
             }, {
+                xtype: 'combo',
+                cls: 'x-grid-editor',
                 fieldLabel: 'Type',
-                xtype: 'fieldcontainer',
-                layout: 'hbox',
-                items: [{
-                    xtype: 'combo',
-                    flex: 1,
-                    store: {
-                        fields: ['type', 'description', {
-                            name: 'displayedValue', convert: function (value, model) {
-                                return model.get('type') + ' ‒ ' + model.get('description');
-                            }
-                        }],
-                        data: [
-                            {type: 'A', description: 'IPv4 address'},
-                            {type: 'CNAME', description: 'Canonical name'},
-                            {type: 'MX', description: 'IMail exchange'},
-                            {type: 'AAAA', description: 'IPv6 address'},
-                            {type: 'TXT', description: 'Text'},
-                            {type: 'PTR', description: 'Pointer'},
-                            {type: 'SRV', description: 'Service locator'},
-                            {type: 'SPF', description: 'Sender Policy Framework'},
-                            {type: 'NS', description: 'Name server'}
-                            //{type: 'SOA', description: 'Start of authority'}
-                        ]
-                    },
-                    displayField: 'displayedValue',
-                    valueField: 'type',
-                    value: 'A',
-                    editable: false,
-                    name: 'type',
-                    listeners: {
-                        change: function (combo, value) {
-                            recordsForm.changeValueTooltip(value);
+                flex: 1,
+                store: {
+                    fields: ['type', 'description', {
+                        name: 'displayedValue', convert: function (value, model) {
+                            return model.get('type') + ' ‒ ' + model.get('description');
                         }
+                    }],
+                    data: [
+                        {type: 'A', description: 'IPv4 address'},
+                        {type: 'CNAME', description: 'Canonical name'},
+                        {type: 'MX', description: 'IMail exchange'},
+                        {type: 'AAAA', description: 'IPv6 address'},
+                        {type: 'TXT', description: 'Text'},
+                        {type: 'PTR', description: 'Pointer'},
+                        {type: 'SRV', description: 'Service locator'},
+                        {type: 'SPF', description: 'Sender Policy Framework'},
+                        {type: 'NS', description: 'Name server'}
+                        //{type: 'SOA', description: 'Start of authority'}
+                    ]
+                },
+                plugins: [{
+                    ptype: 'fieldicons',
+                    align: 'right',
+                    position: 'outer',
+                    icons: {
+                        id: 'info',
+                        tooltip: recordsTooltips.type
                     }
-                }, {
-                    xtype: 'displayinfofield',
-                    margin: '0 0 0 6',
-                    width: 20,
-                    info: recordsTooltips.type
-                }]
+                }],
+                displayField: 'displayedValue',
+                valueField: 'type',
+                value: 'A',
+                editable: false,
+                name: 'type',
+                listeners: {
+                    change: function (combo, value) {
+                        recordsForm.changeValueTooltip(value);
+                    }
+                }
             }]
         }, {
             xtype: 'fieldset',
@@ -1581,78 +1693,72 @@ Scalr.regPage('Scalr.ui.tools.aws.route53.view', function (loadParams, modulePar
             },
 
             items: [{
+                xtype: 'buttongroupfield',
                 fieldLabel: 'Alias',
-                xtype: 'fieldcontainer',
-                layout: 'hbox',
-                name: 'aliasContainer',
-                items: [{
-                    xtype: 'buttongroupfield',
-                    flex: 1,
-                    value: false,
-                    name: 'alias',
-                    defaults: {
-                        width: '25%'
-                    },
-                    items: [
-                        {
-                            xtype: 'button',
-                            text: 'Yes',
-                            value: true
-                        },
-                        {
-                            xtype: 'button',
-                            text: 'No',
-                            value: false
-                        }
-                    ],
-                    listeners: {
-                        change: function (field, value) {
-                            var fields = ['ttlContainer', 'resourceRecord', 'resourceRecordDescription', 'dnsNameContainer', 'dnsName', 'evaluateTargetHealth'];
-
-                            recordsForm.toggleFields(fields);
-
-                            Ext.apply(recordsForm.down('[name=resourceRecord]'), {allowBlank: value});
-                            Ext.apply(recordsForm.down('[name=dnsName]'), {allowBlank: !value});
-                        }
+                flex: 1,
+                value: false,
+                name: 'alias',
+                defaults: {
+                    width: '25%'
+                },
+                plugins: [{
+                    ptype: 'fieldicons',
+                    align: 'right',
+                    position: 'outer',
+                    icons: {
+                        id: 'info',
+                        tooltip: recordsTooltips.alias
                     }
-                }, {
-                    xtype: 'displayinfofield',
-                    margin: '0 0 0 6',
-                    width: 20,
-                    info: recordsTooltips.alias
-                }]
+                }],
+                items: [
+                    {
+                        xtype: 'button',
+                        text: 'Yes',
+                        value: true
+                    },
+                    {
+                        xtype: 'button',
+                        text: 'No',
+                        value: false
+                    }
+                ],
+                listeners: {
+                    change: function (field, value) {
+                        var fields = ['ttl', 'resourceRecord', 'resourceRecordDescription', 'aliasTarget', 'dnsName', 'evaluateTargetHealth'];
+
+                        recordsForm.toggleFields(fields);
+
+                        Ext.apply(recordsForm.down('[name=resourceRecord]'), {allowBlank: value});
+                        Ext.apply(recordsForm.down('[name=dnsName]'), {allowBlank: !value});
+                    }
+                }
             }, {
+                xtype: 'numberfield',
                 fieldLabel: 'TTL (seconds)',
-                xtype: 'fieldcontainer',
-                layout: 'hbox',
-                name: 'ttlContainer',
-                items: [{
-                    xtype: 'numberfield',
-                    flex: 1,
-                    step: 60,
-                    value: 300,
-                    name: 'ttl'
-                }, {
-                    xtype: 'displayinfofield',
-                    margin: '0 0 0 6',
-                    width: 20,
-                    info: recordsTooltips.ttl
+                cls: 'x-grid-editor',
+                flex: 1,
+                step: 60,
+                value: 300,
+                name: 'ttl',
+                plugins: [{
+                    ptype: 'fieldicons',
+                    align: 'right',
+                    position: 'outer',
+                    icons: {
+                        id: 'info',
+                        tooltip: recordsTooltips.ttl
+                    }
                 }]
             }, {
                 fieldLabel: 'Value',
                 xtype: 'textareafield',
+                cls: 'x-grid-editor',
                 allowBlank: false,
                 name: 'resourceRecord',
                 getSubmitValue: function () {
                     var me = this;
 
                     return me.getValue().split('\n');
-
-                    /*
-                    return Ext.encode(
-                        me.getValue().split('\n')
-                    );
-                    */
                 }
             }, {
                 xtype: 'displayfield',
@@ -1660,22 +1766,23 @@ Scalr.regPage('Scalr.ui.tools.aws.route53.view', function (loadParams, modulePar
                 name: 'resourceRecordDescription',
                 value: recordsTooltips.resourceRecord['A']
             }, {
+                xtype: 'displayfield',
                 fieldLabel: 'Alias target',
-                xtype: 'fieldcontainer',
-                layout: 'hbox',
                 hidden: true,
-                name: 'dnsNameContainer',
-                items: [{
-                    xtype: 'displayfield',
-                    flex: 1
-                }, {
-                    xtype: 'displayinfofield',
-                    margin: '0 0 0 6',
-                    width: 20,
-                    info: recordsTooltips.aliasTarget
+                name: 'aliasTarget',
+                flex: 1,
+                plugins: [{
+                    ptype: 'fieldicons',
+                    align: 'right',
+                    position: 'outer',
+                    icons: {
+                        id: 'info',
+                        tooltip: recordsTooltips.aliasTarget
+                    }
                 }]
             }, {
                 xtype: 'combo',
+                cls: 'x-grid-editor',
                 flex: 1,
                 hidden: true,
                 editable: false,
@@ -1718,7 +1825,8 @@ Scalr.regPage('Scalr.ui.tools.aws.route53.view', function (loadParams, modulePar
                 }
             }, {
                 fieldLabel: 'Alias hosted zone ID',
-                labelWidth: 130,
+                cls: 'x-grid-editor',
+                labelWidth: 145,
                 xtype: 'displayfield',
                 hidden: true,
                 submitValue: true,
@@ -1773,120 +1881,119 @@ Scalr.regPage('Scalr.ui.tools.aws.route53.view', function (loadParams, modulePar
                 ],
                 listeners: {
                     change: function (field, value) {
-                        recordsForm.toggleFields(['weightContainer', 'regionContainer', 'failoverContainer', 'setIdContainer', 'healthId', 'healthIdLabel'], true);
+                        recordsForm.toggleFields(['weight', 'region', 'failover', 'setIdentifier', 'healthId', 'healthIdLabel'], true);
 
                         if (value !== 'simple') {
-                            recordsForm.toggleFields([value + 'Container', 'healthId', 'healthIdLabel', 'setIdContainer']);
+                            recordsForm.toggleFields([value, 'healthId', 'healthIdLabel', 'setIdentifier']);
                         }
 
-                        recordsForm.down('[name=setIdTooltip]').setInfo(recordsTooltips.setId[value]);
+                        var setIdField = recordsForm.down('[name=setIdentifier]');
+                        setIdField.getPlugin('fieldicons').
+                            updateIconTooltip('info', recordsTooltips.setId[value]);
 
                         Ext.apply(recordsForm.down('[name=weight]'), {allowBlank: true});
                         Ext.apply(recordsForm.down('[name=region]'), {allowBlank: true});
 
                         Ext.apply(recordsForm.down('[name=' + value + ']'), {allowBlank: false});
-                        Ext.apply(recordsForm.down('[name=setIdentifier]'), {allowBlank: value === 'simple'});
+                        Ext.apply(setIdField, {allowBlank: value === 'simple'});
                     }
                 },
                 name: 'policy'
             }, {
+                xtype: 'numberfield',
+                cls: 'x-grid-editor',
                 fieldLabel: 'Weight',
-                xtype: 'fieldcontainer',
-                layout: 'hbox',
+                flex: 1,
+                minValue: 0,
+                maxValue: 255,
+                name: 'weight',
                 hidden: true,
-                name: 'weightContainer',
-                items: [{
-                    xtype: 'numberfield',
-                    flex: 1,
-                    minValue: 0,
-                    maxValue: 255,
-                    name: 'weight'
-                }, {
-                    xtype: 'displayinfofield',
-                    margin: '0 0 0 6',
-                    width: 20,
-                    info: recordsTooltips.weight
-                }]
-            }, {
-                fieldLabel: 'Region',
-                xtype: 'fieldcontainer',
-                layout: 'hbox',
-                hidden: true,
-                name: 'regionContainer',
-                items: [{
-                    xtype: 'combo',
-                    flex: 1,
-                    store: moduleParams['regions'],
-                    editable: false,
-                    emptyText: 'Select region',
-                    name: 'region'
-                }, {
-                    xtype: 'displayinfofield',
-                    margin: '0 0 0 6',
-                    width: 20,
-                    info: recordsTooltips.region
-                }]
-            }, {
-                fieldLabel: 'Failover record type',
-                xtype: 'fieldcontainer',
-                layout: 'hbox',
-                hidden: true,
-                name: 'failoverContainer',
-                items:[{
-                    xtype: 'buttongroupfield',
-                    flex: 1,
-                    value: 'primary',
-                    defaults: {
-                        width: 115
-                    },
-                    items: [
-                        {
-                            xtype: 'button',
-                            text: 'Primary',
-                            value: 'primary'
-                        },
-                        {
-                            xtype: 'button',
-                            text: 'Secondary',
-                            value: 'secondary'
-                        }
-                    ],
-                    name: 'failover',
-                    listeners: {
-                        change: function (field, value) {
-                            recordsForm.changeSetId(value);
-                        }
+                plugins: [{
+                    ptype: 'fieldicons',
+                    align: 'right',
+                    position: 'outer',
+                    icons: {
+                        id: 'info',
+                        tooltip: recordsTooltips.weight
                     }
-                }, {
-                    xtype: 'displayinfofield',
-                    margin: '0 0 0 6',
-                    width: 20,
-                    info: recordsTooltips.failover
+                }]
+            }, {
+                xtype: 'combo',
+                cls: 'x-grid-editor',
+                fieldLabel: 'Region',
+                flex: 1,
+                store: moduleParams['regions'],
+                editable: false,
+                emptyText: 'Select region',
+                name: 'region',
+                hidden: true,
+                plugins: [{
+                    ptype: 'fieldicons',
+                    align: 'right',
+                    position: 'outer',
+                    icons: {
+                        id: 'info',
+                        tooltip: recordsTooltips.region
+                    }
+                }]
+            }, {
+                xtype: 'buttongroupfield',
+                fieldLabel: 'Failover record type',
+                flex: 1,
+                value: 'primary',
+                hidden: true,
+                defaults: {
+                    width: 115
+                },
+                plugins: [{
+                    ptype: 'fieldicons',
+                    align: 'right',
+                    position: 'outer',
+                    icons: {
+                        id: 'info',
+                        tooltip: recordsTooltips.failover
+                    }
                 }],
+                items: [
+                    {
+                        xtype: 'button',
+                        text: 'Primary',
+                        value: 'primary'
+                    },
+                    {
+                        xtype: 'button',
+                        text: 'Secondary',
+                        value: 'secondary'
+                    }
+                ],
+                name: 'failover',
                 listeners: {
                     show: function () {
                         recordsForm.changeSetId(true);
                     },
                     hide: function () {
                         recordsForm.changeSetId(false);
+                    },
+                    change: function (field, value) {
+                        recordsForm.changeSetId(value);
                     }
                 }
             }, {
+                xtype: 'textfield',
+                cls: 'x-grid-editor',
                 fieldLabel: 'Set ID',
-                xtype: 'fieldcontainer',
-                layout: 'hbox',
+                maxLength: 128,
+                flex: 1,
+                name: 'setIdentifier',
                 hidden: true,
-                name: 'setIdContainer',
-                items: [{
-                    xtype: 'textfield',
-                    maxLength: 128,
-                    flex: 1,
-                    name: 'setIdentifier'
-                }, {
-                    xtype: 'displayinfofield',
-                    margin: '0 0 0 6',
-                    width: 20,
-                    name: 'setIdTooltip'
+                plugins: [{
+                    ptype: 'fieldicons',
+                    align: 'right',
+                    position: 'outer',
+                    icons: {
+                        id: 'info',
+                        tooltip: ''
+                    }
                 }]
             }, {
                 fieldLabel: 'Health check to associate',
@@ -1896,6 +2003,7 @@ Scalr.regPage('Scalr.ui.tools.aws.route53.view', function (loadParams, modulePar
                 name: 'healthIdLabel'
             }, {
                 xtype: 'combo',
+                cls: 'x-grid-editor',
                 store: healthChecksStore,
                 /*
                 store: {
@@ -1947,10 +2055,15 @@ Scalr.regPage('Scalr.ui.tools.aws.route53.view', function (loadParams, modulePar
             xtype: 'container',
             dock: 'bottom',
             cls: 'x-docked-buttons',
-            style: 'background-color: #f9fafb;',
+            //style: 'background-color: #f9fafb;',
+            style: 'background-color: white',
             layout: {
                 type: 'hbox',
                 pack: 'center'
+            },
+            defaults: {
+                flex: 1,
+                maxWidth: 140
             },
             items: [{
                 xtype: 'button',
@@ -1974,13 +2087,30 @@ Scalr.regPage('Scalr.ui.tools.aws.route53.view', function (loadParams, modulePar
                         } else {
                             recordsStore.add(fields);
                         }
+
+                        recordsForm.hide();
                     }
                 }
             }]
         }],
 
         listeners: {
+            afterloadrecord: function (record) {
+                var me = this;
+
+                var isDefault = !recordsGrid.isRecordSetRemovable(
+                    record.get('type'),
+                    record.get('name')
+                );
+
+                me.down('[name=name]').setDisabled(isDefault);
+                me.down('[name=type]').setDisabled(isDefault);
+                me.down('[name=alias]').setVisible(!isDefault);
+                me.down('[name=recordsFormSaveButton]').setText('Edit');
+            },
+
             afterrender: function () {
+                return;
                 var me = this;
 
                 var clearForm = function () {
@@ -1988,32 +2118,34 @@ Scalr.regPage('Scalr.ui.tools.aws.route53.view', function (loadParams, modulePar
                     me.getForm().reset(true);
                 };
 
-                recordsGrid.getSelectionModel().on('focuschange', function (gridSelModel, oldFocused, newFocused) {
-                    if (newFocused) {
-                        if (me.getRecord() !== newFocused) {
-                            var recordSnapshot = newFocused.get('snapshot');
-                            var isZoneExist = recordsGrid.down('[name=zoneComment]').isDisabled();
+                recordsGrid.getSelectionModel().on('selectionchange', function (selectionModel, selected) {
+                    var record = selected[0];
+
+                    if (record) {
+                        if (me.getRecord() !== record) {
+                            var recordSnapshot = record.get('snapshot');
+                            var isZoneExist = zonesForm.down('[name=comment]').isDisabled();
 
                             if (!recordSnapshot && isZoneExist) {
-                                newFocused.set('snapshot', Ext.clone(newFocused.data));
+                                record.set('snapshot', Ext.clone(record.data));
                             }
 
-                            me.loadRecord(newFocused);
+                            me.loadRecord(record);
 
-                            var name = newFocused.get('name');
-                            var type = newFocused.get('type');
+                            var name = record.get('name');
+                            var type = record.get('type');
 
                             var isRemovable = function (recordSetType, recordSetName, hostedZoneName) {
                                 return !(recordSetType === 'SOA' || (recordSetType === 'NS' && recordSetName === hostedZoneName));
                             };
 
-                            var zoneName = recordsGrid.down('[name=zoneName]').getValue();
+                            var zoneName = zonesForm.down('[name=name]').getValue();
 
                             me.isRecordSetRemovable = isRemovable(type, name, zoneName);
 
                             me.disableFields(!me.isRecordSetRemovable);
 
-                            me.formatForm(newFocused.data, zoneName);
+                            me.formatForm(record.data, zoneName);
 
                             me.down('[name=recordsFormSaveButton]').setText('Edit');
 
@@ -2022,7 +2154,7 @@ Scalr.regPage('Scalr.ui.tools.aws.route53.view', function (loadParams, modulePar
                             aliasTargetsStore.clearData();
 
                             if (!isZoneExist) {
-                                recordsForm.down('[name=aliasContainer]').hide();
+                                recordsForm.down('[name=alias]').hide();
                             }
 
                             me.show();
@@ -2048,34 +2180,31 @@ Scalr.regPage('Scalr.ui.tools.aws.route53.view', function (loadParams, modulePar
         flex: .6,
         layout: 'fit',
         cls: 'x-transparent-mask',
-        style: 'background-color: #f9fafb;',
-        minWidth: 500,
+        style: 'background-color: white',
+        minWidth: 540,
         maxWidth: 700,
         autoScroll: true,
         items: recordsForm
     };
 
     var panel = Ext.create('Ext.panel.Panel', {
-        title: 'Tools &raquo; Amazon Web Services &raquo; Route53',
+        scrollable: 'x',
 
-        autoScroll: true,
-
-        //cls: 'scalr-ui-roles-manager',
         layout: {
             type: 'hbox',
             align: 'stretch'
         },
+
         scalrOptions: {
             reload: false,
-            maximize: 'all'
+            maximize: 'all',
+            menuTitle: 'AWS Route 53',
+            menuHref: '#/tools/aws/route53',
+            menuFavorite: true
         },
-        tools: [{
-            xtype: 'favoritetool',
-            favorite: {
-                text: 'Route53',
-                href: '#/tools/aws/route53'
-            }
-        }],
+
+        stateful: true,
+        stateId: 'grid-tools-aws-route53-view',
 
         items: [
             zonesGrid,
@@ -2083,40 +2212,39 @@ Scalr.regPage('Scalr.ui.tools.aws.route53.view', function (loadParams, modulePar
             recordsFormContainer
         ],
 
-        dockedItems: [
-            {
-                xtype: 'container',
-                itemId: 'tabs',
-                weight: 1,
-                dock: 'left',
-                cls: 'x-docked-tabs',
-                width: 112,
-                autoScroll: true,
-                defaults: {
-                    xtype: 'button',
-                    ui: 'tab',
-                    allowDepress: false,
-                    iconAlign: 'above',
-                    disableMouseDownPressed: true,
-                    toggleGroup: 'route53-tabs',
-                    toggleHandler: function (button, state) {
-                        if (state) {
-                            panel.fireEvent('itemselect', button.value);
-                        }
+        dockedItems: [{
+            xtype: 'container',
+            itemId: 'tabs',
+            weight: 1,
+            dock: 'left',
+            cls: 'x-docked-tabs',
+            width: 112,
+            autoScroll: true,
+            defaults: {
+                xtype: 'button',
+                ui: 'tab',
+                allowDepress: false,
+                iconAlign: 'top',
+                disableMouseDownPressed: true,
+                toggleGroup: 'route53-tabs',
+                toggleHandler: function (button, state) {
+                    if (state) {
+                        panel.fireEvent('itemselect', button.value);
                     }
-                },
-                items: [{
-                    iconCls: 'x-icon-leftmenu-tools x-icon-leftmenu-tools-zones',
-                    text: 'Hosted zones',
-                    value: 'hostedZones',
-                    pressed: true
-                }, {
-                    iconCls: 'x-icon-leftmenu-tools x-icon-leftmenu-tools-health-checks',
-                    text: 'Health checks',
-                    value: 'healthChecks'
-                }]
-            }
-        ],
+                }
+            },
+            items: [{
+                iconCls: 'x-icon-leftmenu x-icon-leftmenu-hostedzones',
+                text: 'Hosted zones',
+                value: 'hostedZones',
+                pressed: true
+            }, {
+                iconCls: 'x-icon-leftmenu x-icon-leftmenu-healthchecks',
+                text: 'Health checks',
+                value: 'healthChecks'
+            }]
+
+        }],
 
         listeners: {
             itemselect: function (item) {
@@ -2124,16 +2252,12 @@ Scalr.regPage('Scalr.ui.tools.aws.route53.view', function (loadParams, modulePar
 
                 me.removeAll(false);
 
-                if (item === 'hostedZones') {
-                    me.add([zonesGrid, recordsGridContainer, recordsFormContainer]);
-                }
+                me.add(item === 'hostedZones'
+                    ? [ zonesGrid, recordsGridContainer, recordsFormContainer ]
+                    : [ healthChecksGrid, healthFormContainer ]
+                );
 
-                if (item === 'healthChecks') {
-                    if (!healthChecksStore.getCount()) {
-                        healthChecksStore.load();
-                    }
-                    me.add([healthChecksGrid, healthFormContainer]);
-                }
+                return true;
             }
         }
     });

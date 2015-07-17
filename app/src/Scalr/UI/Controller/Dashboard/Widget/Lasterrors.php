@@ -26,11 +26,7 @@ class Scalr_UI_Controller_Dashboard_Widget_Lasterrors extends Scalr_UI_Controlle
             AND f.env_id = ?';
         $args = array($this->getEnvironmentId());
 
-        $allFarms = $this->request->isAllowed(Acl::RESOURCE_FARMS, Acl::PERM_FARMS_NOT_OWNED_FARMS);
-        if (! $allFarms) {
-            $sql .= ' AND f.created_by_id = ?';
-            $args[] = $this->user->getId();
-        }
+        list($sql, $args) = $this->request->prepareFarmSqlQuery($sql, $args, 'f');
 
         $sql .= ' ORDER BY time DESC LIMIT 0, ?';
         $args[] = $params['errorCount'];

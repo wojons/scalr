@@ -44,6 +44,9 @@ class Scalr_UI_Controller_Account2 extends Scalr_UI_Controller
             $env = Scalr_Environment::init()->loadById($row['id']);
             $row['platforms'] = $env->getEnabledPlatforms();
             $row['teams'] = array();
+            if ($this->getContainer()->config->get('scalr.auth_mode') == 'ldap') {
+                $row['teamIds'] = array();
+            }
             foreach ($env->getTeams() as $teamId) {
                 if ($this->getContainer()->config->get('scalr.auth_mode') == 'ldap') {
                     $team = new Scalr_Account_Team();
@@ -139,8 +142,6 @@ class Scalr_UI_Controller_Account2 extends Scalr_UI_Controller
         return $result;
     }
 
-
-
     public function getAccountRolesList()
     {
         if ($this->user->canManageAcl()) {
@@ -159,4 +160,21 @@ class Scalr_UI_Controller_Account2 extends Scalr_UI_Controller
         return \Scalr::getContainer()->acl->getRolesComputed();
     }
 
+    /*
+     * Redirects for account scope
+     */
+    public function dashboardAction()
+    {
+        self::loadController('Dashboard')->defaultAction();
+    }
+
+    public function eventsAction()
+    {
+        self::loadController('Events', 'Scalr_UI_Controller_Scripts')->defaultAction();
+    }
+
+    public function scriptsAction()
+    {
+        self::loadController('Scripts')->defaultAction();
+    }
 }

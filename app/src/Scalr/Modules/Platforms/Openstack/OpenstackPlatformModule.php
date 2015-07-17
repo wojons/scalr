@@ -16,10 +16,11 @@ use Scalr\Service\OpenStack\Services\Servers\Type\Network;
 use Scalr\Service\OpenStack\Type\PaginationInterface;
 use Scalr\Modules\Platforms\Openstack\Adapters\StatusAdapter;
 use Scalr\Modules\Platforms\AbstractOpenstackPlatformModule;
-use Scalr\Service\OpenStack\Client\AuthToken;
+use Scalr\Modules\PlatformFactory;
 use Scalr\Service\OpenStack\Services\Network\Type\CreateSecurityGroupRule;
 use Scalr\Model\Entity\Image;
 use Scalr\Model\Entity\CloudLocation;
+use Scalr\Service\OpenStack\OpenStack;
 
 class OpenstackPlatformModule extends AbstractOpenstackPlatformModule implements \Scalr\Modules\PlatformModuleInterface
 {
@@ -31,6 +32,7 @@ class OpenstackPlatformModule extends AbstractOpenstackPlatformModule implements
     const TENANT_NAME   = 'tenant_name';
     const KEYSTONE_URL  = 'keystone_url';
     const SSL_VERIFYPEER = 'ssl_verifypeer';
+    const IDENTITY_VERSION   = 'identity_version';
 
     /** System Properties **/
     const AUTH_TOKEN    = 'auth_token';
@@ -49,7 +51,7 @@ class OpenstackPlatformModule extends AbstractOpenstackPlatformModule implements
     protected $resumeStrategy = \Scalr_Role_Behavior::RESUME_STRATEGY_REBOOT;
 
     /**
-     * @return \Scalr\Service\OpenStack\OpenStack
+     * @return OpenStack
      */
     public function getOsClient(\Scalr_Environment $environment, $cloudLocation)
     {
@@ -102,23 +104,11 @@ class OpenstackPlatformModule extends AbstractOpenstackPlatformModule implements
 
         $platform = $this->platform ?: \SERVER_PLATFORMS::OPENSTACK;
 
-        $url = $this->getConfigVariable($this::KEYSTONE_URL, $env);
+        $url = $this->getConfigVariable(static::KEYSTONE_URL, $env);
 
         if (empty($url)) return false;
 
         return $this->container->analytics->prices->hasPriceForUrl($platform, $url) ?: $url;
-    }
-
-    public function getPropsList()
-    {
-        return array(
-            self::USERNAME	=> 'Username',
-            self::API_KEY	=> 'API KEY',
-            self::PASSWORD	=> 'Password',
-            self::TENANT_NAME	=> 'Tenant name',
-            self::KEYSTONE_URL	=> 'KeyStone URL',
-            self::AUTH_TOKEN	=> 'Auth Token'
-        );
     }
 
     /**
@@ -160,7 +150,7 @@ class OpenstackPlatformModule extends AbstractOpenstackPlatformModule implements
         );
     }
 
-    public function determineServerIps(\Scalr\Service\OpenStack\OpenStack $client, $server)
+    public function determineServerIps(OpenStack $client, $server)
     {
         $config = \Scalr::getContainer()->config;
 
@@ -260,24 +250,21 @@ class OpenstackPlatformModule extends AbstractOpenstackPlatformModule implements
     public function GetServerRealStatus(DBServer $DBServer)
     {
         $cloudLocation = $DBServer->GetProperty(\OPENSTACK_SERVER_PROPERTIES::CLOUD_LOCATION);
-        $environment = $DBServer->GetEnvironmentObject();
-
         $iid = $DBServer->GetProperty(\OPENSTACK_SERVER_PROPERTIES::SERVER_ID);
+
         if (!$iid) {
             $status = 'not-found';
-        } elseif (!$this->instancesListCache[$environment->id][$cloudLocation][$iid]) {
-            $osClient = $this->getOsClient($environment, $cloudLocation);
+        } elseif (!$this->instancesListCache[$DBServer->envId][$cloudLocation][$iid]) {
+            $osClient = $this->getOsClient($DBServer->GetEnvironmentObject(), $cloudLocation);
 
             try {
-                $result = $osClient->servers->getServerDetails($DBServer->GetProperty(\OPENSTACK_SERVER_PROPERTIES::SERVER_ID));
+                $result = $osClient->servers->getServerDetails($iid);
                 $status = $result->status;
-            } catch(NotFoundException $e) {
+            } catch (NotFoundException $e) {
                 $status = 'not-found';
             }
-        }
-        else
-        {
-            $status = $this->instancesListCache[$environment->id][$cloudLocation][$DBServer->GetProperty(\OPENSTACK_SERVER_PROPERTIES::SERVER_ID)];
+        } else {
+            $status = $this->instancesListCache[$DBServer->envId][$cloudLocation][$iid];
         }
 
         return StatusAdapter::load($status);
@@ -388,12 +375,6 @@ class OpenstackPlatformModule extends AbstractOpenstackPlatformModule implements
     {
         try {
             $DBServer = DBServer::LoadByID($BundleTask->serverId);
-
-            if ($BundleTask->bundleType != \SERVER_SNAPSHOT_CREATION_TYPE::OSTACK_WINDOWS)
-                return;
-
-            $BundleTask->status = \SERVER_SNAPSHOT_CREATION_STATUS::IN_PROGRESS;
-
             $client = $this->getOsClient($DBServer->GetEnvironmentObject(), $DBServer->GetProperty(\OPENSTACK_SERVER_PROPERTIES::CLOUD_LOCATION));
 
             $info = $client->servers->getImage($BundleTask->snapshotId);
@@ -436,10 +417,20 @@ class OpenstackPlatformModule extends AbstractOpenstackPlatformModule implements
 
         if ($BundleTask->osFamily == 'windows' || $DBServer->osType == 'windows') {
         	$BundleTask->bundleType = \SERVER_SNAPSHOT_CREATION_TYPE::OSTACK_WINDOWS;
+        	$BundleTask->Log(sprintf(_("Selected platform snapshot type: %s"), $BundleTask->bundleType));
+        	
+        	
+        	//prepare bundle
+        	$BundleTask->Log(sprintf(_("Sending 'prepare' command to scalarizr")));
+        	$prepare = $DBServer->scalarizr->image->prepare($BundleTask->roleName);
+        	$BundleTask->Log(sprintf(_("Prepare result: %s"), json_encode($prepare)));
+        	
+        	$createImage = true;
+        	
         	/*
             if ($BundleTask->status == \SERVER_SNAPSHOT_CREATION_STATUS::PENDING) {
                 $BundleTask->bundleType = \SERVER_SNAPSHOT_CREATION_TYPE::OSTACK_WINDOWS;
-                $BundleTask->Log(sprintf(_("Selected platfrom snapshoting type: %s"), $BundleTask->bundleType));
+                $BundleTask->Log(sprintf(_("Selected platform snapshotting type: %s"), $BundleTask->bundleType));
                 $BundleTask->status = \SERVER_SNAPSHOT_CREATION_STATUS::PREPARING;
                 $BundleTask->Save();
                 try {
@@ -458,14 +449,21 @@ class OpenstackPlatformModule extends AbstractOpenstackPlatformModule implements
                     return false;
                 }
             } elseif ($BundleTask->status == \SERVER_SNAPSHOT_CREATION_STATUS::PREPARING) {
+            
+            }
             */
-            $BundleTask->Log(sprintf(_("Selected platform snapshot type: %s"), $BundleTask->bundleType));
-            $createImage = true;
-            /*}*/
         } else {
             $BundleTask->bundleType = \SERVER_SNAPSHOT_CREATION_TYPE::OSTACK_LINUX;
-            $createImage = false;
+            $BundleTask->Log(sprintf(_("Selected platform snapshot type: %s"), $BundleTask->bundleType));
+           
+            //prepare bundle
+            $BundleTask->Log(sprintf(_("Sending 'prepare' command to scalarizr")));
+            $prepare = $DBServer->scalarizr->image->prepare($BundleTask->roleName);
+            $BundleTask->Log(sprintf(_("Prepare result: %s"), json_encode($prepare)));
+            
+            $createImage = true;
 
+            /*
             $BundleTask->status = \SERVER_SNAPSHOT_CREATION_STATUS::IN_PROGRESS;
 
             $msg = new \Scalr_Messaging_Msg_Rebundle(
@@ -485,6 +483,7 @@ class OpenstackPlatformModule extends AbstractOpenstackPlatformModule implements
 
             $BundleTask->setDate('started');
             $BundleTask->Save();
+            */
         }
 
         if ($createImage) {
@@ -550,24 +549,6 @@ class OpenstackPlatformModule extends AbstractOpenstackPlatformModule implements
                 $ips = $this->GetServerIPAddresses($DBServer);
             } catch (\Exception $e) {}
 
-            //TODO: Remove as soon as we will confirm that there is no longer issues with API
-            if ($client->getConfig()->getAuthToken() instanceof AuthToken) {
-                $log = array(
-                    'authTokenTenantId' => $client->getConfig()->getAuthToken()->getTenantId(),
-                    'authTokenTenantName' => $client->getConfig()->getAuthToken()->getTenantName(),
-                       'scalrTenantName' => $client->getConfig()->getTenantName(),
-                       'scalrUsername' => $client->getConfig()->getUsername()
-                );
-
-                $this->debugLog = sprintf("[OPENSTACK_DEBUG] Checking ServerID %s: %s,%s,%s,%s",
-                    $serverId,
-                    $log['authTokenTenantId'],
-                       $log['authTokenTenantName'],
-                       $log['scalrTenantName'],
-                       $log['scalrUsername']
-                );
-            }
-
             if ($iinfo) {
                 $retval =  array(
                     'Cloud Server ID' => $DBServer->GetProperty(\OPENSTACK_SERVER_PROPERTIES::SERVER_ID),
@@ -615,6 +596,7 @@ class OpenstackPlatformModule extends AbstractOpenstackPlatformModule implements
         $environment = $DBServer->GetEnvironmentObject();
         $governance = new \Scalr_Governance($environment->id);
 
+        
         if (!$launchOptions) {
             $launchOptions = new \Scalr_Server_LaunchOptions();
             $DBRole = $DBServer->GetFarmRoleObject()->GetRoleObject();
@@ -624,8 +606,8 @@ class OpenstackPlatformModule extends AbstractOpenstackPlatformModule implements
             $launchOptions->cloudLocation = $DBServer->GetFarmRoleObject()->CloudLocation;
 
             $launchOptions->userData = $DBServer->GetCloudUserData();
-            $launchOptions->userData['platform'] = 'openstack';
             $launchOptions->userData['region'] = $launchOptions->cloudLocation;
+            $launchOptions->userData['platform'] = 'openstack';
 
             $launchOptions->networks = @json_decode($DBServer->GetFarmRoleObject()->GetSetting(\DBFarmRole::SETTING_OPENSTACK_NETWORKS));
             $gevernanceNetworks = $governance->getValue($this->platform, 'openstack.networks');
@@ -639,7 +621,7 @@ class OpenstackPlatformModule extends AbstractOpenstackPlatformModule implements
             }
 
             $launchOptions->architecture = 'x86_64';
-            $isWindows = ($DBServer->osType == 'windows' || $DBRole->osFamily == 'windows');
+            $isWindows = ($DBServer->osType == 'windows' || $DBRole->getOs()->family == 'windows');
 
             if ($DBServer->GetFarmRoleObject()->GetSetting('openstack.boot_from_volume') == 1) {
                 $deviceMapping = new \stdClass();
@@ -654,12 +636,19 @@ class OpenstackPlatformModule extends AbstractOpenstackPlatformModule implements
             }
 
             $customUserData = $DBServer->GetFarmRoleObject()->GetSetting('base.custom_user_data');
-            
+
             $serverNameFormat = $governance->getValue($DBServer->platform, \Scalr_Governance::OPENSTACK_INSTANCE_NAME_FORMAT);
             if (!$serverNameFormat)
                 $serverNameFormat = $DBServer->GetFarmRoleObject()->GetSetting(\Scalr_Role_Behavior::ROLE_INSTANCE_NAME_FORMAT);
-            
+
+            // Availability zone
+            $launchOptions->availZone = $this->GetServerAvailZone(
+                $DBServer, 
+                $this->getOsClient($environment, $launchOptions->cloudLocation), 
+                $launchOptions
+            );
         } else {
+            $launchOptions->availZone = null;
             $launchOptions->userData = array();
             $customUserData = false;
 
@@ -723,6 +712,9 @@ class OpenstackPlatformModule extends AbstractOpenstackPlatformModule implements
                 $extProperties['security_groups'][] = $itm;
             }
         }
+        
+        if ($launchOptions->availZone)
+            $extProperties['availability_zone'] = $launchOptions->availZone;
 
         if ($deviceMapping)
             $extProperties['block_device_mapping_v2'][] = $deviceMapping;
@@ -794,9 +786,9 @@ class OpenstackPlatformModule extends AbstractOpenstackPlatformModule implements
             $osUserData = $launchOptions->userData;
         }
 
-        
+
         $serverName = ($serverNameFormat) ? $DBServer->applyGlobalVarsToValue($serverNameFormat) : $DBServer->serverId;
-        
+
         try {
             $result = $client->servers->createServer(
                 $serverName,
@@ -813,10 +805,11 @@ class OpenstackPlatformModule extends AbstractOpenstackPlatformModule implements
                 \OPENSTACK_SERVER_PROPERTIES::SERVER_ID      => $result->id,
                 \OPENSTACK_SERVER_PROPERTIES::IMAGE_ID       => $launchOptions->imageId,
                 \OPENSTACK_SERVER_PROPERTIES::FLAVOR_ID      => $launchOptions->serverType,
-                \OPENSTACK_SERVER_PROPERTIES::ADMIN_PASS     => $result->adminPass,
+                \OPENSTACK_SERVER_PROPERTIES::ADMIN_PASS     => ($launchOptions->userData['vzc.adminpassword']) ? $launchOptions->userData['vzc.adminpassword'] : $result->adminPass,
                 \OPENSTACK_SERVER_PROPERTIES::NAME           => $DBServer->serverId,
                 \SERVER_PROPERTIES::ARCHITECTURE             => $launchOptions->architecture,
                 \OPENSTACK_SERVER_PROPERTIES::CLOUD_LOCATION => $launchOptions->cloudLocation,
+                \OPENSTACK_SERVER_PROPERTIES::CLOUD_LOCATION_ZONE => $launchOptions->availZone,
                 \SERVER_PROPERTIES::SYSTEM_USER_DATA_METHOD  => $userDataMethod,
             ]);
 
@@ -828,8 +821,10 @@ class OpenstackPlatformModule extends AbstractOpenstackPlatformModule implements
 
             $DBServer->setOsType($isWindows ? 'windows' : 'linux');
             $DBServer->cloudLocation = $launchOptions->cloudLocation;
-            $DBServer->cloudLocationZone = ""; // Not supported by openstack
+            $DBServer->cloudLocationZone = $launchOptions->availZone;
             $DBServer->imageId = $launchOptions->imageId;
+            // we set server history here
+            $DBServer->getServerHistory();
 
             return $DBServer;
         } catch (\Exception $e) {
@@ -841,6 +836,108 @@ class OpenstackPlatformModule extends AbstractOpenstackPlatformModule implements
         }
     }
 
+    /**
+     * Gets Avail zone for the specified DB server
+     *
+     * @param   DBServer                   $DBServer
+     * @param   OpenStack $client Openstack client
+     * @param   \Scalr_Server_LaunchOptions $launchOptions
+     */
+    private function GetServerAvailZone(DBServer $DBServer, OpenStack $client, \Scalr_Server_LaunchOptions $launchOptions)
+    {
+        if ($DBServer->status == \SERVER_STATUS::TEMPORARY)
+            return null;
+    
+        $serverAvailZone = $DBServer->GetProperty(\OPENSTACK_SERVER_PROPERTIES::CLOUD_LOCATION_ZONE);
+    
+        if ($serverAvailZone && $serverAvailZone != 'x-scalr-diff' && !stristr($serverAvailZone, "x-scalr-custom"))
+            return $serverAvailZone;
+    
+        $roleAvailZone = $DBServer->GetFarmRoleObject()->GetSetting(\DBFarmRole::SETTING_OPENSTACK_AVAIL_ZONE);
+    
+        if (!$roleAvailZone)
+            return null;
+    
+        if ($roleAvailZone == "x-scalr-diff" || stristr($roleAvailZone, "x-scalr-custom")) {
+            $availZones = array();
+            if (stristr($roleAvailZone, "x-scalr-custom")) {
+                $zones = explode("=", $roleAvailZone);
+                foreach (explode(":", $zones[1]) as $zoneName) {
+                    if ($zoneName != "") {
+                        $isUnavailable = $DBServer->GetEnvironmentObject()->getPlatformConfigValue(
+                            "openstack.{$launchOptions->cloudLocation}.{$zoneName}.unavailable",
+                            false
+                        );
+                        if ($isUnavailable && $isUnavailable + 3600 < time()) {
+                            $DBServer->GetEnvironmentObject()->setPlatformConfig(
+                                array(
+                                    "openstack.{$launchOptions->cloudLocation}.{$zoneName}.unavailable" => false
+                                ), 
+                                false
+                            );
+                            $isUnavailable = false;
+                        }
+    
+                        if (!$isUnavailable)
+                            array_push($availZones, $zoneName);
+                    }
+                }
+    
+            } else {
+                // Get list of all available zones
+                $availZonesResp = $client->servers->listAvailabilityZones();
+                foreach ($availZonesResp as $zone) {
+                    $zoneName = $zone->zoneName;
+    
+                    if ($zone->zoneState->available == true) {
+                        $isUnavailable = $DBServer->GetEnvironmentObject()->getPlatformConfigValue(
+                            "openstack.{$launchOptions->cloudLocation}.{$zoneName}.unavailable",
+                            false
+                        );
+                        if ($isUnavailable && $isUnavailable + 3600 < time()) {
+                            $DBServer->GetEnvironmentObject()->setPlatformConfig(
+                                array(
+                                    "openstack.{$launchOptions->cloudLocation}.{$zoneName}.unavailable" => false
+                                ),
+                                false
+                            );
+                            $isUnavailable = false;
+                        }
+    
+                        if (!$isUnavailable)
+                            array_push($availZones, $zoneName);
+                    }
+                }
+            }
+    
+            rsort($availZones);
+    
+            $servers = $DBServer->GetFarmRoleObject()->GetServersByFilter(array("status" => array(
+                \SERVER_STATUS::RUNNING,
+                \SERVER_STATUS::INIT,
+                \SERVER_STATUS::PENDING
+            )));
+            $availZoneDistribution = array();
+            foreach ($servers as $cDbServer) {
+                if ($cDbServer->serverId != $DBServer->serverId) {
+                    $availZoneDistribution[$cDbServer->GetProperty(\OPENSTACK_SERVER_PROPERTIES::CLOUD_LOCATION_ZONE)]++;
+                }
+            }
+    
+            $sCount = PHP_INT_MAX;
+            foreach ($availZones as $zone) {
+                if ((int)$availZoneDistribution[$zone] <= $sCount) {
+                    $sCount = (int)$availZoneDistribution[$zone];
+                    $availZone = $zone;
+                }
+            }
+            
+            return $availZone;
+        } else {
+            return $roleAvailZone;
+        }
+    }
+    
     public function GetPlatformAccessData(\Scalr_Environment $environment, DBServer $DBServer)
     {
         $accessData = new \stdClass();
@@ -858,6 +955,20 @@ class OpenstackPlatformModule extends AbstractOpenstackPlatformModule implements
         $accessData->password = $this->getConfigVariable(self::PASSWORD, $environment, true);
         $accessData->cloudLocation = $DBServer->GetProperty(\OPENSTACK_SERVER_PROPERTIES::CLOUD_LOCATION);
         $accessData->sslVerifyPeer = $this->getConfigVariable(self::SSL_VERIFYPEER, $environment, true);
+
+        $config = \Scalr::getContainer()->config;
+
+        if ($config->defined("scalr.{$this->platform}.use_proxy") &&
+            $config("scalr.{$this->platform}.use_proxy") &&
+            in_array($config('scalr.connections.proxy.use_on'), ['both', 'instance'])) {
+            $proxySettings = $config('scalr.connections.proxy');
+            $accessData->proxy = new \stdClass();
+            $accessData->proxy->host = $proxySettings['host'];
+            $accessData->proxy->port = $proxySettings['port'];
+            $accessData->proxy->user = $proxySettings['user'];
+            $accessData->proxy->pass = $proxySettings['pass'];
+            $accessData->proxy->type = $proxySettings['type'];
+        }
 
         return $accessData;
     }
@@ -899,7 +1010,7 @@ class OpenstackPlatformModule extends AbstractOpenstackPlatformModule implements
         $this->instancesDetailsCache = [];
     }
 
-    private function GetServerSecurityGroupsList(DBServer $DBServer, \Scalr\Service\OpenStack\OpenStack $osClient, \Scalr_Governance $governance = null)
+    private function GetServerSecurityGroupsList(DBServer $DBServer, OpenStack $osClient, \Scalr_Governance $governance = null)
     {
         $retval = array();
         $checkGroups = array();
@@ -1030,7 +1141,7 @@ class OpenstackPlatformModule extends AbstractOpenstackPlatformModule implements
         $detailed = [];
 
         //Trying to retrieve instance types from the cache
-        $url = $this->getConfigVariable($this::KEYSTONE_URL, $env);
+        $url = $this->getConfigVariable(static::KEYSTONE_URL, $env);
         $collection = $this->getCachedInstanceTypes($this->platform, $url, $cloudLocation);
 
         if ($collection === false || $collection->count() == 0) {

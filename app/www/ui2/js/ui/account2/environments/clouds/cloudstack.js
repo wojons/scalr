@@ -30,30 +30,30 @@ Scalr.regPage('Scalr.ui.account2.environments.clouds.cloudstack', function (load
 			xtype: 'textfield',
 			fieldLabel: 'Secret key',
 			name: 'secret_key',
-			value: params['secret_key']
+			value: params['secret_key'],
+            selectOnFocus: true
 		},{
             xtype: 'fieldset',
             hidden: Ext.Object.getSize(cloudInfo) === 0,
-            style: 'background:#e6e8ec;border-radius:4px;',
+            style: 'background:#e1ebf4;border-radius:2px;',
             cls: 'x-fieldset-separator-none',
+            title: 'Cloud details',
             margin: '24 0 0 0',
+            defaults: {
+                margin: 0
+            },
             items: [{
-                xtype: 'label',
-                html: '<b>Cloud details:</b>',
-                style: 'display:block',
-                margin: '0 0 12 0'
-            },{
                 xtype: 'displayfield',
                 fieldLabel: 'Version',
                 value: cloudInfo['cloudstackversion']
             },{
                 xtype: 'displayfield',
                 fieldLabel: 'Security groups',
-                value: '<img src="' + Ext.BLANK_IMAGE_URL + '" class="x-icon-' + (cloudInfo['securitygroupsenabled'] ? 'ok' : 'fail') + '" />'
+                value: cloudInfo['securitygroupsenabled'] ? '<div class="x-grid-icon x-grid-icon-simple x-grid-icon-ok"></div>' : '&nbsp;&ndash;'
             },{
                 xtype: 'displayfield',
                 fieldLabel: 'Load balancer',
-                value: '<img src="' + Ext.BLANK_IMAGE_URL + '" class="x-icon-' + (cloudInfo['supportELB'] ? 'ok' : 'fail') + '" />'
+                value: cloudInfo['supportELB'] ? '<div class="x-grid-icon x-grid-icon-simple x-grid-icon-ok"></div>' : '&nbsp;&ndash;'
             }]
         }]
 	});

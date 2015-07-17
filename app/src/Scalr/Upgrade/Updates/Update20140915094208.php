@@ -14,7 +14,7 @@ class Update20140915094208 extends AbstractUpdate implements SequenceInterface
 
     protected $description = 'Update table images and fill with name and size';
 
-    protected $ignoreChanges = true;
+    protected $ignoreChanges = false;
 
     protected $dbservice = 'adodb';
 
@@ -72,10 +72,7 @@ class Update20140915094208 extends AbstractUpdate implements SequenceInterface
             try {
                 $task = \BundleTask::LoadById($image->bundleTaskId);
                 $os = $task->getOsDetails();
-                $image->os = $os->name;
-                $image->osFamily = $os->family;
-                $image->osGeneration = $os->generation;
-                $image->osVersion = $os->version;
+                $image->osId = $os->id;
                 $image->save();
             } catch (\Exception $e) {
                 $this->console->warning($e->getMessage());

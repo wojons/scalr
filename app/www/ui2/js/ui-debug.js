@@ -8,9 +8,11 @@ Scalr.application.addDocked({
         text: 'SQL',
         pressed: Scalr.storage.get('system-debug-sql', true),
         handler: function() {
-            Scalr.application.getDockedComponent('debugSql')[ this.pressed ? 'show' : 'hide' ]();
+            var dataview = Scalr.application.getDockedComponent('debugSql');
+            dataview[this.pressed ? 'show' : 'hide' ]();
             Scalr.storage.set('system-debug-sql', this.pressed, true);
             Scalr.application.layout.onOwnResize();
+            dataview.updateLayout();
         }
     }, {
         xtype: 'button',
@@ -39,19 +41,20 @@ Scalr.application.addDocked({
     autoScroll: true,
     style: 'bottom: 41px; padding-top: 4px',
     itemTpl: new Ext.XTemplate(
-            '<span style="font-weight: bold; margin: 0 0 10px 4px; display: block; cursor: pointer" class="<tpl if="report.length">clickable</tpl>">&nbsp;{url} ({report.length})</span>' +
+            '<b style="margin: 0 0 10px 4px; display: block; cursor: pointer" class="<tpl if="report.length">clickable</tpl>">&nbsp;{url} ({report.length})</b>' +
             '<tpl if="report.length">' +
-            '<ul style="padding-left: 20px; margin: 0 0 8px 0; list-style-type: none; display: none">' +
-            '<tpl for="report">' +
-            '<li style="margin: 2px; white-space: pre-wrap; color: {[this.color(values)]}">{value}</li>' +
-            '</tpl>' +
-            '</ul>' +
+                '<ul style="padding-left: 20px; margin: 0 0 8px 0; list-style-type: none; display: none">' +
+                    '<tpl for="report">' +
+                        '<li style="margin: 2px; white-space: pre-wrap; color: {[this.color(values)]}">{value}</li>' +
+                    '</tpl>' +
+                    '<a href="#" class="collapse">&#8593; Collapse</a>'+
+                '</ul>' +
             '</tpl>'
         , {
             color: function(vs) {
                 var r = /^([0-9\.]+)\sms/mi, result = r.exec(vs.value), tm = result ? parseFloat(result[1]) : 0;
                 if (tm > 500) {
-                    return 'red';
+                    return 'orange';
                 } else if (tm > 200) {
                     return 'blue';
                 } else if (tm > 0) {
@@ -63,29 +66,30 @@ Scalr.application.addDocked({
         }),
     listeners: {
         afterrender: function() {
-            var me = this;
             this.el.on('click', function(e, t) {
-                var s = e.getTarget('span.clickable', 5, true);
+                var s = e.getTarget('b.clickable', 5, true);
                 if (s) {
                     var ul = s.next('ul');
                     if (ul) {
-                        ul.setVisibilityMode(Ext.dom.AbstractElement.DISPLAY);
+                        ul.setVisibilityMode(Ext.dom.Element.DISPLAY);
                         ul[ul.isVisible() ? 'hide' : 'show']();
+                    }
+                } else {
+                    s = e.getTarget('a.collapse', 5, true);
+                    if (s) {
+                        var ul = s.up('ul');
+                        if (ul) {
+                            ul.setVisibilityMode(Ext.dom.Element.DISPLAY);
+                            ul.hide();
+                        }
+                        e.stopEvent();
                     }
                 }
             });
         },
-        beforerefresh: function() {
-            if (this.rendered) {
-                this.scrollPosition = this.lockScroll ?
-                    this.el.getScrollTop() : ((this.el.child('div') ?
-                        this.el.child('div').getHeight() : this.el.getHeight()));
-            }
-        },
         itemadd: function() {
-            if (this.rendered && Ext.isDefined(this.scrollPosition)) {
-                this.el.scroll('b', this.scrollPosition);
-                delete this.scrollPosition;
+            if (this.rendered && !this.lockScroll) {
+                this.scrollBy(0, 99999);
             }
         }
     }

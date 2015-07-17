@@ -2,12 +2,11 @@ SERVICES_APACHE:
 - [/services/apache/vhosts, null, all]
 - /farms/vhosts
 
-SERVICES_CHEF:
+SERVICES_ENVADMINISTRATION_CHEF:
 - /services/chef/servers/default
 - /services/chef/servers/view
-- /services/chef/servers/edit
-- /services/chef/servers/create
-- /services/chef/servers/xDeleteServer
+- /services/chef/servers/xList
+- /services/chef/servers/xRemoveServer
 - /services/chef/servers/xSaveServer
 
 SERVICES_SSL:

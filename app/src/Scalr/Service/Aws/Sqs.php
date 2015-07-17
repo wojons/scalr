@@ -58,14 +58,12 @@ class Sqs extends AbstractService implements ServiceInterface
     public function getUrl()
     {
         $region = $this->getAws()->getRegion();
-        if ($region == Aws::REGION_US_GOV_WEST_1) {
-            return 'sqs.us-gov-west-1.amazonaws.com';
-        } elseif ($region == Aws::REGION_CN_NORTH_1) {
-            return 'sqs.cn-north-1.amazonaws.com.cn';
+
+        if (strpos($region, 'cn-') === 0) {
+            return 'sqs.' . $region . '.amazonaws.com.cn';
+        } else {
+            return 'sqs.' . $region . '.amazonaws.com';
         }
-        
-        return 'sqs.' . $region . '.amazonaws.com';
-        
     }
 
     /**

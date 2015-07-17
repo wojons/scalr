@@ -11,20 +11,15 @@ Scalr.regPage('Scalr.ui.scripts.shortcuts.view', function (loadParams, modulePar
 	});
 
 	return Ext.create('Ext.grid.Panel', {
-		title: 'Scripts &raquo; Shortcuts &raquo; View',
 		scalrOptions: {
-			'reload': false,
-			'maximize': 'all'
+			reload: false,
+			maximize: 'all',
+            menuTitle: 'Scripts Shortcuts'
 		},
 		store: store,
 		stateId: 'grid-scripts-shortcuts-view',
 		stateful: true,
-		plugins: {
-			ptype: 'gridstore'
-		},
-		tools: [{
-			xtype: 'gridcolumnstool'
-		}],
+        plugins: [ 'gridstore', 'applyparams' ],
 
 		viewConfig: {
 			emptyText: "No shortcuts defined",
@@ -33,24 +28,23 @@ Scalr.regPage('Scalr.ui.scripts.shortcuts.view', function (loadParams, modulePar
 
 		columns: [
 			{ header: "Target", flex: 1, dataIndex: 'id', sortable: true, xtype: 'templatecolumn',
-                doSort: function (state) {
-                    var ds = this.up('tablepanel').store;
-                    ds.sort([{
+                multiSort: function (st, direction) {
+                    st.sort([{
                         property: 'farmId',
-                        direction: state
+                        direction: direction
                     }, {
                         property: 'farmRoleId',
-                        direction: state
+                        direction: direction
                     }]);
                 },
                 tpl:
-				'<a href="#/farms/{farmId}/view">{farmName}</a>' +
+				'<a href="#/farms?farmId={farmId}">{farmName}</a>' +
 				'<tpl if="farmRoleId &gt; 0"> &rarr; <a href="#/farms/{farmId}/roles/{farmRoleId}/view">{farmRoleName}</a></tpl>' +
 				'&nbsp;&nbsp;&nbsp;'
             },
 			{ header: "Script", flex: 2, dataIndex: 'scriptId', sortable: true, xtype: 'templatecolumn', tpl: '{scriptName}' },
             {
-				xtype: 'optionscolumn2',
+				xtype: 'optionscolumn',
 				menu: [{
 					text: 'Edit',
                     iconCls: 'x-menu-icon-edit',
@@ -79,9 +73,9 @@ Scalr.regPage('Scalr.ui.scripts.shortcuts.view', function (loadParams, modulePar
                 store: store
             }],
             afterItems: [{
-                ui: 'paging',
                 itemId: 'delete',
-                iconCls: 'x-tbar-delete',
+                iconCls: 'x-btn-icon-delete',
+                cls: 'x-btn-red',
                 tooltip: 'Select one or more shortcut(s) to delete them',
                 disabled: true,
                 handler: function() {

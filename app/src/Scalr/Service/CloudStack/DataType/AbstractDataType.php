@@ -213,7 +213,12 @@ abstract class AbstractDataType
                 if ($this instanceof PaginationType) {
                     $result[$property] = $this->{$property};
                 } else if (!empty($this->{$property})) {
-                    $result[$property] = $this->{$property}->toArray();
+                    if (($this->{$property} instanceof AbstractDataType) || ($this->{$property} instanceof AbstractListDataType)) {
+                        $result[$property] = $this->{$property}->toArray();
+                    } else {
+                        $result[$property] = $this->{$property};
+                    }
+
                 }
             }
         }

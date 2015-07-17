@@ -3,6 +3,7 @@ namespace Scalr\Model\Entity;
 
 use Scalr\Model\AbstractEntity;
 use Scalr\Exception\ScalrException;
+use Scalr\DataType\ScopeInterface;
 
 /**
  * WebhookEndpoint entity
@@ -13,7 +14,7 @@ use Scalr\Exception\ScalrException;
  * @Entity
  * @Table(name="webhook_endpoints")
  */
-class WebhookEndpoint extends AbstractEntity
+class WebhookEndpoint extends AbstractEntity implements ScopeInterface
 {
 
     const LEVEL_SCALR = 1;
@@ -24,7 +25,7 @@ class WebhookEndpoint extends AbstractEntity
      * The identifier of the webhook endpoint
      *
      * @Id
-     * @GeneratedValue("UUID")
+     * @GeneratedValue("CUSTOM")
      * @Column(type="uuid")
      * @var string
      */
@@ -63,7 +64,7 @@ class WebhookEndpoint extends AbstractEntity
     public $url;
 
     /**
-     * @GeneratedValue("UUID")
+     * @GeneratedValue("CUSTOM")
      * @Column(type="uuid",nullable=true)
      * @var string
      */
@@ -133,4 +134,49 @@ class WebhookEndpoint extends AbstractEntity
         }
         return $this->isValid;
     }
+
+    /**
+     * {@inheritdoc}
+     * @see \Scalr\DataType\ScopeInterface::getScope()
+     */
+    public function getScope()
+    {
+        switch ($this->level) {
+            case self::LEVEL_ENVIRONMENT:
+                return self::SCOPE_ENVIRONMENT;
+            case self::LEVEL_ACCOUNT:
+                return self::SCOPE_ACCOUNT;
+            case self::LEVEL_SCALR:
+                return self::SCOPE_SCALR;
+            default:
+                throw new \UnexpectedValueException(sprintf(
+                    "Unknown level type: %d in %s::%s",
+                    $this->level, get_class($this), __FUNCTION__
+                ));
+        }
+    }
+
+    public function setScope($scope, $accountId, $envId)
+    {
+        switch ($scope) {
+            case self::SCOPE_ENVIRONMENT:
+                $this->level = self::LEVEL_ENVIRONMENT;
+                $this->accountId = $accountId;
+                $this->envId = $envId;
+                break;
+            case self::SCOPE_ACCOUNT:
+                $this->level = self::LEVEL_ACCOUNT;
+                $this->accountId = $accountId;
+                break;
+            case self::SCOPE_SCALR:
+                $this->level = self::LEVEL_SCALR;
+                break;
+            default:
+                throw new \UnexpectedValueException(sprintf(
+                    "Unknown scope: %d in %s::%s",
+                    $scope, get_class($this), __FUNCTION__
+                ));
+        }
+    }
+
 }

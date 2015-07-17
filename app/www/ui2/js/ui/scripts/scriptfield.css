@@ -1,36 +1,13 @@
-.x-grid-role-scripting .x-grid-dirty-cell{
-    background-image: url("/ui2/js/extjs-4.2/theme/images/grid/dirty.gif");
-    background-position: 0 0;
-    background-repeat: no-repeat;
-}
-
-.x-grid-role-scripting .x-grid-row-focused .x-grid-dirty-cell{
-    background-position: 2px 2px;
-}
-
 .x-grid-role-scripting .x-grid-row-system{
 	color:#999;
 }
 
-.x-grid-role-scripting .x-grid-empty-inner .title{
-    padding-top: 4px;
-}
-
-.x-grid-role-scripting .x-grid-wrap-row.x-grid-row-focused .x-grid-data-row td:first-child {
-    box-shadow: 0 1px #a6b7cf inset,1px 0 #a6b7cf inset,0 2px #bcc9db inset,2px 0 #bcc9db inset;
-}
-
-.x-grid-role-scripting .x-grid-wrap-row.x-grid-row-focused .x-grid-rowbody-tr td {
-    box-shadow: 0 -1px #a6b7cf inset,-1px 0 #a6b7cf inset,1px 0 #a6b7cf inset,0 -2px #bcc9db inset,-2px 0 #bcc9db inset,2px 0 #bcc9db inset;
-}
-
-.x-boundlist-role-scripting-events li{
-	padding: 5px 3px;
-	height: 26px;
+.x-grid-role-scripting .x-grid-row .x-grid-cell-inner {
+    padding-bottom: 0;
 }
 
 .x-grid-role-scripting .x-grid-rowbody{
-	font-size: 12px;
-	line-height:14px;
+	font-size: 90%;
+	line-height: 16px;
     padding:0;
 }

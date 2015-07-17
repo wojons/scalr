@@ -1,14 +1,9 @@
 .scalr-ui-panel-account-teams .x-dataview-tab{
-    min-height:120px;
-}
-
-.scalr-ui-panel-account-teams .x-dataview-tab-param-title{
-	width:50px;
+    min-height: 90px;
 }
 
 .scalr-ui-panel-account-teams .x-dataview-tab-param-value{
 	word-wrap:break-word;
-	max-width:130px;
 }
 
 .scalr-ui-panel-account-teams .team-add-remove{
@@ -16,16 +11,12 @@
 	cursor:pointer;
 }
 
-.scalr-ui-panel-account-teams .x-grid-row-over .team-add-remove,
-.scalr-ui-panel-account-teams .x-grid-row-selected .team-add-remove{
+.scalr-ui-panel-account-teams .x-grid-item-over .team-add-remove,
+.scalr-ui-panel-account-teams .x-grid-item-selected .team-add-remove{
 	display:inline;
 }
 
 /*access control column*/
-.scalr-ui-panel-account-teams .user-permission{
-	font-weight:bold;
-}
-
 .scalr-ui-panel-account-teams .x-grid-cell-inner{
 	position:relative;
 }
@@ -35,13 +26,13 @@
 	position:absolute;
 	top:2px;
 	right:10px;
-    height: 20px;
+    height: 26px;
     width: 48px;
     background: #f9f9f9;
     border-radius: 2px;
 }
 
-.scalr-ui-panel-account-teams .x-grid-row-over .x-grid-row-options,
+.scalr-ui-panel-account-teams .x-grid-item-over .x-grid-row-options,
 .scalr-ui-panel-account-teams .x-grid-row-selected .x-grid-row-options{
 	display:block;
 }
@@ -51,8 +42,8 @@
 }
 
 .scalr-ui-panel-account-teams .x-grid-row-options-icon{
-	width:32px;
-	height:20px;
-	background:url("/ui2/images/ui/account/manage_access.png") 0 0 no-repeat;
+	width: 32px;
+	height: 100%;
+	background:url("/ui2/images/ui/account/manage_access.png") 0 center no-repeat;
     margin: 0 auto;
 }

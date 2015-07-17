@@ -26,10 +26,8 @@ class Scalr_UI_Controller_Scripts_Shortcuts extends Scalr_UI_Controller
     {
         $sql = 'SELECT id FROM farms WHERE env_id = ?';
         $args = [$this->getEnvironmentId()];
-        if (! $this->request->isAllowed(Acl::RESOURCE_FARMS, Acl::PERM_FARMS_NOT_OWNED_FARMS)) {
-            $sql .= ' AND created_by_id = ?';
-            $args[] = $this->user->getId();
-        }
+
+        list($sql, $args) = $this->request->prepareFarmSqlQuery($sql, $args);
 
         return $this->db->GetCol($sql, $args);
     }
@@ -42,7 +40,7 @@ class Scalr_UI_Controller_Scripts_Shortcuts extends Scalr_UI_Controller
         $errors = [];
         foreach ($shortcutId as $id) {
             try {
-                /* @var ScriptShortcut $shortcut */
+                /* @var $shortcut ScriptShortcut */
                 $shortcut = ScriptShortcut::findPk($id);
                 if (! $shortcut)
                     throw new Scalr_UI_Exception_NotFound();
@@ -80,7 +78,7 @@ class Scalr_UI_Controller_Scripts_Shortcuts extends Scalr_UI_Controller
         $result = ScriptShortcut::find(['farmId' => ['$in' => $this->getAllowedFarmId()]], Scalr\UI\Utils::convertOrder($sort, ['scriptId' => 'ASC'], ['scriptId', 'farmId', 'farmRoleId']), $limit, $start, true);
         $data = [];
         foreach ($result as $shortcut) {
-            /* @var ScriptShortcut $shortcut */
+            /* @var $shortcut ScriptShortcut */
             $s = get_object_vars($shortcut);
             $s['farmName'] = DBFarm::LoadByIDOnlyName($shortcut->farmId);
             $s['scriptName'] = $shortcut->getScriptName();

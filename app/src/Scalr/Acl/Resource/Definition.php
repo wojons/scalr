@@ -54,44 +54,54 @@ class Definition
             self::$rawList = [
                 //resource_id => [name, description, resourceGroup, [[pemission_id => description)])
                 Acl::RESOURCE_FARMS => [
-                    'Farms',
-                    $allows . 'access to farm designer.',
-                    Acl::GROUP_FARMS,
+                    'All Farms',
+                    $allows . 'access to farms and servers.',
+                    Acl::GROUP_FARMS_SERVERS,
                     [
                         //permission_id must be in the lowercase and less than 64 characters.
-                        Acl::PERM_FARMS_MANAGE    => $allows . 'to manage (create/configure/delete) farms.',
-                        Acl::PERM_FARMS_CLONE     => $allows . 'to clone farms.',
-                        Acl::PERM_FARMS_LAUNCH    => $allows . 'to launch farms.',
-                        Acl::PERM_FARMS_TERMINATE => $allows . 'to terminate farms.',
-                        Acl::PERM_FARMS_NOT_OWNED_FARMS => $allows . 'to manage not owned farms.'
+                        Acl::PERM_FARMS_MANAGE              => $allows . 'to manage (create/configure/delete) farms.',
+                        Acl::PERM_FARMS_CLONE               => $allows . 'to clone farms.',
+                        Acl::PERM_FARMS_LAUNCH_TERMINATE    => $allows . 'to launch/terminate farms.',
+                        Acl::PERM_FARMS_CHANGE_OWNERSHIP   => $allows . 'to change owner or team',
+                        Acl::PERM_FARMS_SERVERS             => $allows . 'to manage servers',
+                        Acl::PERM_FARMS_STATISTICS          => $allows . 'to access statistics'
                     ]
                 ],
 
-                Acl::RESOURCE_FARMS_ALERTS => [
-                    'Alerts',
-                    $allows . 'access to alerts.',
-                    Acl::GROUP_FARMS
-                ],
-
-                Acl::RESOURCE_FARMS_SERVERS => [
-                    'Servers',
-                    $allows . 'access to servers.',
-                    Acl::GROUP_FARMS,
+                Acl::RESOURCE_TEAM_FARMS => [
+                    'Farms Your Teams Own',
+                    $allows . 'access to farms and servers.',
+                    Acl::GROUP_FARMS_SERVERS,
                     [
-                        Acl::PERM_FARMS_SERVERS_SSH_CONSOLE => $allows . 'to use server SSH Launcher.'
+                        //permission_id must be in the lowercase and less than 64 characters.
+                        Acl::PERM_FARMS_MANAGE              => $allows . 'to manage (create/configure/delete) farms.',
+                        Acl::PERM_FARMS_CLONE               => $allows . 'to clone farms.',
+                        Acl::PERM_FARMS_LAUNCH_TERMINATE    => $allows . 'to launch/terminate farms.',
+                        Acl::PERM_FARMS_CHANGE_OWNERSHIP   => $allows . 'to change owner or team',
+                        Acl::PERM_FARMS_SERVERS             => $allows . 'to manage servers',
+                        Acl::PERM_FARMS_STATISTICS          => $allows . 'to access statistics'
                     ]
                 ],
 
-                Acl::RESOURCE_FARMS_STATISTICS => [
-                    'Statistics',
-                    $allows . 'access to statistics.',
-                    Acl::GROUP_FARMS
+                Acl::RESOURCE_OWN_FARMS => [
+                    'Farms You Own',
+                    $allows . 'access to farms and servers.',
+                    Acl::GROUP_FARMS_SERVERS,
+                    [
+                        //permission_id must be in the lowercase and less than 64 characters.
+                        Acl::PERM_FARMS_MANAGE              => $allows . 'to manage (create/configure/delete) farms.',
+                        Acl::PERM_FARMS_CLONE               => $allows . 'to clone farms.',
+                        Acl::PERM_FARMS_LAUNCH_TERMINATE    => $allows . 'to launch/terminate farms.',
+                        Acl::PERM_FARMS_CHANGE_OWNERSHIP   => $allows . 'to change owner or team',
+                        Acl::PERM_FARMS_SERVERS             => $allows . 'to manage servers',
+                        Acl::PERM_FARMS_STATISTICS          => $allows . 'to access statistics'
+                    ]
                 ],
 
                 Acl::RESOURCE_FARMS_ROLES => [
                     'Roles',
                     $allows . 'access to roles.',
-                    Acl::GROUP_FARMS,
+                    Acl::GROUP_ROLES_IMAGES,
                     [
                         Acl::PERM_FARMS_ROLES_CREATE      => $allows . 'to create (build/import) roles.',
                         Acl::PERM_FARMS_ROLES_MANAGE      => $allows . 'to manage (edit/delete) roles.',
@@ -103,7 +113,7 @@ class Definition
                 Acl::RESOURCE_FARMS_IMAGES => [
                     'Images',
                     $allows . 'access to images.',
-                    Acl::GROUP_FARMS,
+                    Acl::GROUP_ROLES_IMAGES,
                     [
                         Acl::PERM_FARMS_ROLES_CREATE      => $allows . 'to create (build/import) images.',
                         Acl::PERM_FARMS_ROLES_MANAGE      => $allows . 'to manage (edit/delete) images.'

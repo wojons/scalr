@@ -5,6 +5,17 @@ Ext.define('Scalr.ui.db.backup.Calendar', {
     cachedBackups: {},
     backups: {},
 
+    initEvents: function () {
+        var me = this;
+
+        me.callParent();
+
+        me.on({
+            update: me.initExtendedBackups,
+            scope: me
+        });
+    },
+
     getCell: function (calendarData) {
         var me = this,
             cell = {'date': null, 'backups': null, 'status': 'scalr-ui-dbbackups-not-this-month'};
@@ -80,13 +91,16 @@ Ext.define('Scalr.ui.db.backup.Calendar', {
                                         '</tpl>',
                                     '</tpl>',
                                 '</div>',
-                                '<div class="scalr-ui-dbbackups-show-more"><a class="scalr-ui-dbbackups-show-more-link"></a></div>',
+                                '<div class="scalr-ui-dbbackups-show-more">',
+                                    '<span class="scalr-ui-dbbackups-show-more-wrap"></span>',
+                                    '<a class="scalr-ui-dbbackups-show-more-link"></a>',
+                                '</div>',
                             '</tpl>',
                         '</div>',
                     '</tpl>',
                 '</div>',
             '</tpl>',
-            '<div class="x-tip x-tip-light scalr-ui-dbbackups-show-all-backups-container"></div>',
+            '<div class="x-tip scalr-ui-dbbackups-show-all-backups-container"></div>',
             '<div class="scalr-ui-dbbackups-anchor-left"></div>',
             '<div class="scalr-ui-dbbackups-anchor-right"></div>',
         '</div>'
@@ -170,7 +184,7 @@ Ext.define('Scalr.ui.db.backup.Calendar', {
             tooltipContent = '<div class="scalr-ui-dbbackups-show-all-backups-container-content">' + records.join('') + '</div>';
 
         tooltip.setHeight('auto');
-        tooltip.setHTML(tooltipContent);
+        tooltip.setHtml(tooltipContent);
 
         var tooltipContentEl = tooltip.child('.scalr-ui-dbbackups-show-all-backups-container-content'),
             tooltipContentWidth = tooltipContentEl.getWidth(),
@@ -232,7 +246,7 @@ Ext.define('Scalr.ui.db.backup.Calendar', {
         tooltip.position('absolute', 100, tooltipX, getYPosition());
 
         var anchorFlag = cellX > centralX ? 'right' : 'left',
-            anchorX = anchorFlag === 'left' ? tooltipX - 10 : tooltipX + tooltipWidth,
+            anchorX = anchorFlag === 'left' ? tooltipX - 12 : tooltipX + tooltipWidth,
             anchorY = showMoreContainerY + (showMoreContainerHeight / 2) - 15;
 
         me.anchor[anchorFlag].position('absolute', 100, anchorX, anchorY);
@@ -271,24 +285,29 @@ Ext.define('Scalr.ui.db.backup.Calendar', {
         me.setCellWidth();
         me.displayBackups();
         me.hideTooltip();
+
+        me.fireEvent('update');
     },
 
     getBackupsThenRefreshCalendar: function (date, farmId) {
         var me = this;
+
+        me.setLoading('');
+
         Scalr.Request({
             url: '/db/backups/xGetListBackups',
-            processBox: {
-                type: 'action'
-            },
             params: {
                 time: date
             },
-
             success: function (data) {
                 if (data && data['backups'] && !me.isDestroyed) {
                     me.backups = data['backups'];
                     me.refreshCalendar(date, farmId);
                 }
+                me.setLoading(false);
+            },
+            failure: function () {
+                me.setLoading(false);
             }
         });
     },
@@ -298,6 +317,14 @@ Ext.define('Scalr.ui.db.backup.Calendar', {
         me.callParent();
         me.prepareTplData();
         me.update(me.data);
+    },
+
+    onBoxReady: function () {
+        var me = this;
+
+        me.callParent();
+
+        me.initExtendedBackups();
     },
 
     afterRender: function () {
@@ -315,17 +342,55 @@ Ext.define('Scalr.ui.db.backup.Calendar', {
             me.tooltip.hide();
         };
 
-        me.el.on('click', function (e) {
-            var target = e.getTarget('a.scalr-ui-dbbackups-show-more-link', 0, true);
+        /*
+        me.el.on('click', function (e, target) {
+            console.log(e.getTarget('.scalr-ui-dbbackups-show-more-link'));
+            target = Ext.get(target);
 
-            if (!target || target === me.lastTarget && me.tooltip.isVisible()) {
-                me.hideTooltip();
-            } else {
+            if (target && target !== me.lastTarget && !me.tooltip.isVisible()) {
                 me.showAllBackupsRecords(target.parent(), me.tooltip);
+            } else {
+                me.hideTooltip();
+            }
+        });
+        */
+
+        me.el.on('click', function (e, target) {
+            target = Ext.get(target);
+
+            var isTooltipVisible = me.tooltip.isVisible();
+
+            if (e.getTarget('.scalr-ui-dbbackups-show-more-link') &&
+                (target !== me.lastTarget || !isTooltipVisible)) {
+                me.showAllBackupsRecords(target.parent(), me.tooltip);
+                return;
+            }
+
+            if (isTooltipVisible) {
+                me.hideTooltip();
             }
         });
 
         me.setCellWidth();
+    },
+
+    initExtendedBackups: function () {
+        return;
+        var me = this;
+
+        Ext.Array.each(me.el.query('.scalr-ui-dbbackups-show-more-link'), function (element) {
+            element = Ext.get(element);
+
+            element.on('mouseenter', function () {
+                me.showAllBackupsRecords(element.parent(), me.tooltip);
+            });
+
+            element.on('mouseleave', function (e, target) {
+                console.log(e.getRelatedTarget());
+            }, me, {
+                buffer: 1000
+            });
+        });
     },
 
     onResize: function () {

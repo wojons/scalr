@@ -1,5 +1,7 @@
 <?php
 
+use Scalr\Model\Entity;
+
 class ScalrEnvironment20081125 extends ScalrEnvironment
 {
     protected function ListScripts()
@@ -204,8 +206,7 @@ class ScalrEnvironment20081125 extends ScalrEnvironment
         $hostName = $this->GetArg("hostname") ? " AND name=".$this->qstr($this->GetArg("hostname")) : "";
 
         if ($this->GetArg("id")) {
-            $sslInfo = new Scalr_Service_Ssl_Certificate();
-            $sslInfo->loadById($this->GetArg("id"));
+            $sslInfo = Entity\SslCertificate::findPk($this->GetArg("id"));
             if ($sslInfo->envId != $this->DBServer->envId)
                 $sslInfo = null;
         } else {
@@ -221,8 +222,7 @@ class ScalrEnvironment20081125 extends ScalrEnvironment
             }
 
             if ($vhost_info) {
-                $sslInfo = new Scalr_Service_Ssl_Certificate();
-                $sslInfo->loadById($vhost_info['ssl_cert_id']);
+                $sslInfo = Entity\SslCertificate::findPk($vhost_info['ssl_cert_id']);
                 if ($sslInfo->envId != $this->DBServer->envId)
                     $sslInfo = null;
             }
@@ -337,6 +337,7 @@ class ScalrEnvironment20081125 extends ScalrEnvironment
                     $HostDOMNode->setAttribute('status', $DBServer->status);
                     $HostDOMNode->setAttribute('cloud-location', $DBServer->GetCloudLocation());
                     $HostDOMNode->setAttribute('cloud-location-zone', $DBServer->cloudLocationZone);
+                    $HostDOMNode->setAttribute('hostname', $DBServer->GetProperty(Scalr_Role_Behavior::SERVER_BASE_HOSTNAME));
 
                     if ($DBFarmRole->GetRoleObject()->hasBehavior(ROLE_BEHAVIORS::MONGODB))
                     {

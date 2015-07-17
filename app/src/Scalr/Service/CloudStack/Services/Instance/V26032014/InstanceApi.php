@@ -88,7 +88,7 @@ class InstanceApi extends AbstractApi
 
         $response = $this->getClient()->call('destroyVirtualMachine', array(
             'id'      => $this->escape($id),
-            'expunge' => $this->escape($expunge)
+            'expunge' => $expunge ? 1 : 0
         ));
 
         if ($response->hasError() === false) {
@@ -100,6 +100,31 @@ class InstanceApi extends AbstractApi
 
         return $result;
 
+    }
+    
+    /**
+     * Expunge a virtual machine. Once destroyed, only the administrator can recover it.
+     *
+     * @param string $id      The ID of the virtual machine
+     * @return VirtualMachineInstancesData
+     */
+    public function expungeVirtualMachine($id)
+    {
+        $result = null;
+    
+        $response = $this->getClient()->call('expungeVirtualMachine', array(
+            'id'      => $this->escape($id)
+        ));
+    
+        if ($response->hasError() === false) {
+            $resultObject = $response->getResult();
+            if (!empty($resultObject)) {
+                $result = $this->_loadVirtualMachineInstanceData($resultObject);
+            }
+        }
+    
+        return $result;
+    
     }
 
     /**
@@ -273,7 +298,8 @@ class InstanceApi extends AbstractApi
 
         if ($response->hasError() === false) {
             $resultObject = $response->getResult();
-            if (property_exists($resultObject, 'count') && $resultObject->count > 0) {
+
+            if (!empty($resultObject) && property_exists($resultObject, 'count') && $resultObject->count > 0) {
                 $result = $this->_loadVirtualMachineInstancesList($resultObject->virtualmachine);
             }
         }

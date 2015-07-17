@@ -223,7 +223,7 @@ class Scalr_UI_Controller_Farms_Roles extends Scalr_UI_Controller
             'sort' => array('type' => 'json')
         ));
 
-        $allFarms = $this->request->isAllowed(Acl::RESOURCE_FARMS, Acl::PERM_FARMS_NOT_OWNED_FARMS);
+        $this->request->restrictFarmAccess(DBFarm::LoadByID($this->getParam('farmId')));
 
         $sql = "
             SELECT farm_roles.*
@@ -234,10 +234,6 @@ class Scalr_UI_Controller_Farms_Roles extends Scalr_UI_Controller
         ";
 
         $params = array($this->getParam('farmId'));
-
-        if (!$allFarms) {
-            $sql .= " AND `farmid` IN (SELECT id FROM `farms` WHERE env_id = " . intval($this->getEnvironmentId()) . " AND created_by_id = " . intval($this->user->getId()) . ") ";
-        }
 
         if ($this->getParam('roleId')) {
             $sql .= ' AND role_id = ?';
@@ -290,7 +286,7 @@ class Scalr_UI_Controller_Farms_Roles extends Scalr_UI_Controller
                 foreach (\Scalr\Model\Entity\ScriptShortcut::find(array(
                     array('farmRoleId' => $row['id'])
                 )) as $shortcut) {
-                    /* @var \Scalr\Model\Entity\ScriptShortcut $shortcut */
+                    /* @var $shortcut \Scalr\Model\Entity\ScriptShortcut */
                     $row['shortcuts'][] = array(
                         'id' => $shortcut->id,
                         'name' => $shortcut->getScriptName()
@@ -359,10 +355,8 @@ class Scalr_UI_Controller_Farms_Roles extends Scalr_UI_Controller
             'role' => array(
                 'role_id'       => $newRole->id,
                 'name'          => $newRole->name,
-                'os'			=> $newRole->os,
-                'os_family'     => $newRole->osFamily,
-                'os_generation' => $newRole->osGeneration,
-                'os_version'    => $newRole->osVersion,
+                'os'			=> $newRole->getOs()->name,
+                'osId'			=> $newRole->getOs()->id,
                 'generation'	=> $newRole->generation,
                 'image'         => [
                     'id' => $image->id,

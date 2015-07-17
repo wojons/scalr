@@ -5,18 +5,22 @@ Scalr.regPage('Scalr.ui.tools.openstack.volumes.create', function (loadParams, m
 		width: 700,
 		title: 'Tools &raquo; Openstack &raquo; Volumes &raquo; Create',
 		fieldDefaults: {
-			anchor: '100%'
+			anchor: '100%',
+			labelWidth: 150
 		},
 
 		items: [{
 			xtype: 'fieldset',
 			title: 'Placement information',
-			labelWidth: 130,
 			items: [{
 				fieldLabel: 'Cloud location',
 				xtype: 'combo',
 				allowBlank: false,
 				editable: false,
+				plugins: {
+                    ptype: 'fieldinnericoncloud',
+                    platform: 'openstack'
+                },
 				store: {
 					fields: [ 'id', 'name' ],
 					data: moduleParams.locations,
@@ -36,7 +40,6 @@ Scalr.regPage('Scalr.ui.tools.openstack.volumes.create', function (loadParams, m
 		}, {
 			xtype: 'fieldset',
 			title: 'Volume information',
-			labelWidth: 130,
 			items: [{
 				xtype:'fieldcontainer',
 				fieldLabel: 'Size',

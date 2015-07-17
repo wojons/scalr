@@ -22,6 +22,8 @@ import yaml
 import atexit
 import docopt
 import psutil
+import logging
+import datetime
 
 from textwrap import dedent
 
@@ -32,8 +34,8 @@ from scalrpy import __version__
 from scalrpy import LOG
 
 
-
 class Application(object):
+
     """
     Base application class
     You must override __call__ method
@@ -77,16 +79,16 @@ class Application(object):
     _custom_usage = ''
     _custom_options = ''
 
-
     def __init__(self, argv=None):
         self.args = docopt.docopt(self.help(), argv=argv, version=__version__, help=True)
         self.validate_args()
+        self._update_config()
 
+        self.start_dtime = None
 
     @abc.abstractmethod
     def __call__(self):
         return
-
 
     def _update_config(self):
         if self.args['--log-file']:
@@ -98,7 +100,6 @@ class Application(object):
         if self.args['--group']:
             self.config['group'] = self.args['--group']
 
-
     def validate_args(self):
         if self.args['--verbosity']:
             assert_msg = 'Invalid verbosity level, try -h for help'
@@ -106,13 +107,11 @@ class Application(object):
         else:
             self.args['--verbosity'] = 'ERROR'
 
-
     def validate_config(self):
         assert self.config['log_file']
         assert isinstance(self.config['log_file'], basestring)
         assert self.config['pid_file']
         assert isinstance(self.config['pid_file'], basestring)
-
 
     def add_usage(self, usage):
         if self._custom_usage:
@@ -120,24 +119,21 @@ class Application(object):
         else:
             self._custom_usage = usage
 
-
     def add_options(self, options):
         if self._custom_options:
             self._custom_options = self._custom_options + '\n' + options
         else:
             self._custom_options = options
 
-
     def help(self):
         doc = Application.__doc__.format(
-                description=self.description,
-                name=self.name,
-                log_levels=' | '.join(helper.log_level_map.keys()),
-                custom_usage=self._custom_usage,
-                custom_options=self._custom_options)
+            description=self.description,
+            name=self.name,
+            log_levels=' | '.join(helper.log_level_map.keys()),
+            custom_usage=self._custom_usage,
+            custom_options=self._custom_options)
         doc = doc.replace('\n\n\n', '\n\n')
         return doc
-
 
     def change_permissions(self):
         if self.config['group']:
@@ -151,15 +147,11 @@ class Application(object):
             helper.chown(self.config['pid_file'], self.config['user'], os.getgid())
             helper.set_uid(self.config['user'])
 
-
-    def _configure(self):
-        self._update_config()
-        self.validate_config()
+    def configure_log(self):
         helper.configure_log(
-                log_level=helper.log_level_map[self.args['--verbosity']],
-                log_file=self.config['log_file'],
-                log_size=self.config['log_size'])
-
+            log_level=helper.log_level_map[self.args['--verbosity']],
+            log_file=self.config['log_file'],
+            log_size=self.config['log_size'])
 
     def _start(self):
         if helper.check_pid(self.config['pid_file']):
@@ -169,11 +161,11 @@ class Application(object):
             helper.daemonize()
         helper.create_pid_file(self.config['pid_file'])
         atexit.register(helper.delete_file, self.config['pid_file'])
-        LOG.info('Started')
         helper.set_proc_name(self.name)
+        self.start_dtime = datetime.datetime.utcnow()
+        LOG.info('Started')
         self()
         LOG.info('Stopped')
-
 
     def _stop(self):
         LOG.debug('Stopping')
@@ -200,9 +192,9 @@ class Application(object):
             msg = "Can't stop, reason: {error}".format(error=helper.exc_info())
             raise Exception(msg)
 
-
     def run(self):
-        self._configure()
+        self.validate_config()
+        self.configure_log()
         if self.args['start']:
             self._start()
         elif self.args['stop']:
@@ -211,15 +203,14 @@ class Application(object):
             print self.help()
 
 
-
 class ScalrApplication(Application):
 
     def __init__(self, argv=None):
         cwd = os.path.dirname(os.path.abspath(__file__))
         self.scalr_dir = os.path.normpath(os.path.abspath(os.path.join(cwd, '../../../../')))
         options = (
-                """  -c <file>, --config=<file>        Scalr config file\n"""
-                """\t\t\t\t\t[default: {scalr_dir}/app/etc/config.yml]"""
+            """  -c <file>, --config=<file>        Scalr config file\n"""
+            """\t\t\t\t\t[default: {scalr_dir}/app/etc/config.yml]"""
         ).format(scalr_dir=self.scalr_dir)
         self.add_options(options)
 
@@ -240,35 +231,31 @@ class ScalrApplication(Application):
             'instances_connection_timeout': 5,
         })
 
-
     def validate_args(self):
         Application.validate_args(self)
         assert isinstance(self.args['--config'], basestring), type(self.args['--config'])
         assert_msg = "%s doesn't exists or it's not a file" % self.args['--config']
         assert os.path.isfile(self.args['--config']), assert_msg
 
-
     def validate_config(self):
         Application.validate_config(self)
         int(self.config['connections']['mysql']['port'])
         int(self.config['connections']['mysql']['pool_size'])
-
 
     def load_config(self):
         try:
             self.scalr_config = yaml.safe_load(open(self.args['--config']))['scalr']
         except:
             msg = 'Unable to load Scalr config.yml file, reason: {error}'.format(
-                    error=helper.exc_info())
+                error=helper.exc_info())
             raise Exception(msg)
 
         helper.update_config(
-                self.scalr_config.get('connections', {}).get('mysql', {}),
-                self.config['connections']['mysql'])
+            self.scalr_config.get('connections', {}).get('mysql', {}),
+            self.config['connections']['mysql'])
         self.config['instances_connection_timeout'] = self.scalr_config.get(
-                'system', {}).get(
-                'instances_connection_timeout', self.config['instances_connection_timeout'])
-
+            'system', {}).get(
+            'instances_connection_timeout', self.config['instances_connection_timeout'])
 
 
 class ScalrIterationApplication(ScalrApplication):
@@ -283,43 +270,56 @@ class ScalrIterationApplication(ScalrApplication):
         self.iteration_timeout = 300
         self.iteration_timestamp = None
 
-
     @helper.greenlet
     def _do_iteration(self):
         try:
-            self.do_iteration()
+            return self.do_iteration()
+        except SystemExit:
+            if sys.exc_info()[1].args[0] != 0:
+                raise
         except exceptions.QuitError:
-            sys.exit(0)
-        except (SystemExit, KeyboardInterrupt):
+            return
+        except KeyboardInterrupt:
             raise
         except exceptions.NothingToDoError:
             time.sleep(self.nothing_to_do_sleep)
         except:
-            LOG.error('Iteration failed, reason: {0}'.format(helper.exc_info()))
-            self.on_iteration_error()
-            time.sleep(self.error_sleep)
-
-
-    @abc.abstractmethod
-    def do_iteration(self):
-        return
-
+            if logging.getLevelName(self.args['--verbosity']) < logging.ERROR:
+                LOG.exception(helper.exc_info(where=False))
+            raise
 
     def on_iteration_error(self):
         return
 
+    def before_iteration(self):
+        return
+
+    def after_iteration(self):
+        return
 
     def __call__(self):
         self.change_permissions()
         while True:
-            self.iteration_timestamp = time.time()
-            g = self._do_iteration()
             try:
-                g.get(timeout=self.iteration_timeout)
+                self.iteration_timestamp = time.time()
+                self.before_iteration()
+                g = self._do_iteration()
+                try:
+                    g.get(timeout=self.iteration_timeout)
+                except:
+                    self.on_iteration_error()
+                    raise
+                finally:
+                    if not g.ready():
+                        g.kill()
+                    self.after_iteration()
+                iteration_time = time.time() - self.iteration_timestamp
+                msg = 'End iteration: {0:.1f} seconds'.format(iteration_time)
+                LOG.debug(msg)
+            except:
+                LOG.exception('Iteration failed')
+                time.sleep(self.error_sleep)
             finally:
-                if not g.ready():
-                    g.kill()
-            LOG.debug('End iteration: {0:.1f} seconds'.format(time.time() - self.iteration_timestamp))
-            if self.config['interval']:
-                next_iteration_time = self.iteration_timestamp + self.config['interval']
-                time.sleep(next_iteration_time - time.time())
+                if self.config['interval']:
+                    next_iteration_time = self.iteration_timestamp + self.config['interval']
+                    time.sleep(next_iteration_time - time.time())

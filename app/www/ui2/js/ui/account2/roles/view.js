@@ -7,12 +7,12 @@ Scalr.regPage('Scalr.ui.account2.roles.view', function (loadParams, moduleParams
             roleId = 'first';
         }
 		if (roleId) {
-			dataview.deselect(form.getForm().getRecord());
+			dataview.deselectAndClearLastSelected();
 			if (roleId === 'new') {
-				panel.down('#add').handler();
+				panel.down('#add').toggle(true);
 			} else {
 				panel.down('#rolesLiveSearch').reset();
-				var record =  store.getById(roleId) || (roleId === 'first' ? (store.snapshot || store.data).first() : null);
+				var record =  store.getById(roleId) || (roleId === 'first' ? store.first() : null);
 				if (record) {
 					dataview.select(record);
 				}
@@ -24,10 +24,8 @@ Scalr.regPage('Scalr.ui.account2.roles.view', function (loadParams, moduleParams
     var storeRoles = Scalr.data.get('account.roles'),
         storeBaseRoles = Scalr.data.get('base.roles');
 
-	var store = Ext.create('Scalr.ui.ChildStore', {
-		parentStore: storeRoles,
-		filterOnLoad: true,
-		sortOnLoad: true,
+	var store = Ext.create('Ext.data.ChainedStore', {
+		source: storeRoles,
 		sorters: [{
 			property: 'name',
 			transform: function(value){
@@ -37,18 +35,61 @@ Scalr.regPage('Scalr.ui.account2.roles.view', function (loadParams, moduleParams
 	});
 
     var storeRoleResources = Ext.create('Ext.data.Store', {
-        filterOnLoad: true,
-        sortOnLoad: true,
-        fields: ['id', 'name', 'granted', 'group', 'groupOrder', 'permissions'],
+        fields: ['id', 'name', 'granted', 'group', 'groupOrder', 'permissions', 'locked', 'lockedPermissions'],
         groupField: 'groupOrder'
     });
+
+    // for RESOURCE_FARMS, RESOURCE_TEAM_FARMS, RESOURCE_OWN_FARMS
+    var handler = function(store, record) {
+        if (record.get('id') == 256) { // RESOURCE_FARMS
+            var r;
+            r = store.findRecord('id', 264);
+            if (r) {
+                if (record.get('granted') == 1) {
+                    r.set('granted', 1);
+                    r.set('locked', 1);
+                    r.set('lockedPermissions', Ext.clone(record.get('permissions')));
+                } else {
+                    r.set('locked', null);
+                    r.set('lockedPermissions', null);
+                }
+            }
+
+            r = store.findRecord('id', 265);
+            if (r) {
+                if (record.get('granted') == 1) {
+                    r.set('granted', 1);
+                    r.set('locked', 1);
+                    r.set('lockedPermissions', Ext.clone(record.get('permissions')));
+                } else {
+                    r.set('locked', null);
+                    r.set('lockedPermissions', null);
+                }
+            }
+        }
+    };
+
+    storeRoleResources.on('refresh', function() {
+        var me = this;
+        me.suspendEvents();
+        me.each(function(record) {
+           handler(me, record);
+        });
+        me.resumeEvents();
+    });
+
+    storeRoleResources.on('update', handler);
 
     var dataview = Ext.create('Ext.view.View', {
 		listeners: {
             refresh: function(view){
-                var record = view.getSelectionModel().getLastSelected();
+                var selModel = view.getSelectionModel(),
+                    record = selModel.getLastSelected();
                 if (record) {
-                    form.loadRecord(view.store.getById(record.get('id')));
+                    dataview.deselectAndClearLastSelected();
+                    if (dataview.getNode(record)) {
+                        selModel.select(view.store.getById(record.get('id')));
+                    }
                 }
             }
 		},
@@ -61,13 +102,14 @@ Scalr.regPage('Scalr.ui.account2.roles.view', function (loadParams, moduleParams
         itemSelector: '.x-dataview-tab',
         tpl  : new Ext.XTemplate(
             '<tpl for=".">',
-                '<div class="x-dataview-tab"><div class="x-item-color-corner x-item-color-corner-{[values.color?values.color:\'333333\']}" ></div>',
+                '<div class="x-dataview-tab">',
+                    '<div class="x-item-color-corner x-color-{[values.color?values.color:\'333333\']}"></div>',
                     '<table>',
                         '<tr>',
                             '<td>',
                                 '<div class="x-fieldset-subheader" style="margin:0 0 8px">{name}</div>',
                                 '<table>',
-                                '<tr><td class="x-dataview-tab-param-title">New permission default:</td><td class="x-dataview-tab-param-value">{[this.getBaseRoleName(values.baseRoleId)]}</td></tr> ',
+                                '<tr><td class="x-form-item-label-default">New permission default</td><td class="x-dataview-tab-param-value">{[this.getBaseRoleName(values.baseRoleId)]}</td></tr> ',
                                 '</table>',
                             '</td>',
                         '</tr>',
@@ -83,14 +125,9 @@ Scalr.regPage('Scalr.ui.account2.roles.view', function (loadParams, moduleParams
         ),
 		plugins: {
 			ptype: 'dynemptytext',
-            arrowCls: 'x-grid-empty-arrow2',
-			emptyText: '<div class="title">No ACL were found<br/> to match your search.</div>Try modifying your search criteria <br/>or <a class="add-link" href="#">creating a new ACL</a>',
-			emptyTextNoItems:	'<div class="title">You have no ACLs<br/> under your account.</div>'+
-								'Access Control Lists let you<br/> define exactly what your co-workers<br/> have or don\'t have access to.<br/>' +
-								'Click "+" button to create one.',
-			onAddItemClick: function() {
-				panel.down('#add').handler();
-			}
+			emptyText: '<div class="x-semibold title">No ACL were found to match your search.</div>Try modifying your search criteria <br/>or creating a new ACL',
+			emptyTextNoItems: '<div class="x-semibold title">You have no ACLs under your account.</div>'+
+								'Access Control Lists let you define exactly what your co-workers have or don\'t have access to.'
 		},
 		loadingText: 'Loading ACLs ...',
 		deferEmptyText: false
@@ -105,7 +142,7 @@ Scalr.regPage('Scalr.ui.account2.roles.view', function (loadParams, moduleParams
         padding: 0,
 		listeners: {
 			hide: function() {
-				dataview.up('panel').down('#add').setDisabled(false);
+                panel.down('#add').toggle(false, true);
 			},
 			afterrender: function() {
 				var me = this;
@@ -113,19 +150,16 @@ Scalr.regPage('Scalr.ui.account2.roles.view', function (loadParams, moduleParams
 					if (selection.length) {
 						me.loadRecord(selection[0]);
 					} else {
-						me.setVisible(false);
+                        me.resetRecord();
 					}
 				});
 			},
 			beforeloadrecord: function(record) {
 				var frm = this.getForm(),
-                    isNewRecord = !record.get('id');
-                this.isLoading = true;
-				frm.reset(true);
-
-                this.down('#formtitle').setTitle(isNewRecord ? 'New ACL' : '');
+                    isNewRecord = !record.store;
+                this.down('#formtitle').setTitle(isNewRecord ? 'New ACL' : 'Edit ACL');
 				this.down('#delete').setVisible(!isNewRecord);
-				dataview.up('panel').down('#add').setDisabled(isNewRecord);
+				dataview.up('panel').down('#add').toggle(isNewRecord, true);
                 this.down('#roleusage').update(isNewRecord ? '' : '<a href="#/account/roles/usage?accountRoleId=' + record.get('id') + '">Role usage summary</a>');
 
                 var resources = record.get('resources');
@@ -138,15 +172,7 @@ Scalr.regPage('Scalr.ui.account2.roles.view', function (loadParams, moduleParams
                 this.down('#resources').loadResources(resources);
 
                 frm.findField('baseRoleId').setReadOnly(!isNewRecord);
-			},
-			loadrecord: function(record) {
-				var me = this;
-				me.getForm().clearInvalid();
-				if (!me.isVisible()) {
-					me.setVisible(true);
-				}
-                me.isLoading = false;
-			}
+            }
 		},
         items: [{
             xtype: 'fieldset',
@@ -172,12 +198,12 @@ Scalr.regPage('Scalr.ui.account2.roles.view', function (loadParams, moduleParams
                 valueField: 'id',
                 name: 'baseRoleId',
                 queryMode: 'local',
-                labelWidth: 150,
+                labelWidth: 180,
                 margin: '0 0 0 30',
                 hideInputOnReadOnly: true,
                 listeners: {
                     change: function(comp, value, oldValue){
-                        if (form.isLoading === true) return;
+                        if (form.isRecordLoading) return;
                         var baseRole = storeBaseRoles.getById(value);
                         if (baseRole) {
                             form.down('#resources').loadResources(Ext.clone(baseRole.get('resources')));
@@ -189,7 +215,7 @@ Scalr.regPage('Scalr.ui.account2.roles.view', function (loadParams, moduleParams
                 name: 'color',
                 fieldLabel: 'Color',
                 allowBlank: false,
-                labelWidth: 45,
+                labelWidth: 55,
                 margin: '0 0 0 30'
             }]
         },{
@@ -204,7 +230,9 @@ Scalr.regPage('Scalr.ui.account2.roles.view', function (loadParams, moduleParams
             items: [{
                 xtype: 'grid',
                 itemId: 'resources',
-                cls: 'x-grid-shadow x-grid-with-formfields x-grid-no-highlighting',
+                cls: 'x-grid-with-formfields',
+                trackMouseOver: false,
+                disableSelection: true,
                 maxWidth: 1100,
                 flex: 1,
                 hideHeaders: true,
@@ -214,8 +242,8 @@ Scalr.regPage('Scalr.ui.account2.roles.view', function (loadParams, moduleParams
                 },
                 getResources: function(){
                     var data = [];
-                    (this.store.snapshot || this.store.data).each(function(){
-                        var r = this.getData(),
+                    this.store.getUnfiltered().each(function(resource){
+                        var r = resource.getData(),
                             permissions = null;
                         if (r.permissions) {
                             permissions = {};
@@ -252,7 +280,7 @@ Scalr.regPage('Scalr.ui.account2.roles.view', function (loadParams, moduleParams
                     markDirty: true,
                     plugins: {
                         ptype: 'dynemptytext',
-                        emptyText: '<div class="title">No permissions were found to match your search.</div>Try modifying your search criteria.'
+                        emptyText: '<div class="x-semibold title">No permissions were found to match your search.</div>Try modifying your search criteria.'
                     },
                     listeners: {
                         viewready: function(){
@@ -298,25 +326,35 @@ Scalr.regPage('Scalr.ui.account2.roles.view', function (loadParams, moduleParams
                     flex: 1,
                     minWidth: 390,
                     dataIndex: 'permissions',
-                    labelRenderer: function(key) {
-                        return key === 'ssh-console' ? 'SSH Launcher' : key;
+                    isDisabled: function(record) {
+                        return record.get('granted') != 1;
                     },
-                    customRenderer: function(html, record) {
+                    cellRenderer: function(value, record) {
                         var id = record.get('id'),
                             resource = moduleParams['definitions'][id],
                             prefix;
-                        prefix = '<div style="float:left;min-width:200px"><div style="font-weight:bold">' + (resource ? resource[0] : id) + '</div><div style="font-size:85%;color:#999">' + (resource ? resource[1] : '') + '</div></div>';
-                        return prefix + '<div style="white-space:normal;line-height:20px">' + html.join('') + '</div>';
+                        prefix = '<div style="float:left;min-width:200px"><div class="x-semibold">' + (resource ? resource[0] : id) + '</div><div style="font-size:85%;color:#999;line-height:1.6em">' + (resource ? resource[1] : '') + '</div></div>';
+                        return prefix + value;
                     },
                     listeners: {
                         beforechange: function(column, newValue, name, record, cell) {
-                            if (record.get('id') == 260) {//RESOURCE_FARMS_ROLES
+                            var id = record.get('id');
+                            if (id == 260) { //RESOURCE_FARMS_ROLES
                                 if (newValue['create'] == 1) {
                                     if (name === 'create') {
                                         Ext.apply(newValue, {bundletasks: 1, manage: 1});
                                     } else if ((name === 'bundletasks' || name === 'manage') && newValue[name] == 0){
                                         newValue['create'] = 0;
                                     }
+                                }
+                            }
+                            if (id == 256 || id == 264 || id == 265) { //RESOURCE_FARMS (RESOURCE_OWN/TEAM_FARMS)
+                                if (newValue[name] == 1 && id == 256) {
+                                    // enable permission in child
+                                    record.store.getById(264).get('permissions')[name] = 1;
+                                    record.store.getById(264).commit();
+                                    record.store.getById(265).get('permissions')[name] = 1;
+                                    record.store.getById(265).commit();
                                 }
                             }
                         }
@@ -329,12 +367,12 @@ Scalr.regPage('Scalr.ui.account2.roles.view', function (loadParams, moduleParams
                         '{[this.getAccess(values)]}',
                         {
                             getAccess: function(values){
-                                var access = '<span class="x-no-access">No access</span>';
+                                var access = '<span class="x-no-access x-semibold">No access</span>';
                                 if (values.granted == 1) {
-                                    access = '<span class="x-full-access">Full access</span>';
+                                    access = '<span class="x-full-access x-semibold">Full access</span>';
                                     Ext.Object.each(values.permissions, function(key, value){
                                         if (value == 0) {
-                                            access = '<span class="x-limited-access">Limited access</span>';
+                                            access = '<span class="x-limited-access x-semibold">Limited access</span>';
                                             return false;
                                         }
                                     });
@@ -347,7 +385,7 @@ Scalr.regPage('Scalr.ui.account2.roles.view', function (loadParams, moduleParams
                 dockedItems: [{
                     xtype: 'toolbar',
                     dock: 'top',
-                    ui: 'simple',
+                    ui: 'inline',
                     items: [{
                         xtype: 'filterfield',
                         filterFields: ['name', 'group', function(record){
@@ -359,58 +397,37 @@ Scalr.regPage('Scalr.ui.account2.roles.view', function (loadParams, moduleParams
                         }],
                         store: storeRoleResources,
                         submitValue: false,
-                        isFormField: false,
-                        listeners: {
-                            afterfilter: function(){
-                                //workaround of the extjs grouped store/grid bug
-                                var grid = panel.down('#resources'),
-                                    grouping = grid.getView().getFeature('grouping');
-                                if (grid.headerCt.rendered) {
-                                    grid.suspendLayouts();
-                                    grouping.disable();
-                                    grouping.enable();
-                                    grid.resumeLayouts(true);
-                                }
-                            }
-                        }
+                        excludeForm: true
                     },{
                         xtype: 'buttongroupfield',
+                        cls: 'scalr-ui-panel-account-roles-btngroup',
                         margin: '0 0 0 18',
                         isFormField: false,
                         value: 'all',
                         defaults: {
-                            width: 120
+                            width: 140
                         },
                         items: [{
-                           text: 'All permissions',
-                           value: 'all'
+                            text: 'All permissions',
+                            value: 'all'
                         },{
                             text: 'Allowed',
-                            cls: 'x-btn-default-small-green',
+                            cls: 'scalr-ui-panel-account-roles-btn-allowed',
                             value: 1
                         },{
                             text: 'Limited',
-                            cls: 'x-btn-default-small-blue',
+                            cls: 'scalr-ui-panel-account-roles-btn-limited',
                             value: 2
                         },{
                             text: 'Forbidden',
-                            cls: 'x-btn-default-small-red2',
+                            cls: 'scalr-ui-panel-account-roles-btn-forbidden',
                             value: 0
                         }],
                         listeners: {
                             change: function(comp, value) {
                                 var filterId = 'granted',
-                                    grid = panel.down('#resources'),
-                                    grouping = grid.getView().getFeature('grouping'),
                                     filters = [];
-                                //workaround of the extjs grouped store/grid bug (4.2.2 bug is still here)
-                                grid.suspendLayouts();
-                                grouping.disable();
-                                storeRoleResources.filters.each(function(filter){
-                                    if (filter.id !== filterId) {
-                                        filters.push(filter);
-                                    }
-                                });
+                                storeRoleResources.removeFilter(filterId);
                                 if (value === 2) {
                                     filters.push({
                                         id: filterId,
@@ -435,10 +452,7 @@ Scalr.regPage('Scalr.ui.account2.roles.view', function (loadParams, moduleParams
                                         value: value
                                     });
                                 }
-                                storeRoleResources.clearFilter(false);
-                                storeRoleResources.filter(filters);
-                                grouping.enable();
-                                grid.resumeLayouts(true);
+                                storeRoleResources.addFilter(filters);
                             }
                         }
                     }]
@@ -453,6 +467,7 @@ Scalr.regPage('Scalr.ui.account2.roles.view', function (loadParams, moduleParams
 			xtype: 'container',
 			dock: 'bottom',
 			cls: 'x-docked-buttons',
+            maxWidth: 1100,
 			layout: {
 				type: 'hbox',
 				pack: 'center'
@@ -463,18 +478,19 @@ Scalr.regPage('Scalr.ui.account2.roles.view', function (loadParams, moduleParams
 				text: 'Save',
 				handler: function() {
 					var frm = form.getForm(),
-						record = frm.getRecord(),
-                        role = frm.getValues();
+						record = frm.getRecord();
 					if (frm.isValid()) {
-                        role.resources = Ext.encode(form.down('#resources').getResources());
 						Scalr.Request({
 							processBox: {
 								type: 'save'
 							},
 							url: '/account/roles/xSave',
-							params: role,
+                            form: frm,
+							params: {
+                                resources: Ext.encode(form.down('#resources').getResources())
+                            },
 							success: function (data) {
-								if (!record.get('id')) {
+								if (!record.store) {
 									record = store.add(data.role)[0];
 									dataview.getSelectionModel().select(record);
 								} else {
@@ -491,13 +507,13 @@ Scalr.regPage('Scalr.ui.account2.roles.view', function (loadParams, moduleParams
 				itemId: 'cancel',
 				text: 'Cancel',
 				handler: function() {
-					dataview.deselect(form.getForm().getRecord());
-					form.setVisible(false);
+                    form.hide();
+                    dataview.deselectAndClearLastSelected();
 				}
 			}, {
 				xtype: 'button',
 				itemId: 'delete',
-				cls: 'x-btn-default-small-red',
+				cls: 'x-btn-red',
 				text: 'Delete',
 				handler: function() {
 					var record = form.getForm().getRecord();
@@ -527,7 +543,9 @@ Scalr.regPage('Scalr.ui.account2.roles.view', function (loadParams, moduleParams
 	var panel = Ext.create('Ext.panel.Panel', {
 		cls: 'scalr-ui-panel-account-roles',
 		scalrOptions: {
-			title: 'Access control',
+			menuTitle: 'ACL',
+            menuHref: '#/account/roles',
+            menuFavorite: true,
 			reload: false,
 			maximize: 'all',
 			leftMenu: {
@@ -535,6 +553,7 @@ Scalr.regPage('Scalr.ui.account2.roles.view', function (loadParams, moduleParams
 				itemId: 'roles'
 			}
 		},
+        stateId: 'grid-account-roles',
         listeners: {
             applyparams: reconfigurePage
         },
@@ -551,6 +570,7 @@ Scalr.regPage('Scalr.ui.account2.roles.view', function (loadParams, moduleParams
             dockedItems: [{
                 xtype: 'toolbar',
                 dock: 'top',
+                ui: 'simple',
                 defaults: {
                     margin: '0 0 0 10'
                 },
@@ -559,27 +579,33 @@ Scalr.regPage('Scalr.ui.account2.roles.view', function (loadParams, moduleParams
                     itemId: 'rolesLiveSearch',
                     margin: 0,
                     filterFields: ['name'],
-                    width: 180,
+                    flex: 1,
                     store: store
                 },{
-                    xtype: 'tbfill'
-                },{
                     itemId: 'add',
-                    text: 'Add ACL',
-                    cls: 'x-btn-green-bg',
-                    tooltip: 'Add ACL',
-                    handler: function(){
-                        var baseRole = (storeBaseRoles.snapshot || storeBaseRoles.data).first();
-                        dataview.deselect(form.getForm().getRecord());
-                        form.loadRecord(store.createModel({baseRoleId: baseRole ? baseRole.get('id') : 0}));
+                    text: 'New ACL',
+                    cls: 'x-btn-green',
+                    tooltip: 'New ACL',
+                    enableToggle: true,
+                    toggleHandler: function (button, state) {
+                        if (state) {
+                            var baseRole = storeBaseRoles.getUnfiltered().first();
+                            dataview.deselectAndClearLastSelected();
+                            form.loadRecord(storeRoles.createModel({id: 0, baseRoleId: baseRole ? baseRole.get('id') : 0, 'color': '333333'}));
+                            form.down('[name=name]').focus();
+
+                            return;
+                        }
+
+                        form.hide();
                     }
                 },{
                     itemId: 'refresh',
-                    iconCls: 'x-tbar-loading',
-                    ui: 'paging',
+                    iconCls: 'x-btn-icon-refresh',
                     tooltip: 'Refresh',
                     handler: function() {
                         Scalr.data.reload(['account.*', 'base.roles']);
+                        form.hide();
                     }
                 }]
             }]

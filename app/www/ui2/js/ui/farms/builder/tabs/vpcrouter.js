@@ -1,54 +1,55 @@
-Scalr.regPage('Scalr.ui.farms.builder.tabs.vpcrouter', function (moduleTabParams) {
-	return Ext.create('Scalr.ui.FarmsBuilderTab', {
-		tabTitle: 'VPC router settings',
-        itemId: 'vpcrouter',
-        layout: 'anchor',
-        
-		isEnabled: function (record) {
-			return record.get('platform') === 'ec2';
-		},
+Ext.define('Scalr.ui.FarmRoleEditorTab.Vpcrouter', {
+    extend: 'Scalr.ui.FarmRoleEditorTab',
+    tabTitle: 'VPC router settings',
+    itemId: 'vpcrouter',
+    layout: 'anchor',
 
-		beforeShowTab: function (record, handler) {
-            handler();
-		},
+    cls: 'x-panel-column-left-with-tabs',
 
-		showTab: function (record) {
-			var settings = record.get('settings', true);
-			
-			this.down('[name="router.vpc.networkInterfaceId"]').setValue(settings['router.vpc.networkInterfaceId'] || '-');
-			this.down('[name="router.vpc.ip"]').setValue(settings['router.vpc.ip'] || '-');
-			this.down('[name="router.vpc.ipAllocationId"]').setValue(settings['router.vpc.ipAllocationId'] || '-');
-		},
+    isEnabled: function (record) {
+        return this.callParent(arguments) && record.get('platform') === 'ec2';
+    },
 
-		hideTab: function (record) {
-			//var settings = record.get('settings');
+    beforeShowTab: function (record, handler) {
+        handler();
+    },
 
-			//record.set('settings', settings);
-		},
+    showTab: function (record) {
+        var settings = record.get('settings', true);
+        this.setFieldValues({
+            'router.vpc.networkInterfaceId': settings['router.vpc.networkInterfaceId'] || '-',
+            'router.vpc.ip': settings['router.vpc.ip'] || '-',
+            'router.vpc.ipAllocationId': settings['router.vpc.ipAllocationId'] || '-'
+        });
+    },
 
-		items: [{
-            xtype: 'fieldset',
-            cls: 'x-fieldset-separator-none',
-            defaults: {
-                labelWidth: 180,
-                maxWidth: 500
-            },
-            items: [{
-                xtype: 'displayfield',
-                name: 'router.vpc.networkInterfaceId',
-                fieldLabel: 'Elastic Network Interface ID',
-                value: ''
-            }, {
-                xtype: 'displayfield',
-                name: 'router.vpc.ip',
-                fieldLabel: 'Proxy IP address',
-                value: ''
-            }, {
-                xtype: 'displayfield',
-                name: 'router.vpc.ipAllocationId',
-                fieldLabel: 'IP Allocation ID',
-                value: ''
-            }]
+    hideTab: function (record) {
+        //var settings = record.get('settings');
+        //record.set('settings', settings);
+    },
+
+    __items: [{
+        xtype: 'fieldset',
+        cls: 'x-fieldset-separator-none',
+        defaults: {
+            labelWidth: 210,
+            maxWidth: 500
+        },
+        items: [{
+            xtype: 'displayfield',
+            name: 'router.vpc.networkInterfaceId',
+            fieldLabel: 'Elastic Network Interface ID',
+            value: ''
+        }, {
+            xtype: 'displayfield',
+            name: 'router.vpc.ip',
+            fieldLabel: 'Proxy IP address',
+            value: ''
+        }, {
+            xtype: 'displayfield',
+            name: 'router.vpc.ipAllocationId',
+            fieldLabel: 'IP Allocation ID',
+            value: ''
         }]
-	});
+    }]
 });

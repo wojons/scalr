@@ -1,4 +1,4 @@
-**Version**: 5.3
+**Version**: 5.8
 
 What is Scalr?
 ==============
@@ -7,15 +7,6 @@ Scalr is an open-source Cloud Management Platform (CMP). It leverages the
 APIs exposed by compatible Cloud Platforms (including AWS, GCE, OpenStack,
 CloudStack, and more) to provide users with a high-level and productive
 interface to their organization's cloud resources.
-
-
-Installation Instructions
-=========================
-
-[Installation instructions for Scalr][20] can be found on the Scalr Wiki.
-
-[Instructions to upgrade from an earlier Scalr version][21] can be found there
-too.
 
 
 Mission Statement
@@ -73,7 +64,7 @@ automatically enforce policies that ensure that every piece of infrastructure
 that developers provision is made compliant with the organization's policies,
 without requiring additional effort on the part of developers.
 
-Using Scalr, this is achieved through the enforcement of specific cloud
+Using Scalr, this is be achieved through the enforcement of specific cloud
 configurations (e.g. VPC, with Governance), the definition of user-level
 restrictions (Role-Based Access Control), the execution of host-level
 compliance scripts (Global Orchestration), and integration with external
@@ -84,6 +75,15 @@ More Information
 ----------------
 
 Learn more about Scalr on the [Scalr Website][10].
+
+
+Installation Instructions
+=========================
+
+[Installation instructions for Scalr][20] can be found on the Scalr Wiki.
+
+[Instructions to upgrade from an earlier Scalr version][21] can be found there
+too.
 
 
 -- The Scalr Team

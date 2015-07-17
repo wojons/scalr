@@ -13,7 +13,6 @@ from scalrpy.util import helper
 from scalrpy.util import cryptotool
 
 
-
 class ServiceError(Exception):
     PARSE = -32700
     INVALID_REQUEST = -32600
@@ -31,59 +30,64 @@ class ServiceError(Exception):
         Exception.__init__(self, *args)
 
 
-
 class NamespaceNotFoundError(ServiceError):
+
     """A class implements a JSON-RPC 2.0  Error Object: Server error.
     Reserved for implementation-defined server-errors.
     """
+
     def __init__(self, *data):
         ServiceError.__init__(self, self.NAMESPACE_NOT_FOUND, 'Namespace not found', *data)
 
 
-
 class MethodNotFoundError(ServiceError):
+
     """A class implements a JSON-RPC 2.0  Error Object: Method not found.
     The requested remote-procedure does not exist / is not available.
     """
+
     def __init__(self, *data):
         ServiceError.__init__(self, self.METHOD_NOT_FOUND, 'Method not found', *data)
 
 
-
 class ParseError(ServiceError):
+
     """A class implements a JSON-RPC 2.0  Error Object: Parse error.
     Invalid JSON. An error occurred on the server while parsing the JSON text.
     """
+
     def __init__(self, *data):
         ServiceError.__init__(self, self.PARSE, 'Parse error', *data)
 
 
-
 class InvalidRequestError(ServiceError):
+
     """A class implements a JSON-RPC 2.0  Error Object: Invalid Request.
     The received JSON is not a valid JSON-RPC Request..
     """
+
     def __init__(self, *data):
         ServiceError.__init__(self, self.INVALID_REQUEST, 'Invalid Request', *data)
 
 
-
 class InvalidParamsError(ServiceError):
+
     """A class implements a JSON-RPC 2.0  Error Object: Invalid params.
     Invalid method parameters.
     """
+
     def __init__(self, *data):
         ServiceError.__init__(self, self.INVALID_PARAMS, 'Invalid params', *data)
 
 
-
 class InternalError(ServiceError):
+
     """A class implements a JSON-RPC 2.0  Error Object: Internal error.
     Internal JSON-RPC error.
     """
+
     def __init__(self, *data):
         ServiceError.__init__(self, self.INTERNAL, 'Internal error', *data)
-
 
 
 class Security(object):
@@ -99,16 +103,13 @@ class Security(object):
         else:
             self.crypto_algo = crypto_algo
 
-
     def sign_data(self, data, utc_struct_time=None):
         return cryptotool.sign(data, self.crypto_key, utc_struct_time, self.DATE_FORMAT)
-
 
     def check_signature(self, signature, data, utc_timestamp):
         utc_struct_time = time.strptime(utc_timestamp, self.DATE_FORMAT)
         calc_signature = self.sign_data(data, utc_struct_time)[0]
         assert signature == calc_signature, "Signature doesn't match"
-
 
     def decrypt_data(self, data):
         if not self.encrypt:
@@ -117,7 +118,6 @@ class Security(object):
             return cryptotool.decrypt_scalarizr(self.crypto_algo, data, self.crypto_key)
         except:
             raise InvalidRequestError('Failed to decrypt data. Error:%s' % helper.exc_info())
-
 
     def encrypt_data(self, data):
         if not self.encrypt:
@@ -128,12 +128,10 @@ class Security(object):
             raise InvalidRequestError('Failed to encrypt data. Error:%s' % helper.exc_info())
 
 
-
 class ServiceProxy(object):
 
     def __init__(self):
         self.local = local()
-
 
     def __getattr__(self, name):
         try:
@@ -141,7 +139,6 @@ class ServiceProxy(object):
         except AttributeError:
             self.__dict__['local'].method = [name]
         return self
-
 
     def __call__(self, timeout=None, **kwds):
         try:
@@ -154,10 +151,8 @@ class ServiceProxy(object):
         finally:
             self.local.method = []
 
-
     def exchange(self, request, timeout=None):
         raise NotImplementedError()
-
 
 
 class HttpServiceProxy(ServiceProxy):
@@ -167,7 +162,6 @@ class HttpServiceProxy(ServiceProxy):
         self.endpoint = endpoint
         self.security = security
         self.headers = headers
-
 
     def exchange(self, request, timeout=None):
         if self.security:
@@ -183,8 +177,8 @@ class HttpServiceProxy(ServiceProxy):
             headers.update(self.headers)
         namespace = self.local.method[0] if len(self.local.method) > 1 else ''
         http_req = urllib2.Request(
-                os.path.join(self.endpoint, namespace),
-                request,
-                headers)
+            os.path.join(self.endpoint, namespace),
+            request,
+            headers)
         response = urllib2.urlopen(http_req, timeout=timeout).read()
         return self.security.decrypt_data(response) if self.security else response

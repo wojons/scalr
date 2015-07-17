@@ -20,6 +20,6 @@ class Scalr_Net_Scalarizr_Services_Operation extends Scalr_Net_Scalarizr_Client
         $params = new stdClass();
         $params->operationId = $operationId;
 
-        return $this->request("result", $params)->result;
+        return $this->request("cancel", $params)->result;
     }
 }

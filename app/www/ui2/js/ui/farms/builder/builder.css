@@ -1,0 +1,361 @@
+/*farm settings & add role buttons*/
+.x-docked-tabs .x-btn-farm-settings {
+    box-shadow: 0 -1px #85a7c6 inset;
+}
+
+.x-docked-tabs .x-btn-farm-settings .x-btn-inner {
+    line-height: 48px;
+    text-transform: none;
+    font-family: OpenSansSemiBold;
+    font-size: 14px;
+    width: 154px;
+    padding-left: 6px;
+}
+
+.x-btn-farm-settings.x-btn-new-farm.x-btn-pressed .x-btn-inner {
+    color: rgba(34, 65, 100, 0.6);
+}
+
+.x-btn-farm-settings .x-btn-icon-settings {
+    margin-left: 10px!important;
+    background: url('/ui2/images/ui/farms/farmdesigner/settings-sprite.png') 0 0 no-repeat;
+}
+
+.x-btn-farm-settings.x-btn-pressed .x-btn-icon-settings {
+    background-position: 0 -24px;
+}
+
+.x-btn-farmroles-add {
+    width: 100%;
+	position:absolute;
+    z-index:3;
+    background: #699b62;
+    bottom: 0;
+    height: 56px;
+    border-radius: 0;
+}
+
+.x-btn-farmroles-add.x-btn-over {
+    background: #7ab372;
+}
+
+.x-btn-farmsettings {
+    height: 56px;
+}
+
+.x-btn-farmsettings .x-btn-inner {
+    padding-left: 14px!important;
+}
+
+.x-btn-farmsettings .x-btn-inner img {
+    margin-right: 8px;
+}
+
+/*widget.farmrolesview*/
+.x-docked-tabs-farm-settings .x-panel-body-default {
+    padding-bottom: 56px;
+}
+
+.x-dataview-farmroles {
+    box-shadow: 0 1px #88a9c7 inset;
+}
+
+.x-dataview-farmroles .x-dataview-tab {
+    line-height: 1.4em;
+}
+
+.x-dataview-farmroles .name {
+    font-family: OpenSansSemiBold, Arial, sens-serif;
+}
+
+.x-dataview-farmroles .platform-location {
+    margin-left: 26px;
+}
+
+.x-dataview-farmroles .platform,
+.x-dataview-farmroles .location {
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.x-dataview-farmroles .platform {
+	text-transform: uppercase;
+    line-height: 1.8em;
+}
+
+.x-dataview-farmroles .location {
+    font-style: italic;
+}
+
+.x-dataview-farmroles .launchindex{
+    display: none;
+    position: absolute;
+    margin-top: 3px;
+    width: 18px;
+    text-align: center;
+    font-family: OpenSansSemiBold, Arial, sens-serif;
+}
+
+.x-dataview-farmroles-sortable .launchindex{
+	display:block;
+}
+
+.x-dataview-farmroles .delete-role {
+	position: absolute;
+	right: 0px;
+	top: 0px;
+	width: 24px;
+	height: 24px;
+    cursor: pointer;
+    background: url('/ui2/images/ui/farms/farmdesigner/close-small-sprite.png') 0 0 no-repeat;
+    z-index: 2;
+    display: none;
+}
+
+.x-dataview-farmroles .delete-role:hover {
+    background-position: 0 -24px;
+}
+
+.x-dataview-farmroles .x-dataview-tab:hover .delete-role{
+    display: block;
+}
+/*farm role editor*/
+.x-comboradiolist .x-menu-item-disabled-forced .x-menu-item-text{
+    padding-right: 24px;
+    background: url('/ui2/js/extjs-5.0/theme/images/form/trigger-warning.png') 100% 50% no-repeat;
+}
+
+.x-farmrole-editor-tab > .x-mask{
+    opacity: 1;
+    background: #e1ebf4;
+}
+
+.x-farmrole-editor-tab > .x-mask .x-mask-error div{
+    background: transparent;
+    width: auto;
+}
+
+.x-farmrole-editor-tab .x-container .x-mask{
+    background: transparent;
+}
+
+/*farmrole editor main tab*/
+.x-farmrole-editor-maintab .x-overflow-ellipsis{
+    overflow:hidden;
+    text-overflow:ellipsis;
+    white-space:nowrap;
+    line-height:20px
+}
+
+.x-farmrole-editor-maintab .x-icon-replace{
+    background: url('/ui2/images/ui/farms/farmdesigner/replace.png') 50% 50% no-repeat;
+}
+
+
+.x-farmrole-editor-maintab .x-btn-collapse, .x-farmrole-editor-maintab .x-btn-collapse .x-btn-inner {
+	width: 21px;
+	height: 21px!important;
+}
+.x-farmrole-editor-maintab .x-btn-collapse .x-btn-inner {
+	background: url('/ui2/js/extjs-5.0/theme/images/icon/collapse-sprite.png') no-repeat 0 0;
+	cursor: pointer;
+}
+
+.x-farmrole-editor-maintab .x-btn-collapse.x-btn-pressed .x-btn-inner {
+	background-position: 0px -21px;
+}
+
+.x-farmrole-editor-maintab .x-btn-collapse.x-btn-over .x-btn-inner {
+	opacity: .8;
+}
+
+.x-farmrole-editor-maintab .daily-rate {
+    text-align: center;
+    font-size: 16px;
+    font-family: OpenSansSemiBold;
+}
+
+.x-farmrole-editor-maintab .daily-rate .small{
+    font-size: 14px;
+}
+
+.x-farmrole-editor-maintab .hourly-rate {
+    text-align: center;
+}
+
+/*roles library search result button*/
+.x-roleslibrary-search-result-btn .x-btn-inner{
+    width: 160px;
+    overflow: hidden;
+    text-overflow:ellipsis;
+    position: relative;
+}
+
+.x-roleslibrary-search-result-btn .delete-search{
+    position: absolute;
+    width: 12px;
+    height: 12px;
+    right: 4px;
+    top: 4px;
+    background: url('/ui2/images/ui/farms/farmdesigner/close-small-sprite.png') -6px -6px no-repeat;
+}
+
+/*roleslibrary quickstart tab*/
+.x-btn-tab-quickstart .x-btn-inner{
+    color: #176F2B!important;
+}
+
+/*roleslibrary roles list*/
+.x-roleslibary-list .x-icon-platform-small,
+.x-roleslibary-list .x-icon-osfamily-small {
+    opacity: .4;
+}
+
+.x-roleslibary-list .x-grid-item-over .x-icon-platform-small,
+.x-roleslibary-list .x-grid-item-over .x-icon-osfamily-small {
+    opacity: 1;
+}
+
+.x-roleslibary-list .x-grid-cell-inner {
+    padding-left: 0;
+    padding-right: 0;
+}
+
+.x-roleslibary-list .x-icon-platform-small {
+    margin-left: 6px;
+}
+
+/*roleslibrary nothing found text*/
+.x-roleslibrary .emptytext{
+    text-align: center;
+    padding: 20px 20px 0;
+    color: #666;
+    font: 13px/19px arial;
+}
+
+.x-roleslibrary .emptytext .title{
+    font: 18px/30px arial;
+    color: #202B3D;
+    text-shadow: 0 1px rgba(255, 255, 255, 0.3);
+    margin-bottom: 12px;
+}
+
+.x-roleslibrary .x-items-extra{
+    position:relative;
+    margin-left:50%;
+    left:-137px;
+    float:left;
+    width: 300px;
+    height: 130px;
+}
+
+.x-roleslibrary .x-items-extra.single{
+    left:-61px;
+}
+
+.x-roleslibrary .x-item-extra{
+	width: 110px;
+	height: 110px;
+	background: #fff;
+	border-radius: 4px;
+	text-align:center;
+	float:left;
+	margin:0 10px 10px 0;
+	overflow:hidden;
+    padding:0;
+}
+
+.x-roleslibrary .x-item-extra:hover{
+    text-decoration:none;
+    background:#F9FAFB;
+}
+
+.x-roleslibrary .x-item-extra .x-item-inner{
+    display: block;
+}
+
+.x-roleslibrary .x-item-extra .icon{
+    display: block;
+    margin-bottom: 6px;
+}
+
+.x-roleslibrary .x-item-extra .title{
+    font-size:12px;
+    font-weight:normal;
+}
+
+.x-roleslibrary .x-item-extra-delimiter{
+    float:left;
+    height: 100px;
+    line-height:100px!important;
+    width: 30px;
+    margin:0 12px 12px 0;
+}
+
+.x-roleslibrary .inner-container {
+    background: #e1ebf4;
+    border-radius: 1px;
+    margin: 12px 0 0 0;
+    padding: 18px 18px 6px;
+}
+
+/*farm costmetering*/
+.x-costmetering-hours .title{
+    margin: 12px 0 4px;
+    font-family: OpenSansSemiBold;
+}
+
+.x-costmetering-hours table{
+    border-collapse: collapse;
+}
+
+.x-costmetering-hours table td{
+    text-align: center;
+    padding: 0 16px;
+}
+
+.x-costmetering-farmroles table{
+    margin-top: 4px;
+    border-collapse: collapse;
+}
+
+.x-costmetering-farmroles table th,
+.x-costmetering-farmroles table td{
+    text-align: left;
+    white-space: nowrap;
+    padding: 4px 24px 0 0;
+}
+
+.x-costmetering-farmroles table td:last-child,
+.x-ui-costmetering-farmroles table th:last-child{
+    padding-right: 0;
+}
+
+
+@media only screen and (-webkit-min-device-pixel-ratio: 1.5),
+    only screen and (-o-min-device-pixel-ratio: 3/2),
+    only screen and (min--moz-device-pixel-ratio: 1.5),
+    only screen and (min-device-pixel-ratio: 1.5) {
+
+    .x-btn-farm-settings .x-btn-icon-settings {
+        background-size: 24px 48px;
+        background-image: url('/ui2/images/ui/farms/farmdesigner/settings-sprite-retina.png');
+    }
+
+    .x-farmrole-editor-maintab .x-icon-replace{
+        background-size: 30px 20px;
+        background-image: url('/ui2/images/ui/farms/farmdesigner/replace-retina.png');
+    }
+
+    .x-dataview-farmroles .delete-role {
+        background-image: url('/ui2/images/ui/farms/farmdesigner/close-small-sprite-retina.png');
+        background-size: 48px 48px;
+    }
+
+    .x-btn-collapse .x-btn-inner {
+        background-size: 21px 42px;
+        background-image: url('/ui2/js/extjs-5.0/theme/images/icon/collapse-sprite-retina.png');
+    }
+
+}

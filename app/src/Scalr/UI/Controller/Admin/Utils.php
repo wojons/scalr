@@ -41,10 +41,10 @@ class Scalr_UI_Controller_Admin_Utils extends Scalr_UI_Controller
     }
 
     /**
-     * @param $enabled
+     * @param bool $enabled
      * @throws Scalr_UI_Exception_NotFound
      */
-    public function xSaveDebugAction($enabled)
+    public function xSaveDebugAction($enabled = false)
     {
         Scalr_Session::getInstance()->setDebugMode(['enabled' => $enabled]);
 

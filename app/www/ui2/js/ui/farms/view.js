@@ -25,8 +25,9 @@ Scalr.regPage('Scalr.ui.farms.view', function (loadParams, moduleParams) {
 			{name: 'id', type: 'int'},
 			{name: 'clientid', type: 'int'},
 			'name', 'status', 'dtadded', 'running_servers', 'suspended_servers', 'non_running_servers', 'roles', 'zones','client_email',
-			'havemysqlrole','shortcuts', 'havepgrole', 'haveredisrole', 'haverabbitmqrole', 'havemongodbrole', 'havemysql2role', 'havemariadbrole', 
-			'haveperconarole', 'lock', 'lock_comment', 'created_by_id', 'created_by_email', 'alerts', 'lease', 'leaseMessage'
+			'havemysqlrole','shortcuts', 'havepgrole', 'haveredisrole', 'haverabbitmqrole', 'havemongodbrole', 'havemysql2role', 'havemariadbrole',
+			'haveperconarole', 'lock', 'lock_comment', 'created_by_id', 'created_by_email', 'team_id', 'team_name', 'alerts', { name: 'lease', defaultValue: false }, 'leaseMessage',
+            'teamIdPerm', 'farmOwnerIdPerm'
 		],
 		proxy: {
 			type: 'scalr.paging',
@@ -34,61 +35,53 @@ Scalr.regPage('Scalr.ui.farms.view', function (loadParams, moduleParams) {
 		},
 		remoteSort: true
 	});
-	
+
 	if (loadParams['demoFarm'] == 1) {
 		Scalr.message.Success("Your first environment successfully configured and linked to your AWS account. Please use 'Options -> Launch' menu to launch your first demo LAMP farm.");
 	}
 
 	var grid = Ext.create('Ext.grid.Panel', {
-		title: 'Farms &raquo; View',
 		scalrOptions: {
-			'reload': false,
-			'maximize': 'all'
-		},
+			reload: false,
+			maximize: 'all',
+            menuTitle: 'Farms',
+            menuHref: '#/farms',
+            menuFavorite: true
+        },
 		store: store,
 		stateId: 'grid-farms-view',
 		stateful: true,
-		plugins: {
-			ptype: 'gridstore'
-		},
+        plugins: [ 'gridstore', 'applyparams' ],
 
-		tools: [{
-			xtype: 'gridcolumnstool'
-		}, {
-			xtype: 'favoritetool',
-			favorite: {
-				text: 'Farms',
-				href: '#/farms/view'
-			}
-		}],
-
+        disableSelection: true,
 		viewConfig: {
 			emptyText: 'No farms found',
-			loadingText: 'Loading farms ...',
-			disableSelection: true
+			loadingText: 'Loading farms ...'
 		},
 
 		columns: [
 			{ text: "ID", width: 80, dataIndex: 'id', sortable: true },
-			{ text: "Farm name", flex: 1, dataIndex: 'name', sortable: true, xtype: 'templatecolumn', tpl:
-                '{name}<tpl if="lease && status == 1"> <a href="#/farms/{id}/extendedInfo">' +
+			{ text: "Farm", flex: 1, dataIndex: 'name', sortable: true, xtype: 'templatecolumn', tpl:
+                '{name}' +
+                '<tpl if="lease && status == 1">&nbsp;&nbsp;<a href="#/farms/{id}/extendedInfo">' +
+                    '<div class="x-grid-icon x-grid-icon-leased<tpl if="lease == &quot;Expire&quot;">-expire</tpl>"' +
                     '<tpl if="lease == &quot;Expire&quot;">' +
-                        '<div class="" style="display: inline" data-anchor="left" data-qalign="l-r" data-qtip="{leaseMessage}" data-qwidth="340">' +
+                        ' data-anchor="left" data-qalign="l-r" data-qtip="{leaseMessage}" data-qwidth="340"' +
                     '</tpl>' +
-                    '<img src="' + Ext.BLANK_IMAGE_URL + '" class="x-icon-leased<tpl if="lease == &quot;Expire&quot;"> x-icon-leased-expire</tpl>">' +
-                    '<tpl if="lease == &quot;Expire&quot;"></div></tpl>' +
-                '</a></tpl>'
+                '></div>' +
+                '</a></tpl>' +
+                '<tpl if="lock"><div class="x-grid-icon x-grid-icon-simple x-grid-icon-lock" style="margin-left: 10px" data-qtip="{lock_comment}"></div></tpl>'
             },
 			{ text: "Added", flex: 1, dataIndex: 'dtadded', sortable: true },
 			{ text: "Owner", flex: 1, dataIndex: 'created_by_email', sortable: true },
-			{ text: "Servers", width: 100, dataIndex: 'servers', sortable: false, xtype: 'templatecolumn',
+            { text: "Team", flex: 1, dataIndex: 'team_name', sortable: true },
+			{ text: "Servers", width: 90, dataIndex: 'servers', sortable: false, align: 'center', xtype: 'templatecolumn',
 				tpl: new Ext.XTemplate(
-                    '<span data-anchor="right" data-qalign="r-l" data-qtip="{[this.getTooltipHtml(values)]}" data-qwidth="230">' +
+                    '<a href="#/servers?farmId={id}" class="x-grid-big-href"><span data-anchor="right" data-qalign="r-l" data-qtip="{[this.getTooltipHtml(values)]}" data-qwidth="280">' +
                         '<span style="color:#28AE1E;">{running_servers}</span>' +
                         '/<span style="color:#329FE9;">{suspended_servers}</span>' +
                         '/<span style="color:#bbb;">{non_running_servers}</span>' +
-                    '</span>'+
-                    ' [<a href="#/servers/view?farmId={id}">View</a>]',
+                    '</span></a>',
                     {
                         getTooltipHtml: function(values) {
                             return Ext.String.htmlEncode(
@@ -101,45 +94,43 @@ Scalr.regPage('Scalr.ui.farms.view', function (loadParams, moduleParams) {
                 )
 			},
 			{ text: "Roles", width: 70, dataIndex: 'roles', sortable: false, align:'center', xtype: 'templatecolumn',
-				tpl: '<a href="#/farms/{id}/roles">{roles}</a>'
+				tpl: '<a href="#/farms/{id}/roles" class="x-grid-big-href">{roles}</a>'
 			},
 			{ text: "DNS zones", width: 100, dataIndex: 'zones', sortable: false, align:'center', xtype: 'templatecolumn',
-				tpl: '<a href="#/dnszones/view?farmId={id}">{zones}</a>'
+				tpl: '<a href="#/dnszones?farmId={id}" class="x-grid-big-href">{zones}</a>'
 			},
 			{ text: "Status", width: 120, minWidth: 120, dataIndex: 'status', sortable: true, xtype: 'statuscolumn', statustype: 'farm'},
-            { text: "Alerts", width: 90, dataIndex: 'alerts', align:'center', sortable: false, xtype: 'templatecolumn',	tpl: 
+            { text: "Alerts", width: 90, dataIndex: 'alerts', align:'center', sortable: false, xtype: 'templatecolumn',	tpl:
                 '<tpl if="status == 1">' +
-					'<tpl if="alerts &gt; 0">' + 
-                        '<span style="color:red;">{alerts}</span> [<a href="#/alerts/view?farmId={id}&status=failed">View</a>]' +
+					'<tpl if="alerts &gt; 0">' +
+                        '<a href="#/alerts?farmId={id}&status=failed"><span class="x-grid-big-href" style="color:red;">{alerts}</span></a>' +
                     '<tpl else>' +
-                        '<span style="color:green;">0</span>' +
+                        '<div class="x-grid-icon x-grid-icon-ok x-grid-icon-simple"></div>' +
                     '</tpl>'+
-				'<tpl else>' + 
-                    '<img src="' + Ext.BLANK_IMAGE_URL + '" class="x-icon-minus" />' +
+				'<tpl else>' +
+                    '&mdash;' +
                 '</tpl>'
 			}, {
-				text: 'Lock', width: 60, dataIndex: 'lock', fixed: true, resizable: false, sortable: false, tdCls: 'scalr-ui-farms-view-td-lock', xtype: 'templatecolumn', tpl:
-					'<tpl if="lock"><div class="scalr-ui-farms-view-lock" title="{lock_comment}"></div><tpl else><div class="scalr-ui-farms-view-unlock" title="Lock farm"></div></tpl>'
-			}, {
-				xtype: 'optionscolumn2',
+				xtype: 'optionscolumn',
 				menu: {
                     xtype: 'actionsmenu',
                     listeners: {
                         beforeshow: function () {
-                            var me = this;
+                            var me = this,
+                                shortcuts = me.data['shortcuts'] || [];
                             me.items.each(function (item) {
                                 if (item.isshortcut) {
                                     me.remove(item);
                                 }
                             });
 
-                            if (me.data['shortcuts'].length) {
+                            if (shortcuts.length) {
                                 me.add({
                                     xtype: 'menuseparator',
                                     isshortcut: true
                                 });
 
-                                Ext.Array.each(me.data['shortcuts'], function (shortcut) {
+                                Ext.Array.each(shortcuts, function (shortcut) {
                                     if (typeof(shortcut) != 'function') {
                                         me.add({
                                             isshortcut: true,
@@ -152,7 +143,6 @@ Scalr.regPage('Scalr.ui.farms.view', function (loadParams, moduleParams) {
                         }
                     },
                     items: [{
-                        itemId: 'option.addToDash',
                         text: 'Add to dashboard',
                         iconCls: 'x-menu-icon-dashboard',
                         request: {
@@ -170,15 +160,18 @@ Scalr.regPage('Scalr.ui.farms.view', function (loadParams, moduleParams) {
                             }
                         }
                     }, {
-                        xtype: 'menuseparator',
-                        itemId: 'option.dashSep'
+                        xtype: 'menuseparator'
                     }, {
-                        itemId: 'option.launchFarm',
                         text: 'Launch',
                         iconCls: 'x-menu-icon-launch',
                         getVisibility: function(data) {
-                            return data.status == 0 && Scalr.isAllowed('FARMS', 'launch');
+                            return data.status == 0 && (
+                                Scalr.isAllowed('FARMS', 'launch-terminate') ||
+                                data['teamIdPerm'] && Scalr.isAllowed('TEAM_FARMS', 'launch-terminate') ||
+                                data['farmOwnerIdPerm'] && Scalr.isAllowed('OWN_FARMS', 'launch-terminate')
+                            );
                         },
+                        showAsQuickAction: true,
                         request: {
                             confirmBox: {
                                 type: 'launch',
@@ -197,12 +190,16 @@ Scalr.regPage('Scalr.ui.farms.view', function (loadParams, moduleParams) {
                             }
                         }
                     }, {
-                        itemId: 'option.terminateFarm',
                         iconCls: 'x-menu-icon-terminate',
                         text: 'Terminate',
                         getVisibility: function(data) {
-                            return data.status == 1 && Scalr.isAllowed('FARMS', 'terminate');
+                            return data.status == 1 && (
+                                Scalr.isAllowed('FARMS', 'launch-terminate') ||
+                                data['teamIdPerm'] && Scalr.isAllowed('TEAM_FARMS', 'launch-terminate') ||
+                                data['farmOwnerIdPerm'] && Scalr.isAllowed('OWN_FARMS', 'launch-terminate')
+                            );
                         },
+                        showAsQuickAction: true,
                         request: {
                             processBox: {
                                 type:'action'
@@ -292,34 +289,32 @@ Scalr.regPage('Scalr.ui.farms.view', function (loadParams, moduleParams) {
                             }
                         }
                     }, {
-                        xtype: 'menuseparator',
-                        itemId: 'option.controlSep'
+                        xtype: 'menuseparator'
                     }, {
-                        itemId: 'option.info',
-                        iconCls: 'x-menu-icon-info',
+                        iconCls: 'x-menu-icon-information',
                         text: 'Extended information',
                         href: "#/farms/{id}/extendedInfo"
                     }, {
-                        itemId: 'option.usageStats',
-                        text: 'Usage statistics',
-                        iconCls: 'x-menu-icon-statsusage',
-                        href: '#/statistics/serversusage?farmId={id}',
+                        text: 'Cost Analytics',
+                        iconCls: 'x-menu-icon-analytics',
+                        href: '#/analytics/farms?farmId={id}',
                         getVisibility: function() {
-                            return Scalr.isAllowed('FARMS_STATISTICS');
+                            return Scalr.flags['analyticsEnabled'] && Scalr.isAllowed('ENVADMINISTRATION_ANALYTICS');
                         }
                     }, {
-                        itemId: 'option.loadStats',
                         iconCls: 'x-menu-icon-statsload',
                         text: 'Load statistics',
-                        href: '#/monitoring/view?farmId={id}',
+                        href: '#/monitoring?farmId={id}',
                         getVisibility: function(data) {
-                            return data.status != 0;
+                            return data.status != 0 && (
+                                Scalr.isAllowed('FARMS', 'statistics') ||
+                                data['teamIdPerm'] && Scalr.isAllowed('TEAM_FARMS', 'statistics') ||
+                                data['farmOwnerIdPerm'] && Scalr.isAllowed('OWN_FARMS', 'statistics')
+                            );
                         }
                     }, {
-                        xtype: 'menuseparator',
-                        itemId: 'option.mysqlSep'
+                        xtype: 'menuseparator'
                     }, {
-                        itemId: 'option.mysql',
                         iconCls: 'x-menu-icon-mysql',
                         text: 'MySQL status',
                         href: "#/dbmsr/status?farmId={id}&type=mysql",
@@ -327,7 +322,6 @@ Scalr.regPage('Scalr.ui.farms.view', function (loadParams, moduleParams) {
                             return data.status != 0 && data.havemysqlrole;
                         }
                     }, {
-                        itemId: 'option.mysql2',
                         iconCls: 'x-menu-icon-mysql',
                         text: 'MySQL status',
                         href: "#/db/manager/dashboard?farmId={id}&type=mysql2",
@@ -335,7 +329,6 @@ Scalr.regPage('Scalr.ui.farms.view', function (loadParams, moduleParams) {
                             return data.status != 0 && data.havemysql2role;
                         }
                     }, {
-                        itemId: 'option.percona',
                         iconCls: 'x-menu-icon-percona',
                         text: 'Percona server status',
                         href: "#/db/manager/dashboard?farmId={id}&type=percona",
@@ -343,7 +336,6 @@ Scalr.regPage('Scalr.ui.farms.view', function (loadParams, moduleParams) {
                             return data.status != 0 && data.haveperconarole;
                         }
                     }, {
-                        itemId: 'option.postgresql',
                         iconCls: 'x-menu-icon-postgresql',
                         text: 'PostgreSQL status',
                         href: "#/db/manager/dashboard?farmId={id}&type=postgresql",
@@ -351,7 +343,6 @@ Scalr.regPage('Scalr.ui.farms.view', function (loadParams, moduleParams) {
                             return data.status != 0 && data.havepgrole;
                         }
                     }, {
-                        itemId: 'option.redis',
                         iconCls: 'x-menu-icon-redis',
                         text: 'Redis status',
                         href: "#/db/manager/dashboard?farmId={id}&type=redis",
@@ -359,7 +350,6 @@ Scalr.regPage('Scalr.ui.farms.view', function (loadParams, moduleParams) {
                             return data.status != 0 && data.haveredisrole;
                         }
                     }, {
-                        itemId: 'option.mariadb',
                         iconCls: 'x-menu-icon-mariadb',
                         text: 'MariaDB status',
                         href: "#/db/manager/dashboard?farmId={id}&type=mariadb",
@@ -367,7 +357,6 @@ Scalr.regPage('Scalr.ui.farms.view', function (loadParams, moduleParams) {
                             return data.status != 0 && data.havemariadbrole;
                         }
                     }, {
-                        itemId: 'option.rabbitmq',
                         iconCls: 'x-menu-icon-rabbitmq',
                         text: 'RabbitMQ status',
                         href: "#/services/rabbitmq/status?farmId={id}",
@@ -375,7 +364,6 @@ Scalr.regPage('Scalr.ui.farms.view', function (loadParams, moduleParams) {
                             return data.status != 0 && data.haverabbitmqrole;
                         }
                     }, {
-                        itemId: 'option.mongodb',
                         iconCls: 'x-menu-icon-mongodb',
                         text: 'MongoDB status',
                         href: "#/services/mongodb/status?farmId={id}",
@@ -383,51 +371,166 @@ Scalr.regPage('Scalr.ui.farms.view', function (loadParams, moduleParams) {
                             return data.status != 0 && data.havemongodbrole;
                         }
                     }, {
-                        itemId: 'option.script',
                         iconCls: 'x-menu-icon-execute',
                         text: 'Execute script',
                         href: '#/scripts/execute?farmId={id}',
                         getVisibility: function(data) {
-                            return data.status != 0;
+                            return data.status != 0 && Scalr.isAllowed('ADMINISTRATION_SCRIPTS', 'execute') && (
+                                Scalr.isAllowed('FARMS', 'servers') ||
+                                data['teamIdPerm'] && Scalr.isAllowed('TEAM_FARMS', 'servers') ||
+                                data['farmOwnerIdPerm'] && Scalr.isAllowed('OWN_FARMS', 'servers')
+                            );
                         }
                     }, {
-                        itemId: 'option.event',
                         iconCls: 'x-menu-icon-execute',
                         text: 'Fire event',
                         href: '#/scripts/events/fire?farmId={id}',
                         getVisibility: function(data) {
-                            return data.status != 0 && Scalr.isAllowed('GENERAL_CUSTOM_EVENTS', 'fire');
+                            return data.status != 0 && Scalr.isAllowed('GENERAL_CUSTOM_EVENTS', 'fire') && (
+                                Scalr.isAllowed('FARMS', 'servers') ||
+                                data['teamIdPerm'] && Scalr.isAllowed('TEAM_FARMS', 'servers') ||
+                                data['farmOwnerIdPerm'] && Scalr.isAllowed('OWN_FARMS', 'servers')
+                            );
                         }
                     }, {
-                        xtype: 'menuseparator',
-                        itemId: 'option.logsSep'
+                        xtype: 'menuseparator'
                     }, {
-                        itemId: 'option.ssh_key',
                         text: 'Download SSH private key',
                         iconCls: 'x-menu-icon-downloadprivatekey',
-                        href: '#/sshkeys/view?farmId={id}'
+                        href: '#/sshkeys?farmId={id}',
+                        getVisibility: function(data) {
+                            return data.status != 0 && Scalr.isAllowed('SECURITY_SSH_KEYS') && (
+                                Scalr.isAllowed('FARMS', 'servers') ||
+                                data['teamIdPerm'] && Scalr.isAllowed('TEAM_FARMS', 'servers') ||
+                                data['farmOwnerIdPerm'] && Scalr.isAllowed('OWN_FARMS', 'servers')
+                            );
+                        }
                     }, {
-                        itemId: 'option.alerts',
                         iconCls: 'x-menu-icon-alerts',
                         text: 'Alerts',
-                        href: "#/alerts/view?farmId={id}",
-                        getVisibility: function() {
-                            return Scalr.isAllowed('FARMS_ALERTS');
+                        href: "#/alerts?farmId={id}",
+                        getVisibility: function(data) {
+                            return (
+                                Scalr.isAllowed('FARMS') ||
+                                data['teamIdPerm'] && Scalr.isAllowed('TEAM_FARMS') ||
+                                data['farmOwnerIdPerm'] && Scalr.isAllowed('OWN_FARMS')
+                            );
                         }
                     },{
-                        xtype: 'menuseparator',
-                        itemId: 'option.editSep'
+                        xtype: 'menuseparator'
                     }, {
-                        itemId: 'option.edit',
                         iconCls: 'x-menu-icon-configure',
                         text: 'Configure',
-                        href: '#/farms/{id}/edit'
+                        showAsQuickAction: true,
+                        href: '#/farms/designer?farmId={id}',
+                        getVisibility: function(data) {
+                            return (
+                                Scalr.isAllowed('FARMS', 'manage') ||
+                                data['teamIdPerm'] && Scalr.isAllowed('TEAM_FARMS', 'manage') ||
+                                data['farmOwnerIdPerm'] && Scalr.isAllowed('OWN_FARMS', 'manage')
+                            );
+                        }
                     }, {
-                        itemId: 'option.clone',
+                        iconCls: 'x-menu-icon-unlock',
+                        text: 'Unlock farm',
+                        showAsQuickAction: true,
+                        getVisibility: function(data) {
+                            return !!data['lock'] && (
+                                Scalr.isAllowed('FARMS', 'manage') ||
+                                data['teamIdPerm'] && Scalr.isAllowed('TEAM_FARMS', 'manage') ||
+                                data['farmOwnerIdPerm'] && Scalr.isAllowed('OWN_FARMS', 'manage')
+                            );
+                        },
+                        request: {
+                            confirmBox: {
+                                type: 'action',
+                                msg: 'Are you sure want to unlock farm "{name}" ?'
+                            },
+                            processBox: {
+                                type: 'action',
+                                msg: 'Unlocking farm ...'
+                            },
+                            url: '/farms/xUnlock/',
+                            dataHandler: function(data) {
+                                return { farmId: data['id'] }
+                            },
+                            success: function () {
+                                store.load();
+                            }
+                        }
+                    }, {
+                        iconCls: 'x-menu-icon-lock',
+                        text: 'Lock farm',
+                        showAsQuickAction: true,
+                        getVisibility: function(data) {
+                            return !data['lock'] && (
+                                Scalr.isAllowed('FARMS', 'manage') ||
+                                data['teamIdPerm'] && Scalr.isAllowed('TEAM_FARMS', 'manage') ||
+                                data['farmOwnerIdPerm'] && Scalr.isAllowed('OWN_FARMS', 'manage')
+                            );
+                        },
+                        menuHandler: function(data) {
+                            Scalr.Request({
+                                confirmBox: {
+                                    type: 'action',
+                                    msg: 'Are you sure you would like to lock farm "' + data['name'] + '"? This will prevent the farm from being launched, terminated or removed, along with any configuration changes.',
+                                    formWidth: 600,
+                                    formValidate: true,
+                                    form: [{
+                                        xtype: 'fieldset',
+                                        cls: 'x-fieldset-separator-none',
+                                        defaults: {
+                                            anchor: '100%'
+                                        },
+                                        items: [{
+                                            xtype: 'textarea',
+                                            emptyText: 'Comment (required)',
+                                            name: 'comment',
+                                            allowBlank: false
+                                        }, {
+                                            xtype: 'radiogroup',
+                                            columns: 1,
+                                            items: [{
+                                                boxLabel: 'Anyone with access can unlock this Farm',
+                                                inputValue: '',
+                                                name: 'restrict'
+                                            }, {
+                                                boxLabel: 'Only the Farm Owner "' + data['created_by_email'] + '" can unlock this Farm',
+                                                inputValue: 'owner',
+                                                checked: data['created_by_email'] && !data['team_name'],
+                                                name: 'restrict'
+                                            }, {
+                                                boxLabel: 'Only members of the Farm’s Team "' + data['team_name'] + '" can unlock this Farm',
+                                                inputValue: 'team',
+                                                checked: !!data['team_name'],
+                                                hidden: !data['team_name'],
+                                                name: 'restrict'
+                                            }]
+                                        }]
+                                    }]
+                                },
+                                processBox: {
+                                    type: 'action',
+                                    msg: 'Locking farm ...'
+                                },
+                                params: {
+                                    farmId: data['id']
+                                },
+                                url: '/farms/xLock/',
+                                success: function () {
+                                    store.load();
+                                }
+                            });
+                        }
+                    }, {
                         iconCls: 'x-menu-icon-clone',
                         text: 'Clone',
-                        getVisibility: function() {
-                            return Scalr.isAllowed('FARMS', 'clone');
+                        getVisibility: function(data) {
+                            return (
+                                Scalr.isAllowed('FARMS', 'clone') ||
+                                data['teamIdPerm'] && Scalr.isAllowed('TEAM_FARMS', 'clone') ||
+                                data['farmOwnerIdPerm'] && Scalr.isAllowed('OWN_FARMS', 'clone')
+                            );
                         },
                         request: {
                             confirmBox: {
@@ -447,9 +550,15 @@ Scalr.regPage('Scalr.ui.farms.view', function (loadParams, moduleParams) {
                             }
                         }
                     }, {
-                        itemId: 'option.delete',
                         iconCls: 'x-menu-icon-delete',
                         text: 'Delete',
+                        getVisibility: function(data) {
+                            return (
+                                Scalr.isAllowed('FARMS', 'manage') ||
+                                data['teamIdPerm'] && Scalr.isAllowed('TEAM_FARMS', 'manage') ||
+                                data['farmOwnerIdPerm'] && Scalr.isAllowed('OWN_FARMS', 'manage')
+                            );
+                        },
                         request: {
                             confirmBox: {
                                 type: 'delete',
@@ -470,99 +579,31 @@ Scalr.regPage('Scalr.ui.farms.view', function (loadParams, moduleParams) {
                     },{
                         xtype: 'menuseparator'
                     }, {
-                        itemId: 'option.events',
                         text: 'Event Log',
                         iconCls: 'x-menu-icon-events',
                         href: '#/logs/events?farmId={id}'
                     }, {
-                        itemId: 'option.logs',
                         iconCls: 'x-menu-icon-logs',
                         text: 'System Log',
                         href: "#/logs/system?farmId={id}"
                     }, {
-                        itemId: 'option.scripting_logs',
                         iconCls: 'x-menu-icon-logs',
                         text: 'Scripting Log',
                         href: "#/logs/scripting?farmId={id}"
-	    			}]
+                    }]
                 }
 			}
 		],
-		listeners: {
-			itemclick: function(grid, record, item, index, e) {
-				if (e.getTarget('div.scalr-ui-farms-view-lock')) {
-					Scalr.Request({
-						confirmBox: {
-							type: 'action',
-							msg: 'Are you sure want to unlock farm "' + record.get('name') + '" ?'
-						},
-						processBox: {
-							type: 'action',
-							msg: 'Unlocking farm ...'
-						},
-						url: '/farms/xUnlock/',
-						params: {
-							farmId: record.get('id')
-						},
-						success: function () {
-							store.load();
-						}
-					});
-				} else if (e.getTarget('div.scalr-ui-farms-view-unlock')) {
-					var message = 'Only farm owner (' + record.get('created_by_email') + ') can unlock this farm';
-					Scalr.Request({
-						confirmBox: {
-							type: 'action',
-							msg: 'Are you sure you would like to lock farm "' + record.get('name') + '"? This will prevent the farm from being launched, terminated or removed, along with any configuration changes.',
-							formWidth: 600,
-							formValidate: true,
-							form: [{
-								xtype: 'fieldset',
-                                cls: 'x-fieldset-separator-none',
-								defaults: {
-									anchor: '100%'
-								},
-								items: [{
-									xtype: 'textarea',
-									fieldLabel: 'Comment (required)',
-									labelWidth: 65,
-									name: 'comment',
-									allowBlank: false
-								}, {
-									xtype: 'checkbox',
-									checked: true,
-									hidden: !record.get('created_by_email'),
-									boxLabel: message,
-									name: 'restrict'
-								}]
-							}]
-						},
-						processBox: {
-							type: 'action',
-							msg: 'Locking farm ...'
-						},
-						params: {
-							farmId: record.get('id')
-						},
-						url: '/farms/xLock/',
-						success: function () {
-							store.load();
-						}
-					});
-
-				}
-			}
-		},
 
 		dockedItems: [{
 			xtype: 'scalrpagingtoolbar',
 			store: store,
 			dock: 'top',
 			beforeItems: [{
-                text: 'Add farm',
-                cls: 'x-btn-green-bg',
+                text: 'New farm',
+                cls: 'x-btn-green',
 				handler: function() {
-					Scalr.event.fireEvent('redirect', '#/farms/build');
+					Scalr.event.fireEvent('redirect', '#/farms/designer');
 				}
 			}],
 			items: [{
@@ -571,23 +612,33 @@ Scalr.regPage('Scalr.ui.farms.view', function (loadParams, moduleParams) {
 				store: store,
                 form: filterFieldForm
             }, ' ', {
-				xtype: 'button',
-				text: 'Show only my farms',
-				enableToggle: true,
-                width: 170,
-                pressed: Scalr.storage.get('grid-farms-view-show-only-my-farms'),
-				toggleHandler: function (field, checked) {
-					store.proxy.extraParams.showOnlyMy = checked ? '1' : '';
-                    Scalr.storage.set('grid-farms-view-show-only-my-farms', checked);
-					store.loadPage(1);
-				},
-                listeners: {
-                    added: function() {
-                        store.proxy.extraParams.showOnlyMy = this.pressed ? '1' : '';
-                    }
+                xtype: 'cyclealt',
+                name: 'owner',
+                getItemIconCls: false,
+                width: 200,
+                cls: 'x-btn-compressed',
+                changeHandler: function (comp, item) {
+                    store.applyProxyParams({
+                        owner: item.value
+                    });
+                },
+                menu: {
+                    cls: 'x-menu-light x-menu-cycle-button-filter',
+                    minWidth: 200,
+                    items: [{
+                        text: 'All Farms',
+                        value: null
+                    },{
+                        text: 'Farms I own',
+                        value: 'me'
+                    },{
+                        text: 'Farm my Teams own',
+                        value: 'team'
+                    }]
                 }
-			}]
+            }]
 		}]
 	});
+
 	return grid;
 });

@@ -28,7 +28,7 @@ class Scalr_Net_Dns_Bind_Transports_LocalFs implements Scalr_Net_Dns_Bind_Transp
 
     public function getNamedConf()
     {
-        $retval = @file_get_contents("{$this->zonesPath}/zones.include");
+        $retval = file_get_contents("/var/named/etc/namedb/client_zones/zones.include");
 
         if ($retval === false)
             throw new Exception("Cannot load zones.include file");

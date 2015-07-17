@@ -11,6 +11,7 @@ use Scalr\Modules\Platforms\Ec2\Observers\Ec2Observer;
 use Scalr\Modules\Platforms\Ec2\Observers\EipObserver;
 use Scalr\Modules\Platforms\Ec2\Observers\ElbObserver;
 use Scalr\Modules\Platforms\Openstack\Observers\OpenstackObserver;
+use Scalr\Modules\Platforms\Verizon\Observers\VerizonObserver;
 use Scalr\Stats\CostAnalytics\Entity\ProjectEntity;
 
 class Scalr
@@ -85,6 +86,7 @@ class Scalr
         Scalr::AttachObserver(new ElbObserver());
 
         Scalr::AttachObserver(new OpenstackObserver());
+        Scalr::AttachObserver(new VerizonObserver());
 
         self::$observersSetuped = true;
     }
@@ -139,9 +141,7 @@ class Scalr
             // Notify class observers
             foreach (self::$EventObservers as $observer) {
                 $observerStartTime = microtime(true);
-
                 $observer->SetFarmID($farmid);
-                Logger::getLogger(__CLASS__)->info(sprintf("Event %s. Observer: %s", "On{$event->GetName()}", get_class($observer)));
 
                 if ($event instanceof CustomEvent) {
                     call_user_func(array($observer, "OnCustomEvent"), $event);
@@ -243,20 +243,30 @@ class Scalr
                 $count = 0;
                 foreach ($webhooks as $webhook) {
                     /* @var $webhook \Scalr\Model\Entity\WebhookConfig */
-
                     $payload->configurationId = $webhook->webhookId;
                     $payload->data = array();
+                    $variables = [];
+
                     foreach ($globalVars as $gv) {
+                        $variables[$gv->name] = $gv->value;
+
                         if ($gv->private && $webhook->skipPrivateGv == 1 && !$gv->system)
                             continue;
 
                         $payload->data[$gv->name] = $gv->value;
                     }
 
-                    if ($webhook->postData)
-                        $payload->userData = $dbServer->applyGlobalVarsToValue($webhook->postData);
-                    else
+                    if ($webhook->postData) {
+                        //Parse variable
+                        $keys = array_keys($variables);
+                        $f = create_function('$item', 'return "{".$item."}";');
+                        $keys = array_map($f, $keys);
+                        $values = array_values($variables);
+                        // Strip undefined variables & return value
+                        $payload->userData = preg_replace("/{[A-Za-z0-9_-]+}/", "", str_replace($keys, $values, $webhook->postData));
+                    } else {
                         $payload->userData = '';
+                    }
 
                     foreach ($webhook->getEndpoints() as $ce) {
                         /* @var $ce \Scalr\Model\Entity\WebhookConfigEndpoint */
@@ -528,7 +538,8 @@ class Scalr
                 sprintf("Cannot launch server on '%s' platform: %s",
                     $DBServer->platform,
                     $e->getMessage()
-                )
+                ),
+                $DBServer->serverId
             ));
 
             $existingLaunchError = $DBServer->GetProperty(SERVER_PROPERTIES::LAUNCH_ERROR);
@@ -660,8 +671,6 @@ class Scalr
             return false;
         }
 
-        $date = date("Y-m-d H:i:s");
-
         //Friendly error name
         switch ($errno) {
             case E_NOTICE:
@@ -724,21 +733,35 @@ class Scalr
             case E_CORE_ERROR:
             case E_ERROR:
             case E_USER_ERROR:
-                $exception = new \Exception($message, $errno);
-                $message = $date . " " . $message . "Backtrace:\n " . str_replace("\n#", "\n  #", $exception->getTraceAsString()) . "\n\n";
+            case E_RECOVERABLE_ERROR:
+                $exception = new \ErrorException($errname, $errno, 0, $errfile, $errline);
+                $message = $message . "Stack trace:\n " . str_replace("\n#", "\n  #", $exception->getTraceAsString());
                 @error_log($message);
                 throw $exception;
                 break;
-
             case E_WARNING:
             case E_USER_WARNING:
-            case E_RECOVERABLE_ERROR:
-                $exception = new \Exception($message, $errno);
-                $message = $message . "Backtrace:\n  " . str_replace("\n#", "\n  #", $exception->getTraceAsString()) . "\n\n";
+                $exception = new \ErrorException($errname, $errno, 0, $errfile, $errline);
+                $message = $message . "Stack trace:\n  " . str_replace("\n#", "\n  #", $exception->getTraceAsString());
             default:
-                @error_log($date . " " . $message);
+                @error_log($message);
                 break;
         }
+    }
+
+    /**
+     * Adds catchable exception to standart PHP error log
+     *
+     * @param Exception   $e  The exception to log
+     */
+    public static function logException($e)
+    {
+        @error_log(
+            "PHP Fatal error: Uncaught exception '" . get_class($e) . "' "
+            . "with message '" . $e->getMessage() . "' "
+            . "in " . $e->getFile() . ":" . $e->getLine() . "\n"
+            . "Stack trace:\n " . str_replace("\n#", "\n  #", $e->getTraceAsString())
+        );
     }
 
     /**

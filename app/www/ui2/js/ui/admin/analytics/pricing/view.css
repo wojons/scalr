@@ -1,0 +1,50 @@
+.scalr-ui-analytics-pricing-grid-cell .x-grid-cell {
+    height: 36px;
+    vertical-align: middle;
+}
+
+.scalr-ui-dbbackups-button-prev, .scalr-ui-dbbackups-button-next {
+    background: url(/ui2/images/ui/db/trigger_month_sprite.png);
+}
+
+.scalr-ui-dbbackups-button-prev {
+    background-position: -5px -5px;
+}
+
+.x-pressed .scalr-ui-dbbackups-button-prev{
+    background-position: -5px 21px;
+}
+
+.scalr-ui-dbbackups-button-next {
+    background-position: -34px -5px;
+}
+
+.x-pressed .scalr-ui-dbbackups-button-next {
+    background-position: -34px 21px;
+}
+
+.scalr-ui-analytics-pricing-pricefield {
+    height: 24px;
+    width: 100px;
+    padding: 3px 7px;
+    background-color: #EFF4FA;
+    color: #224164;
+    font: normal 14px/24px OpenSansRegular, arial, sans-serif;
+}
+
+.scalr-ui-analytics-pricing-history-instances {
+    font-weight: bold;
+}
+
+.scalr-ui-analytics-pricing-history-date-title {
+    color: #0054CC;
+}
+
+.scalr-analytics-pricing-header {
+    padding: 18px 0 0 32px;
+}
+
+.scalr-analytics-pricing-header-description {
+    padding: 6px 0 6px 32px;
+}
+

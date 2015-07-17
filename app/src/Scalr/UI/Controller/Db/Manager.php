@@ -275,10 +275,7 @@ class Scalr_UI_Controller_Db_Manager extends Scalr_UI_Controller
             )),
             'inProgress' => array(
                 'status' => (int)$dbFarmRole->GetSetting(Scalr_Db_Msr::DATA_BUNDLE_IS_RUNNING),
-                'serverId' => $dbFarmRole->GetSetting(Scalr_Db_Msr::DATA_BUNDLE_SERVER_ID),
-                'operationId' => $this->db->GetOne("SELECT id FROM server_operations WHERE server_id = ? AND name = ? AND status = ? ORDER BY timestamp DESC LIMIT 1", array(
-                    $data['backupServerId'], "TODO data bundle", 'running'
-                ))
+                'serverId' => $dbFarmRole->GetSetting(Scalr_Db_Msr::DATA_BUNDLE_SERVER_ID)
             ),
             'last' => $lastActionTime ? Scalr_Util_DateTime::convertTz((int)$lastActionTime, 'd M Y \a\\t H:i:s') : 'Never'
         );
@@ -311,10 +308,7 @@ class Scalr_UI_Controller_Db_Manager extends Scalr_UI_Controller
             )),
             'inProgress' => array(
                 'status'      => (int)$dbFarmRole->GetSetting(Scalr_Db_Msr::DATA_BACKUP_IS_RUNNING),
-                'serverId'    => $dbFarmRole->GetSetting(Scalr_Db_Msr::DATA_BACKUP_SERVER_ID),
-                'operationId' => $this->db->GetOne("SELECT id FROM server_operations WHERE server_id = ? AND name = ? AND status = ? ORDER BY timestamp DESC LIMIT 1", array(
-                    $data['backupServerId'], "TODO backup", 'running'
-                ))
+                'serverId'    => $dbFarmRole->GetSetting(Scalr_Db_Msr::DATA_BACKUP_SERVER_ID)
             ),
             'last'       => $lastActionTime ? Scalr_Util_DateTime::convertTz((int)$lastActionTime, 'd M Y \a\\t H:i:s') : 'Never',
             'supported'  => !PlatformFactory::isCloudstack($dbFarmRole->Platform) &&
@@ -488,9 +482,7 @@ class Scalr_UI_Controller_Db_Manager extends Scalr_UI_Controller
                         break;
                 }
 
-                $master->operations->add($operationId, Operations::DBMSR_GROW_VOLUME);
-
-                $this->response->data(array('operationId' => $operationId));
+                $this->response->data(['serverId' => $master->serverId, 'operationId' => $operationId]);
 
             } catch (Exception $e) {
                 throw new Exception("Cannot grow storage: {$e->getMessage()}");
@@ -516,25 +508,29 @@ class Scalr_UI_Controller_Db_Manager extends Scalr_UI_Controller
 
         $dbFarmRole->ClearSettings("mysql.pma");
 
-        $behavior = Scalr_Role_Behavior::loadByName($dbFarmRole->GetRoleObject()->getDbMsrBehavior());
-        $masterDbServer = $behavior->getMasterServer($dbFarmRole);
-
-        if ($masterDbServer) {
-            $time = $dbFarmRole->GetSetting(DBFarmRole::SETTING_MYSQL_PMA_REQUEST_TIME);
-            if (!$time || $time + 3600 < time()) {
-                $msg = new Scalr_Messaging_Msg_Mysql_CreatePmaUser($dbFarmRole->ID, \Scalr::config('scalr.ui.pma.server_ip'));
-                $masterDbServer->SendMessage($msg);
-
-                $dbFarmRole->SetSetting(DBFarmRole::SETTING_MYSQL_PMA_REQUEST_TIME, time(), DBFarmRole::TYPE_LCL);
-                $dbFarmRole->SetSetting(DBFarmRole::SETTING_MYSQL_PMA_REQUEST_ERROR, "", DBFarmRole::TYPE_LCL);
-
-                $this->response->success();
+        $dbMsrBehavior = $dbFarmRole->GetRoleObject()->getDbMsrBehavior();
+        if ($dbMsrBehavior) {
+            $behavior = Scalr_Role_Behavior::loadByName($dbMsrBehavior);
+            $masterDbServer = $behavior->getMasterServer($dbFarmRole);
+    
+            if ($masterDbServer) {
+                $time = $dbFarmRole->GetSetting(DBFarmRole::SETTING_MYSQL_PMA_REQUEST_TIME);
+                if (!$time || $time + 3600 < time()) {
+                    $msg = new Scalr_Messaging_Msg_Mysql_CreatePmaUser($dbFarmRole->ID, \Scalr::config('scalr.ui.pma.server_ip'));
+                    $masterDbServer->SendMessage($msg);
+    
+                    $dbFarmRole->SetSetting(DBFarmRole::SETTING_MYSQL_PMA_REQUEST_TIME, time(), DBFarmRole::TYPE_LCL);
+                    $dbFarmRole->SetSetting(DBFarmRole::SETTING_MYSQL_PMA_REQUEST_ERROR, "", DBFarmRole::TYPE_LCL);
+    
+                    $this->response->success();
+                }
+                else
+                    throw new Exception("MySQL access credentials for PMA already requested. Please wait...");
             }
             else
-                throw new Exception("MySQL access credentials for PMA already requested. Please wait...");
-        }
-        else
-            throw new Exception("There is no running MySQL master. Please wait until master starting up.");
+                throw new Exception("There is no running MySQL master. Please wait until master starting up.");
+        } else
+            throw new Exception("PMA is not available for selected role. If you think this is mistake, please contact support.");
     }
 
     public function xCancelBackupAction()

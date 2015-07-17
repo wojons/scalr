@@ -1,47 +1,25 @@
 Scalr.regPage('Scalr.ui.webhooks.endpoints.view', function (loadParams, moduleParams) {
-    var scalrOptions;
-    if (moduleParams['levelMap'][moduleParams['level']] == 'account') {
-		scalrOptions = {
-			title: 'Account management &raquo; Webhooks &raquo; Endpoints',
-			maximize: 'all',
-			leftMenu: {
-				menuId: 'settings',
-				itemId: 'webhooks',
-                showPageTitle: true
-			}
-		};
-    } else {
-		scalrOptions = {
-			title: Ext.String.capitalize(moduleParams['levelMap'][moduleParams['level']]) + ' webhooks &raquo; Endpoints',
-			maximize: 'all',
-			leftMenu: {
-				menuId: 'webhooks',
-				itemId: 'endpoints',
-                showPageTitle: true
-			}
-		};
-    }
 	var store = Ext.create('store.store', {
-        fields: [
-            {name: 'endpointId', type: 'string'},
-            'level',
-            'url',
-            'isValid',
-            'validationToken',
-            'securityKey',
-            'webhooks',
-            {name: 'id', convert: function(v, record){return record.data.endpointId;}}
-        ],
+        model: Ext.define(null, {
+            extend: 'Ext.data.Model',
+            idProperty: 'endpointId',
+            fields: [
+                {name: 'endpointId', type: 'string'},
+                {name: 'scope', defaultValue: moduleParams['scope']},
+                'url',
+                'isValid',
+                'validationToken',
+                'securityKey',
+                'webhooks'
+            ]
+        }),
         data: moduleParams['endpoints'],
 		proxy: {
 			type: 'ajax',
 			url: '/webhooks/endpoints/xList/',
-            extraParams: {
-                level: moduleParams['level']
-            },
             reader: {
                 type: 'json',
-                root: 'endpoints',
+                rootProperty: 'endpoints',
                 successProperty: 'success'
             }
 		},
@@ -52,19 +30,17 @@ Scalr.regPage('Scalr.ui.webhooks.endpoints.view', function (loadParams, modulePa
 			}
 		}]
 	});
-	
+
 	var reconfigurePage = function(params) {
         if (params.endpointId) {
             cb = function() {
-                var selModel = grid.getSelectionModel();
-                selModel.deselectAll();
                 if (params.endpointId === 'new') {
                     panel.down('#add').handler();
                 } else {
                     panel.down('#liveSearch').reset();
                     var record = store.getById(params.endpointId);
                     if (record) {
-                        selModel.select(record);
+                        grid.setSelectedRecord(record);
                     }
                 }
             };
@@ -75,42 +51,37 @@ Scalr.regPage('Scalr.ui.webhooks.endpoints.view', function (loadParams, modulePa
             }
         }
     };
-	
+
     var grid = Ext.create('Scalr.ui.WebhooksGrid', {
-        cls: 'x-grid-shadow x-panel-column-left',
+        cls: 'x-panel-column-left',
         store: store,
         type: 'endpoint',
         filterFields: ['url'],
         columns: [
             {
-                header: '<img style="cursor: help" src="'+Ext.BLANK_IMAGE_URL+'" class="x-icon-info" data-qclass="x-tip-light" data-qtip="' +
-                    Ext.String.htmlEncode('<div>Scopes:</div>' +
-                    '<div><img src="' + Ext.BLANK_IMAGE_URL + '" class="scalr-scope-scalr">&nbsp;&nbsp;Scalr</div>' +
-                    '<div><img src="' + Ext.BLANK_IMAGE_URL + '" class="scalr-scope-account">&nbsp;&nbsp;Account</div>' +
-                    '<div><img src="' + Ext.BLANK_IMAGE_URL + '" class="scalr-scope-environment">&nbsp;&nbsp;Environment</div>') +
-                    '" />&nbsp;URL',
                 text: 'URL',
                 flex: 1,
                 sortable: true,
                 resizable: false,
                 dataIndex: 'url',
                 xtype: 'templatecolumn',
-                tpl: new Ext.XTemplate('{[this.getLevel(values.level)]}&nbsp;&nbsp;{url}',
-                   {
-                       getLevel: function(level){
-                           var scope = moduleParams['levelMap'][level];
-                           return '<img src="' + Ext.BLANK_IMAGE_URL + '" class="scalr-scope-'+scope+'" data-qtip="'+Ext.String.capitalize(scope)+' scope"/>';
-                       }
-                   }
-               )
-            },
-            //temporarily disable url validation per Igor`s request(see also Scalr_UI_Controller_Webhooks_Endpoints->xSaveAction)
-            //{text: 'Status', minWidth: 120, dataIndex: 'isValid', sortable: true, resizeable: false, xtype: 'statuscolumn', statustype: 'webhookendpoint', qtipConfig: {width: 300}}
+                tpl: new Ext.XTemplate('{[this.getScope(values.scope)]}&nbsp;&nbsp;{url}',
+                    {
+                        getScope: function(scope){
+                            return '<img src="' + Ext.BLANK_IMAGE_URL + '" class="scalr-scope-'+scope+'" data-qclass="x-tip-light" data-qtip="' + Scalr.utils.getScopeLegend('webhookendpoint') + '"/>';
+                        }
+                    }
+                )
+            }
         ],
-        level: moduleParams['level'],
+        scope: moduleParams['scope'],
         listeners: {
-            btnnewclick: function(newRecord) {
-                form.loadRecord(newRecord);
+            btnnewclick: function (pressed) {
+                grid.clearSelectedRecord();
+
+                if (pressed) {
+                    form.loadRecord(store.createModel({endpointId: 0}));
+                }
             },
             btnrefreshclick: function() {
                 store.load();
@@ -118,76 +89,199 @@ Scalr.regPage('Scalr.ui.webhooks.endpoints.view', function (loadParams, modulePa
         }
     });
 
-	var form = 	Ext.create('Scalr.ui.WebhooksEndpointForm', {
-        level: moduleParams['level'],
-        levelName: moduleParams['levelMap'][moduleParams['level']],
+	var form = 	Ext.create('Ext.form.Panel', {
+        hidden: true,
+        fieldDefaults: {
+            anchor: '100%'
+        },
+        layout: 'auto',
+        overflowX: 'hidden',
+        overflowY: 'auto',
+        toggleScopeInfo: function(record) {
+            var me = this,
+                scopeInfoField = me.down('#scopeInfo');
+            if (Scalr.scope != record.get('scope')) {
+                scopeInfoField.setValue(Scalr.utils.getScopeInfo('endpoint', record.get('scope'), record.get('endpointId')));
+                scopeInfoField.show();
+            } else {
+                scopeInfoField.hide();
+            }
+            return me;
+        },
 		listeners: {
-			hide: function() {
-    			grid.down('#add').setDisabled(false);
-			},
-            afterrender: function() {
-                var me = this;
-                grid.getSelectionModel().on('focuschange', function(gridSelModel){
-                    var warning = me.up('#rightcol').down('#warning');
-                    if (gridSelModel.lastFocused) {
-                        if (moduleParams['level'] == gridSelModel.lastFocused.get('level')) {
-                            warning.hide();
-                            me.loadRecord(gridSelModel.lastFocused);
-                        } else {
-                            me.hide();
-                            warning.down('displayfield').setValue('<b>'+gridSelModel.lastFocused.get('url')+'</b><br/>'+Ext.String.capitalize(''+moduleParams['levelMap'][gridSelModel.lastFocused.get('level')]) + ' endpoint info can\'t be viewed in the current scope.');
-                            warning.show();
-                        }
-                    } else {
-                        me.hide();
-                        me.up('#rightcol').down('#warning').hide();
-                    }
-                });
+            show: function (form) {
+                form.down('field[xtype!=hidden]').focus();
             },
-            loadrecord: function() {
-                if (!this.isVisible()) {
-                    this.show();
-                }
+            hide: function () {
+                grid.down('#add').toggle(false, true);
             },
 			beforeloadrecord: function(record) {
-                grid.down('#add').setDisabled(!record.get('endpointId'));
+                var isNewRecord = !record.store,
+                    isEndpointValid = record.get('isValid') == 1,
+                    frm = this.getForm();
+
+                this.down('#formtitle').setTitle(isNewRecord ? 'New endpoint' : 'Edit endpoint');
+
+                if (!isNewRecord && isEndpointValid) {
+                    var usedBy = [];
+                    Ext.Object.each(record.get('webhooks'), function(webhookId, webhookName){
+                        usedBy.push('<a href="#/'+(moduleParams['scope']=='account'?'account/':'')+'webhooks/configs?webhookId='+webhookId+'">'+webhookName+'</a>');
+                    });
+                    this.down('#usedBy').setValue(usedBy.length ? usedBy.join(', ') : '-');
+                }
+                this.down('#usedBy').setVisible(isEndpointValid && !isNewRecord);
+                this.down('#securityKey').setVisible(isEndpointValid && !isNewRecord);
+
+                this.down('#delete').setVisible(!isNewRecord);
+                grid.down('#add').toggle(isNewRecord, true);
+
+                if (moduleParams['scope'] === record.get('scope')) {
+                    //this.disableButtons(false, record.get('scope'), isEventUsed);
+                    frm.findField('url').setReadOnly(false);
+                    this.down('#delete').setDisabled(false);
+                    this.down('#save').setDisabled(false);
+                } else {
+                    //this.disableButtons(true, scope, isEventUsed);
+                    frm.findField('url').setReadOnly(true);
+                    frm.findField('securityKey').hide;
+                    this.down('#usedBy').hide();
+                    this.down('#delete').setDisabled(true);
+                    this.down('#save').setDisabled(true);
+                }
+
+                this.toggleScopeInfo(record);
+
 			},
-            validateendpoint: function(record){
-                grid.getSelectionModel().setLastFocused(null);
-                grid.getSelectionModel().setLastFocused(record);
+		},
+        items: [{
+            xtype: 'displayfield',
+            itemId: 'scopeInfo',
+            cls: 'x-form-field-info x-form-field-info-fit',
+            width: '100%',
+            hidden: true
+        },{
+			xtype: 'fieldset',
+            itemId: 'formtitle',
+            cls: 'x-fieldset-separator-none x-fieldset-no-bottom-padding',
+            title: '&nbsp;',
+            defaults: {
+                labelWidth: 90
             },
-            saveendpoint: function(record, data) {
-                var isNewRecord = !record.get('endpointId');
-                grid.getSelectionModel().deselectAll();
-                grid.getSelectionModel().setLastFocused(null);
-                this.setVisible(false);
-                if (isNewRecord) {
-                    record = store.add(data.endpoint)[0];
-                    grid.getSelectionModel().select(record);
-                } else {
-                    record.set(data.endpoint);
-                    form.loadRecord(record);
-                }
-                if (isNewRecord) {
-                    grid.getSelectionModel().select(record);
-                } else {
-                    grid.getSelectionModel().setLastFocused(record);
-                }
+			items: [{
+                xtype: 'hidden',
+                name: 'endpointId'
+            },{
+				xtype: 'textfield',
+				name: 'url',
+				fieldLabel: 'URL',
+				allowBlank: false,
+                validateOnChange: false,
+                emptyText: 'ex. http://example.com/endpoint'
+            },{
+				xtype: 'textarea',
+				name: 'securityKey',
+                itemId: 'securityKey',
+				fieldLabel: 'Signing key',
+                readOnly: true,
+                submitValue: false,
+                height: 48
+            },{
+                xtype: 'displayfield',
+                itemId: 'usedBy',
+                fieldLabel: 'Used by'
+            }]
+        }],
+        dockedItems: [{
+			xtype: 'container',
+			dock: 'bottom',
+			cls: 'x-docked-buttons',
+			layout: {
+				type: 'hbox',
+				pack: 'center'
+			},
+            maxWidth: 1100,
+            defaults: {
+                flex: 1,
+                maxWidth: 140
             },
-            cancelendpoint: function() {
-                grid.getSelectionModel().setLastFocused(null);
-                this.setVisible(false);
-            }
-		}
+			items: [{
+				itemId: 'save',
+				xtype: 'button',
+				text: 'Save',
+				handler: function() {
+					var frm = form.getForm(),
+                        record = frm.getRecord();
+					if (frm.isValid()) {
+                        Scalr.Request({
+							processBox: {
+								type: 'save'
+							},
+							url: '/webhooks/endpoints/xSave',
+							form: frm,
+							success: function (data) {
+                                if (!record.store) {
+                                    record = store.add(data.endpoint)[0];
+                                } else {
+                                    record.set(data.endpoint);
+                                }
+                                grid.clearSelectedRecord();
+                                grid.setSelectedRecord(record);
+							}
+                        });
+					}
+				}
+			}, {
+				itemId: 'cancel',
+				xtype: 'button',
+				text: 'Cancel',
+				handler: function() {
+                    grid.clearSelectedRecord();
+				}
+			}, {
+				itemId: 'delete',
+				xtype: 'button',
+				cls: 'x-btn-red',
+				text: 'Delete',
+				handler: function() {
+					var record = form.getForm().getRecord();
+					Scalr.Request({
+						confirmBox: {
+							msg: 'Delete endpoint?',
+							type: 'delete'
+						},
+						processBox: {
+							msg: 'Deleting...',
+							type: 'delete'
+						},
+						scope: this,
+						url: '/webhooks/endpoints/xRemove',
+						params: {endpointId: record.get('endpointId')},
+						success: function (data) {
+							record.store.remove(record);
+						}
+					});
+				}
+			}]
+        }]
 	});
-	
+
 	var panel = Ext.create('Ext.panel.Panel', {
-		cls: 'scalr-ui-panel-webhooks-ebndpoints',
 		layout: {
 			type: 'hbox',
 			align: 'stretch'
 		},
-		scalrOptions: scalrOptions,
+		scalrOptions: {
+			maximize: 'all',
+            menuTitle: 'Webhooks',
+            menuSubTitle: 'Endpoints',
+            menuHref: '#'+Scalr.utils.getUrlPrefix()+'/webhooks/endpoints',
+            menuParentStateId: 'grid-webhooks-configs',
+            menuFavorite: Ext.Array.contains(['account', 'environment'], Scalr.scope),
+			leftMenu: {
+				menuId: 'webhooks',
+				itemId: 'endpoints'
+			}
+		},
         listeners: {
             applyparams: reconfigurePage
         },
@@ -200,18 +294,7 @@ Scalr.regPage('Scalr.ui.webhooks.endpoints.view', function (loadParams, modulePa
             maxWidth: 640,
             minWidth: 400,
             layout: 'fit',
-            items: [form, {
-                xtype: 'container',
-                cls: 'x-container-fieldset',
-                itemId: 'warning',
-                layout: 'anchor',
-                hidden: true,
-                items: {
-                    xtype: 'displayfield',
-                    anchor: '100%',
-                    cls: 'x-form-field-info'
-                }
-            }]
+            items: form
         }]
 	});
 	return panel;

@@ -2,139 +2,135 @@
 
 use Scalr\Modules\PlatformFactory;
 use Scalr\Model\Entity\Script;
-use \SERVER_STATUS;
 
 class DBFarmRole
 {
-    const SETTING_EXCLUDE_FROM_DNS					= 	'dns.exclude_role';
-    const SETTING_DNS_INT_RECORD_ALIAS				= 	'dns.int_record_alias';
-    const SETTING_DNS_EXT_RECORD_ALIAS				= 	'dns.ext_record_alias';
+    const SETTING_EXCLUDE_FROM_DNS                  =   'dns.exclude_role';
+    const SETTING_DNS_INT_RECORD_ALIAS              =   'dns.int_record_alias';
+    const SETTING_DNS_EXT_RECORD_ALIAS              =   'dns.ext_record_alias';
 
-    const SETTING_DNS_CREATE_RECORDS				= 	'dns.create_records';
+    const SETTING_DNS_CREATE_RECORDS                =   'dns.create_records';
 
 
-    const SETTING_SCALING_ENABLED					=	'scaling.enabled';
-    const SETTING_SCALING_MIN_INSTANCES				= 	'scaling.min_instances';
-    const SETTING_SCALING_MAX_INSTANCES				= 	'scaling.max_instances';
-    const SETTING_SCALING_POLLING_INTERVAL			= 	'scaling.polling_interval';
-    const SETTING_SCALING_LAST_POLLING_TIME			= 	'scaling.last_polling_time';
-    const SETTING_SCALING_KEEP_OLDEST				= 	'scaling.keep_oldest';
-    const SETTING_SCALING_IGNORE_FULL_HOUR			= 	'scaling.ignore_full_hour';
-    const SETTING_SCALING_SAFE_SHUTDOWN				=	'scaling.safe_shutdown';
+    const SETTING_SCALING_ENABLED                   =   'scaling.enabled';
+    const SETTING_SCALING_MIN_INSTANCES             =   'scaling.min_instances';
+    const SETTING_SCALING_MAX_INSTANCES             =   'scaling.max_instances';
+    const SETTING_SCALING_POLLING_INTERVAL          =   'scaling.polling_interval';
+    const SETTING_SCALING_LAST_POLLING_TIME         =   'scaling.last_polling_time';
+    const SETTING_SCALING_KEEP_OLDEST               =   'scaling.keep_oldest';
+    const SETTING_SCALING_IGNORE_FULL_HOUR          =   'scaling.ignore_full_hour';
+    const SETTING_SCALING_SAFE_SHUTDOWN             =   'scaling.safe_shutdown';
     const SETTING_SCALING_EXCLUDE_DBMSR_MASTER      =   'scaling.exclude_dbmsr_master';
-    const SETTING_SCALING_ONE_BY_ONE				=   'scaling.one_by_one';
+    const SETTING_SCALING_ONE_BY_ONE                =   'scaling.one_by_one';
 
     //advanced timeout limits for scaling
-    const SETTING_SCALING_UPSCALE_TIMEOUT			=	'scaling.upscale.timeout';
-    const SETTING_SCALING_DOWNSCALE_TIMEOUT			=   'scaling.downscale.timeout';
-    const SETTING_SCALING_UPSCALE_TIMEOUT_ENABLED	=	'scaling.upscale.timeout_enabled';
-    const SETTING_SCALING_DOWNSCALE_TIMEOUT_ENABLED =	'scaling.downscale.timeout_enabled';
-    const SETTING_SCALING_UPSCALE_DATETIME			=	'scaling.upscale.datetime';
-    const SETTING_SCALING_DOWNSCALE_DATETIME		=	'scaling.downscale.datetime';
+    const SETTING_SCALING_UPSCALE_TIMEOUT           =   'scaling.upscale.timeout';
+    const SETTING_SCALING_DOWNSCALE_TIMEOUT         =   'scaling.downscale.timeout';
+    const SETTING_SCALING_UPSCALE_TIMEOUT_ENABLED   =   'scaling.upscale.timeout_enabled';
+    const SETTING_SCALING_DOWNSCALE_TIMEOUT_ENABLED =   'scaling.downscale.timeout_enabled';
+    const SETTING_SCALING_UPSCALE_DATETIME          =   'scaling.upscale.datetime';
+    const SETTING_SCALING_DOWNSCALE_DATETIME        =   'scaling.downscale.datetime';
 
-    //CloudFoundry Settings
-    const SETTING_CF_STORAGE_ENGINE			=		'cf.data_storage.engine';
-    const SETTING_CF_STORAGE_EBS_SIZE		= 		'cf.data_storage.ebs.size';
-    const SETTING_CF_STORAGE_VOLUME_ID		= 		'cf.data_storage.volume_id';
-
-    const SETTING_BALANCING_USE_ELB 		= 		'lb.use_elb';
-    const SETTING_BALANCING_HOSTNAME 		= 		'lb.hostname';
-    const SETTING_BALANCING_NAME 			= 		'lb.name';
-    const SETTING_BALANCING_HC_TIMEOUT 		= 		'lb.healthcheck.timeout';
-    const SETTING_BALANCING_HC_TARGET 		= 		'lb.healthcheck.target';
-    const SETTING_BALANCING_HC_INTERVAL		= 		'lb.healthcheck.interval';
-    const SETTING_BALANCING_HC_UTH 			= 		'lb.healthcheck.unhealthythreshold';
-    const SETTING_BALANCING_HC_HTH 			= 		'lb.healthcheck.healthythreshold';
-    const SETTING_BALANCING_HC_HASH 		= 		'lb.healthcheck.hash';
-    const SETTING_BALANCING_AZ_HASH 		= 		'lb.avail_zones.hash';
+    const SETTING_BALANCING_USE_ELB         =       'lb.use_elb';
+    const SETTING_BALANCING_HOSTNAME        =       'lb.hostname';
+    const SETTING_BALANCING_NAME            =       'lb.name';
+    const SETTING_BALANCING_HC_TIMEOUT      =       'lb.healthcheck.timeout';
+    const SETTING_BALANCING_HC_TARGET       =       'lb.healthcheck.target';
+    const SETTING_BALANCING_HC_INTERVAL     =       'lb.healthcheck.interval';
+    const SETTING_BALANCING_HC_UTH          =       'lb.healthcheck.unhealthythreshold';
+    const SETTING_BALANCING_HC_HTH          =       'lb.healthcheck.healthythreshold';
+    const SETTING_BALANCING_HC_HASH         =       'lb.healthcheck.hash';
+    const SETTING_BALANCING_AZ_HASH         =       'lb.avail_zones.hash';
 
     /** RACKSPACE Settings **/
-    const SETTING_RS_FLAVOR_ID				= 		'rs.flavor-id';
+    const SETTING_RS_FLAVOR_ID              =       'rs.flavor-id';
 
     /** OPENSTACK Settings **/
-    const SETTING_OPENSTACK_FLAVOR_ID		= 		'openstack.flavor-id';
+    const SETTING_OPENSTACK_FLAVOR_ID       =       'openstack.flavor-id';
     const SETTING_OPENSTACK_IP_POOL         =       'openstack.ip-pool';
     const SETTING_OPENSTACK_NETWORKS        =       'openstack.networks';
     const SETTING_OPENSTACK_SECURITY_GROUPS_LIST =  'openstack.security_groups.list';
     const SETTING_OPENSTACK_KEEP_FIP_ON_SUSPEND =   'openstack.keep_fip_on_suspend';
+    const SETTING_OPENSTACK_AVAIL_ZONE      =       'openstack.availability_zone';
 
     /** GCE Settings **/
-    const SETTING_GCE_MACHINE_TYPE			=		'gce.machine-type';
-    const SETTING_GCE_NETWORK				=		'gce.network';
+    const SETTING_GCE_MACHINE_TYPE          =       'gce.machine-type';
+    const SETTING_GCE_NETWORK               =       'gce.network';
     const SETTING_GCE_CLOUD_LOCATION        =       'gce.cloud-location';
-    const SETTING_GCE_ON_HOST_MAINTENANCE   =		'gce.on-host-maintenance';
-    const SETTING_GCE_USE_STATIC_IPS        =		'gce.use_static_ips';
-    const SETTING_GCE_STATIC_IPS_MAP		= 		'gce.static_ips.map';
-    const SETTING_GCE_REGION        		= 		'gce.region';
+    const SETTING_GCE_ON_HOST_MAINTENANCE   =       'gce.on-host-maintenance';
+    const SETTING_GCE_USE_STATIC_IPS        =       'gce.use_static_ips';
+    const SETTING_GCE_STATIC_IPS_MAP        =       'gce.static_ips.map';
+    const SETTING_GCE_REGION                =       'gce.region';
 
     /** Cloudstack Settings **/
-    const SETTING_CLOUDSTACK_SERVICE_OFFERING_ID		=		'cloudstack.service_offering_id';
-    const SETTING_CLOUDSTACK_NETWORK_OFFERING_ID		=		'cloudstack.network_offering_id';
-    const SETTING_CLOUDSTACK_DISK_OFFERING_ID			=		'cloudstack.disk_offering_id';
-    const SETTING_CLOUDSTACK_NETWORK_ID					=		'cloudstack.network_id';
-    const SETTING_CLOUDSTACK_NETWORK_TYPE				=		'cloudstack.network_type';
-    const SETTING_CLOUDSTACK_SHARED_IP_ADDRESS			=		'cloudstack.shared_ip.address';
-    const SETTING_CLOUDSTACK_SHARED_IP_ID				=		'cloudstack.shared_ip.id';
-    const SETTING_CLOUDSTACK_SECURITY_GROUPS_LIST	    =		'cloudstack.security_groups.list';
+    const SETTING_CLOUDSTACK_SERVICE_OFFERING_ID        =       'cloudstack.service_offering_id';
+    const SETTING_CLOUDSTACK_NETWORK_OFFERING_ID        =       'cloudstack.network_offering_id';
+    const SETTING_CLOUDSTACK_DISK_OFFERING_ID           =       'cloudstack.disk_offering_id';
+    const SETTING_CLOUDSTACK_NETWORK_ID                 =       'cloudstack.network_id';
+    const SETTING_CLOUDSTACK_NETWORK_TYPE               =       'cloudstack.network_type';
+    const SETTING_CLOUDSTACK_SHARED_IP_ADDRESS          =       'cloudstack.shared_ip.address';
+    const SETTING_CLOUDSTACK_SHARED_IP_ID               =       'cloudstack.shared_ip.id';
+    const SETTING_CLOUDSTACK_SECURITY_GROUPS_LIST       =       'cloudstack.security_groups.list';
 
     const SETIING_CLOUDSTACK_USE_STATIC_NAT             =       'cloudstack.use_static_nat';
     const SETIING_CLOUDSTACK_STATIC_NAT_MAP             =       'cloudstack.static_nat.map';
     const SETIING_CLOUDSTACK_STATIC_NAT_PRIVATE_MAP     =       'cloudstack.static_nat.private_map';
 
     /** EUCA Settings **/
-    const SETTING_EUCA_INSTANCE_TYPE 		= 		'euca.instance_type';
-    const SETTING_EUCA_AVAIL_ZONE	 		= 		'euca.availability_zone';
+    const SETTING_EUCA_INSTANCE_TYPE        =       'euca.instance_type';
+    const SETTING_EUCA_AVAIL_ZONE           =       'euca.availability_zone';
     const SETTING_EUCA_EKI_ID               =       'euca.eki_id';
     const SETTING_EUCA_ERI_ID               =       'euca.eri_id';
     const SETTING_EUCA_SECURITY_GROUPS_LIST =       'euca.security_groups.list';
 
     /** AWS EC2 Settings **/
-    const SETTING_AWS_INSTANCE_TYPE 		= 		'aws.instance_type';
-    const SETTING_AWS_AVAIL_ZONE			= 		'aws.availability_zone';
-    const SETTING_AWS_USE_ELASIC_IPS		= 		'aws.use_elastic_ips';
-    const SETTING_AWS_ELASIC_IPS_MAP		= 		'aws.elastic_ips.map';
+    const SETTING_AWS_INSTANCE_TYPE         =       'aws.instance_type';
+    const SETTING_AWS_AVAIL_ZONE            =       'aws.availability_zone';
+    const SETTING_AWS_USE_ELASIC_IPS        =       'aws.use_elastic_ips';
+    const SETTING_AWS_ELASIC_IPS_MAP        =       'aws.elastic_ips.map';
 
     const SETTING_AWS_IAM_INSTANCE_PROFILE_ARN =    'aws.iam_instance_profile_arn';
 
-    const SETTING_AWS_EBS_OPTIMIZED			= 		'aws.ebs_optimized';
+    const SETTING_AWS_EBS_OPTIMIZED         =       'aws.ebs_optimized';
 
     const SETTING_AWS_ELB_ENABLED           =       'aws.elb.enabled';
     const SETTING_AWS_ELB_ID                =       'aws.elb.id';
 
-    const SETTING_AWS_USE_EBS				=		'aws.use_ebs';
-    const SETTING_AWS_EBS_IOPS				= 		'aws.ebs_iops';
-    const SETTING_AWS_EBS_TYPE				= 		'aws.ebs_type';
-    const SETTING_AWS_EBS_SIZE				=		'aws.ebs_size';
-    const SETTING_AWS_EBS_SNAPID			=		'aws.ebs_snapid';
-    const SETTING_AWS_EBS_MOUNT				=		'aws.ebs_mount';
-    const SETTING_AWS_EBS_MOUNTPOINT		=		'aws.ebs_mountpoint';
-    const SETTING_AWS_AKI_ID				= 		'aws.aki_id';
-    const SETTING_AWS_ARI_ID				= 		'aws.ari_id';
-    const SETTING_AWS_ENABLE_CW_MONITORING	= 		'aws.enable_cw_monitoring';
-    const SETTING_AWS_SECURITY_GROUPS_LIST  = 		'aws.security_groups.list';
-    const SETTING_AWS_S3_BUCKET				= 		'aws.s3_bucket';
-    const SETTING_AWS_CLUSTER_PG			= 		'aws.cluster_pg';
+    const SETTING_AWS_USE_EBS               =       'aws.use_ebs';
+    const SETTING_AWS_EBS_IOPS              =       'aws.ebs_iops';
+    const SETTING_AWS_EBS_TYPE              =       'aws.ebs_type';
+    const SETTING_AWS_EBS_SIZE              =       'aws.ebs_size';
+    const SETTING_AWS_EBS_SNAPID            =       'aws.ebs_snapid';
+    const SETTING_AWS_EBS_MOUNT             =       'aws.ebs_mount';
+    const SETTING_AWS_EBS_MOUNTPOINT        =       'aws.ebs_mountpoint';
+    const SETTING_AWS_AKI_ID                =       'aws.aki_id';
+    const SETTING_AWS_ARI_ID                =       'aws.ari_id';
+    const SETTING_AWS_ENABLE_CW_MONITORING  =       'aws.enable_cw_monitoring';
+    const SETTING_AWS_SECURITY_GROUPS_LIST  =       'aws.security_groups.list';
+    const SETTING_AWS_S3_BUCKET             =       'aws.s3_bucket';
+    const SETTING_AWS_CLUSTER_PG            =       'aws.cluster_pg';
 
-    const SETTING_AWS_INSTANCE_NAME_FORMAT	= 		'aws.instance_name_format';
+    const SETTING_AWS_INSTANCE_NAME_FORMAT  =       'aws.instance_name_format';
+    const SETTING_AWS_SHUTDOWN_BEHAVIOR     =       'aws.instance_initiated_shutdown_behavior';
 
-    const SETTING_AWS_SG_LIST				=		'aws.additional_security_groups';
+    const SETTING_AWS_SG_LIST               =       'aws.additional_security_groups';
     const SETTING_AWS_TAGS_LIST             =       'aws.additional_tags';
     const SETTING_AWS_SG_LIST_APPEND        =       'aws.additional_security_groups.append';
 
-    const SETTING_AWS_VPC_AVAIL_ZONE		=		'aws.vpc_avail_zone';
-    const SETTING_AWS_VPC_INTERNET_ACCESS	=		'aws.vpc_internet_access';
-    const SETTING_AWS_VPC_SUBNET_ID	        =		'aws.vpc_subnet_id';
+    const SETTING_AWS_VPC_AVAIL_ZONE        =       'aws.vpc_avail_zone';
+    const SETTING_AWS_VPC_INTERNET_ACCESS   =       'aws.vpc_internet_access';
+    const SETTING_AWS_VPC_SUBNET_ID         =       'aws.vpc_subnet_id';
     const SETTING_AWS_VPC_ROUTING_TABLE_ID  =       'aws.vpc_routing_table_id';
     const SETTING_AWS_VPC_ASSOCIATE_PUBLIC_IP   =       'aws.vpc_associate_public_ip';
 
     /** MySQL options **/
-    const SETTING_MYSQL_PMA_USER			=		'mysql.pma.username';
-    const SETTING_MYSQL_PMA_PASS			=		'mysql.pma.password';
-    const SETTING_MYSQL_PMA_REQUEST_TIME	=		'mysql.pma.request_time';
-    const SETTING_MYSQL_PMA_REQUEST_ERROR	=		'mysql.pma.request_error';
+    const SETTING_MYSQL_PMA_USER            =       'mysql.pma.username';
+    const SETTING_MYSQL_PMA_PASS            =       'mysql.pma.password';
+    const SETTING_MYSQL_PMA_REQUEST_TIME    =       'mysql.pma.request_time';
+    const SETTING_MYSQL_PMA_REQUEST_ERROR   =       'mysql.pma.request_error';
 
-    const SETTING_MYSQL_BUNDLE_WINDOW_START = 		'mysql.bundle_window.start';
-    const SETTING_MYSQL_BUNDLE_WINDOW_END	= 		'mysql.bundle_window.end';
+    const SETTING_MYSQL_BUNDLE_WINDOW_START =       'mysql.bundle_window.start';
+    const SETTING_MYSQL_BUNDLE_WINDOW_END   =       'mysql.bundle_window.end';
 
     const SETTING_MYSQL_BUNDLE_WINDOW_START_HH = 'mysql.pbw1_hh';
     const SETTING_MYSQL_BUNDLE_WINDOW_START_MM = 'mysql.pbw1_mm';
@@ -142,46 +138,46 @@ class DBFarmRole
     const SETTING_MYSQL_BUNDLE_WINDOW_END_HH = 'mysql.pbw2_hh';
     const SETTING_MYSQL_BUNDLE_WINDOW_END_MM = 'mysql.pbw2_mm';
 
-    const SETTING_MYSQL_EBS_SNAPS_ROTATE			= 'mysql.ebs.rotate';
-    const SETTING_MYSQL_EBS_SNAPS_ROTATION_ENABLED	= 'mysql.ebs.rotate_snaps';
+    const SETTING_MYSQL_EBS_SNAPS_ROTATE            = 'mysql.ebs.rotate';
+    const SETTING_MYSQL_EBS_SNAPS_ROTATION_ENABLED  = 'mysql.ebs.rotate_snaps';
 
-    const SETTING_MYSQL_BCP_ENABLED 				= 'mysql.enable_bcp';
-    const SETTING_MYSQL_BCP_EVERY 					= 'mysql.bcp_every';
-    const SETTING_MYSQL_BUNDLE_ENABLED 				= 'mysql.enable_bundle';
-    const SETTING_MYSQL_BUNDLE_EVERY 				= 'mysql.bundle_every';
-    const SETTING_MYSQL_LAST_BCP_TS 				= 'mysql.dt_last_bcp';
-    const SETTING_MYSQL_LAST_BUNDLE_TS 				= 'mysql.dt_last_bundle';
-    const SETTING_MYSQL_IS_BCP_RUNNING 				= 'mysql.isbcprunning';
-    const SETTING_MYSQL_IS_BUNDLE_RUNNING 			= 'mysql.isbundlerunning';
-    const SETTING_MYSQL_BCP_SERVER_ID 				= 'mysql.bcp_server_id';
-    const SETTING_MYSQL_BUNDLE_SERVER_ID 			= 'mysql.bundle_server_id';
-    /*Scalr_Db_Msr*/ const SETTING_MYSQL_DATA_STORAGE_ENGINE 		= 'mysql.data_storage_engine';
-    const SETTING_MYSQL_SLAVE_TO_MASTER 			= 'mysql.slave_to_master';
+    const SETTING_MYSQL_BCP_ENABLED                 = 'mysql.enable_bcp';
+    const SETTING_MYSQL_BCP_EVERY                   = 'mysql.bcp_every';
+    const SETTING_MYSQL_BUNDLE_ENABLED              = 'mysql.enable_bundle';
+    const SETTING_MYSQL_BUNDLE_EVERY                = 'mysql.bundle_every';
+    const SETTING_MYSQL_LAST_BCP_TS                 = 'mysql.dt_last_bcp';
+    const SETTING_MYSQL_LAST_BUNDLE_TS              = 'mysql.dt_last_bundle';
+    const SETTING_MYSQL_IS_BCP_RUNNING              = 'mysql.isbcprunning';
+    const SETTING_MYSQL_IS_BUNDLE_RUNNING           = 'mysql.isbundlerunning';
+    const SETTING_MYSQL_BCP_SERVER_ID               = 'mysql.bcp_server_id';
+    const SETTING_MYSQL_BUNDLE_SERVER_ID            = 'mysql.bundle_server_id';
+    /*Scalr_Db_Msr*/ const SETTING_MYSQL_DATA_STORAGE_ENGINE        = 'mysql.data_storage_engine';
+    const SETTING_MYSQL_SLAVE_TO_MASTER             = 'mysql.slave_to_master';
 
     /* MySQL users credentials */
-    const SETTING_MYSQL_ROOT_PASSWORD				= 'mysql.root_password';
-    const SETTING_MYSQL_REPL_PASSWORD				= 'mysql.repl_password';
-    const SETTING_MYSQL_STAT_PASSWORD				= 'mysql.stat_password';
+    const SETTING_MYSQL_ROOT_PASSWORD               = 'mysql.root_password';
+    const SETTING_MYSQL_REPL_PASSWORD               = 'mysql.repl_password';
+    const SETTING_MYSQL_STAT_PASSWORD               = 'mysql.stat_password';
 
-    const SETTING_MYSQL_LOG_FILE					= 'mysql.log_file';
-    const SETTING_MYSQL_LOG_POS						= 'mysql.log_pos';
+    const SETTING_MYSQL_LOG_FILE                    = 'mysql.log_file';
+    const SETTING_MYSQL_LOG_POS                     = 'mysql.log_pos';
 
-    /*Scalr_Db_Msr*/ const SETTING_MYSQL_SCALR_SNAPSHOT_ID			= 'mysql.scalr.snapshot_id';
-    /*Scalr_Db_Msr*/ const SETTING_MYSQL_SCALR_VOLUME_ID				= 'mysql.scalr.volume_id';
+    /*Scalr_Db_Msr*/ const SETTING_MYSQL_SCALR_SNAPSHOT_ID          = 'mysql.scalr.snapshot_id';
+    /*Scalr_Db_Msr*/ const SETTING_MYSQL_SCALR_VOLUME_ID                = 'mysql.scalr.volume_id';
 
     /*
      * @deprecated
      */
-    const SETTING_MYSQL_SNAPSHOT_ID			= 'mysql.snapshot_id';
+    const SETTING_MYSQL_SNAPSHOT_ID         = 'mysql.snapshot_id';
     const SETTING_MYSQL_MASTER_EBS_VOLUME_ID= 'mysql.master_ebs_volume_id';
-    const SETTING_MYSQL_EBS_VOLUME_SIZE 	= 'mysql.ebs_volume_size';
-    const SETTING_MYSQL_EBS_TYPE 			= 'mysql.ebs.type';
-    const SETTING_MYSQL_EBS_IOPS 			= 'mysql.ebs.iops';
+    const SETTING_MYSQL_EBS_VOLUME_SIZE     = 'mysql.ebs_volume_size';
+    const SETTING_MYSQL_EBS_TYPE            = 'mysql.ebs.type';
+    const SETTING_MYSQL_EBS_IOPS            = 'mysql.ebs.iops';
 
     /////////////////////////////////////////////////
 
-    const SETTING_SYSTEM_REBOOT_TIMEOUT		=		'system.timeouts.reboot';
-    const SETTING_SYSTEM_LAUNCH_TIMEOUT		= 		'system.timeouts.launch';
+    const SETTING_SYSTEM_REBOOT_TIMEOUT     =       'system.timeouts.reboot';
+    const SETTING_SYSTEM_LAUNCH_TIMEOUT     =       'system.timeouts.launch';
     const SETTING_SYSTEM_NEW_PRESETS_USED   =       'system.new_presets_used';
 
     const SETTING_INFO_INSTANCE_TYPE_NAME   =       'info.instance_type_name';
@@ -205,13 +201,13 @@ class DBFarmRole
             $SettingsCache = array();
 
     private static $FieldPropertyMap = array(
-        'id' 			=> 'ID',
-        'farmid'		=> 'FarmID',
-        'role_id'		=> 'RoleID',
+        'id'            => 'ID',
+        'farmid'        => 'FarmID',
+        'role_id'       => 'RoleID',
         'alias'         => 'Alias',
-        'new_role_id'	=> 'NewRoleID',
-        'launch_index'	=> 'LaunchIndex',
-        'platform'		=> 'Platform',
+        'new_role_id'   => 'NewRoleID',
+        'launch_index'  => 'LaunchIndex',
+        'platform'      => 'Platform',
         'cloud_location'=> 'CloudLocation'
     );
 
@@ -339,7 +335,11 @@ class DBFarmRole
                 'event' => $script->event,
                 'script_id' => (int) $script->scriptId,
                 'script_path' => $script->scriptPath,
-                'run_as' => $script->runAs
+                'script_type' => $script->scriptType,
+                'run_as' => $script->runAs,
+                'target_roles' => $script->targetRoles,
+                'target_farmroles' => $script->targetFarmroles,
+                'target_behaviors' => $script->targetBehaviors
             );
         }
         $this->SetScripts($scripts);
@@ -351,11 +351,11 @@ class DBFarmRole
 
         foreach ($definition->scalingTimes as $scalingPeriod) {
             $this->DB->Execute("INSERT INTO farm_role_scaling_times SET
-                farm_roleid		= ?,
-                start_time		= ?,
-                end_time		= ?,
-                days_of_week	= ?,
-                instances_count	= ?
+                farm_roleid     = ?,
+                start_time      = ?,
+                end_time        = ?,
+                days_of_week    = ?,
+                instances_count = ?
             ", array(
                 $this->ID,
                 $scalingPeriod->startTime,
@@ -421,7 +421,24 @@ class DBFarmRole
             $itm->isMenuItem = $script['ismenuitem'];
             $itm->orderIndex = $script['order_index'];
             $itm->scriptPath = $script['script_path'];
+            $itm->scriptType = $script['script_type'];
             $itm->runAs = $script['run_as'];
+
+            switch ($script['target']) {
+                case $script['target'] == Script::TARGET_ROLES:
+                    $varName = 'targetRoles';
+                    break;
+                case $script['target'] == Script::TARGET_FARMROLES:
+                    $varName = 'targetFarmroles';
+                    break;
+                case $script['target'] == Script::TARGET_BEHAVIORS:
+                    $varName = 'targetBehaviors';
+                    break;
+            }
+
+            $targets = $this->DB->GetAll("SELECT target FROM `farm_role_scripting_targets` WHERE farm_role_script_id = ?", array($script['id']));
+            foreach ($targets as $target)
+                $itm->{$varName}[] = $target['target'];
 
             $roleDefinition->scripts[] = $itm;
         }
@@ -535,7 +552,7 @@ class DBFarmRole
     {
         foreach ($this->GetServersByFilter() as $DBServer) {
             /* @var $DBServer \DBServer */
-            if ($DBServer->status != SERVER_STATUS::TERMINATED) {
+            if ($DBServer->status != \SERVER_STATUS::TERMINATED) {
                 try {
                     $DBServer->terminate(DBServer::TERMINATE_REASON_ROLE_REMOVED);
                 } catch (Exception $e){}
@@ -589,14 +606,14 @@ class DBFarmRole
     public function GetPendingInstancesCount()
     {
         return $this->DB->GetOne("SELECT COUNT(*) FROM servers WHERE status IN(?,?,?) AND farm_roleid=? LIMIT 1",
-            array(SERVER_STATUS::INIT, SERVER_STATUS::PENDING, SERVER_STATUS::PENDING_LAUNCH, $this->ID)
+            array(\SERVER_STATUS::INIT, \SERVER_STATUS::PENDING, \SERVER_STATUS::PENDING_LAUNCH, $this->ID)
         );
     }
 
     public function GetSuspendedInstancesCount()
     {
         return $this->DB->GetOne("SELECT COUNT(*) FROM servers WHERE status IN(?,?) AND farm_roleid=? LIMIT 1",
-                array(SERVER_STATUS::SUSPENDED, SERVER_STATUS::PENDING_SUSPEND, $this->ID)
+                array(\SERVER_STATUS::SUSPENDED, \SERVER_STATUS::PENDING_SUSPEND, $this->ID)
         );
     }
 
@@ -606,11 +623,11 @@ class DBFarmRole
 
         if (!$considerSuspendedServers || $considerSuspendedServers == 'running')
             return $this->DB->GetOne("SELECT COUNT(*) FROM servers WHERE status IN (?,?,?) AND farm_roleid=? LIMIT 1",
-                    array(SERVER_STATUS::RUNNING, SERVER_STATUS::PENDING_SUSPEND, SERVER_STATUS::SUSPENDED, $this->ID)
+                    array(\SERVER_STATUS::RUNNING, \SERVER_STATUS::PENDING_SUSPEND, \SERVER_STATUS::SUSPENDED, $this->ID)
             );
         else
             return $this->DB->GetOne("SELECT COUNT(*) FROM servers WHERE status = ? AND farm_roleid=? LIMIT 1",
-                array(SERVER_STATUS::RUNNING, $this->ID)
+                array(\SERVER_STATUS::RUNNING, $this->ID)
             );
     }
 
@@ -715,10 +732,10 @@ class DBFarmRole
             if ($presets[$behavior]) {
                 if (!$farm_preset_id) {
                     $this->DB->Execute("INSERT INTO farm_role_service_config_presets SET
-                        preset_id	= ?,
-                        farm_roleid	= ?,
-                        behavior	= ?,
-                        restart_service	= '1'
+                        preset_id   = ?,
+                        farm_roleid = ?,
+                        behavior    = ?,
+                        restart_service = '1'
                     ", array(
                         $presets[$behavior],
                         $this->ID,
@@ -729,7 +746,7 @@ class DBFarmRole
                 }
                 elseif ($farm_preset_id != $presets[$behavior]) {
                     $this->DB->Execute("UPDATE farm_role_service_config_presets SET
-                        preset_id	= ?
+                        preset_id   = ?
                     WHERE farm_roleid = ? AND behavior = ?
                     ", array(
                         $presets[$behavior],
@@ -761,7 +778,7 @@ class DBFarmRole
 
             if ($msg)
             {
-                foreach ($this->GetServersByFilter(array('status' => SERVER_STATUS::RUNNING)) as $dbServer)
+                foreach ($this->GetServersByFilter(array('status' => \SERVER_STATUS::RUNNING)) as $dbServer)
                 {
                     if ($dbServer->IsSupported("0.6"))
                         $dbServer->SendMessage($msg);
@@ -824,17 +841,17 @@ class DBFarmRole
                     !empty($script['params']) && $script['script_type'] == Scalr_Scripting_Manager::ORCHESTRATION_SCRIPT_TYPE_CHEF))
                 {
                     $this->DB->Execute("INSERT INTO farm_role_scripts SET
-                        scriptid	= ?,
-                        farmid		= ?,
-                        farm_roleid	= ?,
-                        params		= ?,
-                        event_name	= ?,
-                        target		= ?,
-                        version		= ?,
-                        timeout		= ?,
-                        issync		= ?,
+                        scriptid    = ?,
+                        farmid      = ?,
+                        farm_roleid = ?,
+                        params      = ?,
+                        event_name  = ?,
+                        target      = ?,
+                        version     = ?,
+                        timeout     = ?,
+                        issync      = ?,
                         order_index = ?,
-                        issystem	= '1',
+                        issystem    = '1',
                         script_path = ?,
                         run_as = ?,
                         script_type = ?
@@ -856,10 +873,21 @@ class DBFarmRole
 
                     $farmRoleScriptId = $this->DB->Insert_ID();
 
-                    if ($script['target'] == Script::TARGET_ROLES || $script['target'] == Script::TARGET_BEHAVIORS) {
-
-                        $targetType = ($script['target'] == Script::TARGET_ROLES) ? 'farmrole' : 'behavior';
-                        $varName = ($script['target'] == Script::TARGET_ROLES) ? 'target_roles' : 'target_behaviors';
+                    if ($script['target'] == Script::TARGET_ROLES || $script['target'] == Script::TARGET_BEHAVIORS || $script['target'] == Script::TARGET_FARMROLES) {
+                        switch ($script['target']) {
+                            case $script['target'] == Script::TARGET_ROLES:
+                                $targetType = 'farmrole';
+                                $varName = 'target_roles';
+                                break;
+                            case $script['target'] == Script::TARGET_FARMROLES:
+                                $targetType = 'farmrole';
+                                $varName = 'target_farmroles';
+                                break;
+                            case $script['target'] == Script::TARGET_BEHAVIORS:
+                                $targetType = 'behavior';
+                                $varName = 'target_behaviors';
+                                break;
+                        }
 
                         if (is_array($script[$varName])) {
                             foreach ($script[$varName] as $t) {
@@ -921,11 +949,11 @@ class DBFarmRole
 
                     if (!$role_opts[$hash]) {
                         $this->DB->Execute("INSERT INTO farm_role_options SET
-                            farmid		= ?,
-                            farm_roleid	= ?,
-                            name		= ?,
-                            value		= ?,
-                            hash	 	= ?
+                            farmid      = ?,
+                            farm_roleid = ?,
+                            name        = ?,
+                            value       = ?,
+                            hash        = ?
                             ON DUPLICATE KEY UPDATE name = ?
                         ", array(
                             $this->FarmID,
@@ -938,7 +966,7 @@ class DBFarmRole
                     } else {
                         if (md5($val) != $role_opts[$hash]) {
                             $this->DB->Execute("UPDATE farm_role_options SET value = ? WHERE
-                                farm_roleid	= ? AND hash = ?
+                                farm_roleid = ? AND hash = ?
                             ", array(
                                 $val,
                                 $this->ID,
@@ -990,22 +1018,36 @@ class DBFarmRole
 
     /**
      * Set farm role setting
-     * @param string $name
-     * @param mixed $value
-     * @return void
+     *
+     * @param   string       $name   The name of the setting
+     * @param   string|null  $value  The value of the setting
+     * @param   string       $type   optional
+     * @return  void
      */
     public function SetSetting($name, $value, $type = null)
     {
-        if ($value === "" || $value === null)
-        {
+        if ($value === "" || $value === null) {
             $this->DB->Execute("DELETE FROM farm_role_settings WHERE name=? AND farm_roleid=?", array(
                 $name, $this->ID
             ));
-        }
-        else
-        {
-            $this->DB->Execute("INSERT INTO farm_role_settings SET `name`=?, `value`=?, `farm_roleid`=?, `type`=? ON DUPLICATE KEY UPDATE `value`=?, `type`=?",
-                array($name, $value, $this->ID, $type, $value, $type)
+        } else {
+            $this->DB->Execute("
+                INSERT INTO farm_role_settings
+                SET `name`=?,
+                    `value`=?,
+                    `farm_roleid`=?,
+                    `type`=?
+                ON DUPLICATE KEY UPDATE
+                    `value`=?,
+                    `type`=?
+            ", array(
+                $name,
+                $value,
+                $this->ID,
+                $type,
+
+                $value,
+                $type)
             );
         }
 
@@ -1080,7 +1122,7 @@ class DBFarmRole
         }
         $set = join(', ', $set);
 
-        try	{
+        try {
             // Perform Update
             $bind[] = $this->ID;
             $this->DB->Execute("UPDATE farm_roles SET $set WHERE id = ?", $bind);
@@ -1104,10 +1146,11 @@ class DBFarmRole
             SELECT r.id
             FROM roles r
             INNER JOIN role_images ri ON r.id = ri.role_id
-            WHERE generation = \'2\' AND env_id IN(0, ?)
+            INNER JOIN os ON os.id = r.os_id
+            WHERE r.generation = \'2\' AND env_id IN(0, ?)
             AND ri.platform = ?' .
             (in_array($this->Platform, array(SERVER_PLATFORMS::GCE, SERVER_PLATFORMS::ECS)) ? '' : 'AND ri.cloud_location = ?') .
-            'AND r.os_family = ?' .
+            'AND os.family = ?' .
             ($includeSelf ? '' : 'AND r.id != ?') .
             'GROUP BY r.id
         ';
@@ -1116,7 +1159,7 @@ class DBFarmRole
         if (!in_array($this->Platform, array(SERVER_PLATFORMS::GCE, SERVER_PLATFORMS::ECS)))
             $args[] = $this->CloudLocation;
 
-        $args[] = $dbRole->osFamily;
+        $args[] = $dbRole->getOs()->family;
 
         if ($includeSelf)
             $args[] = $dbRole->id;
@@ -1137,10 +1180,7 @@ class DBFarmRole
                     $result[] = array(
                         'id'            => $role->id,
                         'name'          => $role->name,
-                        'os_name'       => $role->os,
-                        'os_family'     => $role->osFamily,
-                        'os_generation' => $role->osGeneration,
-                        'os_version'    => $role->osVersion,
+                        'osId'          => $role->osId,
                         'shared'        => $role->envId == 0,
                         'behaviors'     => $role->getBehaviors(),
                         'image'         => [
@@ -1167,6 +1207,9 @@ class DBFarmRole
             }
             if ($this->GetSetting(Scalr_Role_Behavior_Chef::ROLE_CHEF_LOG_LEVEL)) {
                 $result[Scalr_Role_Behavior_Chef::ROLE_CHEF_LOG_LEVEL] = $this->GetSetting(Scalr_Role_Behavior_Chef::ROLE_CHEF_LOG_LEVEL);
+            }
+            if ($this->GetSetting(Scalr_Role_Behavior_Chef::ROLE_CHEF_ENVIRONMENT)) {
+                $result[Scalr_Role_Behavior_Chef::ROLE_CHEF_ENVIRONMENT] = $this->GetSetting(Scalr_Role_Behavior_Chef::ROLE_CHEF_ENVIRONMENT);
             }
         } else {
             $result = $this->GetSettingsByFilter('chef.');
@@ -1211,5 +1254,4 @@ class DBFarmRole
         }
         return $this->GetSetting($name);
     }
-
 }

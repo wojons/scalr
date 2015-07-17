@@ -41,7 +41,7 @@ class InstancesTest extends WebTestCase
     {
         $content = $this->request('/tools/aws/rds/instances/xGetParameters/?cloudLocation=us-east-1');
         $this->assertInternalType('array', $content);
-        $this->assertArrayHas(true, 'success', $content);
+        $this->assertTrue(isset($content['success']) && $content['success']);
         $this->assertArrayHasKey('zones', $content);
         $this->assertArrayHasKey('sgroups', $content);
     }

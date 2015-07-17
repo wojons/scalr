@@ -64,7 +64,7 @@ class IamTest extends AwsTestCase
 
         $assumeRolePolicyDocument= '{"Version": "2008-10-17","Statement": [{"Sid": "","Effect": "Deny","Principal": {"Service": "ec2.amazonaws.com"},"Action": "sts:AssumeRole"}]}';
 
-        $aws = $this->getContainer()->aws(AwsTestCase::REGION);
+        $aws = $this->getEnvironment()->aws(AwsTestCase::REGION);
         $roleName = self::getTestName(self::ROLE_NAME);
         $instanceProfileName = self::getTestName(self::INSTANCE_PROFILE_NAME);
 

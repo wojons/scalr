@@ -1,8 +1,13 @@
 <?php
 namespace Scalr\Model\Entity;
 
+use Exception;
+use Scalr\DataType\AccessPermissionsInterface;
+use Scalr\Exception\ModelException;
 use Scalr\Model\AbstractEntity;
 use Scalr\DataType\ScopeInterface;
+use Scalr_Account_User;
+use Scalr_Exception_Core;
 
 /**
  * Script entity
@@ -13,13 +18,14 @@ use Scalr\DataType\ScopeInterface;
  * @Entity
  * @Table(name="scripts")
  */
-class Script extends AbstractEntity implements ScopeInterface
+class Script extends AbstractEntity implements ScopeInterface, AccessPermissionsInterface
 {
     const TARGET_ALL = 'all';
     const TARGET_FARM = 'farm';
     const TARGET_ROLE = 'role';
     const TARGET_INSTANCE = 'instance';
     const TARGET_ROLES = 'roles';
+    const TARGET_FARMROLES = 'farmroles';
     const TARGET_BEHAVIORS = 'behaviors';
 
     const OS_LINUX = 'linux';
@@ -73,7 +79,7 @@ class Script extends AbstractEntity implements ScopeInterface
      * @Column(type="string")
      * @var string
      */
-    public $os;
+    public $os = '';
 
     /**
      * Sync or async script
@@ -95,6 +101,7 @@ class Script extends AbstractEntity implements ScopeInterface
      * The identifier of the client's account
      *
      * @Column(type="integer",nullable=true)
+     *
      * @var integer
      */
     public $accountId;
@@ -103,6 +110,7 @@ class Script extends AbstractEntity implements ScopeInterface
      * The identifier of the client's environment
      *
      * @Column(type="integer",nullable=true)
+     *
      * @var integer
      */
     public $envId;
@@ -122,6 +130,14 @@ class Script extends AbstractEntity implements ScopeInterface
     public $createdByEmail;
 
     /**
+     * Enable/disable script parameters interpolation
+     *
+     * @Column(type="integer")
+     * @var integer
+     */
+    public $allowScriptParameters = 0;
+
+    /**
      * Constructor
      */
     public function __construct()
@@ -138,18 +154,22 @@ class Script extends AbstractEntity implements ScopeInterface
     /**
      * Gets the list of the revisions associated with the script
      *
+     * @param bool $resetCache
      * @return \ArrayObject Returns the list of ScriptVersion objects
      */
-    public function getVersions()
+    public function getVersions($resetCache = false)
     {
-        if ($this->_versions === null) {
+        if ($this->_versions === null || $resetCache) {
             $this->fetchVersions();
         }
         return $this->_versions;
     }
 
     /**
+     * Gets entity of specified version of script
+     *
      * @param int $version
+     *
      * @return ScriptVersion|null
      */
     public function getVersion($version)
@@ -167,7 +187,10 @@ class Script extends AbstractEntity implements ScopeInterface
      */
     public function fetchVersions()
     {
-        $this->_versions = ScriptVersion::find([['scriptId' => $this->id]], ['version' => 'ASC']);
+        $this->_versions = ScriptVersion::result(ScriptVersion::RESULT_ENTITY_COLLECTION)->find(
+            [['scriptId' => $this->id]], ['version' => 'ASC']
+        );
+
         return $this->_versions;
     }
 
@@ -175,27 +198,31 @@ class Script extends AbstractEntity implements ScopeInterface
      * Get latest version of script
      *
      * @return ScriptVersion
+     *
      * @throws \Exception
      */
     public function getLatestVersion()
     {
-        /* @var ScriptVersion $version */
-        $version = ScriptVersion::findOne(array(
-            array(
-                'scriptId' => $this->id
-            )
-        ), array('version' => ''));
+        /* @var $version ScriptVersion */
+        $version = ScriptVersion::findOne([['scriptId' => $this->id]], ['version' => '']);
 
-        if (! $version)
-            throw new \Exception(sprintf('No version found for script %d', $this->id));
+        if (!$version) {
+            throw new Exception(sprintf('No version found for script %d', $this->id));
+        }
 
         return $version;
     }
 
+    /**
+     * Saves changes, if script already exists, or saves new script
+     *
+     * @throws ModelException
+     */
     public function save()
     {
         $id = $this->id;
         $this->dtChanged = new \DateTime();
+
         parent::save();
 
         if (! $id) {
@@ -210,6 +237,13 @@ class Script extends AbstractEntity implements ScopeInterface
         }
     }
 
+    /**
+     * Deletes this script
+     *
+     * @throws Scalr_Exception_Core
+     * @throws Exception
+     * @throws ModelException
+     */
     public function delete()
     {
         // Check script usage
@@ -256,7 +290,7 @@ class Script extends AbstractEntity implements ScopeInterface
         }
 
         if (count($usage)) {
-            throw new \Scalr_Exception_Core(sprintf('Script "%s" being used by %s, and can\'t be deleted',
+            throw new Scalr_Exception_Core(sprintf('Script "%s" being used by %s, and can\'t be deleted',
                 $this->name,
                 join(', ', $usage)
             ));
@@ -284,20 +318,26 @@ class Script extends AbstractEntity implements ScopeInterface
     }
 
     /**
-     * @param $name
-     * @param \Scalr_Account_User $user
-     * @return Script
+     * Forks specified script into new script
+     *
+     * @param string             $name  New script name
+     * @param Scalr_Account_User $user  User performs a fork
+     * @param int                $envId Environment of the new script
+     *
+     * @return Script Forked script
+     * @throws \Exception
      */
-    public function fork($name, \Scalr_Account_User $user)
+    public function fork($name, Scalr_Account_User $user, $envId = null)
     {
-        $script = new self();
+        $script = new static();
         $script->name = $name;
         $script->description = $this->description;
         $script->os = $this->os;
         $script->isSync = $this->isSync;
+        $script->allowScriptParameters = $this->allowScriptParameters;
         $script->timeout = $this->timeout;
         $script->accountId = $user->getAccountId() ? $user->getAccountId() : NULL;
-        $script->envId = $this->envId;
+        $script->envId = $envId ? $envId : $this->envId;
         $script->createdById = $user->getId();
         $script->createdByEmail = $user->getEmail();
         $script->save();
@@ -311,6 +351,15 @@ class Script extends AbstractEntity implements ScopeInterface
         $version->save();
 
         return $script;
+    }
+
+    /**
+     * {@inheritdoc}
+     * @see \Scalr\DataType\ScopeInterface::getScope()
+     */
+    public function getScope()
+    {
+        return !empty($this->envId) ? static::SCOPE_ENVIRONMENT : (!empty($this->accountId) ? static::SCOPE_ACCOUNT : static::SCOPE_SCALR);
     }
 
     public static function getList($accountId, $envId)
@@ -339,6 +388,7 @@ class Script extends AbstractEntity implements ScopeInterface
                 'description' => $script->description,
                 'os' => $script->os,
                 'isSync' => $script->isSync,
+                'allowScriptParameters' => $script->allowScriptParameters,
                 'timeout' => $script->timeout ? $script->timeout : (
                     $script->isSync == 1 ? \Scalr::config('scalr.script.timeout.sync') : \Scalr::config('scalr.script.timeout.async')
                 ),
@@ -346,11 +396,11 @@ class Script extends AbstractEntity implements ScopeInterface
                 'createdByEmail' => $script->createdByEmail,
                 'accountId' => $script->accountId,
                 'scope' => $script->envId ? self::SCOPE_ENVIRONMENT : ($script->accountId ? self::SCOPE_ACCOUNT : self::SCOPE_SCALR),
-                'versions' => array_map(function(ScriptVersion $version) {
+                'versions' => array_map(function(ScriptVersion $version) use($script) {
                     return [
                         'version' => $version->version,
                         'versionName' => $version->version,
-                        'variables' => $version->variables
+                        'variables' => $script->allowScriptParameters ? $version->variables : []
                     ];
                 }, $script->getVersions()->getArrayCopy())
             ];
@@ -361,7 +411,43 @@ class Script extends AbstractEntity implements ScopeInterface
     {
         return [
             'events' => array_merge(\EVENT_TYPE::getScriptingEventsWithScope(), EventDefinition::getList($accountId, $envId)),
-            'scripts' => self::getList($accountId, $envId)
+            'scripts' => static::getList($accountId, $envId)
         ];
+    }
+
+    public static function fetchVariables($content)
+    {
+        $text = preg_replace('/(\\\%)/si', '$$scalr$$', $content);
+        preg_match_all("/\%([^\%\s]+)\%/si", $text, $matches);
+        return $matches[1];
+    }
+
+    public static function hasVariables($content)
+    {
+        $variables = self::fetchVariables($content);
+        return !empty($variables);
+    }
+
+    /**
+     * {@inheritdoc}
+     * @see \Scalr\DataType\AccessPermissionsInterface::hasAccessPermissions()
+     */
+    public function hasAccessPermissions($user, $environment = null, $modify = null)
+    {
+        switch ($this->getScope()) {
+            case static::SCOPE_ACCOUNT:
+                return $this->accountId == $user->accountId && (empty($environment) || !$modify);
+
+            case static::SCOPE_ENVIRONMENT:
+                return $environment
+                     ? $this->envId == $environment->id
+                     : $user->hasAccessToEnvironment($this->envId);
+
+            case static::SCOPE_SCALR:
+                return !$modify;
+
+            default:
+                return false;
+        }
     }
 }

@@ -8,7 +8,7 @@ class Scalr_UI_Controller_Alerts extends Scalr_UI_Controller
 
     public function hasAccess()
     {
-        return parent::hasAccess() && $this->request->isAllowed(Acl::RESOURCE_FARMS_ALERTS);
+        return parent::hasAccess() && $this->request->isFarmAllowed();
     }
 
     public function defaultAction()
@@ -21,32 +21,33 @@ class Scalr_UI_Controller_Alerts extends Scalr_UI_Controller
         $this->response->page('ui/alerts/view.js');
     }
 
-    public function xListAlertsAction()
+    public function xListAction($serverId = null, $farmId = null, $farmRoleId = null, $status = null)
     {
-        $this->request->defineParams(array(
-            'sort' => array('type' => 'string', 'default' => 'id'),
-            'dir' => array('type' => 'string', 'default' => 'DESC')
-        ));
+        $sql = "SELECT sa.* FROM server_alerts sa LEFT JOIN farms f ON f.id = sa.farm_id WHERE sa.env_id = ?";
+        $args = [$this->getEnvironmentId()];
 
-        $sql = "SELECT * FROM server_alerts WHERE env_id='".$this->getEnvironmentId()."'";
-
-        if ($this->getParam('serverId')) {
-            $sql .= ' AND server_id = '.$this->db->qstr($this->getParam('serverId'));
+        if ($serverId) {
+            $sql .= ' AND sa.server_id = ?';
+            $args[] = $serverId;
         }
 
-        if ($this->getParam('farmId')) {
-            $sql .= ' AND farm_id = '.$this->db->qstr($this->getParam('farmId'));
+        if ($farmId) {
+            $sql .= ' AND sa.farm_id = ?';
+            $args[] = $farmId;
 
-            if ($this->getParam('farmRoleId')) {
-                $sql .= ' AND farm_roleid = '.$this->db->qstr($this->getParam('farmRoleId'));
+            if ($farmRoleId) {
+                $sql .= ' AND sa.farm_roleid = ?';
+                $args[] = $farmRoleId;
             }
         }
 
-        if ($this->getParam('status')) {
-            $sql .= ' AND status = '.$this->db->qstr($this->getParam('status'));
+        if ($status) {
+            $sql .= ' AND sa.status = ?';
+            $args[] = $status;
         }
 
-        $response = $this->buildResponseFromSql($sql, array('server_id', 'details'));
+        list($sql, $args) = $this->request->prepareFarmSqlQuery($sql, $args, 'f');
+        $response = $this->buildResponseFromSql2($sql, ['metric', 'status', 'dtoccured', 'dtlastcheck', 'dtsolved', 'details'], ['server_id', 'details'], $args);
 
         foreach ($response['data'] as $i => $row) {
             $row['dtoccured'] = Scalr_Util_DateTime::convertTz($row['dtoccured']);

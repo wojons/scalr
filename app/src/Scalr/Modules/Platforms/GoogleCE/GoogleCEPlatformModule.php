@@ -2,8 +2,8 @@
 
 namespace Scalr\Modules\Platforms\GoogleCE;
 
-require_once __DIR__ . '/../../../../externals/google-api-php-client-git-03102014/src/Google/Client.php';
-require_once __DIR__ .'/../../../../externals/google-api-php-client-git-03102014/src/Google/Service/Compute.php';
+require_once __DIR__ . '/../../../../externals/google-api-php-client-git-03162015/src/Google/Client.php';
+require_once __DIR__ .'/../../../../externals/google-api-php-client-git-03162015/src/Google/Service/Compute.php';
 
 use \DBServer;
 use \BundleTask;
@@ -17,6 +17,7 @@ use Scalr\Modules\AbstractPlatformModule;
 use Scalr\Model\Entity\Image;
 use Scalr\Model\Entity\CloudLocation;
 use Scalr\Modules\Platforms\GoogleCE\Exception\InstanceNotFoundException;
+use Scalr\Farm\Role\FarmRoleStorageConfig;
 
 class GoogleCEPlatformModule extends AbstractPlatformModule implements \Scalr\Modules\PlatformModuleInterface
 {
@@ -32,6 +33,12 @@ class GoogleCEPlatformModule extends AbstractPlatformModule implements \Scalr\Mo
 
     public $instancesListCache;
 
+    protected $resumeStrategy = \Scalr_Role_Behavior::RESUME_STRATEGY_INIT;
+    
+    /**
+     * @param \Scalr_Environment $environment
+     * @return \Google_Service_Compute
+     */
     public function getClient(\Scalr_Environment $environment)
     {
         $client = new \Google_Client();
@@ -82,7 +89,7 @@ class GoogleCEPlatformModule extends AbstractPlatformModule implements \Scalr\Mo
 
             foreach ($zones->getItems() as $zone) {
                 if ($zone->status == 'UP')
-                    $retval[$zone->getName()] = "GCE / {$zone->getName()}";
+                    $retval[$zone->getName()] = $zone->getName();
             }
 
         } catch (\Exception $e) {
@@ -102,16 +109,6 @@ class GoogleCEPlatformModule extends AbstractPlatformModule implements \Scalr\Mo
 
         return $this->container->analytics->prices->hasPriceForUrl(
             \SERVER_PLATFORMS::GCE, ''
-        );
-    }
-
-    public function getPropsList()
-    {
-        return array(
-            self::CLIENT_ID	=> 'Client ID',
-            self::SERVICE_ACCOUNT_NAME	=> 'E-mail',
-            self::KEY	=> "Key",
-            self::PROJECT_ID => "Project ID"
         );
     }
 
@@ -265,7 +262,7 @@ class GoogleCEPlatformModule extends AbstractPlatformModule implements \Scalr\Mo
                         if ($info->status != 'DONE')
                             $status = 'PROVISIONING';
                     } catch (Exception $e) {
-                        \Logger::getLogger("GCE")->error("GCE: operation was not found: {$operationId}, ServerID: {$DBServer->serverId}, ServerStatus: {$DBServer->status}");
+                        \Logger::getLogger("GCE")->info("GCE: operation was not found: {$operationId}, ServerID: {$DBServer->serverId}, ServerStatus: {$DBServer->status}");
                     }
                 } else {
                     if ($DBServer->status == \SERVER_STATUS::PENDING)
@@ -281,6 +278,58 @@ class GoogleCEPlatformModule extends AbstractPlatformModule implements \Scalr\Mo
         return StatusAdapter::load($status);
     }
 
+    /**
+     * {@inheritdoc}
+     * @see \Scalr\Modules\PlatformModuleInterface::ResumeServer()
+     */
+    public function ResumeServer(DBServer $DBServer)
+    {
+        $gce = $this->getClient($DBServer->GetEnvironmentObject());
+
+        try {
+            $gce->instances->start(
+                $DBServer->GetEnvironmentObject()->getPlatformConfigValue(self::PROJECT_ID),
+                $DBServer->GetCloudLocation(),
+                $DBServer->GetProperty(\GCE_SERVER_PROPERTIES::SERVER_NAME)
+            );
+        } catch (Exception $e) {
+            if (stristr($e->getMessage(), "not found")) {
+                throw new InstanceNotFoundException($e->getMessage(), $e->getCode(), $e);
+            }
+
+            throw $e;
+        }
+        
+        parent::ResumeServer($DBServer);
+
+        return true;
+    }
+    
+    /**
+     * {@inheritdoc}
+     * @see \Scalr\Modules\PlatformModuleInterface::SuspendServer()
+     */
+    public function SuspendServer(DBServer $DBServer)
+    {
+        $gce = $this->getClient($DBServer->GetEnvironmentObject());
+
+        try {
+            $gce->instances->stop(
+                $DBServer->GetEnvironmentObject()->getPlatformConfigValue(self::PROJECT_ID),
+                $DBServer->GetCloudLocation(),
+                $DBServer->GetProperty(\GCE_SERVER_PROPERTIES::SERVER_NAME)
+            );
+        } catch (Exception $e) {
+            if (stristr($e->getMessage(), "not found")) {
+                throw new InstanceNotFoundException($e->getMessage(), $e->getCode(), $e);
+            }
+
+            throw $e;
+        }
+
+        return true;
+    }
+    
     /**
      * {@inheritdoc}
      * @see \Scalr\Modules\PlatformModuleInterface::TerminateServer()
@@ -348,7 +397,86 @@ class GoogleCEPlatformModule extends AbstractPlatformModule implements \Scalr\Mo
      */
     public function CheckServerSnapshotStatus(BundleTask $BundleTask)
     {
+        if ($BundleTask->status != \SERVER_SNAPSHOT_CREATION_STATUS::IN_PROGRESS)
+            return;
+        
+        if ($BundleTask->osFamily != 'windows')
+            return;
+            
+        $meta = $BundleTask->getSnapshotDetails();
+        
+        $env = \Scalr_Environment::init()->loadById($BundleTask->envId);
+        $gce = $this->getClient($env);
 
+        if ($meta['gceSnapshotOpPhase3Id']) {
+            try {
+                $op3 = $gce->zoneOperations->get(
+                    $env->getPlatformConfigValue(self::PROJECT_ID),
+                    $meta['gceSnapshotZone'],
+                    $meta['gceSnapshotOpPhase3Id']
+                );
+                
+                if ($op3->status == 'DONE') {
+                    $BundleTask->SnapshotCreationComplete($BundleTask->snapshotId, $meta);
+                } else {
+                    $BundleTask->Log("CreateImage operation status: {$op3->status}");
+                }
+                
+            } catch (\Exception $e) {
+                $BundleTask->Log("CheckServerSnapshotStatus(2): {$e->getMessage()}");
+                return;
+            }
+            
+        } else {
+            //Check operations status
+            try {
+                $op1 = $gce->zoneOperations->get(
+                    $env->getPlatformConfigValue(self::PROJECT_ID), 
+                    $meta['gceSnapshotZone'], 
+                    $meta['gceSnapshotOpPhase1Id']
+                );
+                
+                $op2 = $gce->zoneOperations->get(
+                    $env->getPlatformConfigValue(self::PROJECT_ID),
+                    $meta['gceSnapshotZone'],
+                    $meta['gceSnapshotOpPhase2Id']
+                );
+                
+                
+            } catch (\Exception $e) {
+                $BundleTask->Log("CheckServerSnapshotStatus(1): {$e->getMessage()}");
+                return;
+            }
+            
+            if ($op1->status == 'DONE' && $op2->status == 'DONE') {
+                $postBody = new \Google_Service_Compute_Image();
+                $postBody->setName($BundleTask->roleName . "-" . date("YmdHi"));
+                $postBody->setSourceDisk(
+                    $this->getObjectUrl(
+                        "root-{$BundleTask->serverId}",
+                        'disks',
+                        $env->getPlatformConfigValue(self::PROJECT_ID),
+                        $meta['gceSnapshotZone']
+                    )
+                );
+                
+                $op3 = $gce->images->insert($env->getPlatformConfigValue(self::PROJECT_ID), $postBody);
+                $BundleTask->setMetaData(array(
+                    'gceSnapshotOpPhase3Id' => $op3->name,
+                    'gceSnapshotTargetLink' => $op3->targetLink
+                ));
+                $BundleTask->snapshotId = $env->getPlatformConfigValue(self::PROJECT_ID) . "/global/images/" . $this->getObjectName($op3->targetLink);
+                
+                $BundleTask->Log(sprintf(_("Snapshot initialized (ID: %s). Operation: {$op3->name}"),
+                    $BundleTask->snapshotId
+                ));
+                
+                $BundleTask->Save();
+                
+            } else {
+                $BundleTask->Log("CheckServerSnapshotStatus(0): {$op1->status}:{$op2->status}");
+            }
+        }
     }
 
     /**
@@ -358,25 +486,74 @@ class GoogleCEPlatformModule extends AbstractPlatformModule implements \Scalr\Mo
     public function CreateServerSnapshot(BundleTask $BundleTask)
     {
         $DBServer = DBServer::LoadByID($BundleTask->serverId);
-        $BundleTask->status = \SERVER_SNAPSHOT_CREATION_STATUS::IN_PROGRESS;
-        $BundleTask->bundleType = \SERVER_SNAPSHOT_CREATION_TYPE::GCE_STORAGE;
-
-        $msg = new \Scalr_Messaging_Msg_Rebundle(
-            $BundleTask->id,
-            $BundleTask->roleName,
-            array()
-        );
-
-        if (!$DBServer->SendMessage($msg))
-        {
-            $BundleTask->SnapshotCreationFailed("Cannot send rebundle message to server. Please check event log for more details.");
-            return;
-        }
-        else
-        {
-            $BundleTask->Log(sprintf(_("Snapshot creating initialized (MessageID: %s). Bundle task status changed to: %s"),
-                    $msg->messageId, $BundleTask->status
+        if ($BundleTask->osFamily == 'windows' || $DBServer->osType == 'windows') {
+            $BundleTask->bundleType = \SERVER_SNAPSHOT_CREATION_TYPE::GCE_WINDOWS;
+            $BundleTask->status = \SERVER_SNAPSHOT_CREATION_STATUS::IN_PROGRESS;
+            
+            $gce = $this->getClient($DBServer->GetEnvironmentObject());
+            
+            //Set root disk auto-remove to false
+            try {
+                $op1 = $gce->instances->setDiskAutoDelete(
+                    $DBServer->GetEnvironmentObject()->getPlatformConfigValue(self::PROJECT_ID),
+                    $DBServer->GetCloudLocation(),
+                    $DBServer->GetProperty(\GCE_SERVER_PROPERTIES::SERVER_NAME),
+                    false,
+                    'root'
+                );
+                
+                $BundleTask->Log("Calling setDiskAutoDelete(false) for root device. Operation: {$op1->name}");
+                
+            } catch (\Exception $e) {
+                $BundleTask->Log("Unable to perform setDiskAutoDelete(false) for ROOT device: ". $e->getMessage());
+            }
+            //TODO: Check operation status
+            sleep(2);
+            
+            // Kill VM
+            try {
+                $op2 = $gce->instances->delete(
+                    $DBServer->GetEnvironmentObject()->getPlatformConfigValue(self::PROJECT_ID),
+                    $DBServer->GetCloudLocation(),
+                    $DBServer->GetProperty(\GCE_SERVER_PROPERTIES::SERVER_NAME)
+                );
+                
+                $BundleTask->Log("Terminating VM. Operation: {$op2->name}");
+                
+            } catch (Exception $e) {
+                if (stristr($e->getMessage(), "not found")) {
+                    
+                } else {
+                    $BundleTask->Log("Unable to terminate VM: ". $e->getMessage());
+                }
+            }
+            
+            $BundleTask->setMetaData(array(
+                'gceSnapshotOpPhase1Id' => $op1->name,
+                'gceSnapshotOpPhase2Id' => $op2->name,
+                'gceSnapshotZone'       => $DBServer->cloudLocationZone
             ));
+        } else {
+            $BundleTask->status = \SERVER_SNAPSHOT_CREATION_STATUS::IN_PROGRESS;
+            $BundleTask->bundleType = \SERVER_SNAPSHOT_CREATION_TYPE::GCE_STORAGE;
+            
+            $msg = new \Scalr_Messaging_Msg_Rebundle(
+                $BundleTask->id,
+                $BundleTask->roleName,
+                array()
+            );
+    
+            if (!$DBServer->SendMessage($msg))
+            {
+                $BundleTask->SnapshotCreationFailed("Cannot send rebundle message to server. Please check event log for more details.");
+                return;
+            }
+            else
+            {
+                $BundleTask->Log(sprintf(_("Snapshot creating initialized (MessageID: %s). Bundle task status changed to: %s"),
+                        $msg->messageId, $BundleTask->status
+                ));
+            }
         }
 
         $BundleTask->setDate('started');
@@ -411,7 +588,7 @@ class GoogleCEPlatformModule extends AbstractPlatformModule implements \Scalr\Mo
                 return str_replace($projectName, "{$projectName}/global", self::RESOURCE_BASE_URL."{$objectName}");
             else
                 return self::RESOURCE_BASE_URL."{$objectName}";
-        } elseif ($objectType == 'machineTypes' || $objectType == 'disks') {
+        } elseif ($objectType == 'machineTypes' || $objectType == 'disks' || $objectType == 'diskTypes') {
             return self::RESOURCE_BASE_URL."{$projectName}/zones/{$cloudLocation}/{$objectType}/{$objectName}";
         } elseif ($objectType == 'regions' || $objectType == 'zones') {
             return self::RESOURCE_BASE_URL."{$projectName}/{$objectType}/{$objectName}";
@@ -491,14 +668,13 @@ class GoogleCEPlatformModule extends AbstractPlatformModule implements \Scalr\Mo
     {
         $environment = $DBServer->GetEnvironmentObject();
 
+        $rootDeviceSettings = null;
         if (!$launchOptions) {
             $launchOptions = new \Scalr_Server_LaunchOptions();
             $DBRole = $DBServer->GetFarmRoleObject()->GetRoleObject();
 
             $launchOptions->imageId = $DBRole->__getNewRoleObject()->getImage(\SERVER_PLATFORMS::GCE, $DBServer->GetProperty(\GCE_SERVER_PROPERTIES::CLOUD_LOCATION))->imageId;
-
             $launchOptions->serverType = $DBServer->GetFarmRoleObject()->GetSetting(DBFarmRole::SETTING_GCE_MACHINE_TYPE);
-
             $launchOptions->cloudLocation = $DBServer->GetFarmRoleObject()->CloudLocation;
 
             $userData = $DBServer->GetCloudUserData();
@@ -507,13 +683,22 @@ class GoogleCEPlatformModule extends AbstractPlatformModule implements \Scalr\Mo
 
             $networkName = $DBServer->GetFarmRoleObject()->GetSetting(DBFarmRole::SETTING_GCE_NETWORK);
             $onHostMaintenance = $DBServer->GetFarmRoleObject()->GetSetting(DBFarmRole::SETTING_GCE_ON_HOST_MAINTENANCE);
+            
+            
+            $osType = ($DBRole->getOs()->family == 'windows') ? 'windows' : 'linux';
+            
+            $rootDevice = json_decode($DBServer->GetFarmRoleObject()->GetSetting(\Scalr_Role_Behavior::ROLE_BASE_ROOT_DEVICE_CONFIG), true);
+            if ($rootDevice && $rootDevice['settings'])
+                $rootDeviceSettings = $rootDevice['settings'];
+            
         } else {
             $userData = array();
             $networkName = 'default';
+            $osType = 'linux';
         }
 
         if (!$onHostMaintenance)
-            $onHostMaintenance = 'TERMINATE';
+            $onHostMaintenance = 'MIGRATE';
 
         if ($DBServer->status == \SERVER_STATUS::TEMPORARY)
             $keyName = "SCALR-ROLESBUILDER-".SCALR_ID;
@@ -588,7 +773,7 @@ class GoogleCEPlatformModule extends AbstractPlatformModule implements \Scalr\Mo
 
         // Set scheduling
         $scheduling = new \Google_Service_Compute_Scheduling();
-        $scheduling->setAutomaticRestart(false);
+        $scheduling->setAutomaticRestart(true);
         $scheduling->setOnHostMaintenance($onHostMaintenance);
         $instance->setScheduling($scheduling);
 
@@ -685,6 +870,17 @@ class GoogleCEPlatformModule extends AbstractPlatformModule implements \Scalr\Mo
         $initializeParams = new \Google_Service_Compute_AttachedDiskInitializeParams();
         $initializeParams->sourceImage = $image;
         $initializeParams->diskName = $diskName;
+        
+        if ($rootDeviceSettings) {
+            $initializeParams->diskType = $this->getObjectUrl(
+                $rootDeviceSettings[FarmRoleStorageConfig::SETTING_GCE_PD_TYPE] ? $rootDeviceSettings[FarmRoleStorageConfig::SETTING_GCE_PD_TYPE] : 'pd-standard',
+                'diskTypes',
+                $environment->getPlatformConfigValue(self::PROJECT_ID),
+                $availZone
+            );
+            
+            $initializeParams->diskSizeGb = $rootDeviceSettings[FarmRoleStorageConfig::SETTING_GCE_PD_SIZE];
+        }
 
         $attachedDisk = new \Google_Service_Compute_AttachedDisk();
         $attachedDisk->setKind("compute#attachedDisk");
@@ -719,6 +915,8 @@ class GoogleCEPlatformModule extends AbstractPlatformModule implements \Scalr\Mo
         $items = array();
 
         // Set user data
+        $uData = '';
+
         foreach ($userData as $k=>$v)
             $uData .= "{$k}={$v};";
 
@@ -730,12 +928,25 @@ class GoogleCEPlatformModule extends AbstractPlatformModule implements \Scalr\Mo
             $item->setValue($uData);
             $items[] = $item;
         }
-
-        // Add SSH Key
-        $item = new \Google_Service_Compute_MetadataItems();
-        $item->setKey("sshKeys");
-        $item->setValue("scalr:{$publicKey}");
-        $items[] = $item;
+        
+        if ($osType == 'windows') {
+            // Add Windows credentials
+            $item = new \Google_Service_Compute_MetadataItems();
+            $item->setKey("gce-initial-windows-user");
+            $item->setValue("scalr");
+            $items[] = $item;
+            
+            $item = new \Google_Service_Compute_MetadataItems();
+            $item->setKey("gce-initial-windows-password");
+            $item->setValue(\Scalr::GenerateRandomKey(16) . rand(0,9));
+            $items[] = $item;
+        } else {
+            // Add SSH Key
+            $item = new \Google_Service_Compute_MetadataItems();
+            $item->setKey("sshKeys");
+            $item->setValue("scalr:{$publicKey}");
+            $items[] = $item;
+        }
 
         $metadata->setItems($items);
 
@@ -763,10 +974,12 @@ class GoogleCEPlatformModule extends AbstractPlatformModule implements \Scalr\Mo
                 'debug.zone'                                 => $result->zone,
             ]);
 
-            $DBServer->setOsType('linux');
+            $DBServer->setOsType($osType);
             $DBServer->cloudLocation = $availZone;
             $DBServer->cloudLocationZone = $availZone;
             $DBServer->imageId = $launchOptions->imageId;
+            // we set server history here
+            $DBServer->getServerHistory();
 
             return $DBServer;
         } else {

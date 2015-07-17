@@ -1,5 +1,12 @@
+Scalr.constants.distributionTypes = {
+    1: 'compute', //see x-costanalytics-compute in admin/analytics/admin.css
+    2: 'storage',
+    3: 'bandwidth',
+    4: 'other'
+};
+
 Ext.define('Scalr.ui.CostAnalyticsPeriod', {
-	extend: 'Ext.container.Container',
+    extend: 'Ext.container.Container',
     alias: 'widget.costanalyticsperiod',
 
     layout: 'hbox',
@@ -212,7 +219,8 @@ Ext.define('Scalr.ui.CostAnalyticsPeriod', {
         xtype: 'buttongroupfield',
         itemId: 'mode',
         defaults: {
-            width: 70
+            flex: 1,
+            minWidth: 70
         },
         margin: '0 12 0 0',
         items: [{
@@ -249,8 +257,8 @@ Ext.define('Scalr.ui.CostAnalyticsPeriod', {
         items: [{
             xtype: 'button',
             itemId: 'predefinedPrev',
-            cls: 'x-costanalytics-icon-arrow x-costanalytics-icon-arrow-left',
-            width: 29,
+            cls: 'x-btn-flag',
+            iconCls: 'x-btn-icon-previous',
             margin: '0 6 0 0',
             handler: function() {
                 this.up('costanalyticsperiod').selectNextPredefined(-1);
@@ -307,6 +315,7 @@ Ext.define('Scalr.ui.CostAnalyticsPeriod', {
                 itemId: 'monthInput',
                 fieldStyle: 'text-align:center',
                 editable: false,
+                width: 170,
                 maxValue: Scalr.utils.Quarters.getDate(),
                 listeners: {
                     change: function(field, value){
@@ -347,8 +356,8 @@ Ext.define('Scalr.ui.CostAnalyticsPeriod', {
         },{
             xtype: 'button',
             itemId: 'predefinedNext',
-            cls: 'x-costanalytics-icon-arrow x-costanalytics-icon-arrow-right',
-            width: 29,
+            cls: 'x-btn-flag',
+            iconCls: 'x-btn-icon-next',
             margin: '0 0 0 6',
             handler: function() {
                 this.up('costanalyticsperiod').selectNextPredefined(1);
@@ -371,7 +380,7 @@ Ext.define('Scalr.ui.CostAnalyticsPeriod', {
             format: 'M j, Y',
             maxValue: Scalr.utils.Quarters.getDate(),
             editable: false,
-            width: 120
+            width: 140
         },{
             xtype: 'label',
             html: '&ndash;',
@@ -385,7 +394,7 @@ Ext.define('Scalr.ui.CostAnalyticsPeriod', {
             format: 'M j, Y',
             editable: false,
             maxValue: Scalr.utils.Quarters.getDate(),
-            width: 120
+            width: 140
         },{
             xtype: 'button',
             itemId: 'customBtn',
@@ -401,14 +410,13 @@ Ext.define('Scalr.ui.CostAnalyticsPeriod', {
     },{
         xtype: 'button',
         itemId: 'refresh',
-        ui: 'paging',
-        iconCls: 'x-tbar-loading',
+        iconCls: 'x-btn-icon-refresh',
         tooltip: 'Refresh',
-        cls: 'x-btn-paging-toolbar-small',
+        //cls: 'x-btn-paging-toolbar-small',
         handler: function() {
             this.up('costanalyticsperiod').onChange();
         },
-        margin: '5 0 0 12'
+        margin: '0 0 0 12'
     }]
 });
 
@@ -416,6 +424,7 @@ Ext.define('Ext.picker.Quarter', {
     extend: 'Ext.picker.Month',
     alias: 'widget.quarterpicker',
     cls: 'x-quarterpicker',
+    focusable: false,
 
     beforeRender: function(){
         var me = this,
@@ -552,6 +561,7 @@ Ext.define('Ext.picker.Year', {
     cls: 'x-yearpicker',
     yearOffset: 3,
     totalYears: 12,
+    focusable: false,
 
     beforeRender: function(){
         var me = this,
@@ -670,7 +680,7 @@ Ext.define('Ext.picker.Year', {
 });
 
 Ext.define('Scalr.ui.FormQuarterField', {
-	extend: 'Ext.form.field.Date',
+    extend: 'Ext.form.field.Date',
     alias: 'widget.quarterfield',
 
     valueToRaw: function(value) {
@@ -755,7 +765,7 @@ Ext.define('Scalr.ui.FormQuarterField', {
 });
 
 Ext.define('Scalr.ui.FormYearField', {
-	extend: 'Ext.form.field.Date',
+    extend: 'Ext.form.field.Date',
     alias: 'widget.yearfield',
 
     valueToRaw: function(value) {
@@ -833,7 +843,7 @@ Ext.define('Scalr.ui.FormYearField', {
 });
 
 Ext.define('Scalr.ui.FormMonthField', {
-	extend: 'Ext.form.field.Date',
+    extend: 'Ext.form.field.Date',
     alias: 'widget.monthfield',
 
     initTime: '01 00:00:00',
@@ -860,6 +870,7 @@ Ext.define('Scalr.ui.FormMonthField', {
             startDay: me.startDay,
             minText: format(me.minText, me.formatDate(me.minValue)),
             maxText: format(me.maxText, me.formatDate(me.maxValue)),
+            focusable: false,
             listeners: {
                 select: {scope: me, fn: me.onSelect},
                 monthdblclick: {scope: me, fn: me.onOKClick},
@@ -910,7 +921,7 @@ Ext.define('Scalr.ui.CostAnalyticsListView', {
     itemSelector: '.x-dataview-tab',
     overflowX: 'hidden',
     overflowY: 'auto',
-    loadingText: 'Loading ...',
+    loadingText: '',
     roundCosts: true,
 
     initComponent: function() {
@@ -931,28 +942,28 @@ Ext.define('Scalr.ui.CostAnalyticsListView', {
                                                 '</tpl>'+
                                                 '{name} ' +
                                             '</div>'+
-                                            '<div style="font-size:90%;color:#999;line-height:14px;margin:-4px 0 0 22px">{ccName}</div>'+
+                                            '<div style="font-size:90%;color:#8daac5;line-height:14px;margin:-4px 0 0 22px">{ccName}</div>'+
                                         '</td>'+
                                         '<td style="width:24px;text-align:right">'+
-                                            '<div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;width:70px;white-space:nowrap">' + (me.hideBillingCode ? '' : '<span class="x-dataview-tab-param-value" title="{billingCode:htmlEncode}">{billingCode}</span>')+'</div>'+
+                                            '<div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;width:70px;white-space:nowrap">' + (me.hideBillingCode ? '' : '<span class="x-form-item-label-default" title="{billingCode:htmlEncode}">{billingCode}</span>')+'</div>'+
                                         '</td>'
                                     :
                                         '<td>'+
                                             '<div class="x-fieldset-subheader" style="margin-bottom:4px;width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" data-qtip="{[this.getItemTooltip(values)]}">{name} </div>'+
                                         '</td>'+
                                         '<td style="padding:0 12px 0 0;text-align:right">'+
-                                            '<div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;width:70px;white-space:nowrap">' + (me.hideBillingCode ? '' : '<span class="x-dataview-tab-param-value" title="{billingCode:htmlEncode}">{billingCode}</span>')+'</div>'+
+                                            '<div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;width:70px;white-space:nowrap">' + (me.hideBillingCode ? '' : '<span class="x-form-item-label-default" title="{billingCode:htmlEncode}">{billingCode}</span>')+'</div>'+
                                         '</td>'
                                     ),
                                 '</tr>',
                                 '<tr>',
-                                    '<td colspan="2" style="text-align:center;padding-bottom:0">',
-                                        '<span class="x-dataview-tab-param-value">Spent this month</span>',
+                                    '<td colspan="2" style="text-align:center;padding-bottom:0;padding-top:6px">',
+                                        '<span class="x-form-item-label-default">Spent this month</span>',
                                     '</td>',
                                 '</tr>',
                                 '<tr>',
                                     '<td colspan="2" style="text-align:center;padding-bottom:8px">',
-                                        '<span class="x-dataview-tab-param-title" style="font-size:22px">{[this.currency'+(me.roundCosts?'':'2')+'(values.periodTotal)]}</span> &nbsp;',
+                                        '<span class="x-bold" style="font-size:160%">{[this.currency'+(me.roundCosts?'':'2')+'(values.periodTotal)]}</span> &nbsp;',
                                         '<tpl if="growth!=0">' +
                                             '{[this.pctLabel(values.growth, values.growthPct, false, false, false, '+(me.roundCosts?'true':'false')+')]}' +
                                         '</tpl>'+
@@ -964,7 +975,7 @@ Ext.define('Scalr.ui.CostAnalyticsListView', {
                                     '<tpl if="budgetSpentPct!==null">',
                                         '<tr>',
                                             '<td colspan="2" style="text-align:center">',
-                                                '<span class="x-dataview-tab-param-value">Budget consumption <span class="x-dataview-tab-param-title">{budgetSpentPct}%</span></span>',
+                                                '<span class="x-form-item-label-default">Budget consumption</span> <span class="x-semibold"style="font-size:110%">{budgetSpentPct}%</span>',
                                             '</td>',
                                         '</tr>',
                                         '<tr>',
@@ -1038,7 +1049,7 @@ Ext.define('Scalr.ui.CostAnalyticsListView', {
 });
 
 Ext.define('Scalr.ui.CostAnalyticsSpends', {
-	extend: 'Ext.container.Container',
+    extend: 'Ext.container.Container',
     alias: 'widget.costanalyticsspends',
 
     subject: null,
@@ -1066,6 +1077,7 @@ Ext.define('Scalr.ui.CostAnalyticsSpends', {
 
     permanentSorter: {
         //"Other farms" must be in the bottom
+        id: 'presort',
         sorterFn: function(o1, o2){
             return o1.data.id === 'everything else' ? 1 : (o2.data.id === 'everything else' ? -1 : 0);
         }
@@ -1074,6 +1086,13 @@ Ext.define('Scalr.ui.CostAnalyticsSpends', {
     layout: {
         type: 'vbox',
         align: 'stretch'
+    },
+
+    applyPermanentSorter: function(store, sorters){
+        var sorters = store.getSorters();
+        sorters.suspendEvents(false);
+        sorters.insert(0, 'presort', this.permanentSorter);
+        sorters.resumeEvents();
     },
 
     initComponent: function() {
@@ -1094,13 +1113,12 @@ Ext.define('Scalr.ui.CostAnalyticsSpends', {
             }
             :
             function(record, item) {
-                var info, yField;
-                yField = item.series.type === 'line' ? item.series.yField : item.yField;
-                info = record.get('extrainfo')[yField] || {};
+                var info;
+                info = record.get('extrainfo')[item.field] || {};
                 this.update({
-                    id: yField,
+                    id: item.field,
                     type: me.type,
-                    name: me.type === 'clouds' ? Scalr.utils.getPlatformName(yField) : me.data[me.type][yField]['name'],
+                    name: me.type === 'clouds' ? Scalr.utils.getPlatformName(item.field) : me.data[me.type][item.field]['name'],
                     label: record.get('label'),
                     cost: info['cost'],
                     costPct: info['costPct'],
@@ -1132,7 +1150,6 @@ Ext.define('Scalr.ui.CostAnalyticsSpends', {
                 tpl: '{title}'
             },{
                 xtype: 'label',
-                cls: 'x-label-grey',
                 itemId: 'pieChartInfo',
                 flex: 1,
                 hidden: true,
@@ -1146,7 +1163,7 @@ Ext.define('Scalr.ui.CostAnalyticsSpends', {
                 itemId: 'viewSelector',
                 value: me.defaultView,
                 defaults: {
-                    width: 45
+                    width: 50
                 },
                 items: [{
                     cls: 'x-costanalytics-icon-line-chart',
@@ -1170,26 +1187,21 @@ Ext.define('Scalr.ui.CostAnalyticsSpends', {
                 }
             },{
                 xtype: 'button',
-				text: '<img src="' + Ext.BLANK_IMAGE_URL + '" class="x-icon-download" />',
+                iconCls: 'x-btn-icon-download',
                 tooltip: 'Download CSV',
-                margin: '0 10 0 20',
+                margin: '0 0 0 20',
                 listeners: {
                     mouseout: function() {
                         this.setTooltip('Download CSV');
                     }
                 },
-				handler: function () {
+                handler: function () {
                     this.setTooltip('');//avoid 2 tooltips
                     Scalr.message.InfoTip('Coming soon', this.el, {anchor: 'bottom'});
-					/*var params = Ext.clone(me.requestParams),
-                        url = 'dashboard';
-					params['type'] = me.type;
-                    if (me.level === 'account' || me.level === 'environment') {
-                        url = me.level;
-                    }
-
-					Scalr.utils.UserLoadFile('/analytics/'+ url + '/xGetPeriodCsv?' + Ext.urlEncode(params));*/
-				}
+                    /*var params = Ext.clone(me.requestParams);
+                    params['type'] = me.type;
+                    Scalr.utils.UserLoadFile(Scalr.utils.getUrlPrefix() + '/analytics/xGetPeriodCsv?' + Ext.urlEncode(params));*/
+                }
             }]
         },{
             xtype: 'container',
@@ -1336,7 +1348,7 @@ Ext.define('Scalr.ui.CostAnalyticsSpends', {
             res = [];
         Ext.Array.each(me.data['timeline'], function(item, index){
             //index, datetime, onchart, label, extrainfo, events, series1data, series2data....
-            var row = [index, item.datetime, item.onchart, item.label, {}, item.events, item.cost];
+            var row = [index, item.datetime, item.onchart || index, item.label, {}, item.events ? 1.1: -1, item.events, item.cost];
             Ext.Object.each(me.data[me.type], function(key, value){
                 row[4][key] = value['data'][index];
                 row.push(value['data'][index] ? value['data'][index]['cost'] : undefined);
@@ -1418,27 +1430,27 @@ Ext.define('Scalr.ui.CostAnalyticsSpends', {
                 var color = '#'+me.getItemColor(value, me.type);
                 series.push({
                     type: 'line',
-                    selectionTolerance: 8,
-                    skipWithinBoxCheck: true,
-                    shadowAttributes: [],
-                    axis: 'left',
+                    //selectionTolerance: 8,
+                    //skipWithinBoxCheck: true,
+                    //shadowAttributes: [],
+                    //axis: 'left',
                     xField: 'xLabel',
                     yField: value,
-                    seriesIsHidden: !Ext.Array.contains(enabledSeries, value),
+                    hidden: !Ext.Array.contains(enabledSeries, value),
                     //showMarkers: false,
                     style: {
-                        stroke: color,
+                        stroke: color/*,
                         opacity: 0.7,
-                        'stroke-width': 1
+                        'stroke-width': 1*/
                     },
-                    highlight: {
+                    /*highlight: {
                         //radius: 5,
                         fill: color,
                         'stroke-width': 0
-                    },
-                    highlightLine: false,
+                    },*/
+                    //highlightLine: false,
                     //smooth: true,
-                    markerConfig: {
+                    marker: {
                         type: 'circle',
                         radius: 3,
                         fill: color,
@@ -1446,8 +1458,15 @@ Ext.define('Scalr.ui.CostAnalyticsSpends', {
                         cursor: 'pointer'
                     },
                     listeners: {
-                        itemclick: function(item) {
-                            me.onShowChartViewDetails(item.storeItem.get('index'), item.series.yField, data[item.series.yField]['name'], item.storeItem.get('label'), item.storeItem.get('datetime'), item.storeItem.get('extrainfo')[item.series.yField]);
+                        itemclick: function(series, item, event) {
+                            me.onShowChartViewDetails(
+                                item.record.get('index'),
+                                item.field,
+                                data[item.field]['name'],
+                                item.record.get('label'),
+                                item.record.get('datetime'),
+                                item.record.get('extrainfo')[item.field]
+                            );
                         }
                     },
                     tips: me.chartViewTip
@@ -1455,27 +1474,33 @@ Ext.define('Scalr.ui.CostAnalyticsSpends', {
             });
         } else if (view === 'stacked') {
             series.push({
-                type: 'column',
-                shadowAttributes: [],
-                axis: 'bottom',
-                gutter: 80,
+                type: 'bar',
                 xField: 'xLabel',
-                yField: enabledSeries,
+                yField: seriesList,
+                hidden: Ext.Array.difference(seriesList, enabledSeries),
                 stacked: true,
-                xPadding: 0,
+                //xPadding: 0,
                 listeners: {
-                    itemclick: function(item) {
-                        me.onShowChartViewDetails(item.storeItem.get('index'), item.yField, data[item.yField]['name'], item.storeItem.get('label'), item.storeItem.get('datetime'), item.storeItem.get('extrainfo')[item.yField]);
+                    itemclick: function(series, item, event) {
+                        me.onShowChartViewDetails(
+                            item.record.get('index'),
+                            item.field,
+                            data[item.field]['name'],
+                            item.record.get('label'),
+                            item.record.get('datetime'),
+                            item.record.get('extrainfo')[item.field]
+                        );
                     }
                 },
                 style: {
                     cursor: 'pointer'
                 },
-                renderer: function(sprite, record, attr, index, store){
-                    var yField = sprite.surface.owner.series.getAt(0).yField,
-                        name = yField[index%yField.length];
-                    Ext.apply(attr, {fill: '#'+me.getItemColor(name, me.type)});
-                    return attr;
+                renderer: function(sprite, config, data, index){
+                    var color = '#' + me.getItemColor(sprite.getField(), me.type);
+                    return {
+                        fillStyle: color,
+                        strokeStyle: color
+                    };
                 },
                 tips: me.chartViewTip
             });
@@ -1501,8 +1526,8 @@ Ext.define('Scalr.ui.CostAnalyticsSpends', {
                         'stroke-width': 0
                     },
                     highlightLine: false,
-                    smooth: true,
-                    markerConfig: {
+                    //smooth: true,
+                    marker: {
                         type: 'circle',
                         radius: 2.5,
                         fill: '#00468c',
@@ -1511,8 +1536,8 @@ Ext.define('Scalr.ui.CostAnalyticsSpends', {
                     },
                     tips: me.chartViewTip,
                     listeners: {
-                        itemclick: function(item) {
-                            me.onShowChartViewDetails(item.storeItem.get('index'), item.series.yField, '', item.storeItem.get('label'));
+                        itemclick: function(series, item, event) {
+                            me.onShowChartViewDetails(item.record.get('index'), item.field, '', item.record.get('label'));
                         }
                     },
 
@@ -1521,50 +1546,60 @@ Ext.define('Scalr.ui.CostAnalyticsSpends', {
 
         }
         series.push({
-            type: 'events',
+            type: 'scatter',
             xField: 'xLabel',
-            yField: 'events',
-            shadowAttributes: [],
-            skipWithinBoxCheck: true,
-            yOffset: -12,
-            highlight: {
-                opacity: .6
+            yField: 'xEvents',
+            ignoreYOffset: true,
+            renderer: function(sprite, config, data, index){
+                var hasEvents = data.store.getData().items[index].get('events');
+                return {
+                    hidden: !hasEvents
+                };
             },
-            markerConfig: {
+            marker: {
                 type: 'image',
                 src: '/ui2/images/ui/analytics/event.png',
+                rotationRads: Math.PI,
                 width: 14,
-                height: 12,
-                cursor: 'pointer'
+                height: 12
             },
             listeners: {
-                itemclick: function(item) {
-                    me.onShowEvents(item.storeItem.get('label'), item.storeItem.get('datetime'));
+                itemclick: function(series, item, event) {
+                    me.onShowEvents(item.record.get('label'), item.record.get('datetime'));
                 }
             },
-            tips: {
+            tooltip: {
                 trackMouse: true,
-                //anchor: 'top',
                 hideDelay: 0,
                 showDelay: 0,
                 tpl: '<b>{label}</b><br/>{eventsCount} event(s)',
-                renderer: function(record, item) {
+                renderer: function(record) {
+                    this.eventsCount = record.get('events');
                     this.update({
                         label: record.get('label'),
                         eventsCount: record.get('events')
                     });
+                },
+                listeners: {
+                    beforeshow: function() {
+                        return !!this.eventsCount;
+                    }
                 }
             }
         });
 
         chartWrapper.remove(chartWrapper.getComponent('chart'));
         chart = chartWrapper.insert(0, {
-            xtype: 'chart',
+            xtype: 'cartesian',
             itemId: 'chart',
             height: 200,
-            theme: 'Scalr',
-            insetPaddingTop: 18,
+            theme: 'scalr',
+            allowSeriesOverflowY: true,
+            insetPadding: {top: 20},
             allSeries: seriesList,
+            plugins: {
+                ptype: 'chartitemevents'
+            },
             store: Ext.create('Ext.data.ArrayStore', {
                 fields: Ext.Array.merge(['index', {
                    name: 'datetime',
@@ -1572,50 +1607,50 @@ Ext.define('Scalr.ui.CostAnalyticsSpends', {
                    convert: function(v, record) {
                        return Scalr.utils.Quarters.getDate(v, true);
                    }
-                }, 'xLabel', 'label', 'extrainfo', 'events', 'total'], seriesList),
+                }, 'xLabel', 'label', 'extrainfo', 'xEvents', {name: 'events', type: 'int'}, 'total'], seriesList),
                 data: me.prepareDataForChartStore()
             }),
             toggleSeries: function(value) {
                 if (view === 'stacked') {
-                    chart.series.getAt(0).yField = Ext.Array.intersect(this.allSeries, value);
+                    var series = this.getSeries()[0];
+                    Ext.each(this.allSeries, function(item, index){
+                        series.setHiddenByIndex(index, !Ext.Array.contains(value, item));
+                    });
                 } else {
-                    chart.series.each(function(){
-                        if (this.type !== 'events') {
-                            this.seriesIsHidden = !Ext.Array.contains(value, this.yField);
+                    Ext.each(this.getSeries(), function(series) {
+                        if (series.type !== 'scatter') {
+                            series.setHidden(!Ext.Array.contains(value, series.getYField()));
                         }
                     });
                 }
-                chart.refresh();
+                this.redraw();
             },
             axes: [{
-                type: 'Numeric',
+                type: 'numeric',
                 position: 'left',
                 fields: Ext.Array.merge(seriesList, me.chartVeiwTotalSeries ? ['total'] : []),
-                label: {
-                    renderer: function(value){return value > 0 ? Ext.util.Format.currency(value, null, chart.axes.getAt(0).to > 3 ? 0 : 2) : 0;}
-                },
-                style : {
-                    stroke : 'red'
+                renderer: function(value, layout){
+                    return value > 0 ? Ext.util.Format.currency(value, null, layout.majorTicks.to > 3 ? 0 : 2) : '';
                 },
                 grid: {
-                    even: {
-                        fill: '#f3f6f8',
-                        stroke: '#eaf0f4',
-                        height: 1
-                    },
-                    odd: {
-                        fill: '#f3f6f8',
-                        stroke: '#eaf0f4',
-                        height: 1
-                    }
+                    fillStyle: '#d7e6f2',
+                    strokeStyle: '#b9d2ec'
                 },
-                minimum: 0,
-                majorTickSteps: 3
+                majorTickSteps: 4
             },{
-                type: 'Category',
+                type: 'numeric',
+                position: 'right',
+                fields: 'xEvents',
+                minimum: 0,
+                maximum: 1.1,
+                hidden: true
+            },{
+                type: 'category',
                 position: 'bottom',
-                dateFormat: 'M d',
-                fields: ['xLabel']
+                fields: ['xLabel'],
+                renderer: function(label) {
+                    return Ext.isNumeric(label) ? '' : label;
+                }
             }],
             series: series
         });
@@ -1626,19 +1661,15 @@ Ext.define('Scalr.ui.CostAnalyticsSpends', {
 
     onShowEvents: function(label, datetime) {
         var me = this,
-            url = 'dashboard',
             params = {
                 date: Ext.Date.format(datetime, 'Y-m-d H:i'),
                 mode: me.mode,
                 start: Ext.Date.format(me.startDate, 'Y-m-d'),
                 end: Ext.Date.format(me.endDate, 'Y-m-d')
             };
-        if (me.level === 'account') {
-            url = 'account';
+        if (Scalr.scope === 'account') {
             params['envId'] = me.data['envId'];
-        } else if (me.level === 'environment') {
-            url = 'environment';
-        } else {
+        } else if (Scalr.scope === 'scalr') {
             params['ccId'] = me.data['ccId'];
         }
         params['projectId'] = me.data['projectId'];
@@ -1648,7 +1679,7 @@ Ext.define('Scalr.ui.CostAnalyticsSpends', {
                 type: 'action',
                 msg: 'Loading events...'
             },
-            url: '/analytics/' + url + '/xGetTimelineEvents',
+            url: Scalr.utils.getUrlPrefix() + '/analytics/xGetTimelineEvents',
             params: params,
             success: function (res) {
                 me.showEvents(label, datetime, res['data']);
@@ -1665,7 +1696,8 @@ Ext.define('Scalr.ui.CostAnalyticsSpends', {
             eventsGrid = chartWrapper.insert(1, {
                 xtype: 'grid',
                 itemId: 'eventsGrid',
-                cls: 'x-grid-shadow x-grid-no-highlighting',
+                trackMouseOver: false,
+                disableSelection: true,
                 margin: '12 0 18',
                 store: {
                     fields: [{
@@ -1686,7 +1718,6 @@ Ext.define('Scalr.ui.CostAnalyticsSpends', {
                 columns: [{
                     xtype: 'templatecolumn',
                     header: 'Events',
-                    //dataIndex: 'dtime',
                     sortable: false,
                     resizable: false,
                     flex: 1,
@@ -1711,14 +1742,14 @@ Ext.define('Scalr.ui.CostAnalyticsSpends', {
                                         type = 'pricing';
                                     break;
                                 }
-                                return '<img src="' + Ext.BLANK_IMAGE_URL + '" title="'+title+'" class="x-costanalytics-icon-event x-costanalytics-icon-event-'+type+'" style="vertical-align:top;margin-top:-1px" />';
+                                return '<img src="' + Ext.BLANK_IMAGE_URL + '" title="'+title+'" class="x-costanalytics-icon-event x-costanalytics-icon-event-'+type+'" style="vertical-align:middle" />';
                             }
                         }
                     )
                 }],
                 dockedItems: [{
                     xtype: 'toolbar',
-                    ui: 'simple',
+                    ui: 'inline',
                     dock: 'top',
                     overlay: true,
                     layout: {
@@ -1726,10 +1757,10 @@ Ext.define('Scalr.ui.CostAnalyticsSpends', {
                         pack: 'end'
                     },
                     margin: 0,
-                    padding: '6 12 6 0',
+                    padding: '4 8 6 0',
                     style: 'z-index:2',
                     items: {
-                        style: 'background:transparent;box-shadow:none',
+                        ui: 'other',
                         iconCls: 'x-tool-img x-tool-close',
                         tooltip: 'Hide events',
                         handler: function() {
@@ -1751,7 +1782,44 @@ Ext.define('Scalr.ui.CostAnalyticsSpends', {
             pie,
             data = me.data['totals'][me.type],
             hideChart = me.data['totals']['cost'] == 0,
-            nameColumnTitle = me.type === 'clouds' ? 'Cloud' : (me.type === 'projects' ? 'Project' : 'Farm');
+            nameColumnTitle = me.type === 'clouds' ? 'Cloud' : (me.type === 'projects' ? 'Project' : 'Farm'),
+            grid,
+            chart;
+        chart = {
+            xtype: 'polar',
+            insetPadding: 0,
+            width: 160,
+            height: 160,
+            theme: 'scalr',
+            hidden: hideChart,
+            series: [{
+                type: 'pie',
+                field: 'cost',
+                donut: 24,
+                renderer: function(sprite, config, data, index){
+                    var record = data.store.getData().items[index];
+                    return {
+                        fillStyle: '#' + me.getItemColor(record.get('id'), me.type)
+                    };
+                },
+                tooltip: {
+                    trackMouse: true,
+                    hideDelay: 0,
+                    showDelay: 0,
+                    tpl: '{[this.itemCost(values, values.round)]}',
+                    renderer: function(record, item) {
+                        this.update({
+                            id: record.get('id'),
+                            type: me.type,
+                            name: me.type === 'clouds' ? Scalr.utils.getPlatformName(record.get('name')) : record.get('name'),
+                            cost: record.get('cost'),
+                            costPct: record.get('costPct'),
+                            round: me.roundCosts
+                        });
+                    }
+                }
+            }]
+        };
         viewWrapper.suspendLayouts();
         if (!pieWrapper) {
             pieWrapper = viewWrapper.add({
@@ -1766,7 +1834,7 @@ Ext.define('Scalr.ui.CostAnalyticsSpends', {
         }
         pie = pieWrapper.getComponent('pie');
         if (!pie) {
-            var cloudStore = {
+            var store = {
                 proxy: 'object',
                 fields: [{name: 'id', type: 'string'}, 'name', 'cost', 'costPct', 'prevCost', 'prevCostPct', 'growth', 'growthPct', 'curPrevPctGrowth', 'clouds', 'projects', 'farms', 'instances', 'cloudLocation', 'platform'],
                 sorters: [
@@ -1776,12 +1844,11 @@ Ext.define('Scalr.ui.CostAnalyticsSpends', {
                     direction: 'DESC'
                 }],
                 listeners: {
-                    beforesort: function(store, sorters){
-                        store.sorters.insert(0, 'presort', new Ext.util.Sorter(me.permanentSorter));
-                    }
+                    beforesort: Ext.bind(me.applyPermanentSorter, me)
                 },
                 data: data
             };
+            chart.store = store;
             pie = pieWrapper.add({
                 xtype: 'container',
                 itemId: 'pie',
@@ -1789,45 +1856,11 @@ Ext.define('Scalr.ui.CostAnalyticsSpends', {
                     type: 'hbox',
                     align: 'middle'
                 },
-                items: [{
-                    xtype: 'chart',
-                    store: cloudStore,
-                    shadow: false,
-                    insetPadding: 0,
-                    width: 160,
-                    height: 160,
-                    theme: 'Scalr',
-                    hidden: hideChart,
-                    series: [{
-                        type: 'pie',
-                        field: 'cost',
-                        donut: 24,
-                        renderer: function(sprite, record, attr, index, store){
-                            return Ext.apply(attr, {fill: '#'+me.getItemColor(record.get('id'), me.type)});
-                        },
-                        tips: {
-                            trackMouse: true,
-                            hideDelay: 0,
-                            showDelay: 0,
-                            tpl: '{[this.itemCost(values, values.round)]}',
-                            renderer: function(record, item) {
-                                this.update({
-                                    id: record.get('id'),
-                                    type: me.type,
-                                    name: me.type === 'clouds' ? Scalr.utils.getPlatformName(record.get('name')) : record.get('name'),
-                                    cost: record.get('cost'),
-                                    costPct: record.get('costPct'),
-                                    round: me.roundCosts
-                                });
-                            }
-                        }
-                    }]
-                },{
+                items: [chart,{
                     xtype: 'grid',
-                    cls: 'x-grid-shadow',
-                    store: cloudStore,
+                    store: store,
                     flex: 1,
-                    maxHeight: 224,
+                    maxHeight: 254,
                     margin: '0 0 0 16',
                     features: [{
                         ftype: 'summary',
@@ -1889,21 +1922,27 @@ Ext.define('Scalr.ui.CostAnalyticsSpends', {
                     }]
                 }]
             });
+            grid = pie.down('grid');
         } else {
-            var grid = pie.down('grid'),
-                chart = pie.down('chart'),
-                selected = [];
-            pie.suspendLayouts();
-            chart.store.loadData(data);
-
+            var selected = [];
+            grid = pie.down('grid');
             grid.getSelectionModel().selected.each(function(rec){
                 selected.push(rec.get('id'));
             });
             grid.getSelectionModel().deselectAll();
+
+            pie.suspendLayouts();
             grid.store.loadData(data);
+            var oldChart = pie.down('polar');
+            pie.remove(oldChart);
+            //oldChart.destroy();
+            chart.store = grid.store;
+            chart = pie.insert(0, chart);
+
             grid.columns[0].setText(nameColumnTitle);
             grid.columns[1].setText(Ext.String.capitalize(me.getPeriodTitle()) + ' total');
             grid.columns[2].setText('Previous ' + me.getPeriodTitle());
+
             if (selected.length > 0) {
                 var selection = [];
                 Ext.Array.each(selected, function(id){
@@ -1915,9 +1954,10 @@ Ext.define('Scalr.ui.CostAnalyticsSpends', {
                 var details = pieWrapper.down('#details');
                 if (details) details.hide();
             }
-            pie.resumeLayouts(true);
             chart.setVisible(!hideChart);
+            pie.resumeLayouts(true);
         }
+        grid.view.findFeature('summary').toggleSummaryRow(data && data.length > 0);
 
         viewWrapper.layout.setActiveItem(pieWrapper);
         viewWrapper.resumeLayouts(true);
@@ -1953,7 +1993,7 @@ Ext.define('Scalr.ui.CostAnalyticsSpends', {
                     }
                 }),
                 summaryRenderer: function(value) {
-                    return '<span style="color:#46a557;font-weight:bold;line-height:28px">Total spent:</span>';
+                    return '<span class="x-semibold">Total spend</span>';
                 }
             }];
         }
@@ -1980,7 +2020,7 @@ Ext.define('Scalr.ui.CostAnalyticsSpends', {
                     minWidth: 160,
                     summaryType: 'sum',
                     summaryRenderer: function(value) {
-                        return value > 0 ? Ext.String.format('<span style="color:#46a557;font-weight:bold;line-height:28px">{0}</span>', Ext.util.Format.currency(value, null, me.roundCosts ? 0 : 2)) : '';
+                        return value > 0 ? Ext.String.format('<span class="x-semibold">{0}</span>', Ext.util.Format.currency(value, null, me.roundCosts ? 0 : 2)) : '';
                     },
                     tpl: '<tpl if="col'+index+'_1">{[this.currency'+(me.roundCosts ? '' : '2')+'(values.col'+index+'_1)]} <tpl if="col'+index+'_2&&col'+index+'_2!=0"><span style="color:#999">({[values.col'+index+'_2>0?\'+\':\'\']}{col'+index+'_2:round(2)}%)</span></tpl></tpl>'
                 });
@@ -2011,6 +2051,10 @@ Ext.define('Scalr.ui.CostAnalyticsSpends', {
                     listeners: {
                         boxready: function() {
                             scrollToColumn.call(this.view.normalView, todayColumnIndex);
+                        },
+                        //extjs 5.0 bug fix, remove after switching to 5.1.1
+                        beforereconfigure: function(view, store, columns, oldStore) {
+                            this.view.normalView.findFeature('summary').summaryRecord = null;
                         }
                         /*reconfigure: function() {
                             scrollToColumn.call(this.view.normalView, this.todayColumnIndex);
@@ -2061,8 +2105,8 @@ Ext.define('Scalr.ui.CostAnalyticsSpends', {
         var me = this,
             wrapper = me.down('#' + view + 'Wrapper'),
             details = wrapper.down('#details'),
-            titleData, title2Data, headerData, maxItemCost = 0, location, platform,
-            totalCost, resources, distribution, totalGrowth, totalGrowthPct;
+            titleData, title2Data,
+            resources, distributionTypes = [], maxUsageItemCost = 0;
 
         if (id === 'total') {
             titleData = {label: label};
@@ -2070,51 +2114,128 @@ Ext.define('Scalr.ui.CostAnalyticsSpends', {
                 //id: id,
                 name: me.data['name']
             };
-            resources = me.data['timeline'][index]['instances'];
-            totalCost = me.data['timeline'][index]['cost'];
-            totalGrowth = me.data['timeline'][index]['growth'];
-            totalGrowthPct = me.data['timeline'][index]['growthPct'];
+            resources = me.data['timeline'][index]['distributionTypes'];
 
         } else {
-            resources = data['instances'];
-            Ext.each(me.data['totals'][me.type], function(item){
-                if (item.id == id) {
-                    location = item.cloudLocation;
-                    platform = item.platform;
-                    return false;
-                }
-            });
+            resources = data['distributionTypes'];
             titleData = {label: label || me.down('#title').data.title};
             title2Data = {
                 id: id,
-                name: name,
-                location: location,
-                platform: platform
+                name: name
             };
-            totalCost = data['cost'];
-            totalGrowth = data['growth'];
-            totalGrowthPct = data['growthPct'];
+            Ext.each(me.data['totals'][me.type], function(item){
+                if (item.id == id) {
+                    title2Data.location = item.cloudLocation;
+                    title2Data.platform = item.platform;
+                    return false;
+                }
+            });
         }
-        distribution = {
-            compute: {cost: totalCost, growth: totalGrowth, growthPct: totalGrowthPct},
-            storage: {cost: 0},
-            bandwidth: {cost: 0},
-            other: {cost: 0}
-        };
+
+        Ext.each(resources, function(dType){
+            var distributionType = {
+                id: dType.id,
+                name: Scalr.constants.distributionTypes[dType.id] || dType.id,
+                cost: dType.cost,
+                growth: dType.growth,
+                growthPct: dType.growthPct,
+                usageItems: []
+            };
+            Ext.each(dType.usageTypes, function(uType){
+                Ext.each(uType.usageItems, function(uItem){
+                    var uItemClone = Ext.clone(uItem);
+                    uItemClone.usageType = (uType['displayName'] || uType['name']) + ( uType['measure'] ?  ', ' + uType['measure'] : '');
+                    distributionType.usageItems.push(uItemClone);
+                    maxUsageItemCost = maxUsageItemCost > uItemClone['cost'] ? maxUsageItemCost : uItemClone['cost'];
+                });
+            });
+            distributionTypes[dType.id] = distributionType;
+        });
 
         wrapper.suspendLayouts();
 
-        Ext.Array.each(resources, function(item){
-            maxItemCost = maxItemCost > item['cost'] ? maxItemCost : item['cost'];
-        });
-
-        if (maxItemCost != 0) {
-            Ext.each(resources, function(row){
-                row['pctOfMax'] = row['cost']/maxItemCost*100;
+        if (maxUsageItemCost != 0) {
+            Ext.Object.each(distributionTypes, function(dTypeId, dType){
+                Ext.each(dType.usageItems, function(usageItem) {
+                    usageItem['pctOfMax'] = usageItem['cost']/maxUsageItemCost*100;
+                });
             });
         }
 
         if (!details) {
+            var distributionItems = [];
+            Ext.Object.each(Scalr.constants.distributionTypes, function(dTypeId, dTypeName){
+                distributionItems.push.apply(distributionItems, [{
+                    xtype: 'component',
+                    itemId: 'dType' + dTypeId,
+                    data: distributionTypes[dTypeId] || [],
+                    hidden: !distributionTypes[dTypeId],
+                    tpl:
+                        '<div class="x-cabox x-cabox-transparent" style="text-align:left;padding:24px 0 12px">' +
+                            '<span class="x-cabox-title x-costanalytics-{name}" style="margin:0 18px 0 0">{name}</span>'+
+                            '<span class="title1">{[this.currency2(values.cost, true)]}</span>' +
+                            '<tpl if="growth!=0">' +
+                                ' &nbsp;{[this.pctLabel(values.growth, values.growthPct, false, false, false, false)]}' +
+                            '</tpl>' +
+                        '</div>'
+                },{
+                    xtype: 'grid',
+                    flex: 1,
+                    margin: 0,
+                    itemId: 'dTypeGrid' + dTypeId,
+                    cls: 'x-grid-shadow x-grid-no-highlighting',
+                    features: [{ftype:'grouping', groupHeaderTpl: '{name}'}],
+                    hidden: !distributionTypes[dTypeId],
+                    viewConfig: {
+                        emptyText: 'Nothing found',
+                        deferEmptyText: false
+                    },
+                    store: {
+                        proxy: 'object',
+                        groupField: 'usageType',
+                        fields: [{name: 'id', type: 'string'}, 'name', 'cost', 'costPct', 'growth', 'growthPct', 'growthPrevPoint', 'growthPrevPointPct', 'min', 'max', 'avg', {name: 'hours', type: 'int'}, 'displayHours', 'pctOfMax', 'usageType'],
+                        sorters: {
+                            property: 'cost',
+                            direction: 'DESC'
+                        },
+                        data: distributionTypes[dTypeId] ? distributionTypes[dTypeId].usageItems : []
+                    },
+                    columns: [{
+                        header: 'Resource',
+                        dataIndex: 'name',
+                        flex: 1,
+                        xtype: 'templatecolumn',
+                        tpl: '<span class="x-costanalytics-compute">{name}</span>'
+                    },{
+                        header: 'Spend (% of total)',
+                        dataIndex: 'cost',
+                        xtype: 'templatecolumn',
+                        flex: 1.4,
+                        tpl: '<div class="bar-inner" style="width:{pctOfMax}%"><span>{[this.currency2(values.cost)]}</span></div>'
+                    },{
+                        dataIndex: 'costPct',
+                        sortable: false,
+                        resizable: false,
+                        width: 70,
+                        xtype: 'templatecolumn',
+                        tpl: '{costPct}%'
+                    },{
+                        header: 'Count (Min/Avg/Max)',
+                        dataIndex: 'count',
+                        sortable: false,
+                        width: 200,
+                        xtype: 'templatecolumn',
+                        tpl: '{min}/{avg}/{max}'
+                    },{
+                        header: 'Usage',
+                        dataIndex: 'hours',
+                        width: 180,
+                        xtype: 'templatecolumn',
+                        tpl: '<tpl if="displayHours">{displayHours}<tpl else>&mdash;</tpl>'
+                    }]
+                }]);
+            });
+
             details = wrapper.add({
                 xtype: 'container',
                 itemId: 'details',
@@ -2159,93 +2280,23 @@ Ext.define('Scalr.ui.CostAnalyticsSpends', {
                         }
                     }]
                 },{
-                    xtype: 'component',
-                    itemId: 'distribution',
-                    data: distribution,
-                    tpl:
-                        '<table style="width:100%"><tr>' +
-                        Ext.Array.map(['compute', 'storage', 'bandwidth', 'other'], function(type) {
-                            return  '<td style="width:25%;border:0" class="x-cabox">' +
-                                        '<div class="x-cabox-title x-costanalytics-'+type+'" style="background:transparent;">'+type+'</div>'+
-                                            '<div style="margin: 8px 0 0">' +
-                                                (type === 'compute' ?
-                                                '<span class="title1" style="position:relative;top:-4px">{[this.currency2(values.'+type+'.cost, true)]}</span>' +
-                                                '<tpl if="'+type+'.growth!=0">' +
-                                                    ' &nbsp;{[this.pctLabel(values.'+type+'.growth, values.'+type+'.growthPct, false, false, false, false)]}' +
-                                                '</tpl>' : '<span class="title1" style="position:relative;top:-4px">$0</span>')+
-                                            '</div>' +
-                                        '</div>'+
-                                    '</td>';
-                    }).join('') + '</tr></table>'
-                },{
-                    xtype: 'grid',
-                    flex: 1,
-                    margin: 0,
-                    cls: 'x-grid-shadow x-grid-no-highlighting',
-                    features: [{
-                        ftype: 'summary',
-                        id: 'summary',
-                        dock: 'bottom'
-                    }],
-                    viewConfig: {
-                        emptyText: 'Nothing found',
-                        deferEmptyText: false
-                    },
-                    store: {
-                        proxy: 'object',
-                        fields: [{name: 'id', type: 'string'}, 'name', 'cost', 'costPct', 'growth', 'growthPct', 'growthPrevPoint', 'growthPrevPointPct', 'min', 'max', 'avg', 'hours', 'pctOfMax'],
-                        sorters: {
-                            property: 'cost',
-                            direction: 'DESC'
-                        },
-                        data: resources
-                    },
-                    columns: [{
-                        header: 'Resource',
-                        dataIndex: 'name',
-                        flex: 1,
-                        xtype: 'templatecolumn',
-                        tpl: '<span class="x-costanalytics-compute">{name}</span>',
-                        summaryRenderer: function() {
-                            return 'Total spend:';
-                        }
-                    },{
-                        header: 'Spend (% of total)',
-                        dataIndex: 'cost',
-                        xtype: 'templatecolumn',
-                        flex: 1.4,
-                        tpl: '<div class="bar-inner" style="margin:0;width:{pctOfMax}%"><span>{[this.currency2(values.cost)]}</span></div>',
-                        summaryType: 'sum',
-                        summaryRenderer: function(value) {
-                            return Ext.util.Format.currency(value);
-                        }
-                    },{
-                        dataIndex: 'costPct',
-                        sortable: false,
-                        resizable: false,
-                        width: 60,
-                        xtype: 'templatecolumn',
-                        tpl: '{costPct}%'
-                    },{
-                        header: 'Count (Min/Avg/Max)',
-                        dataIndex: 'count',
-                        width: 200,
-                        xtype: 'templatecolumn',
-                        tpl: '{min}/{avg}/{max}'
-                    },{
-                        header: 'Usage',
-                        dataIndex: 'hours',
-                        width: 180,
-                        xtype: 'templatecolumn',
-                        tpl: '<tpl if="hours">{hours} hour{[values.hours!=1?\'s\':\'\']}</tpl>'
-                    }]
+                    xtype: 'container',
+                    margin: '0 0 12 0',
+                    items: distributionItems
                 }]
             });
         } else {
             details.down('#title').update(titleData);
             details.down('#title2').update(title2Data);
-            details.down('#distribution').update(distribution);
-            details.down('grid').store.loadData(resources);
+            Ext.Object.each(Scalr.constants.distributionTypes, function(dTypeId, dTypeName){
+                if (distributionTypes[dTypeId]) {
+                    details.down('#dType' + dTypeId).setVisible(true).update(distributionTypes[dTypeId]);
+                    details.down('#dTypeGrid' + dTypeId).setVisible(true).store.loadData(distributionTypes[dTypeId].usageItems);
+                } else {
+                    details.down('#dType' + dTypeId).setVisible(false);
+                    details.down('#dTypeGrid' + dTypeId).setVisible(false);
+                }
+            });
         }
         details.show();
         var totals = wrapper.down('#totals');
@@ -2256,7 +2307,7 @@ Ext.define('Scalr.ui.CostAnalyticsSpends', {
 });
 
 Ext.define('Scalr.ui.AnalyticsBoxes', {
-	extend: 'Ext.container.Container',
+    extend: 'Ext.container.Container',
     alias: 'widget.analyticsboxes',
 
     layout: {
@@ -2298,7 +2349,7 @@ Ext.define('Scalr.ui.AnalyticsBoxes', {
 
 //admin
 Ext.define('Scalr.ui.AnalyticsBoxesAdmin', {
-	extend: 'Scalr.ui.AnalyticsBoxes',
+    extend: 'Scalr.ui.AnalyticsBoxes',
     alias: 'widget.analyticsboxesadmin',
 
     loadData: function(mode, quarter, startDate, endDate, data) {
@@ -2352,7 +2403,7 @@ Ext.define('Scalr.ui.AnalyticsBoxesAdmin', {
                 value: totals['budget']['budgetSpentPct'],
                 currentPeriodSpend: mode === 'month' ? '(' + totals['budget']['budgetSpentThisPeriodPct'] + '% used in ' + Ext.Date.format(startDate, 'F Y') + ')' : ''
             });
-            budgetCt.down('chart').store.loadData([[totals['budget']['budgetSpentPct']]]);
+            budgetCt.down('polar').store.loadData([[totals['budget']['budgetSpentPct']]]);
             budgetCt.down('#budgetRemain').update(totals['budget']);
             this.down('#budgetAlert').setVisible(!!totals['budget']['budgetAlert']).update({
                 ccId: data['ccId'],
@@ -2398,20 +2449,20 @@ Ext.define('Scalr.ui.AnalyticsBoxesAdmin', {
         minWidth: 160,
         maxWidth: 500,
         tpl: '<div class="x-cabox-title">{title}</div>'+
-             '<div style="margin:16px 0 0">Spent' +
-                '<div style="margin: 8px 0 0">' +
-                    '<span class="title1" style="position:relative;top:-4px">{[this.currency(values.cost)]}</span>' +
+             '<div style="margin:16px 0 0"><span class="x-form-item-label-default">Spent</span>' +
+                '<div>' +
+                    '<span class="title1">{[this.currency(values.cost)]}</span>' +
                     '<tpl if="growth!=0">' +
                         ' &nbsp;{[this.pctLabel(values.growth, values.growthPct)]}' +
                     '</tpl>'+
                 '</div>' +
              '</div>'+
              '<div style="margin:16px 0 0;padding:0 0 6px 0;min-height:51px">'+
-                '<div style="margin:0 0 6px">Prev. {period} ({prevPeriod})</div>' +//Same time previous {period}
+                '<div><span class="x-form-item-label-default">Prev. {period}</span> ({prevPeriod})</div>' +//Same time previous {period}
                 '<span class="title2">{[this.currency(values.prevCost)]}</span>&nbsp; ' +
              '</div>'+
              '<tpl if="forecastCost!==null">' +
-                '<div style="margin:6px 0 6px">{period:capitalize} end estimate</div>' +
+                '<div style="margin:6px 0 0" class="x-form-item-label-default">{period:capitalize} end estimate</div>' +
                 '<span class="title2" style="padding-right:1em">~ {[this.currency(values.forecastCost)]}</span>' +
              '</tpl>'
     },{
@@ -2422,17 +2473,17 @@ Ext.define('Scalr.ui.AnalyticsBoxesAdmin', {
         minWidth: 160,
         maxWidth: 500,
         tpl: '<div class="x-cabox-title">Trends</div>' +
-             '<div style="margin:16px 0 0">{rollingAverageMessage}<div style="margin: 4px 0 8px"><span class="title1">{[this.currency(values.rollingAverage)]}</span> per {interval}</div></div>'+
-             '<div style="margin:20px 0 14px">Top spender' +
+             '<div style="margin:16px 0 0"><span class="x-form-item-label-default">{rollingAverageMessage}</span><div style="margin: 4px 0 8px"><span class="title1">{[this.currency(values.rollingAverage)]}</span> per {interval}</div></div>'+
+             '<div style="margin:20px 0 0"><span class="x-form-item-label-default">Top spender</span>' +
                 '<div style="margin: 4px 0 8px">' +
                     '<tpl if="topspender">' +
-                        '<span style="position:relative;top:2px;font-weight:bold">'+
+                        '<b style="position:relative;top:4px;">'+
                             '<tpl if="subject==\'costcenters\'">' +
-                                '<a href="#/analytics/projects?projectId={[values.topspender.id]}">{[values.topspender.name]}</a>' +
+                                '<a href="#/admin/analytics/projects?projectId={[values.topspender.id]}">{[values.topspender.name]}</a>' +
                             '<tpl else>' +
                                 '<a href="#farms" data-qtip="{[this.farmInfo(values.topspender, true)]}">{[values.topspender.name]}</a>' +
                             '</tpl>' +
-                        '</span>' +
+                        '</b>' +
                         '<tpl if="topspender.growth!=0">' +
                             ' &nbsp;{[this.pctLabel(values.topspender.growth, values.topspender.growthPct)]}' +
                         '</tpl>'+
@@ -2443,10 +2494,10 @@ Ext.define('Scalr.ui.AnalyticsBoxesAdmin', {
              '</div>'+
              '<table>' +
              '<tr><td style="width:50%;vertical-align:top">' +
-                     '<div style="margin:0 0 6px 0;padding:6px 0 0;">Period high ({periodHighDate})</div>' +
+                     '<div style="margin:0 0 6px 0;padding:6px 0 0;"><span class="x-form-item-label-default">Period high</span><br/>({periodHighDate})</div>' +
                      '<div class="title2">{[this.currency(values.periodHigh)]}</div>' +
              '</td><td style="vertical-align:top">' +
-                     '<div style="margin:6px 0 6px 0;">Period low ({periodLowDate})</div>' +
+                     '<div style="margin:6px 0 6px 0;"><span class="x-form-item-label-default">Period low</span><br/>({periodLowDate})</div>' +
                      '<div class="title2">{[this.currency(values.periodLow)]}</div>' +
              '</td></tr>' +
              '</table>',
@@ -2479,7 +2530,7 @@ Ext.define('Scalr.ui.AnalyticsBoxesAdmin', {
         items: [{
             xtype: 'component',
             itemId: 'title',
-            tpl: '<div class="x-cabox-title"><a style="color:#212b3d;float:left" href="#/analytics/budgets?ccId={ccId}<tpl if="projectId">&projectId={projectId}</tpl>">{[Ext.isNumeric(values.quarter)?\'Q\':\'\']}{quarter} {year} budget</a><span style="float:right;line-height:38px" class="title2">{[this.currency(values.total)]}</span></div>'
+            tpl: '<div class="x-cabox-title"><a style="color:#335071;float:left" href="#/admin/analytics/budgets?ccId={ccId}<tpl if="projectId">&projectId={projectId}</tpl>">{[Ext.isNumeric(values.quarter)?\'Q\':\'\']}{quarter} {year} budget</a><span style="float:right;" class="title2">{[this.currency(values.total)]}</span></div>'
         },{
             xtype: 'container',
             flex: 1,
@@ -2491,27 +2542,28 @@ Ext.define('Scalr.ui.AnalyticsBoxesAdmin', {
                 xtype: 'container',
                 flex: 1,
                 items: [{
-                    xtype: 'chart',
-                    width: 140,
+                    xtype: 'polar',
+                    theme: 'scalr',
                     height: 110,
                     store: Ext.create('Ext.data.ArrayStore', {
                         fields: ['value']
                     }),
-                    insetPadding: 0,
                     axes: [{
-                        type: 'gauge',
+                        type: 'numeric',
                         position: 'gauge',
                         minimum: 0,
                         maximum: 100,
-                        steps: 1,
-                        margin: 7
+                        hidden: true
                     }],
                     series: [{
                         type: 'gauge',
                         field: 'value',
                         donut: 70,
-                        renderer: function(sprite, record, attr, index, store){
-                            if (index === 0) {
+                        totalAngle: Math.PI,
+                        needleLength: 100,
+                        renderer: function(sprite, config, data, index){
+                            var record = data.store.getData().items[index];
+                            if (record) {
                                 var value = record.get('value'),
                                     color;
                                 if (value >= 95) {
@@ -2524,14 +2576,16 @@ Ext.define('Scalr.ui.AnalyticsBoxesAdmin', {
                             } else {
                                 color = '#f0f1f4';
                             }
-                            return Ext.apply(attr, {fill: color});
+                            return {
+                                fillStyle: color
+                            };
                         }
                     }]
                 },{
                     xtype: 'component',
                     itemId: 'budgetSpentPct',
-                    tpl: '<div class="title1" style="font-size:17px">{value}% <span>used</span></div><p>{currentPeriodSpend}</p>',
-                    margin: '-16 0 0 0'
+                    tpl: '<div><span class="title1" style="font-size:17px">{value}%</span> used</div><p>{currentPeriodSpend}</p>',
+                    margin: '-36 0 0 0'
                 }]
             },{
                 xtype: 'component',
@@ -2539,13 +2593,13 @@ Ext.define('Scalr.ui.AnalyticsBoxesAdmin', {
                 itemId: 'budgetRemain',
                 tpl: new Ext.XTemplate(
                      '<tpl if="closed">' +
-                        '<div style="margin: 16px 0 0">Final spend<div class="title1 x-costanalytics-{[this.getColorCls(values)]}" style="margin: 4px 0 8px">{[this.currency(values.budgetFinalSpent)]}</div></div>' +
-                        '<div style="padding:10px 0 0">Cost variance<div class="title2 x-costanalytics-{[values.costVariance>0?\'red\':\'green\']}" data-qtip="{costVariancePct}%">{[values.costVariance>0?\'+\':\'\']}{costVariance:currency}</div></div>'+
-                        '<div style="padding:12px 0 0">Exceeded on<tpl if="estimateDate"><div class="title2 x-costanalytics-red" style="margin: 4px 0 8px">{estimateDate:date(\'M j Y\')}</div><tpl else><div class="title2">&ndash;</div></tpl></div>'+
+                        '<div style="margin: 16px 0 0"><span class="x-form-item-label-default">Final spend</span><div class="title1 x-costanalytics-{[this.getColorCls(values)]}" style="margin: 4px 0 8px">{[this.currency(values.budgetFinalSpent)]}</div></div>' +
+                        '<div style="padding:10px 0 0"><span class="x-form-item-label-default">Cost variance</span><div class="title2 x-costanalytics-{[values.costVariance>0?\'red\':\'green\']}" data-qtip="{costVariancePct}%">{[values.costVariance>0?\'+\':\'\']}{costVariance:currency}</div></div>'+
+                        '<div style="padding:12px 0 0"><span class="x-form-item-label-default">Exceeded on</span><tpl if="estimateDate"><div class="title2 x-costanalytics-red" style="margin: 4px 0 8px">{estimateDate:date(\'M j Y\')}</div><tpl else><div class="title2">&ndash;</div></tpl></div>'+
                      '<tpl else>'+
-                        '<div style="margin: 16px 0 0">Remaining<div class="title1 x-costanalytics-{[this.getColorCls(values)]}" style="margin: 4px 0 8px">{[this.currency(values.budgetRemain)]}</div></div>' +
-                        '<div style="padding:10px 0 0">Overspend estimate<div class="title2<tpl if="estimateOverspend&gt;0"> x-costanalytics-red</tpl>" <tpl if="estimateOverspendPct&gt;0">data-qtip="{estimateOverspendPct}% of budget"</tpl> style="margin: 4px 0 0">~{[this.currency(values.estimateOverspend)]}</div></div>'+
-                        '<div style="padding:12px 0 0">Exceed{[values.budgetRemain>0?\'\':\'ed\']} on<tpl if="estimateDate"><div class="title2 x-costanalytics-red" style="margin: 4px 0 8px">{estimateDate:date(\'M j Y\')}</div><tpl else><div class="title2">&ndash;</div></tpl></div>'+
+                        '<div style="margin: 16px 0 0"><span class="x-form-item-label-default">Remaining</span><div class="title1 x-costanalytics-{[this.getColorCls(values)]}" style="margin: 4px 0 8px">{[this.currency(values.budgetRemain)]}</div></div>' +
+                        '<div style="padding:10px 0 0"><span class="x-form-item-label-default">Overspend estimate</span><div class="title2<tpl if="estimateOverspend&gt;0"> x-costanalytics-red</tpl>" <tpl if="estimateOverspendPct&gt;0">data-qtip="{estimateOverspendPct}% of budget"</tpl> style="margin: 4px 0 0">~{[this.currency(values.estimateOverspend)]}</div></div>'+
+                        '<div style="padding:12px 0 0"><span class="x-form-item-label-default">Exceed{[values.budgetRemain>0?\'\':\'ed\']} on</span><tpl if="estimateDate"><div class="title2 x-costanalytics-red" style="margin: 4px 0 8px">{estimateDate:date(\'M j Y\')}</div><tpl else><div class="title2">&ndash;</div></tpl></div>'+
                      '</tpl>',
                      {
                         getColorCls: function(values) {
@@ -2567,7 +2621,7 @@ Ext.define('Scalr.ui.AnalyticsBoxesAdmin', {
             itemId: 'budgetAlert',
             margin: '6 0 0',
             hidden: true,
-            tpl: '<img src="' + Ext.BLANK_IMAGE_URL + '" class="x-icon-warning"/>&nbsp;&nbsp;<a class="x-link-warning" href="#/analytics/budgets?ccId={ccId}<tpl if="projectId">&projectId={projectId}</tpl>">{alert}</a>'
+            tpl: '<img src="' + Ext.BLANK_IMAGE_URL + '" class="x-grid-icon x-grid-icon-warning"/>&nbsp;&nbsp;<a class="x-link-warning" href="#/admin/analytics/budgets?ccId={ccId}<tpl if="projectId">&projectId={projectId}</tpl>">{alert}</a>'
         }]
     },{
         xtype: 'container',
@@ -2579,112 +2633,106 @@ Ext.define('Scalr.ui.AnalyticsBoxesAdmin', {
         items: [{
             xtype: 'component',
             itemId: 'title',
-            tpl: '<div class="x-cabox-title"><a style="color:#212b3d;float:left" href="#/analytics/budgets?ccId={ccId}<tpl if="projectId">&projectId={projectId}</tpl>">{[Ext.isNumeric(values.quarter)?\'Q\':\'\']}{quarter} {year} Budget</a><span style="float:right;font-weight:normal"><i>{text}</i></span></div>'
+            tpl: '<div class="x-cabox-title"><a style="color:#335071;float:left" href="#/admin/analytics/budgets?ccId={ccId}<tpl if="projectId">&projectId={projectId}</tpl>">{[Ext.isNumeric(values.quarter)?\'Q\':\'\']}{quarter} {year} Budget</a><span style="float:right;font-weight:normal"><i>{text}</i></span></div>'
         },{
             xtype: 'component',
             itemId: 'finalSpent',
             margin: '56 0 0 0',
-            tpl: 'Final spend<div class="title1" style="margin: 4px 0 8px">{[this.currency(values.budgetFinalSpent)]}</div>'
+            tpl: '<span class="x-form-item-label-default">Final spend</span><div class="title1" style="margin: 4px 0 8px">{[this.currency(values.budgetFinalSpent)]}</div>'
         },{
             xtype: 'button',
             itemId: 'button',
             margin: '56 0 0 0',
             padding: '0 24',
-            cls: 'x-btn-green-bg',
+            cls: 'x-btn-green',
             height: 52,
             text: 'Define a budget',
             handler: function(){
                 var data = this.up('analyticsboxesadmin').data;
-                Scalr.event.fireEvent('redirect', '#/analytics/budgets?ccId=' + data['ccId'] + (data['projectId'] ? '&projectId=' + data['projectId'] : ''));
+                Scalr.event.fireEvent('redirect', '#/admin/analytics/budgets', false, {ccId: data['ccId'], projectId: data['projectId']});
             }
         }]
     }]
 });
 
 Ext.define('Scalr.ui.CostAnalyticsChartSummary', {
-	extend: 'Ext.chart.Chart',
+    extend: 'Ext.chart.CartesianChart',
     alias: 'widget.costanalyticssummary',
 
-    theme: 'Scalr',
+    theme: 'scalr',
+    plugins: {
+        ptype: 'chartitemevents'
+    },
+    interactions: 'itemhighlight',
     fieldsConfig: [],
+    insetPadding: '10 0',
     loadData: function(data) {
-        this.series.each(function(series){
+        /*this.series.each(function(series){
             series.highlight = true;
             series.unHighlightItem();
             series.cleanHighlights();
             series.highlight = false;
-        });
-        this.store.loadData(Ext.Array.map(data, function(item){
+        });*/
+        this.store.loadData(Ext.Array.map(data, function(item, index){
             return {
                 cost: item.cost,
                 label: item.label,
-                xLabel: item.onchart,
+                xLabel: item.onchart || index,
                 datetime: item.datetime
             };
         }));
         this.fireEvent('afterload');
     },
     axes: [{
-        type: 'Numeric',
+        type: 'numeric',
         position: 'left',
         fields: ['cost'],
-        label: {
-            renderer: function(value){return value > 0 ? Ext.util.Format.currency(value, null, value >= 5 ? 0 : 2) : 0}
-        },
-        style : {
-            stroke : 'red'
+        renderer: function(value, layout){
+            return value > 0 ? Ext.util.Format.currency(value, null, layout.majorTicks.to > 3 ? 0 : 2) : '';
         },
         grid: {
-            even: {
-                fill: '#f3f6f8',
-                stroke: '#eaf0f4',
-                height: 1
-            },
-            odd: {
-                fill: '#f3f6f8',
-                stroke: '#eaf0f4',
-                height: 1
-            }
+            fillStyle: '#d7e6f2',
+            strokeStyle: '#b9d2ec'
         },
-        minimum: 0,
-        majorTickSteps: 3
+        majorTickSteps: 4
     },{
-        type: 'Category',
+        type: 'category',
         position: 'bottom',
-        dateFormat: 'M d',
-        fields: ['xLabel']
+        fields: ['xLabel'],
+        renderer: function(label) {
+            return Ext.isNumeric(label) ? '' : label;
+        }
+
     }],
     series: [{
         type: 'bar',
-        column: true,
-        yPadding: 0,
-        shadowAttributes: [],
         axis: 'left',
         xField: 'xLabel',
         yField: ['cost'],
         style: {
-            'stroke-width': 1,
-            cursor: 'pointer'
+            fillStyle: '#b4cede',
+            strokeStyle: '#b4cede'
         },
-        renderer: function(sprite, record, attr, index, store){
-            return Ext.apply(attr, {fill: sprite._highlighted ? '#2581b8' : '#b4cede'});
+        highlight: {
+            fillStyle: '#2581b8',
+            strokeStyle: '#2581b8'
         },
-        listeners: {
-            itemclick: function(item) {
-                var series = item.series, items;
+        listeners1: {
+            itemclick: function(chart, item) {
+                /*var series = item.series, items;
                 series.highlight = true;
                 series.unHighlightItem();
                 series.cleanHighlights();
                 series.highlightItem(item);
                 series.highlight = false;
-                this.chart.fireEvent('itemclick', item);
+                this.chart.fireEvent('itemclick', item);*/
             }
         },
-        highlight: false,
-        highlightCfg: {
+        //highlight: false,
+        /*highlightCfg: {
             fill: '#2581b8',
             stroke: null
-        },
+        },*/
         tips: {
             trackMouse: true,
             //anchor: 'top',
@@ -2761,7 +2809,7 @@ Ext.define('Scalr.ui.CostAnalyticsListPanel', {
                 type: 'action',
                 msg: 'Computing...'
             },
-            url: '/analytics/'+ (me.urlPrefix||'') + me.subject + '/xGetPeriodData',
+            url: '/admin/analytics/'+ me.subject + '/xGetPeriodData',
             params: me.requestParams,
             success: function (data) {
                 var summaryTab = me.down('#summary'),
@@ -2778,7 +2826,7 @@ Ext.define('Scalr.ui.CostAnalyticsListPanel', {
                     });
 
                     if (data['totals']['cost'] == 0 && !data['totals']['budget']['closed'] && data['totals']['budget']['budget'] == 0) {
-                        me.down('#tabs').layout.setActiveItem(summaryTab);
+                        me.down('#tabs').setValue('summary');
                     }
                 }
                 summaryTab.loadDataDeferred(mode, quarter, startDate, endDate, data);
@@ -2865,7 +2913,7 @@ Ext.define('Scalr.ui.CostAnalyticsListPanel', {
                 checked: false,
                 group: sortGroupName,
                 sortHandler: function(dir){
-                    store.sort({
+                    store.sort([{
                         property: 'ccName',
                         direction: dir,
                         transform: function(value){
@@ -2876,7 +2924,7 @@ Ext.define('Scalr.ui.CostAnalyticsListPanel', {
                         transform: function(value){
                             return value.toLowerCase();
                         }
-                    });
+                    }]);
                 }
             });
         }
@@ -2899,11 +2947,11 @@ Ext.define('Scalr.ui.CostAnalyticsListPanel', {
         });
 
 
-		me.items = [
-			Ext.create('Ext.panel.Panel', {
-				cls: 'x-panel-column-left',
-				width: 290,
-				items: Ext.create('widget.costanalyticslistview', {
+        me.items = [
+            Ext.create('Ext.panel.Panel', {
+                cls: 'x-panel-column-left',
+                width: 290,
+                items: Ext.create('widget.costanalyticslistview', {
                     subject: me.subject,
                     store: store,
                     listeners: {
@@ -2911,62 +2959,62 @@ Ext.define('Scalr.ui.CostAnalyticsListPanel', {
                             var record = view.getSelectionModel().getLastSelected(),
                                 form = view.up('panel').up('panel').down('#form');
                             if (record && record !== form.currentRecord) {
-                                form.loadRecord(view.store.getById(record.get('id')));
+                                form.loadRecord(view.store.getById(record.get(me.subject === 'projects' ? 'projectId' : 'ccId')));
                             }
                         }
                     }
                 }),
-				layout: 'fit',
-				dockedItems: [{
-					xtype: 'toolbar',
-					dock: 'top',
-					defaults: {
-						margin: '0 0 0 10'
-					},
-					items: [{
-						xtype: 'filterfield',
-						itemId: 'liveSearch',
+                layout: 'fit',
+                dockedItems: [{
+                    xtype: 'toolbar',
+                    dock: 'top',
+                    ui: 'simple',
+                    defaults: {
+                        margin: '0 0 0 10'
+                    },
+                    items: [{
+                        xtype: 'filterfield',
+                        itemId: 'liveSearch',
                         flex: 1,
-						store: store,
-                        forceRemoteSearch: true,
+                        store: store,
                         margin: 0,
+                        matchFieldWidth: false,
                         menu: {
                             xtype: 'menu',
-                            minWidth: 220,
+                            //minWidth: 220,
                             defaults: {
                                 xtype: 'menuitemsortdir'
                             },
                             items: sortItems
                         }
                     },{
-						itemId: 'add',
+                        itemId: 'add',
                         text: 'New',
-                        cls: 'x-btn-green-bg',
-                        href: '#/analytics/' + me.subject + '/edit',
-                        hrefTarget: '_self',
-                        margin: 0,
-                        hidden: !Scalr.utils.isAdmin()
-					},{
-						itemId: 'refresh',
-                        ui: 'paging',
-						iconCls: 'x-tbar-loading',
-						tooltip: 'Refresh',
-						handler: function() {
+                        cls: 'x-btn-green',
+                        hidden: !Scalr.utils.isAdmin(),
+                        handler: function() {
+                            Scalr.event.fireEvent('modal', '#/admin/analytics/' + me.subject + '/edit');
+                        }
+                    },{
+                        itemId: 'refresh',
+                        iconCls: 'x-btn-icon-refresh',
+                        tooltip: 'Refresh',
+                        handler: function() {
                             var dataview = this.up('panel').down('costanalyticslistview');
                             dataview.getSelectionModel().deselectAll();
                             dataview.store.reload();
-						}
+                        }
                     }]
-				}]
-			})
-		,{
-			xtype: 'container',
+                }]
+            })
+        ,{
+            xtype: 'container',
             itemId: 'formWrapper',
             flex: 1,
             autoScroll: true,
             layout: 'anchor',
             preserveScrollPosition: true,
-			items: [{
+            items: [{
                 xtype: 'container',
                 itemId: 'form',
                 layout: {
@@ -2978,8 +3026,8 @@ Ext.define('Scalr.ui.CostAnalyticsListPanel', {
                 },
                 hidden: true,
                 cls: 'x-container-fieldset',
-                style: 'padding-top:16px;padding-bottom:0',
-    			minWidth: 920,
+                minWidth: 1000,
+                maxWidth: 1300,
                 listeners: {
                     afterrender: function() {
                         var me = this;
@@ -2998,8 +3046,9 @@ Ext.define('Scalr.ui.CostAnalyticsListPanel', {
                 loadRecord: function(record) {
                     var periodField = this.down('costanalyticsperiod');
                     this.currentRecord = record;
-                    this.down('#itemEdit').setHref('#/analytics/' + me.subject + '/edit?' + (me.subject==='costcenters'?'ccId':'projectId') + '='+record.get('id'));
-                    this.down('#itemNotifications').setHref('#/analytics/' + me.subject + '/notifications?' + (me.subject==='costcenters'?'ccId':'projectId') + '='+record.get('id'));
+                    var idField = me.subject==='costcenters'?'ccId':'projectId';
+                    this.down('#itemEdit').modalUrl = '#/admin/analytics/' + me.subject + '/edit?' + idField + '='+record.get(idField);
+                    this.down('#itemNotifications').setHref('#/admin/analytics/' + me.subject + '/notifications?' + idField + '='+record.get(idField));
                     periodField.restorePreservedValue('month', !!periodField.getValue());
                 },
                 items: [{
@@ -3012,7 +3061,7 @@ Ext.define('Scalr.ui.CostAnalyticsListPanel', {
                             change: function(mode, startDate, endDate, quarter) {
                                 var form = this.up('#form'),
                                     record = form.currentRecord,
-                                    tabs = form.down('#tabs'),
+                                    tabs = form.down('#tabsWrapper'),
                                     warn;
                                 if (record) {
                                     if (me.subject === 'projects') {
@@ -3022,7 +3071,7 @@ Ext.define('Scalr.ui.CostAnalyticsListPanel', {
                                         if (record.get('projectsCount') == 0) {
                                             tabs.hide();
                                             warn.down('#title').update({name: record.get('name')});
-                                            warn.down('button').setHref('#/analytics/projects/edit?ccId='+record.get('id'));
+                                            warn.down('button').modalUrl = '#/admin/analytics/projects/add?ccId='+record.get('ccId');
                                             warn.show();
                                             this.hide();
                                         } else {
@@ -3039,19 +3088,18 @@ Ext.define('Scalr.ui.CostAnalyticsListPanel', {
                         xtype: 'tbfill'
                     },{
                         xtype: 'button',
-                        text: '<img src="' + Ext.BLANK_IMAGE_URL + '" class="x-icon-notification" />',
-                        width: 50,
+                        iconCls: 'x-btn-icon-notifications',
                         itemId: 'itemNotifications',
                         hrefTarget: '_self',
                         href: '#'
                     },{
                         xtype: 'button',
-                        text: '<img src="' + Ext.BLANK_IMAGE_URL + '" class="x-icon-configure" />',
-                        width: 50,
+                        iconCls: 'x-btn-icon-settings',
                         itemId: 'itemEdit',
-                        hrefTarget: '_self',
                         margin: '0 0 0 12',
-                        href: '#'
+                        handler: function() {
+                            Scalr.event.fireEvent('modal', this.modalUrl);
+                        }
                     }]
                 },{
                     xtype: 'container',
@@ -3066,7 +3114,7 @@ Ext.define('Scalr.ui.CostAnalyticsListPanel', {
                         xtype: 'component',
                         itemId: 'title',
                         cls: 'x-fieldset-subheader',
-                        tpl: 'Add your first project to &quot;{name}&quot; to begin tracking costs'
+                        tpl: 'Add your first project to <span style="text-transform:none">&quot;{name}&quot;</span> to begin tracking costs'
                     },{
                         xtype: 'component',
                         anchor: '100%',
@@ -3077,41 +3125,60 @@ Ext.define('Scalr.ui.CostAnalyticsListPanel', {
                         itemId: 'button',
                         margin: '0 0 0 120',
                         padding: '0 24',
-                        cls: 'x-btn-green-bg',
+                        cls: 'x-btn-green',
                         height: 52,
                         text: 'Create new project',
-                        href: '#',
-                        hrefTarget: '_self',
+                        handler: function() {
+                            Scalr.event.fireEvent('modal', this.modalUrl);
+                        }
                     }]
                 },{
-                    xtype: 'tabpanel',
-                    itemId: 'tabs',
-                    margin: '22 0 0',
-                    cls: 'x-tabs-light',
-                    listeners: {
-                        tabchange: function(panel, newtab, oldtab){
-                            var comp = panel.down('costanalyticsspendsadmin');
-                            if (newtab.itemId !== 'summary') {
-                                newtab.add(comp);
-                                comp.setType(newtab.value);
-                            } else {
-                                comp.setType(null);
-                            }
-                        }
-                    },
+                    xtype: 'container',
+                    itemId: 'tabsWrapper',
                     items: [{
                         xtype: 'container',
-                        tab: true,
+                        layout: {
+                            type: 'hbox',
+                            pack: 'center'
+                        },
+                        items: {
+                            xtype: 'buttongroupfield',
+                            itemId: 'tabs',
+                            margin: '18 0 12',
+                            defaults: {
+                                height: 42,
+                                width: 140
+                            },
+                            value: 'summary',
+                            items: [{
+                                text: 'Summary',
+                                value: 'summary'
+                            },{
+                                text: 'Cloud spend',
+                                value: 'clouds'
+                            },{
+                                text: (me.subject === 'costcenters' ? 'Project' : 'Farm') + ' spend',
+                                value: me.subject === 'costcenters' ? 'projects' : 'farms'
+                            }],
+                            listeners: {
+                                change: function(comp, value) {
+                                    me.down('#summary').setVisible(value === 'summary');
+                                    me.down('costanalyticsspendsadmin').setVisible(value !== 'summary').setType(value === 'summary' ? null: value);
+                                }
+                            }
+                        }
+                    },{
+                        xtype: 'container',
                         itemId: 'summary',
                         loadDataDeferred: function() {
-                            if (this.tab.active) {
+                            if (this.isVisible()) {
                                 this.loadData.apply(this, arguments);
                             } else {
                                 if (this.loadDataBind !== undefined) {
-                                    this.un('activate', this.loadDataBind, this);
+                                    this.un('show', this.loadDataBind, this);
                                 }
                                 this.loadDataBind = Ext.bind(this.loadData, this, arguments);
-                                this.on('activate', this.loadDataBind, this, {single: true});
+                                this.on('show', this.loadDataBind, this, {single: true});
                             }
                         },
                         loadData: function(mode, quarter, startDate, endDate, data) {
@@ -3119,16 +3186,12 @@ Ext.define('Scalr.ui.CostAnalyticsListPanel', {
                             this.down('#summaryChart').loadData(data['timeline']);
                             this.down('#summaryChartTitle').update(Ext.String.capitalize(data['interval'].replace('day', 'dai')) + 'ly breakdown');
                         },
-                        tabConfig: {
-                            title: 'Summary'
-                        },
-                        layout: 'anchor',
                         items: [{
                             xtype: 'analyticsboxesadmin',
                             subject: me.subject,
                             listeners: {
                                 farmclick: function() {
-                                    this.up('#tabs').setActiveTab('farms');
+                                    me.down('#tabs').setValue('farms');
                                 }
                             }
                         },{
@@ -3136,13 +3199,12 @@ Ext.define('Scalr.ui.CostAnalyticsListPanel', {
                             cls: 'x-caheader',
                             itemId: 'summaryChartTitle',
                             html: '&nbsp;',
-                            margin: '24 20 18 24'
+                            margin: '24 20 18 0'
                         },{
                             xtype: 'costanalyticssummary',
-                            anchor: '100%',
                             itemId: 'summaryChart',
                             height: 200,
-                            margin: '0 20 20',
+                            margin: '0 0 20',
                             store: Ext.create('Ext.data.ArrayStore', {
                                 fields: [{
                                     name: 'datetime',
@@ -3154,10 +3216,13 @@ Ext.define('Scalr.ui.CostAnalyticsListPanel', {
                             }),
                             listeners: {
                                 afterload: function() {
-                                    this.up('#summary').down('#summaryDetails').hide();
+                                    me.down('#summaryDetails').hide();
                                 },
-                                itemclick: function(item) {
-                                    this.up('#summary').down('#summaryDetails').loadData(item.storeItem);
+                                itemclick: function(chart, item) {
+                                    if (item.record) {
+                                        chart.setHighlightItem(null);
+                                        me.down('#summaryDetails').loadData(item.record);
+                                    }
                                 }
                             }
                         },{
@@ -3168,6 +3233,7 @@ Ext.define('Scalr.ui.CostAnalyticsListPanel', {
                             loadData: function(record){
                                 var me = this;
                                 cb = function() {
+                                    me.suspendLayouts();
                                     me.down('#summaryDetailsTitle').update({label: record.get('label')});
                                     me.down('#summaryDetailsCost').update({cost: record.get('cost')});
                                     me.down('#summaryDetailsRollingAverage').update({
@@ -3175,17 +3241,17 @@ Ext.define('Scalr.ui.CostAnalyticsListPanel', {
                                         rollingAverageMessage: record.get('rollingAverageMessage')
                                     });
                                     me.down('#summaryDetailsBudgetUseToDate').update(record.getData());
-
+                                    me.resumeLayouts(true);
                                     me.show();
                                 };
-                                if (record.get('rollingAverage') === '') {
+                                if (Ext.isEmpty(record.get('rollingAverage'))) {
                                     var panel = me.up('costanalyticslistpanel');
                                     Scalr.Request({
                                         processBox: {
                                             type: 'action',
                                             msg: 'Computing...'
                                         },
-                                        url: '/analytics/' + panel.subject + '/xGetMovingAverageToDate',
+                                        url: '/admin/analytics/' + panel.subject + '/xGetMovingAverageToDate',
                                         params: Ext.apply({
                                             date: Ext.Date.format(record.get('datetime'), 'Y-m-d H:i')
                                         }, panel.requestParams),
@@ -3203,13 +3269,13 @@ Ext.define('Scalr.ui.CostAnalyticsListPanel', {
                                 cls: 'x-caheader',
                                 itemId: 'summaryDetailsTitle',
                                 tpl: 'On {label}',
-                                margin: '0 20 18 24'
+                                margin: '0 20 18 0'
                             },{
                                 xtype: 'container',
                                 layout: 'hbox',
                                 anchor: '100%',
                                 margin: '0 20 20',
-                                cls: 'x-cabox',
+                                cls: 'x-cabox x-cabox-transparent',
                                 style: 'border:0',
                                 defaults: {
                                     flex: 1
@@ -3217,16 +3283,16 @@ Ext.define('Scalr.ui.CostAnalyticsListPanel', {
                                 items: [{
                                     xtype: 'component',
                                     itemId: 'summaryDetailsCost',
-                                    tpl: 'Spent<div class="title1" style="margin-top:8px">{cost:currency(null, 0)}</div>'
+                                    tpl: '<span class="x-form-item-label-default">Spent</span><div class="title1" style="margin-top:8px">{cost:currency(null, 0)}</div>'
                                 },{
                                     xtype: 'component',
                                     itemId: 'summaryDetailsRollingAverage',
-                                    tpl: '{rollingAverageMessage}<div class="title1" style="margin-top:8px">{rollingAverage:currency(null, 0)}</div>'
+                                    tpl: '<span class="x-form-item-label-default">{rollingAverageMessage}</span><div class="title1" style="margin-top:8px">{rollingAverage:currency(null, 0)}</div>'
 
                                 },{
                                     xtype: 'component',
                                     itemId: 'summaryDetailsBudgetUseToDate',
-                                    tpl:  '<tpl if="quarter">Q{quarter} {year} budget<tpl else>Budget</tpl> use to date<div class="title1" style="margin-top:8px">' +
+                                    tpl:  '<span class="x-form-item-label-default"><tpl if="quarter">Q{quarter} {year} budget<tpl else>Budget</tpl> use to date</span><div class="title1" style="margin-top:8px">' +
                                           '<tpl if="budgetUseToDatePct">'+
                                               '{budgetUseToDatePct}% ({budgetUseToDate:currency(null, 0)})' +
                                           '<tpl else>'+
@@ -3237,39 +3303,20 @@ Ext.define('Scalr.ui.CostAnalyticsListPanel', {
                             }]
                         }]
                     },{
-                        xtype: 'container',
-                        tab: true,
-                        cls: 'x-container-fieldset',
-                        tabConfig: {
-                            title: 'Cloud spend'
-                        },
-                        value: 'clouds',
-                        minHeight: 200,
-                        items: [{
-                            xtype: 'costanalyticsspendsadmin',
-                            subject: me.subject
-                        }]
-                    },{
-                        xtype: 'container',
-                        itemId: me.subject === 'costcenters' ? 'projects' : 'farms',
-                        tab: true,
-                        cls: 'x-container-fieldset',
-                        value: me.subject === 'costcenters' ? 'projects' : 'farms',
-                        tabConfig: {
-                            title: (me.subject === 'costcenters' ? 'Project' : 'Farm') + ' spend'
-                        },
-                        minHeight: 200
+                        xtype: 'costanalyticsspendsadmin',
+                        hidden: true,
+                        subject: me.subject
                     }]
                 }]
             }]
-		}];
+        }];
 
         me.callParent(arguments);
     }
 });
 
 Ext.define('Scalr.ui.CostAnalyticsSpendsAdmin', {
-	extend: 'Scalr.ui.CostAnalyticsSpends',
+    extend: 'Scalr.ui.CostAnalyticsSpends',
     alias: 'widget.costanalyticsspendsadmin',
 
     showChartViewTotals: function() {
@@ -3325,9 +3372,7 @@ Ext.define('Scalr.ui.CostAnalyticsSpendsAdmin', {
                     }],
                     data: me.data['totals'][me.type],
                     listeners: {
-                        beforesort: function(store, sorters){
-                            store.sorters.insert(0, 'presort', new Ext.util.Sorter(me.permanentSorter));
-                        }
+                        beforesort: Ext.bind(me.applyPermanentSorter, me)
                     }
                 },
                 viewConfig: {
@@ -3345,7 +3390,7 @@ Ext.define('Scalr.ui.CostAnalyticsSpendsAdmin', {
                             '<tpl if="this.getType()==\'clouds\'">',
                                 '<img src="'+Ext.BLANK_IMAGE_URL+'" class="x-icon-platform-small x-icon-platform-small-{id}"/> {[this.getColoredName(values.id, values.name)]}',
                             '<tpl elseif="this.getType()==\'projects\'&&id">',
-                                '<a href="#/analytics/projects?projectId={id}">{[this.getColoredName(values.id, values.name)]}</a>',
+                                '<a href="#/admin/analytics/projects?projectId={id}">{[this.getColoredName(values.id, values.name)]}</a>',
                             '<tpl else>',
                                 '<span data-qtip="{[this.farmInfo(values, true)]}">{[this.getColoredName(values.id, values.name)]}</span>',
                             '</tpl>',
@@ -3358,7 +3403,7 @@ Ext.define('Scalr.ui.CostAnalyticsSpendsAdmin', {
                         }
                     }),
                     summaryRenderer: function() {
-                        return 'Total spend:';
+                        return 'Total spend';
                     }
                 },{
                     header: 'Total',
@@ -3417,6 +3462,7 @@ Ext.define('Scalr.ui.CostAnalyticsSpendsAdmin', {
         totals.setSelectedDeferred(Ext.Array.map(me.getEnabledSeries(), function(id){
             return totals.store.getById(id);
         }));
+        totals.view.findFeature('summary').toggleSummaryRow(me.data['totals'][me.type] && me.data['totals'][me.type].length > 0);
         totals.show();
         if (details) details.hide();
     },
@@ -3459,10 +3505,10 @@ Ext.define('Scalr.ui.CostAnalyticsSpendsAdmin', {
                         '<table>' +
                             '<tr class="title">' +
                                 '<td style="width:180px;" class="title" rowspan="2" title="{rawName:htmlEncode}">{name}</td>' +
-                                '<td>{[this.getPeriodTitle(true)]} spend:</td>' +
+                                '<td>{[this.getPeriodTitle(true)]} spend</td>' +
                                 '<td style="width:80px;">&nbsp;</td>' +
-                                '<td style="width:150px;">Previous {[this.getPeriodTitle()]}:</td>' +
-                                '<td style="width:130px;">Growth:</td>' +
+                                '<td style="width:150px;">Previous {[this.getPeriodTitle()]}</td>' +
+                                '<td style="width:130px;">Growth</td>' +
                             '</tr>' +
                             '<tr class="value">' +
                                 '<td>{[this.currency(values.cost)]}</td>' +
@@ -3537,7 +3583,7 @@ Ext.define('Scalr.ui.CostAnalyticsSpendsAdmin', {
                             getItemTitle: function(type, id, name){
                                 var res = me.getItemTitle(type, id, name);
                                 if (type === 'projects' && id) {
-                                    res = '<a href="#/analytics/projects?projectId='+id+'">' + res + '</a>';
+                                    res = '<a href="#/admin/analytics/projects?projectId='+id+'">' + res + '</a>';
                                 }
                                 return res;
                             }
@@ -3562,7 +3608,7 @@ Ext.define('Scalr.ui.CostAnalyticsSpendsAdmin', {
                     type: 'action',
                     msg: 'Computing...'
                 },
-                url: '/analytics/projects/xGetProjectFarmsTopUsageOnDate',
+                url: '/admin/analytics/projects/xGetProjectFarmsTopUsageOnDate',
                 params: {
                     ccId: me.data['ccId'],
                     projectId: me.data['projectId'],
@@ -3643,10 +3689,10 @@ Ext.define('Scalr.ui.CostAnalyticsSpendsAdmin', {
                         '<table>' +
                             '<tr class="title">' +
                                 '<td style="width:180px;" class="title" rowspan="2" title="{rawName:htmlEncode}">{name}</td>' +
-                                '<td>Total spend:</td>' +
+                                '<td>Total spend</td>' +
                                 '<td style="width:80px">&nbsp;</td>' +
-                                '<td style="width:170px">Growth from prev {[this.getMode()]}:</td>' +
-                                '<td style="width:170px">Growth from prev {[this.getIntervalTitle()]}:</td>' +
+                                '<td style="width:200px">Growth from prev {[this.getMode()]}</td>' +
+                                '<td style="width:200px">Growth from prev {[this.getIntervalTitle()]}</td>' +
                             '</tr>' +
                             '<tr class="value">' +
                                 '<td style="overflow:visible">{[this.currency(values.cost)]} ({[this.currency(values.prevCost)]} previous {[this.getMode()]})</td>' +
@@ -3708,12 +3754,12 @@ Ext.define('Scalr.ui.CostAnalyticsSpendsAdmin', {
                                         '<td style="width:180px" data-qtip="{[this.farmInfo(values, true)]}">{[this.getItemTitle(values.type, values.id, values.name)]}</td>' +
                                         '<td><div><div class="bar-inner" style="margin:0;width:{[parent.projectCostMax?values.cost/parent.projectCostMax*100:0]}%"><span>{[this.currency(values.cost)]}</span></div></div></td>' +
                                         '<td style="width:80px;text-align:center">{costPct:round(2)}%</td>' +
-                                        '<td style="width:170px">' +
+                                        '<td style="width:200px">' +
                                             '<tpl if="growth!=0">' +
                                                 '{[this.pctLabel(values.growth, values.growthPct, \'small\', \'fixed\')]}' +
                                             '</tpl>'+
                                         '</td>' +
-                                        '<td style="width:170px">' +
+                                        '<td style="width:200px">' +
                                             '<tpl if="growthPrevPoint!=0">' +
                                                 '{[this.pctLabel(values.growthPrevPoint, values.growthPrevPointPct, \'small\', \'fixed\')]}' +
                                             '</tpl>'+
@@ -3729,7 +3775,7 @@ Ext.define('Scalr.ui.CostAnalyticsSpendsAdmin', {
                             getItemTitle: function(type, id, name){
                                 var res = me.getItemTitle(type, id, name);
                                 if (type === 'projects' && id) {
-                                    res = '<a href="#/analytics/projects?projectId='+id+'">' + res + '</a>';
+                                    res = '<a href="#/admin/analytics/projects?projectId='+id+'">' + res + '</a>';
                                 }
                                 return res;
                             }
@@ -3753,11 +3799,12 @@ Ext.define('Scalr.ui.CostAnalyticsSpendsAdmin', {
 
 //environment
 Ext.define('Scalr.ui.AnalyticsBoxesEnv', {
-	extend: 'Scalr.ui.AnalyticsBoxes',
+    extend: 'Scalr.ui.AnalyticsBoxes',
     alias: 'widget.analyticsboxesenv',
 
     loadData: function(mode, quarter, startDate, endDate, data) {
         var me = this,
+            costDistribution = [],
             totals;
 
         me.callParent(arguments);
@@ -3778,13 +3825,24 @@ Ext.define('Scalr.ui.AnalyticsBoxesEnv', {
 
         me.down('#top5farms').loadData(totals['farms']);
 
-        var distribution = [
-            {type: 'compute', cost: totals['cost'], costPct: totals['cost'] > 0 ? 100 : 0},
-            {type: 'storage', cost: 0, costPct: 0},
-            {type: 'bandwidth', cost: 0, costPct: 0},
-            {type: 'other', cost: 0, costPct: 0},
-        ];
-        me.down('#distribution').loadData(distribution);
+        Ext.Object.each(Scalr.constants.distributionTypes, function(id, name){
+            var cost = null,
+                costPct = null;
+            Ext.Array.each(totals['distributionTypes'], function(item){
+                if (item.id == id) {
+                    cost = item.cost;
+                    costPct = item.costPct;
+                    return false;
+                }
+            });
+            costDistribution.push({
+                id: id,
+                name: name,
+                cost: cost,
+                costPct: costPct
+            });
+        });
+        me.down('#distribution').loadData(costDistribution);
     },
     defaults: {
         minHeight: 240
@@ -3798,21 +3856,21 @@ Ext.define('Scalr.ui.AnalyticsBoxesEnv', {
         maxWidth: 500,
         tpl:
             '<div class="x-cabox-title">{title}</div>'+
-            '<div style="margin:16px 0 0">Spent' +
-                '<div style="margin: 8px 0 0">' +
-                    '<span class="title1" style="position:relative;top:-4px">{[this.currency2(values.cost, true)]}</span>' +
+            '<div style="margin:16px 0 0"><span class="x-form-item-label-default">Spent</span>' +
+                '<div>' +
+                    '<span class="title1">{[this.currency2(values.cost, true)]}</span>' +
                     '<tpl if="growth!=0">' +
                         ' &nbsp;{[this.pctLabel(values.growth, values.growthPct, false, false, false, false)]}' +
                     '</tpl>'+
                 '</div>' +
             '</div>'+
             '<tpl if="trends">' +
-                '<div style="margin:14px 0 0">{trends.rollingAverageMessage}' +
-                    '<div style="margin: 4px 0 8px"><span class="title1">{[this.currency2(values.trends.rollingAverage, true)]}</span> per {interval}</div>' +
+                '<div style="margin:22px 0 0"><span class="x-form-item-label-default">{trends.rollingAverageMessage}</span>' +
+                    '<div style="margin: 0 0 8px"><span class="title1">{[this.currency2(values.trends.rollingAverage, true)]}</span> per {interval}</div>' +
                 '</div>' +
             '</tpl>' +
             '<tpl if="forecastCost!==null">' +
-                '<div style="margin:16px 0 6px">{period:capitalize} end estimate</div>' +
+                '<div style="margin:22px 0 6px" class="x-form-item-label-default">{period:capitalize} end estimate</div>' +
                 '<span class="title2" style="padding-right:1em">~ {[this.currency2(values.forecastCost, true)]}</span>' +
             '</tpl>'
     },{
@@ -3829,11 +3887,13 @@ Ext.define('Scalr.ui.AnalyticsBoxesEnv', {
                 row = Ext.clone(row);
                 rows.push(row);
                 row['pctOfMax'] = 0;
-                maxCost = maxCost > row['cost'] ? maxCost : row['cost'];
+                if (row['cost'] !== null) {
+                    maxCost = maxCost > row['cost'] ? maxCost : row['cost'];
+                }
             });
             if (maxCost != 0) {
                 Ext.each(rows, function(row){
-                    row['pctOfMax'] = row['cost']/maxCost*100;
+                    row['pctOfMax'] = row['cost'] !== null ? row['cost']/maxCost*100 : 0;
                 });
             }
             this.store.loadData(rows);
@@ -3844,7 +3904,7 @@ Ext.define('Scalr.ui.AnalyticsBoxesEnv', {
                 property: 'cost',
                 direction: 'DESC'
             },
-            fields: ['cost', 'costPct', 'pctOfMax', 'type']
+            fields: ['cost', 'costPct', 'pctOfMax', 'name']
         },
         tpl: new Ext.XTemplate(
             '<div class="x-cabox-title">Cost distribution</div>'+
@@ -3852,10 +3912,14 @@ Ext.define('Scalr.ui.AnalyticsBoxesEnv', {
                 '<tpl for=".">' +
                     '<tr class="x-top5-item">' +
                         '<td>' +
-                            '<div style="max-width:250px">{type:capitalize}</div>' +
-                            '<div style="margin-top:4px"><div class="bar-inner x-costanalytics-bg-{type}" style="margin:0;width:{pctOfMax}%"><span>{[this.currency2(values.cost)]}</span></div></div>' +
+                            '<div style="max-width:250px">{name:capitalize}</div>' +
+                            '<div style="margin-top:4px"><div class="bar-inner x-costanalytics-bg-{name}" style="margin:0;width:{pctOfMax}%">'+
+                                '<span>{[values.cost === null ? \'N/A\' : this.currency2(values.cost)]}</span>'+
+                            '</div></div>' +
                         '</td>'+
-                        '<td style="text-align:center;width:75px;"><div style="margin-bottom:4px"><tpl if="xindex==1"><b>% of total</b></tpl>&nbsp;</div>{costPct}%</td>'+
+                        '<td style="text-align:center;width:75px;"><div style="margin-bottom:4px"><tpl if="xindex==1"><b>% of total</b></tpl>&nbsp;</div>' +
+                            '{[values.costPct === null ? \'N/A\' : values.costPct + \'%\']}'+
+                        '</td>'+
                     '</tr>' +
                 '</tpl>'+
             '</table>'
@@ -3902,11 +3966,11 @@ Ext.define('Scalr.ui.AnalyticsBoxesEnv', {
                         '<tr class="x-top5-item">' +
                             '<td>' +
                                 '<tpl if="id && this.checkEnvId(environment)">' +
-                                    '<a href="#/analytics/environment/farms?farmId={id}">' +
+                                    '<a href="#/analytics/farms?farmId={id}">' +
                                 '</tpl>' +
                                     '<div style="max-width:250px" class="link">{name}</div>' +
                                     '<div style="margin-top:4px"><div class="bar-inner" style="margin:0;width:{pctOfMax}%"><span>{[this.currency2(values.cost)]}</span></div></div>' +
-                                '<tpl if="id && this.checkEnvId(envId)">' +
+                                '<tpl if="id && this.checkEnvId(environment)">' +
                                     '</a>' +
                                 '</tpl>' +
                             '</td>'+
@@ -3924,7 +3988,7 @@ Ext.define('Scalr.ui.AnalyticsBoxesEnv', {
 });
 
 Ext.define('Scalr.ui.CostAnalyticsSpendsUser', {
-	extend: 'Scalr.ui.CostAnalyticsSpends',
+    extend: 'Scalr.ui.CostAnalyticsSpends',
     alias: 'widget.costanalyticsspendsuser',
 
     defaultView: 'stacked',
@@ -3932,7 +3996,7 @@ Ext.define('Scalr.ui.CostAnalyticsSpendsUser', {
 
     chartViewTipCfg: {
         cls: 'x-tip-light',
-        anchor: 'top',
+        //anchor: 'top',
         tpl:
             '<div class="x-caheader">{label}</div>' +
             '<div style="margin:8px 0 0;padding-right:10px;max-height:224px;overflow-x:hidden;overflow-y:auto;white-space:nowrap">' +
@@ -3988,7 +4052,7 @@ Ext.define('Scalr.ui.CostAnalyticsSpendsUser', {
 });
 
 Ext.define('Scalr.ui.CostAnalyticsSpendsFarms', {
-	extend: 'Scalr.ui.CostAnalyticsSpendsUser',
+    extend: 'Scalr.ui.CostAnalyticsSpendsUser',
     alias: 'widget.costanalyticsspendsfarms',
 
     subject: 'farms',
@@ -4049,7 +4113,7 @@ Ext.define('Scalr.ui.CostAnalyticsSpendsFarms', {
                 },
                 listeners: {
                     itemclick: function (view, record, item, index, e) {
-                        if (e.getTarget('.farm-details')) {
+                        if (e.getTarget('.scalr-ui-analytics-link')) {
                             me.showInstanceTypeDetails('chart', 0, record.get('id'), record.get('name'), null, null, record.getData());
                             e.preventDefault();
                             return false;
@@ -4063,23 +4127,24 @@ Ext.define('Scalr.ui.CostAnalyticsSpendsFarms', {
                     flex: 1,
                     xtype: 'templatecolumn',
                     tpl: new Ext.XTemplate(
-                        '<a href="#" class="farm-details" style="color:#{[this.getItemColor(values.id)]}"><img src="'+Ext.BLANK_IMAGE_URL+'" class="x-icon-platform-small x-icon-platform-small-{platform}"/> {name}</a>',
+                        '<span class="scalr-ui-analytics-link" style="color:#{[this.getItemColor(values.id)]}"><img src="'+Ext.BLANK_IMAGE_URL+'" class="x-icon-platform-small x-icon-platform-small-{platform}"/> {name}</span>',
                     {
                         getItemColor: function(id){
                             return me.getItemColor(id, me.type);
                         }
                     }),
                     summaryRenderer: function() {
-                        return 'Total spend:';
+                        return 'Total spend';
                     }
                 },{
                     header: 'Location',
-                    dataIndex: 'cloudLocation'
+                    dataIndex: 'cloudLocation',
+                    flex: .6
                 },{
                     header: 'Spend (% of total)',
                     dataIndex: 'cost',
                     xtype: 'templatecolumn',
-                    flex: 1.6,
+                    width: 160,
                     tpl: '{[this.currency2(values.cost)]} {[values.costPct > 0 ? \'(\'+values.costPct+\'%)\' : \'\']}',
                     summaryRenderer: function() {
                         return Ext.util.Format.currency(me.data['totals']['cost'], null, 2);
@@ -4088,7 +4153,7 @@ Ext.define('Scalr.ui.CostAnalyticsSpendsFarms', {
                     header: 'Growth',
                     dataIndex: 'growth',
                     xtype: 'templatecolumn',
-                    width: 90,
+                    width: 100,
                     tpl:
                         '<tpl if="growth!=0">' +
                             '{[this.pctLabel(values.growth, values.growthPct, \'small\', \'invert\', false, false)]}' +
@@ -4098,14 +4163,14 @@ Ext.define('Scalr.ui.CostAnalyticsSpendsFarms', {
                     header: averageColHeader,
                     dataIndex: 'averageCost',
                     xtype: 'templatecolumn',
-                    flex: 1.1,
+                    flex: .6,
                     tpl: '<tpl if="averageCost&gt;0">{[this.currency2(values.averageCost)]}</tpl>'
                 },{
                     xtype: 'templatecolumn',
                     resizable: false,
                     sortable: false,
                     width: 48,
-                    tpl: '<img src="'+Ext.BLANK_IMAGE_URL+'" class="x-icon-view-details farm-details" style="cursor:pointer" title="View farm role details" />'
+                    tpl: '<img src="'+Ext.BLANK_IMAGE_URL+'" class="x-grid-icon x-grid-icon-details scalr-ui-analytics-link" style="cursor:pointer" title="View farm role details" />'
                 }]
             });
         } else {
@@ -4116,6 +4181,7 @@ Ext.define('Scalr.ui.CostAnalyticsSpendsFarms', {
         totals.setSelectedDeferred(Ext.Array.map(me.getEnabledSeries(), function(id){
             return totals.store.getById(id);
         }));
+        totals.view.findFeature('summary').toggleSummaryRow(me.data['totals'][me.type] && me.data['totals'][me.type].length > 0);
         totals.show();
         if (details) details.hide();
     },
@@ -4131,7 +4197,7 @@ Ext.define('Scalr.ui.CostAnalyticsSpendsFarms', {
 });
 
 Ext.define('Scalr.ui.CostAnalyticsSpendsEnv', {
-	extend: 'Scalr.ui.CostAnalyticsSpendsUser',
+    extend: 'Scalr.ui.CostAnalyticsSpendsUser',
     alias: 'widget.costanalyticsspendsenv',
 
     subject: 'envs',
@@ -4151,8 +4217,8 @@ Ext.define('Scalr.ui.CostAnalyticsSpendsEnv', {
                 xtype: 'grid',
                 itemId: 'totals',
                 flex: 1,
-                margin: '12 0 0 0',
-                cls: 'x-grid-shadow x-grid-no-highlighting',
+                margin: '24 0 0 0',
+                cls: 'x-grid-no-highlighting',
                 features: [{
                     ftype: 'summary',
                     id: 'summary',
@@ -4189,9 +4255,7 @@ Ext.define('Scalr.ui.CostAnalyticsSpendsEnv', {
                         direction: 'DESC'
                     }],
                     listeners: {
-                        beforesort: function(store, sorters){
-                            store.sorters.insert(0, 'presort', new Ext.util.Sorter(me.permanentSorter));
-                        }
+                        beforesort: Ext.bind(me.applyPermanentSorter, me)
                     },
                     data: me.data['totals'][me.type]
                 },
@@ -4210,7 +4274,7 @@ Ext.define('Scalr.ui.CostAnalyticsSpendsEnv', {
                                 '<img src="'+Ext.BLANK_IMAGE_URL+'" class="x-icon-platform-small x-icon-platform-small-{id}"/> {[this.getColoredName(values.id, values.name)]}',
                             '<tpl else>',
                                 '<tpl if="id!=\'everything else\' && this.getLevel()==\'environment\'">',
-                                    '<a href="#/analytics/environment/farms?farmId={id}" data-qtip="{[this.farmInfo(values, true)]}">{[this.getColoredName(values.id, values.name)]}</a>',
+                                    '<a href="#/analytics/farms?farmId={id}" data-qtip="{[this.farmInfo(values, true)]}">{[this.getColoredName(values.id, values.name)]}</a>',
                                 '<tpl else>',
                                     '<span data-qtip="{[this.farmInfo(values, true)]}">{[this.getColoredName(values.id, values.name)]}</span>',
                                 '</tpl>',
@@ -4227,7 +4291,7 @@ Ext.define('Scalr.ui.CostAnalyticsSpendsEnv', {
                         }
                     }),
                     summaryRenderer: function() {
-                        return 'Total spend:';
+                        return 'Total spend';
                     }
                 },{
                     header: 'Project',
@@ -4289,6 +4353,7 @@ Ext.define('Scalr.ui.CostAnalyticsSpendsEnv', {
         totals.setSelectedDeferred(Ext.Array.map(me.getEnabledSeries(), function(id){
             return totals.store.getById(id);
         }));
+        totals.view.findFeature('summary').toggleSummaryRow(me.data['totals'][me.type] && me.data['totals'][me.type].length > 0);
         totals.show();
         if (details) details.hide();
     },
@@ -4307,7 +4372,44 @@ Ext.define('Scalr.ui.CostAnalyticsSpendsEnv', {
             data = me.data['totals'][me.type],
             hideChart = me.data['totals']['cost'] == 0,
             averageColHeader = Ext.String.capitalize(me.data['interval'].replace('day', 'dai')) + 'ly average',
-            titleColHeader = me.type === 'clouds' ? 'Cloud' : 'Farm';
+            titleColHeader = me.type === 'clouds' ? 'Cloud' : 'Farm',
+            grid,
+            chart;
+
+        chart = {
+            xtype: 'polar',
+            width: 160,
+            height: 160,
+            theme: 'scalr',
+            insetPadding: 0,
+            hidden: hideChart,
+            series: [{
+                type: 'pie',
+                xField: 'cost',
+                donut: 24,
+                renderer: function(sprite, config, data, index){
+                    var record = data.store.getData().items[index];
+                    return {
+                        fillStyle: '#' + me.getItemColor(record.get('id'), me.type)
+                    };
+                },
+                tooltip: {
+                    trackMouse: true,
+                    hideDelay: 0,
+                    showDelay: 0,
+                    tpl: '{[this.itemCost(values, false)]}',
+                    renderer: function(record, item) {
+                        this.update({
+                            id: record.get('id'),
+                            type: me.type,
+                            name: me.type === 'clouds' ? Scalr.utils.getPlatformName(record.get('name')) : record.get('name'),
+                            cost: record.get('cost'),
+                            costPct: record.get('costPct')
+                        });
+                    }
+                }
+            }]
+        };
         viewWrapper.suspendLayouts();
         if (!pieWrapper) {
             pieWrapper = viewWrapper.add({
@@ -4320,9 +4422,10 @@ Ext.define('Scalr.ui.CostAnalyticsSpendsEnv', {
                 }
             });
         }
+
         pie = pieWrapper.getComponent('pie');
         if (!pie) {
-            var cloudStore = {
+            var store = Ext.create('store.store', {
                 proxy: 'object',
                 fields: [{name: 'id', type: 'string'}, 'name', 'cost', 'costPct', 'prevCost', 'prevCostPct', 'growth', 'growthPct', 'averageCost', 'forecastCost', 'environment'],
                 sorters: [
@@ -4332,12 +4435,11 @@ Ext.define('Scalr.ui.CostAnalyticsSpendsEnv', {
                     direction: 'DESC'
                 }],
                 listeners: {
-                    beforesort: function(store, sorters){
-                        store.sorters.insert(0, 'presort', new Ext.util.Sorter(me.permanentSorter));
-                    }
+                    beforesort: Ext.bind(me.applyPermanentSorter, me)
                 },
                 data: data
-            };
+            });
+            chart.store = store;
             pie = pieWrapper.add({
                 xtype: 'container',
                 itemId: 'pie',
@@ -4345,42 +4447,10 @@ Ext.define('Scalr.ui.CostAnalyticsSpendsEnv', {
                     type: 'hbox',
                     align: 'middle'
                 },
-                items: [{
-                    xtype: 'chart',
-                    store: cloudStore,
-                    shadow: false,
-                    insetPadding: 0,
-                    width: 160,
-                    height: 160,
-                    theme: 'Scalr',
-                    hidden: hideChart,
-                    series: [{
-                        type: 'pie',
-                        field: 'cost',
-                        donut: 24,
-                        renderer: function(sprite, record, attr, index, store){
-                            return Ext.apply(attr, {fill: '#'+me.getItemColor(record.get('id'), me.type)});
-                        },
-                        tips: {
-                            trackMouse: true,
-                            hideDelay: 0,
-                            showDelay: 0,
-                            tpl: '{[this.itemCost(values, false)]}',
-                            renderer: function(record, item) {
-                                this.update({
-                                    id: record.get('id'),
-                                    type: me.type,
-                                    name: me.type === 'clouds' ? Scalr.utils.getPlatformName(record.get('name')) : record.get('name'),
-                                    cost: record.get('cost'),
-                                    costPct: record.get('costPct')
-                                });
-                            }
-                        }
-                    }]
-                },{
+                items: [chart, {
                     xtype: 'grid',
                     cls: 'x-grid-shadow x-grid-no-highlighting',
-                    store: cloudStore,
+                    store: store,
                     flex: 1,
                     maxHeight: 400,
                     margin: '0 0 0 16',
@@ -4414,7 +4484,7 @@ Ext.define('Scalr.ui.CostAnalyticsSpendsEnv', {
                             }
                         }),
                         summaryRenderer: function() {
-                            return 'Total spend:';
+                            return 'Total spend';
                         }
                     },{
                         header: 'Spend (% of total)',
@@ -4444,18 +4514,22 @@ Ext.define('Scalr.ui.CostAnalyticsSpendsEnv', {
                     }]
                 }]
             });
+            grid = pie.down('grid');
         } else {
-            var grid = pie.down('grid'),
-                chart = pie.down('chart');
+            grid = pie.down('grid');
             pie.suspendLayouts();
-            chart.store.loadData(data);
-
             grid.store.loadData(data);
+            var oldChart = pie.down('polar');
+            pie.remove(oldChart);
+            //oldChart.destroy();
+            chart.store = grid.store;
+            chart = pie.insert(0, chart);
             grid.columns[0].setText(titleColHeader);
             grid.columns[3].setText(averageColHeader);
-            pie.resumeLayouts(true);
             chart.setVisible(!hideChart);
+            pie.resumeLayouts(true);
         }
+        grid.view.findFeature('summary').toggleSummaryRow(data && data.length > 0);
 
         viewWrapper.layout.setActiveItem(pieWrapper);
         viewWrapper.resumeLayouts(true);
@@ -4464,7 +4538,7 @@ Ext.define('Scalr.ui.CostAnalyticsSpendsEnv', {
 });
 
 Ext.define('Scalr.ui.AnalyticsBoxesFarm', {
-	extend: 'Ext.container.Container',
+    extend: 'Ext.container.Container',
     alias: 'widget.analyticsboxesfarms',
 
     layout: {
@@ -4474,16 +4548,10 @@ Ext.define('Scalr.ui.AnalyticsBoxesFarm', {
 
     loadData: function(mode, quarter, startDate, endDate, data) {
         var me = this,
+            costDistribution = [],
             totals;
 
         totals = data['totals'];
-
-        var distribution = [
-            {name: 'compute', cost: totals['cost'], costPct: totals['cost'] > 0 ? 100 : 0},
-            {name: 'storage', cost: 0, costPct: 0},
-            {name: 'bandwidth', cost: 0, costPct: 0},
-            {name: 'other', cost: 0, costPct: 0}
-        ];
 
         me.suspendLayouts();
         me.down('#col1').update({
@@ -4491,7 +4559,25 @@ Ext.define('Scalr.ui.AnalyticsBoxesFarm', {
             growth: totals['growth'],
             growthPct: totals['growthPct']
         });
-        me.down('#col2').update(distribution);
+
+        Ext.Object.each(Scalr.constants.distributionTypes, function(id, name){
+            var cost = 0,
+                costPct = 0;
+            Ext.Array.each(totals['distributionTypes'], function(item){
+                if (item.id == id) {
+                    cost = item.cost;
+                    costPct = item.costPct;
+                    return false;
+                }
+            });
+            costDistribution.push({
+                id: id,
+                name: name,
+                cost: cost,
+                costPct: costPct
+            });
+        });
+        me.down('#col2').update(costDistribution);
 
         me.down('#col3').setVisible(!!totals['trends']).update({
             cost: totals['cost'],
@@ -4504,12 +4590,12 @@ Ext.define('Scalr.ui.AnalyticsBoxesFarm', {
         });
 
 
-        //me.down('#distribution').loadData(distribution);
 
         me.resumeLayouts(true);
     },
     defaults: {
-        height: 100
+        height: 100,
+        style: 'text-align:left'
     },
     items: [{
         xtype: 'component',
@@ -4518,11 +4604,10 @@ Ext.define('Scalr.ui.AnalyticsBoxesFarm', {
         flex: 1,
         minWidth: 160,
         maxWidth: 280,
-        style: 'text-align:left',
         tpl:
             '<div class="x-cabox-title">Farm total spend</div>'+
             '<div style="margin: 8px 0 0">' +
-                '<span class="title1" style="position:relative;top:-4px">{[this.currency2(values.cost, true)]}</span>' +
+                '<span class="title1">{[this.currency2(values.cost, true)]}</span>' +
                 '<tpl if="growth!=0">' +
                     ' &nbsp;{[this.pctLabel(values.growth, values.growthPct, false, false, false, false)]}' +
                 '</tpl>'+
@@ -4536,16 +4621,16 @@ Ext.define('Scalr.ui.AnalyticsBoxesFarm', {
         tpl:
             '<div class="x-cabox-title">Farm cost distribution</div>' +
             '<div style="max-width:400px">'+
-                '<table style="width:90%;border-collapse:collapse;margin:0 0 12px 0"><tr>' +
+                '<table style="width:90%;border-collapse:collapse;margin:0 0 6px 0"><tr>' +
                     '<tpl for=".">' +
-                        '<td class="x-costanalytics-bg-{name}" style="min-width:1px;height:16px;padding:0;width:{[values.costPct]}%;" data-qtip="{[Ext.String.htmlEncode(this.itemCost({name:Ext.String.capitalize(values.name),cost:values.cost,costPct:values.costPct,cls:\'x-costanalytics-\'+values.name}, false))]}" data-qclass="x-tip-light"></td>' +
+                        '<td class="x-costanalytics-bg-{name}" style="min-width:3px;height:16px;padding:0;width:{[values.costPct]}%;" data-qtip="{[Ext.String.htmlEncode(this.itemCost({name:Ext.String.capitalize(values.name),cost:values.cost,costPct:values.costPct,cls:\'x-costanalytics-\'+values.name}, false))]}" data-qclass="x-tip-light"></td>' +
                     '</tpl>'+
                 '</tr></table>' +
-                '<table style="width:90%;border-collapse:collapse;margin:0 0 12px 0"><tr>' +
-                    '<td style="width:25%"><span><img src="'+Ext.BLANK_IMAGE_URL+'" class="x-costanalytics-bg-compute" style="vertical-align:top;width:12px;height:12px;border-radius:6px" />&nbsp;Compute</span></td>'+
-                    '<td style="width:25%"><span><img src="'+Ext.BLANK_IMAGE_URL+'" class="x-costanalytics-bg-storage" style="vertical-align:top;width:12px;height:12px;border-radius:6px" />&nbsp;Storage</span></td>'+
-                    '<td style="width:30%"><span><img src="'+Ext.BLANK_IMAGE_URL+'" class="x-costanalytics-bg-bandwidth" style="vertical-align:top;width:12px;height:12px;border-radius:6px" />&nbsp;Bandwidth</span></td>'+
-                    '<td style="width:20%"><span><img src="'+Ext.BLANK_IMAGE_URL+'" class="x-costanalytics-bg-other" style="vertical-align:top;width:12px;height:12px;border-radius:6px" />&nbsp;Other</span></td>'+
+                '<table style="width:90%;border-collapse:collapse;margin:0 0 12px 0;white-space:nowrap"><tr>' +
+                    '<td style="width:25%"><span><img src="'+Ext.BLANK_IMAGE_URL+'" class="x-costanalytics-bg-compute" style="width:12px;height:12px;border-radius:6px" />&nbsp;Compute</span></td>'+
+                    '<td style="width:25%"><span><img src="'+Ext.BLANK_IMAGE_URL+'" class="x-costanalytics-bg-storage" style="width:12px;height:12px;border-radius:6px" />&nbsp;Storage</span></td>'+
+                    '<td style="width:30%"><span><img src="'+Ext.BLANK_IMAGE_URL+'" class="x-costanalytics-bg-bandwidth" style="width:12px;height:12px;border-radius:6px" />&nbsp;Bandwidth</span></td>'+
+                    '<td style="width:20%"><span><img src="'+Ext.BLANK_IMAGE_URL+'" class="x-costanalytics-bg-other" style="width:12px;height:12px;border-radius:6px" />&nbsp;Other</span></td>'+
                 '</tr></table>'+
                 '</div>'
     },{
@@ -4572,12 +4657,13 @@ Ext.define('Scalr.ui.AnalyticsBoxesFarm', {
 });
 
 Ext.define('Scalr.ui.AnalyticsBoxesEnvProject', {
-	extend: 'Scalr.ui.AnalyticsBoxes',
+    extend: 'Scalr.ui.AnalyticsBoxes',
     alias: 'widget.analyticsboxesenvproject',
 
     loadData: function(mode, quarter, startDate, endDate, data) {
         var me = this,
-            totals;
+            totals,
+            costDistribution = [];
 
         me.callParent(arguments);
 
@@ -4595,13 +4681,24 @@ Ext.define('Scalr.ui.AnalyticsBoxesEnvProject', {
             period: mode === 'custom' ? 'period' : mode
         });
 
-        var distribution = [
-            {type: 'compute', cost: totals['cost'], costPct: totals['cost'] > 0 ? 100 : 0},
-            {type: 'storage', cost: 0, costPct: 0},
-            {type: 'bandwidth', cost: 0, costPct: 0},
-            {type: 'other', cost: 0, costPct: 0},
-        ];
-        me.down('#distribution').loadData(distribution);
+        Ext.Object.each(Scalr.constants.distributionTypes, function(id, name){
+            var cost = null,
+                costPct = null;
+            Ext.Array.each(totals['distributionTypes'], function(item){
+                if (item.id == id) {
+                    cost = item.cost;
+                    costPct = item.costPct;
+                    return false;
+                }
+            });
+            costDistribution.push({
+                id: id,
+                name: name,
+                cost: cost,
+                costPct: costPct,
+            });
+        });
+        me.down('#distribution').loadData(costDistribution);
 
         //budget
         var budgetCt = this.down('#budget'),
@@ -4620,7 +4717,7 @@ Ext.define('Scalr.ui.AnalyticsBoxesEnvProject', {
                 value: totals['budget']['budgetSpentPct'],
                 currentPeriodSpend: mode === 'month' ? '(' + totals['budget']['budgetSpentThisPeriodPct'] + '% used in ' + Ext.Date.format(startDate, 'F Y') + ')' : ''
             });
-            budgetCt.down('chart').store.loadData([[totals['budget']['budgetSpentPct']]]);
+            budgetCt.down('polar').store.loadData([[totals['budget']['budgetSpentPct']]]);
             budgetCt.down('#budgetRemain').update(totals['budget']);
             this.down('#budgetAlert').setVisible(!!totals['budget']['budgetAlert']).update({
                 ccId: data['ccId'],
@@ -4654,21 +4751,21 @@ Ext.define('Scalr.ui.AnalyticsBoxesEnvProject', {
         maxWidth: 500,
         tpl:
             '<div class="x-cabox-title">{title}</div>'+
-            '<div style="margin:16px 0 0">Spent' +
-                '<div style="margin: 8px 0 0">' +
-                    '<span class="title1" style="position:relative;top:-4px">{[this.currency2(values.cost, true)]}</span>' +
+            '<div style="margin:16px 0 0"><span class="x-form-item-label-default">Spent</span>' +
+                '<div>' +
+                    '<span class="title1">{[this.currency2(values.cost, true)]}</span>' +
                     '<tpl if="growth!=0">' +
                         ' &nbsp;{[this.pctLabel(values.growth, values.growthPct, false, false, false, false)]}' +
                     '</tpl>'+
                 '</div>' +
             '</div>'+
             '<tpl if="trends">' +
-                '<div style="margin:14px 0 0">{trends.rollingAverageMessage}' +
-                    '<div style="margin: 4px 0 8px"><span class="title1">{[this.currency2(values.trends.rollingAverage, true)]}</span> per {interval}</div>' +
+                '<div style="margin:20px 0 0"><span class="x-form-item-label-default">{trends.rollingAverageMessage}</span>' +
+                    '<div style="margin: 0 0 8px"><span class="title1">{[this.currency2(values.trends.rollingAverage, true)]}</span> per {interval}</div>' +
                 '</div>' +
             '</tpl>' +
             '<tpl if="forecastCost!==null">' +
-                '<div style="margin:16px 0 6px">{period:capitalize} end estimate</div>' +
+                '<div style="margin:20px 0 0" class="x-form-item-label-default">{period:capitalize} end estimate</div>' +
                 '<span class="title2" style="padding-right:1em">~ {[this.currency2(values.forecastCost, true)]}</span>' +
             '</tpl>'
     },{
@@ -4685,11 +4782,13 @@ Ext.define('Scalr.ui.AnalyticsBoxesEnvProject', {
                 row = Ext.clone(row);
                 rows.push(row);
                 row['pctOfMax'] = 0;
-                maxCost = maxCost > row['cost'] ? maxCost : row['cost'];
+                if (row['cost'] !== null) {
+                    maxCost = maxCost > row['cost'] ? maxCost : row['cost'];
+                }
             });
             if (maxCost != 0) {
                 Ext.each(rows, function(row){
-                    row['pctOfMax'] = row['cost']/maxCost*100;
+                    row['pctOfMax'] = row['cost'] !== null ? row['cost']/maxCost*100 : 0;
                 });
             }
             this.store.loadData(rows);
@@ -4700,7 +4799,7 @@ Ext.define('Scalr.ui.AnalyticsBoxesEnvProject', {
                 property: 'cost',
                 direction: 'DESC'
             },
-            fields: ['cost', 'costPct', 'pctOfMax', 'type']
+            fields: ['cost', 'costPct', 'pctOfMax', 'name']
         },
         tpl: new Ext.XTemplate(
             '<div class="x-cabox-title">Cost distribution</div>'+
@@ -4708,10 +4807,14 @@ Ext.define('Scalr.ui.AnalyticsBoxesEnvProject', {
                 '<tpl for=".">' +
                     '<tr class="x-top5-item">' +
                         '<td>' +
-                            '<div style="max-width:250px">{type:capitalize}</div>' +
-                            '<div style="margin-top:4px"><div class="bar-inner x-costanalytics-bg-{type}" style="margin:0;width:{pctOfMax}%"><span>{[this.currency2(values.cost)]}</span></div></div>' +
+                            '<div style="max-width:250px">{name:capitalize}</div>' +
+                            '<div style="margin-top:4px"><div class="bar-inner x-costanalytics-bg-{name}" style="margin:0;width:{pctOfMax}%">'+
+                                '<span>{[values.cost === null ? \'N/A\' : this.currency2(values.cost)]}</span>'+
+                            '</div></div>' +
                         '</td>'+
-                        '<td style="text-align:center;width:75px;"><div style="margin-bottom:4px"><tpl if="xindex==1"><b>% of total</b></tpl>&nbsp;</div>{costPct}%</td>'+
+                        '<td style="text-align:center;width:75px;"><div style="margin-bottom:4px"><tpl if="xindex==1"><b>% of total</b></tpl>&nbsp;</div>' +
+                            '{[values.costPct === null ? \'N/A\' : values.costPct + \'%\']}'+
+                        '</td>'+
                     '</tr>' +
                 '</tpl>'+
             '</table>'
@@ -4728,7 +4831,7 @@ Ext.define('Scalr.ui.AnalyticsBoxesEnvProject', {
         items: [{
             xtype: 'component',
             itemId: 'title',
-            tpl: '<div class="x-cabox-title"><span style="float:left">{[Ext.isNumeric(values.quarter)?\'Q\':\'\']}{quarter} {year} budget</span><span style="float:right;line-height:38px" class="title2">{[this.currency(values.total)]}</span></div>'
+            tpl: '<div class="x-cabox-title"><span style="float:left">{[Ext.isNumeric(values.quarter)?\'Q\':\'\']}{quarter} {year} budget</span><span style="float:right;" class="title2">{[this.currency(values.total)]}</span></div>'
         },{
             xtype: 'container',
             flex: 1,
@@ -4740,27 +4843,28 @@ Ext.define('Scalr.ui.AnalyticsBoxesEnvProject', {
                 xtype: 'container',
                 flex: 1,
                 items: [{
-                    xtype: 'chart',
-                    width: 140,
+                    xtype: 'polar',
+                    theme: 'scalr',
                     height: 110,
                     store: Ext.create('Ext.data.ArrayStore', {
                         fields: ['value']
                     }),
-                    insetPadding: 0,
                     axes: [{
-                        type: 'gauge',
+                        type: 'numeric',
                         position: 'gauge',
                         minimum: 0,
                         maximum: 100,
-                        steps: 1,
-                        margin: 7
+                        hidden: true
                     }],
                     series: [{
                         type: 'gauge',
                         field: 'value',
                         donut: 70,
-                        renderer: function(sprite, record, attr, index, store){
-                            if (index === 0) {
+                        totalAngle: Math.PI,
+                        needleLength: 100,
+                        renderer: function(sprite, config, data, index){
+                            var record = data.store.getData().items[index];
+                            if (record) {
                                 var value = record.get('value'),
                                     color;
                                 if (value >= 95) {
@@ -4773,14 +4877,16 @@ Ext.define('Scalr.ui.AnalyticsBoxesEnvProject', {
                             } else {
                                 color = '#f0f1f4';
                             }
-                            return Ext.apply(attr, {fill: color});
-                        }
+                            return {
+                                fillStyle: color
+                            };
+                        },
                     }]
                 },{
                     xtype: 'component',
                     itemId: 'budgetSpentPct',
-                    tpl: '<div class="title1" style="font-size:17px">{value}% <span>used</span></div><p>{currentPeriodSpend}</p>',
-                    margin: '-16 0 0 0'
+                    tpl: '<div><span class="title1" style="font-size:17px">{value}%</span> used</div><p>{currentPeriodSpend}</p>',
+                    margin: '-36 0 0 0'
                 }]
             },{
                 xtype: 'component',
@@ -4788,13 +4894,13 @@ Ext.define('Scalr.ui.AnalyticsBoxesEnvProject', {
                 itemId: 'budgetRemain',
                 tpl: new Ext.XTemplate(
                      '<tpl if="closed">' +
-                        '<div style="margin: 16px 0 0">Final spend<div class="title1 x-costanalytics-{[this.getColorCls(values)]}" style="margin: 4px 0 8px">{[this.currency(values.budgetFinalSpent)]}</div></div>' +
-                        '<div style="padding:10px 0 0">Cost variance<div class="title2 x-costanalytics-{[values.costVariance>0?\'red\':\'green\']}" data-qtip="{costVariancePct}%">{[values.costVariance>0?\'+\':\'\']}{costVariance:currency}</div></div>'+
-                        '<div style="padding:12px 0 0">Exceeded on<tpl if="estimateDate"><div class="title2 x-costanalytics-red" style="margin: 4px 0 8px">{estimateDate:date(\'M j Y\')}</div><tpl else><div class="title2">&ndash;</div></tpl></div>'+
+                        '<div style="margin: 16px 0 0"><span class="x-form-item-label-default">Final spend</span><div class="title1 x-costanalytics-{[this.getColorCls(values)]}" style="margin: 4px 0 8px">{[this.currency(values.budgetFinalSpent)]}</div></div>' +
+                        '<div style="padding:10px 0 0"><span class="x-form-item-label-default">Cost variance</span><div class="title2 x-costanalytics-{[values.costVariance>0?\'red\':\'green\']}" data-qtip="{costVariancePct}%">{[values.costVariance>0?\'+\':\'\']}{costVariance:currency}</div></div>'+
+                        '<div style="padding:12px 0 0"><span class="x-form-item-label-default">Exceeded on</span><tpl if="estimateDate"><div class="title2 x-costanalytics-red" style="margin: 4px 0 8px">{estimateDate:date(\'M j Y\')}</div><tpl else><div class="title2">&ndash;</div></tpl></div>'+
                      '<tpl else>'+
-                        '<div style="margin: 16px 0 0">Remaining<div class="title1 x-costanalytics-{[this.getColorCls(values)]}" style="margin: 4px 0 8px">{[this.currency(values.budgetRemain)]}</div></div>' +
-                        '<div style="padding:10px 0 0">Overspend estimate<div class="title2<tpl if="estimateOverspend&gt;0"> x-costanalytics-red</tpl>" <tpl if="estimateOverspendPct&gt;0">data-qtip="{estimateOverspendPct}% of budget"</tpl> style="margin: 4px 0 0">~{[this.currency(values.estimateOverspend)]}</div></div>'+
-                        '<div style="padding:12px 0 0">Exceed{[values.budgetRemain>0?\'\':\'ed\']} on<tpl if="estimateDate"><div class="title2 x-costanalytics-red" style="margin: 4px 0 8px">{estimateDate:date(\'M j Y\')}</div><tpl else><div class="title2">&ndash;</div></tpl></div>'+
+                        '<div style="margin: 16px 0 0"><span class="x-form-item-label-default">Remaining</span><div class="title1 x-costanalytics-{[this.getColorCls(values)]}" style="margin: 4px 0 8px">{[this.currency(values.budgetRemain)]}</div></div>' +
+                        '<div style="padding:10px 0 0"><span class="x-form-item-label-default">Overspend estimate</span><div class="title2<tpl if="estimateOverspend&gt;0"> x-costanalytics-red</tpl>" <tpl if="estimateOverspendPct&gt;0">data-qtip="{estimateOverspendPct}% of budget"</tpl> style="margin: 4px 0 0">~{[this.currency(values.estimateOverspend)]}</div></div>'+
+                        '<div style="padding:12px 0 0"><span class="x-form-item-label-default">Exceed{[values.budgetRemain>0?\'\':\'ed\']} on</span><tpl if="estimateDate"><div class="title2 x-costanalytics-red" style="margin: 4px 0 8px">{estimateDate:date(\'M j Y\')}</div><tpl else><div class="title2">&ndash;</div></tpl></div>'+
                      '</tpl>',
                      {
                         getColorCls: function(values) {
@@ -4816,7 +4922,7 @@ Ext.define('Scalr.ui.AnalyticsBoxesEnvProject', {
             itemId: 'budgetAlert',
             margin: '6 0 0',
             hidden: true,
-            tpl: '<img src="' + Ext.BLANK_IMAGE_URL + '" class="x-icon-warning"/>&nbsp;&nbsp;{alert}'
+            tpl: '<img src="' + Ext.BLANK_IMAGE_URL + '" class="x-grid-icon x-grid-icon-warning"/>&nbsp;&nbsp;{alert}'
         }]
     },{
         xtype: 'container',
@@ -4828,36 +4934,36 @@ Ext.define('Scalr.ui.AnalyticsBoxesEnvProject', {
         items: [{
             xtype: 'component',
             itemId: 'title',
-            tpl: '<div class="x-cabox-title"><span style="float:left">{[Ext.isNumeric(values.quarter)?\'Q\':\'\']}{quarter} {year} Budget</span><span style="float:right;font-weight:normal"><i>{text}</i></span></div>'
+            tpl: '<div class="x-cabox-title"><span style="float:left">{[Ext.isNumeric(values.quarter)?\'Q\':\'\']}{quarter} {year} Budget</span><i style="float:right;">{text}</i></div>'
         },{
             xtype: 'component',
             itemId: 'finalSpent',
             margin: '56 0 0 0',
-            tpl: 'Final spend<div class="title1" style="margin: 4px 0 8px">{[this.currency(values.budgetFinalSpent)]}</div>'
+            tpl: '<span class="x-form-item-label-default">Final spend</span><div class="title1" style="margin: 4px 0 8px">{[this.currency(values.budgetFinalSpent)]}</div>'
         },{
             xtype: 'button',
             itemId: 'button',
             margin: '56 0 0 0',
             padding: '0 24',
-            cls: 'x-btn-green-bg',
+            cls: 'x-btn-green',
             height: 52,
             text: 'Define a budget',
             handler: function(){
                 var data = this.up('analyticsboxesenvproject').data;
-                Scalr.event.fireEvent('redirect', '#/analytics/account/budgets?ccId=' + data['ccId'] + (data['projectId'] ? '&projectId=' + data['projectId'] : ''));
+                Scalr.event.fireEvent('redirect', '#/account/analytics/budgets?ccId=' + data['ccId'] + (data['projectId'] ? '&projectId=' + data['projectId'] : ''));
             }
         }]
     }]
 });
 
 Ext.define('Scalr.ui.MenuItemSortDir', {
-	extend: 'Ext.menu.CheckItem',
-	alias: 'widget.menuitemsortdir',
+    extend: 'Ext.menu.CheckItem',
+    alias: 'widget.menuitemsortdir',
 
     defaultDir: 'asc',
-	onRender: function () {
-		var me = this;
-		me.callParent();
+    onRender: function () {
+        var me = this;
+        me.callParent();
         if (me.checked) {
             me.dir = me.defaultDir;
         }
@@ -4867,7 +4973,7 @@ Ext.define('Scalr.ui.MenuItemSortDir', {
             title: me.defaultDir,
             cls: 'x-costanalytics-sort-dir x-costanalytics-sort-dir-' + me.defaultDir
         }, me.arrowEl);
-	},
+    },
 
     onClick: function() {
         var me = this,

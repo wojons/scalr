@@ -13,39 +13,33 @@ Scalr.regPage('Scalr.ui.bundletasks.view', function (loadParams, moduleParams) {
 	});
 
 	return Ext.create('Ext.grid.Panel', {
-		title: 'Bundle tasks &raquo; View',
 		scalrOptions: {
-			'reload': false,
-			'maximize': 'all'
+			reload: false,
+			maximize: 'all',
+            menuTitle: 'Bundle Tasks',
+            menuHref: '#/bundletasks',
+            menuFavorite: true
 		},
 		store: store,
 		stateId: 'grid-bundletasks-view',
 		stateful: true,
-		plugins: {
-			ptype: 'gridstore'
-		},
+        plugins: [{
+            ptype: 'gridstore'
+        }, {
+            ptype: 'applyparams'
+        }],
 
-		tools: [{
-			xtype: 'gridcolumnstool'
-		}, {
-			xtype: 'favoritetool',
-			favorite: {
-				text: 'Bundle tasks',
-				href: '#/bundletasks/view'
-			}
-		}],
-
+        disableSelection: true,
 		viewConfig: {
 			emptyText: 'No bundle tasks found',
-			loadingText: 'Loading bundle tasks ...',
-            disableSelection: true
+			loadingText: 'Loading bundle tasks ...'
 		},
 
 		columns: [
-			{ header: "ID", width: 70, dataIndex: 'id', sortable: true },
+			{ header: "ID", width: 80, dataIndex: 'id', sortable: true },
 			{ header: "Server ID", width: 200, dataIndex: 'server_id', sortable: true, xtype: 'templatecolumn', tpl: new Ext.XTemplate(
 				'<tpl if="server_exists"><a href="#/servers/{server_id}/dashboard" title="{server_id}">{[this.serverId(values.server_id)]}</a>',
-				'<tpl else><img src="/ui2/images/icons/false.png" /></tpl>',
+				'<tpl else>&mdash;</tpl>',
                 {
 					serverId: function(id) {
 						var values = id.split('-');
@@ -57,17 +51,17 @@ Scalr.regPage('Scalr.ui.bundletasks.view', function (loadParams, moduleParams) {
                 '<img class="x-icon-platform-small x-icon-platform-small-{platform}" title="{[Scalr.utils.getPlatformName(values.platform)]}" src="' + Ext.BLANK_IMAGE_URL + '"/>'
             },
 			{ header: "Name", flex: 1, dataIndex: 'rolename', sortable: true, xtype: 'templatecolumn', tpl:
-                '<tpl if="rolename && role_id && status==\'\success\'">' +
-                    '<a href="#/roles/manager?roleId={role_id}">{rolename}</a>' +
+                '<tpl if="rolename && role_id && status==\'success\'">' +
+                    '<a href="#/roles?roleId={role_id}">{rolename}</a>' +
                 '<tpl else>' +
                     '{rolename}' +
                 '</tpl>'
             },
             { header: "OS", flex: .7, dataIndex: 'os_family', sortable: true, xtype: 'templatecolumn', tpl:
                 '<tpl if="os_family">' +
-                    '<img style="margin:0 3px 0 0" class="x-icon-osfamily-small x-icon-osfamily-small-{os_family}" src="' + Ext.BLANK_IMAGE_URL + '"/> {[Scalr.utils.beautifyOsFamily(values.os_family)]} {os_version} {os_name:capitalize}' +
+                    '<img style="margin:0 3px 0 0" class="x-icon-osfamily-small x-icon-osfamily-small-{os_family}" src="' + Ext.BLANK_IMAGE_URL + '"/> {[Scalr.utils.beautifyOsFamily(values.os_family)]} {os_version}' +
                 '<tpl else>' +
-                    '<img src="/ui2/images/icons/false.png" />' +
+                    '&mdash;' +
                 '</tpl>'
             },
 			{ header: "Added", width: 165, dataIndex: 'dtadded', sortable: true, hidden: true },
@@ -78,20 +72,22 @@ Scalr.regPage('Scalr.ui.bundletasks.view', function (loadParams, moduleParams) {
 				'<tpl if="status==\'success\'">' +
                     '{duration}' +
                 '<tpl elseif="status==\'failed\'">' +
-                    '<img src="/ui2/images/icons/false.png" />' +
+                    '&mdash;' +
                 '<tpl else>Ongoing</tpl>'
 			},
             { header: "Created by", width: 165, dataIndex: 'created_by_email', sortable: true },
             { header: "Status", width: 140, dataIndex: 'status', sortable: true, xtype: 'statuscolumn', statustype: 'bundletask'},
             {
-				xtype: 'optionscolumn2',
+				xtype: 'optionscolumn',
 				menu: [{
 					text:'View log',
 					iconCls: 'x-menu-icon-logs',
+                    showAsQuickAction: true,
 					href: '#/bundletasks/{id}/logs'
 				}, {
 					iconCls: 'x-menu-icon-cancel',
 					text: 'Cancel',
+                    showAsQuickAction: true,
                     getVisibility: function (data) {
                         return data['status'] !== 'success' && data['status'] !== 'failed';
                     },

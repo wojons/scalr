@@ -1,8 +1,6 @@
 <?php
 namespace Scalr\Upgrade\Updates;
 
-use Scalr\Farm\Role\FarmRoleService;
-
 use Scalr\Upgrade\SequenceInterface;
 use Scalr\Upgrade\AbstractUpdate;
 
@@ -37,7 +35,7 @@ class Update20140128205641 extends AbstractUpdate implements SequenceInterface
      */
     protected function isApplied1($stage)
     {
-        return false;
+        return class_exists('FarmRoleService');
     }
 
     /**

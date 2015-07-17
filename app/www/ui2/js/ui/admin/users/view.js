@@ -11,27 +11,26 @@ Scalr.regPage('Scalr.ui.admin.users.view', function (loadParams, moduleParams) {
 	});
 
 	return Ext.create('Ext.grid.Panel', {
-		title: 'Admin &raquo; Users &raquo; View',
 		scalrOptions: {
-			'reload': false,
-			'maximize': 'all'
+			reload: false,
+			maximize: 'all',
+            menuTitle: 'Admins'
 		},
 		store: store,
 		stateId: 'grid-admin-users-view',
 		stateful: true,
-		plugins: {
-			ptype: 'gridstore'
-		},
-		tools: [{
-			xtype: 'gridcolumnstool'
-		}],
+        plugins: [{
+            ptype: 'gridstore'
+        }, {
+            ptype: 'applyparams'
+        }],
 		viewConfig: {
 			emptyText: 'No users found',
 			loadingText: 'Loading users ...'
 		},
 
 		columns: [
-			{ text: 'ID', width: 60, dataIndex: 'id', sortable: true },
+			{ text: 'ID', width: 80, dataIndex: 'id', sortable: true },
 			{ text: 'Email', flex: 1, dataIndex: 'email', sortable: true },
 			{ text: 'Status', Width: 50, dataIndex: 'status', sortable: true, xtype: 'templatecolumn', tpl:
 				'<span ' +
@@ -45,12 +44,12 @@ Scalr.regPage('Scalr.ui.admin.users.view', function (loadParams, moduleParams) {
             },
 			{ text: 'Full name', flex: 1, dataIndex: 'fullname', sortable: true },
             { text: '2FA',  width: 70, align: 'center', dataIndex: 'is2FaEnabled', sortable: true, xtype: 'templatecolumn',
-                tpl: '<img src="' + Ext.BLANK_IMAGE_URL + '" class="x-icon-<tpl if="is2FaEnabled">ok<tpl else>minus</tpl>"/>'
+                tpl: '<tpl if="is2FaEnabled"><div class="x-grid-icon x-grid-icon-simple x-grid-icon-ok"></div><tpl else>&mdash;</tpl>'
             },
-			{ text: 'Created date', width: 170, dataIndex: 'dtcreated', sortable: true },
-			{ text: 'Last login', width: 170, dataIndex: 'dtlastlogin', sortable: true },
+			{ text: 'Created date', width: 180, dataIndex: 'dtcreated', sortable: true },
+			{ text: 'Last login', width: 180, dataIndex: 'dtlastlogin', sortable: true },
 			{
-				xtype: 'optionscolumn2',
+				xtype: 'optionscolumn',
 				getVisibility: function(record) {
 					if (record.get('email') == 'admin') {
 						return (Scalr.user.userName == 'admin');
@@ -60,10 +59,12 @@ Scalr.regPage('Scalr.ui.admin.users.view', function (loadParams, moduleParams) {
 				menu: [{
 					text: 'Edit',
 					iconCls: 'x-menu-icon-edit',
+                    showAsQuickAction: true,
 					href: '#/admin/users/{id}/edit'
 				}, {
 					text: 'Remove',
 					iconCls: 'x-menu-icon-delete',
+                    showAsQuickAction: true,
                     getVisibility: function (data) {
                         return data['email'] !== 'admin';
                     },
@@ -92,8 +93,8 @@ Scalr.regPage('Scalr.ui.admin.users.view', function (loadParams, moduleParams) {
 			store: store,
 			dock: 'top',
 			beforeItems: [{
-                text: 'Add user',
-                cls: 'x-btn-green-bg',
+                text: 'New user',
+                cls: 'x-btn-green',
 				handler: function() {
 					Scalr.event.fireEvent('redirect', '#/admin/users/create');
 				}

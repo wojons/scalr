@@ -7,22 +7,27 @@ Scalr.regPage('Scalr.ui.servers.messages', function (loadParams, moduleParams) {
 			type: 'scalr.paging',
 			url: '/servers/xListMessages/'
 		},
-		remoteSort: true
+		remoteSort: true,
+        sorters: {
+            property: 'dtadded',
+            direction: 'DESC'
+        }
 	});
 
 	return Ext.create('Ext.grid.Panel', {
-		title: 'Servers &raquo; ' + loadParams['serverId'] + ' &raquo; Messages',
 		scalrOptions: {
-			'reload': false,
-			'maximize': 'all'
+			reload: false,
+			maximize: 'all',
+            menuTitle: 'Server messages'
 		},
 
 		store: store,
 		stateId: 'grid-servers-messages-view',
 		stateful: true,
-		plugins: {
-			ptype: 'gridstore'
-		},
+        plugins: [ 'gridstore', {
+        	ptype: 'applyparams',
+        	filterIgnoreParams: [ 'serverId' ]
+        }],
 
 		viewConfig: {
 			emptyText: 'No messages found'
@@ -31,9 +36,9 @@ Scalr.regPage('Scalr.ui.servers.messages', function (loadParams, moduleParams) {
 		columns:[
 			{ header: "Message ID", flex: 1, dataIndex: 'messageid', sortable: true },
 			{ header: "Message type", width: 150, dataIndex: 'message_type', xtype: 'templatecolumn', tpl:'{type} / {message_type}', sortable: false },
-			{ header: "Server ID", flex: 1, dataIndex: 'server_id', xtype: 'templatecolumn', tpl:'<a href="#/servers/{server_id}/dashboard">{server_id}</a>', sortable: true },
+			{ header: "Server ID", flex: 1, dataIndex: 'server_id', xtype: 'templatecolumn', tpl:'<a href="#/servers/{server_id}/dashboard">{server_id}</a>', sortable: false },
 			{ header: "Event server ID", flex: 1, dataIndex: 'event_server_id', xtype: 'templatecolumn', tpl:'<a href="#/servers/{event_server_id}/dashboard">{event_server_id}</a>', sortable: true },
-			{ header: "Type", align: 'center', width: 60, dataIndex: 'type', xtype: 'templatecolumn', 
+			{ header: "Type", align: 'center', width: 60, dataIndex: 'type', xtype: 'templatecolumn',
                 tpl: '<img src="'+Ext.BLANK_IMAGE_URL+'" class="x-icon-arrow-{[values.type==\'in\'?\'left\':\'right\']}" '+
                       'data-anchor="right" data-qalign="r-l" data-qtip="This is a message from {[values.type==\'in\'?\'the server addressed to Scalr.\':\'Scalr addressed to the server.\']}" ' +
                      '/>' ,
@@ -43,7 +48,7 @@ Scalr.regPage('Scalr.ui.servers.messages', function (loadParams, moduleParams) {
 			{ header: "Attempts", width: 100, dataIndex: 'handle_attempts', sortable: true },
 			{ header: "Last delivery attempt", width: 200, dataIndex: 'dtlasthandleattempt', sortable: true },
 			{
-				xtype: 'optionscolumn2',
+				xtype: 'optionscolumn',
 				getVisibility: function (record) {
 					return record.get('status') == 2 || record.get('status') == 3;
 				},
@@ -66,16 +71,8 @@ Scalr.regPage('Scalr.ui.servers.messages', function (loadParams, moduleParams) {
 			}
 		],
 
-		tools: [{
-			type: 'close',
-			handler: function () {
-				Scalr.event.fireEvent('close');
-			}
-		}],
-
 		dockedItems: [{
 			xtype: 'scalrpagingtoolbar',
-            ignoredLoadParams: ['serverId'],
 			store: store,
 			dock: 'top',
             items: [{

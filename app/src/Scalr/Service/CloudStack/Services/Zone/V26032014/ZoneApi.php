@@ -69,7 +69,8 @@ class ZoneApi extends AbstractApi
 
         if ($response->hasError() === false) {
             $resultObject = $response->getResult();
-            if (property_exists($resultObject, 'count') && $resultObject->count > 0) {
+
+            if (!empty($resultObject) && property_exists($resultObject, 'count') && $resultObject->count > 0) {
                 $result = $this->_loadZonesList($resultObject->zone);
             }
         }
@@ -127,6 +128,9 @@ class ZoneApi extends AbstractApi
             }
             if (property_exists($resultObject, 'capacity')) {
                 $item->setCapacity($this->_loadCapacityList($resultObject->capacity));
+            }
+            if (property_exists($resultObject, 'resourcedetails')) {
+                $item->setResourcedetails($resultObject->resourcedetails);
             }
         }
 

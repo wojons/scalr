@@ -7,6 +7,7 @@ use Scalr\Modules\PlatformFactory;
 use Scalr\Modules\Platforms\Openstack\Helpers\OpenstackHelper;
 use Scalr\Server\Alerts;
 use Scalr\Service\Aws\Ec2\DataType\InstanceAttributeType;
+use Scalr\Modules\Platforms\GoogleCE\GoogleCEPlatformModule;
 use Scalr\Util\CryptoTool;
 
 class Scalr_UI_Controller_Servers extends Scalr_UI_Controller
@@ -59,8 +60,6 @@ class Scalr_UI_Controller_Servers extends Scalr_UI_Controller
 
     public function xLockAction()
     {
-        $this->request->restrictAccess(Acl::RESOURCE_FARMS_SERVERS);
-
         $this->request->defineParams(array(
             'serverId'
         ));
@@ -89,8 +88,6 @@ class Scalr_UI_Controller_Servers extends Scalr_UI_Controller
 
     public function xTroubleshootAction()
     {
-        $this->request->restrictAccess(Acl::RESOURCE_FARMS_SERVERS);
-
         $this->request->defineParams(array(
             'serverId'
         ));
@@ -133,6 +130,26 @@ class Scalr_UI_Controller_Servers extends Scalr_UI_Controller
 
             $encPassword = $ec2->instance->getPasswordData($dbServer->GetCloudServerID());
             $encPassword = str_replace('\/', '/', trim($encPassword->passwordData));
+        } elseif ($dbServer->platform == SERVER_PLATFORMS::GCE) {
+            $platform = PlatformFactory::NewPlatform(SERVER_PLATFORMS::GCE);
+            $client = $platform->getClient($this->environment, $this->getParam('cloudLocation'));
+            /* @var $client Google_Service_Compute */
+
+            $info = $client->instances->get(
+                $this->environment->getPlatformConfigValue(GoogleCEPlatformModule::PROJECT_ID),
+                $dbServer->cloudLocation,
+                $dbServer->serverId
+            );
+            /* @var $info Google_Service_Compute_Instance */
+
+            foreach ($info->getMetadata() as $meta) {
+                /* @var $meta Google_Service_Compute_MetadataItems */
+                if ($meta->getKey() == 'gce-initial-windows-password') {
+                    $password = $meta->getValue();
+                    break;
+                }
+            }
+
         } elseif (PlatformFactory::isOpenstack($dbServer->platform)) {
             if (in_array($dbServer->platform, array(SERVER_PLATFORMS::RACKSPACENG_UK, SERVER_PLATFORMS::RACKSPACENG_US))) {
                 $password = $dbServer->GetProperty(OPENSTACK_SERVER_PROPERTIES::ADMIN_PASS);
@@ -147,8 +164,12 @@ class Scalr_UI_Controller_Servers extends Scalr_UI_Controller
             throw new Exception("Requested operation supported only by EC2");
 
         if ($encPassword) {
-            $privateKey = Scalr_SshKey::init()->loadGlobalByFarmId($dbServer->envId, $dbServer->farmId, $dbServer->GetCloudLocation(), $dbServer->platform);
-            $password = CryptoTool::opensslDecrypt(base64_decode($encPassword), $privateKey->getPrivate());
+            try {
+                $privateKey = Scalr_SshKey::init()->loadGlobalByFarmId($dbServer->envId, $dbServer->farmId, $dbServer->GetCloudLocation(), $dbServer->platform);
+                $password = CryptoTool::opensslDecrypt(base64_decode($encPassword), $privateKey->getPrivate());
+            } catch (Exception $e) {
+                //Do nothing. Error already handled in UI (If no password returned)
+            }
         }
 
         $this->response->data(array('password' => $password, 'encodedPassword' => $encPassword));
@@ -156,45 +177,52 @@ class Scalr_UI_Controller_Servers extends Scalr_UI_Controller
 
     public function xGetStorageDetailsAction()
     {
-        $this->request->restrictAccess(Acl::RESOURCE_FARMS_SERVERS);
-
         $dbServer = DBServer::LoadByID($this->getParam('serverId'));
         $this->user->getPermissions()->validate($dbServer);
 
-        if ($dbServer->IsSupported('2.5.4')) {
-            $info = $dbServer->scalarizr->system->mounts();
-        } else {
-            if ($dbServer->GetFarmRoleObject()->GetRoleObject()->osFamily == 'windows') {
-                $storages = array('C' => array());
+        try {
+            if ($dbServer->IsSupported('2.5.4')) {
+                $info = $dbServer->scalarizr->system->mounts();
             } else {
-                $storages = array('/' => array());
-                $storageConfigs = $dbServer->GetFarmRoleObject()->getStorage()->getVolumes($dbServer->index);
-                foreach ($storageConfigs as $config) {
-                    $config = $config[$dbServer->index];
+                if ($dbServer->GetFarmRoleObject()->GetRoleObject()->getOs()->family == 'windows') {
+                    $storages = array('C' => array());
+                } else {
+                    $storages = array('/' => array());
+                    $storageConfigs = $dbServer->GetFarmRoleObject()->getStorage()->getVolumes($dbServer->index);
+                    foreach ($storageConfigs as $config) {
+                        $config = $config[$dbServer->index];
 
-                    $storages[$config->config->mpoint] = array();
+                        $storages[$config->config->mpoint] = array();
+                    }
                 }
+
+                $info = $dbServer->scalarizr->system->statvfs(array_keys($storages));
             }
 
-            $info = $dbServer->scalarizr->system->statvfs(array_keys($storages));
+            $this->response->data([
+                'data' => $info,
+                'status' => 'available'
+            ]);
+        } catch (Exception $e) {
+            $this->response->data([
+                'status' => 'notAvailable',
+                'error' => $e->getMessage()
+            ]);
         }
-
-        $this->response->data(array('data' => $info));
     }
 
     public function xGetHealthDetailsAction()
     {
-        $this->request->restrictAccess(Acl::RESOURCE_FARMS_SERVERS);
-
         $dbServer = DBServer::LoadByID($this->getParam('serverId'));
         $this->user->getPermissions()->validate($dbServer);
-
 
         $data = array();
 
         try {
-            $la = $dbServer->scalarizr->system->loadAverage();
-            $data['la'] = number_format($la[0], 2);
+            if ($dbServer->osType == 'linux') {
+                $la = $dbServer->scalarizr->system->loadAverage();
+                $data['la'] = number_format($la[0], 2);
+            }
         } catch (Exception $e) {}
 
         try {
@@ -227,8 +255,6 @@ class Scalr_UI_Controller_Servers extends Scalr_UI_Controller
 
     public function xResendMessageAction()
     {
-        $this->request->restrictAccess(Acl::RESOURCE_FARMS_SERVERS);
-
         $message = $this->db->GetRow("SELECT * FROM messages WHERE server_id=? AND messageid=? LIMIT 1",array(
             $this->getParam('serverId'), $this->getParam('messageId')
         ));
@@ -261,23 +287,20 @@ class Scalr_UI_Controller_Servers extends Scalr_UI_Controller
         }
     }
 
-    public function xListMessagesAction()
+    /**
+     * @param string $serverId
+     * @throws Scalr_UI_Exception_NotFound
+     * @throws Scalr_Exception_InsufficientPermissions
+     */
+    public function xListMessagesAction($serverId)
     {
-        if (!$this->request->isAllowed(Acl::RESOURCE_FARMS_SERVERS) && !$this->request->isAllowed(Acl::RESOURCE_FARMS_ROLES, Acl::PERM_FARMS_ROLES_CREATE)) {
-            throw new Scalr_Exception_InsufficientPermissions();
-        }
-
-        $this->request->defineParams(array(
-            'serverId',
-            'sort' => array('type' => 'string', 'default' => 'dtadded'),
-            'dir' => array('type' => 'string', 'default' => 'DESC')
-        ));
-
-        $dbServer = DBServer::LoadByID($this->getParam('serverId'));
+        $dbServer = DBServer::LoadByID($serverId);
         $this->user->getPermissions()->validate($dbServer);
 
-        $sql = "SELECT *, message_name as message_type FROM messages WHERE server_id='{$dbServer->serverId}'";
-        $response = $this->buildResponseFromSql($sql, array("server_id", "message", "messageid"));
+        $sql = "SELECT *, message_name as message_type FROM messages WHERE server_id = ? AND :FILTER:";
+        $args = [$dbServer->serverId];
+
+        $response = $this->buildResponseFromSql2($sql, ['dtadded', 'messageid', 'event_server_id', 'handle_attempts', 'handle_attempts', 'dtlasthandleattempt'], ['server_id', 'message', 'messageid'], $args);
 
         foreach ($response["data"] as &$row) {
 
@@ -297,7 +320,7 @@ class Scalr_UI_Controller_Servers extends Scalr_UI_Controller
 
     public function messagesAction()
     {
-        if (!$this->request->isAllowed(Acl::RESOURCE_FARMS_SERVERS) && !$this->request->isAllowed(Acl::RESOURCE_FARMS_ROLES, Acl::PERM_FARMS_ROLES_CREATE)) {
+        if (!$this->request->isFarmAllowed(null, Acl::PERM_FARMS_SERVERS) && !$this->request->isAllowed(Acl::RESOURCE_FARMS_ROLES, Acl::PERM_FARMS_ROLES_CREATE)) {
             throw new Scalr_Exception_InsufficientPermissions();
         }
         $this->response->page('ui/servers/messages.js', array('serverId' => $this->getParam('serverId')));
@@ -305,7 +328,7 @@ class Scalr_UI_Controller_Servers extends Scalr_UI_Controller
 
     public function viewAction()
     {
-        if (!$this->request->isAllowed(Acl::RESOURCE_FARMS_SERVERS) && !$this->request->isAllowed(Acl::RESOURCE_FARMS_ROLES, Acl::PERM_FARMS_ROLES_CREATE)) {
+        if (!$this->request->isFarmAllowed(null, Acl::PERM_FARMS_SERVERS) && !$this->request->isAllowed(Acl::RESOURCE_FARMS_ROLES, Acl::PERM_FARMS_ROLES_CREATE)) {
             throw new Scalr_Exception_InsufficientPermissions();
         }
         $this->response->page('ui/servers/view.js', array(
@@ -313,89 +336,30 @@ class Scalr_UI_Controller_Servers extends Scalr_UI_Controller
         ), array('ui/servers/actionsmenu.js'), array('ui/servers/view.css'));
     }
 
-    public function sshConsoleAction()
+    /**
+     * @param   string  $serverId
+     */
+    public function sshConsoleAction($serverId)
     {
-        $this->request->restrictAccess(Acl::RESOURCE_FARMS_SERVERS, Acl::PERM_FARMS_SERVERS_SSH_CONSOLE);
-
-        $dbServer = DBServer::LoadByID($this->getParam('serverId'));
+        $dbServer = DBServer::LoadByID($serverId);
         $this->user->getPermissions()->validate($dbServer);
-        $ipAddress = $dbServer->getSzrHost();
 
-        if ($ipAddress) {
-            $dBFarm = $dbServer->GetFarmObject();
-            $dbRole = $dbServer->GetFarmRoleObject()->GetRoleObject();
+        $this->response->page('ui/servers/sshconsole.js', $this->getSshConsoleSettings($dbServer));
+    }
 
-            $sshPort = $dbRole->getProperty(DBRole::PROPERTY_SSH_PORT);
-            if (!$sshPort)
-                $sshPort = 22;
+    /**
+     * @param   string  $serverId
+     */
+    public function getSshConsoleSettingsAction($serverId)
+    {
+        $dbServer = DBServer::LoadByID($serverId);
+        $this->user->getPermissions()->validate($dbServer);
 
-            $cSshPort = $dbServer->GetProperty(SERVER_PROPERTIES::CUSTOM_SSH_PORT);
-            if ($cSshPort)
-                $sshPort = $cSshPort;
-
-            $userSshSettings = $this->user->getSshConsoleSettings(false, true, $dbServer->serverId);
-
-            $sshSettings = array(
-                'serverId' => $dbServer->serverId,
-                'serverIndex' => $dbServer->index,
-                'remoteIp' => $ipAddress,
-                'localIp' => $dbServer->localIp,
-                'farmName' => $dBFarm->Name,
-                'farmId' => $dbServer->farmId,
-                'roleName' => $dbRole->name,
-                Scalr_Account_User::VAR_SSH_CONSOLE_PORT => $userSshSettings[Scalr_Account_User::VAR_SSH_CONSOLE_PORT] ? $userSshSettings[Scalr_Account_User::VAR_SSH_CONSOLE_PORT] : $sshPort,
-                Scalr_Account_User::VAR_SSH_CONSOLE_USERNAME => $userSshSettings[Scalr_Account_User::VAR_SSH_CONSOLE_USERNAME] ? $userSshSettings[Scalr_Account_User::VAR_SSH_CONSOLE_USERNAME] : ($dbServer->platform == SERVER_PLATFORMS::GCE ? 'scalr' : 'root'),
-                Scalr_Account_User::VAR_SSH_CONSOLE_LOG_LEVEL => $userSshSettings[Scalr_Account_User::VAR_SSH_CONSOLE_LOG_LEVEL] ? $userSshSettings[Scalr_Account_User::VAR_SSH_CONSOLE_LOG_LEVEL] : 'CONFIG',
-                Scalr_Account_User::VAR_SSH_CONSOLE_PREFERRED_PROVIDER => $userSshSettings[Scalr_Account_User::VAR_SSH_CONSOLE_PREFERRED_PROVIDER] ? $userSshSettings[Scalr_Account_User::VAR_SSH_CONSOLE_PREFERRED_PROVIDER] : '',
-                Scalr_Account_User::VAR_SSH_CONSOLE_ENABLE_AGENT_FORWARDING => $userSshSettings[Scalr_Account_User::VAR_SSH_CONSOLE_ENABLE_AGENT_FORWARDING] ? $userSshSettings[Scalr_Account_User::VAR_SSH_CONSOLE_ENABLE_AGENT_FORWARDING] : '0',
-            );
-
-            if ($this->request->isAllowed(Acl::RESOURCE_SECURITY_SSH_KEYS)) {
-                $sshKey = Scalr_SshKey::init()->loadGlobalByFarmId(
-                    $dbServer->envId,
-                    $dbServer->farmId,
-                    $dbServer->GetFarmRoleObject()->CloudLocation,
-                    $dbServer->platform
-                );
-
-                if (!$sshKey) {
-                    throw new NotFoundException(sprintf(
-                        "Cannot find ssh key corresponding to environment:'%d', farm:'%d', platform:'%s', cloud location:'%s'.",
-                        $dbServer->envId,
-                        $dbServer->farmId,
-                        strip_tags($dbServer->platform),
-                        strip_tags($dbServer->GetFarmRoleObject()->CloudLocation)
-                    ));
-                }
-
-                $cloudKeyName = $sshKey->cloudKeyName;
-                if (substr_count($cloudKeyName, '-') == 2) {
-                    $cloudKeyName = str_replace('-'.SCALR_ID, '-'.$sshKey->cloudLocation.'-'.SCALR_ID, $cloudKeyName);
-                }
-
-                $sshSettings['ssh.console.key'] = base64_encode($sshKey->getPrivate());
-                $sshSettings['ssh.console.putty_key'] = base64_encode($sshKey->getPuttyPrivateKey());
-                $sshSettings[Scalr_Account_User::VAR_SSH_CONSOLE_KEY_NAME] = $userSshSettings[Scalr_Account_User::VAR_SSH_CONSOLE_KEY_NAME] ? $userSshSettings[Scalr_Account_User::VAR_SSH_CONSOLE_KEY_NAME] : $cloudKeyName;
-                $sshSettings[Scalr_Account_User::VAR_SSH_CONSOLE_DISABLE_KEY_AUTH] = $userSshSettings[Scalr_Account_User::VAR_SSH_CONSOLE_DISABLE_KEY_AUTH] ? $userSshSettings[Scalr_Account_User::VAR_SSH_CONSOLE_DISABLE_KEY_AUTH] : '0';
-            } else {
-                $sshSettings['ssh.console.key'] = '';
-                $sshSettings['ssh.console.putty_key'] = '';
-                $sshSettings[Scalr_Account_User::VAR_SSH_CONSOLE_KEY_NAME] = '';
-                $sshSettings[Scalr_Account_User::VAR_SSH_CONSOLE_DISABLE_KEY_AUTH] = '1';
-            }
-
-            $this->response->page('ui/servers/sshconsole.js', $sshSettings);
-        }
-        else
-            throw new Exception(_("SSH console not available for this server or server is not yet initialized"));
+        $this->response->data(['settings' => $this->getSshConsoleSettings($dbServer)]);
     }
 
     public function xServerCancelOperationAction()
     {
-        if (!$this->request->isAllowed(Acl::RESOURCE_FARMS_SERVERS) && !$this->request->isAllowed(Acl::RESOURCE_FARMS_ROLES, Acl::PERM_FARMS_ROLES_CREATE)) {
-            throw new Scalr_Exception_InsufficientPermissions();
-        }
-
         $this->request->defineParams(array(
             'serverId'
         ));
@@ -426,118 +390,12 @@ class Scalr_UI_Controller_Servers extends Scalr_UI_Controller
             }
         }
 
-        $this->response->success("Server was successfully canceled and removed from database");
-    }
-
-    public function xUpdateUpdateClientAction()
-    {
-        $this->request->restrictAccess(Acl::RESOURCE_FARMS_SERVERS);
-
-        $this->request->defineParams(array(
-            'serverId'
-        ));
-
-        /* @var Entity\Script $scr */
-        $scr = Entity\Script::find(array(
-            array('id' => 3803),
-            array('accountId' => NULL)
-        ));
-
-        if (! $scr)
-            throw new Exception("Automatical scalarizr update doesn't supported by this scalr version");
-
-        $dbServer = DBServer::LoadByID($this->getParam('serverId'));
-        $this->user->getPermissions()->validate($dbServer);
-
-        $scriptSettings = array(
-            'version' => $scr->getLatestVersion()->version,
-            'scriptid' => 3803,
-            'timeout' => 300,
-            'issync' => 0,
-            'params' => serialize(array()),
-            'type' => Scalr_Scripting_Manager::ORCHESTRATION_SCRIPT_TYPE_SCALR
-        );
-
-        $message = new Scalr_Messaging_Msg_ExecScript("Manual");
-        $message->setServerMetaData($dbServer);
-
-        $script = Scalr_Scripting_Manager::prepareScript($scriptSettings, $dbServer);
-
-        $itm = new stdClass();
-        // Script
-        $itm->asynchronous = ($script['issync'] == 1) ? '0' : '1';
-        $itm->timeout = $script['timeout'];
-        if ($script['body']) {
-            $itm->name = $script['name'];
-            $itm->body = $script['body'];
-        } else {
-            $itm->path = $script['path'];
-        }
-        $itm->executionId = $script['execution_id'];
-
-        $message->scripts = array($itm);
-
-        $dbServer->SendMessage($message);
-
-        $this->response->success('Scalarizr update-client update successfully initiated');
-    }
-
-    public function xUpdateAgentAction()
-    {
-        $this->request->restrictAccess(Acl::RESOURCE_FARMS_SERVERS);
-
-        $this->request->defineParams(array(
-            'serverId'
-        ));
-
-        /* @var Entity\Script $scr */
-        $scr = Entity\Script::find(array(
-            array('id' => 2102),
-            array('accountId' => NULL)
-        ));
-
-        if (! $scr)
-            throw new Exception("Automatical scalarizr update doesn't supported by this scalr version");
-
-        $dbServer = DBServer::LoadByID($this->getParam('serverId'));
-        $this->user->getPermissions()->validate($dbServer);
-
-        $scriptSettings = array(
-            'version' => $scr->getLatestVersion()->version,
-            'scriptid' => 2102,
-            'timeout' => 300,
-            'issync' => 0,
-            'params' => serialize(array()),
-            'type' => Scalr_Scripting_Manager::ORCHESTRATION_SCRIPT_TYPE_SCALR
-        );
-
-        $message = new Scalr_Messaging_Msg_ExecScript("Manual");
-        $message->setServerMetaData($dbServer);
-
-        $script = Scalr_Scripting_Manager::prepareScript($scriptSettings, $dbServer);
-
-        $itm = new stdClass();
-        // Script
-        $itm->asynchronous = ($script['issync'] == 1) ? '0' : '1';
-        $itm->timeout = $script['timeout'];
-        if ($script['body']) {
-            $itm->name = $script['name'];
-            $itm->body = $script['body'];
-        } else {
-            $itm->path = $script['path'];
-        }
-        $itm->executionId = $script['execution_id'];
-
-        $message->scripts = array($itm);
-
-        $dbServer->SendMessage($message);
-
-        $this->response->success('Scalarizr update successfully initiated. Please wait a few minutes and then refresh the page');
+        $this->response->success("Server was successfully canceled");
     }
 
     public function xListServersAction()
     {
-        if (!$this->request->isAllowed(Acl::RESOURCE_FARMS_SERVERS) && !$this->request->isAllowed(Acl::RESOURCE_FARMS_ROLES, Acl::PERM_FARMS_ROLES_CREATE)) {
+        if (!$this->request->isFarmAllowed(null, Acl::PERM_FARMS_SERVERS) && !$this->request->isAllowed(Acl::RESOURCE_FARMS_ROLES, Acl::PERM_FARMS_ROLES_CREATE)) {
             throw new Scalr_Exception_InsufficientPermissions();
         }
 
@@ -546,7 +404,7 @@ class Scalr_UI_Controller_Servers extends Scalr_UI_Controller
             'farmId' => array('type' => 'int'),
             'farmRoleId' => array('type' => 'int'),
             'serverId',
-            'hideTerminated' => array('type' => 'bool'),
+            'showTerminated' => array('type' => 'bool'),
             'sort' => array('type' => 'json')
         ));
 
@@ -639,18 +497,33 @@ class Scalr_UI_Controller_Servers extends Scalr_UI_Controller
             $args[] = $this->getParam('farmId');
         }
 
-        if ($this->request->isAllowed(Acl::RESOURCE_FARMS_SERVERS)) {
-            if (!$this->request->isAllowed(Acl::RESOURCE_FARMS, Acl::PERM_FARMS_NOT_OWNED_FARMS)) {
-                $sql .= " AND (farms.created_by_id = ? OR servers.status IN (?, ?) AND farms.id IS NULL)";
-                $args[] = $this->user->getId();
+        if (!$this->request->isAllowed(Acl::RESOURCE_FARMS, Acl::PERM_FARMS_SERVERS)) {
+            $q = [];
+            if ($this->request->isAllowed(Acl::RESOURCE_TEAM_FARMS, Acl::PERM_FARMS_SERVERS)) {
+                $t = array_map(function($t) { return $t['id']; }, $this->user->getTeams());
+                if (count($t))
+                    $q[] = 'farms.team_id IN(' . join(',', $t) . ')';
+            }
+
+            if ($this->request->isAllowed(Acl::RESOURCE_OWN_FARMS, Acl::PERM_FARMS_SERVERS)) {
+                $q[] = 'farms.created_by_id = ?';
+                $args[] =  $this->request->getUser()->getId();
+            }
+
+            if (count($q)) {
+                if ($this->request->isAllowed(Acl::RESOURCE_FARMS_ROLES, Acl::PERM_FARMS_ROLES_CREATE)) {
+                    $q[] = 'servers.status IN (?, ?) AND farms.id IS NULL';
+                    $args[] = SERVER_STATUS::IMPORTING;
+                    $args[] = SERVER_STATUS::TEMPORARY;
+                }
+
+                $sql .= ' AND (' . join(' OR ', $q) . ')';
+            } else {
+                //show servers related to role creation process only
+                $sql .= ' AND servers.status IN (?, ?) AND farms.id IS NULL';
                 $args[] = SERVER_STATUS::IMPORTING;
                 $args[] = SERVER_STATUS::TEMPORARY;
             }
-        } else {
-            //show servers related to role creation process only
-            $sql .= ' AND servers.status IN (?, ?)';
-            $args[] = SERVER_STATUS::IMPORTING;
-            $args[] = SERVER_STATUS::TEMPORARY;
         }
 
         if ($this->getParam('farmRoleId')) {
@@ -673,7 +546,7 @@ class Scalr_UI_Controller_Servers extends Scalr_UI_Controller
             $args[] = $this->getParam('imageId');
         }
 
-        if ($this->getParam('hideTerminated')) {
+        if (!$this->getParam('showTerminated')) {
             $sql .= ' AND servers.status != ?';
             $args[] = SERVER_STATUS::TERMINATED;
         }
@@ -687,8 +560,8 @@ class Scalr_UI_Controller_Servers extends Scalr_UI_Controller
             } catch (Exception $e) {
                 continue;
             }
-            
-            
+
+
             try {
                 $row['cloud_server_id'] = $dbServer->GetCloudServerID();
                 $row['hostname'] = $dbServer->GetProperty(Scalr_Role_Behavior::SERVER_BASE_HOSTNAME);
@@ -768,10 +641,11 @@ class Scalr_UI_Controller_Servers extends Scalr_UI_Controller
 
             $serverAlerts = new Alerts($dbServer);
 
+            $row['isScalarized'] = $dbServer->isScalarized;
             $row['agent_version'] = $dbServer->GetProperty(SERVER_PROPERTIES::SZR_VESION);
             $row['agent_update_needed'] = $dbServer->IsSupported("0.7") && !$dbServer->IsSupported("0.7.189");
             $row['agent_update_manual'] = !$dbServer->IsSupported("0.5");
-            $row['os_family'] = $dbServer->GetOsFamily();
+            $row['os_family'] = $dbServer->GetOsType();
             $row['flavor'] = $dbServer->GetFlavor();
             $row['instance_type_name'] = $dbServer->GetProperty(SERVER_PROPERTIES::INFO_INSTANCE_TYPE_NAME);
             $row['alerts'] = $serverAlerts->getActiveAlertsCount();
@@ -803,7 +677,7 @@ class Scalr_UI_Controller_Servers extends Scalr_UI_Controller
 
     public function xListServersUpdateAction()
     {
-        if (!$this->request->isAllowed(Acl::RESOURCE_FARMS_SERVERS) && !$this->request->isAllowed(Acl::RESOURCE_FARMS_ROLES, Acl::PERM_FARMS_ROLES_CREATE)) {
+        if (!$this->request->isFarmAllowed(null, Acl::PERM_FARMS_SERVERS) && !$this->request->isAllowed(Acl::RESOURCE_FARMS_ROLES, Acl::PERM_FARMS_ROLES_CREATE)) {
             throw new Scalr_Exception_InsufficientPermissions();
         }
 
@@ -832,17 +706,33 @@ class Scalr_UI_Controller_Servers extends Scalr_UI_Controller
 
         $args = array($this->getEnvironmentId());
 
-        if ($this->request->isAllowed(Acl::RESOURCE_FARMS_SERVERS)) {
-            if (!$this->request->isAllowed(Acl::RESOURCE_FARMS, Acl::PERM_FARMS_NOT_OWNED_FARMS)) {
-                $stmt .= " AND (f.created_by_id = ? OR s.status IN (?, ?) AND f.id IS NULL)";
-                $args[] = $this->user->getId();
+        if (!$this->request->isAllowed(Acl::RESOURCE_FARMS, Acl::PERM_FARMS_SERVERS)) {
+            $q = [];
+            if ($this->request->isAllowed(Acl::RESOURCE_TEAM_FARMS, Acl::PERM_FARMS_SERVERS)) {
+                $t = array_map(function($t) { return $t['id']; }, $this->user->getTeams());
+                if (count($t))
+                    $q[] = 'f.team_id IN(' . join(',', $t) . ')';
+            }
+
+            if ($this->request->isAllowed(Acl::RESOURCE_OWN_FARMS, Acl::PERM_FARMS_SERVERS)) {
+                $q[] = 'f.created_by_id = ?';
+                $args[] =  $this->request->getUser()->getId();
+            }
+
+            if (count($q)) {
+                if ($this->request->isAllowed(Acl::RESOURCE_FARMS_ROLES, Acl::PERM_FARMS_ROLES_CREATE)) {
+                    $q[] = 's.status IN (?, ?) AND f.id IS NULL';
+                    $args[] = SERVER_STATUS::IMPORTING;
+                    $args[] = SERVER_STATUS::TEMPORARY;
+                }
+
+                $stmt .= ' AND (' . join(' OR ', $q) . ')';
+            } else {
+                //show servers related to role creation process only
+                $stmt .= ' AND s.status IN (?, ?) AND f.id IS NULL';
                 $args[] = SERVER_STATUS::IMPORTING;
                 $args[] = SERVER_STATUS::TEMPORARY;
             }
-        } else {
-            $sql .= ' AND s.status IN (?, ?)';
-            $args[] = SERVER_STATUS::IMPORTING;
-            $args[] = SERVER_STATUS::TEMPORARY;
         }
 
         if (count($sql)) {
@@ -883,6 +773,13 @@ class Scalr_UI_Controller_Servers extends Scalr_UI_Controller
                 if ($launchError)
                     $server['launch_error'] = "1";
 
+                $agentVersion = $this->db->GetOne("SELECT value FROM server_properties WHERE server_id=? AND `name`=? LIMIT 1", array(
+                    $server['server_id'], SERVER_PROPERTIES::SZR_VESION
+                ));
+
+                if ($agentVersion)
+                    $server['agent_version'] = $agentVersion;
+
                 $retval[$server['server_id']] = $server;
             }
         }
@@ -894,8 +791,6 @@ class Scalr_UI_Controller_Servers extends Scalr_UI_Controller
 
     public function xSzrUpdateAction()
     {
-        $this->request->restrictAccess(Acl::RESOURCE_FARMS_SERVERS);
-
         if (! $this->getParam('serverId'))
             throw new Exception(_('Server not found'));
 
@@ -914,8 +809,6 @@ class Scalr_UI_Controller_Servers extends Scalr_UI_Controller
 
     public function xSzrRestartAction()
     {
-        $this->request->restrictAccess(Acl::RESOURCE_FARMS_SERVERS);
-
         if (! $this->getParam('serverId'))
             throw new Exception(_('Server not found'));
 
@@ -988,7 +881,10 @@ class Scalr_UI_Controller_Servers extends Scalr_UI_Controller
                 ];
             } catch (Exception $e) {
                 if (stristr($e->getMessage(), "Method not found")) {
-                    return ['status' => 'upgradeUpdClient'];
+                    return [
+                        'status' => 'statusNotAvailable',
+                        'error'  => "<span style='color:red;'>Scalarizr status is not available, because scalr-upd-client installed on this server is too old.</span>"
+                    ];
                 } else {
                     return [
                         'status' => 'statusNotAvailable',
@@ -1006,10 +902,6 @@ class Scalr_UI_Controller_Servers extends Scalr_UI_Controller
      */
     public function xGetServerRealStatusAction($serverId, $timeout = 30)
     {
-        if (!$this->request->isAllowed(Acl::RESOURCE_FARMS_SERVERS) && !$this->request->isAllowed(Acl::RESOURCE_FARMS_ROLES, Acl::PERM_FARMS_ROLES_CREATE)) {
-            throw new Scalr_Exception_InsufficientPermissions();
-        }
-
         if (! $serverId) {
             throw new Exception(_('Server not found'));
         }
@@ -1024,10 +916,6 @@ class Scalr_UI_Controller_Servers extends Scalr_UI_Controller
 
     public function dashboardAction()
     {
-        if (!$this->request->isAllowed(Acl::RESOURCE_FARMS_SERVERS) && !$this->request->isAllowed(Acl::RESOURCE_FARMS_ROLES, Acl::PERM_FARMS_ROLES_CREATE)) {
-            throw new Scalr_Exception_InsufficientPermissions();
-        }
-
         if (! $this->getParam('serverId')) {
             throw new Exception(_('Server not found'));
         }
@@ -1053,7 +941,13 @@ class Scalr_UI_Controller_Servers extends Scalr_UI_Controller
         try {
             $dbRole = $dbServer->GetFarmRoleObject()->GetRoleObject();
             // GCE didn't have imageID before we implement this feature
-            $imageIdDifferent = ($dbRole->__getNewRoleObject()->getImage($dbServer->platform, $dbServer->cloudLocation)->imageId != $dbServer->imageId) && $dbServer->imageId;
+            $roleImageEntity = $dbRole->__getNewRoleObject()->getImage($dbServer->platform, $dbServer->cloudLocation);
+            $imageIdDifferent = ($roleImageEntity->imageId != $dbServer->imageId) && $dbServer->imageId;
+            $os = [
+                'family' => $dbRole->getOs()->family,
+                'name' => $dbRole->getOs()->name
+            ];
+            $imageHash = $roleImageEntity->getImage()->hash;
         } catch (Exception $e) {}
 
 
@@ -1080,12 +974,14 @@ class Scalr_UI_Controller_Servers extends Scalr_UI_Controller
         }
         $data['general'] = array(
             'server_id'         => $dbServer->serverId,
+            'isScalarized'      => $dbServer->isScalarized,
             'hostname_debug'    => urlencode($hostnameDebug),
             'hostname'          => $dbServer->GetProperty(Scalr_Role_Behavior::SERVER_BASE_HOSTNAME),
             'farm_id'           => $dbServer->farmId,
             'farm_name'         => $dbServer->farmId ? $dbServer->GetFarmObject()->Name : "",
             'farm_roleid'       => $dbServer->farmRoleId,
             'imageId'           => $dbServer->imageId,
+            'imageHash'         => $imageHash,
             'imageIdDifferent'  => $imageIdDifferent,
             'farm_hash'         => $hash,
             'role_id'           => isset($dbRole) ? $dbRole->id : null,
@@ -1096,10 +992,7 @@ class Scalr_UI_Controller_Servers extends Scalr_UI_Controller
                                     'id'        => isset($dbRole) ? $dbRole->id : 0,
                                     'platform'  => $dbServer->platform
                                 ),
-            'os'                => array(
-                                    'title'  => isset($dbRole) ? $dbRole->os : 'unknown',
-                                    'family' => isset($dbRole) ? $dbRole->osFamily : 'unknown'
-                                ),
+            'os'                => $os,
             'behaviors'         => isset($dbRole) ? $dbRole->getBehaviors() : array(),
             'status'            => $dbServer->status,
             'initDetailsSupported' => $dbServer->IsSupported("0.7.181"),
@@ -1112,6 +1005,7 @@ class Scalr_UI_Controller_Servers extends Scalr_UI_Controller
             'is_locked'         => $dbServer->GetProperty(EC2_SERVER_PROPERTIES::IS_LOCKED) ? 1 : 0,
             'cloud_server_id'   => $dbServer->GetCloudServerID(),
             'monitoring_host_url' => "{$conf['scheme']}://{$conf['host']}:{$conf['port']}",
+            'os_family'         => $dbServer->GetOsType(),
             'debug' 			=> $p->debugLog
         );
 
@@ -1153,15 +1047,12 @@ class Scalr_UI_Controller_Servers extends Scalr_UI_Controller
             $data['internalProperties'] = $internalProperties;
         }
 
+        $data['mindtermEnabled'] = \Scalr::config('scalr.ui.mindterm_enabled');
         $this->response->page('ui/servers/dashboard.js', $data, array('ui/servers/actionsmenu.js', 'ui/monitoring/window.js'));
     }
 
     public function consoleOutputAction()
     {
-        if (!$this->request->isAllowed(Acl::RESOURCE_FARMS_SERVERS) && !$this->request->isAllowed(Acl::RESOURCE_FARMS_ROLES, Acl::PERM_FARMS_ROLES_CREATE)) {
-            throw new Scalr_Exception_InsufficientPermissions();
-        }
-
         if (! $this->getParam('serverId')) {
             throw new Exception(_('Server not found'));
         }
@@ -1193,8 +1084,6 @@ class Scalr_UI_Controller_Servers extends Scalr_UI_Controller
 
     public function xServerExcludeFromDnsAction()
     {
-        $this->request->restrictAccess(Acl::RESOURCE_FARMS_SERVERS);
-
         if (! $this->getParam('serverId'))
             throw new Exception(_('Server not found'));
 
@@ -1215,8 +1104,6 @@ class Scalr_UI_Controller_Servers extends Scalr_UI_Controller
 
     public function xServerIncludeInDnsAction()
     {
-        $this->request->restrictAccess(Acl::RESOURCE_FARMS_SERVERS);
-
         if (! $this->getParam('serverId'))
             throw new Exception(_('Server not found'));
 
@@ -1237,8 +1124,6 @@ class Scalr_UI_Controller_Servers extends Scalr_UI_Controller
 
     public function xServerCancelAction()
     {
-        $this->request->restrictAccess(Acl::RESOURCE_FARMS_SERVERS);
-
         if (! $this->getParam('serverId'))
             throw new Exception(_('Server not found'));
 
@@ -1272,8 +1157,6 @@ class Scalr_UI_Controller_Servers extends Scalr_UI_Controller
 
     public function xResumeServersAction()
     {
-        $this->request->restrictAccess(Acl::RESOURCE_FARMS_SERVERS);
-
         $this->request->defineParams(array(
             'servers' => array('type' => 'json')
         ));
@@ -1285,7 +1168,7 @@ class Scalr_UI_Controller_Servers extends Scalr_UI_Controller
                 $dbServer = DBServer::LoadByID($serverId);
                 $this->user->getPermissions()->validate($dbServer);
 
-                if ($dbServer->platform == SERVER_PLATFORMS::EC2 || PlatformFactory::isOpenstack($dbServer->platform)) {
+                if ($dbServer->platform == SERVER_PLATFORMS::CLOUDSTACK || $dbServer->platform == SERVER_PLATFORMS::GCE || $dbServer->platform == SERVER_PLATFORMS::EC2 || PlatformFactory::isOpenstack($dbServer->platform)) {
                     PlatformFactory::NewPlatform($dbServer->platform)->ResumeServer($dbServer);
                 } else {
                     //NOT SUPPORTED
@@ -1299,8 +1182,6 @@ class Scalr_UI_Controller_Servers extends Scalr_UI_Controller
 
     public function xSuspendServersAction()
     {
-        $this->request->restrictAccess(Acl::RESOURCE_FARMS_SERVERS);
-
         $this->request->defineParams(array(
             'servers' => array('type' => 'json')
         ));
@@ -1312,7 +1193,7 @@ class Scalr_UI_Controller_Servers extends Scalr_UI_Controller
                 $dbServer = DBServer::LoadByID($serverId);
                 $this->user->getPermissions()->validate($dbServer);
 
-                if ($dbServer->platform == SERVER_PLATFORMS::EC2 || PlatformFactory::isOpenstack($dbServer->platform)) {
+                if ($dbServer->platform == SERVER_PLATFORMS::CLOUDSTACK || $dbServer->platform == SERVER_PLATFORMS::GCE || $dbServer->platform == SERVER_PLATFORMS::EC2 || PlatformFactory::isOpenstack($dbServer->platform)) {
                     $dbServer->suspend('', false, $this->user);
                 } else {
                     //NOT SUPPORTED
@@ -1326,8 +1207,6 @@ class Scalr_UI_Controller_Servers extends Scalr_UI_Controller
 
     public function xServerRebootServersAction()
     {
-        $this->request->restrictAccess(Acl::RESOURCE_FARMS_SERVERS);
-
         $this->request->defineParams(array(
             'servers' => array('type' => 'json'),
             'type'
@@ -1362,8 +1241,6 @@ class Scalr_UI_Controller_Servers extends Scalr_UI_Controller
 
     public function xServerTerminateServersAction()
     {
-        $this->request->restrictAccess(Acl::RESOURCE_FARMS_SERVERS);
-
         $this->request->defineParams(array(
             'servers' => array('type' => 'json'),
             'descreaseMinInstancesSetting' => array('type' => 'bool'),
@@ -1384,7 +1261,8 @@ class Scalr_UI_Controller_Servers extends Scalr_UI_Controller
                     sprintf("Scheduled termination for server %s (%s). It will be terminated in 3 minutes.",
                         $dbServer->serverId,
                         $dbServer->remoteIp ? $dbServer->remoteIp : $dbServer->localIp
-                    )
+                    ),
+                    $dbServer->serverId
                 ));
             }
 
@@ -1417,8 +1295,6 @@ class Scalr_UI_Controller_Servers extends Scalr_UI_Controller
 
     public function xServerGetLaAction()
     {
-        $this->request->restrictAccess(Acl::RESOURCE_FARMS_SERVERS);
-
         $dbServer = DBServer::LoadByID($this->getParam('serverId'));
         $this->user->getPermissions()->validate($dbServer);
 
@@ -1518,6 +1394,7 @@ class Scalr_UI_Controller_Servers extends Scalr_UI_Controller
             ),
             'farmId' => $dbServer->farmId,
             'farmName' => $dbServer->GetFarmObject()->Name,
+            'roleId'   => $dbServer->GetFarmRoleObject()->GetRoleObject()->id,
             'roleName' => $roleName,
             'imageId' => $dbServer->imageId,
             'roleImageId' => $roleImage->imageId,
@@ -1526,7 +1403,12 @@ class Scalr_UI_Controller_Servers extends Scalr_UI_Controller
             'cloudLocation' => $dbServer->GetCloudLocation(),
             'replaceNoReplace' => "<b>DO NOT REPLACE</b> any roles on any farms, just create a new one.</td>",
             'replaceFarmReplace' => "Replace the role '{$roleName}' with this new one <b>ONLY</b> on the current farm '{$dbServer->GetFarmObject()->Name}'</td>",
-            'replaceAll' => "Replace the role '{$roleName}' with this new one on <b>ALL MY FARMS</b> <br/><span style=\"font-style:italic;font-size:11px;\">(You will be able to bundle this role with the same name. The old role will be renamed.)</span></td>"
+            'replaceAll' => "Replace the role '{$roleName}' with this new one on <b>ALL MY FARMS</b> <br/><span style=\"font-style:italic;font-size:11px;\">(You will be able to bundle this role with the same name. The old role will be renamed.)</span></td>",
+            'showWarningMessage' =>
+                $dbServer->osType == 'windows' ?
+                    'You are snapshotting a Windows Server. Before proceeding, make sure that you have sysprepped the instance' . ($dbServer->platform == SERVER_PLATFORMS::GCE ? 'by running gcesysprep' : '') . '. ' .
+                    '<br/>Note that the instance <b>will be ' . ($dbServer->platform == SERVER_PLATFORMS::GCE ? 'terminated' : 'rebooted') . '</b> in order to complete the server snapshotting process. Do not proceed if this is a problem for you.'
+                : null
         ));
     }
 
@@ -1599,7 +1481,7 @@ class Scalr_UI_Controller_Servers extends Scalr_UI_Controller
         }
 
         if ($createRole) {
-            $roleInfo = $this->db->GetRow("SELECT * FROM roles WHERE name=? AND (env_id=? OR env_id='0') LIMIT 1", array($name, $dbServer->envId, $dbServer->GetFarmRoleObject()->RoleID));
+            $roleInfo = $this->db->GetRow("SELECT * FROM roles WHERE name=? AND (env_id=? OR env_id IS NULL) LIMIT 1", array($name, $dbServer->envId, $dbServer->GetFarmRoleObject()->RoleID));
             if ($roleInfo) {
                 if ($roleInfo['env_id'] == 0) {
                     $validator->addError('name', _("Selected role name is reserved and cannot be used for custom role"));
@@ -1647,11 +1529,19 @@ class Scalr_UI_Controller_Servers extends Scalr_UI_Controller
         }
 
         $protoRole = DBRole::loadById($dbServer->GetFarmRoleObject()->RoleID);
+        $BundleTask->osId = $protoRole->osId;
 
-        $BundleTask->osFamily = $protoRole->osFamily;
-        $BundleTask->osVersion = $protoRole->osVersion;
+        if ($protoRole->getOs()->family == 'windows') {
+            $BundleTask->osFamily = $protoRole->getOs()->family;
+            $BundleTask->osVersion = $protoRole->getOs()->generation;
+            $BundleTask->osName = '';
+        } else {
+            $BundleTask->osFamily = $protoRole->getOs()->family;
+            $BundleTask->osVersion = $protoRole->getOs()->version;
+            $BundleTask->osName = $protoRole->getOs()->name;
+        }
 
-        if (in_array($protoRole->osFamily, array('redhat', 'oel', 'scientific')) &&
+        if (in_array($protoRole->getOs()->family, array('redhat', 'oel', 'scientific')) &&
             $dbServer->platform == SERVER_PLATFORMS::EC2) {
             $BundleTask->bundleType = SERVER_SNAPSHOT_CREATION_TYPE::EC2_EBS_HVM;
         }
@@ -1663,8 +1553,6 @@ class Scalr_UI_Controller_Servers extends Scalr_UI_Controller
 
     public function xServerDeleteAction($serverId)
     {
-        $this->request->restrictAccess(Acl::RESOURCE_FARMS_SERVERS);
-
         $dbServer = DBServer::LoadByID($serverId);
         $this->user->getPermissions()->validate($dbServer);
 
@@ -1677,5 +1565,91 @@ class Scalr_UI_Controller_Servers extends Scalr_UI_Controller
         }
 
         $this->response->success('Server record successfully removed.');
+    }
+
+    private function getSshConsoleSettings($dbServer)
+    {
+        $userSshSettings = $this->user->getSshConsoleSettings(false, true, $dbServer->serverId);
+        $ipType = $userSshSettings[Scalr_Account_User::VAR_SSH_CONSOLE_IP] ? $userSshSettings[Scalr_Account_User::VAR_SSH_CONSOLE_IP] : 'auto';
+        switch ($ipType) {
+            case 'auto':
+                $ipAddress = $dbServer->getSzrHost();
+                break;
+            case 'public':
+                $ipAddress = $dbServer->remoteIp;
+                break;
+            case 'private':
+                $ipAddress = $dbServer->localIp;
+                break;
+        }
+
+        if ($ipAddress) {
+            $dBFarm = $dbServer->GetFarmObject();
+            $dbFarmRole = $dbServer->GetFarmRoleObject();
+            $dbRole = $dbFarmRole->GetRoleObject();
+
+            $sshPort = $dbRole->getProperty(DBRole::PROPERTY_SSH_PORT);
+            if (!$sshPort)
+                $sshPort = 22;
+
+            $cSshPort = $dbServer->GetProperty(SERVER_PROPERTIES::CUSTOM_SSH_PORT);
+            if ($cSshPort)
+                $sshPort = $cSshPort;
+
+            $sshSettings = array(
+                'serverId' => $dbServer->serverId,
+                'serverIndex' => $dbServer->index,
+                'ip' => $ipAddress,
+                'farmName' => $dBFarm->Name,
+                'farmId' => $dbServer->farmId,
+                'roleName' => $dbRole->name,
+                'farmRoleAlias' => $dbFarmRole->Alias,
+                'farmRoleId' => $dbFarmRole->ID,
+                Scalr_Account_User::VAR_SSH_CONSOLE_IP => $ipAddress == $dbServer->remoteIp ? 'public' : 'private',
+                Scalr_Account_User::VAR_SSH_CONSOLE_PORT => $userSshSettings[Scalr_Account_User::VAR_SSH_CONSOLE_PORT] ? $userSshSettings[Scalr_Account_User::VAR_SSH_CONSOLE_PORT] : $sshPort,
+                Scalr_Account_User::VAR_SSH_CONSOLE_USERNAME => $userSshSettings[Scalr_Account_User::VAR_SSH_CONSOLE_USERNAME] ? $userSshSettings[Scalr_Account_User::VAR_SSH_CONSOLE_USERNAME] : ($dbServer->platform == SERVER_PLATFORMS::GCE ? 'scalr' : 'root'),
+                Scalr_Account_User::VAR_SSH_CONSOLE_LOG_LEVEL => $userSshSettings[Scalr_Account_User::VAR_SSH_CONSOLE_LOG_LEVEL] ? $userSshSettings[Scalr_Account_User::VAR_SSH_CONSOLE_LOG_LEVEL] : 'CONFIG',
+                Scalr_Account_User::VAR_SSH_CONSOLE_PREFERRED_PROVIDER => $userSshSettings[Scalr_Account_User::VAR_SSH_CONSOLE_PREFERRED_PROVIDER] ? $userSshSettings[Scalr_Account_User::VAR_SSH_CONSOLE_PREFERRED_PROVIDER] : '',
+                Scalr_Account_User::VAR_SSH_CONSOLE_ENABLE_AGENT_FORWARDING => $userSshSettings[Scalr_Account_User::VAR_SSH_CONSOLE_ENABLE_AGENT_FORWARDING] ? $userSshSettings[Scalr_Account_User::VAR_SSH_CONSOLE_ENABLE_AGENT_FORWARDING] : '0',
+            );
+
+            if ($this->request->isAllowed(Acl::RESOURCE_SECURITY_SSH_KEYS)) {
+                $sshKey = Scalr_SshKey::init()->loadGlobalByFarmId(
+                    $dbServer->envId,
+                    $dbServer->farmId,
+                    $dbServer->GetFarmRoleObject()->CloudLocation,
+                    $dbServer->platform
+                );
+
+                if (!$sshKey) {
+                    throw new NotFoundException(sprintf(
+                        "Cannot find ssh key corresponding to environment:'%d', farm:'%d', platform:'%s', cloud location:'%s'.",
+                        $dbServer->envId,
+                        $dbServer->farmId,
+                        strip_tags($dbServer->platform),
+                        strip_tags($dbServer->GetFarmRoleObject()->CloudLocation)
+                    ));
+                }
+
+                $cloudKeyName = $sshKey->cloudKeyName;
+                if (substr_count($cloudKeyName, '-') == 2) {
+                    $cloudKeyName = str_replace('-'.SCALR_ID, '-'.$sshKey->cloudLocation.'-'.SCALR_ID, $cloudKeyName);
+                }
+
+                $sshSettings['ssh.console.key'] = base64_encode($sshKey->getPrivate());
+                $sshSettings['ssh.console.putty_key'] = base64_encode($sshKey->getPuttyPrivateKey());
+                $sshSettings[Scalr_Account_User::VAR_SSH_CONSOLE_KEY_NAME] = $userSshSettings[Scalr_Account_User::VAR_SSH_CONSOLE_KEY_NAME] ? $userSshSettings[Scalr_Account_User::VAR_SSH_CONSOLE_KEY_NAME] : $cloudKeyName;
+                $sshSettings[Scalr_Account_User::VAR_SSH_CONSOLE_DISABLE_KEY_AUTH] = $userSshSettings[Scalr_Account_User::VAR_SSH_CONSOLE_DISABLE_KEY_AUTH] ? $userSshSettings[Scalr_Account_User::VAR_SSH_CONSOLE_DISABLE_KEY_AUTH] : '0';
+            } else {
+                $sshSettings['ssh.console.key'] = '';
+                $sshSettings['ssh.console.putty_key'] = '';
+                $sshSettings[Scalr_Account_User::VAR_SSH_CONSOLE_KEY_NAME] = '';
+                $sshSettings[Scalr_Account_User::VAR_SSH_CONSOLE_DISABLE_KEY_AUTH] = '1';
+            }
+
+            return $sshSettings;
+        }
+        else
+            throw new Exception(_("SSH console not available for this server or server is not yet initialized"));
     }
 }

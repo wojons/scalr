@@ -1,8 +1,8 @@
--- MySQL dump 10.13  Distrib 5.5.33, for Linux (x86_64)
+-- MySQL dump 10.13  Distrib 5.5.43-37.2, for debian-linux-gnu (x86_64)
 --
--- Host: localhost    Database: analysis
+-- Host: localhost    Database: analytics
 -- ------------------------------------------------------
--- Server version	5.5.33-31.1-log
+-- Server version	5.5.43-37.2
 /*!40103 SET @OLD_TIME_ZONE=@@TIME_ZONE */;
 /*!40103 SET TIME_ZONE='+00:00' */;
 /*!40014 SET @OLD_UNIQUE_CHECKS=@@UNIQUE_CHECKS, UNIQUE_CHECKS=0 */;
@@ -28,6 +28,20 @@ CREATE TABLE `account_tag_values` (
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
+-- Table structure for table `aws_billing_records`
+--
+
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
+CREATE TABLE `aws_billing_records` (
+  `record_id` varchar(32) NOT NULL,
+  `date` date NOT NULL,
+  PRIMARY KEY (`record_id`),
+  KEY `idx_date` (`date`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
 -- Table structure for table `farm_usage_d`
 --
 
@@ -36,7 +50,7 @@ CREATE TABLE `account_tag_values` (
 CREATE TABLE `farm_usage_d` (
   `account_id` int(11) NOT NULL COMMENT 'scalr.clients.id ref',
   `farm_role_id` int(11) NOT NULL COMMENT 'scalr.farm_roles.id ref',
-  `instance_type` varchar(45) NOT NULL COMMENT 'Type of the instance',
+  `usage_item` binary(4) NOT NULL COMMENT 'usage_items.id ref',
   `cc_id` binary(16) NOT NULL DEFAULT '\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0' COMMENT 'scalr.ccs.cc_id ref',
   `project_id` binary(16) NOT NULL DEFAULT '\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0' COMMENT 'scalr.projects.project_id ref',
   `date` date NOT NULL COMMENT 'UTC Date',
@@ -45,21 +59,21 @@ CREATE TABLE `farm_usage_d` (
   `env_id` int(11) NOT NULL COMMENT 'scalr.client_account_environments.id ref',
   `farm_id` int(11) NOT NULL COMMENT 'scalr.farms.id ref',
   `role_id` int(11) NOT NULL COMMENT 'scalr.roles.id ref',
-  `cost` decimal(12,6) NOT NULL DEFAULT '0.000000' COMMENT 'total usage',
-  `min_instances` smallint(5) unsigned NOT NULL DEFAULT '0' COMMENT 'min instances count',
-  `max_instances` smallint(5) unsigned NOT NULL DEFAULT '0' COMMENT 'max instances count',
-  `instance_hours` smallint(5) unsigned NOT NULL DEFAULT '0' COMMENT 'total instance hours',
-  `working_hours` smallint(5) unsigned NOT NULL DEFAULT '0' COMMENT 'hours when farm is running',
-  PRIMARY KEY (`account_id`,`farm_role_id`,`instance_type`,`cc_id`,`project_id`,`date`),
+  `cost` decimal(18,9) NOT NULL DEFAULT '0.000000000' COMMENT 'Total cost of the usage',
+  `min_usage` decimal(8,2) unsigned NOT NULL DEFAULT '0.00' COMMENT 'min usage quantity',
+  `max_usage` decimal(8,2) unsigned NOT NULL DEFAULT '0.00' COMMENT 'max usage quantity',
+  `usage_hours` decimal(8,2) unsigned NOT NULL DEFAULT '0.00' COMMENT 'Total usage/hours for day',
+  `working_hours` tinyint(3) unsigned NOT NULL DEFAULT '0' COMMENT 'hours when farm is running',
+  PRIMARY KEY (`account_id`,`farm_role_id`,`usage_item`,`cc_id`,`project_id`,`date`),
   KEY `idx_farm_role_id` (`farm_role_id`),
-  KEY `idx_instance_type` (`instance_type`),
   KEY `idx_date` (`date`),
   KEY `idx_farm_id` (`farm_id`),
   KEY `idx_env_id` (`env_id`),
   KEY `idx_cloud_location` (`cloud_location`),
   KEY `idx_platform` (`platform`),
   KEY `idx_role_id` (`role_id`),
-  KEY `idx_project_id` (`project_id`)
+  KEY `idx_project_id` (`project_id`),
+  KEY `idx_usage_item` (`usage_item`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COMMENT='Farm daily usage'
 /*!50100 PARTITION BY HASH (account_id)
 PARTITIONS 100 */;
@@ -78,8 +92,7 @@ CREATE TABLE `managed` (
   `os` tinyint(1) NOT NULL DEFAULT '0' COMMENT '0 - linux, 1 - windows',
   PRIMARY KEY (`sid`,`server_id`),
   KEY `idx_server_id` (`server_id`),
-  KEY `idx_instance_type` (`instance_type`),
-  CONSTRAINT `fk_managed_poller_sessions` FOREIGN KEY (`sid`) REFERENCES `poller_sessions` (`sid`) ON DELETE CASCADE
+  KEY `idx_instance_type` (`instance_type`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COMMENT='The presence of the managed servers on cloud';
 /*!40101 SET character_set_client = @saved_cs_client */;
 
@@ -112,7 +125,7 @@ CREATE TABLE `nm_usage_d` (
   `platform` varchar(20) NOT NULL COMMENT 'Cloud platform',
   `cc_id` binary(16) NOT NULL DEFAULT '\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0' COMMENT 'ID of Cost centre',
   `env_id` int(11) NOT NULL COMMENT 'ID of Environment',
-  `cost` decimal(12,6) NOT NULL DEFAULT '0.000000' COMMENT 'Daily usage',
+  `cost` decimal(18,9) NOT NULL DEFAULT '0.000000000' COMMENT 'Daily usage',
   PRIMARY KEY (`date`,`platform`,`cc_id`,`env_id`),
   KEY `idx_cc_id` (`cc_id`),
   KEY `idx_env_id` (`env_id`),
@@ -134,8 +147,8 @@ CREATE TABLE `nm_usage_h` (
   `cloud_location` varchar(255) NOT NULL COMMENT 'Cloud location',
   `instance_type` varchar(45) NOT NULL COMMENT 'The type of the instance',
   `os` tinyint(1) NOT NULL DEFAULT '0' COMMENT '0 - linux, 1 - windows',
-  `num` int(10) unsigned NOT NULL DEFAULT '0' COMMENT 'Number of the same instances',
-  `cost` decimal(12,6) NOT NULL DEFAULT '0.000000' COMMENT 'The cost of the usage',
+  `num` decimal(8,2) unsigned NOT NULL DEFAULT '0.00' COMMENT 'Usage quantity',
+  `cost` decimal(18,9) NOT NULL DEFAULT '0.000000000' COMMENT 'The cost of the usage',
   PRIMARY KEY (`usage_id`),
   KEY `idx_platform` (`platform`,`url`,`cloud_location`),
   KEY `idx_dtime` (`dtime`)
@@ -290,7 +303,7 @@ CREATE TABLE `quarterly_budget` (
   `budget` decimal(12,2) NOT NULL DEFAULT '0.00' COMMENT 'Budget dollar amount',
   `final` decimal(12,2) NOT NULL DEFAULT '0.00' COMMENT 'Final spent',
   `spentondate` datetime DEFAULT NULL COMMENT 'Spent on date',
-  `cumulativespend` decimal(12,6) NOT NULL DEFAULT '0.000000' COMMENT 'Cumulative spend',
+  `cumulativespend` decimal(18,9) NOT NULL DEFAULT '0.000000000' COMMENT 'Cumulative spend',
   PRIMARY KEY (`year`,`subject_type`,`subject_id`,`quarter`),
   KEY `idx_year` (`year`,`quarter`),
   KEY `idx_quarter` (`quarter`),
@@ -459,7 +472,7 @@ CREATE TABLE `usage_d` (
   `cc_id` binary(16) NOT NULL DEFAULT '\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0' COMMENT 'ID of the CC',
   `project_id` binary(16) NOT NULL DEFAULT '\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0' COMMENT 'ID of the project',
   `farm_id` int(11) NOT NULL DEFAULT '0' COMMENT 'ID of the farm',
-  `cost` decimal(12,6) NOT NULL DEFAULT '0.000000' COMMENT 'daily usage',
+  `cost` decimal(18,9) NOT NULL DEFAULT '0.000000000' COMMENT 'Daily usage',
   `env_id` int(11) NOT NULL DEFAULT '0' COMMENT 'ID of the environment',
   PRIMARY KEY (`date`,`farm_id`,`platform`,`cc_id`,`project_id`),
   KEY `idx_farm_id` (`farm_id`),
@@ -483,7 +496,7 @@ CREATE TABLE `usage_h` (
   `platform` varchar(20) NOT NULL COMMENT 'The cloud type',
   `url` varchar(255) NOT NULL DEFAULT '',
   `cloud_location` varchar(255) NOT NULL COMMENT 'The cloud location',
-  `instance_type` varchar(45) NOT NULL COMMENT 'The type of the instance',
+  `usage_item` binary(4) NOT NULL COMMENT 'usage_items ref',
   `os` tinyint(1) NOT NULL DEFAULT '0' COMMENT '0 - linux, 1 - windows',
   `cc_id` binary(16) DEFAULT NULL COMMENT 'ID of cost centre',
   `project_id` binary(16) DEFAULT NULL COMMENT 'ID of the project',
@@ -491,11 +504,10 @@ CREATE TABLE `usage_h` (
   `farm_id` int(11) DEFAULT NULL COMMENT 'farms.id reference',
   `farm_role_id` int(11) DEFAULT NULL COMMENT 'farm_roles.id reference',
   `role_id` int(11) DEFAULT NULL COMMENT 'scalr.roles.id ref',
-  `num` int(10) unsigned NOT NULL DEFAULT '0' COMMENT 'The number of the same instances',
-  `cost` decimal(12,6) NOT NULL DEFAULT '0.000000' COMMENT 'Cost of usage',
+  `num` decimal(8,2) unsigned NOT NULL DEFAULT '0.00' COMMENT 'Usage quantity',
+  `cost` decimal(18,9) NOT NULL DEFAULT '0.000000000' COMMENT 'Cost of usage',
   PRIMARY KEY (`usage_id`),
   KEY `idx_platform` (`platform`,`url`,`cloud_location`),
-  KEY `idx_instance_type` (`instance_type`),
   KEY `idx_project_id` (`project_id`),
   KEY `idx_cc_id` (`cc_id`),
   KEY `idx_farm_id` (`farm_id`),
@@ -503,7 +515,9 @@ CREATE TABLE `usage_h` (
   KEY `idx_farm_role_id` (`farm_role_id`),
   KEY `idx_find` (`account_id`,`dtime`),
   KEY `idx_dtime` (`dtime`),
-  KEY `idx_role` (`role_id`)
+  KEY `idx_role` (`role_id`),
+  KEY `idx_usage_item` (`usage_item`),
+  CONSTRAINT `fk_75b88915ce5d` FOREIGN KEY (`usage_item`) REFERENCES `usage_items` (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COMMENT='Hourly usage';
 /*!40101 SET character_set_client = @saved_cs_client */;
 
@@ -525,6 +539,24 @@ CREATE TABLE `usage_h_tags` (
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
+-- Table structure for table `usage_items`
+--
+
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
+CREATE TABLE `usage_items` (
+  `id` binary(4) NOT NULL,
+  `usage_type` binary(4) NOT NULL COMMENT 'usage_types.id ref',
+  `name` varchar(255) NOT NULL COMMENT 'Item name',
+  `display_name` varchar(255) DEFAULT NULL COMMENT 'Display name',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `unique_key` (`usage_type`,`name`),
+  KEY `idx_usage_type` (`usage_type`),
+  CONSTRAINT `fk_2d27e26ab76a` FOREIGN KEY (`usage_type`) REFERENCES `usage_types` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8 COMMENT='Usage items';
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
 -- Table structure for table `usage_servers_h`
 --
 
@@ -542,7 +574,23 @@ CREATE TABLE `usage_servers_h` (
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
--- Dumping routines for database 'analysis'
+-- Table structure for table `usage_types`
+--
+
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
+CREATE TABLE `usage_types` (
+  `id` binary(4) NOT NULL,
+  `cost_distr_type` tinyint(4) NOT NULL COMMENT 'Cost distribution type',
+  `name` varchar(255) NOT NULL COMMENT 'The type of the usage',
+  `display_name` varchar(255) DEFAULT NULL COMMENT 'Display name',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `unique_key` (`cost_distr_type`,`name`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8 COMMENT='Usage types';
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping routines for database 'analytics'
 --
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
 
@@ -551,4 +599,4 @@ CREATE TABLE `usage_servers_h` (
 /*!40014 SET UNIQUE_CHECKS=@OLD_UNIQUE_CHECKS */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
--- Dump completed on 2015-03-19  8:42:40
+-- Dump completed on 2015-07-14  3:11:10

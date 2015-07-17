@@ -423,4 +423,14 @@ class CryptoTool
     {
         return $this->iv;
     }
+
+    /**
+     * Validates crypto key
+     *
+     * @return bool Returns true, if size of IV and key consistent with algorithm
+     */
+    public function validateCryptoKey()
+    {
+        return !(strlen($this->iv) < $this->ivSize || strlen($this->key) < $this->keySize);
+    }
 }

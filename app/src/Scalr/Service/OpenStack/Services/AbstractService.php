@@ -1,9 +1,11 @@
 <?php
 namespace Scalr\Service\OpenStack\Services;
 
+use Scalr\Service\OpenStack\Exception\OpenStackException;
 use Scalr\Service\OpenStack\OpenStack;
 use Scalr\Service\OpenStack\Exception\ServiceException;
 use Scalr\Service\OpenStack\Exception\RestClientException;
+use Scalr\Exception\NotSupportedException;
 
 /**
  * OpenStack abstract service interface class
@@ -13,6 +15,9 @@ use Scalr\Service\OpenStack\Exception\RestClientException;
  */
 abstract class AbstractService
 {
+
+    const VERSION_DEFAULT = 'V1';
+
     /**
      * Conventional service name.
      * @var array
@@ -41,6 +46,42 @@ abstract class AbstractService
      * @var array
      */
     private $cache;
+
+    /**
+     * The current version of the API
+     *
+     * @var string
+     */
+    private $version = self::VERSION_DEFAULT;
+
+    /**
+     * {@inheritdoc}
+     * @see Scalr\Service\OpenStack\Services.ServiceInterface::getVersion()
+     */
+    public function getVersion()
+    {
+        return $this->version;
+    }
+
+    /**
+     * {@inheritdoc}
+     * @see Scalr\Service\OpenStack\Services.ServiceInterface::getSupportedVersions()
+     */
+    public function getSupportedVersions()
+    {
+        return [static::VERSION_DEFAULT];
+    }
+
+    /**
+     * {@inheritdoc}
+     * @see Scalr\Service\OpenStack\Services.ServiceInterface::setVersion()
+     */
+    public function setVersion($version)
+    {
+        $this->version = $version;
+
+        return $this;
+    }
 
     /**
      * Constructor
@@ -130,11 +171,48 @@ abstract class AbstractService
      */
     public function getApiHandler()
     {
+        $class = get_class($this);
+
         if ($this->apiHandler === null) {
             //This method is declared in the ServiceInterface and must be defined in children classes.
+
+            if (!$this->getOpenStack()->getConfig()->getAuthToken()) {
+                $this->getOpenStack()->auth();
+            }
+
             $ver = $this->getVersion();
-            $class = get_class($this);
+
+            $config = $this->getOpenStack()->getConfig();
+            $type = $this->getType();
+            $region = $config->getRegion();
+
+            try {
+                $config->getAuthToken()->getEndpointUrl($type, $region, substr($ver, 1));
+            } catch (OpenStackException $e) {
+                $endpoints = $config->getAuthToken()->getRegionEndpoints();
+
+                if (empty($endpoints[$type][$region])) {
+                    throw $e;
+                }
+
+                $supported = array_map(function ($v) { return substr($v, 1); }, $this->getSupportedVersions());
+
+                $versions = array_intersect($supported, array_keys($endpoints[$type][$region]));
+
+                if (empty($versions)) {
+                    throw new NotSupportedException(sprintf(
+                        "There is not version number which is supported for the %s service. Available: %s, Supported: %s",
+                        $type, join(", ", array_keys($endpoints[$type][$region])), join(", ", $supported)
+                    ));
+                }
+
+                $ver = 'V' . array_shift($versions);
+
+                $this->setVersion($ver);
+            }
+
             $name = self::getOriginalServiceName($class);
+
             if ($name === null) {
                 throw new ServiceException(sprintf(
                     'Invalid service interface class name "%s". It should end with "Service".', $class
@@ -143,6 +221,7 @@ abstract class AbstractService
             $apiClass = __NAMESPACE__ . '\\' . $name . '\\' . $ver . '\\' . $name . 'Api';
             $this->apiHandler = new $apiClass($this);
         }
+
         return $this->apiHandler;
     }
 

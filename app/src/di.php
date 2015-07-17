@@ -4,6 +4,7 @@ use Scalr\Modules\Platforms\Ec2\Ec2PlatformModule;
 use Scalr\Modules\Platforms\Eucalyptus\EucalyptusPlatformModule;
 use Scalr\Modules\Platforms\Openstack\OpenstackPlatformModule;
 use Scalr\Modules\Platforms\Cloudstack\CloudstackPlatformModule;
+use Scalr\System\Config\Yaml;
 
 /**
  * Dependency injection container configuration
@@ -58,10 +59,6 @@ $container->user = function ($cont) {
            $cont->request->getUser() : null;
 };
 
-$container->awsRegion = function ($cont) {
-    return $cont->dbServer->GetProperty(EC2_SERVER_PROPERTIES::REGION);
-};
-
 $container->awsAccessKeyId = function ($cont) {
     return $cont->environment->getPlatformConfigValue(Ec2PlatformModule::ACCESS_KEY);
 };
@@ -84,7 +81,8 @@ $container->awsPrivateKey = function ($cont) {
 
 $container->aws = function ($cont, array $arguments = null) {
     /* @var $env \Scalr_Environment */
-    $params = array();
+    $params = [];
+
     $traitFetchEnvProperties = function ($env) use (&$params) {
         $params['accessKeyId'] = $env->getPlatformConfigValue(Ec2PlatformModule::ACCESS_KEY);
         $params['secretAccessKey'] = $env->getPlatformConfigValue(Ec2PlatformModule::SECRET_KEY);
@@ -92,6 +90,7 @@ $container->aws = function ($cont, array $arguments = null) {
         $params['privateKey'] = $env->getPlatformConfigValue(Ec2PlatformModule::PRIVATE_KEY);
         $params['environment'] = $env;
     };
+
     if (!empty($arguments) && is_object($arguments[0])) {
         //Makes it possible to get aws instance by dbserver object
         if ($arguments[0] instanceof \DBServer) {
@@ -114,11 +113,11 @@ $container->aws = function ($cont, array $arguments = null) {
         $env = $arguments[1];
         $traitFetchEnvProperties($env);
     } else {
-        $params['region'] = isset($arguments[0]) ? $arguments[0] : ($cont->initialized('dbServer') ? $cont->awsRegion : null);
-        $params['accessKeyId'] = isset($arguments[1]) ? $arguments[1] : $cont->awsAccessKeyId;
-        $params['secretAccessKey'] = isset($arguments[2]) ? $arguments[2] : $cont->awsSecretAccessKey;
-        $params['certificate'] = isset($arguments[3]) ? $arguments[3] : $cont->awsCertificate;
-        $params['privateKey'] = isset($arguments[4]) ? $arguments[4] : $cont->awsPrivateKey;
+        $params['region'] = isset($arguments[0]) ? $arguments[0] : null;
+        $params['accessKeyId'] = isset($arguments[1]) ? $arguments[1] : null;
+        $params['secretAccessKey'] = isset($arguments[2]) ? $arguments[2] : null;
+        $params['certificate'] = isset($arguments[3]) ? $arguments[3] : null;
+        $params['privateKey'] = isset($arguments[4]) ? $arguments[4] : null;
         $params['environment'] = !isset($arguments[2]) ? $cont->environment : null;
     }
 
@@ -136,6 +135,10 @@ $container->aws = function ($cont, array $arguments = null) {
 
     if (!$cont->initialized($serviceid)) {
         $cont->setShared($serviceid, function($cont) use ($params, $proxySettings) {
+            if (empty($params['secretAccessKey']) || empty($params['accessKeyId'])) {
+                throw new \Scalr\Exception\InvalidCloudCredentialsException();
+            }
+
             $aws = new \Scalr\Service\Aws(
                 $params['accessKeyId'], $params['secretAccessKey'], $params['region'],
                 $params['certificate'], $params['privateKey']
@@ -210,6 +213,8 @@ $container->openstack = function ($cont, array $arguments = null) {
             $params['identityEndpoint'] = $config->getIdentityEndpoint();
             $params['config'] = $config;
             $params['region'] = $config->getRegion();
+            $params['identityVersion'] = $config->getIdentityVersion();
+            $params['proxySettings'] = $config->getProxySettings();
         } else {
             throw new \InvalidArgumentException('Invalid argument type!');
         }
@@ -246,6 +251,8 @@ $container->openstack = function ($cont, array $arguments = null) {
 
         $params['tenantName'] = $env->getPlatformConfigValue($platform. "." . OpenstackPlatformModule::TENANT_NAME);
         if (empty($params['tenantName'])) $params['tenantName'] = null;
+
+        $params['identityVersion'] = $env->getPlatformConfigValue($platform . '.' . OpenstackPlatformModule::IDENTITY_VERSION);
     }
 
     //calculates unique identifier of the service
@@ -254,14 +261,32 @@ $container->openstack = function ($cont, array $arguments = null) {
         false
     );
 
+    /* @var $config Yaml */
+    $config = $cont->config;
+    $proxySettings = null;
+
+    if (isset($platform) &&
+        $config->defined("scalr.{$platform}.use_proxy") &&
+        $config("scalr.{$platform}.use_proxy") &&
+        in_array($config('scalr.connections.proxy.use_on'), ['both', 'scalr'])) {
+        $params['proxySettings'] = $config('scalr.connections.proxy');
+    }
+
     if (!$cont->initialized($serviceid)) {
         $cont->setShared($serviceid, function ($cont) use ($params) {
             if (!isset($params['config'])) {
                 $params['config'] = new \Scalr\Service\OpenStack\OpenStackConfig(
                     $params['username'], $params['identityEndpoint'], $params['region'], $params['apiKey'],
-                    $params['updateTokenCallback'], $params['authToken'], $params['password'], $params['tenantName']
+                    $params['updateTokenCallback'], $params['authToken'], $params['password'], $params['tenantName'],
+                    $params['identityVersion'],
+                    empty($params['proxySettings']) ? null : $params['proxySettings']
                 );
             }
+
+            if ($params['config']->getUsername() == '' || $params['config']->getIdentityEndpoint() == '') {
+                throw new \Scalr\Exception\InvalidCloudCredentialsException();
+            }
+
             return new \Scalr\Service\OpenStack\OpenStack($params['config']);
         });
     }
@@ -271,13 +296,15 @@ $container->openstack = function ($cont, array $arguments = null) {
 
 $container->cloudstack = function($cont, array $arguments = null) {
     /* @var $env \Scalr_Environment */
-    $params = array();
+    $params = [];
+
     $traitFetchEnvProperties = function ($platform, $env) use (&$params) {
         $params['apiUrl'] = $env->getPlatformConfigValue($platform . "." . CloudstackPlatformModule::API_URL);
         $params['apiKey'] = $env->getPlatformConfigValue($platform . "." . CloudstackPlatformModule::API_KEY);
         $params['secretKey'] = $env->getPlatformConfigValue($platform . "." . CloudstackPlatformModule::SECRET_KEY);
         $params['platform'] = $platform;
     };
+
     if (!isset($arguments[0])) {
         throw new \BadFunctionCallException('Platform value must be provided!');
     } else {
@@ -296,9 +323,14 @@ $container->cloudstack = function($cont, array $arguments = null) {
 
     if (!$cont->initialized($serviceid)) {
         $cont->setShared($serviceid, function($cont) use ($params) {
+            if (empty($params['apiKey']) || empty($params['secretKey'])) {
+                throw new \Scalr\Exception\InvalidCloudCredentialsException();
+            }
+
             $cloudstack = new \Scalr\Service\CloudStack\CloudStack(
                 $params['apiUrl'], $params['apiKey'], $params['secretKey'], $params['platform']
             );
+
             return $cloudstack;
         });
     }
@@ -440,6 +472,13 @@ $container->setShared('analytics', function ($cont) {
     return $analyticsContainer;
 });
 
+//Api sub container
+$container->setShared('api', function ($cont) {
+    $apiContainer = new \Scalr\DependencyInjection\ApiContainer();
+    $apiContainer->setContainer($cont);
+    return $apiContainer;
+});
+
 $container->analytics->setShared('enabled', function ($analyticsContainer) {
 	return (bool)$analyticsContainer->getContainer()->config('scalr.analytics.enabled');
 });
@@ -508,7 +547,7 @@ $container->set('warmup', function($cont, array $arguments = null) {
 
 $container->set(
     'crypto',
-    function (\Scalr\DependencyInjection\BaseContainer $cont, array $arguments = []) {
+    function ($cont, array $arguments = []) {
         $algo = array_shift($arguments) ?: MCRYPT_RIJNDAEL_128;
         $mode = array_shift($arguments) ?: MCRYPT_MODE_CFB;
         $cryptoKey = $cryptoKeyId = array_shift($arguments) ?: (APPPATH . "/etc/.cryptokey");
@@ -531,7 +570,7 @@ $container->set(
         if (!$cont->initialized($cryptoId)) {
             $cont->setShared(
                 $cryptoId,
-                function (\Scalr\DependencyInjection\BaseContainer $cont) use ($algo, $mode, $cryptoKey, $keySize, $blockSize) {
+                function ($cont) use ($algo, $mode, $cryptoKey, $keySize, $blockSize) {
                     return new \Scalr\Util\CryptoTool($algo, $mode, $cryptoKey, $keySize, $blockSize);
                 }
             );

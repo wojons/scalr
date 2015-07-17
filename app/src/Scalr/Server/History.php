@@ -24,6 +24,8 @@ class History
 
     public $cloudServerId;
 
+    public $cloudLocation;
+
     public $dtlaunched;
 
     public $dtterminated;

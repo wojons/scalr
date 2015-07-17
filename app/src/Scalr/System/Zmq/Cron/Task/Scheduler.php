@@ -49,7 +49,7 @@ class Scheduler extends AbstractTask
                  `last_start_time` IS NOT NULL AND `start_time` IS NULL AND (CONVERT_TZ(last_start_time + INTERVAL restart_every MINUTE, 'SYSTEM', `timezone`) < CONVERT_TZ(NOW(),'SYSTEM',`timezone`)) OR
                  `last_start_time` IS NOT NULL AND `start_time` IS NOT NULL AND (CONVERT_TZ(last_start_time + INTERVAL (restart_every * 0.9) MINUTE, 'SYSTEM', `timezone`) < CONVERT_TZ(NOW(),'SYSTEM',`timezone`))
             )
-            ORDER BY IF (last_start_time, last_start_time, start_time), order_index ASC
+            ORDER BY IF (last_start_time, last_start_time, start_time) ASC
         ", [Scalr_SchedulerTask::STATUS_ACTIVE]);
 
         if (!$taskList) {

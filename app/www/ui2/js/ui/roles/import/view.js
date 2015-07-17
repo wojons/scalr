@@ -1,16 +1,11 @@
 Scalr.regPage('Scalr.ui.roles.import.view', function (loadParams, moduleParams) {
-	if (!moduleParams['platforms'].length) {
-        Scalr.message.Flush(true);
-		Scalr.message.Warning('Please configure cloud credentials first.');
-		Scalr.event.fireEvent('redirect', '#/account/environments', true);
-		return false;
-	}
-
 	var panel = Ext.create('Ext.panel.Panel', {
-        title: 'Create role from non-Scalr running instance',
         cls: 'scalr-ui-role-import',
 		scalrOptions: {
-			maximize: 'all'
+			maximize: 'all',
+            menuTitle: 'Roles',
+            menuHref: '#/roles',
+            menuParentStateId: 'grid-roles-manager'
 		},
         plugins: {
             ptype: 'localcachedrequest',
@@ -25,6 +20,7 @@ Scalr.regPage('Scalr.ui.roles.import.view', function (loadParams, moduleParams) 
             itemId: 'leftcol',
             cls: 'x-panel-column-left',
             autoScroll: true,
+            preserveScrollPosition: true,
             flex: 1,
             maxWidth: 560,
             minWidth: 445,
@@ -35,7 +31,7 @@ Scalr.regPage('Scalr.ui.roles.import.view', function (loadParams, moduleParams) 
                 layout: 'anchor',
                 defaults: {
                     anchor: '100%',
-                    labelWidth: 96
+                    labelWidth: 80
                 },
                 items: [{
                     xtype: 'textfield',
@@ -56,7 +52,7 @@ Scalr.regPage('Scalr.ui.roles.import.view', function (loadParams, moduleParams) 
                     boxLabel: 'Only create an Image, do not create a Role using that Image',
                     name: 'roleImage',
                     listeners: {
-                        boxready: function() {
+                        afterrender: function() {
                             if ('image' in loadParams || (moduleParams['server'] && moduleParams['server']['object'] == 'image')) {
                                 this.setValue(true);
                             }
@@ -65,7 +61,6 @@ Scalr.regPage('Scalr.ui.roles.import.view', function (loadParams, moduleParams) 
                 },{
                     xtype: 'label',
                     style: 'display:block;text-align:center',
-                    cls: 'x-label-grey',
                     html: 'Select the location of your current infrastructure, then pick a server.',
                     margin: '12 0'
                 },{
@@ -95,11 +90,15 @@ Scalr.regPage('Scalr.ui.roles.import.view', function (loadParams, moduleParams) 
                     margin: '0 0 10 0',
                     name: 'cloudLocation',
                     editable: false,
-                    fieldLabel: 'Cloud location',
+                    fieldLabel: 'Cloud Location',
                     valueField: 'id',
                     displayField: 'name',
                     queryMode: 'local',
                     emptyText: 'No information about locations',
+                    plugins: {
+                        ptype: 'fieldinnericoncloud',
+                        innerIconStyle: 'top:9px;left:7px;'
+                    },
                     store: {
                         fields: ['id', 'name'],
                         proxy: 'object'
@@ -136,9 +135,9 @@ Scalr.regPage('Scalr.ui.roles.import.view', function (loadParams, moduleParams) 
                         cls: 'x-boundlist-alt',
                         tpl:
                             '<tpl for="."><div class="x-boundlist-item<tpl if="isImporting||isManaged"> x-boundlist-item-unavailable</tpl>" style="height: auto; width: auto">' +
-                                '<div><span style="font-weight: bold">{id}</span> ({zone})</div>' +
-                                '<div style="font-weight: bold"><tpl if="isImporting"><span style="color:#ae2700">Importing</span><tpl elseif="isManaged"><span style="color:orange">Scalr managed</span><tpl else><span style="color:green">Available to import</span></tpl>'+
-                                ', Private IP: <span style="font-weight: bold">{localIp}</span>, Public IP: <span style="font-weight: bold">{publicIp}</span></div>' +
+                                '<div><span class="x-semibold">{id}</span> ({zone})</div>' +
+                                '<div class="x-semibold"><tpl if="isImporting"><span style="color:#ae2700">Importing</span><tpl elseif="isManaged"><span style="color:orange">Scalr managed</span><tpl else><span style="color:green">Available to import</span></tpl>'+
+                                ', Private IP: <span class="x-semibold">{localIp}</span>, Public IP: <span class="x-semibold">{publicIp}</span></div>' +
                             '</div></tpl>'
                     },
                     updateEmptyText: function(type){
@@ -199,27 +198,26 @@ Scalr.regPage('Scalr.ui.roles.import.view', function (loadParams, moduleParams) 
                     xtype: 'component',
                     cls: 'x-fieldset-subheader',
                     html: 'Setup Scalarizr',
-                    margin: '-6 0 6 0'
+                    margin: '-6 0 12 0'
                 },{
                     xtype: 'displayfield',
                     cls: 'x-form-field-info',
-                    value: '<b style="position:relative;top:-2px"><a target="_blank" href="https://scalr-wiki.atlassian.net/wiki/x/1w8b">Please follow these instructions to install scalarizr on your server.</a></b><br/><i>Make sure to open TCP port 8013 in your firewall (IPtables,&nbsp;security&nbsp;groups&nbsp;etc.)</i>'
+                    value: '<a style="white-space:nowrap" class="x-semibold" target="_blank" href="https://scalr-wiki.atlassian.net/wiki/x/1w8b">Please follow instructions to install scalarizr on your server.</a><br/><i>Make sure to open TCP port 8013 in your firewall (IPtables,&nbsp;security&nbsp;groups&nbsp;etc.)</i>'
                 },{
                     xtype: 'component',
                     cls: 'x-fieldset-subheader',
                     html: 'Launch Scalarizr',
-                    margin: '0 0 6 0'
+                    margin: '24 0 12 0'
                 },{
                     xtype: 'label',
-                    cls: 'x-label-grey',
                     html: 'Use this command to launch Scalarizr on your server. Then press "Confirm Scalarizr launch".'
                 },{
                     xtype:'textarea',
                     itemId: 'cmd',
                     margin: '6 0 0 0',
                     readOnly: true,
-                    fieldStyle: 'color:#000',
-                    height: 130
+                    height: 130,
+                    selectOnFocus: true
                 },{
                     xtype: 'container',
                     itemId: 'confirmLaunch',
@@ -231,8 +229,8 @@ Scalr.regPage('Scalr.ui.roles.import.view', function (loadParams, moduleParams) 
                     },
                     items: [{
                         xtype: 'button',
-                        width: 220,
-                        text: '<img src="/ui2/images/ui/roles/import/confirm-button.png" style="vertical-align:top;width:16px;height;16px" />&nbsp;&nbsp;Confirm Scalarizr launch',
+                        width: 240,
+                        text: ' Confirm Scalarizr launch',
                         handler: function() {
                             panel.down('#rightcol').show();
                             this.up('#confirmLaunch').hide();
@@ -267,8 +265,7 @@ Scalr.regPage('Scalr.ui.roles.import.view', function (loadParams, moduleParams) 
                 defaults: {
                     xtype: 'component',
                     flex: 1,
-                    cls: 'scalr-ui-progress-step',
-                    height: 26,
+                    cls: 'scalr-ui-progress-step x-semibold',
                     maxWidth: 300
                 },
                 resetProgress: function() {
@@ -324,11 +321,11 @@ Scalr.regPage('Scalr.ui.roles.import.view', function (loadParams, moduleParams) 
                 itemId: 'waiting',
                 style: 'text-align:center',
                 margin: '36 0 0',
-                html: '<div style="margin:18px 0;color:#666">Waiting to establish communication with running Scalarizr...</div>'+
+                html: '<div style="margin:18px 0;">Waiting to establish communication with running Scalarizr...</div>'+
                       '<table class="comm-status"><tr>'+
-                      '<td><div class="icon-scalr"></div><b>Scalr</b></td>'+
+                      '<td><div class="icon-scalr"></div><span class="x-semibold">Scalr</span></td>'+
                       '<td width="245"><div class="comm-status-inbound" id="inbound"></div><div class="comm-status-outbound" id="outbound"></div></td>'+
-                      '<td><div class="icon-scalarizr"></div><b>Scalarizr</b></td>'+
+                      '<td><div class="icon-scalarizr"></div><span class="x-semibold">Scalarizr</span></td>'+
                       '</tr></table>'+
                       '<div id="comm-error"></div>'
             },{
@@ -336,7 +333,7 @@ Scalr.regPage('Scalr.ui.roles.import.view', function (loadParams, moduleParams) 
                 itemId: 'automation',
                 cls: 'x-fieldset-separator-top',
                 hidden: true,
-                title: 'Select Scalr automation <span class="x-fieldset-header-description">Scalr can automate this ' + (moduleParams['server'] ? moduleParams['server']['object'] : '') + ' based on certain installed software:</span>',
+                title: 'Select Scalr automation <span class="x-fieldset-header-description">Scalr can automate this ' + (moduleParams['server'] ? moduleParams['server']['object'] : '') + ' based on certain installed software</span>',
                 defaults: {
                     anchor: '100%'
                 },
@@ -357,7 +354,7 @@ Scalr.regPage('Scalr.ui.roles.import.view', function (loadParams, moduleParams) 
                             iconCls: 'x-icon-behavior-large x-icon-behavior-large-' + behaviors[i],
                             text: Scalr.utils.beautifyBehavior(behaviors[i]),
                             behavior: behaviors[i],
-                            disabled: isBaseBehavior,
+                            allowDepress: !isBaseBehavior,
                             pressed: moduleParams['step'] == 2 || isBaseBehavior,
                             tooltip: isBaseBehavior ? 'Enabled by default' : ''
                         });
@@ -365,10 +362,26 @@ Scalr.regPage('Scalr.ui.roles.import.view', function (loadParams, moduleParams) 
                     ct.resumeLayouts(true);
                 },
                 items: [{
-                    xtype: 'displayfield',
-                    itemId: 'serverinfo',
-                    fieldLabel: 'OS',
-                    labelWidth: 60
+                    xtype: 'combo',
+                    name: 'osId',
+                    itemId: 'osId',
+                    fieldLabel: 'Operating system',
+                    labelWidth: 130,
+                    maxWidth: 430,
+                    displayField: 'name',
+                    valueField: 'id',
+                    editable: false,
+                    allowBlank: false,
+                    plugins: {
+                        ptype: 'fieldinnericon',
+                        field: 'family',
+                        iconClsPrefix: 'x-icon-osfamily-small x-icon-osfamily-small-'
+                    },
+                    store: {
+                        fields: ['id', 'name', 'family', 'generation', 'version'],
+                        proxy: 'object',
+                        sorters: {property: 'name'}
+                    }
                 },{
                     xtype: 'displayfield',
                     itemId: 'noautomation',
@@ -378,16 +391,16 @@ Scalr.regPage('Scalr.ui.roles.import.view', function (loadParams, moduleParams) 
                 },{
                     xtype: 'fieldcontainer',
                     itemId: 'behaviors',
-                    fieldLabel: 'Software:&nbsp;&nbsp;<label class="x-label-grey">(Click on an icon to add the corresponding prebuilt automation)</label>',
+                    fieldLabel: 'Software&nbsp;&nbsp;<span class="x-small">(Click on an icon to add the corresponding prebuilt automation)</span>',
                     labelSeparator: '',
                     labelAlign: 'top',
-                    margin: '-4 0 0 0',
+                    margin: '16 0 0',
                     defaults: {
                         xtype: 'button',
                         ui: 'simple',
                         enableToggle: true,
                         cls: 'x-btn-simple-large',
-                        iconAlign: 'above',
+                        iconAlign: 'top',
                         margin: '10 10 0 0'
                     }
                 }]
@@ -456,13 +469,12 @@ Scalr.regPage('Scalr.ui.roles.import.view', function (loadParams, moduleParams) 
                 },
                 items: [{
                     xtype: 'grid',
-                    cls: 'x-grid-shadow',
                     plugins: [{
                         ptype: 'gridstore'
                     }, {
                         ptype: 'rowexpander',
                         rowBodyTpl: [
-                            '<p><b>Message:</b> {message}</p>'
+                            '<p><span class="x-semibold">Message:</span> {message}</p>'
                         ]
                     }],
                     store: {
@@ -477,7 +489,7 @@ Scalr.regPage('Scalr.ui.roles.import.view', function (loadParams, moduleParams) 
                         focusedItemCls: 'x-noselection',
                         selectedItemCls: 'x-noselection',
                         getRowClass: function(record, rowIndex) {
-                            return rowIndex === 0 ? 'x-grid-row-new' : '';
+                            return rowIndex === 0 ? 'x-grid-row-color-new' : '';
                         }
                     },
                     columns: [
@@ -564,16 +576,16 @@ Scalr.regPage('Scalr.ui.roles.import.view', function (loadParams, moduleParams) 
                         text: 'View ' + (moduleParams['server'] ? moduleParams['server']['object'] : ''),
                         handler: function() {
                             if (moduleParams['server']['object'] == 'role')
-                                Scalr.event.fireEvent('redirect', '#/roles/manager?roleId=' + panel.roleId);
+                                Scalr.event.fireEvent('redirect', '#/roles?roleId=' + panel.roleId);
                             else
-                                Scalr.event.fireEvent('redirect', '#/images/view?platform=' + panel.platform + '&id=' + panel.imageId);
+                                Scalr.event.fireEvent('redirect', '#/images?hash=' + panel.imageHash);
                         }
                     },{
                         xtype: 'button',
                         text: 'Build farm',
                         hidden: moduleParams['server'] ? moduleParams['server']['object'] == 'image' : false,
                         handler: function() {
-                            Scalr.event.fireEvent('redirect', '#/farms/build');
+                            Scalr.event.fireEvent('redirect', '#/farms/designer');
                         }
                     }]
                 },{
@@ -606,9 +618,10 @@ Scalr.regPage('Scalr.ui.roles.import.view', function (loadParams, moduleParams) 
                 xtype: 'button',
                 ui: 'tab',
                 allowDepress: false,
-                iconAlign: 'above',
+                iconAlign: 'top',
                 disableMouseDownPressed: true,
                 toggleGroup: 'servers-import-tabs',
+                cls: 'x-btn-tab-no-text-transform',
                 toggleHandler: function(field, state) {
                     panel.fireEvent((!state ? 'de' : '') + 'selectplatform', this.value);
                 }
@@ -764,9 +777,9 @@ Scalr.regPage('Scalr.ui.roles.import.view', function (loadParams, moduleParams) 
                 } else if (data['connectionError']) {
                     outbound.removeCls('success progress');
                     outbound.addCls('error');
-                    error.setHTML(
+                    error.setHtml(
                         '<div class="x-tip x-tip-message x-tip-message-warning" style="position:static;margin:0 auto;width:370px;color:#b20000;text-align:left;margin:4px auto"><div class="x-tip-body">'+data['connectionError']+'</div></div>'+
-                        '<div style="margin:18px 0;color:#666">Retrying in a few minutes...</div>'
+                        '<div style="margin:18px 0;">Retrying in a few minutes...</div>'
                     );
                 } else {
                     outbound.removeCls('success error');
@@ -789,11 +802,16 @@ Scalr.regPage('Scalr.ui.roles.import.view', function (loadParams, moduleParams) 
         startBehaviorSelection: function(data) {
             var rightcol = this.getComponent('rightcol'),
                 automation = rightcol.down('#automation'),
+                osIdField = rightcol.down('#osId'),
                 os = data['os'];
             rightcol.show();
             panel.down('#confirmLaunch').hide();
             this.bundleTaskId = data['bundleTaskId'];
-            rightcol.down('#serverinfo').setValue(os ? '<img src="' + Ext.BLANK_IMAGE_URL + '" class="x-icon-osfamily-small x-icon-osfamily-small-'+os['family']+'"/> ' + Scalr.utils.beautifyOsFamily(os['family']) + ' ' + os['version'] + ' ' + os['name']: 'unknown');
+
+            osIdField.store.load({data: os || []});
+            if (osIdField.store.getCount() === 1) {
+                osIdField.setValue(osIdField.store.first());
+            }
             automation.addBehaviors(data.behaviors);
             automation.show();
             rightcol.down('#waiting').hide();
@@ -809,6 +827,7 @@ Scalr.regPage('Scalr.ui.roles.import.view', function (loadParams, moduleParams) 
                 behaviorsCt = rightcol.down('#behaviors'),
                 defaultBehaviors = [],
                 behaviors = [];
+            if (!rightcol.down('#osId').isValid()) return;
             behaviorsCt.items.each(function(){
                 if (this.pressed) {
                     behaviors.push(this.behavior);
@@ -828,6 +847,7 @@ Scalr.regPage('Scalr.ui.roles.import.view', function (loadParams, moduleParams) 
                 params: {
                     serverId: panel.serverId,
                     bundleTaskId: panel.bundleTaskId,
+                    osId: rightcol.down('#osId').getValue(),
                     behaviors: behaviors.join(',')
                 },
                 url: '/roles/import/xSetBehaviors/',
@@ -854,6 +874,7 @@ Scalr.regPage('Scalr.ui.roles.import.view', function (loadParams, moduleParams) 
             this.roleId = data['roleId'];
             this.platform = data['platform'];
             this.imageId = data['imageId'];
+            this.imageHash = data['imageHash'];
         },
         onBundleTaskFailed: function(failureReason) {
             var rightcol = this.getComponent('rightcol'),
@@ -929,6 +950,7 @@ Scalr.regPage('Scalr.ui.roles.import.view', function (loadParams, moduleParams) 
                             cloudLocation: location
                         }
                         leftcol.down('#locationmap').selectLocation(platform, location, locationIds, 'world');
+                        cloudLocationField.getPlugin('fieldinnericoncloud').setPlatform(platform);
                         cloudLocationField.store.load({data: locations});
                         cloudLocationField.setValue(location);
                         cloudLocationField.setDisabled(Ext.Object.getSize(locations) === 0);
@@ -962,7 +984,7 @@ Scalr.regPage('Scalr.ui.roles.import.view', function (loadParams, moduleParams) 
                         me
                     );
                 } else {
-                    Scalr.loadCloudLocations(platform, function(){console.log(Scalr.platforms[platform].locations)
+                    Scalr.loadCloudLocations(platform, function(){
                         callback(Scalr.platforms[platform] ? Scalr.platforms[platform].locations : null);
                     });
                 }

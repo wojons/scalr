@@ -3,6 +3,7 @@
 use Scalr\Acl\Acl;
 use Scalr\Modules\PlatformFactory;
 use Scalr\UI\Request\JsonData;
+use Scalr\Model\Entity\SshKey;
 
 class Scalr_UI_Controller_Sshkeys extends Scalr_UI_Controller
 {
@@ -13,30 +14,64 @@ class Scalr_UI_Controller_Sshkeys extends Scalr_UI_Controller
         return parent::hasAccess() && $this->request->isAllowed(Acl::RESOURCE_SECURITY_SSH_KEYS);
     }
 
+    /**
+     * Covert object to array (without public/private keys)
+     *
+     * @param SshKey $key
+     * @return array
+     */
+    public function getSshKeyObject($key)
+    {
+        if ($key->farmId) {
+            try {
+                $farm = DBFarm::LoadByID($key->farmId);
+                $farmName = $farm->Name;
+            } catch (Exception $e) {}
+        }
+
+        return [
+            'id' => $key->id,
+            'type' => $key->type,
+            'cloudKeyName' => $key->cloudKeyName,
+            'platform' => $key->platform,
+            'cloudLocation' => $key->cloudLocation,
+            'farmId' => $key->farmId,
+            'farmName' => $farmName,
+            'status' => $key->isUsed() ? 'In use' : 'Not used'
+        ];
+    }
+
+    public function defaultAction()
+    {
+        $this->viewAction();
+    }
+
     public function viewAction()
     {
-        $farms = self::loadController('Farms')->getList();
-        array_unshift($farms, array('id' => 0, 'name' => 'All farms'));
-
-        $this->response->page('ui/sshkeys/view.js', array('farms' => $farms));
+        $this->response->page('ui/sshkeys/view.js', array(
+            'platforms' => (new SshKey())->getEnvironmentPlatforms($this->getEnvironmentId())
+        ));
     }
 
     /**
-     * Doenload private key
+     * Download private key
      *
      * @param int $sshKeyId
      * @param int $farmId
      * @param string $platform
      * @param string $cloudLocation
+     * @param bool $formatPpk
      * @throws Scalr_Exception_InsufficientPermissions
      * @throws Scalr_UI_Exception_NotFound
+     * @throws Exception
      */
-    public function downloadPrivateAction($sshKeyId = null, $farmId = null, $platform = null, $cloudLocation = null)
+    public function downloadPrivateAction($sshKeyId = null, $farmId = null, $platform = null, $cloudLocation = null, $formatPpk = false)
     {
+        /** @var SshKey $sshKey */
         if ($sshKeyId) {
-            $sshKey = Scalr_SshKey::init()->loadById($sshKeyId);
+            $sshKey = SshKey::findPk($sshKeyId);
         } else {
-            $sshKey = Scalr_SshKey::init()->loadGlobalByFarmId(
+            $sshKey = (new SshKey())->loadGlobalByFarmId(
                 $this->getEnvironmentId(),
                 $farmId,
                 $cloudLocation,
@@ -56,22 +91,19 @@ class Scalr_UI_Controller_Sshkeys extends Scalr_UI_Controller
 
         if (!$sshKey)
             throw new Exception('SSH key not found in database');
-        
-        $this->user->getPermissions()->validate($sshKey);
-        $retval = $sshKey->getPrivate();
 
-        if ($sshKey->cloudLocation)
-            $fileName = "{$sshKey->cloudKeyName}.{$sshKey->cloudLocation}.private.pem";
-        else
-            $fileName = "{$sshKey->cloudKeyName}.private.pem";
+        $this->user->getPermissions()->validate($sshKey);
+
+        $extension = $formatPpk ? 'ppk' : 'pem';
+        $fileName = ($sshKey->cloudLocation) ? "{$sshKey->cloudKeyName}.{$sshKey->cloudLocation}.{$extension}" : "{$sshKey->cloudKeyName}.{$extension}";
+        $key = $formatPpk ? $sshKey->getPuttyPrivateKey() : $sshKey->privateKey;
 
         $this->response->setHeader('Pragma', 'private');
         $this->response->setHeader('Cache-control', 'private, must-revalidate');
         $this->response->setHeader('Content-type', 'plain/text');
         $this->response->setHeader('Content-Disposition', 'attachment; filename="'.$fileName.'"');
-        $this->response->setHeader('Content-Length', strlen($retval));
-
-        $this->response->setResponse($retval);
+        $this->response->setHeader('Content-Length', strlen($key));
+        $this->response->setResponse($key);
     }
 
     /**
@@ -80,28 +112,31 @@ class Scalr_UI_Controller_Sshkeys extends Scalr_UI_Controller
      * @param int $sshKeyId
      * @throws Scalr_Exception_InsufficientPermissions
      * @throws Scalr_UI_Exception_NotFound
+     * @throws Exception
      */
     public function downloadPublicAction($sshKeyId)
     {
-        $sshKey = Scalr_SshKey::init()->loadById($sshKeyId);
+        /** @var SshKey $sshKey */
+        $sshKey = SshKey::findPk($sshKeyId);
+        if (!$sshKey)
+            throw new Exception("SSH key not found in database");
+
         $this->user->getPermissions()->validate($sshKey);
 
-        $retval = $sshKey->getPublic();
-        if (!$retval)
-            $retval = $sshKey->generatePublicKey();
+        if (!$sshKey->publicKey)
+            $sshKey->generatePublicKey();
 
         if ($sshKey->cloudLocation)
-            $fileName = "{$sshKey->cloudKeyName}.{$sshKey->cloudLocation}.public.pem";
+            $fileName = "{$sshKey->cloudKeyName}.{$sshKey->cloudLocation}.pub";
         else
-            $fileName = "{$sshKey->cloudKeyName}.public.pem";
+            $fileName = "{$sshKey->cloudKeyName}.pub";
 
         $this->response->setHeader('Pragma', 'private');
         $this->response->setHeader('Cache-control', 'private, must-revalidate');
         $this->response->setHeader('Content-type', 'plain/text');
         $this->response->setHeader('Content-Disposition', 'attachment; filename="'.$fileName.'"');
-        $this->response->setHeader('Content-Length', strlen($retval));
-
-        $this->response->setResponse($retval);
+        $this->response->setHeader('Content-Length', strlen($sshKey->publicKey));
+        $this->response->setResponse($sshKey->publicKey);
     }
 
     /**
@@ -198,6 +233,7 @@ class Scalr_UI_Controller_Sshkeys extends Scalr_UI_Controller
     }
 
     /**
+     * @deprecated
      * Get list of roles for listView
      */
     public function xListSshKeysAction()
@@ -246,10 +282,91 @@ class Scalr_UI_Controller_Sshkeys extends Scalr_UI_Controller
                 'farm_id'		    => $sshKey->farmId,
                 'cloud_location'    => $sshKey->cloudLocation,
                 'status'            => $row['status'] ? 'In use' : 'Not used',
-                'farmName'          => $row['farmName']
+                'farmName'          => $row['farmName'],
+                'platform'          => $sshKey->platform
             );
         }
 
         $this->response->data($response);
+    }
+
+    public function xListAction($query = null, $sshKeyId = null, $farmId = null, $platform = null, $cloudLocation = null, JsonData $sort, $start = 0, $limit = 20)
+    {
+        $criteria = [[
+            'envId' => $this->getEnvironmentId()
+        ]];
+
+        if ($this->request->isAllowed(Acl::RESOURCE_FARMS, Acl::PERM_FARMS_SERVERS)) {
+            if (!$this->request->isAllowed(Acl::RESOURCE_FARMS_ROLES, Acl::PERM_FARMS_ROLES_CREATE)) {
+                $criteria[] = [
+                    'farmId' => [
+                        '$ne' => NULL
+                    ]
+                ];
+            }
+        } else {
+            $farmSql = "SELECT id FROM farms WHERE env_id = ?";
+            $farmArgs = [$this->getEnvironmentId()];
+            list($farmSql, $farmArgs) = $this->request->prepareFarmSqlQuery($farmSql, $farmArgs, '', Acl::PERM_FARMS_SERVERS);
+            $farms = $this->db->GetCol($farmSql, $farmArgs);
+
+            if ($this->request->isAllowed(Acl::RESOURCE_FARMS_ROLES, Acl::PERM_FARMS_ROLES_CREATE)) {
+                $criteria[] = [
+                    '$or' => [[
+                        'farmId' => NULL
+                    ], [
+                        'farmId' => [
+                            '$in' => $farms
+                        ]
+                    ]]
+                ];
+            } else {
+                $criteria[] = [
+                    'farmId' => [
+                        '$in' => $farms
+                    ]
+                ];
+            }
+        }
+
+        if ($sshKeyId) {
+            $criteria[] = [
+                'id' => $sshKeyId
+            ];
+        }
+
+        if ($farmId) {
+            $criteria[] = [
+                'farmId' => $farmId
+            ];
+        }
+
+        if ($query) {
+            $querySql = '%' . $query . '%';
+            $criteria[] = [
+                '$or' => [
+                    [ 'cloudKeyName' => [ '$like' => $querySql ]]
+                ]
+            ];
+        }
+
+        if ($platform) {
+            $criteria[] = ['platform' => $platform];
+            if ($cloudLocation) {
+                $criteria[] = ['cloudLocation' => $cloudLocation];
+            }
+        }
+
+        $result = SshKey::find($criteria, \Scalr\UI\Utils::convertOrder($sort, ['id' => 'ASC'], ['id', 'cloudKeyName', 'platform', 'cloudLocation']), $limit, $start, true);
+        $data = [];
+        foreach ($result as $key) {
+            /* @var SshKey $key */
+            $data[] = $this->getSshKeyObject($key);
+        }
+
+        $this->response->data([
+            'total' => $result->totalNumber,
+            'data' => $data
+        ]);
     }
 }

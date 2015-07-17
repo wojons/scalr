@@ -98,7 +98,6 @@ class Scalr_UI_Controller_Logs extends Scalr_UI_Controller
         $this->request->defineParams(array(
             'serverId' => array('type' => 'string'),
             'farmId' => array('type' => 'int'),
-            'severity' => array('type' => 'array'),
             'query' => array('type' => 'string'),
             'sort' => array('type' => 'json', 'default' => array('property' => 'time', 'direction' => 'DESC'))
         ));
@@ -111,7 +110,11 @@ class Scalr_UI_Controller_Logs extends Scalr_UI_Controller
             $args[] = $this->getParam('serverId');
         }
 
-        $farms = $this->db->GetCol("SELECT id FROM farms WHERE env_id=?", array($this->getEnvironmentId()));
+        $farmSql = "SELECT id FROM farms WHERE env_id = ?";
+        $farmArgs = [$this->getEnvironmentId()];
+        list($farmSql, $farmArgs) = $this->request->prepareFarmSqlQuery($farmSql, $farmArgs);
+        $farms = $this->db->GetCol($farmSql, $farmArgs);
+
         if ($this->getParam('farmId') && in_array($this->getParam('farmId'), $farms)) {
             $sql .= ' AND farmid = ?';
             $args[] = $this->getParam('farmId');
@@ -124,11 +127,14 @@ class Scalr_UI_Controller_Logs extends Scalr_UI_Controller
         }
 
         if ($this->getParam('severity')) {
-            $severities = array();
-            foreach ($this->getParam('severity') as $key => $value) {
-                if ($value == 1)
-                    $severities[] = intval($key);
+            $severities = [];
+            foreach (explode(',', $this->getParam('severity')) as $sevId) {
+                $sevId = intval($sevId);
+                if ($sevId > 0 && $sevId < 6) {
+                    $severities[] = $sevId;
+                }
             }
+
             if (count($severities)) {
                 $severities = implode(",", $severities);
                 $sql .= " AND severity IN ($severities)";
@@ -165,7 +171,7 @@ class Scalr_UI_Controller_Logs extends Scalr_UI_Controller
         if ($this->getParam('action') == "download") {
             $fileContent = array();
             $farmNames = array();
-            $fileContent[] = "Type;Time;Farm;Caller;Message\r\n";
+            $fileContent[] = "Type;Time;Farm;Caller;Message;Count;\r\n";
 
             $response = $this->buildResponseFromSql2($sql, array('time'), array('message', 'serverid', 'source'), $args, true);
 
@@ -181,7 +187,7 @@ class Scalr_UI_Controller_Logs extends Scalr_UI_Controller
                 $data['message'] = str_replace("<br />","",$data['message']);
                 $data['message'] = str_replace("\n","",$data['message']);
 
-                $fileContent[] = "{$data['s_severity']};{$data['time']};{$data['farm_name']};{$data['source']};{$data['message']}";
+                $fileContent[] = "{$data['s_severity']};{$data['time']};{$data['farm_name']};{$data['source']};{$data['message']};{$data['cnt']};";
             }
 
             $this->response->setHeader('Content-Encoding', 'utf-8');
@@ -229,7 +235,11 @@ class Scalr_UI_Controller_Logs extends Scalr_UI_Controller
         $sql = "SELECT * FROM scripting_log WHERE :FILTER:";
         $args = array();
 
-        $farms = $this->db->GetCol("SELECT id FROM farms WHERE env_id=?", array($this->getEnvironmentId()));
+        $farmSql = "SELECT id FROM farms WHERE env_id = ?";
+        $farmArgs = [$this->getEnvironmentId()];
+        list($farmSql, $farmArgs) = $this->request->prepareFarmSqlQuery($farmSql, $farmArgs);
+        $farms = $this->db->GetCol($farmSql, $farmArgs);
+
         if ($this->getParam('farmId') && in_array($this->getParam('farmId'), $farms)) {
             $sql .= ' AND farmid = ?';
             $args[] = $this->getParam('farmId');
@@ -257,7 +267,7 @@ class Scalr_UI_Controller_Logs extends Scalr_UI_Controller
         }
 
         if ($this->getParam('script')) {
-            /* @var Script $script */
+            /* @var $script Script */
             $script = Script::findPk($this->getParam('script'));
             if ($script && (!$script->accountId || $script->accountId == $this->user->getAccountId())) {
                 $scriptName = substr(preg_replace("/[^A-Za-z0-9]+/", "_", $script->name), 0, 50); // because of column's length
@@ -525,40 +535,42 @@ class Scalr_UI_Controller_Logs extends Scalr_UI_Controller
         ));
     }
 
-    public function xListEventLogsAction()
+    /**
+     * @param   int        $farmId
+     * @param   string     $eventServerId
+     * @param   string     $eventId
+     * @throws Scalr_Exception_Core
+     */
+    public function xListEventLogsAction($farmId = null, $eventServerId = null, $eventId = null)
     {
-        $this->request->defineParams(array(
-            'farmId' => array('type' => 'int'),
-            'eventServerId',
-            'eventId',
-            'query' => array('type' => 'string'),
-            'sort' => array('type' => 'string', 'default' => 'id'),
-            'dir' => array('type' => 'string', 'default' => 'DESC')
-        ));
+        $sql = "SELECT `events`.* FROM `farms` INNER JOIN `events` ON `farms`.`id` = `events`.`farmid` WHERE `farms`.`env_id` = ? AND :FILTER:";
+        $args = [$this->getEnvironmentId()];
 
-        $sql = "
-            SELECT *
-            FROM events
-            WHERE farmid IN (SELECT id FROM farms where env_id = ".$this->db->qstr($this->getEnvironmentId()).")
-        ";
+        list($sql, $args) = $this->request->prepareFarmSqlQuery($sql, $args, 'farms');
 
-        if ($this->getParam('farmId'))
-            $sql .= " AND farmid = ".$this->db->qstr($this->getParam('farmId'));
+        if ($farmId) {
+            $sql .= " AND farmid = ?";
+            $args[] = $farmId;
+        }
 
-        if ($this->getParam('eventServerId'))
-            $sql .= " AND event_server_id = ".$this->db->qstr($this->getParam('eventServerId'));
+        if ($eventServerId) {
+            $sql .= " AND event_server_id = ?";
+            $args[] = $eventServerId;
+        }
 
-        if ($this->getParam('eventId'))
-            $sql .= " AND event_id = ".$this->db->qstr($this->getParam('eventId'));
+        if ($eventId) {
+            $sql .= " AND event_id = ?";
+            $args[] = $eventId;
+        }
 
-        $response = $this->buildResponseFromSql($sql, array("message", "type", "dtadded", "event_server_id", "event_id"));
+        $response = $this->buildResponseFromSql2($sql, ['dtadded'], ["events.message", "events.type", "events.dtadded", "events.event_server_id", "events.event_id"], $args);
 
         $cache = array();
 
         foreach ($response['data'] as &$row) {
             $row['message'] = nl2br($row['message']);
             $row["dtadded"] = Scalr_Util_DateTime::convertTz($row["dtadded"]);
-            
+
             if ($row['is_suspend'] == 1)
                 $row['type'] = "{$row['type']} (Suspend)";
 
@@ -575,25 +587,25 @@ class Scalr_UI_Controller_Logs extends Scalr_UI_Controller
                     $row['event_farm_roleid'] = $es->farmRoleId;
 
                     if (!$cache['role_names'][$es->GetFarmRoleObject()->RoleID])
-                        $cache['role_names'][$es->GetFarmRoleObject()->RoleID] = $es->GetFarmRoleObject()->GetRoleObject()->name;
+                        $cache['role_names'][$es->GetFarmRoleObject()->RoleID] = $es->GetFarmRoleObject()->Alias;
                     $row['event_role_name'] = $cache['role_names'][$es->GetFarmRoleObject()->RoleID];
 
                     $row['event_server_index'] = $es->index;
                 } catch (Exception $e) {}
 
             }
-            
+
             $row['scripts'] = [
-                'total' => $row['scripts_total'], 
-                'complete' => $row['scripts_completed'], 
-                'failed' => $row['scripts_failed'], 
-                'timeout' => $row['scripts_timedout'], 
+                'total' => $row['scripts_total'],
+                'complete' => $row['scripts_completed'],
+                'failed' => $row['scripts_failed'],
+                'timeout' => $row['scripts_timedout'],
                 'pending' => $row['scripts_total'] - $row['scripts_completed'] - $row['scripts_failed'] - $row['scripts_timedout']
             ];
             $row['webhooks'] = [
-                'total' => $row['wh_total'], 
-                'complete' => $row['wh_completed'], 
-                'failed' => $row['wh_failed'], 
+                'total' => $row['wh_total'],
+                'complete' => $row['wh_completed'],
+                'failed' => $row['wh_failed'],
                 'pending' => $row['wh_total'] - $row['wh_completed'] - $row['wh_failed']
             ];
         }

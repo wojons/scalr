@@ -28,19 +28,19 @@ class Scalr_UI_Controller_Account2_Teams extends Scalr_UI_Controller
         $this->request->defineParams(array(
             'envs' => array('type' => 'json'),
             'users' => array('type' => 'json'),
-            'teamName' => array('type' => 'string', 'validator' => array(
+            'name' => array('type' => 'string', 'validator' => array(
                 Scalr_Validator::REQUIRED => true,
                 Scalr_Validator::NOHTML => true
             )),
-            'accountRoleId' => array('type' => 'string', 'validator' => array(
+            'account_role_id' => array('type' => 'string', 'validator' => array(
                 Scalr_Validator::REQUIRED => true,
                 Scalr_Validator::NOHTML => true
             )),
         ));
 
         $team = Scalr_Account_Team::init();
-        if ($this->getParam('teamId')) {
-            $team->loadById($this->getParam('teamId'));
+        if ($this->getParam('id')) {
+            $team->loadById($this->getParam('id'));
             if ($team->accountId != $this->user->getAccountId()) {
                 throw new Scalr_Exception_InsufficientPermissions();
             }
@@ -55,14 +55,14 @@ class Scalr_UI_Controller_Account2_Teams extends Scalr_UI_Controller
             return;
         }
 
-        $team->name = $this->getParam('teamName');
-        $team->accountRoleId = $this->getParam('accountRoleId');
+        $team->name = $this->getParam('name');
+        $team->accountRoleId = $this->getParam('account_role_id');
         $team->save();
         $team->setUserRoles($this->getParam('users'));
 
         $users = $team->getUsers();
         if (!empty($users)) {
-            $uroles = $this->environment->acl->getUserRoleIdsByTeam(
+            $uroles = $this->getContainer()->acl->getUserRoleIdsByTeam(
                 array_map(create_function('$a', 'return $a["id"];'), $users),
                 $team->id, $team->accountId
             );

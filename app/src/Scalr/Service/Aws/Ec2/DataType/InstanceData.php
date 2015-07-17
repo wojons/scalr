@@ -237,6 +237,8 @@ class InstanceData extends AbstractEc2DataType
      */
     protected function throwExceptionIfNotInitialized()
     {
+        parent::throwExceptionIfNotInitialized();
+
         if ($this->instanceId === null) {
             throw new Ec2Exception(sprintf(
                 'instanceId property has not been initialized for the "%s" yet', get_class($this)

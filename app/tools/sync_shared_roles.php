@@ -5,13 +5,23 @@ $db = Scalr::getDb();
 
 set_time_limit(0);
 
-$dump = @file_get_contents("https://my.scalr.net/storage/shared-roles.php?v2=1&scalr_id=".SCALR_ID);
+$debugMode = count($argv) > 1 && $argv[1] == 'debug';
+
+$dump = @file_get_contents("https://my.scalr.net/storage/shared-roles.php?v2=2&scalr_id=".SCALR_ID."&t=".microtime(true));
 $roles = @json_decode($dump, true);
 if (count($roles) < 1)
     die("Unable to import shared roles: {$dump}");
 
 try {
 	foreach ($roles as $role) {
+        if ($role['env_id'] === 0) {
+            $role['env_id'] = null;
+        }
+
+        if ($role['client_id'] === 0) {
+            $role['client_id'] = null;
+        }
+
         $chk2 = $db->GetRow("SELECT name, origin FROM roles WHERE id=? LIMIT 1", array($role['id']));
         if ($chk2['name'] && ($chk2['name'] != $role['name'] || $chk2['origin'] != $role['origin'])) {
             print "Role ID #{$role['id']} for role '{$role['name']}' taken by role '{$chk2['name']}'\n";
@@ -30,14 +40,11 @@ try {
 				`description` = ?,
 				`behaviors` = ?,
 				`generation` = ?,
-				`os` = ?,
-			    `os_family` = ?,
-			    `os_generation` = ?,
-			    `os_version` = ?
+				`os_id` = ?
 			", array(
 				$role['id'], $role['name'], $role['origin'], $role['client_id'], $role['cat_id'], $role['env_id'], $role['description'],
 				$role['behaviors'],
-				$role['generation'], $role['os'], $role['os_family'], $role['os_generation'], $role['os_version']
+				$role['generation'], $role['os_id']
 			));
 		} else {
 			$role['id'] = $chk;
@@ -47,6 +54,8 @@ try {
 			$db->Execute("DELETE FROM role_parameters WHERE role_id = ?", array($role['id']));
 			$db->Execute("DELETE FROM role_behaviors WHERE role_id =?", array($role['id']));
 		}
+		
+		print "Processing role: {$role['name']}...";
 
 		foreach ($role['role_security_rules'] as $r3) {
 			$db->Execute("INSERT INTO role_security_rules SET
@@ -90,19 +99,17 @@ try {
 
                 if ($r7['image']) {
                     $i = $r7['image'];
-
+                    
                     $db->Execute('DELETE FROM images WHERE hash = UNHEX(?)', [$i['hash']]);
                     $db->Execute('INSERT INTO images SET
                         hash = UNHEX(?), id = ?, env_id = ?, bundle_task_id = ?,
-                        platform = ?, cloud_location = ?, name = ?, os = ?,
-                        os_family = ?, os_generation = ?, os_version = ?,
+                        platform = ?, cloud_location = ?, name = ?, os_id = ?,
                         dt_added = ?, created_by_id = ?, created_by_email = ?,
                         architecture = ?, size = ?,
                         is_deprecated = ?, source = ?, type = ?,
                         status = ?, status_error = ?, agent_version = ?', [
                             $i['hash'], $i['id'], $i['env_id'], $i['bundle_task_id'],
-                            $i['platform'], $i['cloud_location'], $i['name'], $i['os'],
-                            $i['os_family'], $i['os_generation'], $i['os_version'],
+                            $i['platform'], $i['cloud_location'], $i['name'], $i['os_id'],
                             $i['dt_added'], $i['created_by_id'], $i['created_by_email'],
                             $i['architecture'], $i['size'],
                             $i['is_deprecated'], $i['source'], $i['type'],
@@ -122,7 +129,9 @@ try {
                         }
                     }
                 }
-			} catch (Exception $e) {}
+			} catch (Exception $e) {
+                echo "ERROR: {$e->getMessage()}\n";
+            }
 		}
 
 		foreach ($role['role_behaviors'] as $r8) {
@@ -131,8 +140,13 @@ try {
 					`role_id` = ?,
 					`behavior` = ?
 				", array($r8['role_id'], $r8['behavior']));
-		    } catch (Exception $e) {}
+		    } catch (Exception $e) {
+                if ($debugMode)
+                    echo $e->getMessage() . "\n";
+            }
 		}
+		
+		print "DONE\n";
     }
 } catch (Exception $e) {
     $db->RollbackTrans();

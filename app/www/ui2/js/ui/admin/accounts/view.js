@@ -1,7 +1,7 @@
 Scalr.regPage('Scalr.ui.admin.accounts.view', function (loadParams, moduleParams) {
 	var store = Ext.create('store.store', {
 		fields: [
-			{name: 'id', type: 'int'}, 
+			{name: 'id', type: 'int'},
 			'name', 'dtadded', 'status', 'servers', 'users', 'envs', 'farms', 'limitEnvs', 'limitFarms', 'limitUsers', 'limitServers', 'ownerEmail', 'dnsZones', 'isTrial'
 		],
 		proxy: {
@@ -11,21 +11,35 @@ Scalr.regPage('Scalr.ui.admin.accounts.view', function (loadParams, moduleParams
 		remoteSort: true
 	});
 
+    var loginAsUser = function() {
+        Scalr.state.pageSuspend = true;
+        Scalr.event.fireEvent('redirect', '#/dashboard');
+        Ext.Function.defer(function() {
+            Scalr.state.pageSuspend = false;
+            delete Scalr.state.changelogData; // clear to get info for new user
+            Scalr.application.updateContext(Ext.emptyFn, false, {
+                'X-Scalr-UserId': null,
+                'X-Scalr-Scope': 'environment'
+            });
+        }, 50);
+    };
+
 	return Ext.create('Ext.grid.Panel', {
-		title: 'Admin &raquo; Accounts &raquo; View',
 		scalrOptions: {
-			'reload': false,
-			'maximize': 'all'
+			reload: false,
+			maximize: 'all',
+            menuTitle: 'Accounts',
+            menuHref: '#/admin/accounts',
+            menuFavorite: true
 		},
 		store: store,
 		stateId: 'grid-admin-accounts-view',
 		stateful: true,
-		plugins: {
-			ptype: 'gridstore'
-		},
-		tools: [{
-			xtype: 'gridcolumnstool'
-		}],
+        plugins: [{
+            ptype: 'gridstore'
+        }, {
+            ptype: 'applyparams'
+        }],
 		viewConfig: {
 			emptyText: 'No accounts found',
 			loadingText: 'Loading accounts ...'
@@ -33,7 +47,7 @@ Scalr.regPage('Scalr.ui.admin.accounts.view', function (loadParams, moduleParams
 
 		columns: [
 			{ header: "ID", width: 60, dataIndex: 'id', sortable: true },
-			{ header: "Name", flex:1, dataIndex: 'name', sortable: true },
+			{ header: "Account", flex:1, dataIndex: 'name', sortable: true },
 			{ header: Scalr.flags['authMode'] == 'ldap' ? 'LDAP login' : 'Owner email', flex: 1, dataIndex: 'ownerEmail', sortable: false },
 			{ header: "Added", flex: 1, dataIndex: 'dtadded', sortable: true, xtype: 'templatecolumn',
 				tpl: '{[values.dtadded ? values.dtadded : ""]}'
@@ -66,14 +80,16 @@ Scalr.regPage('Scalr.ui.admin.accounts.view', function (loadParams, moduleParams
 				tpl: '{dnsZones}'
 			},
 			{
-				xtype: 'optionscolumn2',
+				xtype: 'optionscolumn',
 				menu: [{
 					iconCls: 'x-menu-icon-edit',
 					text: 'Edit',
+                    showAsQuickAction: true,
 					href: "#/admin/accounts/{id}/edit"
 				}, {
 					iconCls: 'x-menu-icon-login',
 					text: 'Login as owner',
+                    showAsQuickAction: true,
                     request: {
                         processBox: {
                             type: 'action'
@@ -83,11 +99,7 @@ Scalr.regPage('Scalr.ui.admin.accounts.view', function (loadParams, moduleParams
                             return { accountId: data['id'] };
                         },
                         success: function() {
-                            Scalr.event.fireEvent('lock');
-                            Scalr.application.updateContext(function() {
-                                Scalr.event.fireEvent('unlock');
-                                Scalr.event.fireEvent('redirect', '#/dashboard', true);
-                            });
+                            loginAsUser();
                         }
                     }
 				}, {
@@ -104,38 +116,27 @@ Scalr.regPage('Scalr.ui.admin.accounts.view', function (loadParams, moduleParams
 						success: function (data) {
 							Scalr.Request({
 								confirmBox: {
+                                    formValidate: true,
 									type: 'action',
-									msg: 'Please select user. You can search by id, email, fullname, type.',
+									msg: 'Please select user. You can search by id, email, type.',
                                     formSimple: true,
 									form: [{
 										xtype: 'combo',
 										name: 'userId',
 										store: {
-											fields: [ 'id', 'email', 'fullname', 'type' ],
+											fields: [ 'id', 'email', 'fullname', 'type', {name: 'display', convert: function(v, record){
+                                                return '['+record.data.id+'] '+record.data.email+' ['+record.data.type+']';
+                                            }}],
 											data: data.users,
 											proxy: 'object'
 										},
 										allowBlank: false,
-                                        editable: false,
-										filterFn: function(queryString, item) {
-											var value = new RegExp(queryString);
-											return (
-												value.test(item.get('id')) ||
-													value.test(item.get('email')) ||
-													value.test(item.get('fullname')) ||
-													value.test(item.get('type'))
-												) ? true : false;
-										},
+                                        anyMatch: true,
+                                        restoreValueOnBlur: true,
+                                        editable: true,
 										valueField: 'id',
-										displayField: 'email',
-										queryMode: 'local',
-										listConfig: {
-											cls: 'x-boundlist-alt',
-											tpl:
-												'<tpl for="."><div class="x-boundlist-item" style="height: auto; width: auto">' +
-													'[{id}] {email} [{type}]' +
-													'</div></tpl>'
-										}
+										displayField: 'display',
+										queryMode: 'local'
 									}]
 								},
 								processBox: {
@@ -143,12 +144,8 @@ Scalr.regPage('Scalr.ui.admin.accounts.view', function (loadParams, moduleParams
 								},
 								url: '/admin/accounts/xLoginAs',
 								success: function() {
-                                    Scalr.event.fireEvent('lock');
-                                    Scalr.application.updateContext(function() {
-                                        Scalr.event.fireEvent('unlock');
-                                        Scalr.event.fireEvent('redirect', '#/dashboard', true);
-                                    });
-								}
+                                    loginAsUser();
+                                }
 							});
 						}
 					}
@@ -161,7 +158,6 @@ Scalr.regPage('Scalr.ui.admin.accounts.view', function (loadParams, moduleParams
 			}
 		],
 
-		multiSelect: true,
 		selType: 'selectedmodel',
 		listeners: {
 			selectionchange: function(selModel, selections) {
@@ -175,17 +171,17 @@ Scalr.regPage('Scalr.ui.admin.accounts.view', function (loadParams, moduleParams
 			store: store,
 			dock: 'top',
 			beforeItems: [{
-                text: 'Add account',
-                cls: 'x-btn-green-bg',
+                text: 'New account',
+                cls: 'x-btn-green',
 				handler: function() {
 					Scalr.event.fireEvent('redirect', '#/admin/accounts/create');
 				}
 			}],
 			afterItems: [{
-				ui: 'paging',
 				itemId: 'delete',
 				disabled: true,
-				iconCls: 'x-tbar-delete',
+				iconCls: 'x-btn-icon-delete',
+                cls: 'x-btn-red',
 				tooltip: 'Delete',
 				handler: function() {
 					var request = {

@@ -12,11 +12,11 @@ Scalr.regPage('Scalr.ui.farms.builder.addrole.proxy', function () {
         setRole: function(record) {
             var me = this,
                 p = this.down('proxysettings');
-            p.proxyDefaults = this.up('roleslibrary').moduleParams.tabParams['nginx'];
+            p.proxyDefaults = this.up('#farmDesigner').moduleParams.tabParams['nginx'];
             me.roles = [];
-			this.up('roleslibrary').moduleParams.tabParams.farmRolesStore.each(function(r){
+			this.up('#farmDesigner').moduleParams.tabParams.farmRolesStore.each(function(r){
                 var location = r.get('cloud_location');
-    			me.roles.push({id: r.get('farm_role_id'), name: r.get('alias') + (location ? ' (' + location + ')' : '')});
+    			me.roles.push({id: r.get('farm_role_id'), alias: r.get('alias'), name: r.get('alias') + (location ? ' (' + location + ')' : '')});
 			});
             p.setValue({
                 'nginx.proxies': []

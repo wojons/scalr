@@ -1,12 +1,17 @@
 Scalr.regPage('Scalr.ui.tools.aws.rds.instances.createSubnetGroup', function (loadParams, moduleParams) {
 
-    var form = Ext.create('Ext.form.Panel', {
+    var vpcPolicy = Scalr.getGovernance('ec2', 'aws.vpc');
+
+    var form = Scalr.utils.Window({
+        xtype: 'form',
         title: 'Create subnet group',
-        fieldDefaults: {
+        fieldDefaults: Ext.isEmpty(vpcPolicy) ? {
             anchor: '100%'
+        } : {
+            width: 530
         },
         scalrOptions: {
-            modal: true
+            modalWindow: true
         },
         width: 600,
         defaults: {
@@ -25,33 +30,13 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.instances.createSubnetGroup', function (lo
             fieldLabel: 'Description',
             allowBlank: false
         },{
-            xtype: 'comboboxselect',
+            xtype: 'vpcsubnetfield',
             name: 'subnets',
             fieldLabel: 'Subnets',
-            displayField: 'description',
-            valueField: 'id',
-            //emptyText: '',
             flex: 1,
-            queryCaching: false,
-            clearDataBeforeQuery: true,
             allowBlank: false,
-            minChars: 0,
-            queryDelay: 10,
-            store: {
-                fields: ['id', 'name', 'description', 'ips_left', 'type', 'availability_zone', 'cidr'],
-                proxy: {
-                    type: 'cachedrequest',
-                    crscope: 'rdsInstances',
-                    url: '/tools/aws/vpc/xListSubnets',
-                    filterFields: ['description']
-                }
-            },
-            plugins: [{
-                ptype: 'comboaddnew',
-                pluginId: 'comboaddnew',
-                url: '/tools/aws/vpc/createSubnet',
-                applyNewValue: false
-            }],
+            iconAlign: 'right',
+            iconPosition: 'outer',
             getSubmitValue: function () {
                 var me = this;
 
@@ -74,26 +59,18 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.instances.createSubnetGroup', function (lo
                         extended: 1
                     };
 
-                    me.getPlugin('comboaddnew').postUrl = '?' + Ext.Object.toQueryString({
+                    var addNewPlugin = me.getPlugin('comboaddnew');
+
+                    //addNewPlugin.enable();
+
+                    addNewPlugin.postUrl = '?' + Ext.Object.toQueryString({
                         cloudLocation: cloudLocation,
                         vpcId: vpcId
                     });
-                },
-                addnew: function(item) {
-                    Scalr.CachedRequestManager.get('rdsInstances').setExpired({
-                        url: '/tools/aws/vpc/xListSubnets',
-                        params: this.store.proxy.params
-                    });
+
+                    me.getPlugin('fieldicons').
+                        toggleIcon('governance', !Ext.isEmpty(vpcPolicy));
                 }
-            },
-            listConfig: {
-                style: 'white-space:nowrap',
-                cls: 'x-boundlist-alt',
-                tpl:
-                '<tpl for="."><div class="x-boundlist-item" style="height: auto; width: auto;line-height:20px">' +
-                '<div><span style="font-weight: bold">{[values.name || \'<i>No name</i>\' ]} - {id}</span> <span style="font-style: italic;font-size:90%">(Type: <b>{type:capitalize}</b>)</span></div>' +
-                '<div>{cidr} in {availability_zone} [IPs left: {ips_left}]</div>' +
-                '</div></tpl>'
             }
         }],
 
@@ -131,7 +108,7 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.instances.createSubnetGroup', function (lo
                                     );
                                 }
 
-                                Scalr.event.fireEvent('close');
+                                form.close();
                             }
                         });
                     }
@@ -140,7 +117,7 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.instances.createSubnetGroup', function (lo
                 xtype: 'button',
                 text: 'Cancel',
                 handler: function() {
-                    Scalr.event.fireEvent('close');
+                    form.close();
                 }
             }]
         }]

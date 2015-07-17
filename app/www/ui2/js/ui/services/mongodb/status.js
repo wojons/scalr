@@ -252,7 +252,6 @@ Scalr.regPage('Scalr.ui.services.mongodb.status', function (loadParams, modulePa
             cls: 'x-fieldset-separator-top',
             items: [{
                 xtype: 'gridpanel',
-                cls: 'x-grid-shadow',
                 maxHeight: 326,
                 store: logsStore,
                 plugins: {

@@ -17,20 +17,44 @@
 }
 
 .scalr-ui-panel-account-roles .x-permission-warn{
-    color: #7d270b;
+    color: #924203;
 }
 
 .scalr-ui-panel-account-roles .x-full-access{
-    font-weight: bold;
     color: #008000;
 }
 
 .scalr-ui-panel-account-roles .x-no-access{
-    font-weight: bold;
     color: #c00000;
 }
 
 .scalr-ui-panel-account-roles .x-limited-access{
-    font-weight: bold;
     color: #337dce;
 }
+
+.scalr-ui-panel-account-roles-btn-allowed .x-btn-inner {
+     color: #008000
+}
+
+.scalr-ui-panel-account-roles-btn-limited .x-btn-inner {
+    color: #337DCE
+}
+
+.scalr-ui-panel-account-roles-btn-forbidden .x-btn-inner {
+    color: #C00000
+}
+
+.scalr-ui-panel-account-roles-btn-allowed.x-btn-pressed .x-btn-inner,
+.scalr-ui-panel-account-roles-btn-limited.x-btn-pressed .x-btn-inner,
+.scalr-ui-panel-account-roles-btn-forbidden.x-btn-pressed .x-btn-inner
+{
+    color: white;
+}
+
+/*.scalr-ui-panel-account-roles-btngroup .x-btn {
+    background-color: #B8CEE2;
+}
+
+.scalr-ui-panel-account-roles-btngroup .x-btn-over.x-btn-default-toolbar-small {
+    background-color: #C6D8E8;
+}*/

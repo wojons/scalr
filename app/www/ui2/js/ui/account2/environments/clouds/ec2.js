@@ -5,7 +5,7 @@ Scalr.regPage('Scalr.ui.account2.environments.clouds.ec2', function (loadParams,
         bodyCls: 'x-container-fieldset',
 		fieldDefaults: {
 			anchor: '100%',
-			labelWidth: 140
+			labelWidth: 150
 		},
         autoScroll: true,
 		items: [{
@@ -44,7 +44,8 @@ Scalr.regPage('Scalr.ui.account2.environments.clouds.ec2', function (loadParams,
 			xtype: 'textfield',
 			fieldLabel: 'Secret Access Key',
 			name: 'ec2.secret_key',
-			value: params['ec2.secret_key']
+			value: params['ec2.secret_key'],
+            selectOnFocus: true
 		}, {
             xtype: 'buttongroupfield',
             fieldLabel: 'Account type',
@@ -75,6 +76,12 @@ Scalr.regPage('Scalr.ui.account2.environments.clouds.ec2', function (loadParams,
 			name: 'ec2.private_key',
             hidden: Ext.isEmpty(params['ec2.private_key']),
 			value: params['ec2.private_key']
+		}, {
+			xtype: 'textfield',
+			fieldLabel: 'Billing bucket name',
+			name: 'ec2.detailed_billing.bucket',
+            hidden: !Scalr.flags['betaMode'],
+			value: params['ec2.detailed_billing.bucket']
 		}]
 	});
 });

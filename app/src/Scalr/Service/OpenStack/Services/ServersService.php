@@ -234,6 +234,19 @@ class ServersService extends AbstractService implements ServiceInterface
     }
 
     /**
+     * List availability zones action.
+     *
+     * This operation lists all availability zones visible by the account.
+     *
+     * @return  array  Returns list of availibility zones
+     * @throws  RestClientException
+     */
+    public function listAvailabilityZones()
+    {
+        return $this->getApiHandler()->listAvailabilityZones();
+    }
+    
+    /**
      * List Images action.
      *
      * This operation lists all images visible by the account.

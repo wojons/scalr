@@ -39,13 +39,14 @@ Ext.define('Scalr.ui.RoleDesignerTabScripting', {
             showtab: {
                 fn: function(params){
                     var rolescripting = this.down('#rolescripting'),
+                        roleOsFamily = Scalr.utils.getOsById(params['role']['osId'], 'family'),
                         scripts = [];
                     rolescripting.chefSettings = params['role']['chef'] || {};
                     rolescripting.setCurrentRoleOptions({
-                        osFamily: params['role']['osFamily'],
+                        osFamily: roleOsFamily,
                         chefAvailable: Ext.Array.contains(params['role']['behaviors'], 'chef')
                     });
-                    rolescripting.roleOs = params['role']['osFamily'];
+                    rolescripting.roleOs = roleOsFamily;
 
                     if (params['role']['scripts'].length) {
                         scripts.push.apply(scripts, params['role']['scripts']);
@@ -54,7 +55,7 @@ Ext.define('Scalr.ui.RoleDesignerTabScripting', {
                         Ext.each(params['accountScripts'], function(script){
                             var addScript = true;
                             if (script['script_type'] === 'scalr') {
-                                addScript = script['os'] == params['role']['osFamily'] || script['os'] == 'linux' && params['role']['osFamily'] != 'windows';
+                                addScript = script['os'] == roleOsFamily || script['os'] == 'linux' && roleOsFamily != 'windows';
                             }
                             if (addScript) {
                                 scripts.push(script);

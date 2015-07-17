@@ -11,27 +11,15 @@ Scalr.regPage('Scalr.ui.dm.applications.view', function (loadParams, moduleParam
 	});
 
 	return Ext.create('Ext.grid.Panel', {
-		title: 'Deployments &raquo; Applications &raquo; Manage',
 		scalrOptions: {
-			'reload': false,
-			'maximize': 'all'
+			reload: false,
+			maximize: 'all',
+            menuTitle: 'Deployments Applications'
 		},
 		store: store,
 		stateId: 'grid-dm-applications-view',
 		stateful: true,
-		plugins: {
-			ptype: 'gridstore'
-		},
-
-		tools: [{
-			xtype: 'gridcolumnstool'
-		}, {
-			xtype: 'favoritetool',
-			favorite: {
-				text: 'Applications',
-				href: '#/dm/applications/view'
-			}
-		}],
+        plugins: [ 'gridstore', 'applyparams' ],
 
 		viewConfig: {
 			emptyText: 'No applications found',
@@ -47,25 +35,24 @@ Scalr.regPage('Scalr.ui.dm.applications.view', function (loadParams, moduleParam
 			{ header: 'Status', width: 120, dataIndex: 'status', sortable: false, xtype: 'templatecolumn',
 				tpl: '<tpl if="used_on != 0"><span style="color:green;">In use</span></tpl><tpl if="used_on == 0"><span style="color:gray;">Not used</span></tpl>'
 			}, {
-				xtype: 'optionscolumn2',
+				xtype: 'optionscolumn',
 				menu: [{
 					text: 'Deploy',
 					iconCls: 'x-menu-icon-launch',
+                    showAsQuickAction: true,
 					href: '#/dm/applications/{id}/deploy'
-				}, {
-					xtype: 'menuseparator'
 				}, {
 					text: 'Edit',
 					iconCls: 'x-menu-icon-edit',
+                    showAsQuickAction: true,
 					href: '#/dm/applications/{id}/edit'
-				}, {
-					xtype: 'menuseparator'
 				}, {
 					text: 'Delete',
 					iconCls: 'x-menu-icon-delete',
+                    showAsQuickAction: true,
 					request: {
 						confirmBox: {
-							msg: 'Are you sure want to remove demployment "{name}"?',
+							msg: 'Are you sure want to remove deployment "{name}"?',
 							type: 'delete'
 						},
 						processBox: {
@@ -97,7 +84,7 @@ Scalr.regPage('Scalr.ui.dm.applications.view', function (loadParams, moduleParam
 			dock: 'top',
 			beforeItems: [{
                 text: 'Add application',
-                cls: 'x-btn-green-bg',
+                cls: 'x-btn-green',
 				handler: function() {
 					Scalr.event.fireEvent('redirect','#/dm/applications/create');
 				}

@@ -46,8 +46,9 @@ class S3Test extends AwsTestCase
     protected function setUp()
     {
         parent::setUp();
+
         if (!$this->isSkipFunctionalTests()) {
-            $this->s3 = $this->getContainer()->aws(AwsTestCase::REGION)->s3;
+            $this->s3 = $this->getEnvironment()->aws(AwsTestCase::REGION)->s3;
             $this->s3->enableEntityManager();
         }
     }
@@ -126,7 +127,7 @@ class S3Test extends AwsTestCase
         $client = $this->s3->getApiHandler()->getClient();
 
         //AP region aws instance
-        $awsap = \Scalr::getContainer()->aws(Aws::REGION_AP_SOUTHEAST_1);
+        $awsap = $this->getEnvironment()->aws(Aws::REGION_AP_SOUTHEAST_1);
         $awsap->s3->enableEntityManager();
 
         $bucketList = $this->s3->bucket->getList();

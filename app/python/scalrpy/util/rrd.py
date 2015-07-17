@@ -160,7 +160,6 @@ GRAPH_OPT = {
         'end': '-5min',
         'step': '86400',
         'update_every': '86400',
-        'x_grid': 'MONTH:1:MONTH:1:MONTH:1:0:%b',
     },
 }
 
@@ -169,7 +168,6 @@ def create_db(file_path, metric):
     if not os.path.exists(os.path.dirname(file_path)):
         os.makedirs(os.path.dirname(file_path), 0o755)
     rrdtool.create(file_path, SOURCE[metric], ARCHIVE[metric])
-
 
 
 def get_data_to_write(metric_name, metric_data):
@@ -183,14 +181,12 @@ def get_data_to_write(metric_name, metric_data):
     return data_to_write
 
 
-
 def update(file_path, data, sock_path):
     LOG.debug('%s, %s, %s' % (time.time(), file_path, data))
     try:
         rrdtool.update(file_path, '--daemon', 'unix:%s' % sock_path, data)
     except rrdtool.error:
         LOG.error('%s rrdtool update error: %s' % (file_path, helper.exc_info()))
-
 
 
 def write(base_dir, data, sock_path=None):
@@ -221,7 +217,6 @@ def write(base_dir, data, sock_path=None):
         LOG.error(helper.exc_info())
 
 
-
 def _base(img_path, title, label, opt, tz=None):
     if tz:
         utc = datetime.datetime.utcnow()
@@ -241,16 +236,17 @@ def _base(img_path, title, label, opt, tz=None):
         '--rigid',
         '--no-gridfit',
         '--slope-mode',
-        '--x-grid', opt['x_grid'],
         '--end', opt['end'],
         '--start', opt['start'],
-        '--width', '530',
+        '--width', '510',
         '--height', '300',
         '--full-size-mode',
         '--font-render-mode', 'normal',
         '--border', '0',
         '--color', 'BACK#FFFFFF',
     )
+    if opt.get('x_grid'):
+        base += ('--x-grid', opt['x_grid'])
     return base
 
 
@@ -328,7 +324,6 @@ def plot_cpu(img_path, rrd_path, opt, tz=None):
     rrdtool.graph(*(base + addition))
 
 
-
 def plot_la(img_path, rrd_path, opt, tz=None):
     color_la1_line = '#CF0000FF'
     color_la1_area = '#CF000030'
@@ -390,7 +385,6 @@ def plot_la(img_path, rrd_path, opt, tz=None):
     rrdtool.graph(*(base + addition))
 
 
-
 def plot_mem(img_path, rrd_path, opt, tz=None):
     color_mem_totl_line = '#FFAA00FF'
     color_mem_totl_area = '#FFAA0020'
@@ -398,10 +392,10 @@ def plot_mem(img_path, rrd_path, opt, tz=None):
     color_mem_free_area = '#00FF0020'
 
     color_mem_shrd_line = '#00FFFFFF'
-    color_mem_shrd_area = '#00FFFF20'
+    #color_mem_shrd_area = '#00FFFF20'
 
     color_swap_shrd_line = '#EFEF00FF'
-    color_swap_shrd_area = '#EFEF0020'
+    #color_swap_shrd_area = '#EFEF0020'
     color_swap_use_line = '#02EF9AFF'
     color_swap_use_area = '#02EF9A20'
 
@@ -526,7 +520,6 @@ def plot_mem(img_path, rrd_path, opt, tz=None):
     rrdtool.graph(*(base + addition))
 
 
-
 def plot_net(img_path, rrd_path, opt, tz=None):
     color_ibound_line = '#CF0000FF'
     color_ibound_area = '#CF000030'
@@ -569,7 +562,6 @@ def plot_net(img_path, rrd_path, opt, tz=None):
     rrdtool.graph(*(base + addition))
 
 
-
 def plot_snum(img_path, rrd_path, opt, tz=None):
     color_running_servers_line = '#00CF00FF'
     color_running_servers_area = '#00CF0044'
@@ -599,7 +591,6 @@ def plot_snum(img_path, rrd_path, opt, tz=None):
     rrdtool.graph(*(base + addition))
 
 
-
 def plot_io_bits(img_path, rrd_path, opt, tz=None):
     color_r = '#ff0000'
     color_w = '#0000ff'
@@ -610,53 +601,52 @@ def plot_io_bits(img_path, rrd_path, opt, tz=None):
     else:
         time_string = time.strftime('%b %d, %Y %H:%M:%S %z')
 
-    rrdtool.graph(
-        img_path,
-        '--imgformat', 'PNG',
-        '--step', opt['step'],
-        '--pango-markup',
-        '--vertical-label', 'Bits per second',
-        '--title', 'Disk I/O (%s)' % time_string,
-        '--lower-limit', '0',
-        '--alt-autoscale-max',
-        '--alt-autoscale-min',
-        '--rigid',
-        '--no-gridfit',
-        '--slope-mode',
-        '--x-grid', opt['x_grid'],
-        '--end', opt['end'],
-        '--start', opt['start'],
-        '--width', '530',
-        '--height', '300',
-        '--full-size-mode',
-        '--font-render-mode', 'normal',
-        '--border', '0',
-        '--color', 'BACK#FFFFFF',
+    args = (img_path,
+            '--imgformat', 'PNG',
+            '--step', opt['step'],
+            '--pango-markup',
+            '--vertical-label', 'Bits per second',
+            '--title', 'Disk I/O (%s)' % time_string,
+            '--lower-limit', '0',
+            '--alt-autoscale-max',
+            '--alt-autoscale-min',
+            '--rigid',
+            '--no-gridfit',
+            '--slope-mode',
+            '--end', opt['end'],
+            '--start', opt['start'],
+            '--width', '530',
+            '--height', '300',
+            '--full-size-mode',
+            '--font-render-mode', 'normal',
+            '--border', '0',
+            '--color', 'BACK#FFFFFF',
 
-        'DEF:rbyte=%s:rbyte:AVERAGE' % rrd_path,
-        'DEF:wbyte=%s:wbyte:AVERAGE' % rrd_path,
-        'CDEF:rbits=rbyte,8,*',
-        'CDEF:wbits=wbyte,8,*',
-        'VDEF:rbits_last=rbits,LAST',
-        'VDEF:rbits_avg=rbits,AVERAGE',
-        'VDEF:rbits_max=rbits,MAXIMUM',
-        'VDEF:wbits_last=wbits,LAST',
-        'VDEF:wbits_avg=wbits,AVERAGE',
-        'VDEF:wbits_max=wbits,MAXIMUM',
+            'DEF:rbyte=%s:rbyte:AVERAGE' % rrd_path,
+            'DEF:wbyte=%s:wbyte:AVERAGE' % rrd_path,
+            'CDEF:rbits=rbyte,8,*',
+            'CDEF:wbits=wbyte,8,*',
+            'VDEF:rbits_last=rbits,LAST',
+            'VDEF:rbits_avg=rbits,AVERAGE',
+            'VDEF:rbits_max=rbits,MAXIMUM',
+            'VDEF:wbits_last=wbits,LAST',
+            'VDEF:wbits_avg=wbits,AVERAGE',
+            'VDEF:wbits_max=wbits,MAXIMUM',
 
-        'COMMENT:<b><tt>                Current    Average   Maximum</tt></b>\\l',
+            'COMMENT:<b><tt>                Current    Average   Maximum</tt></b>\\l',
 
-        'AREA:wbits%s:<tt>Write bits   </tt>' % color_w,
-        'GPRINT:wbits_last:<tt>%4.1lf%s</tt>\\t',
-        'GPRINT:wbits_avg:<tt>%4.1lf%s</tt>\\t',
-        'GPRINT:wbits_max:<tt>%4.1lf%s</tt>\l',
+            'AREA:wbits%s:<tt>Write bits   </tt>' % color_w,
+            'GPRINT:wbits_last:<tt>%4.1lf%s</tt>\\t',
+            'GPRINT:wbits_avg:<tt>%4.1lf%s</tt>\\t',
+            'GPRINT:wbits_max:<tt>%4.1lf%s</tt>\l',
 
-        'AREA:rbits%s:<tt>Read  bits   </tt>' % color_r,
-        'GPRINT:rbits_last:<tt>%4.1lf%s</tt>\\t',
-        'GPRINT:rbits_avg:<tt>%4.1lf%s</tt>\\t',
-        'GPRINT:rbits_max:<tt>%4.1lf%s</tt>\l'
-    )
-
+            'AREA:rbits%s:<tt>Read  bits   </tt>' % color_r,
+            'GPRINT:rbits_last:<tt>%4.1lf%s</tt>\\t',
+            'GPRINT:rbits_avg:<tt>%4.1lf%s</tt>\\t',
+            'GPRINT:rbits_max:<tt>%4.1lf%s</tt>\l')
+    if opt.get('x_grid'):
+        args += ('--x-grid', opt['x_grid'])
+    rrdtool.graph(*args)
 
 
 def plot_io_ops(img_path, rrd_path, opt, tz=None):
@@ -669,47 +659,47 @@ def plot_io_ops(img_path, rrd_path, opt, tz=None):
     else:
         time_string = time.strftime('%b %d, %Y %H:%M:%S %z')
 
-    rrdtool.graph(
-        img_path,
-        '--imgformat', 'PNG',
-        '--step', opt['step'],
-        '--pango-markup',
-        '--vertical-label', 'Operations per second',
-        '--title', 'Disk I/O (%s)' % time_string,
-        '--lower-limit', '0',
-        '--alt-autoscale-max',
-        '--alt-autoscale-min',
-        '--rigid',
-        '--no-gridfit',
-        '--slope-mode',
-        '--x-grid', opt['x_grid'],
-        '--end', opt['end'],
-        '--start', opt['start'],
-        '--width', '530',
-        '--height', '300',
-        '--full-size-mode',
-        '--font-render-mode', 'normal',
-        '--border', '0',
-        '--color', 'BACK#FFFFFF',
+    args = (img_path,
+            '--imgformat', 'PNG',
+            '--step', opt['step'],
+            '--pango-markup',
+            '--vertical-label', 'Operations per second',
+            '--title', 'Disk I/O (%s)' % time_string,
+            '--lower-limit', '0',
+            '--alt-autoscale-max',
+            '--alt-autoscale-min',
+            '--rigid',
+            '--no-gridfit',
+            '--slope-mode',
+            '--end', opt['end'],
+            '--start', opt['start'],
+            '--width', '530',
+            '--height', '300',
+            '--full-size-mode',
+            '--font-render-mode', 'normal',
+            '--border', '0',
+            '--color', 'BACK#FFFFFF',
 
-        'DEF:read=%s:read:AVERAGE' % rrd_path,
-        'DEF:write=%s:write:AVERAGE' % rrd_path,
-        'VDEF:read_last=read,LAST',
-        'VDEF:read_avg=read,AVERAGE',
-        'VDEF:read_max=read,MAXIMUM',
-        'VDEF:write_last=write,LAST',
-        'VDEF:write_avg=write,AVERAGE',
-        'VDEF:write_max=write,MAXIMUM',
+            'DEF:read=%s:read:AVERAGE' % rrd_path,
+            'DEF:write=%s:write:AVERAGE' % rrd_path,
+            'VDEF:read_last=read,LAST',
+            'VDEF:read_avg=read,AVERAGE',
+            'VDEF:read_max=read,MAXIMUM',
+            'VDEF:write_last=write,LAST',
+            'VDEF:write_avg=write,AVERAGE',
+            'VDEF:write_max=write,MAXIMUM',
 
-        'COMMENT:<b><tt>             Current    Average   Maximum</tt></b>\\l',
+            'COMMENT:<b><tt>             Current    Average   Maximum</tt></b>\\l',
 
-        'AREA:write%s:<tt>Writes    </tt>' % color_w,
-        'GPRINT:write_last:<tt>%4.1lf%s</tt>\\t',
-        'GPRINT:write_avg:<tt>%4.1lf%s</tt>\\t',
-        'GPRINT:write_max:<tt>%4.1lf%s</tt>\l',
+            'AREA:write%s:<tt>Writes    </tt>' % color_w,
+            'GPRINT:write_last:<tt>%4.1lf%s</tt>\\t',
+            'GPRINT:write_avg:<tt>%4.1lf%s</tt>\\t',
+            'GPRINT:write_max:<tt>%4.1lf%s</tt>\l',
 
-        'AREA:read%s:<tt>Reads     </tt>' % color_r,
-        'GPRINT:read_last:<tt>%4.1lf%s</tt>\\t',
-        'GPRINT:read_avg:<tt>%4.1lf%s</tt>\\t',
-        'GPRINT:read_max:<tt>%4.1lf%s</tt>\l'
-    )
+            'AREA:read%s:<tt>Reads     </tt>' % color_r,
+            'GPRINT:read_last:<tt>%4.1lf%s</tt>\\t',
+            'GPRINT:read_avg:<tt>%4.1lf%s</tt>\\t',
+            'GPRINT:read_max:<tt>%4.1lf%s</tt>\l')
+    if opt.get('x_grid'):
+        args += ('--x-grid', opt['x_grid'])
+    rrdtool.graph(*args)

@@ -18,7 +18,10 @@
                 "localstorageenabled": true,
                 "name": "jp-east-t1v",
                 "networktype": "Advanced",
-                "resourcedetails": "key/value",
+                "resourcedetails": {
+                    "pool.storage.capacity.disablethreshold": "0.9",
+                    "storage.overprovisioning.factor":"1.0"
+                },
                 "securitygroupsenabled": false,
                 "vlan": 42,
                 "allocationstate": "Enabled",

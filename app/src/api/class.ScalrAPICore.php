@@ -118,14 +118,18 @@ abstract class ScalrAPICore
         if ($result) {
             //Provides that login is always with domain suffix
             $request['Login'] = $ldap->getUsername();
+            
+            $this->debug['ldapUsername'] = $request['Login'];
 
             $this->Environment = Scalr_Environment::init()->loadById($request['EnvID']);
-
+            
             $start = microtime(true);
             $groups = $ldap->getUserGroups();
             $tldap += microtime(true) - $start;
 
             header(sprintf('X-Scalr-LDAP-Query-Time: %0.4f sec', $tldap));
+            
+            $this->debug['ldapGroups'] = json_encode($groups);
 
             //Get User
             $this->user = Scalr_Account_User::init()->loadByEmail($request['Login'], $this->Environment->clientId);
@@ -137,7 +141,13 @@ abstract class ScalrAPICore
             }
 
             $this->user->applyLdapGroups($groups);
+            
+            $this->debug['ldapEnvId'] = $this->Environment->id;
+            
             $this->user->getPermissions()->setEnvironmentId($this->Environment->id)->validate($this->Environment);
+            
+            $this->debug['ldapAuth'] = 1;
+            
             //We must set environment to DI Container.
             $this->setDiContainer();
         } else {
@@ -175,8 +185,7 @@ abstract class ScalrAPICore
 
         try {
             $this->user = Scalr_Account_User::init()->loadByApiAccessKey($request['KeyID']);
-        } catch (Exception $e) {
-        }
+        } catch (Exception $e) {}
 
         if (!$this->user)
             throw new Exception("The specified KeyID does not exist");
@@ -188,8 +197,7 @@ abstract class ScalrAPICore
                 $this->Environment = Scalr_Environment::init()->loadById($request['EnvID']);
 
                 try {
-                    $user = strtok($this->user->getEmail(), '@');
-                    $ldap = \Scalr::getContainer()->ldap($user, null);
+                    $ldap = \Scalr::getContainer()->ldap($this->user->getLdapUsername(), null);
                     if (! $ldap->isValidUsername()) {
                         throw new Exception('Incorrect login or password (1)');
                     }
@@ -608,6 +616,39 @@ abstract class ScalrAPICore
     }
 
     /**
+     * @param   DBFarm $dbFarm
+     * @param   string $permissionId
+     * @return  bool
+     */
+    protected function isFarmAllowed(DBFarm $dbFarm = null, $permissionId = null)
+    {
+        $acl = \Scalr::getContainer()->acl;
+
+        if (is_null($dbFarm)) {
+            return  $acl->isUserAllowedByEnvironment($this->user, $this->Environment, \Scalr\Acl\Acl::RESOURCE_FARMS, $permissionId) ||
+                    $acl->isUserAllowedByEnvironment($this->user, $this->Environment, \Scalr\Acl\Acl::RESOURCE_TEAM_FARMS, $permissionId) ||
+                    $acl->isUserAllowedByEnvironment($this->user, $this->Environment, \Scalr\Acl\Acl::RESOURCE_OWN_FARMS, $permissionId);
+        } else {
+            if (!($dbFarm instanceof DBFarm))
+                throw new \InvalidArgumentException(sprintf(
+                    'First argument should be instance of DBFarm or null'
+                ));
+
+            $result = $acl->isUserAllowedByEnvironment($this->user, $this->Environment, \Scalr\Acl\Acl::RESOURCE_FARMS, $permissionId);
+
+            if (!$result && $dbFarm->teamId && $this->user->isInTeam($dbFarm->teamId)) {
+                $result = $acl->isUserAllowedByEnvironment($this->user, $this->Environment, \Scalr\Acl\Acl::RESOURCE_TEAM_FARMS, $permissionId);
+            }
+
+            if (!$result && $dbFarm->createdByUserId && $this->user->id == $dbFarm->createdByUserId) {
+                $result = $acl->isUserAllowedByEnvironment($this->user, $this->Environment, \Scalr\Acl\Acl::RESOURCE_OWN_FARMS, $permissionId);
+            }
+
+            return $result;
+        }
+    }
+
+    /**
      * Checks if access to ACL resource or unique permission is allowed
      * and throws an exception if negative.
      *
@@ -633,6 +674,18 @@ abstract class ScalrAPICore
 
         if (!$this->isAllowed($resourceId, $permissionId)) {
            throw new \Scalr_Exception_InsufficientPermissions();
+        }
+    }
+
+    /**
+     * @param DBFarm $dbFarm
+     * @param null $permissionId
+     * @throws Scalr_Exception_InsufficientPermissions
+     */
+    protected function restrictFarmAccess(DBFarm $dbFarm = null, $permissionId = null)
+    {
+        if (!$this->isFarmAllowed($dbFarm, $permissionId)) {
+            throw new Scalr_Exception_InsufficientPermissions();
         }
     }
 }

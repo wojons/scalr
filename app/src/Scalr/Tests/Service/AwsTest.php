@@ -26,8 +26,9 @@ class AwsTest extends AwsTestCase
     protected function setUp()
     {
         parent::setUp();
+
         if (!$this->isSkipFunctionalTests()) {
-            $this->aws = $this->getContainer()->aws(self::REGION);
+            $this->aws = $this->getEnvironment()->aws(self::REGION);
             $this->assertInstanceOf(self::CLASS_AWS, $this->aws);
         }
     }
@@ -44,12 +45,10 @@ class AwsTest extends AwsTestCase
 
     /**
      * @test
+     * @functional
      */
     public function testGetAvailableServiceInterfaces()
     {
-        if ($this->isSkipFunctionalTests()) {
-            $this->markTestSkipped(true);
-        }
         $awsRefClass = new \ReflectionClass(self::CLASS_AWS);
         $available = $this->aws->getAvailableServiceInterfaces();
         $interfaces = array();
@@ -65,19 +64,17 @@ class AwsTest extends AwsTestCase
                 $instance, 'Illegal service interface instance object');
         }
         //Test that region does not need here.
-        $this->getContainer()->aws->iam;
+        $this->getEnvironment()->aws->iam;
     }
 
     /**
      * @test
      * @expectedException Scalr\Service\AwsException
+     * @functional
      */
     public function testSetRegionInvalid()
     {
-        if ($this->isSkipFunctionalTests()) {
-            $this->markTestSkipped(true);
-        }
-        $this->getContainer()->aws('invalid-region')->elb;
+        $this->getEnvironment()->aws('invalid-region')->elb;
     }
 
     /**
@@ -101,26 +98,22 @@ class AwsTest extends AwsTestCase
     /**
      * @test
      * @dataProvider  providerRegion
+     * @functional
      */
     public function testSetRegion($region)
     {
-        if ($this->isSkipFunctionalTests()) {
-            $this->markTestSkipped(true);
-        }
-        $aws = $this->getContainer()->aws($region);
+        $aws = $this->getEnvironment()->aws($region);
         $this->assertEquals($region, $aws->getRegion());
     }
 
     /**
      * @test
      * @dataProvider  providerRegion
+     * @functional
      */
     public function testGetInstance($region)
     {
-        if ($this->isSkipFunctionalTests()) {
-            $this->markTestSkipped(true);
-        }
-        $aws = $this->getContainer()->aws($region);
+        $aws = $this->getEnvironment()->aws($region);
         $this->assertEquals($region, $aws->getRegion());
     }
 

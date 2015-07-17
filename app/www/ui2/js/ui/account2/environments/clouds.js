@@ -10,6 +10,11 @@ Scalr.regPage('Scalr.ui.account2.environments.clouds', function (loadParams, mod
         nebula: 'http://wiki.scalr.com/display/docs/OpenStack#OpenStack-Step2:AddYourOpenStackCredentials',
         ocs: 'http://wiki.scalr.com/display/docs/OpenStack#OpenStack-Step2:AddYourOpenStackCredentials',
         ecs: 'http://wiki.scalr.com/display/docs/OpenStack#OpenStack-Step2:AddYourOpenStackCredentials',
+        mirantis: 'http://wiki.scalr.com/display/docs/OpenStack#OpenStack-Step2:AddYourOpenStackCredentials',
+        vio: 'http://wiki.scalr.com/display/docs/OpenStack#OpenStack-Step2:AddYourOpenStackCredentials',
+        verizon: 'http://wiki.scalr.com/display/docs/OpenStack#OpenStack-Step2:AddYourOpenStackCredentials',
+        cisco: 'http://wiki.scalr.com/display/docs/OpenStack#OpenStack-Step2:AddYourOpenStackCredentials',
+        hpcloud: 'http://wiki.scalr.com/display/docs/OpenStack#OpenStack-Step2:AddYourOpenStackCredentials',
         eucalyptus: 'http://wiki.scalr.com/display/docs/Eucalyptus#Eucalyptus-Step1:AddYourEucalyptusCredentials'
     };
 
@@ -33,7 +38,8 @@ Scalr.regPage('Scalr.ui.account2.environments.clouds', function (loadParams, mod
             formCt.down('form').insert(0, {
                 xtype: 'displayfield',
                 cls: 'x-form-field-info',
-                value: (Scalr.flags.needEnvConfig ? Scalr.strings['account.need_env_config'].replace('%platform%', platformName) : Scalr.strings['account.cloud_access.info']) + (tutorials[params['platform']] ? '<br/><br/><a href="' + tutorials[params['platform']] + '" target="_blank" style="font-weight: bold">Getting started with Scalr and ' + platformName + ' tutorial</a>' : '')
+                margin: '0 0 20 0',
+                value: (Scalr.flags.needEnvConfig ? Scalr.strings['account.need_env_config'].replace('%platform%', platformName) : Scalr.strings['account.cloud_access.info']) + (tutorials[params['platform']] ? '<div style="margin-top:12px;"><a href="' + tutorials[params['platform']] + '" target="_blank" class="x-semibold">Getting started with Scalr and ' + platformName + ' tutorial</a></div>' : '')
             });
         } else {
             formCt.add({xtype: 'component', cls: 'x-container-fieldset', html: 'Under construction...'});
@@ -73,7 +79,7 @@ Scalr.regPage('Scalr.ui.account2.environments.clouds', function (loadParams, mod
 				success: function (data) {
 					Scalr.event.fireEvent('unlock');
 					if (data.demoFarm) {
-						Scalr.event.fireEvent('redirect', '#/farms/view?demoFarm=1', true);
+						Scalr.event.fireEvent('redirect', '#/farms?demoFarm=1', true);
 					} else {
 						Scalr.event.fireEvent('update', '/account/environments/edit', loadParams['envId'], data.envAutoEnabled, panel.currentPlatform, data.enabled);
                         editPlatform({envId: loadParams['envId'], platform: panel.currentPlatform}, data);
@@ -122,7 +128,7 @@ Scalr.regPage('Scalr.ui.account2.environments.clouds', function (loadParams, mod
         loadParams['platform'] = loadParams['platform'] || key;
         (value.public ? publicPlatforms : privatePlatforms).push({
             xtype: 'button',
-            cls: 'x-btn-tab-small-light' + (!platformEnabled ? ' scalr-ui-environment-cloud-disabled' : ''),
+            cls: 'x-btn-tab-no-text-transform x-btn-tab-small-light' + (!platformEnabled ? ' scalr-ui-environment-cloud-disabled' : ''),
             ui: 'tab',
             textAlign: 'left',
             text: value.name,
@@ -152,6 +158,7 @@ Scalr.regPage('Scalr.ui.account2.environments.clouds', function (loadParams, mod
         platformButtons.push({
             xtype: 'container',
             cls: 'x-docked-tabs',
+            width: 'auto',
             items: publicPlatforms
         });
     }
@@ -164,6 +171,7 @@ Scalr.regPage('Scalr.ui.account2.environments.clouds', function (loadParams, mod
         platformButtons.push({
             xtype: 'container',
             cls: 'x-docked-tabs',
+            width: 'auto',
             items: privatePlatforms
         });
     }
@@ -218,7 +226,6 @@ Scalr.regPage('Scalr.ui.account2.environments.clouds', function (loadParams, mod
                     }
                 }, {
                     xtype: 'button',
-                    hidden: !!Scalr.flags.needEnvConfig,
                     text: 'Cancel',
                     handler: function() {
                         Scalr.event.fireEvent('close');
@@ -226,20 +233,11 @@ Scalr.regPage('Scalr.ui.account2.environments.clouds', function (loadParams, mod
                 },{
                     xtype: 'button',
                     itemId: 'delete',
-                    cls: 'x-btn-default-small-red',
+                    cls: 'x-btn-red',
                     hidden: true,
                     text: 'Delete keys',
                     handler: function() {
                         sendForm(true);
-                    }
-                }, {
-                    xtype: 'button',
-                    hidden: !Scalr.flags.needEnvConfig,
-                    text: 'Do this later',
-                    handler: function () {
-                        sessionStorage.setItem('needEnvConfigLater', true);
-                        Scalr.event.fireEvent('unlock');
-                        Scalr.event.fireEvent('close');
                     }
                 }]
             }]

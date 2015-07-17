@@ -27,8 +27,9 @@ class CloudFrontTest extends AwsTestCase
     protected function setUp()
     {
         parent::setUp();
+
         if (!$this->isSkipFunctionalTests()) {
-            $this->aws = $this->getContainer()->aws(AwsTestCase::REGION);
+            $this->aws = $this->getEnvironment()->aws(AwsTestCase::REGION);
             $this->aws->cloudFront->enableEntityManager();
         }
     }

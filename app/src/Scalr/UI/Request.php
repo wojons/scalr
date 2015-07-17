@@ -1,5 +1,7 @@
 <?php
 
+use Scalr\Acl\Acl;
+
 class Scalr_UI_Request
 {
     protected
@@ -9,12 +11,17 @@ class Scalr_UI_Request
         $requestHeaders = [],
         $requestServer = [],
         $requestFiles = [],
-        $user,
         $environment,
         $requestType,
+        $scope,
         $paramErrors = [],
         $paramsIsValid = true,
         $clientIp = null;
+
+    /**
+     * @var Scalr_Account_User
+     */
+    protected $user;
 
     /**
      * Acl roles for this user and environment
@@ -68,16 +75,17 @@ class Scalr_UI_Request
      * @param $params
      * @param $files
      * @param $userId
-     * @param $envId
+     * @param $envId int optional Could be null, when we check headers (for UI)
      * @return Scalr_UI_Request
      * @throws Scalr_Exception_Core
      * @throws Exception
      */
-    public static function initializeInstance($type, $headers, $server, $params, $files, $userId, $envId)
+    public static function initializeInstance($type, $headers, $server, $params, $files, $userId, $envId = null)
     {
         if (self::$_instance)
             self::$_instance = null;
 
+        /* @var $class Scalr_UI_Request */
         $class = get_called_class();
 
         $instance = new $class($type, $headers, $server, $params, $files);
@@ -93,9 +101,33 @@ class Scalr_UI_Request
             if ($user->status != Scalr_Account_User::STATUS_ACTIVE)
                 throw new Exception('User account has been deactivated. Please contact your account owner.');
 
+            $scope = $instance->getHeaderVar('Scope');
+            // ajax file upload, download files
+            if (empty($scope))
+                $scope = $instance->getParam('X-Scalr-Scope');
+
+            if (empty($envId))
+                $envId = $instance->getParam('X-Scalr-EnvId');
+
+            if ($user->isAdmin()) {
+                if ($scope != 'scalr') {
+                    $scope = 'scalr';
+                }
+            } else {
+                if (! in_array($scope, ['account', 'environment'])) {
+                    $scope = 'environment';
+                }
+            }
+
             if (! $user->isAdmin()) {
-                $environment = $user->getDefaultEnvironment($envId);
-                $user->getPermissions()->setEnvironmentId($environment->id);
+                if ($envId || $scope == 'environment') {
+                    if (! $envId)
+                        $envId = $instance->getHeaderVar('EnvId');
+
+                    $environment = $user->getDefaultEnvironment($envId);
+                    $user->getPermissions()->setEnvironmentId($environment->id);
+                    $scope = 'environment';
+                }
             }
 
             if ($user->getAccountId()) {
@@ -117,16 +149,13 @@ class Scalr_UI_Request
 
             // check header's variables
             $headerUserId = !is_null($instance->getHeaderVar('UserId')) ? intval($instance->getHeaderVar('UserId')) : null;
-            $headerEnvId = !is_null($instance->getHeaderVar('EnvId')) ? intval($instance->getHeaderVar('EnvId')) : null;
 
             if (!empty($headerUserId) && $headerUserId != $user->getId())
                 throw new Scalr_Exception_Core('Session expired. Please refresh page.', 1);
 
-            if (!empty($headerEnvId) && !empty($environment) && $headerEnvId != $environment->id)
-                throw new Scalr_Exception_Core('Session expired. Please refresh page.', 1);
-
             $instance->user = $user;
             $instance->environment = isset($environment) ? $environment : null;
+            $instance->scope = $scope;
         }
 
         $container = \Scalr::getContainer();
@@ -195,10 +224,10 @@ class Scalr_UI_Request
         return isset($this->requestParams[$key]);
     }
 
-    public function getRemoteAddr($useXforwardedFor = false)
+    public function getRemoteAddr()
     {
         $ip = null;
-        if ($useXforwardedFor && !empty($this->requestHeaders['X-Forwarded-For'])) {
+        if (!empty($this->requestHeaders['X-Forwarded-For'])) {
             $ip = trim(explode(',', $this->requestHeaders['X-Forwarded-For'])[0]);
             if (filter_var( $ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4 ) === false) {
                 $ip = null;
@@ -216,6 +245,11 @@ class Scalr_UI_Request
     public function setParams($params)
     {
         $this->requestParams = array_merge($this->requestParams, $params);
+    }
+
+    public function getScope()
+    {
+        return $this->scope;
     }
 
     /**
@@ -409,7 +443,11 @@ class Scalr_UI_Request
     public function getAclRoles()
     {
         if (!$this->aclRoles) {
-            $this->aclRoles = $this->getUser()->getAclRolesByEnvironment($this->getEnvironment()->id);
+            if ($this->getEnvironment()) {
+                $this->aclRoles = $this->getUser()->getAclRolesByEnvironment($this->getEnvironment()->id);
+            } else {
+                $this->aclRoles = $this->getUser()->getAclRoles();
+            }
         }
         return $this->aclRoles;
     }
@@ -428,13 +466,46 @@ class Scalr_UI_Request
      * $this->request->isAllowed('FARMS', 'edit');
      *
      * @param   int        $resourceId            The ID of the ACL resource or its symbolic name without "RESOURCE_" prefix.
-     * @param   string     $permissionId optional The ID of the uniqure permission which is
+     * @param   string     $permissionId optional The ID of the unique permission which is
      *                                            related to specified resource.
      * @return  bool       Returns TRUE if access is allowed
      */
     public function isAllowed($resourceId, $permissionId = null)
     {
         return \Scalr::getContainer()->acl->isUserAllowedByEnvironment($this->getUser(), $this->getEnvironment(), $resourceId, $permissionId);
+    }
+
+    /**
+     * @param   DBFarm $dbFarm
+     * @param   string $permissionId
+     * @return  bool
+     */
+    public function isFarmAllowed(DBFarm $dbFarm = null, $permissionId = null)
+    {
+        $acl = \Scalr::getContainer()->acl;
+
+        if (is_null($dbFarm)) {
+            return  $acl->isUserAllowedByEnvironment($this->getUser(), $this->getEnvironment(), \Scalr\Acl\Acl::RESOURCE_FARMS, $permissionId) ||
+                    $acl->isUserAllowedByEnvironment($this->getUser(), $this->getEnvironment(), \Scalr\Acl\Acl::RESOURCE_TEAM_FARMS, $permissionId) ||
+                    $acl->isUserAllowedByEnvironment($this->getUser(), $this->getEnvironment(), \Scalr\Acl\Acl::RESOURCE_OWN_FARMS, $permissionId);
+        } else {
+            if (!($dbFarm instanceof DBFarm))
+                throw new \InvalidArgumentException(sprintf(
+                    'First argument should be instance of DBFarm or null'
+                ));
+
+            $result = $acl->isUserAllowedByEnvironment($this->getUser(), $this->getEnvironment(), \Scalr\Acl\Acl::RESOURCE_FARMS, $permissionId);
+
+            if (!$result && $dbFarm->teamId && $this->getUser()->isInTeam($dbFarm->teamId)) {
+                $result = $acl->isUserAllowedByEnvironment($this->getUser(), $this->getEnvironment(), \Scalr\Acl\Acl::RESOURCE_TEAM_FARMS, $permissionId);
+            }
+
+            if (!$result && $dbFarm->createdByUserId && $this->getUser()->id == $dbFarm->createdByUserId) {
+                $result = $acl->isUserAllowedByEnvironment($this->getUser(), $this->getEnvironment(), \Scalr\Acl\Acl::RESOURCE_OWN_FARMS, $permissionId);
+            }
+
+            return $result;
+        }
     }
 
     /**
@@ -475,6 +546,54 @@ class Scalr_UI_Request
         if (!$this->isAllowed($resourceId, $permissionId)) {
            throw new Scalr_Exception_InsufficientPermissions();
         }
+    }
+
+    /**
+     * @param DBFarm $dbFarm
+     * @param null $permissionId
+     * @throws Scalr_Exception_InsufficientPermissions
+     */
+    public function restrictFarmAccess(DBFarm $dbFarm = null, $permissionId = null)
+    {
+        if (!$this->isFarmAllowed($dbFarm, $permissionId)) {
+            throw new Scalr_Exception_InsufficientPermissions();
+        }
+    }
+
+    /**
+     * Modify sql query to limit access by only allowable farms
+     *
+     * @param   string  $query
+     * @param   array   $args
+     * @param   string  $prefix optional    Prefix for table farms in sql query
+     * @param   string  $perm   optional
+     * @return array
+     */
+    public function prepareFarmSqlQuery($query, $args, $prefix = '', $perm = null)
+    {
+        $prefix = $prefix ? "{$prefix}." : '';
+
+        if (!$this->isAllowed(Acl::RESOURCE_FARMS, $perm)) {
+            $q = [];
+            if ($this->isAllowed(Acl::RESOURCE_TEAM_FARMS, $perm)) {
+                $t = array_map(function($t) { return $t['id']; }, $this->user->getTeams());
+                if (count($t))
+                    $q[] = "{$prefix}team_id IN(" . join(',', $t) . ")";
+            }
+
+            if ($this->isAllowed(Acl::RESOURCE_OWN_FARMS, $perm)) {
+                $q[] = "{$prefix}created_by_id = ?";
+                $args[] = $this->user->getId();
+            }
+
+            if (count($q)) {
+                $query .= ' AND (' . join(' OR ', $q) . ')';
+            } else {
+                $query .= ' AND false'; // no permissions
+            }
+        }
+
+        return [$query, $args];
     }
 
     /**

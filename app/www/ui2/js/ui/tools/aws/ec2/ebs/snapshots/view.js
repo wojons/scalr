@@ -9,26 +9,21 @@ Scalr.regPage('Scalr.ui.tools.aws.ec2.ebs.snapshots.view', function (loadParams,
 	});
 
 	return Ext.create('Ext.grid.Panel', {
-		title: 'Tools &raquo; Amazon Web Services &raquo; EC2 &raquo; EBS &raquo; Snapshots',
 		scalrOptions: {
-			'reload': false,
-			'maximize': 'all'
+			reload: false,
+			maximize: 'all',
+            menuTitle: 'EBS Snapshots',
+            menuHref: '#/tools/aws/ec2/ebs/snapshots',
+            menuFavorite: true
 		},
 		store: store,
 		stateId: 'grid-tools-aws-ec2-ebs-snapshots-view',
 		stateful: true,
-		plugins: {
-			ptype: 'gridstore'
-		},
-		tools: [{
-			xtype: 'gridcolumnstool'
-		}, {
-			xtype: 'favoritetool',
-			favorite: {
-				text: 'EBS Snapshots',
-				href: '#/tools/aws/ec2/ebs/snapshots'
-			}
-		}],
+        plugins: [{
+            ptype: 'gridstore'
+        }, {
+            ptype: 'applyparams'
+        }],
 
 		viewConfig: {
 			emptyText: "No snapshots found",
@@ -41,15 +36,15 @@ Scalr.regPage('Scalr.ui.tools.aws.ec2.ebs.snapshots.view', function (loadParams,
 			{ header: "Created on", width: 120, dataIndex: 'volumeId', sortable: true },
 			{ header: "Size (GB)", width: 110, dataIndex: 'volumeSize', sortable: true },
 			{ header: "Status", width: 120, dataIndex: 'status', sortable: true },
-			{ header: "Local start time", width: 150, dataIndex: 'startTime', sortable: true },
+			{ header: "Local start time", width: 180, dataIndex: 'startTime', sortable: true },
 			{ header: "Completed", width: 100, dataIndex: 'progress', sortable: false, align:'center', xtype: 'templatecolumn', tpl: '{progress}%' },
 			{ header: "Comment", flex: 1, dataIndex: 'comment', sortable: true, xtype: 'templatecolumn', tpl: '<tpl if="comment">{comment}</tpl>' },
 			{
-				xtype: 'optionscolumn2',
+				xtype: 'optionscolumn',
 				menu: [{
-					itemId: 'option.create',
 					text: 'Create new volume based on this snapshot',
 					iconCls: 'x-menu-icon-create',
+                    showAsQuickAction: true,
 					menuHandler: function(data) {
 						Scalr.event.fireEvent('redirect','#/tools/aws/ec2/ebs/volumes/create?' +
 							Ext.Object.toQueryString({
@@ -60,18 +55,18 @@ Scalr.regPage('Scalr.ui.tools.aws.ec2.ebs.snapshots.view', function (loadParams,
 						);
 					}
 				}, {
-					itemId: 'option.migrate',
 					iconCls: 'x-menu-icon-fork',
 					text: 'Copy to another EC2 region',
+                    showAsQuickAction: true,
 					request: {
 						processBox: {
 							type:'action'
 						},
 						url: '/tools/aws/ec2/ebs/snapshots/xGetMigrateDetails/',
 						dataHandler: function (data) {
-							return { 
+							return {
 								'snapshotId': data['snapshotId'],
-								'cloudLocation': store.proxy.extraParams.cloudLocation 
+								'cloudLocation': store.proxy.extraParams.cloudLocation
 							};
 						},
 						success: function (data) {
@@ -83,21 +78,26 @@ Scalr.regPage('Scalr.ui.tools.aws.ec2.ebs.snapshots.view', function (loadParams,
 									form: [{
 										xtype: 'fieldset',
 										title: 'Region copy',
+										fieldDefaults: {
+											labelWidth: 150
+										},
 										items: [{
 											xtype: 'displayfield',
-											labelWidth: 120,
 											width: 500,
 											fieldLabel: 'Snpashot ID',
-											value: data['snapshotId']	
+											value: data['snapshotId']
 										},{
 											xtype: 'displayfield',
-											labelWidth: 120,
 											width: 500,
 											fieldLabel: 'Source region',
-											value: data['sourceRegion']	
+											value: data['sourceRegion']
 										}, {
 											xtype: 'combo',
 											fieldLabel: 'Destination region',
+											plugins: {
+							                    ptype: 'fieldinnericoncloud',
+							                    platform: 'ec2'
+							                },
 											store: {
 												fields: [ 'cloudLocation', 'name' ],
 												proxy: 'object',
@@ -109,7 +109,6 @@ Scalr.regPage('Scalr.ui.tools.aws.ec2.ebs.snapshots.view', function (loadParams,
 											editable: false,
 											queryMode: 'local',
 											name: 'destinationRegion',
-											labelWidth: 120,
 											width: 500
 										}]
 									}]
@@ -120,40 +119,15 @@ Scalr.regPage('Scalr.ui.tools.aws.ec2.ebs.snapshots.view', function (loadParams,
 								url: '/tools/aws/ec2/ebs/snapshots/xMigrate',
 								params: {snapshotId: data.snapshotId, sourceRegion: data.sourceRegion},
 								success: function (data) {
-									document.location.href = '#/tools/aws/ec2/ebs/snapshots/' + data.data.snapshotId + '/view?cloudLocation=' + data.data.cloudLocation;
+                                    Scalr.event.fireEvent('redirect', '#/tools/aws/ec2/ebs/snapshots/' + data.data.snapshotId + '/view?cloudLocation=' + data.data.cloudLocation);
 								}
 							});
-						}
-					}
-				}, {
-					xtype: 'menuseparator',
-					itemId: 'option.Sep'
-				}, {
-					itemId: 'option.delete',
-					text: 'Delete',
-					iconCls: 'x-menu-icon-delete',
-					request: {
-						confirmBox: {
-							type: 'delete',
-							msg: 'Are you sure want to delete EBS snapshot "{snapshotId}"?'
-						},
-						processBox: {
-							type: 'delete',
-							msg: 'Deleting EBS snapshot ...'
-						},
-						url: '/tools/aws/ec2/ebs/snapshots/xRemove/',
-						dataHandler: function (data) {
-							return { snapshotId: Ext.encode([data['snapshotId']]), cloudLocation: store.proxy.extraParams.cloudLocation };
-						},
-						success: function () {
-							store.load();
 						}
 					}
 				}]
 			}
 		],
 
-		multiSelect: true,
 		selType: 'selectedmodel',
 		listeners: {
 			selectionchange: function(selModel, selections) {
@@ -167,10 +141,10 @@ Scalr.regPage('Scalr.ui.tools.aws.ec2.ebs.snapshots.view', function (loadParams,
 			store: store,
 			dock: 'top',
 			afterItems: [{
-				ui: 'paging',
 				itemId: 'delete',
 				disabled: true,
-				iconCls: 'x-tbar-delete',
+				iconCls: 'x-btn-icon-delete',
+                cls: 'x-btn-red',
 				tooltip: 'Delete',
 				handler: function() {
 					var request = {
@@ -201,22 +175,19 @@ Scalr.regPage('Scalr.ui.tools.aws.ec2.ebs.snapshots.view', function (loadParams,
 				xtype: 'filterfield',
 				store: store
 			}, ' ',{
-				xtype: 'fieldcloudlocation',
-				itemId: 'cloudLocation',
-				store: {
-					fields: [ 'id', 'name' ],
-					data: moduleParams.locations,
-					proxy: 'object'
-				},
+                xtype: 'cloudlocationfield',
+                platforms: ['ec2'],
 				gridStore: store
 			}, ' ', {
-				xtype: 'button',
+				xtype: 'buttonfield',
+                name: 'showPublicSnapshots',
 				enableToggle: true,
-				width: 220,
+				width: 260,
 				text: 'Show public (Shared) snapshots',
-				toggleHandler: function (field, checked) {
-					store.proxy.extraParams.showPublicSnapshots = checked ? '1' : '';
-					store.loadPage(1);
+				toggleHandler: function (me) {
+					store.applyProxyParams({
+						showPublicSnapshots: me.getValue()
+					});
 				}
 			}]
 		}]

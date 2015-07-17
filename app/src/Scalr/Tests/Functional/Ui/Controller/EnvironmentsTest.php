@@ -57,7 +57,7 @@ class EnvironmentsTest extends WebTestCase
     protected function _getInfoAction($envId)
     {
         $res = $this->internalRequest('/environments/xGetInfo?envId=' . intval($envId));
-        $this->assertArrayHas(true, 'success', $res);
+        $this->assertTrue(isset($res['success']) && $res['success']);
         $this->arrayHasKey('environment', $res);
         $this->assertInternalType('array', $res['environment']);
         $v = $res['environment'];
@@ -75,7 +75,7 @@ class EnvironmentsTest extends WebTestCase
     protected function _removeTestEnv($envId)
     {
         $response = $this->internalRequest('/environments/xRemove?envId=' . $envId);
-        $this->assertArrayHas(true, 'success', $response);
+        $this->assertTrue(isset($response['success']) && $response['success']);
     }
 
     /**
@@ -110,7 +110,7 @@ class EnvironmentsTest extends WebTestCase
             'envId' => $createdEnvId,
             $par    => 'Europe/Simferopol',
         ));
-        $this->assertArrayHas(true, 'success', $res2);
+        $this->assertTrue(isset($res2['success']) && $res2['success']);
 
         //Test removal
         $this->_removeTestEnv($createdEnvId);

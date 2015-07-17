@@ -3,10 +3,12 @@
 use Scalr\Modules\PlatformFactory;
 use Scalr\Modules\Platforms\Openstack\OpenstackPlatformModule;
 use Scalr\Model\Entity\Tag;
+use Scalr\Model\Entity\Os;
 use Scalr\UI\Request\RawData;
 use Scalr\UI\Request\JsonData;
 use Scalr\Stats\CostAnalytics\Entity\AccountCostCenterEntity;
 use Scalr\Util\CryptoTool;
+use Scalr\Acl\Acl;
 
 class Scalr_UI_Controller_Guest extends Scalr_UI_Controller
 {
@@ -23,7 +25,11 @@ class Scalr_UI_Controller_Guest extends Scalr_UI_Controller
         return true;
     }
 
-    public function xInitAction()
+    /**
+     * @param int $uiStorageTime optional
+     * @throws Scalr_UI_Exception_NotFound
+     */
+    public function xInitAction($uiStorageTime = 0)
     {
         $initParams = array();
 
@@ -47,12 +53,12 @@ class Scalr_UI_Controller_Guest extends Scalr_UI_Controller
         );
 
         $initParams['uiHash'] = $this->response->pageUiHash();
-        $initParams['context'] = $this->getContext();
+        $initParams['context'] = $this->getContext($uiStorageTime);
 
         $this->response->data(array('initParams' => $initParams));
     }
 
-    public function getContext()
+    public function getContext($uiStorageTime = 0)
     {
         $data = array();
         if ($this->user) {
@@ -64,25 +70,27 @@ class Scalr_UI_Controller_Guest extends Scalr_UI_Controller
                 'envId' => $this->getEnvironment() ? $this->getEnvironmentId() : 0,
                 'envName'  => $this->getEnvironment() ? $this->getEnvironment()->name : '',
                 'envVars' => $this->getEnvironment() ? $this->getEnvironment()->getPlatformConfigValue(Scalr_Environment::SETTING_UI_VARS) : '',
-                'type' => $this->user->getType()
+                'type' => $this->user->getType(),
+                'settings' => [
+                    Scalr_Account_User::VAR_SSH_CONSOLE_LAUNCHER => $this->user->getVar(Scalr_Account_User::VAR_SSH_CONSOLE_LAUNCHER)
+                ]
             );
+
+            if (($uiStorageTime > 0) && ($uiStorageTime < $this->user->getSetting(Scalr_Account_User::SETTING_UI_STORAGE_TIME)) && !Scalr_Session::getInstance()->isVirtual()) {
+                $data['user']['uiStorage'] = $this->user->getVar(Scalr_Account_User::VAR_UI_STORAGE);
+            }
 
             $envVars = json_decode($data['user']['envVars'], true);
             $betaMode = ($envVars && $envVars['beta'] == 1);
 
             if (! $this->user->isAdmin()) {
-                $data['farms'] = $this->db->getAll('SELECT id, name FROM farms WHERE env_id = ? ORDER BY name', array($this->getEnvironmentId()));
-
+                $data['flags'] = [];
                 if ($this->user->getAccountId() != 0) {
-                    $data['flags'] = $this->user->getAccount()->getFeaturesList();
                     $data['user']['userIsTrial'] = $this->user->getAccount()->getSetting(Scalr_Account::SETTING_IS_TRIAL) == '1' ? true : false;
-                } else {
-                    $data['flags'] = array();
                 }
 
                 $data['flags']['billingExists'] = \Scalr::config('scalr.billing.enabled');
                 $data['flags']['showDeprecatedFeatures'] = \Scalr::config('scalr.ui.show_deprecated_features');
-                $data['flags']['featureUsersPermissions'] = $this->user->getAccount()->isFeatureEnabled(Scalr_Limits::FEATURE_USERS_PERMISSIONS);
 
                 $data['flags']['wikiUrl'] = \Scalr::config('scalr.ui.wiki_url');
                 $data['flags']['supportUrl'] = \Scalr::config('scalr.ui.support_url');
@@ -92,36 +100,65 @@ class Scalr_UI_Controller_Guest extends Scalr_UI_Controller
 
                 $data['acl'] = $this->request->getAclRoles()->getAllowedArray(true);
 
-                if ($this->user->isAccountOwner()) {
-                    if (! $this->user->getAccount()->getSetting(Scalr_Account::SETTING_DATE_ENV_CONFIGURED)) {
-                        if (count($this->environment->getEnabledPlatforms()) == 0) {
-                            $data['flags']['needEnvConfig'] = Scalr_Environment::init()->loadDefault($this->user->getAccountId())->id;
-                        }
-                    }
+                if (! $this->user->isAccountOwner()) {
+                    $data['user']['accountOwnerName'] = $this->user->getAccount()->getOwner()->getEmail();
                 }
 
                 $data['environments'] = $this->user->getEnvironments();
 
-                if ($this->getEnvironment() && $this->user->isTeamOwner()) {
-                    $data['user']['isTeamOwner'] = true;
+                if ($this->user->isAccountOwner()) {
+                    if (! $this->user->getAccount()->getSetting(Scalr_Account::SETTING_DATE_ENV_CONFIGURED)) {
+                        $data['flags']['needEnvConfig'] = true;
+                    }
+                }
+
+                if ($this->request->getScope() == 'environment') {
+                    $sql = 'SELECT id, name FROM farms WHERE env_id = ?';
+                    $args = [$this->getEnvironmentId()];
+
+                    list($sql, $args) = $this->request->prepareFarmSqlQuery($sql, $args);
+                    $sql .= ' ORDER BY name';
+
+                    $data['farms'] = $this->db->getAll($sql, $args);
+
+                    if ($this->getEnvironment() && $this->user->isTeamOwner()) {
+                        $data['user']['isTeamOwner'] = true;
+                    }
                 }
             }
 
-            $data['platforms'] = array();
+            //OS
+            $data['os'] = [];
+            foreach (Os::find([['status' => Os::STATUS_ACTIVE]]) as $os) {
+                /* @var $os Os */
+                $data['os'][] = [
+                    'id' => $os->id,
+                    'family' => $os->family,
+                    'name' => $os->name,
+                    'generation' => $os->generation,
+                    'version' => $os->version
+                ];
+            }
+
+            $data['platforms'] = [];
             $allowedClouds = (array) \Scalr::config('scalr.allowed_clouds');
 
             foreach (SERVER_PLATFORMS::getList() as $platform => $platformName) {
+
+                if ($this->user->getAccountId() == 263)
+                    array_push($allowedClouds, SERVER_PLATFORMS::VERIZON);
+
                 if (!in_array($platform, $allowedClouds) && !$this->request->getHeaderVar('Interface-Beta')) {
                     continue;
                 }
 
                 $data['platforms'][$platform] = array(
                     'public'  => PlatformFactory::isPublic($platform),
-                    'enabled' => $this->user->isAdmin() ? true : !!$this->environment->isPlatformEnabled($platform),
+                    'enabled' => ($this->user->isAdmin() || $this->request->getScope() != 'environment') ? true : !!$this->environment->isPlatformEnabled($platform),
                     'name'    => $platformName,
                 );
 
-                if (!$this->user->isAdmin()) {
+                if (! ($this->user->isAdmin() || $this->request->getScope() != 'environment')) {
                     if ($platform == SERVER_PLATFORMS::EC2 && $this->environment->status == Scalr_Environment::STATUS_INACTIVE && $this->environment->getPlatformConfigValue('system.auto-disable-reason')) {
                         $data['platforms'][$platform]['config'] = array('autoDisabled' => true);
                     }
@@ -141,22 +178,33 @@ class Scalr_UI_Controller_Guest extends Scalr_UI_Controller
             $data['flags']['uiStorageTime'] = $this->user->getSetting(Scalr_Account_User::SETTING_UI_STORAGE_TIME);
             $data['flags']['uiStorage'] = $this->user->getVar(Scalr_Account_User::VAR_UI_STORAGE);
             $data['flags']['allowManageAnalytics'] = (bool) Scalr::isAllowedAnalyticsOnHostedScalrAccount($this->environment->clientId);
+
+            $data['scope'] = $this->request->getScope();
+            if ($this->request->getScope() == 'environment') {
+                $governance = new Scalr_Governance($this->getEnvironmentId());
+                $data['governance'] = $governance->getValues(true);
+            }
         }
 
         if ($this->user)
             $data['tags'] = Tag::getAll($this->user->getAccountId());
 
         $data['flags']['authMode'] = $this->getContainer()->config->get('scalr.auth_mode');
+        $data['flags']['recaptchaPublicKey'] = $this->getContainer()->config->get('scalr.ui.recaptcha.public_key');
         $data['flags']['specialToken'] = Scalr_Session::getInstance()->getToken();
         $data['flags']['hostedScalr'] = (bool) Scalr::isHostedScalr();
         $data['flags']['analyticsEnabled'] = $this->getContainer()->analytics->enabled;
+        $data['flags']['apiEnabled'] = (bool) \Scalr::config('scalr.system.api.enabled');
 
         return $data;
     }
 
-    public function xGetContextAction()
+    /**
+     * @param int $uiStorageTime optional
+     */
+    public function xGetContextAction($uiStorageTime = 0)
     {
-        $this->response->data($this->getContext());
+        $this->response->data($this->getContext($uiStorageTime));
     }
 
     /**
@@ -379,11 +427,17 @@ class Scalr_UI_Controller_Guest extends Scalr_UI_Controller
         }
     }
 
-    public function loginAction()
-    {
-        $this->response->page('ui/guest/login.js', array('loginAttempts' => 0, 'recaptchaPublicKey' => $this->getContainer()->config->get('scalr.ui.recaptcha.public_key')));
-    }
-
+    /**
+     * @param $login
+     * @param $password
+     * @param $accountId
+     * @param $scalrCaptcha
+     * @param $scalrCaptchaChallenge
+     * @return Scalr_Account_User
+     * @throws Exception
+     * @throws Scalr_Exception_Core
+     * @throws \Scalr\System\Config\Exception\YamlException
+     */
     private function loginUserGet($login, $password, $accountId, $scalrCaptcha, $scalrCaptchaChallenge)
     {
         if ($login != '' && $password != '') {
@@ -491,9 +545,10 @@ class Scalr_UI_Controller_Guest extends Scalr_UI_Controller
                         $user->fullname = $ldap->getFullName();
                         $user->save();
                     }
-
+                    
                     if ($ldap->getUsername() != $ldap->getEmail()) {
                         $user->setSetting(Scalr_Account_User::SETTING_LDAP_EMAIL, $ldap->getEmail());
+                        $user->setSetting(Scalr_Account_User::SETTING_LDAP_USERNAME, $ldap->getUsername());
                     } else {
                         $user->setSetting(Scalr_Account_User::SETTING_LDAP_EMAIL, '');
                     }
@@ -617,11 +672,6 @@ class Scalr_UI_Controller_Guest extends Scalr_UI_Controller
         $this->response->data(array('userId' => $user->getId(), 'specialToken' => Scalr_Session::getInstance()->getToken()));
     }
 
-    public function xLoginFakeAction()
-    {
-        $this->response->setResponse(file_get_contents(APPPATH . '/www/login.html'));
-    }
-
     /**
      * @param string $scalrLogin
      * @param RawData $scalrPass
@@ -637,10 +687,7 @@ class Scalr_UI_Controller_Guest extends Scalr_UI_Controller
         $user = $this->loginUserGet($scalrLogin, $scalrPass, $accountId, $scalrCaptcha, $scalrCaptchaChallenge);
 
         // check for 2-factor auth
-        if (
-            ($user->getAccountId() && $user->getAccount()->isFeatureEnabled(Scalr_Limits::FEATURE_2FA) || !$user->getAccountId()) &&
-            ($user->getSetting(Scalr_Account_User::SETTING_SECURITY_2FA_GGL) == 1)
-        ) {
+        if ($user->getSetting(Scalr_Account_User::SETTING_SECURITY_2FA_GGL) == 1) {
             if ($tfaGglCode) {
                 if ($tfaGglReset) {
                     $resetCode = $user->getSetting(Scalr_Account_User::SETTING_SECURITY_2FA_GGL_RESET_CODE);
@@ -672,11 +719,6 @@ class Scalr_UI_Controller_Guest extends Scalr_UI_Controller
         $this->loginUserCreate($user, $scalrKeepSession);
     }
 
-    public function recoverPasswordAction()
-    {
-        $this->response->page('ui/guest/recoverPassword.js');
-    }
-
     /**
      * @param $email
      */
@@ -697,7 +739,7 @@ class Scalr_UI_Controller_Guest extends Scalr_UI_Controller
                 SCALR_TEMPLATES_PATH . '/emails/password_reset_confirmation.eml',
                 array(
                     '{{fullname}}' => $clientinfo['fullname'],
-                    '{{link}}'     => Scalr::config('scalr.endpoint.scheme') . "://" . Scalr::config('scalr.endpoint.host') . "/#/guest/updatePassword/?hash={$hash}",
+                    '{{link}}'     => Scalr::config('scalr.endpoint.scheme') . "://" . Scalr::config('scalr.endpoint.host') . "/?resetPasswordHash={$hash}",
                 ),
                 $clientinfo['email'], $clientinfo['fullname']
             );
@@ -711,13 +753,12 @@ class Scalr_UI_Controller_Guest extends Scalr_UI_Controller
     /**
      * @param $hash
      */
-    public function updatePasswordAction($hash)
+    public function xUpdatePasswordValidateAction($hash)
     {
-        if ($hash) {
-            $user = Scalr_Account_User::init()->loadBySetting(Scalr_Account::SETTING_OWNER_PWD_RESET_HASH, $hash);
-            $this->response->page('ui/guest/updatePassword.js', array('valid' => is_object($user), 'authenticated' => is_object($this->user)));
+        if ($hash && ($user = Scalr_Account_User::init()->loadBySetting(Scalr_Account::SETTING_OWNER_PWD_RESET_HASH, $hash))) {
+            $this->response->data(['email' => $user->getEmail()]);
         } else {
-            throw new Exception('Incorrect confirmation link');
+            $this->response->failure("Incorrect confirmation link");
         }
     }
 
@@ -736,7 +777,7 @@ class Scalr_UI_Controller_Guest extends Scalr_UI_Controller
 
             //Scalr_Session::create($user->getAccountId(), $user->getId(), $user->getType());
 
-            $this->response->success("Password has been reset. Please log in.");
+            $this->response->data(['email' => $user->getEmail(), 'message' => 'Password has been reset. Please log in.']);
         } else {
             $this->response->failure("Incorrect confirmation link");
         }
@@ -756,7 +797,7 @@ class Scalr_UI_Controller_Guest extends Scalr_UI_Controller
             if ($updateDashboard)
                 $result['updateDashboard'] = Scalr_UI_Controller::loadController('dashboard')->checkLifeCycle($updateDashboard);
 
-            if (!Scalr_Session::getInstance()->isVirtual() && $uiStorage) {
+            if (!Scalr_Session::getInstance()->isVirtual() && $uiStorage->count()) {
                 $this->user->setSetting(Scalr_Account_User::SETTING_UI_STORAGE_TIME, $uiStorage['time']);
                 $this->user->setVar(Scalr_Account_User::VAR_UI_STORAGE, $uiStorage['dump']);
             }
@@ -777,7 +818,7 @@ class Scalr_UI_Controller_Guest extends Scalr_UI_Controller
      * @param $lineno
      * @param RawData $message
      */
-    public function xPostErrorAction($url, $file, $lineno, RawData $message)
+    public function xPostErrorAction($url, $file, $lineno = 0, RawData $message)
     {
         $this->response->success();
 

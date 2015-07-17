@@ -10,23 +10,6 @@
     color: red;
 }
 
-.scalr-ui-dashboard-container .x-mask {
-	background: #f0f1f4;
-	opacity: 1;
-}
-
-.scalr-ui-dashboard-container .x-mask-msg {
-    background: #f0f1f4;
-}
-
-.scalr-ui-dashboard-container .x-mask-msg-text {
-	font: 18px Arial bold;
-	color: #666;
-    padding: 12px 5px 12px 55px;
-    background: url('/ui2/images/ui/dashboard/load_widget.gif?1.0') no-repeat;
-}
-
-
 .scalr-ui-dashboard-widgets-billing label.x-form-item-label {
 	font-weight: bold;
 	text-shadow: none;
@@ -67,23 +50,43 @@
 
 .scalr-ui-dashboard-container {
 	min-height: 200px;
-	border: none;
+}
+
+.scalr-ui-dashboard-container .x-mask {
+    opacity: 1;
+    background-color: #f1f5fa;
 }
 
 .scalr-ui-dashboard-container-dd div.editpanel {
-	display: none;
+	display: none!important;
 }
 
 .scalr-ui-dashboard-container div.editpanel div.remove, .scalr-ui-dashboard-container div.editpanel div.add{
 	visibility: hidden;
 	display: inline;
 	float: left;
-	font: bold 18px Arial;
-	text-decoration: none;
-	padding: 16px;
-	background-color: #DFE4EA;
-    border-radius: 3px;
-    opacity: 0.8;
+
+    height: 40px;
+    line-height: 43px;
+    background-color: rgba(80, 159, 0, 0.2);
+    color: white;
+    font-size: 12px;
+    font-family: OpenSansBold;
+    border-radius: 2px;
+    text-align: center;
+    text-transform: uppercase;
+}
+
+.scalr-ui-dashboard-container div.editpanel div.add:hover {
+    background-color: rgba(80, 159, 0, 0.25);
+}
+
+.scalr-ui-dashboard-container div.editpanel div.remove {
+    background-color: rgba(217, 54, 0, 0.25);
+}
+
+.scalr-ui-dashboard-container div.editpanel div.remove:hover {
+    background-color: rgba(217, 54, 0, 0.30);
 }
 
 .scalr-ui-dashboard-container div.editpanel {
@@ -98,15 +101,11 @@
 	display: block;
 }
 
-.scalr-ui-dashboard-container-over-empty div.editpanel  div.add:hover, .scalr-ui-dashboard-container-over-empty div.editpanel  div.remove:hover, .scalr-ui-dashboard-container-over div.editpanel div.add:hover{
-	opacity: 0.7;
-}
-
 .scalr-ui-dashboard-container-over div.editpanel div.add {
 	width: 100%;
 	visibility: visible;
 	cursor: pointer;
-	border-radius: 0 0 6px 6px;
+	border-radius: 2px;
 }
 
 .scalr-ui-dashboard-container-over-empty div.editpanel div.remove, .scalr-ui-dashboard-container-over-empty div.editpanel div.add {
@@ -116,32 +115,24 @@
 }
 
 .scalr-ui-dashboard-container-over-empty div.editpanel div.add {
-	border-radius: 0 0 0px 6px;
+	border-radius: 2px;
 }
 
 .scalr-ui-dashboard-container-over-empty div.editpanel div.remove {
 	width: 49%;
 	margin-left: 2px;
-	border-radius: 0 0 6px 0px;
+	border-radius: 2px;
 }
-
-.scalr-ui-dashboard-icon-add-widget {
-	background: url('/ui2/images/ui/dashboard/widgets_control_sprite.png?1.0') no-repeat 0 0;
-	height: 24px;
-	width: 24px;
-}
-
-.scalr-ui-dashboard-icon-remove-column {
-	background: url('/ui2/images/ui/dashboard/widgets_control_sprite.png?1.0') no-repeat 0 -24px;
-	height: 24px;
-	width: 24px;
-}
-
 
 .scalr-ui-dashboard-panel .x-panel-dd-spacer {
+    display: none;
 	border: 2px dashed #A9BCD8;
 	border-radius: 4px;
 	margin-bottom: 5px;
+}
+
+.scalr-ui-dashboard-container-over .x-panel-dd-spacer {
+    display: block;
 }
 
 .scalr-ui-dashboard-widgets-div {
@@ -150,11 +141,12 @@
 	overflow-x: hidden;
 	overflow-y: hidden;
 	background: #ffffff;
+    border-bottom: 1px solid #f7f7f7;
 }
 
-.scalr-ui-dashboard-widgets-div:nth-of-type(even) {
+/*.scalr-ui-dashboard-widgets-div:nth-of-type(even) {
     background-color: #F4F4F4;
-}
+}*/
 
 .scalr-ui-dashboard-widgets-message {
 	font-size: 13px;
@@ -180,9 +172,9 @@
 }
 
 .scalr-ui-dashboard-widgets-desc {
-	font: bold 11px arial;
-	color: #333;
+	font: 11px OpenSansBold;
 	margin-bottom: 3px;
+    text-transform: uppercase;
 }
 
 .scalr-ui-dashboard-widgets-message-small {
@@ -198,20 +190,24 @@
 
 
 /* dashboard.farm */
+ul.scalr-ui-dashboard-farms {
+    margin-top: 4px;
+}
+
 ul.scalr-ui-dashboard-farms li {
 	position: relative;
 	display: inline-block;
 	margin: 7px;
 	margin-bottom: 15px;
-	height: 60px;
-	width: 55px;
+	height: 55px;
+	width: 50px;
 	cursor: pointer;
 	text-align: center;
 }
 
 ul.scalr-ui-dashboard-farms li a.icon {
-	height: 50px;
-	width: 50px;
+	height: 45px;
+	width: 45px;
     background-color: white;
 	border-radius: 3px;
 	position: relative;
@@ -222,20 +218,22 @@ ul.scalr-ui-dashboard-farms li a.icon {
 
 ul.scalr-ui-dashboard-farms li a.icon div {
     position: relative;
-    top: 5px;
+    top: 14px;
+    margin: 0 auto;
 }
 
 ul.scalr-ui-dashboard-farms li a.count {
 	position: absolute;
 	top: 0;
-	left: 38px;
+	left: 37px;
     background: #439A25;
-	border-radius: 10px;
-	width: 20px;
-	height: 20px;
+    font: 12px OpenSansSemiBold;
+    border-radius: 40px;
+    height: 21px;
+    width: 21px;
 	color: #ffffff;
-	font: bold 11px arial;
-	padding-top: 3px;
+    padding-top: 1px;
+    line-height: 20px;
 }
 /* end of dashboard.farm */
 
@@ -275,6 +273,28 @@ ul.scalr-ui-dashboard-farms li a.count {
 	color: #666;
 }
 
+.scalr-ui-dashboard-checklist-icon {
+    position: absolute;
+    top: -8px;
+    width: 38px;
+    height: 38px;
+    background: url('/ui2/images/ui/dashboard/checklist-sprite.png') 0 0 no-repeat;
+    background-size: 38px 114px;
+}
+
+.scalr-ui-dashboard-checklist-icon-0 {
+    background-position: 0 0;
+}
+
+.scalr-ui-dashboard-checklist-icon-1 {
+    background-position: 0 -38px;
+}
+
+.scalr-ui-dashboard-checklist-icon-2 {
+    background-position: 0 -76px;
+}
+
+
 @font-face {
 	font-family: "Roboto Black";
 	src:
@@ -286,22 +306,13 @@ ul.scalr-ui-dashboard-farms li a.count {
 	font-style: normal;
 }
 
+/*retina 2x images*/
 @media only screen and (-webkit-min-device-pixel-ratio: 1.5),
     only screen and (-o-min-device-pixel-ratio: 3/2),
     only screen and (min--moz-device-pixel-ratio: 1.5),
     only screen and (min-device-pixel-ratio: 1.5) {
 
-
-    .scalr-ui-dashboard-container .x-mask-msg-text {
-        background-size: 50px 50px;
-        background-image: url('/ui2/images/ui/dashboard/load_widget_retina.gif');
+    .scalr-ui-dashboard-checklist-icon {
+        background-image: url('/ui2/images/ui/dashboard/checklist-sprite-retina.png');
     }
-
-    .scalr-ui-dashboard-icon-add-widget,
-    .scalr-ui-dashboard-icon-remove-column{
-        background-image: url('/ui2/images/ui/dashboard/widgets_control_sprite_retina.png');
-        background-size: 24px 48px;
-    }
-
-    
 }

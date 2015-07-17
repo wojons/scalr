@@ -188,7 +188,7 @@ class CostCentres
      */
     public function get($ccId, $ignoreCache = false, $criteria = null)
     {
-        $all = $this->all(true, $ignoreCache, $criteria);
+        $all = $this->all(true, $criteria, $ignoreCache);
         return isset($all[$ccId]) ? $all[$ccId] : null;
     }
 

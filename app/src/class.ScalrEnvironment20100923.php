@@ -14,7 +14,7 @@ class ScalrEnvironment20100923 extends ScalrEnvironment20090305
         {
             $scalingMetric = $farmRoleScalingMetric->getMetric();
 
-            if ($scalingMetric->clientId == 0)
+            if ($scalingMetric->accountId == 0)
                 continue;
 
             $metric = $ResponseDOMDocument->createElement("metric");

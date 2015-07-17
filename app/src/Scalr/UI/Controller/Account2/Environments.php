@@ -58,12 +58,8 @@ class Scalr_UI_Controller_Account2_Environments extends Scalr_UI_Controller
         $this->user->getPermissions()->validate($env);
         $env->delete();
 
-        if ($env->id == $this->getEnvironmentId()) {
-            Scalr_Session::getInstance()->setEnvironmentId(null); // reset
-        }
-
         $this->response->success("Environment successfully removed");
-        $this->response->data(array('env' => array('id' => $env->id), 'flagReload' => $env->id == $this->getEnvironmentId() ? true : false));
+        $this->response->data(array('env' => array('id' => $env->id), 'flagReload' => false));
     }
 
     public function xCloneAction()
@@ -133,7 +129,7 @@ class Scalr_UI_Controller_Account2_Environments extends Scalr_UI_Controller
                 ));
 
         } else {
-            $this->response->failure($this->request->getValidationErrorsMessage());
+            $this->response->failure($this->request->getValidationErrorsMessage(), true);
         }
     }
 
@@ -239,20 +235,6 @@ class Scalr_UI_Controller_Account2_Environments extends Scalr_UI_Controller
                             $env->addTeam($id);
                         }
                     }
-                    // remove unused teams
-                    $ids = $this->db->GetAll('
-                        SELECT account_teams.id
-                        FROM account_teams
-                        LEFT JOIN account_team_envs ON account_team_envs.team_id = account_teams.id
-                        WHERE ISNULL(account_team_envs.env_id) AND account_teams.account_id = ?
-                    ', array($this->user->getAccountId()));
-
-                    foreach ($ids as $id) {
-                        $team = new Scalr_Account_Team();
-                        $team->loadById($id['id']);
-                        $team->delete();
-                    }
-
                     if ($this->getContainer()->config->get('scalr.connections.ldap.user')) {
                         $user = strtok($this->user->getEmail(), '@');
                         $ldap = $this->getContainer()->ldap($user, null);
@@ -293,7 +275,7 @@ class Scalr_UI_Controller_Account2_Environments extends Scalr_UI_Controller
             ));
 
         } else {
-            $this->response->failure($this->request->getValidationErrorsMessage());
+            $this->response->failure($this->request->getValidationErrorsMessage(), true);
         }
     }
 }

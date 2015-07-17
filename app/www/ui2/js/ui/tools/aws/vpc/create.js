@@ -1,15 +1,16 @@
 Scalr.regPage('Scalr.ui.tools.aws.vpc.create', function (loadParams, moduleParams) {
-	var form = Ext.create('Ext.form.Panel', {
-		title: 'Create VPC',
+	var form = Scalr.utils.Window({
+        xtype: 'form',
+        title: 'Create VPC',
 		fieldDefaults: {
 			anchor: '100%'
 		},
 		scalrOptions: {
-			modal: true
+			modalWindow: true
 		},
-		width: 500,
+		width: 560,
         defaults: {
-            labelWidth: 120
+            labelWidth: 135
         },
         bodyCls: 'x-container-fieldset',
 		items: [{
@@ -65,7 +66,7 @@ Scalr.regPage('Scalr.ui.tools.aws.vpc.create', function (loadParams, moduleParam
 								if (data['vpc']) {
 									Scalr.event.fireEvent('update', '/tools/aws/vpc/create', data['vpc']);
 								}
-								Scalr.event.fireEvent('close');
+								form.close();
 							}
 						});
 					}
@@ -74,7 +75,7 @@ Scalr.regPage('Scalr.ui.tools.aws.vpc.create', function (loadParams, moduleParam
 				xtype: 'button',
 				text: 'Cancel',
 				handler: function() {
-					Scalr.event.fireEvent('close');
+					form.close();
 				}
 			}]
 		}]

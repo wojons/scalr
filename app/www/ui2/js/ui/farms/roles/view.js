@@ -13,20 +13,25 @@ Scalr.regPage('Scalr.ui.farms.roles.view', function (loadParams, moduleParams) {
 	});
 
 	return Ext.create('Ext.grid.Panel', {
-		title: 'Farms &raquo; ' + moduleParams['farmName'] + ' &raquo; Roles',
 		scalrOptions: {
-			'reload': false,
-			'maximize': 'all'
+			reload: false,
+			maximize: 'all',
+            menuTitle: 'Farms',
+            menuSubTitle: moduleParams['farmName'] + ' &raquo; Roles',
+            menuHref: '#/farms',
+            menuParentStateId: 'grid-farms-view'
 		},
 		store: store,
 		stateId: 'grid-farms-roles-view',
 		stateful: true,
-		plugins: {
-			ptype: 'gridstore'
-		},
-		tools: [{
-			xtype: 'gridcolumnstool'
-		}],
+        plugins: [{
+            ptype: 'gridstore'
+        }, {
+            ptype: 'applyparams',
+            filterIgnoreParams: [ 'farmId' ],
+            updateLinkOnStoreDataChanged: false
+        }],
+        disableSelection: true,
 
 		viewConfig: {
 			emptyText: 'No roles assigned to selected farm',
@@ -40,23 +45,22 @@ Scalr.regPage('Scalr.ui.farms.roles.view', function (loadParams, moduleParams) {
 			{ header: "Location", width: 100, dataIndex: 'location', sortable: false },
 			{ header: "Name", flex: 1, dataIndex: 'alias', sortable: false},
 			{ header: "Role", flex: 1, dataIndex: 'name', sortable: false, xtype: 'templatecolumn', tpl:
-				'<a href="#/roles/manager?roleId={role_id}">{name}</a>'
+				'<a href="#/roles?roleId={role_id}">{name}</a>'
 			},
 			{ header: "Min servers", width: 90, dataIndex: 'min_count', sortable: false, align:'center', xtype:'templatecolumn',  tpl:
 				'<tpl if="min_count">{min_count}</tpl>' +
-				'<tpl if="!min_count"><img src="/ui2/images/icons/false.png" /></tpl>'},
+				'<tpl if="!min_count">&mdash;</tpl>'},
 			{ header: "Max servers", width: 90, dataIndex: 'max_count', sortable: false, align:'center', xtype:'templatecolumn',  tpl:
 				'<tpl if="max_count">{max_count}</tpl>' +
-				'<tpl if="!max_count"><img src="/ui2/images/icons/false.png" /></tpl>'},
+				'<tpl if="!max_count">&mdash;</tpl>'},
 			{ header: "Enabled scaling algorithms", flex: 1, dataIndex: 'scaling_algos', sortable: false, align:'center' },
-			{ header: "Servers", width: 100, dataIndex: 'servers', sortable: false, xtype: 'templatecolumn', 
+			{ header: "Servers", width: 100, dataIndex: 'servers', sortable: false, align: 'center', xtype: 'templatecolumn',
 				tpl: new Ext.XTemplate(
-                    '<span data-anchor="right" data-qalign="r-l" data-qtip="{[this.getTooltipHtml(values)]}" data-qwidth="230">' +
+                    '<a href="#/servers?farmId={farmid}&farmRoleId={id}" class="x-grid-big-href"<span data-anchor="right" data-qalign="r-l" data-qtip="{[this.getTooltipHtml(values)]}" data-qwidth="270">' +
                         '<span style="color:#28AE1E;">{running_servers}</span>' +
                         '/<span style="color:#329FE9;">{suspended_servers}</span>' +
                         '/<span style="color:#bbb;">{non_running_servers}</span>' +
-                    '</span>'+
-                    ' [<a href="#/servers/view?farmId={farmid}&farmRoleId={id}">View</a>]',
+                    '</span></a>',
                     {
                         getTooltipHtml: function(values) {
                             return Ext.String.htmlEncode(
@@ -68,28 +72,29 @@ Scalr.regPage('Scalr.ui.farms.roles.view', function (loadParams, moduleParams) {
                     }
                 )
 			},
-			{ header: "Domains", width: 100, dataIndex: 'domains', sortable: false, xtype: 'templatecolumn', tpl:
-				'{domains} [<a href="#/dnszones/view?farmRoleId={id}">View</a>]'
+			{ header: "Domains", width: 90, dataIndex: 'domains', sortable: false, align: 'center', xtype: 'templatecolumn', tpl:
+				'<a href=#/dnszones?farmRoleId={id}" class="x-grid-big-href">{domains}</a>'
 			}, {
-				xtype: 'optionscolumn2',
+				xtype: 'optionscolumn',
                 menu: {
                     xtype: 'actionsmenu',
                     listeners: {
                         beforeshow: function() {
-                            var me = this;
+                            var me = this,
+                                shortcuts = me.data['shortcuts'] || [];
                             me.items.each(function (item) {
                                 if (item.isshortcut) {
                                     me.remove(item);
                                 }
                             });
 
-                            if (me.data['farm_status'] == 1 && me.data['shortcuts'].length) {
+                            if (me.data['farm_status'] == 1 && shortcuts.length) {
                                 me.add({
                                     xtype: 'menuseparator',
                                     isshortcut: true
                                 });
 
-                                Ext.Array.each(me.data['shortcuts'], function (shortcut) {
+                                Ext.Array.each(shortcuts, function (shortcut) {
                                     if (typeof(shortcut) != 'function') {
                                         me.add({
                                             isshortcut: true,
@@ -102,40 +107,37 @@ Scalr.regPage('Scalr.ui.farms.roles.view', function (loadParams, moduleParams) {
                         }
                     },
                     items: [{
-                        itemId: 'option.ssh_key',
                         text: 'Download SSH private key',
                         iconCls: 'x-menu-icon-downloadprivatekey',
                         menuHandler: function (data) {
                             Scalr.utils.UserLoadFile('/sshkeys/downloadPrivate?farmId=' + loadParams['farmId'] + '&platform=' + data['platform'] + "&cloudLocation=" + data['location']);
                         }
                     }, {
-                        itemId: 'option.cfg',
                         iconCls: 'x-menu-icon-configure',
                         text: 'Configure',
-                        href: "#/farms/{farmid}/edit?farmRoleId={id}"
+                        showAsQuickAction: true,
+                        href: "#/farms/designer?farmId={farmid}&farmRoleId={id}"
                     }, {
-                        itemId: 'option.stat',
                         iconCls: 'x-menu-icon-statsusage',
                         text: 'View statistics',
-                        href: "#/monitoring/view?farmRoleId={id}&farmId={farmid}"
+                        href: "#/monitoring?farmRoleId={id}&farmId={farmid}",
+                        getVisibility: function(data) {
+                            return data['farm_status'] != 0 && Scalr.isAllowed('FARMS', 'statistics');
+                        }
                     }, {
-                        itemId: 'option.info',
-                        iconCls: 'x-menu-icon-info',
+                        iconCls: 'x-menu-icon-information',
                         text: 'Extended role information',
+                        showAsQuickAction: true,
                         href: "#/farms/" + loadParams['farmId'] + "/roles/{id}/extendedInfo"
                     }, {
-                        xtype: 'menuseparator',
-                        itemId: 'option.mainSep'
+                        xtype: 'menuseparator'
                     }, {
-                        xtype: 'menuseparator',
-                        itemId: 'option.mainSep2'
+                        xtype: 'menuseparator'
                     }, {
-                        itemId: 'option.exec',
                         iconCls: 'x-menu-icon-execute',
                         text: 'Execute script',
                         href: '#/scripts/execute?farmRoleId={id}'
                     }, {
-                        itemId: 'option.fire',
                         iconCls: 'x-menu-icon-execute',
                         text: 'Fire event',
                         href: '#/scripts/events/fire?farmRoleId={id}',
@@ -143,16 +145,19 @@ Scalr.regPage('Scalr.ui.farms.roles.view', function (loadParams, moduleParams) {
                             return Scalr.isAllowed('GENERAL_CUSTOM_EVENTS', 'fire');
                         }
                     }, {
-                        xtype: 'menuseparator',
-                        itemId: 'option.eSep'
+                        xtype: 'menuseparator'
                     }, {
-                        itemId: 'option.launch',
                         iconCls: 'x-menu-icon-launch',
                         text: 'Launch new server',
+                        showAsQuickAction: true,
                         getVisibility: function(data) {
-                            return !!data['allow_launch_instance'];
+                            return !!data['allow_launch_instance'] && data['farm_status'] == '1';
                         },
                         request: {
+                            confirmBox: {
+                                type: 'launch',
+                                msg: 'Are you sure want to launch new server ?'
+                            },
                             processBox: {
                                 type: 'launch'
                             },
@@ -170,7 +175,6 @@ Scalr.regPage('Scalr.ui.farms.roles.view', function (loadParams, moduleParams) {
 
 		dockedItems: [{
 			xtype: 'scalrpagingtoolbar',
-            ignoredLoadParams: ['farmId'],
 			store: store,
 			dock: 'top',
 			items: [{

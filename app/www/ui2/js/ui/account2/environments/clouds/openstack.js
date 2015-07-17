@@ -35,18 +35,19 @@ Scalr.regPage('Scalr.ui.account2.environments.clouds.openstack', function (loadP
                 items.push({
                     xtype: 'displayfield',
                     fieldLabel: feature,
-                    value: Ext.isBoolean(featureValue) ? '<img src="' + Ext.BLANK_IMAGE_URL + '" class="x-icon-' + (featureValue ? 'ok' : 'fail') + '" />' : featureValue
+                    margin: 0,
+                    value: Ext.isBoolean(featureValue) ? (featureValue ? '<div class="x-grid-icon x-grid-icon-simple x-grid-icon-ok"></div>' : '&nbsp;&ndash;') : featureValue
                 });
             });
             cloudFeaturesTabs.push({
-                xtype: 'fieldset',
-                cls: 'x-fieldset-separator-none',
+                xtype: 'container',
+                cls: 'x-container-fieldset',
                 tabConfig: {
                     title: key
                 },
 				defaults: {
 					anchor: '100%',
-					labelWidth: 210
+					labelWidth: 240
 				},
                 items: items
             });
@@ -77,7 +78,8 @@ Scalr.regPage('Scalr.ui.account2.environments.clouds.openstack', function (loadP
 			fieldLabel: 'Password',
 			name: 'password',
 			value: params['password'],
-			hidden: true
+			hidden: true,
+            selectOnFocus: true
 		}, {
 			xtype: 'textfield',
 			fieldLabel: 'API key',
@@ -89,13 +91,14 @@ Scalr.regPage('Scalr.ui.account2.environments.clouds.openstack', function (loadP
 			fieldLabel: 'Tenant name',
 			name: 'tenant_name',
 			value: params['tenant_name'],
-			hidden: true
+			hidden: true,
+            selectOnFocus: true
 		}, {
             xtype: 'checkbox',
             name: 'ssl_verifypeer',
             width: 260,
             checked: params['ssl_verifypeer'],
-            hidden: !(loadParams['platform'] == 'openstack' || loadParams['platform'] == 'ecs' || loadParams['platform'] == 'nebula'),
+            hidden: (loadParams['platform'] == 'rackspacengus' || loadParams['platform'] == 'rackspacenguk' || loadParams['platform'] == 'ecs'),
             boxLabel: 'Enable SSL certificate verification for Keystone endpoints'
         }, {
             xtype: 'tabpanel',

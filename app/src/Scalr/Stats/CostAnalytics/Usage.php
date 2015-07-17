@@ -8,7 +8,9 @@ use InvalidArgumentException;
 use ArrayIterator;
 use OutOfRangeException;
 use \DBFarm;
-use Scalr\Model\Entity\CloudInstanceType;
+use Scalr\Model\Loader\Field;
+use Scalr\Stats\CostAnalytics\Entity\UsageItemEntity;
+use Scalr\Stats\CostAnalytics\Entity\UsageTypeEntity;
 use \SERVER_PROPERTIES;
 use \Scalr_Environment;
 use \Scalr_Account_User;
@@ -103,15 +105,11 @@ class Usage
     }
 
     /**
-     * Initializes default cost centres and projects according to fixtures
-     *
-     * @return void
+     * Creates default Cost Center and Project from the fixture
      */
-    public function initDefault()
+    public function createDefaultCostCenter()
     {
         $fixture = $this->fixture();
-
-        $analytics = \Scalr::getContainer()->analytics;
 
         foreach ($fixture as $i => $c) {
             $ccId = key($c);
@@ -124,7 +122,7 @@ class Usage
                 $cc->name = sprintf('Cost center %02d', $i + 1);
                 $cc->save();
 
-                $cc->saveProperty(CostCentrePropertyEntity::NAME_DESCRIPTION, 'This is the automatically added cost center');
+                $cc->saveProperty(CostCentrePropertyEntity::NAME_DESCRIPTION, 'This Cost Center was added automatically.');
                 $cc->saveProperty(CostCentrePropertyEntity::NAME_BILLING_CODE, sprintf('CC-%02d', $i));
                 $cc->saveProperty(CostCentrePropertyEntity::NAME_LEAD_EMAIL, '');
 
@@ -148,7 +146,7 @@ class Usage
                     $pr->name = sprintf('Project %d%d', $i, $j + 1);
                     $pr->save();
 
-                    $pr->saveProperty(ProjectPropertyEntity::NAME_DESCRIPTION, 'This is the automatically generated project');
+                    $pr->saveProperty(ProjectPropertyEntity::NAME_DESCRIPTION, 'This Project was added automatically.');
                     $pr->saveProperty(ProjectPropertyEntity::NAME_BILLING_CODE, sprintf('PR-%02d-%02d', $i, $j));
                     $pr->saveProperty(ProjectPropertyEntity::NAME_LEAD_EMAIL, '');
 
@@ -163,6 +161,14 @@ class Usage
                 }
             }
         }
+    }
+
+    /**
+     * Initializes default cost centres and projects according to fixtures
+     */
+    public function initDefault()
+    {
+        $this->createDefaultCostCenter();
 
         //Assigns cost centre to each environment
         $res = $this->db->Execute("SELECT id FROM client_environments");
@@ -200,8 +206,6 @@ class Usage
 
     /**
      * Initializes server's properties which are necessary for cloud cost analytics
-     *
-     * @return   void
      */
     private function initServerProperties()
     {
@@ -323,7 +327,7 @@ class Usage
         $cc->save();
 
         $cc->saveProperty(CostCentrePropertyEntity::NAME_BILLING_CODE, "CC-" . $account->name);
-        $cc->saveProperty(CostCentrePropertyEntity::NAME_DESCRIPTION, "This is automatically generated Cost Center");
+        $cc->saveProperty(CostCentrePropertyEntity::NAME_DESCRIPTION, "This Cost Center was added automatically.");
         $cc->saveProperty(CostCentrePropertyEntity::NAME_LEAD_EMAIL, $user->getEmail());
         $cc->saveProperty(CostCentrePropertyEntity::NAME_LOCKED, false);
 
@@ -339,7 +343,7 @@ class Usage
         $project->save();
 
         $project->saveProperty(ProjectPropertyEntity::NAME_BILLING_CODE, "PR-" . $account->name);
-        $project->saveProperty(ProjectPropertyEntity::NAME_DESCRIPTION, "This is automatically generated Project");
+        $project->saveProperty(ProjectPropertyEntity::NAME_DESCRIPTION, "This Project was added automatically.");
         $project->saveProperty(ProjectPropertyEntity::NAME_LEAD_EMAIL, $user->getEmail());
 
         if (\Scalr::getContainer()->analytics->enabled) {
@@ -1511,13 +1515,13 @@ class Usage
 
             $rawUsage = $this->getFarmData(
                 $filter['accountId'], $criteria, $start, $end,
-                [$queryInterval, TagEntity::TAG_ID_PLATFORM, TagEntity::TAG_ID_FARM, 'instanceType'], true
+                [$queryInterval, TagEntity::TAG_ID_PLATFORM, TagEntity::TAG_ID_FARM, 'distributionType', 'usageType', 'usageItem'], true
             );
 
             //Requests data for the previous period
             $rawPrevUsage = $this->getFarmData(
                 $filter['accountId'], $criteria, $iterator->getPreviousStart(), $iterator->getPreviousEnd(),
-                [$queryInterval, TagEntity::TAG_ID_PLATFORM, TagEntity::TAG_ID_FARM, 'instanceType'], true
+                [$queryInterval, TagEntity::TAG_ID_PLATFORM, TagEntity::TAG_ID_FARM, 'distributionType', 'usageType', 'usageItem'], true
             );
 
             $rawQuarterUsage = $this->getFarmData(
@@ -1572,19 +1576,19 @@ class Usage
             ->load($rawPrevUsage)->calculatePercentage();
 
         if (isset($filter['accountId'])) {
-            $usgDetailed = new AggregationCollection(['period', 'farmId', 'instanceType' => ['envId', 'platform', 'cloudLocation']], [
+            $usgDetailed = new AggregationCollection(['period', 'farmId', 'distributionType', 'usageType' => ['name', 'displayName'], 'usageItem' => ['envId', 'platform', 'cloudLocation', 'id']], [
                 'cost'          => 'sum',
-                'minInstances'  => 'min',
-                'maxInstances'  => 'max',
-                'instanceHours' => 'sum',
+                'minUsage'      => 'min',
+                'maxUsage'      => 'max',
+                'usageHours'    => 'sum',
                 'workingHours'  => 'sum',
             ]);
 
-            $usgPrevDetailed = new AggregationCollection(['period', 'farmId', 'instanceType'], [
+            $usgPrevDetailed = new AggregationCollection(['period', 'farmId', 'distributionType', 'usageType', 'usageItem'], [
                 'cost'          => 'sum',
-                'minInstances'  => 'min',
-                'maxInstances'  => 'max',
-                'instanceHours' => 'sum',
+                'minUsage'      => 'min',
+                'maxUsage'      => 'max',
+                'usageHours'    => 'sum',
                 'workingHours'  => 'sum',
             ]);
         }
@@ -1769,7 +1773,7 @@ class Usage
 
                         //Projects data is empty
                         $r['clouds'] = [];
-                        $r['instances'] = [];
+                        $r['usageTypes'] = [];
 
                         $farmsData[$farmId]['data'][] = $r;
 
@@ -1820,8 +1824,6 @@ class Usage
 
                         // platform data
                         $cloudPlatformData = [];
-                        // instances data
-                        $instanceTypesData = [];
 
                         if (!empty($v['data'])) {
                             foreach ($v['data'] as $platform => $pv) {
@@ -1835,30 +1837,7 @@ class Usage
 
                         $r['clouds'] = $cloudPlatformData;
 
-                        if (!empty($usgDetailed['data'][$chartPoint->key]['data'][$farmId]['data'])) {
-                            foreach ($usgDetailed['data'][$chartPoint->key]['data'][$farmId]['data'] as $instanceType => $iv) {
-                                $instanceTypeName = $this->getInstanceTypeName($instanceType, $iv['envId'], $iv['platform'], $iv['cloudLocation']);
-
-                                $instanceDataPoint = $this->getDetailedPointDataArray(
-                                    $instanceType, $instanceTypeName, $iv,
-                                    (isset($usgPrevDetailed['data'][$chartPoint->previousPeriodKey]['data'][$farmId]['data'][$instanceType])
-                                        ? $usgPrevDetailed['data'][$chartPoint->previousPeriodKey]['data'][$farmId]['data'][$instanceType]
-                                        : null),
-                                    (isset($usgDetailed['data'][$prevPointKey]['data'][$farmId]['data'][$instanceType])
-                                        ? $usgDetailed['data'][$prevPointKey]['data'][$farmId]['data'][$instanceType]
-                                        : null)
-                                );
-
-                                $instanceDataPoint['min'] = $iv['minInstances'];
-                                $instanceDataPoint['max'] = $iv['maxInstances'];
-                                $instanceDataPoint['avg'] = !empty($iv['workingHours']) ? round(($iv['instanceHours'] / $iv['workingHours'])) : 0;
-                                $instanceDataPoint['hours'] = $iv['instanceHours'];
-
-                                $instanceTypesData[] = $instanceDataPoint;
-                            }
-                        }
-
-                        $r['instances'] = $instanceTypesData;
+                        $r['distributionTypes'] = (!empty($usgDetailed) && !empty($usgPrevDetailed)) ? $this->getDistributionTypesData($chartPoint, $prevPointKey, $usgDetailed, $usgPrevDetailed, $farmId) : [];
 
                         $farmsData[$farmId]['name'] = $this->fetchFarmName($farmId);
 
@@ -1902,11 +1881,19 @@ class Usage
         //Subtotals by farms
         $usage2 = new AggregationCollection(['farmId' => ['envId'], 'platform'], ['cost' => 'sum']);
 
+        //Subtotals by distr types
+        $usage3 = (new AggregationCollection(['distributionType'], ['cost' => 'sum']))
+            ->load($rawUsage)->calculatePercentage();
+
         //Previous period subtotals by platforms
         $prevUsage = new AggregationCollection(['platform', 'farmId'], ['cost' => 'sum']);
 
         //Previous period subtotals by farms
         $prevUsage2 = new AggregationCollection(['farmId', 'platform'], ['cost' => 'sum']);
+
+        //Previous period subtotals by distr types
+        $prevUsage3 = (new AggregationCollection(['distributionType'], ['cost' => 'sum']))
+            ->load($rawPrevUsage)->calculatePercentage();
 
         if (empty($top5farms)) {
             //Loads current period
@@ -2046,17 +2033,31 @@ class Usage
             $farmsTotal[] = $cl;
         }
 
+        // Build cost dist types total
+        $distributionTypesTotal = [];
+
+        $it = $usage3->getIterator();
+
+        foreach ($it as $distributionType => $costUsage) {
+            $pp = isset($prevUsage3['data'][$distributionType]) ? $prevUsage3['data'][$distributionType] : null;
+
+            $distributionTypeDataTotal = $this->getTotalDataArray($distributionType, $distributionType, $costUsage, $pp, null, [], null, true);
+
+            $distributionTypesTotal[] = $distributionTypeDataTotal;
+        }
+
         $data = [
             'reportVersion'    => '0.1.0',
             'totals' => [
-                'cost'         => round($usage['cost'], 2),
-                'prevCost'     => round($prevUsage['cost'], 2),
-                'growth'       => round($usage['cost'] - $prevUsage['cost'], 2),
-                'growthPct'    => $prevUsage['cost'] == 0 ? null : round(abs((($usage['cost'] - $prevUsage['cost']) / $prevUsage['cost']) * 100), 0),
-                'clouds'       => $cloudsTotal,
-                'farms'        => $farmsTotal,
-                'trends'       => $this->calculateSpendingTrends(['projectId' => $projectId], $timeline, $queryInterval, $iterator->getEnd()),
-                'forecastCost' => null,
+                'cost'              => round($usage['cost'], 2),
+                'prevCost'          => round($prevUsage['cost'], 2),
+                'growth'            => round($usage['cost'] - $prevUsage['cost'], 2),
+                'growthPct'         => $prevUsage['cost'] == 0 ? null : round(abs((($usage['cost'] - $prevUsage['cost']) / $prevUsage['cost']) * 100), 0),
+                'clouds'            => $cloudsTotal,
+                'farms'             => $farmsTotal,
+                'distributionTypes' => $distributionTypesTotal,
+                'trends'            => $this->calculateSpendingTrends(['projectId' => $projectId], $timeline, $queryInterval, $iterator->getEnd()),
+                'forecastCost'      => null,
             ],
             'timeline'          => $timeline,
             'clouds'            => $cloudsData,
@@ -2129,44 +2130,44 @@ class Usage
         //Requests data for the specified period
         $rawUsage = $this->getFarmData(
             $environment->clientId, $criteria, $start, $end,
-            [$queryInterval, TagEntity::TAG_ID_FARM_ROLE, 'instanceType'], true
+            [$queryInterval, TagEntity::TAG_ID_FARM_ROLE, 'distributionType', 'usageType', 'usageItem'], true
         );
 
         //Requests data for the previous period
         $rawPrevUsage = $this->getFarmData(
             $environment->clientId, $criteria, $iterator->getPreviousStart(), $iterator->getPreviousEnd(),
-            [$queryInterval, TagEntity::TAG_ID_FARM_ROLE, 'instanceType'], true
+            [$queryInterval, TagEntity::TAG_ID_FARM_ROLE, 'distributionType', 'usageType', 'usageItem'], true
         );
 
-        $usgByInstanceDetailed = (new AggregationCollection(['period', 'farmRoleId', 'instanceType' => ['envId', 'platform', 'cloudLocation']], [
+        $usgByInstanceDetailed = (new AggregationCollection(['period', 'farmRoleId', 'distributionType', 'usageType' => ['name', 'displayName'], 'usageItem' => ['envId', 'platform', 'cloudLocation', 'id']], [
                 'cost'          => 'sum',
-                'minInstances'  => 'min',
-                'maxInstances'  => 'max',
-                'instanceHours' => 'sum',
+                'minUsage'      => 'min',
+                'maxUsage'      => 'max',
+                'usageHours'    => 'sum',
                 'workingHours'  => 'sum',
             ]))->load($rawUsage)->calculatePercentage();
 
-        $usgByInstancePrevDetailed = (new AggregationCollection(['period', 'farmRoleId', 'instanceType'], [
+        $usgByInstancePrevDetailed = (new AggregationCollection(['period', 'farmRoleId', 'distributionType', 'usageType', 'usageItem'], [
                 'cost'          => 'sum',
-                'minInstances'  => 'min',
-                'maxInstances'  => 'max',
-                'instanceHours' => 'sum',
+                'minUsage'      => 'min',
+                'maxUsage'      => 'max',
+                'usageHours'    => 'sum',
                 'workingHours'  => 'sum',
             ]))->load($rawPrevUsage)->calculatePercentage();
 
-        $usgDetailed = (new AggregationCollection(['period', 'instanceType' => ['envId', 'platform', 'cloudLocation']], [
+        $usgDetailed = (new AggregationCollection(['period', 'distributionType', 'usageType' => ['name', 'displayName'], 'usageItem' => ['envId', 'platform', 'cloudLocation', 'id']], [
                 'cost'          => 'sum',
-                'minInstances'  => 'min',
-                'maxInstances'  => 'max',
-                'instanceHours' => 'sum',
+                'minUsage'      => 'min',
+                'maxUsage'      => 'max',
+                'usageHours'    => 'sum',
                 'workingHours'  => 'sum',
             ]))->load($rawUsage)->calculatePercentage();
 
-        $usgPrevDetailed = (new AggregationCollection(['period', 'instanceType'], [
+        $usgPrevDetailed = (new AggregationCollection(['period', 'distributionType', 'usageType', 'usageItem'], [
                 'cost'          => 'sum',
-                'minInstances'  => 'min',
-                'maxInstances'  => 'max',
-                'instanceHours' => 'sum',
+                'minUsage'      => 'min',
+                'maxUsage'      => 'max',
+                'usageHours'    => 'sum',
                 'workingHours'  => 'sum',
             ]))->load($rawPrevUsage)->calculatePercentage();
 
@@ -2194,37 +2195,12 @@ class Usage
             $pptTotal = isset($usgByInstanceDetailed['data'][$prevPointKey]) ? $usgByInstanceDetailed['data'][$prevPointKey] : null;
             $pointDataTotal = $this->getPointDataArray($currentPeriodTotal, $ppTotal, $pptTotal);
 
-            $instanceTypesData = [];
-
-            if (!empty($usgDetailed['data'][$chartPoint->key]['data'])) {
-                foreach ($usgDetailed['data'][$chartPoint->key]['data'] as $instanceType => $iv) {
-                    $instanceTypeName = $this->getInstanceTypeName($instanceType, $iv['envId'], $iv['platform'], $iv['cloudLocation']);
-
-                    $instanceDataPoint = $this->getDetailedPointDataArray(
-                        $instanceType, $instanceTypeName, $iv,
-                        (isset($usgPrevDetailed['data'][$chartPoint->previousPeriodKey]['data'][$instanceType])
-                            ? $usgPrevDetailed['data'][$chartPoint->previousPeriodKey]['data'][$instanceType]
-                            : null),
-                        (isset($usgDetailed['data'][$prevPointKey]['data'][$instanceType])
-                            ? $usgDetailed['data'][$prevPointKey]['data'][$instanceType]
-                            : null)
-                    );
-
-                    $instanceDataPoint['min'] = $iv['minInstances'];
-                    $instanceDataPoint['max'] = $iv['maxInstances'];
-                    $instanceDataPoint['avg'] = !empty($iv['workingHours']) ? round(($iv['instanceHours'] / $iv['workingHours'])) : 0;
-                    $instanceDataPoint['hours'] = $iv['instanceHours'];
-
-                    $instanceTypesData[] = $instanceDataPoint;
-                }
-            }
-
             $timeline[] = [
-                'datetime' => $chartPoint->dt->format('Y-m-d H:00'),
-                'label'    => $chartPoint->label,
-                'onchart'  => $chartPoint->show,
-                'instances'=> $instanceTypesData,
-                'events'   => null
+                'datetime'          => $chartPoint->dt->format('Y-m-d H:00'),
+                'label'             => $chartPoint->label,
+                'onchart'           => $chartPoint->show,
+                'distributionTypes' => $this->getDistributionTypesData($chartPoint, $prevPointKey, $usgDetailed, $usgPrevDetailed),
+                'events'            => null
             ] + $pointDataTotal;
 
             //Period - FarmRoles subtotals
@@ -2247,7 +2223,7 @@ class Usage
 
                         $r = $this->getPointDataArray(null, $pp, $ppt);
 
-                        $r['instances'] = [];
+                        $r['distributionTypes'] = [];
 
                         $farmRolesData[$farmRoleId]['name'] = AccountTagEntity::fetchName($farmRoleId, TagEntity::TAG_ID_FARM_ROLE);
                         $farmRolesData[$farmRoleId]['data'][] = $r;
@@ -2295,38 +2271,78 @@ class Usage
                     if (!$iterator->isFuture()) {
                         $r = $this->getPointDataArray($v, $pp, $ppt);
 
-                        // instances data
-                        $instancesData = [];
+                        $distrTypesData = [];
 
                         if (!empty($v['data'])) {
-                            foreach ($v['data'] as $instanceType => $instanceValue) {
-                                if (isset($pp['data'][$instanceType])) {
-                                    $ppp = $pp['data'][$instanceType];
+                            foreach ($v['data'] as $distribType => $distribUsage) {
+                                $usageTypesData = [];
+
+                                if (isset($pp['data'][$distribType])) {
+                                    $distrPp = $pp['data'][$distribType];
                                 } else {
-                                    $ppp = null;
+                                    $distrPp = null;
                                 }
 
-                                if (isset($ppt['data'][$instanceType])) {
-                                    $pppt = $ppt['data'][$instanceType];
+                                if (isset($ppt['data'][$distribType])) {
+                                    $distrPpt = $ppt['data'][$distribType];
                                 } else {
-                                    $pppt = null;
+                                    $distrPpt = null;
                                 }
 
-                                $instanceTypeName = $this->getInstanceTypeName($instanceType, $instanceValue['envId'], $instanceValue['platform'], $instanceValue['cloudLocation']);
+                                $distrTypeData = $this->getDetailedPointDataArray(
+                                    $distribType, $distribType, $distribUsage, $distrPp, $distrPpt
+                                );
 
-                                $instanceData = $this->getDetailedPointDataArray(
-                                        $instanceType, $instanceTypeName,
-                                        $instanceValue, $ppp, $pppt
-                                    );
-                                $instanceData['min'] = $instanceValue['minInstances'];
-                                $instanceData['max'] = $instanceValue['maxInstances'];
-                                $instanceData['avg'] = !empty($instanceValue['workingHours']) ? round(($instanceValue['instanceHours'] / $instanceValue['workingHours'])) : 0;
-                                $instanceData['hours'] = $instanceValue['instanceHours'];
-                                $instancesData[] = $instanceData;
+                                foreach ($distribUsage['data'] as $usageType => $usageData) {
+                                    $uTypeData = [
+                                        'id'            => $usageType,
+                                        'name'          => $usageData['name'],
+                                        'displayName'   => $usageData['displayName'],
+                                        'measure'       => $this->getMeasure($usageData['name'])
+                                    ];
+
+                                    foreach ($usageData['data'] as $usageItem => $usageItemValue) {
+                                        if (isset($pp['data'][$distribType]['data'][$usageType]['data'][$usageItem])) {
+                                            $ppItem = $pp['data'][$distribType]['data'][$usageType]['data'][$usageItem];
+                                        } else {
+                                            $ppItem = null;
+                                        }
+
+                                        if (isset($ppt['data'][$distribType]['data'][$usageType]['data'][$usageItem])) {
+                                            $pptItem = $ppt['data'][$distribType]['data'][$usageType]['data'][$usageItem];
+                                        } else {
+                                            $pptItem = null;
+                                        }
+
+                                        if ($usageData['name'] == UsageTypeEntity::NAME_COMPUTE_BOX_USAGE) {
+                                            $usageItemName = $this->getInstanceTypeName($usageItem, $usageItemValue['envId'], $usageItemValue['platform'], $usageItemValue['cloudLocation']);
+                                        } else {
+                                            $usageItemName = $usageItem;
+                                        }
+
+                                        $itemData = $this->getDetailedPointDataArray(
+                                            $usageItemValue['id'], $usageItemName,
+                                            $usageItemValue, $ppItem, $pptItem
+                                        );
+
+                                        $itemData['costPct'] = !empty($v['cost']) && round($v['cost'], 2) ? round(($itemData['cost'] / round($v['cost'], 2)) * 100) : 0;
+                                        $itemData['min'] = $usageItemValue['minUsage'];
+                                        $itemData['max'] = $usageItemValue['maxUsage'];
+                                        $itemData['avg'] = !empty($usageItemValue['workingHours']) ? round(($usageItemValue['usageHours'] / $usageItemValue['workingHours'])) : 0;
+                                        $itemData['hours'] = $usageItemValue['usageHours'];
+                                        $itemData['displayHours'] = $this->getDisplayHours($usageItemValue['usageHours']);
+                                        $uTypeData['usageItems'][] = $itemData;
+                                    }
+
+                                    $usageTypesData[] = $uTypeData;
+                                }
+
+                                $distrTypeData['usageTypes'] = $usageTypesData;
+                                $distrTypesData[] = $distrTypeData;
                             }
                         }
 
-                        $r['instances'] = $instancesData;
+                        $r['distributionTypes'] = $distrTypesData;
 
                         $farmRolesData[$farmRoleId]['name'] = AccountTagEntity::fetchName($farmRoleId, TagEntity::TAG_ID_FARM_ROLE);
                         $farmRolesData[$farmRoleId]['data'][] = $r;
@@ -2352,53 +2368,51 @@ class Usage
             }
         }
 
-        //Subtotals by instanceType
-        $usage = (new AggregationCollection(['farmRoleId' => ['cloudLocation', 'platform'], 'instanceType' => ['envId', 'platform', 'cloudLocation']], [
+        //Subtotals by usageItem
+        $usage = (new AggregationCollection(['farmRoleId' => ['cloudLocation', 'platform'], 'distributionType', 'usageType' => ['name', 'displayName'], 'usageItem' => ['envId', 'platform', 'cloudLocation', 'id']], [
                 'cost'          => 'sum',
-                'minInstances'  => 'min',
-                'maxInstances'  => 'max',
-                'instanceHours' => 'sum',
+                'minUsage'      => 'min',
+                'maxUsage'      => 'max',
+                'usageHours'    => 'sum',
                 'workingHours'  => 'sum',
             ]))->load($rawUsage)->calculatePercentage();
 
-        //Previous period subtotals by instanceType
-        $prevUsage = (new AggregationCollection(['farmRoleId', 'instanceType'], [
+        //Previous period subtotals by usageItem
+        $prevUsage = (new AggregationCollection(['farmRoleId', 'distributionType', 'usageType', 'usageItem'], [
                 'cost'          => 'sum',
-                'minInstances'  => 'min',
-                'maxInstances'  => 'max',
-                'instanceHours' => 'sum',
+                'minUsage'      => 'min',
+                'maxUsage'      => 'max',
+                'usageHours'    => 'sum',
                 'workingHours'  => 'sum',
             ]))->load($rawPrevUsage)->calculatePercentage();
 
-        //Subtotals by instanceType total
-        $usageInst = (new AggregationCollection(['instanceType' => ['envId', 'platform', 'cloudLocation']], [
+        //Subtotals by usageItem total
+        $usageInst = (new AggregationCollection(['distributionType', 'usageType' => ['name', 'displayName'], 'usageItem' => ['envId', 'platform', 'cloudLocation', 'id']], [
                 'cost'          => 'sum',
-                'minInstances'  => 'min',
-                'maxInstances'  => 'max',
-                'instanceHours' => 'sum',
+                'minUsage'      => 'min',
+                'maxUsage'      => 'max',
+                'usageHours'    => 'sum',
                 'workingHours'  => 'sum',
             ]))->load($rawUsage)->calculatePercentage();
 
-        //Previous period subtotals by instanceType total
-        $prevUsageInst = (new AggregationCollection(['instanceType'], [
+        //Previous period subtotals by usageItem total
+        $prevUsageInst = (new AggregationCollection(['distributionType', 'usageType', 'usageItem'], [
                 'cost'          => 'sum',
-                'minInstances'  => 'min',
-                'maxInstances'  => 'max',
-                'instanceHours' => 'sum',
+                'minUsage'      => 'min',
+                'maxUsage'      => 'max',
+                'usageHours'    => 'sum',
                 'workingHours'  => 'sum',
             ]))->load($rawPrevUsage)->calculatePercentage();
 
         if ($iterator->getWholePreviousPeriodEnd() != $iterator->getPreviousEnd()) {
             $rawPrevUsageWhole = $this->getFarmData(
                 $environment->clientId, $criteria, $iterator->getPreviousStart(), $iterator->getWholePreviousPeriodEnd(),
-                [TagEntity::TAG_ID_FARM_ROLE, 'instanceType'], true
+                [TagEntity::TAG_ID_FARM_ROLE, 'distributionType', 'usageType', 'usageItem'], true
             );
             //Previous whole period usage subtotals by farm role
             $prevUsageWhole = (new AggregationCollection(['farmRoleId'], ['cost' => 'sum']))->load($rawPrevUsageWhole);
-            $prevUsageWholeInst = (new AggregationCollection(['instanceType'], ['cost' => 'sum']))->load($rawPrevUsageWhole);
         } else {
             $prevUsageWhole  = $prevUsage;
-            $prevUsageWholeInst = $prevUsageInst;
         }
 
         //Build farm roles total
@@ -2416,62 +2430,132 @@ class Usage
             $frPrev['cloudLocation'] = $p['cloudLocation'];
 
             if ($it->hasChildren()) {
-                $instancesTotal = [];
+                $distrTypesTotal = [];
 
-                foreach ($it->getChildren() as $instanceType => $inst) {
-                    $instPrev = isset($prevUsage['data'][$farmRoleId]['data'][$instanceType])
-                            ? $prevUsage['data'][$farmRoleId]['data'][$instanceType]
-                            : null;
+                foreach ($it->getChildren() as $distrType => $distrUsage) {
+                    $usageTypesTotal = [];
 
-                    $instanceTypeName = $this->getInstanceTypeName($instanceType, $inst['envId'], $inst['platform'], $inst['cloudLocation']);
+                    $distrTypeDataPrev = isset($prevUsage['data'][$farmRoleId]['data'][$distrType])
+                        ? $prevUsage['data'][$farmRoleId]['data'][$distrType]
+                        : null;
 
-                    $instanceTotal = $this->getTotalDataArray($instanceType, $instanceTypeName, $inst, $instPrev, null, [], $iterator, true);
-                    $instanceTotal['min'] = $inst['minInstances'];
-                    $instanceTotal['max'] = $inst['maxInstances'];
-                    $instanceTotal['avg'] = !empty($inst['workingHours']) ? round(($inst['instanceHours'] / $inst['workingHours'])) : 0;
-                    $instanceTotal['hours'] = $inst['instanceHours'];
-                    $instancesTotal[] = $instanceTotal;
+                    $distrTypesDataPoint = $this->getTotalDataArray($distrType, $distrType, $distrUsage, $distrTypeDataPrev, null, [], $iterator, true);
+
+                    foreach ($distrUsage['data'] as $usageType => $usageTypeData) {
+                        $usageTypeTotal = [
+                            'id'            => $usageType,
+                            'name'          => $usageTypeData['name'],
+                            'displayName'   => $usageTypeData['displayName'],
+                            'measure'       => $this->getMeasure($usageTypeData['name'])
+                        ];
+
+                        $usageItemsDataTotal = [];
+
+                        if (isset($usageTypeData['data'])) {
+                            foreach ($usageTypeData['data'] as $usageItem => $iUsage) {
+                                $iUsagePrev = isset($prevUsage['data'][$farmRoleId]['data'][$distrType]['data'][$usageType]['data'][$usageItem])
+                                    ? $prevUsage['data'][$farmRoleId]['data'][$distrType]['data'][$usageType]['data'][$usageItem]
+                                    : null;
+
+                                if ($usageTypeData['name'] == UsageTypeEntity::NAME_COMPUTE_BOX_USAGE) {
+                                    $usageItemName = $this->getInstanceTypeName($usageItem, $iUsage['envId'], $iUsage['platform'], $iUsage['cloudLocation']);
+                                } else {
+                                    $usageItemName = $usageItem;
+                                }
+
+                                $usageItemDataTotal = $this->getTotalDataArray($iUsage['id'], $usageItemName, $iUsage, $iUsagePrev, null, [], $iterator, true);
+
+                                $usageItemDataTotal['costPct'] = !empty($p['cost']) && round($p['cost'], 2) ? round(($usageItemDataTotal['cost'] / round($p['cost'], 2)) * 100) : 0;
+                                $usageItemDataTotal['min'] = $iUsage['minUsage'];
+                                $usageItemDataTotal['max'] = $iUsage['maxUsage'];
+                                $usageItemDataTotal['avg'] = !empty($iUsage['workingHours']) ? round(($iUsage['usageHours'] / $iUsage['workingHours'])) : 0;
+                                $usageItemDataTotal['hours'] = $iUsage['usageHours'];
+                                $usageItemDataTotal['displayHours'] = $this->getDisplayHours($iUsage['usageHours']);
+                                $usageItemsDataTotal[] = $usageItemDataTotal;
+                            }
+                        }
+
+                        $usageTypeTotal['usageItems'] = $usageItemsDataTotal;
+                        $usageTypesTotal[] = $usageTypeTotal;
+                    }
+
+                    $distrTypesDataPoint['usageTypes'] = $usageTypesTotal;
+                    $distrTypesTotal[] = $distrTypesDataPoint;
                 }
 
-                $frPrev['instances'] = $instancesTotal;
+                $frPrev['distributionTypes'] = $distrTypesTotal;
             } else {
-                $frPrev['instances'] = [];
+                $frPrev['distributionTypes'] = [];
             }
 
             $farmRolesTotal[] = $frPrev;
         }
 
-        //Build farm roles total
-        $instanceTypesTotal = [];
+        // Build cost dist types total
+        $distributionTypesTotal = [];
 
         $it = $usageInst->getIterator();
 
-        foreach ($it as $instanceTypeTotal => $p) {
-            $pp = isset($prevUsageInst['data'][$instanceTypeTotal]) ? $prevUsageInst['data'][$instanceTypeTotal] : null;
+        foreach ($it as $distributionType => $costUsage) {
+            $pp = isset($prevUsageInst['data'][$distributionType]) ? $prevUsageInst['data'][$distributionType] : null;
 
-            $pw = isset($prevUsageWholeInst['data'][$instanceTypeTotal]) ? $prevUsageWholeInst['data'][$instanceTypeTotal] : null;
+            $distributionTypeDataTotal = $this->getTotalDataArray($distributionType, $distributionType, $costUsage, $pp, null, [], $iterator, true);
 
-            $instanceTypeName = $this->getInstanceTypeName($instanceTypeTotal, $p['envId'], $p['platform'], $p['cloudLocation']);
+            $usageTypesDataTotal = [];
 
-            $instanceTotalData = $this->getTotalDataArray($instanceTypeTotal, $instanceTypeName, $p, $pp, $pw, $instanceTypesData, $iterator);
-            $instanceTotalData['min'] = $p['minInstances'];
-            $instanceTotalData['max'] = $p['maxInstances'];
-            $instanceTotalData['avg'] = !empty($p['workingHours']) ? round(($p['instanceHours'] / $p['workingHours'])) : 0;
-            $instanceTotalData['hours'] = $p['instanceHours'];
+            foreach ($costUsage['data'] as $usageType => $typeData) {
+                $usageTypeDataTotal = [
+                    'id'            => $usageType,
+                    'name'          => $typeData['name'],
+                    'displayName'   => $typeData['displayName'],
+                    'measure'       => $this->getMeasure($typeData['name'])
+                ];
 
-            $instanceTypesTotal[] = $instanceTotalData;
+                $usageItemsTotal = [];
+
+                if (isset($typeData['data'])) {
+                    foreach ($typeData['data'] as $usageItem => $itemValue) {
+                        $pp = isset($prevUsageInst['data'][$distributionType]['data'][$usageType]['data'][$usageItem]) ? $prevUsageInst['data'][$distributionType]['data'][$usageType]['data'][$usageItem] : null;
+
+                        if ($typeData['name'] == UsageTypeEntity::NAME_COMPUTE_BOX_USAGE) {
+                            $usageItemName = $this->getInstanceTypeName($usageItem, $itemValue['envId'], $itemValue['platform'], $itemValue['cloudLocation']);
+                        } else {
+                            $usageItemName = $usageItem;
+                        }
+
+                        $usageItemTotal = $this->getTotalDataArray($itemValue['id'], $usageItemName, $itemValue, $pp, null, [], $iterator, true);
+
+                        $usageItemTotal['costPct'] = !empty($usageInst['cost']) && round($usageInst['cost'], 2) ? round(($usageItemTotal['cost'] / round($usageInst['cost'], 2)) * 100) : 0;
+                        $usageItemTotal['min'] = $itemValue['minUsage'];
+                        $usageItemTotal['max'] = $itemValue['maxUsage'];
+                        $usageItemTotal['avg'] = !empty($itemValue['workingHours']) ? round(($itemValue['usageHours'] / $itemValue['workingHours'])) : 0;
+                        $usageItemTotal['hours'] = $itemValue['usageHours'];
+                        $usageItemTotal['displayHours'] = $this->getDisplayHours($itemValue['usageHours']);
+
+                        $usageItemsTotal[] = $usageItemTotal;
+                    }
+                }
+
+                $usageTypeDataTotal['usageItems'] = $usageItemsTotal;
+
+                $usageTypesDataTotal[] = $usageTypeDataTotal;
+            }
+
+            $distributionTypeDataTotal['usageTypes'] = $usageTypesDataTotal;
+
+            $distributionTypesTotal[] = $distributionTypeDataTotal;
         }
 
         $data = [
             'totals' => [
-                'cost'         => round($usage['cost'], 2),
-                'prevCost'     => round($prevUsage['cost'], 2),
-                'growth'       => round($usage['cost'] - $prevUsage['cost'], 2),
-                'growthPct'    => $prevUsage['cost'] == 0 ? null : round(abs((($usage['cost'] - $prevUsage['cost']) / $prevUsage['cost']) * 100), 0),
-                'farmRoles'    => $farmRolesTotal,
-                'instanceTypes'=> $instanceTypesTotal,
-                'trends'       => $this->calculateSpendingTrends(['farmId' => $farmId], $timeline, $queryInterval, $iterator->getEnd(), $environment->clientId),
-                'forecastCost' => null,
+                'cost'                => round($usage['cost'], 2),
+                'prevCost'            => round($prevUsage['cost'], 2),
+                'growth'              => round($usage['cost'] - $prevUsage['cost'], 2),
+                'growthPct'           => $prevUsage['cost'] == 0 ? null : round(abs((($usage['cost'] - $prevUsage['cost']) / $prevUsage['cost']) * 100), 0),
+                'farmRoles'           => $farmRolesTotal,
+                'distributionTypes'   => $distributionTypesTotal,
+                'trends'              => $this->calculateSpendingTrends(['farmId' => $farmId], $timeline, $queryInterval, $iterator->getEnd(), $environment->clientId),
+                'forecastCost'        => null,
             ],
             'timeline'          => $timeline,
             'farmRoles'         => $farmRolesData,
@@ -2742,21 +2826,21 @@ class Usage
     /**
      * Gets cost metering data
      *
-     * @param string $accountId              Client identifier
-     * @param array $criteria                Filter array. ['fieldName' => 'fieldValue']
+     * @param string   $accountId            Client identifier
+     * @param array    $criteria             Filter array. ['fieldName' => 'fieldValue'] or ['fieldName' => ['value1', 'value2']]
      * @param DateTime $begin                Begin date
      * @param DateTime $end                  End date
      *
      * @param array|string $breakdown        optional The identifier of the tag or list
      *                                       looks like ['day', TagEntity::TAG_ID_FARM ...]
-     *                                       The inteval to group data [12 hours, day, week, month]
+     *                                       The interval to group data [12 hours, day, week, month]
      *
      * @param bool $rawResult                optional Whether it should return raw result
      *
      * @return AggregationCollection|array   Returns collection or array with raw result
      * @throws InvalidArgumentException
      */
-    public function getFarmData($accountId, $criteria, DateTime $begin, DateTime $end, $breakdown = null, $rawResult = false)
+    public function getFarmData($accountId, array $criteria, DateTime $begin, DateTime $end, $breakdown = null, $rawResult = false)
     {
         $now = new DateTime("now", new DateTimeZone('UTC'));
         $usageHourly = false;
@@ -2785,43 +2869,57 @@ class Usage
             $obj = new UsageHourlyEntity();
 
             if ($breakdown !== null) {
-                $selectFields .= ", MIN(`u`.`num`) AS `min_instances`, MAX(`u`.`num`) AS `max_instances`,";
+                $selectFields .= ", MIN(`u`.`num`) AS `min_usage`, MAX(`u`.`num`) AS `max_usage`,";
             } else {
-                $selectFields .= ", `u`.`num` AS `min_instances`, `u`.`num` AS `max_instances`,";
+                $selectFields .= ", `u`.`num` AS `min_usage`, `u`.`num` AS `max_usage`,";
             }
 
-            $selectFields .= "NULL AS `instance_hours`, NULL AS `working_hours`";
+            $selectFields .= "`u`.`num` AS `usage_hours`, 1 AS `working_hours`";
 
             $dtime = 'dtime';
         } else {
             $obj = new FarmUsageDailyEntity();
 
             if ($breakdown !== null) {
-                $selectFields .= ", MIN(`u`.`min_instances`) AS `min_instances`, MAX(`u`.`max_instances`) AS `max_instances`, SUM(`u`.`instance_hours`) AS `instance_hours`, SUM(`u`.`working_hours`) AS `working_hours`";
+                $selectFields .= ", MIN(`u`.`min_usage`) AS `min_usage`, MAX(`u`.`max_usage`) AS `max_usage`, SUM(`u`.`usage_hours`) AS `usage_hours`, SUM(`u`.`working_hours`) AS `working_hours`";
             } else {
-                $selectFields .= ", `u`.`min_instances`, `u`.`max_instances`, `u`.`instance_hours`, `u`.`working_hours`";
+                $selectFields .= ", `u`.`min_usage`, `u`.`max_usage`, `u`.`usage_hours`, `u`.`working_hours`";
             }
 
             $dtime = 'date';
         }
 
-        $aFields = ['cost', 'projectId', 'minInstances', 'maxInstances', 'cloudLocation', 'instanceHours', 'workingHours', 'platform', 'accountId', 'envId'];
+        $aFields = ['cost', 'projectId', 'minUsage', 'maxUsage', 'cloudLocation', 'usageHours', 'workingHours', 'platform', 'accountId', 'envId'];
         $where = ' u.account_id = ' . $this->cadb->escape($accountId);
 
         $it = $obj->getIterator();
 
-        if (is_array($criteria)) {
-            foreach ($criteria as $name => $value) {
-                $field = $it->getField($name);
-                if (!is_null($field)) {
-                    $value = $field->type->toDb($value);
+        $getValue = function (Field $field, $value) {
+            $value = $field->type->toDb($value);
 
-                    if ($field->getType() instanceof UuidType) {
-                        $value = "UNHEX(" . $this->cadb->qstr($value) . ")";
-                    }
+            if ($field->getType() instanceof UuidType) {
+                $value = "UNHEX(" . $this->cadb->qstr($value) . ")";
+            }
 
-                    $where .= ' AND ' . $field->getColumnName('u') . '=' . $value;
+            return $value;
+        };
+
+        foreach ($criteria as $name => $value) {
+            $field = $it->getField($name);
+
+            if (is_null($field)) {
+                throw new InvalidArgumentException(sprintf("Invalid field name: %s", $name));
+            }
+
+            if (!is_array($value)) {
+                $where .= ' AND ' . $field->getColumnName('u') . '=' . $getValue($field, $value);
+            } else {
+                $values = [];
+
+                foreach ($value as $val) {
+                    $values[] = $getValue($field, $val);
                 }
+                $where .= ' AND ' . $field->getColumnName('u') . "IN ('" . implode(',', $values) . "')";
             }
         }
 
@@ -2839,14 +2937,16 @@ class Usage
             TagEntity::TAG_ID_FARM_ROLE      => ['farmRoleId', 'u'],
             TagEntity::TAG_ID_PROJECT        => ['projectId', 'u'],
             'cloudLocation'                  => ['cloudLocation', 'u'],
-            'instanceType'                   => ['instanceType', 'u'],
+            'usageItem'                      => ['name', 'ui'],
+            'usageType'                      => ['id', 'ut'],
+            'distributionType'               => ['costDistrType', 'ut']
         ];
 
         $group = '';
+        $join = '';
         $subtotals = [];
 
         if (!empty($breakdown)) {
-
             foreach ($breakdown as $t) {
                 if (!isset($groupFields[$t])) {
                     throw new InvalidArgumentException(sprintf(
@@ -2862,6 +2962,27 @@ class Usage
 
                     $group .= ($groupFields[$t][2] ? : "`period`") . ', ';
 
+                } else if ($t == 'usageItem' || $t == 'usageType' || $t == 'distributionType') {
+                    $subtotals[] = $t;
+
+                    if ($t == 'usageItem') {
+                        $entity = new UsageItemEntity();
+                        $selectFields = '`ui`.`id`,' . $selectFields;
+                    } else {
+                        $entity = new UsageTypeEntity();
+
+                        if ($t == 'usageType') {
+                            $selectFields = '`ut`.`name`, `ut`.`display_name`,' . $selectFields;
+                        }
+                    }
+
+                    $uiIterator = $entity->getIterator();
+
+                    $field = $uiIterator->getField($groupFields[$t][0]);
+
+                    $selectFields = $field->getColumnName($groupFields[$t][1], $t) . ', ' . $selectFields;
+
+                    $group .= '`' . $t . '`, ';
                 } else {
                     $field = $it->getField($groupFields[$t][0]);
 
@@ -2875,6 +2996,13 @@ class Usage
                 }
             }
 
+            if (in_array('usageItem', $breakdown) || in_array('usageType', $breakdown)) {
+                $join = "
+                    JOIN usage_items ui ON ui.id = u.usage_item
+                    JOIN usage_types ut ON ut.id = ui.usage_type
+                ";
+            }
+
             $group = 'GROUP BY ' . substr($group, 0, -2);
         }
 
@@ -2885,9 +3013,9 @@ class Usage
         } else {
             $ret = new AggregationCollection($subtotals, [
                 'cost'          => 'sum',
-                'minInstances'  => 'min',
-                'maxInstances'  => 'max',
-                'instanceHours' => 'sum',
+                'minUsage'      => 'min',
+                'maxUsage'      => 'max',
+                'usageHours'    => 'sum',
                 'workingHours'  => 'sum',
             ]);
         }
@@ -2899,6 +3027,7 @@ class Usage
             $statement = "
                 SELECT " . $selectFields . "
                 FROM `farm_usage_d` u
+                " . $join . "
                 WHERE " . $where . "
                 AND u.`date` >= ? AND u.`date` <= ?
                 " . $group . "
@@ -2909,6 +3038,7 @@ class Usage
             $statement = "
                 SELECT " . str_replace('`date`', '`dtime`', $selectFields) . "
                 FROM `usage_h` u
+                " . $join . "
                 WHERE " . $where . "
                 AND u.`dtime` >= ? AND u.`dtime` <= ?
                 " . $group . "
@@ -2921,7 +3051,7 @@ class Usage
             $dtimeType->toDb($end),
         ));
 
-        $aFields = array_diff(array_merge($aFields, $subtotals), ['period']);
+        $aFields = array_diff(array_merge($aFields, $subtotals), ['period', 'usageItem', 'usageType', 'distributionType']);
 
         while ($rec = $res->FetchRow()) {
             $item = new FarmUsageDailyEntity();
@@ -2933,7 +3063,37 @@ class Usage
                 $arr[$col] = $item->$col;
             }
 
-            $arr['period'] = (string)$rec['period'];
+            $arr['period'] = (string) $rec['period'];
+
+            if (isset($rec['usageItem'])) {
+                $arr['usageItem'] = (string) $rec['usageItem'];
+
+                $uiEntity = new UsageItemEntity();
+
+                $uiIterator = $uiEntity->getIterator();
+
+                $type = $uiIterator->getField('id')->getType();
+
+                $arr['id'] = $type->toPhp($rec['id']);
+            }
+
+            if (isset($rec['usageType'])) {
+                $utEntity = new UsageTypeEntity();
+
+                $utIterator = $utEntity->getIterator();
+
+                $type = $utIterator->getField($groupFields['usageType'][0])->getType();
+
+                $arr['usageType'] = $type->toPhp($rec['usageType']);
+
+                $arr['displayName'] = $rec['display_name'];
+
+                $arr['name'] = (string) $rec['name'];
+            }
+
+            if (isset($rec['distributionType'])) {
+                $arr['distributionType'] = (int) $rec['distributionType'];
+            }
 
             if ($rawResult) {
                 $ret[] = $arr;
@@ -2980,24 +3140,26 @@ class Usage
         $criteria = ['farmId' => $farmId];
 
         //Current period data
-        $farmUsageCurrent = $this->getFarmData($accountId, $criteria, $iterator->getStart(), $iterator->getEnd(), [$queryInterval, TagEntity::TAG_ID_FARM_ROLE, 'instanceType'], true);
+        $farmUsageCurrent = $this->getFarmData($accountId, $criteria, $iterator->getStart(),
+            $iterator->getEnd(), [$queryInterval, TagEntity::TAG_ID_FARM_ROLE, 'distributionType', 'usageItem'], true);
 
         //Previous period data
-        $farmUsagePrevious = $this->getFarmData($accountId, $criteria, $iterator->getPreviousStart(), $iterator->getPreviousEnd(), [$queryInterval, TagEntity::TAG_ID_FARM_ROLE, 'instanceType'], true);
+        $farmUsagePrevious = $this->getFarmData($accountId, $criteria, $iterator->getPreviousStart(),
+            $iterator->getPreviousEnd(), [$queryInterval, TagEntity::TAG_ID_FARM_ROLE, 'distributionType', 'usageItem'], true);
 
-        $farmUsageCurrentCollection = (new AggregationCollection(['period', 'farmRoleId', 'instanceType' => ['envId', 'platform', 'cloudLocation']], [
+        $farmUsageCurrentCollection = (new AggregationCollection(['period', 'farmRoleId', 'distributionType', 'usageItem' => ['envId', 'platform', 'cloudLocation', 'id']], [
             'cost'          => 'sum',
-            'minInstances'  => 'min',
-            'maxInstances'  => 'max',
-            'instanceHours' => 'sum',
+            'minUsage'      => 'min',
+            'maxUsage'      => 'max',
+            'usageHours'    => 'sum',
             'workingHours'  => 'sum',
         ]))->load($farmUsageCurrent)->calculatePercentage();
 
-        $farmUsagePreviousCollection = (new AggregationCollection(['period', 'farmRoleId', 'instanceType'], [
+        $farmUsagePreviousCollection = (new AggregationCollection(['period', 'farmRoleId', 'distributionType', 'usageItem'], [
             'cost'          => 'sum',
-            'minInstances'  => 'min',
-            'maxInstances'  => 'max',
-            'instanceHours' => 'sum',
+            'minUsage'      => 'min',
+            'maxUsage'      => 'max',
+            'usageHours'    => 'sum',
             'workingHours'  => 'sum',
         ]))->load($farmUsagePrevious)->calculatePercentage();
 
@@ -3084,16 +3246,22 @@ class Usage
                         $costData['hours'] = [];
 
                         if (isset($roleData['data'])) {
-                            foreach ($roleData['data'] as $instanceType => $usage) {
-                                $instanceTypeName = $this->getInstanceTypeName($instanceType, $usage['envId'], $usage['platform'], $usage['cloudLocation']);
+                            foreach ($roleData['data'] as $distrType => $distrUsage) {
+                                if ($distrType != UsageTypeEntity::COST_DISTR_TYPE_COMPUTE) {
+                                    continue;
+                                }
+                                foreach ($distrUsage['data'] as $usageItem => $usage) {
+                                    $usageItemName = $this->getInstanceTypeName($usageItem, $usage['envId'], $usage['platform'], $usage['cloudLocation']);
 
-                                $costData['hours'][$instanceTypeName] = [
-                                    'hours' => $usage['instanceHours'],
-                                    'min'   => $usage['minInstances'],
-                                    'max'   => $usage['maxInstances'],
-                                    'avg'   => !empty($usage['workingHours']) ? round(($usage['instanceHours'] / $usage['workingHours'])) : 0
-                                ];
+                                    $costData['hours'][$usageItemName] = [
+                                        'hours' => $usage['usageHours'],
+                                        'min'   => $usage['minUsage'],
+                                        'max'   => $usage['maxUsage'],
+                                        'avg'   => !empty($usage['workingHours']) ? round(($usage['usageHours'] / $usage['workingHours'])) : 0
+                                    ];
+                                }
                             }
+
                         }
 
                         $farmRoles[$farmRoleId]['data'][] = $costData;
@@ -3166,13 +3334,13 @@ class Usage
     }
 
     /**
-     * Gets cost analytics for enviroment scope
+     * Gets cost analytics for environment scope
      *
-     * @param   Scalr_Environment  $env       Current enviroment
+     * @param   Scalr_Environment  $env       Current environment
      * @param   string             $mode      The mode (week, month, quarter, year)
      * @param   string             $startDate The start date of the period in UTC ('Y-m-d')
      * @param   string             $endDate   The end date of the period in UTC ('Y-m-d')
-     * @return  array     Returns cost analytics data for enviroment scope
+     * @return  array     Returns cost analytics data for environment scope
      */
     public function getEnvironmentPeriodData(Scalr_Environment $env, $mode, $startDate, $endDate)
     {
@@ -3195,13 +3363,13 @@ class Usage
         //Requests data for the specified period
         $rawUsage = $this->getFarmData(
             $env->clientId, $criteria, $start, $end,
-            [$queryInterval, TagEntity::TAG_ID_PLATFORM, TagEntity::TAG_ID_FARM, 'instanceType'], true
+            [$queryInterval, TagEntity::TAG_ID_PLATFORM, TagEntity::TAG_ID_FARM, 'distributionType', 'usageType', 'usageItem'], true
         );
 
         //Requests data for the previous period
         $rawPrevUsage = $this->getFarmData(
             $env->clientId, $criteria, $iterator->getPreviousStart(), $iterator->getPreviousEnd(),
-            [$queryInterval, TagEntity::TAG_ID_PLATFORM, TagEntity::TAG_ID_FARM, 'instanceType'], true
+            [$queryInterval, TagEntity::TAG_ID_PLATFORM, TagEntity::TAG_ID_FARM, 'distributionType', 'usageType', 'usageItem'], true
         );
 
         $max = 5;
@@ -3229,19 +3397,19 @@ class Usage
         $usgByPlatformPrevDetailed = (new AggregationCollection(['period', 'platform'], ['cost' => 'sum']))
             ->load($rawPrevUsage)->calculatePercentage();
 
-        $usgDetailed = new AggregationCollection(['period', 'farmId', 'instanceType' => ['envId', 'platform', 'cloudLocation']], [
+        $usgDetailed = new AggregationCollection(['period', 'farmId', 'distributionType', 'usageType' => ['name', 'displayName'], 'usageItem' => ['envId', 'platform', 'cloudLocation', 'id']], [
             'cost'          => 'sum',
-            'minInstances'  => 'min',
-            'maxInstances'  => 'max',
-            'instanceHours' => 'sum',
+            'minUsage'      => 'min',
+            'maxUsage'      => 'max',
+            'usageHours'    => 'sum',
             'workingHours'  => 'sum',
         ]);
 
-        $usgPrevDetailed = new AggregationCollection(['period', 'farmId', 'instanceType'], [
+        $usgPrevDetailed = new AggregationCollection(['period', 'farmId', 'distributionType', 'usageType', 'usageItem'], [
             'cost'          => 'sum',
-            'minInstances'  => 'min',
-            'maxInstances'  => 'max',
-            'instanceHours' => 'sum',
+            'minUsage'      => 'min',
+            'maxUsage'      => 'max',
+            'usageHours'    => 'sum',
             'workingHours'  => 'sum',
         ]);
 
@@ -3409,7 +3577,7 @@ class Usage
                         $r = $this->getPointDataArray(null, $pp, $ppt);
 
                         $r['clouds'] = [];
-                        $r['instances'] = [];
+                        $r['usageTypes'] = [];
 
                         $farmsData[$farmId]['data'][] = $r;
 
@@ -3460,8 +3628,6 @@ class Usage
 
                         // platform data
                         $cloudPlatformData = [];
-                        // instances data
-                        $instanceTypesData = [];
 
                         if (!empty($v['data'])) {
                             foreach ($v['data'] as $platform => $pv) {
@@ -3475,30 +3641,7 @@ class Usage
 
                         $r['clouds'] = $cloudPlatformData;
 
-                        if (!empty($usgDetailed['data'][$chartPoint->key]['data'][$farmId]['data'])) {
-                            foreach ($usgDetailed['data'][$chartPoint->key]['data'][$farmId]['data'] as $instanceType => $iv) {
-                                $instanceTypeName = $this->getInstanceTypeName($instanceType, $iv['envId'], $iv['platform'], $iv['cloudLocation']);
-
-                                $instanceDataPoint = $this->getDetailedPointDataArray(
-                                    $instanceType, $instanceTypeName, $iv,
-                                    (isset($usgPrevDetailed['data'][$chartPoint->previousPeriodKey]['data'][$farmId]['data'][$instanceType])
-                                        ? $usgPrevDetailed['data'][$chartPoint->previousPeriodKey]['data'][$farmId]['data'][$instanceType]
-                                        : null),
-                                    (isset($usgDetailed['data'][$prevPointKey]['data'][$farmId]['data'][$instanceType])
-                                        ? $usgDetailed['data'][$prevPointKey]['data'][$farmId]['data'][$instanceType]
-                                        : null)
-                                );
-
-                                $instanceDataPoint['min'] = $iv['minInstances'];
-                                $instanceDataPoint['max'] = $iv['maxInstances'];
-                                $instanceDataPoint['avg'] = !empty($iv['workingHours']) ? round(($iv['instanceHours'] / $iv['workingHours'])) : 0;
-                                $instanceDataPoint['hours'] = $iv['instanceHours'];
-
-                                $instanceTypesData[] = $instanceDataPoint;
-                            }
-                        }
-
-                        $r['instances'] = $instanceTypesData;
+                        $r['distributionTypes'] = $this->getDistributionTypesData($chartPoint, $prevPointKey, $usgDetailed, $usgPrevDetailed, $farmId);
 
                         $farmsData[$farmId]['name'] = $this->fetchFarmName($farmId);
 
@@ -3542,11 +3685,19 @@ class Usage
         //Subtotals by farms
         $usage2 = new AggregationCollection(['farmId' => ['projectId', 'envId'], 'platform'], ['cost' => 'sum']);
 
+        //Subtotals by distr types
+        $usage3 = (new AggregationCollection(['distributionType'], ['cost' => 'sum']))
+            ->load($rawUsage)->calculatePercentage();
+
         //Previous period subtotals by platforms
         $prevUsage = new AggregationCollection(['platform', 'farmId'], ['cost' => 'sum']);
 
         //Previous period subtotals by farms
         $prevUsage2 = new AggregationCollection(['farmId', 'platform'], ['cost' => 'sum']);
+
+        //Previous period subtotals by distr types
+        $prevUsage3 = (new AggregationCollection(['distributionType'], ['cost' => 'sum']))
+            ->load($rawPrevUsage)->calculatePercentage();
 
         if (empty($top5farms)) {
             //Loads current period
@@ -3671,16 +3822,30 @@ class Usage
             $farmsTotal[] = $cl;
         }
 
+        // Build cost dist types total
+        $distributionTypesTotal = [];
+
+        $it = $usage3->getIterator();
+
+        foreach ($it as $distributionType => $costUsage) {
+            $pp = isset($prevUsage3['data'][$distributionType]) ? $prevUsage3['data'][$distributionType] : null;
+
+            $distributionTypeDataTotal = $this->getTotalDataArray($distributionType, $distributionType, $costUsage, $pp, null, [], null, true);
+
+            $distributionTypesTotal[] = $distributionTypeDataTotal;
+        }
+
         $data = [
             'totals' => [
-                'cost'         => round($usage['cost'], 2),
-                'prevCost'     => round($prevUsage['cost'], 2),
-                'growth'       => round($usage['cost'] - $prevUsage['cost'], 2),
-                'growthPct'    => $prevUsage['cost'] == 0 ? null : round(abs((($usage['cost'] - $prevUsage['cost']) / $prevUsage['cost']) * 100), 0),
-                'clouds'       => $cloudsTotal,
-                'farms'        => $farmsTotal,
-                'trends'       => $this->calculateSpendingTrends(['envId' => $env->id], $timeline, $queryInterval, $iterator->getEnd(), $env->clientId),
-                'forecastCost' => null,
+                'cost'              => round($usage['cost'], 2),
+                'prevCost'          => round($prevUsage['cost'], 2),
+                'growth'            => round($usage['cost'] - $prevUsage['cost'], 2),
+                'growthPct'         => $prevUsage['cost'] == 0 ? null : round(abs((($usage['cost'] - $prevUsage['cost']) / $prevUsage['cost']) * 100), 0),
+                'clouds'            => $cloudsTotal,
+                'farms'             => $farmsTotal,
+                'distributionTypes' => $distributionTypesTotal,
+                'trends'            => $this->calculateSpendingTrends(['envId' => $env->id], $timeline, $queryInterval, $iterator->getEnd(), $env->clientId),
+                'forecastCost'      => null,
             ],
             'timeline'          => $timeline,
             'clouds'            => $cloudsData,
@@ -3781,6 +3946,283 @@ class Usage
         );
 
         return $isLead ? true : false;
+    }
+
+    /**
+     * Gets period data for top farms
+     *
+     * @param   int        $accountId       The current client id
+     * @param   array      $allowedEnvs     Array of allowed environments' ids for current user
+     * @param   string     $mode            The mode (week, month, quarter, year)
+     * @param   string     $startDate       The start date of the period in UTC ('Y-m-d')
+     * @param   string     $endDate         The end date of the period in UTC ('Y-m-d')
+     * @param   int        $farmCount       Top farms count
+     * @return  array      Returns cost analytics data for environment scope
+     */
+    public function getTopFarmsPeriodData($accountId, array $allowedEnvs, $mode, $startDate, $endDate, $farmCount = 5)
+    {
+        $utcTz = new DateTimeZone('UTC');
+
+        $iterator = ChartPeriodIterator::create($mode, new DateTime($startDate, $utcTz), new DateTime($endDate, $utcTz), 'UTC');
+
+        $start = $iterator->getStart();
+
+        $end = $iterator->getEnd();
+
+        //Interval which is used in the database query for grouping
+        $queryInterval = preg_replace('/^1 /', '', $iterator->getInterval());
+        $criteria = !empty($allowedEnvs) ? ['envId' => $allowedEnvs] : [];
+
+        //Requests data for the specified period
+        $rawUsage = $this->getFarmData(
+            $accountId, $criteria, $start, $end,
+            [$queryInterval, TagEntity::TAG_ID_FARM], true
+        );
+
+        //Requests data for the previous period
+        $rawPrevUsage = $this->getFarmData(
+            $accountId, $criteria, $iterator->getPreviousStart(), $iterator->getPreviousEnd(),
+            [$queryInterval, TagEntity::TAG_ID_FARM], true
+        );
+
+        //Calculates top five farms for the specified period
+        $topFarms = [];
+
+        $arr = (new AggregationCollection(['farmId'], ['cost' => 'sum']))->load($rawUsage)->getArrayCopy();
+
+        if (!empty($arr['data']) && count($arr['data']) > $farmCount + 1) {
+            uasort($arr['data'], function ($a, $b) {
+                if ($a['cost'] == $b['cost']) {
+                    return 0;
+                }
+                return $a['cost'] < $b['cost'] ? 1 : -1;
+            });
+
+            $i = 0;
+
+            foreach ($arr['data'] as $farmId => $v) {
+                $topFarms[$farmId] = $farmId;
+
+                if (++$i >= $farmCount){
+                    break;
+                }
+            }
+        }
+
+        //Subtotals by farms
+        $usage = new AggregationCollection(['farmId'], ['cost' => 'sum']);
+
+        //Previous period subtotals by farms
+        $prevUsage = new AggregationCollection(['farmId'], ['cost' => 'sum']);
+
+        if (empty($topFarms)) {
+            //Loads current period
+            foreach ($rawUsage as $item) {
+                $usage->append($item);
+            }
+
+            //Loads previous period
+            foreach ($rawPrevUsage as $item) {
+                $prevUsage->append($item);
+            }
+        } else {
+            //Loads current period and aggregates top 5 farms
+            foreach ($rawUsage as $item) {
+                if (array_key_exists($item['farmId'], $topFarms)) {
+                    $usage->append($item);
+                }
+            }
+
+            //Loads previous period and aggregates top 5 farms
+            foreach ($rawPrevUsage as $item) {
+                if (array_key_exists($item['farmId'], $topFarms)) {
+                    $prevUsage->append($item);
+                }
+            }
+        }
+
+        //Calculates percentage
+        $usage->calculatePercentage();
+
+        if ($iterator->getWholePreviousPeriodEnd() != $iterator->getPreviousEnd()) {
+            $rawPrevUsageWhole = $this->getFarmData(
+                $accountId, ['envId' => $allowedEnvs], $iterator->getPreviousStart(), $iterator->getWholePreviousPeriodEnd(),
+                [TagEntity::TAG_ID_FARM], true
+            );
+            //Previous whole period usage subtotals by farm
+            $prevUsageWhole = (new AggregationCollection(['farmId'], ['cost' => 'sum']))->load($rawPrevUsageWhole);
+        } else {
+            $prevUsageWhole  = $prevUsage;
+        }
+
+        //Build farms total
+        $farmsTotal = [];
+
+        $it = $usage->getIterator();
+
+        foreach ($it as $farmId => $p) {
+            $pp = isset($prevUsage['data'][$farmId]) ? $prevUsage['data'][$farmId] : null;
+
+            $pw = isset($prevUsageWhole['data'][$farmId]) ? $prevUsageWhole['data'][$farmId] : null;
+
+            $cl = $this->getTotalDataArray(
+                $farmId,
+                $this->fetchFarmName($farmId),
+                $p, $pp, $pw, [], null, true
+            );
+
+            $farmsTotal[] = $cl;
+        }
+
+        return $farmsTotal;
+    }
+
+    /**
+     * Gets array of usage types and usage items with calculated data
+     *
+     * @param ChartPointInfo        $chartPoint         Chart point data
+     * @param int|null              $prevPointKey       Previous point key
+     * @param AggregationCollection $usgDetailed        Usage data
+     * @param AggregationCollection $usgPrevDetailed    Previous usage data
+     * @param int|null              $farmId             optional Farm id
+     * @return array
+     */
+    private function getDistributionTypesData(ChartPointInfo $chartPoint, $prevPointKey, AggregationCollection $usgDetailed, AggregationCollection $usgPrevDetailed, $farmId = null)
+    {
+        $distrTypes = [];
+
+        if (!empty($farmId)) {
+            $totalCost =  isset($usgDetailed['data'][$chartPoint->key]['data'][$farmId]['cost'])
+                ? round($usgDetailed['data'][$chartPoint->key]['data'][$farmId]['cost'], 2)
+                : 0;
+            $distrUsage = $usgDetailed['data'][$chartPoint->key]['data'][$farmId];
+            $usagePrev = $usgPrevDetailed['data'][$chartPoint->previousPeriodKey]['data'][$farmId];
+            $usagePrevPoint = $usgDetailed['data'][$prevPointKey]['data'][$farmId];
+        } else {
+            $totalCost = isset($usgDetailed['data'][$chartPoint->key]['cost'])
+                ? round($usgDetailed['data'][$chartPoint->key]['cost'], 2)
+                : 0;
+            $distrUsage = $usgDetailed['data'][$chartPoint->key];
+            $usagePrev = $usgPrevDetailed['data'][$chartPoint->previousPeriodKey];
+            $usagePrevPoint = $usgDetailed['data'][$prevPointKey];
+        }
+
+        if (!empty($distrUsage['data'])) {
+            foreach ($distrUsage['data'] as $distrType => $usage) {
+                $usageTypesData = [];
+
+                $distrTypesDataPoint = $this->getDetailedPointDataArray(
+                    $distrType, $distrType, $usage,
+                    (isset($usagePrev['data'][$distrType])
+                        ? $usagePrev['data'][$distrType]
+                        : null),
+                    (isset($usagePrevPoint['data'][$distrType])
+                        ? $usagePrevPoint['data'][$distrType]
+                        : null)
+                );
+
+                foreach ($usage['data'] as $usageType => $uv) {
+                    $usageTypeDataPoint = [
+                        'id'            => $usageType,
+                        'name'          => $uv['name'],
+                        'displayName'   => $uv['displayName'],
+                        'measure'       => $this->getMeasure($uv['name'])
+                    ];
+
+                    if (!empty($uv['data'])) {
+                        $usageItemsData = [];
+
+                        foreach ($uv['data'] as $usageItem => $iv) {
+                            if ($uv['name'] == UsageTypeEntity::NAME_COMPUTE_BOX_USAGE) {
+                                $usageItemName = $this->getInstanceTypeName($usageItem, $iv['envId'], $iv['platform'], $iv['cloudLocation']);
+                            } else {
+                                $usageItemName = $usageItem;
+                            }
+
+                            $usageItemDataPoint = $this->getDetailedPointDataArray(
+                                $iv['id'], $usageItemName, $iv,
+                                (isset($usagePrev['data'][$distrType]['data'][$usageType]['data'][$usageItem])
+                                    ? $usagePrev['data'][$distrType]['data'][$usageType]['data'][$usageItem]
+                                    : null),
+                                (isset($usagePrevPoint['data'][$distrType]['data'][$usageType]['data'][$usageItem])
+                                    ? $usagePrevPoint['data'][$distrType]['data'][$usageType]['data'][$usageItem]
+                                    : null)
+                            );
+
+                            $usageItemDataPoint['costPct'] = !empty($totalCost) ? round(($usageItemDataPoint['cost'] / $totalCost) * 100) : 0;
+                            $usageItemDataPoint['min'] = $iv['minUsage'];
+                            $usageItemDataPoint['max'] = $iv['maxUsage'];
+                            $usageItemDataPoint['avg'] = !empty($iv['workingHours']) ? round(($iv['usageHours'] / $iv['workingHours'])) : 0;
+                            $usageItemDataPoint['hours'] = $iv['usageHours'];
+                            $usageItemDataPoint['displayHours'] = $this->getDisplayHours($iv['usageHours']);
+
+                            $usageItemsData[] = $usageItemDataPoint;
+                        }
+
+                        $usageTypeDataPoint['usageItems'] = $usageItemsData;
+                    }
+
+                    $usageTypesData[] = $usageTypeDataPoint;
+                }
+
+                $distrTypesDataPoint['usageTypes'] = $usageTypesData;
+                $distrTypes[] = $distrTypesDataPoint;
+            }
+        }
+
+        return $distrTypes;
+    }
+
+    /**
+     * Gets measure for selected usage type
+     *
+     * @param  string $usageType Usage type name
+     * @return string
+     */
+    private function getMeasure($usageType)
+    {
+        $measure = '';
+
+        switch ($usageType) {
+            case UsageTypeEntity::NAME_COMPUTE_BOX_USAGE:
+                $measure = 'hours';
+                break;
+            case UsageTypeEntity::NAME_STORAGE_EBS:
+                $measure = 'GB-hours';
+                break;
+            case UsageTypeEntity::NAME_STORAGE_EBS_IOPS:
+                $measure = 'operations';
+                break;
+            case UsageTypeEntity::NAME_STORAGE_EBS_IO:
+                $measure = 'requests';
+                break;
+            case UsageTypeEntity::NAME_BANDWIDTH_IN:
+            case UsageTypeEntity::NAME_BANDWIDTH_OUT:
+            case UsageTypeEntity::NAME_BANDWIDTH_REGIONAL:
+                $measure = 'MB';
+                break;
+        }
+
+        return $measure;
+    }
+
+    /**
+     *  Gets formatted user-friendly hours field
+     *
+     * @param int|float $hours        Usage hours
+     * @param int       $precision    optional Precision
+     * @return string
+     */
+    private function getDisplayHours($hours, $precision = 0)
+    {
+        if (empty($hours)) {
+            return 0;
+        }
+
+        $base = log($hours, 1000);
+        $suffixes = array('', 'k', 'M', 'G', 'T');
+
+        return round(pow(1000, $base - floor($base)), $precision) . $suffixes[floor($base)];
     }
 
 }

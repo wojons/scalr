@@ -13,29 +13,36 @@ Feature: Scalarizr update service
             | 'a0000000-0000-0000-0000-000000000002' | 2       | 2           | 'running' | 1     | NULL        | '127.0.0.1' | 'ec2'    |
 
         Database has server_properties records
-          | server_id                              | name                  | value                                                      |
-          | 'a0000000-0000-0000-0000-000000000001' | 'scalarizr.updc_port' | '8008'                                                     |
-          | 'a0000000-0000-0000-0000-000000000001' | 'scalarizr.key'       | '8mYTcBxiE70DtXCBRjn7AMuTQNzBJJcTa5uFok24X40ePafq1gUyyg==' |
-          | 'a0000000-0000-0000-0000-000000000001' | 'scalarizr.version'   | '2.7.7' |
-          | 'a0000000-0000-0000-0000-000000000002' | 'scalarizr.updc_port' | '8008'                                                     |
-          | 'a0000000-0000-0000-0000-000000000002' | 'scalarizr.key'       | '9mYTcBxiE70DtXCBRjn7AMuTQNzBJJcTa5uFok24X40ePafq1gUyyg==' |
-          | 'a0000000-0000-0000-0000-000000000002' | 'scalarizr.version'   | '2.7.8' |
+            | server_id                              | name                  | value                                                      |
+            | 'a0000000-0000-0000-0000-000000000001' | 'scalarizr.updc_port' | '8008'                                                     |
+            | 'a0000000-0000-0000-0000-000000000001' | 'scalarizr.key'       | '8mYTcBxiE70DtXCBRjn7AMuTQNzBJJcTa5uFok24X40ePafq1gUyyg==' |
+            | 'a0000000-0000-0000-0000-000000000001' | 'scalarizr.version'   | '2.7.7' |
+            | 'a0000000-0000-0000-0000-000000000002' | 'scalarizr.updc_port' | '8008'                                                     |
+            | 'a0000000-0000-0000-0000-000000000002' | 'scalarizr.key'       | '9mYTcBxiE70DtXCBRjn7AMuTQNzBJJcTa5uFok24X40ePafq1gUyyg==' |
+            | 'a0000000-0000-0000-0000-000000000002' | 'scalarizr.version'   | '2.7.8' |
 
         Database has farm_settings records
-          | farmid | name               | value   |
-          | 1      | 'szr.upd.schedule' | '* * *' |
-          | 2      | 'ec2.vpc.id'       | '5'     |
+            | farmid | name               | value   |
+            | 1      | 'szr.upd.schedule' | '* * *' |
+            | 2      | 'ec2.vpc.id'       | '5'     |
         
-        Database has farm_role_settings records
-          | farm_roleid | name                        | value   |
-          | 1           | 'scheduled_on'              | ''      |
-          | 2           | 'router.scalr.farm_role_id' | '10'    |
-          | 2           | 'base.upd.schedule'         | '* * *' |
-          | 2           | 'scheduled_on'              | ''      |
+        Database has farm_roles records
+            | id | role_id |
+            | 1  | 11      |
+            | 2  | 22      |
+
+        Database has roles records
+            | id | os_id          |
+            | 11 | 'ubuntu-12-04' |
+            | 22 | 'ubuntu-12-04' |
 
         Database has farm_role_settings records
-          | farm_roleid  | name            | value       |
-          | 10           | 'router.vpc.ip' | '127.0.0.1' |
+            | farm_roleid | name                        | value       |
+            | 1           | 'scheduled_on'              | ''          |
+            | 2           | 'router.scalr.farm_role_id' | '10'        |
+            | 2           | 'base.upd.schedule'         | '* * *'     |
+            | 2           | 'scheduled_on'              | ''          |
+            | 10          | 'router.vpc.ip'             | '127.0.0.1' |
 
         White Rabbit starts scalarizr update client on port 8008
         White Rabbit starts vpc router
@@ -61,22 +68,29 @@ Feature: Scalarizr update service
             | 'a0000000-0000-0000-0000-000000000001' | 1       | 1           | 'running' | 1     | '127.0.0.1' | NULL        | 'ec2'    |
 
         Database has server_properties records
-          | server_id                              | name                  | value                                                      |
-          | 'a0000000-0000-0000-0000-000000000001' | 'scalarizr.updc_port' | '8008'                                                     |
-          | 'a0000000-0000-0000-0000-000000000001' | 'scalarizr.key'       | '8mYTcBxiE70DtXCBRjn7AMuTQNzBJJcTa5uFok24X40ePafq1gUyyg==' |
-          | 'a0000000-0000-0000-0000-000000000001' | 'scalarizr.version'   | '2.7.7' |
+            | server_id                              | name                  | value                                                      |
+            | 'a0000000-0000-0000-0000-000000000001' | 'scalarizr.updc_port' | '8008'                                                     |
+            | 'a0000000-0000-0000-0000-000000000001' | 'scalarizr.key'       | '8mYTcBxiE70DtXCBRjn7AMuTQNzBJJcTa5uFok24X40ePafq1gUyyg==' |
+            | 'a0000000-0000-0000-0000-000000000001' | 'scalarizr.version'   | '2.7.7' |
 
         Database has farm_settings records
-          | farmid | name               | value   |
-          | 1      | 'szr.upd.schedule' | '* * *' |
+            | farmid | name               | value   |
+            | 1      | 'szr.upd.schedule' | '* * *' |
+
+        Database has farm_roles records
+            | id | role_id |
+            | 1  | 11      |
+            | 2  | 22      |
+
+        Database has roles records
+            | id | os_id          |
+            | 11 | 'ubuntu-12-04' |
+            | 22 | 'ubuntu-12-04' |
 
         Database has farm_role_settings records
-          | farm_roleid | name                        | value   |
-          | 1           | 'scheduled_on'              | ''      |
-
-        Database has farm_role_settings records
-          | farm_roleid  | name            | value       |
-          | 10           | 'router.vpc.ip' | '127.0.0.1' |
+            | farm_roleid | name            | value       |
+            | 1           | 'scheduled_on'  | ''          |
+            | 10          | 'router.vpc.ip' | '127.0.0.1' |
 
         White Rabbit starts scalarizr update client on port 8008
         White Rabbit starts vpc router
@@ -101,18 +115,28 @@ Feature: Scalarizr update service
             | 'a0000000-0000-0000-0000-000000000001' | 1       | 1           | 'running' | 1     | '127.0.0.1' | NULL        | 'ec2'    |
 
         Database has server_properties records
-          | server_id                              | name                  | value                                                      |
-          | 'a0000000-0000-0000-0000-000000000001' | 'scalarizr.updc_port' | '8008'                                                     |
-          | 'a0000000-0000-0000-0000-000000000001' | 'scalarizr.key'       | '8mYTcBxiE70DtXCBRjn7AMuTQNzBJJcTa5uFok24X40ePafq1gUyyg==' |
-          | 'a0000000-0000-0000-0000-000000000001' | 'scalarizr.version'   | '2.7.7' |
+            | server_id                              | name                  | value                                                      |
+            | 'a0000000-0000-0000-0000-000000000001' | 'scalarizr.updc_port' | '8008'                                                     |
+            | 'a0000000-0000-0000-0000-000000000001' | 'scalarizr.key'       | '8mYTcBxiE70DtXCBRjn7AMuTQNzBJJcTa5uFok24X40ePafq1gUyyg==' |
+            | 'a0000000-0000-0000-0000-000000000001' | 'scalarizr.version'   | '2.7.7' |
 
         Database has farm_settings records
-          | farmid | name               | value   |
-          | 1      | 'szr.upd.schedule' | '* * *' |
+            | farmid | name               | value   |
+            | 1      | 'szr.upd.schedule' | '* * *' |
         
+        Database has farm_roles records
+            | id | role_id |
+            | 1  | 11      |
+            | 2  | 22      |
+
+        Database has roles records
+            | id | os_id          |
+            | 11 | 'ubuntu-12-04' |
+            | 22 | 'ubuntu-12-04' |
+
         Database has farm_role_settings records
-          | farm_roleid | name                        | value   |
-          | 1           | 'scheduled_on'              | ''      |
+            | farm_roleid | name                        | value   |
+            | 1           | 'scheduled_on'              | ''      |
 
         White Rabbit starts failed scalarizr update client on port 8008
         White Rabbit waits 1 seconds

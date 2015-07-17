@@ -7,7 +7,6 @@ Scalr.regPage('Scalr.ui.core.api', function (loadParams, moduleParams) {
 		fieldDefaults: {
 			labelWidth: 110
 		},
-        layout: 'auto',
 		items: [{
 			xtype: 'fieldset',
 			title: 'Enable API access for &laquo;' + Scalr.user['userName'] + '&raquo;',
@@ -18,7 +17,7 @@ Scalr.regPage('Scalr.ui.core.api', function (loadParams, moduleParams) {
 			checkboxName: 'api.enabled',
             cls: 'x-fieldset-separator-none',
 			inputValue: 1,
-            defaults:{
+            defaults: {
                 anchor: '100%'
             },
 			items: [{
@@ -77,7 +76,7 @@ Scalr.regPage('Scalr.ui.core.api', function (loadParams, moduleParams) {
 				growMax: 200,
 				value: params['api.ip.whitelist']
 			}]
-		}],
+        }],
 
 		dockedItems: [{
 			xtype: 'container',

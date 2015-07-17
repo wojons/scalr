@@ -1,6 +1,7 @@
 <?php
 namespace Scalr\Service\OpenStack\Client;
 
+use Scalr\Service\OpenStack\Client\Auth\LoaderFactory;
 use Scalr\Service\OpenStack\Services\ServiceInterface;
 use Scalr\Service\OpenStack\Exception\RestClientException;
 use Scalr\Service\OpenStack\OpenStackConfig;
@@ -76,6 +77,24 @@ class RestClient implements ClientInterface
             'timeout'        => \Scalr::config('scalr.openstack.api_client.timeout'),
             'connecttimeout' => 30
         ));
+
+        $proxySettings = $this->getConfig()->getProxySettings();
+
+        if (!empty($proxySettings)) {
+            $req->setOptions([
+                'proxyhost' => $proxySettings['host'],
+                'proxyport' => $proxySettings['port'],
+                'proxytype' => $proxySettings['type']
+            ]);
+
+            if ($proxySettings['user']) {
+                $req->setOptions([
+                    'proxyauth'     => "{$proxySettings['user']}:{$proxySettings['pass']}",
+                    'proxyauthtype' => $proxySettings['authtype']
+                ]);
+            }
+        }
+
         return $req;
     }
 
@@ -187,8 +206,10 @@ class RestClient implements ClientInterface
             //removes trailing slashes
             $endpoint = rtrim($endpoint, '/');
         }
+
         $req->addHeaders($headers);
         $req->setUrl($endpoint . $path);
+
         if ($verb == 'POST') {
             $req->setBody(json_encode($options));
         } elseif ($verb == 'PUT') {
@@ -230,18 +251,18 @@ class RestClient implements ClientInterface
     {
         $cfg = $this->getConfig();
 
-        $options = ['auth' => $cfg->getAuthQueryString()];
+        $options = $cfg->getAuthQueryString();
 
         $response = $this->call(
             $cfg->getIdentityEndpoint(),
-            '/tokens', $options, 'POST', null, false
+            $cfg->getIdentityVersion() == 3 ? '/auth/tokens' : '/tokens', $options, 'POST', null, false
         );
 
         if ($response->hasError() === false) {
             $str = $response->getContent();
             $result = json_decode($str);
 
-            $cfg->setAuthToken(AuthToken::loadJson($str));
+            $cfg->setAuthToken(LoaderFactory::makeToken($response, $cfg));
 
             //Trying to fetch stage keystone
             $regionEndpoints = $cfg->getAuthToken()->getRegionEndpoints();

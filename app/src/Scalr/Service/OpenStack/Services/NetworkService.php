@@ -101,10 +101,11 @@ class NetworkService extends AbstractService implements ServiceInterface
     public function getEndpointUrl()
     {
         //Endpoint url in the service catalog does not include version
+        $version = '/' . lcfirst($this->getVersion()) . '.0';
+
         $cfg = $this->getOpenStack()->getConfig();
-        return $cfg->getAuthToken() === null ?
-            $cfg->getIdentityEndpoint() :
-            rtrim(rtrim(parent::getEndpointUrl(), '/'), '/v2.0') . '/v2.0';
+
+        return $cfg->getAuthToken() === null ? $cfg->getIdentityEndpoint() : rtrim(parent::getEndpointUrl(), $version) . $version;
     }
 
     /**
@@ -534,9 +535,9 @@ class NetworkService extends AbstractService implements ServiceInterface
      * @return  object   Returns allocated floating ip details
      * @throws  RestClientException
      */
-    public function createFloatingIp($floatingNetworkId, $portId = null)
+    public function createFloatingIp($floatingNetworkId, $portId = null, $fixedIpAddress = null)
     {
-        return $this->getApiHandler()->createFloatingIp($floatingNetworkId, $portId);
+        return $this->getApiHandler()->createFloatingIp($floatingNetworkId, $portId, $fixedIpAddress);
     }
 
     /**

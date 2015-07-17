@@ -39,7 +39,7 @@ class DBEventObserver extends EventObserver
         try
         {
             $DBFarmRole = $event->DBServer->GetFarmRoleObject();
-            $farm_roleid = $DBfarmRole->ID;
+            $farm_roleid = $DBFarmRole->ID;
         }
         catch(Exception $e) {
             return;
@@ -236,10 +236,12 @@ class DBEventObserver extends EventObserver
         $event->DBServer->remoteIp = $event->ExternalIP;
         $event->DBServer->status = SERVER_STATUS::INIT;
         $event->DBServer->Save();
+        
+        $db = Scalr::getDb();
+        $event->DBServer->SetProperty("tmp.status.debug", "{$db->hasTransactions}:{$db->transCnt}");
 
         $event->DBServer->SetProperty("tmp.status.processed", $event->DBServer->status);
 
-        $this->DB->Execute("DELETE FROM server_operations WHERE server_id=?", array($event->DBServer->serverId));
         $event->DBServer->SetProperty(SERVER_PROPERTIES::SZR_IS_INIT_FAILED, false);
 
         try {
@@ -350,7 +352,8 @@ class DBEventObserver extends EventObserver
                             $DBFarm->Name,
                             $dbFarmRole->GetRoleObject()->name,
                             $DBServer->serverId
-                        )));
+                        ), $DBServer->serverId));
+                        
                     } catch (Exception $e) {
                         Logger::getLogger(LOG_CATEGORY::SCALING)->error($e->getMessage());
                     }
@@ -435,26 +438,6 @@ class DBEventObserver extends EventObserver
         }
 
         $event->DBServer->Save();
-
-        try {
-            // If we need replace old instance to new one terminate old one.
-            if ($event->DBServer->replaceServerID) {
-                Logger::getLogger(LOG_CATEGORY::FARM)->info(new FarmLogMessage($this->FarmID, "Host UP. Terminating old server: {$event->DBServer->replaceServerID})."));
-
-                try {
-                    $oldDBServer = DBServer::LoadByID($event->DBServer->replaceServerID);
-                } catch (Exception $e) {
-                }
-
-                Logger::getLogger(LOG_CATEGORY::FARM)->info(new FarmLogMessage($this->FarmID, "OLD Server found: {$oldDBServer->serverId})."));
-
-                if ($oldDBServer) {
-                    $oldDBServer->terminate(DBServer::TERMINATE_REASON_REPLACE_SERVER_FROM_SNAPSHOT);
-                }
-            }
-        } catch (Exception $e) {
-            $this->Logger->fatal($e->getMessage());
-        }
     }
 
     /**
@@ -545,7 +528,7 @@ class DBEventObserver extends EventObserver
             SERVER_SNAPSHOT_CREATION_STATUS::PENDING,
             SERVER_SNAPSHOT_CREATION_STATUS::IN_PROGRESS
         ));
-        if ($bundle_task_id) {
+        if ($bundle_task_id && $event->DBServer->platform != SERVER_PLATFORMS::GCE) {
             $BundleTask = BundleTask::LoadById($bundle_task_id);
             $BundleTask->SnapshotCreationFailed("Server was terminated before image was created.");
         }
@@ -553,7 +536,13 @@ class DBEventObserver extends EventObserver
 
     public function OnIPAddressChanged(IPAddressChangedEvent $event)
     {
-        Logger::getLogger(LOG_CATEGORY::FARM)->warn(new FarmLogMessage($this->FarmID, "IP changed for server {$event->DBServer->serverId}. New public IP: {$event->NewIPAddress} New private IP: {$event->NewLocalIPAddress}"));
+        Logger::getLogger(LOG_CATEGORY::FARM)->warn(new FarmLogMessage(
+            $this->FarmID, 
+            sprintf("IP changed for server %s. New public IP: %s New private IP: %s", 
+                $event->DBServer->serverId, $event->NewIPAddress, $event->NewLocalIPAddress
+            ),
+            $event->DBServer->serverId
+        ));
 
         if ($event->NewIPAddress)
             $event->DBServer->remoteIp = $event->NewIPAddress;

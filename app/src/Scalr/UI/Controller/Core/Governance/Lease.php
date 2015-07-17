@@ -2,6 +2,7 @@
 
 use Scalr\Acl\Acl;
 use Scalr\Farm\FarmLease;
+use Scalr\Model\Entity\SettingEntity;
 
 class Scalr_UI_Controller_Core_Governance_Lease extends Scalr_UI_Controller
 {
@@ -122,6 +123,8 @@ class Scalr_UI_Controller_Core_Governance_Lease extends Scalr_UI_Controller
                     }
                 } else {
                     $dt = new DateTime($dbFarm->GetSetting(DBFarm::SETTING_LEASE_TERMINATE_DATE));
+                    SettingEntity::increase(SettingEntity::LEASE_DECLINED_REQUEST);
+
                     if ($mailer)
                         $mailer->sendTemplate(
                             SCALR_TEMPLATES_PATH . '/emails/farm_lease_non_standard_decline.eml',

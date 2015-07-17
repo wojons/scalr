@@ -1,8 +1,6 @@
 <?php
 namespace Scalr\Tests;
 
-use Scalr\Tests\Constraint\ArrayHas;
-
 /**
  * Basic TestCase class
  *
@@ -64,6 +62,19 @@ abstract class TestCase extends \PHPUnit_Framework_TestCase
     }
 
     /**
+     * {@inheritdoc}
+     * @see PHPUnit_Framework_TestCase::runTest()
+     */
+    protected function runTest()
+    {
+        if (isset($this->getAnnotations()['method']['functional']) && $this->isSkipFunctionalTests()) {
+            $this->markTestSkipped();
+        }
+
+        return parent::runTest();
+    }
+
+    /**
      * Constraints that array has key and value
      *
      * @param   mixed              $value   Expected array value
@@ -73,7 +84,20 @@ abstract class TestCase extends \PHPUnit_Framework_TestCase
      */
     public static function assertArrayHas($value, $key, $arr, $message = '')
     {
-        self::assertThat($arr, new ArrayHas(self::equalTo($value), $key), $message);
+        self::assertArrayHasKey($key, $arr, $message);
+        self::assertEquals($value, $arr[$key], $message);
+    }
+
+    /**
+     * Constraints that object is sub-class of the specified class
+     *
+     * @param    string    $className The name of the class
+     * @param    object    $object    The object to check
+     * @param    string    $message   optional The message
+     */
+    public static function assertSubClassOf($className, $object, $message = '')
+    {
+        self::assertTrue(is_subclass_of($object, $className), $message);
     }
 
     /**

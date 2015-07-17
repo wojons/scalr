@@ -85,19 +85,19 @@ class DescribeLoadBalancersLoaderTest extends ElbTestCase
             'other-policy-2'
         ), $first->policies->otherPolicies);
         $this->assertInstanceOf('Scalr\\Service\\Aws\\Elb\\DataType\\AppCookieStickinessPolicyList', $first->policies->appCookieStickinessPolicies);
-        $appCookieSticknessPolicies = $first->policies->appCookieStickinessPolicies->getOriginal();
-        $this->assertEquals('app-csp-policyname-1', $appCookieSticknessPolicies[0]->policyName);
-        $this->assertEquals('app-csp-cookiename-1', $appCookieSticknessPolicies[0]->cookieName);
-        $this->assertEquals('app-csp-policyname-2', $appCookieSticknessPolicies[1]->policyName);
-        $this->assertEquals('app-csp-cookiename-2', $appCookieSticknessPolicies[1]->cookieName);
-        unset($appCookieSticknessPolicies);
+        $appCookieStickinessPolicies = $first->policies->appCookieStickinessPolicies->getOriginal();
+        $this->assertEquals('app-csp-policyname-1', $appCookieStickinessPolicies[0]->policyName);
+        $this->assertEquals('app-csp-cookiename-1', $appCookieStickinessPolicies[0]->cookieName);
+        $this->assertEquals('app-csp-policyname-2', $appCookieStickinessPolicies[1]->policyName);
+        $this->assertEquals('app-csp-cookiename-2', $appCookieStickinessPolicies[1]->cookieName);
+        unset($appCookieStickinessPolicies);
         $this->assertInstanceOf('Scalr\\Service\\Aws\\Elb\\DataType\\LbCookieStickinessPolicyList', $first->policies->lbCookieStickinessPolicies);
-        $lbCookieSticknessPolicies = $first->policies->lbCookieStickinessPolicies->getOriginal();
-        $this->assertEquals('lb-csp-policyname-1', $lbCookieSticknessPolicies[0]->policyName);
-        $this->assertEquals(21, $lbCookieSticknessPolicies[0]->cookieExpirationPeriod);
-        $this->assertEquals('lb-csp-policyname-2', $lbCookieSticknessPolicies[1]->policyName);
-        $this->assertEquals(22, $lbCookieSticknessPolicies[1]->cookieExpirationPeriod);
-        unset($lbCookieSticknessPolicies);
+        $lbCookieStickinessPolicies = $first->policies->lbCookieStickinessPolicies->getOriginal();
+        $this->assertEquals('lb-csp-policyname-1', $lbCookieStickinessPolicies[0]->policyName);
+        $this->assertEquals(21, $lbCookieStickinessPolicies[0]->cookieExpirationPeriod);
+        $this->assertEquals('lb-csp-policyname-2', $lbCookieStickinessPolicies[1]->policyName);
+        $this->assertEquals(22, $lbCookieStickinessPolicies[1]->cookieExpirationPeriod);
+        unset($lbCookieStickinessPolicies);
         $arr = $first->toArray();
         $this->assertEquals(array(
             array(

@@ -6,11 +6,11 @@ FARMS:
   - /farms/xUnlock
   - /farms/xListFarms
   - /farms/xLock
-  - [/farms/events, {"farmId":"%OWNED_FARM_ID%"}, all]
   FARMS_MANAGE:
   - /farms/builder/xBuild
   - /farms/xRemove
-  - /farms/build
+  - /farms/designer
+  - /farms/xGetFarm
   FARMS_CLONE:
   - /farms/xClone
   FARMS_LAUNCH:
@@ -20,20 +20,9 @@ FARMS:
   - /farms/xGetTerminationDetails
   FARMS_NOT_OWNED_FARMS:
   - /farms/xListFarms?showOnlyMy=0
-  - /farms/events/default?farmId=%NOT_OWNED_FARM_ID%
-  - /farms/events/view?farmId=%NOT_OWNED_FARM_ID%
-  - /farms/events/xListEvents?farmId=%NOT_OWNED_FARM_ID%
-  - /farms/events/configure?farmId=%NOT_OWNED_FARM_ID%
-  - /farms/events/xSaveNotifications?farmId=%NOT_OWNED_FARM_ID%
   - /servers/xListServers
   - /servers/xListServersUpdate
   - /farms/roles/xListFarmRoles?farmId=%NOT_OWNED_FARM_ID%
-
-FARMS_ALERTS:
-- [/alerts, ~, all]
-
-FARMS_STATISTICS:
-- [/statistics, ~, all]
 
 FARMS_ROLES:
   self:
@@ -72,8 +61,6 @@ FARMS_SERVERS:
 - /servers/messages
 - /servers/view
 - /servers/xServerCancelOperation
-- /servers/xUpdateUpdateClient
-- /servers/xUpdateAgent
 - /servers/xListServers
 - /servers/xListServersUpdate
 - /servers/xSzrUpdate

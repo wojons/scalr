@@ -12,6 +12,11 @@ final class SERVER_PLATFORMS
     const ECS = 'ecs';
     const OCS = 'ocs';
     const NEBULA = 'nebula';
+    const MIRANTIS = 'mirantis';
+    const VIO = 'vio';
+    const VERIZON = 'verizon';
+    const CISCO = 'cisco';
+    const HPCLOUD = 'hpcloud';
 
 
     const RACKSPACENG_US = 'rackspacengus';
@@ -36,7 +41,12 @@ final class SERVER_PLATFORMS
             self::RACKSPACENG_UK=> 'Rackspace UK',
             self::ECS           => 'Enter Cloud Suite',
             self::OCS           => 'CloudScaling',
-            self::NEBULA        => 'Nebula'
+            self::NEBULA        => 'Nebula',
+            self::MIRANTIS      => 'Mirantis',
+            self::VIO           => 'VMWare VIO',
+            self::VERIZON       => 'Verizon',
+            self::CISCO         => 'Cisco Openstack',
+            self::HPCLOUD       => 'HP Helion',
         );
     }
 

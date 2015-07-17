@@ -16,7 +16,7 @@ class Scalr_UI_Controller_Farms_Builder extends Scalr_UI_Controller
      */
     public function hasAccess()
     {
-        return parent::hasAccess() && $this->request->isAllowed(Acl::RESOURCE_FARMS);
+        return parent::hasAccess() && $this->request->isFarmAllowed();
     }
 
     public function xGetStorageConfigAction()
@@ -85,7 +85,7 @@ class Scalr_UI_Controller_Farms_Builder extends Scalr_UI_Controller
                 $this->setBuildError('variables', $result);
         }
 
-        if ($farmSettings['owner']) {
+        if (is_numeric($farmSettings['owner'])) {
             try {
                 $u = (new Scalr_Account_User())->loadById($farmSettings['owner']);
                 if ($u->getAccountId() != $this->user->getAccountId()) {
@@ -96,10 +96,22 @@ class Scalr_UI_Controller_Farms_Builder extends Scalr_UI_Controller
             }
         }
 
+        if (is_numeric($farmSettings['teamOwner']) && $farmSettings['teamOwner'] > 0) {
+            if ($this->user->canManageAcl()) {
+                $teams = $this->db->getAll('SELECT id, name FROM account_teams WHERE account_id = ?', array($this->user->getAccountId()));
+            } else {
+                $teams = $this->user->getTeams();
+            }
+
+            if (!in_array($farmSettings['teamOwner'], array_map(function($t) { return $t['id']; }, $teams))) {
+                if ($this->db->GetOne('SELECT team_id FROM farms WHERE id = ?', [$farmId]) != $farmSettings['teamOwner'])
+                    $this->setBuildError('teamOwner', 'Team not found');
+            }
+        }
+
         if (!empty($roles)) {
-            $cloudFoundryStack = array();
             $hasVpcRouter = false;
-            $nginxFound = 0;
+            $vpcRouterRequired = false;
 
             foreach ($roles as $role) {
                 $dbRole = DBRole::loadById($role['role_id']);
@@ -141,25 +153,8 @@ class Scalr_UI_Controller_Farms_Builder extends Scalr_UI_Controller
                     }
                 }
 
-                //-- CloudFoundryStuff
-                if ($dbRole->hasBehavior(ROLE_BEHAVIORS::CF_CLOUD_CONTROLLER))
-                    $cloudFoundryStack[ROLE_BEHAVIORS::CF_CLOUD_CONTROLLER] = true;
-                if ($dbRole->hasBehavior(ROLE_BEHAVIORS::CF_DEA))
-                    $cloudFoundryStack[ROLE_BEHAVIORS::CF_DEA] = true;
-                if ($dbRole->hasBehavior(ROLE_BEHAVIORS::CF_HEALTH_MANAGER))
-                    $cloudFoundryStack[ROLE_BEHAVIORS::CF_HEALTH_MANAGER] = true;
-                if ($dbRole->hasBehavior(ROLE_BEHAVIORS::CF_ROUTER))
-                    $cloudFoundryStack[ROLE_BEHAVIORS::CF_ROUTER] = true;
-                if ($dbRole->hasBehavior(ROLE_BEHAVIORS::CF_SERVICE))
-                    $cloudFoundryStack[ROLE_BEHAVIORS::CF_SERVICE] = true;
-
                 if ($dbRole->hasBehavior(ROLE_BEHAVIORS::VPC_ROUTER))
                     $hasVpcRouter = true;
-
-
-                if ($dbRole->hasBehavior(ROLE_BEHAVIORS::NGINX))
-                    $nginxFound++;
-                 //-- End CloudFoundry stuff
 
                 if ($dbRole->hasBehavior(ROLE_BEHAVIORS::RABBITMQ)) {
                     $role['settings'][DBFarmRole::SETTING_SCALING_MAX_INSTANCES] = $role['settings'][DBFarmRole::SETTING_SCALING_MIN_INSTANCES];
@@ -186,6 +181,42 @@ class Scalr_UI_Controller_Farms_Builder extends Scalr_UI_Controller
                     }
                 }
 
+                if ($dbRole->hasBehavior(ROLE_BEHAVIORS::NGINX)) {
+                    $proxies = (array)@json_decode($role['settings'][Scalr_Role_Behavior_Nginx::ROLE_PROXIES], true);
+                    foreach ($proxies as $proxyIndex => $proxy) {
+                        if ($proxy['ssl'] == 1) {
+                            if (empty($proxy['ssl_certificate_id'])) {
+                                $this->setBuildError(
+                                    Scalr_Role_Behavior_Nginx::ROLE_PROXIES,
+                                    ['message' => 'SSL certificate is required', 'invalidIndex' => $proxyIndex],
+                                    $role['farm_role_id']
+                                );
+                                break;
+                            }
+                            if ($proxy['port'] == $proxy['ssl_port']) {
+                                $this->setBuildError(
+                                    Scalr_Role_Behavior_Nginx::ROLE_PROXIES,
+                                    ['message' => 'HTTP and HTTPS ports cannot be the same', 'invalidIndex' => $proxyIndex],
+                                    $role['farm_role_id']
+                                );
+                            }
+                        }
+                        if (count($proxy['backends']) > 0) {
+                            foreach ($proxy['backends'] as $backend) {
+                                if (empty($backend['farm_role_id']) && empty($backend['farm_role_alias']) && empty($backend['host'])) {
+                                    $this->setBuildError(
+                                        Scalr_Role_Behavior_Nginx::ROLE_PROXIES,
+                                        ['message' => 'Destination is required', 'invalidIndex' => $proxyIndex],
+                                        $role['farm_role_id']
+                                    );
+                                    break;
+                                }
+                            }
+                        }
+                    }
+
+               }
+
                 /* Validate scaling */
                 $minCount = (int)$role['settings'][DBFarmRole::SETTING_SCALING_MIN_INSTANCES];
                 if (!$minCount && $minCount != 0)
@@ -194,7 +225,7 @@ class Scalr_UI_Controller_Farms_Builder extends Scalr_UI_Controller
                 if ($minCount < 0 || $minCount > 400) {
                     $this->setBuildError(
                         DBFarmRole::SETTING_SCALING_MIN_INSTANCES,
-                        sprintf(_("Min instances for '%s' must be a number between 1 and 400"), $dbRole->name),
+                        sprintf(_("Min instances for '%s' must be a number between 0 and 400"), $dbRole->name),
                         $role['farm_role_id']
                     );
                 }
@@ -236,6 +267,23 @@ class Scalr_UI_Controller_Farms_Builder extends Scalr_UI_Controller
                 /** Validate platform specified settings **/
                 switch($role['platform']) {
                     case SERVER_PLATFORMS::EC2:
+
+                        if ($role['settings'][DBFarmRole::SETTING_AWS_TAGS_LIST]) {
+                            $reservedBaseCustomTags = ['scalr-meta', 'Name'];
+                            $baseCustomTags = @explode("\n", $role['settings'][DBFarmRole::SETTING_AWS_TAGS_LIST]);
+                            foreach ((array)$baseCustomTags as $tag) {
+                                $tag = trim($tag);
+                                $tagChunks = explode("=", $tag);
+                                if (in_array(trim($tagChunks[0]), $reservedBaseCustomTags)) {
+                                    $this->setBuildError(
+                                        DBFarmRole::SETTING_AWS_TAGS_LIST,
+                                        "Avoid using Scalr-reserved tag names.",
+                                        $role['farm_role_id']
+                                    );
+                                }
+                            }
+                        }
+
                         if ($dbRole->hasBehavior(ROLE_BEHAVIORS::MYSQL)) {
                             if ($role['settings'][DBFarmRole::SETTING_MYSQL_DATA_STORAGE_ENGINE] == MYSQL_STORAGE_ENGINE::EBS) {
 
@@ -275,38 +323,6 @@ class Scalr_UI_Controller_Farms_Builder extends Scalr_UI_Controller
                                     );
                                 }
                             }
-
-                            if ($role['settings'][Scalr_Db_Msr::DATA_STORAGE_ENGINE] == MYSQL_STORAGE_ENGINE::RAID_EBS) {
-                                if (!$this->user->getAccount()->isFeatureEnabled(Scalr_Limits::FEATURE_RAID)) {
-                                    $this->setBuildError(
-                                        Scalr_Db_Msr::DATA_STORAGE_ENGINE,
-                                        'RAID arrays are not available for your pricing plan. <a href="#/billing">Please upgrade your account to be able to use this feature.</a>',
-                                        $role['farm_role_id']
-                                    );
-                                }
-                            }
-
-                            if ($role['settings'][Scalr_Db_Msr::DATA_STORAGE_FSTYPE] && $role['settings'][Scalr_Db_Msr::DATA_STORAGE_FSTYPE] != 'ext3') {
-                                if (!$this->user->getAccount()->isFeatureEnabled(Scalr_Limits::FEATURE_MFS)) {
-                                    $this->setBuildError(
-                                        Scalr_Db_Msr::DATA_STORAGE_ENGINE,
-                                        'Only ext3 filesystem available for your pricing plan. <a href="#/billing">Please upgrade your account to be able to use other filesystems.</a>',
-                                        $role['farm_role_id']
-                                    );
-                                }
-                            }
-                        }
-
-                        if ($dbRole->hasBehavior(ROLE_BEHAVIORS::MONGODB)) {
-                            if ($role['settings'][Scalr_Role_Behavior_MongoDB::ROLE_DATA_STORAGE_ENGINE] == MYSQL_STORAGE_ENGINE::RAID_EBS) {
-                                if (!$this->user->getAccount()->isFeatureEnabled(Scalr_Limits::FEATURE_RAID)) {
-                                    $this->setBuildError(
-                                        Scalr_Role_Behavior_MongoDB::ROLE_DATA_STORAGE_ENGINE,
-                                        'RAID arrays are not available for your pricing plan. <a href="#/billing">Please upgrade your account to be able to use this feature.</a>',
-                                        $role['farm_role_id']
-                                    );
-                                }
-                            }
                         }
 
                         if ($role['settings'][DBFarmRole::SETTING_AWS_AVAIL_ZONE] == 'x-scalr-custom=') {
@@ -335,6 +351,27 @@ class Scalr_UI_Controller_Farms_Builder extends Scalr_UI_Controller
                                     $role['farm_role_id']
                                 );
                             }
+
+                        if (\Scalr::config('scalr.instances_connection_policy') != 'local' &&
+                            !$role['settings'][Scalr_Role_Behavior_Router::ROLE_VPC_SCALR_ROUTER_ID] &&
+                            !$vpcRouterRequired) {
+                                try {
+                                    $subnets = @json_decode($role['settings'][DBFarmRole::SETTING_AWS_VPC_SUBNET_ID]);
+                                    if ($subnets[0]) {
+                                        $platform = PlatformFactory::NewPlatform(SERVER_PLATFORMS::EC2);
+                                        $info = $platform->listSubnets(
+                                            $this->getEnvironment(),
+                                            $role['cloud_location'],
+                                            $farmSettings['vpc_id'],
+                                            true,
+                                            $subnets[0]
+                                        );
+
+                                        if ($info && $info['type'] == 'private')
+                                            $vpcRouterRequired = $role['farm_role_id'];
+                                    }
+                                } catch (Exception $e) {}
+                            }
                         }
 
                         break;
@@ -361,7 +398,7 @@ class Scalr_UI_Controller_Farms_Builder extends Scalr_UI_Controller
                 }
 
                 if ($role['settings'][Scalr_Role_Behavior::ROLE_BASE_CUSTOM_TAGS] && PlatformFactory::isOpenstack($role['platform'])) {
-                    $reservedBaseCustomTags = ['farmid', 'role', 'httpproto', 'region', 'hash', 'realrolename', 'szr_key', 'serverid', 'p2p_producer_endpoint', 'queryenv_url', 'behaviors', 'farm_roleid', 'roleid', 'env_id', 'platform', 'server_index', 'cloud_server_id', 'cloud_location_zone', 'owner_email'];
+                    $reservedBaseCustomTags = ['scalr-meta', 'farmid', 'role', 'httpproto', 'region', 'hash', 'realrolename', 'szr_key', 'serverid', 'p2p_producer_endpoint', 'queryenv_url', 'behaviors', 'farm_roleid', 'roleid', 'env_id', 'platform', 'server_index', 'cloud_server_id', 'cloud_location_zone', 'owner_email'];
                     $baseCustomTags = @explode("\n", $role['settings'][Scalr_Role_Behavior::ROLE_BASE_CUSTOM_TAGS]);
                     foreach ((array)$baseCustomTags as $tag) {
                         $tag = trim($tag);
@@ -369,7 +406,7 @@ class Scalr_UI_Controller_Farms_Builder extends Scalr_UI_Controller
                         if (in_array(trim($tagChunks[0]), $reservedBaseCustomTags)) {
                             $this->setBuildError(
                                 Scalr_Role_Behavior::ROLE_BASE_CUSTOM_TAGS,
-                                "avoid using Scalr-reserved metadata names.",
+                                "Avoid using Scalr-reserved metadata names.",
                                 $role['farm_role_id']
                             );
                         }
@@ -449,66 +486,13 @@ class Scalr_UI_Controller_Farms_Builder extends Scalr_UI_Controller
             }
         }
 
-        try {
-            if (!empty($cloudFoundryStack)) {
-                if (!$cloudFoundryStack[ROLE_BEHAVIORS::CF_CLOUD_CONTROLLER])
-                    throw new Exception("CF CloudContoller role required for CloudFoundry stack. Please add All-in-one CF or separate CCHM role to farm");
-
-                if (!$cloudFoundryStack[ROLE_BEHAVIORS::CF_HEALTH_MANAGER])
-                    throw new Exception("CF HealthManager role required for CloudFoundry stack. Please add All-in-one CF or separate CCHM role to farm");
-
-                if (!$cloudFoundryStack[ROLE_BEHAVIORS::CF_ROUTER])
-                    throw new Exception("CF Router role required for CloudFoundry stack. Please add All-in-one CF or separate CF Router role to farm");
-
-                if (!$cloudFoundryStack[ROLE_BEHAVIORS::CF_DEA])
-                    throw new Exception("CF DEA role required for CloudFoundry stack. Please add All-in-one CF or separate CF DEA role to farm");
-
-                if (!$nginxFound)
-                    throw new Exception("Nginx load balancer role required for CloudFoundry stack. Please add it to the farm");
-
-                if ($cloudFoundryStack[ROLE_BEHAVIORS::CF_CLOUD_CONTROLLER] > 1)
-                    throw new Exception("CloudFoundry stack can work only with ONE CF CloudController role. Please leave only one CloudController role in farm");
-
-                if ($cloudFoundryStack[ROLE_BEHAVIORS::CF_HEALTH_MANAGER] > 1)
-                    throw new Exception("CloudFoundry stack can work only with ONE CF HealthManager role. Please leave only one HealthManager role in farm");
-
-                if ($nginxFound > 1)
-                    throw new Exception("CloudFoundry stack can work only with ONE nginx role. Please leave only one nginx role in farm");
-            }
-        } catch (Exception $e) {
-            $this->setBuildError(
-                'general',
-                $e->getMessage(),
-                null
-            );
-        }
-
         if ($farmSettings['vpc_id']) {
-            $vpcRouterRequired = false;
-            if (\Scalr::config('scalr.instances_connection_policy') != 'local' &&
-                    !$hasVpcRouter &&
-                    !$role['settings'][Scalr_Role_Behavior_Router::ROLE_VPC_SCALR_ROUTER_ID]) {
-                try {
-                    $subnets = @json_decode($role['settings'][DBFarmRole::SETTING_AWS_VPC_SUBNET_ID]);
-                    if ($subnets[0]) {
-                        $platform = PlatformFactory::NewPlatform(SERVER_PLATFORMS::EC2);
-                        $info = $platform->listSubnets(
-                            $this->getEnvironment(),
-                            $role['cloud_location'],
-                            $farmSettings['vpc_id'],
-                            true,
-                            $subnets[0]
-                        );
-
-                        if ($info && $info['type'] == 'private') {
-                            $this->setBuildError(
-                                'vpc',
-                                "VPC Router role required for farm that running inside VPC with roles configured to use private subnet(s)",
-                                null
-                            );
-                        }
-                    }
-                } catch (Exception $e) {}
+            if (!$hasVpcRouter && $vpcRouterRequired) {
+                $this->setBuildError(
+                    DBFarmRole::SETTING_AWS_VPC_SUBNET_ID,
+                    'You must select a VPC Router for Farm Roles launched in a Private VPC Subnet',
+                    $vpcRouterRequired
+                );
             }
         }
 
@@ -535,10 +519,9 @@ class Scalr_UI_Controller_Farms_Builder extends Scalr_UI_Controller
             'farmId' => array('type' => 'int'),
             'roles' => array('type' => 'json'),
             'farm' => array('type' => 'json'),
-            'roleUpdate' => array('type' => 'int')
+            'roleUpdate' => array('type' => 'int'),
+            'launch' => array('type' => 'bool'),
         ));
-
-        $this->request->restrictAccess(Acl::RESOURCE_FARMS, Acl::PERM_FARMS_MANAGE);
 
         if (!$this->isFarmConfigurationValid($this->getParam('farmId'), $this->getParam('farm'), (array)$this->getParam('roles'))) {
             if ($this->errors['error_count'] != 0) {
@@ -554,6 +537,7 @@ class Scalr_UI_Controller_Farms_Builder extends Scalr_UI_Controller
         if ($this->getParam('farmId')) {
             $dbFarm = DBFarm::LoadByID($this->getParam('farmId'));
             $this->user->getPermissions()->validate($dbFarm);
+            $this->request->restrictFarmAccess($dbFarm, Acl::PERM_FARMS_MANAGE);
             $dbFarm->isLocked();
 
             if ($this->getParam('changed') && $dbFarm->changedTime && $this->getParam('changed') != $dbFarm->changedTime) {
@@ -575,6 +559,7 @@ class Scalr_UI_Controller_Farms_Builder extends Scalr_UI_Controller
             $dbFarm->changedTime = microtime();
             $bNew = false;
         } else {
+            $this->request->restrictFarmAccess(null, Acl::PERM_FARMS_MANAGE);
             $this->user->getAccount()->validateLimit(Scalr_Limits::ACCOUNT_FARMS, 1);
 
             $dbFarm = new DBFarm();
@@ -598,23 +583,29 @@ class Scalr_UI_Controller_Farms_Builder extends Scalr_UI_Controller
         if (empty($dbFarm->Name))
             throw new Exception(_("Farm name required"));
 
-        if (!$bNew && $farm['owner'] && $farm['owner'] != $dbFarm->createdByUserId) {
-            if ($dbFarm->createdByUserId == $this->user->getId() || $this->user->isAccountOwner()) {
-                $user = (new Scalr_Account_User())->loadById($farm['owner']);
-                $dbFarm->createdByUserId = $user->getId();
-                $dbFarm->createdByUserEmail = $user->getEmail();
-                // TODO: move to subclass \Farm\Setting\OwnerHistory
-                $history = unserialize($dbFarm->GetSetting(DBFarm::SETTING_OWNER_HISTORY));
-                if (! is_array($history))
-                    $history = [];
-                $history[] = [
-                    'newId' => $user->getId(),
-                    'newEmail' => $user->getEmail(),
-                    'changedById' => $this->user->getId(),
-                    'changedByEmail' => $this->user->getEmail(),
-                    'dt' => date('Y-m-d H:i:s')
-                ];
-                $dbFarm->SetSetting(DBFarm::SETTING_OWNER_HISTORY, serialize($history));
+        if ($bNew) {
+            $dbFarm->teamId = is_numeric($farm['teamOwner']) && $farm['teamOwner'] > 0 ? $farm['teamOwner'] : NULL;
+        } else {
+            if ($dbFarm->createdByUserId == $this->user->getId() || $this->user->isAccountOwner() || $this->request->isFarmAllowed($dbFarm, Acl::PERM_FARMS_CHANGE_OWNERSHIP)) {
+                if (is_numeric($farm['owner']) && $farm['owner'] != $dbFarm->createdByUserId) {
+                    $user = (new Scalr_Account_User())->loadById($farm['owner']);
+                    $dbFarm->createdByUserId = $user->getId();
+                    $dbFarm->createdByUserEmail = $user->getEmail();
+                    // TODO: move to subclass \Farm\Setting\OwnerHistory
+                    $history = unserialize($dbFarm->GetSetting(DBFarm::SETTING_OWNER_HISTORY));
+                    if (! is_array($history))
+                        $history = [];
+                    $history[] = [
+                        'newId' => $user->getId(),
+                        'newEmail' => $user->getEmail(),
+                        'changedById' => $this->user->getId(),
+                        'changedByEmail' => $this->user->getEmail(),
+                        'dt' => date('Y-m-d H:i:s')
+                    ];
+                    $dbFarm->SetSetting(DBFarm::SETTING_OWNER_HISTORY, serialize($history));
+                }
+
+                $dbFarm->teamId = is_numeric($farm['teamOwner']) && $farm['teamOwner'] > 0 ? $farm['teamOwner'] : NULL;
             }
         }
 
@@ -637,6 +628,10 @@ class Scalr_UI_Controller_Farms_Builder extends Scalr_UI_Controller
         $dbFarm->SetSetting(DBFarm::SETTING_TIMEZONE, $farm['timezone']);
         $dbFarm->SetSetting(DBFarm::SETTING_EC2_VPC_ID, $farm['vpc_id']);
         $dbFarm->SetSetting(DBFarm::SETTING_EC2_VPC_REGION, $farm['vpc_region']);
+
+        $dbFarm->SetSetting(DBFarm::SETTING_SZR_UPD_REPOSITORY, $farm[DBFarm::SETTING_SZR_UPD_REPOSITORY]);
+        $dbFarm->SetSetting(DBFarm::SETTING_SZR_UPD_SCHEDULE, $farm[DBFarm::SETTING_SZR_UPD_SCHEDULE]);
+
 
         if (!$dbFarm->GetSetting(DBFarm::SETTING_CRYPTO_KEY)) {
             $dbFarm->SetSetting(DBFarm::SETTING_CRYPTO_KEY, Scalr::GenerateRandomKey(40));
@@ -787,7 +782,7 @@ class Scalr_UI_Controller_Farms_Builder extends Scalr_UI_Controller
                     $behavior->onFarmSave($dbFarm, $dbFarmRole);
 
                 /**
-                 * Platfrom specified updates
+                 * Platform specified updates
                  */
                 if ($dbFarmRole->Platform == SERVER_PLATFORMS::EC2) {
                     \Scalr\Modules\Platforms\Ec2\Helpers\EbsHelper::farmUpdateRoleSettings($dbFarmRole, $oldRoleSettings, $role['settings']);
@@ -811,21 +806,19 @@ class Scalr_UI_Controller_Farms_Builder extends Scalr_UI_Controller
             }
         }
 
-        if ($usedPlatforms[SERVER_PLATFORMS::CLOUDSTACK])
-            \Scalr\Modules\Platforms\Cloudstack\Helpers\CloudstackHelper::farmSave($dbFarm, $dbFarmRolesList);
-
-        if ($usedPlatforms[SERVER_PLATFORMS::EC2])
-            \Scalr\Modules\Platforms\Ec2\Helpers\Ec2Helper::farmSave($dbFarm, $dbFarmRolesList);
-
-        if ($usedPlatforms[SERVER_PLATFORMS::EUCALYPTUS])
-            \Scalr\Modules\Platforms\Eucalyptus\Helpers\EucalyptusHelper::farmSave($dbFarm, $dbFarmRolesList);
-
         $dbFarm->save();
 
         if (!$client->GetSettingValue(CLIENT_SETTINGS::DATE_FARM_CREATED))
             $client->SetSettingValue(CLIENT_SETTINGS::DATE_FARM_CREATED, time());
 
-        $this->response->success('Farm successfully saved');
+        if ($this->request->isFarmAllowed($dbFarm, Acl::PERM_FARMS_LAUNCH_TERMINATE) && $this->getParam('launch')) {
+            $this->user->getPermissions()->validate($dbFarm);
+            $dbFarm->isLocked();
+            Scalr::FireEvent($dbFarm->ID, new FarmLaunchedEvent(true, $this->user->id));
+            $this->response->success('Farm successfully saved and launched');
+        } else {
+            $this->response->success('Farm successfully saved');
+        }
         $this->response->data(array('farmId' => $dbFarm->ID, 'isNewFarm' => $bNew));
     }
 
@@ -871,8 +864,18 @@ class Scalr_UI_Controller_Farms_Builder extends Scalr_UI_Controller
                         'run_as' 	    => $script['run_as'],
                     );
 
-                    if ($script['target'] == Script::TARGET_BEHAVIORS || $script['target'] == Script::TARGET_ROLES) {
-                        $varName = ($script['target'] == Script::TARGET_ROLES) ? 'target_roles' : 'target_behaviors';
+                    if ($script['target'] == Script::TARGET_BEHAVIORS || $script['target'] == Script::TARGET_ROLES || $script['target'] == Script::TARGET_FARMROLES) {
+                        switch ($script['target']) {
+                            case $script['target'] == Script::TARGET_ROLES:
+                                $varName = 'target_roles';
+                                break;
+                            case $script['target'] == Script::TARGET_FARMROLES:
+                                $varName = 'target_farmroles';
+                                break;
+                            case $script['target'] == Script::TARGET_BEHAVIORS:
+                                $varName = 'target_behaviors';
+                                break;
+                        }
                         $s[$varName] = array();
                         $r = $this->db->GetAll("SELECT `target` FROM farm_role_scripting_targets WHERE farm_role_script_id = ?", array($script['id']));
                         foreach ($r as $v)
@@ -951,10 +954,13 @@ class Scalr_UI_Controller_Farms_Builder extends Scalr_UI_Controller
                 'alias'         => $dbFarmRole->Alias ? $dbFarmRole->Alias : $dbFarmRole->GetRoleObject()->name,
                 'role_id'		=> $dbFarmRole->RoleID,
                 'platform'		=> $dbFarmRole->Platform,
-                'os'			=> $dbFarmRole->GetRoleObject()->os,
-                'os_family'     => $dbFarmRole->GetRoleObject()->osFamily,
-                'os_generation' => $dbFarmRole->GetRoleObject()->osGeneration,
-                'os_version'    => $dbFarmRole->GetRoleObject()->osVersion,
+                //todo: check&remove 4 deprecated os fields below
+                'os'			=> $dbFarmRole->GetRoleObject()->getOs()->name,
+                'os_family'     => $dbFarmRole->GetRoleObject()->getOs()->family,
+                'os_generation' => $dbFarmRole->GetRoleObject()->getOs()->generation,
+                'os_version'    => $dbFarmRole->GetRoleObject()->getOs()->version,
+
+                'osId'          => $dbFarmRole->GetRoleObject()->getOs()->id,
                 'generation'	=> $dbFarmRole->GetRoleObject()->generation,
                 'group'			=> $dbFarmRole->GetRoleObject()->getCategoryName(),
                 'cat_id'        => $dbFarmRole->GetRoleObject()->catId,
@@ -986,7 +992,7 @@ class Scalr_UI_Controller_Farms_Builder extends Scalr_UI_Controller
             );
         }
 
-        $farmOwnerEditable = $dbFarm->createdByUserId == $this->user->getId() || $this->user->isAccountOwner();
+        $farmOwnerEditable = $dbFarm->createdByUserId == $this->user->getId() || $this->user->isAccountOwner() || $this->request->isFarmAllowed($dbFarm, Acl::PERM_FARMS_CHANGE_OWNERSHIP);
 
         return array(
             'farm' => array(
@@ -1000,8 +1006,11 @@ class Scalr_UI_Controller_Farms_Builder extends Scalr_UI_Controller
                 'hash' => $dbFarm->Hash,
                 'owner' => $farmOwnerEditable ? $dbFarm->createdByUserId : $dbFarm->createdByUserEmail,
                 'ownerEditable' => $farmOwnerEditable,
-                'updRepo' => $dbFarm->GetSetting(DBFarm::SETTING_SZR_UPD_REPOSITORY),
-                'updSchedule' => $dbFarm->GetSetting(DBFarm::SETTING_SZR_UPD_SCHEDULE)
+                'teamOwner' => $farmOwnerEditable ? $dbFarm->teamId : ($dbFarm->teamId ? (new Scalr_Account_Team())->loadById($dbFarm->teamId)->name : ''),
+                'teamOwnerEditable' => $farmOwnerEditable,
+                'launchPermission' => $this->request->isFarmAllowed($dbFarm, Acl::PERM_FARMS_LAUNCH_TERMINATE),
+                DBFarm::SETTING_SZR_UPD_REPOSITORY => $dbFarm->GetSetting(DBFarm::SETTING_SZR_UPD_REPOSITORY),
+                DBFarm::SETTING_SZR_UPD_SCHEDULE => $dbFarm->GetSetting(DBFarm::SETTING_SZR_UPD_SCHEDULE)
             ),
             'roles' => $farmRoles,
             'lock' => $dbFarm->isLocked(false),
@@ -1011,7 +1020,6 @@ class Scalr_UI_Controller_Farms_Builder extends Scalr_UI_Controller
 
     private function getInitialSecurityGroupsList(DBFarmRole $dbFarmRole)
     {
-
         $additionalSecurityGroups = $dbFarmRole->GetSetting(DBFarmRole::SETTING_AWS_SG_LIST);
         $append = $dbFarmRole->GetSetting(DBFarmRole::SETTING_AWS_SG_LIST_APPEND);
         if ($append === null || $append == 1 || ($append == 0 && $additionalSecurityGroups === null)) {

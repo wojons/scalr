@@ -4,47 +4,35 @@
 
 /*phpmyadmin*/
 .scalr-ui-dbmsr-phpmyadmin{
-    background: url('/ui2/images/ui/db/phpmyadmin_logo.png') 0 0 no-repeat;
+    background: url('/ui2/images/ui/db/phpmyadmin-logo.png') 0 0 no-repeat;
+    background-size: 146px;
     width: 146px;
     height: 88px;
-    margin: 20px 0 21px 50px;
 }
 
 /*inprogress indicator*/
 .scalr-ui-dbmsr-status-inprogress{
-	background:transparent url("/ui2/images/ui/db/backup_progress.gif") 0 0 no-repeat;
-	color:#fff;
-	font-weight:bold;
-	line-height:24px;
-	text-align:center;
-	font-size:13px;
-    height: 26px;
-    width:145px;
-}
-
-/*button stop*/
-.scalr-ui-dbmsr-status-stop{
-	background:transparent url("/ui2/images/ui/db/stop_backup_sprite.png") 0 0 no-repeat;
-    width: 30px;
-    height: 26px;
-}
-
-.scalr-ui-dbmsr-status-stop.x-btn-over{
-	background-position:0 -26px;
+	background:transparent url('/ui2/images/ui/db/progress.gif') 0 0 no-repeat;
+    background-size: 300px;
+	color: #fff;
+	/*font-weight:bold;*/
+	line-height: 30px;
+	text-align: center;
+    height: 30px;
+    width: 145px;
 }
 
 /*dump/snapshot history field*/
 .x-form-dbmshistory-field{
-	height:18px;
 	overflow:hidden;
 }
 
 .x-form-dbmshistory-field .item{
-	height: 18px;
+	height: 22px;
 	width: 22px;
 	background: #72BB61;
-	float:left;
-	border-radius: 3px;
+	float: left;
+	border-radius: 2px;
 	margin-right:17px;
 }
 
@@ -54,8 +42,8 @@
 
 /*cluster map*/
 .x-dbmsclustermapfield-container{
-	background: #E6E8EC;
-	border-radius: 4px;
+	background: #e1ebf4;
+	border-radius: 2px;
 }
 
 .x-dbmsclustermapfield-container .x-panel-body-default{
@@ -65,9 +53,7 @@
 
 .x-dbmsclustermapfield-btn{
 	background: #fff;
-	box-shadow: 0 -1px 1px #8297AC inset, 0 -1px #A6B5C4 inset;
-	-webkit-box-shadow: 0 -1px 2px #8297AC inset, 0 -1px #A6B5C4 inset; 
-	border-radius: 4px;
+	border-radius: 2px;
 	overflow:hidden;
 }
 
@@ -100,12 +86,12 @@
 }
 
 .x-dbmsclustermapfield-btn .title{
-	font-weight: bold;
+	font-family: OpenSansSemiBold;
 	color: #0055CC;
 }
 
 .x-dbmsclustermapfield-btn .status{
-	font-weight:bold;
+	font-family: OpenSansSemiBold;
 	color:#000;
 }
 
@@ -136,22 +122,24 @@
 }
 
 .x-dbmsclustermapfield-add{
-    background: #EDF3EB;
-    border-radius: 4px 4px 4px 4px;
+    background: #6FAB54;
+    border-radius: 2px;
     margin-bottom: 5px;
 	cursor: pointer;
 }
 
 .x-dbmsclustermapfield-add .x-dbmsclustermapfield-inner{
 	padding:0;
-	font: bold 13px/90px arial, helvetica, sans-serif;
-    color: #49634C;
+    font-family: OpenSansBold;
+    text-transform: uppercase;
+	line-height: 90px;
+    color: #fff;
 	height:100%;
 	text-align:center;
 }
 
 .x-dbmsclustermapfield-add:hover{
-    background: #F2F7F0;
+    background: #81b669;
 }
 
 @media only screen and (-webkit-min-device-pixel-ratio: 1.5),
@@ -160,7 +148,10 @@
     only screen and (min-device-pixel-ratio: 1.5) {
 
     .scalr-ui-dbmsr-phpmyadmin{
-        background-size: 146px 88px;
-        background-image: url('/ui2/images/ui/db/phpmyadmin_logo_retina.png');
+        background-image: url('/ui2/images/ui/db/phpmyadmin-logo-retina.png');
+    }
+
+    .scalr-ui-dbmsr-status-inprogress{
+        background-image: url('/ui2/images/ui/db/progress-retina.gif');
     }
 }

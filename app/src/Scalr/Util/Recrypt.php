@@ -2,122 +2,184 @@
 
 namespace Scalr\Util;
 
-use ArrayObject;
-use PDO;
-use stdClass;
+use ADODB_mysqli;
+use Scalr\Upgrade\Console;
 
 /**
- * Recrypt
+ * Re-encryption tool
+ *
  * @author  N.V.
  */
 class Recrypt
 {
 
     /**
-     * @var PDO
+     * Database connection
+     *
+     * @var ADODB_mysqli
      */
-    private $pdo;
+    private $db;
 
     /**
+     * Scheme
+     *
+     * @var string
+     */
+    private $scheme;
+
+    /**
+     * Previous encryption
+     *
      * @var CryptoTool
      */
     private $source;
 
     /**
+     * New encryption
+     *
      * @var CryptoTool
      */
     private $target;
 
     /**
-     * @param string     $database
-     * @param CryptoTool $source
-     * @param CryptoTool $target
+     * Recrypt
+     *
+     * @param string     $scheme    Database scheme
+     * @param CryptoTool $source    Current encryption
+     * @param CryptoTool $target    New encryption
+     * @param Console    $console   Console handler
      */
-    public function __construct($database, CryptoTool $source, CryptoTool $target)
+    public function __construct($scheme, CryptoTool $source, CryptoTool $target, Console $console)
     {
-        $config = \Scalr::getContainer()->config->get('scalr.connections.mysql');
+        $this->db = \Scalr::getDb();
 
-        if($config['port'] == '~') {
-            $config['port'] = 3306;
-        }
-
-        $this->pdo = new PDO("mysql:host={$config['host']};port={$config['port']};dbname={$database}", $config['user'], $config['password']);
+        $this->scheme = $scheme;
 
         $this->source = $source;
         $this->target = $target;
+
+        $this->console = $console;
     }
 
     /**
-     * @param string   $table
-     * @param string[] $fields
-     * @param string   $where
-     * @param string[] $pks
+     * Starts re-encryption
      *
-     * @return int
+     * @return $this
      */
-    public function recrypt($table, $fields, $where = '', $pks = ['id'])
+    public function begin()
     {
-        print "Recrypting table '{$table}' fields:\n\t" . implode("\n\t", $fields) . "\n";
+        $this->db->BeginTrans();
 
-        $names = '`' . implode('`,`', array_merge($pks, $fields)) . '`';
-        $out = new ObjectAccess();
+        return $this;
+    }
 
-        if(!$this->pdo->inTransaction()) {
-            $this->pdo->beginTransaction();
+    /**
+     * Commit changes
+     *
+     * @return $this
+     */
+    public function commit()
+    {
+        $this->db->CommitTrans();
+
+        return $this;
+    }
+
+    /**
+     * Reencrypts specified fields
+     *
+     * @param string     $table           Table name
+     * @param string[]   $fields          Fields name
+     * @param string     $where  optional WHERE statement for SELECT query
+     * @param string[]   $pks    optional Primary keys names
+     * @param CryptoTool $source optional Alternative source CryptoTool
+     *
+     * @return int Returns number of affected rows
+     */
+    public function recrypt($table, $fields, $where = '', $pks = ['id'], CryptoTool $source = null)
+    {
+        if (empty($this->db->transCnt)) {
+            $this->begin();
         }
 
-        $data = $this->pdo->query("SELECT {$names} FROM `{$table}` {$where} FOR UPDATE;");
-        $data->setFetchMode(PDO::FETCH_INTO, $out);
-
-        $params = static::makeParams($fields, ', ');
-        $where = static::makeParams($pks, ' AND ');
-        $stmt = $this->pdo->prepare("UPDATE `{$table}` SET {$params} WHERE {$where};");
-
-        foreach ($fields as $field) {
-            $stmt->bindParam(":{$field}", $out[$field]);
+        if ($source === null) {
+            $source = $this->source;
         }
 
-        foreach ($pks as $pk) {
-            $stmt->bindParam(":{$pk}", $out[$pk]);
-        }
+        $this->console->out("Reencrypting table `{$this->scheme}`.`{$table}` fields:\n\t" . implode("\n\t", $fields));
+
+        $names = '`' . implode('`, `', array_merge($pks, $fields)) . '`';
+
+        $data = $this->db->Execute("SELECT {$names} FROM `{$this->scheme}`.`{$table}` {$where} FOR UPDATE;");
+
+        $params = '`' . implode('` = ?, `', $fields) . '` = ?';
+        $where = '`' . implode('` = ? AND `', $pks) . '` = ?';
+        $stmt = $this->db->Prepare("UPDATE `{$this->scheme}`.`{$table}` SET {$params} WHERE {$where};");
 
         $affected = 0;
 
         foreach ($data as $entry) {
-            foreach ($out as $field => $value) {
-                if (!in_array($field, $pks)) {
-                    $out[$field] = $this->target->encrypt($this->source->decrypt($value));
-                }
+            $in = [];
+
+            foreach ($fields as $field) {
+                $in[] = $this->target->encrypt($source->decrypt($entry[$field]));
             }
 
-            $stmt->execute();
+            foreach ($pks as $pk) {
+                $in[] = $entry[$pk];
+            }
 
-            $affected += $stmt->rowCount();
+            $this->db->Execute($stmt, $in);
+
+            $affected += $this->db->Affected_Rows();
         }
 
-        if($this->pdo->inTransaction()) {
-            $this->pdo->commit();
-        }
-
-        print "Updated {$affected} rows!\n\n";
+        $this->console->out("Updated {$affected} rows!");
 
         return $affected;
     }
 
     /**
-     * @param array  $fields
-     * @param string $glue
+     * Gets current scheme name
      *
      * @return string
      */
-    private static function makeParams($fields, $glue = ',')
+    public function getScheme()
     {
-        $params = [];
+        return $this->scheme;
+    }
 
-        foreach ($fields as $field) {
-            $params[] = "`{$field}` = :{$field}";
-        }
+    /**
+     * Sets scheme name
+     *
+     * @param $scheme
+     *
+     * @return $this
+     */
+    public function setScheme($scheme)
+    {
+        $this->scheme = $scheme;
 
-        return implode($glue, $params);
+        return $this;
+    }
+
+    /**
+     * Gets source CryptoTool
+     *
+     * @return CryptoTool
+     */
+    public function getSource()
+    {
+        return $this->source;
+    }
+
+    /**
+     * Gets target CryptoTool
+     *
+     * @return CryptoTool
+     */
+    public function getTarget()
+    {
+        return $this->target;
     }
 }

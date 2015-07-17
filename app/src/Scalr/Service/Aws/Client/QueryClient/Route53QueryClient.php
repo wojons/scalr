@@ -29,7 +29,7 @@ class Route53QueryClient extends QueryClient
      * @return    ClientResponseInterface
      * @throws    ClientException
      */
-    public function call ($action, $options, $path = '/')
+    public function call($action, $options, $path = '/')
     {
         $httpRequest = $this->createRequest();
         $httpMethod = $action ?: 'GET';
@@ -53,7 +53,7 @@ class Route53QueryClient extends QueryClient
         }
 
         //Wipes out extra options from headers and moves them to separate array.
-        $extraOptions = array();
+        $extraOptions = ['region' => null];
         foreach ($options as $key => $val) {
             if (substr($key, 0, 1) === '_') {
                 $extraOptions[substr($key, 1)] = $val;
@@ -64,12 +64,14 @@ class Route53QueryClient extends QueryClient
         if (!isset($options['Date'])) {
             $options['Date'] = gmdate(DATE_RFC1123);
         }
+
         if (!isset($options['Host'])) {
             $options['Host'] = (isset($extraOptions['subdomain']) ? $extraOptions['subdomain'] . '.' : '') . $this->url;
         }
 
         if ($httpMethod === 'POST') {
             $options['Content-Type'] = 'application/xml';
+
             if (array_key_exists('putData', $extraOptions)) {
                 $httpRequest->setBody($extraOptions['putData']);
             } elseif (array_key_exists('putFile', $extraOptions)) {
@@ -77,12 +79,18 @@ class Route53QueryClient extends QueryClient
             }
         }
 
-        $options['X-Amzn-Authorization'] = "AWS3-HTTPS AWSAccessKeyId=" . $this->awsAccessKeyId . ", Algorithm=HmacSHA1,Signature="
-              . base64_encode(hash_hmac('sha1', $options['Date'], $this->secretAccessKey, 1));
-
         $httpRequest->setUrl('https://' . $options['Host'] . $path);
         $httpRequest->setMethod(constant('HTTP_METH_' . $httpMethod));
         $httpRequest->addHeaders($options);
+
+        if (true) {
+            $this->signRequestV4($httpRequest, (!empty($extraOptions['region']) ? $extraOptions['region'] : null));
+        } else {
+            $httpRequest->addHeaders([
+                'X-Amzn-Authorization' => "AWS3-HTTPS AWSAccessKeyId=" . $this->awsAccessKeyId . ", Algorithm=HmacSHA1,Signature="
+                                        . base64_encode(hash_hmac('sha1', $options['Date'], $this->secretAccessKey, 1))
+            ]);
+        }
 
         $response = $this->tryCall($httpRequest);
 

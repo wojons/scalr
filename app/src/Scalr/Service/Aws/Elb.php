@@ -61,13 +61,12 @@ class Elb extends AbstractService implements ServiceInterface
     public function getUrl()
     {
         $region = $this->getAws()->getRegion();
-        if ($region == Aws::REGION_US_GOV_WEST_1) {
-            return 'elasticloadbalancing.us-gov-west-1.amazonaws.com';
-        } elseif ($region == Aws::REGION_CN_NORTH_1) {
-            return 'elasticloadbalancing.cn-north-1.amazonaws.com.cn';
+
+        if (strpos($region, 'cn-') === 0) {
+            return 'elasticloadbalancing.' . $region . '.amazonaws.com.cn';
+        } else {
+            return 'elasticloadbalancing.' . $region . '.amazonaws.com';
         }
-        
-        return 'elasticloadbalancing.' . $region . '.amazonaws.com';
     }
 
     /**

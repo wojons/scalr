@@ -159,16 +159,18 @@ class OpenStackTest extends OpenStackTestCase
     /**
      * @test
      * @dataProvider providerRs
+     * @functional
      */
     public function testFunctionalOpenStack($platform, $region, $imageId)
     {
-        if ($this->isSkipFunctionalTests() || $platform === self::EMPTY_CONFIG) {
+        if ($platform === self::EMPTY_CONFIG) {
             $this->markTestSkipped();
         }
+
         /* @var $rs OpenStack */
         if ($this->getContainer()->environment->isPlatformEnabled($platform)) {
             $rs = $this->getContainer()->openstack($platform, $region);
-//             $rs->setDebug();
+            //$rs->setDebug();
             $this->assertInstanceOf($this->getOpenStackClassName('OpenStack'), $rs);
         } else {
             //Environment has not been activated yet.
@@ -286,7 +288,9 @@ class OpenStackTest extends OpenStackTestCase
                 'status' => 'ACTIVE',
                 'shared' => false
             ));
+
             $this->assertTrue($networks instanceof \ArrayIterator);
+
             if (isset($networks[0])) {
                 $this->assertInternalType('object', $networks[0]);
                 $this->assertNotEmpty($networks[0]->id);
@@ -296,13 +300,29 @@ class OpenStackTest extends OpenStackTestCase
                 $this->assertEquals($networks[0], $network);
                 unset($network);
             }
+
             $publicNetworkId = null;
+
             foreach ($networks as $network) {
                 if ($network->{"router:external"} == true) {
                     $publicNetworkId = $network->id;
                 }
             }
+
             unset($networks);
+
+            if (empty($publicNetworkId)) {
+                $networks = $rs->network->networks->list();
+
+                foreach ($networks as $network) {
+                    if ($network->shared == true && $network->status == 'ACTIVE') {
+                        $publicNetworkId = $network->id;
+                        break;
+                    }
+                }
+
+                unset($networks);
+            }
 
             $this->assertNotEmpty($publicNetworkId, 'Could not find public network to continue.');
 
@@ -986,7 +1006,7 @@ class OpenStackTest extends OpenStackTestCase
         $imageId = $rs->servers->images->create($srv->id, self::getTestName('image'));
         $this->assertTrue(is_string($imageId));
 
-        //It requires ACTIVE state of server
+        //It requires ACTIVE state of the server
 //         $res = $rs->servers->resizeServer($srv->id, $srv->name, '3');
 //         $this->assertTrue($res);
 

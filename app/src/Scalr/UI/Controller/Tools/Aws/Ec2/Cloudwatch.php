@@ -34,6 +34,11 @@ class Scalr_UI_Controller_Tools_Aws_Ec2_Cloudwatch extends Scalr_UI_Controller
         $this->response->success("Cloudwatch monitoring successfully enabled for the instance");
     }
 
+    public function defaultAction()
+    {
+        $this->viewAction();
+    }
+
     public function viewAction()
     {
         $cloudWatch = $this->getEnvironment()->aws($this->getParam('region'))->cloudWatch;

@@ -1,77 +1,94 @@
 /*
- * Data plugins
- */
-Ext.define('Scalr.ui.DataReaderJson', {
-	extend: 'Ext.data.reader.Json',
-	alias : 'reader.scalr.json',
-
-	type: 'json',
-	root: 'data',
-	totalProperty: 'total',
-	successProperty: 'success'
-});
-
-Ext.define('Scalr.ui.DataProxyAjax', {
-	extend: 'Ext.data.proxy.Ajax',
-	alias: 'proxy.scalr.paging',
-
-	reader: 'scalr.json'
-});
-
-Ext.define('Scalr.ui.StoreReaderObject', {
-	extend: 'Ext.data.reader.Json',
-	alias: 'reader.object',
-
-	readRecords: function (data) {
-		var me = this, result = [];
-
-		for (var i in data) {
-			if (Ext.isString(data[i]))
-				result[result.length] = {id: i, name: data[i]}; // format id => name
-			else
-				result[result.length] = data[i];
-		}
-
-		return me.callParent([result]);
-	}
-});
-
-Ext.define('Scalr.ui.StoreProxyObject', {
-	extend: 'Ext.data.proxy.Memory',
-	alias: 'proxy.object',
-
-	reader: 'object',
-
-	/**
-	* Reads data from the configured {@link #data} object. Uses the Proxy's {@link #reader}, if present
-	* @param {Ext.data.Operation} operation The read Operation
-	* @param {Function} callback The callback to call when reading has completed
-	* @param {Object} scope The scope to call the callback function in
-	*/
-	read: function(operation, callback, scope) {
-		var me     = this,
-			reader = me.getReader();
-
-		////
-		if (Ext.isDefined(operation.data))
-			me.data = operation.data;
-		////
-
-		var result = reader.read(me.data);
-
-		Ext.apply(operation, {
-			resultSet: result
-		});
-
-		operation.setCompleted();
-		operation.setSuccessful();
-		Ext.callback(callback, scope || me, [operation]);
-	}
-});
-
-/*
  * Form plugins
  */
+Ext.define('Scalr.ui.ScalrTagFieldPlugin', {
+    extend: 'Ext.AbstractPlugin',
+    alias: 'plugin.addnewtag',
+
+    init: function (component) {
+        var me = this;
+
+        // to preserve offset for add button
+        Ext.override(component, {
+            alignPicker: function () {
+                this.callParent();
+
+                var me = this,
+                    picker = me.getPicker(),
+                    heightAbove = me.getPosition()[1] - Ext.getBody().getScroll().top,
+                    heightBelow = Ext.dom.Element.getDocumentHeight() - heightAbove - me.getHeight(),
+                    space = Math.max(heightAbove, heightBelow);
+
+                if (picker.getHeight() > space - (5 + 24)) {
+                    picker.setHeight(space - (5 + 24)); // have some leeway so we aren't flush against
+                }
+            }
+        });
+
+        component.on('render', function (component) {
+            var picker = component.getPicker();
+            picker.addCls('x-boundlist-hideemptygrid');
+
+            picker.on('render', function (picker) {
+                if (!me.disabled) {
+                    picker.el.addCls('x-boundlist-with-addnew');
+                }
+
+                me.el = picker.el.createChild({
+                    tag: 'div',
+                    cls: 'x-boundlist-addnewtag'
+                }).on('click', function(e) {
+                    //component.collapse();
+                    me.handler();
+                    e.stopEvent();//we don't want to reset current combobox value
+                }).setVisible(!me.disabled);
+            });
+
+            component.on('beforequery', function (queryPlan) {
+                var pickerEl = picker.el;
+                component.expand();//when store is empty picker doesn't appear
+                if (pickerEl) {
+                    var enteredValue = queryPlan.query;
+
+                    component.suspendCollapse = enteredValue ? true : false;
+
+                    me.setDisabled(!enteredValue);
+
+                    pickerEl.down('.x-boundlist-addnewtag').
+                        update(
+                            '<div class="x-boundlist-addnewtag-text">'
+                                + '<span>Press <b>Enter</b> to add</span>'
+                                + '<span class="x-boundlist-addnewtag-text-tagname">'
+                                    + '"' + enteredValue + '"'
+                                + '</span>'
+                            + '</div>'
+                    );
+                } else {
+                    me.setDisabled(true);
+                }
+            });
+        });
+    },
+
+    setDisabled: function(disabled) {
+        if (this.el !== undefined) {
+            var parent = this.el.parent();
+            if (parent) {
+                parent[disabled ? 'removeCls' : 'addCls']('x-boundlist-with-addnew');
+            }
+            this.el.setVisible(!disabled);
+        }
+        this.disabled = disabled;
+    },
+
+    handler: function () {
+        var me = this;
+
+        me.cmp.applyRawValue();
+        me.setDisabled(true);
+    }
+});
+
 Ext.define('Scalr.ui.ComboAddNewPlugin', {
 	extend: 'Ext.AbstractPlugin',
 	alias: 'plugin.comboaddnew',
@@ -79,7 +96,7 @@ Ext.define('Scalr.ui.ComboAddNewPlugin', {
 	postUrl: '',
     disabled: false,
     applyNewValue: true,
-    
+
 	init: function(comp) {
 		var me = this;
 
@@ -91,7 +108,7 @@ Ext.define('Scalr.ui.ComboAddNewPlugin', {
                 var me = this,
                     picker = me.getPicker(),
                     heightAbove = me.getPosition()[1] - Ext.getBody().getScroll().top,
-                    heightBelow = Ext.Element.getViewHeight() - heightAbove - me.getHeight(),
+                    heightBelow = Ext.dom.Element.getDocumentHeight() - heightAbove - me.getHeight(),
                     space = Math.max(heightAbove, heightBelow);
 
 				if (picker.getHeight() > space - (5 + 24)) {
@@ -111,9 +128,10 @@ Ext.define('Scalr.ui.ComboAddNewPlugin', {
 					tag: 'div',
 					cls: 'x-boundlist-addnew',
                     title: 'Add new'
-				}).on('click', function() {
+				}).on('click', function(e) {
 					comp.collapse();
 					me.handler();
+                    e.stopEvent();//we don't want to reset current combobox value
 				}).setVisible(!me.disabled);
 			});
 		});
@@ -128,7 +146,7 @@ Ext.define('Scalr.ui.ComboAddNewPlugin', {
 			}
 		}, comp);
 	},
-    
+
     setDisabled: function(disabled) {
         if (this.el !== undefined) {
             var parent = this.el.parent();
@@ -139,15 +157,464 @@ Ext.define('Scalr.ui.ComboAddNewPlugin', {
         }
         this.disabled = disabled;
     },
-    
+
 	handler: function() {
-		Scalr.event.fireEvent('redirect', '#' + this.url + this.postUrl);
+		Scalr.event.fireEvent('modal', '#' + this.url + this.postUrl);
 	}
 });
 
 /*
  * Grid plugins
  */
+
+Ext.define('Scalr.ui.ApplyParamsPlugin', {
+    extend: 'Ext.AbstractPlugin',
+    alias: 'plugin.applyparams',
+
+    firstLoad: true,
+
+    updateLinkOnStoreDataChanged: true,
+
+    loadStoreOnReturn: true,
+
+    expectingFilterResponse: false,
+
+    initHiddenParams: function () {
+        var me = this;
+
+        var hiddenParams = me.hiddenParams;
+
+        me.hiddenParams = Ext.isArray(hiddenParams)
+            ? hiddenParams : [];
+
+        Ext.Array.push(me.hiddenParams, 'new');
+
+        return me;
+    },
+
+    initForbiddenParams: function () {
+        var me = this;
+
+        var forbiddenParams = me.storeForbiddenParams;
+
+        me.storeForbiddenParams = Ext.isArray(forbiddenParams)
+            ? forbiddenParams : [];
+
+        Ext.Array.push(me.storeForbiddenParams, 'new');
+
+        return me;
+    },
+
+    initFilterIgnoreParams: function () {
+        var me = this;
+
+        var filterIgnoreParams = me.filterIgnoreParams;
+
+        me.filterIgnoreParams = Ext.isArray(filterIgnoreParams)
+            ? filterIgnoreParams : [];
+
+        return me;
+    },
+
+    initForbiddenFilters: function () {
+        var me = this;
+
+        var forbiddenFilters = me.forbiddenFilters;
+
+        me.forbiddenFilters = Ext.isArray(forbiddenFilters)
+            ? forbiddenFilters : [];
+
+        return me;
+    },
+
+    init: function (grid) {
+        var me = this;
+
+        me.grid = grid;
+
+        me.store = grid.getStore();
+        me.store.preventLoading = true;
+
+        me.toolbar = grid.child('toolbar');
+
+        me.
+            initHiddenParams().
+            initForbiddenParams().
+            initFilterIgnoreParams().
+            initForbiddenFilters().
+            initSubscriber();
+
+        me._cachedParams = {};
+
+        if (me.updateLinkOnStoreDataChanged) {
+            me.subscribeToStore();
+        }
+    },
+
+    isDisabled: function () {
+        return this.disabled;
+    },
+
+    hasScalrOptions: function (component) {
+        return Ext.isDefined(component.scalrOptions);
+    },
+
+    subscribeApplyParamsEvent: function (subscriber) {
+        var me = this;
+
+        me.subscriber = subscriber;
+
+        subscriber.on({
+            applyparams: me.applyParams,
+            activate: me.enable,
+            deactivate: me.disable,
+            reloadstore: me.reloadStore,
+            scope: me
+        });
+
+        return me;
+    },
+
+    initSubscriber: function () {
+        var me = this;
+
+        var grid = me.grid;
+
+        grid.addButtonTrigger = me._addButtonTrigger;
+
+        if (me.hasScalrOptions(grid)) {
+            me.subscribeApplyParamsEvent(grid);
+
+            return me;
+        }
+
+        grid.on('beforerender', function () {
+            me.subscribeApplyParamsEvent(
+                grid.up('[scalrOptions]')
+            );
+        });
+
+        return me;
+    },
+
+    toQueryString: function (object) {
+        Ext.Object.each(object, function (key, value) {
+            if (!value || value === '0') {
+                delete object[key];
+            }
+        });
+
+        return Ext.Object.toQueryString(object);
+    },
+
+    getPureLink: function () {
+        var url = document.URL;
+        var separatorIndex = url.indexOf('#');
+        var pagePath = url.substring(separatorIndex, url.length);
+        var paramsIndex = pagePath.indexOf('?');
+
+        return url.substring(0, separatorIndex) +
+            (paramsIndex !== -1 ? pagePath.substring(0, paramsIndex) : pagePath);
+    },
+
+    setLink: function (params) {
+        var me = this;
+
+        var pureLink = me.getPureLink();
+        var stringParams = me.toQueryString(
+            me.excludeProperties(params, me.hiddenParams)
+        );
+
+        history.replaceState(
+            null, null, !stringParams
+                ? pureLink
+                : pureLink + '?' + stringParams
+        );
+
+        return me;
+    },
+
+    subscribeToStore: function () {
+        var me = this;
+
+        var store = me.store;
+        store = !store.getProxy()
+            ? store.source
+            : store;
+
+        store.on('datachanged', function () {
+            me.setLink(
+                store.getProxy().extraParams
+            );
+        }, me);
+
+        return me;
+    },
+
+    applyToStore: function (params) {
+        var me = this;
+
+        var store = me.store;
+        store.preventLoading = false;
+        store.applyProxyParams(params);
+
+        return me;
+    },
+
+    getFilters: function () {
+        var me = this;
+
+        return me.toolbar.query(
+            '[name][isFormField=true][xtype!=filterfield]'
+
+            + Ext.Array.map(me.forbiddenFilters, function (filterName) {
+                return '[name!=' + filterName + ']';
+            }).join('')
+        );
+    },
+
+    formatFilterValue: function (value) {
+        if (value === 'true') {
+            value = true;
+        } else if (value === 'false') {
+            value = false;
+        }
+
+        return value;
+    },
+
+    isExpectingFilters: function () {
+        return this.expectingFilterResponse;
+    },
+
+    applyTo: function (filter, value) {
+        var me = this;
+
+        if (!Ext.isEmpty(value)) {
+            filter.setValue(
+                me.formatFilterValue(value)
+            );
+
+            return true;
+        }
+
+        if (!me.firstLoad) {
+
+            if (filter.allowBlank === false) {
+                me.requiredValues[filter.name] = filter.getValue();
+                return false;
+            }
+
+            if (Ext.isDefined(filter.originalValue)) {
+                filter.reset();
+            } else {
+                filter.setValue(null);
+            }
+
+            return false;
+        }
+
+        me.defaultValues[filter.name] = filter.getValue();
+
+        return false;
+    },
+
+    applyToSingleFilters: function (params) {
+        var me = this;
+
+        var appliedParamKeys = [];
+
+        Ext.Array.each(me.getFilters(), function (filter) {
+            var filterName = filter.name;
+
+            if (me.applyTo(filter, params[filterName])) {
+                appliedParamKeys.push(filterName);
+            }
+        });
+
+        return appliedParamKeys;
+    },
+
+    excludeProperties: function (object, properties) {
+        var result = {};
+
+        Ext.Object.each(object, function (key, value) {
+            if (properties.indexOf(key) === -1) {
+                result[key]  = value;
+            }
+        });
+
+        return result;
+    },
+
+    applyToFilterField: function (params, appliedParamKeys) {
+        var me = this;
+
+        var filterField = me.toolbar.down('filterfield');
+
+        if (filterField && filterField.remoteSort) {
+            filterField.resetFilter();
+
+            var filterFieldParams = me.excludeProperties(
+                params, Ext.Array.merge(
+                    appliedParamKeys,
+                    me.filterIgnoreParams,
+                    me.storeForbiddenParams
+                )
+            );
+
+            if (filterField && !Ext.Object.isEmpty(filterFieldParams)) {
+                var compiledValue = filterField.compileValue(filterFieldParams);
+
+                filterField.setValue(compiledValue);
+                filterField.lastValue = compiledValue;
+                filterField.appliedParamKeys = Ext.Object.getKeys(filterFieldParams);
+
+                filterField.getTrigger('cancelButton').
+                    show();
+            }
+        }
+
+        return me;
+    },
+
+    applyToFilters: function (params) {
+        var me = this;
+
+        me.defaultValues = {};
+        me.requiredValues = {};
+
+        var appliedParams = me.applyToSingleFilters(params);
+
+        me.applyToFilterField(params, appliedParams);
+
+        return me.firstLoad ? me.defaultValues : me.requiredValues;
+    },
+
+    _addButtonTrigger: function () {
+        var me = this;
+
+        var button = me.down('#add');
+
+        if (!Ext.isEmpty(button) && button.enableToggle) {
+            button.toggle(true);
+
+            var setFormForceVisibility = function (form) {
+                if (button.pressed) {
+                    form.show();
+                }
+            };
+
+            var form = me.up('panel').down('form');
+
+            form.on('hide', setFormForceVisibility);
+
+            button.on('toggle', function (button, state) {
+                if (!state) {
+                    form.un('hide', setFormForceVisibility)
+                }
+            });
+        }
+
+        return me;
+    },
+
+    deleteEmptyKeys: function (object) {
+        Ext.Object.each(object, function (key, value) {
+            if (Ext.isEmpty(value)) {
+                delete object[key];
+            }
+        });
+
+        return object;
+    },
+
+    wereParamsChanged: function (params) {
+        var me = this;
+
+        var proxyParams = me.store.getProxy().extraParams;
+
+        return !(
+            ( Ext.Object.isEmpty(params) && !Ext.Object.isEmpty(proxyParams) )
+            || ( Ext.Object.equals(params, me.deleteEmptyKeys(proxyParams)) )
+        );
+    },
+
+    reloadStore: function() {
+        this.applyToStore();
+    },
+
+    //todo: refact this
+
+    applyParams: function (params) {
+        var me = this;
+
+        var field = me.toolbar.down('[beforeApplyParams]');
+
+        if (me.firstLoad && !me.isExpectingFilters() && field !== null) {
+            me.expectingFilterResponse = true;
+
+            field.beforeApplyParams(function () {
+                me.applyParams(params);
+            });
+
+            return me;
+        }
+
+        me.expectingFilterResponse = false;
+
+        var store = me.store;
+
+        if (me.isDisabled() && !me.wereParamsChanged(params)) {
+            me.setLink(
+                store.getProxy().extraParams
+            );
+
+            if (me.loadStoreOnReturn) {
+                me.applyToStore(params);
+            }
+
+            return me;
+        }
+
+        store.
+            clearAllProxyParams().
+            preventLoading = true;
+
+        if (params.new) {
+            me.
+                setLink(params).
+                applyToStore(null).
+                grid.
+                    addButtonTrigger();
+
+            return me;
+        }
+
+        var resetOn = me.subscriber.resetOn;
+
+        if (params[resetOn]) {
+            var newParams = {};
+            newParams[resetOn] = params[resetOn];
+            params = newParams;
+
+            Ext.Array.each(me.getFilters(), function (filter) {
+                filter.setValue(null);
+            });
+        }
+
+        var filtersValues = me.applyToFilters(params);
+
+        me.applyToStore(
+            Ext.Object.merge(params, filtersValues)
+        );
+
+        me.firstLoad = false;
+
+        return me;
+    }
+});
+
 Ext.define('Scalr.ui.GridStorePlugin', {
 	extend: 'Ext.AbstractPlugin',
 	alias: 'plugin.gridstore',
@@ -165,7 +632,7 @@ Ext.define('Scalr.ui.GridStorePlugin', {
             view.getRowClass = function(record) {
                 var cls = prevFn ? (prevFn.apply(view, arguments) || '') : '';
                 if (record.get('gridHighlightItem'))
-                    cls = cls + ' x-grid-row-new';
+                    cls = cls + ' x-grid-row-color-new';
 
                 return cls;
             };
@@ -179,8 +646,14 @@ Ext.define('Scalr.ui.GridStorePlugin', {
                     delete store.gridHightlightNew;
                 }
 
-				if (this.getView().rendered)
-					this.getView().clearViewEl();
+				if (this.getView().rendered) {
+                    this.getView().clearViewEl();
+                    // TODO: make it better, ExtJS leaves div, so remove it by ourselves
+                    var ge = this.getView().el.child('.x-grid-error')
+                    if (ge)
+                        ge.remove();
+                }
+
 				if (! this.getView().loadMask && !this.processBox)
 					this.processBox = Scalr.utils.CreateProcessBox({
 						type: 'action',
@@ -211,6 +684,10 @@ Ext.define('Scalr.ui.GridStorePlugin', {
                 if (client.store.gridHightlight)
                     delete client.store.gridHightlight;
 
+                if (response.status == 403 || response.status == 0) {
+                    Scalr.state.userNeedRefreshStoreAfter = true;
+                }
+
 				var message = 'Unable to load data';
 				try {
 					var result = Ext.decode(response.responseText, true);
@@ -236,7 +713,7 @@ Ext.define('Scalr.ui.GridStorePlugin', {
 						});
 					}
 				}
-				
+
 				message += '. <a href="#">Refresh</a>';
 
 				proxy.view.update('<div class="x-grid-error">' + message + '</div>');
@@ -250,229 +727,12 @@ Ext.define('Scalr.ui.GridStorePlugin', {
 	}
 });
 
-Ext.define('Scalr.ui.GridSelectionModel', {
-	alias: 'selection.selectedmodel',
-	extend: 'Ext.selection.CheckboxModel',
-
-	injectCheckbox: 'last',
-	highlightArrow: false,
-	checkOnly: true,
-    preventFocusOnSelect: false,
-
-	bindComponent: function () {
-		this.callParent(arguments);
-        this.view.on('viewready', function(){
-            this.view.on('refresh', function() {
-                this.toggleUiHeader(false);
-            }, this);
-        }, this);
-        
-        this.on('beforeselect', function(comp, record) {
-            return comp.getVisibility(record);
-        });
-	},
-
-	getHeaderConfig: function() {
-		var c = this.callParent();
-		c.width = 38;
-		c.minWidth = c.width;
-		return c;
-	},
-
-	// required in all cases
-	getVisibility: function (record) {
-		return true;
-	},
-
-	renderer: function(value, metaData, record, rowIndex, colIndex, store, view) {
-		metaData.tdCls = Ext.baseCSSPrefix + 'grid-cell-special';
-		metaData.style = 'margin-left: 5px';
-
-		if (this.getVisibility(record))
-			return '<div class="' + Ext.baseCSSPrefix + 'grid-row-checker">&#160;</div>';
-	},
-
-    updateHeaderState: function() {
-        var me = this, selections = [];
-        Ext.each(me.store.getRange(), function (record) {
-            if (this.getVisibility(record))
-                selections.push(record);
-        }, this);
-
-        var hdSelectStatus = this.selected.getCount() === selections.length && selections.length > 0;
-        this.toggleUiHeader(hdSelectStatus);
-    },
-
-	// keyNav
-	onKeyEnd: function(e) {
-		var me = this,
-			last = me.store.getAt(me.store.getCount() - 1);
-
-		if (last) {
-			me.setLastFocused(last);
-		}
-	},
-
-	onKeyHome: function(e) {
-		var me = this,
-			first = me.store.getAt(0);
-
-		if (first) {
-			me.setLastFocused(first);
-		}
-	},
-
-	onKeyPageUp: function(e) {
-		var me = this,
-			rowsVisible = me.getRowsVisible(),
-			selIdx,
-			prevIdx,
-			prevRecord;
-
-		if (rowsVisible) {
-			selIdx = e.recordIndex;
-			prevIdx = selIdx - rowsVisible;
-			if (prevIdx < 0) {
-				prevIdx = 0;
-			}
-			prevRecord = me.store.getAt(prevIdx);
-			me.setLastFocused(prevRecord);
-		}
-	},
-
-	onKeyPageDown: function(e) {
-		var me = this,
-			rowsVisible = me.getRowsVisible(),
-			selIdx,
-			nextIdx,
-			nextRecord;
-
-		if (rowsVisible) {
-			selIdx = e.recordIndex;
-			nextIdx = selIdx + rowsVisible;
-			if (nextIdx >= me.store.getCount()) {
-				nextIdx = me.store.getCount() - 1;
-			}
-			nextRecord = me.store.getAt(nextIdx);
-			me.setLastFocused(nextRecord);
-		}
-	},
-
-	onKeySpace: function(e) {
-		var me = this,
-			record = me.lastFocused;
-
-		if (record) {
-			if (me.isSelected(record)) {
-				me.doDeselect(record, false);
-                me.setLastFocused(record);
-			} else if(me.getVisibility(record)) {
-				me.doSelect(record, true);
-			}
-		}
-	},
-
-	onKeyUp: function(e) {
-		var me = this,
-			idx  = me.store.indexOf(me.lastFocused),
-			record;
-
-		if (idx > 0) {
-			// needs to be the filtered count as thats what
-			// will be visible.
-			record = me.store.getAt(idx - 1);
-			me.setLastFocused(record);
-		}
-	},
-
-	onKeyDown: function(e) {
-		var me = this,
-			idx  = me.store.indexOf(me.lastFocused),
-			record;
-
-		// needs to be the filtered count as thats what
-		// will be visible.
-		if (idx + 1 < me.store.getCount()) {
-			record = me.store.getAt(idx + 1);
-			me.setLastFocused(record);
-		}
-	},
-	
-    onRowClick: function(view, record, item, index, e) {
-        //view.el.focus(); todo: what is this?
-        var me = this,
-            checker = e.getTarget(me.checkSelector),
-            mode;
-
-        if (!me.allowRightMouseSelection(e)) {
-            return;
-        }
-
-        // checkOnly set, but we didn't click on a checker.
-        if (me.checkOnly && !checker) {
-            me.setLastFocused(record);
-            e.lastSelected = record;
-           return;
-        }
-        if (checker) {
-            if (me.preventFocusOnSelect) {
-                me.preventFocus = true;
-            }
-			e.preventDefault();//prevent text selection
-            mode = me.getSelectionMode();
-            // dont change the mode if its single otherwise
-            // we would get multiple selection
-            if (mode !== 'SINGLE' && !e.shiftKey) {
-                me.setSelectionMode('SIMPLE');
-            }
-            me.selectWithEvent(record, e);
-            me.setSelectionMode(mode);
-            
-            if (!me.preventFocus) {
-                me.setLastFocused(record);
-            }
-        } else {
-            me.selectWithEvent(record, e);
-        }
-    },
-	
-	refreshLastFocused: function(suppressFocus) {
-		var record = this.getLastFocused();
-		this.setLastFocused(null, suppressFocus);
-		if (record) {
-			this.setLastFocused(record, suppressFocus);
-		}
-	},
-	
-    selectWithEvent: function(record, e, keepExisting) {
-        var me = this;
-        if (me.selectionMode === 'MULTI') {
-            if (e.ctrlKey && me.isSelected(record)) {
-                me.doDeselect(record, false);
-            } else if (e.shiftKey && me.lastFocused) {
-                if (!me.isSelected(record)) {
-                    me.selectRange(me.lastFocused, record, true);
-                } else {
-                    me.deselectRange(me.lastFocused, record);
-                }
-            } else if (e.ctrlKey) {
-                me.doSelect(record, true, false);
-            } else if (me.isSelected(record) && !e.shiftKey && !e.ctrlKey && me.selected.getCount() > 1) {
-                me.doSelect(record, keepExisting, false);
-            } else {
-                me.doSelect(record, false);
-            }
-        } else {
-            me.callParent(arguments);
-        }
-    }	
-	
-});
-
-/**
- * Base class from Ext.ux.TabReorderer.
- */
+// (5.0)
 Ext.define('Ext.ux.BoxReorderer', {
+    requires: [
+        'Ext.dd.DD'
+    ],
+
     mixins: {
         observable: 'Ext.util.Observable'
     },
@@ -491,48 +751,46 @@ Ext.define('Ext.ux.BoxReorderer', {
      */
     animate: 100,
 
+    /**
+     * @event StartDrag
+     * Fires when dragging of a child Component begins.
+     * @param {Ext.ux.BoxReorderer} this
+     * @param {Ext.container.Container} container The owning Container
+     * @param {Ext.Component} dragCmp The Component being dragged
+     * @param {Number} idx The start index of the Component being dragged.
+     */
+
+    /**
+     * @event Drag
+     * Fires during dragging of a child Component.
+     * @param {Ext.ux.BoxReorderer} this
+     * @param {Ext.container.Container} container The owning Container
+     * @param {Ext.Component} dragCmp The Component being dragged
+     * @param {Number} startIdx The index position from which the Component was initially dragged.
+     * @param {Number} idx The current closest index to which the Component would drop.
+     */
+
+    /**
+     * @event ChangeIndex
+     * Fires when dragging of a child Component causes its drop index to change.
+     * @param {Ext.ux.BoxReorderer} this
+     * @param {Ext.container.Container} container The owning Container
+     * @param {Ext.Component} dragCmp The Component being dragged
+     * @param {Number} startIdx The index position from which the Component was initially dragged.
+     * @param {Number} idx The current closest index to which the Component would drop.
+     */
+
+    /**
+     * @event Drop
+     * Fires when a child Component is dropped at a new index position.
+     * @param {Ext.ux.BoxReorderer} this
+     * @param {Ext.container.Container} container The owning Container
+     * @param {Ext.Component} dragCmp The Component being dropped
+     * @param {Number} startIdx The index position from which the Component was initially dragged.
+     * @param {Number} idx The index at which the Component is being dropped.
+     */
+
     constructor: function() {
-        this.addEvents(
-            /**
-             * @event StartDrag
-             * Fires when dragging of a child Component begins.
-             * @param {Ext.ux.BoxReorderer} this
-             * @param {Ext.container.Container} container The owning Container
-             * @param {Ext.Component} dragCmp The Component being dragged
-             * @param {Number} idx The start index of the Component being dragged.
-             */
-             'StartDrag',
-            /**
-             * @event Drag
-             * Fires during dragging of a child Component.
-             * @param {Ext.ux.BoxReorderer} this
-             * @param {Ext.container.Container} container The owning Container
-             * @param {Ext.Component} dragCmp The Component being dragged
-             * @param {Number} startIdx The index position from which the Component was initially dragged.
-             * @param {Number} idx The current closest index to which the Component would drop.
-             */
-             'Drag',
-            /**
-             * @event ChangeIndex
-             * Fires when dragging of a child Component causes its drop index to change.
-             * @param {Ext.ux.BoxReorderer} this
-             * @param {Ext.container.Container} container The owning Container
-             * @param {Ext.Component} dragCmp The Component being dragged
-             * @param {Number} startIdx The index position from which the Component was initially dragged.
-             * @param {Number} idx The current closest index to which the Component would drop.
-             */
-             'ChangeIndex',
-            /**
-             * @event Drop
-             * Fires when a child Component is dropped at a new index position.
-             * @param {Ext.ux.BoxReorderer} this
-             * @param {Ext.container.Container} container The owning Container
-             * @param {Ext.Component} dragCmp The Component being dropped
-             * @param {Number} startIdx The index position from which the Component was initially dragged.
-             * @param {Number} idx The index at which the Component is being dropped.
-             */
-             'Drop'
-        );
         this.mixins.observable.constructor.apply(this, arguments);
     },
 
@@ -550,7 +808,7 @@ Ext.define('Ext.ux.BoxReorderer', {
         // Initialize the DD on first layout, when the innerCt has been created.
         me.container.on({
             scope: me,
-            boxready: me.afterFirstLayout,
+            boxready: me.onBoxReady,
             beforedestroy: me.onContainerDestroy
         });
     },
@@ -566,7 +824,7 @@ Ext.define('Ext.ux.BoxReorderer', {
         }
     },
 
-    afterFirstLayout: function() {
+    onBoxReady: function() {
         var me = this,
             layout = me.container.getLayout(),
             names = layout.names,
@@ -577,12 +835,12 @@ Ext.define('Ext.ux.BoxReorderer', {
         // TODO: Ext5's DD classes should not use init internally because it collides with use as a plugin
         // TODO: Ext5's DD classes should be Observable.
         // TODO: When all the above are trus, this plugin should extend the DD class.
-        dd = me.dd = Ext.create('Ext.dd.DD', layout.innerCt, me.container.id + '-reorderer');
+        dd = me.dd = new Ext.dd.DD(layout.innerCt, me.container.id + '-reorderer');
         Ext.apply(dd, {
             animate: me.animate,
             reorderer: me,
             container: me.container,
-            getDragCmp: this.getDragCmp,
+            getDragCmp: me.getDragCmp,
             clickValidator: Ext.Function.createInterceptor(dd.clickValidator, me.clickValidator, me, false),
             onMouseDown: me.onMouseDown,
             startDrag: me.startDrag,
@@ -629,7 +887,7 @@ Ext.define('Ext.ux.BoxReorderer', {
             cmpBox = cmpEl.getBox();
 
             // Last tracked start position
-            me.lastPos = cmpBox[this.startAttr];
+            me.lastPos = cmpBox[me.startAttr];
 
             // Calculate constraints depending upon orientation
             // Calculate offset from mouse to dragEl position
@@ -638,12 +896,12 @@ Ext.define('Ext.ux.BoxReorderer', {
                 me.minX = containerBox.left;
                 me.maxX = containerBox.right - cmpBox.width;
                 me.minY = me.maxY = cmpBox.top;
-                me.deltaX = e.getPageX() - cmpBox.left;
+                me.deltaX = e.getX() - cmpBox.left;
             } else {
                 me.minY = containerBox.top;
                 me.maxY = containerBox.bottom - cmpBox.height;
                 me.minX = me.maxX = cmpBox.left;
-                me.deltaY = e.getPageY() - cmpBox.top;
+                me.deltaY = e.getY() - cmpBox.top;
             }
             me.constrainY = me.constrainX = true;
         }
@@ -689,7 +947,7 @@ Ext.define('Ext.ux.BoxReorderer', {
         if (items.getAt(newIndex).reorderable === false) {
             newItem = items.getAt(newIndex);
             if (newIndex > me.startIndex) {
-                 while(newItem && newItem.reorderable === false) {
+                while(newItem && newItem.reorderable === false) {
                     newIndex++;
                     newItem = items.getAt(newIndex);
                 }
@@ -719,7 +977,7 @@ Ext.define('Ext.ux.BoxReorderer', {
             items = me.container.items,
             container = me.container,
             wasRoot = me.container._isLayoutRoot,
-            orig, dest, tmpIndex, temp;
+            orig, dest, tmpIndex;
 
         newIndex = me.findReorderable(newIndex);
 
@@ -865,12 +1123,10 @@ Ext.define('Scalr.ui.CustomButton', {
 	pressedCls: 'x-btn-custom-pressed',
 	disabledCls: 'x-btn-custom-disabled',
 	tooltipType: 'qtip',
-	
+
 	initComponent: function() {
 		var me = this;
 		me.callParent(arguments);
-
-		me.addEvents('click', 'toggle');
 
 		if (Ext.isString(me.toggleGroup)) {
 			me.enableToggle = true;
@@ -884,7 +1140,7 @@ Ext.define('Scalr.ui.CustomButton', {
 
 		me.callParent(arguments);
 
-		me.mon(me.btnEl, {
+		me.mon(me.el, {
 			click: me.onClick,
 			scope: me
 		});
@@ -893,11 +1149,11 @@ Ext.define('Scalr.ui.CustomButton', {
 			me.addCls(me.pressedCls);
 
 		Ext.ButtonToggleManager.register(me);
-		
+
         if (me.tooltip) {
             me.setTooltip(me.tooltip, true);
         }
-		
+
 	},
 
 	onDestroy: function() {
@@ -949,7 +1205,7 @@ Ext.define('Scalr.ui.CustomButton', {
 			me.toggle();
 		}
 	},
-	
+
 	setTooltip: function(tooltip, initial) {
 		var me = this;
 
@@ -971,11 +1227,11 @@ Ext.define('Scalr.ui.CustomButton', {
 		}
 		return me;
 	},
-	
+
 	getTipAttr: function(){
 		return this.tooltipType == 'qtip' ? 'data-qtip' : 'title';
 	},
-	
+
     clearTip: function() {
         if (Ext.isObject(this.tooltip)) {
             Ext.tip.QuickTipManager.unregister(this.btnEl);
@@ -983,108 +1239,21 @@ Ext.define('Scalr.ui.CustomButton', {
     }
 });
 
-Ext.define('Scalr.ui.GridPanelTool', {
-	extend: 'Ext.panel.Tool',
-	alias: 'widget.gridcolumnstool',
-
-	initComponent: function () {
-		this.type = 'settings';
-		this.callParent();
-	},
-
-	gridSettingsForm: function () {
-		var columnsFieldset = new Ext.form.FieldSet({
-			title: 'Grid columns to show'
-		});
-		var checkboxGroup = columnsFieldset.add({
-			xtype: 'checkboxgroup',
-				columns: 2,
-				vertical: true
-		});
-		var grid = this.up('panel'),
-			columns = grid.columns;
-
-		for(var i in columns) {
-			if(columns[i].hideable) {
-				checkboxGroup.add({
-					xtype: 'checkbox',
-					boxLabel: columns[i].text,
-					checked: !columns[i].hidden,
-					name: columns[i].text,
-					inputValue: 1
-				});
-			}
-		}
-
-		var settingsFieldset = new Ext.form.FieldSet({
-            layout: 'hbox',
-			items: [{
-				xtype: 'button',
-                flex: 1,
-				text: '<span style="font-weight:normal">Reset columns width</span>',
-				handler: function(){
-					grid.suspendLayouts();
-					for (var i=0, len=columns.length; i<len; i++) {
-						if (columns[i].initialConfig.flex) {
-							columns[i].flex = columns[i].initialConfig.flex;
-							if (columns[i].width) {
-								delete columns[i].width;
-							}
-						} else if (columns[i].initialConfig.width) {
-							columns[i].width = columns[i].initialConfig.width;
-						}
-					}
-					grid.resumeLayouts(true);
-				}
-			}, {
-                xtype: 'buttonfield',
-                flex: 1,
-                margin: '0 0 0 10',
-                text: 'Autorefresh',
-                name: 'autoRefresh',
-                enableToggle: true,
-                value: !!this.up('panel').down('scalrpagingtoolbar').autoRefresh
-            }]
-		});
-		return [columnsFieldset, settingsFieldset];
-	},
-
-	handler: function () {
-		var me = this,
-            grid = me.up('panel'),
-			columns = grid.columns;
-		Scalr.Confirm({
-			form: me.gridSettingsForm(),
-			success: function (data) {
-				for (var i in columns) {
-					if(data[columns[i].text])
-						columns[i].show();
-					if(!data[columns[i].text] && columns[i].hideable)
-						columns[i].hide();
-				}
-				grid.fireEvent('resize');
-
-				if (data['autoRefresh'])
-					this.up('panel').down('scalrpagingtoolbar').checkRefreshHandler({'autoRefresh': 60 }, true);
-				else
-					this.up('panel').down('scalrpagingtoolbar').checkRefreshHandler({'autoRefresh': 0}, true);
-			},
-			scope: this
-		});
-	}
-});
+/*
+ remove, move code to ui.js
 
 Ext.define('Scalr.ui.PanelTool', {
+
 	extend: 'Ext.panel.Tool',
 	alias: 'widget.favoritetool',
 
-	/** Example:
+	 * Example:
 	 *
 	 favorite: {
 	    text: 'Farms',
 	    href: '#/farms/view'
 	 }
-	 */
+
 	favorite: {},
 
 	initComponent: function () {
@@ -1132,9 +1301,9 @@ Ext.define('Scalr.ui.PanelTool', {
 
 		Scalr.storage.set('system-favorites', favorites);
 	}
-});
+});*/
 
-// add link for topmenu (4.2)
+// 5.0
 Ext.define('Scalr.ui.MenuItemTop', {
 	extend: 'Ext.menu.Item',
 	alias: 'widget.menuitemtop',
@@ -1151,7 +1320,8 @@ Ext.define('Scalr.ui.MenuItemTop', {
         me.itemEl.createChild({
             tag: 'a',
             cls: 'addlink',
-            href: me.addLinkHref
+            href: me.addLinkHref,
+            html: 'ADD NEW'
         }, me.arrowEl);
 	}
 });
@@ -1209,9 +1379,9 @@ Ext.define('Scalr.ui.AddFieldPlugin', {
 		var me = this;
         me.client = client;
 		client.on('afterrender', function() {
-			me.panelContainer = Ext.DomHelper.insertAfter(client.el.down(me.targetEl), {style: {height: '26px'}}, true);
+			me.panelContainer = Ext.DomHelper.insertAfter(client.el.down(me.targetEl), {style: {height: '30px'}}, true);
 			var addmask = Ext.DomHelper.append(me.panelContainer,
-				'<div style="position: absolute; width: ' + me.width + '; height: 26px;'+(me.padding ? 'padding:' + me.padding + ';' : '')+'">' +
+				'<div style="position: absolute; width: ' + me.width + '; height: 30px;'+(me.padding ? 'padding:' + me.padding + ';' : '')+'">' +
 					'<div class="scalr-ui-addfield ' + me.cls + '"></div>' +
 					'</div>'
 				, true);
@@ -1240,12 +1410,12 @@ Ext.define('Scalr.ui.AddFieldPlugin', {
 Ext.define('Scalr.ui.FormFieldPassword', {
     extend: 'Ext.form.field.Text',
 	alias: 'widget.passwordfield',
-	
+
 	inputType:'password',
 	allowBlank: false,
 	placeholder: '******',
 	initialValue: null,
-	
+
 	isPasswordEmpty: function(password) {
 		return Ext.isEmpty(password) || password === false;
 	},
@@ -1290,9 +1460,9 @@ Ext.define('Scalr.ui.LeftMenu', {
 	currentItemId: null,
     currentOptions: null,
 	itemIdPrefix: 'leftmenu-',
-    defaultMenuWidth: 112,
+    defaultMenuWidth: 110 + Ext.getScrollbarSize().width,
 
-	itemIconClsPrefix: 'x-icon-leftmenu-',
+	itemIconClsPrefix: 'x-icon-leftmenu',
 
 	getMenuConfig: function(menuId){
 		var config = {
@@ -1301,12 +1471,6 @@ Ext.define('Scalr.ui.LeftMenu', {
         };
 		switch (menuId) {
 			case 'account':
-                config.items.push({
-                    itemId:'environments',
-                    href: '#/account/environments',
-                    text: 'Environments'
-                });
-                
                 config.items.push({
                     itemId:'teams',
                     href: '#/account/teams',
@@ -1330,123 +1494,84 @@ Ext.define('Scalr.ui.LeftMenu', {
 			case 'webhooks':
                 config.items.push({
                     itemId:'endpoints',
-                    href: '#/webhooks/endpoints',
+                    href: '#' + Scalr.utils.getUrlPrefix() + '/webhooks/endpoints',
                     text: 'Endpoints'
                 });
 
                 config.items.push({
+                    itemCls: 'webhooks',
                     itemId:'configs',
-                    href: '#/webhooks/configs',
+                    href: '#' + Scalr.utils.getUrlPrefix() + '/webhooks/configs',
                     text: 'Webhooks'
                 });
 
                 config.items.push({
                     itemId:'history',
-                    href: '#/webhooks/history',
+                    href: '#' + Scalr.utils.getUrlPrefix() + '/webhooks/history',
                     text: 'History'
                 });
                 break;
 
             case 'analytics':
-                if (Scalr.utils.isAdmin()) {
-                    config.items.push({
-                        itemId: 'dashboard',
-                        href: '#/analytics/dashboard',
-                        text: 'Dashboard'
-                    });
-                }
+                config.items.push({
+                    itemId: 'dashboard',
+                    cls: 'x-btn-tab-small-dark',
+                    href: '#/admin/analytics/dashboard',
+                    text: 'Dashboard'
+                });
                 config.items.push({
                     itemId: 'costcenters',
-                    href: '#/analytics/costcenters',
+                    href: '#/admin/analytics/costcenters',
                     text: 'Cost centers'
                 },{
                     itemId: 'projects',
-                    href: '#/analytics/projects',
+                    href: '#/admin/analytics/projects',
                     text: 'Projects'
                 },{
                     itemId: 'budgets',
-                    href: '#/analytics/budgets',
+                    href: '#/admin/analytics/budgets',
                     text: 'Budgets'
                 },{
                     itemId: 'pricing',
-                    href: '#/analytics/pricing',
+                    href: '#/admin/analytics/pricing',
                     text: 'Pricing list'
                 });
-                if (Scalr.utils.isAdmin()) {
-                    config.items.push({
-                        itemId: 'notifications',
-                        href: '#/analytics/notifications',
-                        text: 'Notifications',
-                    });
-                }
+                config.items.push({
+                    itemId: 'notifications',
+                    href: '#/admin/analytics/notifications',
+                    text: 'Notifications',
+                });
                 break;
             case 'envanalytics':
                 config.cls = 'analytics';
                 config.items.push({
+                    cls: 'x-btn-tab-small-dark',
                     itemId: 'dashboard',
                     itemCls: 'environments',
-                    href: '#/analytics/environment/dashboard',
+                    href: '#/analytics/dashboard',
                     text: 'Environment'
                 },{
                     itemId: 'farms',
                     itemCls: 'farms',
-                    href: '#/analytics/environment/farms',
+                    href: '#/analytics/farms',
                     text: 'Farms'
                 });
                 break;
-			case 'settings':
+            case 'accountanalytics':
+                config.cls = 'analytics';
                 config.items.push({
-                    itemId:'orchestration',
-                    href: '#/account/orchestration',
-                    text: 'Orchestration',
-                    hidden: !Scalr.isAllowed('ADMINISTRATION_ORCHESTRATION')
+                    itemId: 'environments',
+                    href: '#/account/analytics/environments',
+                    text: 'Environments'
+                },{
+                    itemId: 'projects',
+                    href: '#/account/analytics/projects',
+                    text: 'Projects'
+                },{
+                    itemId: 'budgets',
+                    href: '#/account/analytics/budgets',
+                    text: 'Budgets'
                 });
-
-                config.items.push({
-                    itemId:'events',
-                    href: '#/scripts/events/account',
-                    text: 'Custom events',
-                    hidden: !Scalr.isAllowed('GENERAL_CUSTOM_EVENTS')
-                });
-
-                config.items.push({
-                    itemId:'variables',
-                    href: '#/account/variables',
-                    text: 'Global variables',
-                    hidden: !Scalr.isAllowed('ADMINISTRATION_GLOBAL_VARIABLES')
-                });
-                
-                config.items.push({
-                    menuCls: 'webhooks',
-                    itemCls: 'configs',
-                    itemId: 'webhooks',
-                    href: '#/webhooks/endpoints?level=account',
-                    text: 'Webhooks',
-                    hidden: !Scalr.isAllowed('ADMINISTRATION_WEBHOOKS')
-                });
-
-                config.items.push({
-                    itemId:'chef',
-                    href: '#/services/chef/servers?level=account',
-                    text: 'Chef servers',
-                    hidden: !Scalr.isAllowed('SERVICES_ADMINISTRATION_CHEF')
-                });
-
-                config.items.push({
-                    itemCls: 'analytics',
-                    itemId: 'resources',
-                    href: '#/analytics/account/projects',
-                    text: 'Cost analytics',
-                    hidden: !Scalr.isAllowed('ADMINISTRATION_ANALYTICS') || !Scalr.flags['analyticsEnabled']
-                });
-
-                config.items.push({
-                    itemId:'billing',
-                    href: '#/billing',
-                    text: 'Billing',
-                    hidden: !Scalr.isAllowed('ADMINISTRATION_BILLING') || !Scalr.flags['billingExists']
-                });
-
                 break;
 
 		}
@@ -1465,13 +1590,13 @@ Ext.define('Scalr.ui.LeftMenu', {
 			hidden: true,
 			dock: 'left',
             cls: 'x-docked-tabs',
-            width: me.defaultMenuWidth + Ext.getScrollbarSize().width,
-            overflowY: 'auto',
+            width: me.defaultMenuWidth,
+            scrollable: 'y',
 			defaults: {
                 xtype: 'button',
                 ui: 'tab',
                 allowDepress: false,
-                iconAlign: 'above',
+                iconAlign: 'top',
                 disableMouseDownPressed: true,
                 enebleToggle: true,
                 hrefTarget: null,
@@ -1486,10 +1611,11 @@ Ext.define('Scalr.ui.LeftMenu', {
 	set: function(options) {
 		var me = this, prevBtn, newBtn, menuConfig;
         me.currentOptions = options;
-		if (options.menuId !== this.currentMenuId) {
+		if (options.menuId !== this.currentMenuId || this.currentScope != Scalr.scope) {
+            this.currentScope = Scalr.scope;
             menuConfig = this.getMenuConfig(options.menuId);
 			this.menu.removeAll();
-            var iconClsPrefix = me.itemIconClsPrefix + (menuConfig.cls || options.menuId);
+            var iconClsPrefix = me.itemIconClsPrefix;
             this.menu.setWidth(options.width || me.defaultMenuWidth);
 			this.menu.add(Ext.Array.map(menuConfig.items, function(item){
                 var iconClsPrefixLocal = item.menuCls ? me.itemIconClsPrefix + item.menuCls : iconClsPrefix;
@@ -1554,12 +1680,10 @@ Ext.define('Scalr.ui.LeftMenu', {
 Ext.define('Scalr.ui.GridField', {
     extend: 'Ext.grid.Panel',
     mixins: {
-        //labelable: 'Ext.form.Labelable',
         field: 'Ext.form.field.Field'
     },
     alias: 'widget.gridfield',
-	
-	multiSelect: true,
+
 	selModel: {
 		selType: 'selectedmodel',
 		injectCheckbox: 'first'
@@ -1575,7 +1699,7 @@ Ext.define('Scalr.ui.GridField', {
         if (!me.name) {
             me.name = me.getInputId();
         }
-		
+
 		this.on('viewready', function(){
 			this.fieldReady = true;
 			this.setRawValue(this.value);
@@ -1583,11 +1707,9 @@ Ext.define('Scalr.ui.GridField', {
 		this.on('selectionchange', function(selModel, selected){
 			this.checkChange();
 		});
-		this.getStore().on('refresh', function(){
-			me.setRawValue(me.value);
-		});
+		this.getStore().on('refresh', me.onStoreRefresh, me);
 	},
-  
+
 	setValue: function(value) {
 		this.setRawValue(value);
 		return this.mixins.field.setValue.call(this, value);
@@ -1605,14 +1727,18 @@ Ext.define('Scalr.ui.GridField', {
 					records.push(record);
 				}
 			}
-			this.getSelectionModel().select(records, false, true);
+            if (records.length) {
+                this.getSelectionModel().select(records, false, true);
+            } else {
+                this.getSelectionModel().deselectAll();
+            }
 		}
 	},
 
     getInputId: function() {
         return this.inputId || (this.inputId = this.id + '-inputEl');
     },
-	
+
     getRawValue: function() {
 		var ids = [];
 		this.getSelectionModel().selected.each(function(record){
@@ -1628,7 +1754,7 @@ Ext.define('Scalr.ui.GridField', {
     getActiveError : function() {
         return this.activeError || '';
     },
-	
+
     getSubmitData: function() {
         var me = this,
             data = null;
@@ -1637,72 +1763,24 @@ Ext.define('Scalr.ui.GridField', {
             data[me.getName()] = Ext.encode(me.getValue());
         }
         return data;
-    }
-	
-});
+    },
 
-Ext.define('Scalr.ui.ChildStore', {
-	extend: 'Ext.data.Store',
-	parentStore: null,
-    suspendSelfUpdate: 0,
-    suspendParentUpdate: 0,
-	constructor: function(){
-		var me = this;
-		if (arguments[0].parentStore) {
-			arguments[0].model = arguments[0].parentStore.getProxy().getModel().modelName;
-		}
-		me.callParent(arguments);
-		if (me.parentStore) {
-			this.loadRecords(this.parentStore.getRange());
-			
-			this.parentStore.on({
-				refresh: function(){
-                    if (me.suspendSelfUpdate === 0) {
-                        me.suspendParentUpdate++;
-                        me.loadRecords(me.parentStore.getRange());
-                        me.suspendParentUpdate--;
-                    }
-				},
-				remove: function(store, record){
-					if (me.suspendSelfUpdate === 0) {
-						me.suspendParentUpdate++;
-                        me.remove(record);
-                        me.suspendParentUpdate--;
-					}
-				},
-				add: function(store, records, index){
-					if (me.suspendSelfUpdate === 0) {
-						me.suspendParentUpdate++;
-						me.insert(index, records);
-						me.suspendParentUpdate--;
-					}
-				}
-			});
-			
-			this.on({
-				remove: function(store, record){
-					if (me.suspendParentUpdate === 0) {
-                        me.suspendSelfUpdate++;
-                        me.parentStore.remove(record);
-                        me.suspendSelfUpdate--;
-                    }
-				},
-				add: function(store, records, index){
-					if (me.suspendParentUpdate === 0) {
-						me.suspendSelfUpdate++;
-						me.parentStore.insert(index, records);
-						me.suspendSelfUpdate--;
-					}
-				}
-			});
-		}
-	}
-});	
+    onStoreRefresh: function(){
+        this.setRawValue(this.value);
+    },
+
+    beforeDestroy: function() {
+    	this.getStore().un('refresh', this.onStoreRefresh, this);
+    	this.callParent(arguments);
+    }
+
+
+});
 
 Ext.define('Scalr.ui.FormPicker', {
 	extend:'Ext.form.field.Picker',
 	alias: 'widget.formpicker',
-	
+
 	onBoxReady: function() {
 		this.callParent(arguments);
 		this.on({
@@ -1711,7 +1789,7 @@ Ext.define('Scalr.ui.FormPicker', {
 			}
 		});
 	},
-	
+
 	createPicker: function() {
 		var me = this,
 			formDefaults = {
@@ -1726,7 +1804,7 @@ Ext.define('Scalr.ui.FormPicker', {
 				hidden: true,
 				ownerCt: this.ownerCt
 			};
-			
+
 		if (!this.form.dockedItems) {
 			this.form.dockedItems = {
 				xtype: 'container',
@@ -1765,7 +1843,7 @@ Ext.define('Scalr.ui.FormPicker', {
 		})
 		return form;
 	},
-	
+
 	collapseIf: function(e) {
 		var me = this;
 		if (!me.keepVisible && !me.isDestroyed && !e.within(me.bodyEl, false, true) && !e.within(me.picker.el, false, true) && !me.isEventWithinPickerLoadMask(e)) {
@@ -1773,27 +1851,27 @@ Ext.define('Scalr.ui.FormPicker', {
 		}
 		me.keepVisible = false;
 	}
-	
+
 });
 
 Ext.define('Scalr.ui.data.View.DynEmptyText', {
     extend: 'Ext.AbstractPlugin',
     alias: 'plugin.dynemptytext',
-	
+
     disabled: false,
-	client:null,
-	
+	client: null,
+
 	onAddItemClick: Ext.emptyFn,
 	itemsTotal: null,
-	emptyText: 'No items were found to match your search.<p>Try modifying your search criteria or <a class="add-link" href="#">adding a new item</a></p>',
+	emptyText: 'Nothing were found to match your search.<br/>Try modifying your search criteria.',
 	emptyTextNoItems: null,
-    showArrow: true,
-    arrowCls: 'x-grid-empty-arrow',
     forceRefresh: false,
-	
+
 	init: function(client) {
 		var me = this;
 		me.client = client;
+        client.emptyText = '<div class="' + Ext.baseCSSPrefix + 'grid-empty">' + me.emptyText + '</div>';
+        client.deferEmptyText = false;
 		client.on({
 			containerclick: {
 				fn: me.onContainerClick,
@@ -1824,7 +1902,7 @@ Ext.define('Scalr.ui.data.View.DynEmptyText', {
 			}
 		});
 	},
-	
+
 	onContainerClick: function(comp, e){
 		var el = comp.el.query('a.add-link');
 		if (el.length) {
@@ -1837,33 +1915,28 @@ Ext.define('Scalr.ui.data.View.DynEmptyText', {
 			e.preventDefault();
 		}
 	},
-	
+
 	updateEmptyText: function() {
 		var client = this.client,
-			itemsTotal = client.store.snapshot ?  client.store.snapshot.length : client.store.data.length;
+            visibleCount = client.store.getCount(),
+			itemsTotal = (client.store.getUnfiltered ? client.store.getUnfiltered().length : client.store.getSource().length) || 0;
 
-		if (this.forceRefresh || itemsTotal !== this.itemsTotal) {
-			var text = this.emptyText;
-			if (itemsTotal < 1) {
-                if (this.showArrow) {
-                    text = '<div class="x-grid-empty-inner ' + this.arrowCls + '"><div class="x-grid-empty-text">' + (this.emptyTextNoItems || this.emptyText) + '</div></div>';
-                } else {
-                    text = '<div class="x-grid-empty-inner"><div class="x-grid-empty-text">' + (this.emptyTextNoItems || this.emptyText) + '</div></div>';
-                }
-			} else {
-				text = '<div class="x-grid-empty-inner">' + text + '</div>';
-			}
+		if (!visibleCount && (this.forceRefresh || itemsTotal !== this.itemsTotal)) {
+			var text = itemsTotal < 1 ? this.emptyTextNoItems || this.emptyText : this.emptyText;
 			client.emptyText = '<div class="' + Ext.baseCSSPrefix + 'grid-empty">' + text + '</div>';
 			var emptyDiv = client.el.query('.' + Ext.baseCSSPrefix + 'grid-empty');
 			if (emptyDiv.length) {
-				Ext.fly(emptyDiv[0]).setHTML(text);
-                client.refreshSize();
+				Ext.fly(emptyDiv[0]).setHtml(text);
 			}
+            client.refreshSize();
 			this.itemsTotal = itemsTotal;
             this.forceRefresh = false;
-		}
+		} else if (visibleCount) {
+            //extjs table view bug? empty text is visible after adding new record
+            client.clearEmptyEl();
+        }
 	},
-    
+
     setEmptyText: function(text, alt) {
         this['emptyText' + (alt ? 'NoItems' : '')] = text;
         this.forceRefresh = true;
@@ -1884,7 +1957,7 @@ Ext.define('Ext.ux.form.ToolFieldSet', {
                 legend.items.push(me.createToolCmp(me.tools[i]));
             }
         }
-		
+
 		return legend;
     },
 
@@ -1904,19 +1977,19 @@ Ext.define('Ext.ux.form.ToolFieldSet', {
 });
 
 Ext.define('Scalr.CachedRequest', {
-    
+
     defaultTtl: 3600,//seconds
-    
+
     defaultProcessBox: {
         type: 'action',
         msg: 'Loading ...'
     },
-    
+
     constructor: function() {
         this.cache = {};
         this.queue = {};
     },
-    
+
     getCacheId: function(config) {
         var cacheId = [],
             paramNames;
@@ -1931,24 +2004,25 @@ Ext.define('Scalr.CachedRequest', {
         }
         return cacheId.join('.');
     },
-    
+
     clearCache: function() {
         delete this.queue;
         delete this.cache;
         this.cache = {};
+        //todo abort requests before unset
         this.queue = {};
     },
-    
+
     removeCache: function(params) {
         var cacheId = this.getCacheId(params);
         delete this.cache[cacheId];
     },
-    
+
     load: function(params, cb, scope, ttl, processBox) {
         var me = this,
             cacheId = me.getCacheId(params);
         ttl = ttl === undefined ? me.defaultTtl : ttl;
-        
+
         if (me.queue[cacheId] !== undefined) {
             me.queue[cacheId].callbacks.push({fn: cb, scope: scope || me});
         } else if (me.cache[cacheId] !== undefined && !me.isExpired(me.cache[cacheId], ttl)) {
@@ -1958,7 +2032,7 @@ Ext.define('Scalr.CachedRequest', {
             me.queue[cacheId] = {
                 callbacks: [{fn: cb, scope: scope || me}]
             };
-            Scalr.Request({
+            me.queue[cacheId].request = Scalr.Request({
                 processBox: processBox!== false ? processBox || me.defaultProcessBox : undefined,
                 url:  params.url,
                 params: params.params || {},
@@ -1989,27 +2063,35 @@ Ext.define('Scalr.CachedRequest', {
         }
         return cacheId;
     },
-    
+
+    abort: function(cacheId) {
+        var me = this;
+        if (me.queue[cacheId] && me.queue[cacheId].request) {
+            Ext.Ajax.abort(me.queue[cacheId].request);
+            delete me.queue[cacheId].request;
+        }
+    },
+
     get: function(params) {
         var cacheId = Ext.isString(params) ? params : this.getCacheId(params);
         return this.cache[cacheId] || undefined;
     },
-    
+
     getTime: function() {
         return Math.floor(new Date().getTime() / 1000);
     },
-    
+
     isExpired: function(data, ttl) {
         return data.expired ? true : (ttl !== 0 ? this.getTime() - data.time > ttl : false);
     },
-    
+
     setExpired: function(params) {
         var cacheId = Ext.isString(params) ? params : this.getCacheId(params);
         if (this.cache[cacheId] !== undefined) {
             this.cache[cacheId].expired = true;
         }
     },
-    
+
     isLoaded: function(params) {
         var cacheId = Ext.isString(params) ? params : this.getCacheId(params);
         return this.cache[cacheId] !== undefined;
@@ -2018,165 +2100,8 @@ Ext.define('Scalr.CachedRequest', {
     onDestroy: function(){
         this.clearCache();
     }
-    
+
 });
-
-Ext.define('Scalr.ui.NotAGridView', {
-	extend: 'Ext.container.Container',
-	alias : 'widget.notagridview',
-    
-    layout: {
-        type: 'vbox',
-        align: 'stretch'
-    },
-    
-    selectable: false,
-    
-    constructor: function(config) {
-        config.cls += ' x-grid-shadow x-not-a-grid' + (config.selectable ? ' x-not-a-grid-selectable' : '');
-        this.createItems(config);
-        this.callParent(arguments);
-    },
-    
-    initComponent: function(){
-        var me = this;
-        me.callParent(arguments);
-        me.down('#items').on({
-            add: function(c, comp) {
-                me.updateItemsCls();
-                if (me.selectable) {
-                    comp.on({
-                        click: {
-                            fn: function(){
-                                me.toggleSelect(this);
-                            },
-                            element: 'el',
-                            scope: comp
-                        }
-                    });
-                }
-            },
-            remove: function() {
-                me.updateItemsCls();
-            }
-        });
-    },
-    
-    createItems: function(config){
-        this.items = [{
-            xtype: 'container',
-            itemId: 'header',
-            layout: 'hbox',
-            cls: 'x-not-a-grid-header x-grid-header-ct',
-            items: Ext.Array.map(config.columns, function(column, index){
-                return column.header !== false ? 
-                Ext.apply({
-                    xtype: 'component',
-                    html: '<div class="x-column-header-inner"><span class="x-column-header-text">' + column.title + '</span></div>',
-                    cls: 'x-column-header' + (index === 0 ? ' x-column-header-first' : '')
-                }, column.header) : undefined;
-            })
-        },{
-            xtype: 'container',
-            cls: 'x-not-a-grid-body-fit',
-            flex: 1,
-            layout: 'absolute',
-            items: [{
-                xtype: 'container',
-                itemId: 'items',
-                maskOnDisable: false,
-                cls: 'x-not-a-grid-view x-not-a-grid-view-fit'
-            }]
-        }];
-        if (config.title !== undefined) {
-            this.items.unshift({
-                xtype: 'component',
-                html: config.title,
-                cls: 'x-fieldset-subheader ' + config.headerCls
-            });
-        }
-    },
-    
-    getItems: function(){
-        return this.down('#items').items;
-    },
-
-    removeItem: function(item){
-        return this.down('#items').remove(item);
-    },
-
-    removeItems: function(){
-        return this.down('#items').removeAll();
-    },
-
-    addItems: function(items, append) {
-        var me = this,
-            c =  me.down('#items');
-        c.suspendLayouts();
-        if (append === false) {
-            this.toggleSelect();
-            c.removeAll();
-        }
-       c.add(Ext.Array.map(items, function(item){
-            return item !== undefined ? {
-                xtype: 'container',
-                layout: 'column',
-                cls: 'x-item',
-                itemData: item.itemData,
-                items: Ext.Array.map(me.columns, function(column) {
-                    var c = Ext.clone(column.control);
-                    if (c !== undefined) {
-                        c['name'] = column.name;
-                        c[c.xtype === 'radio' ? 'checked' : 'value'] = item.itemData.settings[column.name] || (Ext.isFunction(column.defaultValue) ? column.defaultValue(item.itemData) : column.defaultValue);
-                        if (column.extendInitialConfig) {
-                            column.extendInitialConfig(c, item.itemData);
-                        }
-                    }
-                    return c;
-                })
-            } : undefined;
-        }));
-        c.resumeLayouts(true);
-    },
-
-    showEmptyText: function(text) {
-        this.down('#items').add({
-            xtype: 'component',
-            cls: 'x-empty-text',
-            html: text,
-            flex: 1
-        });
-    },
-    
-    toggleSelect: function(item) {
-        if (item === this.selectedItem) return;
-        
-        if (this.selectedItem !== undefined) {
-            this.selectedItem.removeCls('x-item-selected');
-            this.fireEvent('selectionchange', this.selectedItem, false);
-            delete this.selectedItem;
-        }
-        if (item !== undefined) {
-            this.selectedItem = item;
-            this.selectedItem.addCls('x-item-selected');
-            this.fireEvent('selectionchange', item, true);
-        }
-
-    },
-    
-    updateItemsCls: function(){
-        this.down('#items').items.each(function(item, index){
-            item[index % 2 ? 'addCls' : 'removeCls']('x-item-alt');
-        });
-    },
-    
-    setDisabled: function(disabled) {
-        var ct = this.down('#items');
-        ct.setOverflowXY('hidden', disabled ? 'hidden' : 'auto');
-        ct.setDisabled(disabled);
-    }
-});
-
 
 //4.2 plugins
 Ext.define('Scalr.CachedRequestManager', {
@@ -2209,6 +2134,14 @@ Ext.define('Scalr.CachedRequestManager', {
         }
     },
 
+    clear: function(id) {
+        var me = this,
+            item = me.list[id];
+        if (item !== undefined) {
+            item.instance.clearCache();
+        }
+    },
+
     get: function(id) {
         return this.create(id, true);
     }
@@ -2233,18 +2166,27 @@ Ext.define('Scalr.ui.StoreProxyCachedRequest', {
     extend: 'Ext.data.proxy.Proxy',
     alias: 'proxy.cachedrequest',
 
-    crscope: null,
-    url: null,
+    config: {
+        crscope: null,
+        url: null,
+        data: null,
+        filterFields: null,
+        root: null,
+        filterFn: null,
+        filterFnScope: null,
+        prependData: null,
+        ttl: null,
+        processBox: null
+    },
 
     constructor: function(config) {
         this.params = {};
-        this.callParent([config]);
-        this.setReader(this.reader);
-        //backwards compatibility, will be deprecated in 5.0
-        //this.nocache = true;
+        this.extraParams = {};
+        this.callParent(arguments);
     },
 
-    updateOperation: function(operation, callback, scope) {
+
+    finishOperation: function(operation) {
         var i = 0,
             recs = operation.getRecords(),
             len = recs.length;
@@ -2252,92 +2194,83 @@ Ext.define('Scalr.ui.StoreProxyCachedRequest', {
         for (i; i < len; i++) {
             recs[i].commit();
         }
-        operation.setCompleted();
-        operation.setSuccessful();
-
-        Ext.callback(callback, scope || this, [operation]);
+        operation.setSuccessful(true);
     },
 
-    create: function() {
-        this.updateOperation.apply(this, arguments);
+    create: function(operation) {
+        this.finishOperation(operation);
     },
 
-    update: function() {
-        this.updateOperation.apply(this, arguments);
+    update: function(operation) {
+        this.finishOperation(operation);
     },
 
-    destroy: function() {
-        this.updateOperation.apply(this, arguments);
+    erase: function(operation) {
+        this.finishOperation(operation);
     },
 
-    read: function(operation, callback, scope) {
-        var me = this;
-        if (me.data) {
-            operation.resultSet = me.getReader().read(me.data);
+    clear: Ext.emptyFn,
 
-            operation.setCompleted();
-            operation.setSuccessful();
-            Ext.callback(callback, scope || me, [operation]);
+    read: function(operation) {
+        var me = this,
+            config = me.config,
+            resultSet,
+            records,
+            root = me.getRoot(),
+            data = me.getData();
+        if (data) {
+            resultSet = me.getReader().read(me.getData());
+            if (operation.process(resultSet, null, null, false) !== false) {
+                operation.setCompleted();
+            }
         } else {
-            Scalr.CachedRequestManager.get(me.crscope).load(
+            Scalr.CachedRequestManager.get(me.getCrscope()).load(
                 {
-                    url: me.url,
-                    params: me.params
+                    url: me.getUrl(),
+                    params: Ext.Object.getSize(me.params) ? me.params : me.extraParams
                 },
                 function(data, status, cacheId, response) {
                     var filterFn,
                         testRe,
-                        queryString = operation.params ? operation.params.query : null;
+                        queryString = operation.config.params ? operation.config.params.query : null;
 
                     if (status) {
-                        operation.resultSet = me.getReader().read(me.root !== undefined ? data[me.root] : data);
-                        if (operation.resultSet.success) {
-                            if (me.filterFn) {
-                                operation.resultSet.records = Ext.Array.filter(operation.resultSet.records, me.filterFn, me.filterFnScope || me);
+                        resultSet = me.getReader().read(root ? data[root] : data);
+                        if (operation.process(resultSet, null, null, false) !== false) {
+                            if (me.getFilterFn()) {
+                                resultSet.setRecords(records = Ext.Array.filter(resultSet.getRecords(), me.getFilterFn(), me.getFilterFnScope() || me));
+                                resultSet.setTotal(records.length)
                             }
                             if (queryString) {
-                                if (me.filterFields !== undefined) {
+                                if (me.getFilterFields()) {
                                     testRe = new RegExp(Ext.String.escapeRegex(queryString), 'i');
                                     filterFn = function(record){
                                         var res = false;
-                                        Ext.Array.each(me.filterFields, function(field){
+                                        Ext.Array.each(me.getFilterFields(), function(field){
                                             return !(res = testRe.test(record.get(field)));
                                         });
                                         return res;
-                                    }
+                                    };
                                 }
 
                                 if (filterFn !== undefined) {
-                                    operation.resultSet.records = Ext.Array.filter(operation.resultSet.records, filterFn);
+                                    resultSet.setRecords(records = Ext.Array.filter(resultSet.getRecords(), filterFn));
+                                    resultSet.setTotal(records.length);
                                 }
                             }
-                            if (me.prependData !== undefined) {
-                                Ext.Array.insert(operation.resultSet.records, 0, me.getReader().read(me.prependData).records);
+                            if (me.getPrependData()) {
+                                Ext.Array.insert(operation.getRecords(), 0, me.getReader().read(me.getPrependData()).getRecords());
                             }
-                        }
-                        if (operation.resultSet.success) {
-                            operation.commitRecords(operation.resultSet.records);
+
                             operation.setCompleted();
-                            operation.setSuccessful();
-                        } else {
-                            operation.setException(operation.resultSet.message);
-                            me.fireEvent('exception', me, response, operation);
                         }
-                    } else {
-                        operation.setException(operation, null);
-                        me.fireEvent('exception', this, response, operation);
                     }
-                    Ext.callback(callback, scope || me, [operation]);
                 },
                 me,
-                me.ttl !== undefined ? me.ttl : 0,
-                me.processBox
+                me.getTtl() || 0,
+                me.getProcessBox()
             );
         }
-    },
-
-    updateSettings: function(settings){
-        Ext.apply(this, settings);
     }
 
 });
@@ -2350,7 +2283,7 @@ Ext.define('Scalr.ui.PanelScrollFixPlugin', {
 	client:null,
 
     scrollTop: 0,
-    
+
 	init: function(client) {
 		var me = this;
 		me.client = client;
@@ -2383,96 +2316,6 @@ Ext.define('Scalr.ui.PanelScrollFixPlugin', {
 
     resetScrollPosition: function() {
         this.scrollTop = 0;
-    }
-});
-
-
-Ext.define('Scalr.ui.ActionsMenu', {
-	extend: 'Ext.menu.Menu',
-    alias: 'widget.actionsmenu',
-    cls: 'x-options-menu',
-	constructor: function () {
-		this.callParent(arguments);
-        this.linkTplsCache = {};
-    },
-
-    onClick: function(e) {
-        var me = this,
-            item;
-
-        if (me.disabled) {
-            e.stopEvent();
-            return;
-        }
-
-        item = (e.type === 'click') ? me.getItemFromEvent(e) : me.activeItem;
-        if (item && item.isMenuItem) {
-            if (!item.menu || !me.ignoreParentClicks) {
-                item.onClick(e);
-            } else {
-                e.stopEvent();
-            }
-            /*Changed*/
-            if (Ext.isFunction (item.menuHandler)) {
-                item.menuHandler(me.data);
-                e.stopEvent();
-            } else if (Ext.isObject(item.request)) {
-                var r = Scalr.utils.CloneObject(item.request);
-                r.params = r.params || {};
-
-                if (Ext.isObject(r.confirmBox))
-                    r.confirmBox.msg = new Ext.Template(r.confirmBox.msg).applyTemplate(me.data);
-
-                if (Ext.isFunction(r.dataHandler)) {
-                    r.params = Ext.apply(r.params, r.dataHandler(me.data));
-                    delete r.dataHandler;
-                }
-                if (r.success === undefined) {
-                    r.success = function () {
-                        me.fireEvent('actioncomplete');
-                    }
-                }
-                Scalr.Request(r);
-                e.stopEvent();
-            }
-            /*End*/
-        }
-        // Click event may be fired without an item, so we need a second check
-        if (!item || item.disabled) {
-            item = undefined;
-        }
-        me.fireEvent('click', me, item, e);
-    },
-    
-    setData: function(data) {
-        var me = this,
-            prevSeparator,
-            display;
-        me.data = data;
-
-		this.items.each(function (item) {
-			display = Ext.isFunction(item.getVisibility) ? item.getVisibility(me.data) : true;
-            if (display) {//prevent double separators
-                if (item.xtype === 'menuseparator') {
-                    display = prevSeparator === undefined;
-                    prevSeparator = display ? item : prevSeparator;
-                } else {
-                    prevSeparator = undefined;
-                }
-            }
-            
-			item[display ? 'show' : 'hide']();
-			if (display && item.href) {
-				// Update item link
-				if (! this.linkTplsCache[item.id]) {
-					this.linkTplsCache[item.id] = new Ext.Template(item.href).compile();
-				}
-				var tpl = this.linkTplsCache[item.id];
-				if (item.rendered) {
-					item.el.down('a').dom.href = tpl.apply(me.data);
-                }
-			}
-		}, this);
     }
 });
 
@@ -2764,99 +2607,135 @@ Ext.define('Scalr.ui.ColoredStatus', {
                 text: 'This <b>Custom Event</b> is currently not used.'
             }
         },
-		rdsdbinstance: {
-			'creating': {
-				cls: 'yellow',
-				title: 'Creating',
+        rdsdbinstance: {
+            'creating': {
+                cls: 'yellow',
+                iconCls: 'running',
+                title: 'Creating',
                 text: 'The instance is being created. The instance is inaccessible while it is being created.'
-			},
-			'backing-up': {
-				cls: 'yellow',
-				title: 'Backing up',
+            },
+            'backing-up': {
+                cls: 'yellow',
+                iconCls: 'running',
+                title: 'Backing up',
                 text: 'The instance is currently being backed up.'
-			},
-			'available': {
-				cls: 'green',
-				title: 'Available',
+            },
+            'available': {
+                cls: 'green',
+                title: 'Available',
                 text: 'The instance is healthy and available.'
-			},
-			'pending' : {
-				cls: 'yellow',
-				title: 'Pending'
-			},
-			'rebooting' : {
-				cls: 'yellow',
-				title: 'Rebooting',
+            },
+            'pending': {
+                cls: 'yellow',
+                iconCls: 'running',
+                title: 'Pending'
+            },
+            'rebooting': {
+                cls: 'yellow',
+                iconCls: 'running',
+                title: 'Rebooting',
                 text: 'The instance is being rebooted because of a customer request or an Amazon RDS ' +
-                'process that requires the rebooting of the instance.'
-			},
-			'modifying': {
-				cls: 'yellow',
-				title: 'Modifying',
+                    'process that requires the rebooting of the instance.'
+            },
+            'modifying': {
+                cls: 'yellow',
+                iconCls: 'running',
+                title: 'Modifying',
                 text: 'The instance is being modified because of a customer request to modify the instance.'
-			},
+            },
             'renaming': {
                 cls: 'yellow',
+                iconCls: 'running',
                 title: 'Renaming',
                 text: 'The instance is being renamed because of a customer request to rename it.'
             },
             'resetting-master-credentials': {
                 cls: 'yellow',
+                iconCls: 'running',
                 title: 'Resetting master credentials',
                 text: 'The master credentials for the instance are being reset ' +
-                'because of a customer request to reset them.'
+                    'because of a customer request to reset them.'
             },
-			'deleting': {
-				title: 'Deleting',
+            'deleting': {
+                iconCls: 'running',
+                title: 'Deleting',
                 text: 'The instance is being deleted.'
-			},
+            },
             'failed': {
                 cls: 'red',
+                iconCls: 'failed',
                 title: 'Failed',
                 text: 'The instance has failed and Amazon RDS was unable to recover it. ' +
-                'Perform a point-in-time restore to the latest restorable time of the instance to recover the data.'
+                    'Perform a point-in-time restore to the latest restorable time of the instance to recover the data.'
             },
             'incompatible-network': {
                 cls: 'red',
+                iconCls: 'failed',
                 title: 'Incompatible network',
                 text: 'Amazon RDS is attempting to perform a recovery action on an instance but is unable to do ' +
-                'so because the VPC is in a state that is preventing the action from being completed. ' +
-                'This status can occur if, for example, all available IP addresses in a subnet were in use and ' +
-                'Amazon RDS was unable to get an IP address for the DB instance.'
+                    'so because the VPC is in a state that is preventing the action from being completed. ' +
+                    'This status can occur if, for example, all available IP addresses in a subnet were in use and ' +
+                    'Amazon RDS was unable to get an IP address for the DB instance.'
             },
             'incompatible-option-group': {
                 cls: 'red',
+                iconCls: 'failed',
                 title: 'Incompatible option group',
                 text: 'Amazon RDS attempted to apply an option group change but was unable to do so, ' +
-                'and Amazon RDS was unable to roll back to the previous option group state. ' +
-                'Consult the Recent Events list for the DB instance for more information. ' +
-                'This status can occur if, for example, the option group contains an option such as TDE ' +
-                'and the DB instance does not contain encrypted information.'
+                    'and Amazon RDS was unable to roll back to the previous option group state. ' +
+                    'Consult the Recent Events list for the DB instance for more information. ' +
+                    'This status can occur if, for example, the option group contains an option such as TDE ' +
+                    'and the DB instance does not contain encrypted information.'
             },
             'incompatible-parameters': {
                 cls: 'red',
+                iconCls: 'failed',
                 title: 'Incompatible parameters',
                 text: 'Amazon RDS was unable to start up the DB instance because the parameters specified ' +
-                'in the instance\'s DB parameter group were not compatible. ' +
-                'Revert the parameter changes or make them compatible with the instance to regain access ' +
-                'to your instance. Consult the Recent Events list for the DB instance for more information ' +
-                'about the incompatible parameters.'
+                    'in the instance\'s DB parameter group were not compatible. ' +
+                    'Revert the parameter changes or make them compatible with the instance to regain access ' +
+                    'to your instance. Consult the Recent Events list for the DB instance for more information ' +
+                    'about the incompatible parameters.'
             },
             'incompatible-restore': {
                 cls: 'red',
+                iconCls: 'failed',
                 title: 'Incompatible restore',
                 text: 'Amazon RDS is unable to do a point-in-time restore. ' +
-                'Common causes for this status include using temp tables or using MyISAM tables.'
+                    'Common causes for this status include using temp tables or using MyISAM tables.'
             },
             'storage-full': {
                 cls: 'red',
+                iconCls: 'failed',
                 title: 'Storage full',
                 text: 'The instance has reached its storage capacity allocation. ' +
-                'This is a critical status and should be remedied immediately; ' +
-                'you should scale up your storage by modifying the DB instance. Set CloudWatch alarms to ' +
-                'warn you when storage space is getting low so you don\'t run into this situation.'
+                    'This is a critical status and should be remedied immediately; ' +
+                    'you should scale up your storage by modifying the DB instance. Set CloudWatch alarms to ' +
+                    'warn you when storage space is getting low so you don\'t run into this situation.'
+            },
+        },
+        os: {
+            'active': {
+                title: 'Active',
+                cls: 'green',
+                text: 'This operating system is available.'
+            },
+            'inactive': {
+                title: 'Inactive',
+                text: 'This operating system is not available'
             }
-		}
+        },
+        apikey: {
+            'active': {
+                title: 'Active',
+                cls: 'green',
+                text: 'This API key is active.'
+            },
+            'inactive': {
+                title: 'Inactive',
+                text: 'This API key is inactive'
+            }
+        }
     },
 
     getHtml: function(config, qtipConfig) {
@@ -2891,6 +2770,7 @@ Ext.define('Scalr.ui.ColoredStatus', {
         html =
             '<'+ (renderData['link'] ? 'a href="' + renderData['link'] + '" ' : 'div ') +
                 'class="x-colored-status ' + (renderData['cls'] || '') + '" ' +
+                'data-qclickable="1" ' +
                 'data-anchor="' + tooltip.anchor + '" ' +
                 'data-qalign="' + tooltip.align + '" ' +
                 'data-qtitle="' + Ext.String.htmlEncode(renderData['tooltipTitle'] || renderData['title']) + '" ' +
@@ -2944,7 +2824,9 @@ Ext.define('Scalr.ui.ColoredStatus', {
                 if (data['termination_error']) {
                     result['tooltipTitle'] = 'Error:';
                     result['text'] = Ext.String.htmlEncode(Ext.String.htmlEncode(data['termination_error']));
-                    result['iconCls'] = 'failed';
+                    if (data['status'] !== 'Pending terminate') {
+                        result['iconCls'] = 'failed';
+                    }
                 }
             }
             return result;
@@ -3032,15 +2914,15 @@ Ext.define('Scalr.ui.ColoredStatus', {
         chefserver: function(data, params) {
             var text,
                 status,
-                level = params['level'];
+                scope = params['currentScope'];
             if (data['status']) {
                 status = 'In use';
                 text = ['This <b>Chef Server</b> is currently used by '];
                 if (data['status']['rolesCount'] > 0) {
-                    text.push(level == 'environment' ? '<a href="#/roles/manager?chefServerId='+data['id']+'">'+data['status']['rolesCount']+'&nbsp;Role(s)</a>' : data['status']['rolesCount']+'&nbsp;Role(s)');
+                    text.push(scope == 'environment' ? '<a href="#/roles/manager?chefServerId='+data['id']+'">'+data['status']['rolesCount']+'&nbsp;Role(s)</a>' : data['status']['rolesCount']+'&nbsp;Role(s)');
                 }
                 if (data['status']['farmsCount'] > 0) {
-                    text.push((data['status']['rolesCount']>0 ? ' and ' : '') + (level == 'environment' ? '<a href="#/farms/view?chefServerId='+data['id']+'">'+data['status']['farmsCount']+'&nbsp;Farm(s)</a>' : data['status']['farmsCount']+'&nbsp;Farm(s)'));
+                    text.push((data['status']['rolesCount']>0 ? ' and ' : '') + (scope == 'environment' ? '<a href="#/farms/view?chefServerId='+data['id']+'">'+data['status']['farmsCount']+'&nbsp;Farm(s)</a>' : data['status']['farmsCount']+'&nbsp;Farm(s)'));
                 }
                 text = text.join('');
             } else {
@@ -3067,32 +2949,511 @@ Ext.define('Scalr.ui.ColoredStatus', {
                 status: data['status'],
                 text: text
             };
+        },
+        osusage: function(data) {
+            var result = {}, text;
+
+            if (data['used']) {
+                text = ['This <b>Operating System</b> is currently used by '];
+                if (data['used']['imagesCount'] > 0) {
+                    text.push(data['used']['imagesCount']+'&nbsp;<b>Image</b>(s)');
+                }
+                if (data['used']['rolesCount'] > 0) {
+                    text.push((data['used']['imagesCount']>0 ? ' and ' : '') + data['used']['rolesCount']+'&nbsp;<b>Role</b>(s)');
+                }
+                result['status'] = 'In use';
+                result['cls'] = 'green';
+                result['text'] = text.join('');
+            } else {
+                result['status'] = 'Not used';
+                result['text'] = 'This <b>Operating System</b> is currently not used by any <b>Image</b> and <b>Role</b>.';
+            }
+
+            return result;
+        },
+
+        apikey: function(data, params) {
+            return {
+                status: data['active'] == 0 ? 'inactive' : 'active'
+            };
         }
+
     }
 });
 
 Ext.define('Ext.chart.theme.Scalr', {
     extend: 'Ext.chart.theme.Base',
-    constructor: function(config) {
-        config = Ext.apply(config || {}, {
-            axis: {
-                stroke: '#eaf0f4',
-                'stroke-width': 1
+    alias: 'chart.theme.scalr',
+    config: {
+        chart: {
+            defaults: {
+                animation: false,
+                background: 'none'
             }
-        });
-        this.callParent([config]);
+        },
+        series: {
+            defaults: {
+                style: {
+                    strokeStyle: 'none'
+                }
+            },
+            bar: {
+                style: {
+                    minBarWidth: 10,
+                    maxBarWidth: 30,
+                    minGapWidth: 10
+                }
+            }
+        },
+        axis: {
+            defaults: {
+                label: {
+                    fillStyle: '#2c496b',
+                    fontSize: 14,
+                    fontFamily: 'OpenSansRegular'
+                },
+                style: {
+                    strokeStyle: '#b9d2ec'
+                }
+            },
+            left: {
+                label: {
+                    textAlign: 'right'
+                }
+            }
+        }
     }
 });
 
-Ext.define('Ext.chart.theme.ScalrDark', {
-    extend: 'Ext.chart.theme.Base',
-    constructor: function(config) {
-        config = Ext.apply(config || {}, {
-            axis: {
-                stroke: '#cad6df',
-                'stroke-width': 1
+//extjs5 ready
+Ext.define('Ext.form.field.plugin.Icons', {
+    extend: 'Ext.AbstractPlugin',
+    alias: 'plugin.fieldicons',
+	pluginId: 'fieldicons',
+
+    position: 'inner',
+    align: 'left',
+    childElName: 'iconsEl',
+    cls: 'x-field-icons',
+
+    init: function(field) {
+        var me = this,
+            destination,
+            html = [],
+            icons = {},
+            iconsDefaults = {
+                governance: {
+                    hidden: true,
+                    tooltip: 'The account owner has enforced a specific policy on {[values.fieldLabel?\'the <b>\'+values.fieldLabel+\'</b>\': \'this setting.\']}',
+                    tooltipData: {}
+                },
+                globalvars: {
+                    tooltip: 'This field supports Global Variable Interpolation.'
+                },
+                question: {
+                    hidden: true
+                },
+                szrversion: {
+                    iconCls: 'warning',
+                    tooltip: 'Feature only available in Scalarizr starting from {version}'
+                }
+            };
+
+        me.extendField();
+
+        //todo inject me.childElName to field.childEls instead of "this.iconsEl = this.bodyEl.down('.'+me.cls)"
+        /*if (Ext.isArray(field.childEls)) {
+            field.getChildEls().push(me.childElName);
+        } else {
+            field.getChildEls[field.childElName] = {name: me.childElName, itemId: me.childElName};
+        }*/
+
+        if (me.position === 'label') {
+            destination = 'afterLabelTextTpl';
+        } else {
+            if (field.isCheckbox) {
+                destination = 'afterBoxLabelTextTpl';
+            } else {
+                destination = me.align === 'left' ? 'beforeSubTpl' : 'afterSubTpl';
+            }
+        }
+
+        me.visibleIconsCount = 0;
+        html.push('<span id="' + field.id+'-' + me.childElName + '" class="' + me.cls + ' ' + me.cls + '-' + me.align + '">');
+        Ext.each(me.icons, function(icon, i){
+            var iconId;
+            if (Ext.isString(icon)) {
+                iconId = icon;
+                icons[iconId] = {};
+            } else {
+                iconId = icon.id;
+                icons[iconId] = Ext.apply({}, icon);
+            }
+            Ext.applyIf(icons[iconId], iconsDefaults[iconId]);
+
+            if (icons[iconId].tooltipData) {
+                if (iconId === 'governance' && !icons[iconId].tooltipData['fieldLabel']) {
+                    icons[iconId].tooltipData['fieldLabel'] = field.getFieldLabel();
+                }
+                icons[iconId].tooltip = new Ext.XTemplate(icons[iconId].tooltip).apply(icons[iconId]['tooltipData']);
+            }
+            me.icons = icons;
+            html.push('<img src="' + Ext.BLANK_IMAGE_URL + '" class="x-icon-' + (icons[iconId]['iconCls'] || iconId) + '" data-qclickable="1" data-qtip="' + Ext.String.htmlEncode(icons[iconId]['tooltip'] || '') + '" ' + (icons[iconId]['hidden'] ? 'style="display:none"' : '') + ' />');
+            me.visibleIconsCount += icons[iconId]['hidden'] ? 0 : 1;
+        });
+        html.push('</span>');
+
+        field[destination] = html.join('') + (field[destination] || '');
+
+        field.on('afterrender', function() {
+            this.bodyEl.setStyle({position: 'relative'});
+            this.iconsEl = this.el.down('.'+me.cls);
+            me.refreshIconsStyle();
+        }, field, {priority: 1});
+
+    },
+
+    extendField: function() {
+        var me = this,
+            field = me.getCmp();
+        Ext.each(['hideIcons', 'toggleIcon', 'updateIconTooltip', 'setValueWithGovernance'], function(method) {
+            if (!field[method]) {
+                field[method] = Ext.bind(me[method], me);
+            } else {
+                Ext.log.warn('plugins.fieldicons: method ' + method + ' is in use');
             }
         });
-        this.callParent([config]);
+    },
+
+    refreshIconsStyle: function() {
+        var field = this.getCmp(),
+            style = {},
+            iconsWidth;
+        if (!field.rendered || field.isCheckbox) return;
+
+        iconsWidth = this.visibleIconsCount * 24;
+
+        switch (this.position) {
+            case 'label':
+                break;
+            case 'over':
+                break;
+            default:
+                if (this.position === 'inner' && field.labelAlign !== 'top') {
+                    field.bodyEl.setStyle('padding-' + this.align, iconsWidth + 'px');
+                } else {
+                    style[this.align] = (0 - iconsWidth) + 'px';
+                    if (this.align === 'top') {
+                       style['top'] = '28px';
+                    }
+                    field.iconsEl.setStyle(style);
+                }
+                break;
+        }
+    },
+
+    hideIcons: function() {
+        var field = this.getCmp();
+        if (field.rendered) {
+            this.visibleIconsCount = 0;
+            Ext.each(field.iconsEl.query('img'), function(iconEl){
+                Ext.fly(iconEl).setVisibilityMode(Ext.Element.DISPLAY).setVisible(false);
+            });
+            this.refreshIconsStyle();
+        } else {
+            Ext.Object.each(this.icons, function(key, value){
+                value['hidden'] = true;
+            });
+        }
+    },
+
+    toggleIcon: function(icon, show) {
+        var me = this,
+            field = me.getCmp();
+        if (!me.icons || !me.icons[icon]) return;
+        fn = function() {
+            var iconEl = field.iconsEl.query('.x-icon-' + (me.icons[icon]['iconCls'] || icon));
+            if (iconEl.length) {
+                iconEl = Ext.fly(iconEl[0]);
+                var isVisible = iconEl.isVisible();
+                if (show === undefined) {
+                    show = !isVisible;
+                    me.visibleIconsCount--;
+                } else if (show && !isVisible) {
+                    me.visibleIconsCount++;
+                } else if (!show && isVisible) {
+                    me.visibleIconsCount--;
+                }
+                iconEl.setVisibilityMode(Ext.Element.DISPLAY).setVisible(!!show);
+                me.refreshIconsStyle();
+            }
+        }
+        if (field.rendered) {
+            fn();
+        } else {
+            field.on('afterrender', fn, field, {single: true});
+        }
+
+    },
+
+    updateIconTooltip: function(icon, tooltip) {
+        var me = this,
+            field = me.getCmp();
+        if (!me.icons || !me.icons[icon]) return;
+        fn = function() {
+            var iconEl = field.iconsEl.query('.x-icon-' + (me.icons[icon]['iconCls'] || icon));
+            if (iconEl.length) {
+                iconEl = Ext.fly(iconEl[0]);
+                iconEl.set({'data-qtip': tooltip});
+            }
+        }
+        if (field.rendered) {
+            fn();
+        } else {
+            field.on('afterrender', fn, field, {single: true});
+        }
+    },
+
+    setValueWithGovernance: function(value, limit) {
+        var governanceEnabled = limit !== undefined,
+            field = this.getCmp();
+        field.setValue(governanceEnabled ? limit : value);
+        field.setReadOnly(governanceEnabled, false);
+        this.toggleIcon('governance', governanceEnabled);
+    }
+
+});
+
+Ext.define('Ext.form.field.plugin.InnerIcon', {
+    extend: 'Ext.AbstractPlugin',
+    alias: 'plugin.fieldinnericon',
+
+    iconClsPrefix: '',
+    field: null,//required
+    tooltipField: null,
+    tooltipSuffix: '',
+    innerIconStyle: 'top:6px;left:6px;',
+    inputPadding: 30,
+
+    init: function(field) {
+        var me = this,
+            tpl = field.tpl;
+
+        field.listConfig = field.listConfig || {};
+
+        if (field.listConfig.tpl) {
+            tpl = field.listConfig.tpl;
+        }
+
+        if (tpl) {
+            if (!tpl.isTemplate) {
+                tpl = new Ext.XTemplate(tpl);
+            }
+            tpl.getInnerIcon = Ext.bind(me.getInnerIcon, me);
+
+            field.listConfig.tpl = tpl;
+        }
+        var img = me.getInnerIconTpl();
+        if (field.listConfig.getInnerTpl) {
+            var getInnerTpl = field.listConfig.getInnerTpl;
+            field.listConfig.getInnerTpl = function(displayField) {
+                return getInnerTpl.apply(this, [displayField, img]);
+            };
+        } else {
+            field.listConfig.getInnerTpl = function(displayField) {
+                return img + '{' + displayField + '}';
+            };
+        }
+
+        field.on({
+            afterrender: function () {
+                this.bodyEl.setStyle('position', 'relative');
+                me.innerIconEl = this.inputCell.createChild({
+                    tag: 'img',
+                    src: Ext.BLANK_IMAGE_URL,
+                    style: 'position:absolute;' + me.innerIconStyle
+                });
+                me.innerIconEl.setVisibilityMode(Ext.Element.DISPLAY);
+                me.updateFieldIcon(this.getValue());
+            },
+            change: function(comp, newValue, oldValue) {
+                if (me.innerIconEl) {
+                    me.updateFieldIcon(newValue);
+                }
+            }
+        });
+    },
+
+    updateFieldIcon: function(newValue) {
+        var me = this,
+            field = me.getCmp(),
+            rec = field.findRecordByValue(newValue);
+        if (me._currentCls) {
+            me.innerIconEl.removeCls(me._currentCls);
+            delete me._currentCls;
+        }
+        if (rec && rec.get(me.field)) {
+            me._currentCls = me.iconClsPrefix + rec.get(me.field);
+            me.innerIconEl.addCls(me._currentCls);
+            if (me.tooltipField) {
+                me.innerIconEl.set({'data-qtip': Ext.String.capitalize(rec.get(me.tooltipField)) + me.tooltipSuffix});
+            } else if (me.tooltipScopeType) {
+                me.innerIconEl.set({'data-qtip': Scalr.utils.getScopeLegend(me.tooltipScopeType, true), 'data-qclass': 'x-tip-light' });
+            }
+            me.innerIconEl.show();
+            field.inputEl.setStyle('padding-left', me.inputPadding + 'px');
+        } else {
+            field.inputEl.setStyle('padding-left', '7px');
+            me.innerIconEl.hide();
+        }
+    },
+
+    getInnerIcon: function(values) {
+        var tooltip = '';
+        if (this.tooltipField) {
+            tooltip = Ext.String.capitalize(values[this.tooltipField]) + this.tooltipSuffix;
+        } else if (this.tooltipScopeType) {
+            tooltip = Scalr.utils.getScopeLegend(this.tooltipScopeType);
+        }
+        return '<img src="'+Ext.BLANK_IMAGE_URL+'" class="' + this.iconClsPrefix + values[this.field] + '" data-qclass="x-tip-light" data-qtip="' + tooltip + '"/>';
+    },
+
+    getInnerIconTpl: function() {
+        var tooltip = '';
+        if (this.tooltipField) {
+            tooltip = '{' + this.tooltipField + ':capitalize}' + this.tooltipSuffix;
+        } else if (this.tooltipScopeType) {
+            tooltip = Scalr.utils.getScopeLegend(this.tooltipScopeType);
+        }
+        return '<img src="'+Ext.BLANK_IMAGE_URL+'" class="'+this.iconClsPrefix+'{'+this.field+'}" data-qclass="x-tip-light" data-qtip="' + tooltip + '"/>&nbsp;&nbsp;';
+    }
+});
+
+
+Ext.define('Ext.form.field.plugin.InnerIconScope', {
+    extend: 'Ext.form.field.plugin.InnerIcon',
+    alias: 'plugin.fieldinnericonscope',
+	pluginId: 'fieldinnericonscope',
+
+    iconClsPrefix: 'scalr-scope-',
+    field: 'scope',
+    tooltipScopeType: null,
+    innerIconStyle: 'top:9px;left:6px;',
+    inputPadding: 28
+});
+
+Ext.define('Ext.form.field.plugin.InnerIconCloud', {
+    extend: 'Ext.form.field.plugin.InnerIcon',
+    alias: 'plugin.fieldinnericoncloud',
+    pluginId: 'fieldinnericoncloud',
+
+    iconClsPrefix: 'x-icon-platform-small x-icon-platform-small-',
+    innerIconStyle: 'top:6px;left:7px;',
+    inputPadding: 34,
+
+    platform: '',
+
+    setPlatform: function (platform) {
+        var me = this;
+
+        me.platform = platform;
+
+        var field = me.getCmp();
+
+        field.listConfig.getInnerTpl = function (displayField) {
+            return me.getInnerIconTpl() + '{' + displayField + '}';
+        };
+
+        field.picker = null;
+
+        return true;
+    },
+
+    updateFieldIcon: function(newValue) {
+        var me = this,
+            field = me.getCmp(),
+            platform = me.platform;
+
+        if (!Ext.isEmpty(me._currentCls)) {
+            me.innerIconEl.removeCls(me._currentCls);
+            delete me._currentCls;
+        }
+
+        if (!Ext.isEmpty(newValue) && !Ext.isEmpty(platform)) {
+            me._currentCls = me.iconClsPrefix + platform;
+            me.innerIconEl.addCls(me._currentCls);
+            me.innerIconEl.set({'data-qtip': Scalr.utils.getPlatformName(platform) + me.tooltipSuffix});
+            me.innerIconEl.show();
+            field.inputEl.setStyle('padding-left', me.inputPadding + 'px');
+        } else {
+            field.inputEl.setStyle('padding-left', '7px');
+            me.innerIconEl.hide();
+        }
+    },
+
+    getInnerIcon: function () {
+        var me = this;
+
+        return '<img src="' + Ext.BLANK_IMAGE_URL + '" class="' +
+            me.iconClsPrefix + me.platform +
+            '" data-qtip="' + Scalr.utils.getPlatformName(me.platform) + '"/>';
+    },
+
+    getInnerIconTpl: function () {
+        return this.getInnerIcon() + '&nbsp;&nbsp;';
+    }
+});
+
+
+Ext.define('Scalr.ui.PanelBgiFrame', {
+	extend: 'Ext.AbstractPlugin',
+	alias: 'plugin.bgiframe',
+
+	init: function(client) {
+        this.client = client;
+        this.showBgiFrameDelayed = Ext.Function.createDelayed(this.showBgiFrame, 200);
+        client.on({
+            afterlayout: this.showBgiFrameDelayed,
+            show: this.showBgiFrameDelayed,
+            hide: this.hideBgiFrame,
+            scope: this
+        });
+    },
+
+    destroy: function() {
+        this.client.un({
+            afterlayout: this.showBgiFrameDelayed,
+            show: this.showBgiFrameDelayed,
+            hide: this.hideBgiFrame,
+            scope: this
+        });
+        if (this.iframeEl) {
+            this.iframeEl.remove();
+            delete this.iframeEl;
+        }
+    },
+
+    showBgiFrame: function() {
+        if (!this.client.isVisible()) return;
+        if (!this.iframeEl) {
+            var iframe = document.createElement('iframe');
+            var iframeStyle = iframe.style;
+            iframeStyle.setProperty('display', 'none');
+            iframeStyle.setProperty('position', 'absolute', 'important');
+            iframeStyle.setProperty('border', '0px', 'important');
+            iframeStyle.setProperty('zIndex', '5', 'important');
+            document.body.appendChild(iframe);
+            this.iframeEl = Ext.get(iframe);
+        }
+
+        if (this.client.el) {
+            this.iframeEl.setBox(this.client.el.getBox());
+            this.iframeEl.show();
+        }
+    },
+    hideBgiFrame: function() {
+        if (this.iframeEl) {
+            this.iframeEl.hide();
+        }
     }
 });

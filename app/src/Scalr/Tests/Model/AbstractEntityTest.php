@@ -120,14 +120,10 @@ class AbstractEntityTest extends TestCase
     /**
      * SCALRCORE-951 we should avoid ON DUPLICATE KEY UPDATE clause on tables with multiple unique indexes
      * @test
+     * @functional
      */
     public function testFunctionalSeveralUniqueKeys()
     {
-        if ($this->isSkipFunctionalTests()) {
-            $this->markTestSkipped("Functional test is disabled in config.");
-            return;
-        }
-
         $db = \Scalr::getDb();
 
         //Removes previously created records if they exist

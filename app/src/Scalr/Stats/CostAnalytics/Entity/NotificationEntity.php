@@ -35,7 +35,7 @@ class NotificationEntity extends \Scalr\Model\AbstractEntity
      * identifier (UUID)
      *
      * @Id
-     * @GeneratedValue("UUID")
+     * @GeneratedValue("CUSTOM")
      * @Column(type="uuid")
      * @var string
      */

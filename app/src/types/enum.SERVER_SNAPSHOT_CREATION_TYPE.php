@@ -17,9 +17,11 @@ final class SERVER_SNAPSHOT_CREATION_TYPE
 
     const RS_CFILES = 'rs.cfiles';
     const GCE_STORAGE = 'gce.storage';
+    const GCE_WINDOWS = 'gce.windows';
 
     const OSTACK_LINUX = 'ostack.linux';
     const OSTACK_WINDOWS = 'ostack.windows';
 
     const CSTACK_DEF = 'cstack.default';
+    const CSTACK_WINDOWS = 'cs.windows';
 }

@@ -61,7 +61,7 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.instances.promoteReadReplica', function (l
                 name: 'PreferredBackupWindow',
                 itemId: 'PreferredBackupWindow'
             }, {
-                xtype: 'container',
+                xtype: 'fieldcontainer',
                 layout: {
                     type: 'hbox'
                 },
@@ -105,14 +105,19 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.instances.promoteReadReplica', function (l
                 },{
                     xtype: 'displayfield',
                     value: 'UTC',
-                    margin: '0 0 0 6'
-                },{
-                    xtype: 'displayinfofield',
-                    info: 'Format: hh24:mi - hh24:mi',
-                    margin: '0 0 0 6'
+                    margin: '0 0 0 6',
+                    plugins: [{
+                        ptype: 'fieldicons',
+                        align: 'right',
+                        position: 'outer',
+                        icons: {
+                            id: 'info',
+                            tooltip: 'Format: hh24:mi - hh24:mi'
+                        }
+                    }]
                 }]
             }, {
-                xtype: 'container',
+                xtype: 'fieldcontainer',
                 layout: 'hbox',
                 items: [{
                     labelWidth: 200,

@@ -4,18 +4,22 @@ use Scalr\Exception\Http\BadRequestException;
 
 abstract class ScalrEnvironment extends ScalrRESTService
 {
-    const LATEST_VERSION = '2012-07-01';
+    const LATEST_VERSION = '2015-04-10';
 
     /**
      * @var DBServer
      */
     protected $DBServer;
+    
+    public $debugObject = null;
 
     /**
      * Query Environment object and return result;
      */
     public function Query($operation, array $args)
     {
+        $this->debugObject = new stdClass();
+        
         $this->SetRequest($args);
 
         // Get Method name by operation
@@ -29,7 +33,18 @@ abstract class ScalrEnvironment extends ScalrRESTService
 
                 $result = call_user_func(array($this, $method_name));
                 if ($result instanceof DOMDocument) {
+                    header("Content-Type: text/xml");
                     return $result->saveXML();
+                } else if (is_object($result)) {
+                    header("Content-Type: application/json");
+                    
+                    $retval = new stdClass();
+                    $retval->result = new stdClass();
+                    
+                    $serializer = Scalr_Messaging_JsonSerializer::getInstance();
+                    $serializer->walkSerialize($result, $retval->result, 'underScope');
+                    
+                    return json_encode($retval->result);
                 } else {
                     throw new Exception(sprintf("%s:%s() returns invalid response. DOMDocument expected.",
                         get_class($this),
@@ -37,6 +52,8 @@ abstract class ScalrEnvironment extends ScalrRESTService
                     ));
                 }
             } catch (\Scalr\Exception\Http\HttpException $e) {
+                throw $e;
+            } catch (DOMException $e) {
                 throw $e;
             } catch (Exception $e) {
                 throw new Exception(sprintf(_("Cannot retrieve environment by operation '%s': %s"),

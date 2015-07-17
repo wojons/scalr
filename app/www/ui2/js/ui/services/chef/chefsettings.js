@@ -44,7 +44,7 @@ Ext.define('Scalr.ui.ChefSettingsField', {
             overrideAttributes,
             serverId = value['chef.server_id'],
             defaultEnv = '_default',
-            limits = me.limits,
+            limits = Scalr.getGovernance('general', 'general.chef'),
             setValues = function(success) {
                 var field;
                 me.reset();
@@ -52,13 +52,24 @@ Ext.define('Scalr.ui.ChefSettingsField', {
                 me.down('#solo').setValues(value);
                 me.down('[name="chef.bootstrap"]').setValue(value['chef.bootstrap']);
                 me.down('[name="chef.server_id"]').setValue(serverId);
-                me.down('[name="chef.environment"]').setValue(value['chef.environment'] || (serverId ? defaultEnv : null));
+                field = me.down('[name="chef.environment"]');
+                if (me.readOnly) {
+                    field.store.loadData([{name: 0, description: 'Role default (' + roleChefSettings['chef.environment'] + ')'}]);
+                    field.setValue(farmRoleChefSettings['chef.environment'] || 0);
+                    field.emptyText = 'Role default ('+roleChefSettings['chef.environment']+')';
+                } else {
+                    field.setValue(value['chef.environment'] || (serverId ? defaultEnv : null));
+                    field.emptyText = ' ';
+                }
+                field.applyEmptyText();
                 me.down('[name="chef.role_name"]').setValue(value['chef.role_name']);
                 me.down('[name="chef.runlist"]').setValue(value['chef.runlist']);
                 me.down('[name="chef.node_name_tpl"]').setValue(value['chef.node_name_tpl']);
+                me.down('[name="chef.ssl_verify_mode"]').setValue(value['chef.ssl_verify_mode'] || 'chef_auto');
                 field = me.down('[name="chef.daemonize"]');
                 field.setValue(value['chef.daemonize']);
                 field.setReadOnly(!!me.disableDaemonize || me.readOnly);
+                field.toggleIcon('warning', me.roleOsFamily === 'windows');
 
                 field = me.down('[name="chef.attributes"]');
                 if (me.readOnly) {
@@ -113,10 +124,15 @@ Ext.define('Scalr.ui.ChefSettingsField', {
                     value['chef.runlist'] = this.down('[name="chef.runlist"]').getValue();
                 }
                 value['chef.node_name_tpl'] = this.down('[name="chef.node_name_tpl"]').getValue();
+                value['chef.ssl_verify_mode'] = this.down('[name="chef.ssl_verify_mode"]').getValue();
                 value['chef.daemonize'] = this.down('[name="chef.daemonize"]').getValue() ? 1 : 0;
             }
             value['chef.log_level'] = logLevel;
         } else {
+            value['chef.environment'] = this.down('[name="chef.environment"]').getValue();
+            if (Ext.isEmpty(value['chef.environment']) || value['chef.environment'] == 0) {
+                delete value['chef.environment'];
+            }
             if (logLevel != roleChefSettings['chef.log_level']) {
                 value['chef.log_level'] = logLevel;
             }
@@ -139,6 +155,7 @@ Ext.define('Scalr.ui.ChefSettingsField', {
             'chef.role_name': '',
             'chef.attributes': '',
             'chef.node_name_tpl': '',
+            'chef.ssl_verify_mode': 'chef_auto',
             'chef.daemonize': 0,
             'chef.log_level': 'auto'
         });
@@ -146,16 +163,18 @@ Ext.define('Scalr.ui.ChefSettingsField', {
     },
 
     setReadOnly: function(readOnly) {
-        var fields = this.query('[isFormField]');
+        var fields = this.query('[isFormField]'),
+            field;
         this.suspendLayouts();
         Ext.Array.each(fields, function(field){
-            if (!Ext.Array.contains(['overrideAttributes', 'chef.log_level'], field.name)) {
+            if (!Ext.Array.contains(['overrideAttributes', 'chef.log_level', 'chef.environment'], field.name)) {
                 field.setReadOnly(!!readOnly, false);
             }
         });
         this.down('#configureRunlist').setDisabled(!!readOnly);
         this.down('#overrideAttributes').setVisible(!!readOnly);
-        this.down('[name="chef.attributes"]').setFieldLabel(readOnly ? '' : 'Attributes');
+        field = this.down('[name="chef.attributes"]');
+        field.setFieldLabel(readOnly ? '' : ('Attributes' + field.afterLabelTextTpl));//setFieldLabel removes fieldicons, we have to restore them
         this.resumeLayouts(true);
         this.readOnly = !!readOnly;
     },
@@ -203,18 +222,20 @@ Ext.define('Scalr.ui.ChefSettingsField', {
                     serverCt.setVisible(value === 'server');
                     comp.next('#solo').setVisible(value === 'solo');
                     if (value === 'server') {
-                        var envValue = serverCt.down('[name="chef.environment"]').getValue();
-                        comp.next('#attributes').setVisible(!!envValue);
-                        comp.next('#nodeName').setVisible(!!envValue);
-                        comp.next('[name="chef.daemonize"]').setVisible(!!envValue);
-                        comp.next('#logLevel').setVisible(!!envValue);
-                        comp.next('#runlist').setVisible(!!envValue && serverCt.down('#confType').getValue() === 'runlist');
-                        serverCt.down('#configuration').setVisible(!!envValue);
+                        var visible = serverCt.down('[name="chef.environment"]').getValue() || comp.up('chefsettings').readOnly;
+                        comp.next('#attributes').setVisible(visible);
+                        comp.next('#nodeName').setVisible(visible);
+                        comp.next('#sslVerifyMode').setVisible(visible);
+                        comp.next('[name="chef.daemonize"]').setVisible(visible);
+                        comp.next('#logLevel').setVisible(visible);
+                        comp.next('#runlist').setVisible(visible && serverCt.down('#confType').getValue() === 'runlist');
+                        serverCt.down('#configuration').setVisible(visible);
                     } else {
                         comp.next('#attributes').show();
                         comp.next('#runlist').show();
                         comp.next('#logLevel').show();
                         comp.next('#nodeName').hide();
+                        comp.next('#sslVerifyMode').hide();
                         comp.next('[name="chef.daemonize"]').hide();
                     }
                 }
@@ -225,7 +246,7 @@ Ext.define('Scalr.ui.ChefSettingsField', {
             layout: 'anchor',
             defaults: {
                 anchor: '100%',
-                labelWidth: 120
+                labelWidth: 135
             },
             items: [{
                 xtype: 'chefserveridcombo',
@@ -233,19 +254,27 @@ Ext.define('Scalr.ui.ChefSettingsField', {
                 listeners: {
                     change: function(comp, value) {
                         var envField = comp.next(),
-                            ct = comp.up('chefsettings'),
-                            envValue = value ? '_default' : '',
+                            chefSettingsField = comp.up('chefsettings'),
+                            envValue = value ? '_default' : (chefSettingsField.readOnly ? 0 : ''),
+                            roleChefSettings = chefSettingsField.roleChefSettings || {},
+                            roleDefaultEnv = {name: 0, description: 'Role default (' + roleChefSettings['chef.environment'] + ')'},
+                            limits = Scalr.getGovernance('general', 'general.chef'),
                             envList = null;
 
-                        if (value && ct.limits !== undefined && ct.limits['servers'][value]) {
-                            var envs = ct.limits['servers'][value]['environments'] || [];
+                        if (value && limits !== undefined && limits['servers'][value]) {
+                            var envs = limits['servers'][value]['environments'] || [];
                             if (envs.length) {
                                 envList = Ext.Array.map(envs, function(name){
                                     return {name: name};
                                 });
                                 envValue = '';
+                                if (chefSettingsField.readOnly) {
+                                    envValue = 0;
+                                    envList.unshift(roleDefaultEnv);
+                                }
                             }
                         }
+                        envField.store.proxy.prependData = chefSettingsField.readOnly ? [roleDefaultEnv] : null;
                         envField.store.proxy.data = envList;
 
                         envField.setDisabled(!value);
@@ -260,15 +289,17 @@ Ext.define('Scalr.ui.ChefSettingsField', {
                 listeners: {
                     change: function(comp, value) {
                         var ct = comp.up('chefsettings'),
-                            rolesField = ct.down('[name="chef.role_name"]');
+                            rolesField = ct.down('[name="chef.role_name"]'),
+                            visible = !!value || ct.readOnly;
                         if (ct.down('#chefMode').getValue() === 'server') {
-                            ct.down('#attributes').setVisible(!!value);
-                            ct.down('#nodeName').setVisible(!!value);
-                            ct.down('[name="chef.daemonize"]').setVisible(!!value);
-                            ct.down('#logLevel').setVisible(!!value);
-                            ct.down('#runlist').setVisible(value && ct.down('#confType').getValue() == 'runlist');
+                            ct.down('#attributes').setVisible(visible);
+                            ct.down('#nodeName').setVisible(visible);
+                            ct.down('#sslVerifyMode').setVisible(visible);
+                            ct.down('[name="chef.daemonize"]').setVisible(visible);
+                            ct.down('#logLevel').setVisible(visible);
+                            ct.down('#runlist').setVisible(visible && ct.down('#confType').getValue() == 'runlist');
                         }
-                        ct.down('#configuration').setVisible(!!value);
+                        ct.down('#configuration').setVisible(visible);
                         rolesField.reset();
                         rolesField.store.proxy.params = {
                             servId: ct.down('[name="chef.server_id"]').getValue()
@@ -276,7 +307,7 @@ Ext.define('Scalr.ui.ChefSettingsField', {
                     }
                 }
             },{
-                xtype: 'container',
+                xtype: 'fieldcontainer',
                 itemId: 'configuration',
                 layout: 'hbox',
                 items: [{
@@ -284,8 +315,8 @@ Ext.define('Scalr.ui.ChefSettingsField', {
                     name: 'confType',
                     itemId: 'confType',
                     fieldLabel: 'Configuration',
-                    labelWidth: 120,
-                    width: 340,
+                    labelWidth: 135,
+                    width: 355,
                     defaults: {
                         width: 100
                     },
@@ -301,7 +332,7 @@ Ext.define('Scalr.ui.ChefSettingsField', {
                             var ct = comp.up('chefsettings');
                             ct.down('[name="chef.role_name"]').setVisible(value === 'role');
                             if (ct.down('#chefMode').getValue() === 'server') {
-                                ct.down('[name="chef.runlist"]').setVisible(ct.down('[name="chef.environment"]').getValue() && value === 'runlist');
+                                ct.down('[name="chef.runlist"]').setVisible((ct.down('[name="chef.environment"]').getValue() || ct.readOnly) && value === 'runlist');
                             }
                             ct.down('#configureRunlist').setVisible(value === 'runlist');
                         }
@@ -328,7 +359,8 @@ Ext.define('Scalr.ui.ChefSettingsField', {
                     itemId: 'configureRunlist',
                     hidden: true,
                     flex: 1,
-                    text: '<img src="' + Ext.BLANK_IMAGE_URL + '" class="x-icon-configure" />&nbsp;Configure runlist',
+                    iconCls: 'x-btn-icon-settings',
+                    text: 'Configure runlist',
                     handler: function() {
                         var ct = this.up('chefsettings'),
                             runlistField = ct.down('[name="chef.runlist"]'),
@@ -358,21 +390,43 @@ Ext.define('Scalr.ui.ChefSettingsField', {
             hidden: true,
             margin: 0
         },{
-            xtype: 'container',
+            xtype: 'textfield',
+            fieldLabel: 'Node name',
             itemId: 'nodeName',
-            layout: 'hbox',
+            labelWidth: 135,
+            name: 'chef.node_name_tpl',
+            emptyText: 'Leave blank to use server system hostname',
+            submitEmptyText: false,
+            plugins: {
+                ptype: 'fieldicons',
+                position: 'outer',
+                icons: ['globalvars']
+            }
+        },{
+            xtype: 'buttongroupfield',
+            fieldLabel: 'SSL verify mode',
+            itemId: 'sslVerifyMode',
+            labelWidth: 135,
+            name: 'chef.ssl_verify_mode',
+            plugins: {
+                ptype: 'fieldicons',
+                position: 'outer',
+                icons: [
+                    {id: 'szrversion', tooltipData: {version: '3.5.22'}}
+                ]
+            },
+            defaults: {
+                width: 143
+            },
             items: [{
-                xtype: 'textfield',
-                fieldLabel: 'Node name',
-                labelWidth: 120,
-                name: 'chef.node_name_tpl',
-                emptyText: 'Leave blank to use server system hostname',
-                submitEmptyText: false,
-                icons: {
-                    globalvars: true
-                },
-                iconsPosition: 'outer',
-                flex: 1
+                text: 'Chef Default',
+                value: 'chef_auto'
+            },{
+                text: 'Peer',
+                value: 'verify_peer'
+            },{
+                text: 'None',
+                value: 'verify_none'
             }]
         },{
             xtype: 'combo',
@@ -381,17 +435,20 @@ Ext.define('Scalr.ui.ChefSettingsField', {
             fieldLabel: 'Log level',
             name: 'chef.log_level',
             itemId: 'logLevel',
-            labelWidth: 120
+            labelWidth: 135
         },{
             xtype: 'checkbox',
             name: 'chef.daemonize',
-            labelWidth: 120,
+            labelWidth: 135,
             fieldLabel: '&nbsp;',
             labelSeparator: '',
             boxLabel: 'Daemonize chef client',
-            questionTooltip: 'Daemonize is not available in case of using Chef runlist in orchestration',
-            icons: {
-                question: true
+            plugins: {
+                ptype: 'fieldicons',
+                icons: [
+                    {id: 'question', tooltip: 'Daemonize is not available in case of using Chef runlist in orchestration'},
+                    {id: 'warning', tooltip: 'For this option to work, Chef Client <b>must</b> have been registered as a Windows service when it was installed.', hidden: true}
+                ]
             },
             listeners:{
                 writeablechange: function(comp, readOnly) {
@@ -407,8 +464,10 @@ Ext.define('Scalr.ui.ChefSettingsField', {
             labelAlign: 'top',
             height: 100,
             emptyText: 'Paste your run list in JSON format',
-            icons: {
-                globalvars: true
+            plugins: {
+                ptype: 'fieldicons',
+                position: 'label',
+                icons: ['globalvars']
             }
         },{
             xtype: 'checkbox',
@@ -420,7 +479,8 @@ Ext.define('Scalr.ui.ChefSettingsField', {
                 change: function(comp, value) {
                     var attrField = comp.next('[name="chef.attributes"]'),
                         roleChefSettings = comp.up('chefsettings').roleChefSettings || {};
-                    attrField.applyEmptyText(value ? '' : 'Paste attributes in JSON format');
+                    attrField.emptyText = value ? ' ' : 'Paste attributes in JSON format';
+                    attrField.applyEmptyText();
                     attrField.setReadOnly(!value);
                     if (!value) {
                         attrField.setValue(roleChefSettings['chef.attributes'] || '');
@@ -432,8 +492,10 @@ Ext.define('Scalr.ui.ChefSettingsField', {
             itemId: 'attributes',
             name: 'chef.attributes',
             fieldLabel: 'Attributes',
-            icons: {
-                globalvars: true
+            plugins: {
+                ptype: 'fieldicons',
+                position: 'label',
+                icons: ['globalvars']
             },
             labelAlign: 'top',
             height: 220,
@@ -451,7 +513,7 @@ Ext.define('Scalr.ui.ChefSoloSettings', {
     layout: 'anchor',
     defaults: {
         anchor: '100%',
-        labelWidth: 120
+        labelWidth: 135
     },
     isValid: function(returnErrorField) {
         var field, result;
@@ -529,7 +591,7 @@ Ext.define('Scalr.ui.ChefSoloSettings', {
 Ext.define('Scalr.ui.ChefServerIdField', {
 	extend: 'Ext.form.field.ComboBox',
 	alias: 'widget.chefserveridcombo',
-    
+
     fieldLabel: 'Chef server',
     valueField: 'id',
     displayField: 'url',
@@ -540,66 +602,28 @@ Ext.define('Scalr.ui.ChefServerIdField', {
     queryCaching: false,
     clearDataBeforeQuery: true,
     store: {
-        fields: ['id', 'url', 'username', 'level' ],
+        fields: ['id', 'url', 'username', 'scope' ],
         proxy: {
             type: 'cachedrequest',
             url: '/services/chef/servers/xListServers/'
         }
     },
-
+    plugins: {
+        ptype: 'fieldinnericonscope',
+        tooltipScopeType: 'chefserver'
+    },
     listConfig: {
         cls: 'x-boundlist-alt',
         tpl:
             '<tpl for=".">' +
                 '<div class="x-boundlist-item" style="height: auto; width: auto; max-width: 900px;">' +
-                    '<img src="'+Ext.BLANK_IMAGE_URL+'" class="scalr-scope-{level}" data-qtip="{level:capitalize} scope"/>&nbsp; {url}'+
+                    '{[this.getInnerIcon(values)]}&nbsp;&nbsp;{url}'+
                     '<div style="line-height: 16px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;margin:0 0 0 16px">' +
                         '<span style="font-style: italic;">Username: {username}</span>' +
                     '</div>' +
                 '</div>' +
             '</tpl>'
-    },
-
-    onRender: function() {
-        var me = this;
-
-        me.callParent(arguments);
-
-        me.inputImgEl = me.inputCell.createChild({
-            tag: 'img',
-            src: Ext.BLANK_IMAGE_URL,
-            style: 'position:absolute;top:8px;left:6px;'
-        });
-        me.inputImgEl.setVisibilityMode(Ext.Element.DISPLAY);
-        me.setInputImgElType(me.getValue());
-    },
-
-    setInputImgElType: function(newValue, oldValue) {
-        var me = this,
-            rec = me.findRecordByValue(newValue),
-            oldRec = me.findRecordByValue(oldValue);
-        if (oldRec) {
-            this.inputImgEl.removeCls('scalr-scope-' + oldRec.get('level'));
-        }
-        if (rec) {
-            this.inputImgEl.addCls('scalr-scope-' + rec.get('level'));
-            this.inputImgEl.set({'data-qtip': Ext.String.capitalize(rec.get('level')) + ' scope'});
-            this.inputImgEl.show();
-            this.inputEl.setStyle('padding-left', '20px');
-        } else {
-            this.inputEl.setStyle('padding-left', '7px');
-            this.inputImgEl.hide();
-        }
-    },
-
-    onChange: function(newValue, oldValue) {
-        var me = this;
-        if (me.inputImgEl) {
-            me.setInputImgElType(newValue, oldValue);
-        }
-        me.callParent(arguments);
     }
-
 });
 
 Ext.define('Scalr.ui.ChefEnvironmentField', {
@@ -614,8 +638,18 @@ Ext.define('Scalr.ui.ChefEnvironmentField', {
     disabled: true,
     queryCaching: false,
     clearDataBeforeQuery: true,
+    displayTpl:
+        '<tpl for=".">' +
+            '{[typeof values === "string" ? values : values.description||values.name]}' +
+            '<tpl if="xindex < xcount">,</tpl>' +
+        '</tpl>',
+    listConfig: {
+        getInnerTpl: function() {
+            return '{[values.description||values.name]}';
+        }
+    },
     store: {
-        fields: [ 'name' ],
+        model: Scalr.getModel({idProperty: 'name', fields: [ 'name', {name: 'description', convert: function(v, record){return record.data.description || record.data.name;}}]}),
         proxy: {
             type: 'cachedrequest',
             url: '/services/chef/xListEnvironments/'
@@ -628,7 +662,7 @@ Ext.define('Scalr.ui.ChefRunlistCosnstructor', {
     singleton: true,
     show: function(config) {
         var runlistGridData = [], runlistStore;
-        
+
         Ext.Array.each(config.runlist, function(item) {
             var itemData = {}, name;
             if (item.indexOf('role[') === 0) {
@@ -642,7 +676,7 @@ Ext.define('Scalr.ui.ChefRunlistCosnstructor', {
                 item = item.replace(/^recipe\[/i, '').replace(/\]$/i, '');
                 item = item.split('::');
                 Ext.apply(itemData, {
-                    id: item.join(''),
+                    id: item.join('::'),
                     cookbook: item[0],
                     name: item[1]
                 });
@@ -686,7 +720,7 @@ Ext.define('Scalr.ui.ChefRunlistCosnstructor', {
                                     }}]);
                                 }
                             },
-                            buffer: 300
+                            buffer: 200
                         }
                     }
                 },{
@@ -701,7 +735,6 @@ Ext.define('Scalr.ui.ChefRunlistCosnstructor', {
                     },
                     items: [{
                         xtype: 'container',
-                        cls: 'x-container-shadow',
                         layout: 'accordion',
                         items: [{
                             xtype: 'grid',
@@ -721,13 +754,14 @@ Ext.define('Scalr.ui.ChefRunlistCosnstructor', {
                                 focusedItemCls: '',
                                 emptyText: 'No roles found to match your search.',
                                 preserveScrollOnRefresh: true,
+                                loadingText: '',
                                 plugins: {
                                     ptype: 'gridviewdragdrop',
                                     dragGroup: 'runList'
                                 }
                             },
                             store: {
-                                fields: [ 'name', 'chef_type', {name: 'id', convert: function(v, record){return record.data.name}}],
+                                model: Scalr.getModel({fields: [ 'name', 'chef_type', {name: 'id', convert: function(v, record){return record.data.name}}]}),
                                 sorters: [{
                                     property: 'name',
                                     transform: function(value){
@@ -750,10 +784,10 @@ Ext.define('Scalr.ui.ChefRunlistCosnstructor', {
                                     var store = this.store;
                                     store.load({callback: function(records, operation, success) {
                                         if (success) {
-                                            (runlistStore.snapshot || runlistStore.data).each(function(rec){
-                                                var record = store.getById(rec.get('id'));
-                                                if (record) {
-                                                    store.remove(record);
+                                            runlistStore.getUnfiltered().each(function(rec){
+                                                var res = store.query('id', rec.get('id'), false, true, false);
+                                                if (res.length) {
+                                                    store.remove(res.first());
                                                 }
                                             });
                                         }
@@ -778,13 +812,14 @@ Ext.define('Scalr.ui.ChefRunlistCosnstructor', {
                                 focusedItemCls: '',
                                 emptyText: 'No recipes found to match your search.',
                                 preserveScrollOnRefresh: true,
+                                loadingText: '',
                                 plugins: {
                                     ptype: 'gridviewdragdrop',
                                     dragGroup: 'runList'
                                 }
                             },
                             store: {
-                                fields: [ 'name', 'cookbook', {name: 'id', convert: function(v, record){return record.data.cookbook+record.data.name}}],
+                                model: Scalr.getModel({fields: [ 'name', 'cookbook', {name: 'id', convert: function(v, record){return record.data.cookbook+'::'+record.data.name}}]}),
                                 sorters: [{
                                     property: 'cookbook',
                                     transform: function(value){
@@ -813,10 +848,10 @@ Ext.define('Scalr.ui.ChefRunlistCosnstructor', {
                                     var store = this.store;
                                     store.load({callback: function(records, operation, success) {
                                         if (success) {
-                                            (runlistStore.snapshot || runlistStore.data).each(function(rec){
-                                                var record = store.getById(rec.get('id'));
-                                                if (record) {
-                                                    store.remove(record);
+                                            runlistStore.getUnfiltered().each(function(rec){
+                                                var res = store.query('id', rec.get('id'), false, true, false);
+                                                if (res.length) {
+                                                    store.remove(res.first());
                                                 }
                                             });
                                         }
@@ -827,9 +862,9 @@ Ext.define('Scalr.ui.ChefRunlistCosnstructor', {
                     },{
                         xtype: 'grid',
                         itemId: 'runList',
-                        cls: 'x-container-shadow x-grid-no-selection',
+                        trackMouseOver: false,
                         bodyStyle: 'background:#fff',
-                        margin: '2 2 2 12',
+                        margin: '0 0 0 12',
                         store: runlistStore,
                         viewConfig: {
                             deferEmptyText: false,
@@ -851,9 +886,9 @@ Ext.define('Scalr.ui.ChefRunlistCosnstructor', {
                             dataIndex: 'name'
                         }, {
                             xtype: 'templatecolumn',
-                            tpl: '<img style="cursor:pointer" width="15" height="15" class="x-icon-action x-icon-action-delete" title="Remove from runlist" src="'+Ext.BLANK_IMAGE_URL+'"/>',
+                            tpl: '<img class="x-grid-icon x-grid-icon-delete" title="Remove from runlist" src="'+Ext.BLANK_IMAGE_URL+'"/>',
                             text: '&nbsp;',
-                            width: 35,
+                            width: 45,
                             sortable: false,
                             resizable: false,
                             border: false,
@@ -862,10 +897,10 @@ Ext.define('Scalr.ui.ChefRunlistCosnstructor', {
                         }],
                         listeners: {
                             itemclick: function (view, record, item, index, e) {
-                                if (e.getTarget('img.x-icon-action-delete')) {
+                                if (e.getTarget('img.x-grid-icon-delete')) {
                                     var isRecipe= !!record.get('cookbook'),
                                         store = this.up('fieldset').down(isRecipe ? '#recipesGrid' : '#rolesGrid').store;
-                                    if (store.query('id', record.get('id')).length === 0) {
+                                    if (store.query('id', record.get('id'), false, true, false).length === 0) {
                                         store.add(record);
                                         store.sort();
                                     }
@@ -884,7 +919,7 @@ Ext.define('Scalr.ui.ChefRunlistCosnstructor', {
                 getValues: function() {
                     var runlist = [],
                         store = this.down('#runList').store;
-                    (store.snapshot || store.data).each(function (record) {
+                    store.getUnfiltered().each(function(record) {
                         if (record.get('cookbook')) {
                             runlist.push('recipe[' + record.get('cookbook') + '::' + record.get('name') + ']');
                         } else if (record.get('chef_type')) {
@@ -924,7 +959,7 @@ Ext.define('Scalr.ui.ChefOrchestrationField', {
 
     isValid: function(returnErrorField) {
         var field, result = true;
-        
+
         if (!this.readOnly && !this.disabled) {
             if (this.down('#chefMode').getValue() === 'solo') {
                 result = this.down('#solo').isValid(returnErrorField);
@@ -942,7 +977,7 @@ Ext.define('Scalr.ui.ChefOrchestrationField', {
         }
         return result;
     },
-    
+
     clearInvalid: function() {
         var fields = this.query('[isFormField]');
         Ext.Array.each(fields, function(field){
@@ -979,7 +1014,7 @@ Ext.define('Scalr.ui.ChefOrchestrationField', {
                 field = me.down('[name="chef.role_name"]');
                 field.store.proxy.params = {servId: me.chefSettings['chef.server_id']};
                 field.setValue(value['chef.role_name'] || me.chefSettings['chef.role_name']);
-                
+
                 me.down('[name="chef.runlist"]').setValue(value['chef.runlist'] || '');
                 me.down('[name="chef.attributes"]').setValue(value['chef.attributes'] || me.chefSettings['chef.attributes']);
                 me.down('#confType').setValue((value['chef.role_name'] || me.chefSettings['chef.role_name']) ? 'role' : 'runlist');
@@ -1010,7 +1045,7 @@ Ext.define('Scalr.ui.ChefOrchestrationField', {
         }
         return value;
     },
-    
+
     reset: function() {
         this.setFieldValues({
             'chefMode': null,
@@ -1061,6 +1096,7 @@ Ext.define('Scalr.ui.ChefOrchestrationField', {
             value: 'reconverge'
         },{
             text: 'Chef solo',
+            maxWidth: 120,
             value: 'solo'
         }],
         listeners: {
@@ -1102,7 +1138,7 @@ Ext.define('Scalr.ui.ChefOrchestrationField', {
         layout: 'anchor',
         defaults: {
             anchor: '100%',
-            labelWidth: 120
+            labelWidth: 135
         },
         items: [{
             xtype: 'container',
@@ -1113,8 +1149,9 @@ Ext.define('Scalr.ui.ChefOrchestrationField', {
                 name: 'confType',
                 itemId: 'confType',
                 fieldLabel: 'Configuration',
-                labelWidth: 120,
+                labelWidth: 135,
                 width: 380,
+                margin: '0 12 0 0',
                 defaults: {
                     width: 120
                 },
@@ -1157,7 +1194,8 @@ Ext.define('Scalr.ui.ChefOrchestrationField', {
                 itemId: 'configureRunlist',
                 hidden: true,
                 flex: 1,
-                text: '<img src="' + Ext.BLANK_IMAGE_URL + '" class="x-icon-configure" />&nbsp;Configure runlist',
+                iconCls: 'x-btn-icon-settings',
+                text: 'Configure runlist',
                 handler: function() {
                     var ct = this.up('cheforchestration'),
                         runlistField = ct.down('[name="chef.runlist"]'),
@@ -1193,8 +1231,10 @@ Ext.define('Scalr.ui.ChefOrchestrationField', {
         fieldLabel: 'Runlist',
         labelAlign: 'top',
         height: 120,
-        icons: {
-            globalvars: true
+        plugins: {
+            ptype: 'fieldicons',
+            position: 'label',
+            icons: ['globalvars']
         },
         emptyText: 'Paste your run list in JSON format'
     },{
@@ -1202,8 +1242,10 @@ Ext.define('Scalr.ui.ChefOrchestrationField', {
         itemId: 'attributes',
         name: 'chef.attributes',
         fieldLabel: 'Attributes',
-        icons: {
-            globalvars: true
+        plugins: {
+            ptype: 'fieldicons',
+            position: 'label',
+            icons: ['globalvars']
         },
         labelAlign: 'top',
         height: 120,

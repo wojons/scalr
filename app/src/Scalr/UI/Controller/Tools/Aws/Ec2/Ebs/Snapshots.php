@@ -21,15 +21,16 @@ class Scalr_UI_Controller_Tools_Aws_Ec2_Ebs_Snapshots extends Scalr_UI_Controlle
 
     public function viewAction()
     {
-        $this->response->page('ui/tools/aws/ec2/ebs/snapshots/view.js', array(
-            'locations'	=> self::loadController('Platforms')->getCloudLocations(SERVER_PLATFORMS::EC2, false)
-        ));
+        $this->response->page('ui/tools/aws/ec2/ebs/snapshots/view.js', []);
     }
 
     public function xGetMigrateDetailsAction()
     {
-        if (!$this->request->getEnvironment()->isPlatformEnabled(SERVER_PLATFORMS::EC2))
+        if (!$this->request->getEnvironment()->isPlatformEnabled(SERVER_PLATFORMS::EC2)) {
             throw new Exception('You can migrate image between regions only on EC2 cloud');
+        }
+
+        $availableDestinations = [];
 
         $platform = PlatformFactory::NewPlatform(SERVER_PLATFORMS::EC2);
         $locationsList = $platform->getLocations($this->environment);
@@ -40,9 +41,9 @@ class Scalr_UI_Controller_Tools_Aws_Ec2_Ebs_Snapshots extends Scalr_UI_Controlle
         }
 
         $this->response->data(array(
-            'sourceRegion' => $this->getParam('cloudLocation'),
+            'sourceRegion'          => $this->getParam('cloudLocation'),
             'availableDestinations' => $availableDestinations,
-            'snapshotId' => $this->getParam('snapshotId')
+            'snapshotId'            => $this->getParam('snapshotId')
         ));
     }
 
@@ -73,6 +74,19 @@ class Scalr_UI_Controller_Tools_Aws_Ec2_Ebs_Snapshots extends Scalr_UI_Controlle
         if (isset($snapshot->snapshotId)) {
             /* @var $volume \Scalr\Service\Aws\Ec2\DataType\VolumeData */
             $volume = $aws->ec2->volume->describe($snapshot->volumeId)->get(0);
+
+            if (!empty($volume->tagSet) && $volume->tagSet->count()) {
+                try {
+                    //We need to do sleep due to eventual consistency on EC2
+                    sleep(2);
+                    //Set tags (copy them from the original EBS volume)
+                    $snapshot->createTags($volume->tagSet);
+                } catch (Exception $e) {
+                    //We want to hear from the cases when it cannot set tag to snapshot
+                    trigger_error(sprintf("Cound not set tag to snapshot: %s", $e->getMessage()), E_USER_WARNING);
+                }
+            }
+
             if (count($volume->attachmentSet) && !empty($volume->attachmentSet[0]->instanceId)) {
                 $instanceId = $volume->attachmentSet[0]->instanceId;
                 try {
@@ -80,6 +94,7 @@ class Scalr_UI_Controller_Tools_Aws_Ec2_Ebs_Snapshots extends Scalr_UI_Controlle
                     $dBFarm = $dBServer->GetFarmObject();
                 } catch (Exception $e) {
                 }
+
                 if (isset($dBServer) && isset($dBFarm)) {
                     $comment = sprintf(_("Created on farm '%s', server '%s' (Instance ID: %s)"),
                         $dBFarm->Name, $dBServer->serverId, $instanceId

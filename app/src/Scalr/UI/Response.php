@@ -10,6 +10,8 @@ class Scalr_UI_Response
     public $serverDebugLog = [];
     public $uiDebugLog = [];
 
+    private $file = null;
+
     private $_serverDebugEnabled = false;
 
     private static $_instance = null;
@@ -29,12 +31,13 @@ class Scalr_UI_Response
     public function pageNotFound()
     {
         $this->setHttpResponseCode(404);
+        throw new Scalr_UI_Exception_NotFound();
     }
 
     public function pageAccessDenied()
     {
         $this->setHttpResponseCode(403);
-        //throw new Exception('Access denied');
+        throw new Scalr_Exception_InsufficientPermissions();
     }
 
     /**
@@ -116,7 +119,11 @@ class Scalr_UI_Response
 
     public function sendResponse()
     {
-        $response = $this->getResponse();
+        if (is_readable($this->file) &&
+            isset($_SERVER["HTTP_IF_MODIFIED_SINCE"]) &&
+            filemtime($this->file) < DateTime::createFromFormat('D, d M Y H:i:s T', $_SERVER["HTTP_IF_MODIFIED_SINCE"])->getTimestamp()) {
+                $this->setHttpResponseCode(304);
+        }
 
         foreach ($this->headers as $header) {
             header($header['name'] . ': ' . $header['value'], $header['replace']);
@@ -132,11 +139,45 @@ class Scalr_UI_Response
         }
 
         header_remove('Set-Cookie');
-        foreach ($cookies as $key => $value)
+        foreach ($cookies as $key => $value) {
             header("Set-Cookie: {$key}={$value}", false);
+        }
 
         header("HTTP/1.0 {$this->httpResponseCode}");
-        echo $response;
+
+        is_readable($this->file) ? readfile($this->file) : print($this->getResponse());
+    }
+
+    /**
+     * Sends file content with response
+     *
+     * @param   string   $path     File path
+     * @param   string[] $headers  optional Response headers
+     * @param   string   $fileName optional File name
+     * @param   string   $content  optional File content
+     */
+    public function sendFile($path, $headers = [], $fileName = null, $content = null)
+    {
+        if (empty($fileName)) {
+            $fileName = pathinfo($path, PATHINFO_BASENAME);
+        }
+
+        $defaults = [
+            'Content-Description'   => 'File Transfer',
+            'Content-Type'          => 'application/octet-stream',
+            'Content-Disposition'   => "attachment; filename=" . ($fileName ?: 'file'),
+            'Expires'               => 0,
+            'Cache-Control'         => 'must-revalidate',
+            'Content-Length'        => $content === null ? filesize($path) : strlen($content)
+        ];
+
+        foreach (array_filter(array_merge($defaults, $headers), function ($entry) {
+            return $entry !== false;
+        }) as $header => $value) {
+            $this->setHeader($header, $value);
+        }
+
+        $content === null ? $this->file = $path : $this->setResponse($content);
     }
 
     public function resetResponse()
@@ -161,21 +202,21 @@ class Scalr_UI_Response
     // divide into set headers and set body
     public function prepareJsonResponse()
     {
-        //if (! isset($_REQUEST['X-Requested-With']) && $_REQUEST['X-Requested-With'] == 'XMLHttpRequest') {
-            // when we do file uploads, big log break json parser, may be some issue in extjs 4.2.2
-        if ($this->_serverDebugEnabled)
+        if ($this->_serverDebugEnabled) {
             $this->jsResponse['scalrDebugLog'] = $this->serverDebugLog;
-        //}
+        }
 
         $this->setResponse(json_encode($this->jsResponse));
 
         if (count($this->uiDebugLog))
             $this->setHeader('X-Scalr-Debug', json_encode($this->uiDebugLog));
 
-        if (isset($_REQUEST['X-Requested-With']) && $_REQUEST['X-Requested-With'] == 'XMLHttpRequest')
-            $this->setHeader('content-type', 'text/html', true); // hack for ajax file uploads and other cases
-        else
+        if (isset($_REQUEST['X-Requested-With']) && $_REQUEST['X-Requested-With'] == 'XMLHttpRequest') {
+            // hack for ajax file uploads and other cases (use text/plain because text/html cannot parse html tags in result)
+            $this->setHeader('content-type', 'text/plain', true);
+        } else {
             $this->setHeader('content-type', 'text/javascript', true);
+        }
     }
 
     public function getModuleName($name)
@@ -196,23 +237,44 @@ class Scalr_UI_Response
         return "/{$path}{$nameTm}";
     }
 
+    /**
+     * @param array $files
+     * @return string
+     */
+    public function calculateFilesHash($files)
+    {
+        return sha1(join(';', array_map(function($item) {
+            return $this->getModuleName($item);
+        }, $files)));
+    }
+
     public function pageUiHash()
     {
-        return sha1(join(';', array(
-            $this->getModuleName("override.js"),
-            $this->getModuleName("init.js"),
-            $this->getModuleName("utils.js"),
-            $this->getModuleName("ui-form.js"),
-            $this->getModuleName("ui-grid.js"),
-            $this->getModuleName("ui-plugins.js"),
-            $this->getModuleName("ui.js"),
-            $this->getModuleName("ui.css")
-        )));
+        return $this->calculateFilesHash([
+            "override.js",
+            "init.js",
+            "utils.js",
+            "ui-form.js",
+            "ui-grid.js",
+            "ui-plugins.js",
+            "ui.js",
+            "ui.css"
+        ]);
     }
 
     public function page($name, $params = array(), $requires = array(), $requiresCss = array(), $requiresData = array())
     {
-        $this->jsResponse['moduleName'] = $this->getModuleName($name);
+        if (is_array($name)) {
+            $this->jsResponse['moduleName'] = $this->getModuleName($name[0]);
+            $this->jsResponse['moduleRequiresMain'] = [];
+            foreach ($name as $n) {
+                $this->jsResponse['moduleRequiresMain'][] = $this->getModuleName($n);
+            }
+        } else {
+            $this->jsResponse['moduleName'] = $this->getModuleName($name);
+            $this->jsResponse['moduleRequiresMain'] = [$this->jsResponse['moduleName']];
+        }
+
         $this->jsResponse['moduleParams'] = $params;
 
         if (count($requires)) {

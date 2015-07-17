@@ -1,6 +1,12 @@
 <?php
-use Scalr\Acl\Acl;
 
+use Scalr\Acl\Acl;
+use Scalr\UI\Request\JsonData;
+use Scalr\Model\Entity;
+
+/**
+ * Class Scalr_UI_Controller_Services_Ssl_Certificates.
+ */
 class Scalr_UI_Controller_Services_Ssl_Certificates extends Scalr_UI_Controller
 {
     const CALL_PARAM_NAME = 'certId';
@@ -10,180 +16,224 @@ class Scalr_UI_Controller_Services_Ssl_Certificates extends Scalr_UI_Controller
         $this->viewAction();
     }
 
+    /**
+     * @throws Scalr_Exception_InsufficientPermissions
+     */
     public function viewAction()
     {
         $this->request->restrictAccess(Acl::RESOURCE_SERVICES_SSL);
-        $this->response->page('ui/services/ssl/certificates/view.js');
+        $this->response->page(
+            'ui/services/ssl/certificates/view.js',
+            [],
+            ['ui/services/ssl/certificates/create.js']
+        );
     }
 
-    public function getList()
-    {
-        return $this->db->GetAll('SELECT id, name FROM services_ssl_certs WHERE env_id = ?', array($this->getEnvironmentId()));
-    }
-
-    public function xRemoveAction()
+    /**
+     * @param JsonData $certs
+     * @throws Scalr_Exception_InsufficientPermissions
+     */
+    public function xRemoveAction(JsonData $certs)
     {
         $this->request->restrictAccess(Acl::RESOURCE_SERVICES_SSL);
-        $this->request->defineParams(array(
-            'certs' => array('type' => 'json')
-        ));
+        $errors = [];
+        $processed = [];
 
-        foreach ($this->getParam('certs') as $certId) {
-            $cert = new Scalr_Service_Ssl_Certificate();
-            $cert->loadById($certId);
-            $this->user->getPermissions()->validate($cert);
-            $cert->delete();
+        foreach ($certs as $certId) {
+            try {
+                $cert = Entity\SslCertificate::findPk($certId);
+
+                if (!$cert) {
+                    throw new Scalr_UI_Exception_NotFound();
+                }
+
+                $this->user->getPermissions()->validate($cert);
+                $cert->delete();
+                $processed[] = $certId;
+            } catch (Exception $e) {
+                $errors[] = $e->getMessage();
+            }
         }
 
-        $this->response->success();
+        $this->response->data(['processed' => $processed]);
+        if (count($errors)) {
+            $this->response->warning("Certificates(s) successfully removed, but some errors occurred:\n".implode("\n", $errors));
+        } else {
+            $this->response->success('Certificates(s) successfully removed');
+        }
     }
 
-    public function editAction()
+    /**
+     * @param int $certId
+     * @throws Scalr_Exception_InsufficientPermissions
+     * @throws Scalr_UI_Exception_NotFound
+     */
+    public function editAction($certId)
     {
         $this->request->restrictAccess(Acl::RESOURCE_SERVICES_SSL);
 
-        $cert = new Scalr_Service_Ssl_Certificate();
-        $cert->loadById($this->getParam('certId'));
+        /* @var \Scalr\Model\Entity\SslCertificate $cert */
+        $cert = Entity\SslCertificate::findPk($certId);
+
+        if (!$cert) {
+            throw new Scalr_UI_Exception_NotFound();
+        }
+
         $this->user->getPermissions()->validate($cert);
 
-        $this->response->page('ui/services/ssl/certificates/create.js', array(
-            'cert' => array(
-                'id' => $cert->id,
-                'name' => $cert->name,
-                'privateKey' => $cert->privateKey ? 'Private key uploaded' : '',
-                'privateKeyPassword' => $cert->privateKeyPassword ? '******' : '',
-                'certificate' => $cert->certificate ? $cert->getCertificateName() : '',
-                'caBundle' => $cert->caBundle ? $cert->getCaBundleName() : ''
-            )
-        ));
+        $this->response->page('ui/services/ssl/certificates/create.js', [
+            'cert' => $cert->getInfo(),
+        ]);
     }
 
+    /**
+     * @throws Scalr_Exception_InsufficientPermissions
+     */
     public function createAction()
     {
         $this->request->restrictAccess(Acl::RESOURCE_SERVICES_SSL);
         $this->response->page('ui/services/ssl/certificates/create.js');
     }
 
-    public function xSaveAction()
+    /**
+     * Save certificate (create new or update existing).
+     *
+     * @param string $name
+     * @param int    $id                 optional
+     * @param int    $privateKeyClear    optional
+     * @param int    $certificateClear   optional
+     * @param int    $caBundleClear      optional
+     * @param string $privateKeyPassword optional
+     * @throws Scalr_Exception_Core
+     * @throws Scalr_Exception_InsufficientPermissions
+     * @throws Scalr_UI_Exception_NotFound
+     * @throws \Scalr\Exception\ModelException
+     */
+    public function xSaveAction($name, $id = null, $privateKeyClear = null, $certificateClear = null, $caBundleClear = null, $privateKeyPassword = null)
     {
         $this->request->restrictAccess(Acl::RESOURCE_SERVICES_SSL);
 
-        $cert = new Scalr_Service_Ssl_Certificate();
         $flagNew = false;
-        if ($this->getParam('id')) {
-            $cert->loadById($this->getParam('id'));
+        if ($id) {
+            /* @var \Scalr\Model\Entity\SslCertificate $cert */
+            $cert = Entity\SslCertificate::findPk($id);
+
+            if (!$cert) {
+                throw new Scalr_UI_Exception_NotFound();
+            }
+
             $this->user->getPermissions()->validate($cert);
         } else {
+            $cert = new Entity\SslCertificate();
             $cert->envId = $this->getEnvironmentId();
             $flagNew = true;
         }
 
-        if (! $this->getParam('name'))
-            throw new Scalr_Exception_Core('Name can\'t be empty');
-
-        $cert->name = $this->getParam('name');
+        $cert->name = $name;
+        if (!$cert->name) {
+            $this->request->addValidationErrors('name', 'Name can\'t be empty');
+        }
 
         if (!empty($_FILES['privateKey']['tmp_name'])) {
             $cert->privateKey = file_get_contents($_FILES['privateKey']['tmp_name']);
-        } else if ($this->getParam('privateKeyClear')) {
-            $cert->privateKey = '';
+        } elseif ($privateKeyClear) {
+            $cert->privateKey = null;
         }
 
-        if ($this->getParam('privateKeyPassword')) {
-            if (! $cert->privateKey) {
+        if ($privateKeyPassword) {
+            if (!$cert->privateKey) {
                 $this->request->addValidationErrors('privateKeyPassword', 'Private key password requires private key');
             } else {
-                if ($this->getParam('privateKeyPassword') != '******')
-                    $cert->privateKeyPassword = $this->getParam('privateKeyPassword');
+                if ($privateKeyPassword != '******') {
+                    $cert->privateKeyPassword = $privateKeyPassword;
+                }
             }
+        } else {
+            $cert->privateKeyPassword = null;
         }
 
         if (!empty($_FILES['certificate']['tmp_name'])) {
             $cr = file_get_contents($_FILES['certificate']['tmp_name']);
-            if (! openssl_x509_parse($cr, false)) {
+            if (!openssl_x509_parse($cr, false)) {
                 $this->request->addValidationErrors('certificate', 'Not valid certificate');
             } else {
                 $cert->certificate = $cr;
             }
-        } else if ($this->getParam('certificateClear')) {
-            $cert->certificate = '';
+        } elseif ($certificateClear) {
+            $cert->certificate = null;
         }
 
         if (!empty($_FILES['caBundle']['tmp_name'])) {
             $bn = file_get_contents($_FILES['caBundle']['tmp_name']);
-            if (! openssl_x509_parse($bn, false)) {
+            if (!openssl_x509_parse($bn, false)) {
                 $this->request->addValidationErrors('caBundle', 'Not valid certificate chain');
             } else {
                 $cert->caBundle = $bn;
             }
-        } else if ($this->getParam('caBundleClear')) {
-            $cert->caBundle = '';
+        } elseif ($caBundleClear) {
+            $cert->caBundle = null;
         }
 
-        if (! $this->request->isValid()) {
+        if (!$cert->certificate) {
+            $this->request->addValidationErrors('certificate', 'Certificate cannot be empty.');
+        }
+
+        if (!$cert->privateKey) {
+            $this->request->addValidationErrors('privateKey', 'Private key cannot be empty.');
+        }
+
+        if (!$this->request->isValid()) {
             $this->response->data($this->request->getValidationErrors());
             $this->response->failure();
         } else {
             $cert->save();
-            
-            if ($this->getParam('id')) {
+
+            if ($id) {
                 try {
                     // Update existing servers
                     $res = $this->db->Execute("SELECT farm_roleid FROM farm_role_settings WHERE name='nginx.proxies' AND value LIKE '%ssl_certificate_id\":\"{$cert->id}%'");
                     while ($f = $res->FetchRow()) {
                         $dbFarmRole = DBFarmRole::LoadByID($f['farm_roleid']);
-                        $servers = $dbFarmRole->GetServersByFilter(array('status' => SERVER_STATUS::RUNNING));
+                        $servers = $dbFarmRole->GetServersByFilter(['status' => SERVER_STATUS::RUNNING]);
                         foreach ($servers as $server) {
                             $msg = new Scalr_Messaging_Msg_SSLCertificateUpdate();
                             $msg->id = $cert->id;
                             $msg->certificate = $cert->certificate;
                             $msg->cacertificate = $cert->caBundle;
                             $msg->privateKey = $cert->privateKey;
-        
+
                             $server->SendMessage($msg, false, true);
                         }
                     }
-                    
                     // Update apache server
-                    
-                    
-                } catch (Exception $e) {}
+                } catch (Exception $e) {
+                }
             }
-            
+
             $this->response->success('Certificate was successfully saved');
+
             if ($flagNew) {
-                $this->response->data(array('cert' => array(
-                    'id' => (string)$cert->id,
-                    'name' => $cert->name
-                )));
+                $this->response->data(['cert' => $cert->getInfo()]);
             }
         }
     }
 
+    /**
+     * @throws Scalr_Exception_Core
+     */
     public function xListCertificatesAction()
     {
-        $this->request->defineParams(array(
-            'sort' => array('type' => 'json')
-        ));
+        $this->request->restrictAccess(Acl::RESOURCE_SERVICES_SSL);
 
-        $sql = "SELECT id, name, ssl_pkey AS privateKey, ssl_pkey_password AS privateKeyPassword, ssl_cert AS certificate, ssl_cabundle AS caBundle FROM `services_ssl_certs` WHERE env_id = ? AND :FILTER:";
-        $response = $this->buildResponseFromSql2($sql, array('id', 'name'), array('id', 'name'), array($this->getEnvironmentId()));
+        $criteria = [['envId' => $this->getEnvironmentId()]];
+        $certs = Entity\SslCertificate::find($criteria);
+        $certInfos = [];
 
-        foreach ($response['data'] as &$row) {
-            $row['privateKey'] = !!$row['privateKey'];
-            $row['privateKeyPassword'] = !!$row['privateKeyPassword'];
-
-            if ($row['certificate']) {
-                $info = openssl_x509_parse($row['certificate'], false);
-                $row['certificate'] = $info['name'] ? $info['name'] : 'uploaded';
-            }
-
-            if ($row['caBundle']) {
-                $info = openssl_x509_parse($row['caBundle'], false);
-                $row['caBundle'] = $info['name'] ? $info['name'] : 'uploaded';
-            }
+        /* @var \Scalr\Model\Entity\SslCertificate $cert */
+        foreach ($certs as $cert) {
+            $certInfos[] = $cert->getInfo();
         }
 
-        $this->response->data($response);
+        $this->response->data(['data' => $certInfos]);
     }
 }

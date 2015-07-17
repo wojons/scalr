@@ -1,6 +1,6 @@
 Scalr.regPage('Scalr.ui.tools.aws.ec2.eips.view', function (loadParams, moduleParams) {
 	var store = Ext.create('store.store', {
-		fields: [ 'ipaddress','instance_id', 'domain', 'allocation_id', 'farm_id', 'farm_name', 'role_name', 'indb', 'farm_roleid', 'server_id', 'server_index' ],
+		fields: [ 'ipaddress','instance_id', 'domain', 'allocation_id', {name: 'farm_id', defaultValue: null}, 'farm_name', 'role_name', {name: 'indb', defaultValue: null}, 'farm_roleid', {name: 'server_id', defaultValue: null}, 'server_index' ],
 		proxy: {
 			type: 'scalr.paging',
 			url: '/tools/aws/ec2/eips/xListEips/'
@@ -9,27 +9,21 @@ Scalr.regPage('Scalr.ui.tools.aws.ec2.eips.view', function (loadParams, modulePa
 	});
 
 	return Ext.create('Ext.grid.Panel', {
-		title: 'Tools &raquo; Amazon Web Services &raquo; EC2 &raquo; Elastic IPs',
 		scalrOptions: {
-			'reload': false,
-			'maximize': 'all'
+			reload: false,
+			maximize: 'all',
+            menuTitle: 'EC2 EIPs',
+            menuHref: '#/tools/aws/ec2/eips',
+            menuFavorite: true
 		},
 		store: store,
 		stateId: 'grid-tools-aws-ec2-eips-view',
 		stateful: true,
-		plugins: {
-			ptype: 'gridstore'
-		},
-
-		tools: [{
-			xtype: 'gridcolumnstool'
-		}, {
-			xtype: 'favoritetool',
-			favorite: {
-				text: 'Elastic IPs',
-				href: '#/tools/aws/ec2/eips'
-			}
-		}],
+        plugins: [{
+            ptype: 'gridstore'
+        }, {
+            ptype: 'applyparams'
+        }],
 
 		viewConfig: {
 			emptyText: "No elastic IPs found",
@@ -38,27 +32,26 @@ Scalr.regPage('Scalr.ui.tools.aws.ec2.eips.view', function (loadParams, modulePa
 
 		columns: [
 			{ header: "Used By", flex: 1, dataIndex: 'farm_name', sortable: true, xtype: 'templatecolumn', tpl:
-				'<tpl if="farm_id"><a href="#/farms/{farm_id}/view" title="Farm {farm_name}">{farm_name}</a>' +
+				'<tpl if="farm_id"><a href="#/farms?farmId={farm_id}" title="Farm {farm_name}">{farm_name}</a>' +
 					'<tpl if="role_name">&nbsp;&rarr;&nbsp;<a href="#/farms/{farm_id}/roles/{farm_roleid}/view"' +
 						'title="Role {role_name}">{role_name}</a> #{server_index}' +
 					'</tpl>' +
 				'</tpl>' +
-				'<tpl if="! farm_id"><img src="/ui2/images/icons/false.png" /></tpl>'
+				'<tpl if="! farm_id">&mdash;</tpl>'
 			},
 			{ header: "IP address", width: 200, dataIndex: 'ipaddress', sortable: false },
 			{ header: "Type", width: 80, dataIndex: 'domain', sortable: false },
 			{ header: "Allocation ID", width: 200, dataIndex: 'allocation_id', sortable: false },
 			{ header: "Auto-assigned", width: 150, dataIndex: 'role_name', sortable: true, xtype: 'templatecolumn', align:'center', tpl:
-				'<tpl if="indb"><img src="/ui2/images/icons/true.png"></tpl>' +
-				'<tpl if="!indb"><img src="/ui2/images/icons/false.png"></tpl>'
+				'<tpl if="indb"><div class="x-grid-icon x-grid-icon-simple x-grid-icon-ok"></div></tpl>' +
+				'<tpl if="!indb">&mdash;</tpl>'
 			},
 			{ header: "Server", flex: 1, dataIndex: 'server_id', sortable: true, xtype: 'templatecolumn', tpl:
-				'<tpl if="server_id"><a href="#/servers/{server_id}/view">{server_id}</a></tpl>' +
+				'<tpl if="server_id"><a href="#/servers?serverId={server_id}">{server_id}</a></tpl>' +
 				'<tpl if="!server_id">{instance_id}</tpl>'
 			}
 		],
 
-        multiSelect: true,
         selModel: {
             selType: 'selectedmodel',
             getVisibility: function(record) {
@@ -77,19 +70,14 @@ Scalr.regPage('Scalr.ui.tools.aws.ec2.eips.view', function (loadParams, modulePa
 			store: store,
 			dock: 'top',
 			items: [{
-				xtype: 'fieldcloudlocation',
-				itemId: 'cloudLocation',
-				store: {
-					fields: [ 'id', 'name' ],
-					data: moduleParams.locations,
-					proxy: 'object'
-				},
-				gridStore: store
+                xtype: 'cloudlocationfield',
+                platforms: ['ec2'],
+                gridStore: store
 			}],
             afterItems: [{
-                ui: 'paging',
                 itemId: 'delete',
-                iconCls: 'x-tbar-delete',
+                iconCls: 'x-btn-icon-delete',
+                cls: 'x-btn-red',
                 tooltip: 'Select one or more elastic IP(s) to delete them',
                 disabled: true,
                 handler: function() {

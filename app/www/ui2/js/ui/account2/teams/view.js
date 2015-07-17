@@ -1,5 +1,5 @@
 Scalr.regPage('Scalr.ui.account2.teams.view', function (loadParams, moduleParams) {
-	var UNASSIGNED_TEAM_ID = 9999999, 
+	var UNASSIGNED_TEAM_ID = 9999999,
 		NEW_TEAM_ID = 0,
 		isAccountOwner = Scalr.user['type'] === 'AccountOwner',
         readOnlyAccess = !Scalr.utils.canManageAcl(),
@@ -16,12 +16,12 @@ Scalr.regPage('Scalr.ui.account2.teams.view', function (loadParams, moduleParams
             teamId = 'first';
         }
 		if (teamId) {
-			dataview.deselect(form.getForm().getRecord());
+			dataview.deselectAndClearLastSelected();
 			if (teamId === 'new') {
-    			panel.down('#add').handler();
+    			panel.down('#add').toggle(true);
 			} else {
 				panel.down('#teamsLiveSearch').reset();
-				var record = store.getById(teamId) || (teamId === 'first' ? (store.snapshot || store.data).first() : null);
+				var record = store.getById(teamId) || (teamId === 'first' ? store.first() : null);
 				if (record) {
 					dataview.select(record);
 				}
@@ -29,11 +29,9 @@ Scalr.regPage('Scalr.ui.account2.teams.view', function (loadParams, moduleParams
 		}
         firstReconfigure = false;
 	};
-	
-	var store = Ext.create('Scalr.ui.ChildStore', {
-		parentStore: storeTeams,
-		filterOnLoad: true,
-		sortOnLoad: true,
+
+	var store = Ext.create('Ext.data.ChainedStore', {
+		source: storeTeams,
 		sorters: [{
 			property: 'name',
 			transform: function(value){
@@ -53,15 +51,15 @@ Scalr.regPage('Scalr.ui.account2.teams.view', function (loadParams, moduleParams
 			}
 		}],
         loadRoles: function (data) {
-            var roles = [{id: null, name: ''}];
+            var roles = [];
             data.each(function(role){
                 roles.push({id: role.get('id'), name: role.get('name'), color: role.get('color')});
             });
             this.loadData(roles);
         }
 	});
-    storeDefaultRole.loadRoles(storeRoles.snapshot || storeRoles.data);
-    
+    storeDefaultRole.loadRoles(storeRoles.getUnfiltered());
+
 	var storeTeamUsers = Ext.create('store.store', {
 		filterOnLoad: true,
 		sortOnLoad: true,
@@ -105,15 +103,19 @@ Scalr.regPage('Scalr.ui.account2.teams.view', function (loadParams, moduleParams
 			this.loadData(users);
 		}
 	});
-	
+
     var dataview = Ext.create('Ext.view.View', {
         deferInitialRefresh: false,
         store: store,
 		listeners: {
             refresh: function(view){
-                var record = view.getSelectionModel().getLastSelected();
+                var selModel = view.getSelectionModel(),
+                    record = selModel.getLastSelected();
                 if (record) {
-                    form.loadRecord(view.store.getById(record.get('id')));
+                    dataview.deselectAndClearLastSelected();
+                    if (dataview.getNode(record)) {
+                        selModel.select(view.store.getById(record.get('id')));
+                    }
                 }
             }
 		},
@@ -133,10 +135,10 @@ Scalr.regPage('Scalr.ui.account2.teams.view', function (loadParams, moduleParams
                         '</tr>',
                         '<tr>',
                             '<td width="120">',
-                                '<span class="x-dataview-tab-param-title">Users: </span><span class="x-dataview-tab-param-value">{[values.users ? values.users.length : 0]}</span>',
+                                '<span class="x-form-item-label-default">Users&nbsp; </span><span class="x-dataview-tab-param-value">{[values.users ? values.users.length : 0]}</span>',
                             '</td>',
                             '<td style="padding-left:10px">',
-                                '<span class="x-dataview-tab-param-title">Access to: </span><span class="x-dataview-tab-param-value">{[this.getTeamEnvironmentsList(values.id)]}</span>',
+                                '{[this.getTeamEnvironmentsList(values.id)]}',
                             '</td>',
                         '</tr>',
                     '</table>',
@@ -147,14 +149,13 @@ Scalr.regPage('Scalr.ui.account2.teams.view', function (loadParams, moduleParams
 					var list = [];
 					storeEnvironments.each(function() {
                         if (
-                            Scalr.flags['authMode'] == 'scalr' && Ext.Array.contains(this.get('teams'), teamId) ||
-                            Scalr.flags['authMode'] == 'ldap' && Ext.Array.contains(this.get('teamIds'), teamId)
+                            Scalr.flags['authMode'] == 'scalr' && Ext.Array.contains(this.get('teams') || [], teamId) ||
+                            Scalr.flags['authMode'] == 'ldap' && Ext.Array.contains(this.get('teamIds') || [], teamId)
                         ) {
                             list.push(this.get('name'));
                         }
 					});
-
-					return list.length > 0 ? list.join(', ') : 'no access to environments';
+					return list.length > 0 ? '<span class="x-form-item-label-default">Access to&nbsp; </span><span class="x-dataview-tab-param-value">'+list.join(', ')+'</span>' : '<i>no access to environments</i>';
 				}
 			}
         ),
@@ -162,18 +163,17 @@ Scalr.regPage('Scalr.ui.account2.teams.view', function (loadParams, moduleParams
 			ptype: 'dynemptytext',
             showArrow: Scalr.flags['authMode'] == 'ldap',
 			emptyText: Scalr.flags['authMode'] == 'ldap' ?
-                '<div class="title">No teams were found to match your search.</div> Try modifying your search criteria.':
-                '<div class="title">No teams were found to match your search.</div> Try modifying your search criteria' + ' or <a class="add-link" href="#">creating a new team</a>.',
+                '<div class="x-semibold title">No teams were found to match your search.</div> Try modifying your search criteria.':
+                '<div class="x-semibold title">No teams were found to match your search.</div> Try modifying your search criteria or creating a new team.',
 
 			emptyTextNoItems: Scalr.flags['authMode'] == 'ldap' ?
-                '<div class="title">You have no teams under your account yet.</div>' +
+                '<div class="x-semibold title">You have no teams under your account yet.</div>' +
                 'Teams are based on LDAP groups, and let you organize your co-workers\' access to different parts of your infrastructure.<br/>' +
                 'Please specify which LDAP groups have access to your Scalr environments on the Environments tab.</div>' :
-                '<div class="title">You have no teams under your account.</div>'+
-								'Teams let you organize your co-workers\' access<br/> to different parts of your infrastructure.<br/>' +
-								'Click "Add team" button to create one.',
+                '<div class="x-semibold title">You have no teams under your account.</div>'+
+								'Teams let you organize your co-workers\' access<br/> to different parts of your infrastructure',
 			onAddItemClick: function() {
-				panel.down('#add').handler();
+				panel.down('#add').toggle(true);
 			}
 		},
 		loadingText: 'Loading teams ...',
@@ -184,10 +184,10 @@ Scalr.regPage('Scalr.ui.account2.teams.view', function (loadParams, moduleParams
 		cls: 'x-menu-light',
 		setTeam: function(teamRecord){
 			var items = [];
-            (storeRoles.snapshot || storeRoles.data).each(function(role){
+            storeDefaultRole.getUnfiltered().each(function(role){
                 items.push({
                     xtype: 'menucheckitem',
-                    text: '<span style="font-weight:bold;color:#'+role.get('color')+'">'+role.get('name')+'</span>',
+                    text: '<span style="color:#'+role.get('color')+'">'+role.get('name')+'</span>',
                     value: role.get('id')
                 });
             });
@@ -213,6 +213,7 @@ Scalr.regPage('Scalr.ui.account2.teams.view', function (loadParams, moduleParams
 				xy[1] -= sizeX - Scalr.application.getHeight();
 			}
 			this.show().setPosition([xy[0] - (this.getWidth() - btnEl.getWidth()), xy[1] + btnEl.getHeight() + 1]);
+            this.focus();
 		},
 		defaults: {
 			listeners: {
@@ -232,7 +233,7 @@ Scalr.regPage('Scalr.ui.account2.teams.view', function (loadParams, moduleParams
 	menuUserRoles.doAutoRender();
 
 	var gridTeamMembers = Ext.create('Ext.grid.Panel', {
-		cls: 'x-grid-shadow' + (readOnlyAccess ? ' x-grid-no-highlighting' : ''),
+		cls: readOnlyAccess ? 'x-grid-no-highlighting' : '',
 		maxWidth: 770,
 		store: storeTeamUsers,
 		listeners: {
@@ -243,7 +244,7 @@ Scalr.regPage('Scalr.ui.account2.teams.view', function (loadParams, moduleParams
 						menuUserRoles.setTeam(record);
 						storeTeamUsers.loadTeam(record);
 					}
-                    storeDefaultRole.loadRoles(storeRoles.snapshot || storeRoles.data);
+                    storeDefaultRole.loadRoles(storeRoles.getUnfiltered());
 				}
 
 				storeUsers.on({
@@ -257,11 +258,13 @@ Scalr.regPage('Scalr.ui.account2.teams.view', function (loadParams, moduleParams
 							});
 						}
 					},
-					remove: function(store, record){
-                        var teamUser = storeTeamUsers.getById(record.get('id'));
-                        if (teamUser) {
-                            storeTeamUsers.remove(teamUser);
-                        }
+					remove: function(store, records){
+                        Ext.each(records, function(record){
+                            var teamUser = storeTeamUsers.getById(record.get('id'));
+                            if (teamUser) {
+                                storeTeamUsers.remove(teamUser);
+                            }
+                        })
 					},
 					update: function(store, record, operation, fields){
 						if (operation == Ext.data.Model.EDIT) {
@@ -291,39 +294,26 @@ Scalr.regPage('Scalr.ui.account2.teams.view', function (loadParams, moduleParams
 			id:'grouping',
 			ftype:'grouping',
             disabled: readOnlyAccess || Scalr.flags['authMode'] == 'ldap',
-			groupHeaderTpl: '{[values.name=='+UNASSIGNED_TEAM_ID+'?"Not in team":"In team"]}'
+            restoreGroupsState: true,
+			groupHeaderTpl: '{[(values.name=='+UNASSIGNED_TEAM_ID+'?"Not in team":"In team")+ \' (\' + values.children.length + \' user\' + (values.children.length !== 1 ? \'s\' : \'\') + \')\']}'
 		}],
 		dockedItems: [{
             xtype: 'toolbar',
-            ui: 'simple',
+            ui: 'inline',
 			dock: 'top',
 			items: [{
 				xtype: 'filterfield',
 				filterFields: ['fullname', 'email'],
 				store: storeTeamUsers,
                 submitValue: false,
-                isFormField: false,
-				listeners: {
-					afterfilter: function(){
-						//workaround of the extjs grouped store/grid bug
-                        if (gridTeamMembers.headerCt.rendered && !readOnlyAccess) {
-                            var grouping = gridTeamMembers.getView().getFeature('grouping');
-                            gridTeamMembers.suspendLayouts();
-                            if (!grouping.disabled) {
-                                grouping.disable();
-                                grouping.enable();
-                            }
-                            gridTeamMembers.resumeLayouts(true);
-                        }
-					}
-				}
+                excludeForm: true
 			}]
-		}],	
+		}],
 		viewConfig: {
             focusedItemCls: '',
 			plugins: {
 				ptype: 'dynemptytext',
-				emptyText: '<div class="title">No users were found to match your search.</div>Try modifying your search criteria ' + (readOnlyAccess || Scalr.flags['authMode'] == 'ldap' ? '' : 'or <a href="#/account/users?userId=new">creating a new user</a>')
+				emptyText: '<div class="x-semibold title">No users were found to match your search.</div>Try modifying your search criteria ' + (readOnlyAccess || Scalr.flags['authMode'] == 'ldap' ? '' : 'or <a href="#/account/users?userId=new">creating a new user</a>')
 			},
 			loadingText: 'Loading users ...',
 			deferEmptyText: false,
@@ -331,9 +321,8 @@ Scalr.regPage('Scalr.ui.account2.teams.view', function (loadParams, moduleParams
 				itemclick: function (view, record, item, index, e) {
 					var grid = view.up('panel');
 					if (e.getTarget('img.team-add-remove')) {//user add/remove buttons
-						var scrollTop = view.el.getScroll().top;
 						grid.suspendLayouts();
-						view.getFeature('grouping').disable();//workaround of the extjs grouped store/grid bug
+						view.getFeature('grouping').disable();//workaround of the extjs grouped store/grid bug: moving record to the collapsed group causes error
 						if (record.get('teamId') != UNASSIGNED_TEAM_ID) {
 							record.set('teamId', UNASSIGNED_TEAM_ID);
 							record.set('roles', null);
@@ -344,24 +333,29 @@ Scalr.regPage('Scalr.ui.account2.teams.view', function (loadParams, moduleParams
 						view.getFeature('grouping').enable();//workaround of the extjs grouped store/grid bug
 						grid.getSelectionModel().deselect(record);
 						grid.resumeLayouts(true);
-						view.el.scrollTo('top', scrollTop);
 					} else if (e.getTarget('.x-grid-row-options')) {
 						var btnEl = Ext.get(item).down('div.x-grid-row-options');
 						menuUserRoles.setUser(btnEl, record);
 					}
-				}
+				},
+                groupexpand: function(){
+                    menuUserRoles.hide();
+                },
+                groupcollapse: function(){
+                    menuUserRoles.hide();
+                }
 			}
 		},
 		columns: [{
 			text: 'User',
 			flex: 2,
-			dataIndex: 'fullname', 
+			dataIndex: 'fullname',
 			sortable: true,
             xtype: 'templatecolumn',
             tpl:
                 '<tpl if="values.fullname">{fullname} <span style="color:#999">&lt;{email}&gt;</span><tpl else>{email}</tpl>'
 		},{
-			text: 'Access control list', 
+			text: 'Access control list',
 			flex: 1.5,
 			sortable: false,
             resizable: false,
@@ -369,7 +363,7 @@ Scalr.regPage('Scalr.ui.account2.teams.view', function (loadParams, moduleParams
 			tpl: new Ext.XTemplate(
 				'<tpl if="values.teamId!='+UNASSIGNED_TEAM_ID+'">',
 					readOnlyAccess ? '' : '<div class="x-grid-row-options"><div class="x-grid-row-options-icon"></div></div>',
-					'<div data-qtip="{[Ext.htmlEncode(this.getRolesList(values.roles))]}" style="text-overflow:ellipsis;overflow:hidden">{[this.getRolesList(values.roles)]}&nbsp;</div>',
+					'<div data-qclass="x-tip-light" data-qtip="{[Ext.htmlEncode(this.getRolesList(values.roles))]}" style="text-overflow:ellipsis;overflow:hidden">{[this.getRolesList(values.roles)]}&nbsp;</div>',
 				'</tpl>',
 			{
 				getRolesList: function(roles){
@@ -380,25 +374,25 @@ Scalr.regPage('Scalr.ui.account2.teams.view', function (loadParams, moduleParams
                         for (var i=0, len=roles.length; i<len; i++) {
                             var role = storeRoles.getById(roles[i]);
                             if (role) {
-                                html.push(readOnlyAccess ? role.get('name') : '<a href="#/account/roles?roleId=' + role.get('id') + '" class="user-permission" style="color:#' + role.get('color') + '">' + role.get('name') + '</a>');
+                                html.push(readOnlyAccess ? role.get('name') : '<a href="#/account/roles?roleId=' + role.get('id') + '" class="x-semibold user-permission" style="color:#' + role.get('color') + '">' + role.get('name') + '</a>');
                             }
                         }
 					}
-                    
-					return html.length > 0 ? html.join(', ') : (defaultRoleRecord && defaultRoleRecord.get('id') ? '<span style="font-weight:bold;color:#'+defaultRoleRecord.get('color')+'">' + defaultRoleRecord.get('name')+'</span> (team\'s default ACL)' : '<span style="color:red">No access</span>');
+
+					return html.length > 0 ? html.join(', ') : (defaultRoleRecord && defaultRoleRecord.get('id') ? '<span class="x-semibold" style="color:#'+defaultRoleRecord.get('color')+'">' + defaultRoleRecord.get('name')+'</span> (team\'s default ACL)' : '<span style="color:red">No access</span>');
 				}
 			})
 		},{
 			width: 40,
             hidden: readOnlyAccess || Scalr.flags['authMode'] == 'ldap',
 			xtype: 'templatecolumn',
-			tpl: '<img width="15" height="15" class="team-add-remove x-icon-action x-icon-action-{[values.teamId!='+UNASSIGNED_TEAM_ID+' ? "remove" : "add"]}" title="{[values.teamId!='+UNASSIGNED_TEAM_ID+'?"Remove "+(values.fullname || values.email)+" from team":"Add "+(values.fullname || values.email)+" to team"]}" src="'+Ext.BLANK_IMAGE_URL+'"/>',
+			tpl: '<img class="team-add-remove x-grid-icon x-grid-icon-{[values.teamId!='+UNASSIGNED_TEAM_ID+' ? "removegridline" : "addgridline"]}" title="{[values.teamId!='+UNASSIGNED_TEAM_ID+'?"Remove "+(values.fullname || values.email)+" from team":"Add "+(values.fullname || values.email)+" to team"]}" src="'+Ext.BLANK_IMAGE_URL+'"/>',
 			resizable: false,
 			sortable: false
 		}]
-		
+
 	});
-	
+
 	var form = 	Ext.create('Ext.form.Panel', {
 		hidden: true,
 		fieldDefaults: {
@@ -410,42 +404,31 @@ Scalr.regPage('Scalr.ui.account2.teams.view', function (loadParams, moduleParams
 			pack  : 'start'
 		},
 		listeners: {
+			hide: function() {
+    			panel.down('#add').toggle(false, true);
+			},
 			afterrender: function() {
 				var me = this;
 				dataview.on('selectionchange', function(dataview, selection){
 					if (selection.length) {
 						me.loadRecord(selection[0]);
 					} else {
-						me.setVisible(false);
+                        me.resetRecord();
 					}
 				});
 			},
-			hide: function() {
-    			dataview.up('panel').down('#add').setDisabled(false);
-			},
 			beforeloadrecord: function(record) {
-				var frm = this.getForm(),
-					isNewRecord = record.get('id') == NEW_TEAM_ID;
-                form.isLoading = true;
-				frm.reset(true);
-				var c = this.query('component[cls~=hideoncreate], #delete');
+				var isNewRecord = record.get('id') == NEW_TEAM_ID,
+                    c = this.query('component[cls~=hideoncreate], #delete');
 				for (var i=0, len=c.length; i<len; i++) {
-                    if (Scalr.flags['authMode'] == 'ldap' && c[i].itemId == 'delete')
-                        c[i].hide();
-                    else
-    					c[i].setVisible(!isNewRecord);
+                    c[i].setVisible(!isNewRecord);
 				}
-				this.down('#formtitle').setTitle(isNewRecord ? 'New team' : '');
-				dataview.up('panel').down('#add').setDisabled(isNewRecord);
+				this.down('#formtitle').setTitle(isNewRecord ? 'New team' : 'Edit team');
+                dataview.up('panel').down('#add').toggle(isNewRecord, true);
 			},
 			loadrecord: function(record) {
 				storeTeamUsers.loadTeam(record);
 				menuUserRoles.setTeam(record);
-				if (!this.isVisible()) {
-					this.setVisible(true);
-				}
-                this.getForm().clearInvalid();
-                form.isLoading = false;
 			}
 		},
 		items: [{
@@ -465,7 +448,7 @@ Scalr.regPage('Scalr.ui.account2.teams.view', function (loadParams, moduleParams
                 name: 'name',
                 fieldLabel: 'Name',
                 labelWidth: 60,
-                readOnly: readOnlyAccess || Scalr.flags['authMode'] == 'ldap',
+                readOnly: readOnlyAccess,
                 allowBlank: false
 
             },{
@@ -482,11 +465,20 @@ Scalr.regPage('Scalr.ui.account2.teams.view', function (loadParams, moduleParams
                 margin: '0 0 0 30',
                 readOnly: readOnlyAccess,
                 listeners: {
-                    change: function() {
-                        var form = this.up('form');
-                        if (!form.isLoading) {
+                    change: function(comp, value) {
+                        var form = this.up('form'),
+                            record = this.findRecordByValue(value);
+                        if (comp.inputEl) {
+                            comp.inputEl.setStyle('color', (record ? '#' + record.get('color') : ''))
+                        }
+                        if (!form.isRecordLoading) {
                             gridTeamMembers.getView().refresh();
                         }
+                    }
+                },
+                listConfig: {
+                    getInnerTpl: function(displayField) {
+                        return '<span style="color:#{color}">{' + displayField + '}</span>';
                     }
                 }
 			}]
@@ -516,7 +508,7 @@ Scalr.regPage('Scalr.ui.account2.teams.view', function (loadParams, moduleParams
 					var frm = form.getForm(),
 						team = frm.getValues(),
 						users = {};
-					if (frm.isValid()) { 
+					if (frm.isValid()) {
 						storeTeamUsers.queryBy(function(user){
 							if (user.get('teamId') == team['id']) {
 								users[user.get('id')] = user.get('roles');
@@ -525,10 +517,8 @@ Scalr.regPage('Scalr.ui.account2.teams.view', function (loadParams, moduleParams
 						Scalr.Request({
 							url: '/account/teams/xSave',
 							processBox: {type: 'save'},
+                            form: frm,
 							params: {
-								teamId: team['id'],
-								teamName: team['name'],
-                                accountRoleId: team['account_role_id'],
 								users: Ext.encode(users)
 							},
 							success: function (data) {
@@ -536,7 +526,11 @@ Scalr.regPage('Scalr.ui.account2.teams.view', function (loadParams, moduleParams
 								if (team['id'] != NEW_TEAM_ID) {
 									record.set(data.team);
 									form.loadRecord(record);
-								} else {
+
+                                    if (Scalr.flags['authMode'] == 'ldap')
+                                        Scalr.data.reload(['account.environments']);
+
+                                } else {
 									record = store.add(data.team)[0];
 									dataview.getSelectionModel().select(record);
 								}
@@ -549,13 +543,13 @@ Scalr.regPage('Scalr.ui.account2.teams.view', function (loadParams, moduleParams
 				xtype: 'button',
 				text: 'Cancel',
 				handler: function() {
-					dataview.deselect(form.getForm().getRecord());
-					form.setVisible(false);
+                    form.hide();
+                    dataview.deselectAndClearLastSelected();
 				}
 			}, {
 				itemId: 'delete',
 				xtype: 'button',
-				cls: 'x-btn-default-small-red',
+				cls: 'x-btn-red',
 				text: 'Delete',
 				handler: function() {
 					var record = form.getForm().getRecord();
@@ -573,7 +567,10 @@ Scalr.regPage('Scalr.ui.account2.teams.view', function (loadParams, moduleParams
 						params: {teamId: record.get('id')},
 						success: function (data) {
 							store.remove(record);
-						}
+
+                            if (Scalr.flags['authMode'] == 'ldap')
+                                Scalr.data.reload(['account.environments']);
+                        }
 					});
 				}
 			}]
@@ -587,14 +584,21 @@ Scalr.regPage('Scalr.ui.account2.teams.view', function (loadParams, moduleParams
 			align: 'stretch'
 		},
 		scalrOptions: {
-			title: 'Teams',
+			menuTitle: 'Teams',
+            menuHref: '#/account/teams',
+            menuFavorite: true,
 			reload: false,
 			maximize: 'all',
 			leftMenu: {
 				menuId: 'account',
 				itemId: 'teams'
-			}
+			},
+            beforeClose: function() {
+                menuUserRoles.hide();
+                return true;
+            }
 		},
+        stateId: 'grid-account-teams',
         listeners: {
             applyparams: reconfigurePage
         },
@@ -606,7 +610,7 @@ Scalr.regPage('Scalr.ui.account2.teams.view', function (loadParams, moduleParams
 			dockedItems: [{
 				xtype: 'toolbar',
 				dock: 'top',
-				layout: 'hbox',
+                ui: 'simple',
 				defaults: {
 					margin: '0 0 0 10'
 				},
@@ -618,34 +622,42 @@ Scalr.regPage('Scalr.ui.account2.teams.view', function (loadParams, moduleParams
 					filterFields: ['name'],
 					store: store
 				},{
-					xtype: 'tbfill' 
+					xtype: 'tbfill'
 				},{
 					itemId: 'add',
-                    text: 'Add team',
-                    cls: 'x-btn-green-bg',
-					hidden: readOnlyAccess || Scalr.flags['authMode'] == 'ldap',
-					tooltip: 'Add team',
-					handler: function(){
-						dataview.deselect(form.getForm().getRecord());
-						form.loadRecord(store.createModel({id: NEW_TEAM_ID}));
+                    text: 'New team',
+                    cls: 'x-btn-green',
+					hidden: readOnlyAccess,
+					tooltip: 'New team',
+					enableToggle: true,
+					toggleHandler: function (button, state) {
+						if (state) {
+                            dataview.deselectAndClearLastSelected();
+                            form.loadRecord(storeTeams.createModel({id: NEW_TEAM_ID}));
+							form.down('[name=name]').focus();
+
+							return;
+						}
+
+						form.hide();
 					}
 				},{
 					itemId: 'refresh',
-                    ui: 'paging',
-                    iconCls: 'x-tbar-loading',
+                    iconCls: 'x-btn-icon-refresh',
 					tooltip: 'Refresh',
 					handler: function() {
 						Scalr.data.reload('account.*');
+                        form.hide();
 					}
 				}]
-			}]				
+			}]
 		},{
 			xtype: 'container',
             flex: 1,
             layout: 'fit',
 			minWidth: 500,
 			items: form
-		}]	
+		}]
 	});
 	return panel;
 });

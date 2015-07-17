@@ -10,7 +10,7 @@ class OpenstackObserver extends \EventObserver
 
     public function OnHostInit(\HostInitEvent $event) {
         
-        if (!$event->DBServer->isOpenstack())
+        if (!$event->DBServer->isOpenstack() && $event->DBServer->platform != \SERVER_PLATFORMS::VERIZON)
             return;
     
         try {
@@ -21,33 +21,7 @@ class OpenstackObserver extends \EventObserver
             if ($dbServer->farmId == 0)
                 return;
             
-            $tags = array(
-                "scalr-env-id" => $dbServer->envId,
-                "scalr-owner" => $dbServer->GetFarmObject()->createdByUserEmail,
-                "scalr-farm-id" => $dbServer->farmId,
-                "scalr-farm-role-id" => $dbServer->farmRoleId,
-                "scalr-server-id" => $dbServer->serverId
-            );
-    
-            //Tags governance
-            $governance = new \Scalr_Governance($dbServer->envId);
-            $gTags = (array)$governance->getValue($dbServer->platform, \Scalr_Governance::OPENSTACK_TAGS);
-            if (count($gTags) > 0) {
-                foreach ($gTags as $tKey => $tValue) {
-                    $tags[$tKey] = $dbServer->applyGlobalVarsToValue($tValue);
-                }
-            } else {
-                //Custom tags
-                $cTags = $dbServer->GetFarmRoleObject()->GetSetting(\Scalr_Role_Behavior::ROLE_BASE_CUSTOM_TAGS);
-                $tagsList = @explode("\n", $cTags);
-                foreach ((array)$tagsList as $tag) {
-                    $tag = trim($tag);
-                    if ($tag) {
-                        $tagChunks = explode("=", $tag);
-                        $tags[trim($tagChunks[0])] = $dbServer->applyGlobalVarsToValue(trim($tagChunks[1]));
-                    }
-                }
-            }
+            $tags = $dbServer->getOpenstackTags();
             
             $osClient->servers->updateServerMetadata($dbServer->GetCloudServerID(), $tags);
             
@@ -58,7 +32,7 @@ class OpenstackObserver extends \EventObserver
                     $event->DBServer->serverId,
                     $e->getMessage(),
                     \json_encode($tags)
-                ))
+                ), $event->DBServer->serverId)
             );
         }
     }

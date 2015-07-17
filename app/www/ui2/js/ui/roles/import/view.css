@@ -24,33 +24,33 @@
 }
 
 .scalr-ui-role-import .comm-status-inbound{
-    margin: 6px auto 12px;
-    width: 102px;
-    height: 38px;
-    background: url('/ui2/images/ui/roles/import/arrow-inbound-anim.gif?1.1') 0 0 no-repeat;
+    margin: 18px auto 18px;
+    width: 72px;
+    height: 24px;
+    background: url('/ui2/images/ui/roles/import/arrow-inbound-anim.gif') 0 0 no-repeat;
 }
 
 .scalr-ui-role-import .comm-status-outbound{
     margin: 0 auto;
-    width: 102px;
-    height: 38px;
-    background: url('/ui2/images/ui/roles/import/arrow-outbound-waiting.png?1.1') 0 0 no-repeat;
+    width: 72px;
+    height: 24px;
+    background: url('/ui2/images/ui/roles/import/arrow-outbound-waiting.png') 0 0 no-repeat;
 }
 
 .scalr-ui-role-import .comm-status-inbound.success{
-    background: url('/ui2/images/ui/roles/import/arrow-inbound.png?1.1') 0 0 no-repeat;
+    background: url('/ui2/images/ui/roles/import/arrow-inbound.png') 0 0 no-repeat;
 }
 
 .scalr-ui-role-import .comm-status-outbound.progress{
-    background: url('/ui2/images/ui/roles/import/arrow-outbound-anim.gif?1.1') 0 0 no-repeat;
+    background: url('/ui2/images/ui/roles/import/arrow-outbound-anim.gif') 0 0 no-repeat;
 }
 
 .scalr-ui-role-import .comm-status-outbound.success{
-    background: url('/ui2/images/ui/roles/import/arrow-outbound.png?1.1') 0 0 no-repeat;
+    background: url('/ui2/images/ui/roles/import/arrow-outbound.png') 0 0 no-repeat;
 }
 
 .scalr-ui-role-import .comm-status-outbound.error{
-    background: url('/ui2/images/ui/roles/import/arrow-outbound-error.png?1.1') 0 0 no-repeat;
+    background: url('/ui2/images/ui/roles/import/arrow-outbound-error.png') 0 0 no-repeat;
 }
 
 @media only screen and (-webkit-min-device-pixel-ratio: 1.5),
@@ -69,33 +69,29 @@
     }
 
     .scalr-ui-role-import .comm-status-inbound{
-        background-size: 102px 38px;
-        background-image: url('/ui2/images/ui/roles/import/arrow-inbound-anim-retina.gif?1.1');
+        background-image: url('/ui2/images/ui/roles/import/arrow-inbound-anim-retina.gif');
+        background-size: 74px 26px;
     }
 
     .scalr-ui-role-import .comm-status-outbound{
-        background-size: 102px 38px;
-        background-image: url('/ui2/images/ui/roles/import/arrow-outbound-waiting-retina.png?1.1');
+        background-image: url('/ui2/images/ui/roles/import/arrow-outbound-waiting-retina.png');
+        background-size: 74px 26px;
     }
 
     .scalr-ui-role-import .comm-status-inbound.success{
-        background-size: 102px 38px;
-        background-image: url('/ui2/images/ui/roles/import/arrow-inbound-retina.png?1.1');
+        background-image: url('/ui2/images/ui/roles/import/arrow-inbound-retina.png');
     }
 
     .scalr-ui-role-import .comm-status-outbound.progress{
-        background-size: 102px 38px;
-        background-image: url('/ui2/images/ui/roles/import/arrow-outbound-anim-retina.gif?1.1');
+        background-image: url('/ui2/images/ui/roles/import/arrow-outbound-anim-retina.gif');
     }
 
     .scalr-ui-role-import .comm-status-outbound.success{
-        background-size: 102px 38px;
-        background-image: url('/ui2/images/ui/roles/import/arrow-outbound-retina.png?1.1');
+        background-image: url('/ui2/images/ui/roles/import/arrow-outbound-retina.png');
     }
 
     .scalr-ui-role-import .comm-status-outbound.error{
-        background-size: 102px 38px;
-        background-image: url('/ui2/images/ui/roles/import/arrow-outbound-error-retina.png?1.1');
+        background-image: url('/ui2/images/ui/roles/import/arrow-outbound-error-retina.png');
     }
 
 

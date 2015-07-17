@@ -1,8 +1,10 @@
 <?php
 
 use Scalr\Acl\Acl;
+use Scalr\Modules\PlatformFactory;
 use Scalr\Modules\Platforms\Ec2\Ec2PlatformModule;
 use Scalr\Service\Aws\Rds\DataType\CreateDBInstanceReadReplicaData;
+use Scalr\Service\Aws\Rds\DataType\CreateDBInstanceRequestData;
 use Scalr\Service\Aws\Rds\DataType\CreateDBSubnetGroupRequestData;
 use Scalr\Service\Aws\Rds\DataType\DBParameterGroupData;
 use Scalr\Service\Aws\Rds\DataType\DescribeDBEngineVersionsData;
@@ -11,7 +13,9 @@ use Scalr\Service\Aws\Rds\DataType\ModifyDBInstanceRequestData;
 use Scalr\Service\Aws\Rds\DataType\OptionGroupData;
 use Scalr\Service\Aws\Rds\DataType\RestoreDBInstanceFromDBSnapshotRequestData;
 use Scalr\Service\Aws\Rds\DataType\OrderableDBInstanceOptionsData;
+use Scalr\Service\Aws\Rds\DataType\TagsList;
 use Scalr\UI\Request\JsonData;
+use Scalr\Model\Entity\CloudResource;
 
 class Scalr_UI_Controller_Tools_Aws_Rds_Instances extends Scalr_UI_Controller
 {
@@ -29,19 +33,22 @@ class Scalr_UI_Controller_Tools_Aws_Rds_Instances extends Scalr_UI_Controller
 
     public function viewAction()
     {
-        $this->response->page('ui/tools/aws/rds/instances/view.js', array(
-            'locations' => self::loadController('Platforms')->getCloudLocations(SERVER_PLATFORMS::EC2, false),
+        $this->response->page('ui/tools/aws/rds/instances/view.js', []);
+    }
 
-        ));
+    public function view2Action()
+    {
+        $this->response->page('ui/tools/aws/rds/instances/view2.js', []);
     }
 
     public function createAction()
     {
-        $this->response->page('ui/tools/aws/rds/instances/create.js', array(
+        $this->response->page(['ui/tools/aws/rds/instances/create.js', 'ui/security/groups/sgeditor.js'], array(
             'locations'     => self::loadController('Platforms')->getCloudLocations(SERVER_PLATFORMS::EC2, false),
             'accountId'     => $this->environment->getPlatformConfigValue(Ec2PlatformModule::ACCOUNT_ID),
             'remoteAddress' => $this->request->getRemoteAddr(),
-        ), ['ux-boxselect.js', 'ui/security/groups/sgeditor.js', 'ui/tools/aws/rds/rds.js']);
+            'farms'         => self::loadController('Farms')->getList()
+        ), ['ui/tools/aws/rds/rds.js']);
     }
 
     public function editAction($cloudLocation)
@@ -49,7 +56,7 @@ class Scalr_UI_Controller_Tools_Aws_Rds_Instances extends Scalr_UI_Controller
         $aws = $this->getEnvironment()->aws($cloudLocation);
         $dbinstance = $aws->rds->dbInstance->describe($this->getParam(self::CALL_PARAM_NAME))->get(0)->toArray(true);
 
-         $vpcSglist = $aws->ec2->securityGroup->describe();
+        $vpcSglist = $aws->ec2->securityGroup->describe();
 
         foreach ($dbinstance['VpcSecurityGroups'] as &$vpcSg) {
             foreach ($vpcSglist as $vpcSqData) {
@@ -93,12 +100,25 @@ class Scalr_UI_Controller_Tools_Aws_Rds_Instances extends Scalr_UI_Controller
 
         $dbinstance ['VpcId'] = !empty($vpcId) ? $vpcId : null;
 
-        $this->response->page('ui/tools/aws/rds/instances/edit.js', array(
+        $cloudResource = CloudResource::findPk(
+            $dbinstance['DBInstanceIdentifier'],
+            $this->getEnvironmentId(),
+            \SERVER_PLATFORMS::EC2,
+            $cloudLocation
+        );
+        if ($cloudResource) {
+            try {
+                $dbFarm = DBFarm::LoadByID($cloudResource->farmId);
+                $dbinstance['farmName'] = $dbFarm->Name;
+            } catch (Exception $e){}
+        }
+
+        $this->response->page([ 'ui/tools/aws/rds/instances/edit.js', 'ui/security/groups/sgeditor.js' ], array(
             'locations'     => self::loadController('Platforms')->getCloudLocations(SERVER_PLATFORMS::EC2, false),
             'instance'      => $dbinstance,
             'accountId'     => $this->environment->getPlatformConfigValue(Ec2PlatformModule::ACCOUNT_ID),
-            'remoteAddress' => $this->request->getRemoteAddr(),
-        ), ['ui/security/groups/sgeditor.js', 'ui/tools/aws/rds/rds.js']);
+            'remoteAddress' => $this->request->getRemoteAddr()
+        ), ['ui/tools/aws/rds/rds.js']);
     }
 
     /**
@@ -130,7 +150,7 @@ class Scalr_UI_Controller_Tools_Aws_Rds_Instances extends Scalr_UI_Controller
         $this->response->page('ui/tools/aws/rds/instances/createReadReplica.js', array(
             'locations'     => self::loadController('Platforms')->getCloudLocations(SERVER_PLATFORMS::EC2, false),
             'instance'      => $dbInstance
-        ), ['ux-boxselect.js']);
+        ));
     }
 
     public function promoteReadReplicaAction()
@@ -184,7 +204,7 @@ class Scalr_UI_Controller_Tools_Aws_Rds_Instances extends Scalr_UI_Controller
      * @param string     $cloudLocation
      * @param string     $DBInstanceIdentifier
      * @param int        $BackupRetentionPeriod  optional
-     * @param string     $preferredBackupWindow  optional
+     * @param string     $PreferredBackupWindow  optional
      */
     public function xPromoteReadReplicaAction($cloudLocation, $DBInstanceIdentifier, $BackupRetentionPeriod = null, $PreferredBackupWindow = null)
     {
@@ -195,7 +215,11 @@ class Scalr_UI_Controller_Tools_Aws_Rds_Instances extends Scalr_UI_Controller
         $this->response->success("DB Instance Read Replica has been successfully promoted");
     }
 
-    public function xModifyInstanceAction(JsonData $VpcSecurityGroupIds = null, JsonData $DBSecurityGroups = null)
+    /**
+     * @param JsonData $VpcSecurityGroups
+     * @param JsonData $DBSecurityGroups
+     */
+    public function xModifyInstanceAction(JsonData $VpcSecurityGroups = null, JsonData $DBSecurityGroups = null)
     {
         $aws = $this->getEnvironment()->aws($this->getParam('cloudLocation'));
 
@@ -261,21 +285,38 @@ class Scalr_UI_Controller_Tools_Aws_Rds_Instances extends Scalr_UI_Controller
 
         $vpcSgIds = null;
 
-        foreach ($VpcSecurityGroupIds as $VpcSecurityGroupId) {
-            $vpcSgIds[] = $VpcSecurityGroupId;
+        foreach ($VpcSecurityGroups as $VpcSecurityGroup) {
+            $vpcSgIds[] = $VpcSecurityGroup['id'];
         }
 
         $request->vpcSecurityGroupIds = $vpcSgIds;
         $request->engineVersion = $this->getParam('EngineVersion') ?: null;
         $request->iops = $this->getParam('Iops') ?: null;
 
-        $aws->rds->dbInstance->modify($request);
-        $this->response->success("DB Instance successfully modified");
+        $ignoreGovernance = $this->getParam('ignoreGovernance');
+
+        if (!$ignoreGovernance) {
+            $errorMessage = $this->checkPolicy($VpcSecurityGroups);
+        }
+
+        if (empty($errorMessage)) {
+            $aws->rds->dbInstance->modify($request);
+            $this->response->success("DB Instance successfully modified");
+        } else {
+            $this->response->failure($errorMessage);
+        }
     }
 
-    public function xLaunchInstanceAction(JsonData $VpcSecurityGroupIds = null, JsonData $DBSecurityGroups = null)
+    /**
+     * @param JsonData $VpcSecurityGroups
+     * @param JsonData $DBSecurityGroups
+     * @param JsonData $SubnetIds
+     */
+    public function xLaunchInstanceAction(JsonData $VpcSecurityGroups = null, JsonData $DBSecurityGroups = null, JsonData $SubnetIds = null)
     {
-        $aws = $this->getEnvironment()->aws($this->getParam('cloudLocation'));
+        $cloudLocation = $this->getParam('cloudLocation');
+
+        $aws = $this->getEnvironment()->aws($cloudLocation);
 
         $engine = $this->getParam('Engine');
 
@@ -283,7 +324,7 @@ class Scalr_UI_Controller_Tools_Aws_Rds_Instances extends Scalr_UI_Controller
             $engine = 'MySQL';
         }
 
-        $request = new \Scalr\Service\Aws\Rds\DataType\CreateDBInstanceRequestData(
+        $request = new CreateDBInstanceRequestData(
             $this->getParam('DBInstanceIdentifier'),
             $this->getParam('AllocatedStorage'),
             $this->getParam('DBInstanceClass'),
@@ -291,8 +332,10 @@ class Scalr_UI_Controller_Tools_Aws_Rds_Instances extends Scalr_UI_Controller
             $this->getParam('MasterUsername'),
             $this->getParam('MasterUserPassword')
         );
+
         $request->port = $this->getParam('Port') ?: null;
         $request->dBName = $this->getParam('DBName') ?: null;
+        $request->characterSetName = $this->getParam('CharacterSetName') ?: null;
 
         $paramName = $this->getParam('DBParameterGroup');
 
@@ -351,94 +394,90 @@ class Scalr_UI_Controller_Tools_Aws_Rds_Instances extends Scalr_UI_Controller
 
         $vpcSgIds = null;
 
-        foreach ($VpcSecurityGroupIds as $VpcSecurityGroupId) {
-            $vpcSgIds[] = $VpcSecurityGroupId;
+        foreach ($VpcSecurityGroups as $VpcSecurityGroup) {
+            $vpcSgIds[] = $VpcSecurityGroup['id'];
         }
 
         $request->vpcSecurityGroupIds = $vpcSgIds;
         $request->engineVersion = $this->getParam('EngineVersion') ?: null;
         $request->iops = $this->getParam('Iops') ?: null;
+        $vpcId = $this->getParam('VpcId');
 
-        $aws->rds->dbInstance->create($request);
+        $tagsObject = ($this->getParam('farmId')) ? DBFarm::LoadByID($this->getParam('farmId')) : $this->environment;
 
-        $this->response->success("DB Instance successfully created");
-    }
+        $tags = [
+            ['key' => \Scalr_Governance::SCALR_META_TAG_NAME, 'value' => $tagsObject->applyGlobalVarsToValue(\Scalr_Governance::SCALR_META_TAG_VALUE)]
+        ];
 
-    public function detailsAction()
-    {
-        $aws = $this->getEnvironment()->aws($this->getParam('cloudLocation'));
+        $governance = new \Scalr_Governance($this->environment->id);
+        $gTags = (array) $governance->getValue(SERVER_PLATFORMS::EC2, \Scalr_Governance::AWS_TAGS);
 
-        /* @var $dbinstance \Scalr\Service\Aws\Rds\DataType\DBInstanceData */
-        $dbinstance = $aws->rds->dbInstance->describe($this->getParam(self::CALL_PARAM_NAME))->get(0);
+        if (count($gTags) > 0) {
+            foreach ($gTags as $tKey => $tValue)
+                $tags[] = array('key' => $tKey, 'value' => $tagsObject->applyGlobalVarsToValue($tValue));
+        }
+        $request->tags = new TagsList($tags);
 
-        $createdTime = $dbinstance->instanceCreateTime;
+        $errorMessage = $this->checkPolicy($VpcSecurityGroups, $vpcId, $SubnetIds, $cloudLocation);
 
-        $dbinstance = $dbinstance->toArray(true);
+        if (empty($errorMessage)) {
+            $aws->rds->dbInstance->create($request);
 
-        $vpcSglist = $aws->ec2->securityGroup->describe();
-
-        foreach ($dbinstance['VpcSecurityGroups'] as &$vpcSg) {
-            foreach ($vpcSglist as $vpcSqData) {
-                /* @var $vpcSqData \Scalr\Service\Aws\Ec2\DataType\SecurityGroupData */
-                $vpcSecurityGroupName = null;
-
-                if ($vpcSqData->groupId == $vpcSg['VpcSecurityGroupId']) {
-                    $vpcSecurityGroupName = $vpcSqData->groupName;
-                    break;
-                }
+            if ($this->getParam('farmId')) {
+                $cloudResource = new CloudResource();
+                $cloudResource->id = $request->dBInstanceIdentifier;
+                $cloudResource->type = CloudResource::TYPE_AWS_RDS;
+                $cloudResource->platform = \SERVER_PLATFORMS::EC2;
+                $cloudResource->cloudLocation = $cloudLocation;
+                $cloudResource->envId = $this->getEnvironmentId();
+                $cloudResource->farmId = $this->getParam('farmId');
+                $cloudResource->save();
             }
 
-            $vpcSg = [
-                'vpcSecurityGroupId'   => $vpcSg['VpcSecurityGroupId'],
-                'vpcSecurityGroupName' => $vpcSecurityGroupName
-            ];
+            $this->response->success("DB Instance successfully created");
+        } else {
+            $this->response->failure($errorMessage);
         }
-
-        $dbinstance['DBSubnetGroupName'] = isset($dbinstance['DBSubnetGroup']['DBSubnetGroupName']) ? $dbinstance['DBSubnetGroup']['DBSubnetGroupName'] : null;
-
-        foreach ($dbinstance['DBSecurityGroups'] as &$dbSg) {
-            $dbSg = $dbSg['DBSecurityGroupName'];
-        }
-
-        foreach ($dbinstance['OptionGroupMembership'] as &$member) {
-            $dbinstance['OptionGroupName'] = $member['OptionGroupName'];
-            break;
-        }
-
-        foreach ($dbinstance['DBParameterGroups'] as &$param) {
-            $dbinstance['DBParameterGroup'] = $param['DBParameterGroupName'];
-            break;
-        }
-
-        $dbinstance['Address'] = $dbinstance['Endpoint']['Address'];
-        $dbinstance['EngineVersion'] = isset($dbinstance['PendingModifiedValues']) && !empty($dbinstance['PendingModifiedValues']['EngineVersion']) ? $dbinstance['EngineVersion']. ' <i><font color="red">New value (' . $dbinstance['PendingModifiedValues']['EngineVersion'] . ') is pending</font></i>' : $dbinstance['EngineVersion'];
-        $dbinstance['Port'] = isset($dbinstance['PendingModifiedValues']) && !empty($dbinstance['PendingModifiedValues']['Port']) ?
-            (string) $dbinstance['Endpoint']['Port'] . ' <i><font color="red">New value (' . $dbinstance['PendingModifiedValues']['Port'] . ') is pending</font></i>' : (string)$dbinstance['Endpoint']['Port'];
-        $dbinstance['InstanceCreateTime'] = Scalr_Util_DateTime::convertTz($createdTime);
-        $dbinstance['MultiAZ'] = ($dbinstance['MultiAZ'] ? 'Enabled' : 'Disabled') .
-            (isset($dbinstance['PendingModifiedValues']) && isset($dbinstance['PendingModifiedValues']['MultiAZ']) ?
-                ' <i><font color="red">New value(' . ($dbinstance['PendingModifiedValues']['MultiAZ'] ? 'true' : 'false') . ') is pending</font></i>' : '');
-        $dbinstance['DBInstanceClass'] = isset($dbinstance['PendingModifiedValues']) && $dbinstance['PendingModifiedValues']['DBInstanceClass'] ?
-            $dbinstance['DBInstanceClass'] . ' <i><font color="red">New value ('. $dbinstance['PendingModifiedValues']['DBInstanceClass'].') is pending</font></i>' : $dbinstance['DBInstanceClass'];
-        $dbinstance['AllocatedStorage'] = isset($dbinstance['PendingModifiedValues']) && $dbinstance['PendingModifiedValues']['AllocatedStorage'] ? (string) $dbinstance['AllocatedStorage'] . ' GB' . ' <i><font color="red">New value (' . $dbinstance['PendingModifiedValues']['AllocatedStorage'] . ') is pending</font></i>' : (string) $dbinstance['AllocatedStorage'];
-        $dbinstance['BackupRetentionPeriod'] = isset($dbinstance['PendingModifiedValues']) && !empty($dbinstance['PendingModifiedValues']['BackupRetentionPeriod']) ?
-            $dbinstance['PendingModifiedValues']['BackupRetentionPeriod']. ' <i><font color="red">(Pending Modified)</font></i>' : $dbinstance['BackupRetentionPeriod'];
-        $dbinstance['isReplica'] = !empty($dbinstance['ReadReplicaSourceDBInstanceIdentifier']) ? 1 : 0;
-
-        $this->response->page('ui/tools/aws/rds/instances/details.js', ['instance' => $dbinstance]);
     }
 
-    public function xRebootAction()
+    /**
+     * @param JsonData $dbInstancesIds
+     * @param string $cloudLocation
+     */
+    public function xRebootAction(JsonData $dbInstancesIds, $cloudLocation)
     {
-        $aws = $this->getEnvironment()->aws($this->getParam('cloudLocation'));
-        $aws->rds->dbInstance->reboot($this->getParam('instanceId'));
+        $aws = $this->getEnvironment()->aws($cloudLocation);
+
+        foreach ($dbInstancesIds as $dbInstancesId) {
+            $aws->rds->dbInstance->reboot($dbInstancesId);
+        }
+
         $this->response->success();
     }
 
-    public function xTerminateAction()
+    /**
+     * @param JsonData $dbInstancesIds
+     * @param string $cloudLocation
+     */
+    public function xTerminateAction(JsonData $dbInstancesIds, $cloudLocation)
     {
-        $aws = $this->getEnvironment()->aws($this->getParam('cloudLocation'));
-        $aws->rds->dbInstance->delete($this->getParam('instanceId'), true);
+        $aws = $this->getEnvironment()->aws($cloudLocation);
+
+        foreach ($dbInstancesIds as $dbInstancesId) {
+            $aws->rds->dbInstance->delete($dbInstancesId, true);
+        }
+
+        $cloudResource = CloudResource::findPk(
+            $this->getParam('instanceId'),
+            $this->getEnvironmentId(),
+            \SERVER_PLATFORMS::EC2,
+            $this->getParam('cloudLocation')
+        );
+
+        if ($cloudResource) {
+            $cloudResource->delete();
+        }
+
         $this->response->success();
     }
 
@@ -477,39 +516,59 @@ class Scalr_UI_Controller_Tools_Aws_Rds_Instances extends Scalr_UI_Controller
         ));
     }
 
-    public function xListInstancesAction()
+    /**
+     * xListInstancesAction
+     *
+     * @param string $cloudLocation  DB Instance region
+     * @throws Scalr_Exception_Core
+     */
+    public function xListInstancesAction($cloudLocation)
     {
-        $this->request->defineParams(array(
-            'cloudLocation',
-            'sort' => array('type' => 'json', 'default' => array('property' => 'id', 'direction' => 'ASC'))
-        ));
+        $this->request->defineParams([
+            'sort' => ['type' => 'json', 'default' => ['property' => 'id', 'direction' => 'ASC']]
+        ]);
 
-        $aws = $this->getEnvironment()->aws($this->getParam('cloudLocation'));
+        $aws = $this->getEnvironment()->aws($cloudLocation);
 
         $rows = $aws->rds->dbInstance->describe();
-        $rowz = array();
 
-        /* @var $pv \Scalr\Service\Aws\Rds\DataType\DBInstanceData */
-        foreach ($rows as $pv)
-            $rowz[] = array(
-                'engine'	    => (string)$pv->engine,
-                'status'	    => (string)$pv->dBInstanceStatus,
-                'hostname'	    => (isset($pv->endpoint) ? (string)$pv->endpoint->address : ''),
-                'port'		    => (isset($pv->endpoint) ? (string)$pv->endpoint->port : ''),
-                'name'		    => (string)$pv->dBInstanceIdentifier,
-                'username'	    => (string)$pv->masterUsername,
-                'type'		    => (string)$pv->dBInstanceClass,
-                'storage'	    => (string)$pv->allocatedStorage,
-                'dtadded'	    => $pv->instanceCreateTime,
-                'avail_zone'    => (string)$pv->availabilityZone,
-                'engineVersion' => $pv->engineVersion,
-                'multiAz'       => $pv->multiAZ,
-                'isReplica'     => !empty($pv->readReplicaSourceDBInstanceIdentifier) ? 1 : 0
+        $data = [];
+
+        foreach ($rows as $dbInstance) {
+            /* @var $dbInstance \Scalr\Service\Aws\Rds\DataType\DBInstanceData */
+            $data[] = array(
+                'engine'        => (string)$dbInstance->engine,
+                'status'        => (string)$dbInstance->dBInstanceStatus,
+                'hostname'      => (isset($dbInstance->endpoint) ? (string)$dbInstance->endpoint->address : ''),
+                'port'          => (isset($dbInstance->endpoint) ? (string)$dbInstance->endpoint->port : ''),
+                'name'          => (string)$dbInstance->dBInstanceIdentifier,
+                'username'      => (string)$dbInstance->masterUsername,
+                'type'          => (string)$dbInstance->dBInstanceClass,
+                'storage'       => (string)$dbInstance->allocatedStorage,
+                'dtadded'       => $dbInstance->instanceCreateTime,
+                'avail_zone'    => (string)$dbInstance->availabilityZone,
+                'engineVersion' => $dbInstance->engineVersion,
+                'multiAz'       => $dbInstance->multiAZ,
+                'isReplica'     => !empty($dbInstance->readReplicaSourceDBInstanceIdentifier) ? 1 : 0
             );
+        }
 
-        $response = $this->buildResponseFromData($rowz);
+        $response = $this->buildResponseFromData($data, ['name']);
+
         foreach ($response['data'] as &$row) {
             $row['dtadded'] = $row['dtadded'] ? Scalr_Util_DateTime::convertTz($row['dtadded']) : '';
+
+            $cloudResource = CloudResource::findPk(
+                $row['name'],
+                $this->getEnvironmentId(),
+                \SERVER_PLATFORMS::EC2,
+                $cloudLocation
+            );
+            if ($cloudResource) {
+                $row['farmId'] = $cloudResource->farmId;
+                $row['farmName'] = $this->db->GetOne("SELECT name FROM farms WHERE id=? LIMIT 1", [$cloudResource->farmId]);
+            }
+
         }
         $this->response->data($response);
     }
@@ -540,9 +599,13 @@ class Scalr_UI_Controller_Tools_Aws_Rds_Instances extends Scalr_UI_Controller
         ]);
     }
 
-    public function xRestoreInstanceAction()
+    /**
+     * @param JsonData $SubnetIds
+     */
+    public function xRestoreInstanceAction(JsonData $SubnetIds = null)
     {
-        $aws = $this->getEnvironment()->aws($this->getParam('cloudLocation'));
+        $cloudLocation = $this->getParam('cloudLocation');
+        $aws = $this->getEnvironment()->aws($cloudLocation);
 
         $request = new RestoreDBInstanceFromDBSnapshotRequestData(
             $this->getParam('DBInstanceIdentifier'),
@@ -583,9 +646,16 @@ class Scalr_UI_Controller_Tools_Aws_Rds_Instances extends Scalr_UI_Controller
         $request->iops = $this->getParam('Iops') ?: null;
         $request->dBName = $this->getParam('DBName') ?: null;
 
-        $aws->rds->dbInstance->restoreFromSnapshot($request);
+        $vpcId = $this->getParam('VpcId');
 
-        $this->response->success("DB Instance successfully restore from Snapshot");
+        $errorMessage = $this->checkPolicy(null, $vpcId, $SubnetIds, $cloudLocation);
+
+        if (empty($errorMessage)) {
+            $aws->rds->dbInstance->restoreFromSnapshot($request);
+            $this->response->success("DB Instance successfully restore from Snapshot");
+        } else {
+            $this->response->failure($errorMessage);
+        }
     }
 
     /**
@@ -612,7 +682,28 @@ class Scalr_UI_Controller_Tools_Aws_Rds_Instances extends Scalr_UI_Controller
                 if ($group->vpcId !== $vpcId) {
                     continue;
                 }
-                $result[] = $group->toArray();
+
+                $platform = PlatformFactory::NewPlatform(SERVER_PLATFORMS::EC2);
+
+                $ec2Subnets = $platform->listSubnets(
+                    $this->getEnvironment(),
+                    $cloudLocation,
+                    $vpcId
+                );
+
+                $subnetGroup = $group->toArray();
+
+                $subnetGroup['subnets'] = array_map(function (&$subnet) use ($ec2Subnets) {
+                    foreach ($ec2Subnets as $ec2Subnet) {
+                        if ($ec2Subnet['id'] == $subnet['subnetIdentifier']) {
+                            $subnet['type'] = $ec2Subnet['type'];
+
+                            return $subnet;
+                        }
+                    }
+                }, $subnetGroup['subnets']);
+
+                $result[] = $subnetGroup;
             }
         } while ($groups->marker !== null);
 
@@ -672,7 +763,7 @@ class Scalr_UI_Controller_Tools_Aws_Rds_Instances extends Scalr_UI_Controller
         $this->response->page('ui/tools/aws/rds/instances/createSubnetGroup.js', array(
             'cloudLocation'     => $this->getParam('cloudLocation'),
             'vpcId'             => $this->getParam('vpcId')
-        ), ['ux-boxselect.js']);
+        ));
     }
 
     /**
@@ -861,4 +952,153 @@ class Scalr_UI_Controller_Tools_Aws_Rds_Instances extends Scalr_UI_Controller
         $this->response->data(['instanceTypes' => array_reverse($instanceTypes)]);
     }
 
+    /**
+     * Checks request data
+     *
+     * @param JsonData   $vpcSecurityGroups
+     * @param string     $vpcId
+     * @param JsonData   $subnetIds
+     * @param string     $cloudLocation
+     * @return bool|string Returns error message if access to some data restricted. False otherwise.
+     * @throws Scalr_Exception_Core
+     */
+    private function checkPolicy($vpcSecurityGroups = null, $vpcId = null, $subnetIds = null, $cloudLocation = null)
+    {
+        $governance = new Scalr_Governance($this->getEnvironmentId());
+        $values = $governance->getValues(true);
+
+        if (!empty($values[SERVER_PLATFORMS::EC2][Scalr_Governance::AWS_VPC]->value)) {
+            if (!empty($cloudLocation) && !array_key_exists($cloudLocation, (array) $values[SERVER_PLATFORMS::EC2][Scalr_Governance::AWS_VPC]->regions)) {
+                return sprintf("A Vpc Policy is active in this Environment, access to %s region has been restricted by account owner.", $cloudLocation);
+            }
+
+            if (!empty($vpcId)) {
+                foreach ($values[SERVER_PLATFORMS::EC2][Scalr_Governance::AWS_VPC]->regions as $region => $policy) {
+                    if (!empty($policy->ids) && !empty($cloudLocation) && $cloudLocation == $region && !in_array($vpcId, (array) $policy->ids)) {
+                        return sprintf("A Vpc Policy is active in this Environment, access to vpc %s has been restricted by account owner.", $vpcId);
+                    }
+                }
+
+                foreach ($values[SERVER_PLATFORMS::EC2][Scalr_Governance::AWS_VPC]->ids as $vpc => $restrictions) {
+                    $subnetIds = (array) $subnetIds;
+                    $missingSubnets = array_diff($subnetIds, $restrictions);
+                    $s = count($missingSubnets) > 1 ? 's' : '';
+
+                    if (!empty($restrictions) && is_array($restrictions) && $vpc == $vpcId && !empty($missingSubnets)) {
+                        return sprintf("A Vpc Policy is active in this Environment, access to subnet%s %s has been restricted by account owner.",
+                            $s, implode(', ', $missingSubnets)
+                        );
+                    }
+                }
+            }
+        }
+
+        if (!empty($vpcSecurityGroups)) {
+            foreach ($vpcSecurityGroups as $vpcSecurityGroup) {
+                if (empty($vpcSecurityGroup['id'])) {
+                    $notFoundGroups[] = $vpcSecurityGroup['name'];
+                }
+                $vpcSecurityGroupNames[] = $vpcSecurityGroup['name'];
+            }
+        }
+
+        if (!empty($values[SERVER_PLATFORMS::EC2][Scalr_Governance::AWS_SECURITY_GROUPS]->value) && !empty($vpcSecurityGroupNames)) {
+            if (!empty($notFoundGroups)) {
+                $s = count($notFoundGroups) > 1 ? 's' : '';
+                $es = $s ? '' : "e$s";
+                $they = $s ? "they" : 'it';
+
+                return sprintf("A Security Group Policy is active in this Environment, and requires that you attach the following Security Group%s to your DB instance: %s, but %s do%s not exist in current Vpc.",
+                    $s, implode(', ', $notFoundGroups), $they, $es
+                );
+            }
+
+            $sgDefaultNames = explode(',', $values[SERVER_PLATFORMS::EC2][Scalr_Governance::AWS_SECURITY_GROUPS]->value);
+
+            if ($missingGroups = array_diff($sgDefaultNames, $vpcSecurityGroupNames)) {
+                return sprintf("A Security Group Policy is active in this Environment, and requires that you attach the following Security Groups to your DB instance: %s", implode(', ', $missingGroups));
+            }
+
+            sort($sgDefaultNames);
+            sort($vpcSecurityGroupNames);
+
+            if (empty($values[SERVER_PLATFORMS::EC2][Scalr_Governance::AWS_SECURITY_GROUPS]->allow_additional_sec_groups) && $sgDefaultNames != $vpcSecurityGroupNames) {
+                return sprintf("A Security Group Policy is active in this Environment, and you can't apply additional security groups to your DB instance.");
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * xGetDbInstanceDataAction
+     *
+     * @param string $cloudLocation     DB Instance region
+     * @param string $dbInstanceName    DB Instance name
+     */
+    public function xGetDbInstanceDataAction($cloudLocation, $dbInstanceName)
+    {
+        $aws = $this->getEnvironment()->aws($cloudLocation);
+
+        /* @var $dbinstance \Scalr\Service\Aws\Rds\DataType\DBInstanceData */
+        $dbinstance = $aws->rds->dbInstance->describe($dbInstanceName)->get(0);
+
+        $createdTime = $dbinstance->instanceCreateTime;
+
+        $dbinstance = $dbinstance->toArray(true);
+
+        $vpcSglist = $aws->ec2->securityGroup->describe();
+
+        foreach ($dbinstance['VpcSecurityGroups'] as &$vpcSg) {
+            foreach ($vpcSglist as $vpcSqData) {
+                /* @var $vpcSqData \Scalr\Service\Aws\Ec2\DataType\SecurityGroupData */
+                $vpcSecurityGroupName = null;
+
+                if ($vpcSqData->groupId == $vpcSg['VpcSecurityGroupId']) {
+                    $vpcSecurityGroupName = $vpcSqData->groupName;
+                    break;
+                }
+            }
+
+            $vpcSg = [
+                'vpcSecurityGroupId'   => $vpcSg['VpcSecurityGroupId'],
+                'vpcSecurityGroupName' => $vpcSecurityGroupName
+            ];
+        }
+
+        $dbinstance['DBSubnetGroupName'] = isset($dbinstance['DBSubnetGroup']['DBSubnetGroupName']) ? $dbinstance['DBSubnetGroup']['DBSubnetGroupName'] : null;
+
+        foreach ($dbinstance['DBSecurityGroups'] as &$dbSg) {
+            $dbSg = $dbSg['DBSecurityGroupName'];
+        }
+
+        foreach ($dbinstance['OptionGroupMembership'] as &$member) {
+            $dbinstance['OptionGroupName'] = $member['OptionGroupName'];
+            break;
+        }
+
+        foreach ($dbinstance['DBParameterGroups'] as &$param) {
+            $dbinstance['DBParameterGroup'] = $param['DBParameterGroupName'];
+            break;
+        }
+
+        $dbinstance['Address'] = $dbinstance['Endpoint']['Address'];
+        $dbinstance['EngineVersion'] = isset($dbinstance['PendingModifiedValues']) && !empty($dbinstance['PendingModifiedValues']['EngineVersion']) ? $dbinstance['EngineVersion']. ' <i><font color="red">New value (' . $dbinstance['PendingModifiedValues']['EngineVersion'] . ') is pending</font></i>' : $dbinstance['EngineVersion'];
+        $dbinstance['Port'] = isset($dbinstance['PendingModifiedValues']) && !empty($dbinstance['PendingModifiedValues']['Port']) ?
+            (string) $dbinstance['Endpoint']['Port'] . ' <i><font color="red">New value (' . $dbinstance['PendingModifiedValues']['Port'] . ') is pending</font></i>' : (string)$dbinstance['Endpoint']['Port'];
+        $dbinstance['InstanceCreateTime'] = Scalr_Util_DateTime::convertTz($createdTime);
+        $dbinstance['MultiAZ'] = ($dbinstance['MultiAZ'] ? 'Enabled' : 'Disabled') .
+            (isset($dbinstance['PendingModifiedValues']) && isset($dbinstance['PendingModifiedValues']['MultiAZ']) ?
+                ' <i><font color="red">New value(' . ($dbinstance['PendingModifiedValues']['MultiAZ'] ? 'true' : 'false') . ') is pending</font></i>' : '');
+        $dbinstance['DBInstanceClass'] = isset($dbinstance['PendingModifiedValues']) && $dbinstance['PendingModifiedValues']['DBInstanceClass'] ?
+            $dbinstance['DBInstanceClass'] . ' <i><font color="red">New value ('. $dbinstance['PendingModifiedValues']['DBInstanceClass'].') is pending</font></i>' : $dbinstance['DBInstanceClass'];
+        $dbinstance['AllocatedStorage'] = isset($dbinstance['PendingModifiedValues']) && $dbinstance['PendingModifiedValues']['AllocatedStorage'] ? (string) $dbinstance['AllocatedStorage'] . ' GB' . ' <i><font color="red">New value (' . $dbinstance['PendingModifiedValues']['AllocatedStorage'] . ') is pending</font></i>' : (string) $dbinstance['AllocatedStorage'];
+        $dbinstance['BackupRetentionPeriod'] = isset($dbinstance['PendingModifiedValues']) && !empty($dbinstance['PendingModifiedValues']['BackupRetentionPeriod']) ?
+            $dbinstance['PendingModifiedValues']['BackupRetentionPeriod']. ' <i><font color="red">(Pending Modified)</font></i>' : $dbinstance['BackupRetentionPeriod'];
+        $dbinstance['isReplica'] = !empty($dbinstance['ReadReplicaSourceDBInstanceIdentifier']) ? 1 : 0;
+
+        $this->response->data(array(
+            'instance' => $dbinstance
+        ));
+    }
 }

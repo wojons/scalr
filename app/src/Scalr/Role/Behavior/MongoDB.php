@@ -1,4 +1,7 @@
 <?php
+
+use Scalr\Model\Entity;
+
     class Scalr_Role_Behavior_MongoDB extends Scalr_Role_Behavior implements Scalr_Role_iBehavior
     {
         /** DBFarmRole settings **/
@@ -541,6 +544,7 @@
                     $volumeConfig->size = $dbFarmRole->GetSetting(static::ROLE_DATA_STORAGE_EBS_SIZE);
                     if ($volumeConfig->type == MYSQL_STORAGE_ENGINE::EBS) {
 
+                        $volumeConfig->tags = $dbServer->getAwsTags();
                         $volumeConfig->volumeType = $dbFarmRole->GetSetting(static::ROLE_DATA_STORAGE_EBS_TYPE);
                         if ($volumeConfig->volumeType == 'io1')
                             $volumeConfig->iops = $dbFarmRole->GetSetting(static::ROLE_DATA_STORAGE_EBS_IOPS);
@@ -557,6 +561,7 @@
                         $dsk = new stdClass();
                         $dsk->type = 'ebs';
                         $dsk->size = $dbFarmRole->GetSetting(self::DATA_STORAGE_RAID_DISK_SIZE);
+                        $dsk->tags = $dbServer->getAwsTags();
 
                         $volumeConfig->disks[] = $dsk;
                     }
@@ -623,8 +628,7 @@
             }
 
             if ($dbServer->GetFarmRoleObject()->GetSetting(self::ROLE_SSL_ENABLED) == 1) {
-                $cert = new Scalr_Service_Ssl_Certificate();
-                $cert->loadById($dbServer->GetFarmRoleObject()->GetSetting(self::ROLE_SSL_CERT_ID));
+                $cert = Entity\SslCertificate::findPk($dbServer->GetFarmRoleObject()->GetSetting(self::ROLE_SSL_CERT_ID));
 
                 $configuration->ssl = new stdClass();
                 $configuration->ssl->privateKey = $cert->privateKey;

@@ -35,9 +35,9 @@ if (!$windows) {
     }
 
     // Check SNMP
-    if (!function_exists('snmpget')) {
-        $err[] = "Cannot find SNMP functions. Make sure that SNMP Functions enabled. Look at $PHPSITE/snmp.installation.php";
-    }
+    // if (!function_exists('snmpget')) {
+    //     $err[] = "Cannot find SNMP functions. Make sure that SNMP Functions enabled. Look at $PHPSITE/snmp.installation.php";
+    // }
 
 //     //Check RRDTool
 //     if (class_exists('RRDUpdater')) {
@@ -122,6 +122,13 @@ if (ini_get('http.persistent.handles.limit') !== "0") {
     $err[] = sprintf("http.persistent.handles.limit must be set to 0. Current value is %s", ini_get('http.persistent.handles.limit'));
 }
 
+// Dev requirements
+if (!class_exists('ZMQ')) {
+    $err[] = "ZMQ is used for some new features and should be installed. Look at $PHPSITE/zmq.requirements.php";
+} else if (version_compare(phpversion('zmq'), '1.1.2', '<')) {
+    $err[] = "ZMQ is used for some new features. Version of the ZMQ extension must be >= 1.1.2.";
+}
+
 if (version_compare($phpBranch, '5.4', '<') ||
     $phpBranch == '5.4' && version_compare(PHP_VERSION, '5.4.19', '<') ||
     $phpBranch == '5.5' && version_compare(PHP_VERSION, '5.5.4', '<')) {
@@ -202,18 +209,11 @@ if (empty($err)) {
     if (!function_exists('ldap_connect')) {
         if ($config('scalr.auth_mode') == 'ldap') {
             $err[] = "LDAP must be enabled if you want to use ldap auth_mode. "
-                   . "Look at $PHPSITE/manual/en/ldap.installation.php";
+                   . "Look at $PHPSITE/ldap.installation.php";
         } else {
             $recommend[] = "If you're going to use ldap auth_mode, LDAP extension should be enabled. "
-                         . "Look at $PHPSITE/manual/en/ldap.installation.php";
+                         . "Look at $PHPSITE/ldap.installation.php";
         }
-    }
-
-    // Dev requirements
-    if (!class_exists('ZMQ')) {
-        $recommend[] = "ZMQ is used for some new features and should be installed. Look at $PHPSITE/manual/en/zmq.requirements.php";
-    } else if (version_compare(phpversion('zmq'), '1.1.2', '<')) {
-        $recommend[] = "ZMQ is used for some new features. Version of the ZMQ extension must be >= 1.1.2.";
     }
 }
 

@@ -15,7 +15,7 @@ class Update20141104183518 extends AbstractUpdate implements SequenceInterface
 
     protected $description = 'Migrate software from roles to images';
 
-    protected $ignoreChanges = true;
+    protected $ignoreChanges = false;
 
     protected $dbservice = 'adodb';
 

@@ -85,7 +85,7 @@ class CloudLocation extends AbstractEntity
      */
     public function fetchInstanceTypes()
     {
-        $this->instanceTypes = CloudInstanceType::find([['cloudLocationId' => $this->cloudLocationId]]);
+        $this->instanceTypes = CloudInstanceType::result(CloudInstanceType::RESULT_ENTITY_COLLECTION)->find([['cloudLocationId' => $this->cloudLocationId]]);
 
         return $this->instanceTypes;
     }

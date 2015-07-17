@@ -25,13 +25,7 @@ class Scalr_Messaging_Service {
             $this->handlers[] = $handler;
         }
     }
-
-    function debug($serverId, $message) {
-        if (defined('MSG_DEBUG') && MSG_DEBUG == true) {
-            @file_put_contents(CACHEPATH . '/msg_debug.txt', "[{$serverId}] " . $message . "\n", FILE_APPEND);
-        }
-    }
-
+    
     function handle ($queue, $payload) {
 
         $contentType = $_SERVER['CONTENT_TYPE'];
@@ -39,16 +33,12 @@ class Scalr_Messaging_Service {
         // Authenticate request
         try {
 
-            $this->debug($_SERVER["HTTP_X_SERVER_ID"], "INIT");
-
             $this->logger->info(sprintf("Validating server (server_id: %s)", $_SERVER["HTTP_X_SERVER_ID"]));
             try{
                 $DBServer = DBServer::LoadByID($_SERVER["HTTP_X_SERVER_ID"]);
             } catch (Exception $e) {
                 throw new Exception(sprintf(_("Server '%s' is not known by Scalr"), $_SERVER["HTTP_X_SERVER_ID"]));
             }
-
-            $this->debug($_SERVER["HTTP_X_SERVER_ID"], "SERVER_FOUND");
 
             $cryptoKey = $DBServer->GetKey(true);
             $this->cryptoTool->setCryptoKey($cryptoKey);
@@ -58,15 +48,6 @@ class Scalr_Messaging_Service {
             if ($isOneTimeKey && $keyExpired) {
                 throw new Exception(_("One-time crypto key expired"));
             }
-
-            $this->debug($_SERVER["HTTP_X_SERVER_ID"], "KEY: {$cryptoKey}");
-
-            $this->debug($_SERVER["HTTP_X_SERVER_ID"], "RECEIVED_SIGNATURE: {$_SERVER["HTTP_X_SIGNATURE"]}");
-            $this->debug($_SERVER["HTTP_X_SERVER_ID"], "RECEIVED_DATE: {$_SERVER["HTTP_DATE"]}");
-            $this->debug($_SERVER["HTTP_X_SERVER_ID"], "RECEIVED_PAYLOAD_SIZE: " . strlen($payload));
-            $this->debug($_SERVER["HTTP_X_SERVER_ID"], "RECEIVED_PAYLOAD: {$payload}");
-            $this->debug($_SERVER["HTTP_X_SERVER_ID"], "POST_SIZE: " . count($_POST));
-            $this->debug($_SERVER["HTTP_X_SERVER_ID"], "POST_LENGTH: " . strlen(implode("\n", $_POST)));
 
             $this->logger->info(sprintf(_("Validating signature '%s'"), $_SERVER["HTTP_X_SIGNATURE"]));
             $this->validateSignature($payload, $_SERVER["HTTP_X_SIGNATURE"], $_SERVER["HTTP_DATE"]);
@@ -119,8 +100,6 @@ class Scalr_Messaging_Service {
 
     private function validateSignature($payload, $signature, $timestamp) {
         $valid_sign = $this->cryptoTool->sign($payload, null, $timestamp, Scalr_Net_Scalarizr_Client::HASH_ALGO);
-
-        $this->debug("NO_SID", "VALID_SIGNATURE: {$valid_sign}");
 
         if ($valid_sign != $signature) {
             throw new Exception("Signature doesn't match");

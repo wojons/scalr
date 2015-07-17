@@ -1,6 +1,7 @@
 <?php
 
 namespace Scalr\Db;
+use Scalr\Exception\MysqlConnectionException;
 
 /**
  * Database connection pool [SCALRCORE-369]
@@ -10,6 +11,8 @@ namespace Scalr\Db;
  */
 class ConnectionPool
 {
+    const ER_LOCK_DEADLOCK = 1213;
+
     /**
      * Connection pool
      *
@@ -131,7 +134,7 @@ class ConnectionPool
             }
 
             if (!$conn && isset($exception)) {
-                throw new \Exception("Could not establish database connection: {$exception->getMessage()}", E_ERROR);
+                throw new MysqlConnectionException("Could not establish database connection: {$exception->getMessage()}", E_ERROR);
             }
 
             if (!$conn || !$conn->IsConnected()) {

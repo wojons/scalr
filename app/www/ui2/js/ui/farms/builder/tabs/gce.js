@@ -1,48 +1,39 @@
-Scalr.regPage('Scalr.ui.farms.builder.tabs.gce', function (moduleTabParams) {
-	return Ext.create('Scalr.ui.FarmsBuilderTab', {
-		tabTitle: 'GCE settings',
-        itemId: 'gce',
-        layout: 'anchor',
-        
-        settings: {
-            'gce.on-host-maintenance': undefined
-        },
-        
-		isEnabled: function (record) {
-			return record.get('platform') == 'gce';
-		},
+Ext.define('Scalr.ui.FarmRoleEditorTab.Gce', {
+    extend: 'Scalr.ui.FarmRoleEditorTab',
+    tabTitle: 'GCE settings',
+    itemId: 'gce',
+    layout: 'anchor',
+    cls: 'x-panel-column-left-with-tabs x-container-fieldset',
 
-		showTab: function (record) {
-			var settings = record.get('settings', true);
-			this.down('[name="gce.on-host-maintenance"]').setValue(settings['gce.on-host-maintenance'] || 'TERMINATE');
-		},
+    settings: {
+        'gce.on-host-maintenance': 'MIGRATE'
+    },
 
-		hideTab: function (record) {
-			var settings = record.get('settings');
+    isEnabled: function (record) {
+        return this.callParent(arguments) && record.get('platform') == 'gce';
+    },
 
-			settings['gce.on-host-maintenance'] = this.down('[name="gce.on-host-maintenance"]').getValue();
-			
-			record.set('settings', settings);
-		},
+    showTab: function (record) {
+        var settings = record.get('settings', true);
+        this.down('[name="gce.on-host-maintenance"]').setValue(settings['gce.on-host-maintenance'] || 'MIGRATE');
+    },
 
-		items: [{
-			xtype: 'fieldset',
-            layout: 'anchor',
-            defaults: {
-                anchor: '100%',
-                maxWidth: 600,
-                labelWidth: 140
-            },
-			items: [{
-				xtype: 'combo',
-				store: [['TERMINATE', 'TERMINATE'], ['MIGRATE', 'MIGRATE']],
-				valueField: 'name',
-				displayField: 'description',
-				fieldLabel: 'Maintenance behavior',
-				editable: false,
-				queryMode: 'local',
-				name: 'gce.on-host-maintenance'
-			}]
-		}]
-	});
+    hideTab: function (record) {
+        var settings = record.get('settings');
+        settings['gce.on-host-maintenance'] = this.down('[name="gce.on-host-maintenance"]').getValue();
+        record.set('settings', settings);
+    },
+
+    __items: [{
+        xtype: 'combo',
+        store: [['TERMINATE', 'TERMINATE'], ['MIGRATE', 'MIGRATE']],
+        valueField: 'name',
+        displayField: 'description',
+        fieldLabel: 'Maintenance behavior',
+        editable: false,
+        queryMode: 'local',
+        name: 'gce.on-host-maintenance',
+        labelWidth: 170,
+        width: 400
+    }]
 });

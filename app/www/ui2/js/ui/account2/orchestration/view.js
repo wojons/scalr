@@ -25,65 +25,12 @@ Scalr.regPage('Scalr.ui.account2.orchestration.view', function (loadParams, modu
     
 	var panel = Ext.create('Ext.panel.Panel', {
 		scalrOptions: {
-			title: 'Account management &raquo; Orchestration',
-			maximize: 'all',
-			leftMenu: {
-				menuId: 'settings',
-				itemId: 'orchestration',
-                showPageTitle: true,
-                beforeClose: function(cb) {
-                    if (panel.down('#scripting').hasDirtyRecords()) {
-                        Scalr.utils.Window({
-                            title: 'Orchestration rule changes',
-                            layout: 'fit',
-                            width: 560,
-                            bodyCls: 'x-container-fieldset',
-                            items: [{
-                                xtype: 'displayfield',
-                                cls: 'x-form-field-warning',
-                                value: 'There are some unsaved changes on this page. Do you want to save them before leaving?',
-                                margin: '0 0 10 0'
-                            }],
-                            dockedItems: [{
-                                xtype: 'container',
-                                cls: 'x-docked-buttons',
-                                dock: 'bottom',
-                                layout: {
-                                    type: 'hbox',
-                                    pack: 'center'
-                                },
-                                items: [{
-                                    xtype: 'button',
-                                    text: 'Save changes',
-                                    handler: function() {
-                                        saveHandler(cb);
-                                        this.up('#box').close();
-                                    }
-                                }, {
-                                    xtype: 'button',
-                                    text: 'Ignore changes',
-                                    margin: '0 0 0 10',
-                                    handler: function() {
-                                        cb();
-                                        this.up('#box').close();
-                                    }
-                                }, {
-                                    xtype: 'button',
-                                    text: 'Continue edit',
-                                    margin: '0 0 0 10',
-                                    handler: function() {
-                                        this.up('#box').close();
-                                    }
-                                }]
-                            }]
-                        });
-                    } else {
-                        cb();
-                    }
-                    return false;
-                }
-			}
+            menuTitle: 'Orchestration',
+            menuHref: '#/account/orchestration',
+            menuFavorite: true,
+			maximize: 'all'
 		},
+        stateId: 'grid-account-orchestration',
         layout: 'fit',
 		items: [{
             xtype: 'scriptfield',

@@ -6,15 +6,13 @@ Scalr.regPage('Scalr.ui.farms.builder.addrole.cloudstack', function () {
 
         cls: 'x-container-fieldset x-fieldset-separator-bottom',
 
-        instanceTypeFieldName: 'cloudstack.service_offering_id',
-
         layout: 'anchor',
         defaults: {
             anchor: '100%',
-            maxWidth: 762,
-            labelWidth: 110
+            maxWidth: 760,
+            labelWidth: 120
         },
-        
+
         isVisibleForRole: function(record) {
             return Ext.Array.contains(['cloudstack', 'idcf'], record.get('platform'));
         },
@@ -22,7 +20,7 @@ Scalr.regPage('Scalr.ui.farms.builder.addrole.cloudstack', function () {
         setRole: function(record) {
             var platform = record.get('platform'),
                 cloudLocation = record.get('cloud_location');
-            Scalr.CachedRequestManager.get('farmbuilder').load(
+            Scalr.CachedRequestManager.get('farmDesigner').load(
                 {
                     url: '/platforms/cloudstack/xGetOfferingsList/',
                     params: {
@@ -35,8 +33,7 @@ Scalr.regPage('Scalr.ui.farms.builder.addrole.cloudstack', function () {
                     var me = this,
                         field,
                         defaultValue = null,
-                        limits,
-                        fb = this.up('#farmbuilder');
+                        limits;
                     data = data || {};
                     this.down('[name="cloudstack.static_nat.map"]').hide().reset();
                     Ext.Object.each({
@@ -44,7 +41,7 @@ Scalr.regPage('Scalr.ui.farms.builder.addrole.cloudstack', function () {
                         'cloudstack.shared_ip.id': 'ipAddresses'
                     }, function(fieldName, dataFieldName){
                         var storeData;
-                        limits = fb.getLimits(platform, fieldName);
+                        limits = Scalr.getGovernance(platform, fieldName);
                         if (limits && limits.value && limits.value[cloudLocation] && limits.value[cloudLocation].length > 0) {
                             storeData = [];
                             Ext.Array.each(data ? data[dataFieldName] : [], function(item) {
@@ -66,7 +63,9 @@ Scalr.regPage('Scalr.ui.farms.builder.addrole.cloudstack', function () {
                             field.show();
                         }
                         field.setValue(defaultValue);
-                        field.toggleIcon('governance', !!limits);
+                        if (field.toggleIcon) {
+                            field.toggleIcon('governance', !!limits);
+                        }
                     });
                 },
                 this
@@ -76,9 +75,7 @@ Scalr.regPage('Scalr.ui.farms.builder.addrole.cloudstack', function () {
         isValid: function() {
             var res = true,
                 field;
-            field = this.down('[name="cloudstack.service_offering_id"]');
-            res = field.validate() || {comp: field, message: 'Instance type is required'};
-            if (res === true && this.down('[name="cloudstack.network_id"]').getValue() == 'SCALR_MANUAL') {
+            if (this.down('[name="cloudstack.network_id"]').getValue() == 'SCALR_MANUAL') {
                 field = this.down('[name="cloudstack.static_nat.map"]');
                 res = field.validate() || {comp: field, message: 'Static IPs is required'};
             }
@@ -88,9 +85,8 @@ Scalr.regPage('Scalr.ui.farms.builder.addrole.cloudstack', function () {
         getSettings: function() {
             var sharedIpIdField = this.down('[name="cloudstack.shared_ip.id"]'),
                 settings = {
-                'cloudstack.service_offering_id': this.down('[name="cloudstack.service_offering_id"]').getValue(),
-                'cloudstack.network_id': this.down('[name="cloudstack.network_id"]').getValue()
-            };
+                    'cloudstack.network_id': this.down('[name="cloudstack.network_id"]').getValue()
+                };
             if (settings['cloudstack.network_id'] == 'SCALR_MANUAL') {
                 settings['cloudstack.static_nat.map'] = this.down('[name="cloudstack.static_nat.map"]').getValue();
                 settings['cloudstack.use_static_nat'] = 1;
@@ -108,20 +104,16 @@ Scalr.regPage('Scalr.ui.farms.builder.addrole.cloudstack', function () {
         },
 
         items: [{
-            xtype: 'instancetypefield',
-            name: 'cloudstack.service_offering_id',
-            allowBlank: false,
-            iconsPosition: 'outer'
-        },{
             xtype: 'combo',
             name: 'cloudstack.network_id',
             flex: 1,
             matchFieldWidth: false,
             fieldLabel: 'Network',
-            icons: {
-                governance: true
+            plugins: {
+                ptype: 'fieldicons',
+                position: 'outer',
+                icons: ['governance']
             },
-            iconsPosition: 'outer',
             editable: false,
             listConfig: {
                 width: 'auto',
@@ -129,7 +121,7 @@ Scalr.regPage('Scalr.ui.farms.builder.addrole.cloudstack', function () {
             },
             queryMode: 'local',
             store: {
-                fields: [ 'id', 'name' ],
+                model: Scalr.getModel({fields: [ 'id', 'name' ]}),
                 proxy: 'object'
             },
             valueField: 'id',
@@ -160,7 +152,7 @@ Scalr.regPage('Scalr.ui.farms.builder.addrole.cloudstack', function () {
             },
             queryMode: 'local',
             store: {
-                fields: [ 'id', 'name' ],
+                model: Scalr.getModel({fields: [ 'id', 'name' ]}),
                 proxy: 'object'
             },
             valueField: 'id',

@@ -16,6 +16,11 @@ class Scalr_UI_Controller_Tools_Aws_Iam_ServerCertificates extends Scalr_UI_Cont
         $this->response->page('ui/tools/aws/iam/serverCertificates/create.js');
     }
 
+    public function defaultAction()
+    {
+        $this->viewAction();
+    }
+
     public function viewAction()
     {
         $this->response->page('ui/tools/aws/iam/serverCertificates/view.js');
@@ -27,7 +32,7 @@ class Scalr_UI_Controller_Tools_Aws_Iam_ServerCertificates extends Scalr_UI_Cont
             'name' => array('type' => 'string')
         ));
 
-        //TODO This must be refactored to new Scalr\Service\Aws\Iam class
+        //FIXME This must be refactored to new Scalr\Service\Aws\Iam class
         $iamClient = Scalr_Service_Cloud_Aws::newIam(
             $this->getEnvironment()->getPlatformConfigValue(Ec2PlatformModule::ACCESS_KEY),
             $this->getEnvironment()->getPlatformConfigValue(Ec2PlatformModule::SECRET_KEY)
@@ -45,7 +50,7 @@ class Scalr_UI_Controller_Tools_Aws_Iam_ServerCertificates extends Scalr_UI_Cont
 
     public function xListCertificatesAction()
     {
-        //TODO This needs to be refactored. We have to use new Scalr\Service\Aws\Iam library.
+        //FIXME This needs to be refactored. We have to use new Scalr\Service\Aws\Iam library.
         $iamClient = Scalr_Service_Cloud_Aws::newIam(
             $this->getEnvironment()->getPlatformConfigValue(Ec2PlatformModule::ACCESS_KEY),
             $this->getEnvironment()->getPlatformConfigValue(Ec2PlatformModule::SECRET_KEY)

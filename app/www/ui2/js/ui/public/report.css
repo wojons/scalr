@@ -5,13 +5,13 @@
 .x-panel-cost-report{
     background: #fff;
     color: #1A487B;
-    font-weight: bold;
+    font-family: OpenSansSemiBold;
     border: 1px solid #A8CCDF;
     margin: 12px auto;
 }
 
 .x-panel-cost-report .x-header{
-    font: 22px 'open_sanssemibold', Arial, sans-serif;
+    font: 22px OpenSansSemiBold, Arial, sans-serif;
     line-height: 65px;
     background: #A8CCDF;
     height: 65px;
@@ -21,7 +21,6 @@
 
 .x-panel-cost-report .x-footer {
     margin: 28px 0 0;
-	font-size: 12px;
 	line-height: 55px;
 	background: #eef4f8;
 	text-align: center;
@@ -31,9 +30,8 @@
 }
 
 .x-panel-cost-report .x-title1{
-    font: 13px 'open_sansbold', Arial, sans-serif;
+    font: 13px OpenSansBold, Arial, sans-serif;
     color: #5997BF;
-    font-weight: bold;
     line-height: 24px;
     text-transform: uppercase;
 }
@@ -43,16 +41,14 @@
 }
 
 .x-panel-cost-report .x-title2{
-    font: 23px 'open_sansbold', Arial, sans-serif;
+    font: 23px OpenSansBold, Arial, sans-serif;
     color: #1A487B;
-    font-weight: bold;
     line-height:46px;
 }
 
 .x-panel-cost-report .x-title3{
-    font: 13px 'open_sansbold', Arial, sans-serif;
+    font: 13px OpenSansBold, Arial, sans-serif;
     color: #1A487B;
-    font-weight: bold;
     line-height: 24px;
     text-transform: uppercase;
 }

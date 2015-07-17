@@ -161,6 +161,8 @@ class MessagingEventObserver extends EventObserver
         );
 
         $msg->cloudLocation = $event->DBServer->GetCloudLocation();
+        $msg->eventId = $event->GetEventID();
+        $msg->serverId = $event->DBServer->serverId;
 
         $dbServer = $event->DBServer;
         $dbFarmRole = $dbServer->GetFarmRoleObject();
@@ -292,7 +294,7 @@ class MessagingEventObserver extends EventObserver
                 if (!$sshKey->loadGlobalByFarmId(
                     $event->DBServer->envId,
                     $event->DBServer->farmId,
-                    $event->DBServer->GetFarmRoleObject()->CloudLocation,
+                    ($event->DBServer->isCloudstack()) ? "" : $event->DBServer->GetFarmRoleObject()->CloudLocation,
                     $event->DBServer->platform
                 )) {
                     $key_name = "FARM-{$event->DBServer->farmId}-" . SCALR_ID;
@@ -303,7 +305,7 @@ class MessagingEventObserver extends EventObserver
                     $sshKey->envId = $event->DBServer->envId;
                     $sshKey->type = Scalr_SshKey::TYPE_GLOBAL;
                     $sshKey->platform = $event->DBServer->platform;
-                    $sshKey->cloudLocation = $event->DBServer->GetFarmRoleObject()->CloudLocation;
+                    $sshKey->cloudLocation = ($event->DBServer->isCloudstack()) ? "" : $event->DBServer->GetFarmRoleObject()->CloudLocation;
                     $sshKey->cloudKeyName = $key_name;
                     $sshKey->platform = $event->DBServer->platform;
 

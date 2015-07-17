@@ -1,6 +1,5 @@
 <?php
 
-use \DBServer;
 use Scalr\Stats\CostAnalytics\Entity\AccountCostCenterEntity;
 use Scalr\Stats\CostAnalytics\Entity\CostCentreEntity;
 use Scalr\Model\Collections\ArrayCollection;
@@ -24,7 +23,7 @@ class Scalr_Account extends Scalr_Model
     const SETTING_DATE_FARM_CREATED = 'date.farm_created';
 
     const SETTING_TRIAL_MAIL_SENT = 'mail.trial_sent';
-    const SETTING_IS_TRIAL			= 'billing.is_trial';
+    const SETTING_IS_TRIAL          = 'billing.is_trial';
 
     //MOVE TO Scalr_Billing
     const SETTING_BILLING_PAY_AS_YOU_GO_DATE = 'billing.pay-as-you-go-date';
@@ -41,11 +40,11 @@ class Scalr_Account extends Scalr_Model
     const SETTING_CLOUDYN_MASTER_PASSWD   = 'cloudyn.master.passwd';
 
     protected $dbPropertyMap = array(
-        'id'			=> 'id',
-        'name'			=> 'name',
-        'status'		=> 'status',
-        'comments'		=> 'comments',
-        'dtadded'		=> array('property' => 'dtAdded', 'update' => false, 'type' => 'datetime', 'createSql' => 'NOW()'),
+        'id'            => 'id',
+        'name'          => 'name',
+        'status'        => 'status',
+        'comments'      => 'comments',
+        'dtadded'       => array('property' => 'dtAdded', 'update' => false, 'type' => 'datetime', 'createSql' => 'NOW()'),
         'priority'      => 'priority'
     );
 
@@ -93,10 +92,10 @@ class Scalr_Account extends Scalr_Model
      */
     public function delete($id = null)
     {
-        $servers = DBServer::listByFilter(['clientId' => $this->id]);
+        $servers = \DBServer::listByFilter(['clientId' => $this->id]);
 
         foreach ($servers as $server) {
-            /* @var DBServer $server */
+            /* @var $server \DBServer */
             $server->Remove();
         }
 
@@ -128,8 +127,7 @@ class Scalr_Account extends Scalr_Model
             $this->db->Execute("DELETE FROM apache_vhosts WHERE client_id=?", array($this->id));
             $this->db->Execute("DELETE FROM scheduler WHERE account_id=?", array($this->id));
 
-            $farms = $this->db->GetAll("SELECT id FROM farms WHERE clientid='{$this->id}'");
-            foreach ($farms as $farm) {
+            foreach ($this->db->Execute("SELECT id FROM farms WHERE clientid=?", [$this->id]) as $farm) {
                 $this->db->Execute("DELETE FROM farms WHERE id=?", array($farm["id"]));
                 $this->db->Execute("DELETE FROM farm_roles WHERE farmid=?", array($farm["id"]));
                 $this->db->Execute("DELETE FROM farm_role_options WHERE farmid=?", array($farm["id"]));
@@ -137,7 +135,7 @@ class Scalr_Account extends Scalr_Model
                 $this->db->Execute("DELETE FROM elastic_ips WHERE farmid=?", array($farm["id"]));
             }
 
-            $roles = $this->db->GetAll("SELECT id FROM roles WHERE client_id='{$this->id}'");
+            $roles = $this->db->GetAll("SELECT id FROM roles WHERE client_id = '{$this->id}'");
             foreach ($roles as $role) {
                 $this->db->Execute("DELETE FROM roles WHERE id = ?", array($role['id']));
 
@@ -289,26 +287,6 @@ class Scalr_Account extends Scalr_Model
             "DELETE FROM client_settings WHERE `key` LIKE '{$filter}' AND clientid = ?",
             array($this->id)
         );
-    }
-
-    public function isFeatureEnabled($feature)
-    {
-        if (!$this->getSetting(Scalr_Billing::SETTING_PACKAGE))
-            return true;
-        else {
-            $limit = Scalr_Limits::init()->Load($feature, $this->id);
-            return $limit->check(1);
-        }
-    }
-
-    public function getFeaturesList()
-    {
-        $retval = array();
-        foreach (Scalr_Limits::getFeatures() as $f => $n) {
-            $retval[$f] = $this->isFeatureEnabled($f);
-        }
-
-        return $retval;
     }
 
     public function setLimit($limitName, $limitValue) {

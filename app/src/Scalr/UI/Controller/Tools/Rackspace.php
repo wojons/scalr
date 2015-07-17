@@ -31,10 +31,6 @@ class Scalr_UI_Controller_Tools_Rackspace extends Scalr_UI_Controller
 
     public function limitsAction()
     {
-        $locations = $p = PlatformFactory::NewPlatform(SERVER_PLATFORMS::RACKSPACE)->getLocations($this->environment);
-
-        $this->response->page('ui/tools/rackspace/limits.js', array(
-                'locations'	=> self::loadController('Platforms')->getCloudLocations(SERVER_PLATFORMS::RACKSPACE, false)
-        ));
+        $this->response->page('ui/tools/rackspace/limits.js');
     }
 }

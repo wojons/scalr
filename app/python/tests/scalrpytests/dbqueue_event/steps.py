@@ -16,7 +16,6 @@ import time
 
 from gevent import pywsgi
 
-from scalrpy.util import cryptotool
 from scalrpy.dbqueue_event import DBQueueEvent
 
 from scalrpytests.steplib import lib
@@ -27,11 +26,11 @@ from lettuce import step, before, after
 
 class DBQueueEventScript(lib.Script):
 
-    app_cls = DBQueueEvent 
+    app_cls = DBQueueEvent
     name = 'dbqueue_event'
 
 
-lib.ScriptCls = DBQueueEventScript 
+lib.ScriptCls = DBQueueEventScript
 
 
 def answer(environ, start_response):
@@ -108,12 +107,12 @@ def stop_wsgi_server(step, port):
 def start_https_wsgi_server(step, port):
     if not hasattr(lib.world, 'wsgi_servers'):
         lib.world.wsgi_servers = {}
-    key_file=os.path.join(scalrpytests_dir, 'scalrpytests/steplib/server.key')
-    cert_file=os.path.join(scalrpytests_dir, 'scalrpytests/steplib/server.crt')
+    key_file = os.path.join(scalrpytests_dir, 'fixtures/server.key')
+    cert_file = os.path.join(scalrpytests_dir, 'fixtures/server.crt')
     wsgi_server = pywsgi.WSGIServer(('127.0.0.1', int(port)), answer,
-            ssl_version=ssl.PROTOCOL_TLSv1,
-            keyfile=key_file, certfile=cert_file,
-            cert_reqs=ssl.CERT_NONE)
+                                    ssl_version=ssl.PROTOCOL_TLSv1,
+                                    keyfile=key_file, certfile=cert_file,
+                                    cert_reqs=ssl.CERT_NONE)
     wsgi_server.reuse_addr = True
     wsgi_server.start()
     lib.world.wsgi_servers[port] = wsgi_server
@@ -150,7 +149,7 @@ def start_wsgi_server_timeout(step, port):
 
 
 @step(u"White Rabbit stops wsgi server with timeout code on port (\d+)$")
-def stop_wsgi_server500(step, port):
+def stop_wsgi_server_timeout(step, port):
     lib.world.wsgi_servers[port].socket.shutdown(socket.SHUT_RDWR)
     lib.world.wsgi_servers[port].socket.close()
     lib.world.wsgi_servers[port].stop()
@@ -170,4 +169,3 @@ def after_scenario(scenario):
 
 before.each_scenario(before_scenario)
 after.each_scenario(after_scenario)
-

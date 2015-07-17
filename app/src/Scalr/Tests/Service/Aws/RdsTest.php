@@ -250,7 +250,7 @@ class RdsTest extends AwsTestCase
         $this->markTestSkipped();
         $this->skipIfEc2PlatformDisabled();
 
-        $aws = $this->getContainer()->aws(AwsTestCase::REGION);
+        $aws = $this->getEnvironment()->aws(AwsTestCase::REGION);
         $aws->rds->setApiClientType($clientType);
         $aws->rds->enableEntityManager();
 
@@ -435,7 +435,7 @@ class RdsTest extends AwsTestCase
     {
         $this->skipIfEc2PlatformDisabled();
 
-        $aws = $this->getContainer()->aws(AwsTestCase::REGION);
+        $aws = $this->getEnvironment()->aws(AwsTestCase::REGION);
         $aws->rds->setApiClientType($clientType);
         $aws->rds->enableEntityManager();
 

@@ -1,6 +1,10 @@
 <?php
 namespace Scalr\Service\OpenStack;
 
+use Scalr\Exception\NotSupportedException;
+use Scalr\Service\OpenStack\Client\Auth\RequestBuilderInterface;
+use Scalr\Service\OpenStack\Client\Auth\RequestBuilderV2;
+use Scalr\Service\OpenStack\Client\Auth\RequestBuilderV3;
 use Scalr\Service\OpenStack\Client\AuthToken;
 use Scalr\Service\OpenStack\Exception\OpenStackException;
 
@@ -32,6 +36,12 @@ class OpenStackConfig
     private $username;
 
     /**
+     * OpenStack user Id
+     * @var string
+     */
+    private $userId;
+
+    /**
      * User password
      * @var string|null
      */
@@ -56,9 +66,43 @@ class OpenStackConfig
 
     /**
      * OpenStack tenant name.
+     * Is project name to Identity v3.
+     *
      * @var string
      */
     private $tenantName;
+
+    /**
+     * OpenStack project id.
+     *
+     * @var string
+     */
+    private $projectId;
+
+    /**
+     * OpenStack version
+     * @var string
+     */
+    private $identityVersion;
+
+    /**
+     * @var RequestBuilderInterface
+     */
+    private $authRequestBuilder;
+
+    /**
+     * Proxy settings:
+     *  host
+     *  port
+     *  user
+     *  pass
+     *  type
+     *
+     * @see config.yml
+     *
+     * @var array
+     */
+    private $proxySettings;
 
     /**
      * Convenient constructor
@@ -71,11 +115,17 @@ class OpenStackConfig
      *                                                         This function must accept one parameter AuthToken object.
      * @param   AuthToken                 $authToken           optional Authentication token for the OpenStack service.
      * @param   string                    $password            optional An User's password
-     * @param   string                    $tenantName          optional OpenStack tenant name. This is used for the OpenStack
+     * @param   string                    $tenantName          optional Either tenant name for V2 or project for V3
+     * @param   string                    $identityVersion     optional The version of the identity
+     * @param   array                     $proxySettings       optional Proxy settings
      */
     public function __construct($username, $identityEndpoint, $region, $apiKey = null, \Closure $updateTokenCallback = null,
-                                AuthToken $authToken = null, $password = null, $tenantName = null)
+                                AuthToken $authToken = null, $password = null, $tenantName = null, $identityVersion = null, array $proxySettings = null)
     {
+        if ($identityVersion === null) {
+            $identityVersion = static::parseIdentityVersion($identityEndpoint);
+        }
+
         $this
             ->setUsername($username)
             ->setIdentityEndpoint($identityEndpoint)
@@ -85,6 +135,8 @@ class OpenStackConfig
             ->setUpdateTokenCallback($updateTokenCallback)
             ->setAuthToken($authToken)
             ->setTenantName($tenantName)
+            ->setIdentityVersion($identityVersion)
+            ->setProxySettings($proxySettings)
         ;
     }
 
@@ -108,6 +160,65 @@ class OpenStackConfig
     {
         $this->tenantName = $tenantName;
         return $this;
+    }
+
+    /**
+     * Gets OpenStack user id
+     *
+     * @return  string
+     */
+    public function getUserId()
+    {
+        return $this->userId;
+    }
+
+    /**
+     * Sets OpenStack user id
+     *
+     * @param   string  $userId OpenStack user id
+     *
+     * @return  $this
+     */
+    public function setUserId($userId)
+    {
+        $this->userId = $userId;
+
+        return $this;
+    }
+
+    /**
+     * Gets OpenStack project id
+     *
+     * @return  string
+     */
+    public function getProjectId()
+    {
+        return $this->projectId;
+    }
+
+    /**
+     * Sets OpenStack project id
+     *
+     * @param   string  $projectId OpenStack project id
+     *
+     * @return  $this
+     */
+    public function setProjectId($projectId)
+    {
+        $this->projectId = $projectId;
+
+        return $this;
+    }
+
+    /**
+     * Gets OpenStack project id
+     * It same as tenant name for Identity v2
+     *
+     * @return  string
+     */
+    public function getProjectName()
+    {
+        return $this->tenantName;
     }
 
     /**
@@ -272,39 +383,84 @@ class OpenStackConfig
     public function setAuthToken(AuthToken $authToken = null)
     {
         $this->authToken = $authToken;
+
         return $this;
     }
 
     /**
      * Gets auth query string
      *
-     * @return  array  Returns auth query
-     * @throws  OpenStackException
+     * @return array Returns auth query
+     *
+     * @throws NotSupportedException
+     * @throws OpenStackException
      */
     public function getAuthQueryString()
     {
-        if ($this->getApiKey() !== null) {
-            $s = array(
-                "RAX-KSKEY:apiKeyCredentials" => array(
-                    'username' => $this->getUsername(),
-                    'apiKey'   => $this->getApiKey(),
-                ),
-            );
-        } else if ($this->getPassword() !== null) {
-            $s = array(
-                "passwordCredentials" => array(
-                    'username' => $this->getUsername(),
-                    'password' => $this->getPassword(),
-                ),
-            );
-        } else {
-            throw new OpenStackException(
-                'Neither api key nor password was provided for the OpenStack config.'
-            );
+        return $this->authRequestBuilder->makeRequest($this);
+    }
+
+    /**
+     * Sets OpenStack API version
+     *
+     * @param int $version
+     *
+     * @return $this
+     *
+     * @throws NotSupportedException
+     */
+    public function setIdentityVersion($version = null)
+    {
+        $this->identityVersion = $version ?: 2;
+
+        switch ($this->identityVersion) {
+            case 2:
+                $this->authRequestBuilder = new RequestBuilderV2();
+                break;
+
+            case 3:
+                $this->authRequestBuilder = new RequestBuilderV3();
+                break;
+
+            default:
+                throw new NotSupportedException("Unsupported api version: {$this->identityVersion}");
         }
-        if ($this->getTenantName() !== null) {
-            $s['tenantName'] = $this->getTenantName();
-        }
-        return $s;
+
+        return $this;
+    }
+
+    /**
+     * Gets OpenStack API version
+     *
+     * @return string Returns the version of the identity
+     */
+    public function getIdentityVersion()
+    {
+        return $this->identityVersion ?: 2;
+    }
+
+    /**
+     * Parses the version of identity endpoint url
+     *
+     * @param    string    $keystone  The identity endpoint url
+     * @return   int|null  Returns the major version number or NULL if it cannot be obtained from the specified URL
+     */
+    public static function parseIdentityVersion($keystone)
+    {
+        preg_match_all('/\/v(?P<major>\d+)(?:\.(?P<minor>\d+))?/', $keystone, $matches);
+
+        return array_shift($matches['major']);
+    }
+
+    public function setProxySettings(array $proxySettings = null)
+    {
+        $this->proxySettings = $proxySettings;
+
+        return $this;
+    }
+
+    public function getProxySettings()
+    {
+        return $this->proxySettings;
     }
 }

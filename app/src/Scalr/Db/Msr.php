@@ -37,6 +37,7 @@ class Scalr_Db_Msr
 
     // For GCE persistent
     const DATA_STORAGE_GCED_SIZE = 'db.msr.data_storage.gced.size';
+    const DATA_STORAGE_GCED_TYPE = 'db.msr.data_storage.gced.type';
 
     /** Replication settings **/
     const SLAVE_TO_MASTER = 'db.msr.slave_to_master';

@@ -25,9 +25,11 @@ use \HostUpEvent;
 use \IPAddressChangedEvent;
 use \Scalr_Billing;
 use Scalr\System\Zmq\Cron\AbstractTask;
+use Scalr\Modules\Platforms\Cloudstack\Helpers\CloudstackHelper;
 use Scalr\Modules\PlatformFactory;
 use Scalr\Service\Aws\Ec2\DataType\InstanceAttributeType;
 use Scalr\Modules\Platforms\Ec2\Helpers\EipHelper as Ec2EipHelper;
+use Scalr\Modules\Platforms\Ec2\Helpers\Ec2Helper;
 
 
 
@@ -105,12 +107,10 @@ class CloudPoller extends AbstractTask
         $account = Scalr_Account::init()->loadById($DBFarm->ClientID);
         $payAsYouGoTime = $account->getSetting(Scalr_Account::SETTING_BILLING_PAY_AS_YOU_GO_DATE);
 
-        $GLOBALS["SUB_TRANSACTIONID"] = abs(crc32(posix_getpid() . $request->farmId));
-        $GLOBALS["LOGGER_FARMID"] = $request->farmId;
-
+        $transactionId = abs(crc32(posix_getpid() . $request->farmId));
         $this->getLogger()->info(
             "[%s] Begin polling farm (ID: %d, Name: %s, Status: %s)",
-            $GLOBALS["SUB_TRANSACTIONID"],
+            $transactionId,
             $DBFarm->ID,
             $DBFarm->Name,
             $DBFarm->Status
@@ -129,7 +129,7 @@ class CloudPoller extends AbstractTask
         $this->getLogger()->info("%d server%s for the farm: %d", $servers_count, ($servers_count == 1 ? '' : 's'), $DBFarm->ID);
 
         $config = \Scalr::getContainer()->config;
-        
+
         foreach ($DBFarm->GetServersByFilter(array(), array('status' => SERVER_STATUS::PENDING_LAUNCH)) as $DBServer) {
             /* @var $DBServer \DBServer */
             try {
@@ -143,9 +143,14 @@ class CloudPoller extends AbstractTask
 
                         $p = PlatformFactory::NewPlatform($DBServer->platform);
 
-                        $list = $p->GetServersList($DBServer->GetEnvironmentObject(), $DBServer->cloudLocation);
+                        $p->GetServersList($DBServer->GetEnvironmentObject(), $DBServer->cloudLocation);
                     } catch (Exception $e) {
-                        $this->getLogger()->error("Could not retrieve the list of the instances: %s", $e->getMessage());
+                        $this->getLogger()->error(
+                            "[Server: %s] Could not retrieve the list of the instances: %s",
+                            $DBServer->serverId, $e->getMessage()
+                        );
+
+                        continue;
                     }
                 }
 
@@ -166,13 +171,20 @@ class CloudPoller extends AbstractTask
                             if (!in_array($DBServer->status, [SERVER_STATUS::PENDING_TERMINATE, SERVER_STATUS::TERMINATED])) {
                                 if ($DBServer->isOpenstack() && $DBServer->status == SERVER_STATUS::SUSPENDED) {
                                     continue;
+                                } elseif ($DBServer->platform == \SERVER_PLATFORMS::GCE && $DBServer->status == SERVER_STATUS::SUSPENDED) {
+                                    $DBServer->terminate(DBServer::TERMINATE_REASON_CRASHED);
+                                    Logger::getLogger(LOG_CATEGORY::FARM)->warn(new FarmLogMessage($DBFarm->ID, sprintf(
+                                        "Server '%s' was terminated",
+                                        $DBServer->serverId
+                                    ), $DBServer->serverId));
+                                    continue;
                                 }
 
                                 if ($DBServer->GetProperty(SERVER_PROPERTIES::CRASHED) == 1) {
                                     $action = 'terminate';
                                     if ($config->defined("scalr.{$DBServer->platform}.action_on_missing_server"))
                                         $action = $config->get("scalr.{$DBServer->platform}.action_on_missing_server");
-                                    
+
                                 	if ($action == 'flag') {
                                 		$DBServer->SetProperty(SERVER_PROPERTIES::MISSING, 1);
                                 	} else {
@@ -190,7 +202,7 @@ class CloudPoller extends AbstractTask
                                         "Server '%s' found in database but not found on %s. Crashed.",
                                         $DBServer->serverId,
                                         $DBServer->platform
-                                    )));
+                                    ), $DBServer->serverId));
                                 }
 
                                 continue;
@@ -203,14 +215,21 @@ class CloudPoller extends AbstractTask
                                 $DBServer->serverId,
                                 $DBServer->envId
                             );
+                            
+                            //More debug
+                            $this->getLogger()->error(sprintf("[CRASH][FarmID: %d] Debug: %s", $DBFarm->ID, json_encode($p->instancesListCache)));
+                            $this->getLogger()->error(sprintf("[CRASH][FarmID: %d] {$DBServer->GetCloudServerID()}"));
                         }
                     } else {
-                        $DBServer->SetProperty(SERVER_PROPERTIES::CRASHED, "0");
-                        $DBServer->SetProperty(SERVER_PROPERTIES::MISSING, "0");
+                        $DBServer->SetProperties([
+                            SERVER_PROPERTIES::CRASHED => 0,
+                            SERVER_PROPERTIES::MISSING => 0
+                        ]);
                     }
                 }
             } catch (Exception $e) {
                 if (stristr($e->getMessage(), "AWS was not able to validate the provided access credentials") ||
+                    stristr($e->getMessage(), "You are not authorized to perform this operation") ||
                     stristr($e->getMessage(), "Unable to sign AWS API request. Please, check your X.509")) {
                     /* @var $env \Scalr_Environment */
                     $env = Scalr_Environment::init()->LoadById($DBFarm->EnvID);
@@ -246,14 +265,30 @@ class CloudPoller extends AbstractTask
                     }
 
                     if ($DBServer->GetRealStatus()->isTerminated() || $openstackErrorState) {
-                        Logger::getLogger(LOG_CATEGORY::FARM)->warn(new FarmLogMessage($DBFarm->ID,
-                            sprintf("Server '%s' (Platform: %s) is not running (Real state: %s, Scalr status: %s).",
-                                $DBServer->serverId,
-                                $DBServer->platform,
-                                $DBServer->GetRealStatus()->getName(),
-                                $DBServer->status
-                            )
-                        ));
+                        if ($openstackErrorState) {
+                            try {
+                                $info = PlatformFactory::NewPlatform($DBServer->platform)->GetServerExtendedInformation($DBServer);
+                                Logger::getLogger(LOG_CATEGORY::FARM)->warn(new FarmLogMessage($DBFarm->ID,
+                                    sprintf("Server '%s' (Platform: %s) is not running. Status: %s. Terminating.",
+                                        $DBServer->serverId,
+                                        $DBServer->platform,
+                                        $info['Status']
+                                    ),
+                                    $DBServer->serverId
+                                ));
+                            } catch (Exception $e) {
+                            }
+                        } else {
+                            Logger::getLogger(LOG_CATEGORY::FARM)->warn(new FarmLogMessage($DBFarm->ID,
+                                sprintf("Server '%s' (Platform: %s) is not running (Real state: %s, Scalr status: %s).",
+                                    $DBServer->serverId,
+                                    $DBServer->platform,
+                                    $DBServer->GetRealStatus()->getName(),
+                                    $DBServer->status
+                                ),
+                                $DBServer->serverId
+                            ));
+                        }
 
                         $DBServer->terminate(DBServer::TERMINATE_REASON_CRASHED);
 
@@ -269,12 +304,13 @@ class CloudPoller extends AbstractTask
                         //In case the server was suspended when it was running
                         if ($DBServer->status == SERVER_STATUS::RUNNING) {
                             Logger::getLogger(LOG_CATEGORY::FARM)->warn(new FarmLogMessage($DBFarm->ID,
-                                sprintf("Server '%s' (Platform: %s) is not running (Real state: %s, Scalr status: %s).",
+                                sprintf("Server '%s' (Platform: %s) is not running (Status in cloud: %s, Status in Scalr: %s).",
                                     $DBServer->serverId,
                                     $DBServer->platform,
                                     $DBServer->GetRealStatus()->getName(),
                                     $DBServer->status
-                                )
+                                ),
+                                $DBServer->serverId
                             ));
 
                             $DBServer->SetProperties([
@@ -287,7 +323,7 @@ class CloudPoller extends AbstractTask
 
                             $DBServer->status = SERVER_STATUS::SUSPENDED;
                             $DBServer->Save();
-                            
+
                             $event = new HostDownEvent($DBServer);
                             $event->isSuspended = true;
 
@@ -305,6 +341,13 @@ class CloudPoller extends AbstractTask
 
                 if ($DBServer->status != SERVER_STATUS::RUNNING && $DBServer->GetRealStatus()->IsRunning()) {
                     if ($DBServer->status == SERVER_STATUS::SUSPENDED) {
+                        $platform = PlatformFactory::NewPlatform($DBServer->platform);
+                        if ($DBServer->platform == \SERVER_PLATFORMS::GCE) {
+                            if ($platform->GetServerRealStatus($DBServer)->getName() == 'STOPPING') {
+                                continue;
+                            }
+                        }
+
                         // For Openstack we need to re-accociate IPs
                         try {
                             if ($DBServer->isOpenstack()) {
@@ -314,12 +357,17 @@ class CloudPoller extends AbstractTask
                             if (!$DBServer->GetProperty(SERVER_PROPERTIES::SZR_IS_INIT_FAILED)) {
                                 $DBServer->SetProperties([
                                     SERVER_PROPERTIES::SZR_IS_INIT_FAILED    => 1,
-                                    SERVER_PROPERTIES::SZR_IS_INIT_ERROR_MSG => $e->getMessage(),
+                                    SERVER_PROPERTIES::SZR_IS_INIT_ERROR_MSG => "Scalr is unable to allocate/associate floating IP with server: ". $e->getMessage(),
                                 ]);
                             }
                         }
 
-                        $platform = PlatformFactory::NewPlatform($DBServer->platform);
+                        if ($DBServer->platform == \SERVER_PLATFORMS::CLOUDSTACK) {
+                            if (!$DBServer->remoteIp) {
+                                $DBServer->remoteIp = CloudstackHelper::getSharedIP($DBServer);
+                                $DBServer->Save();
+                            }
+                        }
 
                         if ($platform->getResumeStrategy() == \Scalr_Role_Behavior::RESUME_STRATEGY_INIT) {
                             $DBServer->status = \SERVER_STATUS::PENDING;
@@ -335,7 +383,6 @@ class CloudPoller extends AbstractTask
                     } elseif (!in_array($DBServer->status, array(SERVER_STATUS::TERMINATED, SERVER_STATUS::TROUBLESHOOTING))) {
                         if ($DBServer->platform == SERVER_PLATFORMS::EC2) {
                             if ($DBServer->status == SERVER_STATUS::PENDING) {
-                                
                                 if (!$DBServer->remoteIp && !$DBServer->localIp) {
                                     $ipaddresses = PlatformFactory::NewPlatform($DBServer->platform)->GetServerIPAddresses($DBServer);
                                     if (($ipaddresses['remoteIp'] && !$DBServer->remoteIp) || ($ipaddresses['localIp'] && !$DBServer->localIp)) {
@@ -343,8 +390,11 @@ class CloudPoller extends AbstractTask
                                         $DBServer->localIp = $ipaddresses['localIp'];
                                         $DBServer->Save();
                                     }
+
+                                    //Add tags
+                                    Ec2Helper::createServerTags($DBServer);
                                 }
-                                
+
                                 if ($DBFarm->GetSetting(DBFarm::SETTING_EC2_VPC_ID)) {
                                     if ($DBServer->GetFarmRoleObject()->GetSetting(DBFarmRole::SETTING_AWS_VPC_INTERNET_ACCESS) != 'outbound-only') {
                                         $ipAddress = Ec2EipHelper::setEipForServer($DBServer);
@@ -365,7 +415,7 @@ class CloudPoller extends AbstractTask
                             if (!$DBServer->GetProperty(SERVER_PROPERTIES::SZR_IS_INIT_FAILED)) {
                                 $DBServer->SetProperties([
                                     SERVER_PROPERTIES::SZR_IS_INIT_FAILED    => 1,
-                                    SERVER_PROPERTIES::SZR_IS_INIT_ERROR_MSG => $e->getMessage(),
+                                    SERVER_PROPERTIES::SZR_IS_INIT_ERROR_MSG => "Scalr is unable to allocate/associate floating IP with server:" . $e->getMessage(),
                                 ]);
                             }
                         }
@@ -388,7 +438,7 @@ class CloudPoller extends AbstractTask
                                     //TODO handle failed job: $res->jobresult->jobstatus == 2
                                 } catch (Exception $e) {
                                     if ($DBServer->farmId) {
-                                        Logger::getLogger("CloudStack")->error(new FarmLogMessage($DBServer->farmId, $e->getMessage()));
+                                        Logger::getLogger("CloudStack")->error(new FarmLogMessage($DBServer->farmId, $e->getMessage(), $DBServer->serverId));
                                     }
                                 }
                             }
@@ -433,7 +483,7 @@ class CloudPoller extends AbstractTask
                                     $DBServer->serverId,
                                     $event,
                                     $launch_timeout
-                                )));
+                                ), $DBServer->serverId));
 
                                 try {
                                     $DBServer->terminate(array(DBServer::TERMINATE_REASON_SERVER_DID_NOT_SEND_EVENT, $event, $launch_timeout), false);
@@ -458,7 +508,7 @@ class CloudPoller extends AbstractTask
                                     $ipaddresses['remoteIp'],
                                     $DBServer->localIp,
                                     $ipaddresses['localIp']
-                                )));
+                                ), $DBServer->serverId));
 
                                 \Scalr::FireEvent(
                                     $DBServer->farmId,
@@ -473,6 +523,8 @@ class CloudPoller extends AbstractTask
                     if ($DBServer->platform == SERVER_PLATFORMS::EC2) {
                         $DBServer->terminate(DBServer::TERMINATE_REASON_CRASHED);
                         \Scalr::FireEvent($DBFarm->ID, new HostCrashEvent($DBServer));
+                    } elseif ($DBServer->platform == SERVER_PLATFORMS::GCE) {
+                        \Scalr::FireEvent($DBFarm->ID, new HostDownEvent($DBServer));
                     }
                 } elseif ($DBServer->status == SERVER_STATUS::RUNNING && $DBServer->GetRealStatus()->isRunning()) {
                     // Is IP address changed?
@@ -566,48 +618,66 @@ class CloudPoller extends AbstractTask
                     }
 
                     if (!$ip->fixed_ip_address && $ip->floating_ip_address && !$ip->port_id) {
-                        $ipInfo = $ip;
+                        // Checking that FLoating IP has the same tenant as auth user
+                        if ($ip->tenant_id && $ip->tenant_id == $osClient->getConfig()->getAuthToken()->getTenantId()) {
+                            $ipInfo = $ip;
+                        }
                     }
                 }
 
                 if ($ipInfo) {
                     Logger::getLogger("Openstack")->warn(new FarmLogMessage($DBServer->farmId,
-                    	"Found free floating IP: {$ipInfo->floating_ip_address} for use (". json_encode($ipInfo) .")"
+                    	"Found free floating IP: {$ipInfo->floating_ip_address} for use",
+                    	$DBServer->serverId
 					));
                 }
 
                 if (!$ipInfo || !$ipAssigned) {
                 	// Get instance port
                     $ports = $osClient->network->ports->list();
+
+                    $serverNetworkPort = [];
+
                     foreach ($ports as $port) {
                         if ($port->device_id == $DBServer->GetProperty(OPENSTACK_SERVER_PROPERTIES::SERVER_ID)) {
                             $serverNetworkPort[] = $port;
                         }
                     }
 
-                    if (count($serverNetworkPort) == 0) {
-                        Logger::getLogger("Openstack")->error(new FarmLogMessage($DBServer->farmId,
-                        	"Unable to identify network port of instance"
+                    if (empty($serverNetworkPort)) {
+                        Logger::getLogger("Openstack")->error(new FarmLogMessage(
+                            $DBServer->farmId,
+                        	"Unable to identify network port of instance",
+                            $DBServer->serverId
 						));
                     } else {
                         $publicNetworkId = $ipPool;
 
-                        while (count($serverNetworkPort) > 0) {
+                        while (!empty($serverNetworkPort)) {
                             try {
                                 $port = array_shift($serverNetworkPort);
 
                                 if (!$ipInfo) {
                                     $ipInfo = $osClient->network->floatingIps->create($publicNetworkId, $port->id);
 
-                                    Logger::getLogger("Openstack")->warn(new FarmLogMessage($DBServer->farmId,
-                                        "Allocated new IP {$ipInfo->floating_ip_address} for port: {$port->id}"
+                                    Logger::getLogger("Openstack")->warn(new FarmLogMessage(
+                                        $DBServer->farmId,
+                                        "Allocated new IP {$ipInfo->floating_ip_address} for port: {$port->id}",
+                                        $DBServer->serverId
                                     ));
-
                                 } else {
+                                    /*
+                                    $port = $port->id;
+                                    if (count($port->fixed_ips) > 1)
+                                        $port = $port->id . "_" . $serverIps['localIp'];
+                                    */
+
                                     $osClient->network->floatingIps->update($ipInfo->id, $port->id);
 
-                                    Logger::getLogger("Openstack")->warn(new FarmLogMessage($DBServer->farmId,
-                                    	"Existing floating IP {$ipInfo->floating_ip_address} was used for port: {$port->id}"
+                                    Logger::getLogger("Openstack")->warn(new FarmLogMessage(
+                                        $DBServer->farmId,
+                                    	"Existing floating IP {$ipInfo->floating_ip_address} was used for port: {$port->id}",
+                                    	$DBServer->serverId
                                     ));
                                 }
 
@@ -620,13 +690,19 @@ class CloudPoller extends AbstractTask
 
                                 break;
                             } catch (Exception $e) {
-                            	$this->getLogger()->error("Clould not allocate new floating IP from pool: %s", $e->getMessage());
+                            	$this->getLogger()->error("Clould not allocate/update floating IP: %s (%s, %s)",
+                            	    $e->getMessage(),
+                            	    json_encode($ipInfo),
+                            	    $osClient->getConfig()->getAuthToken()->getTenantId()
+                            	);
                             }
                         }
                     }
                 } else {
-                    Logger::getLogger("Openstack")->warn(new FarmLogMessage($DBServer->farmId,
-                    	"IP: {$ipInfo->floating_ip_address} already assigned"
+                    Logger::getLogger("Openstack")->warn(new FarmLogMessage(
+                        $DBServer->farmId,
+                    	"IP: {$ipInfo->floating_ip_address} already assigned",
+                    	$DBServer->serverId
                     ));
 
                     $ipAddress = $ipInfo->floating_ip_address;
@@ -661,7 +737,7 @@ class CloudPoller extends AbstractTask
                 if (!$ipAssigned) {
                     //Associate floating IP with Instance
                     $osClient->servers->addFloatingIp($DBServer->GetCloudServerID(), $ipAddress);
-                    
+
                     $DBServer->SetProperties(array(
                         OPENSTACK_SERVER_PROPERTIES::FLOATING_IP => $ipAddress,
                         OPENSTACK_SERVER_PROPERTIES::FLOATING_IP_ID => $ipAddressId

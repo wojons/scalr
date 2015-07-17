@@ -2,9 +2,9 @@
 
 use Scalr\Acl\Acl;
 use Scalr\Modules\PlatformFactory;
-use Scalr\Modules\Platforms\Cloudstack\CloudstackPlatformModule;
 use Scalr\Modules\Platforms\GoogleCE\GoogleCEPlatformModule;
-use Scalr\Role\Role;
+use Scalr\Model\Entity\Role;
+use Scalr\Model\Entity\Os;
 
 class Scalr_UI_Controller_Roles_Import extends Scalr_UI_Controller
 {
@@ -31,6 +31,10 @@ class Scalr_UI_Controller_Roles_Import extends Scalr_UI_Controller
             throw new Exception('Role creation is already started');
         }
 
+        if (!$this->getParam('osId')) {
+            throw new Exception("OS should be specified");
+        }
+
         $bundleTask = BundleTask::LoadById($this->getParam('bundleTaskId'));
         $this->user->getPermissions()->validate($bundleTask);
 
@@ -38,6 +42,7 @@ class Scalr_UI_Controller_Roles_Import extends Scalr_UI_Controller
         $dbServer->SetProperty(SERVER_PROPERTIES::SZR_IMPORTING_BEHAVIOR, trim($this->getParam('behaviors')));
         $dbServer->SetProperty(SERVER_PROPERTIES::SZR_IMPORTING_STEP, 2);
 
+        $bundleTask->osId = $this->getParam('osId');
         $bundleTask->status = SERVER_SNAPSHOT_CREATION_STATUS::PENDING;
         $bundleTask->Log(sprintf(_("Prebuild automation was enabled for: %s. Bundle task status: %s"), trim($this->getParam('behaviors')), $bundleTask->status));
         $bundleTask->Save();
@@ -78,7 +83,14 @@ class Scalr_UI_Controller_Roles_Import extends Scalr_UI_Controller
 
             if ($bundleTaskId) {
                 $bundleTask = BundleTask::LoadById($bundleTaskId);
-                $os = array('family' => $bundleTask->osFamily, 'version' => $bundleTask->osVersion, 'name' => $bundleTask->osName);
+                $osDetails = $bundleTask->getOsDetails();
+
+                $criteria = [
+                    ['family'     => $osDetails->family],
+                    ['generation' => $osDetails->generation],
+                    ['status'     => Os::STATUS_ACTIVE]
+                ];
+                $os = Os::find($criteria);
             }
         }
 
@@ -88,7 +100,8 @@ class Scalr_UI_Controller_Roles_Import extends Scalr_UI_Controller
             'connectionError' => $connectionError,
             'bundleTaskId' => $bundleTaskId,
             'behaviors' => $behaviors ? explode(',', $behaviors) : null,
-            'os' => $os
+            'os' => (isset($os) ? $os->getArrayCopy() : []),
+            'serverOs' => ($osDetails) ? $osDetails->name : ''
         ));
     }
 
@@ -102,10 +115,10 @@ class Scalr_UI_Controller_Roles_Import extends Scalr_UI_Controller
      */
     public function xInitiateImportAction($platform, $cloudLocation, $cloudServerId, $name, $createImage = false)
     {
-        if (! \Scalr\Role\Role::validateName($name))
+        if (!Role::validateName($name))
             throw new Exception(_("Name is incorrect"));
 
-        if (! $createImage && $this->db->GetOne("SELECT id FROM roles WHERE name=? AND (env_id = '0' OR env_id = ?) LIMIT 1",
+        if (! $createImage && $this->db->GetOne("SELECT id FROM roles WHERE name=? AND (env_id IS NULL OR env_id = ?) LIMIT 1",
             array($name, $this->getEnvironmentId()))
         )
             throw new Exception('Selected role name is already used. Please select another one.');
@@ -450,6 +463,11 @@ class Scalr_UI_Controller_Roles_Import extends Scalr_UI_Controller
             }
         }
 
+        if (empty($platforms)) {
+            $this->response->failure('Please <a href="#/account/environments?envId='.$this->getEnvironmentId().'">configure cloud credentials</a> before importing roles.', true);
+            return;
+        }
+
         $command = null;
         if ($this->getParam('serverId')) {
             $dbServer = DBServer::LoadByID($this->getParam('serverId'));
@@ -489,6 +507,8 @@ class Scalr_UI_Controller_Roles_Import extends Scalr_UI_Controller
             $row['dtadded'] = Scalr_Util_DateTime::convertTz($row['dtadded']);
         }
 
+        $image = $task->getImageEntity();
+
         $this->response->data(array(
             'status'        => $task->status,
             'failureReason' => $task->failureReason,
@@ -496,7 +516,8 @@ class Scalr_UI_Controller_Roles_Import extends Scalr_UI_Controller
             'roleId'        => $task->roleId,
             'roleName'      => $task->roleName,
             'platform'      => $task->platform,
-            'imageId'       => $task->snapshotId
+            'imageId'       => $task->snapshotId,
+            'imageHash'     => !empty($image) ? $image->hash : null
         ));
     }
 

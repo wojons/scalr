@@ -75,6 +75,8 @@ class Scalr_Messaging_Service_LogQueueHandler implements Scalr_Messaging_Service
                 
                 if ($message->eventId) {
                     
+                    $updateTotal = '';
+                    
                     if ($message->returnCode == 130) {
                         $field = 'scripts_timedout';
                     } elseif ($message->returnCode != 0) {
@@ -83,7 +85,10 @@ class Scalr_Messaging_Service_LogQueueHandler implements Scalr_Messaging_Service
                         $field = 'scripts_completed';
                     }
                     
-                    $this->db->Execute("UPDATE events SET `{$field}` = `{$field}`+1 WHERE event_id = ?", array($message->eventId));
+                    if (stristr($name, '[Scalr built-in]'))
+                        $updateTotal = ', `scripts_total` = `scripts_total`+1';
+                    
+                    $this->db->Execute("UPDATE events SET `{$field}` = `{$field}`+1 {$updateTotal} WHERE event_id = ?", array($message->eventId));
                 }
 
             } catch (Exception $e) {
@@ -153,71 +158,6 @@ class Scalr_Messaging_Service_LogQueueHandler implements Scalr_Messaging_Service
                     $message->message
                 ));
             } catch (Exception $e) {}
-        } /*elseif ($message instanceof Scalr_Messaging_Msg_OperationDefinition) {
-            try {
-                if ($message->name == 'Execute scripts')
-                    return;
-
-                $this->db->Execute("INSERT INTO server_operations SET
-                    `id` = ?,
-                    `server_id` = ?,
-                    `timestamp` = ?,
-                    `status`	= ?,
-                    `name` = ?,
-                    `phases` = ?
-                ", array(
-                    $message->id,
-                    $dbserver->serverId,
-                    time(),
-                    'running',
-                    $message->name,
-                    json_encode($message->phases)
-                ));
-            } catch (Exception $e) {}
-        } elseif ($message instanceof Scalr_Messaging_Msg_OperationProgress) {
-            try {
-
-                $opName = $this->db->GetOne("SELECT name FROM server_operations WHERE id = ? LIMIT 1", array($message->id));
-                if (!$opName || ($opName != 'Initialization' && $opName != 'Grow MySQL/Percona data volume'))
-                    return;
-
-                if ($message->warning) {
-                    $msg = $message->warning->message;
-                    $trace = $message->warning->trace;
-                    $handler = $message->warning->handler;
-                }
-
-                $this->db->Execute("INSERT INTO server_operation_progress SET
-                    `operation_id` = ?,
-                    `timestamp` = ?,
-                    `phase` = ?,
-                    `step` = ?,
-                    `status` = ?,
-                    `message`= ?,
-                    `trace` = ?,
-                    `handler` = ?,
-                    `progress` = ?,
-                    `stepno` = ?
-                    ON DUPLICATE KEY UPDATE status = ?, progress = ?, trace = ?, handler = ?, message = ?
-                ", array(
-                    $message->id,
-                    $message->getTimestamp(),
-                    $message->phase,
-                    $message->step,
-                    $message->status,
-                    $msg,
-                    $trace,
-                    $handler,
-                    $message->progress,
-                    $message->stepno,
-                    //
-                    $message->status,
-                    $message->progress,
-                    $trace,
-                    $handler,
-                    $msg
-                ));
-            } catch (Exception $e) {}
-        }*/
+        }
     }
 }

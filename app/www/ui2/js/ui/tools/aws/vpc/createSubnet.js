@@ -1,44 +1,25 @@
 Scalr.regPage('Scalr.ui.tools.aws.vpc.createSubnet', function (loadParams, moduleParams) {
-	var form = Ext.create('Ext.form.Panel', {
+	var form = Scalr.utils.Window({
+        xtype: 'form',
 		title: 'Create VPC subnet',
 		fieldDefaults: {
 			anchor: '100%'
 		},
 		scalrOptions: {
-			modal: true
+			modalWindow: true
 		},
 		width: 600,
         defaults: {
-            labelWidth: 120
+            labelWidth: 130
         },
         bodyCls: 'x-container-fieldset x-fieldset-no-bottom-padding',
 		items: [{
-            xtype: 'combo',
+            xtype: 'textfield',
             name: 'vpcId',
-            emptyText: 'Please select a VPC ID',
-            editable: false,
             fieldLabel: 'VPC ID',
+            readOnly: true,
             hideInputOnReadOnly: true,
-            queryCaching: false,
-            clearDataBeforeQuery: true,
-            store: {
-                fields: [ 'id', 'name', 'info' ],
-                proxy: {
-                    type: 'cachedrequest',
-                    url: '/platforms/ec2/xGetVpcList',
-                    root: 'vpc',
-                    ttl: 1,
-                    params: {cloudLocation: loadParams['cloudLocation']}
-                }
-            },
-            valueField: 'id',
-            displayField: 'name',
-            allowBlank: false,
-            listeners: {
-                change: function(field, value) {
-                    this.next('[name="routeTableId"]').store.proxy.params['vpcId'] = value;
-                }
-            }
+            value: loadParams['vpcId']
         },{
             xtype: 'textfield',
             name: 'name',
@@ -47,7 +28,7 @@ Scalr.regPage('Scalr.ui.tools.aws.vpc.createSubnet', function (loadParams, modul
             xtype: 'combo',
             name: 'availZone',
             fieldLabel: 'Availability zone',
-            valueField: 'id',
+            valueField: 'zoneId',
             displayField: 'name',
 
             editable: false,
@@ -57,7 +38,7 @@ Scalr.regPage('Scalr.ui.tools.aws.vpc.createSubnet', function (loadParams, modul
             value: '',
             emptyText: 'AWS-chosen',
             store: {
-                fields: [ 'id', 'name' ],
+                fields: [ 'id', 'name', {name: 'zoneId', mapping: 'id' }],
                 proxy: {
                     type: 'cachedrequest',
                     url: '/platforms/ec2/xGetAvailZones',
@@ -70,7 +51,8 @@ Scalr.regPage('Scalr.ui.tools.aws.vpc.createSubnet', function (loadParams, modul
             name: 'subnet',
             fieldLabel: 'CIDR block',
             emptyText: 'eg. 10.0.0.0/24',
-            allowBlank: false
+            allowBlank: false,
+            value: moduleParams['subnet']
         },{
             xtype: 'combo',
             name: 'routeTableId',
@@ -79,29 +61,19 @@ Scalr.regPage('Scalr.ui.tools.aws.vpc.createSubnet', function (loadParams, modul
             displayField: 'id',
             emptyText: 'VPC default',
 
-            //editable: false,
             queryCaching: false,
             minChars: 0,
-            queryDelay: 10,
-            clearDataBeforeQuery: true,
-            restoreValueOnBlur: true,
+            forceSelection: true,
             store: {
                 fields: [ 'id', 'name', 'main', 'type' ],
                 proxy: {
                     type: 'cachedrequest',
                     url: '/tools/aws/vpc/xListRoutingTables',
-                    params: {cloudLocation: loadParams['cloudLocation']},
+                    params: {
+                        cloudLocation: loadParams['cloudLocation'],
+                        vpcId: loadParams['vpcId']
+                    },
                     filterFields: ['id', 'name']
-                }
-            },
-            listeners: {
-                beforequery: function() {
-                    var vpcId = this.prev('[name="vpcId"]');
-                    if (!vpcId.getValue()) {
-                        this.collapse();
-                        Scalr.message.InfoTip('Select VPC ID first.', vpcId.inputEl);
-                        return false;
-                    }
                 }
             },
             listConfig: {
@@ -141,7 +113,7 @@ Scalr.regPage('Scalr.ui.tools.aws.vpc.createSubnet', function (loadParams, modul
 								if (data['subnet']) {
 									Scalr.event.fireEvent('update', '/tools/aws/vpc/createSubnet', data['subnet']);
 								}
-								Scalr.event.fireEvent('close');
+								form.close();
 							}
 						});
 					}
@@ -150,20 +122,11 @@ Scalr.regPage('Scalr.ui.tools.aws.vpc.createSubnet', function (loadParams, modul
 				xtype: 'button',
 				text: 'Cancel',
 				handler: function() {
-					Scalr.event.fireEvent('close');
+					form.close();
 				}
 			}]
 		}]
 	});
-
-	form.getForm().setValues({
-        vpcId: loadParams['vpcId'],
-		subnet: moduleParams['subnet']
-	});
-
-    if (loadParams['vpcId']) {
-        form.getForm().findField('vpcId').setReadOnly(true);
-    }
 
 	return form;
 });

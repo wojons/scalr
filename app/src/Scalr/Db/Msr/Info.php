@@ -157,30 +157,6 @@ abstract class Scalr_Db_Msr_Info
         $fsType = $this->dbFarmRole->GetSetting(Scalr_Db_Msr::DATA_STORAGE_FSTYPE);
         if ($fsType)
             $volumeConfig->fstype = $fsType;
-
-        //Tags
-        try {
-            $tags = array(
-                "scalr-env-id"  => $this->dbServer->envId,
-                "scalr-owner" => $this->dbServer->GetFarmObject()->createdByUserEmail,
-                "scalr-farm-id" => $this->dbServer->farmId,
-                "scalr-farm-role-id" => $this->dbServer->farmRoleId,
-                "scalr-server-id" => $this->dbServer->serverId
-            );
-        
-            $governance = new \Scalr_Governance($this->dbFarmRole->GetFarmObject()->EnvID);
-            $gTags = (array)$governance->getValue('ec2', 'aws.tags');
-            if (count($gTags) > 0) {
-                foreach ($gTags as $tKey => $tValue) {
-                    if ($tKey == 'Name')
-                        continue;
-                    $tags[$tKey] = $this->dbServer->applyGlobalVarsToValue($tValue);
-                }
-            }
-        
-            $volumeConfig->tags = $tags;
-        } catch (\Exception $e) {}
-        //
         
         $type = $volumeConfig->type;
 
@@ -202,6 +178,7 @@ abstract class Scalr_Db_Msr_Info
                     $dsk->type = MYSQL_STORAGE_ENGINE::GCE_PERSISTENT;
 
                 $dsk->volumeType = $this->dbFarmRole->GetSetting(Scalr_Db_Msr::DATA_STORAGE_RAID_EBS_DISK_TYPE);
+                $dsk->tags = $this->dbServer->getAwsTags();
 
                 if ($dsk->volumeType == 'io1')
                     $dsk->iops = $this->dbFarmRole->GetSetting(Scalr_Db_Msr::DATA_STORAGE_RAID_EBS_DISK_IOPS);
@@ -220,6 +197,7 @@ abstract class Scalr_Db_Msr_Info
         } else if ($volumeConfig->type == MYSQL_STORAGE_ENGINE::GCE_PERSISTENT) {
 
             $volumeConfig->size = $this->dbFarmRole->GetSetting(Scalr_Db_Msr::DATA_STORAGE_GCED_SIZE);
+            $volumeConfig->diskType = $this->dbFarmRole->GetSetting(Scalr_Db_Msr::DATA_STORAGE_GCED_TYPE);
 
         } else if ($volumeConfig->type == MYSQL_STORAGE_ENGINE::EPH) {
 
@@ -274,6 +252,7 @@ abstract class Scalr_Db_Msr_Info
             $volumeConfig->size = $this->dbFarmRole->GetSetting(Scalr_Db_Msr::DATA_STORAGE_EBS_SIZE);
             $volumeConfig->volumeType = $this->dbFarmRole->GetSetting(Scalr_Db_Msr::DATA_STORAGE_EBS_TYPE);
             $volumeConfig->encrypted = (int)$this->dbFarmRole->GetSetting(Scalr_Db_Msr::DATA_STORAGE_EBS_ENCRYPTED);
+            $volumeConfig->tags = $this->dbServer->getAwsTags();
             
             if ($volumeConfig->volumeType == 'io1')
                 $volumeConfig->iops = $this->dbFarmRole->GetSetting(Scalr_Db_Msr::DATA_STORAGE_EBS_IOPS);

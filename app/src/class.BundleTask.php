@@ -1,6 +1,7 @@
 <?php
 
 use Scalr\Model\Entity\Image;
+use Scalr\Model\Entity\Os;
 
 class ServerSnapshotDetails
 {
@@ -43,6 +44,7 @@ class BundleTask
     public $osFamily;
     public $osName;
     public $osVersion;
+    public $osId;
 
     /**
      * @var \ADODB_mysqli
@@ -86,6 +88,7 @@ class BundleTask
         'os_family'		=> 'osFamily',
         'os_name'		=> 'osName',
         'os_version'	=> 'osVersion',
+        'os_id'         => 'osId',
         'created_by_id' => 'createdById',
         'created_by_email' => 'createdByEmail'
     );
@@ -191,7 +194,6 @@ class BundleTask
      */
     public function createImageEntity()
     {
-        $os = $this->getOsDetails();
         $snapshot = $this->getSnapshotDetails();
 
         $image = new Image();
@@ -200,10 +202,6 @@ class BundleTask
         $image->bundleTaskId = $this->id;
         $image->platform = $this->platform;
         $image->cloudLocation = $this->cloudLocation;
-        $image->os = $os->name;
-        $image->osFamily = $os->family;
-        $image->osGeneration = $os->generation;
-        $image->osVersion = $os->version;
         $image->createdById = $this->createdById;
         $image->createdByEmail = $this->createdByEmail;
         $image->architecture = is_null($snapshot['os']->arch) ? 'x86_64' : $snapshot['os']->arch;
@@ -215,6 +213,7 @@ class BundleTask
         if (!$image->name)
             $image->name = $this->roleName . '-' . date('YmdHi');
 
+        $image->osId = $this->osId;
         $image->save();
 
         if ($snapshot['software']) {
@@ -236,21 +235,13 @@ class BundleTask
         return unserialize($this->metaData);
     }
 
-    public function getOsIds()
-    {
-        $info = $this->getOsDetails();
-        
-        //TODO: Return all OS ids that match.
-    }
-    
     public function getOsDetails()
     {
         $retval = new stdClass();
-
         switch ($this->osFamily) {
             case "windows":
                 $retval->family = "windows";
-                
+
                 if (strpos($this->osName, '2008Server') === 0)
                     $generation = '2008';
                 elseif (strpos($this->osName, '2012Server') === 0)
@@ -259,10 +250,10 @@ class BundleTask
                 $retval->generation = $generation;
                 $retval->version = $this->osVersion;
                 $retval->name = "Windows {$generation}";
-                
+
                 if (substr($this->osName, -2) == 'R2')
                     $retval->name .= " R2";
-                
+
                 break;
             case "ubuntu":
                 $retval->family = $this->osFamily;
@@ -273,7 +264,7 @@ class BundleTask
             case "centos":
                 $retval->family = $this->osFamily;
                 $retval->generation = (int)substr($this->osVersion, 0, 1);
-                $retval->version = "{$retval->generation}.X";
+                $retval->version = $this->osVersion;
                 $retval->name = "CentOS {$retval->version} Final";
                 break;
             case "amazon":
@@ -282,16 +273,10 @@ class BundleTask
                 $retval->version = $this->osVersion;
                 $retval->name = "Amazon Linux {$this->osName}";
                 break;
-            case "gcel":
-                $retval->family = $this->osFamily;
-                $retval->generation = $this->osVersion;
-                $retval->version = $this->osVersion;
-                $retval->name = "GCEL 12.04";
-                break;
             case "oel":
                 $retval->family = $this->osFamily;
                 $retval->generation = (int)substr($this->osVersion, 0, 1);
-                $retval->version = "{$retval->generation}.X";
+                $retval->version = $this->osVersion;
                 $retval->name = "Oracle Enterprise Linux Server {$this->osVersion}";
                 if ($retval->generation == 5)
                     $retval->name .= " Tikanga";
@@ -301,7 +286,7 @@ class BundleTask
             case "redhat":
                 $retval->family = $this->osFamily;
                 $retval->generation = (int)substr($this->osVersion, 0, 1);
-                $retval->version = "{$retval->generation}.X";
+                $retval->version = $this->osVersion;
                 $retval->name = "Redhat {$this->osVersion}";
                 if ($retval->generation == 5)
                     $retval->name .= " Tikanga";
@@ -311,7 +296,7 @@ class BundleTask
             case "scientific":
                 $retval->family = $this->osFamily;
                 $retval->generation = (int)substr($this->osVersion, 0, 1);
-                $retval->version = "{$retval->generation}.X";
+                $retval->version = $this->osVersion;
                 $retval->name = "Scientific {$this->osVersion}";
                 if ($retval->generation == 5)
                     $retval->name .= " Boron";
@@ -321,7 +306,7 @@ class BundleTask
             case "debian":
                 $retval->family = $this->osFamily;
                 $retval->generation = (int)substr($this->osVersion, 0, 1);
-                $retval->version = "{$retval->generation}.X";
+                $retval->version = $this->osVersion;
                 $retval->name = "Debian {$this->osVersion}";
                 if ($retval->generation == 5)
                     $retval->name .= " Lenny";
@@ -330,6 +315,21 @@ class BundleTask
                 elseif ($retval->generation == 7)
                     $retval->name .= " Wheezy";
                 break;
+            default:
+                $retval->generation = '';
+                $retval->version = '';
+                $retval->name = $this->osName;
+        }
+
+        $osIds = Os::findIdsBy($retval->family, $retval->generation, $retval->version);
+        if (count($osIds) > 0) {
+            $retval->id = $osIds[0];
+        } else {
+            $osIds = Os::findIdsBy($retval->family, $retval->generation, NULL);
+            if (count($osIds) > 0) {
+                $retval->id = $osIds[0];
+            } else
+                $retval->id = Os::UNKNOWN_OS;
         }
 
         return $retval;
@@ -348,6 +348,11 @@ class BundleTask
         $this->snapshotId = $snapshotId;
         $this->status = SERVER_SNAPSHOT_CREATION_STATUS::CREATING_ROLE;
         $this->setMetaData($metaData);
+
+        if (!$this->osId) {
+            $os = $this->getOsDetails();
+            $this->osId = $os->id;
+        }
 
         $this->createImageEntity();
 
@@ -538,5 +543,43 @@ class BundleTask
         ]);
 
         return $db->Affected_Rows();
+    }
+
+    /**
+     * Designates the type of the bundle task
+     *
+     * It sets the type of bundle task to ec2.ebs-hvm to bundle in AWS way
+     * according to the OS version
+     *
+     * @param    string   $platform    The name of the cloud platform
+     * @param    string   $family      OS family
+     * @param    string   $generation  optional OS generation. If generation is not provided it will use version instead.
+     * @param    string   $version     optional OS version. If generation is not provided it will use version instead.
+     */
+    public function designateType($platform, $family, $generation = null, $version = '')
+    {
+        if ($platform == SERVER_PLATFORMS::EC2) {
+            switch (true) {
+                case in_array($family, ['redhat', 'oel', 'scientific']) :
+                case $family == 'centos' && ($generation == '7' || strpos($version, '7') === 0) :
+                case $family == 'debian' && ($generation == '8' || strpos($version, '8') === 0) :
+                case $family == 'amazon' && ($generation == '2014.09' || $version == '2014.09') :
+                    $this->bundleType = SERVER_SNAPSHOT_CREATION_TYPE::EC2_EBS_HVM;
+                    break;
+            }
+        }
+    }
+
+    /**
+     * @return Image
+     */
+    public function getImageEntity()
+    {
+        return Image::findOne([
+            ['id' => $this->snapshotId],
+            ['envId' => $this->envId],
+            ['platform' => $this->platform],
+            ['cloudLocation' => $this->cloudLocation]
+        ]);
     }
 }

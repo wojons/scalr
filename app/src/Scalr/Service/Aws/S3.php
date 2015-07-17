@@ -69,15 +69,19 @@ class S3 extends AbstractService implements ServiceInterface
     public function getUrl()
     {
         $aws = $this->getAws();
+
         if ($aws instanceof Eucalyptus) {
             $url = rtrim($aws->getUrl('s3'), '/ ');
         } else {
             $region = $this->getAws()->getRegion();
-            if ($region == Aws::REGION_CN_NORTH_1)
+
+            if (strpos($region, 'cn-') === 0) {
                 $url = 's3.' . $region . '.amazonaws.com.cn';
-            else
+            } else {
                 $url = 's3' . ($region && $region != Aws::REGION_US_EAST_1 ? '-' . $region : '') . '.amazonaws.com';
+            }
         }
+
         return $url;
     }
 }

@@ -9,27 +9,17 @@ Scalr.regPage('Scalr.ui.logs.api', function (loadParams, moduleParams) {
 	});
 
 	return Ext.create('Ext.grid.Panel', {
-		title: 'Logs &raquo; API Log',
 		scalrOptions: {
-			'reload': false,
-			'maximize': 'all'
+			reload: false,
+			maximize: 'all',
+            menuTitle: 'API Log',
+            menuHref: '#/logs/api',
+            menuFavorite: true
 		},
 		store: store,
 		stateId: 'grid-logs-api-view',
 		stateful: true,
-		plugins: {
-			ptype: 'gridstore'
-		},
-
-		tools: [{
-			xtype: 'gridcolumnstool'
-		}, {
-			xtype: 'favoritetool',
-			favorite: {
-				text: 'API Log',
-				href: '#/logs/api'
-			}
-		}],
+        plugins: [ 'gridstore', 'applyparams' ],
 
 		viewConfig: {
 			emptyText: 'Nothing found',
@@ -42,10 +32,13 @@ Scalr.regPage('Scalr.ui.logs.api', function (loadParams, moduleParams) {
 			{ header: 'Action', flex: 1, dataIndex: 'action', sortable: true },
 			{ header: 'IP address', flex: 1, dataIndex: 'ipaddress', sortable: true },
 			{
-				xtype: 'optionscolumn2',
-				menu: [
-					{ text:'Details', href: "#/logs/apiLogEntryDetails?transactionId={transaction_id}" }
-				]
+				xtype: 'optionscolumn',
+				menu: [{
+                    text:'Details',
+                    iconCls: 'x-menu-icon-information',
+                    showAsQuickAction: true,
+                    href: "#/logs/apiLogEntryDetails?transactionId={transaction_id}"
+                }]
 			}
 		],
 

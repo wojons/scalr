@@ -1,6 +1,6 @@
 Scalr.regPage('Scalr.ui.servers.dashboard', function (loadParams, moduleParams) {
     var showInstanceHealth = moduleParams['general']['status'] === 'Running';
-    
+
 	var panel = Ext.create('Ext.form.Panel', {
 		scalrOptions: {
 			'modal': true
@@ -10,16 +10,18 @@ Scalr.regPage('Scalr.ui.servers.dashboard', function (loadParams, moduleParams) 
         layout: 'auto',
         overflowX: 'hidden',
         bodyStyle: 'overflow-x:hidden!important',
+        preserveScrollPosition: true,
         items: [{
             xtype: 'button',
             itemId: 'serverOptions',
-            width: 100,
+            width: 120,
             text: 'Actions',
             style: 'position:absolute;right:32px;top:21px;z-index:2',
             menuAlign: 'tr-br',
             menu: {
                 xtype: 'servermenu',
                 hideOptionInfo: true,
+                moduleParams: moduleParams,
                 listeners: {
                     beforeshow: {
                         fn: function() {
@@ -65,7 +67,7 @@ Scalr.regPage('Scalr.ui.servers.dashboard', function (loadParams, moduleParams) 
                         name: 'farm_name',
                         fieldLabel: 'Farm',
                         renderer: function (value) {
-                            return '<a href="#/farms/view?farmId=' + moduleParams.general['farm_id'] + '">' + value + '</a>';
+                            return '<a href="#/farms?farmId=' + moduleParams.general['farm_id'] + '">' + value + '</a>';
                         }
                     },{
                         name: 'role',
@@ -73,7 +75,7 @@ Scalr.regPage('Scalr.ui.servers.dashboard', function (loadParams, moduleParams) 
                         renderer: function(value, comp) {
                             var name = value.name;
                             if (value.id) {
-                                name = '<a href="#/roles/manager?roleId=' + value.id + '">' + name + '</a>';
+                                name = '<a href="#/roles?roleId=' + value.id + '">' + name + '</a>';
                             }
                             return '<img src="' + Ext.BLANK_IMAGE_URL + '" class="x-icon-platform-small x-icon-platform-small-' + value.platform + '"/>&nbsp;&nbsp;' + name;
                         }
@@ -81,7 +83,7 @@ Scalr.regPage('Scalr.ui.servers.dashboard', function (loadParams, moduleParams) 
                         name: 'os',
                         fieldLabel: 'Operating system',
                         renderer: function(value, comp) {
-                            return '<img src="' + Ext.BLANK_IMAGE_URL + '" class="x-icon-osfamily-small x-icon-osfamily-small-' + value.family + '"/>&nbsp;&nbsp;' + value.title;
+                            return value ? '<img src="' + Ext.BLANK_IMAGE_URL + '" class="x-icon-osfamily-small x-icon-osfamily-small-' + value.family + '"/>&nbsp;&nbsp;' + value.name : 'unknown';
                         }
                     },{
                         name: 'behaviors',
@@ -102,7 +104,7 @@ Scalr.regPage('Scalr.ui.servers.dashboard', function (loadParams, moduleParams) 
                     items: [{
                         name: 'status',
                         fieldLabel: 'Status',
-                        width: 280,
+                        width: 300,
                         renderer: function(value) {
                             return Scalr.ui.ColoredStatus.getHtml({
                                 type: 'server',
@@ -125,19 +127,19 @@ Scalr.regPage('Scalr.ui.servers.dashboard', function (loadParams, moduleParams) 
                         fieldLabel: 'Instance type'
                     }, {
                         name: 'imageId',
-                        fieldLabel: 'Image ID',
-                        icons: {
-                            question: true
+                        fieldLabel: 'Cloud Image ID',
+                        plugins: {
+                            ptype: 'fieldicons',
+                            position: 'outer',
+                            icons: [{id: 'warning', hidden: true, tooltip: "This Server was launched using an Image that is no longer used in its Role's configuration."}]
                         },
                         renderer: function(value) {
-                            return '<a href="#/images/view?id=' + value + '">' + value + '</a>';
+                            return '<a href="#/images?hash=' + moduleParams['general']['imageHash'] + '">' + value + '</a>';
                         },
-                        iconsPosition: 'outer',
-                        questionTooltip: "This Server was launched using an Image that is no longer used in its Role's configuration.",
                         listeners: {
                             afterrender: function() {
                                 if (moduleParams['general']['imageIdDifferent'])
-                                    this.toggleIcon('question', true);
+                                    this.toggleIcon('warning', true);
                             }
                         }
                     }]
@@ -159,6 +161,19 @@ Scalr.regPage('Scalr.ui.servers.dashboard', function (loadParams, moduleParams) 
             }]
         },{
             xtype: 'container',
+            itemId: 'notScalarizedWarning',
+            cls: 'x-fieldset-separator-top',
+            hidden: true,
+            items: {
+                xtype: 'displayfield',
+                margin: 0,
+                width: '100%',
+                itemId: 'healthNotAvailable',
+                value: '<b>Storage</b>, <b>Scalr Agent</b> and <b>Instance health</b> information available only on servers with scalr agent installed',
+                cls: 'x-form-field-warning x-form-field-warning-fit'
+            }
+        },{
+            xtype: 'container',
             itemId: 'storageAndScalarizr',
             cls: 'x-fieldset-separator-top',
             layout: {
@@ -175,14 +190,23 @@ Scalr.regPage('Scalr.ui.servers.dashboard', function (loadParams, moduleParams) 
                 cls: 'x-fieldset-separator-none',
                 loadStorages: function() {
                     var me = this;
-                    Scalr.Request({
-                        url: '/servers/xGetStorageDetails/',
-                        params: {serverId: loadParams['serverId']},
-                        success: function(data){
-                            if (!me.isDestroyed && data.data) {
+
+                    if (!Ext.isEmpty(me.getEl())) {
+                        me.mask('');
+                    } else {
+                        me.on('boxready', function () {
+                            me.mask('');
+                        });
+                    }
+
+                    var onSuccess = function (data) {
+                        if (!me.isDestroyed) {
+                            me.unmask();
+
+                            if (data.status === 'available' && !Ext.isEmpty(data.data)) {
                                 var items = [];
-                                Ext.Object.each(data.data, function(key, value){
-                                    items[ key === '/' ? 'unshift' : 'push' ]({
+                                Ext.Object.each(data.data, function(key, value) {
+                                    items[key === '/' ? 'unshift' : 'push']({
                                         xtype: 'progressfield',
                                         fieldLabel: key + (value && value.fstype ? ' (' + value.fstype + ')' : ''),
                                         labelWidth: 200,
@@ -193,15 +217,48 @@ Scalr.regPage('Scalr.ui.servers.dashboard', function (loadParams, moduleParams) 
                                         emptyText: 'Loading...',
                                         fieldCls: 'x-form-progress-field',
                                         value: value ? {
-                                            total: Ext.util.Format.round(value.total*1/1024/1024, 1),
-                                            value: Ext.util.Format.round((value.total*1 - value.free)/1024/1024, 1)
+                                            total: Ext.util.Format.round(value.total * 1 / 1024 / 1024, 1),
+                                            value: Ext.util.Format.round((value.total * 1 - value.free) / 1024 / 1024, 1)
                                         } : 'Unknown size'
                                     });
                                 });
                                 me.add(items);
+                            } else if (data.status === 'notAvailable' && !Ext.isEmpty(data.error)) {
+                                me.add({
+                                    xtype: 'displayfield',
+                                    value: data.error,
+                                    renderer: function (value) {
+                                        return '<span style="color:red">' + value + '</span>';
+                                    }
+                                });
                             }
                         }
-                    });
+                    };
+
+                    var onFailure = function () {
+                        if (!me.isDestroyed) {
+                            me.unmask();
+                            me.add({
+                                xtype: 'displayfield',
+                                value: 'Unable to load data from server.',
+                                renderer: function (value) {
+                                    return '<span style="color:red">' + value + '</span>';
+                                }
+                            });
+                        }
+                    };
+
+                    Ext.create('Scalr.ScalarizrRequest')
+                        .on({
+                            success: onSuccess,
+                            failure: onFailure
+                        })
+                        .request({
+                            url: '/servers/xGetStorageDetails/',
+                            params: {
+                                serverId: loadParams.serverId
+                            }
+                        });
                 }
             },{
                 xtype: 'toolfieldset',
@@ -214,7 +271,7 @@ Scalr.regPage('Scalr.ui.servers.dashboard', function (loadParams, moduleParams) 
                     tooltip: 'Refresh scalr agent status',
                     style: 'margin-left:12px',
                     handler: function () {
-                        this.refreshStatus();
+                        this.refreshStatus(1);
                     }
                 }],
                 abortRequest: function() {
@@ -224,24 +281,48 @@ Scalr.regPage('Scalr.ui.servers.dashboard', function (loadParams, moduleParams) 
                     }
                 },
                 requestTimeout: 30, //seconds
-                refreshStatus: function() {
+                refreshStatus: function(requestLimit) {
                     var me = this;
-                    fn = function() {
-                        me.mask('Refreshing agent status...');
-                        me.request = Scalr.Request({
-                            url: '/servers/xGetServerRealStatus/',
-                            params: {serverId: loadParams['serverId'], timeout: me.requestTimeout},
-                            success: function(data){
-                                if (!me.isDestroyed) {
-                                    me.unmask();
-                                    me.showStatus(data['scalarizr']);
-                                    if (Ext.isString(me.error) && me.error.indexOf('Unable to perform request to update client: Timeout was reached') !== -1) {
-                                        me.requestTimeout += 15;
-                                    }
+                    var fn = function() {
+                        me.mask('');
+
+                        var onSuccess = function (data) {
+                            if (!me.isDestroyed) {
+                                me.unmask();
+                                me.showStatus(data['scalarizr']);
+                                if (Ext.isString(me.error) && me.error.indexOf('Unable to perform request to update client: Timeout was reached') !== -1) {
+                                    me.requestTimeout += 15;
                                 }
-                                delete me.request;
                             }
-                        });
+                            delete me.request;
+                        };
+
+                        var onFailure = function () {
+                            if (!me.isDestroyed) {
+                                me.unmask();
+                                me.down('[name="statusNotAvailable"]')
+                                    .show()
+                                    .setValue(
+                                        '<span style="color:red">Unable to load data from server.</span>'
+                                    );
+                            }
+                        };
+
+                        Ext.create('Scalr.ScalarizrRequest', { requestLimit: !Ext.isDefined(requestLimit) ? 3 : requestLimit })
+                            .on({
+                                request: function (request) {
+                                    me.request = request;
+                                },
+                                success: onSuccess,
+                                failure: onFailure
+                            })
+                            .request({
+                                url: '/servers/xGetServerRealStatus/',
+                                params: {
+                                    serverId: loadParams['serverId'],
+                                    timeout: me.requestTimeout
+                                }
+                            });
                     };
                     if (me.rendered) {
                         fn();
@@ -251,24 +332,16 @@ Scalr.regPage('Scalr.ui.servers.dashboard', function (loadParams, moduleParams) 
                 },
                 showStatus: function(data) {
                     switch (data['status']) {
-                        case 'upgradeUpdClient':
-                            this.down('#status').hide();
-                            this.down('[name="statusNotAvailable"]').hide();
-                            this.down('#upgradeUpdClientBtn').show();
-                        break;
                         case 'statusNotAvailable':
-                            this.down('#upgradeUpdClientBtn').hide();
                             this.down('#status').hide();
                             this.down('[name="statusNotAvailable"]').show().setValue(data['error']);
                         break;
                         case 'statusNoCache':
-                            this.down('#upgradeUpdClientBtn').hide();
                             this.down('#status').hide();
                             this.down('[name="statusNotAvailable"]').show().setValue('&nbsp;');
                         break;
                         break;
                         default:
-                            this.down('#upgradeUpdClientBtn').hide();
                             this.down('[name="statusNotAvailable"]').hide();
                             this.down('#status').show();
                             this.setFieldValues(data);
@@ -289,7 +362,7 @@ Scalr.regPage('Scalr.ui.servers.dashboard', function (loadParams, moduleParams) 
                         name: 'status',
                         fieldLabel: 'Scalarizr status',
                         renderer: function(value) {
-                            return '<span style="font-weight:bold;color:' + (value === 'running' ? '#008000' : 'red') + '">' + Ext.String.capitalize(value) + '</span>'
+                            return '<b style="color:' + (value === 'running' ? '#008000' : 'red') + '">' + Ext.String.capitalize(value) + '</b>'
                         }
                     },{
                         name: 'version',
@@ -303,13 +376,13 @@ Scalr.regPage('Scalr.ui.servers.dashboard', function (loadParams, moduleParams) 
                         renderer: function(value) {
                             var html = value.date ? (value.date + '&nbsp;&nbsp;&nbsp;') : '';
                             if (value.error) {
-                                html += '<span style="font-weight:bold;color:#C00000">Failed';
-                                html += ' <img data-qtip="'+Ext.String.htmlEncode(value.error)+'" src="' + Ext.BLANK_IMAGE_URL + '" class="x-icon-question" style="cursor: help; height: 16px;position:relative;top:2px">';
-                                html += '</span>';
+                                html += '<b style="color:#C00000">Failed';
+                                html += ' &nbsp;<img data-qtip="'+Ext.String.htmlEncode(value.error)+'" src="' + Ext.BLANK_IMAGE_URL + '" class="x-icon-error" style="position:relative;top:-2px">';
+                                html += '</b>';
                             } else if(!value.date) {
-                                html += '<span style="font-weight:bold;">Never</span>';
+                                html += '<b>Never</b>';
                             } else {
-                                html += '<span style="font-weight:bold;color:#008000;">Success</span>';
+                                html += '<b style="color:#008000;">Success</b>';
                             }
                             return html;
                         }
@@ -327,19 +400,19 @@ Scalr.regPage('Scalr.ui.servers.dashboard', function (loadParams, moduleParams) 
                             return html;
                         }
                     },{
-                        xtype: 'container',
+                        xtype: 'fieldcontainer',
                         layout: 'hbox',
                         defaults: {
                             width: 190,
                             height: 32
                         },
-                        margin: '12 0 0 0',
                         items: [{
                             xtype: 'button',
                             itemId: 'btnUpdateScalarizr',
                             text: 'Update scalarizr now',
                             handler: function() {
                                 Scalr.Request({
+                                    timeout: 105000,
                                     confirmBox: {
                                         type: 'action',
                                         msg: 'Are you sure want to update scalarizr right now?'
@@ -352,7 +425,7 @@ Scalr.regPage('Scalr.ui.servers.dashboard', function (loadParams, moduleParams) 
                                     },
                                     url: '/servers/xSzrUpdate/',
                                     params: {serverId: loadParams['serverId']},
-                                    success: function(){
+                                    success: function () {
                                         Scalr.event.fireEvent('refresh');
                                     }
                                 });
@@ -373,33 +446,13 @@ Scalr.regPage('Scalr.ui.servers.dashboard', function (loadParams, moduleParams) 
                                     },
                                     url: '/servers/xSzrRestart/',
                                     params: {serverId: loadParams['serverId']},
-                                    success: function(){
+                                    success: function () {
                                         Scalr.event.fireEvent('refresh');
                                     }
                                 });
                             }
                         }]
                     }]
-                },{
-                    xtype: 'button',
-                    itemId: 'upgradeUpdClientBtn',
-                    hidden: true,
-                    text: 'Upgrade scalarizr upd-client',
-                    height: 32,
-                    flex: 1,
-                    handler: function() {
-                        Scalr.Request({
-                            processBox: {
-                                type: 'action',
-                                msg: 'Updating scalarizr upd-client to the latest version ...'
-                            },
-                            url: '/servers/xUpdateUpdateClient/',
-                            params: {serverId: loadParams['serverId']},
-                            success: function(){
-                                //Scalr.event.fireEvent('refresh');
-                            }
-                        });
-                    }
                 },{
                     xtype: 'displayfield',
                     hidden: true,
@@ -473,7 +526,6 @@ Scalr.regPage('Scalr.ui.servers.dashboard', function (loadParams, moduleParams) 
             },
             items: [{
                 xtype: 'grid',
-                cls: 'x-grid-shadow',
                 store: {
                     fields: [ 'id', 'server_id', 'farm_id', 'farm_name', 'farm_roleid',
                         'role_name', 'server_index', 'status', 'metric', 'details', 'dtoccured',
@@ -485,7 +537,7 @@ Scalr.regPage('Scalr.ui.servers.dashboard', function (loadParams, moduleParams) 
                             status: 'failed',
                             serverId: loadParams['serverId']
                         },
-                        url: '/alerts/xListAlerts/'
+                        url: '/alerts/xList'
                     },
                     remoteSort: true,
                     listeners: {
@@ -510,7 +562,7 @@ Scalr.regPage('Scalr.ui.servers.dashboard', function (loadParams, moduleParams) 
                     { header: "Check", flex: 1, dataIndex: 'metric', sortable: true },
                     { header: "Occured", width: 160, dataIndex: 'dtoccured', sortable: true },
                     { header: "Last check", width: 160, dataIndex: 'dtlastcheck', sortable: true, xtype: 'templatecolumn', tpl:
-                        '<tpl if="dtlastcheck">{dtlastcheck}<tpl else><img src="/ui2/images/icons/false.png" /></tpl>'
+                        '<tpl if="dtlastcheck">{dtlastcheck}<tpl else>&mdash;</tpl>'
                     },
                     { header: "Details", flex: 1, dataIndex: 'details', sortable: true }
                 ]
@@ -561,39 +613,39 @@ Scalr.regPage('Scalr.ui.servers.dashboard', function (loadParams, moduleParams) 
 
             chartPreview.loadStatistics(hostUrl, params, callback);
 		},
-        
+
 		loadGeneralMetrics: function() {
-			var me = this,
-				serverId = moduleParams['general']['server_id'],
-				scrollTop = me.body.getScroll().top;
-			if (serverId) {
-				me.getForm().setValues({
-					server_load_average: null,
-					server_metrics_memory: null,
-					server_metrics_cpu: null
-				});
-				me.body.scrollTo('top', scrollTop);
-				Scalr.Request({
-					url: '/servers/xGetHealthDetails',
-					params: {
-						serverId: serverId
-					},
-					success: function (res) {
+            var me = this,
+                serverId = moduleParams['general']['server_id'],
+                scrollTop = me.body.getScroll().top;
+            if (serverId) {
+                me.getForm().setValues({
+                    server_load_average: null,
+                    server_metrics_memory: null,
+                    server_metrics_cpu: null
+                });
+                me.body.scrollTo('top', scrollTop);
+                Scalr.Request({
+                    url: '/servers/xGetHealthDetails',
+                    params: {
+                        serverId: serverId
+                    },
+                    success: function (res) {
                         if (me.isDestroyed) return;
                         me.suspendLayouts();
-						if (
+                        if (
                             serverId == moduleParams['general']['server_id'] &&
                             res.data['memory'] && res.data['cpu']
                         ) {
-							me.getForm().setValues({
-								server_load_average: res.data['la'],
-								server_metrics_memory: {
-									total: res.data['memory']['total']*1,
-									value: Ext.util.Format.round(res.data['memory']['total'] - res.data['memory']['free'], 2)
-								},
-								server_metrics_cpu: (100 - res.data['cpu']['idle'])/100
-							});
-						} else {
+                            me.getForm().setValues({
+                                server_load_average: res.data['la'],
+                                server_metrics_memory: {
+                                    total: res.data['memory']['total']*1,
+                                    value: Ext.util.Format.round(res.data['memory']['total'] - res.data['memory']['free'], 2)
+                                },
+                                server_metrics_cpu: (100 - res.data['cpu']['idle'])/100
+                            });
+                        } else {
                             me.getForm().setValues({
                                 server_load_average: 'not available',
                                 server_metrics_memory: 'not available',
@@ -602,7 +654,7 @@ Scalr.regPage('Scalr.ui.servers.dashboard', function (loadParams, moduleParams) 
                         }
                         me.resumeLayouts(false);
                         me.lgmDelayed = Ext.Function.defer(me.loadGeneralMetrics, 30000, me);
-					},
+                    },
                     failure: function() {
                         if (me.isDestroyed) return;
                         me.suspendLayouts();
@@ -613,9 +665,9 @@ Scalr.regPage('Scalr.ui.servers.dashboard', function (loadParams, moduleParams) 
                         });
                         me.resumeLayouts(false);
                     }
-				});
-			}
-		},
+                });
+            }
+        },
 
         listeners: {
             afterrender: function() {
@@ -638,7 +690,7 @@ Scalr.regPage('Scalr.ui.servers.dashboard', function (loadParams, moduleParams) 
     var generalCt = panel.down('#general');
     generalCt.setFieldValues(moduleParams['general']);
     generalCt.down('[name="hostname"]').setVisible(!!moduleParams['general']['hostname']);
-    
+
     var scalarizrCt = panel.down('#scalarizr');
     if (moduleParams['scalarizr'] !== undefined) {
         scalarizrCt.show();
@@ -647,20 +699,27 @@ Scalr.regPage('Scalr.ui.servers.dashboard', function (loadParams, moduleParams) 
     }
 
     var storageCt = panel.down('#storage');
-    if (/*moduleParams['storage']*/ moduleParams['scalarizr'] !== undefined) {
-        storageCt.show();
-        panel.down('#storage').loadStorages();
-    }
+    if (moduleParams['general']['isScalarized'] == 1) {
 
-    if (moduleParams['scalarizr'] === undefined/* && moduleParams['storage'] === undefined*/) {
+        if (/*moduleParams['storage']*/ moduleParams['scalarizr'] !== undefined) {
+            storageCt.show();
+            panel.down('#storage').loadStorages();
+        }
+
+        if (moduleParams['scalarizr'] === undefined/* && moduleParams['storage'] === undefined*/) {
+            panel.down('#storageAndScalarizr').hide();
+        }
+
+        if (!showInstanceHealth) {
+            panel.down('#instanceHealth').items.each(function() {
+                this.setVisible(this.itemId === 'healthNotAvailable');
+            });
+
+        }
+    } else {
         panel.down('#storageAndScalarizr').hide();
-    }
-
-    if (!showInstanceHealth) {
-        panel.down('#instanceHealth').items.each(function() {
-            this.setVisible(this.itemId === 'healthNotAvailable');
-        });
-
+        panel.down('#instanceHealth').hide();
+        panel.down('#notScalarizedWarning').show();
     }
     var cloudPropertiesCt = panel.down('#cloudProperties'),
         securityGroupsField = panel.down('[name="securityGroups"]'),
@@ -681,7 +740,7 @@ Scalr.regPage('Scalr.ui.servers.dashboard', function (loadParams, moduleParams) 
         } else {
             securityGroupsField.hide();
         }
-        
+
         if (moduleParams['cloudProperties']['Block storage']) {
         	blockStorageField.setValue(moduleParams['cloudProperties']['Block storage']);
         } else {
@@ -723,4 +782,143 @@ Scalr.regPage('Scalr.ui.servers.dashboard', function (loadParams, moduleParams) 
     }
 
 	return panel;
+});
+
+Ext.define('Scalr.RepeatingRequest', {
+    extend: 'Ext.Evented',
+
+    requestCount: 0,
+
+    requestLimit: 3,
+
+    timeout: 0,
+
+    step: 5000,
+
+    doNotHideErrorMessages: false,
+
+    setTimeout: function (timeout) {
+        var me = this;
+
+        me.timeout = timeout;
+
+        return me;
+    },
+
+    getTimeout: function () {
+        return this.timeout;
+    },
+
+    getRequestConfig: function () {
+        return Ext.clone(this.requestConfig);
+    },
+
+    doStep: function () {
+        var me = this;
+
+        me.setTimeout(me.getTimeout() + me.step);
+
+        me.requestConfig.hideErrorMessage = !me.doNotHideErrorMessages
+            ? me.requestLimit - me.requestCount !== 1
+            : false;
+
+        return me;
+    },
+
+    onSuccess: function (responseData) {
+        var me = this;
+
+        me.fireEvent('success', responseData);
+        me.destroy();
+
+        return me;
+    },
+
+    onFailure: function (responseData) {
+        var me = this;
+
+        me.requestCount++;
+
+        if (me.requestCount >= me.requestLimit) {
+            me.fireEvent('failure', responseData);
+            me.destroy();
+            return me;
+        }
+
+        me.doStep();
+
+        Ext.Function.defer(
+            me.doRequest,
+            me.getTimeout(),
+            me
+        );
+
+        return me;
+    },
+
+    doRequest: function () {
+        var me = this;
+
+        var request = Scalr.Request(me.getRequestConfig());
+
+        me.fireEvent('request', request);
+
+        return me;
+    },
+
+    request: function (config) {
+        var me = this;
+
+        me.requestConfig = Ext.apply(config, {
+            hideErrorMessage: !me.doNotHideErrorMessages,
+            success: me.onSuccess,
+            failure: me.onFailure,
+            scope: me
+        });
+
+        me.doRequest();
+
+        return me;
+    }
+});
+
+Ext.define('Scalr.ScalarizrRequest', {
+    extend: 'Scalr.RepeatingRequest',
+
+    doNotHideErrorMessages: true,
+
+    onSuccess: function (responseData) {
+        var me = this;
+
+        me.requestCount++;
+
+        var isScalarizrAvailable = !Ext.isEmpty(responseData.scalarizr)
+            ? responseData.scalarizr.status !== 'statusNotAvailable'
+            : responseData.status !== 'notAvailable';
+
+        if (isScalarizrAvailable || me.requestCount >= me.requestLimit) {
+            me.fireEvent('success', responseData);
+            me.destroy();
+            return me;
+        }
+
+        me.doStep();
+
+        Ext.Function.defer(
+            me.doRequest,
+            me.getTimeout(),
+            me
+        );
+
+        return me;
+    },
+
+    onFailure: function (responseData) {
+        var me =  this;
+
+        me.fireEvent('failure', responseData);
+        me.destroy();
+
+        return me;
+    }
 });

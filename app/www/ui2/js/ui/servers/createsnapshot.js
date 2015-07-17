@@ -3,7 +3,7 @@ Scalr.regPage('Scalr.ui.servers.createsnapshot', function  (loadParams, modulePa
         scalrOptions: {
             'modal': true
         },
-        width: 850,
+        width: 1100,
         title: 'Create server snapshot',
         fieldDefaults: {
             anchor: '100%',
@@ -12,7 +12,7 @@ Scalr.regPage('Scalr.ui.servers.createsnapshot', function  (loadParams, modulePa
 
         items: [{
             xtype: 'displayfield',
-            cls: 'x-form-field-warning',
+            cls: 'x-form-field-warning x-form-field-warning-fit',
             value: moduleParams['showWarningMessage'] || '',
             hidden: !moduleParams['showWarningMessage']
         }, {
@@ -20,47 +20,46 @@ Scalr.regPage('Scalr.ui.servers.createsnapshot', function  (loadParams, modulePa
             layout: 'hbox',
             cls: 'x-fieldset-separator-bottom',
             items: [{
-                xtype: 'fieldset',
-                cls: 'x-fieldset-separator-none',
-                flex: 1,
+                xtype: 'container',
+                cls: 'x-container-fieldset',
+                width: 450,
                 items: [{
                     xtype: 'displayfield',
                     value: moduleParams['serverId'],
                     fieldLabel: 'Server ID'
                 }, {
                     xtype: 'displayfield',
-                    value: moduleParams['farmId'],
-                    fieldLabel: 'Farm ID'
-                }, {
+                    value: '<a href="#/farms?farmId='+moduleParams['farmId']+'">' + moduleParams['farmName'] + '</a> (ID: ' + moduleParams['farmId'] + ')',
+                    fieldLabel: 'Farm'
+                },{
                     xtype: 'displayfield',
-                    value: moduleParams['farmName'],
-                    fieldLabel: 'Farm name'
+                    value: '<a href="#/roles?roleId=' + moduleParams['roleId'] + '">' + moduleParams['roleName'] + '</a>',
+                    fieldLabel: 'Role name'
                 }]
             }, {
-                xtype: 'fieldset',
-                cls: 'x-fieldset-separator-left',
+                xtype: 'container',
+                cls: 'x-container-fieldset x-fieldset-separator-left',
                 margin: '0 0 0 12',
                 flex: 1,
                 defaults: {
-                    labelWidth: 100
+                    labelWidth: 120
                 },
                 items: [{
                     xtype: 'displayfield',
-                    value: moduleParams['roleName'],
-                    fieldLabel: 'Role name'
-                }, {
-                    xtype: 'displayfield',
-                    value: moduleParams['cloudLocation'],
-                    fieldLabel: 'Cloud Location'
+                    fieldLabel: 'Location',
+                    value:
+                        '<img class="x-icon-platform-small x-icon-platform-small-' + moduleParams['platform'] +
+                        '" data-qtip="' + Scalr.utils.getPlatformName(moduleParams['platform']) + '" src="' + Ext.BLANK_IMAGE_URL +
+                        '"/> ' + moduleParams['cloudLocation']
                 }, {
                     xtype: 'displayfield',
                     value: moduleParams['imageId'],
-                    fieldLabel: 'Image ID',
-                    icons: {
-                        question: true
+                    fieldLabel: 'Cloud Image ID',
+                    plugins: {
+                        ptype: 'fieldicons',
+                        position: 'outer',
+                        icons: [{id: 'question', tooltip: "This Server was launched using an Image that is no longer used in its Role's configuration."}]
                     },
-                    iconsPosition: 'outer',
-                    questionTooltip: "This Server was launched using an Image that is no longer used in its Role's configuration.",
                     listeners: {
                         afterrender: function() {
                             if (moduleParams['imageId'] != moduleParams['roleImageId'])
@@ -133,7 +132,7 @@ Scalr.regPage('Scalr.ui.servers.createsnapshot', function  (loadParams, modulePa
                 height: 64,
                 fieldLabel: 'Description'
             }, {
-                xtype: 'container',
+                xtype: 'fieldcontainer',
                 layout: 'hbox',
                 items: [{
                     xtype: 'checkbox',
@@ -222,20 +221,12 @@ Scalr.regPage('Scalr.ui.servers.createsnapshot', function  (loadParams, modulePa
                     xtype: 'textfield',
                     name: 'rootVolumeSize',
                     width: 100,
-                    validator: function (value) {
-                        var form = this.up('form');
-                        var minValue = 1;
-                        if (value) {
-                            if (form.down('[name="rootVolumeType"]').getValue() === 'io1') {
-                                minValue = Scalr.utils.getMinStorageSizeByIops(form.down('[name="rootVolumeIops"]').getValue());
-                            }
-                            if (value * 1 > Scalr.constants.ebsMaxStorageSize) {
-                                return 'Maximum value is ' + Scalr.constants.ebsMaxStorageSize + '.';
-                            } else if (value * 1 < minValue) {
-                                return 'Minimum value is ' + minValue + '.';
-                            }
-                        }
-                        return true;
+                    vtype: 'ebssize',
+                    getEbsType: function() {
+                        return this.up('form').down('[name="rootVolumeType"]').getValue();
+                    },
+                    getEbsIops: function() {
+                        return this.up('form').down('[name="rootVolumeIops"]').getValue();
                     }
                 }, {
                     padding: '0 0 0 5',
@@ -302,7 +293,7 @@ Scalr.regPage('Scalr.ui.servers.createsnapshot', function  (loadParams, modulePa
                 xtype: 'button',
                 itemId: 'create',
                 text: 'Create Image',
-                width: 200,
+                minWidth: 150,
                 handler: function () {
                     var frm = this.up('form').getForm();
                     if (frm.isValid()) {
@@ -313,7 +304,7 @@ Scalr.regPage('Scalr.ui.servers.createsnapshot', function  (loadParams, modulePa
                             form: frm,
                             url: '/servers/xServerCreateSnapshot/',
                             success: function () {
-                                Scalr.event.fireEvent('redirect', '#/bundletasks/view');
+                                Scalr.event.fireEvent('redirect', '#/bundletasks');
                             }
                         });
                     }
@@ -321,7 +312,7 @@ Scalr.regPage('Scalr.ui.servers.createsnapshot', function  (loadParams, modulePa
             }, {
                 xtype: 'button',
                 text: 'Cancel',
-                width: 200,
+                minWidth: 150,
                 handler: function () {
                     Scalr.event.fireEvent('close');
                 }

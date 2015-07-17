@@ -152,7 +152,7 @@ class Scalr_SshKey extends Scalr_Model
         }
 
         $pipes = array();
-        $process = @proc_open("/usr/bin/ssh-keygen -f {$filePath} {$args}", $descriptorspec, $pipes);
+        $process = @proc_open("ssh-keygen -f {$filePath} {$args}", $descriptorspec, $pipes);
         if (@is_resource($process)) {
 
             @fclose($pipes[0]);
@@ -207,5 +207,10 @@ class Scalr_SshKey extends Scalr_Model
     public function getPublic()
     {
         return $this->getCrypto()->decrypt($this->publicKeyEnc);
+    }
+
+    public static function getEnvironmentPlatforms($envId)
+    {
+        return \Scalr::getDb()->GetCol('SELECT DISTINCT `platform` FROM `ssh_keys` WHERE `env_id` = ?', [$envId]);
     }
 }

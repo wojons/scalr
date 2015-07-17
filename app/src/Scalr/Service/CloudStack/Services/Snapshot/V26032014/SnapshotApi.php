@@ -99,7 +99,8 @@ class SnapshotApi extends AbstractApi
 
         if ($response->hasError() === false) {
             $resultObject = $response->getResult();
-            if (property_exists($resultObject, 'count') && $resultObject->count > 0) {
+
+            if (!empty($resultObject) && property_exists($resultObject, 'count') && $resultObject->count > 0) {
                 $result = $this->_loadSnapshotResponseList($resultObject->snapshot);
             }
         }
@@ -207,7 +208,8 @@ class SnapshotApi extends AbstractApi
 
         if ($response->hasError() === false) {
             $resultObject = $response->getResult();
-            if (property_exists($resultObject, 'count') && $resultObject->count > 0) {
+
+            if (!empty($resultObject) && property_exists($resultObject, 'count') && $resultObject->count > 0) {
                 $result = $this->_loadSnapshotPolicyList($resultObject->snapshotpolicy);
             }
         }

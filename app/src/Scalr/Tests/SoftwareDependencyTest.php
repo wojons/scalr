@@ -173,11 +173,11 @@ class SoftwareDependencyTest extends TestCase
               . 'Look at http://www.php.net/manual/en/posix.installation.php'
             );
 
-            $this->assertTrue(
-                class_exists('SNMP'),
-                'SNMP must be enabled. '
-              . 'Look at http://ua1.php.net/manual/en/snmp.installation.php'
-            );
+            // $this->assertTrue(
+            //     class_exists('SNMP'),
+            //     'SNMP must be enabled. '
+            //   . 'Look at http://ua1.php.net/manual/en/snmp.installation.php'
+            // );
 
 //             $this->assertTrue(
 //                 class_exists('RRDUpdater'),

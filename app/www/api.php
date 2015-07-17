@@ -2,6 +2,10 @@
 
 use Scalr\Util\CryptoTool;
 
+/**
+ * @deprecated This API is deprecated. You should not build your apps on it.
+ */
+
 $path = trim(str_replace("?{$_SERVER['QUERY_STRING']}", "", $_SERVER['REQUEST_URI']), '/');
 
 @session_start();
@@ -38,7 +42,7 @@ try {
         $postDataConvert[str_replace('.', '_', $key)] = $value;
     }
 
-    $request = Scalr_UI_Request::initializeInstance(Scalr_UI_Request::REQUEST_TYPE_API, apache_request_headers(), $_SERVER, $postDataConvert, $_FILES, $user->id, $envId);
+    $request = Scalr_UI_Request::initializeInstance(Scalr_UI_Request::REQUEST_TYPE_API, getallheaders(), $_SERVER, $postDataConvert, $_FILES, $user->id, $envId);
     $request->requestApiVersion = intval(trim($version, 'v'));
 
     Scalr_Api_Controller::handleRequest($pathChunks);

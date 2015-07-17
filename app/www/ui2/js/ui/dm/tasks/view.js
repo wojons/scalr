@@ -14,25 +14,14 @@ Scalr.regPage('Scalr.ui.dm.tasks.view', function (loadParams, moduleParams) {
 	return Ext.create('Ext.grid.Panel', {
 		title: 'Deployments &raquo; Tasks',
 		scalrOptions: {
-			'reload': false,
-			'maximize': 'all'
+			reload: false,
+			maximize: 'all',
+            menuTitle: 'Deployments Tasks'
 		},
 		store: store,
 		stateId: 'grid-dm-tasks-view',
 		stateful: true,
-		plugins: {
-			ptype: 'gridstore'
-		},
-
-		tools: [{
-			xtype: 'gridcolumnstool'
-		}, {
-			xtype: 'favoritetool',
-			favorite: {
-				text: 'Deployments',
-				href: '#/dm/tasks/view'
-			}
-		}],
+        plugins: [ 'gridstore', 'applyparams' ],
 
 		viewConfig: {
 			emptyText: 'No tasks found',
@@ -45,26 +34,25 @@ Scalr.regPage('Scalr.ui.dm.tasks.view', function (loadParams, moduleParams) {
 				'<a href="#/dm/applications/{application_id}/view">{application_name}</a>'
 			},
 			{ header: "Farm & Role", flex: 1, dataIndex: 'farm_id', sortable: true, xtype: 'templatecolumn',
-                doSort: function (state) {
-                    var ds = this.up('tablepanel').store;
-                    ds.sort([{
+                multiSort: function (st, direction) {
+                    st.sort([{
                         property: 'farm_name',
-                        direction: state
+                        direction: direction
                     }, {
                         property: 'role_name',
-                        direction: state
+                        direction: direction
                     }, {
                         property: 'server_index',
-                        direction: state
+                        direction: direction
                     }]);
                 },
                 tpl:
 				'<tpl if="role_name">'+
-					'<a href="#/farms/{farm_id}/view" title="Farm {farm_name}">{farm_name}</a>' +
+					'<a href="#/farms?farmId={farm_id}" title="Farm {farm_name}">{farm_name}</a>' +
 					'&nbsp;&rarr;&nbsp;<a href="#/farms/{farm_id}/roles/{farm_roleid}/view" title="Role {role_name}">{role_name}</a> ' +
 				'</tpl>' +
-				'<tpl if="server_index">#<a href="#/servers/{server_id}/view">{server_index}</a></tpl>' +
-				'<tpl if="! role_name"><img src="/ui2/images/icons/false.png" /></tpl>'
+				'<tpl if="server_index">#<a href="#/servers?serverId={server_id}">{server_index}</a></tpl>' +
+				'<tpl if="! role_name">&mdash;</tpl>'
 			},
 			{ header: "Status", width: 140, dataIndex: 'status', sortable: true, xtype: 'templatecolumn', tpl:
 				'<tpl if="status == &quot;failed&quot;">{status} (<a href="#/dm/tasks/{id}/failureDetails">Why?</a>)</tpl>' +
@@ -73,7 +61,7 @@ Scalr.regPage('Scalr.ui.dm.tasks.view', function (loadParams, moduleParams) {
 			{ header: "Created", width: 170, dataIndex: 'dtadded', sortable: true },
 			{ header: "Deployed", width: 170, dataIndex: 'dtdeployed', sortable: true },
 			{
-				xtype: 'optionscolumn2',
+				xtype: 'optionscolumn',
 				menu: [{
 					text: 'Logs',
 					iconCls: 'x-menu-icon-logs',

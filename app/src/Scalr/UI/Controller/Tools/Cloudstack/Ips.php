@@ -21,15 +21,7 @@ class Scalr_UI_Controller_Tools_Cloudstack_Ips extends Scalr_UI_Controller
 
     public function viewAction()
     {
-        if ($this->getParam('platform')) {
-            $locations = self::loadController('Platforms')->getCloudLocations(array($this->getParam('platform')), false);
-        } else {
-            $locations = self::loadController('Platforms')->getCloudLocations(array(SERVER_PLATFORMS::CLOUDSTACK, SERVER_PLATFORMS::IDCF), false);
-        }
-
-        $this->response->page('ui/tools/cloudstack/ips/view.js', array(
-            'locations'	=> $locations
-        ));
+        $this->response->page('ui/tools/cloudstack/ips/view.js');
     }
 
     public function xRemoveAction()

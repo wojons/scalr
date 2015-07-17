@@ -2,6 +2,7 @@
 namespace Scalr\System\Zmq\Cron\Task;
 
 use ArrayObject, DateTime, DateTimeZone, Exception;
+use Scalr\Exception\ServerNotFoundException;
 use Scalr\Service\Exception\InstanceNotFound;
 use Scalr\System\Zmq\Cron\AbstractTask;
 use Scalr\Modules\PlatformFactory;
@@ -16,6 +17,7 @@ use \FarmLogMessage;
 use \HostDownEvent;
 use stdClass;
 use Scalr\Model\Entity\ServerTerminationError;
+use Scalr\Exception\InvalidCloudCredentialsException;
 
 
 /**
@@ -63,7 +65,14 @@ class ServerTerminate extends AbstractTask
     {
         $dtNow = new DateTime('now');
 
-        $dbServer = DBServer::LoadByID($request->serverId);
+        try {
+            $dbServer = DBServer::LoadByID($request->serverId);
+        } catch (ServerNotFoundException $e) {
+            $this->log('INFO', "Server:%s does not exist:%s", $request->serverId, $e->getMessage());
+
+            return false;
+        }
+
 
         if (!in_array($dbServer->status, array(
             SERVER_STATUS::PENDING_TERMINATE,
@@ -87,6 +96,17 @@ class ServerTerminate extends AbstractTask
 
         if (in_array($dbServer->status, array(SERVER_STATUS::TERMINATED)) || $dbServer->dateShutdownScheduled <= $dtNow->format('Y-m-d H:i:s')) {
             try {
+                $p = PlatformFactory::NewPlatform($dbServer->platform);
+
+                $environment = $dbServer->GetEnvironmentObject();
+
+                if (!$environment->isPlatformEnabled($dbServer->platform)) {
+                    throw new Exception(sprintf(
+                        "%s platform is not enabled in the '%s' (%d) environment.",
+                        $dbServer->platform, $environment->name, $environment->id
+                    ));
+                }
+
                 if ($dbServer->GetCloudServerID()) {
                     $serverHistory = $dbServer->getServerHistory();
 
@@ -97,7 +117,15 @@ class ServerTerminate extends AbstractTask
                         $dbServer->status, array(SERVER_STATUS::SUSPENDED, SERVER_STATUS::PENDING_SUSPEND)
                     );
 
-                    if (($isTermination && !$dbServer->GetRealStatus()->isTerminated()) || ($isSuspension && !$dbServer->GetRealStatus()->isSuspended())) {
+                    $status = $dbServer->GetRealStatus();
+                    if ($dbServer->isCloudstack()) {
+                        //Workaround for when expunge flag not working and servers stuck in Destroyed state.
+                        $isTerminated = $status->isTerminated() && $status->getName() != 'Destroyed';
+                    } else {
+                        $isTerminated = $status->isTerminated();
+                    }
+
+                    if (($isTermination && !$isTerminated) || ($isSuspension && !$dbServer->GetRealStatus()->isSuspended())) {
                         try {
                             if ($dbServer->farmId != 0) {
                                 try {
@@ -110,7 +138,8 @@ class ServerTerminate extends AbstractTask
                                                         "RabbitMQ role. Main DISK node should be terminated after all other nodes. "
                                                         . "Waiting... (Platform: %s) (ServerTerminate).",
                                                         $dbServer->serverId, $dbServer->platform
-                                                    )
+                                                    ),
+                                                    $dbServer->serverId
                                                 )
                                             );
 
@@ -125,7 +154,8 @@ class ServerTerminate extends AbstractTask
                                         $dbServer->GetFarmObject()->ID, sprintf(
                                             "Terminating server '%s' (Platform: %s) (ServerTerminate).",
                                             $dbServer->serverId, $dbServer->platform
-                                        )
+                                        ),
+                                        $dbServer->serverId
                                     )
                                 );
                             }
@@ -137,9 +167,9 @@ class ServerTerminate extends AbstractTask
 
                         if (!$terminationTime || (time() - $terminationTime) > 180) {
                             if ($isTermination) {
-                                PlatformFactory::NewPlatform($dbServer->platform)->TerminateServer($dbServer);
+                                $p->TerminateServer($dbServer);
                             } else {
-                                PlatformFactory::NewPlatform($dbServer->platform)->SuspendServer($dbServer);
+                                $p->SuspendServer($dbServer);
                             }
 
                             $dbServer->SetProperty(SERVER_PROPERTIES::TERMINATION_REQUEST_UNIXTIME, time());
@@ -153,7 +183,7 @@ class ServerTerminate extends AbstractTask
                                 if (!$wasHostDownFired) {
                                     $event = new HostDownEvent($dbServer);
                                     $event->isSuspended = !$isTermination;
-                                    
+
                                     \Scalr::FireEvent($dbServer->farmId, $event);
                                 }
                             }
@@ -193,12 +223,15 @@ class ServerTerminate extends AbstractTask
                 }
                 $dbServer->Remove();
             } catch (Exception $e) {
-                if ($request->serverId &&
-                          (stristr($e->getMessage(), "tenant is disabled") ||
-                          stristr($e->getMessage(), "was not able to validate the provided access credentials") ||
-                          stristr($e->getMessage(), "modify its 'disableApiTermination' instance attribute and try again") ||
-                          stristr($e->getMessage(), "neither api key nor password was provided for the openstack config") ||
-                          stristr($e->getMessage(), "refreshing the OAuth2 token"))) {
+                if ($request->serverId && ($e instanceof InvalidCloudCredentialsException ||
+                     stripos($e->getMessage(), "The request you have made requires authentication.") !== false ||
+                     stripos($e->getMessage(), "tenant is disabled") !== false ||
+                     stripos($e->getMessage(), "was not able to validate the provided access credentials") !== false ||
+                     stripos($e->getMessage(), "platform is not enabled") !== false ||
+                     stripos($e->getMessage(), "modify its 'disableApiTermination' instance attribute and try again") !== false ||
+                     stripos($e->getMessage(), "neither api key nor password was provided for the openstack config") !== false ||
+                     stripos($e->getMessage(), "refreshing the OAuth2 token") !== false ||
+                     strpos($e->getMessage(), "Cannot obtain endpoint url. Unavailable service") !== false)) {
                     //Postpones unsuccessful task for 30 minutes.
                     $ste = new ServerTerminationError(
                         $request->serverId, (isset($request->attempts) ? $request->attempts + 1 : 1), $e->getMessage()
@@ -208,8 +241,8 @@ class ServerTerminate extends AbstractTask
                     $ste->retryAfter = new \DateTime('+' . $minutes . ' minutes');
 
                     if ($ste->attempts > self::MAX_ATTEMPTS && in_array($dbServer->status, [SERVER_STATUS::PENDING_TERMINATE, SERVER_STATUS::TERMINATED])) {
-                        //We are going to remove those with Pending terminate status after 1 month of unsuccessful attempts
-                        //$dbServer->Remove();
+                        //We are going to remove those with Pending terminate status from Scalr after 1 month of unsuccessful attempts
+                        $dbServer->Remove();
                     }
 
                     $ste->save();

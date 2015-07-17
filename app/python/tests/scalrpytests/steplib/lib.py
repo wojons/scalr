@@ -63,11 +63,10 @@ def create_db(config):
         conn.close()
 
     if passwd:
-        cmd = "mysql -h {host} -u{user} -p{passwd} {name} <{sql_file}"
+        cmd = "mysql -h {host} -u{user} -p{passwd} {name} < {sql_file}"
     else:
-        cmd = "mysql -h {host} -u{user} {name} <{sql_file}"
-    pwd = os.path.dirname(__file__)
-    sql_file = os.path.join(pwd, '%s.sql' % name)
+        cmd = "mysql -h {host} -u{user} {name} < {sql_file}"
+    sql_file = os.path.join(scalrpy_dir, 'tests/fixtures/%s.sql' % name)
 
     p = subprocess.Popen(
         cmd.format(host=host, user=user, passwd=passwd, name=name, sql_file=sql_file),

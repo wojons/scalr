@@ -1,21 +1,4 @@
 Scalr.regPage('Scalr.ui.services.chef.servers.view', function (loadParams, moduleParams) {
-    var scalrOptions;
-    if (moduleParams['levelMap'][moduleParams['level']] == 'account') {
-		scalrOptions = {
-			title: 'Account management &raquo; Chef servers',
-			maximize: 'all',
-			leftMenu: {
-				menuId: 'settings',
-				itemId: 'chef',
-                showPageTitle: true
-			}
-		};
-    } else {
-		scalrOptions = {
-			maximize: 'all'
-		};
-    }
-
     var store = Ext.create('store.store', {
         fields: [
             'id',
@@ -24,19 +7,16 @@ Scalr.regPage('Scalr.ui.services.chef.servers.view', function (loadParams, modul
             'authKey',
             'vUsername',
             'vAuthKey',
-            'level',
+            'scope',
             'status'
         ],
         data: moduleParams['servers'],
 		proxy: {
 			type: 'ajax',
 			url: '/services/chef/servers/xList/',
-            extraParams: {
-                level: moduleParams['level']
-            },
             reader: {
                 type: 'json',
-                root: 'servers',
+                rootProperty: 'servers',
                 successProperty: 'success'
             }
 		},
@@ -45,44 +25,52 @@ Scalr.regPage('Scalr.ui.services.chef.servers.view', function (loadParams, modul
 		}]
 	});
 
+	var reconfigurePage = function(params) {
+        if (params.chefServerId) {
+            cb = function() {
+                if (params.chefServerId === 'new') {
+                    panel.down('#add').handler();
+                } else {
+                    panel.down('#liveSearch').reset();
+                    var record = store.getById(params.chefServerId);
+                    if (record) {
+                        grid.setSelectedRecord(record);
+                    }
+                }
+            };
+            if (grid.view.viewReady) {
+                cb();
+            } else {
+                grid.view.on('viewready', cb, grid.view, {single: true});
+            }
+        }
+    };
+
     var grid = Ext.create('Ext.grid.Panel', {
-        cls: 'x-grid-shadow x-panel-column-left',
+        cls: 'x-panel-column-left x-panel-column-left-with-tabs',
         store: store,
         flex: 1,
         selModel: {
             selType: 'selectedmodel',
             getVisibility: function(record) {
-                return moduleParams['level'] == record.get('level');
+                return Scalr.scope == record.get('scope');
             }
         },
-        plugins: ['focusedrowpointer'],
+        plugins: ['focusedrowpointer', {ptype: 'selectedrecord', disableSelection: false, clearOnRefresh: true}],
         columns: [{
-            header: '<img style="cursor: help" src="'+Ext.BLANK_IMAGE_URL+'" class="x-icon-info" data-qclass="x-tip-light" data-qtip="' +
-                Ext.String.htmlEncode('<div>Scopes:</div>' +
-                '<div><img src="' + Ext.BLANK_IMAGE_URL + '" class="scalr-scope-scalr">&nbsp;&nbsp;Scalr</div>' +
-                '<div><img src="' + Ext.BLANK_IMAGE_URL + '" class="scalr-scope-account">&nbsp;&nbsp;Account</div>' +
-                '<div><img src="' + Ext.BLANK_IMAGE_URL + '" class="scalr-scope-environment">&nbsp;&nbsp;Environment</div>') +
-                '" />&nbsp;URL',
             text: 'URL',
             flex: 1,
             dataIndex: 'url',
             resizable: false,
             sortable: true,
             xtype: 'templatecolumn',
-            tpl: new Ext.XTemplate('{[this.getLevel(values.level)]}&nbsp;&nbsp;{url}',
-               {
-                   getLevel: function(level){
-                       var scope = moduleParams['levelMap'][level];
-                       return '<img src="' + Ext.BLANK_IMAGE_URL + '" class="scalr-scope-'+scope+'" data-qtip="'+Ext.String.capitalize(scope)+' scope"/>';
-                   }
-               }
-            )
+            tpl: '<img src="' + Ext.BLANK_IMAGE_URL + '" class="scalr-scope-{scope}" data-qclass="x-tip-light" data-qtip="{[Scalr.utils.getScopeLegend(\'chefserver\')]}"/>&nbsp;&nbsp;{url}'
         },{
-            header: 'User name',
+            text: 'User name',
             dataIndex: 'username',
             width: 200
         },{
-            header: 'Status',
+            text: 'Status',
             minWidth: 90,
             width: 90,
             dataIndex: 'status',
@@ -91,7 +79,7 @@ Scalr.regPage('Scalr.ui.services.chef.servers.view', function (loadParams, modul
             xtype: 'statuscolumn',
             statustype: 'chefserver',
             params: {
-                level: moduleParams['levelMap'][moduleParams['level']]
+                currentScope: Scalr.scope
             }
         }],
         viewConfig: {
@@ -103,13 +91,7 @@ Scalr.regPage('Scalr.ui.services.chef.servers.view', function (loadParams, modul
                 emptyTextNoItems: 'You have no chef servers added yet.'
             },
             loadingText: 'Loading chef servers ...',
-            deferEmptyText: false,
-            listeners: {
-                refresh: function(view){
-                    view.getSelectionModel().setLastFocused(null);
-                    view.getSelectionModel().deselectAll();
-                }
-            }
+            deferEmptyText: false
         },
         listeners: {
             selectionchange: function(selModel, selected) {
@@ -119,52 +101,9 @@ Scalr.regPage('Scalr.ui.services.chef.servers.view', function (loadParams, modul
         dockedItems: [{
             xtype: 'toolbar',
             dock: 'top',
+            ui: 'simple',
             defaults: {
-                margin: '0 0 0 12',
-                handler: function() {
-                    var action = this.getItemId(),
-                        actionMessages = {
-                            'delete': ['Delete selected chef server(s)', 'Deleting chef server(s) ...']
-                        },
-                        selModel = grid.getSelectionModel(),
-                        ids = [],
-                        request = {};
-
-                    for (var i=0, records = selModel.getSelection(), len=records.length; i<len; i++) {
-                        ids.push(records[i].get('id'));
-                    }
-
-                    request = {
-                        confirmBox: {
-                            msg: actionMessages[action][0],
-                            type: action
-                        },
-                        processBox: {
-                            msg: actionMessages[action][1],
-                            type: action
-                        },
-                        params: {action: action, level: moduleParams['level']},
-                        success: function (data) {
-                            if (data.processed && data.processed.length) {
-                                switch (action) {
-                                    case 'delete':
-                                        var recordsToDelete = [];
-                                        for (var i=0,len=data.processed.length; i<len; i++) {
-                                            recordsToDelete.push(grid.store.getById(data.processed[i]));
-                                            selModel.deselect(recordsToDelete[i]);
-                                        }
-                                        grid.store.remove(recordsToDelete);
-                                    break;
-                                }
-                            }
-                            selModel.refreshLastFocused();
-                        }
-                    };
-                    request.url = '/services/chef/servers/xGroupActionHandler';
-                    request.params['serverIds'] = Ext.encode(ids);
-
-                    Scalr.Request(request);
-                }
+                margin: '0 0 0 12'
             },
             items: [{
                 xtype: 'filterfield',
@@ -187,25 +126,76 @@ Scalr.regPage('Scalr.ui.services.chef.servers.view', function (loadParams, modul
             },{
                 itemId: 'add',
                 text: 'New chef server',
-                cls: 'x-btn-green-bg',
-                handler: function() {
-                    grid.getSelectionModel().setLastFocused(null);
-                    form.loadRecord(grid.store.createModel({level: moduleParams['level']}));
+                cls: 'x-btn-green',
+                enableToggle: true,
+                toggleHandler: function (button, state) {
+                    if (state) {
+                        grid.clearSelectedRecord();
+                        form.loadRecord(store.createModel({id: 0, scope: Scalr.scope}));
+                        form.down('[name=url]').focus();
+
+                        return;
+                    }
+
+                    form.hide();
                 }
             },{
                 itemId: 'refresh',
-                ui: 'paging',
-                iconCls: 'x-tbar-loading',
+                iconCls: 'x-btn-icon-refresh',
                 tooltip: 'Refresh',
                 handler: function() {
                     store.load();
+                    grid.down('#add').toggle(false, true);
                 }
             },{
                 itemId: 'delete',
-                ui: 'paging',
-                iconCls: 'x-tbar-delete',
+                iconCls: 'x-btn-icon-delete',
+                cls: 'x-btn-red',
                 disabled: true,
-                tooltip: 'Deletechef server '
+                tooltip: 'Delete chef server',
+                handler: function() {
+                    var action = this.getItemId(),
+                        actionMessages = {
+                            'delete': ['Delete selected chef server(s)', 'Deleting chef server(s) ...']
+                        },
+                        selModel = grid.getSelectionModel(),
+                        ids = [],
+                        request = {};
+
+                    for (var i=0, records = selModel.getSelection(), len=records.length; i<len; i++) {
+                        ids.push(records[i].get('id'));
+                    }
+
+                    request = {
+                        confirmBox: {
+                            msg: actionMessages[action][0],
+                            type: action
+                        },
+                        processBox: {
+                            msg: actionMessages[action][1],
+                            type: action
+                        },
+                        params: {action: action},
+                        success: function (data) {
+                            if (data.processed && data.processed.length) {
+                                switch (action) {
+                                    case 'delete':
+                                        var recordsToDelete = [];
+                                        for (var i=0,len=data.processed.length; i<len; i++) {
+                                            recordsToDelete.push(grid.store.getById(data.processed[i]));
+                                            selModel.deselect(recordsToDelete[i]);
+                                        }
+                                        grid.store.remove(recordsToDelete);
+                                    break;
+                                }
+                            }
+                        }
+                    };
+                    request.url = '/services/chef/servers/xGroupActionHandler';
+                    request.params['serverIds'] = Ext.encode(ids);
+
+                    Scalr.Request(request);
+                }
             }]
         }]
     });
@@ -216,41 +206,59 @@ Scalr.regPage('Scalr.ui.services.chef.servers.view', function (loadParams, modul
             type: 'vbox',
             align: 'stretch'
         },
+
+        disableButtons: function (disabled, scope) {
+            var me = this;
+
+            Ext.Array.each(
+                me.getDockedComponent('buttons').query('#save, #delete'),
+                function (button) {
+                    button
+                        .setTooltip(disabled && !Ext.isEmpty(scope)
+                            ? Scalr.utils.getForbiddenActionTip('chef server', scope)
+                            : ''
+                        )
+                        .setDisabled(disabled);
+                }
+            );
+
+            return me;
+        },
+
+        toggleScopeInfo: function(record) {
+            var me = this,
+                scopeInfoField = me.down('#scopeInfo');
+            if (Scalr.scope != record.get('scope')) {
+                scopeInfoField.setValue(Scalr.utils.getScopeInfo('chef server', record.get('scope'), record.get('id')));
+                scopeInfoField.show();
+            } else {
+                scopeInfoField.hide();
+            }
+            return me;
+        },
 		listeners: {
 			hide: function() {
-    			grid.down('#add').setDisabled(false);
+    			//grid.down('#add').setDisabled(false);
 			},
-            afterrender: function() {
-                var me = this;
-                grid.getSelectionModel().on('focuschange', function(gridSelModel){
-                    if (gridSelModel.lastFocused) {
-                        me.loadRecord(gridSelModel.lastFocused);
-                    } else {
-                        me.hide();
-                    }
-                });
-            },
 			beforeloadrecord: function(record) {
 				var frm = this.getForm(),
-					isNewRecord = !record.get('id'),
-                    warning = this.down('#warning');
+					isNewRecord = !record.store;
 
-				frm.reset(true);
-                if (moduleParams['level'] == record.get('level')) {
-                    warning.hide();
+                if (Scalr.scope == record.get('scope')) {
                     this.down('#clientAuth').show();
                     this.down('#clientVAuth').show();
-                    this.getDockedComponent('buttons').show();
+                    this.disableButtons(false);
                     frm.findField('url').setReadOnly(false);
                     this.down('#formtitle').setTitle(isNewRecord ? 'New chef server' : 'Edit chef server');
+                    this.down('#save').setText(isNewRecord ? 'Create' : 'Save');
                 } else {
-                    warning.down('displayfield').setValue('You don\'t have permission to view authorization settings for a <b>Chef Server</b> defined in the ' + Ext.String.capitalize(''+moduleParams['levelMap'][record.get('level')]) + ' Scope.');
+                    //warning.down('displayfield').setValue('You don\'t have permission to view authorization settings for a <b>Chef Server</b> defined in the ' + Ext.String.capitalize(record.get('scope')) + ' Scope.');
                     this.down('#clientAuth').hide();
                     this.down('#clientVAuth').hide();
-                    this.getDockedComponent('buttons').hide();
+                    this.disableButtons(true, record.get('scope'));
                     frm.findField('url').setReadOnly(true);
-                    warning.show();
-                    this.down('#formtitle').setTitle('View chef server');
+                    this.down('#formtitle').setTitle('Edit chef server');
+                    this.down('#save').setText('Save');
                 }
 
 
@@ -258,24 +266,25 @@ Scalr.regPage('Scalr.ui.services.chef.servers.view', function (loadParams, modul
 				for (var i=0, len=c.length; i<len; i++) {
 					c[i].setVisible(!isNewRecord);
 				}
-                grid.down('#add').setDisabled(isNewRecord);
-			},
-            loadrecord: function() {
-                if (!this.isVisible()) {
-                    this.show();
-                }
+                grid.down('#add').toggle(isNewRecord, true);
+                this.toggleScopeInfo(record);
             }
 		},
 		fieldDefaults: {
 			anchor: '100%',
             labelWidth: 70,
-            allowBlank: false,
-            validateOnChange: false
+            allowBlank: false
 		},
 		items: [{
+            xtype: 'displayfield',
+            itemId: 'scopeInfo',
+            cls: 'x-form-field-info x-form-field-info-fit',
+            width: '100%',
+            hidden: true
+        },{
 			xtype: 'fieldset',
             itemId: 'formtitle',
-            title: '&nbsp;',
+            margin: '0 0 24',//fieldset layout bug fix
 			items: [{
                 xtype: 'displayfield',
                 submitValue: true,
@@ -301,10 +310,10 @@ Scalr.regPage('Scalr.ui.services.chef.servers.view', function (loadParams, modul
                         if (status) {
                             text = ['This <b>Chef Server</b> is currently used by '];
                             if (status['rolesCount'] > 0) {
-                                text.push(moduleParams['levelMap'][moduleParams['level']] == 'environment' ? '<a href="#/roles/manager?chefServerId='+record.get('id')+'">'+status['rolesCount']+'&nbsp;Role(s)</a>' : status['rolesCount']+'&nbsp;Role(s)');
+                                text.push(Scalr.scope == 'environment' ? '<a href="#/roles?chefServerId='+record.get('id')+'">'+status['rolesCount']+'&nbsp;Role(s)</a>' : status['rolesCount']+'&nbsp;Role(s)');
                             }
                             if (status['farmsCount'] > 0) {
-                                text.push((status['rolesCount']>0 ? ' and ' : '') + (moduleParams['levelMap'][moduleParams['level']] == 'environment' ? '<a href="#/farms/view?chefServerId='+record.get('id')+'">'+status['farmsCount']+'&nbsp;Farm(s)</a>' : status['farmsCount']+'&nbsp;Farm(s)'));
+                                text.push((status['rolesCount']>0 ? ' and ' : '') + (Scalr.scope == 'environment' ? '<a href="#/farms?chefServerId='+record.get('id')+'">'+status['farmsCount']+'&nbsp;Farm(s)</a>' : status['farmsCount']+'&nbsp;Farm(s)'));
                             }
                             text = text.join('');
                         } else {
@@ -317,23 +326,9 @@ Scalr.regPage('Scalr.ui.services.chef.servers.view', function (loadParams, modul
                 }
             }]
         },{
-            xtype: 'container',
-            cls: 'x-container-fieldset',
-            itemId: 'warning',
-            layout: 'anchor',
-            hidden: true,
-            items: {
-                xtype: 'displayfield',
-                anchor: '100%',
-                cls: 'x-form-field-info'
-            }
-        },{
 			xtype: 'fieldset',
 			title: 'Client authorization',
             itemId: 'clientAuth',
-			defaults: {
-				allowBlank: false
-			},
             layout: {
                 type: 'vbox',
                 align: 'stretch'
@@ -392,35 +387,22 @@ Scalr.regPage('Scalr.ui.services.chef.servers.view', function (loadParams, modul
 				text: 'Save',
 				handler: function() {
 					var frm = form.getForm(),
-                        params,
                         record = frm.getRecord();
 					if (frm.isValid()) {
-                        params = {
-                            level: moduleParams['level']
-                        };
 						Scalr.Request({
 							processBox: {
 								type: 'save'
 							},
 							url: '/services/chef/servers/xSave',
                             form: frm,
-                            params: params,
 							success: function (data) {
-                                var isNewRecord = !record.get('id');
-                                grid.getSelectionModel().setLastFocused(null);
-                                form.setVisible(false);
-								if (isNewRecord) {
+								if (!record.store) {
 									record = store.add(data.server)[0];
-									grid.getSelectionModel().select(record);
 								} else {
 									record.set(data.server);
-									form.loadRecord(record);
 								}
-                                if (isNewRecord) {
-                                    grid.getSelectionModel().select(record);
-                                } else {
-                                    grid.getSelectionModel().setLastFocused(record);
-                                }
+                                grid.clearSelectedRecord();
+                                grid.setSelectedRecord(record);
                                 Scalr.CachedRequestManager.get().setExpired({url: '/services/chef/servers/xListServers/'});
 							}
 						});
@@ -431,13 +413,13 @@ Scalr.regPage('Scalr.ui.services.chef.servers.view', function (loadParams, modul
 				xtype: 'button',
 				text: 'Cancel',
 				handler: function() {
-                    grid.getSelectionModel().setLastFocused(null);
-                    form.setVisible(false);
+                    grid.clearSelectedRecord();
+                    grid.down('#add').toggle(false, true);
 				}
 			}, {
 				itemId: 'delete',
 				xtype: 'button',
-				cls: 'x-btn-default-small-red',
+				cls: 'x-btn-red',
 				text: 'Delete',
 				handler: function() {
 					var record = form.getForm().getRecord();
@@ -452,7 +434,7 @@ Scalr.regPage('Scalr.ui.services.chef.servers.view', function (loadParams, modul
 						},
 						scope: this,
 						url: '/services/chef/servers/xRemove',
-						params: {id: record.get('id'), level: moduleParams['level']},
+						params: {id: record.get('id')},
 						success: function (data) {
 							record.store.remove(record);
 						}
@@ -464,13 +446,20 @@ Scalr.regPage('Scalr.ui.services.chef.servers.view', function (loadParams, modul
 
 
 	var panel = Ext.create('Ext.panel.Panel', {
-		cls: 'scalr-ui-panel-webhooks-ebndpoints',
 		layout: {
 			type: 'hbox',
 			align: 'stretch'
 		},
-		scalrOptions: scalrOptions,
-        title: moduleParams['levelMap'][moduleParams['level']] == 'account' ? '' : Ext.String.capitalize(moduleParams['levelMap'][moduleParams['level']]) + ' Chef servers',
+		scalrOptions: {
+			maximize: 'all',
+            menuTitle: 'Chef servers',
+            menuHref: '#' + Scalr.utils.getUrlPrefix() + '/services/chef/servers',
+            menuFavorite: Ext.Array.contains(['account', 'environment'], Scalr.scope),
+		},
+        stateId: 'grid-chef-servers',
+        listeners: {
+            applyparams: reconfigurePage
+        },
         items: [
             grid
         ,{

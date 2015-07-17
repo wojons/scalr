@@ -30,8 +30,8 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.sg.edit', function (loadParams, modulePara
             value: moduleParams['description']
         }, {
             xtype: 'grid',
-            cls: 'x-grid-shadow',
             store: rulesStore,
+            disableSelection: true,
             plugins: {
                 ptype: 'gridstore'
             },
@@ -41,23 +41,29 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.sg.edit', function (loadParams, modulePara
                 deferEmptyText: false
             },
             columns: [{
-                text: "Type", width: 200, dataIndex: 'Type', sortable: true
+                text: "Type", flex: 1, dataIndex: 'Type', sortable: true
             },{
-                text: "Parameters", width: 220, dataIndex: 'Parameters', sortable: true, xtype: 'templatecolumn',
+                text: "Parameters", flex: 1, dataIndex: 'Parameters', sortable: true, xtype: 'templatecolumn',
                 tpl: '<tpl if="CIDRIP">{CIDRIP}</tpl><tpl if="EC2SecurityGroupOwnerId">{EC2SecurityGroupOwnerId}/{EC2SecurityGroupName}</tpl>'
             },{
                 text: "Status", width: 160, dataIndex: 'Status', sortable: true
             },{
-                xtype: 'actioncolumn',
-                width: 20,
-                items: [{
-                    icon: '/ui2/images/icons/delete_icon_16x16.png',
-                    tooltip: 'Delete',
-                    handler: function(grid, rowIndex, colIndex) {
-                        rulesStore.remove(rulesStore.getAt(rowIndex));
-                    }
-                }]
+                xtype: 'templatecolumn',
+                tpl: '<img class="x-grid-icon x-grid-icon-delete" title="Delete" src="'+Ext.BLANK_IMAGE_URL+'"/>',
+                text: '&nbsp;',
+                width: 45,
+                sortable: false,
+                resizable: false,
+                border: false,
+                align:'center'
             }],
+            listeners: {
+                itemclick: function (view, record, item, index, e) {
+                    if (e.getTarget('img.x-grid-icon-delete')) {
+                        view.store.remove(record);
+                    }
+                }
+            },
             dockedItems: [{
                 xtype: 'container',
                 dock: 'bottom',
@@ -94,7 +100,7 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.sg.edit', function (loadParams, modulePara
                 }]
             },{
                 xtype: 'toolbar',
-                ui: 'simple',
+                ui: 'inline',
                 dock: 'top',
                 padding: '8 0 7 0',
                 layout: {
@@ -104,8 +110,8 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.sg.edit', function (loadParams, modulePara
                 items:[{
                     xtype: 'tbfill'
                 }, {
-                    text: 'Add security rule',
-                    cls: 'x-btn-green-bg',
+                    text: 'Create security rule',
+                    cls: 'x-btn-green',
                     handler: function() {
                         Scalr.Confirm({
                             title: 'New security rule',

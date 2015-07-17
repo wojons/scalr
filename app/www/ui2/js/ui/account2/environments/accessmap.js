@@ -36,7 +36,7 @@ Scalr.regPage('Scalr.ui.account2.environments.accessmap', function (loadParams, 
             store: storeUsers,
             listConfig: {
                tpl : '<tpl for=".">'+
-                          '<div class="x-boundlist-item"><b>{name}</b> <span style="color:#999">&lt; {email} &gt;</span></div>'+
+                          '<div class="x-boundlist-item"><span class="x-semibold">{name}</span> <span style="color:#999">&lt; {email} &gt;</span></div>'+
                       '</tpl>'
             },
             listeners: {
@@ -65,7 +65,9 @@ Scalr.regPage('Scalr.ui.account2.environments.accessmap', function (loadParams, 
             hidden: true,
             margin: '18 0 0',
             itemId: 'resources',
-            cls: 'x-grid-shadow x-grid-no-highlighting x-grid-with-formfields',
+            cls: 'x-grid-with-formfields',
+            trackMouseOver: false,
+            disableSelection: true,
             flex: 1,
             hideHeaders: true,
             store: storeUserResources,
@@ -94,16 +96,16 @@ Scalr.regPage('Scalr.ui.account2.environments.accessmap', function (loadParams, 
                 xtype: 'multicheckboxcolumn',
                 flex: 1,
                 dataIndex: 'permissions',
-                readonly: true,
+                readOnly: true,
                 labelRenderer: function(key) {
                     return key === 'ssh-console' ? 'SSH Launcher' : key;
                 },
-                customRenderer: function(html, record) {
+                cellRenderer: function(value, record) {
                     var id = record.get('id'),
                         resource = moduleParams['definitions'][id],
                         prefix;
-                    prefix = '<div style="float:left;min-width:200px"><div style="font-weight:bold">' + (resource ? resource[0] : id) + '</div><div style="font-size:85%;color:#999">' + (resource ? resource[1] : '') + '</div></div>';
-                    return prefix + html.join('');
+                    prefix = '<div style="float:left;min-width:200px"><div class="x-semibold">' + (resource ? resource[0] : id) + '</div><div style="font-size:85%;color:#999;line-height:1.6em">' + (resource ? resource[1] : '') + '</div></div>';
+                    return prefix + value;
                 }
             },{
                 xtype: 'templatecolumn',
@@ -112,12 +114,12 @@ Scalr.regPage('Scalr.ui.account2.environments.accessmap', function (loadParams, 
                     '{[this.getAccess(values)]}',
                     {
                         getAccess: function(values){
-                            var access = '<span style="font-weight:bold;color:#c00000">No access</span>';
+                            var access = '<span class="x-semibold" style="color:#c00000">No access</span>';
                             if (values.granted == 1) {
-                                access = '<span style="font-weight:bold;color:#008000">Full access</span>';
+                                access = '<span class="x-semibold" style="color:#008000">Full access</span>';
                                 Ext.Object.each(values.permissions, function(key, value){
                                     if (value == 0) {
-                                        access = '<span style="font-weight:bold;color:#337dce">Limited access</span>';
+                                        access = '<span class="x-semibold" style="color:#337dce">Limited access</span>';
                                         return false;
                                     }
                                 });
@@ -129,7 +131,7 @@ Scalr.regPage('Scalr.ui.account2.environments.accessmap', function (loadParams, 
             }],
             dockedItems: [{
                 xtype: 'toolbar',
-                ui: 'simple',
+                ui: 'inline',
                 dock: 'top',
                 items: [{
                     xtype: 'filterfield',
@@ -156,33 +158,29 @@ Scalr.regPage('Scalr.ui.account2.environments.accessmap', function (loadParams, 
                     doNotReset: true,
                     margin: '0 0 0 18',
                     defaults: {
-                        width: 120
+                        width: 140
                     },
                     items: [{
                        text: 'All permissions',
                        value: 'all'
                     },{
                         text: 'Allowed',
-                        cls: 'x-btn-default-small-green',
+                        cls: 'x-btn-green',
                         value: 'allowed'
                     },{
                         text: 'Limited',
-                        cls: 'x-btn-default-small-blue',
+                        cls: 'x-btn-blue',
                         value: 'limited'
                     },{
                         text: 'Forbidden',
-                        cls: 'x-btn-default-small-red2',
+                        cls: 'x-btn-pink',
                         value: 'forbidden'
                     }],
                     listeners: {
                         change: function(comp, value) {
                             var filterId = 'granted',
                                 filters = [];
-                            storeUserResources.filters.each(function(filter){
-                                if (filter.id !== filterId) {
-                                    filters.push(filter);
-                                }
-                            });
+                            storeUserResources.removeFilter(filterId);
                             if (value === 'limited') {
                                 filters.push({
                                     id: filterId,
@@ -207,8 +205,7 @@ Scalr.regPage('Scalr.ui.account2.environments.accessmap', function (loadParams, 
                                     value: value === 'allowed' ? 1 : 0
                                 });
                             }
-                            storeUserResources.clearFilter(false);
-                            storeUserResources.filter(filters);
+                            storeUserResources.addFilter(filters);
                         }
                     }
                 }]

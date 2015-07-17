@@ -28,7 +28,7 @@ use FilesystemIterator;
  *
  * @property \Scalr\Service\OpenStack\Services\NetworkService $network
  *           A Quantum API (Network) service interface.
- *           
+ *
  *
  * @property \Scalr\Service\OpenStack\Services\SwiftService $swift
  *           Object Storage (SWIFT) service interface.
@@ -233,16 +233,21 @@ class OpenStack
     {
         if (!isset($this->cache['services'])) {
             $cfg = $this->getConfig();
+
             $client = $this->getClient();
+
             if (!($cfg->getAuthToken() instanceof AuthToken)) {
                 $client->auth();
             }
+
             $region = $cfg->getRegion();
+
             foreach ($cfg->getAuthToken()->getRegionEndpoints() as $service => $info) {
-                if ($info[$region])
+                if (!empty($info[$region]))
                     $this->cache['services'][$service] = $service;
             }
         }
+
         return array_values($this->cache['services']);
     }
 

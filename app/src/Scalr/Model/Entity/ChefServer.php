@@ -3,12 +3,13 @@ namespace Scalr\Model\Entity;
 
 use Scalr\Model\AbstractEntity;
 use Scalr\Exception\ScalrException;
+use Scalr\DataType\ScopeInterface;
 
 /**
  * ChefServer entity
  * @Table(name="services_chef_servers")
  */
-class ChefServer extends AbstractEntity
+class ChefServer extends AbstractEntity implements ScopeInterface
 {
 
     const LEVEL_SCALR = 1;
@@ -95,7 +96,7 @@ class ChefServer extends AbstractEntity
     {
     }
 
-    public function isInUse($accountId = 0, $envId = 0, $level = self::LEVEL_SCALR)
+    public function isInUse($accountId = null, $envId = null, $scope = self::SCOPE_SCALR)
     {
         $sql = 'SELECT count(DISTINCT f.id)
                 FROM farms f
@@ -108,10 +109,10 @@ class ChefServer extends AbstractEntity
             \Scalr_Role_Behavior_Chef::ROLE_CHEF_BOOTSTRAP,
             1
         ];
-        if ($level == self::LEVEL_ENVIRONMENT) {
+        if ($scope == self::SCOPE_ENVIRONMENT) {
             $sql .= ' AND f.env_id = ?';
             $args[] = $envId;
-        } elseif ($level == self::LEVEL_ACCOUNT) {
+        } elseif ($scope == self::SCOPE_ACCOUNT) {
             $sql .= ' AND f.clientid = ?';
             $args[] = $accountId;
         }
@@ -129,40 +130,88 @@ class ChefServer extends AbstractEntity
             \Scalr_Role_Behavior_Chef::ROLE_CHEF_BOOTSTRAP,
             1
         ];
-        if ($level == self::LEVEL_ENVIRONMENT) {
-            $sql .= ' AND (r.env_id = ? OR r.env_id = 0)';
-            $args[] = $envId;
-        } elseif ($level == self::LEVEL_ACCOUNT) {
-            $sql .= ' AND (r.client_id = ? OR r.client_id = 0)';
-            $args[] = $accountId;
+        if ($scope == self::SCOPE_ENVIRONMENT) {
+            $sql .= ' AND (r.env_id = ? OR r.env_id IS NULL)';
+            $args[] = empty($envId) ? null : $envId;
+        } elseif ($scope == self::SCOPE_ACCOUNT) {
+            $sql .= ' AND (r.client_id = ? OR r.client_id IS NULL)';
+            $args[] = empty($accountId) ? null : $accountId;
         }
 
         $rolesCount = $this->db()->GetOne($sql2, $args2);
         return $farmsCount > 0 || $rolesCount > 0 ? ['rolesCount' => $rolesCount, 'farmsCount' => $farmsCount] : false;
     }
 
-    public static function getList($accountId, $envId, $level = self::LEVEL_ENVIRONMENT)
+    public static function getList($accountId, $envId, $scope = self::SCOPE_ENVIRONMENT)
     {
         $criteria = [];
+        switch ($scope) {
+            case self::SCOPE_ENVIRONMENT:
+                $criteria[] = ['$or' => [
+                    ['$and' => [['accountId' => $accountId], ['envId' => $envId], ['level' => self::LEVEL_ENVIRONMENT]]],
+                    ['$and' => [['accountId' => $accountId], ['envId' => null], ['level' => self::LEVEL_ACCOUNT]]],
+                    ['$and' => [['accountId' => null], ['envId' => null], ['level' => self::LEVEL_SCALR]]]
+                ]];
+                break;
+            case self::SCOPE_ACCOUNT:
+                $criteria[] = ['$or' => [
+                    ['$and' => [['accountId' => $accountId], ['envId' => null], ['level' => self::LEVEL_ACCOUNT]]],
+                    ['$and' => [['accountId' => null], ['envId' => null], ['level' => self::LEVEL_SCALR]]]
+                ]];
+                break;
+            case self::SCOPE_SCALR:
+                $criteria[] = ['level' => self::LEVEL_SCALR];
+                $criteria[] = ['envId' => null];
+                $criteria[] = ['accountId' => null];
+                break;
 
-        if ($level == self::LEVEL_ENVIRONMENT) {
-            $criteria[] = ['$or' => [
-                ['$and' => [['accountId' => $accountId], ['envId' => $envId], ['level' => self::LEVEL_ENVIRONMENT]]],
-                ['$and' => [['accountId' => $accountId], ['envId' => null], ['level' => self::LEVEL_ACCOUNT]]],
-                ['$and' => [['accountId' => null], ['envId' => null], ['level' => self::LEVEL_SCALR]]]
-            ]];
-        } elseif ($level == self::LEVEL_ACCOUNT) {
-            $criteria[] = ['$or' => [
-                ['$and' => [['accountId' => $accountId], ['envId' => null], ['level' => self::LEVEL_ACCOUNT]]],
-                ['$and' => [['accountId' => null], ['envId' => null], ['level' => self::LEVEL_SCALR]]]
-            ]];
-        } elseif ($level == self::LEVEL_SCALR) {
-            $criteria[] = ['level' => self::LEVEL_SCALR];
-            $criteria[] = ['envId' => null];
-            $criteria[] = ['accountId' => null];
         }
 
-        return ChefServer::find($criteria);
+        return ChefServer::result(ChefServer::RESULT_ENTITY_COLLECTION)->find($criteria);
+    }
+
+    /**
+     * {@inheritdoc}
+     * @see \Scalr\DataType\ScopeInterface::getScope()
+     */
+    public function getScope()
+    {
+        switch ($this->level) {
+            case self::LEVEL_ENVIRONMENT:
+                return self::SCOPE_ENVIRONMENT;
+            case self::LEVEL_ACCOUNT:
+                return self::SCOPE_ACCOUNT;
+            case self::LEVEL_SCALR:
+                return self::SCOPE_SCALR;
+            default:
+                throw new \UnexpectedValueException(sprintf(
+                    "Unknown level type: %d in %s::%s",
+                    $this->level, get_class($this), __FUNCTION__
+                ));
+        }
+    }
+
+    public function setScope($scope, $accountId, $envId)
+    {
+        switch ($scope) {
+            case self::SCOPE_ENVIRONMENT:
+                $this->level = self::LEVEL_ENVIRONMENT;
+                $this->accountId = $accountId;
+                $this->envId = $envId;
+                break;
+            case self::SCOPE_ACCOUNT:
+                $this->level = self::LEVEL_ACCOUNT;
+                $this->accountId = $accountId;
+                break;
+            case self::SCOPE_SCALR:
+                $this->level = self::LEVEL_SCALR;
+                break;
+            default:
+                throw new \UnexpectedValueException(sprintf(
+                    "Unknown scope: %d in %s::%s",
+                    $scope, get_class($this), __FUNCTION__
+                ));
+        }
     }
 
 }

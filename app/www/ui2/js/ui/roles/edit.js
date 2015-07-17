@@ -1,12 +1,12 @@
 Scalr.regPage('Scalr.ui.roles.edit', function (loadParams, moduleParams) {
-    var iconCls = 'scalr-ui-role-edit-icon',
+    var iconCls = 'x-icon-leftmenu',
         tabsConfig = [
-            {name: 'overview', title: 'Role overview'},
+            {name: 'overview', title: 'Role overview', cls: 'x-btn-tab-small-dark'},
             {name: 'images', title: 'Images'},
             {name: 'scripting', title: 'Orchestration'},
-            {name: 'variables', title: 'Global variables'}
+            {name: 'variables', title: '<span style="position:relative;top:-10px">Global<br/>variables</span>'}
         ];
-    tabsConfig.push({name: 'chef', title: 'Chef', hidden: !Ext.Array.contains(moduleParams['role']['behaviors'], 'chef')});
+    tabsConfig.push({name: 'chef', title: 'Chef', cls: 'x-btn-tab-small-dark', hidden: !Ext.Array.contains(moduleParams['role']['behaviors'], 'chef')});
 
     if (!Ext.isArray(moduleParams['role']['images'])) {
         moduleParams['role']['images'] = [];
@@ -24,25 +24,26 @@ Scalr.regPage('Scalr.ui.roles.edit', function (loadParams, moduleParams) {
             extended: loadParams['image']
         });
 
-        if (moduleParams['role']['osFamily']) {
-            if (loadParams['image']['osFamily'] != moduleParams['role']['osFamily'] ||
-                loadParams['image']['osVersion'] != moduleParams['role']['osVersion']
-                ) {
+        if (moduleParams['role']['osId']) {
+            if (loadParams['image']['osId'] != moduleParams['role']['osId']) {
                 Scalr.message.Warning('OS versions of image and role are different');
             }
         } else {
-            moduleParams['role']['osFamily'] = loadParams['image']['osFamily'];
-            moduleParams['role']['osVersion'] = loadParams['image']['osVersion'];
+            moduleParams['role']['osId'] = loadParams['image']['osId'];
         }
     }
 
 	var panel = Ext.create('Ext.panel.Panel', {
-        title: moduleParams['role']['roleId'] ? 'Roles &raquo; Edit &raquo; ' + moduleParams.role.name : 'Roles &raquo; Create',
-		scalrOptions: {
-			maximize: 'all'
+        scalrOptions: {
+			maximize: 'all',
+            menuParentStateId: 'grid-roles-manager',
+            menuHref: '#/roles',
+            menuTitle: 'Roles',
+            menuSubTitle: 'Role Editor',
+            menuFavorite: Scalr.scope === 'environment'
 		},
         layout: 'card',
-        minWidth: 900,
+        minWidth: 1200,
 		dockedItems: [{
             xtype: 'container',
             itemId: 'tabs',
@@ -53,7 +54,7 @@ Scalr.regPage('Scalr.ui.roles.edit', function (loadParams, moduleParams) {
                 xtype: 'button',
                 ui: 'tab',
                 allowDepress: false,
-                iconAlign: 'above',
+                iconAlign: 'top',
                 disableMouseDownPressed: true,
                 toggleGroup: 'roledesigner-tabs',
                 toggleHandler: function(field, state) {
@@ -69,6 +70,7 @@ Scalr.regPage('Scalr.ui.roles.edit', function (loadParams, moduleParams) {
                 return {
                     text: tab.title,
                     tabId: tab.name,
+                    cls: tab.cls || '',
                     hidden: !!tab.hidden,
                     iconCls: iconCls + ' ' + iconCls + '-' + tab.name
                 };
@@ -120,11 +122,12 @@ Scalr.regPage('Scalr.ui.roles.edit', function (loadParams, moduleParams) {
                             url: '/roles/xSave/',
                             params: params,
                             success: function (data) {
-                                Scalr.event.fireEvent('update', '/roles/edit', data.role);
-                                if (data.isNewRole)
-                                    Scalr.event.fireEvent('redirect', '#/roles/manager?roleId=' + data.role.id);
-                                else
-                                    Scalr.event.fireEvent('close');
+                                if (params.roleId == 0) {
+                                    Scalr.event.fireEvent('redirect', '#/roles?roleId=' + data.role.id);
+                                } else {
+                                    Scalr.event.fireEvent('update', '/roles/edit', data.role);
+                                    Scalr.event.fireEvent('redirect', '#/roles');
+                                }
                             }
                         });
                     }
@@ -165,8 +168,8 @@ Scalr.regPage('Scalr.ui.roles.edit', function (loadParams, moduleParams) {
                             }
                             this.down('#chefPanel').refreshChefSettings(moduleParams);
                         },
-                        osfamilychange: function(osFamily) {
-                            moduleParams['role']['osFamily'] = osFamily;
+                        osidchange: function(osId) {
+                            moduleParams['role']['osId'] = osId;
                             this.down('#scripts').refreshScripts(moduleParams);
                         }
                     }

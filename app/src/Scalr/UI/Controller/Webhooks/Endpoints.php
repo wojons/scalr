@@ -5,52 +5,29 @@ use Scalr\Model\Entity\WebhookConfig;
 use Scalr\Model\Entity\WebhookConfigEndpoint;
 use Scalr\UI\Request\JsonData;
 use Scalr\UI\Request\Validator;
+use Scalr\DataType\ScopeInterface;
 
 class Scalr_UI_Controller_Webhooks_Endpoints extends Scalr_UI_Controller
 {
     const CALL_PARAM_NAME = 'endpointId';
-    
-    private static $levelMap = [
-        'environment' => WebhookEndpoint::LEVEL_ENVIRONMENT,
-        'account'     => WebhookEndpoint::LEVEL_ACCOUNT,
-        'scalr'       => WebhookEndpoint::LEVEL_SCALR
-    ];
 
-    var $level = null;
-    
     public function hasAccess()
     {
-        return ($this->level == WebhookEndpoint::LEVEL_ENVIRONMENT && $this->request->isAllowed(Acl::RESOURCE_ENVADMINISTRATION_WEBHOOKS) && !$this->user->isScalrAdmin() ||
-               $this->level == WebhookEndpoint::LEVEL_ACCOUNT && $this->request->isAllowed(Acl::RESOURCE_ADMINISTRATION_WEBHOOKS) && !$this->user->isScalrAdmin() ||
-               $this->level == WebhookEndpoint::LEVEL_SCALR && $this->user->isScalrAdmin());
+        return ($this->request->getScope() == WebhookEndpoint::SCOPE_ENVIRONMENT && $this->request->isAllowed(Acl::RESOURCE_ENVADMINISTRATION_WEBHOOKS) && !$this->user->isScalrAdmin() ||
+               $this->request->getScope() == WebhookEndpoint::SCOPE_ACCOUNT && $this->request->isAllowed(Acl::RESOURCE_ADMINISTRATION_WEBHOOKS) && !$this->user->isScalrAdmin() ||
+               $this->request->getScope() == WebhookEndpoint::SCOPE_SCALR && $this->user->isScalrAdmin());
     }
-    
-    public function init()
-    {
-        if ($this->user->isScalrAdmin()) {
-            $level = 'scalr';
-        } else {
-            $level = $this->getParam('level') ? $this->getParam('level') : 'environment';
-        }
-        if (isset(self::$levelMap[$level])) {
-            $this->level = self::$levelMap[$level];
-        } elseif (in_array($level, [WebhookEndpoint::LEVEL_ENVIRONMENT, WebhookEndpoint::LEVEL_ACCOUNT, WebhookEndpoint::LEVEL_SCALR])) {
-            $this->level = (int)$level;
-        } else {
-            throw new Scalr_Exception_Core('Invalid webhook scope');
-        }
-    }
-    
+
     /**
      * @param WebhookEndpoint $endpoint
      * @throws Exception
      */
     private function canEditEndpoint($endpoint)
     {
-        return $this->level == $endpoint->level &&
-               ($endpoint->level == WebhookEndpoint::LEVEL_ENVIRONMENT && $endpoint->envId == $this->getEnvironmentId() && $endpoint->accountId == $this->user->getAccountId() ||
-               $endpoint->level == WebhookEndpoint::LEVEL_ACCOUNT && $endpoint->accountId == $this->user->getAccountId() && empty($endpoint->envId) ||
-               $endpoint->level == WebhookEndpoint::LEVEL_SCALR && empty($endpoint->accountId) && empty($endpoint->envId));
+        return $this->request->getScope() == $endpoint->getScope() &&
+               ($endpoint->getScope() == WebhookEndpoint::SCOPE_SCALR ||
+                $endpoint->getScope() == WebhookEndpoint::SCOPE_ACCOUNT && $endpoint->accountId == $this->user->getAccountId() ||
+                $endpoint->getScope() == WebhookEndpoint::SCOPE_ENVIRONMENT && $endpoint->envId == $this->getEnvironmentId() && $endpoint->accountId == $this->user->getAccountId());
     }
 
 
@@ -59,8 +36,7 @@ class Scalr_UI_Controller_Webhooks_Endpoints extends Scalr_UI_Controller
         $this->response->page('ui/webhooks/endpoints/view.js',
             array(
                 'endpoints' => $this->getList(),
-                'level' => $this->level,
-                'levelMap' => array_flip(self::$levelMap)
+                'scope' => $this->request->getScope()
             ),
             array('ui/webhooks/webhooks.js')
         );
@@ -93,13 +69,7 @@ class Scalr_UI_Controller_Webhooks_Endpoints extends Scalr_UI_Controller
     {
         if (!$endpointId) {
             $endpoint = new WebhookEndpoint();
-            $endpoint->level = $this->level;
-            if ($this->level == WebhookEndpoint::LEVEL_ENVIRONMENT) {
-                $endpoint->accountId = $this->user->getAccountId();
-                $endpoint->envId = $this->getEnvironmentId();
-            } elseif ($this->level == WebhookEndpoint::LEVEL_ACCOUNT) {
-                $endpoint->accountId = $this->user->getAccountId();
-            }
+            $endpoint->setScope($this->request->getScope(), $this->user->getAccountId(), $this->getEnvironmentId(true));
             $endpoint->securityKey = Scalr::GenerateRandomKey(64);
         } else {
             $endpoint = WebhookEndpoint::findPk($endpointId);
@@ -107,26 +77,32 @@ class Scalr_UI_Controller_Webhooks_Endpoints extends Scalr_UI_Controller
                 throw new Scalr_Exception_Core('Insufficient permissions to edit endpoint at this scope');
             }
         }
-        
+
         $validator = new Validator();
-        $validator->validate($url, 'url', Validator::NOEMPTY);
+        $validator->validate($url, 'url', Validator::URL);
 
         //check url unique within current level
         $criteria = [];
         $criteria[] = ['url' => $url];
-        $criteria[] = ['level' => $this->level];
         if ($endpoint->endpointId) {
             $criteria[] = ['endpointId' => ['$ne' => $endpoint->endpointId]];
         }
-        if ($this->level == WebhookEndpoint::LEVEL_ENVIRONMENT) {
-            $criteria[] = ['envId' => $endpoint->envId];
-            $criteria[] = ['accountId' => $endpoint->accountId];
-        } elseif ($this->level == WebhookEndpoint::LEVEL_ACCOUNT) {
-            $criteria[] = ['envId' => null];
-            $criteria[] = ['accountId' => $endpoint->accountId];
-        } elseif ($this->level == WebhookEndpoint::LEVEL_SCALR) {
-            $criteria[] = ['envId' => null];
-            $criteria[] = ['accountId' => null];
+        switch ($this->request->getScope()) {
+            case WebhookEndpoint::SCOPE_ENVIRONMENT:
+                $criteria[] = ['level' => WebhookEndpoint::LEVEL_ENVIRONMENT];
+                $criteria[] = ['envId' => $endpoint->envId];
+                $criteria[] = ['accountId' => $endpoint->accountId];
+                break;
+            case WebhookEndpoint::SCOPE_ACCOUNT:
+                $criteria[] = ['level' => WebhookEndpoint::LEVEL_ACCOUNT];
+                $criteria[] = ['envId' => null];
+                $criteria[] = ['accountId' => $endpoint->accountId];
+                break;
+            case WebhookEndpoint::SCOPE_SCALR:
+                $criteria[] = ['level' => WebhookEndpoint::LEVEL_SCALR];
+                $criteria[] = ['envId' => null];
+                $criteria[] = ['accountId' => null];
+                break;
         }
 
         if (WebhookEndpoint::findOne($criteria)) {
@@ -146,6 +122,8 @@ class Scalr_UI_Controller_Webhooks_Endpoints extends Scalr_UI_Controller
 
         $endpoint->save();
 
+        $this->response->success('Endpoint successfully saved');
+
         $this->response->data(array(
             'endpoint' => array(
                 'endpointId'      => $endpoint->endpointId,
@@ -153,7 +131,7 @@ class Scalr_UI_Controller_Webhooks_Endpoints extends Scalr_UI_Controller
                 'isValid'         => $endpoint->isValid,
                 'validationToken' => $endpoint->validationToken,
                 'securityKey'     => $endpoint->securityKey,
-                'level'           => $endpoint->level
+                'scope'           => $endpoint->getScope()
             )
         ));
     }
@@ -167,12 +145,8 @@ class Scalr_UI_Controller_Webhooks_Endpoints extends Scalr_UI_Controller
         $processed = array();
         $errors = array();
         if (!empty($endpointIds)) {
-            $endpoints = WebhookEndpoint::find(array(
-                array(
-                    'endpointId'  => array('$in' => $endpointIds)
-                )
-            ));
-            foreach($endpoints as $endpoint) {
+            $endpoints = WebhookEndpoint::find([['endpointId'  => ['$in' => $endpointIds]]]);
+            foreach ($endpoints as $endpoint) {
                 if (!$this->canEditEndpoint($endpoint)) {
                     $errors[] = 'Insufficient permissions to remove endpoint';
                 } elseif (count(WebhookConfigEndpoint::findByEndpointId($endpoint->endpointId)) == 0) {
@@ -183,7 +157,7 @@ class Scalr_UI_Controller_Webhooks_Endpoints extends Scalr_UI_Controller
                 }
             }
         }
-        
+
         $num = count($endpointIds);
         if (count($processed) == $num) {
             $this->response->success('Endpoints successfully processed');
@@ -204,7 +178,7 @@ class Scalr_UI_Controller_Webhooks_Endpoints extends Scalr_UI_Controller
     {
         $endpoint = WebhookEndpoint::findPk($endpointId);
         if (!$this->canEditEndpoint($endpoint)) {
-            throw new Scalr_Exception_Core('Insufficient permissions to edit endpoint at this level');
+            throw new Scalr_Exception_Core('Insufficient permissions to edit endpoint in this scope');
         }
 
         if ($endpoint->url != $url) {
@@ -229,34 +203,56 @@ class Scalr_UI_Controller_Webhooks_Endpoints extends Scalr_UI_Controller
         ));
     }
 
-    public function xListAction()
+    /**
+     * @param   string      $scope
+     */
+    public function xListAction($scope = '')
     {
-        $this->response->data(array('endpoints' => $this->getList()));
+        $this->response->data(array('endpoints' => $this->getList($scope)));
     }
 
-    private function getList()
+    /**
+     * @param   string      $scope
+     * @return  array
+     * @throws Scalr_Exception_Core
+     */
+    private function getList($scope = '')
     {
         $endpoints = array();
 
         $criteria = [];
-        
-        if ($this->level == WebhookEndpoint::LEVEL_ENVIRONMENT) {
-            $criteria[] = ['$or' => [
-                ['$and' => [['accountId' => $this->user->getAccountId()], ['envId' => $this->getEnvironmentId()], ['level' => WebhookEndpoint::LEVEL_ENVIRONMENT]]],
-                ['$and' => [['accountId' => $this->user->getAccountId()], ['envId' => null], ['level' => WebhookEndpoint::LEVEL_ACCOUNT]]],
-                ['$and' => [['accountId' => null], ['envId' => null], ['level' => WebhookEndpoint::LEVEL_SCALR]]]
-            ]];
-        } elseif ($this->level == WebhookEndpoint::LEVEL_ACCOUNT) {
-            $criteria[] = ['$or' => [
-                ['$and' => [['accountId' => $this->user->getAccountId()], ['envId' => null], ['level' => WebhookEndpoint::LEVEL_ACCOUNT]]],
-                ['$and' => [['accountId' => null], ['envId' => null], ['level' => WebhookEndpoint::LEVEL_SCALR]]]
-            ]];
-        } elseif ($this->level == WebhookEndpoint::LEVEL_SCALR) {
-            $criteria[] = ['level' => WebhookEndpoint::LEVEL_SCALR];
-            $criteria[] = ['envId' => null];
-            $criteria[] = ['accountId' => null];
+
+        switch ($this->request->getScope()) {
+            case WebhookEndpoint::SCOPE_ENVIRONMENT:
+                $criteria[] = ['$or' => [
+                    ['$and' => [['accountId' => $this->user->getAccountId()], ['envId' => $this->getEnvironmentId()], ['level' => WebhookEndpoint::LEVEL_ENVIRONMENT]]],
+                    ['$and' => [['accountId' => $this->user->getAccountId()], ['envId' => null], ['level' => WebhookEndpoint::LEVEL_ACCOUNT]]],
+                    ['$and' => [['accountId' => null], ['envId' => null], ['level' => WebhookEndpoint::LEVEL_SCALR]]]
+                ]];
+                break;
+            case WebhookEndpoint::SCOPE_ACCOUNT:
+                $criteria[] = ['$or' => [
+                    ['$and' => [['accountId' => $this->user->getAccountId()], ['envId' => null], ['level' => WebhookEndpoint::LEVEL_ACCOUNT]]],
+                    ['$and' => [['accountId' => null], ['envId' => null], ['level' => WebhookEndpoint::LEVEL_SCALR]]]
+                ]];
+                break;
+            case WebhookEndpoint::SCOPE_SCALR:
+                $criteria[] = ['level' => WebhookEndpoint::LEVEL_SCALR];
+                $criteria[] = ['envId' => null];
+                $criteria[] = ['accountId' => null];
+                break;
         }
-        
+
+        $scopeLinking = [
+            ScopeInterface::SCOPE_SCALR => WebhookEndpoint::LEVEL_SCALR,
+            ScopeInterface::SCOPE_ACCOUNT => WebhookEndpoint::LEVEL_ACCOUNT,
+            ScopeInterface::SCOPE_ENVIRONMENT => WebhookEndpoint::LEVEL_ENVIRONMENT
+        ];
+
+        if ($scope && array_key_exists($scope, $scopeLinking)) {
+            $criteria[] = ['level' => $scopeLinking[$scope]];
+        }
+
         foreach (WebhookEndpoint::find($criteria) as $entity) {
             $webhooks = array();
             foreach (WebhookConfigEndpoint::findByEndpointId($entity->endpointId) as $WebhookConfigEndpoint) {
@@ -266,9 +262,9 @@ class Scalr_UI_Controller_Webhooks_Endpoints extends Scalr_UI_Controller
             $endpoint = array(
                 'endpointId'      => $entity->endpointId,
                 'url'             => $entity->url,
-                'level'           => $entity->level
+                'scope'           => $entity->getScope()
             );
-            if ($this->level == $entity->level) {
+            if ($this->request->getScope() == $entity->getScope()) {
                 $endpoint['isValid'] = $entity->isValid;
                 $endpoint['validationToken'] = $entity->validationToken;
                 $endpoint['securityKey'] = $entity->securityKey;

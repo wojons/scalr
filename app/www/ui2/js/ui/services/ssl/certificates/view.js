@@ -1,129 +1,293 @@
 Scalr.regPage('Scalr.ui.services.ssl.certificates.view', function () {
+
 	var store = Ext.create('store.store', {
-		fields: [ 'id', 'name', 'privateKey', 'privateKeyPassword', 'certificate', 'caBundle' ],
-		proxy: {
-			type: 'scalr.paging',
-			url: '/services/ssl/certificates/xListCertificates/'
-		},
-		remoteSort: true
+
+		fields: [
+            'id',
+            'name',
+            'privateKey',
+            'privateKeyPassword',
+            'certificate',
+            'caBundle'
+        ],
+
+        proxy: {
+            type: 'ajax',
+            url: '/services/ssl/certificates/xListCertificates/',
+            reader: {
+                type: 'json',
+                rootProperty: 'data',
+                successProperty: 'success'
+            }
+        },
+
+        removeByCertificateId: function (ids) {
+            var me = this;
+
+            me.remove(Ext.Array.map(
+                ids, function (id) {
+                    return me.getById(id);
+                }
+            ));
+
+            if (me.getCount() === 0) {
+                grid.getView().refresh();
+            }
+
+            return me;
+        }
 	});
 
-	return Ext.create('Ext.grid.Panel', {
-		title: 'SSL certificates',
-		scalrOptions: {
-			'reload': false,
-			'maximize': 'all'
-		},
+	var grid = Ext.create('Ext.grid.Panel', {
+
+        cls: 'x-panel-column-left',
+        flex: 1,
+        scrollable: true,
+
 		store: store,
-		stateId: 'grid-services-ssl-certificates-view',
-		stateful: true,
-		plugins: [{
-			ptype: 'gridstore'
-		}, {
-			ptype: 'rowexpander',
-			rowBodyTpl: [
-				'<p><b>Certificate:</b> <tpl if="certificate">{certificate}<tpl else>empty</tpl></p>',
-				'<p><b>Certificate chain:</b> <tpl if="caBundle">{caBundle}<tpl else>empty</tpl></p>'
-			]
-		}],
 
-		tools: [{
-			xtype: 'gridcolumnstool'
-		}, {
-			xtype: 'favoritetool',
-			favorite: {
-				text: 'SSL certificates',
-				href: '#/services/ssl/certificates/view'
-			}
-		}],
+        plugins: [ 'applyparams', 'focusedrowpointer', {
+            ptype: 'selectedrecord',
+            disableSelection: false,
+            clearOnRefresh: true,
+            selectSingleRecord: true
+        }],
 
-		viewConfig: {
-			emptyText: "No ssl certificates found",
-			loadingText: 'Loading certificates ...'
-		},
+        viewConfig: {
+            preserveScrollOnRefresh: true,
+            markDirty: false,
+            plugins: {
+                ptype: 'dynemptytext',
+                emptyText: 'No ssl certificates found.',
+                emptyTextNoItems: 'You have no ssl certificates added yet.'
+            },
+            loadingText: 'Loading certificates ...',
+            deferEmptyText: false
+        },
+
+        selModel: 'selectedmodel',
+
+        listeners: {
+            selectionchange: function (selModel, selections) {
+                this.down('toolbar').down('#delete').setDisabled(!selections.length);
+            }
+        },
+
+        applyCertificate: function (certificate) {
+            var me = this;
+
+            var record = me.getSelectedRecord();
+            var store = me.getStore();
+
+            if (Ext.isEmpty(record)) {
+                record = store.add(certificate)[0];
+            } else {
+                record.set(certificate);
+                me.clearSelectedRecord();
+            }
+
+            me.setSelectedRecord(record);
+
+            return me;
+        },
+
+        deleteCertificates: function (ids, names) {
+
+            Scalr.Request({
+                confirmBox: {
+                    type: 'delete',
+                    msg: 'Delete selected certificate(s): %s ?',
+                    objects: names
+                },
+                processBox: {
+                    type: 'delete',
+                    msg: 'Deleting selected certificates ...'
+                },
+                url: '/services/ssl/certificates/xRemove/',
+                params: {
+                    certs: Ext.encode(ids)
+                },
+                success: function (response) {
+                    var deletedCertificatesIds = response.processed;
+
+                    if (!Ext.isEmpty(deletedCertificatesIds)) {
+
+                        store.removeByCertificateId(
+                            deletedCertificatesIds
+                        );
+                    }
+                }
+            });
+        },
+
+        deleteSelectedCertificates: function () {
+            var me = this;
+
+            var ids = [];
+            var names = [];
+
+            Ext.Array.each(
+                me.getSelectionModel().getSelection(),
+
+                function (record) {
+                    ids.push(record.get('id'));
+                    names.push(record.get('name'));
+                }
+            );
+
+            me.deleteCertificates(ids, names);
+
+            return me;
+        },
 
 		columns:[
 			{ header: "ID", width: 60, dataIndex: 'id', sortable: true },
-			{ header: "Name", flex: 1, dataIndex: 'name', sortable: true },
+			{ header: "SSL Certificate", flex: 1, dataIndex: 'name', sortable: true },
 			{
-				header: 'Private key', width: 150, dataIndex: 'privateKey', sortable: false, xtype: 'templatecolumn', align: 'center',
-				tpl: '<tpl if="privateKey"><img src="/ui2/images/icons/true.png"><tpl else><img src="/ui2/images/icons/false.png"></tpl>'
+				header: 'Certificate', width: 100, dataIndex: 'certificate', sortable: false, xtype: 'templatecolumn', align: 'center',
+				tpl: '<tpl if="!!certificate"><div class="x-grid-icon x-grid-icon-simple x-grid-icon-ok"></div><tpl else>&mdash;</tpl>'
 			}, {
-                header: 'Private key password', width: 150, dataIndex: 'privateKeyPassword', sortable: false, xtype: 'templatecolumn', align: 'center',
-                tpl: '<tpl if="privateKeyPassword"><img src="/ui2/images/icons/true.png"><tpl else><img src="/ui2/images/icons/false.png"></tpl>'
-            }, {
-				header: 'Certificate', width: 150, dataIndex: 'certificate', sortable: false, xtype: 'templatecolumn', align: 'center',
-				tpl: '<tpl if="!!certificate"><img src="/ui2/images/icons/true.png"><tpl else><img src="/ui2/images/icons/false.png"></tpl>'
+				header: 'Certificate chain', width: 140, dataIndex: 'caBundle', sortable: false, xtype: 'templatecolumn', align: 'center',
+				tpl: '<tpl if="!!caBundle"><div class="x-grid-icon x-grid-icon-simple x-grid-icon-ok"></div><tpl else>&mdash;</tpl>'
 			}, {
-				header: 'Certificate chain', width: 150, dataIndex: 'caBundle', sortable: false, xtype: 'templatecolumn', align: 'center',
-				tpl: '<tpl if="!!caBundle"><img src="/ui2/images/icons/true.png"><tpl else><img src="/ui2/images/icons/false.png"></tpl>'
-			}, {
-				xtype: 'optionscolumn2',
-				menu: [{
-					text: 'Edit',
-                    iconCls: 'x-menu-icon-edit',
-					href: "#/services/ssl/certificates/{id}/edit"
-				}]
-			}
+                header: 'Private key', width: 100, dataIndex: 'privateKey', sortable: false, xtype: 'templatecolumn', align: 'center',
+                tpl: '<tpl if="privateKey"><div class="x-grid-icon x-grid-icon-simple x-grid-icon-ok"></div><tpl else>&mdash;</tpl>'
+            }
 		],
 
-		multiSelect: true,
-		selModel: {
-			selType: 'selectedmodel'
-		},
-
-		listeners: {
-			selectionchange: function(selModel, selections) {
-				this.down('scalrpagingtoolbar').down('#delete').setDisabled(!selections.length);
-			}
-		},
-
 		dockedItems: [{
-			xtype: 'scalrpagingtoolbar',
+			xtype: 'toolbar',
 			store: store,
 			dock: 'top',
-			afterItems: [{
-				ui: 'paging',
-				itemId: 'delete',
-				iconCls: 'x-tbar-delete',
-				tooltip: 'Select one or more certificates to delete them',
-				disabled: true,
-				handler: function() {
-					var request = {
-						confirmBox: {
-							type: 'delete',
-							msg: 'Delete selected certificates(s): %s ?'
-						},
-						processBox: {
-							type: 'delete',
-							msg: 'Deleting selected certificates ...'
-						},
-						url: '/services/ssl/certificates/xRemove/',
-						success: function() {
-							store.load();
-						}
-					}, records = this.up('grid').getSelectionModel().getSelection(), ids = [];
-
-					request.confirmBox.objects = [];
-					for (var i = 0, len = records.length; i < len; i++) {
-						ids.push(records[i].get('id'));
-						request.confirmBox.objects.push(records[i].get('name'));
-					}
-					request.params = { certs: Ext.encode(ids) };
-					Scalr.Request(request);
-				}
-			}],
-			beforeItems: [{
-                text: 'Add SSL certificate',
-                cls: 'x-btn-green-bg',
-				handler: function() {
-					Scalr.event.fireEvent('redirect', '#/services/ssl/certificates/create');
-				}
-			}],
+            ui: 'simple',
+            defaults: {
+                margin: '0 0 0 12'
+            },
 			items: [{
 				xtype: 'filterfield',
-				store: store
-			}]
+				store: store,
+                filterFields: ['name'],
+                margin: 0,
+                listeners: {
+                    afterfilter: function () {
+                        grid.getView().refresh();
+                    }
+                }
+            }, {
+                xtype: 'tbfill'
+            }, {
+                text: 'New SSL certificate',
+                itemId: 'add',
+                cls: 'x-btn-green',
+                enableToggle: true,
+                toggleHandler: function (button, state) {
+                    if (state) {
+                        grid.clearSelectedRecord();
+
+                        form.down('#save').setText('Create');
+                        form.down('#delete').hide();
+
+                        form.
+                            setHeader('New SSL Certificate').
+                            disableButtons().
+                            show().
+                            down('[name=name]').focus();
+
+                        return;
+                    }
+
+                    form.hide();
+                }
+            }, {
+                itemId: 'refresh',
+                iconCls: 'x-btn-icon-refresh',
+                tooltip: 'Refresh',
+                handler: function () {
+                    store.load();
+                    grid.down('#add').toggle(false, true);
+                }
+            }, {
+                itemId: 'delete',
+                iconCls: 'x-btn-icon-delete',
+                cls: 'x-btn-red',
+                tooltip: 'Select one or more certificates to delete them',
+                disabled: true,
+                handler: function () {
+                    grid.deleteSelectedCertificates();
+                }
+            }]
 		}]
 	});
+
+    var form = Ext.create('Scalr.ui.CertificateForm', {
+
+        hidden: true,
+
+        onCertificateSave: function (form, certificate) {
+            if (certificate !== null) {
+                grid.applyCertificate(certificate);
+                return true;
+            }
+
+            store.load();
+            grid.down('#add').toggle(false, true);
+        },
+
+        onCertificateRemove: function (form, id) {
+            store.removeByCertificateId(id);
+        },
+
+        onCancel: function () {
+            grid.clearSelectedRecord();
+            grid.down('#add').toggle(false, true);
+        },
+
+        listeners: {
+            afterloadrecord: function (record) {
+                var me = this;
+
+                me
+                    .setHeader('Edit SSL Certificate')
+                    .disableButtons(
+                        record.get('certificate'),
+                        record.get('caBundle'),
+                        record.get('privateKey')
+                    );
+
+                form.down('#save').setText('Save');
+                me.down('#delete').show();
+
+                grid.down('#add').toggle(false, true);
+            }
+        }
+    });
+
+    return Ext.create('Ext.panel.Panel', {
+
+        stateful: true,
+        stateId: 'grid-services-ssl-certificates-view',
+
+        layout: {
+            type: 'hbox',
+            align: 'stretch'
+        },
+
+        scalrOptions: {
+            reload: false,
+            maximize: 'all',
+            menuTitle: 'SSL certificates',
+            menuHref: '#/services/ssl/certificates',
+            menuFavorite: true
+        },
+
+        items: [ grid, {
+            xtype: 'container',
+            itemId: 'rightcol',
+            flex: .6,
+            maxWidth: 900,
+            minWidth: 600,
+            layout: 'fit',
+            items: [ form ]
+        }]
+    });
 });

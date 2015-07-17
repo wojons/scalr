@@ -52,8 +52,9 @@ class ElbTest extends ElbTestCase
     protected function setUp()
     {
         parent::setUp();
+
         if (!$this->isSkipFunctionalTests()) {
-            $this->elb = $this->getContainer()->aws(self::REGION)->elb;
+            $this->elb = $this->getEnvironment()->aws(self::REGION)->elb;
             $this->elb->enableEntityManager();
         }
     }
@@ -531,21 +532,6 @@ class ElbTest extends ElbTestCase
             $this->assertTrue($ret);
             $this->assertEquals(spl_object_hash($policy), spl_object_hash($loadBalancer->policies->appCookieStickinessPolicies->get(1)));
             unset($policy);
-
-            $ret = $listener1->setPolicies('app-policy-2');
-            $this->assertEquals(array('app-policy-2'), $ret);
-            $this->assertEquals($ret, $loadBalancer->listenerDescriptions[$mapping[1025]]->policyNames);
-
-            $ret = $listener1->setPolicies();
-            $this->assertEmpty($ret);
-            $this->assertEmpty($loadBalancer->listenerDescriptions[$mapping[1025]]->policyNames);
-
-            $ret = $loadBalancer->listenerDescriptions[$mapping[1025]]->listener->delete();
-            $this->assertTrue($ret, 'Cannot remove listener');
-            foreach ($loadBalancer->listenerDescriptions as $listenerDescription) {
-                $this->assertNotEquals(1025, $listenerDescription->listener->loadBalancerPort);
-            }
-            $this->assertContains('app-policy-2', $loadBalancer->policies->appCookieStickinessPolicies->getQueryArray());
 
             $ret = $loadBalancer->policies->appCookieStickinessPolicies->get(1)->delete();
             $this->assertTrue($ret);

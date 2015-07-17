@@ -19,7 +19,7 @@ Scalr.regPage('Scalr.ui.scripts.create', function (loadParams, moduleParams) {
                         else
                             Scalr.event.fireEvent('close');
                     } else
-                        Scalr.event.fireEvent('redirect', '#/scripts/view');
+                        Scalr.event.fireEvent('redirect', '#/scripts');
                 }
             });
     };
@@ -30,12 +30,13 @@ Scalr.regPage('Scalr.ui.scripts.create', function (loadParams, moduleParams) {
             anchor: '100%'
         },
 
-        tools: [{
+        // TODO refactor
+        /*tools: [{
             type: 'maximize',
             handler: function () {
                 Scalr.event.fireEvent('maximize');
             }
-        }],
+        }],*/
         layout: 'auto',
         items: [{
             xtype: 'fieldset',
@@ -175,7 +176,7 @@ Scalr.regPage('Scalr.ui.scripts.create', function (loadParams, moduleParams) {
                     labelWidth: 80
                 }]
             }, {
-                xtype: 'tagbox',
+                xtype: 'scalrtagfield',
                 fieldLabel: 'Tags',
                 saveTagsOn: 'submit',
                 labelWidth: 150,

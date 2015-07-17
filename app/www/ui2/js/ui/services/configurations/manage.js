@@ -136,6 +136,25 @@ Scalr.regPage('Scalr.ui.services.configurations.manage', function (loadParams, m
             defaults: {
                 anchor: '100%'
             },
+            bodyStyle: 'padding-bottom:32px;',
+            plugins: {
+                ptype: 'addfield',
+                padding: '6px 28px 0 0',
+                targetEl: '.x-panel-body',
+                handler: function () {
+                    var scrollY = form.getScrollY();
+                    this.addNewConfigfield();
+                    form.setScrollY(scrollY);
+                }
+            },
+            addNewConfigfield: function (){
+                this.items.last().down('#remove').enable().show();
+                this.add({
+                    xtype: 'configfield',
+                    configFile: name,
+                    showRemoveButton: true
+                });
+            },
 			items: []
 		});
 		

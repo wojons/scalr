@@ -43,6 +43,7 @@ class CloudStackTestCase extends TestCase
         parent::setUp();
         $this->container = \Scalr::getContainer();
         $this->environment = new \Scalr_Environment();
+
         if (!$this->isSkipFunctionalTests()) {
             $this->environment->loadById(\Scalr::config('scalr.phpunit.envid'));
             $this->container->environment = $this->environment;

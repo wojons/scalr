@@ -8,7 +8,7 @@ class Scalr_Messaging_JsonSerializer {
     static private $instance;
 
     /**
-     * @return Scalr_Messaging_XmlSerializer
+     * @return Scalr_Messaging_JsonSerializer
      */
     static function getInstance() {
         if (self::$instance === null) {
@@ -37,7 +37,7 @@ class Scalr_Messaging_JsonSerializer {
         return @json_encode($retval);
     }
 
-    private function walkSerialize ($object, &$retval, $normalizationMethod) {
+    public function walkSerialize ($object, &$retval, $normalizationMethod) {
         foreach ($object as $k=>$v) {
             if ($v === null)
                 $v = '';
@@ -98,7 +98,11 @@ class Scalr_Messaging_JsonSerializer {
         return $retval;
     }
 
-    private function underScope ($name) {
+    public function underScope ($name) {
+        
+        if (preg_match("/^[A-Z]+$/", $name))
+            return $name;
+        
         $parts = preg_split("/[A-Z]/", $name, -1, PREG_SPLIT_OFFSET_CAPTURE | PREG_SPLIT_NO_EMPTY);
         $ret = "";
         foreach ($parts as $part) {
@@ -110,7 +114,7 @@ class Scalr_Messaging_JsonSerializer {
         return $ret;
     }
 
-    private function camelCase ($name) {
+    public function camelCase ($name) {
         $parts = explode("_", $name);
         $first = array_shift($parts);
         return $first . join("", array_map("ucfirst", $parts));

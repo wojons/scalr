@@ -40,7 +40,49 @@ class Scalr_UI_Controller_Dashboard_Widget_Status extends Scalr_UI_Controller_Da
             $time = filemtime($awsCachePath);
             $data = (array) json_decode(file_get_contents($awsCachePath));
         } else {
-            $html = @file_get_contents($endpoint->statUrl);
+            $req = new HttpRequest();
+            $req->resetCookies();
+            $req->setOptions(array(
+                'redirect'       => 10,
+                'useragent'      => "Scalr ". SCALR_VERSION,
+                'verifypeer'     => false,
+                'verifyhost'     => false,
+                'timeout'        => 30,
+                'connecttimeout' => 30
+            ));
+            
+            if (\Scalr::config('scalr.aws.use_proxy') && in_array(\Scalr::config('scalr.connections.proxy.use_on'), array('both', 'scalr'))) {
+                $proxySettings = \Scalr::config('scalr.connections.proxy');
+            }
+            
+            if (!empty($proxySettings)) {
+                $req->setOptions([
+                    'proxyhost' => $proxySettings['host'],
+                    'proxyport' => $proxySettings['port'],
+                    'proxytype' => $proxySettings['type']
+                ]);
+            
+                if ($proxySettings['user']) {
+                    $req->setOptions([
+                        'proxyauth'     => "{$proxySettings['user']}:{$proxySettings['pass']}",
+                        'proxyauthtype' => $proxySettings['authtype']
+                    ]);
+                }
+            }
+            $req->setMethod(constant('HTTP_METH_GET'));
+            $req->setUrl($endpoint->statUrl);
+            try {
+                $req->send();
+                if ($req->getResponseCode() == 200) {
+                    $html = $req->getResponseBody();
+                } else {
+                    return [];
+                }
+            } catch (\HttpException $e) {
+                return [];
+            }
+            
+            //$html = @file_get_contents($endpoint->statUrl);
             if ($html) {
                 $dom = new DOMDocument();
                 $dom->validateOnParse = false;
@@ -70,7 +112,7 @@ class Scalr_UI_Controller_Dashboard_Widget_Status extends Scalr_UI_Controller_Da
                                 if ($cols->item(0)
                                          ->getElementsByTagName('img')
                                          ->item(0)
-                                         ->getAttribute('src') == 'images/status0.gif'
+                                         ->getAttribute('src') == '/images/status0.gif'
                                 ) {
                                     $img = 'normal.png';
                                 } else {

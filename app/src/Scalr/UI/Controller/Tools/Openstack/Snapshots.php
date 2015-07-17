@@ -43,15 +43,7 @@ class Scalr_UI_Controller_Tools_Openstack_Snapshots extends Scalr_UI_Controller
 
     public function viewAction()
     {
-        if ($this->getParam('platform')) {
-            $locations = self::loadController('Platforms')->getCloudLocations(array($this->getParam('platform')), false);
-        } else {
-            $locations = self::loadController('Platforms')->getCloudLocations(PlatformFactory::getOpenstackBasedPlatforms(), false);
-        }
-
-        $this->response->page('ui/tools/openstack/snapshots/view.js', array(
-            'locations'	=> $locations
-        ));
+        $this->response->page('ui/tools/openstack/snapshots/view.js');
     }
 
     public function xRemoveAction()

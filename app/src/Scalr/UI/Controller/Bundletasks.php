@@ -100,7 +100,7 @@ class Scalr_UI_Controller_Bundletasks extends Scalr_UI_Controller
             $args[] = $this->getParam('id');
         }
 
-        $response = $this->buildResponseFromSql2($sql, array('id', 'server_id', 'rolename', 'status', 'os_family', 'dtadded', 'dtstarted', 'created_by_email'), array('rolename'), $args);
+        $response = $this->buildResponseFromSql2($sql, array('id', 'server_id', 'rolename', 'status', 'os_family', 'dtadded', 'dtstarted', 'created_by_email'), array('id', 'rolename'), $args);
 
         foreach ($response["data"] as &$row) {
             $row['server_exists'] = DBServer::IsExists($row['server_id']);

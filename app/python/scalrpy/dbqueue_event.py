@@ -53,8 +53,8 @@ class DBQueueEvent(application.ScalrIterationApplication):
         self.description = "Scalr queue event application"
 
         options = (
-                """  --disable-ssl-verification        """
-                """disable ssl certificate verification""")
+            """  --disable-ssl-verification        """
+            """disable ssl certificate verification""")
         self.add_options(options)
 
         super(DBQueueEvent, self).__init__(argv=argv)
@@ -72,28 +72,26 @@ class DBQueueEvent(application.ScalrIterationApplication):
         self.https_session = requests.Session()
         self.https_session.mount('https://', helper.HttpsAdapter())
 
-
     def configure(self):
         helper.update_config(
-                self.scalr_config.get('dbqueue_event', {}), self.config)
+            self.scalr_config.get('dbqueue_event', {}), self.config)
         helper.validate_config(self.config)
         socket.setdefaulttimeout(self.config['instances_connection_timeout'])
 
         self._db = dbmanager.ScalrDB(self.config['connections']['mysql'])
         self._pool = helper.GPool(pool_size=self.config['pool_size'])
 
-
     def get_webhooks(self):
         query = (
-                "SELECT HEX(wh.history_id) as history_id, HEX(wh.webhook_id) as webhook_id, "
-                "HEX(wh.endpoint_id) as endpoint_id, wh.payload, wh.handle_attempts, "
-                "wh.dtlasthandleattempt, wh.error_msg, wh.event_id, we.url, "
-                "we.security_key, wc.timeout, wc.attempts "
-                "FROM webhook_history wh "
-                "JOIN webhook_endpoints we ON wh.endpoint_id=we.endpoint_id "
-                "LEFT JOIN webhook_configs wc ON wh.webhook_id=wc.webhook_id "
-                "WHERE wh.status=0 "
-                "LIMIT 250"
+            "SELECT HEX(wh.history_id) as history_id, HEX(wh.webhook_id) as webhook_id, "
+            "HEX(wh.endpoint_id) as endpoint_id, wh.payload, wh.handle_attempts, "
+            "wh.dtlasthandleattempt, wh.error_msg, wh.event_id, we.url, "
+            "we.security_key, wc.timeout, wc.attempts "
+            "FROM webhook_history wh "
+            "JOIN webhook_endpoints we ON wh.endpoint_id=we.endpoint_id "
+            "LEFT JOIN webhook_configs wc ON wh.webhook_id=wc.webhook_id "
+            "WHERE wh.status=0 "
+            "LIMIT 250"
         )
         results = self._db.execute(query)
         for result in results:
@@ -109,10 +107,10 @@ class DBQueueEvent(application.ScalrIterationApplication):
                 result['error_msg'] = ''
         return results
 
-
     def post_webhook(self, webhook, headers=None):
         if headers is None:
-            signature, date = cryptotool.sign(webhook['payload'], webhook['security_key'], version=2)
+            signature, date = cryptotool.sign(
+                webhook['payload'], webhook['security_key'], version=2)
             headers = {
                 'Date': date,
                 'X-Signature': signature,
@@ -128,14 +126,13 @@ class DBQueueEvent(application.ScalrIterationApplication):
         webhook['dtlasthandleattempt'] = str(datetime.datetime.utcnow().replace(microsecond=0))
 
         resp = self.https_session.post(
-                url, data=webhook['payload'], headers=headers, timeout=webhook['timeout'],
-                allow_redirects=False, verify=not self.args['--disable-ssl-verification'])
+            url, data=webhook['payload'], headers=headers, timeout=webhook['timeout'],
+            allow_redirects=False, verify=not self.args['--disable-ssl-verification'])
 
         if resp.status_code > 205:
             webhook['error_msg'] = resp.text.encode('ascii', 'replace')
 
         return resp
-
 
     def update_webhook(self, webhook):
         webhook['response_code'] = webhook.get('response_code', 'NULL')
@@ -143,11 +140,11 @@ class DBQueueEvent(application.ScalrIterationApplication):
         while True:
             try:
                 query = (
-                        """UPDATE webhook_history """
-                        """SET status={status}, response_code={response_code}, """
-                        """error_msg="{error_msg}", handle_attempts={handle_attempts}, """
-                        """dtlasthandleattempt='{dtlasthandleattempt}' """
-                        """WHERE history_id=UNHEX('{history_id}')"""
+                    """UPDATE webhook_history """
+                    """SET status={status}, response_code={response_code}, """
+                    """error_msg="{error_msg}", handle_attempts={handle_attempts}, """
+                    """dtlasthandleattempt='{dtlasthandleattempt}' """
+                    """WHERE history_id=UNHEX('{history_id}')"""
                 ).format(**webhook)
                 self._db.execute(query)
                 break
@@ -159,21 +156,20 @@ class DBQueueEvent(application.ScalrIterationApplication):
                 LOG.warning(msg)
                 time.sleep(5)
 
-
     def update_event(self, webhook):
         try:
             assert webhook['history_id'], 'event_id is null'
             if webhook['status'] == 1:
                 query = (
-                        """UPDATE events """
-                        """SET wh_completed=wh_completed+1 """
-                        """WHERE events.event_id='{event_id}'"""
+                    """UPDATE events """
+                    """SET wh_completed=wh_completed+1 """
+                    """WHERE events.event_id='{event_id}'"""
                 ).format(**webhook)
             elif webhook['status'] == 2:
                 query = (
-                        """UPDATE events """
-                        """SET wh_failed=wh_failed+1 """
-                        """WHERE events.event_id='{event_id}'"""
+                    """UPDATE events """
+                    """SET wh_failed=wh_failed+1 """
+                    """WHERE events.event_id='{event_id}'"""
                 ).format(**webhook)
             else:
                 return
@@ -182,7 +178,6 @@ class DBQueueEvent(application.ScalrIterationApplication):
             msg = "Events update failed, history_id: {0}, reason: {1}"
             msg = msg.format(webhook['history_id'], helper.exc_info())
             LOG.warning(msg)
-
 
     def do_iteration(self):
         webhooks = self.get_webhooks()
@@ -226,9 +221,9 @@ class DBQueueEvent(application.ScalrIterationApplication):
                             LOG.debug(msg)
                             self._pool.wait()
                             webhook['async_result'] = self._pool.apply_async(
-                                    self.post_webhook,
-                                    (webhook,),
-                                    {'headers': {}})
+                                self.post_webhook,
+                                (webhook,),
+                                {'headers': {}})
                             continue
                     else:
                         if 500 <= webhook['response_code'] < 600:
@@ -252,7 +247,6 @@ class DBQueueEvent(application.ScalrIterationApplication):
                 webhooks_to_iterate.remove(webhook)
 
         self._pool.join()
-
 
     def _handle_webhook_exception(self, webhook):
         exc = sys.exc_info()[1]
@@ -284,10 +278,8 @@ class DBQueueEvent(application.ScalrIterationApplication):
             msg = msg.format(webhook['history_id'], helper.exc_info())
             LOG.error(msg)
 
-
     def on_iteration_error(self):
         self._pool.kill()
-
 
 
 def main():
@@ -303,7 +295,6 @@ def main():
         pass
     except:
         LOG.exception('Oops')
-
 
 
 if __name__ == '__main__':

@@ -81,17 +81,18 @@ class BaseContainer
     /**
      * Gets parameter
      *
-     * @param   string $id Service Id
+     * @param   string    $id   Identifier of the service
      * @throws  \RuntimeException
      * @return  mixed
      */
     public function get($id)
     {
         if (!isset($this->values[$id])) {
-            throw new \RuntimeException(
-                sprintf('Could not find the service "%s"' , $id)
-            );
+            throw new \RuntimeException(sprintf(
+                'Could not find the service "%s" in the DI container.', $id
+            ));
         }
+
         return is_callable($this->values[$id]) ? $this->values[$id]($this) : $this->values[$id];
     }
 
@@ -135,25 +136,31 @@ class BaseContainer
                 'Second argument of the "%s" method must be callable.', __FUNCTION__
             ));
         }
+
         $ptr =& $this->shared;
+
         if (($t = strpos($id, '.')) !== false) {
             //We need to register release hook which is needed to remove all
             //associated objects from the memory.
             $parentid = substr($id, 0, $t);
+
             if (!isset($this->releasehooks[$parentid])) {
                 $this->releasehooks[$parentid] = array();
             }
+
             $this->releasehooks[$parentid][$id] = true;
         }
+
         $this->values[$id] = function (BaseContainer $container, $arguments = null) use ($id, $callable, &$ptr) {
             if (!isset($ptr[$id])) {
                 $ptr[$id] = $callable($container);
             }
+
             //Invokes magic method for the specified object if it does exist.
-            if (!empty($arguments) && is_array($arguments) &&
-                is_object($ptr[$id]) && method_exists($ptr[$id], '__invoke')) {
-                return call_user_func_array(array($ptr[$id], '__invoke'), $arguments);
+            if (!empty($arguments) && is_array($arguments) && is_object($ptr[$id]) && method_exists($ptr[$id], '__invoke')) {
+                return call_user_func_array([$ptr[$id], '__invoke'], $arguments);
             }
+
             return $ptr[$id];
         };
 
@@ -172,15 +179,19 @@ class BaseContainer
             if (is_object($this->shared[$id]) && method_exists($this->shared[$id], '__destruct')) {
                 $this->shared[$id]->__destruct();
             }
+
             unset($this->shared[$id]);
         }
+
         //Releases all children shared objects
         if (!empty($this->releasehooks[$id])) {
             foreach ($this->releasehooks[$id] as $serviceid => $b) {
                 $this->release($serviceid);
             }
+
             unset($this->releasehooks[$id]);
         }
+
         return $this;
     }
 

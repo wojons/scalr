@@ -1,6 +1,6 @@
 ADMINISTRATION_BILLING:
 # all action methods of billing controller
-- [/billing, ~, all]
+- [/account2/billing, ~, all]
 
 ADMINISTRATION_GLOBAL_VARIABLES:
 - /account/variables

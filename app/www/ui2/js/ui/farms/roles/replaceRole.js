@@ -1,17 +1,16 @@
 Scalr.regPage('Scalr.ui.farms.roles.replaceRole', function (loadParams, moduleParams) {
-	return Ext.create('Ext.form.Panel', {
+	return Scalr.utils.Window({
+        xtype: 'form',
 		scalrOptions: {
-			modal: true
+			modalWindow: true
 		},
-		width: 700,
+		width: 800,
         layout: 'fit',
         bodyCls: 'x-container-fieldset',
 		items: [{
             xtype: 'grid',
-            hideHeaders: true,
-            margin: '0 0 0 -32',
-            padding: '0 0 0 32',
-            cls: 'x-grid-shadow x-grid-no-selection',
+            margin: '0 0 0 -20',
+            padding: '0 0 0 20',
             plugins: [{
                 pluginId: 'rowpointer',
                 ptype: 'rowpointer',
@@ -21,51 +20,68 @@ Scalr.regPage('Scalr.ui.farms.roles.replaceRole', function (loadParams, modulePa
                 getPointerRecord: function() {
                     return this.client.store.getById(moduleParams['roleId']);
                 }
-            }],
+            }, 'selectedrecord'],
+            viewConfig: {
+                emptyText: 'No suitable roles found',
+                deferEmptyText: false
+            },
             store: {
-                fields: ['id', 'name', 'os_name', 'os_family', 'os_generation', 'os_version', 'shared', 'image', 'behaviors'],
+                fields: ['id', 'name', 'osId', 'shared', 'image', 'behaviors'],
                 proxy: 'object',
                 data: moduleParams['roles'],
-                sortOnLoad: true,
                 sorters: [{
-                    property: 'os_version',
+                    property: 'osId',
                     direction: 'ASC'
                 }]
             },
             columns: [{
                 xtype: 'templatecolumn',
+                text: 'Role',
+                dataIndex: 'name',
                 flex: 1,
-                tpl: 
-                    '<img src="' + Ext.BLANK_IMAGE_URL + '" class="x-icon-osfamily-small x-icon-osfamily-small-{os_family}"/>&nbsp;&nbsp;'+
-                    '{os_name} {[values.image.architecture==\'i386\'?32:64]}bit'+
-                    '&nbsp;&nbsp;(<tpl if="shared"><span style="color:#46A657" title="Quick start role.">{name}</span><tpl else>{name}</tpl>)'
-                    
+                tpl: new Ext.XTemplate('{[this.getScope(values.shared)]}&nbsp;&nbsp;{name}',
+                    {
+                        getScope: function(shared){
+                            var scope = shared ? 'scalr' : 'environment';
+                            return '<img src="' + Ext.BLANK_IMAGE_URL + '" class="scalr-scope-'+scope+'" data-qclass="x-tip-light" data-qtip="' + Scalr.utils.getScopeLegend('role') + '"/>';
+                        }
+                    }
+                )
+
+            },{
+                xtype: 'templatecolumn',
+                text: 'OS',
+                dataIndex: 'osId',
+                flex: .6,
+                tpl:
+                    '{[this.getOsById(values.osId)]} '+
+                    '{[values.image.architecture==\'i386\'?32:64]}bit'
+
             },{
                 xtype: 'templatecolumn',
                 align: 'right',
+                sortable: false,
+                resizeable: false,
                 tpl  : new Ext.XTemplate('{[this.renderBehaviors(values.behaviors)]}',{
                     renderBehaviors: function(behaviors) {
                         var res = [];
                         Ext.Array.each(behaviors, function(behavior){
-                            res.push('<img title="' + Scalr.utils.beautifyBehavior(behavior) + '" src="' + Ext.BLANK_IMAGE_URL + '" class="x-icon-role-small x-icon-role-small-' + behavior + '"/>');
+                            res.push('<img style="margin:0 3px 0 0" title="' + Scalr.utils.beautifyBehavior(behavior) + '" src="' + Ext.BLANK_IMAGE_URL + '" class="x-icon-role-small x-icon-role-small-' + behavior + '"/>');
                         });
                         return res.join('&nbsp;');
                     }
                 })
             }],
-            viewConfig: {
-                listeners: {
-                    viewready: function(){
-                        var grid = this,
-                            selModel = this.getSelectionModel(),
-                            record = this.store.getById(moduleParams['roleId']);
-                        selModel.setLastFocused(record);
-                        selModel.on('focuschange', function(selModel, oldFocused, newFocused){
-                            if (newFocused) {
-                                grid.up('form').down('#replace').setDisabled(newFocused.get('id') == moduleParams['roleId']);
-                            }
-                        })
-                    }
+            listeners: {
+                viewready: function(){
+                    var grid = this,
+                        record = this.store.getById(moduleParams['roleId']);
+                    grid.setSelectedRecord(record);
+                    grid.on('selectedrecordchange', function(record){
+                        if (record) {
+                            grid.up('form').down('#replace').setDisabled(record.get('id') == moduleParams['roleId']);
+                        }
+                    });
                 }
             }
         }],
@@ -98,12 +114,13 @@ Scalr.regPage('Scalr.ui.farms.roles.replaceRole', function (loadParams, modulePa
                 text: 'Replace',
                 disabled: true,
                 handler: function() {
-                    var record = this.up('form').down('grid').getSelectionModel().getLastFocused();
+                    var me = this,
+                        record = me.up('form').down('grid').getSelectedRecord();
                     if (record) {
                         Scalr.Request({
 							confirmBox: {
 								type: 'action',
-								msg: 'Are you sure you want to replace this role?<br>' + 
+								msg: 'Are you sure you want to replace this role?<br>' +
 								'This change will be saved immediately!'
 							},
                             processBox: {
@@ -119,7 +136,7 @@ Scalr.regPage('Scalr.ui.farms.roles.replaceRole', function (loadParams, modulePa
                                     farmRoleId: loadParams['farmRoleId'],
                                     role: data.role
                                 });
-                                Scalr.event.fireEvent('close');
+                                me.up('form').close();
                             }
                         });
                     }
@@ -130,7 +147,7 @@ Scalr.regPage('Scalr.ui.farms.roles.replaceRole', function (loadParams, modulePa
                 text: 'Cancel',
                 margin: '0 0 0 24',
                 handler: function() {
-                    Scalr.event.fireEvent('close');
+                    this.up('form').close();
                 }
             }]
         }]

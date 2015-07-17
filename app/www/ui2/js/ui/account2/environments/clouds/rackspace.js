@@ -2,7 +2,6 @@ Scalr.regPage('Scalr.ui.account2.environments.clouds.rackspace', function (loadP
 	var params = moduleParams['params'];
 	
 	var form = Ext.create('Ext.form.Panel', {
-        //bodyCls: 'x-container-fieldset',
         autoScroll: true,
 		fieldDefaults: {
 			anchor: '100%'

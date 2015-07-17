@@ -153,7 +153,7 @@ class Scalr_Scripting_Manager
         );
 
         if ($scriptSettings['type'] == self::ORCHESTRATION_SCRIPT_TYPE_SCALR) {
-            /* @var Script $script */
+            /* @var $script Script */
             $script = Script::findPk($scriptSettings['scriptid']);
             if (! $script)
                 return false;
@@ -176,7 +176,7 @@ class Scalr_Scripting_Manager
             $template['id'] = $script->id;
             $template['body'] = $version->content;
 
-            $scriptParams = (array) $version->variables; // variables could be null
+            $scriptParams = $script->allowScriptParameters ? (array) $version->variables : []; // variables could be null
             foreach ($scriptParams as &$val)
                 $val = "";
 
@@ -321,7 +321,7 @@ class Scalr_Scripting_Manager
                     continue;
             }
 
-            if ($scriptSettings['target'] == Script::TARGET_ROLES || $scriptSettings['target'] == Script::TARGET_BEHAVIORS) {
+            if ($scriptSettings['target'] == Script::TARGET_ROLES || $scriptSettings['target'] == Script::TARGET_BEHAVIORS  || $scriptSettings['target'] == Script::TARGET_FARMROLES) {
 
                 if ($scriptSettings['scope'] != 'role')
                     $targets = $db->GetAll("SELECT * FROM farm_role_scripting_targets WHERE farm_role_script_id = ?", array($scriptSettings['id']));
@@ -332,7 +332,8 @@ class Scalr_Scripting_Manager
                 foreach ($targets as $target) {
                     switch ($target['target_type']) {
                         case "farmrole":
-                            if ($targetServer->farmRoleId == $target['target'])
+                            if ($scriptSettings['target'] == Script::TARGET_ROLES && $targetServer->farmRoleId == $target['target'] ||
+                                $scriptSettings['target'] == Script::TARGET_FARMROLES && $targetServer->GetFarmRoleObject()->Alias == $target['target'])
                                 $execute = true;
                             break;
                         case "behavior":

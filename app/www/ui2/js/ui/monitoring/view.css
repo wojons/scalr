@@ -1,6 +1,9 @@
-.scalr-ui-monitoring-tree-panel .x-grid-cell-inner {
-    max-width: 300px;
-    padding-right: 30px;
+.scalr-ui-monitoring-main-panel {
+    background-color: #e1ebf4;
+}
+
+.scalr-ui-monitoring-left-panel {
+    background: rgb(195, 214, 230);
 }
 
 .scalr-ui-monitoring-tree-panel .x-tree-node-text {
@@ -10,11 +13,15 @@
 }
 
 .scalr-ui-monitoring-checked-node {
-    background-color: #dfe7ec !important;
+    background-color: #e1ebf4 !important;
+}
+
+.scalr-ui-monitoring-compare-mode .x-grid-item-selected {
+    background-color: inherit;
 }
 
 .scalr-ui-monitoring-main-container {
-    background: inherit;
+    background-color: #e1ebf4;
 }
 
 .scalr-ui-monitoring-loading-message {
@@ -36,34 +43,34 @@
 
 .scalr-ui-monitoring-container-for-statistics {
     float: left;
-    margin: 14px 0 0 12px;
+    margin: 15px 0 0 15px;
 }
 
 .scalr-ui-monitoring-container-for-statistics div {
-    margin-bottom: 12px;
+    margin-bottom: 15px;
 }
 
 .scalr-ui-monitoring-title {
-    color: white;
+    color: #224164;
     font-size: 18px;
     margin-bottom: 14px !important;
 }
 
 .scalr-ui-monitoring-statistics-container {
-    width: 530px;
+    width: 510px;
     position: relative;
 }
 
 .scalr-ui-monitoring-statistics-container-compare-mode-off {
-    margin: 12px 0 0 12px;
-    width: 530px;
+    margin: 15px 0 0 15px;
+    width: 510px;
     position: relative;
     display: inline-block;
     vertical-align: top;
 }
 
 .scalr-ui-monitoring-statistics-container-compare-mode-off:last-child {
-    margin-bottom: 12px;
+    margin-bottom: 15px;
 }
 
 .scalr-ui-monitoring-add-to-dashboard-tool-container {
@@ -74,26 +81,37 @@
 }
 
 .scalr-ui-monitoring-add-to-dashboard-tool {
-    background: #E0E6EB;
-    border-radius: 3px;
+    border-radius: 2px;
     height: 42px;
     width: 42px;
     position: relative;
-    box-shadow: 0 1px rgba(65,92,120,0.2),0 1px 1px rgba(65,92,120,0.3);
     -webkit-box-shadow: 0 1px 1px rgba(65,92,120,0.4),0 1px 2px rgba(65,92,120,0.2);
     z-index: 10;
     cursor: pointer;
+    background: #F1F5FA;
+    box-shadow: 0 1px rgba(58, 101, 148, 0.1), 1px 0 rgba(58, 101, 148, 0.1), -1px 0 rgba(58, 101, 148, 0.1);
 }
 
 .scalr-ui-monitoring-add-to-dashboard-tool:after {
-    background: url(/ui2/js/extjs-4.2/theme/images/tools/tool-sprites.png) 0 32px;
+    background: url(/ui2/js/extjs-5.0/theme/images/tools/tool-sprites.png) 0 -220px;
     content: '';
     position: absolute;
-    top: 13px;
-    left: 13px;
-    right: 13px;
-    bottom: 13px;
+    top: 10px;
+    left: 10px;
+    right: 10px;
+    bottom: 10px;
     z-index: -1;
+}
+
+@media only screen and (-webkit-min-device-pixel-ratio: 1.5),
+only screen and (-o-min-device-pixel-ratio: 3/2),
+only screen and (min--moz-device-pixel-ratio: 1.5),
+only screen and (min-device-pixel-ratio: 1.5) {
+
+    .scalr-ui-monitoring-add-to-dashboard-tool:after {
+        background-image: url(/ui2/js/extjs-5.0/theme/images/tools/tool-sprites-retina.png);
+        background-size: 44px 330px;
+    }
 }
 
 .scalr-ui-monitoring-add-to-dashboard-tool-container:hover {
@@ -101,7 +119,7 @@
 }
 
 .scalr-ui-monitoring-add-to-dashboard-tool-container:hover .scalr-ui-monitoring-add-to-dashboard-tool:after {
-    background-position: 16px 32px;
+    background-position: 22px -220px;
 }
 
 .scalr-ui-monitoring-add-to-dashboard-tool a {
@@ -120,13 +138,18 @@
 .scalr-ui-monitoring-image-container,
 .scalr-ui-monitoring-image-container-compare-mode-off {
     background: white;
-    border-radius: 3px;
+    border-radius: 2px;
     color: #F04A46;
     text-align: center;
     height: 300px;
-    width: 530px;
+    width: 510px;
     line-height: 300px;
     overflow: hidden;
+}
+
+.scalr-ui-monitoring-image-container .scalr-ui-monitoring-message-error,
+.scalr-ui-monitoring-image-container-compare-mode-off .scalr-ui-monitoring-message-error {
+    line-height: 20px;
 }
 
 .scalr-ui-monitoring-disk-name-container {
@@ -138,12 +161,11 @@
 
 .scalr-ui-monitoring-disk-name {
     position: relative;
-    background: #E0E6EB;
-    border-radius: 3px;
+    background: #e1ebf4;
+    border-radius: 2px;
     height: 20px;
     width: 60px;
     text-align: center;
-    padding-top: 2px;
 }
 
 .scalr-ui-monitoring-disk-name-container:hover + .scalr-ui-monitoring-add-to-dashboard-tool-container {
@@ -170,4 +192,15 @@
     color: #F04A46;
 }
 
+.scalr-ui-monitoring-tree-node-farm span:first-child,
+.scalr-ui-monitoring-tree-node-farmrole span:first-child {
+    font-weight: bold;
+}
 
+.scalr-ui-monitoring-tree-node-farm {
+    color: #039203;
+}
+
+.scalr-ui-monitoring-tree-node-farm span:first-child {
+    color: #224164;
+}

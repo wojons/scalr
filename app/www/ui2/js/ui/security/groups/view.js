@@ -12,20 +12,15 @@ Scalr.regPage('Scalr.ui.security.groups.view', function (loadParams, moduleParam
 	});
 
 	return Ext.create('Ext.grid.Panel', {
-		title: Scalr.utils.getPlatformName(loadParams['platform']) + ' &raquo; Security groups &raquo; View',
 		scalrOptions: {
-			'reload': true,
-			'maximize': 'all'
+			reload: true,
+			maximize: 'all',
+            menuTitle: Scalr.utils.getPlatformName(loadParams['platform']) + ' Security groups'
 		},
 		store: store,
 		stateId: 'grid-security-groups-view',
 		stateful: true,
-		plugins: {
-			ptype: 'gridstore'
-		},
-		tools: [{
-			xtype: 'gridcolumnstool'
-		}],
+        plugins: [ 'gridstore', 'applyparams' ],
 
 		viewConfig: {
 			emptyText: "No security groups found",
@@ -36,20 +31,21 @@ Scalr.regPage('Scalr.ui.security.groups.view', function (loadParams, moduleParam
 		    { header: "ID", width: 180, dataIndex: 'id', sortable: true },
 		    { header: 'Used by', flex: 1, dataIndex: 'farm_id', sortable: false, xtype: 'templatecolumn', tpl:
 				'<tpl if="farm_id">' +
-					'<a href="#/farms/{farm_id}/view" title="Farm {farm_name}">{farm_name}</a>' +
+					'<a href="#/farms?farmId={farm_id}" title="Farm {farm_name}">{farm_name}</a>' +
 					'<tpl if="farm_roleid">' +
 						'&nbsp;&rarr;&nbsp;<a href="#/farms/{farm_id}/roles/{farm_roleid}/view" title="Role {role_name}">{role_name}</a> ' +
 					'</tpl>' +
-				'<tpl else><img src="' + Ext.BLANK_IMAGE_URL + '" class="x-icon-minus" /></tpl>'
+				'<tpl else>&mdash;</tpl>'
 			},
-			{ header: "Name", flex: 1, dataIndex: 'name', sortable: true },
+			{ header: "Security group", flex: 1, dataIndex: 'name', sortable: true },
 			{ header: "Description", flex: 2, dataIndex: 'description', sortable: true },
 			{ header: "VPC ID", width: 180, dataIndex: 'vpcId', sortable: true },
 			{
-				xtype: 'optionscolumn2',
+				xtype: 'optionscolumn',
 				menu: [{
                     iconCls: 'x-menu-icon-edit',
                     text:'Edit',
+                    showAsQuickAction: true,
                     menuHandler: function(data) {
 						Scalr.event.fireEvent('redirect', '#/security/groups/' + data['id'] + '/edit?platform=' + loadParams['platform'] + (Scalr.isCloudstack(loadParams['platform']) ? '' : '&cloudLocation=' + store.proxy.extraParams.cloudLocation));
 					}
@@ -57,11 +53,7 @@ Scalr.regPage('Scalr.ui.security.groups.view', function (loadParams, moduleParam
 			}
 		],
 
-        multiSelect: true,
-        selModel: {
-            selType: 'selectedmodel'
-        },
-
+        selModel: 'selectedmodel',
         listeners: {
             selectionchange: function(selModel, selections) {
                 this.down('scalrpagingtoolbar').down('#delete').setDisabled(!selections.length);
@@ -70,20 +62,19 @@ Scalr.regPage('Scalr.ui.security.groups.view', function (loadParams, moduleParam
 
         dockedItems: [{
             xtype: 'scalrpagingtoolbar',
-            ignoredLoadParams: ['platform'],
             store: store,
             dock: 'top',
 			beforeItems: [{
-                text: 'Add group',
-                cls: 'x-btn-green-bg',
+                text: 'New group',
+                cls: 'x-btn-green',
                 handler: function() {
                     Scalr.event.fireEvent('redirect', '#/security/groups/create?platform=' + loadParams['platform'] + (Scalr.isCloudstack(loadParams['platform']) ? '' : '&cloudLocation=' + store.proxy.extraParams.cloudLocation));
                 }
             }],
             afterItems: [{
-                ui: 'paging',
                 itemId: 'delete',
-                iconCls: 'x-tbar-delete',
+                iconCls: 'x-btn-icon-delete',
+                cls: 'x-btn-red',
                 tooltip: 'Select one or more security group(s) to delete them',
                 disabled: true,
                 handler: function() {
@@ -115,15 +106,10 @@ Scalr.regPage('Scalr.ui.security.groups.view', function (loadParams, moduleParam
                 xtype: 'filterfield',
                 store: store
             }, ' ', {
-                xtype: 'fieldcloudlocation',
-                itemId: 'cloudLocation',
-                store: {
-                    fields: [ 'id', 'name' ],
-                    data: moduleParams.locations,
-                    proxy: 'object'
-                },
-                hidden: Scalr.isCloudstack(loadParams['platform']),
-                gridStore: store
+                xtype: 'cloudlocationfield',
+                platforms: [loadParams['platform']],
+                gridStore: store,
+                hidden: Scalr.isCloudstack(loadParams['platform'])
             }]
         }]
 	});

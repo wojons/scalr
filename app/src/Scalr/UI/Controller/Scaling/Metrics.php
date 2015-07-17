@@ -1,147 +1,169 @@
 <?php
-use Scalr\Acl\Acl;
 
+use Scalr\Acl\Acl;
+use Scalr\Model\Entity;
+use Scalr\UI\Request\JsonData;
+use Scalr\UI\Request\Validator;
+
+/**
+ * Class Scalr_UI_Controller_Scaling_Metrics.
+ */
 class Scalr_UI_Controller_Scaling_Metrics extends Scalr_UI_Controller
 {
     const CALL_PARAM_NAME = 'metricId';
-
 
     public function defaultAction()
     {
         $this->viewAction();
     }
 
-    public function getList()
-    {
-        $dbmetrics = $this->db->Execute("SELECT * FROM scaling_metrics WHERE env_id=0 OR env_id=?",
-            array($this->getEnvironmentId())
-        );
-
-        $metrics = array();
-        while ($metric = $dbmetrics->FetchRow())
-        {
-            $metrics[$metric['id']] = array(
-                'id'	=> $metric['id'],
-                'name'	=> $metric['name'],
-                'alias'	=> $metric['alias']
-            );
-        }
-
-        return $metrics;
-    }
-
-
+    /**
+     * @throws Scalr_Exception_Core
+     * @throws Scalr_Exception_InsufficientPermissions
+     */
     public function xGetListAction()
     {
         $this->request->restrictAccess(Acl::RESOURCE_GENERAL_CUSTOM_SCALING_METRICS);
-        $this->response->data(array('metrics' => $this->getList()));
+        $this->response->data(['metrics' => Entity\ScalingMetric::getList($this->getEnvironmentId())]);
     }
 
+    /**
+     * @throws Scalr_Exception_Core
+     * @throws Scalr_Exception_InsufficientPermissions
+     */
     public function getListAction()
     {
         $this->request->restrictAccess(Acl::RESOURCE_GENERAL_CUSTOM_SCALING_METRICS);
-        $this->response->data(array('metrics' => $this->getList()));
+        $this->response->data(['metrics' => Entity\ScalingMetric::getList($this->getEnvironmentId())]);
     }
 
-    public function xSaveAction()
+    /**
+     * Save metric.
+     *
+     * @param string $name
+     * @param string $retrieveMethod
+     * @param string $calcFunction
+     * @param int    $metricId       optional
+     * @param string $filePath       optional
+     * @throws Exception
+     * @throws Scalr_Exception_Core
+     * @throws Scalr_Exception_InsufficientPermissions
+     * @throws \Scalr\Exception\ModelException
+     */
+    public function xSaveAction($name, $retrieveMethod, $calcFunction, $metricId = null, $filePath = null)
     {
         $this->request->restrictAccess(Acl::RESOURCE_GENERAL_CUSTOM_SCALING_METRICS);
-        $this->request->defineParams(array(
-            'metricId' => array('type' => 'int'),
-            'name', 'filePath', 'retrieveMethod', 'calcFunction'
-        ));
 
-        $metric = Scalr_Scaling_Metric::init();
+        $validator = new Validator;
 
-        if ($this->getParam('metricId')) {
-            $metric->loadById($this->getParam('metricId'));
+        if ($metricId) {
+            /* @var \Scalr\Model\Entity\ScalingMetric $metric */
+            $metric = Entity\ScalingMetric::findPk($metricId);
+
+            if (!$metric) {
+                throw new Scalr_UI_Exception_NotFound();
+            }
+
             $this->user->getPermissions()->validate($metric);
         } else {
-            $metric->clientId = $this->user->getAccountId();
+            $metric = new Entity\ScalingMetric();
+            $metric->accountId = $this->user->getAccountId();
             $metric->envId = $this->getEnvironmentId();
             $metric->alias = 'custom';
-            $metric->algorithm = Scalr_Scaling_Algorithm::SENSOR_ALGO;
+            $metric->algorithm = Entity\ScalingMetric::ALGORITHM_SENSOR;
         }
 
-        if (!preg_match("/^[A-Za-z0-9]{6,}/", $this->getParam('name')))
-            throw new Exception("Metric name should me alphanumeric and greater than 5 chars");
+        if (!preg_match('/^[A-Za-z0-9]{5,}$/', $name)) {
+            $validator->addError('name', 'Metric name should be alphanumeric and greater than 5 chars');
+        }
 
-        $metric->name = $this->getParam('name');
-        $metric->filePath = $this->getParam('filePath');
-        $metric->retrieveMethod = $this->getParam('retrieveMethod');
-        $metric->calcFunction = $this->getParam('calcFunction');
+        $criteria = [];
+        $criteria[] = ['name' => $name];
+        if ($metricId) {
+            $criteria[] = ['id' => ['$ne' => $metricId]];
+        }
 
-        $metric->save();
-        $this->response->success('Scaling metric successfully saved');
+        if (Entity\ScalingMetric::findOne($criteria)) {
+            $validator->addError('name', 'Metric with the same name already exist');
+        }
+
+        if ($validator->isValid($this->response)) {
+            $metric->name = $name;
+            $metric->filePath = $filePath;
+            $metric->retrieveMethod = $retrieveMethod;
+            $metric->calcFunction = $calcFunction;
+
+            $metric->save();
+
+            $this->response->success('Scaling metric successfully saved');
+            $this->response->data(['metric' => get_object_vars($metric)]);
+        }
     }
 
-    public function xRemoveAction()
+    /**
+     * Remove metrics.
+     *
+     * @param JsonData $metrics json array of metricId to remove
+     * @throws Scalr_Exception_Core
+     * @throws Scalr_Exception_InsufficientPermissions
+     * @throws \Scalr\Exception\ModelException
+     */
+    public function xRemoveAction(JsonData $metrics)
     {
         $this->request->restrictAccess(Acl::RESOURCE_GENERAL_CUSTOM_SCALING_METRICS);
-        $this->request->defineParams(array(
-            'metrics' => array('type' => 'json')
-        ));
+        $processed = [];
+        $err = [];
 
-        foreach ($this->getParam('metrics') as $metricId) {
-            if (!$this->db->GetOne("SELECT id FROM farm_role_scaling_metrics WHERE metric_id=? LIMIT 1", array($metricId)))
-                $this->db->Execute("DELETE FROM scaling_metrics WHERE id=? AND env_id=?", array($metricId, $this->getEnvironmentId()));
-            else
-                $err[] = sprintf(_("Metric #%s is used and cannot be removed"), $metricId);
+        foreach ($metrics as $metricId) {
+            try {
+                if (!$this->db->GetOne("SELECT id FROM farm_role_scaling_metrics WHERE metric_id=? LIMIT 1", [$metricId])) {
+                    /* @var \Scalr\Model\Entity\ScalingMetric $metric */
+                    $metric = Entity\ScalingMetric::findOne([['id' => $metricId], ['envId' => $this->getEnvironmentId()]]);
+
+                    if (!$metric) {
+                        throw new Scalr_UI_Exception_NotFound();
+                    }
+
+                    $metric->delete();
+                    $processed[] = $metricId;
+                } else {
+                    $err[] = sprintf(_('Metric #%s is used and cannot be removed'), $metricId);
+                }
+            } catch (Exception $e) {
+                $err[] = $e->getMessage();
+            }
         }
 
-        if (count($err) == 0)
+        if (!count($err)) {
             $this->response->success('Selected metric(s) successfully removed');
-        else
+        } else {
             $this->response->warning(implode("\n", $err));
+        }
+
+        $this->response->data(['processed' => $processed]);
     }
 
-    public function createAction()
-    {
-        $this->request->restrictAccess(Acl::RESOURCE_GENERAL_CUSTOM_SCALING_METRICS);
-        $this->response->page('ui/scaling/metrics/create.js', array(
-            'name' => '',
-            'filePath' => '',
-            'retrieveMethod' => '',
-            'calcFunction' => ''
-        ));
-    }
-
-    public function editAction()
-    {
-        $this->request->restrictAccess(Acl::RESOURCE_GENERAL_CUSTOM_SCALING_METRICS);
-        $this->request->defineParams(array(
-            'metricId' => array('type' => 'int')
-        ));
-
-        $metric = Scalr_Scaling_Metric::init()->loadById($this->getParam('metricId'));
-        $this->user->getPermissions()->validate($metric);
-
-        $this->response->page('ui/scaling/metrics/create.js', array(
-            'name' => $metric->name,
-            'filePath' => $metric->filePath,
-            'retrieveMethod' => $metric->retrieveMethod,
-            'calcFunction' => $metric->calcFunction
-        ));
-    }
-
+    /**
+     * @throws Scalr_Exception_InsufficientPermissions
+     */
     public function viewAction()
     {
         $this->request->restrictAccess(Acl::RESOURCE_GENERAL_CUSTOM_SCALING_METRICS);
         $this->response->page('ui/scaling/metrics/view.js');
     }
 
+    /**
+     * @throws Scalr_Exception_Core
+     * @throws Scalr_Exception_InsufficientPermissions
+     */
     public function xListMetricsAction()
     {
         $this->request->restrictAccess(Acl::RESOURCE_GENERAL_CUSTOM_SCALING_METRICS);
-        $this->request->defineParams(array(
-            'metricId' => array('type' => 'int'),
-            'sort' => array('type' => 'json')
-        ));
 
-        $sql = 'SELECT * FROM scaling_metrics WHERE env_id = ? OR env_id = 0';
-        $args = array($this->getEnvironmentId());
+        $criteria = [['$or' => [['envId' => $this->getEnvironmentId()],['envId' => null]]]];
+        $metrics = (array) Entity\ScalingMetric::result(Entity\ScalingMetric::RESULT_ENTITY_COLLECTION)
+            ->find($criteria, ['id' => true, 'name' => true, 'filePath' => true]);
 
-        $response = $this->buildResponseFromSql2($sql, array('id', 'name', 'file_path'), array(), $args);
-        $this->response->data($response);
+        $this->response->data(['data' => $metrics, 'total' => count($metrics)]);
     }
 }

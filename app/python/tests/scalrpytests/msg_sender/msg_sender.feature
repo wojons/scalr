@@ -29,7 +29,7 @@ Feature: Message sender
         White Rabbit stops script with options '-c ../../../tests/etc/config.yml -v DEBUG'
         White Rabbit stops wsgi server on port 8013
 
-        White Rabbit checks messages
+        White Rabbit checks messages table
             | messageid                              | status | handle_attempts |
             | 'b0000000-0000-0000-0000-000000000001' | 1      | 1               |
             | 'b0000000-0000-0000-0000-000000000003' | 0      | 0               |
@@ -60,7 +60,7 @@ Feature: Message sender
         White Rabbit waits 2 seconds
         White Rabbit stops script with options '-c ../../../tests/etc/config.yml -v DEBUG'
         
-        White Rabbit checks messages
+        White Rabbit checks messages table
           | messageid                              | status | handle_attempts |
           | 'b0000000-0000-0000-0000-000000000001' | 0      | 1               |
  
@@ -95,7 +95,7 @@ Feature: Message sender
         White Rabbit stops script with options '-c ../../../tests/etc/config.yml -v DEBUG'
         White Rabbit stops wsgi server on port 8013
         
-        White Rabbit checks messages
+        White Rabbit checks messages table
           | messageid                              | status | handle_attempts |
           | 'b0000000-0000-0000-0000-000000000001' | 1      | 1               |
  
@@ -132,7 +132,7 @@ Feature: Message sender
         White Rabbit stops script with options '-c ../../../tests/etc/config.yml -v DEBUG'
         White Rabbit stops wsgi server on port 8013
         
-        White Rabbit checks messages
+        White Rabbit checks messages table
           | messageid                              | status | handle_attempts |
           | 'b0000000-0000-0000-0000-000000000001' | 1      | 2               |
      
@@ -184,7 +184,7 @@ Feature: Message sender
         White Rabbit stops script with options '-c ../../../tests/etc/config.yml -v DEBUG'
         White Rabbit stops wsgi server on port 8013
         
-        White Rabbit checks messages
+        White Rabbit checks messages table
           | messageid                              | status | handle_attempts |
           | 'b0000000-0000-0000-0000-000000000001' | 1      | 1               |
           | 'b0000000-0000-0000-0000-000000000002' | 1      | 1               |
@@ -240,7 +240,7 @@ Feature: Message sender
         White Rabbit stops wsgi server on port 80
         White Rabbit stops wsgi server on port 8013
         
-        White Rabbit checks messages
+        White Rabbit checks messages table
           | messageid                              | status | handle_attempts |
           | 'b0000000-0000-0000-0000-000000000002' | 1      | 1               |
           | 'b0000000-0000-0000-0000-000000000002' | 1      | 1               |
@@ -276,7 +276,7 @@ Feature: Message sender
         White Rabbit stops script with options '-c ../../../tests/etc/config-local.yml -v DEBUG'
         White Rabbit stops wsgi server on port 8013
 
-        White Rabbit checks messages
+        White Rabbit checks messages table
             | messageid                              | status | handle_attempts |
             | 'b0000000-0000-0000-0000-000000000001' | 1      | 1               |
             | 'b0000000-0000-0000-0000-000000000003' | 0      | 0               |
@@ -307,7 +307,7 @@ Feature: Message sender
         White Rabbit waits 370 seconds
         White Rabbit stops script with options '-c ../../../tests/etc/config.yml -v DEBUG'
         
-        White Rabbit checks messages
+        White Rabbit checks messages table
           | messageid                              | status | handle_attempts |
           | 'b0000000-0000-0000-0000-000000000001' | 3      | 3               |
 

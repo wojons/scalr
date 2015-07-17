@@ -11,12 +11,13 @@ Scalr.regPage('Scalr.ui.tools.openstack.lb.monitors.view', function (loadParams,
 
     var panel = Ext.create('Ext.grid.Panel', {
 
-        title: Scalr.utils.getPlatformName(loadParams['platform']) + ' &raquo; Load balancers &raquo; Monitors',
         itemId: 'lbMonitorsGrid',
 
         scalrOptions: {
             //'reload': false,
-            'maximize': 'all'
+            maximize: 'all',
+            menuTitle: Scalr.utils.getPlatformName(loadParams['platform']) + ' LB Monitors',
+            //menuFavorite: true
         },
 
         store: store,
@@ -24,17 +25,11 @@ Scalr.regPage('Scalr.ui.tools.openstack.lb.monitors.view', function (loadParams,
         stateId: 'grid-tools-openstack-lb-monitors-view',
         stateful: true,
 
-        plugins: {
+        plugins: [{
             ptype: 'gridstore'
-        },
-        tools: [{
-            xtype: 'gridcolumnstool'
         }, {
-            xtype: 'favoritetool',
-            favorite: {
-                text: 'LB Monitors',
-                href: '#/tools/openstack/lb/members'
-            }
+            ptype: 'applyparams',
+            filterIgnoreParams: [ 'platform' ]
         }],
 
         viewConfig: {
@@ -57,10 +52,11 @@ Scalr.regPage('Scalr.ui.tools.openstack.lb.monitors.view', function (loadParams,
             { header: "Delay", width: 100, dataIndex: 'delay' },
             { header: "Timeout", width: 100, dataIndex: 'timeout' },
             { header: "Max retries", width: 125, dataIndex: 'max_retries' },
-            { xtype: 'optionscolumn2',
+            { xtype: 'optionscolumn',
                 menu: [{
                     text: 'View',
                     iconCls: 'x-menu-icon-view',
+                    showAsQuickAction: true,
                     menuHandler: function(data) {
                         var platform = 'platform=' + store.proxy.extraParams.platform,
                             cloudLocation = '&cloudLocation=' + store.proxy.extraParams.cloudLocation,
@@ -75,11 +71,7 @@ Scalr.regPage('Scalr.ui.tools.openstack.lb.monitors.view', function (loadParams,
             }
         ],
 
-        multiSelect: true,
-        selModel: {
-            selType: 'selectedmodel'
-        },
-
+        selModel: 'selectedmodel',
         listeners: {
             selectionchange: function(selModel, selections) {
                 var toolbar = this.down('scalrpagingtoolbar');
@@ -89,12 +81,11 @@ Scalr.regPage('Scalr.ui.tools.openstack.lb.monitors.view', function (loadParams,
 
         dockedItems: [{
             xtype: 'scalrpagingtoolbar',
-            ignoredLoadParams: ['platform'],
             store: store,
             dock: 'top',
             beforeItems: [{
-                text: 'Add monitor',
-                cls: 'x-btn-green-bg',
+                text: 'New monitor',
+                cls: 'x-btn-green',
                 handler: function() {
                     var platform = 'platform=' + store.proxy.extraParams.platform,
                         cloudLocation = '&cloudLocation=' + store.proxy.extraParams.cloudLocation,
@@ -106,10 +97,10 @@ Scalr.regPage('Scalr.ui.tools.openstack.lb.monitors.view', function (loadParams,
                 }
             }],
             afterItems: [{
-                ui: 'paging',
                 itemId: 'delete',
                 disabled: true,
-                iconCls: 'x-tbar-delete',
+                iconCls: 'x-btn-icon-delete',
+                cls: 'x-btn-red',
                 tooltip: 'Delete',
                 handler: function() {
                     var request = {
@@ -147,14 +138,9 @@ Scalr.regPage('Scalr.ui.tools.openstack.lb.monitors.view', function (loadParams,
                 xtype: 'filterfield',
                 store: store
             }, ' ', {
-                xtype: 'fieldcloudlocation',
-                itemId: 'cloudLocation',
-                store: {
-                    fields: [ 'id', 'name' ],
-                    data: moduleParams.locations,
-                    proxy: 'object'
-                },
-                gridStore: store
+                xtype: 'cloudlocationfield',
+                platforms: [loadParams['platform']],
+				gridStore: store
             }]
         }]
     });

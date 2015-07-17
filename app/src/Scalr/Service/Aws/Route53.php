@@ -59,20 +59,13 @@ class Route53 extends AbstractService implements ServiceInterface
      */
     public function getUrl()
     {
+        //Amazon Route 53 uses two endpoints. The endpoint that you use depends on the operation that you want to perform.
+        //Requests for hosted zones, resource record sets, health checks, and cost allocation tags use the following endpoint.
         return 'route53.amazonaws.com';
 
-        /* $region = $this->getAws()->getRegion();
-
-
-        if ($region == Aws::REGION_US_GOV_WEST_1) {
-            return 'route53.us-gov-west-1.amazonaws.com';
-        } elseif ($region == Aws::REGION_CN_NORTH_1) {
-            return 'route53.cn-north-1.amazonaws.com.cn';
-        }
-
-
-        return 'route53.' . $region . '.amazonaws.com';
-        */
+        //Requests for domain registration use the following endpoint.
+        //$region = $this->getAws()->getRegion();
+        //return 'route53domains.' . $region . '.amazonaws.com';
     }
 
     /**

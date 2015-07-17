@@ -2,7 +2,7 @@ Ext.define('Scalr.ui.SecurityGroupEditor', {
 	extend: 'Ext.form.Panel',
 	alias: 'widget.sgeditor',
     vpcIdReadOnly: false,
-
+    layout: 'fit',
     initComponent: function () {
         var me = this;
 
@@ -16,8 +16,12 @@ Ext.define('Scalr.ui.SecurityGroupEditor', {
         itemId: 'formtitle',
         cls: 'x-fieldset-separator-none x-fieldset-no-bottom-padding',
         title: '&nbsp;',
+        layout: {
+            type: 'vbox',
+            align: 'stretch'
+        },
         defaults: {
-            anchor: '100%',
+            //anchor: '100%',
             labelWidth: 120
         },
         items: [{
@@ -65,14 +69,14 @@ Ext.define('Scalr.ui.SecurityGroupEditor', {
             valueField: 'id',
             displayField: 'name',
             plugins: [{
+                ptype: 'fieldicons',
+                position: 'outer',
+                icons: ['governance']
+            },{
                 ptype: 'comboaddnew',
                 pluginId: 'comboaddnew',
                 url: '/tools/aws/vpc/create'
-            }],
-            icons: {
-                governance: true
-            },
-            iconsPosition: 'outer'
+            }]
         }, {
             xtype: 'displayfield',
             name: 'cloudLocationName',
@@ -80,14 +84,12 @@ Ext.define('Scalr.ui.SecurityGroupEditor', {
         },{
             xtype: 'grid',
             itemId: 'view',
-            cls: 'x-grid-shadow x-grid-no-highlighting',
-            maxHeight: 500,
-            selModel: {
-                selType: 'selectedmodel'
-            },
+            trackMouseOver: false,
+            selModel: 'selectedmodel',
+            flex: 1,
             store: {
                 proxy: 'object',
-                fields: ['id', 'type', 'direction', 'ipProtocol', 'fromPort', 'toPort', 'sourceType', 'sourceValue', 'comment']
+                model: Scalr.getModel({fields: ['id', 'type', 'direction', 'ipProtocol', 'fromPort', 'toPort', 'sourceType', 'sourceValue', 'comment']})
             },
             plugins: {
                 ptype: 'gridstore'
@@ -98,11 +100,10 @@ Ext.define('Scalr.ui.SecurityGroupEditor', {
                 }
             },
             viewConfig: {
-                focusedItemCls: 'no-focus',
                 emptyText: 'No security rules defined',
                 deferEmptyText: false
             },
-            columns: [{ 
+            columns: [{
                 header: 'Protocol',
                 width: 100,
                 sortable: true,
@@ -148,11 +149,14 @@ Ext.define('Scalr.ui.SecurityGroupEditor', {
                 header: 'Comment',
                 flex: 1,
                 sortable: true,
-                dataIndex: 'comment'
+                dataIndex: 'comment',
+                renderer: function (value) {
+                    return Ext.String.htmlEncode(value);
+                }
             }],
             dockedItems: [{
                 xtype: 'toolbar',
-                ui: 'simple',
+                ui: 'inline',
                 dock: 'top',
                 defaults: {
                     margin: '0 0 0 10'
@@ -162,7 +166,7 @@ Ext.define('Scalr.ui.SecurityGroupEditor', {
                 }, {
                     itemId: 'add',
                     text: 'Add security rule',
-                    cls: 'x-btn-green-bg',
+                    cls: 'x-btn-green',
                     tooltip: 'Add security rule',
                     handler: function() {
                         var editor = this.up('sgeditor'),
@@ -202,7 +206,7 @@ Ext.define('Scalr.ui.SecurityGroupEditor', {
                                     labelWidth: 75
                                 },
                                 items: [{
-                                    xtype: 'container',
+                                    xtype: 'fieldcontainer',
                                     layout: 'hbox',
                                     items: [{
                                         xtype: 'buttongroupfield',
@@ -211,7 +215,7 @@ Ext.define('Scalr.ui.SecurityGroupEditor', {
                                         value: 'tcp',
                                         labelWidth: 75,
                                         layout: 'hbox',
-                                        width: 320,
+                                        width: 340,
                                         defaults: {
                                             flex: 1
                                         },
@@ -242,7 +246,7 @@ Ext.define('Scalr.ui.SecurityGroupEditor', {
                                         }
                                     }]
                                 }, {
-                                    xtype: 'container',
+                                    xtype: 'fieldcontainer',
                                     itemId: 'portCt',
                                     layout: 'hbox',
                                     items: [{
@@ -250,10 +254,10 @@ Ext.define('Scalr.ui.SecurityGroupEditor', {
                                         fieldLabel: 'Port',
                                         submitValue: false,
                                         value: 'single',
-                                        width: 330,
+                                        width: 350,
                                         labelWidth: 75,
                                         defaults: {
-                                            width: 120
+                                            width: 130
                                         },
                                         items: [{
                                             text: 'Single port',
@@ -327,17 +331,17 @@ Ext.define('Scalr.ui.SecurityGroupEditor', {
                                         value: 'egress'
                                     }]
                                 }, {
-                                    xtype: 'container',
+                                    xtype: 'fieldcontainer',
                                     layout: 'hbox',
                                     items: [{
                                         xtype: 'buttongroupfield',
                                         fieldLabel: 'Source',
                                         name: 'sourceType',
                                         value: 'ip',
-                                        width: 330,
+                                        width: 350,
                                         labelWidth: 75,
                                         defaults: {
-                                            width: 120
+                                            width: 130
                                         },
                                         items: [{
                                             text: 'CIDR IP',
@@ -415,7 +419,7 @@ Ext.define('Scalr.ui.SecurityGroupEditor', {
                                     allowBlank: true
                                 }]
 							}],
-                            formWidth: 600,
+                            formWidth: 640,
                             winConfig: {
                                 autoScroll: false,
                                 alignTop: true
@@ -452,16 +456,13 @@ Ext.define('Scalr.ui.SecurityGroupEditor', {
                     }
                 },{
                     itemId: 'delete',
-                    iconCls: 'x-tbar-delete',
-                    ui: 'paging',
+                    iconCls: 'x-btn-icon-delete',
+                    cls: 'x-btn-red',
                     disabled: true,
                     tooltip: 'Delete selected rules',
                     handler: function() {
-                        var grid = this.up('grid'),
-                            selModel = grid.getSelectionModel(),
-                            selection = selModel.getSelection();
-                        selModel.setLastFocused(null);
-                        grid.getStore().remove(selection);
+                        var grid = this.up('grid');
+                        grid.getStore().remove(grid.getSelectionModel().getSelection());
                     }
                 }]
             }]
@@ -515,26 +516,27 @@ Ext.define('Scalr.ui.SecurityGroupEditor', {
         vpcIdField.setVisible(data['platform'] === 'ec2' && (isNewRecord && !this.vpcIdReadOnly || data['vpcId']));
         vpcIdField.setReadOnly(!!data['vpcId'] || this.vpcIdReadOnly, false);
 
-        var vpcLimits = data['vpcLimits'];
-        if (isNewRecord && data['platform'] === 'ec2' && Ext.isObject(data['vpcLimits'])) {
+        var vpcLimits = Scalr.getGovernance('ec2', 'aws.vpc');
+        if (isNewRecord && data['platform'] === 'ec2' && Ext.isObject(vpcLimits)) {
             vpcIdField.toggleIcon('governance', true);
             vpcIdField.allowBlank = vpcLimits['value'] == 0;
-            if (vpcLimits['value'] == 1 && vpcLimits['regions'] && vpcLimits['regions'][cloudLocation]) {
+            if (vpcLimits['regions'] && vpcLimits['regions'][cloudLocation]) {
                 if (vpcLimits['regions'][cloudLocation]['ids'] && vpcLimits['regions'][cloudLocation]['ids'].length > 0) {
                     var vpcList = Ext.Array.map(vpcLimits['regions'][cloudLocation]['ids'], function(vpcId){
                         return {id: vpcId, name: vpcId};
                     });
                     vpcIdField.getStore().getProxy().data = vpcList;
                     vpcIdField.store.load();
-                    vpcIdField.setValue(vpcIdField.store.first());
                     vpcIdField.getPlugin('comboaddnew').setDisabled(true);
+                    if (vpcLimits['value'] == 1) {
+                        vpcIdField.setValue(vpcIdField.store.first());
+                    }
                 }
-            } else {
-                vpcIdField.setVisible(vpcLimits['value'] == 1);
-                vpcIdField.setReadOnly(true, false);
             }
+        } else if (data['vpcId']) {
+            vpcIdField.store.load();//extjs 5.1 will not show value until store.load done
         }
-        
+
         this.down('#formtitle').setTitle((isNewRecord ? 'New' :'Edit') + ' security group', false);
     },
 
@@ -544,8 +546,8 @@ Ext.define('Scalr.ui.SecurityGroupEditor', {
         if (!frm.isValid()) return false;
         values = this.callParent(arguments);
         store = this.down('grid').store;
-        (store.snapshot || store.data).each(function() {
-            var data = this.getData();
+        store.getUnfiltered().each(function(record) {
+            var data = record.getData();
             data[data['sourceType'] === 'ip' ? 'cidrIp' : 'sg'] = data['sourceValue'];
             (data['sourceType'] === 'ip' ? rules : sgRules).push(data);
             delete data['sourceValue'];
@@ -566,6 +568,7 @@ Ext.define('Scalr.ui.SecurityGroupMultiSelect', {
     excludeGroups: {},
     selection: [],//selected records
     limit: 0,
+    layout: 'fit',
 
     selectOnLoad: function (store) {
         var me = this;
@@ -588,7 +591,12 @@ Ext.define('Scalr.ui.SecurityGroupMultiSelect', {
         var store = Ext.create('store.store', {
             fields: [
                 'name', 'description', 'id', 'vpcId',
-                'farm_name', 'farm_id', 'role_name', 'farm_roleid'
+                'farm_name', 'farm_id', 'role_name', 'farm_roleid', {
+                    name: 'securityGroupId',
+                    convert: function (value, model) {
+                        return model.get('id');
+                    }
+                }
             ],
             proxy: {
                 type: 'scalr.paging',
@@ -606,32 +614,41 @@ Ext.define('Scalr.ui.SecurityGroupMultiSelect', {
 
         store.on('load', me.selectOnLoad, me);
 
+        var gridColumns = [
+            { header: "Security group", flex: 1, dataIndex: 'name', sortable: true },
+            { header: "Description", flex: 2, dataIndex: 'description', sortable: true }
+        ];
+
+        if (!me.isRdsSecurityGroupMultiSelect) {
+            gridColumns.unshift(
+                { header: "ID", width: 120, dataIndex: 'id', sortable: true , xtype: 'templatecolumn', tpl: '<a class="edit-group" title="Edit security group" href="#">{id}</a>' }
+            );
+        } else if (me.storeExtraParams.platform === 'ec2') {
+            gridColumns.unshift(
+                { header: "ID", width: 120, dataIndex: 'securityGroupId', sortable: true , xtype: 'templatecolumn', tpl: '<a class="edit-group" title="Edit security group" href="#">{securityGroupId}</a>' }
+            );
+        }
+
         me.add([{
             xtype: 'grid',
-            cls: 'x-grid-shadow',
             store: store,
             plugins: {
                 ptype: 'gridstore'
             },
             viewConfig: {
                 focusedItemCls: 'no-focus',
-                emptyText: "No security groups found",
+                emptyText: 'No security groups found',
                 deferEmptyText: false,
                 loadingText: 'Loading security groups ...',
                 listeners: {
                     viewready: function() {
-                        this.up('grid').getDockedComponent('paging').setPageSizeAndLoad();
+                        store.applyProxyParams();
                     }
                 }
             },
 
-            columns: [
-                { header: "ID", width: 120, dataIndex: 'id', sortable: true , xtype: 'templatecolumn', tpl: '<a class="edit-group" title="Edit security group" href="#xxx">{id}</a>'},
-                { header: "Name", flex: 1, dataIndex: 'name', sortable: true },
-                { header: "Description", flex: 2, dataIndex: 'description', sortable: true }
-            ],
+            columns: gridColumns,
 
-            multiSelect: true,
             selModel: {
                 selType: 'selectedmodel',
                 injectCheckbox: 'first',
@@ -657,11 +674,21 @@ Ext.define('Scalr.ui.SecurityGroupMultiSelect', {
                 },
                 selectionchange: function(selModel, selections) {
                     var newSelection = [];
-                    Ext.Array.each(me.selection, function(rec) {
-                        if (!store.getById(rec.get('id'))) {
-                            newSelection.push(rec);
-                        }
-                    });
+
+                    if (me.getXType() === 'rdssgmultiselect') {
+                        Ext.Array.each(me.selection, function (record) {
+                            if (!store.findRecord('name', record.get('name'))) {
+                                newSelection.push(record);
+                            }
+                        });
+                    } else {
+                        Ext.Array.each(me.selection, function(rec) {
+                            if (!store.getById(rec.get('id'))) {
+                                newSelection.push(rec);
+                            }
+                        });
+                    }
+
                     Ext.Array.each(selections, function(record) {
                         newSelection.push(record);
                     });
@@ -674,13 +701,13 @@ Ext.define('Scalr.ui.SecurityGroupMultiSelect', {
             dockedItems: [{
                 xtype: 'scalrpagingtoolbar',
                 itemId: 'paging',
-                style: 'box-shadow:none;padding-left:0;padding-right:0',
+                style: 'padding-left:0;padding-right:0',
                 store: store,
                 dock: 'top',
                 calculatePageSize: false,
                 beforeItems: [{
                     text: 'Add group',
-                    cls: 'x-btn-green-bg',
+                    cls: 'x-btn-green',
                     handler: function() {
                         this.up('sgmultiselect').edit();
                     }
@@ -694,7 +721,10 @@ Ext.define('Scalr.ui.SecurityGroupMultiSelect', {
     },
     updateButtonState: function(count) {
         var button = this.up('#box').down('#buttonOk'),
-            total;
+            total,
+            gridOverflowEl = this.up('#box').down('grid').getView().getOverflowEl(),
+            scrollPos;
+        scrollPos = gridOverflowEl.getScroll();//changing button text causes grid scroll position reset
         button.setDisabled(!count);
         button.setText(count > 0 ? 'Add ' + count + ' group(s)' : 'Add');
         if (this.limit > 0) {
@@ -704,6 +734,7 @@ Ext.define('Scalr.ui.SecurityGroupMultiSelect', {
                 Scalr.message.InfoTip('There is limit of ' + this.limit + ' security groups per farm role. Please reduce your selection.', button.getEl(), {anchor: 'bottom', dismissDelay: 0});
             }
         }
+        gridOverflowEl.setScrollTop(scrollPos.top);
     },
     edit: function(record) {
         var me = this,
@@ -713,21 +744,23 @@ Ext.define('Scalr.ui.SecurityGroupMultiSelect', {
                 win.hide();
                 Scalr.Confirm({
                     formWidth: 950,
+                    formLayout: 'fit',
                     alignTop: true,
                     winConfig: {
-                        autoScroll: false
+                        autoScroll: false,
+                        layout: 'fit'
                     },
                     form: [{
-                         xtype: 'sgeditor',
-                         vpcIdReadOnly: true,
-                         accountId: me.accountId,
-                         remoteAddress: me.remoteAddress,
+                        xtype: 'sgeditor',
+                        vpcIdReadOnly: true,
+                        accountId: me.accountId,
+                        remoteAddress: me.remoteAddress,
                         platform: me.storeExtraParams['platform'],
-                         listeners: {
-                             afterrender: function() {
-                                 this.setValues(data);
-                             }
-                         }
+                        listeners: {
+                            afterrender: function() {
+                                this.setValues(data);
+                            }
+                        }
                     }],
                     ok: 'Save',
                     closeOnSuccess: true,

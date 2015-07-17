@@ -8,9 +8,6 @@ namespace Scalr\DependencyInjection;
  * @author   Vitaliy Demidov    <vitaliy@scalr.com>
  * @since    19.10.2012
  *
- * @property string $awsRegion
- *           The AWS region derived from user's environment.
- *
  * @property string $awsSecretAccessKey
  *           The AWS sercret access key taken from user's environment.
  *
@@ -69,6 +66,9 @@ namespace Scalr\DependencyInjection;
  * @property \Scalr\DependencyInjection\AnalyticsContainer $analytics
  *           Gets Cost Analytics sub container
  *
+ * @property \Scalr\DependencyInjection\ApiContainer $api
+ *           Gets REST API sub container
+ *
  * @property \Scalr\Logger $logger
  *           Gets logger service
  *
@@ -77,6 +77,7 @@ namespace Scalr\DependencyInjection;
  *
  * @property \Scalr\Util\CryptoTool $srzcrypto
  *           Gets Scalarizr cryptotool
+ *
  *
  * @method   mixed config()
  *           config(string $name)

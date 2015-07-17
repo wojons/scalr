@@ -55,7 +55,7 @@ class AccountTagEntity extends \Scalr\Model\AbstractEntity
      */
     public static function fetchName($id, $tagId, $accountId = null, $ignoreCache = false)
     {
-        static $cache;
+        static $cache = [];
 
         $name = null;
 

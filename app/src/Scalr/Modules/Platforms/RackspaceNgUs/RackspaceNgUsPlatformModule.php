@@ -26,12 +26,28 @@ class RackspaceNgUsPlatformModule extends OpenstackPlatformModule implements \Sc
      */
     public function getLocations(\Scalr_Environment $environment = null)
     {
-        return array(
-            'ORD' => 'Rackspace US / ORD',
-            'DFW' => 'Rackspace US / DFW',
-            'IAD' => 'Rackspace US / IAD',
-            'SYD' => 'Rackspace US / SYD'
-        );
+        if (!$environment) {
+            return array(
+                'ORD' => 'Rackspace US / ORD',
+                'DFW' => 'Rackspace US / DFW',
+                'IAD' => 'Rackspace US / IAD',
+                'SYD' => 'Rackspace US / SYD'
+            );
+        } else {
+            try {
+                $client = $environment->openstack($this->platform, "fakeRegion");
+                $zones = $client->listZones();
+                $endpoints = $client->getConfig()->getAuthToken()->getRegionEndpoints();
+                foreach ($zones as $zone) {                    
+                    if (isset($endpoints['compute'][$zone->name]))
+                        $retval[$zone->name] = "Rackspace US / {$zone->name}";
+                }
+            } catch (\Exception $e) {
+                return array();
+            }
+            
+            return $retval;
+        }
     }
 
     /**

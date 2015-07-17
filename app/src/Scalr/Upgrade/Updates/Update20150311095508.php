@@ -83,13 +83,15 @@ class Update20150311095508 extends AbstractUpdate implements SequenceInterface
         $indexes = $this->hasTableCompatibleIndex($this->origin, [1 => 'env_id']);
         $dropped = [];
 
-        foreach ($indexes as $index) {
-            if (array_search("DROP INDEX `{$index}`", $this->sql) !== false) {
-                $dropped[] = $index;
+        if ($indexes) {
+            foreach ($indexes as $index) {
+                if (array_search("DROP INDEX `{$index}`", $this->sql) !== false) {
+                    $dropped[] = $index;
+                }
             }
-        }
 
-        $indexes = array_diff($indexes, $dropped);
+            $indexes = array_diff($indexes, $dropped);
+        }
 
         return !empty($indexes);
     }

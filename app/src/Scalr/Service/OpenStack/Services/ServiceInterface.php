@@ -38,9 +38,24 @@ interface ServiceInterface
     /**
      * Gets a version number
      *
-     * @return  string Returns version of the interface
+     * @return  string Returns major version of the interface (V1, V2)
      */
     public function getVersion();
+
+    /**
+     * Gets a list of supported versions
+     *
+     * @return   array  Returns the list of supported versions
+     */
+    public function getSupportedVersions();
+
+    /**
+     * Sets the number of the version
+     *
+     * @param   string  $version  Major version number (V1, V2)
+     * @return  ServiceInterface
+     */
+    public function setVersion($version);
 
     /**
      * Gets an API handler for the appropriated version

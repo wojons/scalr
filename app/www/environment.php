@@ -38,23 +38,34 @@ require __DIR__ . "/../src/class.ScalrEnvironment20120417.php";
  */
 require __DIR__ . "/../src/class.ScalrEnvironment20120701.php";
 
+/*
+ * Date: 2015-04-10
+ */
+require __DIR__ . "/../src/class.ScalrEnvironment20150410.php";
+
 if (empty($_REQUEST["version"])) {
     header('HTTP/1.1 400 Bad Request');
     exit;
 }
 
-$args = "";
-foreach ($_REQUEST as $k => $v) {
-    $args .= "{$k} = {$v}, ";
-}
-$args = trim($args, ",");
-
 try {
     $EnvironmentObject = ScalrEnvironmentFactory::CreateEnvironment($_REQUEST['version']);
-    $response = $EnvironmentObject->Query($_REQUEST['operation'], array_merge($_GET, $_POST));
+    print $EnvironmentObject->Query($_REQUEST['operation'], array_merge($_GET, $_POST));
+    exit;
 } catch (\Scalr\Exception\Http\HttpException $e) {
 	$e->terminate();
     exit;
+} catch (DOMException $e) { 
+    header("HTTP/1.0 500 XMLSerializer error");
+    
+    print "--------- Error ----------\n";
+    print $e->getMessage() . "\n\n";
+    print "--------- Trace ----------\n";
+    print $e->getTraceAsString() . "\n\n";
+    print "--------- JSON Object ----------\n";
+    print json_encode($EnvironmentObject->debugObject);
+    exit();
+    
 } catch (Exception $e) {
     if ($e instanceof Scalr_Exception_InsufficientPermissions) {
         (new \Scalr\Exception\Http\ForbiddenException($e->getMessage()))->terminate();
@@ -69,7 +80,3 @@ try {
 
     die($e->getMessage());
 }
-
-header("Content-Type: text/xml");
-print $response;
-exit;

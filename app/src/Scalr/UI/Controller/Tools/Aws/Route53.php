@@ -25,7 +25,6 @@ class Scalr_UI_Controller_Tools_Aws_Route53 extends Scalr_UI_Controller
         $locations = self::loadController('Platforms')->getCloudLocations(SERVER_PLATFORMS::EC2, false);
         $regions = array_keys($locations);
         $this->response->page('ui/tools/aws/route53/view.js', array(
-            'locations'	=> $locations,
             'regions'   => $regions
         ));
     }

@@ -11,3 +11,7 @@ LOGS_SCRIPTING_LOGS:
 LOGS_SYSTEM_LOGS:
 - /logs/system
 - /logs/xListLogs
+
+LOGS_EVENT_LOGS:
+- /logs/events
+- /logs/xListEventLogs

@@ -80,19 +80,19 @@ scalr:
     default_repo: 'stable'
     api_port: 8008
     repos:
-      latest:
-        deb_repo_url: 'http://apt.scalr.net/debian scalr/'
-        rpm_repo_url: 'http://rpm.scalr.net/rpm/rhel/$releasever/$basearch'
-        win_repo_url: 'http://win.scalr.net'
       stable:
-        deb_repo_url: 'http://apt-delayed.scalr.net/debian scalr/'
-        rpm_repo_url: 'http://rpm-delayed.scalr.net/rpm/rhel/$releasever/$basearch'
-        win_repo_url: 'http://win-delayed.scalr.net'
+        deb_repo_url: 'http://repo.scalr.net/apt-plain stable/'
+        rpm_repo_url: 'http://repo.scalr.net/rpm/stable/rhel/$releasever/$basearch'
+        win_repo_url: 'http://repo.scalr.net/win/stable'
+      latest:
+        deb_repo_url: 'http://repo.scalr.net/apt-plain latest/'
+        rpm_repo_url: 'http://repo.scalr.net/rpm/latest/rhel/$releasever/$basearch'
+        win_repo_url: 'http://repo.scalr.net/win/latest'
     devel_repos:
       stridercd:
-        deb_repo_url: 'http://stridercd.scalr-labs.com/apt-plain %s main'
-        rpm_repo_url: 'http://stridercd.scalr-labs.com/rpm/%s/rhel/$releasever/$basearch'
-        win_repo_url: 'http://buildbot.scalr-labs.com/win/%s/'
+        deb_repo_url: 'http://stridercd.scalr-labs.com/scalarizr/apt-plain/develop %s/'
+        rpm_repo_url: 'http://stridercd.scalr-labs.com/scalarizr/rpm/develop/%s/rhel/$releasever/$basearch'
+        win_repo_url: 'http://stridercd.scalr-labs.com/scalarizr/win/develop/%s/'
     service:
       chunk_size: 100
       pool_size: 100

@@ -45,8 +45,8 @@ class Extension implements IteratorAggregate
         //Please follow alphabetical order when add something new
         $this
             ->sub('scalr')
-                ->node('allowed_clouds', array('ec2', 'openstack', 'cloudstack', 'idcf', 'gce', 'ocs', 'ecs',
-                                               'rackspacenguk', 'rackspacengus', 'nebula'))
+                ->node('allowed_clouds', array('ec2', 'openstack', 'cloudstack', 'idcf', 'gce',
+                                               'rackspacenguk', 'rackspacengus', 'nebula', 'mirantis', 'vio', 'cisco', 'hpcloud'))
 
                 ->sub('analytics', false)
                     ->node('enabled', false)
@@ -82,7 +82,7 @@ class Extension implements IteratorAggregate
                 ->end()
 
                 ->sub('billing')
-                    ->node('enabled')
+                    ->node('enabled', false)
                     ->node('chargify_api_key', '')
                     ->node('chargify_domain', '')
                     ->node('emergency_phone_number', '')
@@ -110,7 +110,7 @@ class Extension implements IteratorAggregate
                         ->node('base_dn_groups', null)
                         ->node('user', null)
                         ->node('pass', null)
-                        ->node('group_nesting', true)
+                        ->node('group_nesting', false)
                         ->node('domain', null)
                         ->node('bind_type', \Scalr\Net\Ldap\LdapClient::BIND_TYPE_REGULAR)
                         ->node('mail_attribute', null)
@@ -295,13 +295,14 @@ class Extension implements IteratorAggregate
                         ->end()
                         ->sub('scaling', false)
                             ->node('enabled', false)
-                            ->node('time', '*/2 * * * *')
+                            ->node('time', '* * * * *')
                             ->node('workers', 14)
-                            ->node('daemon', false)
+                            ->node('daemon', true)
                             ->node('memory_limit', 0)
                             ->node('timezone', null)
                             ->node('log', '/dev/null')
                             ->node('log_level', 'WARN')
+                            ->node('idle', 10)
                         ->end()
                         ->sub('scheduler', false)
                             ->node('enabled', false)
@@ -441,6 +442,9 @@ class Extension implements IteratorAggregate
                 ->end()
 
                 ->sub('system', false)
+                    ->sub('api', false)
+                        ->node('enabled', false)
+                    ->end()
                     ->node('instances_connection_timeout', 4)
                     ->node('default_disable_firewall_management', false)
                     ->node('server_terminate_timeout', '+3 minutes')
@@ -451,6 +455,9 @@ class Extension implements IteratorAggregate
                     ->end()
                     ->sub('global_variables', false)
                         ->node('format', array())
+                    ->end()
+                    ->sub('api', false)
+                        ->node('enabled', false)
                     ->end()
                 ->end()
 

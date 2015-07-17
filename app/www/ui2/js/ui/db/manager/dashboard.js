@@ -15,7 +15,11 @@ Scalr.regPage('Scalr.ui.db.manager.dashboard', function (loadParams, moduleParam
                 xtype: 'fieldset',
                 cls: 'x-fieldset-separator-none',
                 minWidth: 400,
-                flex: 1.1,
+                flex: 1.3,
+                layout: {
+                    type: 'vbox', //extjs doesn't calculate hbox container height properly when using anchor layout
+                    align: 'stretch'
+                },
                 title: 'General',
                 items: [{
                     xtype: 'displayfield',
@@ -25,11 +29,11 @@ Scalr.regPage('Scalr.ui.db.manager.dashboard', function (loadParams, moduleParam
                 },{
                     xtype: 'container',
                     itemId: 'generalExtras',
-                    height: 58,
+                    height: 78,
                     defaults: {
                         labelWidth: 130
                     },
-                    overflow: 'hidden'
+                    overflowY: 'hidden'
                 },{
                     xtype: 'container',
                     layout: {
@@ -37,8 +41,7 @@ Scalr.regPage('Scalr.ui.db.manager.dashboard', function (loadParams, moduleParam
                         pack: 'center'
                     },
                     defaults: {
-                        flex: 1,
-                        maxWidth: 180
+                        flex: 1
                     },
                     items: [{
                         xtype: 'button',
@@ -53,11 +56,11 @@ Scalr.regPage('Scalr.ui.db.manager.dashboard', function (loadParams, moduleParam
                         xtype: 'button',
                         text: 'Connection details',
                         margin: '0 0 0 5',
+                        maxWidth: 170,
                         handler: function() {
                             Scalr.utils.Window({
                                 title: 'Connection details',
-                                width: 640,
-                                //padding: '0 24',
+                                width: 700,
                                 items: this.up('form').getConnectionDetails(),
                                 dockedItems: [{
                                     xtype: 'container',
@@ -88,7 +91,8 @@ Scalr.regPage('Scalr.ui.db.manager.dashboard', function (loadParams, moduleParam
                 items: [{
                     xtype: 'image',
                     src: Ext.BLANK_IMAGE_URL,
-                    cls: 'scalr-ui-dbmsr-phpmyadmin'
+                    cls: 'scalr-ui-dbmsr-phpmyadmin',
+                    margin: '20 0 12 50'
                 },{
                     xtype: 'container',
                     layout: {
@@ -96,7 +100,8 @@ Scalr.regPage('Scalr.ui.db.manager.dashboard', function (loadParams, moduleParam
                         pack: 'center'
                     },
                     defaults: {
-                        width: 120
+                        width: 120,
+                        margin: '32 0 0'
                     },
                     items: [{
                         xtype: 'button',
@@ -122,7 +127,7 @@ Scalr.regPage('Scalr.ui.db.manager.dashboard', function (loadParams, moduleParam
                     }, {
                         xtype: 'button',
                         itemId: 'launchPMA',
-                        margin: '0 10 0 0',
+                        margin: '32 10 0 0',
                         text: 'Launch',
                         hidden: true,
                         disabled: !Scalr.isAllowed('DB_DATABASE_STATUS', 'phpmyadmin'),
@@ -164,7 +169,7 @@ Scalr.regPage('Scalr.ui.db.manager.dashboard', function (loadParams, moduleParam
                         xtype: 'displayfield',
                         hidden: true,
                         itemId: 'PMAinProgress',
-                        margin: '-8 0 0 0',
+                        margin: 0,
                         width: 280,
                         value: 'MySQL access details for PMA requested. Please refresh this page in a couple minutes...'
                     }]
@@ -203,189 +208,137 @@ Scalr.regPage('Scalr.ui.db.manager.dashboard', function (loadParams, moduleParam
                     },{
                         xtype: 'button',
                         itemId: 'increaseStorageSizeBtn',
-                        ui: 'flag',
-                        cls: 'x-btn-flag-increase',
+                        iconCls: 'x-btn-icon-increase',
                         margin: '0 0 0 5',
-                        tooltip: Scalr.flags['betaMode'] ? 'Change storage settings' : 'Increase storage size',
+                        tooltip: 'Change storage settings',
                         handler: function(){
                             var data = this.up('form').moduleParams,
                                 currentEbsSettings = data['storage']['ebs_settings'];
-                            Scalr.flags['betaMode'] && currentEbsSettings ?
-                                Scalr.Confirm({
-                                    form: {
-                                        xtype: 'fieldset',
-                                        cls: 'x-fieldset-separator-none x-fieldset-no-bottom-padding',
-                                        title: 'Change storage configuration',
+                            Scalr.Confirm({
+                                form: {
+                                    xtype: 'fieldset',
+                                    cls: 'x-fieldset-separator-none x-fieldset-no-bottom-padding',
+                                    title: 'Change storage configuration',
+                                    items: [{
+                                        xtype: 'fieldcontainer',
+                                        layout: 'hbox',
                                         items: [{
-                                            xtype: 'container',
-                                            layout: 'hbox',
-                                            items: [{
-                                                xtype: 'combo',
-                                                store: Scalr.constants.ebsTypes,
-                                                fieldLabel: 'EBS type',
-                                                valueField: 'id',
-                                                displayField: 'name',
-                                                editable: false,
-                                                queryMode: 'local',
-                                                name: 'volumeType',
-                                                width: 340,
-                                                value: currentEbsSettings['volumeType'],
-                                                listeners: {
-                                                    change: function (comp, value) {
-                                                        var form = comp.up('form'),
-                                                            iopsField = form.down('[name="iops"]');
-                                                        iopsField.setVisible(value === 'io1').setDisabled(value !== 'io1');
-                                                        if (value === 'io1') {
-                                                            iopsField.reset();
-                                                            iopsField.setValue(100);
-                                                        } else {
-                                                            form.down('[name="size"]').isValid();
-                                                        }
+                                            xtype: 'combo',
+                                            store: Scalr.constants.ebsTypes,
+                                            fieldLabel: 'EBS type',
+                                            valueField: 'id',
+                                            displayField: 'name',
+                                            editable: false,
+                                            queryMode: 'local',
+                                            name: 'volumeType',
+                                            width: 340,
+                                            value: currentEbsSettings['volumeType'],
+                                            listeners: {
+                                                change: function (comp, value) {
+                                                    var form = comp.up('form'),
+                                                        iopsField = form.down('[name="iops"]');
+                                                    iopsField.setVisible(value === 'io1').setDisabled(value !== 'io1');
+                                                    if (value === 'io1') {
+                                                        iopsField.reset();
+                                                        iopsField.setValue(100);
+                                                    } else {
+                                                        form.down('[name="size"]').isValid();
                                                     }
                                                 }
-                                            }, {
-                                                xtype: 'textfield',
-                                                name: 'iops',
-                                                vtype: 'iops',
-                                                allowBlank: false,
-                                                hidden: currentEbsSettings['volumeType'] != 'io1',
-                                                disabled: currentEbsSettings['volumeType'] != 'io1',
-                                                margin: '0 0 0 6',
-                                                width: 50,
-                                                value: currentEbsSettings['iops'],
-                                                listeners: {
-                                                    change: function(comp, value){
-                                                        var form = comp.up('form'),
-                                                            sizeField = form.down('[name="size"]');
-                                                        if (comp.isValid() && comp.prev().getValue() === 'io1') {
-                                                            var minSize = Scalr.utils.getMinStorageSizeByIops(value);
-                                                            if (sizeField.getValue()*1 < minSize) {
-                                                                sizeField.setValue(minSize);
-                                                            }
-                                                        }
-                                                    }
-                                                }
-
-                                            }]
-                                        }, {
-                                            xtype: 'container',
-                                            layout: {
-                                                type: 'hbox',
-                                                align: 'middle'
-                                            },
-                                            items: [{
-                                                xtype: 'textfield',
-                                                name: 'size',
-                                                fieldLabel: 'Storage size',
-                                                width: 215,
-                                                value: currentEbsSettings['size'],
-                                                vtype: 'num',
-                                                validator: function(value){
-                                                    var minValue = 1,
-                                                        form = this.up('form');
-                                                    if (form.down('[name="volumeType"]').getValue() === 'io1') {
-                                                        minValue = Scalr.utils.getMinStorageSizeByIops(form.down('[name="iops"]').getValue());
-                                                    }
-                                                    if (value*1 > Scalr.constants.ebsMaxStorageSize) {
-                                                        return 'Maximum value is ' + Scalr.constants.ebsMaxStorageSize + '.';
-                                                    } else if (value*1 < minValue) {
-                                                        return 'Minimum value is ' + minValue + '.';
-                                                    }
-                                                    return true;
-                                                }
-                                            },{
-                                                xtype: 'label',
-                                                text: 'GB',
-                                                margin: '0 0 0 6'
-                                            }]
-                                        }]
-                                    },
-                                    formWidth:480,
-                                    ok: 'Save',
-                                    closeOnSuccess: true,
-                                    success: function (formValues, form) {
-                                        if (form.isValid()) {
-                                            var growConfig = {};
-                                            Ext.Object.each(formValues, function(name, value){
-                                                if (!currentEbsSettings[name] || value != currentEbsSettings[name]) {
-                                                    growConfig[name] = value;
-                                                }
-                                            });
-                                            if (Ext.Object.getSize(growConfig) > 0) {
-                                                if (growConfig['size'] !== undefined) {
-                                                    growConfig['newSize'] = growConfig['size'];
-                                                    delete growConfig['size'];
-                                                }
-                                                Scalr.Request({
-                                                    processBox: {
-                                                        type: 'action',
-                                                        msg: 'Processing ...'
-                                                    },
-                                                    url: '/db/manager/xChangeStorageSettings/',
-                                                    params: Ext.apply(growConfig, {
-                                                        farmRoleId: data['farmRoleId']
-                                                    }),
-                                                    success: function(data){
-                                                        Scalr.message.Success("Storage settings change has been successfully initiated");
-                                                        Scalr.event.fireEvent('redirect', '#/operations/' + data['operationId'] + '/details');
-                                                    }
-                                                });
-
                                             }
-                                            return true;
-                                        }
-
-                                    }
-                                })
-                            :
-                            Scalr.Request({
-                                confirmBox: {
-                                    type: 'action',
-                                    formWidth: 700,
-                                    msg: 'Are you sure want to increase storage size?',
-                                    form: [{
-                                        xtype: 'container',
-                                        cls: 'x-container-fieldset',
-                                        layout: 'anchor',
-                                        items: [{
-                                            xtype: 'displayfield',
-                                            cls: 'x-form-field-warning',
-                                            value: '<span style="color:red;">Attention! This operation will cause downtime on master server.</span><br />During creation and replacement of new storage, master server won\'t be able to accept any connections.'
                                         }, {
-                                            xtype: 'fieldcontainer',
-                                            hideLabel: true,
-                                            layout: 'hbox',
-                                            items: [{
-                                                xtype: 'displayfield',
-                                                value: 'New size (GB):',
-                                                hideLabel: true
-                                            }, {
-                                                xtype: 'textfield',
-                                                width: 50,
-                                                hideLabel: true,
-                                                margin: '0 0 0 5',
-                                                name: 'newSize',
-                                                value: (parseInt(data['storage']['size']['total'])+1)*2
-                                            }, {
-                                                xtype: 'displayfield',
-                                                margin: '0 0 0 5',
-                                                value: ' GB',
-                                                hideLabel: true
-                                            }]
+                                            xtype: 'textfield',
+                                            name: 'iops',
+                                            vtype: 'iops',
+                                            allowBlank: false,
+                                            hidden: currentEbsSettings['volumeType'] != 'io1',
+                                            disabled: currentEbsSettings['volumeType'] != 'io1',
+                                            margin: '0 0 0 6',
+                                            width: 50,
+                                            value: currentEbsSettings['iops'],
+                                            listeners: {
+                                                change: function(comp, value){
+                                                    var form = comp.up('form'),
+                                                        sizeField = form.down('[name="size"]');
+                                                    if (comp.isValid() && comp.prev().getValue() === 'io1') {
+                                                        var minSize = Scalr.utils.getMinStorageSizeByIops(value);
+                                                        if (sizeField.getValue()*1 < minSize) {
+                                                            sizeField.setValue(minSize);
+                                                        }
+                                                    }
+                                                }
+                                            }
+
+                                        }]
+                                    }, {
+                                        xtype: 'container',
+                                        layout: {
+                                            type: 'hbox',
+                                            align: 'middle'
+                                        },
+                                        items: [{
+                                            xtype: 'textfield',
+                                            name: 'size',
+                                            fieldLabel: 'Storage size',
+                                            width: 215,
+                                            value: currentEbsSettings['size'],
+                                            vtype: 'ebssize',
+                                            getEbsType: function() {
+                                                return this.up('form').down('[name="volumeType"]').getValue();
+                                            },
+                                            getEbsIops: function() {
+                                                return this.up('form').down('[name="iops"]').getValue();
+                                            },
+                                            validator: function(value){
+                                                if (value*1 < currentEbsSettings['size']*1) {
+                                                    return 'New storage size must be bigger that previous one.';
+                                                }
+                                                return true;
+                                            }
+                                        },{
+                                            xtype: 'label',
+                                            text: 'GB',
+                                            margin: '0 0 0 6'
                                         }]
                                     }]
                                 },
-                                processBox: {
-                                    type: 'action',
-                                    msg: 'Updating scalarizr ...'
-                                },
-                                url: '/db/manager/xGrowStorage/',
-                                params: {farmRoleId: data['farmRoleId']},
-                                success: function(data){
-                                    Scalr.message.Success("Storage grow successfully initiated");
-                                    Scalr.event.fireEvent('redirect', '#/operations/' + data['operationId'] + '/details');
+                                formWidth:480,
+                                ok: 'Save',
+                                closeOnSuccess: true,
+                                success: function (formValues, form) {
+                                    if (form.isValid()) {
+                                        var growConfig = {};
+                                        Ext.Object.each(formValues, function(name, value){
+                                            if (!currentEbsSettings[name] || value != currentEbsSettings[name]) {
+                                                growConfig[name] = value;
+                                            }
+                                        });
+                                        if (Ext.Object.getSize(growConfig) > 0) {
+                                            if (growConfig['size'] !== undefined) {
+                                                growConfig['newSize'] = growConfig['size'];
+                                                delete growConfig['size'];
+                                            }
+                                            Scalr.Request({
+                                                processBox: {
+                                                    type: 'action',
+                                                    msg: 'Processing ...'
+                                                },
+                                                url: '/db/manager/xChangeStorageSettings/',
+                                                params: Ext.apply(growConfig, {
+                                                    farmRoleId: data['farmRoleId']
+                                                }),
+                                                success: function(data){
+                                                    Scalr.message.Success("Storage settings change has been successfully initiated");
+                                                    Scalr.event.fireEvent('redirect', '#/operations/details?' + Ext.Object.toQueryString(data));
+                                                }
+                                            });
+
+                                        }
+                                        return true;
+                                    }
+
                                 }
-                            });
+                            })
                         }
                     }]
                 }]
@@ -409,7 +362,7 @@ Scalr.regPage('Scalr.ui.db.manager.dashboard', function (loadParams, moduleParam
                 cls: 'x-fieldset-separator-right',
                 hideOn: 'backupsNotSupported',
                 flex: 1.04,
-                title: 'Database dumps <img data-qwidth="400" data-qtip="Scalr will backup the database and store it in SQL form in your cloud. This backup will be taken from a slave. Click on Manage to configure the schedule for backups from the Farm Manager." class="tipHelp" src="/ui2/images/icons/info_icon_16x16.png" style="cursor: help; height: 16px;">',
+                title: 'Database dumps &nbsp;<img src="'+Ext.BLANK_IMAGE_URL+'" class="x-icon-info" style="cursor: help;" data-qwidth="400" data-qtip="Scalr will backup the database and store it in SQL form in your cloud. This backup will be taken from a slave. Click on Manage to configure the schedule for backups from the Farm Manager." />',
                 items: [{
                     xtype: 'displayfield',
                     showOn: 'backupsDisabled',
@@ -521,8 +474,7 @@ Scalr.regPage('Scalr.ui.db.manager.dashboard', function (loadParams, moduleParam
                         },{
                             xtype: 'buttonfield',
                             itemId: 'cancelDataBackupBtn',
-                            ui: 'custom',
-                            cls: 'scalr-ui-dbmsr-status-stop',
+                            iconCls: 'x-btn-icon-terminate',
                             margin: '0 0 0 12',
                             submitValue: false,
                             handler: function(){
@@ -550,9 +502,9 @@ Scalr.regPage('Scalr.ui.db.manager.dashboard', function (loadParams, moduleParam
                 xtype: 'fieldset',
                 cls: 'x-fieldset-separator-none',
                 flex: 1,
-                title: 'Binary storage snapshots <img data-qwidth="400" data-qtip="Scalr will perform a data bundle to snapshot the database and store it in binary form in your cloud. This snapshot will be taken from the master." class="tipHelp" src="/ui2/images/icons/info_icon_16x16.png" style="cursor: help; height: 16px;">',
+                title: 'Binary storage snapshots &nbsp;<img src="'+Ext.BLANK_IMAGE_URL+'" class="x-icon-info" style="cursor: help;" data-qwidth="400" data-qtip="Scalr will perform a data bundle to snapshot the database and store it in binary form in your cloud. This snapshot will be taken from the master.">',
                 defaults: {
-                    labelWidth: 110
+                    labelWidth: 135
                 },
                 items: [{
                     xtype: 'displayfield',
@@ -668,8 +620,7 @@ Scalr.regPage('Scalr.ui.db.manager.dashboard', function (loadParams, moduleParam
                         },{
                             xtype: 'buttonfield',
                             itemId: 'cancelDataBundleBtn',
-                            ui: 'custom',
-                            cls: 'scalr-ui-dbmsr-status-stop',
+                            iconCls: 'x-btn-icon-terminate',
                             margin: '0 0 0 12',
                             submitValue: false,
                             handler: function(){
@@ -701,14 +652,14 @@ Scalr.regPage('Scalr.ui.db.manager.dashboard', function (loadParams, moduleParam
 				this.loadData(moduleParams);
 			}
 		},
-		
+
 		toggleElementsByFeature: function(feature, visible) {
 			var c = this.query('component[hideOn='+feature+'], component[showOn='+feature+']');
 			for (var i=0, len=c.length; i<len; i++) {
 				c[i].setVisible(!!(c[i].showOn && c[i].showOn == feature) === !!visible);
 			}
 		},
-		
+
 		loadData: function(data) {
 			//console.log(data);
 			this.moduleParams = data;
@@ -731,17 +682,17 @@ Scalr.regPage('Scalr.ui.db.manager.dashboard', function (loadParams, moduleParam
 				}
 				return values;
 			};
-			
+
             data['storage'] = data['storage'] || {};
 			var formValues = {
 				general_dbname: data['name'],
-				
+
 				storage_id: data['storage']['id'] || '',
 				storage_engine_name: data['storage']['engineName'] || '',
 				storage_fs: data['storage']['fs'] || '',
 				storage_size: data['storage']['size'] || 'not available'
 			};
-			
+
 			//general extras
 			var generalExtrasPanel = this.down('#generalExtras');
 			generalExtrasPanel.removeAll();
@@ -754,23 +705,23 @@ Scalr.regPage('Scalr.ui.db.manager.dashboard', function (loadParams, moduleParam
 					});
 				});
 			}
-			
+
 			if (data['backups']) {
                 if (data['backups']['supported']) {
                     Ext.apply(formValues, formatBackupValues(data['backups']));
                 }
             }
-			
+
             if (data['bundles']) {
                 Ext.apply(formValues, formatBackupValues(data['bundles'], 'bundles'));
             }
-			
+
 			formValues.clustermap = data['servers'];
-			
+
 			this.refreshElements();
 			this.getForm().setValues(formValues);
 		},
-		
+
 		refreshElements: function() {
 			var data = this.moduleParams;
 
@@ -778,7 +729,7 @@ Scalr.regPage('Scalr.ui.db.manager.dashboard', function (loadParams, moduleParam
 			if (data['bundles']) {
                 this.toggleElementsByFeature('bundleInProgress', data['bundles']['inProgress']['status'] != '0');
             }
-            
+
             this.toggleElementsByFeature('backupsDisabled', !data['backups']);
             if (data['backups']) {
                 this.toggleElementsByFeature('backupsNotSupported', !data['backups']['supported']);
@@ -787,11 +738,11 @@ Scalr.regPage('Scalr.ui.db.manager.dashboard', function (loadParams, moduleParam
                 }
             }
 			this.down('#manageConfigurationBtn').setVisible(data['dbType'] != 'mysql');
-			this.down('#increaseStorageSizeBtn').setVisible(data['storage'] && (data['storage']['growSupported']));
-			this.down('#cancelDataBundleBtn').setVisible(data['storage'] && data['storage']['engine'] == 'lvm');
-			
+			this.down('#increaseStorageSizeBtn').setVisible(!!(data['storage'] && data['storage']['growSupported'] && data['storage']['ebs_settings']));
+			this.down('#cancelDataBundleBtn').setVisible(!!(data['storage'] && data['storage']['engine'] == 'lvm'));
+
 			this.down('#cancelDataBackupBtn').setVisible(data['dbType'] == 'mysql2' || data['dbType'] == 'percona');
-			
+
 			if (data['pma']) {
 				this.down('#phpMyAdminAccess').setVisible(true);
                 this.down('#setupPMA').setVisible(!(data['pma']['accessSetupInProgress'] || data['pma']['configured']));
@@ -804,7 +755,7 @@ Scalr.regPage('Scalr.ui.db.manager.dashboard', function (loadParams, moduleParam
 
 			//this.down('#phpMyAdminAccess').setVisible(data['dbType'] != 'mysql' || data['dbType'] != 'mysql2' || data['dbType'] != 'percona');
 		},
-		
+
 		getConfirmationDataBundleOptions: function() {
 			var data = this.moduleParams,
 				confirmationDataBundleOptions = {};
@@ -857,7 +808,7 @@ Scalr.regPage('Scalr.ui.db.manager.dashboard', function (loadParams, moduleParam
 			}
 			return confirmationDataBundleOptions;
 		},
-		
+
 		getConnectionDetails: function() {
 			var data = this.moduleParams,
 				items = [];
@@ -877,13 +828,14 @@ Scalr.regPage('Scalr.ui.db.manager.dashboard', function (loadParams, moduleParam
 					value: data['accessDetails']['password']
 				}]
 			});
-			
+
 			if (data['accessDetails']['dns']) {
 				items.push({
 					xtype: 'fieldset',
 					title: 'Endpoints',
+                    cls: 'x-fieldset-separator-none',
 					defaults: {
-						labelWidth: 170,
+						labelWidth: 190,
 						width: '100%'
 					},
 					items: [{
@@ -911,7 +863,7 @@ Scalr.regPage('Scalr.ui.db.manager.dashboard', function (loadParams, moduleParam
 			}
 			return items;
 		},
-		
+
 		tools: [{
 			type: 'refresh',
 			handler: function () {
@@ -934,7 +886,7 @@ if (!Ext.ClassManager.isCreated('Scalr.ui.FormFieldDbmsHistory')) {
 
 		fieldSubTpl: [
 			'<div id="{id}"',
-			'<tpl if="fieldStyle"> style="{fieldStyle}"</tpl>', 
+			'<tpl if="fieldStyle"> style="{fieldStyle}"</tpl>',
 			' class="{fieldCls}"></div>',
 			{
 				compiled: true,
@@ -976,13 +928,13 @@ if (!Ext.ClassManager.isCreated('Scalr.ui.FormFieldDbmsClusterMap')) {
 
 		baseCls: 'x-container x-form-dbmsclustermapfield',
 		allowBlank: false,
-		
+
 		layout: {
 			type: 'vbox',
 			align: 'center'
 		},
 		currentServerId: null,
-		
+
 		buttonConfig: {
 			xtype: 'custombutton',
 			cls: 'x-dbmsclustermapfield-btn',
@@ -1044,7 +996,7 @@ if (!Ext.ClassManager.isCreated('Scalr.ui.FormFieldDbmsClusterMap')) {
 			}
 			return value;
 		},
-		
+
 		valueToRaw: function(data) {
 			var rawValue = {master: {}, slaves: []};
 			if (data) {
@@ -1058,7 +1010,7 @@ if (!Ext.ClassManager.isCreated('Scalr.ui.FormFieldDbmsClusterMap')) {
 			}
 			return rawValue;
 		},
-        
+
         getServerStatus: function(status){
             var result;
             switch (status) {
@@ -1075,7 +1027,7 @@ if (!Ext.ClassManager.isCreated('Scalr.ui.FormFieldDbmsClusterMap')) {
             }
             return result;
         },
-        
+
         getReplicationStatus: function(status) {
             var result;
             switch (status) {
@@ -1091,11 +1043,11 @@ if (!Ext.ClassManager.isCreated('Scalr.ui.FormFieldDbmsClusterMap')) {
             }
             return result;
         },
-        
+
 		renderButtons: function(data) {
 			this.suspendLayouts();
 			this.removeAll();
-            
+
             //render master button
             var master = {
                 height: 85,
@@ -1117,11 +1069,11 @@ if (!Ext.ClassManager.isCreated('Scalr.ui.FormFieldDbmsClusterMap')) {
                 padding: 12,
                 items: Ext.applyIf(master, this.buttonConfig)
             });
-            
+
             //render slaves buttons
             var slavesRowsCount = Math.ceil((data.slaves.length + 1)/5);//
             for (var row=0; row<slavesRowsCount; row++) {
-                var slave, status, replication, statusTitle, slaves, limit; 
+                var slave, status, replication, statusTitle, slaves, limit;
 
                 slaves = this.add({
                     xtype: 'container',
@@ -1134,7 +1086,7 @@ if (!Ext.ClassManager.isCreated('Scalr.ui.FormFieldDbmsClusterMap')) {
                     padding: 12,
                     margin: '2 0 0 0'
                 });
-                
+
                 limit = row*5 + 5 > data.slaves.length ? data.slaves.length : row*5 + 5;
                 for (var i=row*5; i<limit; i++) {
                     replication = data.slaves[i].replication || {};
@@ -1165,7 +1117,7 @@ if (!Ext.ClassManager.isCreated('Scalr.ui.FormFieldDbmsClusterMap')) {
                     slaves.add(Ext.applyIf(slave, this.buttonConfig));
                 }
             }
-            
+
             //render launch new slave button
             var addBtn = {
                 cls: 'x-dbmsclustermapfield-add',
@@ -1196,7 +1148,7 @@ if (!Ext.ClassManager.isCreated('Scalr.ui.FormFieldDbmsClusterMap')) {
                 }
             };
             slaves.add(Ext.applyIf(addBtn, this.buttonConfig));
-            
+
             //server details form
             this.detailsForm = this.add({
                 xtype: 'form',
@@ -1239,6 +1191,9 @@ if (!Ext.ClassManager.isCreated('Scalr.ui.FormFieldDbmsClusterMap')) {
                         xtype: 'toolfieldset',
                         title: 'General metrics',
                         cls: 'x-fieldset-separator-left',
+                        defaults: {
+                            labelWidth: 120
+                        },
                         items: [{
                             xtype: 'progressfield',
                             fieldLabel: 'Memory usage',
@@ -1261,10 +1216,10 @@ if (!Ext.ClassManager.isCreated('Scalr.ui.FormFieldDbmsClusterMap')) {
                         }],
                         tools: [{
                             type: 'refresh',
-                            //tooltip: 'Refresh general metrics',
+                            style: 'margin-left:12px',
                             handler: function () {
                                 this.up('dbmsclustermapfield').loadGeneralMetrics();
-                            }			
+                            }
                         }]
                     }]
                 },{
@@ -1294,18 +1249,18 @@ if (!Ext.ClassManager.isCreated('Scalr.ui.FormFieldDbmsClusterMap')) {
                         }],
                         tools: [{
                             type: 'refresh',
-                            //tooltip: 'Refresh general metrics',
+                            style: 'margin-left:12px',
                             handler: function () {
                                 this.up('dbmsclustermapfield').loadChartsData();
-                            }			
+                            }
                         }]
                     }]
                 }]
             });
 			this.resumeLayouts(true);
-			
+
 		},
-		
+
 		hideServerDetails: function() {
 			var form = this.up('form');
 			if (this.detailsForm) {
@@ -1335,7 +1290,7 @@ if (!Ext.ClassManager.isCreated('Scalr.ui.FormFieldDbmsClusterMap')) {
 				});
 
 				metricsPanel.removeAll();
-                
+
 				if (replication['status'] == 'error' || !replication['status']) {
 					var message = replication['message'] ? replication['message'] : 'Can\'t get replication status'
 					metricsPanel.add({
@@ -1350,7 +1305,7 @@ if (!Ext.ClassManager.isCreated('Scalr.ui.FormFieldDbmsClusterMap')) {
                                 html: '<b>' + name + ':</b>'
                             });
                             var c = metricsPanel.add({
-                                xtype: 'container', 
+                                xtype: 'container',
                                 margin: '12 0 20 0',
                                 defaults: {
                                     labelWidth: 180
@@ -1404,7 +1359,9 @@ if (!Ext.ClassManager.isCreated('Scalr.ui.FormFieldDbmsClusterMap')) {
                     me.lcdDelayed = Ext.Function.defer(me.loadChartsData, 60000, me);
                 };
 
-                chartPreview.loadStatistics(hostUrl, paramsForStatistic, callback);
+                if (chartPreview) {
+                    chartPreview.loadStatistics(hostUrl, paramsForStatistic, callback);
+                }
             }
 		},
 		loadGeneralMetrics: function() {

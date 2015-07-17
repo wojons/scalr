@@ -1,6 +1,6 @@
 Scalr.regPage('Scalr.ui.tools.aws.s3.buckets', function (loadParams, moduleParams) {
 	var store = Ext.create('store.store', {
-		fields: [ 'name' , 'farmId', 'farmName', 'cfid', 'cfurl', 'cname', 'status', 'enabled'],
+		fields: [ 'name' , {name: 'farmId', defaultValue: null}, 'farmName', 'cfid', 'cfurl', 'cname', 'status', {name: 'enabled', defaultValue: null}],
 		proxy: {
 			type: 'scalr.paging',
 			url: '/tools/aws/s3/xListBuckets/'
@@ -9,52 +9,51 @@ Scalr.regPage('Scalr.ui.tools.aws.s3.buckets', function (loadParams, moduleParam
 	});
 
 	return Ext.create('Ext.grid.Panel', {
-		title: 'Tools &raquo; Amazon Web Services &raquo; S3 &raquo; Buckets &amp; Cloudfront',
 		scalrOptions: {
-			'reload': false,
-			'maximize': 'all'
+			reload: false,
+			maximize: 'all',
+            menuTitle: 'AWS Cloudfront'
 		},
 		store: store,
 		stateId: 'grid-tools-aws-s3-buckets',
 		stateful: true,
-		plugins: {
-			ptype: 'gridstore'
-		},
-		tools: [{
-			xtype: 'gridcolumnstool'
-		}],
+        plugins: [{
+            ptype: 'gridstore'
+        }, {
+            ptype: 'applyparams'
+        }],
 		viewConfig: {
 			emptyText: "No buckets found",
 			loadingText: 'Loading buckets ...'
 		},
 		columns: [
-			{ header: "Bucket name", flex: 2, dataIndex: 'name', sortable: false },
+			{ header: "Bucket", flex: 2, dataIndex: 'name', sortable: false },
 			{ header: "Used by", flex: 1, dataIndex: 'farmId', xtype: 'templatecolumn', sortable: true, tpl:
-				'<tpl if="farmId"><a href="#/farms/{farmId}/view">{farmName}</a></tpl>' +
-				'<tpl if="! farmId"><img src="/ui2/images/icons/false.png"></tpl>'
+				'<tpl if="farmId"><a href="#/farms?farmId={farmId}">{farmName}</a></tpl>' +
+				'<tpl if="! farmId">&mdash;</tpl>'
 			},
 			{ header: "Cloudfront ID", flex: 2, dataIndex: 'cfid', sortable: false},
 			{ header: "Cloudfront URL", flex: 2, dataIndex: 'cfurl', sortable: false},
 			{ header: "CNAME", flex: 3, dataIndex: 'cname', sortable: false},
 			{ header: "Status", width: 80, dataIndex: 'status', sortable: false},
 			{ header: "Enabled", width: 80, dataIndex: 'enabled', xtype: 'templatecolumn', sortable: false, tpl:
-				'<tpl if="enabled == \'true\'"><img src="/ui2/images/icons/true.png"></tpl>' +
-				'<tpl if="enabled == \'false\' || !enabled"><img src="/ui2/images/icons/false.png"></tpl>'
+				'<tpl if="enabled == \'true\'"><div class="x-grid-icon x-grid-icon-simple x-grid-icon-ok"></div></tpl>' +
+				'<tpl if="enabled == \'false\' || !enabled">&mdash;</tpl>'
 		}, {
-			xtype: 'optionscolumn2',
+			xtype: 'optionscolumn',
 			width: 120,
 			menu: [{
-				itemId: "option.create_dist",
 				text: 'Create distribution',
 				iconCls: 'x-menu-icon-create',
+                showAsQuickAction: true,
 				href: "#/tools/aws/s3/manageDistribution?bucketName={name}",
                 getVisibility: function(data) {
                     return !data['cfid'];
-                },
+                }
 			}, {
-				itemId: "option.delete_dist",
 				iconCls: 'x-menu-icon-delete',
 				text: 'Remove distribution',
+                showAsQuickAction: true,
                 getVisibility: function(data) {
                     return data['cfid'] && data['status'] === 'Deployed' && data['enabled'] == 'false';
                 },
@@ -76,9 +75,10 @@ Scalr.regPage('Scalr.ui.tools.aws.s3.buckets', function (loadParams, moduleParam
 						}
 					});
 				}
-			},{ 
-                itemId: "option.disable_dist",
+			},{
                 text: 'Disable distribution',
+                iconCls: 'x-menu-icon-disable',
+                showAsQuickAction: true,
                 getVisibility: function(data) {
                     return data['enabled'] == "true" && data['cfid'];
                 },
@@ -95,9 +95,10 @@ Scalr.regPage('Scalr.ui.tools.aws.s3.buckets', function (loadParams, moduleParam
 						}
 					});
 				}
-			},{ 
-                itemId: "option.enable_dist",
+			},{
                 text: 'Enable distribution',
+                iconCls: 'x-menu-icon-enable',
+                showAsQuickAction: true,
                 getVisibility: function(data) {
                     return data['enabled'] == "false" && data['cfid'];
                 },
@@ -114,42 +115,10 @@ Scalr.regPage('Scalr.ui.tools.aws.s3.buckets', function (loadParams, moduleParam
 						}
 					});
 				}
-			},
-				new Ext.menu.Separator({itemId: "option.editSep"}),
-			{
-                itemId: "option.delete_backet",
-                iconCls: 'x-menu-icon-delete',
-                text: 'Delete bucket',
-				menuHandler: function(data) {
-					if(data['cfid']) {
-						Scalr.message.Warning('Remove distribution before deleting');
-					} else {
-						Scalr.Request({
-							confirmBox: {
-								msg: 'Remove selected bucket ?',
-								type: 'delete'
-							},
-							processBox: {
-								msg: 'Removing bucket ...',
-								type: 'delete'
-							},
-							scope: this,
-							url: '/tools/aws/s3/xDeleteBucket',
-							params: { buckets: Ext.encode([ data['name'] ]) },
-							success: function (data, response, options){
-								store.load();
-							}
-						});
-					}
-				}
 			}]
 		}],
 
-        multiSelect: true,
-        selModel: {
-            selType: 'selectedmodel'
-        },
-
+        selModel: 'selectedmodel',
         listeners: {
             selectionchange: function(selModel, selections) {
                 this.down('scalrpagingtoolbar').down('#delete').setDisabled(!selections.length);
@@ -161,26 +130,32 @@ Scalr.regPage('Scalr.ui.tools.aws.s3.buckets', function (loadParams, moduleParam
 			store: store,
 			dock: 'top',
             beforeItems: [{
-                text: 'Add bucket',
-                cls: 'x-btn-green-bg',
+                text: 'New bucket',
+                cls: 'x-btn-green',
                 handler: function() {
                     Scalr.Request({
                         confirmBox: {
                             title: 'Create new Bucket',
-                            width: 480,
+                            width: 520,
                             form: [{
                                 xtype: 'fieldset',
                                 cls: 'x-fieldset-separator-none',
                                 defaults: {
-                                    anchor: '100%'
+                                    anchor: '100%',
+                                    labelWidth: 130
                                 },
                                 items: [{
                                     xtype: 'combo',
                                     name: 'location',
-                                    fieldLabel: 'Select location',
+                                    fieldLabel: 'Cloud location',
+                                    emptyText: 'Select location',
                                     editable: false,
                                     allowBlank: false,
                                     queryMode: 'local',
+                                    plugins: {
+                                        ptype: 'fieldinnericoncloud',
+                                        platform: 'ec2'
+                                    },
                                     store: {
                                         fields: [ 'id', 'name' ],
                                         data: moduleParams.locations,
@@ -211,9 +186,9 @@ Scalr.regPage('Scalr.ui.tools.aws.s3.buckets', function (loadParams, moduleParam
                 }
             }],
 			afterItems: [{
-                ui: 'paging',
                 itemId: 'delete',
-                iconCls: 'x-tbar-delete',
+                iconCls: 'x-btn-icon-delete',
+                cls: 'x-btn-red',
                 tooltip: 'Select one or more buckets to delete them',
                 disabled: true,
                 handler: function() {

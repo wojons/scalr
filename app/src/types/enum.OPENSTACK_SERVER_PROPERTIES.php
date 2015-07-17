@@ -11,6 +11,7 @@
         const FLOATING_IP   = 'openstack.floating-ip';
         const FLOATING_IP_ID   = 'openstack.floating-ip-id';
 
-        const CLOUD_LOCATION	= 'openstack.cloud_location';
+        const CLOUD_LOCATION	    = 'openstack.cloud_location';
+        const CLOUD_LOCATION_ZONE	= 'openstack.cloud_location_zone';
     }
 ?>

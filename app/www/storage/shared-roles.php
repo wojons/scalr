@@ -10,25 +10,11 @@ if (!$setupInfo)
 
 $v2 = (boolean) $_GET['v2'];
 
-$rs20 = $db->Execute("SELECT * FROM roles WHERE env_id = '0' AND client_id = '0' AND generation='2'");
+$rs20 = $db->Execute("SELECT * FROM roles WHERE env_id IS NULL AND client_id IS NULL AND generation='2' AND os_id NOT IN (
+    SELECT id FROM os WHERE (family='centos' AND generation='5') OR (family='ubuntu' AND generation IN ('8.04','10.04')) OR (family='windows' AND generation='2003')
+)");
 $result = array();
 while ($role = $rs20->FetchRow()) {
-
-    if ($role['os_family'] == 'ubuntu') {
-        if ($role['os_version'] == '8.04' || $role['os_generation'] == '10.04')
-            continue;
-    }
-    
-    if ($role['os_family'] == 'centos') {
-        if ($role['os_generation'] == '5')
-            continue;
-    }
-    
-    if ($role['os_family'] == 'windows') {
-        if ($role['os_generation'] == '2003')
-            continue;
-    }
-    
     $role['role_security_rules'] = $db->GetAll("SELECT * FROM role_security_rules WHERE role_id = ?", array($role['id']));
     $role['role_properties'] = $db->GetAll("SELECT * FROM role_properties WHERE role_id = ?", array($role['id']));
     $role['role_parameters'] = $db->GetAll("SELECT * FROM role_parameters WHERE role_id = ?", array($role['id']));
@@ -38,18 +24,28 @@ while ($role = $rs20->FetchRow()) {
     $isOldMySQL = $db->GetOne("SELECT id FROM role_behaviors WHERE role_id = ? AND behavior='mysql' LIMIT 1", array($role['id']));
 
     if (!$isOldMySQL) {
-        foreach ($role['role_images'] as &$image) {
+        foreach ($role['role_images'] as $i => $image) {
             if ($v2) {
-                $image['image'] = $db->GetRow('SELECT *, HEX(hash) AS hash FROM images WHERE platform = ? AND cloud_location = ? AND id = ? AND env_id IS NULL', [
+                $role['role_images'][$i]['image'] = $db->GetRow('SELECT *, HEX(hash) AS hash FROM images WHERE platform = ? AND cloud_location = ? AND id = ? AND env_id IS NULL', [
                     $image['platform'],
                     $image['cloud_location'],
                     $image['image_id']
                 ]);
-                // temporary solution because of os-refactoring feature, remove in next OSS release
-                unset($image['image']['os_id']);
-                unset($image['image']['dt_last_used']);
 
-                $image['image']['software'] = $db->GetAll('SELECT name, version FROM image_software WHERE image_hash = UNHEX(?)', [$image['image']['hash']]);
+                // temporary solution because of os-refactoring feature, remove in next OSS release
+                // ugly hack for testing purposes
+                if ($v2 != 2) {
+                    unset($role['role_images'][$i]['image']['os_id']);
+                    unset($role['role_images'][$i]['image']['dt_last_used']);
+                }
+
+
+                $role['role_images'][$i]['image']['software'] = $db->GetAll('SELECT name, version FROM image_software WHERE image_hash = UNHEX(?)', [$image['image']['hash']]);
+
+                //DO NOT provide OLD/Deprecated 32 bit images
+                if ($role['role_images'][$i]['image']['architecture'] == 'i386')
+                    unset($role['role_images'][$i]);
+
             } else {
                 $image['architecture'] = NULL;
                 $image['os_family'] = NULL;
@@ -59,7 +55,18 @@ while ($role = $rs20->FetchRow()) {
             }
         }
 
-        $result[] = $role;
+        if (count($role['role_images']) > 0) {
+            //For backward compatibility
+            if (empty($role['env_id'])) {
+                $role['env_id'] = 0;
+            }
+
+            if (empty($role['client_id'])) {
+                $role['client_id'] = 0;
+            }
+
+            $result[] = $role;
+        }
     }
 }
 

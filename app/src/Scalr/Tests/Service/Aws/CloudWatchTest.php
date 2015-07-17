@@ -26,8 +26,9 @@ class CloudWatchTest extends CloudWatchTestCase
     protected function setUp()
     {
         parent::setUp();
+
         if (!$this->isSkipFunctionalTests()) {
-            $this->cloudWatch = $this->getContainer()->aws(self::REGION)->cloudWatch;
+            $this->cloudWatch = $this->getEnvironment()->aws(self::REGION)->cloudWatch;
             $this->cloudWatch->enableEntityManager();
         }
     }

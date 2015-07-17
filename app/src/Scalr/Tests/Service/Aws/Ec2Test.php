@@ -874,13 +874,47 @@ class Ec2Test extends AwsTestCase
         $ec2->getEntityManager()->detachAll();
     }
 
+
+    public function testFunctionalDescribeInstancesMaxResult()
+    {
+        $this->skipIfEc2PlatformDisabled();
+
+        $aws = $this->getEnvironment()->aws(AwsTestCase::REGION);
+
+        $list = $aws->ec2->instance->describe();
+
+        if (count($list) < 10) {
+            $this->markTestSkipped('There are at least 10 instances to test it');
+        }
+
+        $reservationsList = $aws->ec2->instance->describe(
+            null,
+            null,
+            null,
+            5
+        );
+
+        $this->assertInstanceOf($this->getEc2ClassName('DataType\\ReservationList'), $reservationsList);
+        $this->assertLessThanOrEqual(5, count($reservationsList));
+        $this->assertNotNull($reservationsList->getNextToken());
+
+        $reservationsListNext = $aws->ec2->instance->describe(
+            null,
+            null,
+            $reservationsList->getNextToken(),
+            5
+        );
+        $this->assertInstanceOf($this->getEc2ClassName('DataType\\ReservationList'), $reservationsListNext);
+        $this->assertLessThanOrEqual(5, count($reservationsListNext));
+    }
+
     /**
      * @test
      */
     public function testFunctionalErrorMessageShouldContainAction()
     {
         $this->skipIfEc2PlatformDisabled();
-        $aws = $this->getContainer()->aws(AwsTestCase::REGION);
+        $aws = $this->getEnvironment()->aws(AwsTestCase::REGION);
 
         try {
             $group = $aws->ec2->securityGroup->create('5 &% illegal group name ^{', '');
@@ -892,15 +926,16 @@ class Ec2Test extends AwsTestCase
 
     /**
      * @test
+     * @functional
      */
     public function testFunctionalEc2()
     {
         $this->skipIfEc2PlatformDisabled();
 
-        $aws = $this->getContainer()->aws(AwsTestCase::REGION);
+        $aws = $this->getEnvironment()->aws(AwsTestCase::REGION);
         $aws->ec2->enableEntityManager();
         //We should use different ec2 instance for another region
-        $aws2 = $this->getContainer()->aws(Aws::REGION_US_WEST_2);
+        $aws2 = $this->getEnvironment()->aws(Aws::REGION_US_WEST_2);
 
         $nameTag = new ResourceTagSetData(self::TAG_NAME_KEY, self::getTestName(self::NAME_TAG_VALUE));
 
@@ -1512,12 +1547,13 @@ class Ec2Test extends AwsTestCase
     /**
      * @test
      * @depends testFunctionalEc2
+     * @functional
      */
     public function testFunctionalVpc()
     {
         $this->skipIfEc2PlatformDisabled();
 
-        $aws = $this->getContainer()->aws(AwsTestCase::REGION);
+        $aws = $this->getEnvironment()->aws(AwsTestCase::REGION);
         $aws->ec2->enableEntityManager();
 
         $nameTag = new ResourceTagSetData(self::TAG_NAME_KEY, self::getTestName(self::NAME_TAG_VALUE));

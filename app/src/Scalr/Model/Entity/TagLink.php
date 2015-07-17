@@ -44,7 +44,7 @@ class TagLink extends AbstractEntity
     public function getName()
     {
         $tag = Tag::findPk($this->tagId);
-        /* @var Tag $tag */
+        /* @var $tag Tag */
         return $tag ? $tag->name : '*Unknown tag*';
     }
 }

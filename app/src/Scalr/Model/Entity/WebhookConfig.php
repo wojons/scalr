@@ -3,6 +3,7 @@ namespace Scalr\Model\Entity;
 
 use Scalr\Model\AbstractEntity;
 use Scalr\Model\Collections\ArrayCollection;
+use Scalr\DataType\ScopeInterface;
 
 /**
  * WebhookConfig entity
@@ -13,7 +14,7 @@ use Scalr\Model\Collections\ArrayCollection;
  * @Entity
  * @Table(name="webhook_configs")
  */
-class WebhookConfig extends AbstractEntity
+class WebhookConfig extends AbstractEntity implements ScopeInterface
 {
 
     const LEVEL_SCALR = 1;
@@ -26,7 +27,7 @@ class WebhookConfig extends AbstractEntity
      * The identifier of the webhook config
      *
      * @Id
-     * @GeneratedValue("UUID")
+     * @GeneratedValue("CUSTOM")
      * @Column(type="uuid")
      * @var string
      */
@@ -96,24 +97,24 @@ class WebhookConfig extends AbstractEntity
     public $attempts;
 
     /**
-     * @var \ArrayObject
+     * @var ArrayCollection
      */
     private $_endpoints;
 
     /**
-     * @var \ArrayObject
+     * @var ArrayCollection
      */
     private $_events;
 
     /**
-     * @var \ArrayObject
+     * @var ArrayCollection
      */
     private $_farms;
 
     /**
      * Gets the list of the endpoints associated with the config
      *
-     * @return \ArrayObject Returns the list of WebhookConfigEndpoint objects
+     * @return ArrayCollection Returns the list of WebhookConfigEndpoint objects
      */
     public function getEndpoints()
     {
@@ -126,30 +127,30 @@ class WebhookConfig extends AbstractEntity
     /**
      * Fetches list of the endpoints associated with the config (refreshes)
      *
-     * @return \ArrayObject Returns the list of WebhookConfigEndpoint objects
+     * @return ArrayCollection Returns the list of WebhookConfigEndpoint objects
      */
     public function fetchEndpoints()
     {
-        $this->_endpoints = WebhookConfigEndpoint::findByWebhookId($this->webhookId);
+        $this->_endpoints = WebhookConfigEndpoint::result(self::RESULT_ENTITY_COLLECTION)->findByWebhookId($this->webhookId);
         return $this->_endpoints;
     }
 
     /**
      * Sets the list of the endpoints
      *
-     * @param   \ArrayObject   $endpoints
+     * @param   ArrayCollection   $endpoints
      * @return  \Scalr\Model\Entity\WebhookConfig
      */
-    public function setEndpoints(\ArrayObject $endpoints = null)
+    public function setEndpoints($endpoints = null)
     {
-        $this->_endpoints = $endpoints === null ? new \ArrayObject(array()) : $endpoints;
+        $this->_endpoints = $endpoints === null ? new ArrayCollection([]) : $endpoints;
         return $this;
     }
 
     /**
      * Gets the list of the events associated with the config
      *
-     * @return \ArrayObject Returns the list of WebhookConfigEvent objects
+     * @return ArrayCollection Returns the list of WebhookConfigEvent objects
      */
     public function getEvents()
     {
@@ -162,23 +163,23 @@ class WebhookConfig extends AbstractEntity
     /**
      * Fetches list of the events associated with the config (refreshes)
      *
-     * @return \ArrayObject Returns the list of WebhookConfigEvents objects
+     * @return ArrayCollection Returns the list of WebhookConfigEvents objects
      */
     public function fetchEvents()
     {
-        $this->_events = WebhookConfigEvent::findByWebhookId($this->webhookId);
+        $this->_events = WebhookConfigEvent::result(self::RESULT_ENTITY_COLLECTION)->findByWebhookId($this->webhookId);
         return $this->_events;
     }
 
     /**
      * Sets the list of the events
      *
-     * @param   \ArrayObject   $events
+     * @param   ArrayCollection   $events
      * @return  \Scalr\Model\Entity\WebhookConfig
      */
-    public function setEvents(\ArrayObject $events = null)
+    public function setEvents($events = null)
     {
-        $this->_events = $events === null ? new \ArrayObject(array()) : $events;
+        $this->_events = $events === null ? new ArrayCollection([]) : $events;
         return $this;
     }
 
@@ -198,23 +199,23 @@ class WebhookConfig extends AbstractEntity
     /**
      * Fetches list of the farms associated with the config (refreshes)
      *
-     * @return \ArrayObject Returns the list of WebhookConfigFarm objects
+     * @return ArrayCollection Returns the list of WebhookConfigFarm objects
      */
     public function fetchFarms()
     {
-        $this->_farms = WebhookConfigFarm::findByWebhookId($this->webhookId);
+        $this->_farms = WebhookConfigFarm::result(self::RESULT_ENTITY_COLLECTION)->findByWebhookId($this->webhookId);
         return $this->_farms;
     }
 
     /**
      * Sets the list of the farms
      *
-     * @param   \ArrayObject   $farms
+     * @param   ArrayCollection    $farms
      * @return  \Scalr\Model\Entity\WebhookConfig
      */
-    public function setFarms(\ArrayObject $farms = null)
+    public function setFarms($farms = null)
     {
-        $this->_farms = $farms === null ? new \ArrayObject(array()) : $farms;
+        $this->_farms = $farms === null ? new ArrayCollection([]) : $farms;
         return $this;
     }
 
@@ -263,6 +264,52 @@ class WebhookConfig extends AbstractEntity
         }
 
         return $ret;
+    }
+
+    /**
+     * {@inheritdoc}
+     * @see \Scalr\DataType\ScopeInterface::getScope()
+     */
+    public function getScope()
+    {
+        switch ($this->level) {
+            case self::LEVEL_FARM:
+                return self::SCOPE_FARM;
+            case self::LEVEL_ENVIRONMENT:
+                return self::SCOPE_ENVIRONMENT;
+            case self::LEVEL_ACCOUNT:
+                return self::SCOPE_ACCOUNT;
+            case self::LEVEL_SCALR:
+                return self::SCOPE_SCALR;
+            default:
+                throw new \UnexpectedValueException(sprintf(
+                    "Unknown level type: %d in %s::%s",
+                    $this->level, get_class($this), __FUNCTION__
+                ));
+        }
+    }
+
+    public function setScope($scope, $accountId, $envId)
+    {
+        switch ($scope) {
+            case self::SCOPE_ENVIRONMENT:
+                $this->level = self::LEVEL_ENVIRONMENT;
+                $this->accountId = $accountId;
+                $this->envId = $envId;
+                break;
+            case self::SCOPE_ACCOUNT:
+                $this->level = self::LEVEL_ACCOUNT;
+                $this->accountId = $accountId;
+                break;
+            case self::SCOPE_SCALR:
+                $this->level = self::LEVEL_SCALR;
+                break;
+            default:
+                throw new \UnexpectedValueException(sprintf(
+                    "Unknown scope: %d in %s::%s",
+                    $scope, get_class($this), __FUNCTION__
+                ));
+        }
     }
 
 }
