@@ -133,18 +133,17 @@ class Scalr_Validator
 
     public function validateDomain($value, $type = null, $options = null)
     {
-        $allowed_utf8_chars = isset($options['allowed']) ? preg_quote($options['allowed']) : '';
-        $disallowed_utf8_chars = isset($options['disallowed']) ? preg_quote($options['disallowed']) : '';
+        $allowed = isset($options['allowed']) ? preg_quote($options['allowed']) : '';
+        $forbidden = isset($options['disallowed']) ? preg_quote($options['disallowed']) : '';
 
         $value = rtrim($value, ".");
 
-        $retval = (bool) preg_match(
-            '/^([a-zA-Z0-9' . $allowed_utf8_chars
-          . ']+[a-zA-Z0-9\-' . $allowed_utf8_chars
-          . ']*\.[a-zA-Z0-9' . $allowed_utf8_chars . ']*?)+$/usi', $value);
+        $token = '[a-z\d' . $allowed . ']';
 
-        if ($disallowed_utf8_chars != '') {
-            $retval = $retval && !((bool)preg_match("/[" . $disallowed_utf8_chars . "]+/siu", $value));
+        $retval = (bool) preg_match('/^(' . $token . '(-*' . $token . ')*)(\.(' . $token . '(-*' . $token . ')*))*$/i' . (!empty($allowed) ? 'u' : ''), $value);
+
+        if ($forbidden != '') {
+            $retval = $retval && !((bool)preg_match("/[" . $forbidden . "]+/iu", $value));
         }
 
         return $retval ?: array('This is not a valid domain.');
