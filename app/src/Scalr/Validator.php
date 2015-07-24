@@ -140,7 +140,7 @@ class Scalr_Validator
 
         $token = '[a-z\d' . $allowed . ']';
 
-        $retval = (bool) preg_match('/^(' . $token . '(-*' . $token . ')*)(\.(' . $token . '(-*' . $token . ')*))*$/i' . (!empty($allowed) ? 'u' : ''), $value);
+        $retval = (bool) preg_match('/^(' . $token . '(-*' . $token . ')*)(\.(' . $token . '(-*' . $token . ')*))+$/i' . (!empty($allowed) ? 'u' : ''), $value);
 
         if ($forbidden != '') {
             $retval = $retval && !((bool)preg_match("/[" . $forbidden . "]+/iu", $value));
