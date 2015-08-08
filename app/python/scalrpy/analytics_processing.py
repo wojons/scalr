@@ -442,9 +442,9 @@ class AnalyticsProcessing(application.ScalrIterationApplication):
                                                             minute=0,
                                                             second=0,
                                                             microsecond=0)
-            if utcnow.day == 1:
-                dtime_from -= datetime.timedelta(days=1)
-        dtime_to = self.config['dtime_to'] or datetime.datetime.utcnow().replace(microsecond=0)
+            if utcnow.day < 11:
+                dtime_from = helper.previous_month(dtime_from)
+        dtime_to = self.config['dtime_to'] or datetime.datetime.utcnow().replace(microsecond=999999)
 
         return dtime_from, dtime_to
 
@@ -468,6 +468,14 @@ class AnalyticsProcessing(application.ScalrIterationApplication):
                     for rows in self.csv_reader(csv_file, dtime_from=dtime):
                         records = self.get_aws_records(rows)
                         records = [rec for rec in records if int(rec['env_id']) in data['envs_ids']]
+                        if records:
+                            with self._lock:
+                                min_records_dtime = min([record['dtime'] for record in records])
+                                if self.aws_billing_dtime_from:
+                                    self.aws_billing_dtime_from = min(self.aws_billing_dtime_from,
+                                                                      min_records_dtime)
+                                else:
+                                    self.aws_billing_dtime_from = min_records_dtime
                         for record in records:
                             self.pool.wait()
                             if self.args['--recalculate']:
@@ -480,7 +488,7 @@ class AnalyticsProcessing(application.ScalrIterationApplication):
                     msg = msg.format(data['envs_ids'], dtime.month)
                     LOG.exception(msg)
                 finally:
-                    dtime = helper.new_month(dtime)
+                    dtime = helper.next_month(dtime)
         except:
             msg = 'AWS billing for environments {0} failed'
             msg = msg.format(data['envs_ids'])
@@ -493,13 +501,7 @@ class AnalyticsProcessing(application.ScalrIterationApplication):
         dtime_from, dtime_to = self.get_aws_billing_interval()
         msg = 'AWS billing interval: {0} - {1}'
         msg = msg.format(dtime_from, dtime_to)
-        LOG.debug(msg)
-
-        with self._lock:
-            if not self.aws_billing_dtime_from:
-                self.aws_billing_dtime_from = dtime_from
-            else:
-                self.aws_billing_dtime_from = min(self.aws_billing_dtime_from, dtime_from)
+        LOG.info(msg)
 
         for envs in self.analytics.load_envs():
             unique = {}
@@ -533,10 +535,12 @@ class AnalyticsProcessing(application.ScalrIterationApplication):
 
         # fill farm_usage_d
         dtime_cur = dtime_from
+        msg = 'AWS fill_farm_usage_d interval: {0} - {1}'
+        LOG.info(msg.format(dtime_cur, dtime_to))
         while dtime_cur <= dtime_to:
             date, hour = dtime_cur.date(), dtime_cur.hour
             try:
-                self.analytics.fill_farm_usage_d(date, hour)
+                self.analytics.fill_farm_usage_d(date, hour, platform='ec2')
             except:
                 msg = 'Unable to fill farm_usage_d table for date {0}, hour {1}'.format(date, hour)
                 LOG.exception(msg)
@@ -559,7 +563,7 @@ class AnalyticsProcessing(application.ScalrIterationApplication):
 
     def process_poller_billing(self):
         dtime_from, dtime_to = self.get_poller_billing_interval()
-        LOG.debug('Poller billing interval: {0} - {1}'.format(dtime_from, dtime_to))
+        LOG.info('Poller billing interval: {0} - {1}'.format(dtime_from, dtime_to))
 
         # process poller_session table
         dtime_cur = dtime_from
@@ -604,6 +608,8 @@ class AnalyticsProcessing(application.ScalrIterationApplication):
 
         # fill farm_usage_d
         dtime_cur = dtime_from
+        msg = 'Poller fill_farm_usage_d interval: {0} - {1}'
+        LOG.info(msg.format(dtime_cur, dtime_to))
         while dtime_cur <= dtime_to:
             date, hour = dtime_cur.date(), dtime_cur.hour
             try:

@@ -847,6 +847,9 @@ class Analytics(object):
             raise
 
     def fill_farm_usage_d(self, date, hour, platform=None):
+        two_weeks_ago = (datetime.datetime.utcnow() + datetime.timedelta(days=-14)).date()
+        assert_msg = 'Processing is not supported for dtime-from more than two weeks ago'
+        assert date > two_weeks_ago, assert_msg
         query = (
             "INSERT INTO farm_usage_d "
             "(account_id, farm_role_id, usage_item, cc_id, project_id, date, "

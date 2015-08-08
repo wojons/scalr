@@ -1,6 +1,6 @@
 # vim: tabstop=4 shiftwidth=4 softtabstop=4
 #
-# Copyright 2013, 2014 Scalr Inc.
+# Copyright 2013, 2014, 2015 Scalr Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License"); you may
 # not use this file except in compliance with the License. You may obtain
@@ -524,12 +524,19 @@ class HttpsAdapter(HTTPAdapter):
                                        ssl_version=ssl.PROTOCOL_TLSv1)
 
 
-def new_month(dtime):
+def next_month(dtime):
     one_day = datetime.timedelta(days=1)
     new_dtime = dtime + one_day
     while dtime.month == new_dtime.month:
         new_dtime += one_day
-    new_dtime.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    new_dtime = new_dtime.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    return new_dtime
+
+
+def previous_month(dtime):
+    delta = datetime.timedelta(days=dtime.day + 1)
+    new_dtime = dtime - delta
+    new_dtime = new_dtime.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
     return new_dtime
 
 
