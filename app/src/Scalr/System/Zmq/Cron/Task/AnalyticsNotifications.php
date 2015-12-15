@@ -60,7 +60,6 @@ class AnalyticsNotifications extends AbstractTask
                 $subjects = call_user_func($subjectEntityName . 'Entity::find');
 
                 foreach ($subjects as $subject) {
-
                     if ($subject->archived) {
                         continue;
                     }
@@ -107,8 +106,11 @@ class AnalyticsNotifications extends AbstractTask
                 case ReportEntity::PERIOD_QUARTELY:
                     $period = 'quarter';
                     $quarters = new Quarters(SettingEntity::getQuarters());
-                    $currentQuarter = $quarters->getQuarterForDate(new \DateTime('yesterday', new \DateTimeZone('UTC')));
-                    $currentYear = (new \DateTime('yesterday', new \DateTimeZone('UTC')))->format('Y');
+
+                    $currentPeriod = $quarters->getPeriodForDate(new \DateTime('yesterday', new \DateTimeZone('UTC')));
+
+                    $currentQuarter = $currentPeriod->quarter;
+                    $currentYear = $currentPeriod->year;
 
                     if ($currentQuarter === 1) {
                         $quarter = 4;
@@ -119,13 +121,17 @@ class AnalyticsNotifications extends AbstractTask
                     }
 
                     $date = $quarters->getPeriodForQuarter($quarter, $year);
+
                     $start = $date->start->format('Y-m-d');
                     $end = $date->end->format('Y-m-d');
+
                     $formatedTitle = 'Q' . $quarter . ' ' . $year;
                     $formatedForecastDate = 'End of ' . $currentYear;
 
-                    $startForecast = $currentYear . '-01-01';
-                    $endForecast = $currentYear . '-12-31';
+                    $forecastPeriod = $quarters->getPeriodForYear($year);
+
+                    $startForecast = $forecastPeriod->start;
+                    $endForecast = $forecastPeriod->end;
                     $periodForecast = 'year';
                     break;
 
@@ -139,8 +145,12 @@ class AnalyticsNotifications extends AbstractTask
 
             if ($report->period !== ReportEntity::PERIOD_DAILY && $report->period !== ReportEntity::PERIOD_QUARTELY) {
                 $quarters = new Quarters(SettingEntity::getQuarters());
-                $currentQuarter = $quarters->getQuarterForDate(new \DateTime($start, new \DateTimeZone('UTC')));
-                $currentYear = (new \DateTime($start, new \DateTimeZone('UTC')))->format('Y');
+
+                $currentPeriod = $quarters->getPeriodForDate(new \DateTime($start, new \DateTimeZone('UTC')));
+
+                $currentQuarter = $currentPeriod->quarter;
+                $currentYear = $currentPeriod->year;
+
                 $date = $quarters->getPeriodForQuarter($currentQuarter, $currentYear);
                 $formatedForecastDate = 'End of Q' . $currentQuarter;
 
@@ -161,6 +171,7 @@ class AnalyticsNotifications extends AbstractTask
                 $baseUrl = rtrim(\Scalr::getContainer()->config('scalr.endpoint.scheme') . "://" . \Scalr::getContainer()->config('scalr.endpoint.host') , '/');
                 $periodData = \Scalr::getContainer()->analytics->usage->getDashboardPeriodData($period, $start, $end);
                 $periodDataForecast = \Scalr::getContainer()->analytics->usage->getDashboardPeriodData($periodForecast, $startForecast, $endForecast);
+
                 $periodData['period'] = $period;
                 $periodData['forecastPeriod'] = $formatedForecastDate;
                 $periodData['totals']['forecastCost'] = $periodDataForecast['totals']['forecastCost'];
@@ -207,7 +218,9 @@ class AnalyticsNotifications extends AbstractTask
                 if (!ReportPayloadEntity::findPk($entity->uuid)) {
                     $payload = json_decode($entity->payload, true);
                     \Scalr::getContainer()->mailer->setSubject('Summary report.')->setContentType('text/html')->sendTemplate(SCALR_TEMPLATES_PATH . '/emails/report_summary.html.php', $payload, $report->emails);
+
                     $this->getLogger()->info('Summary report email has been sent');
+
                     $payload['date'] = $entity->created->format('Y-m-d');
                     $entity->payload = json_encode($payload);
                     $entity->save();
@@ -370,7 +383,7 @@ class AnalyticsNotifications extends AbstractTask
             'date'           => $formatedTitle,
             'detailsUrl'     => $baseUrl . '#/admin/analytics/' . $subjects . '?' . $subjectIdName . '=' . $subject->{$subjectIdName},
             'jsonVersion'    => '1.0.0',
-            $childItems     => [],
+            $childItems      => [],
         ];
 
         if (!empty($periodSubjectData['totals'][$childItems])) {
@@ -400,7 +413,9 @@ class AnalyticsNotifications extends AbstractTask
                 }
 
                 \Scalr::getContainer()->mailer->setSubject($emailSubject)->setContentType('text/html')->sendTemplate(SCALR_TEMPLATES_PATH . '/emails/budget_notification_' . $subjectName . '.html.php', $subjectAnalytics, $notification->emails);
+
                 $this->getLogger()->info('Notification email has been sent');
+
                 $payload['date'] = $entity->created->format('Y-m-d');
                 $entity->payload = json_encode($payload);
                 $entity->save();
