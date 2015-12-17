@@ -130,8 +130,8 @@ class AnalyticsNotifications extends AbstractTask
 
                     $forecastPeriod = $quarters->getPeriodForYear($year);
 
-                    $startForecast = $forecastPeriod->start;
-                    $endForecast = $forecastPeriod->end;
+                    $startForecast = $forecastPeriod->start->format('Y-m-d');
+                    $endForecast = $forecastPeriod->end->format('Y-m-d');
                     $periodForecast = 'year';
                     break;
 
