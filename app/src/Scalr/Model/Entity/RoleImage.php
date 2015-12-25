@@ -67,7 +67,7 @@ class RoleImage extends AbstractEntity
 
     public function isUsed()
     {
-        if (in_array($this->platform, [\SERVER_PLATFORMS::GCE])) {
+        if (in_array($this->platform, [\SERVER_PLATFORMS::GCE, \SERVER_PLATFORMS::AZURE])) {
             return !!$this->db()->GetOne('SELECT EXISTS(SELECT 1 FROM farm_roles WHERE role_id = ? AND platform = ?)', [$this->roleId, $this->platform]);
         } else {
             return !!$this->db()->GetOne('SELECT EXISTS(SELECT 1 FROM farm_roles WHERE role_id = ? AND platform = ? AND cloud_location = ?)', [$this->roleId, $this->platform, $this->cloudLocation]);
